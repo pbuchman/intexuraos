@@ -477,6 +477,119 @@ describe('Internal Routes', () => {
     });
   });
 
+  describe('POST /internal/bookmarks/:id/force-refresh', () => {
+    it('returns 401 when no internal auth header', async () => {
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/internal/bookmarks/bookmark-123/force-refresh',
+      });
+
+      expect(response.statusCode).toBe(401);
+    });
+
+    it('returns 404 when bookmark not found', async () => {
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/internal/bookmarks/non-existent/force-refresh',
+        headers: {
+          'x-internal-auth': TEST_INTERNAL_TOKEN,
+        },
+      });
+
+      expect(response.statusCode).toBe(404);
+    });
+
+    it('force refreshes bookmark with fresh OG data', async () => {
+      const createResult = await ctx.bookmarkRepository.create({
+        userId: 'user-1',
+        url: 'https://example.com/article',
+        tags: [],
+        source: 'web',
+        sourceId: 'src-1',
+      });
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) return;
+
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: `/internal/bookmarks/${createResult.value.id}/force-refresh`,
+        headers: {
+          'x-internal-auth': TEST_INTERNAL_TOKEN,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(true);
+      expect(body.data.ogFetchStatus).toBe('processed');
+      expect(body.data.ogPreview).toEqual({
+        title: 'Test Title',
+        description: 'Test Description',
+        image: 'https://example.com/image.jpg',
+        siteName: 'Example Site',
+        favicon: 'https://example.com/favicon.ico',
+        type: null,
+      });
+    });
+
+    it('sets ogFetchStatus to failed when fetchPreview fails', async () => {
+      const createResult = await ctx.bookmarkRepository.create({
+        userId: 'user-1',
+        url: 'https://example.com/article',
+        tags: [],
+        source: 'web',
+        sourceId: 'src-1',
+      });
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) return;
+
+      ctx.linkPreviewFetcher.setNextResult({
+        ok: false,
+        error: { code: 'FETCH_FAILED', message: 'Network error' },
+      });
+
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: `/internal/bookmarks/${createResult.value.id}/force-refresh`,
+        headers: {
+          'x-internal-auth': TEST_INTERNAL_TOKEN,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(true);
+      expect(body.data.ogFetchStatus).toBe('failed');
+    });
+
+    it('returns 500 on storage error', async () => {
+      const createResult = await ctx.bookmarkRepository.create({
+        userId: 'user-1',
+        url: 'https://example.com',
+        tags: [],
+        source: 'web',
+        sourceId: 'src-1',
+      });
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) return;
+
+      ctx.bookmarkRepository.simulateMethodError('update', {
+        code: 'STORAGE_ERROR',
+        message: 'DB error',
+      });
+
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: `/internal/bookmarks/${createResult.value.id}/force-refresh`,
+        headers: {
+          'x-internal-auth': TEST_INTERNAL_TOKEN,
+        },
+      });
+
+      expect(response.statusCode).toBe(500);
+    });
+  });
+
   describe('Error on findByUserIdAndUrl during internal create', () => {
     it('returns 500 when findByUserIdAndUrl fails', async () => {
       ctx.bookmarkRepository.simulateMethodError('findByUserIdAndUrl', {
