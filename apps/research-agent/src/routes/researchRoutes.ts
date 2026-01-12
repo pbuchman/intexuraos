@@ -410,21 +410,13 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       const apiKeysResult = await userServiceClient.getApiKeys(user.userId);
       if (!apiKeysResult.ok) {
         request.log.error({ requestId }, 'Failed to fetch API keys');
-        return await reply.code(500).send({
-          success: false,
-          error: { code: 'INTERNAL_ERROR', message: 'Failed to fetch API keys' },
-          diagnostics: { requestId, durationMs: Date.now() - startTime },
-        });
+        return await reply.fail('INTERNAL_ERROR', 'Failed to fetch API keys');
       }
 
       const googleKey = apiKeysResult.value.google;
       if (googleKey === undefined) {
         request.log.error({ requestId }, 'Google API key not configured');
-        return await reply.code(500).send({
-          success: false,
-          error: { code: 'MISCONFIGURED', message: 'Google API key required for validation' },
-          diagnostics: { requestId, durationMs: Date.now() - startTime },
-        });
+        return await reply.fail('MISCONFIGURED', 'Google API key required for validation');
       }
 
       const validator = createInputValidator(
@@ -501,21 +493,13 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       const apiKeysResult = await userServiceClient.getApiKeys(user.userId);
       if (!apiKeysResult.ok) {
         request.log.error({ requestId }, 'Failed to fetch API keys');
-        return await reply.code(500).send({
-          success: false,
-          error: { code: 'INTERNAL_ERROR', message: 'Failed to fetch API keys' },
-          diagnostics: { requestId, durationMs: Date.now() - startTime },
-        });
+        return await reply.fail('INTERNAL_ERROR', 'Failed to fetch API keys');
       }
 
       const googleKey = apiKeysResult.value.google;
       if (googleKey === undefined) {
         request.log.error({ requestId }, 'Google API key not configured');
-        return await reply.code(500).send({
-          success: false,
-          error: { code: 'MISCONFIGURED', message: 'Google API key required for improvement' },
-          diagnostics: { requestId, durationMs: Date.now() - startTime },
-        });
+        return await reply.fail('MISCONFIGURED', 'Google API key required for improvement');
       }
 
       const validator = createInputValidator(
