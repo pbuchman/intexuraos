@@ -1,6 +1,7 @@
 import { lazy, Suspense } from 'react';
 import { HashRouter, Navigate, Route, Routes, useParams } from 'react-router-dom';
 import { Auth0Provider } from '@auth0/auth0-react';
+import { VibeKanbanWebCompanion } from 'vibe-kanban-web-companion';
 import { AuthProvider, SyncQueueProvider, useAuth } from '@/context';
 import { PWAProvider } from '@/context/pwa-context';
 import { AndroidInstallBanner, IOSInstallBanner, UpdateBanner } from '@/components/pwa-banners';
@@ -416,6 +417,7 @@ export function App(): React.JSX.Element {
           </AuthProvider>
         </HashRouter>
       </Auth0Provider>
+      <VibeKanbanWebCompanion />
     </PWAProvider>
   );
 }
