@@ -50,6 +50,16 @@ export interface CompositeFeedRepository {
   ): Promise<Result<CompositeFeed, string>>;
 
   /**
+   * Update data insights for a composite feed.
+   * Only updates if owned by the specified user.
+   */
+  updateDataInsights(
+    id: string,
+    userId: string,
+    dataInsights: import('../models/index.js').CompositeFeed['dataInsights']
+  ): Promise<Result<CompositeFeed, string>>;
+
+  /**
    * Delete a composite feed.
    * Only deletes if owned by the specified user.
    */

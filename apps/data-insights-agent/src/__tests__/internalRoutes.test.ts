@@ -7,9 +7,12 @@ import {
   FakeCompositeFeedRepository,
   FakeFeedNameGenerationService,
   FakeMobileNotificationsClient,
-  FakeSnapshotRepository,
   FakeVisualizationRepository,
   FakeVisualizationGenerationService,
+  FakeSnapshotRepository,
+  FakeDataAnalysisService,
+  FakeChartDefinitionService,
+  FakeDataTransformService,
 } from './fakes.js';
 
 const TEST_INTERNAL_TOKEN = 'test-internal-auth-token';
@@ -23,6 +26,9 @@ describe('internalRoutes', () => {
   let fakeSnapshotRepo: FakeSnapshotRepository;
   let fakeVisualizationRepo: FakeVisualizationRepository;
   let fakeVisualizationGenerationService: FakeVisualizationGenerationService;
+  let fakeDataAnalysisService: FakeDataAnalysisService;
+  let fakeChartDefinitionService: FakeChartDefinitionService;
+  let fakeDataTransformService: FakeDataTransformService;
 
   beforeEach(() => {
     process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = TEST_INTERNAL_TOKEN;
@@ -34,6 +40,9 @@ describe('internalRoutes', () => {
     fakeSnapshotRepo = new FakeSnapshotRepository();
     fakeVisualizationRepo = new FakeVisualizationRepository();
     fakeVisualizationGenerationService = new FakeVisualizationGenerationService();
+    fakeDataAnalysisService = new FakeDataAnalysisService();
+    fakeChartDefinitionService = new FakeChartDefinitionService();
+    fakeDataTransformService = new FakeDataTransformService();
     setServices({
       dataSourceRepository: fakeDataSourceRepo,
       titleGenerationService: fakeTitleService,
@@ -43,6 +52,9 @@ describe('internalRoutes', () => {
       snapshotRepository: fakeSnapshotRepo,
       visualizationRepository: fakeVisualizationRepo,
       visualizationGenerationService: fakeVisualizationGenerationService,
+      dataAnalysisService: fakeDataAnalysisService,
+      chartDefinitionService: fakeChartDefinitionService,
+      dataTransformService: fakeDataTransformService,
     });
   });
 

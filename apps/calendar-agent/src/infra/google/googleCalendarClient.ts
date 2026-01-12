@@ -109,10 +109,41 @@ function mapGoogleEventToCalendarEvent(event: GoogleEvent): CalendarEvent {
   return result;
 }
 
-function mapErrorToCalendarError(error: unknown): CalendarError {
-  const e = error as { code?: number; message?: string; errors?: { reason?: string }[] };
-  const code = e.code;
-  const message = e.message ?? 'Unknown error';
+export function mapErrorToCalendarError(error: unknown): CalendarError {
+  // Try to extract status from Google API error structure
+  const googleError = error as {
+    response?: {
+      status?: number;
+      data?: {
+        error?: {
+          code?: number;
+          message?: string;
+          errors?: { reason?: string }[];
+        };
+      };
+    };
+    code?: number;
+    message?: string;
+  };
+
+  let code: number | undefined;
+  let message: string;
+  let apiErrors: { reason?: string }[] | undefined;
+
+  if (googleError.response?.data?.error) {
+    // Google API error format: { response: { data: { error: { code, message, errors } } } }
+    const apiError = googleError.response.data.error;
+    code = apiError.code;
+    message = apiError.message ?? 'Unknown error';
+    apiErrors = apiError.errors;
+  } else if (googleError.code !== undefined) {
+    // Direct error format: { code, message }
+    code = googleError.code;
+    message = googleError.message ?? 'Unknown error';
+  } else {
+    // Unknown error format
+    message = 'Unknown error';
+  }
 
   if (code === 404) {
     return { code: 'NOT_FOUND', message };
@@ -121,7 +152,7 @@ function mapErrorToCalendarError(error: unknown): CalendarError {
     return { code: 'TOKEN_ERROR', message };
   }
   if (code === 403) {
-    const reason = e.errors?.[0]?.reason;
+    const reason = apiErrors?.[0]?.reason;
     if (reason === 'quotaExceeded' || reason === 'rateLimitExceeded') {
       return { code: 'QUOTA_EXCEEDED', message };
     }
