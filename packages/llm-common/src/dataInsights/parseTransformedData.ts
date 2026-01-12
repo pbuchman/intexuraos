@@ -10,9 +10,9 @@
  *   DATA_END
  */
 export function parseTransformedData(response: string): unknown[] {
-  const dataMatch = response.match(/DATA_START\s*([\s\S]*?)\s*DATA_END/);
+  const dataMatch = /DATA_START\s*([\s\S]*?)\s*DATA_END/.exec(response);
 
-  if (!dataMatch) {
+  if (dataMatch?.[1] === undefined) {
     throw new Error('Missing DATA_START...DATA_END markers');
   }
 
@@ -38,9 +38,9 @@ export function parseTransformedData(response: string): unknown[] {
   }
 
   for (let i = 0; i < data.length; i++) {
-    const item = data[i];
+    const item: unknown = data[i];
     if (typeof item !== 'object' || item === null || Array.isArray(item)) {
-      throw new Error(`Item at index ${i} must be an object`);
+      throw new Error(`Item at index ${String(i)} must be an object`);
     }
   }
 

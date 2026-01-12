@@ -2,7 +2,7 @@
  * Composite feed domain models.
  */
 
-import type { DataInsight } from '../dataInsights/index.js';
+import type { DataInsight } from '../../dataInsights/index.js';
 
 /**
  * Configuration for a notification filter within a composite feed.

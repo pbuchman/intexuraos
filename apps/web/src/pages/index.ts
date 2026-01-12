@@ -1,5 +1,6 @@
 export { BookmarksListPage } from './BookmarksListPage.js';
 export { CalendarPage } from './CalendarPage.js';
+export { DataInsightsPage } from './DataInsightsPage.js';
 export { HomePage } from './HomePage.js';
 export { LoginPage } from './LoginPage.js';
 export { SystemHealthPage } from './SystemHealthPage.js';
@@ -18,7 +19,6 @@ export { DataSourcesListPage } from './DataSourcesListPage.js';
 export { DataSourceFormPage } from './DataSourceFormPage.js';
 export { CompositeFeedsListPage } from './CompositeFeedsListPage.js';
 export { CompositeFeedFormPage } from './CompositeFeedFormPage.js';
-export { CompositeFeedVisualizationsPage } from './CompositeFeedVisualizationsPage.js';
 export { NotesListPage } from './NotesListPage.js';
 export { ShareHistoryPage } from './ShareHistoryPage.js';
 export { ShareTargetPage } from './ShareTargetPage.js';

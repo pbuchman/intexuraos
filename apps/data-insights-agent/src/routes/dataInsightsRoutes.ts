@@ -38,10 +38,6 @@ interface PreviewBody {
 }
 
 export const dataInsightsRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
-  /**
-   * POST /composite-feeds/:feedId/analyze
-   * Analyze composite feed data and generate up to 5 data insights.
-   */
   fastify.post<{ Params: AnalyzeFeedParams }>(
     '/composite-feeds/:feedId/analyze',
     {
@@ -73,20 +69,20 @@ export const dataInsightsRoutes: FastifyPluginCallback = (fastify, _opts, done) 
 
       if (!result.ok) {
         const error = result.error;
-        if (error.code === 'FEED_NOT_FOUND') {
-          void reply.status(404);
-          return await reply.fail('NOT_FOUND', error.message);
-        }
-        if (error.code === 'SNAPSHOT_NOT_FOUND') {
-          void reply.status(404);
-          return await reply.fail('NOT_FOUND', error.message);
-        }
-        if (error.code === 'NO_API_KEY') {
-          void reply.status(400);
-          return await reply.fail('INVALID_REQUEST', error.message);
-        }
-        if (error.code === 'REPOSITORY_ERROR' || error.code === 'ANALYSIS_ERROR') {
-          return await reply.fail('INTERNAL_ERROR', error.message);
+        switch (error.code) {
+          case 'FEED_NOT_FOUND': {
+            void reply.status(404);
+            return await reply.fail('NOT_FOUND', error.message);
+          }
+          case 'SNAPSHOT_NOT_FOUND': {
+            void reply.status(404);
+            return await reply.fail('NOT_FOUND', error.message);
+          }
+          case 'REPOSITORY_ERROR':
+          case 'ANALYSIS_ERROR':
+          case 'NO_INSIGHTS': {
+            return await reply.fail('INTERNAL_ERROR', error.message);
+          }
         }
         return await reply.fail('INTERNAL_ERROR', error.message);
       }
@@ -101,10 +97,6 @@ export const dataInsightsRoutes: FastifyPluginCallback = (fastify, _opts, done) 
     }
   );
 
-  /**
-   * POST /composite-feeds/:feedId/insights/:insightId/chart-definition
-   * Generate ephemeral chart configuration for a specific insight.
-   */
   fastify.post<{ Params: ChartDefinitionParams }>(
     '/composite-feeds/:feedId/insights/:insightId/chart-definition',
     {
@@ -141,28 +133,27 @@ export const dataInsightsRoutes: FastifyPluginCallback = (fastify, _opts, done) 
 
       if (!result.ok) {
         const error = result.error;
-        if (error.code === 'FEED_NOT_FOUND') {
-          void reply.status(404);
-          return await reply.fail('NOT_FOUND', error.message);
-        }
-        if (error.code === 'SNAPSHOT_NOT_FOUND') {
-          void reply.status(404);
-          return await reply.fail('NOT_FOUND', error.message);
-        }
-        if (error.code === 'INSIGHT_NOT_FOUND') {
-          void reply.status(404);
-          return await reply.fail('NOT_FOUND', error.message);
-        }
-        if (error.code === 'CHART_TYPE_NOT_FOUND') {
-          void reply.status(400);
-          return await reply.fail('INVALID_REQUEST', error.message);
-        }
-        if (error.code === 'NO_API_KEY') {
-          void reply.status(400);
-          return await reply.fail('INVALID_REQUEST', error.message);
-        }
-        if (error.code === 'REPOSITORY_ERROR' || error.code === 'GENERATION_ERROR') {
-          return await reply.fail('INTERNAL_ERROR', error.message);
+        switch (error.code) {
+          case 'FEED_NOT_FOUND': {
+            void reply.status(404);
+            return await reply.fail('NOT_FOUND', error.message);
+          }
+          case 'SNAPSHOT_NOT_FOUND': {
+            void reply.status(404);
+            return await reply.fail('NOT_FOUND', error.message);
+          }
+          case 'INSIGHT_NOT_FOUND': {
+            void reply.status(404);
+            return await reply.fail('NOT_FOUND', error.message);
+          }
+          case 'INVALID_CHART_TYPE': {
+            void reply.status(400);
+            return await reply.fail('INVALID_REQUEST', error.message);
+          }
+          case 'REPOSITORY_ERROR':
+          case 'GENERATION_ERROR': {
+            return await reply.fail('INTERNAL_ERROR', error.message);
+          }
         }
         return await reply.fail('INTERNAL_ERROR', error.message);
       }
@@ -177,10 +168,6 @@ export const dataInsightsRoutes: FastifyPluginCallback = (fastify, _opts, done) 
     }
   );
 
-  /**
-   * POST /composite-feeds/:feedId/preview
-   * Transform snapshot data for chart preview.
-   */
   fastify.post<{ Params: PreviewParams; Body: PreviewBody }>(
     '/composite-feeds/:feedId/preview',
     {
@@ -219,24 +206,23 @@ export const dataInsightsRoutes: FastifyPluginCallback = (fastify, _opts, done) 
 
       if (!result.ok) {
         const error = result.error;
-        if (error.code === 'FEED_NOT_FOUND') {
-          void reply.status(404);
-          return await reply.fail('NOT_FOUND', error.message);
-        }
-        if (error.code === 'SNAPSHOT_NOT_FOUND') {
-          void reply.status(404);
-          return await reply.fail('NOT_FOUND', error.message);
-        }
-        if (error.code === 'INSIGHT_NOT_FOUND') {
-          void reply.status(404);
-          return await reply.fail('NOT_FOUND', error.message);
-        }
-        if (error.code === 'NO_API_KEY') {
-          void reply.status(400);
-          return await reply.fail('INVALID_REQUEST', error.message);
-        }
-        if (error.code === 'REPOSITORY_ERROR' || error.code === 'TRANSFORMATION_ERROR') {
-          return await reply.fail('INTERNAL_ERROR', error.message);
+        switch (error.code) {
+          case 'FEED_NOT_FOUND': {
+            void reply.status(404);
+            return await reply.fail('NOT_FOUND', error.message);
+          }
+          case 'SNAPSHOT_NOT_FOUND': {
+            void reply.status(404);
+            return await reply.fail('NOT_FOUND', error.message);
+          }
+          case 'INSIGHT_NOT_FOUND': {
+            void reply.status(404);
+            return await reply.fail('NOT_FOUND', error.message);
+          }
+          case 'REPOSITORY_ERROR':
+          case 'TRANSFORMATION_ERROR': {
+            return await reply.fail('INTERNAL_ERROR', error.message);
+          }
         }
         return await reply.fail('INTERNAL_ERROR', error.message);
       }

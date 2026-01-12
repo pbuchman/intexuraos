@@ -21,10 +21,7 @@ export {
   type ChartDefinitionPromptDeps,
 } from './chartDefinitionPrompt.js';
 
-export {
-  parseChartDefinition,
-  type ParsedChartDefinition,
-} from './parseChartDefinition.js';
+export { parseChartDefinition, type ParsedChartDefinition } from './parseChartDefinition.js';
 
 export {
   dataTransformPrompt,

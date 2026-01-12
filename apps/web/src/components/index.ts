@@ -1,6 +1,9 @@
 export { ActionDetailModal } from './ActionDetailModal.js';
+export { ChartDefinitionDisplay } from './ChartDefinitionDisplay.js';
+export { ChartPreview } from './ChartPreview.js';
 export { CommandDetailModal } from './CommandDetailModal.js';
 export { ConfigurableActionButton } from './ConfigurableActionButton.js';
+export { DataInsightCard } from './DataInsightCard.js';
 export { Header } from './Header.js';
 export { Sidebar } from './Sidebar.js';
 export { Layout } from './Layout.js';
@@ -12,5 +15,4 @@ export { LinkPreview } from './LinkPreview.js';
 export { LinkPreviewList } from './LinkPreviewList.js';
 export { ModelSelector, getSelectedModelsList, PROVIDER_MODELS } from './ModelSelector.js';
 export { VegaChart } from './VegaChart.js';
-export { VisualizationCard } from './VisualizationCard.js';
 export * from './ui/index.js';

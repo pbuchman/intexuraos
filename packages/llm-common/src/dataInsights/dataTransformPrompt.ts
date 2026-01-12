@@ -1,60 +1,29 @@
-/**
- * Prompt builder for data transformation (Prompt 3).
- * Transforms snapshot data according to chart definition instructions.
- */
-
 import type { PromptBuilder } from '../types.js';
 
-/**
- * Input for data transformation prompt.
- */
 export interface DataTransformPromptInput {
-  /**
-   * JSON schema of the composite feed structure.
-   */
   jsonSchema: object;
-
-  /**
-   * Snapshot data to transform.
-   */
   snapshotData: object;
-
-  /**
-   * Chart configuration (without data).
-   */
   chartConfig: object;
-
-  /**
-   * Transformation instructions from Prompt 2.
-   */
   transformInstructions: string;
-
-  /**
-   * Data insight context.
-   */
   insight: {
     title: string;
     trackableMetric: string;
   };
 }
 
-/**
- * Dependencies for data transformation prompt (none required).
- */
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type
 export interface DataTransformPromptDeps {}
 
-/**
- * Build data transformation prompt (Prompt 3).
- */
-export const dataTransformPrompt: PromptBuilder<
-  DataTransformPromptInput,
-  DataTransformPromptDeps
-> = () => (input) => {
-  const jsonSchema = JSON.stringify(input.jsonSchema, null, 2);
-  const snapshotData = JSON.stringify(input.snapshotData, null, 2);
-  const chartConfig = JSON.stringify(input.chartConfig, null, 2);
+export const dataTransformPrompt: PromptBuilder<DataTransformPromptInput, DataTransformPromptDeps> =
+  {
+    name: 'data-transform',
+    description: 'Transforms snapshot data according to chart definition instructions',
+    build(input: DataTransformPromptInput): string {
+      const jsonSchema = JSON.stringify(input.jsonSchema, null, 2);
+      const snapshotData = JSON.stringify(input.snapshotData, null, 2);
+      const chartConfig = JSON.stringify(input.chartConfig, null, 2);
 
-  return `## Your Task
+      return `## Your Task
 Transform the snapshot data according to the provided instructions.
 Output ONLY the transformed data as a JSON array.
 
@@ -91,4 +60,5 @@ RULES:
 - Do NOT modify the schema, only transform data
 - Ensure field names exactly match what the chart expects
 - All values must be properly typed (strings, numbers, dates, etc.)`;
-};
+    },
+  };

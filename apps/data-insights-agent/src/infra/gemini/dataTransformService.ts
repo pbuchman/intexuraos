@@ -83,7 +83,7 @@ export function createDataTransformService(
         pricing,
       });
 
-      const prompt = dataTransformPrompt()({
+      const prompt = dataTransformPrompt.build({
         jsonSchema,
         snapshotData,
         chartConfig,

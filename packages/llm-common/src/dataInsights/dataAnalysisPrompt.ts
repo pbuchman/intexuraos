@@ -5,9 +5,6 @@
 
 import type { PromptBuilder } from '../types.js';
 
-/**
- * Chart type definition for prompt context.
- */
 export interface ChartTypeInfo {
   id: string;
   name: string;
@@ -15,34 +12,15 @@ export interface ChartTypeInfo {
   vegaLiteSchema: object;
 }
 
-/**
- * Input for data analysis prompt.
- */
 export interface DataAnalysisPromptInput {
-  /**
-   * JSON schema of the composite feed structure.
-   */
   jsonSchema: object;
-
-  /**
-   * Snapshot data from the composite feed.
-   */
   snapshotData: object;
-
-  /**
-   * Supported chart types with their metadata.
-   */
   chartTypes: ChartTypeInfo[];
 }
 
-/**
- * Dependencies for data analysis prompt (none required).
- */
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type
 export interface DataAnalysisPromptDeps {}
 
-/**
- * Build formatted chart types table for the prompt.
- */
 function buildChartTypesTable(chartTypes: ChartTypeInfo[]): string {
   const header = 'ID   | Name         | Best For                    | Vega-Lite Schema';
   const separator = '-----|--------------|-----------------------------|-----------------';
@@ -53,11 +31,10 @@ function buildChartTypesTable(chartTypes: ChartTypeInfo[]): string {
   return [header, separator, ...rows].join('\n');
 }
 
-/**
- * Build data analysis prompt (Prompt 1).
- */
-export const dataAnalysisPrompt: PromptBuilder<DataAnalysisPromptInput, DataAnalysisPromptDeps> =
-  () => (input) => {
+export const dataAnalysisPrompt: PromptBuilder<DataAnalysisPromptInput, DataAnalysisPromptDeps> = {
+  name: 'data-analysis',
+  description: 'Analyzes composite feed data and generates measurable, trackable insights',
+  build(input: DataAnalysisPromptInput): string {
     const chartTypesTable = buildChartTypesTable(input.chartTypes);
     const jsonSchema = JSON.stringify(input.jsonSchema, null, 2);
     const snapshotData = JSON.stringify(input.snapshotData, null, 2);
@@ -93,4 +70,5 @@ RULES:
 - Do NOT include any text outside the specified format
 - Description must be 2-3 sentences maximum
 - Each INSIGHT line must be on a single line (no line breaks within the line)`;
-  };
+  },
+};
