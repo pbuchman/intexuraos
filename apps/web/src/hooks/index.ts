@@ -6,11 +6,13 @@ export {
 } from './useBookmarkChanges.js';
 export { useBookmarks } from './useBookmarks.js';
 export { useCalendarEvents } from './useCalendarEvents.js';
+export { useChartDefinition } from './useChartDefinition.js';
+export { useChartPreview } from './useChartPreview.js';
 export { useCommandChanges, type UseCommandChangesResult } from './useCommandChanges.js';
 export { useCompositeFeed, useCompositeFeeds } from './useCompositeFeeds.js';
+export { useDataInsights } from './useDataInsights.js';
 export { useDataSource, useDataSources } from './useDataSources.js';
 export { useLlmKeys } from './useLlmKeys.js';
 export { useNotes } from './useNotes.js';
 export { useResearch, useResearches } from './useResearch.js';
 export { useTodos } from './useTodos.js';
-export { useVisualization, useVisualizations } from './useVisualizations.js';
