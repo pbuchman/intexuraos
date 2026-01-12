@@ -10,6 +10,7 @@ import {
   FakeActionEventPublisher,
   FakeActionTransitionRepository,
   FakeCommandsAgentClient,
+  FakeBookmarksServiceClient,
   createFakeServices,
   createFakeExecuteResearchActionUseCase,
 } from './fakes.js';
@@ -378,6 +379,48 @@ describe('Research Agent Routes', () => {
       expect(response.statusCode).toBe(400);
       const body = JSON.parse(response.body) as { error: string };
       expect(body.error).toBe('Unsupported action type: unknown_type');
+    });
+
+    it('returns 500 when handler execution fails', async () => {
+      fakeActionClient.setAction({
+        id: 'action-123',
+        userId: 'user-456',
+        commandId: 'cmd-789',
+        type: 'research',
+        confidence: 0.95,
+        title: 'Test Research',
+        status: 'pending',
+        payload: {},
+        createdAt: '2025-01-01T12:00:00.000Z',
+        updatedAt: '2025-01-01T12:00:00.000Z',
+      });
+
+      fakeActionClient.setFailOn('updateActionStatus', new Error('Database connection failed'));
+
+      setServices(
+        createFakeServices({
+          actionServiceClient: fakeActionClient,
+          researchServiceClient: fakeResearchClient,
+          notificationSender: fakeNotificationSender,
+          actionRepository: fakeActionRepository,
+          actionEventPublisher: fakeActionEventPublisher,
+          actionTransitionRepository: fakeActionTransitionRepository,
+          commandsAgentClient: fakeCommandsAgentClient,
+        })
+      );
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/actions/research',
+        headers: {
+          'x-internal-auth': INTERNAL_AUTH_TOKEN,
+        },
+        payload: createValidPayload(),
+      });
+
+      expect(response.statusCode).toBe(500);
+      const body = JSON.parse(response.body) as { error: string };
+      expect(body.error).toContain('Database connection failed');
     });
   });
 
@@ -1461,6 +1504,222 @@ describe('Research Agent Routes', () => {
     });
   });
 
+  describe('POST /actions/:actionId/resolve-duplicate', () => {
+    beforeEach(() => {
+      process.env['INTEXURAOS_AUTH_JWKS_URL'] = 'https://example.auth.com/.well-known/jwks.json';
+      process.env['INTEXURAOS_AUTH_ISSUER'] = 'https://example.auth.com/';
+      process.env['INTEXURAOS_AUTH_AUDIENCE'] = 'test-audience';
+    });
+
+    it('returns 401 when no auth token', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/actions/action-1/resolve-duplicate',
+        payload: { action: 'skip' },
+      });
+
+      expect(response.statusCode).toBe(401);
+    });
+
+    it('returns 400 when action is missing', async () => {
+      const mockToken =
+        'eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyLTEyMyIsImF1ZCI6InRlc3QtYXVkaWVuY2UiLCJpc3MiOiJodHRwczovL2V4YW1wbGUuYXV0aC5jb20vIiwiaWF0IjoxNzA5MjE3NjAwfQ.mock';
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/actions/action-1/resolve-duplicate',
+        headers: {
+          authorization: `Bearer ${mockToken}`,
+        },
+        payload: {},
+      });
+
+      expect(response.statusCode).toBe(400);
+    });
+
+    it('skips duplicate bookmark and rejects action', async () => {
+      await fakeActionRepository.save({
+        id: 'action-1',
+        userId: 'user-123',
+        commandId: 'cmd-1',
+        type: 'link',
+        confidence: 0.95,
+        title: 'Test Link',
+        status: 'failed',
+        payload: { existingBookmarkId: 'bookmark-456', error: 'Duplicate URL' },
+        createdAt: '2025-01-01T00:00:00.000Z',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      });
+
+      const mockToken =
+        'eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyLTEyMyIsImF1ZCI6InRlc3QtYXVkaWVuY2UiLCJpc3MiOiJodHRwczovL2V4YW1wbGUuYXV0aC5jb20vIiwiaWF0IjoxNzA5MjE3NjAwfQ.mock';
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/actions/action-1/resolve-duplicate',
+        headers: {
+          authorization: `Bearer ${mockToken}`,
+        },
+        payload: { action: 'skip' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: { actionId: string; status: string };
+      };
+      expect(body.success).toBe(true);
+      expect(body.data.status).toBe('rejected');
+
+      const updatedAction = await fakeActionRepository.getById('action-1');
+      expect(updatedAction?.status).toBe('rejected');
+    });
+
+    it('refreshes duplicate bookmark and completes action', async () => {
+      await fakeActionRepository.save({
+        id: 'action-1',
+        userId: 'user-123',
+        commandId: 'cmd-1',
+        type: 'link',
+        confidence: 0.95,
+        title: 'Test Link',
+        status: 'failed',
+        payload: { existingBookmarkId: 'bookmark-456', error: 'Duplicate URL' },
+        createdAt: '2025-01-01T00:00:00.000Z',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      });
+
+      const mockToken =
+        'eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyLTEyMyIsImF1ZCI6InRlc3QtYXVkaWVuY2UiLCJpc3MiOiJodHRwczovL2V4YW1wbGUuYXV0aC5jb20vIiwiaWF0IjoxNzA5MjE3NjAwfQ.mock';
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/actions/action-1/resolve-duplicate',
+        headers: {
+          authorization: `Bearer ${mockToken}`,
+        },
+        payload: { action: 'update' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: { actionId: string; status: string; resource_url: string };
+      };
+      expect(body.success).toBe(true);
+      expect(body.data.status).toBe('completed');
+      expect(body.data.resource_url).toBe('/#/bookmarks/bookmark-456');
+
+      const updatedAction = await fakeActionRepository.getById('action-1');
+      expect(updatedAction?.status).toBe('completed');
+      expect(updatedAction?.payload['bookmarkId']).toBe('bookmark-456');
+      expect(updatedAction?.payload['resource_url']).toBe('/#/bookmarks/bookmark-456');
+    });
+
+    it('returns 400 when action has no existingBookmarkId', async () => {
+      await fakeActionRepository.save({
+        id: 'action-1',
+        userId: 'user-123',
+        commandId: 'cmd-1',
+        type: 'link',
+        confidence: 0.95,
+        title: 'Test Link',
+        status: 'failed',
+        payload: { error: 'Some other error' },
+        createdAt: '2025-01-01T00:00:00.000Z',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      });
+
+      const mockToken =
+        'eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyLTEyMyIsImF1ZCI6InRlc3QtYXVkaWVuY2UiLCJpc3MiOiJodHRwczovL2V4YW1wbGUuYXV0aC5jb20vIiwiaWF0IjoxNzA5MjE3NjAwfQ.mock';
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/actions/action-1/resolve-duplicate',
+        headers: {
+          authorization: `Bearer ${mockToken}`,
+        },
+        payload: { action: 'skip' },
+      });
+
+      expect(response.statusCode).toBe(400);
+    });
+
+    it('returns 404 when action belongs to different user', async () => {
+      await fakeActionRepository.save({
+        id: 'action-1',
+        userId: 'different-user',
+        commandId: 'cmd-1',
+        type: 'link',
+        confidence: 0.95,
+        title: 'Test Link',
+        status: 'failed',
+        payload: { existingBookmarkId: 'bookmark-456', error: 'Duplicate URL' },
+        createdAt: '2025-01-01T00:00:00.000Z',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      });
+
+      const mockToken =
+        'eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyLTEyMyIsImF1ZCI6InRlc3QtYXVkaWVuY2UiLCJpc3MiOiJodHRwczovL2V4YW1wbGUuYXV0aC5jb20vIiwiaWF0IjoxNzA5MjE3NjAwfQ.mock';
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/actions/action-1/resolve-duplicate',
+        headers: {
+          authorization: `Bearer ${mockToken}`,
+        },
+        payload: { action: 'skip' },
+      });
+
+      expect(response.statusCode).toBe(404);
+    });
+
+    it('returns 500 when force refresh fails', async () => {
+      const fakeBookmarksServiceClient = new FakeBookmarksServiceClient();
+      fakeBookmarksServiceClient.setFailNext(true, new Error('Refresh failed'));
+
+      setServices(
+        createFakeServices({
+          actionServiceClient: fakeActionClient,
+          researchServiceClient: fakeResearchClient,
+          notificationSender: fakeNotificationSender,
+          actionRepository: fakeActionRepository,
+          actionEventPublisher: fakeActionEventPublisher,
+          bookmarksServiceClient: fakeBookmarksServiceClient,
+        })
+      );
+
+      await fakeActionRepository.save({
+        id: 'action-1',
+        userId: 'user-123',
+        commandId: 'cmd-1',
+        type: 'link',
+        confidence: 0.95,
+        title: 'Test Link',
+        status: 'failed',
+        payload: { existingBookmarkId: 'bookmark-456', error: 'Duplicate URL' },
+        createdAt: '2025-01-01T00:00:00.000Z',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      });
+
+      const mockToken =
+        'eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyLTEyMyIsImF1ZCI6InRlc3QtYXVkaWVuY2UiLCJpc3MiOiJodHRwczovL2V4YW1wbGUuYXV0aC5jb20vIiwiaWF0IjoxNzA5MjE3NjAwfQ.mock';
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/actions/action-1/resolve-duplicate',
+        headers: {
+          authorization: `Bearer ${mockToken}`,
+        },
+        payload: { action: 'update' },
+      });
+
+      expect(response.statusCode).toBe(500);
+      const body = JSON.parse(response.body) as { error: { message: string } };
+      expect(body.error.message).toContain('Refresh failed');
+    });
+  });
+
   describe('System endpoints', () => {
     it('GET /health returns 200', async () => {
       const response = await app.inject({
@@ -1656,6 +1915,47 @@ describe('Research Agent Routes', () => {
       expect(body.actionId).toBe('action-123');
     });
 
+    it('returns 500 when handler execution fails with other error', async () => {
+      fakeActionClient.setAction({
+        id: 'action-123',
+        userId: 'user-456',
+        commandId: 'cmd-789',
+        type: 'research',
+        confidence: 0.95,
+        title: 'Test Research',
+        status: 'pending',
+        payload: {},
+        createdAt: '2025-01-01T12:00:00.000Z',
+        updatedAt: '2025-01-01T12:00:00.000Z',
+      });
+
+      fakeActionClient.setFailOn('updateActionStatus', new Error('Database connection failed'));
+
+      setServices(
+        createFakeServices({
+          actionServiceClient: fakeActionClient,
+          researchServiceClient: fakeResearchClient,
+          notificationSender: fakeNotificationSender,
+          actionRepository: fakeActionRepository,
+          actionEventPublisher: fakeActionEventPublisher,
+          actionTransitionRepository: fakeActionTransitionRepository,
+          commandsAgentClient: fakeCommandsAgentClient,
+        })
+      );
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/actions/process',
+        headers: {
+          'x-internal-auth': INTERNAL_AUTH_TOKEN,
+        },
+        payload: createValidPayload({ actionType: 'research' }),
+      });
+
+      expect(response.statusCode).toBe(500);
+      const body = JSON.parse(response.body) as { error: string };
+      expect(body.error).toContain('Database connection failed');
+    });
   });
 
   describe('POST /internal/actions/retry-pending', () => {

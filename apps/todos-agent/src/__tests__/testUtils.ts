@@ -3,9 +3,12 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import * as jose from 'jose';
 import { buildServer } from '../server.js';
 import { clearJwksCache } from '@intexuraos/common-http';
+import type { Result } from '@intexuraos/common-core';
 import { FakeTodoRepository } from './fakeTodoRepository.js';
 import { resetServices, setServices } from '../services.js';
 import type { TodosProcessingPublisher } from '@intexuraos/infra-pubsub';
+import type { UserServiceClient } from '../infra/user/userServiceClient.js';
+import type { TodoItemExtractionService, ExtractedItem, ExtractionError } from '../infra/gemini/todoItemExtractionService.js';
 
 export class FakeTodosProcessingPublisher implements TodosProcessingPublisher {
   public publishedEvents: { todoId: string; userId: string; title: string; correlationId?: string }[] = [];
@@ -15,13 +18,31 @@ export class FakeTodosProcessingPublisher implements TodosProcessingPublisher {
     userId: string;
     title: string;
     correlationId?: string;
-  }): Promise<{ ok: true; value: undefined }> {
+  }): Promise<{ readonly ok: true; readonly value: undefined }> {
     this.publishedEvents.push(params);
     return { ok: true, value: undefined };
   }
 
   reset(): void {
     this.publishedEvents = [];
+  }
+}
+
+export class FakeUserServiceClient implements UserServiceClient {
+  public getGeminiApiKeyResult?: { readonly ok: true; readonly value: string } | { readonly ok: false; readonly error: { code: 'NETWORK_ERROR' | 'API_ERROR' | 'NO_API_KEY'; message: string } };
+
+  async getGeminiApiKey(_userId: string): Promise<{ readonly ok: true; readonly value: string } | { readonly ok: false; readonly error: { code: 'NETWORK_ERROR' | 'API_ERROR' | 'NO_API_KEY'; message: string } }> {
+    if (this.getGeminiApiKeyResult) return this.getGeminiApiKeyResult;
+    return { ok: false, error: { code: 'NO_API_KEY', message: 'No API key' } };
+  }
+}
+
+export class FakeTodoItemExtractionService implements TodoItemExtractionService {
+  public extractItemsResult?: Result<ExtractedItem[], ExtractionError>;
+
+  async extractItems(_userId: string, _description: string): Promise<Result<ExtractedItem[], ExtractionError>> {
+    if (this.extractItemsResult) return this.extractItemsResult;
+    return { ok: true, value: [] };
   }
 }
 
@@ -86,6 +107,8 @@ export interface TestContext {
   app: FastifyInstance;
   todoRepository: FakeTodoRepository;
   todosProcessingPublisher: FakeTodosProcessingPublisher;
+  userServiceClient: FakeUserServiceClient;
+  todoItemExtractionService: FakeTodoItemExtractionService;
 }
 
 export function setupTestContext(): TestContext {
@@ -93,6 +116,8 @@ export function setupTestContext(): TestContext {
     app: null as unknown as FastifyInstance,
     todoRepository: null as unknown as FakeTodoRepository,
     todosProcessingPublisher: null as unknown as FakeTodosProcessingPublisher,
+    userServiceClient: null as unknown as FakeUserServiceClient,
+    todoItemExtractionService: null as unknown as FakeTodoItemExtractionService,
   };
 
   beforeAll(async () => {
@@ -107,9 +132,13 @@ export function setupTestContext(): TestContext {
     process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = 'test-internal-token';
     context.todoRepository = new FakeTodoRepository();
     context.todosProcessingPublisher = new FakeTodosProcessingPublisher();
+    context.userServiceClient = new FakeUserServiceClient();
+    context.todoItemExtractionService = new FakeTodoItemExtractionService();
     setServices({
       todoRepository: context.todoRepository,
       todosProcessingPublisher: context.todosProcessingPublisher,
+      userServiceClient: context.userServiceClient,
+      todoItemExtractionService: context.todoItemExtractionService,
     });
     clearJwksCache();
     context.app = await buildServer();

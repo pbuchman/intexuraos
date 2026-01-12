@@ -29,22 +29,19 @@ export {
   type CommandClassifierPromptDeps,
 } from './classification/index.js';
 
+// Todo prompts (item extraction)
+export {
+  itemExtractionPrompt,
+  type ItemExtractionPromptInput,
+  type ItemExtractionPromptDeps,
+} from './todos/index.js';
+
 // Image prompts (thumbnail generation)
 export {
   thumbnailPrompt,
   type ThumbnailPromptInput,
   type ThumbnailPromptDeps,
 } from './image/index.js';
-
-// Visualization prompts (insights and Vega-Lite generation)
-export {
-  insightsPrompt,
-  type InsightsPromptInput,
-  type InsightsPromptDeps,
-  vegaLitePrompt,
-  type VegaLitePromptInput,
-  type VegaLitePromptDeps,
-} from './visualization/index.js';
 
 // Validation prompts (input quality and improvement)
 export {
@@ -121,3 +118,23 @@ export {
 
 // Security utilities
 export { redactToken, redactObject, SENSITIVE_FIELDS } from './redaction.js';
+
+// Data insights prompts and parsers
+export {
+  dataAnalysisPrompt,
+  type DataAnalysisPromptInput,
+  type DataAnalysisPromptDeps,
+  type ChartTypeInfo,
+  parseInsightResponse,
+  type ParsedDataInsight,
+  type ParseInsightResult,
+  chartDefinitionPrompt,
+  type ChartDefinitionPromptInput,
+  type ChartDefinitionPromptDeps,
+  parseChartDefinition,
+  type ParsedChartDefinition,
+  dataTransformPrompt,
+  type DataTransformPromptInput,
+  type DataTransformPromptDeps,
+  parseTransformedData,
+} from './dataInsights/index.js';

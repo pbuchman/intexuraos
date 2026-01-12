@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { FakeTodoRepository } from './fakeTodoRepository.js';
+import { setupTestContext } from './testUtils.js';
 import { createTodo } from '../domain/usecases/createTodo.js';
 import { getTodo } from '../domain/usecases/getTodo.js';
 import { listTodos } from '../domain/usecases/listTodos.js';
@@ -1403,7 +1404,7 @@ describe('updateTodoItem - additional coverage', () => {
     }
   });
 
-  it('sets in_progress when item marked in_progress', async () => {
+  it('sets in_progress when item marked completed', async () => {
     const createResult = await todoRepository.create({
       userId: 'user-1',
       title: 'Test',
@@ -1424,7 +1425,7 @@ describe('updateTodoItem - additional coverage', () => {
       createResult.value.id,
       itemId,
       'user-1',
-      { status: 'in_progress' }
+      { status: 'completed' }
     );
 
     expect(result.ok).toBe(true);
@@ -1863,10 +1864,11 @@ describe('cancelTodo', () => {
 });
 
 describe('processTodoCreated', () => {
+  const context = setupTestContext();
   let todoRepository: FakeTodoRepository;
 
   beforeEach(() => {
-    todoRepository = new FakeTodoRepository();
+    todoRepository = context.todoRepository;
   });
 
   it('changes processing todo status to pending', async () => {
@@ -1882,7 +1884,30 @@ describe('processTodoCreated', () => {
     if (!createResult.ok) return;
 
     const result = await processTodoCreated(
-      { todoRepository, logger: mockLogger },
+      { todoRepository, logger: mockLogger, todoItemExtractionService: context.todoItemExtractionService },
+      createResult.value.id
+    );
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.status).toBe('pending');
+    }
+  });
+
+  it('changes processing todo status to pending', async () => {
+    const createResult = await todoRepository.create({
+      userId: 'user-1',
+      title: 'Test',
+      tags: [],
+      source: 'web',
+      sourceId: 'src-1',
+      status: 'processing',
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) return;
+
+    const result = await processTodoCreated(
+      { todoRepository, logger: mockLogger, todoItemExtractionService: context.todoItemExtractionService },
       createResult.value.id
     );
 
@@ -1904,7 +1929,7 @@ describe('processTodoCreated', () => {
     if (!createResult.ok) return;
 
     const result = await processTodoCreated(
-      { todoRepository, logger: mockLogger },
+      { todoRepository, logger: mockLogger, todoItemExtractionService: context.todoItemExtractionService },
       createResult.value.id
     );
 
@@ -1916,7 +1941,7 @@ describe('processTodoCreated', () => {
 
   it('returns NOT_FOUND for non-existent todo', async () => {
     const result = await processTodoCreated(
-      { todoRepository, logger: mockLogger },
+      { todoRepository, logger: mockLogger, todoItemExtractionService: context.todoItemExtractionService },
       'non-existent'
     );
 
@@ -1930,7 +1955,7 @@ describe('processTodoCreated', () => {
     todoRepository.simulateMethodError('findById', { code: 'STORAGE_ERROR', message: 'DB error' });
 
     const result = await processTodoCreated(
-      { todoRepository, logger: mockLogger },
+      { todoRepository, logger: mockLogger, todoItemExtractionService: context.todoItemExtractionService },
       'any-id'
     );
 
@@ -1958,13 +1983,465 @@ describe('processTodoCreated', () => {
     });
 
     const result = await processTodoCreated(
-      { todoRepository, logger: mockLogger },
+      { todoRepository, logger: mockLogger, todoItemExtractionService: context.todoItemExtractionService },
       createResult.value.id
     );
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.error.code).toBe('STORAGE_ERROR');
+    }
+  });
+
+  it('extracts items from description and adds to todo', async () => {
+    const createResult = await todoRepository.create({
+      userId: 'user-1',
+      title: 'Test',
+      tags: [],
+      source: 'web',
+      sourceId: 'src-1',
+      status: 'processing',
+      description: 'Need to buy groceries and call mom',
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) return;
+
+    context.todoItemExtractionService.extractItemsResult = {
+      ok: true,
+      value: [
+        {
+          title: 'Buy groceries',
+          priority: 'high',
+          dueDate: new Date('2025-12-31'),
+          reasoning: 'Urgent task',
+        },
+        {
+          title: 'Call mom',
+          priority: null,
+          dueDate: null,
+          reasoning: 'Regular task',
+        },
+      ],
+    };
+
+    const result = await processTodoCreated(
+      { todoRepository, logger: mockLogger, todoItemExtractionService: context.todoItemExtractionService },
+      createResult.value.id
+    );
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.items).toHaveLength(2);
+      expect(result.value.items[0]?.title).toBe('Buy groceries');
+      expect(result.value.items[0]?.priority).toBe('high');
+      expect(result.value.items[0]?.status).toBe('pending');
+      expect(result.value.items[1]?.title).toBe('Call mom');
+      expect(result.value.status).toBe('pending');
+    }
+  });
+
+  it('adds informational item when extraction returns no items', async () => {
+    const createResult = await todoRepository.create({
+      userId: 'user-1',
+      title: 'Test',
+      tags: [],
+      source: 'web',
+      sourceId: 'src-1',
+      status: 'processing',
+      description: 'No actionable tasks here',
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) return;
+
+    context.todoItemExtractionService.extractItemsResult = { ok: true, value: [] };
+
+    const result = await processTodoCreated(
+      { todoRepository, logger: mockLogger, todoItemExtractionService: context.todoItemExtractionService },
+      createResult.value.id
+    );
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.items).toHaveLength(1);
+      expect(result.value.items[0]?.title).toBe('No actionable items found in todo description');
+      expect(result.value.status).toBe('pending');
+    }
+  });
+
+  it('adds warning item when extraction fails', async () => {
+    const createResult = await todoRepository.create({
+      userId: 'user-1',
+      title: 'Test',
+      tags: [],
+      source: 'web',
+      sourceId: 'src-1',
+      status: 'processing',
+      description: 'Tasks to extract',
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) return;
+
+    context.todoItemExtractionService.extractItemsResult = {
+      ok: false,
+      error: {
+        code: 'GENERATION_ERROR',
+        message: 'LLM failed',
+      },
+    };
+
+    const result = await processTodoCreated(
+      { todoRepository, logger: mockLogger, todoItemExtractionService: context.todoItemExtractionService },
+      createResult.value.id
+    );
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.items).toHaveLength(1);
+      expect(result.value.items[0]?.title).toBe('Item extraction failed (GENERATION_ERROR)');
+      expect(result.value.items[0]?.priority).toBe('high');
+      expect(result.value.status).toBe('pending');
+    }
+  });
+
+  it('adds warning item for NO_API_KEY extraction error', async () => {
+    const createResult = await todoRepository.create({
+      userId: 'user-1',
+      title: 'Test',
+      tags: [],
+      source: 'web',
+      sourceId: 'src-1',
+      status: 'processing',
+      description: 'Some tasks',
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) return;
+
+    context.todoItemExtractionService.extractItemsResult = {
+      ok: false,
+      error: {
+        code: 'NO_API_KEY',
+        message: 'Please configure your Gemini API key',
+      },
+    };
+
+    const result = await processTodoCreated(
+      { todoRepository, logger: mockLogger, todoItemExtractionService: context.todoItemExtractionService },
+      createResult.value.id
+    );
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.items).toHaveLength(1);
+      expect(result.value.items[0]?.title).toBe('Item extraction failed (NO_API_KEY)');
+      expect(result.value.items[0]?.priority).toBe('high');
+    }
+  });
+
+  it('handles todo with empty description (just updates status)', async () => {
+    const createResult = await todoRepository.create({
+      userId: 'user-1',
+      title: 'Test',
+      tags: [],
+      source: 'web',
+      sourceId: 'src-1',
+      status: 'processing',
+      description: '',
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) return;
+
+    const result = await processTodoCreated(
+      { todoRepository, logger: mockLogger, todoItemExtractionService: context.todoItemExtractionService },
+      createResult.value.id
+    );
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.status).toBe('pending');
+      expect(result.value.items).toHaveLength(0);
+    }
+  });
+
+  it('handles todo with null description (just updates status)', async () => {
+    const createResult = await todoRepository.create({
+      userId: 'user-1',
+      title: 'Test',
+      tags: [],
+      source: 'web',
+      sourceId: 'src-1',
+      status: 'processing',
+      description: null,
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) return;
+
+    const result = await processTodoCreated(
+      { todoRepository, logger: mockLogger, todoItemExtractionService: context.todoItemExtractionService },
+      createResult.value.id
+    );
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.status).toBe('pending');
+      expect(result.value.items).toHaveLength(0);
+    }
+  });
+
+  it('handles todo with whitespace-only description (just updates status)', async () => {
+    const createResult = await todoRepository.create({
+      userId: 'user-1',
+      title: 'Test',
+      tags: [],
+      source: 'web',
+      sourceId: 'src-1',
+      status: 'processing',
+      description: '   \n\t  ',
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) return;
+
+    const result = await processTodoCreated(
+      { todoRepository, logger: mockLogger, todoItemExtractionService: context.todoItemExtractionService },
+      createResult.value.id
+    );
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.status).toBe('pending');
+      expect(result.value.items).toHaveLength(0);
+    }
+  });
+
+  it('adds extracted items after existing items with correct positions', async () => {
+    const createResult = await todoRepository.create({
+      userId: 'user-1',
+      title: 'Test',
+      tags: [],
+      source: 'web',
+      sourceId: 'src-1',
+      status: 'processing',
+      description: 'Additional tasks',
+      items: [{ title: 'Existing item' }],
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) return;
+
+    context.todoItemExtractionService.extractItemsResult = {
+      ok: true,
+      value: [
+        {
+          title: 'New item 1',
+          priority: null,
+          dueDate: null,
+          reasoning: 'New task',
+        },
+        {
+          title: 'New item 2',
+          priority: null,
+          dueDate: null,
+          reasoning: 'Another task',
+        },
+      ],
+    };
+
+    const result = await processTodoCreated(
+      { todoRepository, logger: mockLogger, todoItemExtractionService: context.todoItemExtractionService },
+      createResult.value.id
+    );
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.items).toHaveLength(3);
+      expect(result.value.items[0]?.title).toBe('Existing item');
+      expect(result.value.items[0]?.position).toBe(0);
+      expect(result.value.items[1]?.title).toBe('New item 1');
+      expect(result.value.items[1]?.position).toBe(1);
+      expect(result.value.items[2]?.title).toBe('New item 2');
+      expect(result.value.items[2]?.position).toBe(2);
+    }
+  });
+
+  it('truncates description exceeding MAX_DESCRIPTION_LENGTH', async () => {
+    const createResult = await todoRepository.create({
+      userId: 'user-1',
+      title: 'Test',
+      tags: [],
+      source: 'web',
+      sourceId: 'src-1',
+      status: 'processing',
+      description: 'A'.repeat(10001),
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) return;
+
+    context.todoItemExtractionService.extractItemsResult = {
+      ok: true,
+      value: [
+        {
+          title: 'Task from truncated description',
+          priority: null,
+          dueDate: null,
+          reasoning: 'Test',
+        },
+      ],
+    };
+
+    const result = await processTodoCreated(
+      { todoRepository, logger: mockLogger, todoItemExtractionService: context.todoItemExtractionService },
+      createResult.value.id
+    );
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.items).toHaveLength(1);
+      expect(result.value.items[0]?.title).toBe('Task from truncated description');
+      expect(result.value.status).toBe('pending');
+    }
+  });
+
+  it('adds all extracted items from description', async () => {
+    const createResult = await todoRepository.create({
+      userId: 'user-1',
+      title: 'Test',
+      tags: [],
+      source: 'web',
+      sourceId: 'src-1',
+      status: 'processing',
+      description: 'Many tasks',
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) return;
+
+    const extractedItems = Array.from({ length: 60 }, (_, i) => ({
+      title: `Task ${String(i)}`,
+      priority: null,
+      dueDate: null,
+      reasoning: `Task number ${String(i)}`,
+    }));
+
+    context.todoItemExtractionService.extractItemsResult = { ok: true, value: extractedItems };
+
+    const result = await processTodoCreated(
+      { todoRepository, logger: mockLogger, todoItemExtractionService: context.todoItemExtractionService },
+      createResult.value.id
+    );
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.items).toHaveLength(60);
+      expect(result.value.items[0]?.title).toBe('Task 0');
+      expect(result.value.items[59]?.title).toBe('Task 59');
+    }
+  });
+
+  it('adds warning item after existing items on extraction failure', async () => {
+    const createResult = await todoRepository.create({
+      userId: 'user-1',
+      title: 'Test',
+      tags: [],
+      source: 'web',
+      sourceId: 'src-1',
+      status: 'processing',
+      description: 'Tasks to extract',
+      items: [{ title: 'Existing item' }],
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) return;
+
+    context.todoItemExtractionService.extractItemsResult = {
+      ok: false,
+      error: {
+        code: 'USER_SERVICE_ERROR',
+        message: 'Failed to fetch API key',
+      },
+    };
+
+    const result = await processTodoCreated(
+      { todoRepository, logger: mockLogger, todoItemExtractionService: context.todoItemExtractionService },
+      createResult.value.id
+    );
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.items).toHaveLength(2);
+      expect(result.value.items[0]?.title).toBe('Existing item');
+      expect(result.value.items[1]?.title).toBe('Item extraction failed (USER_SERVICE_ERROR)');
+      expect(result.value.items[1]?.position).toBe(1);
+    }
+  });
+
+  it('adds informational item after existing items when no extraction results', async () => {
+    const createResult = await todoRepository.create({
+      userId: 'user-1',
+      title: 'Test',
+      tags: [],
+      source: 'web',
+      sourceId: 'src-1',
+      status: 'processing',
+      description: 'Nothing to extract',
+      items: [{ title: 'Existing item' }],
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) return;
+
+    context.todoItemExtractionService.extractItemsResult = { ok: true, value: [] };
+
+    const result = await processTodoCreated(
+      { todoRepository, logger: mockLogger, todoItemExtractionService: context.todoItemExtractionService },
+      createResult.value.id
+    );
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.items).toHaveLength(2);
+      expect(result.value.items[0]?.title).toBe('Existing item');
+      expect(result.value.items[1]?.title).toBe('No actionable items found in todo description');
+      expect(result.value.items[1]?.position).toBe(1);
+    }
+  });
+
+  it('preserves existing items when adding extracted items', async () => {
+    const createResult = await todoRepository.create({
+      userId: 'user-1',
+      title: 'Test',
+      tags: [],
+      source: 'web',
+      sourceId: 'src-1',
+      status: 'processing',
+      description: 'More tasks',
+      items: [
+        { title: 'Existing 1' },
+        { title: 'Existing 2' },
+        { title: 'Existing 3' },
+      ],
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) return;
+
+    context.todoItemExtractionService.extractItemsResult = {
+      ok: true,
+      value: [
+        {
+          title: 'Extracted 1',
+          priority: null,
+          dueDate: null,
+          reasoning: 'Test',
+        },
+      ],
+    };
+
+    const result = await processTodoCreated(
+      { todoRepository, logger: mockLogger, todoItemExtractionService: context.todoItemExtractionService },
+      createResult.value.id
+    );
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.items).toHaveLength(4);
+      expect(result.value.items[0]?.title).toBe('Existing 1');
+      expect(result.value.items[1]?.title).toBe('Existing 2');
+      expect(result.value.items[2]?.title).toBe('Existing 3');
+      expect(result.value.items[3]?.title).toBe('Extracted 1');
     }
   });
 });

@@ -4,7 +4,7 @@
  */
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import nock from 'nock';
-import { GoogleCalendarClientImpl } from '../../infra/google/googleCalendarClient.js';
+import { GoogleCalendarClientImpl, mapErrorToCalendarError } from '../../infra/google/googleCalendarClient.js';
 
 const GOOGLE_CALENDAR_API = 'https://www.googleapis.com';
 const TEST_ACCESS_TOKEN = 'test-access-token';
@@ -505,6 +505,141 @@ describe('GoogleCalendarClientImpl', () => {
       if (!result.ok) {
         expect(result.error.code).toBe('INTERNAL_ERROR');
       }
+    });
+  });
+
+  describe('mapErrorToCalendarError', () => {
+    it('maps Google API 404 errors to NOT_FOUND', () => {
+      const error = {
+        response: {
+          data: {
+            error: {
+              code: 404,
+              message: 'Event not found',
+            },
+          },
+        },
+      };
+
+      const result = mapErrorToCalendarError(error);
+      expect(result.code).toBe('NOT_FOUND');
+      expect(result.message).toBe('Event not found');
+    });
+
+    it('maps Google API 401 errors to TOKEN_ERROR', () => {
+      const error = {
+        response: {
+          data: {
+            error: {
+              code: 401,
+              message: 'Invalid token',
+            },
+          },
+        },
+      };
+
+      const result = mapErrorToCalendarError(error);
+      expect(result.code).toBe('TOKEN_ERROR');
+    });
+
+    it('maps Google API 403 quota errors to QUOTA_EXCEEDED', () => {
+      const error = {
+        response: {
+          data: {
+            error: {
+              code: 403,
+              message: 'Quota exceeded',
+              errors: [{ reason: 'quotaExceeded' }],
+            },
+          },
+        },
+      };
+
+      const result = mapErrorToCalendarError(error);
+      expect(result.code).toBe('QUOTA_EXCEEDED');
+    });
+
+    it('maps Google API 403 rate limit errors to QUOTA_EXCEEDED', () => {
+      const error = {
+        response: {
+          data: {
+            error: {
+              code: 403,
+              message: 'Rate limit exceeded',
+              errors: [{ reason: 'rateLimitExceeded' }],
+            },
+          },
+        },
+      };
+
+      const result = mapErrorToCalendarError(error);
+      expect(result.code).toBe('QUOTA_EXCEEDED');
+    });
+
+    it('maps Google API 403 permission errors to PERMISSION_DENIED', () => {
+      const error = {
+        response: {
+          data: {
+            error: {
+              code: 403,
+              message: 'Access denied',
+              errors: [{ reason: 'forbidden' }],
+            },
+          },
+        },
+      };
+
+      const result = mapErrorToCalendarError(error);
+      expect(result.code).toBe('PERMISSION_DENIED');
+    });
+
+    it('maps Google API 400 errors to INVALID_REQUEST', () => {
+      const error = {
+        response: {
+          data: {
+            error: {
+              code: 400,
+              message: 'Invalid request',
+            },
+          },
+        },
+      };
+
+      const result = mapErrorToCalendarError(error);
+      expect(result.code).toBe('INVALID_REQUEST');
+    });
+
+    it('maps unknown errors to INTERNAL_ERROR', () => {
+      const error = {
+        response: {
+          data: {
+            error: {
+              code: 500,
+              message: 'Internal server error',
+            },
+          },
+        },
+      };
+
+      const result = mapErrorToCalendarError(error);
+      expect(result.code).toBe('INTERNAL_ERROR');
+    });
+
+    it('handles direct error format with code and message', () => {
+      const error = {
+        code: 404,
+        message: 'Not found',
+      };
+
+      const result = mapErrorToCalendarError(error);
+      expect(result.code).toBe('NOT_FOUND');
+    });
+
+    it('handles errors without known format', () => {
+      const error = {};
+      const result = mapErrorToCalendarError(error);
+      expect(result.code).toBe('INTERNAL_ERROR');
+      expect(result.message).toBe('Unknown error');
     });
   });
 });

@@ -1,4 +1,3 @@
-import { lazy, Suspense } from 'react';
 import { HashRouter, Navigate, Route, Routes, useParams } from 'react-router-dom';
 import { Auth0Provider } from '@auth0/auth0-react';
 import { VibeKanbanWebCompanion } from 'vibe-kanban-web-companion';
@@ -7,9 +6,6 @@ import { PWAProvider } from '@/context/pwa-context';
 import { AndroidInstallBanner, IOSInstallBanner, UpdateBanner } from '@/components/pwa-banners';
 import { config } from '@/config';
 
-const LazyCompositeFeedVisualizationsPage = lazy(
-  () => import('./pages/CompositeFeedVisualizationsPage')
-);
 
 (function handleShareTargetRedirect(): void {
   if (window.location.hash !== '') return;
@@ -25,6 +21,7 @@ import {
   CalendarPage,
   CompositeFeedFormPage,
   CompositeFeedsListPage,
+  DataInsightsPage,
   DataSourceFormPage,
   DataSourcesListPage,
   GoogleCalendarConnectionPage,
@@ -253,6 +250,14 @@ function AppRoutes(): React.JSX.Element {
         }
       />
       <Route
+        path="/data-insights/composite-feeds/:feedId/visualizations"
+        element={
+          <ProtectedRoute>
+            <DataInsightsPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
         path="/data-insights/static-sources"
         element={
           <ProtectedRoute>
@@ -273,22 +278,6 @@ function AppRoutes(): React.JSX.Element {
         element={
           <ProtectedRoute>
             <DataSourceFormPage />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/data-insights/:id/visualizations"
-        element={
-          <ProtectedRoute>
-            <Suspense
-              fallback={
-                <div className="flex min-h-screen items-center justify-center bg-slate-50">
-                  <div className="h-12 w-12 animate-spin rounded-full border-4 border-blue-600 border-t-transparent" />
-                </div>
-              }
-            >
-              <LazyCompositeFeedVisualizationsPage />
-            </Suspense>
           </ProtectedRoute>
         }
       />

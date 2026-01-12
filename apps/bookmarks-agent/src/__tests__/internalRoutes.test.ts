@@ -170,6 +170,37 @@ describe('Internal Routes', () => {
       expect(body.error.code).toBe('CONFLICT');
       expect(body.error.details?.existingBookmarkId).toBe(existingId);
     });
+
+    it('creates bookmark successfully even when enrich publish fails', async () => {
+      ctx.enrichPublisher.setNextError({
+        code: 'PUBLISH_FAILED',
+        message: 'Pub/Sub temporarily unavailable',
+      });
+
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/internal/bookmarks',
+        headers: {
+          'x-internal-auth': TEST_INTERNAL_TOKEN,
+          'content-type': 'application/json',
+        },
+        payload: {
+          userId: 'user-1',
+          url: 'https://example.com',
+          title: 'Example',
+          tags: ['internal'],
+          source: 'actions-agent',
+          sourceId: 'action-123',
+        },
+      });
+
+      // Should still create the bookmark successfully
+      expect(response.statusCode).toBe(201);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(true);
+      expect(body.data.id).toBeDefined();
+      expect(body.data.bookmark.url).toBe('https://example.com');
+    });
   });
 
   describe('GET /internal/bookmarks/:id', () => {
@@ -474,6 +505,119 @@ describe('Internal Routes', () => {
       const body = JSON.parse(response.body);
       expect(body.data.tags).toEqual(['new-tag']);
       expect(body.data.archived).toBe(true);
+    });
+  });
+
+  describe('POST /internal/bookmarks/:id/force-refresh', () => {
+    it('returns 401 when no internal auth header', async () => {
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/internal/bookmarks/bookmark-123/force-refresh',
+      });
+
+      expect(response.statusCode).toBe(401);
+    });
+
+    it('returns 404 when bookmark not found', async () => {
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/internal/bookmarks/non-existent/force-refresh',
+        headers: {
+          'x-internal-auth': TEST_INTERNAL_TOKEN,
+        },
+      });
+
+      expect(response.statusCode).toBe(404);
+    });
+
+    it('force refreshes bookmark with fresh OG data', async () => {
+      const createResult = await ctx.bookmarkRepository.create({
+        userId: 'user-1',
+        url: 'https://example.com/article',
+        tags: [],
+        source: 'web',
+        sourceId: 'src-1',
+      });
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) return;
+
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: `/internal/bookmarks/${createResult.value.id}/force-refresh`,
+        headers: {
+          'x-internal-auth': TEST_INTERNAL_TOKEN,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(true);
+      expect(body.data.ogFetchStatus).toBe('processed');
+      expect(body.data.ogPreview).toEqual({
+        title: 'Test Title',
+        description: 'Test Description',
+        image: 'https://example.com/image.jpg',
+        siteName: 'Example Site',
+        favicon: 'https://example.com/favicon.ico',
+        type: null,
+      });
+    });
+
+    it('sets ogFetchStatus to failed when fetchPreview fails', async () => {
+      const createResult = await ctx.bookmarkRepository.create({
+        userId: 'user-1',
+        url: 'https://example.com/article',
+        tags: [],
+        source: 'web',
+        sourceId: 'src-1',
+      });
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) return;
+
+      ctx.linkPreviewFetcher.setNextResult({
+        ok: false,
+        error: { code: 'FETCH_FAILED', message: 'Network error' },
+      });
+
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: `/internal/bookmarks/${createResult.value.id}/force-refresh`,
+        headers: {
+          'x-internal-auth': TEST_INTERNAL_TOKEN,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(true);
+      expect(body.data.ogFetchStatus).toBe('failed');
+    });
+
+    it('returns 500 on storage error', async () => {
+      const createResult = await ctx.bookmarkRepository.create({
+        userId: 'user-1',
+        url: 'https://example.com',
+        tags: [],
+        source: 'web',
+        sourceId: 'src-1',
+      });
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) return;
+
+      ctx.bookmarkRepository.simulateMethodError('update', {
+        code: 'STORAGE_ERROR',
+        message: 'DB error',
+      });
+
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: `/internal/bookmarks/${createResult.value.id}/force-refresh`,
+        headers: {
+          'x-internal-auth': TEST_INTERNAL_TOKEN,
+        },
+      });
+
+      expect(response.statusCode).toBe(500);
     });
   });
 

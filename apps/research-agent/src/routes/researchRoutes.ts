@@ -1,16 +1,17 @@
 /**
  * Research Routes
  *
- * POST   /research            - Create new research
- * POST   /research/draft      - Save research as draft
- * GET    /research            - List user's researches
- * GET    /research/:id        - Get single research
+ * POST   /research             - Create new research
+ * POST   /research/draft       - Save research as draft
+ * GET    /research             - List user's researches
+ * GET    /research/:id         - Get single research
  * POST   /research/:id/approve - Approve draft research
- * POST   /research/:id/confirm - Confirm partial failure decision
- * POST   /research/:id/retry   - Retry from failed status
- * POST   /research/:id/enhance - Create enhanced research from completed
- * DELETE /research/:id        - Delete research
- * DELETE /research/:id/share  - Remove public share access
+ * POST   /research/:id/confirm  - Confirm partial failure decision
+ * POST   /research/:id/retry    - Retry from failed status
+ * POST   /research/:id/enhance  - Create enhanced research from completed
+ * DELETE /research/:id          - Delete research
+ * DELETE /research/:id/share    - Remove public share access
+ * PATCH  /research/:id/favourite - Toggle favourite status
  */
 
 import type { FastifyPluginCallback, FastifyReply, FastifyRequest } from 'fastify';
@@ -30,6 +31,7 @@ import {
   retryFromFailed,
   runSynthesis,
   submitResearch,
+  toggleResearchFavourite,
   unshareResearch,
   generateContextLabels,
 } from '../domain/research/index.js';
@@ -52,6 +54,8 @@ import {
   retryFromFailedResponseSchema,
   saveDraftBodySchema,
   saveDraftResponseSchema,
+  toggleFavouriteBodySchema,
+  toggleFavouriteResponseSchema,
   updateDraftBodySchema,
   validateInputBodySchema,
   validateInputResponseSchema,
@@ -1127,6 +1131,52 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       }
 
       return await reply.ok(null);
+    }
+  );
+
+  // PATCH /research/:id/favourite - Toggle favourite status
+  fastify.patch(
+    '/research/:id/favourite',
+    {
+      schema: {
+        operationId: 'toggleFavourite',
+        summary: 'Toggle research favourite status',
+        description: 'Mark or unmark a research as a favourite.',
+        tags: ['research'],
+        params: researchIdParamsSchema,
+        body: toggleFavouriteBodySchema,
+        response: {
+          200: toggleFavouriteResponseSchema,
+        },
+      },
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const user = await requireAuth(request, reply);
+      if (user === null) {
+        return;
+      }
+
+      const { id } = request.params as ResearchIdParams;
+      const body = request.body as { favourite: boolean };
+      const { researchRepo } = getServices();
+
+      const result = await toggleResearchFavourite(
+        { researchId: id, userId: user.userId, favourite: body.favourite },
+        { researchRepo }
+      );
+
+      if (!result.ok) {
+        switch (result.error.type) {
+          case 'NOT_FOUND':
+            return await reply.fail('NOT_FOUND', 'Research not found');
+          case 'FORBIDDEN':
+            return await reply.fail('FORBIDDEN', 'Access denied');
+          case 'REPO_ERROR':
+            return await reply.fail('INTERNAL_ERROR', result.error.error.message);
+        }
+      }
+
+      return await reply.ok(result.value);
     }
   );
 

@@ -29,6 +29,20 @@ import type {
 import type { DataInsightSnapshot, SnapshotRepository } from '../domain/snapshot/index.js';
 import type { CompositeFeedData } from '../domain/compositeFeed/schemas/index.js';
 import { SNAPSHOT_TTL_MS } from '../domain/snapshot/models/index.js';
+import type {
+  DataAnalysisService,
+  DataAnalysisResult,
+  DataAnalysisError,
+} from '../infra/gemini/dataAnalysisService.js';
+import type {
+  ChartDefinitionService,
+  ChartDefinitionError,
+} from '../infra/gemini/chartDefinitionService.js';
+import type {
+  DataTransformService,
+  DataTransformError,
+} from '../infra/gemini/dataTransformService.js';
+import type { ParsedChartDefinition } from '@intexuraos/llm-common';
 
 /**
  * Fake DataSource repository for testing.
@@ -249,6 +263,7 @@ export class FakeCompositeFeedRepository implements CompositeFeedRepository {
         ...f,
         id: `filter-${String(idx + 1)}`,
       })),
+      dataInsights: null,
       createdAt: now,
       updatedAt: now,
     };
@@ -321,6 +336,35 @@ export class FakeCompositeFeedRepository implements CompositeFeedRepository {
           ...f,
           id: `filter-${String(idx + 1)}`,
         })) ?? feed.notificationFilters,
+      dataInsights:
+        request.staticSourceIds !== undefined || request.notificationFilters !== undefined
+          ? null
+          : feed.dataInsights,
+      updatedAt: new Date(),
+    };
+
+    this.feeds.set(id, updated);
+    return Promise.resolve(ok(updated));
+  }
+
+  updateDataInsights(
+    id: string,
+    userId: string,
+    dataInsights: CompositeFeed['dataInsights']
+  ): Promise<Result<CompositeFeed, string>> {
+    if (this.shouldFailUpdate) {
+      this.shouldFailUpdate = false;
+      return Promise.resolve(err('Simulated update failure'));
+    }
+
+    const feed = this.feeds.get(id);
+    if (feed === undefined || feed.userId !== userId) {
+      return Promise.resolve(err('Composite feed not found'));
+    }
+
+    const updated: CompositeFeed = {
+      ...feed,
+      dataInsights,
       updatedAt: new Date(),
     };
 
@@ -430,7 +474,6 @@ export class FakeMobileNotificationsClient implements MobileNotificationsClient 
     return Promise.resolve(ok(this.notifications));
   }
 }
-
 /**
  * Fake Snapshot repository for testing.
  */
@@ -542,229 +585,127 @@ export class FakeSnapshotRepository implements SnapshotRepository {
 }
 
 /**
- * Fake Visualization repository for testing.
+ * Fake VisualizationRepository for testing (placeholder - visualizations deprecated).
  */
 export class FakeVisualizationRepository {
-  private visualizations = new Map<string, import('../domain/visualization/index.js').Visualization>();
-  private idCounter = 1;
-  private shouldFailCreate = false;
-  private shouldFailGet = false;
-  private shouldFailList = false;
-  private shouldFailUpdate = false;
-  private shouldFailDelete = false;
-  private shouldFailIncrement = false;
-
-  setFailNextCreate(fail: boolean): void {
-    this.shouldFailCreate = fail;
-  }
-
-  setFailNextGet(fail: boolean): void {
-    this.shouldFailGet = fail;
-  }
-
-  setFailNextList(fail: boolean): void {
-    this.shouldFailList = fail;
-  }
-
-  setFailNextUpdate(fail: boolean): void {
-    this.shouldFailUpdate = fail;
-  }
-
-  setFailNextDelete(fail: boolean): void {
-    this.shouldFailDelete = fail;
-  }
-
-  setFailNextIncrement(fail: boolean): void {
-    this.shouldFailIncrement = fail;
-  }
-
-  async create(
-    feedId: string,
-    userId: string,
-    data: {
-      title: string;
-      description: string;
-      type: import('../domain/visualization/index.js').VisualizationType;
-    }
-  ): Promise<Result<import('../domain/visualization/index.js').Visualization, string>> {
-    if (this.shouldFailCreate) {
-      this.shouldFailCreate = false;
-      return err('Simulated create failure');
-    }
-
-    const id = `viz-${String(this.idCounter++)}`;
-    const now = new Date();
-    const visualization: import('../domain/visualization/index.js').Visualization = {
-      id,
-      feedId,
-      userId,
-      title: data.title,
-      description: data.description,
-      type: data.type,
-      status: 'pending',
-      htmlContent: null,
-      errorMessage: null,
-      renderErrorCount: 0,
-      createdAt: now,
-      updatedAt: now,
-      lastGeneratedAt: null,
-    };
-
-    this.visualizations.set(id, visualization);
-    return ok(visualization);
-  }
-
-  async getById(
-    id: string,
-    feedId: string,
-    userId: string
-  ): Promise<Result<import('../domain/visualization/index.js').Visualization | null, string>> {
-    if (this.shouldFailGet) {
-      this.shouldFailGet = false;
-      return err('Simulated get failure');
-    }
-
-    const viz = this.visualizations.get(id);
-    if (viz === undefined || viz.feedId !== feedId || viz.userId !== userId) {
-      return ok(null);
-    }
-
-    return ok(viz);
-  }
-
-  async listByFeedId(
-    feedId: string,
-    userId: string
-  ): Promise<Result<import('../domain/visualization/index.js').Visualization[], string>> {
-    if (this.shouldFailList) {
-      this.shouldFailList = false;
-      return err('Simulated list failure');
-    }
-
-    const visualizations = Array.from(this.visualizations.values())
-      .filter((v) => v.feedId === feedId && v.userId === userId)
-      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
-
-    return ok(visualizations);
-  }
-
-  async update(
-    id: string,
-    feedId: string,
-    userId: string,
-    data: {
-      title?: string;
-      description?: string;
-      type?: import('../domain/visualization/index.js').VisualizationType;
-      status?: import('../domain/visualization/index.js').VisualizationStatus;
-      htmlContent?: string | null;
-      errorMessage?: string | null;
-      renderErrorCount?: number;
-      lastGeneratedAt?: Date;
-    }
-  ): Promise<Result<import('../domain/visualization/index.js').Visualization, string>> {
-    if (this.shouldFailUpdate) {
-      this.shouldFailUpdate = false;
-      return err('Simulated update failure');
-    }
-
-    const viz = this.visualizations.get(id);
-    if (viz === undefined || viz.feedId !== feedId || viz.userId !== userId) {
-      return err('Visualization not found');
-    }
-
-    const updated: import('../domain/visualization/index.js').Visualization = {
-      ...viz,
-      title: data.title ?? viz.title,
-      description: data.description ?? viz.description,
-      type: data.type ?? viz.type,
-      status: data.status ?? viz.status,
-      htmlContent: data.htmlContent !== undefined ? data.htmlContent : viz.htmlContent,
-      errorMessage: data.errorMessage !== undefined ? data.errorMessage : viz.errorMessage,
-      renderErrorCount: data.renderErrorCount ?? viz.renderErrorCount,
-      lastGeneratedAt: data.lastGeneratedAt ?? viz.lastGeneratedAt,
-      updatedAt: new Date(),
-    };
-
-    this.visualizations.set(id, updated);
-    return ok(updated);
-  }
-
-  async delete(
-    id: string,
-    feedId: string,
-    userId: string
-  ): Promise<Result<void, string>> {
-    if (this.shouldFailDelete) {
-      this.shouldFailDelete = false;
-      return err('Simulated delete failure');
-    }
-
-    const viz = this.visualizations.get(id);
-    if (viz === undefined || viz.feedId !== feedId || viz.userId !== userId) {
-      return err('Visualization not found');
-    }
-
-    this.visualizations.delete(id);
-    return ok(undefined);
-  }
-
-  async incrementRenderErrorCount(
-    id: string,
-    feedId: string,
-    userId: string
-  ): Promise<Result<number, string>> {
-    if (this.shouldFailIncrement) {
-      this.shouldFailIncrement = false;
-      return err('Simulated increment failure');
-    }
-
-    const viz = this.visualizations.get(id);
-    if (viz === undefined || viz.feedId !== feedId || viz.userId !== userId) {
-      return err('Visualization not found');
-    }
-
-    const newCount = viz.renderErrorCount + 1;
-    const updated: import('../domain/visualization/index.js').Visualization = {
-      ...viz,
-      renderErrorCount: newCount,
-      updatedAt: new Date(),
-    };
-
-    this.visualizations.set(id, updated);
-    return ok(newCount);
-  }
-
+  private visualizations = new Map<string, object>();
   clear(): void {
     this.visualizations.clear();
-    this.idCounter = 1;
   }
 }
 
 /**
- * Fake Visualization generation service for testing.
+ * Fake VisualizationGenerationService for testing (placeholder - visualizations deprecated).
  */
-export class FakeVisualizationGenerationService {
-  private shouldFail = false;
-  private generatedHtml = '<html><body><h1>Fake Visualization</h1></body></html>';
+// eslint-disable-next-line @typescript-eslint/no-extraneous-class
+export class FakeVisualizationGenerationService {}
 
-  setGeneratedHtml(html: string): void {
-    this.generatedHtml = html;
+/**
+ * Fake DataAnalysisService for testing.
+ */
+export class FakeDataAnalysisService implements DataAnalysisService {
+  private errorToReturn: DataAnalysisError | null = null;
+  private resultToReturn: DataAnalysisResult | null = null;
+
+  setError(error: DataAnalysisError | null): void {
+    this.errorToReturn = error;
   }
 
-  setFailNextGeneration(fail: boolean): void {
-    this.shouldFail = fail;
+  setResult(result: DataAnalysisResult): void {
+    this.resultToReturn = result;
   }
 
-  async generateContent(
+  async analyzeData(
+    _userId: string,
+    _jsonSchema: object,
     _snapshotData: object,
-    _request: import('../domain/visualization/index.js').GenerateVisualizationContentRequest
-  ): Promise<import('../domain/visualization/index.js').GeneratedVisualizationContent> {
-    if (this.shouldFail) {
-      this.shouldFail = false;
-      throw new Error('Simulated generation failure');
+    _chartTypes: unknown[]
+  ): Promise<Result<DataAnalysisResult, DataAnalysisError>> {
+    if (this.errorToReturn !== null) {
+      const error = this.errorToReturn;
+      this.errorToReturn = null;
+      return Promise.resolve(err(error));
     }
+    if (this.resultToReturn !== null) {
+      const result = this.resultToReturn;
+      this.resultToReturn = null;
+      return Promise.resolve(ok(result));
+    }
+    return Promise.resolve(ok({ insights: [] }));
+  }
+}
 
-    return { htmlContent: this.generatedHtml };
+/**
+ * Fake ChartDefinitionService for testing.
+ */
+export class FakeChartDefinitionService implements ChartDefinitionService {
+  private errorToReturn: ChartDefinitionError | null = null;
+  private resultToReturn: ParsedChartDefinition | null = null;
+
+  setError(error: ChartDefinitionError | null): void {
+    this.errorToReturn = error;
+  }
+
+  setResult(result: ParsedChartDefinition): void {
+    this.resultToReturn = result;
+  }
+
+  async generateChartDefinition(
+    _userId: string,
+    _jsonSchema: object,
+    _snapshotData: object,
+    _targetChartSchema: object,
+    _insight: { title: string; trackableMetric: string; suggestedChartType: string }
+  ): Promise<Result<ParsedChartDefinition, ChartDefinitionError>> {
+    if (this.errorToReturn !== null) {
+      const error = this.errorToReturn;
+      this.errorToReturn = null;
+      return Promise.resolve(err(error));
+    }
+    if (this.resultToReturn !== null) {
+      const result = this.resultToReturn;
+      this.resultToReturn = null;
+      return Promise.resolve(ok(result));
+    }
+    return Promise.resolve(
+      ok({ vegaLiteConfig: {}, transformInstructions: 'No transform needed' })
+    );
+  }
+}
+
+/**
+ * Fake DataTransformService for testing.
+ */
+export class FakeDataTransformService implements DataTransformService {
+  private errorToReturn: DataTransformError | null = null;
+  private resultToReturn: unknown[] | null = null;
+
+  setError(error: DataTransformError | null): void {
+    this.errorToReturn = error;
+  }
+
+  setResult(result: unknown[]): void {
+    this.resultToReturn = result;
+  }
+
+  async transformData(
+    _userId: string,
+    _jsonSchema: object,
+    _snapshotData: object,
+    _chartConfig: object,
+    _transformInstructions: string,
+    _insight: { title: string; trackableMetric: string }
+  ): Promise<Result<unknown[], DataTransformError>> {
+    if (this.errorToReturn !== null) {
+      const error = this.errorToReturn;
+      this.errorToReturn = null;
+      return Promise.resolve(err(error));
+    }
+    if (this.resultToReturn !== null) {
+      const result = this.resultToReturn;
+      this.resultToReturn = null;
+      return Promise.resolve(ok(result));
+    }
+    return Promise.resolve(ok([]));
   }
 }

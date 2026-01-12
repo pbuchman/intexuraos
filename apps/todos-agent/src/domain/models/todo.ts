@@ -5,12 +5,15 @@ export type TodoStatus =
   | 'in_progress'
   | 'completed'
   | 'cancelled';
+
+export type TodoItemStatus = 'pending' | 'completed';
+
 export type TodoPriority = 'low' | 'medium' | 'high' | 'urgent';
 
 export interface TodoItem {
   id: string;
   title: string;
-  status: TodoStatus;
+  status: TodoItemStatus;
   priority: TodoPriority | null;
   dueDate: Date | null;
   position: number;
@@ -66,7 +69,7 @@ export interface UpdateTodoInput {
 
 export interface UpdateTodoItemInput {
   title?: string | undefined;
-  status?: TodoStatus | undefined;
+  status?: TodoItemStatus | undefined;
   priority?: TodoPriority | null | undefined;
   dueDate?: Date | null | undefined;
 }

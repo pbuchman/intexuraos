@@ -417,6 +417,23 @@ export interface CompositeFeedNotificationFilter {
 }
 
 /**
+ * Chart type IDs for the 6 supported visualization types.
+ */
+export type ChartTypeId = 'C1' | 'C2' | 'C3' | 'C4' | 'C5' | 'C6';
+
+/**
+ * A single data insight generated from composite feed analysis.
+ */
+export interface DataInsight {
+  id: string;
+  title: string;
+  description: string;
+  trackableMetric: string;
+  suggestedChartType: ChartTypeId;
+  generatedAt: string;
+}
+
+/**
  * Composite feed from data-insights-agent.
  * Aggregates static data sources and notification filters.
  */
@@ -427,6 +444,7 @@ export interface CompositeFeed {
   purpose: string;
   staticSourceIds: string[];
   notificationFilters: CompositeFeedNotificationFilter[];
+  dataInsights: DataInsight[] | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -501,47 +519,6 @@ export interface CompositeFeedData {
  */
 export interface CompositeFeedSnapshot extends CompositeFeedData {
   expiresAt: string;
-}
-
-export type VisualizationType = 'chart' | 'table' | 'summary' | 'custom';
-export type VisualizationStatus = 'pending' | 'ready' | 'error';
-
-/**
- * Visualization from data-insights-agent.
- * Represents LLM-generated visual content for a composite feed.
- */
-export interface Visualization {
-  id: string;
-  feedId: string;
-  userId: string;
-  title: string;
-  description: string;
-  type: VisualizationType;
-  status: VisualizationStatus;
-  htmlContent: string | null;
-  errorMessage: string | null;
-  renderErrorCount: number;
-  createdAt: string;
-  updatedAt: string;
-  lastGeneratedAt: string | null;
-}
-
-/**
- * Request to create a visualization.
- */
-export interface CreateVisualizationRequest {
-  title: string;
-  description: string;
-  type: VisualizationType;
-}
-
-/**
- * Request to update a visualization.
- */
-export interface UpdateVisualizationRequest {
-  title?: string;
-  description?: string;
-  type?: VisualizationType;
 }
 
 /**

@@ -4,6 +4,7 @@ import { getServices } from '../services.js';
 import { createBookmark } from '../domain/usecases/createBookmark.js';
 import { getBookmark } from '../domain/usecases/getBookmark.js';
 import { updateBookmarkInternal } from '../domain/usecases/updateBookmarkInternal.js';
+import { forceRefreshBookmark } from '../domain/usecases/forceRefreshBookmark.js';
 import type { Bookmark, BookmarkStatus, OgFetchStatus, OpenGraphPreview } from '../domain/models/bookmark.js';
 
 interface CreateBookmarkBody {
@@ -356,6 +357,87 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           return await reply.fail('NOT_FOUND', 'Bookmark not found');
         }
         return await reply.fail('INTERNAL_ERROR', result.error.message);
+      }
+
+      return await reply.ok(formatBookmark(result.value));
+    }
+  );
+
+  fastify.post<{ Params: BookmarkParams; Body: UpdateBookmarkBody }>(
+    '/internal/bookmarks/:id/force-refresh',
+    {
+      schema: {
+        operationId: 'forceRefreshBookmark',
+        summary: 'Force refresh bookmark OG data',
+        description:
+          'Synchronously fetch fresh OG data for bookmark, always updating even if already processed.',
+        tags: ['internal'],
+        params: bookmarkParamsSchema,
+        response: {
+          200: {
+            description: 'Bookmark refreshed',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean' },
+              data: bookmarkResponseSchema,
+            },
+          },
+          401: {
+            description: 'Unauthorized',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean' },
+              error: {
+                type: 'object',
+                properties: {
+                  code: { type: 'string' },
+                  message: { type: 'string' },
+                },
+              },
+            },
+          },
+          404: {
+            description: 'Bookmark not found',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean' },
+              error: {
+                type: 'object',
+                properties: {
+                  code: { type: 'string' },
+                  message: { type: 'string' },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    async (
+      request: FastifyRequest<{ Params: BookmarkParams }>,
+      reply: FastifyReply
+    ) => {
+      logIncomingRequest(request, {
+        message: 'Received request to POST /internal/bookmarks/:id/force-refresh',
+      });
+
+      const authResult = validateInternalAuth(request);
+      if (!authResult.valid) {
+        request.log.warn({ reason: authResult.reason }, 'Internal auth failed for force refresh');
+        reply.status(401);
+        return { error: 'Unauthorized' };
+      }
+
+      const { bookmarkRepository, linkPreviewFetcher } = getServices();
+      const result = await forceRefreshBookmark(
+        { bookmarkRepository, linkPreviewFetcher, logger: request.log },
+        request.params.id
+      );
+
+      if (!result.ok) {
+        // Map BookmarkErrorCode to standard ErrorCode
+        const errorCode = result.error.code === 'NOT_FOUND' ? 'NOT_FOUND' : 'INTERNAL_ERROR';
+        return await reply.fail(errorCode, result.error.message);
       }
 
       return await reply.ok(formatBookmark(result.value));

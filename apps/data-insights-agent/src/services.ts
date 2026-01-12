@@ -10,10 +10,9 @@ import type {
   MobileNotificationsClient,
 } from './domain/compositeFeed/index.js';
 import type { SnapshotRepository } from './domain/snapshot/index.js';
-import type {
-  VisualizationRepository,
-  VisualizationGenerationService,
-} from './domain/visualization/index.js';
+import type { DataAnalysisService } from './infra/gemini/dataAnalysisService.js';
+import type { ChartDefinitionService } from './infra/gemini/chartDefinitionService.js';
+import type { DataTransformService } from './infra/gemini/dataTransformService.js';
 
 /**
  * Service container holding all adapter instances.
@@ -25,8 +24,11 @@ export interface ServiceContainer {
   feedNameGenerationService: FeedNameGenerationService;
   mobileNotificationsClient: MobileNotificationsClient;
   snapshotRepository: SnapshotRepository;
-  visualizationRepository: VisualizationRepository;
-  visualizationGenerationService: VisualizationGenerationService;
+  dataAnalysisService: DataAnalysisService;
+  chartDefinitionService: ChartDefinitionService;
+  dataTransformService: DataTransformService;
+  visualizationRepository?: object;
+  visualizationGenerationService?: object;
 }
 
 let container: ServiceContainer | null = null;

@@ -212,4 +212,150 @@ describe('createBookmarksServiceHttpClient', () => {
       expect(scope.isDone()).toBe(true);
     });
   });
+
+  describe('forceRefreshBookmark', () => {
+    it('returns refreshed bookmark on success', async () => {
+      nock(baseUrl)
+        .post('/internal/bookmarks/bookmark-123/force-refresh')
+        .matchHeader('X-Internal-Auth', internalAuthToken)
+        .matchHeader('Content-Type', 'application/json')
+        .reply(200, {
+          success: true,
+          data: {
+            id: 'bookmark-123',
+            url: 'https://example.com/article',
+            status: 'active',
+            ogPreview: {
+              title: 'Updated Title',
+              description: 'Updated Description',
+              image: 'https://example.com/image.jpg',
+            },
+            ogFetchStatus: 'processed',
+          },
+        });
+
+      const client = createBookmarksServiceHttpClient({ baseUrl, internalAuthToken });
+      const result = await client.forceRefreshBookmark('bookmark-123');
+
+      expect(isOk(result)).toBe(true);
+      if (isOk(result)) {
+        expect(result.value.id).toBe('bookmark-123');
+        expect(result.value.url).toBe('https://example.com/article');
+        expect(result.value.ogFetchStatus).toBe('processed');
+        expect(result.value.ogPreview?.title).toBe('Updated Title');
+      }
+    });
+
+    it('returns error on HTTP 404 (bookmark not found)', async () => {
+      nock(baseUrl)
+        .post('/internal/bookmarks/nonexistent/force-refresh')
+        .reply(404, {
+          success: false,
+          error: { code: 'NOT_FOUND', message: 'Bookmark not found' },
+        });
+
+      const client = createBookmarksServiceHttpClient({ baseUrl, internalAuthToken });
+      const result = await client.forceRefreshBookmark('nonexistent');
+
+      expect(isErr(result)).toBe(true);
+      if (isErr(result)) {
+        expect(result.error.message).toContain('Bookmark not found');
+      }
+    });
+
+    it('returns error on HTTP 500', async () => {
+      nock(baseUrl).post('/internal/bookmarks/bookmark-500/force-refresh').reply(500, 'Internal Server Error');
+
+      const client = createBookmarksServiceHttpClient({ baseUrl, internalAuthToken });
+      const result = await client.forceRefreshBookmark('bookmark-500');
+
+      expect(isErr(result)).toBe(true);
+      if (isErr(result)) {
+        expect(result.error.message).toContain('HTTP 500');
+      }
+    });
+
+    it('returns error on HTTP 401', async () => {
+      nock(baseUrl)
+        .post('/internal/bookmarks/bookmark-401/force-refresh')
+        .reply(401, { error: 'Unauthorized' });
+
+      const client = createBookmarksServiceHttpClient({ baseUrl, internalAuthToken });
+      const result = await client.forceRefreshBookmark('bookmark-401');
+
+      expect(isErr(result)).toBe(true);
+      if (isErr(result)) {
+        expect(result.error.message).toContain('HTTP 401');
+      }
+    });
+
+    it('returns error when response success is false', async () => {
+      nock(baseUrl)
+        .post('/internal/bookmarks/bookmark-fail/force-refresh')
+        .reply(200, {
+          success: false,
+          error: { code: 'FETCH_FAILED', message: 'Failed to fetch preview' },
+        });
+
+      const client = createBookmarksServiceHttpClient({ baseUrl, internalAuthToken });
+      const result = await client.forceRefreshBookmark('bookmark-fail');
+
+      expect(isErr(result)).toBe(true);
+      if (isErr(result)) {
+        expect(result.error.message).toBe('Failed to fetch preview');
+      }
+    });
+
+    it('returns error when response data is undefined', async () => {
+      nock(baseUrl)
+        .post('/internal/bookmarks/bookmark-nodata/force-refresh')
+        .reply(200, { success: true });
+
+      const client = createBookmarksServiceHttpClient({ baseUrl, internalAuthToken });
+      const result = await client.forceRefreshBookmark('bookmark-nodata');
+
+      expect(isErr(result)).toBe(true);
+      if (isErr(result)) {
+        expect(result.error.message).toContain('Invalid response');
+      }
+    });
+
+    it('returns error on network failure', async () => {
+      nock(baseUrl)
+        .post('/internal/bookmarks/bookmark-network/force-refresh')
+        .replyWithError('Connection refused');
+
+      const client = createBookmarksServiceHttpClient({ baseUrl, internalAuthToken });
+      const result = await client.forceRefreshBookmark('bookmark-network');
+
+      expect(isErr(result)).toBe(true);
+      if (isErr(result)) {
+        expect(result.error.message).toContain('Failed to call bookmarks-agent');
+      }
+    });
+
+    it('returns bookmark with ogFetchStatus failed when fetch fails', async () => {
+      nock(baseUrl)
+        .post('/internal/bookmarks/bookmark-failed/force-refresh')
+        .reply(200, {
+          success: true,
+          data: {
+            id: 'bookmark-failed',
+            url: 'https://example.com/article',
+            status: 'active',
+            ogPreview: null,
+            ogFetchStatus: 'failed',
+          },
+        });
+
+      const client = createBookmarksServiceHttpClient({ baseUrl, internalAuthToken });
+      const result = await client.forceRefreshBookmark('bookmark-failed');
+
+      expect(isOk(result)).toBe(true);
+      if (isOk(result)) {
+        expect(result.value.ogFetchStatus).toBe('failed');
+        expect(result.value.ogPreview).toBeNull();
+      }
+    });
+  });
 });
