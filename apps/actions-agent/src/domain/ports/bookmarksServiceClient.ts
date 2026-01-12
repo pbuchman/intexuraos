@@ -17,6 +17,15 @@ export interface CreateBookmarkResponse {
   title: string | null;
 }
 
+export interface ForceRefreshBookmarkResponse {
+  id: string;
+  url: string;
+  status: 'draft' | 'active';
+  ogPreview: { title: string | null; description: string | null; image: string | null; siteName: string | null; favicon: string | null } | null;
+  ogFetchStatus: 'pending' | 'processed' | 'failed';
+}
+
 export interface BookmarksServiceClient {
   createBookmark(request: CreateBookmarkRequest): Promise<Result<CreateBookmarkResponse>>;
+  forceRefreshBookmark(bookmarkId: string): Promise<Result<ForceRefreshBookmarkResponse>>;
 }

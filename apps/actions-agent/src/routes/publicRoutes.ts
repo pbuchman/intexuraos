@@ -527,5 +527,149 @@ export const publicRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
     }
   );
 
+  fastify.post<{ Params: { actionId: string }; Body: { action: 'skip' | 'update' } }>(
+    '/actions/:actionId/resolve-duplicate',
+    {
+      schema: {
+        operationId: 'resolveDuplicateAction',
+        summary: 'Resolve duplicate bookmark conflict',
+        description: 'Skip (reject) or update existing bookmark with fresh OG data.',
+        tags: ['actions'],
+        params: {
+          type: 'object',
+          properties: {
+            actionId: { type: 'string' },
+          },
+          required: ['actionId'],
+        },
+        body: {
+          type: 'object',
+          properties: {
+            action: { type: 'string', enum: ['skip', 'update'] },
+          },
+          required: ['action'],
+        },
+        response: {
+          200: {
+            description: 'Conflict resolved',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [true] },
+              data: {
+                type: 'object',
+                properties: {
+                  actionId: { type: 'string' },
+                  status: { type: 'string', enum: ['rejected', 'completed'] },
+                  resource_url: { type: 'string' },
+                },
+                required: ['actionId', 'status'],
+              },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+            required: ['success', 'data'],
+          },
+          400: {
+            description: 'Bad Request',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+            required: ['success', 'error'],
+          },
+          401: {
+            description: 'Unauthorized',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+            required: ['success', 'error'],
+          },
+          403: {
+            description: 'Forbidden',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+            required: ['success', 'error'],
+          },
+          404: {
+            description: 'Action not found',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+            required: ['success', 'error'],
+          },
+        },
+      },
+    },
+    async (
+      request: FastifyRequest<{ Params: { actionId: string }; Body: { action: 'skip' | 'update' } }>,
+      reply: FastifyReply
+    ) => {
+      const user = await requireAuth(request, reply);
+      if (user === null) {
+        return;
+      }
+
+      const { actionId } = request.params;
+      const { action: choice } = request.body;
+
+      const services = getServices();
+      const action = await services.actionRepository.getById(actionId);
+
+      if (action?.userId !== user.userId) {
+        return await reply.fail('NOT_FOUND', 'Action not found');
+      }
+
+      // Get existingBookmarkId from failed action payload
+      const existingBookmarkId = action.payload['existingBookmarkId'] as string | undefined;
+      if (existingBookmarkId === undefined) {
+        return await reply.fail('INVALID_REQUEST', 'Action is not a duplicate conflict');
+      }
+
+      if (choice === 'skip') {
+        // Reject the action
+        action.status = 'rejected';
+        action.updatedAt = new Date().toISOString();
+        await services.actionRepository.update(action);
+        return await reply.ok({ actionId, status: 'rejected' });
+      }
+
+      // choice === 'update': Force refresh existing bookmark
+      const refreshResult = await services.bookmarksServiceClient.forceRefreshBookmark(
+        existingBookmarkId
+      );
+
+      if (!refreshResult.ok) {
+        return await reply.fail('INTERNAL_ERROR', refreshResult.error.message);
+      }
+
+      // Mark action as completed with link to existing bookmark
+      action.status = 'completed';
+      action.payload = {
+        ...action.payload,
+        bookmarkId: existingBookmarkId,
+        resource_url: `/#/bookmarks/${existingBookmarkId}`,
+      };
+      action.updatedAt = new Date().toISOString();
+      await services.actionRepository.update(action);
+
+      return await reply.ok({
+        actionId,
+        status: 'completed',
+        resource_url: `/#/bookmarks/${existingBookmarkId}`,
+      });
+    }
+  );
+
   done();
 };

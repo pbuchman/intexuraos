@@ -7,6 +7,8 @@ export interface Config {
     audience: string;
   };
   internalAuthKey: string;
+  userServiceUrl: string;
+  appSettingsServiceUrl: string;
 }
 
 export function loadConfig(): Config {
@@ -19,5 +21,7 @@ export function loadConfig(): Config {
       audience: process.env['INTEXURAOS_AUTH_AUDIENCE'] ?? '',
     },
     internalAuthKey: process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] ?? '',
+    userServiceUrl: process.env['INTEXURAOS_USER_SERVICE_URL'] ?? 'http://localhost:8110',
+    appSettingsServiceUrl: process.env['INTEXURAOS_APP_SETTINGS_SERVICE_URL'] ?? 'http://localhost:8113',
   };
 }
