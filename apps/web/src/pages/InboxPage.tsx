@@ -148,7 +148,7 @@ function CommandItem({
 
   return (
     <div
-      className="cursor-pointer rounded-lg border border-slate-200 bg-white p-4 transition-all hover:border-slate-300 hover:shadow-sm"
+      className="cursor-pointer rounded-lg border border-slate-200 bg-white p-3 transition-all hover:border-slate-300 hover:shadow-sm sm:p-4"
       onClick={onClick}
       role="button"
       tabIndex={0}
@@ -167,23 +167,27 @@ function CommandItem({
           )}
         </div>
         <div className="min-w-0 flex-1">
-          <p className="line-clamp-3 break-words text-sm text-slate-800">{command.text}</p>
-          <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+          <p className="line-clamp-3 break-words text-sm text-slate-800 sm:text-base">{command.text}</p>
+          <div className="mt-2 flex flex-wrap items-center gap-1.5 text-xs text-slate-500 sm:gap-2">
             {command.classification !== undefined && (
               <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 font-medium text-slate-700">
                 {getTypeIcon(command.classification.type)}
-                {getTypeLabel(command.classification.type)}
+                <span className="hidden sm:inline">{getTypeLabel(command.classification.type)}</span>
               </span>
             )}
             <span className="inline-flex items-center gap-1">
               {getStatusIcon(command.status)}
-              {command.status}
+              <span className="hidden xs:inline">{command.status}</span>
             </span>
-            <span>{formatDate(command.createdAt)}</span>
+            <span className="text-[10px] sm:text-xs">{formatDate(command.createdAt)}</span>
           </div>
         </div>
+      </div>
+
+      {/* Action buttons - full width on mobile for larger touch targets */}
+      {(canDelete || canArchive) && (
         <div
-          className="flex shrink-0 gap-2"
+          className="mt-3 flex flex-col gap-2 sm:mt-0 sm:ml-2 sm:flex-row sm:items-center sm:gap-1"
           onClick={(e): void => {
             e.stopPropagation();
           }}
@@ -194,14 +198,14 @@ function CommandItem({
                 onDelete(command.id);
               }}
               disabled={isDeleting}
-              className="rounded p-2.5 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
-              title="Delete command"
+              className="flex w-full items-center justify-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-600 transition-colors hover:bg-red-50 hover:text-red-600 disabled:opacity-50 sm:w-auto sm:justify-normal sm:gap-1.5 sm:border-none sm:bg-transparent sm:p-2.5 sm:px-3 sm:hover:bg-red-50"
             >
               {isDeleting ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
                 <Trash2 className="h-4 w-4" />
               )}
+              <span>Delete</span>
             </button>
           )}
           {canArchive && (
@@ -210,18 +214,18 @@ function CommandItem({
                 onArchive(command.id);
               }}
               disabled={isArchiving}
-              className="rounded p-2.5 text-slate-400 transition-colors hover:bg-amber-50 hover:text-amber-600 disabled:opacity-50"
-              title="Archive command"
+              className="flex w-full items-center justify-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-600 transition-colors hover:bg-amber-50 hover:text-amber-600 disabled:opacity-50 sm:w-auto sm:justify-normal sm:gap-1.5 sm:border-none sm:bg-transparent sm:p-2.5 sm:px-3 sm:hover:bg-amber-50"
             >
               {isArchiving ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
                 <Archive className="h-4 w-4" />
               )}
+              <span>Archive</span>
             </button>
           )}
         </div>
-      </div>
+      )}
     </div>
   );
 }
@@ -259,7 +263,7 @@ function ActionItem({ action, onClick, onActionSuccess }: ActionItemProps): Reac
 
   return (
     <div
-      className="cursor-pointer rounded-lg border border-slate-200 bg-white p-4 transition-all hover:border-slate-300 hover:shadow-sm"
+      className="cursor-pointer rounded-lg border border-slate-200 bg-white p-3 transition-all hover:border-slate-300 hover:shadow-sm sm:p-4"
       onClick={onClick}
       role="button"
       tabIndex={0}
@@ -269,20 +273,22 @@ function ActionItem({ action, onClick, onActionSuccess }: ActionItemProps): Reac
         }
       }}
     >
+      {/* Main content row */}
       <div className="flex items-start gap-3">
         <div className="mt-0.5 shrink-0">{getTypeIcon(action.type)}</div>
         <div className="min-w-0 flex-1">
-          <h3 className="break-words font-medium text-slate-800">{action.title}</h3>
-          <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+          <h3 className="break-words font-medium text-slate-800 text-sm sm:text-base">{action.title}</h3>
+          <div className="mt-2 flex flex-wrap items-center gap-1.5 text-xs text-slate-500 sm:gap-2">
             <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 font-medium text-slate-700">
-              {getTypeLabel(action.type)}
+              {getTypeIcon(action.type)}
+              <span className="hidden sm:inline">{getTypeLabel(action.type)}</span>
             </span>
             <span className="inline-flex items-center gap-1">
               {getStatusIcon(action.status)}
-              {action.status}
+              <span className="hidden xs:inline">{action.status}</span>
             </span>
-            <span>{String(Math.round(action.confidence * 100))}% confidence</span>
-            <span>{formatDate(action.createdAt)}</span>
+            <span className="hidden sm:inline">{String(Math.round(action.confidence * 100))}% confidence</span>
+            <span className="text-[10px] sm:text-xs">{formatDate(action.createdAt)}</span>
           </div>
           {/* Success notification with link */}
           {executionResult?.resource_url !== undefined && (
@@ -301,36 +307,37 @@ function ActionItem({ action, onClick, onActionSuccess }: ActionItemProps): Reac
             </div>
           )}
         </div>
-        {/* Hide buttons after action with resource_url was executed */}
-        {!actionExecuted && (
-          <div
-            className="flex shrink-0 gap-1"
-            onClick={(e): void => {
-              e.stopPropagation();
-            }}
-          >
-            {buttons.map((button) => (
-              <ConfigurableActionButton
-                key={button.id}
-                button={button}
-                onSuccess={(): void => {
-                  onActionSuccess(button);
-                }}
-                onResult={(result, btn): void => {
-                  if (result.resource_url !== undefined && btn.onSuccess !== undefined) {
-                    setExecutionResult({
-                      resource_url: normalizeResourceUrl(result.resource_url),
-                      message: btn.onSuccess.message,
-                      linkLabel: btn.onSuccess.linkLabel,
-                    });
-                    setActionExecuted(true);
-                  }
-                }}
-              />
-            ))}
-          </div>
-        )}
       </div>
+
+      {/* Action buttons - stacked on mobile for larger touch targets */}
+      {!actionExecuted && (
+        <div
+          className="mt-3 flex flex-col gap-2 sm:mt-0 sm:ml-2 sm:flex-row sm:items-center sm:gap-1"
+          onClick={(e): void => {
+            e.stopPropagation();
+          }}
+        >
+          {buttons.map((button) => (
+            <ConfigurableActionButton
+              key={button.id}
+              button={button}
+              onSuccess={(): void => {
+                onActionSuccess(button);
+              }}
+              onResult={(result, btn): void => {
+                if (result.resource_url !== undefined && btn.onSuccess !== undefined) {
+                  setExecutionResult({
+                    resource_url: normalizeResourceUrl(result.resource_url),
+                    message: btn.onSuccess.message,
+                    linkLabel: btn.onSuccess.linkLabel,
+                  });
+                  setActionExecuted(true);
+                }
+              }}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -736,28 +743,34 @@ export function InboxPage(): React.JSX.Element {
 
   return (
     <Layout>
-      <div className="mb-6 flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-bold text-slate-900">Inbox</h2>
-          <div className="flex items-center gap-2">
-            <p className="text-slate-600">Your commands and pending actions</p>
-            {isListening && (
-              <span className="inline-flex items-center gap-1 text-xs text-green-600">
-                <Radio className="h-3 w-3 animate-pulse" />
-                Live
-              </span>
-            )}
+      {/* Header - mobile optimized */}
+      <div className="mb-4 sm:mb-6">
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+              <h2 className="text-xl font-bold text-slate-900 sm:text-2xl">Inbox</h2>
+              {isListening && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">
+                  <Radio className="h-3 w-3 animate-pulse" />
+                  Live
+                </span>
+              )}
+            </div>
+            <p className="mt-0.5 truncate text-xs text-slate-500 sm:text-sm">
+              Your commands and pending actions
+            </p>
           </div>
+          <Button
+            variant="secondary"
+            onClick={handleRefresh}
+            isLoading={isRefreshing}
+            className="shrink-0 px-3 py-2 sm:px-4"
+            size="sm"
+          >
+            <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+            <span className="hidden sm:inline">Refresh</span>
+          </Button>
         </div>
-        <Button
-          variant="secondary"
-          onClick={handleRefresh}
-          isLoading={isRefreshing}
-          className="flex items-center gap-2"
-        >
-          <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
-          Refresh
-        </Button>
       </div>
 
       {/* Real-time listener error warning */}
@@ -773,33 +786,33 @@ export function InboxPage(): React.JSX.Element {
         </div>
       ) : null}
 
-      {/* Tabs */}
+      {/* Tabs - full width with larger touch targets on mobile */}
       <div className="mb-4 flex border-b border-slate-200">
         <button
           onClick={(): void => {
             setActiveTab('actions');
           }}
-          className={`flex items-center gap-2 border-b-2 px-4 py-2 text-sm font-medium transition-colors ${
+          className={`flex flex-1 items-center justify-center gap-2 border-b-2 px-3 py-3 text-sm font-medium transition-colors sm:px-4 sm:py-2 ${
             activeTab === 'actions'
               ? 'border-blue-600 text-blue-600'
               : 'border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-700'
           }`}
         >
           <ListTodo className="h-4 w-4" />
-          Actions ({String(actions.length)})
+          <span className="truncate">Actions ({String(actions.length)})</span>
         </button>
         <button
           onClick={(): void => {
             setActiveTab('commands');
           }}
-          className={`flex items-center gap-2 border-b-2 px-4 py-2 text-sm font-medium transition-colors ${
+          className={`flex flex-1 items-center justify-center gap-2 border-b-2 px-3 py-3 text-sm font-medium transition-colors sm:px-4 sm:py-2 ${
             activeTab === 'commands'
               ? 'border-blue-600 text-blue-600'
               : 'border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-700'
           }`}
         >
           <MessageSquare className="h-4 w-4" />
-          Commands ({String(commands.length)})
+          <span className="truncate">Commands ({String(commands.length)})</span>
         </button>
       </div>
 
@@ -810,19 +823,21 @@ export function InboxPage(): React.JSX.Element {
             onClick={(): void => {
               setIsFilterExpanded((prev) => !prev);
             }}
-            className="flex items-center gap-2 text-sm font-medium text-slate-600 hover:text-slate-800"
+            className="flex w-full items-center justify-between rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-800 sm:w-auto sm:justify-normal sm:gap-2 sm:border-none sm:bg-transparent sm:p-0 sm:hover:bg-transparent"
           >
-            <Filter className="h-4 w-4" />
-            Filter by status
-            {statusFilter.length > 0 && (
-              <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs text-blue-700">
-                {String(statusFilter.length)}
-              </span>
-            )}
+            <div className="flex items-center gap-2">
+              <Filter className="h-4 w-4" />
+              Filter by status
+              {statusFilter.length > 0 && (
+                <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs text-blue-700">
+                  {String(statusFilter.length)}
+                </span>
+              )}
+            </div>
             {isFilterExpanded ? (
-              <ChevronUp className="h-4 w-4" />
+              <ChevronUp className="h-4 w-4 sm:ml-0" />
             ) : (
-              <ChevronDown className="h-4 w-4" />
+              <ChevronDown className="h-4 w-4 sm:ml-0" />
             )}
           </button>
 
