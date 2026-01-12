@@ -118,6 +118,7 @@ export const researchSchema = {
     totalCostUsd: { type: 'number', nullable: true },
     sourceActionId: { type: 'string', nullable: true },
     sourceResearchId: { type: 'string', nullable: true },
+    favourite: { type: 'boolean', nullable: true },
   },
   required: [
     'id',
