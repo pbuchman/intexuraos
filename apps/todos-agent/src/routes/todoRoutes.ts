@@ -13,7 +13,7 @@ import { reorderTodoItems } from '../domain/usecases/reorderTodoItems.js';
 import { archiveTodo } from '../domain/usecases/archiveTodo.js';
 import { unarchiveTodo } from '../domain/usecases/unarchiveTodo.js';
 import { cancelTodo } from '../domain/usecases/cancelTodo.js';
-import type { Todo, TodoItem, TodoStatus, TodoPriority } from '../domain/models/todo.js';
+import type { Todo, TodoItem, TodoStatus, TodoItemStatus, TodoPriority } from '../domain/models/todo.js';
 
 interface CreateTodoBody {
   title: string;
@@ -58,7 +58,7 @@ interface CreateTodoItemBody {
 
 interface UpdateTodoItemBody {
   title?: string;
-  status?: TodoStatus;
+  status?: TodoItemStatus;
   priority?: TodoPriority | null;
   dueDate?: string | null;
 }
@@ -68,6 +68,7 @@ interface ReorderItemsBody {
 }
 
 const todoStatusEnum = ['draft', 'processing', 'pending', 'in_progress', 'completed', 'cancelled'];
+const todoItemStatusEnum = ['pending', 'completed'];
 const todoPriorityEnum = ['low', 'medium', 'high', 'urgent'];
 
 const createTodoBodySchema = {
@@ -148,7 +149,7 @@ const updateTodoItemBodySchema = {
   type: 'object',
   properties: {
     title: { type: 'string', minLength: 1 },
-    status: { type: 'string', enum: todoStatusEnum },
+    status: { type: 'string', enum: todoItemStatusEnum },
     priority: { type: ['string', 'null'], enum: [...todoPriorityEnum, null] },
     dueDate: { type: ['string', 'null'], format: 'date-time' },
   },
@@ -167,7 +168,7 @@ const todoItemResponseSchema = {
   properties: {
     id: { type: 'string' },
     title: { type: 'string' },
-    status: { type: 'string', enum: todoStatusEnum },
+    status: { type: 'string', enum: todoItemStatusEnum },
     priority: { type: ['string', 'null'], enum: [...todoPriorityEnum, null] },
     dueDate: { type: ['string', 'null'], format: 'date-time' },
     position: { type: 'number' },
