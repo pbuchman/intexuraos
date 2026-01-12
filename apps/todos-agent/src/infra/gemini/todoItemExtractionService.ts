@@ -102,7 +102,7 @@ export function createTodoItemExtractionService(
         }
 
         const response = parsed as { items: ExtractedItem[]; summary: string };
-        const items = response['items'].slice(0, MAX_ITEMS);
+        const items = response.items.slice(0, MAX_ITEMS);
 
         const itemsWithDates = items.map((item) => ({
           ...item,
