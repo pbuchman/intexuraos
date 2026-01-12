@@ -52,6 +52,7 @@ export {
   type InputImprovementPromptInput,
   type InputImprovementPromptDeps,
   isInputQualityResult,
+  getInputQualityGuardError,
   type InputQualityResult,
 } from './validation/index.js';
 

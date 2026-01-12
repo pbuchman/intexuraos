@@ -19,7 +19,7 @@ export function VegaChart({ spec, data, onRenderError }: VegaChartProps): React.
     const container = containerRef.current;
     const specWithData = replaceDataPlaceholder(spec, data);
 
-    embed(container, specWithData, {
+    void embed(container, specWithData, {
       actions: false,
       renderer: 'canvas',
     })
