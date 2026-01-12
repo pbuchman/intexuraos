@@ -402,16 +402,20 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       }
 
       const body = request.body as { prompt: string; includeImprovement?: boolean };
-      const { userServiceClient, createInputValidator, pricingContext } = getServices();
+      const { userServiceClient, createInputValidator, pricingContext, generateId } = getServices();
+      const requestId = generateId();
+      const startTime = Date.now();
 
       // Get Google API key
       const apiKeysResult = await userServiceClient.getApiKeys(user.userId);
       if (!apiKeysResult.ok) {
+        request.log.error({ requestId }, 'Failed to fetch API keys');
         return await reply.fail('INTERNAL_ERROR', 'Failed to fetch API keys');
       }
 
       const googleKey = apiKeysResult.value.google;
       if (googleKey === undefined) {
+        request.log.error({ requestId }, 'Google API key not configured');
         return await reply.fail('MISCONFIGURED', 'Google API key required for validation');
       }
 
@@ -426,15 +430,18 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       // Validate
       const validationResult = await validator.validateInput(body.prompt);
       if (!validationResult.ok) {
-        // Silent degradation - return GOOD quality if validation fails
         request.log.warn(
-          { errorCode: validationResult.error.code, errorMessage: validationResult.error.message },
+          {
+            requestId,
+            errorCode: validationResult.error.code,
+            errorMessage: validationResult.error.message,
+          },
           'Validation failed, returning GOOD quality as fallback'
         );
-        return await reply.ok({
-          quality: 2,
-          reason: 'Validation unavailable',
-          improvedPrompt: null,
+        return await reply.code(200).send({
+          success: true,
+          data: { quality: 2, reason: 'Validation unavailable', improvedPrompt: null },
+          diagnostics: { requestId, durationMs: Date.now() - startTime },
         });
       }
 
@@ -449,10 +456,10 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         }
       }
 
-      return await reply.ok({
-        quality,
-        reason,
-        improvedPrompt,
+      return await reply.code(200).send({
+        success: true,
+        data: { quality, reason, improvedPrompt },
+        diagnostics: { requestId, durationMs: Date.now() - startTime },
       });
     }
   );
@@ -479,15 +486,19 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       }
 
       const body = request.body as { prompt: string };
-      const { userServiceClient, createInputValidator, pricingContext } = getServices();
+      const { userServiceClient, createInputValidator, pricingContext, generateId } = getServices();
+      const requestId = generateId();
+      const startTime = Date.now();
 
       const apiKeysResult = await userServiceClient.getApiKeys(user.userId);
       if (!apiKeysResult.ok) {
+        request.log.error({ requestId }, 'Failed to fetch API keys');
         return await reply.fail('INTERNAL_ERROR', 'Failed to fetch API keys');
       }
 
       const googleKey = apiKeysResult.value.google;
       if (googleKey === undefined) {
+        request.log.error({ requestId }, 'Google API key not configured');
         return await reply.fail('MISCONFIGURED', 'Google API key required for improvement');
       }
 
@@ -501,15 +512,22 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       const result = await validator.improveInput(body.prompt);
       if (!result.ok) {
-        // Silent degradation - return original prompt
         request.log.warn(
-          { errorCode: result.error.code, errorMessage: result.error.message },
+          { requestId, errorCode: result.error.code, errorMessage: result.error.message },
           'Improvement failed, returning original prompt'
         );
-        return await reply.ok({ improvedPrompt: body.prompt });
+        return await reply.code(200).send({
+          success: true,
+          data: { improvedPrompt: body.prompt },
+          diagnostics: { requestId, durationMs: Date.now() - startTime },
+        });
       }
 
-      return await reply.ok({ improvedPrompt: result.value.improvedPrompt });
+      return await reply.code(200).send({
+        success: true,
+        data: { improvedPrompt: result.value.improvedPrompt },
+        diagnostics: { requestId, durationMs: Date.now() - startTime },
+      });
     }
   );
 

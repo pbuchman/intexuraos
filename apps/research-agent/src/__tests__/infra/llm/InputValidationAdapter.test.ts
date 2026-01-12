@@ -116,7 +116,7 @@ describe('InputValidationAdapter', () => {
       expect(result.ok).toBe(false);
       if (!result.ok) {
         expect(result.error.code).toBe('API_ERROR');
-        expect(result.error.message).toContain('does not match expected schema');
+        expect(result.error.message).toContain('Missing "quality" field');
       }
     });
 

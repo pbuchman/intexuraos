@@ -6,6 +6,7 @@
 import { createGeminiClient, type GeminiClient } from '@intexuraos/infra-gemini';
 import type { ModelPricing } from '@intexuraos/llm-contract';
 import {
+  getInputQualityGuardError,
   inputImprovementPrompt,
   inputQualityPrompt,
   isInputQualityResult,
@@ -70,15 +71,29 @@ export class InputValidationAdapter implements InputValidationProvider {
 
     const parsed = parseJson(result.value.content, isInputQualityResult);
     if (!parsed.ok) {
+      // Try to get a more specific error from the guard
+      let guardError: string | null = null;
+      const cleaned = result.value.content
+        .replace(/^```json\s*/i, '')
+        .replace(/^```\s*/i, '')
+        .replace(/\s*```$/i, '')
+        .trim();
+      try {
+        const parsedValue: unknown = JSON.parse(cleaned);
+        guardError = getInputQualityGuardError(parsedValue);
+      } catch {
+        // JSON parse failed, use original error
+      }
+      const errorMessage = guardError ?? parsed.error;
       this.logger?.error(
-        { model: this.model, parseError: parsed.error, rawContent: result.value.content },
+        { model: this.model, parseError: errorMessage, rawContent: result.value.content },
         'Input validation parse failed'
       );
       return {
         ok: false,
         error: {
           code: 'API_ERROR',
-          message: parsed.error,
+          message: errorMessage,
           usage: {
             inputTokens: result.value.usage.inputTokens,
             outputTokens: result.value.usage.outputTokens,
