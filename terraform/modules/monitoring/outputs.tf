@@ -12,7 +12,13 @@ output "log_metrics" {
   description = "Created log-based metrics"
   value = {
     llm_errors              = google_logging_metric.llm_errors.name
-    pubsub_dlq              = google_logging_metric.pubsub_dlq_messages.name
     whatsapp_webhook_errors = google_logging_metric.whatsapp_webhook_errors.name
+  }
+}
+
+output "alert_policies" {
+  description = "Created alert policies"
+  value = {
+    dlq_messages = var.alert_email != null ? try(google_monitoring_alert_policy.dlq_messages[0].name, null) : null
   }
 }
