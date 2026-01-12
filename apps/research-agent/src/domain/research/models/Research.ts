@@ -108,6 +108,7 @@ export interface Research {
   attributionStatus?: AttributionStatus;
   auxiliaryCostUsd?: number;
   sourceLlmCostUsd?: number;
+  favourite?: boolean;
 }
 
 export function createLlmResults(selectedModels: ResearchModel[]): LlmResult[] {

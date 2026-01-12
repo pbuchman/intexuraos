@@ -208,6 +208,25 @@ export async function enhanceResearch(
   );
 }
 
+/**
+ * Toggle research favourite status.
+ */
+export async function toggleResearchFavourite(
+  accessToken: string,
+  id: string,
+  favourite: boolean
+): Promise<Research> {
+  return await apiRequest<Research>(
+    config.ResearchAgentUrl,
+    `/research/${id}/favourite`,
+    accessToken,
+    {
+      method: 'PATCH',
+      body: { favourite },
+    }
+  );
+}
+
 export type {
   ConfirmPartialFailureResponse,
   CreateResearchRequest,

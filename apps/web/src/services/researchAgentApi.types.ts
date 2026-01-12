@@ -107,6 +107,7 @@ export interface Research {
   totalOutputTokens?: number;
   totalCostUsd?: number;
   skipSynthesis?: boolean;
+  favourite?: boolean;
 }
 
 /**
