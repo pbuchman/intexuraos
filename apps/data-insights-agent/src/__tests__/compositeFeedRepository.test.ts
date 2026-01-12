@@ -492,4 +492,90 @@ describe('FirestoreCompositeFeedRepository', () => {
       fakeFirestore.configure({});
     });
   });
+
+  describe('updateDataInsights', () => {
+    it('updates data insights for composite feed', async () => {
+      const createResult = await repo.create(userId, 'Feed', {
+        purpose: 'Purpose',
+        staticSourceIds: [],
+        notificationFilters: [],
+      });
+      const feed = createResult.ok ? createResult.value : null;
+
+      const dataInsights = [
+        {
+          id: 'insight-1',
+          title: 'Test Insight',
+          description: 'A test insight',
+          trackableMetric: 'test-metric',
+          suggestedChartType: 'C1' as const,
+          generatedAt: new Date().toISOString(),
+        },
+      ];
+
+      const result = await repo.updateDataInsights(feed?.id ?? '', userId, dataInsights);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.dataInsights).toEqual(dataInsights);
+      }
+    });
+
+    it('updates updatedAt timestamp', async () => {
+      const createResult = await repo.create(userId, 'Feed', {
+        purpose: 'Purpose',
+        staticSourceIds: [],
+        notificationFilters: [],
+      });
+      const feed = createResult.ok ? createResult.value : null;
+      const originalUpdatedAt = feed?.updatedAt;
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      const result = await repo.updateDataInsights(feed?.id ?? '', userId, []);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.updatedAt.getTime()).toBeGreaterThan(originalUpdatedAt?.getTime() ?? 0);
+      }
+    });
+
+    it('returns error for non-existent feed', async () => {
+      const result = await repo.updateDataInsights('non-existent', userId, []);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error).toBe('Composite feed not found');
+      }
+    });
+
+    it('returns error when userId does not match', async () => {
+      const createResult = await repo.create(userId, 'Feed', {
+        purpose: 'Purpose',
+        staticSourceIds: [],
+        notificationFilters: [],
+      });
+      const feed = createResult.ok ? createResult.value : null;
+
+      const result = await repo.updateDataInsights(feed?.id ?? '', 'other-user', []);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error).toBe('Composite feed not found');
+      }
+    });
+
+    it('handles Firestore errors', async () => {
+      fakeFirestore.configure({ errorToThrow: new Error('Update failed') });
+
+      const result = await repo.updateDataInsights('any-id', userId, []);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error).toContain('Failed to update data insights');
+      }
+
+      fakeFirestore.configure({});
+    });
+  });
 });

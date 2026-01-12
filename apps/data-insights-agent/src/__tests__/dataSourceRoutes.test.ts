@@ -7,9 +7,12 @@ import {
   FakeCompositeFeedRepository,
   FakeFeedNameGenerationService,
   FakeMobileNotificationsClient,
-  FakeSnapshotRepository,
   FakeVisualizationRepository,
   FakeVisualizationGenerationService,
+  FakeSnapshotRepository,
+  FakeDataAnalysisService,
+  FakeChartDefinitionService,
+  FakeDataTransformService,
 } from './fakes.js';
 
 vi.mock('@intexuraos/common-http', async () => {
@@ -36,6 +39,9 @@ describe('dataSourceRoutes', () => {
   let fakeSnapshotRepo: FakeSnapshotRepository;
   let fakeVisualizationRepo: FakeVisualizationRepository;
   let fakeVisualizationGenerationService: FakeVisualizationGenerationService;
+  let fakeDataAnalysisService: FakeDataAnalysisService;
+  let fakeChartDefinitionService: FakeChartDefinitionService;
+  let fakeDataTransformService: FakeDataTransformService;
 
   beforeEach(() => {
     fakeRepo = new FakeDataSourceRepository();
@@ -46,6 +52,9 @@ describe('dataSourceRoutes', () => {
     fakeSnapshotRepo = new FakeSnapshotRepository();
     fakeVisualizationRepo = new FakeVisualizationRepository();
     fakeVisualizationGenerationService = new FakeVisualizationGenerationService();
+    fakeDataAnalysisService = new FakeDataAnalysisService();
+    fakeChartDefinitionService = new FakeChartDefinitionService();
+    fakeDataTransformService = new FakeDataTransformService();
     setServices({
       dataSourceRepository: fakeRepo,
       titleGenerationService: fakeTitleService,
@@ -55,6 +64,9 @@ describe('dataSourceRoutes', () => {
       snapshotRepository: fakeSnapshotRepo,
       visualizationRepository: fakeVisualizationRepo,
       visualizationGenerationService: fakeVisualizationGenerationService,
+      dataAnalysisService: fakeDataAnalysisService,
+      chartDefinitionService: fakeChartDefinitionService,
+      dataTransformService: fakeDataTransformService,
     });
   });
 
@@ -460,6 +472,7 @@ describe('dataSourceRoutes', () => {
         purpose: 'Testing',
         staticSourceIds: [dataSource?.id ?? 'missing'],
         notificationFilters: [],
+        dataInsights: null,
         createdAt: new Date(),
         updatedAt: new Date(),
       });

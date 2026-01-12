@@ -61,7 +61,10 @@ const EVENTS = {
               {
                 value: {
                   messaging_product: 'whatsapp',
-                  metadata: { display_phone_number: '+1234567890', phone_number_id: 'test-phone-id' },
+                  metadata: {
+                    display_phone_number: '+1234567890',
+                    phone_number_id: 'test-phone-id',
+                  },
                   messages: [
                     {
                       from: '+9876543210',
@@ -82,7 +85,7 @@ const EVENTS = {
       receivedAt: new Date().toISOString(),
     },
   },
-  'transcription': {
+  transcription: {
     topic: 'whatsapp-transcription',
     data: {
       type: 'whatsapp.audio.transcribe',
