@@ -39,3 +39,9 @@ export {
   type EnhanceResearchDeps,
   type EnhanceResearchError,
 } from './enhanceResearch.js';
+export {
+  toggleResearchFavourite,
+  type ToggleResearchFavouriteParams,
+  type ToggleResearchFavouriteDeps,
+  type ToggleResearchFavouriteError,
+} from './toggleResearchFavourite.js';
