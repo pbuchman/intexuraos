@@ -4,14 +4,8 @@ variable "project_id" {
 }
 
 variable "region" {
-  description = "GCP region for runtime resources (Cloud Run, etc.)"
+  description = "GCP region for resources"
   type        = string
-}
-
-variable "build_region" {
-  description = "GCP region for Cloud Build workers (triggers, connection). Can differ from region for cost optimization."
-  type        = string
-  default     = null
 }
 
 variable "environment" {

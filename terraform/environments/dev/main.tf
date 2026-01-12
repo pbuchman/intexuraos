@@ -47,12 +47,6 @@ variable "region" {
   default     = "europe-central2"
 }
 
-variable "build_region" {
-  description = "GCP region for Cloud Build workers (triggers, connection). Separate from region for cost optimization."
-  type        = string
-  default     = "europe-west1"
-}
-
 variable "environment" {
   description = "Environment name"
   type        = string
@@ -1331,7 +1325,6 @@ module "cloud_build" {
 
   project_id             = var.project_id
   region                 = var.region
-  build_region           = var.build_region
   environment            = var.environment
   github_owner           = var.github_owner
   github_repo            = var.github_repo
