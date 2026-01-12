@@ -84,7 +84,7 @@ jobs:
           echo "🚀 Triggering MONOLITH build (all services)"
           BUILD_ID=$(gcloud builds triggers run intexuraos-dev-deploy \
             --branch="${GITHUB_REF_NAME}" \
-            --region=europe-central2 \
+            --region=europe-west1 \
             --substitutions="COMMIT_SHA=${GITHUB_SHA},BRANCH_NAME=${GITHUB_REF_NAME}" \
             --format="value(metadata.build.id)")
           echo "build_id=$BUILD_ID" >> $GITHUB_OUTPUT
