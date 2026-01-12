@@ -61,6 +61,8 @@ Note: The alias may not be available in spawned subshells - if `tf` is not found
 
 **NEVER modify `vitest.config.ts` coverage exclusions or thresholds. Write tests instead.**
 
+**ALWAYS commit `.claude/ci-failures/*` files with your changes.** These track verification failures for learning and pattern analysis.
+
 ---
 
 ## Architecture
