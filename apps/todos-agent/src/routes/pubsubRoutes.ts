@@ -104,10 +104,10 @@ export const pubsubRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         'Processing todo created event'
       );
 
-      const { todoRepository } = getServices();
+      const { todoRepository, todoItemExtractionService } = getServices();
 
       const result = await processTodoCreated(
-        { todoRepository, logger: request.log },
+        { todoRepository, logger: request.log, todoItemExtractionService },
         eventData.todoId
       );
 
