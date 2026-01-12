@@ -18,6 +18,9 @@ export interface ExtractionError {
     parseError?: string;
     rawResponsePreview?: string | undefined;
     userServiceError?: string;
+    wasWrappedInMarkdown?: boolean;
+    originalLength?: number;
+    cleanedLength?: number;
   };
 }
 
@@ -86,9 +89,17 @@ export function createTodoItemExtractionService(
         });
       }
 
+      // Strip markdown code blocks if present (LLMs often wrap JSON in ```json ... ```)
+      let cleaned = result.value.content.trim();
+      const codeBlockRegex = /^```(?:json)?\s*\n([\s\S]*?)\n```$/;
+      const codeBlockMatch = codeBlockRegex.exec(cleaned);
+      const wasWrappedInMarkdown = codeBlockMatch !== null;
+      if (wasWrappedInMarkdown && codeBlockMatch[1] !== undefined) {
+        cleaned = codeBlockMatch[1].trim();
+      }
+
       try {
-        const trimmed = result.value.content.trim();
-        const parsed = JSON.parse(trimmed) as unknown;
+        const parsed = JSON.parse(cleaned) as unknown;
 
         if (!isValidExtractionResponse(parsed)) {
           return err({
@@ -96,7 +107,8 @@ export function createTodoItemExtractionService(
             message: 'LLM returned invalid response format',
             details: {
               parseError: 'Schema validation failed',
-              rawResponsePreview: trimmed.slice(0, 500),
+              rawResponsePreview: cleaned.slice(0, 1000),
+              wasWrappedInMarkdown,
             },
           });
         }
@@ -116,7 +128,10 @@ export function createTodoItemExtractionService(
           message: `Failed to parse LLM response: ${getErrorMessage(error)}`,
           details: {
             parseError: getErrorMessage(error),
-            rawResponsePreview: result.value.content.slice(0, 500),
+            rawResponsePreview: cleaned.slice(0, 1000),
+            wasWrappedInMarkdown,
+            originalLength: result.value.content.length,
+            cleanedLength: cleaned.length,
           },
         });
       }
