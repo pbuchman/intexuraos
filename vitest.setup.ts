@@ -5,9 +5,15 @@
  * 1. Firebase/Firestore never tries to connect to real GCP
  * 2. Tests are fully isolated from external services
  * 3. Logging is suppressed during tests
+ * 4. HTTP requests use node-fetch polyfill for nock interception (fetch only)
  */
 
 import { vi } from 'vitest';
+import nodeFetch from 'node-fetch';
+
+// Polyfill only fetch, not Headers/Request/Response, to avoid breaking jose
+// Native fetch (Node.js 18+) is not intercepted by nock
+globalThis.fetch = nodeFetch as unknown as typeof fetch;
 
 // Mock firebase-admin to prevent any GCP connections
 vi.mock('firebase-admin/app', () => ({
