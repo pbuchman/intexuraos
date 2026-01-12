@@ -225,6 +225,7 @@ export class FakeAuth0Client implements Auth0Client {
 export class FakeUserSettingsRepository implements UserSettingsRepository {
   private settings = new Map<string, UserSettings>();
   private shouldFailGet = false;
+  private shouldThrowOnGet = false;
   private shouldFailSave = false;
   private shouldFailUpdateLlmKey = false;
   private shouldFailDeleteLlmKey = false;
@@ -234,6 +235,13 @@ export class FakeUserSettingsRepository implements UserSettingsRepository {
    */
   setFailNextGet(fail: boolean): void {
     this.shouldFailGet = fail;
+  }
+
+  /**
+   * Configure the fake to throw an exception on next getSettings call.
+   */
+  setThrowOnGet(shouldThrow: boolean): void {
+    this.shouldThrowOnGet = shouldThrow;
   }
 
   /**
@@ -265,6 +273,10 @@ export class FakeUserSettingsRepository implements UserSettingsRepository {
   }
 
   getSettings(userId: string): Promise<Result<UserSettings | null, SettingsError>> {
+    if (this.shouldThrowOnGet) {
+      this.shouldThrowOnGet = false;
+      throw new Error('Unexpected exception in getSettings');
+    }
     if (this.shouldFailGet) {
       this.shouldFailGet = false;
       return Promise.resolve(err({ code: 'INTERNAL_ERROR', message: 'Simulated get failure' }));

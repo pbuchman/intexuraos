@@ -671,12 +671,15 @@ steps:
 
 options:
   logging: CLOUD_LOGGING_ONLY
-  machineType: E2_HIGHCPU_32
+  machineType: E2_HIGHCPU_8
   env:
     - 'DOCKER_BUILDKIT=1'
 
 # Substitutions
+# _REGION: Deployment target for Cloud Run services (runtime region, not build region)
+# _ARTIFACT_REGISTRY_URL: AR URL (includes runtime region)
+# _ENVIRONMENT: Environment name
 substitutions:
-  _REGION: europe-west1
+  _REGION: europe-central2
 
 timeout: 1800s
