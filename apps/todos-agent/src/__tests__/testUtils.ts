@@ -3,11 +3,12 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import * as jose from 'jose';
 import { buildServer } from '../server.js';
 import { clearJwksCache } from '@intexuraos/common-http';
+import type { Result } from '@intexuraos/common-core';
 import { FakeTodoRepository } from './fakeTodoRepository.js';
 import { resetServices, setServices } from '../services.js';
 import type { TodosProcessingPublisher } from '@intexuraos/infra-pubsub';
 import type { UserServiceClient } from '../infra/user/userServiceClient.js';
-import type { TodoItemExtractionService } from '../infra/gemini/todoItemExtractionService.js';
+import type { TodoItemExtractionService, ExtractedItem, ExtractionError } from '../infra/gemini/todoItemExtractionService.js';
 
 export class FakeTodosProcessingPublisher implements TodosProcessingPublisher {
   public publishedEvents: { todoId: string; userId: string; title: string; correlationId?: string }[] = [];
@@ -37,9 +38,9 @@ export class FakeUserServiceClient implements UserServiceClient {
 }
 
 export class FakeTodoItemExtractionService implements TodoItemExtractionService {
-  public extractItemsResult?: { readonly ok: true; readonly value: Array<{ title: string; priority: 'low' | 'medium' | 'high' | 'urgent' | null; dueDate: Date | null; reasoning: string }> } | { readonly ok: false; readonly error: { code: 'NO_API_KEY' | 'USER_SERVICE_ERROR' | 'GENERATION_ERROR' | 'INVALID_RESPONSE'; message: string; details?: { llmErrorCode?: string; parseError?: string; rawResponsePreview?: string; userServiceError?: string } } };
+  public extractItemsResult?: Result<ExtractedItem[], ExtractionError>;
 
-  async extractItems(_userId: string, _description: string): Promise<{ readonly ok: true; readonly value: Array<{ title: string; priority: 'low' | 'medium' | 'high' | 'urgent' | null; dueDate: Date | null; reasoning: string }> } | { readonly ok: false; readonly error: { code: 'NO_API_KEY' | 'USER_SERVICE_ERROR' | 'GENERATION_ERROR' | 'INVALID_RESPONSE'; message: string; details?: { llmErrorCode?: string; parseError?: string; rawResponsePreview?: string; userServiceError?: string } } }> {
+  async extractItems(_userId: string, _description: string): Promise<Result<ExtractedItem[], ExtractionError>> {
     if (this.extractItemsResult) return this.extractItemsResult;
     return { ok: true, value: [] };
   }
