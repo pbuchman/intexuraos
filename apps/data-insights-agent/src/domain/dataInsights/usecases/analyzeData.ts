@@ -173,7 +173,7 @@ export async function analyzeData(
 
   const now = new Date().toISOString();
   const insights: DataInsight[] = parsedInsights.map((pi, idx) => ({
-    id: `${feedId}-insight-${idx + 1}`,
+    id: `${feedId}-insight-${String(idx + 1)}`,
     title: pi.title,
     description: pi.description,
     trackableMetric: pi.trackableMetric,
@@ -190,5 +190,10 @@ export async function analyzeData(
     });
   }
 
-  return ok({ insights, noInsightsReason });
+  const result: AnalyzeDataResult = { insights };
+  if (noInsightsReason !== undefined) {
+    result.noInsightsReason = noInsightsReason;
+  }
+
+  return ok(result);
 }

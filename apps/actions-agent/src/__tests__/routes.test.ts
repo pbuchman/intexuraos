@@ -379,6 +379,48 @@ describe('Research Agent Routes', () => {
       const body = JSON.parse(response.body) as { error: string };
       expect(body.error).toBe('Unsupported action type: unknown_type');
     });
+
+    it('returns 500 when handler execution fails', async () => {
+      fakeActionClient.setAction({
+        id: 'action-123',
+        userId: 'user-456',
+        commandId: 'cmd-789',
+        type: 'research',
+        confidence: 0.95,
+        title: 'Test Research',
+        status: 'pending',
+        payload: {},
+        createdAt: '2025-01-01T12:00:00.000Z',
+        updatedAt: '2025-01-01T12:00:00.000Z',
+      });
+
+      fakeActionClient.setFailOn('updateActionStatus', new Error('Database connection failed'));
+
+      setServices(
+        createFakeServices({
+          actionServiceClient: fakeActionClient,
+          researchServiceClient: fakeResearchClient,
+          notificationSender: fakeNotificationSender,
+          actionRepository: fakeActionRepository,
+          actionEventPublisher: fakeActionEventPublisher,
+          actionTransitionRepository: fakeActionTransitionRepository,
+          commandsAgentClient: fakeCommandsAgentClient,
+        })
+      );
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/actions/research',
+        headers: {
+          'x-internal-auth': INTERNAL_AUTH_TOKEN,
+        },
+        payload: createValidPayload(),
+      });
+
+      expect(response.statusCode).toBe(500);
+      const body = JSON.parse(response.body) as { error: string };
+      expect(body.error).toContain('Database connection failed');
+    });
   });
 
   describe('POST /internal/actions (action creation endpoint)', () => {
@@ -1654,6 +1696,48 @@ describe('Research Agent Routes', () => {
       };
       expect(body.success).toBe(true);
       expect(body.actionId).toBe('action-123');
+    });
+
+    it('returns 500 when handler execution fails with other error', async () => {
+      fakeActionClient.setAction({
+        id: 'action-123',
+        userId: 'user-456',
+        commandId: 'cmd-789',
+        type: 'research',
+        confidence: 0.95,
+        title: 'Test Research',
+        status: 'pending',
+        payload: {},
+        createdAt: '2025-01-01T12:00:00.000Z',
+        updatedAt: '2025-01-01T12:00:00.000Z',
+      });
+
+      fakeActionClient.setFailOn('updateActionStatus', new Error('Database connection failed'));
+
+      setServices(
+        createFakeServices({
+          actionServiceClient: fakeActionClient,
+          researchServiceClient: fakeResearchClient,
+          notificationSender: fakeNotificationSender,
+          actionRepository: fakeActionRepository,
+          actionEventPublisher: fakeActionEventPublisher,
+          actionTransitionRepository: fakeActionTransitionRepository,
+          commandsAgentClient: fakeCommandsAgentClient,
+        })
+      );
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/actions/process',
+        headers: {
+          'x-internal-auth': INTERNAL_AUTH_TOKEN,
+        },
+        payload: createValidPayload({ actionType: 'research' }),
+      });
+
+      expect(response.statusCode).toBe(500);
+      const body = JSON.parse(response.body) as { error: string };
+      expect(body.error).toContain('Database connection failed');
     });
 
   });

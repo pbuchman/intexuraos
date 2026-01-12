@@ -1,32 +1,9 @@
-/**
- * Prompt builder for chart definition (Prompt 2).
- * Generates chart configuration based on a specific data insight.
- */
-
 import type { PromptBuilder } from '../types.js';
 
-/**
- * Input for chart definition prompt.
- */
 export interface ChartDefinitionPromptInput {
-  /**
-   * JSON schema of the composite feed structure.
-   */
   jsonSchema: object;
-
-  /**
-   * Snapshot data from the composite feed (for reference).
-   */
   snapshotData: object;
-
-  /**
-   * Exact Vega-Lite schema for the target chart type.
-   */
   targetChartSchema: object;
-
-  /**
-   * Data insight to create chart for.
-   */
   insight: {
     title: string;
     description: string;
@@ -35,23 +12,21 @@ export interface ChartDefinitionPromptInput {
   };
 }
 
-/**
- * Dependencies for chart definition prompt (none required).
- */
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type
 export interface ChartDefinitionPromptDeps {}
 
-/**
- * Build chart definition prompt (Prompt 2).
- */
 export const chartDefinitionPrompt: PromptBuilder<
   ChartDefinitionPromptInput,
   ChartDefinitionPromptDeps
-> = () => (input) => {
-  const jsonSchema = JSON.stringify(input.jsonSchema, null, 2);
-  const snapshotData = JSON.stringify(input.snapshotData, null, 2);
-  const targetSchema = JSON.stringify(input.targetChartSchema, null, 2);
+> = {
+  name: 'chart-definition',
+  description: 'Generates chart configuration based on a specific data insight',
+  build(input: ChartDefinitionPromptInput): string {
+    const jsonSchema = JSON.stringify(input.jsonSchema, null, 2);
+    const snapshotData = JSON.stringify(input.snapshotData, null, 2);
+    const targetSchema = JSON.stringify(input.targetChartSchema, null, 2);
 
-  return `## Your Task
+    return `## Your Task
 Generate a detailed chart configuration for the specified insight.
 You MUST NOT transform data. You MUST NOT include actual data values. FORBIDDEN.
 
@@ -100,4 +75,5 @@ RULES:
 - Transform instructions must be detailed and unambiguous
 - Do NOT include actual data values in the config
 - Ensure field names in encoding match what will be in transformed data`;
+  },
 };

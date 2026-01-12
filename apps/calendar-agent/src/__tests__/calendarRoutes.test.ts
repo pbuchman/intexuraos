@@ -127,6 +127,18 @@ describe('Calendar Routes', () => {
       expect(response.statusCode).toBe(200);
     });
 
+    it('accepts timeMax and q query parameters', async () => {
+      const jwt = await createJwt('user-123');
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/calendar/events?timeMin=2025-01-01T00:00:00Z&timeMax=2025-01-31T23:59:59Z&q=meeting',
+        headers: { authorization: `Bearer ${jwt}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+    });
+
     it('returns 403 when not connected', async () => {
       const jwt = await createJwt('user-123');
       fakeUserService.setTokenError('NOT_CONNECTED', 'Google Calendar not connected');
@@ -406,6 +418,27 @@ describe('Calendar Routes', () => {
       const body = response.json();
       expect(body.success).toBe(true);
       expect(body.data.event.summary).toBe('Updated Title');
+    });
+
+    it('updates event location', async () => {
+      const jwt = await createJwt('user-123');
+      fakeCalendarClient.addEvent({
+        id: 'event-123',
+        summary: 'Event',
+        start: { dateTime: '2025-01-01T10:00:00Z' },
+        end: { dateTime: '2025-01-01T11:00:00Z' },
+      });
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/calendar/events/event-123',
+        headers: { authorization: `Bearer ${jwt}` },
+        payload: {
+          location: 'Conference Room B',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
     });
 
     it('returns 404 when event not found', async () => {

@@ -45,19 +45,19 @@ node scripts/pubsub-publish-test.mjs todos-processing
 
 ## Monitored Topics
 
-| Topic                         | Color         | Event Type                  |
-| ----------------------------- | ------------- | --------------------------- |
-| `whatsapp-media-cleanup`      | Purple        | Media file deletion         |
-| `whatsapp-send-message`       | Green         | Outbound WhatsApp messages  |
-| `whatsapp-webhook-process`    | Light Purple  | WhatsApp webhook processing |
-| `whatsapp-transcription`      | Light Green   | Audio transcription         |
-| `commands-ingest`             | Orange        | Command routing             |
-| `actions-queue`               | Cyan          | Action processing           |
-| `research-process`            | Blue          | Research task processing    |
-| `llm-analytics`               | Indigo        | LLM usage analytics         |
-| `llm-call`                    | Purple        | LLM API calls               |
-| `bookmark-enrich`             | Orange        | Bookmark metadata enriching |
-| `todos-processing-local`      | Pink          | Todo processing events      |
+| Topic                      | Color        | Event Type                  |
+| -------------------------- | ------------ | --------------------------- |
+| `whatsapp-media-cleanup`   | Purple       | Media file deletion         |
+| `whatsapp-send-message`    | Green        | Outbound WhatsApp messages  |
+| `whatsapp-webhook-process` | Light Purple | WhatsApp webhook processing |
+| `whatsapp-transcription`   | Light Green  | Audio transcription         |
+| `commands-ingest`          | Orange       | Command routing             |
+| `actions-queue`            | Cyan         | Action processing           |
+| `research-process`         | Blue         | Research task processing    |
+| `llm-analytics`            | Indigo       | LLM usage analytics         |
+| `llm-call`                 | Purple       | LLM API calls               |
+| `bookmark-enrich`          | Orange       | Bookmark metadata enriching |
+| `todos-processing-local`   | Pink         | Todo processing events      |
 
 ## Architecture
 

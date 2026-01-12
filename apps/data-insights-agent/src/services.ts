@@ -27,6 +27,8 @@ export interface ServiceContainer {
   dataAnalysisService: DataAnalysisService;
   chartDefinitionService: ChartDefinitionService;
   dataTransformService: DataTransformService;
+  visualizationRepository?: object;
+  visualizationGenerationService?: object;
 }
 
 let container: ServiceContainer | null = null;

@@ -1,4 +1,3 @@
-import { lazy, Suspense } from 'react';
 import { HashRouter, Navigate, Route, Routes, useParams } from 'react-router-dom';
 import { Auth0Provider } from '@auth0/auth0-react';
 import { AuthProvider, SyncQueueProvider, useAuth } from '@/context';
@@ -21,6 +20,7 @@ import {
   CalendarPage,
   CompositeFeedFormPage,
   CompositeFeedsListPage,
+  DataInsightsPage,
   DataSourceFormPage,
   DataSourcesListPage,
   GoogleCalendarConnectionPage,
@@ -245,6 +245,14 @@ function AppRoutes(): React.JSX.Element {
         element={
           <ProtectedRoute>
             <CompositeFeedFormPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/data-insights/composite-feeds/:feedId/visualizations"
+        element={
+          <ProtectedRoute>
+            <DataInsightsPage />
           </ProtectedRoute>
         }
       />

@@ -22,18 +22,15 @@ export interface ParsedChartDefinition {
  *   TRANSFORM_INSTRUCTIONS_END
  */
 export function parseChartDefinition(response: string): ParsedChartDefinition {
-  const chartConfigMatch = response.match(
-    /CHART_CONFIG_START\s*([\s\S]*?)\s*CHART_CONFIG_END/
-  );
-  const transformMatch = response.match(
-    /TRANSFORM_INSTRUCTIONS_START\s*([\s\S]*?)\s*TRANSFORM_INSTRUCTIONS_END/
-  );
+  const chartConfigMatch = /CHART_CONFIG_START\s*([\s\S]*?)\s*CHART_CONFIG_END/.exec(response);
+  const transformMatch =
+    /TRANSFORM_INSTRUCTIONS_START\s*([\s\S]*?)\s*TRANSFORM_INSTRUCTIONS_END/.exec(response);
 
-  if (!chartConfigMatch) {
+  if (chartConfigMatch?.[1] === undefined) {
     throw new Error('Missing CHART_CONFIG_START...CHART_CONFIG_END markers');
   }
 
-  if (!transformMatch) {
+  if (transformMatch?.[1] === undefined) {
     throw new Error('Missing TRANSFORM_INSTRUCTIONS_START...TRANSFORM_INSTRUCTIONS_END markers');
   }
 
@@ -55,7 +52,7 @@ export function parseChartDefinition(response: string): ParsedChartDefinition {
     throw new Error(`Invalid JSON in chart config: ${String(error)}`);
   }
 
-  if (typeof vegaLiteConfig !== 'object' || vegaLiteConfig === null) {
+  if (typeof vegaLiteConfig !== 'object') {
     throw new Error('Chart config must be an object');
   }
 

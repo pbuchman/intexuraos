@@ -86,7 +86,7 @@ export function createDataAnalysisService(
         pricing,
       });
 
-      const prompt = dataAnalysisPrompt()({
+      const prompt = dataAnalysisPrompt.build({
         jsonSchema,
         snapshotData,
         chartTypes,

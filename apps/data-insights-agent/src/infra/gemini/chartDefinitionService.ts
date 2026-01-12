@@ -89,7 +89,7 @@ export function createChartDefinitionService(
         pricing,
       });
 
-      const prompt = chartDefinitionPrompt()({
+      const prompt = chartDefinitionPrompt.build({
         jsonSchema,
         snapshotData,
         targetChartSchema,
