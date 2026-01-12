@@ -170,6 +170,37 @@ describe('Internal Routes', () => {
       expect(body.error.code).toBe('CONFLICT');
       expect(body.error.details?.existingBookmarkId).toBe(existingId);
     });
+
+    it('creates bookmark successfully even when enrich publish fails', async () => {
+      ctx.enrichPublisher.setNextError({
+        code: 'PUBLISH_FAILED',
+        message: 'Pub/Sub temporarily unavailable',
+      });
+
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/internal/bookmarks',
+        headers: {
+          'x-internal-auth': TEST_INTERNAL_TOKEN,
+          'content-type': 'application/json',
+        },
+        payload: {
+          userId: 'user-1',
+          url: 'https://example.com',
+          title: 'Example',
+          tags: ['internal'],
+          source: 'actions-agent',
+          sourceId: 'action-123',
+        },
+      });
+
+      // Should still create the bookmark successfully
+      expect(response.statusCode).toBe(201);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(true);
+      expect(body.data.id).toBeDefined();
+      expect(body.data.bookmark.url).toBe('https://example.com');
+    });
   });
 
   describe('GET /internal/bookmarks/:id', () => {

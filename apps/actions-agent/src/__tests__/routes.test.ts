@@ -391,12 +391,23 @@ describe('Research Agent Routes', () => {
         title: 'Test Research',
         status: 'pending',
         payload: {},
-        createdAt: '2025-01-01T00:00:00.000Z',
-        updatedAt: '2025-01-01T00:00:00.000Z',
+        createdAt: '2025-01-01T12:00:00.000Z',
+        updatedAt: '2025-01-01T12:00:00.000Z',
       });
 
-      // Make updateActionStatus fail to trigger handler error path
       fakeActionClient.setFailOn('updateActionStatus', new Error('Database connection failed'));
+
+      setServices(
+        createFakeServices({
+          actionServiceClient: fakeActionClient,
+          researchServiceClient: fakeResearchClient,
+          notificationSender: fakeNotificationSender,
+          actionRepository: fakeActionRepository,
+          actionEventPublisher: fakeActionEventPublisher,
+          actionTransitionRepository: fakeActionTransitionRepository,
+          commandsAgentClient: fakeCommandsAgentClient,
+        })
+      );
 
       const response = await app.inject({
         method: 'POST',
@@ -410,9 +421,6 @@ describe('Research Agent Routes', () => {
       expect(response.statusCode).toBe(500);
       const body = JSON.parse(response.body) as { error: string };
       expect(body.error).toContain('Database connection failed');
-
-      // Reset fail state for subsequent tests
-      fakeActionClient.setFailOn(null);
     });
   });
 
@@ -1907,7 +1915,7 @@ describe('Research Agent Routes', () => {
       expect(body.actionId).toBe('action-123');
     });
 
-    it('returns 500 when handler execution fails', async () => {
+    it('returns 500 when handler execution fails with other error', async () => {
       fakeActionClient.setAction({
         id: 'action-123',
         userId: 'user-456',
@@ -1917,12 +1925,23 @@ describe('Research Agent Routes', () => {
         title: 'Test Research',
         status: 'pending',
         payload: {},
-        createdAt: '2025-01-01T00:00:00.000Z',
-        updatedAt: '2025-01-01T00:00:00.000Z',
+        createdAt: '2025-01-01T12:00:00.000Z',
+        updatedAt: '2025-01-01T12:00:00.000Z',
       });
 
-      // Make updateActionStatus fail to trigger handler error path
-      fakeActionClient.setFailOn('updateActionStatus', new Error('Service unavailable'));
+      fakeActionClient.setFailOn('updateActionStatus', new Error('Database connection failed'));
+
+      setServices(
+        createFakeServices({
+          actionServiceClient: fakeActionClient,
+          researchServiceClient: fakeResearchClient,
+          notificationSender: fakeNotificationSender,
+          actionRepository: fakeActionRepository,
+          actionEventPublisher: fakeActionEventPublisher,
+          actionTransitionRepository: fakeActionTransitionRepository,
+          commandsAgentClient: fakeCommandsAgentClient,
+        })
+      );
 
       const response = await app.inject({
         method: 'POST',
@@ -1930,15 +1949,12 @@ describe('Research Agent Routes', () => {
         headers: {
           'x-internal-auth': INTERNAL_AUTH_TOKEN,
         },
-        payload: createValidPayload(),
+        payload: createValidPayload({ actionType: 'research' }),
       });
 
       expect(response.statusCode).toBe(500);
       const body = JSON.parse(response.body) as { error: string };
-      expect(body.error).toContain('Service unavailable');
-
-      // Reset fail state for subsequent tests
-      fakeActionClient.setFailOn(null);
+      expect(body.error).toContain('Database connection failed');
     });
   });
 
