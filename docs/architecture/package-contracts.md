@@ -42,7 +42,7 @@ packages/
 
 **Dependencies:** None (leaf package).
 
-**Verification:** `npm run verify:common`
+**Verification:** `pnpm run verify:common`
 
 ### apps/\*/src/domain/
 
@@ -156,8 +156,8 @@ infra/
 ## Verification
 
 ```bash
-npm run verify:boundaries  # ESLint boundaries check
-npm run verify:common      # Common package purity check
-npm run lint               # Full ESLint including boundaries
-npm run ci                 # All checks
+pnpm run verify:boundaries  # ESLint boundaries check
+pnpm run verify:common      # Common package purity check
+pnpm run lint               # Full ESLint including boundaries
+pnpm run ci                 # All checks
 ```

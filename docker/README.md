@@ -8,10 +8,10 @@ The easiest way to run all services locally with hot-reload:
 
 ```bash
 # Start everything (emulators + all 7 services with hot-reload)
-npm run dev
+pnpm run dev
 
 # Start only emulators (if you want to run services manually)
-npm run dev:emulators
+ppnpm run dev:emulators
 ```
 
 This starts:
@@ -24,13 +24,13 @@ This starts:
 
 ```bash
 # Start emulators only
-npm run emulators:start
+pnpm run emulators:start
 
 # Stop emulators
-npm run emulators:stop
+pnpm run emulators:stop
 
 # View emulator logs
-npm run emulators:logs
+pnpm run emulators:logs
 ```
 
 ## Services & Ports
@@ -94,8 +94,8 @@ docker compose -f docker/docker-compose.yaml up --build
 Tests use **fake repositories** (in-memory) via dependency injection, so no external services are required:
 
 ```bash
-npm run test          # Run all tests
-npm run test:coverage # Run with coverage
+pnpm run test          # Run all tests
+ppnpm run test:coverage # Run with coverage
 ```
 
 ## See Also

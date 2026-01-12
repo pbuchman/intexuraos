@@ -1201,8 +1201,8 @@ Update or create `docs/site-developer.md`:
 ```bash
 git clone https://github.com/your-org/intexuraos.git
 cd intexuraos
-npm install
-npm run setup
+ppnpm install
+pnpm run setup
 ```
 
 ---

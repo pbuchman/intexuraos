@@ -13,11 +13,15 @@
 # - _ENVIRONMENT: Environment name (dev, staging, prod)
 
 steps:
-  # Step 1: Install dependencies (needed for web build)
+  # Step 1: Install pnpm and dependencies (needed for web build)
   - name: 'node:22-slim'
-    id: 'npm-ci'
-    entrypoint: 'npm'
-    args: ['ci']
+    id: 'pnpm-install'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        npm install -g pnpm@9
+        pnpm install --frozen-lockfile
 
   # ===== PARALLEL SERVICE PIPELINES =====
   # All services build unconditionally when this pipeline runs
@@ -635,13 +639,13 @@ steps:
 
   - name: 'node:22-slim'
     id: 'build-web'
-    waitFor: ['npm-ci', 'fetch-web-config']
+    waitFor: ['pnpm-install', 'fetch-web-config']
     entrypoint: 'bash'
     args:
       - '-c'
       - |
         echo "=== Building web ==="
-        npm run --workspace=@intexuraos/web build
+        pnpm run --filter @intexuraos/web build
     env:
       - 'COMMIT_SHA=$COMMIT_SHA'
 
@@ -659,7 +663,7 @@ steps:
   # ===== firestore (indexes and rules) =====
   - name: 'node:22-slim'
     id: 'deploy-firestore'
-    waitFor: ['npm-ci']
+    waitFor: ['pnpm-install']
     entrypoint: 'bash'
     args: ['-c', 'bash cloudbuild/scripts/deploy-firestore.sh']
     env:

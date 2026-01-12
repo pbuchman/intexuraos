@@ -13,7 +13,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@intexuraos/common-core": "*",
-    "@intexuraos/llm-common": "*"
+    "@intexuraos/common-core": "workspace:*",
+    "@intexuraos/llm-common": "workspace:*"
   }
 }

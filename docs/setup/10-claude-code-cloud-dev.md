@@ -127,7 +127,7 @@ LOG_LEVEL=debug
 ```bash
 # The credentials are automatically loaded from .env.local
 cd apps/user-service
-npm run dev
+pnpm run dev
 
 # Test the health endpoint
 curl http://localhost:8080/health
