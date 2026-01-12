@@ -32,7 +32,8 @@
     "remark-gfm": "^4.0.1",
     "vega": "^5.28.0",
     "vega-embed": "^6.25.0",
-    "vega-lite": "^5.18.0"
+    "vega-lite": "^5.18.0",
+    "vibe-kanban-web-companion": "^0.0.5"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.1.8",
