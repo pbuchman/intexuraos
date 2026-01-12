@@ -11,9 +11,9 @@ describe('inputQualityPrompt', () => {
     const result = inputQualityPrompt.build({ prompt: 'best travel tips' });
     expect(result).toContain('best travel tips');
     expect(result).toContain('QUALITY SCALE');
-    expect(result).toContain('INVALID (0)');
-    expect(result).toContain('WEAK_BUT_VALID (1)');
-    expect(result).toContain('GOOD (2)');
+    expect(result).toContain('- 0 (INVALID):');
+    expect(result).toContain('- 1 (WEAK_BUT_VALID):');
+    expect(result).toContain('- 2 (GOOD):');
   });
 
   it('includes evaluation criteria', () => {
