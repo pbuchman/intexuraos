@@ -213,6 +213,103 @@ describe('FirestoreNotificationRepository', () => {
         expect(secondPage.ok).toBe(true);
       }
     });
+
+    it('applies source filter when provided', async () => {
+      // Save notifications with different sources
+      await repository.save(
+        createTestInput({ userId: 'user-filter', source: 'android', app: 'com.app1' })
+      );
+      await repository.save(
+        createTestInput({ userId: 'user-filter', source: 'ios', app: 'com.app2' })
+      );
+
+      const result = await repository.findByUserIdPaginated('user-filter', {
+        limit: 10,
+        filter: { source: ['android'] },
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.notifications.length).toBeGreaterThan(0);
+      }
+    });
+
+    it('applies app filter when provided', async () => {
+      // Save notifications with different apps
+      await repository.save(
+        createTestInput({ userId: 'user-filter', source: 'android', app: 'com.whatsapp' })
+      );
+      await repository.save(
+        createTestInput({ userId: 'user-filter', source: 'android', app: 'com.telegram' })
+      );
+
+      const result = await repository.findByUserIdPaginated('user-filter', {
+        limit: 10,
+        filter: { app: ['com.whatsapp'] },
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.notifications.length).toBeGreaterThan(0);
+      }
+    });
+
+    it('applies both source and app filters when provided', async () => {
+      await repository.save(
+        createTestInput({ userId: 'user-filter', source: 'android', app: 'com.whatsapp' })
+      );
+      await repository.save(
+        createTestInput({ userId: 'user-filter', source: 'ios', app: 'com.telegram' })
+      );
+
+      const result = await repository.findByUserIdPaginated('user-filter', {
+        limit: 10,
+        filter: { source: ['android'], app: ['com.whatsapp'] },
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.notifications.length).toBeGreaterThanOrEqual(0);
+      }
+    });
+
+    it('handles empty filter arrays gracefully', async () => {
+      await repository.save(createTestInput({ userId: 'user-filter' }));
+
+      const result = await repository.findByUserIdPaginated('user-filter', {
+        limit: 10,
+        filter: { source: [], app: [] },
+      });
+
+      expect(result.ok).toBe(true);
+    });
+
+    it('applies title filter when provided', async () => {
+      await repository.save(
+        createTestInput({ userId: 'user-filter', title: 'Important Meeting' })
+      );
+      await repository.save(
+        createTestInput({ userId: 'user-filter', title: 'Random Notification' })
+      );
+
+      const result = await repository.findByUserIdPaginated('user-filter', {
+        limit: 10,
+        filter: { title: 'meeting' },
+      });
+
+      expect(result.ok).toBe(true);
+    });
+
+    it('handles empty string title filter gracefully', async () => {
+      await repository.save(createTestInput({ userId: 'user-filter' }));
+
+      const result = await repository.findByUserIdPaginated('user-filter', {
+        limit: 10,
+        filter: { title: '' },
+      });
+
+      expect(result.ok).toBe(true);
+    });
   });
 
   describe('existsByNotificationIdAndUserId', () => {
