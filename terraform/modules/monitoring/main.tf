@@ -488,10 +488,6 @@ resource "google_monitoring_dashboard" "main" {
     }
   })
 
-  lifecycle {
-    # GCP API re-serializes JSON with different formatting, causing perpetual drift
-    ignore_changes = [dashboard_json]
-  }
 }
 
 # =============================================================================
