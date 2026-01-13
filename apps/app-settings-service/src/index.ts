@@ -10,18 +10,19 @@ import {
 import { buildServer } from './server.js';
 import { getServices } from './services.js';
 
-const REQUIRED_ENV = ['INTEXURAOS_GCP_PROJECT_ID', 'INTEXURAOS_INTERNAL_AUTH_TOKEN'];
+const REQUIRED_ENV = [
+  'INTEXURAOS_GCP_PROJECT_ID',
+  'INTEXURAOS_INTERNAL_AUTH_TOKEN',
+  'INTEXURAOS_SENTRY_DSN',
+];
 
 validateRequiredEnv(REQUIRED_ENV);
 
-const sentryDsn = process.env['INTEXURAOS_SENTRY_DSN'];
-if (sentryDsn !== undefined) {
-  initSentry({
-    dsn: sentryDsn,
-    environment: process.env['INTEXURAOS_ENVIRONMENT'] ?? 'development',
-    serviceName: 'app-settings-service',
-  });
-}
+initSentry({
+  dsn: process.env['INTEXURAOS_SENTRY_DSN'],
+  environment: process.env['INTEXURAOS_ENVIRONMENT'] ?? 'development',
+  serviceName: 'app-settings-service',
+});
 
 const PORT = Number(process.env['PORT'] ?? 8080);
 const HOST = process.env['HOST'] ?? '0.0.0.0';
