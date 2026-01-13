@@ -19,7 +19,6 @@ import { createChartDefinitionService } from './infra/gemini/chartDefinitionServ
 import { createDataTransformService } from './infra/gemini/dataTransformService.js';
 
 const REQUIRED_ENV = [
-  'INTEXURAOS_SENTRY_DSN',
   'INTEXURAOS_GCP_PROJECT_ID',
   'INTEXURAOS_AUTH_JWKS_URL',
   'INTEXURAOS_AUTH_ISSUER',

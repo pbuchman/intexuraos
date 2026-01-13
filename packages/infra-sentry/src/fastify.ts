@@ -38,17 +38,25 @@ export function setupSentryErrorHandler(app: FastifyInstance): void {
     const fastifyReply = reply as IntexuraFastifyReply;
     const fastifyError = error as { code?: string };
 
-    // Send to Sentry with request context
-    Sentry.withScope((scope) => {
-      scope.setTag('url', request.url);
-      scope.setTag('method', request.method);
-      scope.setContext('request', {
-        url: request.url,
-        method: request.method,
-        headers: sanitizeHeaders(request.headers),
+    // Log to Pino FIRST - this is our reliable error log
+    request.log.error({ err: error }, 'Unhandled error');
+
+    // Try to send to Sentry, but don't let it break error handling
+    try {
+      Sentry.withScope((scope) => {
+        scope.setTag('url', request.url);
+        scope.setTag('method', request.method);
+        scope.setContext('request', {
+          url: request.url,
+          method: request.method,
+          headers: sanitizeHeaders(request.headers),
+        });
+        Sentry.captureException(error);
       });
-      Sentry.captureException(error);
-    });
+    } catch (sentryError) {
+      // Log that Sentry failed but don't crash the error handler
+      request.log.warn({ err: sentryError }, 'Failed to send error to Sentry');
+    }
 
     // Handle Fastify-specific errors
     if (fastifyError.code === 'FST_ERR_CTP_INVALID_JSON_BODY') {
@@ -57,39 +65,33 @@ export function setupSentryErrorHandler(app: FastifyInstance): void {
       return;
     }
 
-    if (
-      (error as unknown) !== null &&
-      typeof error === 'object' &&
-      'validation' in error &&
-      Array.isArray((error as { validation?: unknown }).validation)
-    ) {
-      const validation = (
-        error as {
-          validation: { instancePath?: string; message?: string }[];
-          message?: string;
-        }
-      ).validation;
+    // Handle validation errors
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+    if (typeof error === 'object' && error !== null && 'validation' in error) {
+      const errorWithValidation = error as {
+        validation?: { instancePath?: string; message?: string }[];
+      };
+      if (Array.isArray(errorWithValidation.validation)) {
+        const validation = errorWithValidation.validation;
 
-      const errors = validation.map((v) => {
-        let path = (v.instancePath ?? '').replace(/^\//, '').replaceAll('/', '.');
-        if (path === '') {
-          const requiredMatch = /must have required property '([^']+)'/.exec(v.message ?? '');
-          path = requiredMatch?.[1] ?? '<root>';
-        }
+        const errors = validation.map((v) => {
+          let path = (v.instancePath ?? '').replace(/^\//, '').replaceAll('/', '.');
+          if (path === '') {
+            const requiredMatch = /must have required property '([^']+)'/.exec(v.message ?? '');
+            path = requiredMatch?.[1] ?? '<root>';
+          }
 
-        return {
-          path,
-          message: v.message ?? 'Invalid value',
-        };
-      });
+          return {
+            path,
+            message: v.message ?? 'Invalid value',
+          };
+        });
 
-      reply.status(400);
-      await fastifyReply.fail('INVALID_REQUEST', 'Validation failed', undefined, { errors });
-      return;
+        reply.status(400);
+        await fastifyReply.fail('INVALID_REQUEST', 'Validation failed', undefined, { errors });
+        return;
+      }
     }
-
-    // Log to Pino
-    request.log.error({ err: error }, 'Unhandled error');
 
     // Return error response
     reply.status(500);
