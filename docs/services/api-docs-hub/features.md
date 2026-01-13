@@ -22,11 +22,13 @@ API-docs-hub provides centralized documentation:
 ## Key Features
 
 **Aggregated Specs:**
+
 - Fetches OpenAPI from configured services
 - Displays in unified Swagger UI
 - Service dropdown for navigation
 
 **Health Endpoint:**
+
 - `/health` - Checks configuration validity
 - Returns source count
 

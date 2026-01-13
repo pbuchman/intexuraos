@@ -23,11 +23,13 @@ PromptVault-service provides:
 ## Key Features
 
 **Prompt Model:**
+
 - Title and content
 - Notion page ID
 - Created/updated timestamps
 
 **Operations:**
+
 - `GET /prompt-vault/main-page` - List prompts
 - `GET /prompt-vault/prompts` - List prompts
 - `POST /prompt-vault/prompts` - Create prompt

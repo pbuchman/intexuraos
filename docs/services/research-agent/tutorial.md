@@ -112,6 +112,7 @@ When `status` is `completed`, you'll have:
 ### Checkpoint
 
 You should have:
+
 1. Created a research that queried multiple models
 2. Received a synthesized result combining all responses
 3. Gotten a shareable URL with an AI-generated cover image
@@ -165,6 +166,7 @@ curl -X POST https://research-agent.intexuraos.com/research/research_abc123/enha
 ```
 
 This creates a new research that:
+
 - Preserves completed LLM results from the original
 - Adds new models to query
 - Adds new context to the synthesis
@@ -207,6 +209,7 @@ This creates a new research that:
 **Cause:** Some LLMs failed but others succeeded.
 
 **Solution:** Choose to:
+
 1. **Proceed** - Use completed results only
 2. **Retry** - Retry failed models
 3. **Cancel** - Mark research as failed
@@ -289,7 +292,7 @@ This removes the public page and deletes the generated cover image.
 ## Troubleshooting
 
 | Issue                        | Symptom                           | Solution                                                                       |
-| ----------------------------  | ---------------------------------  | ------------------------------------------------------------------------------  |
+| ---------------------------- | --------------------------------- | ------------------------------------------------------------------------------ |
 | Research stuck in processing | Status never changes to completed | Check Pub/Sub configuration; verify LLM call queue is being processed          |
 | Synthesis fails              | Research shows `synthesisError`   | Check synthesis model API key; verify context doesn't exceed limits            |
 | High costs                   | Unexpected `totalCostUsd`         | Review model selection; use smaller models (flash/mini) for initial queries    |

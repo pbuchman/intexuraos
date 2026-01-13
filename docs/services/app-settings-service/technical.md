@@ -6,10 +6,10 @@ App-settings-service provides application-wide LLM pricing and user-specific usa
 
 ## API Endpoints
 
-| Method   | Path                    | Description                  | Auth         |
-| --------  | -----------------------  | ----------------------------  | ------------  |
-| GET      | `/settings/pricing`     | Get all LLM provider pricing | Bearer token |
-| GET      | `/settings/usage-costs` | Get user's usage costs       | Bearer token |
+| Method | Path                    | Description                  | Auth         |
+| ------ | ----------------------- | ---------------------------- | ------------ |
+| GET    | `/settings/pricing`     | Get all LLM provider pricing | Bearer token |
+| GET    | `/settings/usage-costs` | Get user's usage costs       | Bearer token |
 
 ### Pricing Response
 
@@ -24,9 +24,9 @@ App-settings-service provides application-wide LLM pricing and user-specific usa
 
 ### Usage Costs Query Parameters
 
-| Parameter   | Type    | Default   | Max   |
-| -----------  | -------  | ---------  | -----  |
-| `days`      | integer | 90        | 365   |
+| Parameter | Type    | Default | Max |
+| --------- | ------- | ------- | --- |
+| `days`    | integer | 90      | 365 |
 
 ### Usage Costs Response
 
@@ -43,14 +43,15 @@ App-settings-service provides application-wide LLM pricing and user-specific usa
 
 ## Configuration
 
-| Environment Variable                | Required   | Description                  |
-| -----------------------------------  | ----------  | ----------------------------  |
-| `INTEXURAOS_PRICING_COLLECTION`     | Yes        | Firestore pricing collection |
-| `INTEXURAOS_USAGE_STATS_COLLECTION` | Yes        | Firestore usage collection   |
+| Environment Variable                | Required | Description                  |
+| ----------------------------------- | -------- | ---------------------------- |
+| `INTEXURAOS_PRICING_COLLECTION`     | Yes      | Firestore pricing collection |
+| `INTEXURAOS_USAGE_STATS_COLLECTION` | Yes      | Firestore usage collection   |
 
 ## Dependencies
 
 **Infrastructure:**
+
 - Firestore (`pricing` collection) - Provider pricing config
 - Firestore (`usage_stats` collection) - User usage statistics
 

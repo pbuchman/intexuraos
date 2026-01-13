@@ -33,7 +33,7 @@ We use fire-and-forget Promises for background transcription. This is simpler bu
 **Trade-offs:**
 
 | Aspect            | In-Process Async                 | Cloud Tasks                        |
-| -----------------  | --------------------------------  | ----------------------------------  |
+| ----------------- | -------------------------------- | ---------------------------------- |
 | Reliability       | May fail if container killed     | Guaranteed delivery with retries   |
 | Complexity        | Simple                           | Requires additional infrastructure |
 | Cost              | No additional cost               | Cloud Tasks pricing                |
@@ -130,7 +130,7 @@ Orphaned transcriptions (stuck in 'pending' or 'processing') can be recovered by
 ### Environment Variables
 
 | Variable                          | Description                            |
-| ---------------------------------  | --------------------------------------  |
+| --------------------------------- | -------------------------------------- |
 | `INTEXURAOS_SPEECHMATICS_API_KEY` | Speechmatics Batch API key (EU region) |
 
 ### Polling Configuration
@@ -149,7 +149,7 @@ const TRANSCRIPTION_POLL_CONFIG = {
 All transcription steps are logged with structured events:
 
 | Event                          | Description                      |
-| ------------------------------  | --------------------------------  |
+| ------------------------------ | -------------------------------- |
 | `transcription_start`          | Transcription initiated          |
 | `transcription_get_signed_url` | Getting signed URL for audio     |
 | `transcription_submit`         | Submitting to Speechmatics       |
