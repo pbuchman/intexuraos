@@ -8,7 +8,7 @@ actions:
       method: POST
       baseUrl: ${INTEXURAOS_ACTIONS_AGENT_URL}
     ui:
-      label: Approve
+      label: Research!
       variant: success
       icon: CheckCircle
       confirmationMessage: 'This will create a research draft. Continue?'
@@ -22,7 +22,7 @@ actions:
       method: POST
       baseUrl: ${INTEXURAOS_ACTIONS_AGENT_URL}
     ui:
-      label: Create Todo
+      label: Todo!
       variant: success
       icon: CheckCircle
       confirmationMessage: 'Create this todo?'
@@ -36,7 +36,7 @@ actions:
       method: POST
       baseUrl: ${INTEXURAOS_ACTIONS_AGENT_URL}
     ui:
-      label: Create Note
+      label: Note!
       variant: success
       icon: CheckCircle
       confirmationMessage: 'Create this note?'
@@ -50,7 +50,7 @@ actions:
       method: POST
       baseUrl: ${INTEXURAOS_ACTIONS_AGENT_URL}
     ui:
-      label: Save Link
+      label: Bookmark!
       variant: success
       icon: CheckCircle
       confirmationMessage: 'Save this link?'
