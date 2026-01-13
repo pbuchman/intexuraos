@@ -15,7 +15,7 @@ This document describes how to configure GCP access for Claude Code when running
 ## Differences from Local Development
 
 | Aspect         | Local Development                     | Claude Code Cloud   |
-| -------------- | ------------------------------------- | ------------------- |
+| --------------  | -------------------------------------  | -------------------  |
 | Authentication | Application Default Credentials (ADC) | Service Account Key |
 | CLI Tools      | `gcloud` CLI installed                | No CLI tools needed |
 | User Account   | Your personal GCP account             | Service Account     |
@@ -51,7 +51,7 @@ Click **CREATE AND CONTINUE**
 Add the following roles:
 
 | Role                               | Purpose                                       |
-| ---------------------------------- | --------------------------------------------- |
+| ----------------------------------  | ---------------------------------------------  |
 | **Cloud Datastore User**           | Read/write Firestore collections              |
 | **Secret Manager Secret Accessor** | Access secrets from Secret Manager            |
 | **Storage Object Viewer**          | Read from GCS buckets                         |
@@ -187,11 +187,11 @@ ls -la /home/user/intexuraos/gcp-service-account.json
 ## 7. Differences from Local Setup
 
 | Task                    | Local Development       | Claude Code Cloud          |
-| ----------------------- | ----------------------- | -------------------------- |
-| Install gcloud CLI      | ✅ Required             | ❌ Not needed              |
-| Run `gcloud auth login` | ✅ Required             | ❌ Not needed              |
-| Service Account Key     | ❌ Optional             | ✅ Required                |
-| `.env.local` file       | ✅ Used                 | ✅ Used                    |
+| -----------------------  | -----------------------  | --------------------------  |
+| Install gcloud CLI      | ✅ Required              | ❌ Not needed               |
+| Run `gcloud auth login` | ✅ Required              | ❌ Not needed               |
+| Service Account Key     | ❌ Optional              | ✅ Required                 |
+| `.env.local` file       | ✅ Used                  | ✅ Used                     |
 | IAM Roles               | Granted to user account | Granted to service account |
 
 ## 8. Related Documentation
