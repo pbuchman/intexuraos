@@ -69,6 +69,7 @@ llm_usage_stats/
 ```
 
 Each document contains:
+
 - `totalCalls`: Number of calls
 - `successfulCalls`: Number of successful calls
 - `failedCalls`: Number of failed calls
@@ -80,9 +81,9 @@ Each document contains:
 
 ## Configuration
 
-| Environment Variable | Description | Default |
-|---------------------|-------------|---------|
-| `INTEXURAOS_LOG_LLM_USAGE` | Enable usage logging | `true` |
+| Environment Variable       | Description          | Default |
+| -------------------------- | -------------------- | ------- |
+| `INTEXURAOS_LOG_LLM_USAGE` | Enable usage logging | `true`  |
 
 ## Call Types
 

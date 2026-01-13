@@ -5,6 +5,7 @@ LLM audit logging to Firestore for debugging and monitoring.
 ## Purpose
 
 Logs all LLM requests and responses with:
+
 - Request metadata (model, provider, timestamp)
 - Full prompt text
 - Response content (truncated if too long)
@@ -52,6 +53,7 @@ llm_audit_logs/
 ```
 
 Each audit log contains:
+
 - `requestId`: Unique identifier
 - `provider`: LLM provider (anthropic, openai, google, perplexity)
 - `model`: Model used
@@ -69,9 +71,9 @@ Each audit log contains:
 
 ## Configuration
 
-| Environment Variable | Description | Default |
-|---------------------|-------------|---------|
-| `INTEXURAOS_AUDIT_LLMS` | Enable audit logging | `true` |
+| Environment Variable    | Description          | Default |
+| ----------------------- | -------------------- | ------- |
+| `INTEXURAOS_AUDIT_LLMS` | Enable audit logging | `true`  |
 
 ## Security
 

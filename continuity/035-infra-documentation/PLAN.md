@@ -34,28 +34,30 @@ We will improve documentation for the existing `infra-*` packages using AI SDK's
 
 ## Affected Packages
 
-| Package | Purpose | Priority |
-|---------|---------|----------|
-| `infra-claude` | Anthropic Claude client | High |
-| `infra-gpt` | OpenAI GPT client | High |
-| `infra-gemini` | Google Gemini client | High |
-| `infra-perplexity` | Perplexity client | Medium |
-| `llm-contract` | Shared types and interfaces | High |
-| `llm-pricing` | Usage logging and pricing | High |
-| `llm-audit` | Audit logging to Firestore | Medium |
+| Package            | Purpose                     | Priority |
+| ------------------ | --------------------------- | -------- |
+| `infra-claude`     | Anthropic Claude client     | High     |
+| `infra-gpt`        | OpenAI GPT client           | High     |
+| `infra-gemini`     | Google Gemini client        | High     |
+| `infra-perplexity` | Perplexity client           | Medium   |
+| `llm-contract`     | Shared types and interfaces | High     |
+| `llm-pricing`      | Usage logging and pricing   | High     |
+| `llm-audit`        | Audit logging to Firestore  | Medium   |
 
 ## Tasks
 
 ### 1. Add Comprehensive JSDoc to Client Factories
 
 **Files:**
+
 - `packages/infra-claude/src/client.ts`
 - `packages/infra-gpt/src/client.ts`
 - `packages/infra-gemini/src/client.ts`
 - `packages/infra-perplexity/src/client.ts`
 
 **Pattern to Follow:**
-```typescript
+
+````typescript
 /**
  * Creates a configured Claude AI client with parameterized pricing.
  *
@@ -94,21 +96,23 @@ We will improve documentation for the existing `infra-*` packages using AI SDK's
  * @param config.pricing - Cost configuration per 1k tokens
  * @returns A configured {@link LLMClient} instance
  */
-export function createClaudeClient(config: ClaudeConfig): ClaudeClient
-```
+export function createClaudeClient(config: ClaudeConfig): ClaudeClient;
+````
 
 ### 2. Document LLM Contract Types
 
 **File:** `packages/llm-contract/src/types.ts`
 
 Add comprehensive JSDoc to:
+
 - `LLMClient` interface
 - `LLMError` type
 - `NormalizedUsage` interface
 - `ResearchResult`, `GenerateResult`, `ImageGenerationResult`
 
 **Pattern for Error Codes:**
-```typescript
+
+````typescript
 /**
  * Error codes that can be returned by LLM client operations.
  *
@@ -147,11 +151,12 @@ export type LLMErrorCode =
   | 'CONTEXT_LENGTH'
   /** Content was filtered by provider safety systems */
   | 'CONTENT_FILTERED';
-```
+````
 
 ### 3. Create README.md for Each Infra Package
 
 **Files to Create:**
+
 - `packages/infra-claude/README.md`
 - `packages/infra-gpt/README.md`
 - `packages/infra-gemini/README.md`
@@ -161,6 +166,7 @@ export type LLMErrorCode =
 - `packages/llm-audit/README.md`
 
 **Template Structure:**
+
 ```markdown
 # @intexuraos/infra-claude
 
@@ -176,26 +182,26 @@ This is an internal package - installed via workspace protocol.
 import { createClaudeClient } from '@intexuraos/infra-claude';
 
 const client = createClaudeClient({
-  apiKey: process.env.ANTHROPIC_API_KEY,
-  model: 'claude-sonnet-4-5',
-  userId: 'user-123',
-  pricing: { ... }
+apiKey: process.env.ANTHROPIC_API_KEY,
+model: 'claude-sonnet-4-5',
+userId: 'user-123',
+pricing: { ... }
 });
 
 // Research with web search
 const researchResult = await client.research('Latest TypeScript features');
 if (researchResult.ok) {
-  console.log(researchResult.data.content);
-  console.log('Sources:', researchResult.data.sources);
-  console.log('Cost:', researchResult.data.usage.costUsd);
+console.log(researchResult.data.content);
+console.log('Sources:', researchResult.data.sources);
+console.log('Cost:', researchResult.data.usage.costUsd);
 }
 
 // Simple generation
 const result = await client.generate('Explain TypeScript');
 if (result.ok) {
-  console.log(result.data.content);
+console.log(result.data.content);
 } else {
-  console.error(result.error.code, result.error.message);
+console.error(result.error.code, result.error.message);
 }
 \`\`\`
 
@@ -203,35 +209,37 @@ if (result.ok) {
 
 ### `createClaudeClient(config)`
 
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| apiKey | string | Yes | Anthropic API key |
-| model | string | Yes | Model ID |
-| userId | string | Yes | User ID for usage tracking |
-| pricing | ModelPricing | Yes | Cost configuration per 1k tokens |
+| Parameter | Type         | Required | Description                      |
+| --------- | ------------ | -------- | -------------------------------- |
+| apiKey    | string       | Yes      | Anthropic API key                |
+| model     | string       | Yes      | Model ID                         |
+| userId    | string       | Yes      | User ID for usage tracking       |
+| pricing   | ModelPricing | Yes      | Cost configuration per 1k tokens |
 
 ### Methods
 
 #### `research(prompt: string)`
+
 Performs web search research using Claude's built-in web search tool.
 
 **Returns:** `Promise<Result<ResearchResult, ClaudeError>>`
 
 #### `generate(prompt: string)`
+
 Generates text completion without web search.
 
 **Returns:** `Promise<Result<GenerateResult, ClaudeError>>`
 
 ## Error Codes
 
-| Code | Description | Recommended Action |
-|------|-------------|-------------------|
-| INVALID_KEY | API key is invalid | Check ANTHROPIC_API_KEY env var |
-| RATE_LIMITED | Rate limit exceeded | Implement exponential backoff |
-| OVERLOADED | Anthropic API is overloaded | Retry after delay |
-| TIMEOUT | Request timed out | Retry with longer timeout |
-| CONTEXT_LENGTH | Prompt too long | Truncate and retry |
-| API_ERROR | Other API errors | Check message for details |
+| Code           | Description                 | Recommended Action              |
+| -------------- | --------------------------- | ------------------------------- |
+| INVALID_KEY    | API key is invalid          | Check ANTHROPIC_API_KEY env var |
+| RATE_LIMITED   | Rate limit exceeded         | Implement exponential backoff   |
+| OVERLOADED     | Anthropic API is overloaded | Retry after delay               |
+| TIMEOUT        | Request timed out           | Retry with longer timeout       |
+| CONTEXT_LENGTH | Prompt too long             | Truncate and retry              |
+| API_ERROR      | Other API errors            | Check message for details       |
 
 ## Cost Tracking
 
@@ -239,12 +247,12 @@ All methods return a `NormalizedUsage` object:
 
 \`\`\`ts
 interface NormalizedUsage {
-  inputTokens: number;
-  outputTokens: number;
-  totalTokens: number;
-  costUsd: number;
-  cacheTokens?: number;      // Prompt cache read tokens
-  webSearchCalls?: number;    // Number of web search calls (research only)
+inputTokens: number;
+outputTokens: number;
+totalTokens: number;
+costUsd: number;
+cacheTokens?: number; // Prompt cache read tokens
+webSearchCalls?: number; // Number of web search calls (research only)
 }
 \`\`\`
 
@@ -255,11 +263,13 @@ to Firestore for analytics.
 ### 4. Document Pricing and Audit Functions
 
 **Files:**
+
 - `packages/llm-pricing/src/usageLogger.ts`
 - `packages/llm-pricing/src/pricingClient.ts`
 - `packages/llm-audit/src/audit.ts`
 
 Add JSDoc explaining:
+
 - How usage is aggregated (by model, call type, period)
 - Firestore structure for usage stats
 - Audit log structure and purpose
@@ -284,22 +294,22 @@ pnpm run ci:tracked
 
 ## Files to Modify
 
-| File | Changes |
-|------|---------|
-| `packages/infra-claude/src/client.ts` | Add comprehensive JSDoc |
-| `packages/infra-gpt/src/client.ts` | Add comprehensive JSDoc |
-| `packages/infra-gemini/src/client.ts` | Add comprehensive JSDoc |
-| `packages/infra-perplexity/src/client.ts` | Add comprehensive JSDoc |
-| `packages/llm-contract/src/types.ts` | Add JSDoc to all types |
-| `packages/llm-pricing/src/usageLogger.ts` | Add JSDoc to functions |
-| `packages/llm-audit/src/audit.ts` | Add JSDoc to AuditContext |
-| `packages/infra-claude/README.md` | **CREATE** |
-| `packages/infra-gpt/README.md` | **CREATE** |
-| `packages/infra-gemini/README.md` | **CREATE** |
-| `packages/infra-perplexity/README.md` | **CREATE** |
-| `packages/llm-contract/README.md` | **CREATE** |
-| `packages/llm-pricing/README.md` | **CREATE** |
-| `packages/llm-audit/README.md` | **CREATE** |
+| File                                      | Changes                   |
+| ----------------------------------------- | ------------------------- |
+| `packages/infra-claude/src/client.ts`     | Add comprehensive JSDoc   |
+| `packages/infra-gpt/src/client.ts`        | Add comprehensive JSDoc   |
+| `packages/infra-gemini/src/client.ts`     | Add comprehensive JSDoc   |
+| `packages/infra-perplexity/src/client.ts` | Add comprehensive JSDoc   |
+| `packages/llm-contract/src/types.ts`      | Add JSDoc to all types    |
+| `packages/llm-pricing/src/usageLogger.ts` | Add JSDoc to functions    |
+| `packages/llm-audit/src/audit.ts`         | Add JSDoc to AuditContext |
+| `packages/infra-claude/README.md`         | **CREATE**                |
+| `packages/infra-gpt/README.md`            | **CREATE**                |
+| `packages/infra-gemini/README.md`         | **CREATE**                |
+| `packages/infra-perplexity/README.md`     | **CREATE**                |
+| `packages/llm-contract/README.md`         | **CREATE**                |
+| `packages/llm-pricing/README.md`          | **CREATE**                |
+| `packages/llm-audit/README.md`            | **CREATE**                |
 
 ## Not Doing (Deliberate Exclusions)
 
