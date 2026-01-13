@@ -131,6 +131,7 @@ Note: The build script auto-generates `dist/package.json` with all transitive de
 ### 4. Create src/index.ts
 
 ```typescript
+import { initSentry } from '@intexuraos/infra-sentry';
 import { validateRequiredEnv } from '@intexuraos/http-server';
 import { getErrorMessage } from '@intexuraos/common-core';
 import { buildServer } from './server.js';
@@ -139,6 +140,7 @@ import { initServices } from './services.js';
 
 // Fail-fast startup validation - crashes immediately if required vars are missing
 const REQUIRED_ENV = [
+  'INTEXURAOS_SENTRY_DSN',
   'INTEXURAOS_GCP_PROJECT_ID', // Required for Firestore (remove if not using Firestore)
   'INTEXURAOS_AUTH_JWKS_URL',
   'INTEXURAOS_AUTH_ISSUER',
@@ -148,6 +150,13 @@ const REQUIRED_ENV = [
 ];
 
 validateRequiredEnv(REQUIRED_ENV);
+
+// Initialize Sentry (required - DSN is validated above)
+initSentry({
+  dsn: process.env['INTEXURAOS_SENTRY_DSN'],
+  environment: process.env['INTEXURAOS_ENVIRONMENT'] ?? 'development',
+  serviceName: '<service-name>',
+});
 
 async function main(): Promise<void> {
   const config = loadConfig();
