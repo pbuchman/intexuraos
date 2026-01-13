@@ -113,7 +113,7 @@ Terraform will:
 
 The pipeline (`cloudbuild/cloudbuild.yaml`) now runs **independent per-service chains** after the shared setup:
 
-1. `npm-ci` (node:22-slim) — installs dependencies
+1. Dependency installation (node:22-slim) — installs dependencies
 2. `detect-affected` (node:22) — writes `/workspace/affected.json`
 3. Per-service pipelines (each waits only on `detect-affected` → build → push → deploy):
    - `user-service`: `build-user-service` → `push-user-service` → `deploy-user-service`

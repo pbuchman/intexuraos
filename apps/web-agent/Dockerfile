@@ -4,15 +4,20 @@
 # Stage 1: Build
 FROM node:22-alpine AS builder
 
+# Install pnpm
+RUN npm install -g pnpm@9
+
 WORKDIR /app
 
-# Copy all package.json files
+# Copy workspace config and lockfile
+COPY pnpm-workspace.yaml ./
+COPY pnpm-lock.yaml ./
 COPY package*.json ./
 COPY apps/web-agent/package*.json ./apps/web-agent/
 COPY packages/*/package*.json ./packages/
 
 # Install dependencies
-RUN npm ci
+RUN pnpm install --frozen-lockfile
 
 # Copy source files
 COPY tsconfig*.json ./
@@ -21,16 +26,23 @@ COPY packages/ ./packages/
 COPY apps/web-agent/ ./apps/web-agent/
 
 # Build service (esbuild bundles everything into one file)
-RUN npm run build -w @intexuraos/web-agent
+RUN pnpm run --filter @intexuraos/web-agent build
 
 # Stage 2: Production
 FROM node:22-alpine
 
+# Install pnpm
+RUN npm install -g pnpm@9
+
 WORKDIR /app
+
+# Copy workspace config and lockfile
+COPY pnpm-workspace.yaml ./
+COPY pnpm-lock.yaml ./
 
 # Copy generated production package.json and install deps
 COPY --from=builder /app/apps/web-agent/dist/package.json ./
-RUN npm install --omit=dev
+RUN pnpm install --prod --frozen-lockfile
 
 # Copy built file
 COPY --from=builder /app/apps/web-agent/dist/index.js ./dist/

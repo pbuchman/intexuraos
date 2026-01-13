@@ -13,7 +13,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@intexuraos/common-core": "*",
+    "@intexuraos/common-core": "workspace:*",
     "@google-cloud/firestore": "^7.10.0"
   }
 }

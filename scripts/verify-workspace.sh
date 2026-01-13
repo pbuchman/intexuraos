@@ -24,15 +24,15 @@ if [ "$WORKSPACE" = "web" ]; then
   echo ""
 
   echo "[1/3] TypeCheck (source)..."
-  npm run typecheck --workspace @intexuraos/$WORKSPACE
+  pnpm run --filter @intexuraos/$WORKSPACE typecheck
 
   echo ""
   echo "[2/3] Lint..."
-  npm run lint -- apps/$WORKSPACE/src
+  pnpm run lint -- apps/$WORKSPACE/src
 
   echo ""
   echo "[3/3] Tests (no coverage threshold)..."
-  npm run test -- apps/$WORKSPACE
+  pnpm run test -- apps/$WORKSPACE
 
   echo ""
   echo "=== All checks passed for $WORKSPACE ==="
@@ -44,7 +44,7 @@ echo "=== Targeted Verification: $WORKSPACE ==="
 echo ""
 
 echo "[1/4] TypeCheck (source)..."
-npm run typecheck --workspace @intexuraos/$WORKSPACE
+pnpm run --filter @intexuraos/$WORKSPACE typecheck
 
 echo ""
 echo "[2/4] TypeCheck (tests)..."
@@ -70,11 +70,11 @@ rm "$TEMP_TSCONFIG"
 
 echo ""
 echo "[3/4] Lint..."
-npm run lint -- apps/$WORKSPACE/src
+pnpm run lint -- apps/$WORKSPACE/src
 
 echo ""
 echo "[4/4] Tests + Coverage..."
-npm run test -- apps/$WORKSPACE --coverage --coverage.include="apps/$WORKSPACE/src/**/*.ts"
+pnpm run test -- apps/$WORKSPACE --coverage --coverage.include="apps/$WORKSPACE/src/**/*.ts"
 
 echo ""
 echo "=== All checks passed for $WORKSPACE ==="

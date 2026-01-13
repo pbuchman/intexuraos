@@ -118,7 +118,7 @@ git show <commit-hash>               # See actual diff
 NEW_VERSION="X.Y.Z"
 
 # Update root package.json
-npm version $NEW_VERSION --no-git-tag-version
+pnpm version $NEW_VERSION --no-git-tag-version
 
 # Update all apps
 for app in apps/*/package.json; do
@@ -131,7 +131,7 @@ for pkg in packages/*/package.json; do
 done
 
 # Regenerate lock file
-npm install
+ppnpm install
 ```
 
 ### 8. Update CHANGELOG.md Header

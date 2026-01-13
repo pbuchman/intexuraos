@@ -36,22 +36,22 @@ const phases = [
     name: 'Type & Lint',
     parallel: true,
     commands: [
-      { name: 'typecheck', run: 'npm run typecheck --silent' },
-      { name: 'typecheck:tests', run: 'npm run typecheck:tests --silent' },
-      { name: 'lint', run: 'npm run lint --silent' },
+      { name: 'typecheck', run: 'pnpm run typecheck' },
+      { name: 'typecheck:tests', run: 'pnpm run typecheck:tests' },
+      { name: 'lint', run: 'pnpm run lint' },
     ],
   },
   {
     name: 'Tests',
     parallel: false,
-    commands: [{ name: 'test:coverage', run: 'npm run test:coverage --silent' }],
+    commands: [{ name: 'test:coverage', run: 'pnpm run test:coverage' }],
   },
   {
     name: 'Build & Format',
     parallel: true,
     commands: [
-      { name: 'build', run: 'npm run build --silent' },
-      { name: 'format', run: 'npm run format --silent' },
+      { name: 'build', run: 'pnpm run build' },
+      { name: 'format', run: 'pnpm run format' },
     ],
   },
 ];

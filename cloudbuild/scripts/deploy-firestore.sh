@@ -8,7 +8,7 @@
 #
 # Prerequisites:
 # - Cloud Build service account needs Firebase Admin role
-# - npm ci must have been run
+# - pnpm install must have been run
 #
 # Required environment variables:
 # - PROJECT_ID: GCP project ID (provided by Cloud Build)

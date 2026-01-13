@@ -58,12 +58,12 @@ gcloud run services describe intexuraos-<service> --project=intexuraos-dev-pbuch
 
 ### Common Issues
 
-| Error                   | Cause                               | Fix                                                |
-| ----------------------- | ----------------------------------- | -------------------------------------------------- |
-| "Dynamic require"       | CommonJS package bundled by esbuild | Add package to service's package.json dependencies |
-| Health check failure    | Service crashed on startup          | Check startup logs for error                       |
-| Build failure at npm ci | Missing/mismatched dependencies     | Run `npm install` locally and commit lock file     |
-| Docker build failure    | Invalid Dockerfile or missing files | Check Dockerfile and build context                 |
+| Error                         | Cause                               | Fix                                                |
+| ----------------------------- | ----------------------------------- | -------------------------------------------------- |
+| "Dynamic require"             | CommonJS package bundled by esbuild | Add package to service's package.json dependencies |
+| Health check failure          | Service crashed on startup          | Check startup logs for error                       |
+| Build failure at pnpm install | Missing/mismatched dependencies     | Run `pnpm install` locally and commit lock file    |
+| Docker build failure          | Invalid Dockerfile or missing files | Check Dockerfile and build context                 |
 
 ## Services Monitored
 
