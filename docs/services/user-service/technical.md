@@ -83,7 +83,7 @@ sequenceDiagram
 | --------  | ----------------------------------------  | -------------------------  | ------------  |
 | GET      | `/users/:uid/settings`                   | Get user settings         | Bearer token |
 | PATCH    | `/users/:uid/settings`                   | Update user settings      | Bearer token |
-| PUT      | `/users/:uid/llm-keys`                   | Update LLM API keys       | Bearer token |
+| PATCH    | `/users/:uid/llm-keys`                   | Update LLM API keys       | Bearer token |
 | DELETE   | `/users/:uid/llm-keys/:provider`         | Delete LLM API key        | Bearer token |
 | GET      | `/users/:uid/llm-keys/test`              | Test LLM API key          | Bearer token |
 | GET      | `/users/:uid/oauth-connections`          | List OAuth connections    | Bearer token |
@@ -96,8 +96,6 @@ sequenceDiagram
 | GET      | `/internal/users/:uid/llm-keys`                     | Get decrypted LLM API keys   | Internal header |
 | POST     | `/internal/users/:uid/llm-keys/:provider/last-used` | Update last used timestamp   | Internal header |
 | GET      | `/internal/users/:uid/oauth/google/token`           | Get valid Google OAuth token | Internal header |
-| POST     | `/internal/users/:uid/llm-keys/validate`            | Validate LLM API key         | Internal header |
-| POST     | `/internal/users/:uid/llm-keys/success`             | Report LLM usage success     | Internal header |
 
 ## Domain Models
 
