@@ -4,17 +4,17 @@ import { itemExtractionPrompt } from '@intexuraos/llm-common';
 import type { LlmGenerateClient } from '@intexuraos/llm-factory';
 import type { UserServiceClient } from '../user/userServiceClient.js';
 import pino from 'pino';
-import type { Logger } from 'pino';
 
 const MAX_ITEMS = 50;
 const MAX_DESCRIPTION_LENGTH = 10000;
 
-const defaultLogger = pino({
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type -- Extends Logger for type compatibility
+interface MinimalLogger extends pino.Logger {}
+
+const defaultLogger: MinimalLogger = pino({
   level: process.env['LOG_LEVEL'] ?? 'info',
   name: 'todoItemExtractionService',
-});
-
-interface MinimalLogger extends Logger {}
+}) as unknown as MinimalLogger;
 
 export interface ExtractionError {
   code: 'NO_API_KEY' | 'USER_SERVICE_ERROR' | 'GENERATION_ERROR' | 'INVALID_RESPONSE';

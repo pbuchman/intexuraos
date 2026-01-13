@@ -4,7 +4,12 @@
 
 import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
 import * as Sentry from '@sentry/node';
-import { createSentryStream, createSentryTransport, sendToSentry, isSentryConfigured } from '../transport.js';
+import {
+  createSentryStream,
+  createSentryTransport,
+  sendToSentry,
+  isSentryConfigured,
+} from '../transport.js';
 
 // Mock Sentry - must use factory function to avoid hoisting issues
 vi.mock('@sentry/node', () => {
@@ -105,7 +110,9 @@ describe('createSentryStream', () => {
   it('returns multistream unchanged when SENTRY_DSN is not set', () => {
     delete process.env['INTEXURAOS_SENTRY_DSN'];
 
-    const mockMultistream = { streams: [] } as unknown as ReturnType<typeof import('pino').multistream>;
+    const mockMultistream = { streams: [] } as unknown as ReturnType<
+      typeof import('pino').multistream
+    >;
 
     const result = createSentryStream(mockMultistream);
 
@@ -115,7 +122,9 @@ describe('createSentryStream', () => {
   it('adds Sentry stream to multistream when SENTRY_DSN is set', () => {
     process.env['INTEXURAOS_SENTRY_DSN'] = 'https://test@sentry.io/123';
 
-    const mockMultistream = { streams: [] } as unknown as ReturnType<typeof import('pino').multistream>;
+    const mockMultistream = { streams: [] } as unknown as ReturnType<
+      typeof import('pino').multistream
+    >;
 
     const result = createSentryStream(mockMultistream);
 
@@ -132,7 +141,9 @@ describe('createSentryStream', () => {
   it('Sentry stream has write function', () => {
     process.env['INTEXURAOS_SENTRY_DSN'] = 'https://test@sentry.io/123';
 
-    const mockMultistream = { streams: [] } as unknown as ReturnType<typeof import('pino').multistream>;
+    const mockMultistream = { streams: [] } as unknown as ReturnType<
+      typeof import('pino').multistream
+    >;
 
     const result = createSentryStream(mockMultistream);
 

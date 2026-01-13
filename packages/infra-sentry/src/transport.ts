@@ -34,7 +34,6 @@ import type { LogDescriptor } from 'pino';
  */
 const SENTRY_DSN_ENV = 'INTEXURAOS_SENTRY_DSN';
 
-
 /**
  * Levels that should be sent to Sentry (warn, error, fatal).
  */

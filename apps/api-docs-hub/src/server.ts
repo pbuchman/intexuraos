@@ -49,11 +49,13 @@ export async function buildServer(config: Config): Promise<FastifyInstance> {
         ? false
         : {
             level: process.env['LOG_LEVEL'] ?? 'info',
+            /* eslint-disable @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access -- Pino multistream types are incompatible */
             stream: createSentryStream(
               pino.multistream([
                 pino.destination({ dest: 1, sync: false }),
               ])
             ),
+            /* eslint-enable @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access */
           },
     disableRequestLogging: true, // We'll handle logging ourselves to skip health checks
   });
