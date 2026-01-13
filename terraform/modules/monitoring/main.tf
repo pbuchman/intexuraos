@@ -452,6 +452,37 @@ resource "google_monitoring_dashboard" "main" {
               }]
             }
           }
+        },
+
+        # Row 6: Cloud Build Network Telemetry
+        {
+          xPos   = 0
+          yPos   = 21
+          width  = 12
+          height = 4
+          widget = {
+            title = "Cloud Build - Network Telemetry Events by Service"
+            xyChart = {
+              dataSets = [{
+                timeSeriesQuery = {
+                  timeSeriesFilter = {
+                    filter = "metric.type=\"logging.googleapis.com/user/${google_logging_metric.cloudbuild_network_telemetry.name}\" resource.type=\"cloudbuild.googleapis.com/Build\""
+                    aggregation = {
+                      alignmentPeriod    = "60s"
+                      perSeriesAligner   = "ALIGN_RATE"
+                      crossSeriesReducer = "REDUCE_SUM"
+                      groupByFields      = ["metric.label.service"]
+                    }
+                  }
+                }
+                plotType = "STACKED_BAR"
+              }]
+              yAxis = {
+                scale = "LINEAR"
+                label = "events/sec"
+              }
+            }
+          }
         }
       ]
     }
