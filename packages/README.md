@@ -31,13 +31,13 @@ All packages have tests in `src/__tests__/` subdirectories using Vitest.
 
 ```bash
 # Run all package tests
-npm run test -- packages
+pnpm run test -- packages
 
 # Run tests for specific package
-npm run test -- packages/common-core
+pnpm run test -- packages/common-core
 
 # Run tests with coverage
-npm run test:coverage
+ppnpm run test:coverage
 ```
 
 ### Test Patterns
@@ -57,7 +57,7 @@ All packages are subject to the repo-wide coverage thresholds defined in `vitest
 
 ## Import Rules
 
-Enforced by `npm run verify:boundaries`:
+Enforced by `pnpm run verify:boundaries`:
 
 - `common-core` → imports nothing
 - `common-http` → imports from `common-core`

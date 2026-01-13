@@ -17,7 +17,8 @@
   },
   "dependencies": {
     "@auth0/auth0-react": "^2.2.4",
-    "@intexuraos/llm-contract": "*",
+    "@intexuraos/common-core": "workspace:*",
+    "@intexuraos/llm-contract": "workspace:*",
     "@types/js-yaml": "^4.0.9",
     "firebase": "^11.9.0",
     "highlight.js": "^11.11.1",
@@ -33,7 +34,8 @@
     "vega": "^5.28.0",
     "vega-embed": "^6.25.0",
     "vega-lite": "^5.18.0",
-    "vibe-kanban-web-companion": "^0.0.5"
+    "vibe-kanban-web-companion": "^0.0.5",
+    "workbox-window": "^7.4.0"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.1.8",
@@ -49,6 +51,7 @@
     "jsdom": "^26.1.0",
     "tailwindcss": "^4.1.8",
     "typescript": "^5.8.3",
+    "vite": "^7.3.1",
     "vite-plugin-pwa": "^1.2.0"
   }
 }
