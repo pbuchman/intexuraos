@@ -23,6 +23,6 @@ async function main(): Promise<void> {
 }
 
 main().catch((error: unknown) => {
-  console.error('Fatal error during startup:', error);
+  process.stderr.write(`Fatal error during startup: ${String(error)}\n`);
   process.exit(1);
 });

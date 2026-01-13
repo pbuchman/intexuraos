@@ -92,9 +92,8 @@ export function createSentryStream(
  * Send a log entry to Sentry.
  */
 function sendLogToSentry(logEntry: LogDescriptor): void {
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
-  const levelValue = logEntry['level'];
-  if (levelValue === undefined || !SENTRY_LEVELS.has(levelValue)) {
+  const levelValue = logEntry['level'] as unknown;
+  if (levelValue === undefined || !SENTRY_LEVELS.has(levelValue as number)) {
     return;
   }
 
@@ -110,15 +109,12 @@ function sendLogToSentry(logEntry: LogDescriptor): void {
       // error or fatal - capture as exception
       const error = new Error(typeof msg === 'string' ? msg : String(msg));
       // Add stack trace if available in the log
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-      const errObj = rest['err'];
-      if (typeof errObj === 'object' && errObj !== null) {
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-        if ('stack' in errObj && typeof errObj.stack === 'string') {
+      const errObj = rest['err'] as { stack?: string; message?: string } | undefined;
+      if (errObj !== undefined) {
+        if (typeof errObj.stack === 'string') {
           error.stack = errObj.stack;
         }
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-        if ('message' in errObj && typeof errObj.message === 'string') {
+        if (typeof errObj.message === 'string') {
           error.message = errObj.message;
         }
       }

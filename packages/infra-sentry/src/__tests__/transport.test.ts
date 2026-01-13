@@ -31,7 +31,10 @@ vi.mock('@sentry/node', () => {
 const originalEnv = process.env;
 
 // Get references to the mocked functions after mock is set up
-const getMockedSentry = () => ({
+const getMockedSentry = (): {
+  captureException: ReturnType<typeof vi.fn>;
+  captureMessage: ReturnType<typeof vi.fn>;
+} => ({
   captureException: vi.mocked(Sentry).captureException as ReturnType<typeof vi.fn>,
   captureMessage: vi.mocked(Sentry).captureMessage as ReturnType<typeof vi.fn>,
 });
