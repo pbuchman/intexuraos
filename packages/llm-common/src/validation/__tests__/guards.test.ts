@@ -65,32 +65,41 @@ describe('getInputQualityGuardError', () => {
   });
 
   it('returns error for non-numeric quality', () => {
-    expect(getInputQualityGuardError({ quality: 'WEAK_BUT_VALID', reason: 'test' }))
-      .toBe('"quality" must be a number (0, 1, or 2), got string: "WEAK_BUT_VALID"');
-    expect(getInputQualityGuardError({ quality: '1', reason: 'test' }))
-      .toBe('"quality" must be a number (0, 1, or 2), got string: "1"');
+    expect(getInputQualityGuardError({ quality: 'WEAK_BUT_VALID', reason: 'test' })).toBe(
+      '"quality" must be a number (0, 1, or 2), got string: "WEAK_BUT_VALID"'
+    );
+    expect(getInputQualityGuardError({ quality: '1', reason: 'test' })).toBe(
+      '"quality" must be a number (0, 1, or 2), got string: "1"'
+    );
   });
 
   it('returns error for out-of-range quality', () => {
-    expect(getInputQualityGuardError({ quality: 3, reason: 'test' }))
-      .toBe('"quality" must be 0, 1, or 2, got 3');
-    expect(getInputQualityGuardError({ quality: -1, reason: 'test' }))
-      .toBe('"quality" must be 0, 1, or 2, got -1');
+    expect(getInputQualityGuardError({ quality: 3, reason: 'test' })).toBe(
+      '"quality" must be 0, 1, or 2, got 3'
+    );
+    expect(getInputQualityGuardError({ quality: -1, reason: 'test' })).toBe(
+      '"quality" must be 0, 1, or 2, got -1'
+    );
   });
 
   it('returns error for missing or invalid reason', () => {
-    expect(getInputQualityGuardError({ quality: 1, reason: '' }))
-      .toBe('Missing or invalid "reason" field (must be a non-empty string)');
-    expect(getInputQualityGuardError({ quality: 1 }))
-      .toBe('Missing or invalid "reason" field (must be a non-empty string)');
-    expect(getInputQualityGuardError({ quality: 1, reason: null }))
-      .toBe('Missing or invalid "reason" field (must be a non-empty string)');
-    expect(getInputQualityGuardError({ quality: 1, reason: 123 }))
-      .toBe('Missing or invalid "reason" field (must be a non-empty string)');
+    expect(getInputQualityGuardError({ quality: 1, reason: '' })).toBe(
+      'Missing or invalid "reason" field (must be a non-empty string)'
+    );
+    expect(getInputQualityGuardError({ quality: 1 })).toBe(
+      'Missing or invalid "reason" field (must be a non-empty string)'
+    );
+    expect(getInputQualityGuardError({ quality: 1, reason: null })).toBe(
+      'Missing or invalid "reason" field (must be a non-empty string)'
+    );
+    expect(getInputQualityGuardError({ quality: 1, reason: 123 })).toBe(
+      'Missing or invalid "reason" field (must be a non-empty string)'
+    );
   });
 
   it('prefers quality over quality_scale when both exist', () => {
-    expect(getInputQualityGuardError({ quality: 1, quality_scale: 'WEAK_BUT_VALID', reason: 'test' }))
-      .toBe(null);
+    expect(
+      getInputQualityGuardError({ quality: 1, quality_scale: 'WEAK_BUT_VALID', reason: 'test' })
+    ).toBe(null);
   });
 });

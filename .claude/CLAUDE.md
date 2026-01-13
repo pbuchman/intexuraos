@@ -377,6 +377,27 @@ Use the same command: `pnpm run verify:workspace:tracked -- web` — adjusted be
 
 ---
 
+## Pull Request Workflow (DEFAULT)
+
+**When asked to create a PR, follow this default workflow:**
+
+1. **Commit all changes** in the current workspace
+2. **Fetch origin** and merge `origin/development` if it exists
+3. **Push** the branch
+4. **Create PR** targeting `development` (if it exists), otherwise `main`
+
+**Commands:**
+
+```bash
+git add -A && git commit -m "message"
+git fetch origin
+git merge origin/development  # if exists, skip if not
+git push -u origin <branch>
+gh pr create --base development  # or --base main if development doesn't exist
+```
+
+---
+
 ## Complex Tasks — Continuity Workflow
 
 For multi-step features, use numbered directories in `continuity/`. See [continuity/README.md](../continuity/README.md).

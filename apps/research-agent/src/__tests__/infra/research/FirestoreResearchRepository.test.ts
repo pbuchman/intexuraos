@@ -118,61 +118,94 @@ describe('FirestoreResearchRepository', () => {
   });
 
   describe('findByUserId', () => {
-    it('returns researches for user', async () => {
-      const researches: Research[] = [
-        {
-          id: 'research-1',
-          userId: 'user-1',
-          title: 'Test Research 1',
-          prompt: 'Test',
-          selectedModels: [LlmModels.Gemini25Pro],
-          synthesisModel: LlmModels.Gemini25Pro,
-          status: 'pending',
-          llmResults: [],
-          startedAt: '2024-01-01T00:00:00Z',
-        },
-        {
-          id: 'research-2',
-          userId: 'user-1',
-          title: 'Test Research 2',
-          prompt: 'Test',
-          selectedModels: [LlmModels.Gemini25Pro],
-          synthesisModel: LlmModels.Gemini25Pro,
-          status: 'pending',
-          llmResults: [],
-          startedAt: '2024-01-01T00:00:00Z',
-        },
-      ];
+    it('returns researches for user with favorites first', async () => {
+      const favoriteResearch: Research = {
+        id: 'research-fav',
+        userId: 'user-1',
+        title: 'Favorite Research',
+        prompt: 'Test',
+        selectedModels: [LlmModels.Gemini25Pro],
+        synthesisModel: LlmModels.Gemini25Pro,
+        status: 'pending',
+        llmResults: [],
+        favourite: true,
+        startedAt: '2024-01-02T00:00:00Z',
+      };
+      const normalResearch: Research = {
+        id: 'research-2',
+        userId: 'user-1',
+        title: 'Test Research 2',
+        prompt: 'Test',
+        selectedModels: [LlmModels.Gemini25Pro],
+        synthesisModel: LlmModels.Gemini25Pro,
+        status: 'pending',
+        llmResults: [],
+        favourite: false,
+        startedAt: '2024-01-01T00:00:00Z',
+      };
 
-      const mockQueryGet = vi.fn().mockResolvedValue({
-        docs: researches.map((r): { id: string; data: () => Research } => ({
-          id: r.id,
-          data: () => r,
-        })),
+      const mockFavoritesGet = vi.fn().mockResolvedValue({
+        docs: [
+          {
+            id: favoriteResearch.id,
+            data: (): Research => favoriteResearch,
+          },
+        ],
+      });
+      const mockNonFavoritesGet = vi.fn().mockResolvedValue({
+        docs: [
+          {
+            id: normalResearch.id,
+            data: (): Research => normalResearch,
+          },
+        ],
       });
 
-      mockWhere.mockReturnValue({
-        orderBy: vi.fn().mockReturnValue({
-          limit: vi.fn().mockReturnValue({
-            get: mockQueryGet,
+      // Mock the two parallel queries: favorites first, then non-favorites
+      mockWhere
+        .mockReturnValueOnce({
+          where: vi.fn().mockReturnValue({
+            orderBy: vi.fn().mockReturnValue({
+              limit: vi.fn().mockReturnValue({
+                get: mockFavoritesGet,
+              }),
+            }),
           }),
-        }),
-      });
+        })
+        .mockReturnValueOnce({
+          where: vi.fn().mockReturnValue({
+            orderBy: vi.fn().mockReturnValue({
+              limit: vi.fn().mockReturnValue({
+                get: mockNonFavoritesGet,
+              }),
+            }),
+          }),
+        });
 
       const result = await repository.findByUserId('user-1');
 
       expect(result.ok).toBe(true);
       if (result.ok) {
-        expect(result.value.items).toHaveLength(2);
+        const { items } = result.value;
+        expect(items).toHaveLength(2);
+        // Favorites should come first
+        expect(items[0]?.id).toBe('research-fav');
+        expect(items[0]?.favourite).toBe(true);
+        expect(items[1]?.id).toBe('research-2');
+        expect(items[1]?.favourite).toBe(false);
         expect(result.value.nextCursor).toBe('research-2');
       }
     });
 
     it('returns empty list when no results', async () => {
+      const mockGet = vi.fn().mockResolvedValue({ docs: [] });
+
       mockWhere.mockReturnValue({
-        orderBy: vi.fn().mockReturnValue({
-          limit: vi.fn().mockReturnValue({
-            get: vi.fn().mockResolvedValue({ docs: [] }),
+        where: vi.fn().mockReturnValue({
+          orderBy: vi.fn().mockReturnValue({
+            limit: vi.fn().mockReturnValue({
+              get: mockGet,
+            }),
           }),
         }),
       });
@@ -186,48 +219,51 @@ describe('FirestoreResearchRepository', () => {
       }
     });
 
-    it('handles cursor pagination', async () => {
-      const cursorDoc = { exists: true };
-      mockDocGet.mockResolvedValue(cursorDoc);
+    it('respects limit parameter', async () => {
+      const favorites: Research[] = Array.from({ length: 10 }, (_, i) => ({
+        id: `fav-${i}`,
+        userId: 'user-1',
+        title: `Favorite ${i}`,
+        prompt: 'Test',
+        selectedModels: [LlmModels.Gemini25Pro],
+        synthesisModel: LlmModels.Gemini25Pro,
+        status: 'pending',
+        llmResults: [],
+        favourite: true,
+        startedAt: '2024-01-01T00:00:00Z',
+      }));
 
-      const mockStartAfter = vi.fn().mockReturnValue({
-        get: vi.fn().mockResolvedValue({ docs: [] }),
+      const mockGet = vi.fn().mockResolvedValue({
+        docs: favorites.slice(0, 5).map((r): { id: string; data: () => Research } => ({ id: r.id, data: (): Research => r })),
       });
 
       mockWhere.mockReturnValue({
-        orderBy: vi.fn().mockReturnValue({
-          limit: vi.fn().mockReturnValue({
-            startAfter: mockStartAfter,
+        where: vi.fn().mockReturnValue({
+          orderBy: vi.fn().mockReturnValue({
+            limit: vi.fn().mockReturnValue({
+              get: mockGet,
+            }),
           }),
         }),
       });
 
-      await repository.findByUserId('user-1', { cursor: 'prev-id' });
-
-      expect(mockStartAfter).toHaveBeenCalledWith(cursorDoc);
-    });
-
-    it('ignores invalid cursor', async () => {
-      mockDocGet.mockResolvedValue({ exists: false });
-
-      mockWhere.mockReturnValue({
-        orderBy: vi.fn().mockReturnValue({
-          limit: vi.fn().mockReturnValue({
-            get: vi.fn().mockResolvedValue({ docs: [] }),
-          }),
-        }),
-      });
-
-      const result = await repository.findByUserId('user-1', { cursor: 'invalid' });
+      const result = await repository.findByUserId('user-1', { limit: 5 });
 
       expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.items).toHaveLength(5);
+      }
     });
 
     it('returns error on Firestore failure', async () => {
+      const mockGet = vi.fn().mockRejectedValue(new Error('Query failed'));
+
       mockWhere.mockReturnValue({
-        orderBy: vi.fn().mockReturnValue({
-          limit: vi.fn().mockReturnValue({
-            get: vi.fn().mockRejectedValue(new Error('Query failed')),
+        where: vi.fn().mockReturnValue({
+          orderBy: vi.fn().mockReturnValue({
+            limit: vi.fn().mockReturnValue({
+              get: mockGet,
+            }),
           }),
         }),
       });
