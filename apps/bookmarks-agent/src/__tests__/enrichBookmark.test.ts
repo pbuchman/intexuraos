@@ -151,7 +151,7 @@ describe('enrichBookmark', () => {
 
   it('returns error when findById fails', async () => {
     bookmarkRepository.simulateMethodError('findById', {
-      code: 'INTERNAL_ERROR',
+      code: 'STORAGE_ERROR',
       message: 'Database connection failed',
     });
 
@@ -161,8 +161,8 @@ describe('enrichBookmark', () => {
     );
 
     expect(result.ok).toBe(false);
-    if (!result.ok) return;
-    expect(result.error.code).toBe('INTERNAL_ERROR');
+    if (result.ok) return;
+    expect(result.error.code).toBe('STORAGE_ERROR');
     expect(result.error.message).toBe('Database connection failed');
   });
 
