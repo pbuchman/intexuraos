@@ -2,6 +2,7 @@
  * Service wiring for whatsapp-service.
  * Provides class-based adapters for domain use cases.
  */
+import pino from 'pino';
 import {
   MessageRepositoryAdapter,
   UserMappingRepositoryAdapter,
@@ -117,6 +118,7 @@ export function getServices(): ServiceContainer {
     linkPreviewFetcher: createWebAgentLinkPreviewClient({
       baseUrl: serviceConfig.webAgentUrl,
       internalAuthToken: serviceConfig.internalAuthToken,
+      logger: pino({ name: 'webAgentLinkPreviewClient' }),
     }),
   };
   return container;

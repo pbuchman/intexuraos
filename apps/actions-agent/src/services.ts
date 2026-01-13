@@ -140,16 +140,19 @@ export function initServices(config: ServiceConfig): void {
   const todosServiceClient = createTodosServiceHttpClient({
     baseUrl: config.todosAgentUrl,
     internalAuthToken: config.internalAuthToken,
+    logger: pino({ name: 'todosServiceClient' }),
   });
 
   const notesServiceClient = createNotesServiceHttpClient({
     baseUrl: config.notesAgentUrl,
     internalAuthToken: config.internalAuthToken,
+    logger: pino({ name: 'notesServiceClient' }),
   });
 
   const bookmarksServiceClient = createBookmarksServiceHttpClient({
     baseUrl: config.bookmarksAgentUrl,
     internalAuthToken: config.internalAuthToken,
+    logger: pino({ name: 'bookmarksServiceClient' }),
   });
 
   const executeResearchActionUseCase = createExecuteResearchActionUseCase({
