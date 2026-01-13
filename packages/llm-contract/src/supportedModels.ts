@@ -14,9 +14,10 @@ export type Google = 'google';
 export type OpenAI = 'openai';
 export type Anthropic = 'anthropic';
 export type Perplexity = 'perplexity';
+export type Zhipu = 'zhipu';
 
 /** Union of all LLM providers */
-export type LlmProvider = Google | OpenAI | Anthropic | Perplexity;
+export type LlmProvider = Google | OpenAI | Anthropic | Perplexity | Zhipu;
 
 // =============================================================================
 // Individual Model Types - Google
@@ -53,6 +54,12 @@ export type SonarPro = 'sonar-pro';
 export type SonarDeepResearch = 'sonar-deep-research';
 
 // =============================================================================
+// Individual Model Types - Zhipu
+// =============================================================================
+
+export type Glm47 = 'glm-4.7';
+
+// =============================================================================
 // Model Category Types (composed from individual types)
 // =============================================================================
 
@@ -73,12 +80,13 @@ export type ResearchModel =
   | GPT52
   | Sonar
   | SonarPro
-  | SonarDeepResearch;
+  | SonarDeepResearch
+  | Glm47;
 
 /**
  * Models for API key validation (cheap, fast).
  */
-export type ValidationModel = ClaudeHaiku35 | Gemini20Flash | GPT4oMini | Sonar;
+export type ValidationModel = ClaudeHaiku35 | Gemini20Flash | GPT4oMini | Sonar | Glm47;
 
 /**
  * Fast models for quick tasks (classification, title generation).
@@ -112,7 +120,9 @@ export type LLMModel =
   // Perplexity (3 models)
   | Sonar
   | SonarPro
-  | SonarDeepResearch;
+  | SonarDeepResearch
+  // Zhipu (1 model)
+  | Glm47;
 
 // =============================================================================
 // Provider Constants Object
@@ -127,6 +137,7 @@ export const LlmProviders = {
   OpenAI: 'openai' as OpenAI,
   Anthropic: 'anthropic' as Anthropic,
   Perplexity: 'perplexity' as Perplexity,
+  Zhipu: 'zhipu' as Zhipu,
 } as const;
 
 // =============================================================================
@@ -156,6 +167,8 @@ export const LlmModels = {
   Sonar: 'sonar' as Sonar,
   SonarPro: 'sonar-pro' as SonarPro,
   SonarDeepResearch: 'sonar-deep-research' as SonarDeepResearch,
+  // Zhipu
+  Glm47: 'glm-4.7' as Glm47,
 } as const;
 
 // =============================================================================
@@ -185,6 +198,8 @@ export const ALL_LLM_MODELS: LLMModel[] = [
   LlmModels.Sonar,
   LlmModels.SonarPro,
   LlmModels.SonarDeepResearch,
+  // Zhipu
+  LlmModels.Glm47,
 ] as const;
 
 // =============================================================================
@@ -213,6 +228,8 @@ export const MODEL_PROVIDER_MAP: Record<LLMModel, LlmProvider> = {
   [LlmModels.Sonar]: LlmProviders.Perplexity,
   [LlmModels.SonarPro]: LlmProviders.Perplexity,
   [LlmModels.SonarDeepResearch]: LlmProviders.Perplexity,
+  // Zhipu
+  [LlmModels.Glm47]: LlmProviders.Zhipu,
 } as const;
 
 /**

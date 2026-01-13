@@ -60,6 +60,19 @@ vi.mock('../../../infra/llm/PerplexityAdapter.js', () => ({
   },
 }));
 
+vi.mock('../../../infra/llm/GlmAdapter.js', () => ({
+  GlmAdapter: class MockGlmAdapter {
+    apiKey: string;
+    model: string;
+    userId: string;
+    constructor(apiKey: string, model: string, userId: string) {
+      this.apiKey = apiKey;
+      this.model = model;
+      this.userId = userId;
+    }
+  },
+}));
+
 const { createSynthesizer, createTitleGenerator, createResearchProvider } =
   await import('../../../infra/llm/LlmAdapterFactory.js');
 
@@ -112,6 +125,18 @@ describe('LlmAdapterFactory', () => {
       expect((provider as unknown as { apiKey: string }).apiKey).toBe('perplexity-key');
       expect((provider as unknown as { model: string }).model).toBe(LlmModels.SonarPro);
     });
+
+    it('creates GlmAdapter for zhipu model', () => {
+      const provider = createResearchProvider(
+        LlmModels.Glm47,
+        'zhipu-key',
+        'test-user-id',
+        testPricing
+      );
+
+      expect((provider as unknown as { apiKey: string }).apiKey).toBe('zhipu-key');
+      expect((provider as unknown as { model: string }).model).toBe(LlmModels.Glm47);
+    });
   });
 
   describe('createSynthesizer', () => {
@@ -151,6 +176,18 @@ describe('LlmAdapterFactory', () => {
       expect(() =>
         createSynthesizer(LlmModels.SonarPro, 'perplexity-key', 'test-user-id', testPricing)
       ).toThrow('Perplexity does not support synthesis');
+    });
+
+    it('creates GlmAdapter for zhipu model', () => {
+      const synthesizer = createSynthesizer(
+        LlmModels.Glm47,
+        'zhipu-key',
+        'test-user-id',
+        testPricing
+      );
+
+      expect((synthesizer as unknown as { apiKey: string }).apiKey).toBe('zhipu-key');
+      expect((synthesizer as unknown as { model: string }).model).toBe(LlmModels.Glm47);
     });
   });
 

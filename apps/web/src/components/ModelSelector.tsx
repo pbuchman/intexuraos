@@ -48,6 +48,11 @@ const PROVIDER_MODELS: ProviderConfig[] = [
       { id: LlmModels.SonarDeepResearch, name: 'Sonar Deep Research' },
     ],
   },
+  {
+    id: LlmProviders.Zhipu,
+    displayName: 'Zhipu',
+    models: [{ id: LlmModels.Glm47, name: 'GLM-4.7' }],
+  },
 ];
 
 export interface ModelSelectorProps {
