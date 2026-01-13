@@ -14,8 +14,8 @@ COPY pnpm-workspace.yaml ./
 COPY pnpm-lock.yaml ./
 COPY package*.json ./
 COPY apps/notion-service/package*.json ./apps/notion-service/
-COPY packages/*/package*.json ./packages/
 
+COPY packages/ ./packages/
 # Install dependencies
 RUN pnpm install --frozen-lockfile
 

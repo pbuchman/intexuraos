@@ -14,8 +14,8 @@ COPY pnpm-workspace.yaml ./
 COPY pnpm-lock.yaml ./
 COPY package*.json ./
 COPY apps/actions-agent/package*.json ./apps/actions-agent/
-COPY packages/*/package*.json ./packages/
 
+COPY packages/ ./packages/
 # Install dependencies
 RUN pnpm install --frozen-lockfile
 

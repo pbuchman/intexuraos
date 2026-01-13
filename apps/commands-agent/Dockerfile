@@ -9,20 +9,19 @@ RUN npm install -g pnpm@9
 
 WORKDIR /app
 
-# Copy workspace config and lockfile
+# Copy workspace config, lockfile, and ALL package.json files first
 COPY pnpm-workspace.yaml ./
 COPY pnpm-lock.yaml ./
 COPY package*.json ./
 COPY apps/commands-agent/package*.json ./apps/commands-agent/
-COPY packages/*/package*.json ./packages/
+COPY packages/ ./packages/
 
-# Install dependencies
+# Install dependencies (workspace symlinks now point to copied source)
 RUN pnpm install --frozen-lockfile
 
-# Copy source files
+# Copy remaining source files (tsconfig, scripts, app source)
 COPY tsconfig*.json ./
 COPY scripts/ ./scripts/
-COPY packages/ ./packages/
 COPY apps/commands-agent/ ./apps/commands-agent/
 
 # Build service (esbuild bundles everything into one file)
