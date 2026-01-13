@@ -3,19 +3,11 @@ steps:
   - name: 'gcr.io/cloud-builders/docker'
     id: 'build'
     entrypoint: 'bash'
-    args:
-      - '-c'
-      - |
-        docker pull ${_ARTIFACT_REGISTRY_URL}/web-agent:latest || true
-        docker build \
-          --cache-from=${_ARTIFACT_REGISTRY_URL}/web-agent:latest \
-          --build-arg BUILDKIT_INLINE_CACHE=1 \
-          -t ${_ARTIFACT_REGISTRY_URL}/web-agent:$COMMIT_SHA \
-          -t ${_ARTIFACT_REGISTRY_URL}/web-agent:latest \
-          -f apps/web-agent/Dockerfile .
-        docker push ${_ARTIFACT_REGISTRY_URL}/web-agent:$COMMIT_SHA
-        docker push ${_ARTIFACT_REGISTRY_URL}/web-agent:latest
-    env: ['DOCKER_BUILDKIT=1']
+    args: ['cloudbuild/scripts/build-push-monitored.sh', 'web-agent', 'apps/web-agent/Dockerfile']
+    env:
+      - 'DOCKER_BUILDKIT=1'
+      - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
+      - 'COMMIT_SHA=$COMMIT_SHA'
 
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     id: 'deploy'

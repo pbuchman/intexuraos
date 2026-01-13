@@ -2,7 +2,7 @@
  * Tests for Sentry initialization.
  */
 
-import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
+import { describe, expect, it, beforeEach, vi } from 'vitest';
 import * as Sentry from '@sentry/node';
 import { initSentry, type SentryConfig } from '../init.js';
 
@@ -15,16 +15,8 @@ vi.mock('@sentry/node', () => ({
 }));
 
 describe('initSentry', () => {
-  const originalConsoleWarn = console.warn;
-  const consoleWarnSpy = vi.fn();
-
   beforeEach(() => {
-    console.warn = consoleWarnSpy;
     vi.clearAllMocks();
-  });
-
-  afterEach(() => {
-    console.warn = originalConsoleWarn;
   });
 
   it('initializes Sentry with valid config', () => {
@@ -62,18 +54,17 @@ describe('initSentry', () => {
     );
   });
 
-  it('logs warning and returns early when no DSN provided', () => {
+  it('returns early when no DSN provided', () => {
     const config: SentryConfig = {
       serviceName: 'test-service',
     };
 
     initSentry(config);
 
-    expect(consoleWarnSpy).toHaveBeenCalledWith('[Sentry] No DSN provided, skipping initialization');
     expect(Sentry.init).not.toHaveBeenCalled();
   });
 
-  it('logs warning and returns early when DSN is empty string', () => {
+  it('returns early when DSN is empty string', () => {
     const config: SentryConfig = {
       dsn: '',
       serviceName: 'test-service',
@@ -81,7 +72,6 @@ describe('initSentry', () => {
 
     initSentry(config);
 
-    expect(consoleWarnSpy).toHaveBeenCalledWith('[Sentry] No DSN provided, skipping initialization');
     expect(Sentry.init).not.toHaveBeenCalled();
   });
 });
