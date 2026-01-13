@@ -6,7 +6,7 @@
  * ## Usage
  *
  * ```ts
- * import { initSentry, createSentryTransport, setupSentryErrorHandler } from '@intexuraos/infra-sentry';
+ * import { initSentry, setupSentryErrorHandler } from '@intexuraos/infra-sentry';
  *
  * // 1. Initialize Sentry at entry point (index.ts)
  * initSentry({
@@ -15,21 +15,14 @@
  *   serviceName: 'my-service',
  * });
  *
- * // 2. Add Pino transport in server.ts
- * const app = Fastify({
- *   logger: {
- *     level: 'info',
- *     transport: createSentryTransport(),
- *   },
- * });
- *
- * // 3. Replace error handler
+ * // 2. Replace error handler in server.ts
  * setupSentryErrorHandler(app);
  * ```
  *
- * All `log.error()` and `log.warn()` calls will now be sent to Sentry.
+ * All unhandled errors will now be sent to Sentry.
+ * For manual error reporting, use the `sendToSentry()` function.
  */
 
 export { initSentry, type SentryConfig } from './init.js';
-export { createSentryTransport } from './transport.js';
+export { createSentryTransport, sendToSentry } from './transport.js';
 export { setupSentryErrorHandler } from './fastify.js';

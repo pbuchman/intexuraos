@@ -64,7 +64,6 @@ describe('initSentry', () => {
 
   it('logs warning and returns early when no DSN provided', () => {
     const config: SentryConfig = {
-      dsn: undefined,
       serviceName: 'test-service',
     };
 

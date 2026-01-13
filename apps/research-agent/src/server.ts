@@ -15,7 +15,7 @@ import {
   checkSecrets,
   type HealthCheck,
 } from '@intexuraos/http-server';
-import { createSentryTransport, setupSentryErrorHandler } from '@intexuraos/infra-sentry';
+import { setupSentryErrorHandler } from '@intexuraos/infra-sentry';
 import { researchRoutes, internalRoutes } from './routes/index.js';
 
 const SERVICE_NAME = 'research-agent';
@@ -128,14 +128,12 @@ function buildOpenApiOptions(): FastifyDynamicSwaggerOptions {
 }
 
 export async function buildServer(): Promise<FastifyInstance> {
-  const sentryTransport = createSentryTransport();
   const app = Fastify({
     logger:
       process.env['NODE_ENV'] === 'test'
         ? false
         : {
             level: process.env['LOG_LEVEL'] ?? 'info',
-            ...(sentryTransport !== undefined && { transport: sentryTransport as unknown as { target: string; options: Record<string, unknown> } }),
           },
     disableRequestLogging: true,
   });
