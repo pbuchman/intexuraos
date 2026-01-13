@@ -664,6 +664,9 @@ importers:
       '@intexuraos/infra-gemini':
         specifier: workspace:*
         version: link:../../packages/infra-gemini
+      '@intexuraos/infra-glm':
+        specifier: workspace:*
+        version: link:../../packages/infra-glm
       '@intexuraos/infra-gpt':
         specifier: workspace:*
         version: link:../../packages/infra-gpt
@@ -731,6 +734,9 @@ importers:
       '@intexuraos/infra-gemini':
         specifier: workspace:*
         version: link:../../packages/infra-gemini
+      '@intexuraos/infra-glm':
+        specifier: workspace:*
+        version: link:../../packages/infra-glm
       '@intexuraos/infra-pubsub':
         specifier: workspace:*
         version: link:../../packages/infra-pubsub
@@ -743,6 +749,9 @@ importers:
       '@intexuraos/llm-contract':
         specifier: workspace:*
         version: link:../../packages/llm-contract
+      '@intexuraos/llm-factory':
+        specifier: workspace:*
+        version: link:../../packages/llm-factory
       '@intexuraos/llm-pricing':
         specifier: workspace:*
         version: link:../../packages/llm-pricing
@@ -807,6 +816,9 @@ importers:
       '@intexuraos/infra-gemini':
         specifier: workspace:*
         version: link:../../packages/infra-gemini
+      '@intexuraos/infra-glm':
+        specifier: workspace:*
+        version: link:../../packages/infra-glm
       '@intexuraos/infra-gpt':
         specifier: workspace:*
         version: link:../../packages/infra-gpt
@@ -1145,6 +1157,27 @@ importers:
         specifier: workspace:*
         version: link:../llm-pricing
 
+  packages/infra-glm:
+    dependencies:
+      '@intexuraos/common-core':
+        specifier: workspace:*
+        version: link:../common-core
+      '@intexuraos/llm-audit':
+        specifier: workspace:*
+        version: link:../llm-audit
+      '@intexuraos/llm-common':
+        specifier: workspace:*
+        version: link:../llm-common
+      '@intexuraos/llm-contract':
+        specifier: workspace:*
+        version: link:../llm-contract
+      '@intexuraos/llm-pricing':
+        specifier: workspace:*
+        version: link:../llm-pricing
+      openai:
+        specifier: ^6.15.0
+        version: 6.16.0(ws@8.19.0)(zod@3.25.76)
+
   packages/infra-gpt:
     dependencies:
       '@intexuraos/common-core':
@@ -1242,7 +1275,14 @@ importers:
         specifier: workspace:*
         version: link:../llm-contract
 
-  packages/llm-common: {}
+  packages/llm-common:
+    dependencies:
+      '@intexuraos/common-core':
+        specifier: workspace:*
+        version: link:../common-core
+      '@intexuraos/llm-contract':
+        specifier: workspace:*
+        version: link:../llm-contract
 
   packages/llm-contract:
     dependencies:
@@ -1252,6 +1292,27 @@ importers:
       '@intexuraos/llm-common':
         specifier: workspace:*
         version: link:../llm-common
+
+  packages/llm-factory:
+    dependencies:
+      '@intexuraos/common-core':
+        specifier: workspace:*
+        version: link:../common-core
+      '@intexuraos/infra-gemini':
+        specifier: workspace:*
+        version: link:../infra-gemini
+      '@intexuraos/infra-glm':
+        specifier: workspace:*
+        version: link:../infra-glm
+      '@intexuraos/llm-common':
+        specifier: workspace:*
+        version: link:../llm-common
+      '@intexuraos/llm-contract':
+        specifier: workspace:*
+        version: link:../llm-contract
+      '@intexuraos/llm-pricing':
+        specifier: workspace:*
+        version: link:../llm-pricing
 
   packages/llm-pricing:
     dependencies:

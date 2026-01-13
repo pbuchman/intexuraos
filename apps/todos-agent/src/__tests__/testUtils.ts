@@ -4,11 +4,13 @@ import * as jose from 'jose';
 import { buildServer } from '../server.js';
 import { clearJwksCache } from '@intexuraos/common-http';
 import type { Result } from '@intexuraos/common-core';
+import { ok } from '@intexuraos/common-core';
 import { FakeTodoRepository } from './fakeTodoRepository.js';
 import { resetServices, setServices } from '../services.js';
 import type { TodosProcessingPublisher } from '@intexuraos/infra-pubsub';
 import type { UserServiceClient } from '../infra/user/userServiceClient.js';
 import type { TodoItemExtractionService, ExtractedItem, ExtractionError } from '../infra/gemini/todoItemExtractionService.js';
+import type { LlmGenerateClient } from '@intexuraos/llm-factory';
 
 export class FakeTodosProcessingPublisher implements TodosProcessingPublisher {
   public publishedEvents: { todoId: string; userId: string; title: string; correlationId?: string }[] = [];
@@ -30,10 +32,23 @@ export class FakeTodosProcessingPublisher implements TodosProcessingPublisher {
 
 export class FakeUserServiceClient implements UserServiceClient {
   public getGeminiApiKeyResult?: { readonly ok: true; readonly value: string } | { readonly ok: false; readonly error: { code: 'NETWORK_ERROR' | 'API_ERROR' | 'NO_API_KEY'; message: string } };
+  public getLlmClientResult?: Result<LlmGenerateClient, { code: 'NETWORK_ERROR' | 'API_ERROR' | 'NO_API_KEY' | 'UNSUPPORTED_MODEL'; message: string }>;
 
   async getGeminiApiKey(_userId: string): Promise<{ readonly ok: true; readonly value: string } | { readonly ok: false; readonly error: { code: 'NETWORK_ERROR' | 'API_ERROR' | 'NO_API_KEY'; message: string } }> {
     if (this.getGeminiApiKeyResult) return this.getGeminiApiKeyResult;
     return { ok: false, error: { code: 'NO_API_KEY', message: 'No API key' } };
+  }
+
+  async getLlmClient(_userId: string): Promise<Result<LlmGenerateClient, { code: 'NETWORK_ERROR' | 'API_ERROR' | 'NO_API_KEY' | 'UNSUPPORTED_MODEL'; message: string }>> {
+    if (this.getLlmClientResult) return this.getLlmClientResult;
+
+    const fakeLlmClient: LlmGenerateClient = {
+      generate: async () => ok({
+        content: 'fake response',
+        usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd: 0.0001 },
+      }),
+    };
+    return ok(fakeLlmClient);
   }
 }
 

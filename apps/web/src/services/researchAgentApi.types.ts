@@ -19,6 +19,7 @@ const MODEL_TO_PROVIDER: Record<SupportedModel, LlmProvider> = {
   [LlmModels.Sonar]: LlmProviders.Perplexity,
   [LlmModels.SonarPro]: LlmProviders.Perplexity,
   [LlmModels.SonarDeepResearch]: LlmProviders.Perplexity,
+  [LlmModels.Glm47]: LlmProviders.Zhipu,
 };
 
 export function getProviderForModel(model: SupportedModel): LlmProvider {

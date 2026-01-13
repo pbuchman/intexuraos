@@ -29,6 +29,7 @@ const PROVIDER_CONFIG: Record<LlmProvider, { name: string; color: string; bgColo
   openai: { name: 'OpenAI', color: 'text-green-700', bgColor: 'bg-green-50' },
   anthropic: { name: 'Anthropic', color: 'text-orange-700', bgColor: 'bg-orange-50' },
   perplexity: { name: 'Perplexity', color: 'text-purple-700', bgColor: 'bg-purple-50' },
+  zhipu: { name: 'Zhipu', color: 'text-red-700', bgColor: 'bg-red-50' },
 };
 
 interface ModelRowProps {
@@ -193,6 +194,7 @@ export function LlmPricingPage(): React.JSX.Element {
           <ProviderBlock provider={LlmProviders.OpenAI} pricing={pricing.openai} />
           <ProviderBlock provider={LlmProviders.Anthropic} pricing={pricing.anthropic} />
           <ProviderBlock provider={LlmProviders.Perplexity} pricing={pricing.perplexity} />
+          <ProviderBlock provider={LlmProviders.Zhipu} pricing={pricing.zhipu} />
         </div>
       ) : error === null ? (
         <Card>

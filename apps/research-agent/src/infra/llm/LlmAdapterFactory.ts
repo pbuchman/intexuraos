@@ -20,6 +20,7 @@ import { GeminiAdapter } from './GeminiAdapter.js';
 import { ClaudeAdapter } from './ClaudeAdapter.js';
 import { GptAdapter } from './GptAdapter.js';
 import { PerplexityAdapter } from './PerplexityAdapter.js';
+import { GlmAdapter } from './GlmAdapter.js';
 import { ContextInferenceAdapter } from './ContextInferenceAdapter.js';
 import {
   InputValidationAdapter,
@@ -44,6 +45,8 @@ export function createResearchProvider(
       return new GptAdapter(apiKey, model, userId, pricing, logger);
     case 'perplexity':
       return new PerplexityAdapter(apiKey, model, userId, pricing, logger);
+    case 'zhipu':
+      return new GlmAdapter(apiKey, model, userId, pricing, logger);
   }
 }
 
@@ -65,6 +68,8 @@ export function createSynthesizer(
       return new GptAdapter(apiKey, model, userId, pricing, logger);
     case 'perplexity':
       throw new Error('Perplexity does not support synthesis');
+    case 'zhipu':
+      return new GlmAdapter(apiKey, model, userId, pricing, logger);
   }
 }
 
