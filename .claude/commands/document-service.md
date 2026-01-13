@@ -15,15 +15,15 @@ Generate professional documentation for a service, then update project-level doc
 
 This skill produces four documentation files per service, plus updates aggregated site content:
 
-| File                 | Purpose                                     | Audience              |
-| -------------------- | ------------------------------------------- | --------------------- |
-| `features.md`        | Value propositions, capabilities, use cases | Users, marketing      |
-| `technical.md`       | Architecture, APIs, patterns, gotchas       | Developers, AI agents |
-| `tutorial.md`        | Getting-started tutorial with exercises     | New developers        |
-| `technical-debt.md`  | Known issues, debt items, future plans      | Maintainers           |
-| `services/index.md`  | Service catalog (aggregated)                | All audiences         |
-| `site-marketing.md`  | Marketing pages source                      | Website users         |
-| `site-developer.md`  | Developer docs source                       | API consumers         |
+| File                | Purpose                                     | Audience              |
+| ------------------- | ------------------------------------------- | --------------------- |
+| `features.md`       | Value propositions, capabilities, use cases | Users, marketing      |
+| `technical.md`      | Architecture, APIs, patterns, gotchas       | Developers, AI agents |
+| `tutorial.md`       | Getting-started tutorial with exercises     | New developers        |
+| `technical-debt.md` | Known issues, debt items, future plans      | Maintainers           |
+| `services/index.md` | Service catalog (aggregated)                | All audiences         |
+| `site-marketing.md` | Marketing pages source                      | Website users         |
+| `site-developer.md` | Developer docs source                       | API consumers         |
 
 After service documentation, project-level docs are updated with an integrated narrative and website source files are incrementally built.
 
@@ -199,12 +199,8 @@ const modelCoverage = (documentedModels / totalModels) * 100;
 const useCaseCoverage = (documentedUseCases / totalUseCases) * 100;
 const configCoverage = (documentedEnvVars / totalEnvVars) * 100;
 
-const overallCoverage = (
-  endpointCoverage * 0.4 +
-  modelCoverage * 0.3 +
-  useCaseCoverage * 0.2 +
-  configCoverage * 0.1
-);
+const overallCoverage =
+  endpointCoverage * 0.4 + modelCoverage * 0.3 + useCaseCoverage * 0.2 + configCoverage * 0.1;
 ```
 
 **Output format (store in working memory):**
@@ -250,16 +246,16 @@ Missing:
 
 ### Question Set
 
-| # | Question | Type | Inference Source |
-|---|----------|------|------------------|
-| 1 | **Why does this service exist?** | **OPEN** | Ask user (not inferable) |
-| 2 | **Primary user type?** | Wizard | Route analysis (internal-only → Internal Services) |
-| 3 | **Interaction style?** | Wizard | Routes, Pub/Sub subscriptions, scheduled jobs |
-| 4 | **Data processing mode?** | Wizard | HTTP methods, domain use cases |
-| 5 | **What's the killer feature?** | **OPEN** | Ask user (value judgment) |
-| 6 | **State management?** | Wizard | Firestore collections, external deps |
-| 7 | **Known limitations?** | Wizard | Rate limits, quotas, validation rules |
-| 8 | **Planned future developments?** | **OPEN** | Ask user (not inferable) |
+| #   | Question                         | Type     | Inference Source                                   |
+| --- | -------------------------------- | -------- | -------------------------------------------------- |
+| 1   | **Why does this service exist?** | **OPEN** | Ask user (not inferable)                           |
+| 2   | **Primary user type?**           | Wizard   | Route analysis (internal-only → Internal Services) |
+| 3   | **Interaction style?**           | Wizard   | Routes, Pub/Sub subscriptions, scheduled jobs      |
+| 4   | **Data processing mode?**        | Wizard   | HTTP methods, domain use cases                     |
+| 5   | **What's the killer feature?**   | **OPEN** | Ask user (value judgment)                          |
+| 6   | **State management?**            | Wizard   | Firestore collections, external deps               |
+| 7   | **Known limitations?**           | Wizard   | Rate limits, quotas, validation rules              |
+| 8   | **Planned future developments?** | **OPEN** | Ask user (not inferable)                           |
 
 ---
 
@@ -307,6 +303,7 @@ Options:
 #### Q3: Interaction style?
 
 **Infer if:**
+
 - Only Pub/Sub subscriptions → "Async Events"
 - Only HTTP routes + cron jobs → "REST API + Scheduled"
 - Only webhook routes → "Webhook"
@@ -326,6 +323,7 @@ Options:
 #### Q4: Data processing mode?
 
 **Infer if:**
+
 - Only GET routes + read-only use cases → "Read-only"
 - Only POST/PUT + no GET → "Write-only"
 - Full CRUD operations → "Read-Write"
@@ -346,6 +344,7 @@ Options:
 #### Q6: State management?
 
 **Infer if:**
+
 - Firestore collections in migrations/registry → "Firestore"
 - No collections, no state → "Stateless"
 - Calls other services for state → "External Service"
@@ -366,6 +365,7 @@ Options:
 #### Q7: Known limitations?
 
 **Infer if:**
+
 - Rate limiting in code → "Rate Limits"
 - Payload size limits → "Data Size"
 - Scoped feature set → "Feature Scope"
@@ -470,7 +470,7 @@ _Part of [IntexuraOS](../overview.md) — <tagline>_
 
 Write to `docs/services/<service-name>/technical.md`:
 
-```markdown
+````markdown
 # <Service Name> — Technical Reference
 
 ## Overview
@@ -512,6 +512,7 @@ graph TB
     class Firestore storage
     class Client,ExtSvc external
 ```
+````
 
 ### Data Flow
 
@@ -532,11 +533,11 @@ sequenceDiagram
 
 ### Component Details
 
-| Component | Purpose | Technology |
-|-----------|---------|------------|
-| Routes | HTTP endpoint handling | FastAPI |
-| Domain | Business logic | TypeScript |
-| Infra | External adapters | Firestore, Pub/Sub |
+| Component | Purpose                | Technology         |
+| --------- | ---------------------- | ------------------ |
+| Routes    | HTTP endpoint handling | FastAPI            |
+| Domain    | Business logic         | TypeScript         |
+| Infra     | External adapters      | Firestore, Pub/Sub |
 
 ## API Endpoints
 
@@ -619,6 +620,7 @@ apps/<service-name>/src/
 ├── routes/
 └── services.ts
 ```
+
 ````
 
 ---
@@ -872,13 +874,13 @@ Write to `docs/services/<service-name>/technical-debt.md`:
 
 ## Summary
 
-| Category | Count | Severity |
-|----------|-------|----------|
-| Code Smells | N | High/Medium/Low |
-| Test Gaps | N | High/Medium/Low |
-| Type Issues | N | High/Medium/Low |
-| TODOs | N | High/Medium/Low |
-| **Total** | **N** | — |
+| Category    | Count | Severity        |
+| ----------- | ----- | --------------- |
+| Code Smells | N     | High/Medium/Low |
+| Test Gaps   | N     | High/Medium/Low |
+| Type Issues | N     | High/Medium/Low |
+| TODOs       | N     | High/Medium/Low |
+| **Total**   | **N** | —               |
 
 ---
 
@@ -892,74 +894,74 @@ Write to `docs/services/<service-name>/technical-debt.md`:
 
 ### High Priority
 
-| File | Issue | Impact |
-|------|-------|--------|
+| File                    | Issue              | Impact           |
+| ----------------------- | ------------------ | ---------------- |
 | `src/routes/example.ts` | Silent catch block | Errors swallowed |
-| `src/usecases/foo.ts` | Module-level state | Not testable |
+| `src/usecases/foo.ts`   | Module-level state | Not testable     |
 
 ### Medium Priority
 
-| File | Issue | Impact |
-|------|-------|--------|
+| File               | Issue           | Impact            |
+| ------------------ | --------------- | ----------------- |
 | `src/infra/bar.ts` | Console logging | Should use logger |
 
 ### Low Priority
 
 | File | Issue | Impact |
-|------|-------|--------|
-| ... | ... | ... |
+| ---- | ----- | ------ |
+| ...  | ...   | ...    |
 
 ---
 
 ## Test Coverage Gaps
 
-| File/Module | Coverage | Missing |
-|-------------|----------|---------|
-| `src/domain/usecases/specialCase.ts` | 0% | Entire use case untested |
-| `src/routes/internalRoutes.ts` | 85% | Error path untested |
+| File/Module                          | Coverage | Missing                  |
+| ------------------------------------ | -------- | ------------------------ |
+| `src/domain/usecases/specialCase.ts` | 0%       | Entire use case untested |
+| `src/routes/internalRoutes.ts`       | 85%      | Error path untested      |
 
 ---
 
 ## TypeScript Issues
 
-| File | Issue | Count |
-|------|-------|-------|
-| `src/models/types.ts` | `any` type | 3 |
-| `src/infra/api.ts` | @ts-ignore | 1 |
+| File                  | Issue      | Count |
+| --------------------- | ---------- | ----- |
+| `src/models/types.ts` | `any` type | 3     |
+| `src/infra/api.ts`    | @ts-ignore | 1     |
 
 ---
 
 ## TODOs / FIXMEs
 
-| File | Comment | Priority |
-|------|---------|----------|
-| `src/services.ts` | TODO: Add caching | Medium |
-| `src/routes.ts` | FIXME: Handle edge case | High |
+| File              | Comment                 | Priority |
+| ----------------- | ----------------------- | -------- |
+| `src/services.ts` | TODO: Add caching       | Medium   |
+| `src/routes.ts`   | FIXME: Handle edge case | High     |
 
 ---
 
 ## SRP Violations
 
-| File | Lines | Issue | Suggestion |
-|------|-------|-------|------------|
-| `src/routes/compositeFeedRoutes.ts` | 450 | Handles routing + validation + business logic | Extract to use case |
+| File                                | Lines | Issue                                         | Suggestion          |
+| ----------------------------------- | ----- | --------------------------------------------- | ------------------- |
+| `src/routes/compositeFeedRoutes.ts` | 450   | Handles routing + validation + business logic | Extract to use case |
 
 ---
 
 ## Code Duplicates
 
-| Pattern | Locations | Suggestion |
-|---------|-----------|------------|
-| Error handling middleware | `routes/*.ts` (5 files) | Extract to common-http package |
-| Firestore pagination pattern | `infra/repositories/*.ts` (3 files) | Create base repository class |
+| Pattern                      | Locations                           | Suggestion                     |
+| ---------------------------- | ----------------------------------- | ------------------------------ |
+| Error handling middleware    | `routes/*.ts` (5 files)             | Extract to common-http package |
+| Firestore pagination pattern | `infra/repositories/*.ts` (3 files) | Create base repository class   |
 
 ---
 
 ## Deprecations
 
-| Item | Location | Replacement | Deadline |
-|------|----------|-------------|----------|
-| `deprecatedMethod()` | `src/infra/old.ts` | `newMethod()` | Q2 2026 |
+| Item                 | Location           | Replacement   | Deadline |
+| -------------------- | ------------------ | ------------- | -------- |
+| `deprecatedMethod()` | `src/infra/old.ts` | `newMethod()` | Q2 2026  |
 
 ---
 
@@ -967,10 +969,10 @@ Write to `docs/services/<service-name>/technical-debt.md`:
 
 <Track items that were identified and later fixed>
 
-| Date | Issue | Resolution |
-|------|-------|------------|
+| Date       | Issue                     | Resolution          |
+| ---------- | ------------------------- | ------------------- |
 | 2025-12-01 | Silent catch in routes.ts | Added error logging |
-| ... | ... | ... |
+| ...        | ...                       | ...                 |
 
 ---
 
@@ -1088,6 +1090,7 @@ Webhooks, APIs, and pub/sub make anything connectable.
 ### Capture
 
 **WhatsApp Service** — Turn messages into todos
+
 - Send a text: creates a todo
 - Send a voice note: transcribes and creates a todo
 - Send a URL: creates a bookmark
@@ -1095,11 +1098,13 @@ Webhooks, APIs, and pub/sub make anything connectable.
 ### Organize
 
 **Todos Service** — Task management
+
 - Natural language priority parsing
 - Tag-based organization
 - Search and filter
 
 **Bookmarks Service** — Link collection
+
 - Automatic metadata extraction
 - Tag-based organization
 - Full-text search
@@ -1107,11 +1112,13 @@ Webhooks, APIs, and pub/sub make anything connectable.
 ### Automate
 
 **Actions Agent** — AI-powered task completion
+
 - Auto-categorization
 - Priority suggestions
 - Dependency detection
 
 **Triggers Service** — Event-based automation
+
 - Pub/Sub event listening
 - Conditional actions
 - Chained workflows
@@ -1119,6 +1126,7 @@ Webhooks, APIs, and pub/sub make anything connectable.
 ### Integrate
 
 **Webhooks Service** — External connections
+
 - HTTP webhook endpoints
 - Event filtering
 - Retry handling
@@ -1130,11 +1138,13 @@ Webhooks, APIs, and pub/sub make anything connectable.
 <!-- From each service's features.md "Use Case" section -->
 
 ### The Driving Thought Capture
+
 > "I'm driving when I remember I need to call the dentist. I send a quick voice note to WhatsApp. By the time I get home, there's a todo waiting: 'Call dentist to schedule cleaning' — with the transcription, suggested priority, and even a proposed time based on my calendar."
 
 **Services involved:** WhatsApp Service, Actions Agent, Todos Service
 
 ### The Research Project
+
 > "I'm researching a topic across multiple sources. I use the web clipper to save articles, WhatsApp to voice-note thoughts, and the Actions Agent automatically groups everything into a project with connections I didn't even see myself."
 
 **Services involved:** Scraper Service, WhatsApp Service, Bookmarks Service, Actions Agent
@@ -1143,13 +1153,13 @@ Webhooks, APIs, and pub/sub make anything connectable.
 
 ## Feature Comparison
 
-| Feature | Free | Pro | Enterprise |
-|---------|------|-----|------------|
-| WhatsApp capture | ✓ | ✓ | ✓ |
-| Voice transcription | 10/month | Unlimited | Unlimited |
-| AI suggestions | — | ✓ | ✓ |
-| API access | — | — | ✓ |
-| Webhooks | — | ✓ | ✓ |
+| Feature             | Free     | Pro       | Enterprise |
+| ------------------- | -------- | --------- | ---------- |
+| WhatsApp capture    | ✓        | ✓         | ✓          |
+| Voice transcription | 10/month | Unlimited | Unlimited  |
+| AI suggestions      | —        | ✓         | ✓          |
+| API access          | —        | —         | ✓          |
+| Webhooks            | —        | ✓         | ✓          |
 
 ---
 
@@ -1158,17 +1168,20 @@ Webhooks, APIs, and pub/sub make anything connectable.
 <!-- From Q8: Future Plans across all services -->
 
 ### Q2 2026
+
 - Telegram and SMS support (WhatsApp Service)
 - Advanced AI prioritization (Actions Agent)
 - Custom webhooks (Webhooks Service)
 
 ### Q3 2026
+
 - Calendar integration (Calendar Service)
 - Collaboration features (Share Service)
 - Advanced analytics (Data Insights Service)
 ```
 
 **Incremental update rule:**
+
 1. Add service's capabilities to appropriate section
 2. Add service's use case to "Use Cases"
 3. Add future plans to "Roadmap"
@@ -1180,7 +1193,7 @@ Webhooks, APIs, and pub/sub make anything connectable.
 
 Update or create `docs/site-developer.md`:
 
-```markdown
+````markdown
 # IntexuraOS — Developer Documentation
 
 > Last updated: YYYY-MM-DD
@@ -1201,9 +1214,10 @@ Update or create `docs/site-developer.md`:
 ```bash
 git clone https://github.com/your-org/intexuraos.git
 cd intexuraos
-npm install
-npm run setup
+ppnpm install
+pnpm run setup
 ```
+````
 
 ---
 
@@ -1217,11 +1231,11 @@ npm run setup
 
 **Endpoints:**
 
-| Method | Path | Purpose |
-|--------|------|---------|
-| POST | `/auth/oauth/google` | Initiate OAuth flow |
-| POST | `/auth/oauth/callback` | OAuth callback |
-| POST | `/internal/auth/refresh` | Refresh access token |
+| Method | Path                     | Purpose              |
+| ------ | ------------------------ | -------------------- |
+| POST   | `/auth/oauth/google`     | Initiate OAuth flow  |
+| POST   | `/auth/oauth/callback`   | OAuth callback       |
+| POST   | `/internal/auth/refresh` | Refresh access token |
 
 **Docs:** [User Service Technical](services/user-service/technical.md)
 
@@ -1233,18 +1247,18 @@ npm run setup
 
 **Public Endpoints:**
 
-| Method | Path | Purpose |
-|--------|------|---------|
-| GET | `/todos` | List todos |
-| POST | `/todos` | Create todo |
-| PATCH | `/todos/:id` | Update todo |
+| Method | Path         | Purpose     |
+| ------ | ------------ | ----------- |
+| GET    | `/todos`     | List todos  |
+| POST   | `/todos`     | Create todo |
+| PATCH  | `/todos/:id` | Update todo |
 | DELETE | `/todos/:id` | Delete todo |
 
 **Internal Endpoints:**
 
-| Method | Path | Purpose |
-|--------|------|---------|
-| POST | `/internal/todos/sync` | Sync from external source |
+| Method | Path                   | Purpose                   |
+| ------ | ---------------------- | ------------------------- |
+| POST   | `/internal/todos/sync` | Sync from external source |
 
 **Docs:** [Todos Service Technical](services/todos-service/technical.md)
 
@@ -1252,11 +1266,11 @@ npm run setup
 
 **Public Endpoints:**
 
-| Method | Path | Purpose |
-|--------|------|---------|
-| GET | `/bookmarks` | List bookmarks |
-| POST | `/bookmarks` | Create bookmark |
-| PATCH | `/bookmarks/:id` | Update bookmark |
+| Method | Path             | Purpose         |
+| ------ | ---------------- | --------------- |
+| GET    | `/bookmarks`     | List bookmarks  |
+| POST   | `/bookmarks`     | Create bookmark |
+| PATCH  | `/bookmarks/:id` | Update bookmark |
 | DELETE | `/bookmarks/:id` | Delete bookmark |
 
 **Docs:** [Bookmarks Service Technical](services/bookmarks-service/technical.md)
@@ -1269,18 +1283,18 @@ npm run setup
 
 ### Published Events
 
-| Topic | Event Type | Payload | Publisher |
-|-------|------------|---------|-----------|
-| `todo-created` | `TodoCreated` | `{ todoId, userId, text }` | todos-service |
-| `todo-completed` | `TodoCompleted` | `{ todoId, userId }` | todos-service |
-| `bookmark-created` | `BookmarkCreated` | `{ bookmarkId, userId, url }` | bookmarks-service |
-| `message-received` | `MessageReceived` | `{ messageId, from, content }` | whatsapp-service |
+| Topic              | Event Type        | Payload                        | Publisher         |
+| ------------------ | ----------------- | ------------------------------ | ----------------- |
+| `todo-created`     | `TodoCreated`     | `{ todoId, userId, text }`     | todos-service     |
+| `todo-completed`   | `TodoCompleted`   | `{ todoId, userId }`           | todos-service     |
+| `bookmark-created` | `BookmarkCreated` | `{ bookmarkId, userId, url }`  | bookmarks-service |
+| `message-received` | `MessageReceived` | `{ messageId, from, content }` | whatsapp-service  |
 
 ### Subscribed Events
 
-| Topic | Subscriber | Handler | Action |
-|-------|------------|---------|--------|
-| `todo-created` | actions-agent | `/internal/pubsub/todo-created` | Suggest related actions |
+| Topic              | Subscriber       | Handler                             | Action                  |
+| ------------------ | ---------------- | ----------------------------------- | ----------------------- |
+| `todo-created`     | actions-agent    | `/internal/pubsub/todo-created`     | Suggest related actions |
 | `message-received` | whatsapp-service | `/internal/pubsub/message-received` | Process inbound message |
 
 ---
@@ -1291,15 +1305,15 @@ npm run setup
 
 ### Todo
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `id` | `string` | Unique identifier |
-| `userId` | `string` | Owner's user ID |
-| `text` | `string` | Todo content |
-| `status` | `TodoStatus` | Current state |
-| `priority` | `Priority` | Importance level |
-| `dueDate` | `datetime?` | Optional due date |
-| `createdAt` | `datetime` | Creation timestamp |
+| Field       | Type         | Description        |
+| ----------- | ------------ | ------------------ |
+| `id`        | `string`     | Unique identifier  |
+| `userId`    | `string`     | Owner's user ID    |
+| `text`      | `string`     | Todo content       |
+| `status`    | `TodoStatus` | Current state      |
+| `priority`  | `Priority`   | Importance level   |
+| `dueDate`   | `datetime?`  | Optional due date  |
+| `createdAt` | `datetime`   | Creation timestamp |
 
 **Status values:** `pending`, `in_progress`, `completed`, `cancelled`
 
@@ -1309,13 +1323,13 @@ npm run setup
 
 ### Bookmark
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `id` | `string` | Unique identifier |
-| `userId` | `string` | Owner's user ID |
-| `url` | `string` | Target URL |
-| `title` | `string` | Page title |
-| `tags` | `string[]` | User-assigned tags |
+| Field       | Type       | Description        |
+| ----------- | ---------- | ------------------ |
+| `id`        | `string`   | Unique identifier  |
+| `userId`    | `string`   | Owner's user ID    |
+| `url`       | `string`   | Target URL         |
+| `title`     | `string`   | Page title         |
+| `tags`      | `string[]` | User-assigned tags |
 | `createdAt` | `datetime` | Creation timestamp |
 
 **Docs:** [Bookmarks Service Technical](services/bookmarks-service/technical.md)
@@ -1326,10 +1340,10 @@ npm run setup
 
 ### Required Environment Variables
 
-| Variable | Purpose | Service |
-|----------|---------|---------|
-| `INTEXURAOS_FIRESTORE_PROJECT` | GCP project ID | All |
-| `INTEXURAOS_OAUTH_GOOGLE_CLIENT_ID` | Google OAuth client ID | user-service |
+| Variable                                   | Purpose                       | Service          |
+| ------------------------------------------ | ----------------------------- | ---------------- |
+| `INTEXURAOS_FIRESTORE_PROJECT`             | GCP project ID                | All              |
+| `INTEXURAOS_OAUTH_GOOGLE_CLIENT_ID`        | Google OAuth client ID        | user-service     |
 | `INTEXURAOS_WHATSAPP_WEBHOOK_VERIFY_TOKEN` | WhatsApp webhook verification | whatsapp-service |
 
 ---
@@ -1370,7 +1384,8 @@ await publisher.publish({ todoId: '123', userId: 'abc', text: 'Buy milk' });
 ```
 
 **Docs:** [PubSub Standards](../architecture/pubsub-standards.md)
-```
+
+````
 
 **Incremental update rule:**
 1. Add service's endpoints to appropriate API section
@@ -1442,9 +1457,10 @@ Update or create `docs/site-index.json`:
     "completion": "21%"
   }
 }
-```
+````
 
 **Incremental update rule:**
+
 1. Append service object to `services` array
 2. Update `stats.documentedServices` and `stats.completion`
 
@@ -1534,17 +1550,20 @@ Ask user: "Existing docs found. Update with new analysis, or start fresh?"
 After generating:
 
 ### Service Docs
+
 1. **Review features.md** — Read aloud. Does it sound like marketing copy?
 2. **Review technical.md** — Can a new developer understand the service?
 3. **Review technical-debt.md** — Are debt items actionable?
 
 ### Website Content
+
 4. **Check services/index.md** — Is service in the catalog?
 5. **Check site-marketing.md** — Are capabilities and use cases included?
 6. **Check site-developer.md** — Are APIs and events documented?
 7. **Check site-index.json** — Is service metadata present?
 
 ### Final
+
 8. **Check overview.md** — Does the narrative include the new service?
 9. **Verify log** — Is the run recorded in documentation-runs.md?
 
@@ -1553,6 +1572,7 @@ After generating:
 ## Quick Start Checklist
 
 ### Service Documentation
+
 - [ ] Service analyzed (routes, models, use cases)
 - [ ] Previous runs checked (documentation-runs.md)
 - [ ] Documentation coverage calculated (Step 1.4)
@@ -1563,12 +1583,14 @@ After generating:
 - [ ] technical-debt.md generated
 
 ### Website Content
+
 - [ ] services/index.md updated (service catalog)
 - [ ] site-marketing.md updated (capabilities, use cases)
 - [ ] site-developer.md updated (APIs, events, data models)
 - [ ] site-index.json updated (metadata)
 
 ### Finalization
+
 - [ ] overview.md updated
 - [ ] Run logged in documentation-runs.md
 - [ ] User reviewed output

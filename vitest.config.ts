@@ -1,6 +1,16 @@
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vitest/config';
 
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
 export default defineConfig({
+  resolve: {
+    alias: {
+      // Redirect @notionhq/client to our mock for all packages in the workspace
+      '@notionhq/client': path.resolve(__dirname, './vitest-mocks/notion-client.ts'),
+    },
+  },
   test: {
     globals: false,
     include: ['**/*.test.ts', '**/*.spec.ts'],

@@ -10,9 +10,9 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "@intexuraos/common-core": "*",
-    "@intexuraos/infra-firestore": "*",
-    "@intexuraos/llm-contract": "*"
+    "@intexuraos/common-core": "workspace:*",
+    "@intexuraos/infra-firestore": "workspace:*",
+    "@intexuraos/llm-contract": "workspace:*"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"

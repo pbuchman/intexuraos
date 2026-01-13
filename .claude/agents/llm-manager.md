@@ -328,7 +328,7 @@ Present final summary:
 
 ### Next Steps
 
-- Run `npm run migrate` to apply new pricing
+- Run `pnpm run migrate` to apply new pricing
 - Review docs/current/llm-usage.md for accuracy
 ```
 
@@ -339,8 +339,8 @@ Present final summary:
 After completing:
 
 ```bash
-npm run ci
-npm run migrate:status  # Should show new migration as pending
+pnpm run ci
+ppnpm run migrate:status  # Should show new migration as pending
 ```
 
 ---

@@ -27,7 +27,7 @@ ls continuity/ | grep -i coverage
 If no active task exists, analyze current coverage:
 
 ```bash
-npm run test:coverage
+ppnpm run test:coverage
 ```
 
 Parse the output to identify:
@@ -214,7 +214,7 @@ Session complete when:
 
 ```bash
 # Run coverage report
-npm run test:coverage
+ppnpm run test:coverage
 
 # View HTML report
 open coverage/index.html
