@@ -16,8 +16,8 @@ const client = createPerplexityClient({
   model: 'sonar-pro',
   userId: 'user-123',
   pricing: {
-    inputPricePerMillion: 1.00,
-    outputPricePerMillion: 1.00,
+    inputPricePerMillion: 1.0,
+    outputPricePerMillion: 1.0,
   },
   timeoutMs: 840000, // 14 minutes for deep research
 });
@@ -41,37 +41,39 @@ if (result.ok) {
 
 ### `createPerplexityClient(config)`
 
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| apiKey | string | Yes | Perplexity API key from perplexity.ai |
-| model | string | Yes | Model ID (e.g., 'sonar', 'sonar-pro') |
-| userId | string | Yes | User ID for usage tracking |
-| pricing | ModelPricing | Yes | Cost configuration per million tokens |
-| timeoutMs | number | No | Request timeout in milliseconds (default: 840000) |
+| Parameter | Type         | Required | Description                                       |
+| --------- | ------------ | -------- | ------------------------------------------------- |
+| apiKey    | string       | Yes      | Perplexity API key from perplexity.ai             |
+| model     | string       | Yes      | Model ID (e.g., 'sonar', 'sonar-pro')             |
+| userId    | string       | Yes      | User ID for usage tracking                        |
+| pricing   | ModelPricing | Yes      | Cost configuration per million tokens             |
+| timeoutMs | number       | No       | Request timeout in milliseconds (default: 840000) |
 
 ### Methods
 
 #### `research(prompt: string)`
+
 Performs online search research with source citations.
 Uses SSE streaming for long-running reasoning models.
 
 **Returns:** `Promise<Result<ResearchResult, PerplexityError>>`
 
 #### `generate(prompt: string)`
+
 Generates text completion with online search context.
 
 **Returns:** `Promise<Result<GenerateResult, PerplexityError>>`
 
 ## Error Codes
 
-| Code | Description | Recommended Action |
-|------|-------------|-------------------|
-| INVALID_KEY | API key is invalid | Check PERPLEXITY_API_KEY env var |
-| RATE_LIMITED | Rate limit exceeded | Implement exponential backoff |
-| OVERLOADED | Perplexity API is overloaded | Retry after delay |
-| TIMEOUT | Request timed out | Increase timeoutMs config |
-| CONTEXT_LENGTH | Prompt too long | Truncate and retry |
-| API_ERROR | Other API errors | Check message for details |
+| Code           | Description                  | Recommended Action               |
+| -------------- | ---------------------------- | -------------------------------- |
+| INVALID_KEY    | API key is invalid           | Check PERPLEXITY_API_KEY env var |
+| RATE_LIMITED   | Rate limit exceeded          | Implement exponential backoff    |
+| OVERLOADED     | Perplexity API is overloaded | Retry after delay                |
+| TIMEOUT        | Request timed out            | Increase timeoutMs config        |
+| CONTEXT_LENGTH | Prompt too long              | Truncate and retry               |
+| API_ERROR      | Other API errors             | Check message for details        |
 
 ## Streaming
 
@@ -80,8 +82,8 @@ The `research()` method uses Server-Sent Events (SSE) streaming to prevent
 
 ## Supported Models
 
-| Model | Description | Search Context |
-|-------|-------------|----------------|
-| sonar | Fast, cost-effective | Low |
-| sonar-pro | Balanced performance | Medium |
-| sonar-deep-research | Extended reasoning | High |
+| Model               | Description          | Search Context |
+| ------------------- | -------------------- | -------------- |
+| sonar               | Fast, cost-effective | Low            |
+| sonar-pro           | Balanced performance | Medium         |
+| sonar-deep-research | Extended reasoning   | High           |

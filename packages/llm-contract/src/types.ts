@@ -191,7 +191,7 @@ export type LLMErrorCode =
   /** Prompt exceeds model's context window */
   | 'CONTEXT_LENGTH'
   /** Content was filtered by provider safety systems */
-  | 'CONTENT_FILTERED'
+  | 'CONTENT_FILTERED';
 /**
  * Error object returned when LLM operations fail.
  *
