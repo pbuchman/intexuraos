@@ -22,6 +22,8 @@ Notes-agent provides simple CRUD operations for text notes with tag-based filter
 | --------  | -----------------  | --------------------------------  | ---------------  |
 | POST     | `/internal/notes` | Create note from internal source | Internal header |
 
+**Response includes:** `id`, `url` (web app path), and `note` object.
+
 ## Domain Models
 
 ### Note
