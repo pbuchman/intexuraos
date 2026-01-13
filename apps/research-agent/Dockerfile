@@ -32,7 +32,8 @@ RUN pnpm run --filter @intexuraos/research-agent build
 
 # 5. PRUNE PROD DEPS: Creates standalone folder with prod deps
 # This eliminates the need for a second install in the final stage
-RUN pnpm deploy --filter @intexuraos/research-agent --prod /prod/research-agent
+# --legacy flag required for pnpm v10 without inject-workspace-packages
+RUN pnpm deploy --filter @intexuraos/research-agent --prod --legacy /prod/research-agent
 
 # ==========================================
 # Stage 2: Production (Zero Network Usage)
