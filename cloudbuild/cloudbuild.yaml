@@ -3,8 +3,19 @@
 
 steps:
   # ==========================================================
-  # STEP 0: PREPARATION
+  # DIAGNOSTICS & PREP
   # ==========================================================
+  - name: 'ubuntu'
+    id: 'diagnose-start'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        echo "=== INITIAL DISK USAGE ==="
+        df -h
+        echo "=== REPO SIZE ==="
+        du -sh .
+
   - name: 'node:22-slim'
     id: 'pnpm-install'
     entrypoint: 'bash'
@@ -16,7 +27,7 @@ steps:
 
   # ==========================================================
   # WAVE 1: CORE SERVICES
-  # these start immediately (waitFor: ['-'])
+  # These start immediately.
   # ==========================================================
 
   # [user-service]
@@ -207,8 +218,21 @@ steps:
 
 
   # ==========================================================
-  # WAVE 2: INTELLIGENT AGENTS
-  # Starts after Wave 1 is essentially done
+  # DIAGNOSTICS CHECKPOINT (Mid-Build)
+  # ==========================================================
+  - name: 'ubuntu'
+    id: 'diagnose-mid'
+    waitFor: ['build-push-user-service', 'build-push-app-settings-service']
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        echo "=== DISK USAGE AFTER WAVE 1 ==="
+        df -h
+
+  # ==========================================================
+  # WAVE 2: HEAVY AGENTS
+  # Waits for Wave 1 to clear network/CPU
   # ==========================================================
 
   # [research-agent]
@@ -400,7 +424,7 @@ steps:
 
   # ==========================================================
   # WAVE 3: FRONTEND & LIGHTWEIGHT SERVICES
-  # Starts after Wave 2 is essentially done
+  # Waits for Wave 2
   # ==========================================================
 
   # [api-docs-hub]
@@ -559,7 +583,6 @@ steps:
       - 'ENVIRONMENT=${_ENVIRONMENT}'
 
   # [web - frontend]
-  # Wait for wave 2 to finish so we have CPU available for this compilation
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     id: 'fetch-web-config'
     waitFor: ['build-push-research-agent', 'build-push-data-insights-agent']
@@ -570,7 +593,7 @@ steps:
         echo "=== Fetching config for web ==="
         REGION="${_REGION}"
 
-        # Cloud Run services to fetch URLs for (service-name:ENV_VAR_SUFFIX)
+        # Cloud Run services to fetch URLs for
         CLOUD_RUN_SERVICES=(
           "user-service:USER_SERVICE"
           "promptvault-service:PROMPTVAULT_SERVICE"
@@ -588,7 +611,7 @@ steps:
           "app-settings-service:APP_SETTINGS_SERVICE"
         )
 
-        # Fetch service URLs from Cloud Run API (not secrets)
+        # Fetch service URLs
         declare -A SERVICE_URLS
         for entry in "$${CLOUD_RUN_SERVICES[@]}"; do
           SERVICE_NAME="$${entry%%:*}"
@@ -649,7 +672,7 @@ steps:
       - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
 
   # ==========================================================
-  # FIRESTORE
+  # FIRESTORE (Last)
   # ==========================================================
   - name: 'node:22-slim'
     id: 'deploy-firestore'
