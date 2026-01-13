@@ -49,19 +49,16 @@ graph TB
 
 ### GeneratedImage
 
-| Field              | Type       | Description                          |
-| ------------------  | ----------  | ------------------------------------  |
-| `id`               | string     | Unique image identifier              |
-| `userId`           | string     | User who requested generation        |
-| `provider`         | 'openai' \ | 'google'                             | Image generation provider |
-| `model`            | string     | Model used for generation            |
-| `prompt`           | string     | Original or enhanced prompt          |
-| `thumbnailUrl`     | string     | Signed GCS URL for thumbnail (256px) |
-| `fullSizeUrl`      | string     | Signed GCS URL for full-size image   |
-| `gcsPath`          | string     | GCS object path                      |
-| `thumbnailGcsPath` | string     | GCS thumbnail path                   |
-| `slug`             | string     | URL-safe identifier (optional)       |
-| `createdAt`        | string     | Creation timestamp                   |
+| Field          | Type       | Description                            |
+| --------------  | ----------  | --------------------------------------  |
+| `id`           | string     | Unique image identifier               |
+| `userId`       | string     | User who requested generation          |
+| `model`        | string     | Model used (e.g., `gpt-image-1`)     |
+| `prompt`       | string     | Original or enhanced prompt           |
+| `thumbnailUrl` | string     | Signed GCS URL for thumbnail (256px) |
+| `fullSizeUrl`  | string     | Signed GCS URL for full-size image   |
+| `slug`         | string     | URL-safe identifier (optional)       |
+| `createdAt`    | string     | Creation timestamp                    |
 
 ### ThumbnailPrompt
 
