@@ -1,10 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import nock from 'nock';
+import pino from 'pino';
 import { createWhatsappNotificationSender } from '../../../infra/notification/whatsappNotificationSender.js';
 
 describe('createWhatsappNotificationSender', () => {
   const userServiceUrl = 'http://user-service.local';
   const internalAuthToken = 'test-token';
+  const silentLogger = pino({ level: 'silent' });
 
   beforeEach(() => {
     nock.cleanAll();
@@ -22,7 +24,7 @@ describe('createWhatsappNotificationSender', () => {
         .matchHeader('Content-Type', 'application/json')
         .reply(200);
 
-      const sender = createWhatsappNotificationSender({ userServiceUrl, internalAuthToken });
+      const sender = createWhatsappNotificationSender({ userServiceUrl, internalAuthToken, logger: silentLogger });
       const result = await sender.sendDraftReady(
         'user-123',
         'research-456',
@@ -47,7 +49,7 @@ describe('createWhatsappNotificationSender', () => {
         })
         .reply(200);
 
-      const sender = createWhatsappNotificationSender({ userServiceUrl, internalAuthToken });
+      const sender = createWhatsappNotificationSender({ userServiceUrl, internalAuthToken, logger: silentLogger });
       await sender.sendDraftReady(
         'user-123',
         'research-789',
@@ -61,7 +63,7 @@ describe('createWhatsappNotificationSender', () => {
     it('returns error on non-ok response', async () => {
       nock(userServiceUrl).post('/internal/users/user-123/notify').reply(500);
 
-      const sender = createWhatsappNotificationSender({ userServiceUrl, internalAuthToken });
+      const sender = createWhatsappNotificationSender({ userServiceUrl, internalAuthToken, logger: silentLogger });
       const result = await sender.sendDraftReady(
         'user-123',
         'research-456',
@@ -80,7 +82,7 @@ describe('createWhatsappNotificationSender', () => {
         .post('/internal/users/user-123/notify')
         .replyWithError('Connection refused');
 
-      const sender = createWhatsappNotificationSender({ userServiceUrl, internalAuthToken });
+      const sender = createWhatsappNotificationSender({ userServiceUrl, internalAuthToken, logger: silentLogger });
       const result = await sender.sendDraftReady(
         'user-123',
         'research-456',

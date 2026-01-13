@@ -1,5 +1,5 @@
 import type { FastifyPluginCallback, FastifyRequest, FastifyReply } from 'fastify';
-import { requireAuth } from '@intexuraos/common-http';
+import { logIncomingRequest, requireAuth } from '@intexuraos/common-http';
 import { getServices } from '../services.js';
 import { createBookmark } from '../domain/usecases/createBookmark.js';
 import { getBookmark } from '../domain/usecases/getBookmark.js';
@@ -157,6 +157,7 @@ export const bookmarkRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       },
     },
     async (request: FastifyRequest<{ Querystring: ListBookmarksQuery }>, reply: FastifyReply) => {
+      logIncomingRequest(request);
       const user = await requireAuth(request, reply);
       if (user === null) {
         return;
@@ -231,6 +232,7 @@ export const bookmarkRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       },
     },
     async (request: FastifyRequest<{ Body: CreateBookmarkBody }>, reply: FastifyReply) => {
+      logIncomingRequest(request);
       const user = await requireAuth(request, reply);
       if (user === null) {
         return;
@@ -287,6 +289,7 @@ export const bookmarkRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       },
     },
     async (request: FastifyRequest<{ Params: BookmarkParams }>, reply: FastifyReply) => {
+      logIncomingRequest(request, { includeParams: true });
       const user = await requireAuth(request, reply);
       if (user === null) {
         return;
@@ -340,6 +343,7 @@ export const bookmarkRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       request: FastifyRequest<{ Params: BookmarkParams; Body: UpdateBookmarkBody }>,
       reply: FastifyReply
     ) => {
+      logIncomingRequest(request, { includeParams: true });
       const user = await requireAuth(request, reply);
       if (user === null) {
         return;
@@ -395,6 +399,7 @@ export const bookmarkRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       },
     },
     async (request: FastifyRequest<{ Params: BookmarkParams }>, reply: FastifyReply) => {
+      logIncomingRequest(request, { includeParams: true });
       const user = await requireAuth(request, reply);
       if (user === null) {
         return;
@@ -444,6 +449,7 @@ export const bookmarkRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       },
     },
     async (request: FastifyRequest<{ Params: BookmarkParams }>, reply: FastifyReply) => {
+      logIncomingRequest(request, { includeParams: true });
       const user = await requireAuth(request, reply);
       if (user === null) {
         return;
@@ -493,6 +499,7 @@ export const bookmarkRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       },
     },
     async (request: FastifyRequest<{ Params: BookmarkParams }>, reply: FastifyReply) => {
+      logIncomingRequest(request, { includeParams: true });
       const user = await requireAuth(request, reply);
       if (user === null) {
         return;

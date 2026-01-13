@@ -4,6 +4,7 @@
 
 import { initSentry } from '@intexuraos/infra-sentry';
 import { validateRequiredEnv } from '@intexuraos/http-server';
+import pino from 'pino';
 import { buildServer } from './server.js';
 import { loadConfig } from './config.js';
 
@@ -19,6 +20,10 @@ initSentry({
   serviceName: 'api-docs-hub',
 });
 
+const logger = pino({
+  name: 'api-docs-hub',
+});
+
 async function main(): Promise<void> {
   const config = loadConfig();
   const app = await buildServer(config);
@@ -29,6 +34,7 @@ async function main(): Promise<void> {
   app.log.info(`API Docs Hub listening on ${host}:${String(port)}`);
 }
 
-main().catch(() => {
+main().catch((error: unknown) => {
+  logger.error({ error }, 'Fatal error during startup');
   process.exit(1);
 });

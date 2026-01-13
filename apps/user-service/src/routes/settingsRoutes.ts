@@ -5,7 +5,7 @@
  */
 
 import type { FastifyPluginCallback, FastifyReply, FastifyRequest } from 'fastify';
-import { requireAuth } from '@intexuraos/common-http';
+import { requireAuth, logIncomingRequest } from '@intexuraos/common-http';
 import { getServices } from '../services.js';
 import { getUserSettings, type GetUserSettingsErrorCode } from '../domain/settings/index.js';
 
@@ -97,6 +97,10 @@ export const settingsRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       },
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
+      logIncomingRequest(request, {
+        message: 'Received request to GET /users/:uid/settings',
+      });
+
       const user = await requireAuth(request, reply);
       if (!user) {
         return;

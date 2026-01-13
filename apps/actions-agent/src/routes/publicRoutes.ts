@@ -1,5 +1,5 @@
 import type { FastifyPluginCallback, FastifyRequest, FastifyReply } from 'fastify';
-import { requireAuth } from '@intexuraos/common-http';
+import { logIncomingRequest, requireAuth } from '@intexuraos/common-http';
 import { getServices } from '../services.js';
 import type { ActionStatus, ActionType } from '../domain/models/action.js';
 
@@ -106,6 +106,7 @@ export const publicRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       },
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
+      logIncomingRequest(request);
       const user = await requireAuth(request, reply);
       if (user === null) {
         return;
@@ -207,6 +208,7 @@ export const publicRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       },
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
+      logIncomingRequest(request);
       const user = await requireAuth(request, reply);
       if (user === null) {
         return;
@@ -299,6 +301,7 @@ export const publicRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       },
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
+      logIncomingRequest(request);
       const user = await requireAuth(request, reply);
       if (user === null) {
         return;
@@ -388,6 +391,7 @@ export const publicRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       },
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
+      logIncomingRequest(request);
       const user = await requireAuth(request, reply);
       if (user === null) {
         return;
@@ -484,6 +488,7 @@ export const publicRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       },
     },
     async (request: FastifyRequest<{ Params: { actionId: string } }>, reply: FastifyReply) => {
+      logIncomingRequest(request);
       const user = await requireAuth(request, reply);
       if (user === null) {
         return;
@@ -616,6 +621,7 @@ export const publicRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       request: FastifyRequest<{ Params: { actionId: string }; Body: { action: 'skip' | 'update' } }>,
       reply: FastifyReply
     ) => {
+      logIncomingRequest(request);
       const user = await requireAuth(request, reply);
       if (user === null) {
         return;

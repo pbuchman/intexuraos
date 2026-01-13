@@ -118,12 +118,12 @@ describe('createSentryStream', () => {
 
     // Cast to access internal streams array
     const ms = result as unknown as {
-      streams: Array<{ level: number; stream: unknown }>;
+      streams: { level: number; stream: unknown }[];
     };
 
     // Should have 1 stream: Sentry
     expect(ms.streams).toHaveLength(1);
-    expect(ms.streams[0].level).toBe(40); // Sentry (warn+)
+    expect(ms.streams[0]?.level).toBe(40); // Sentry (warn+)
   });
 
   it('Sentry stream has write function', () => {
@@ -134,14 +134,14 @@ describe('createSentryStream', () => {
     const result = createSentryStream(mockMultistream);
 
     const ms = result as unknown as {
-      streams: Array<{ level: number; stream: { write: (data: string) => void } }>;
+      streams: { level: number; stream: { write: (data: string) => void } }[];
     };
 
-    expect(typeof ms.streams[0].stream.write).toBe('function');
+    expect(typeof ms.streams[0]?.stream.write).toBe('function');
 
     // Test write function
     const testLog = JSON.stringify({ level: 50, msg: 'Test error', userId: '123' });
-    expect(() => ms.streams[0].stream.write(testLog)).not.toThrow();
+    expect(() => ms.streams[0]?.stream.write(testLog)).not.toThrow();
   });
 });
 

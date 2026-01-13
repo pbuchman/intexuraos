@@ -3,6 +3,7 @@
  */
 
 import type { Result } from '@intexuraos/common-core';
+import type { Logger } from '@intexuraos/common-core';
 import type {
   CalendarEvent,
   CreateEventInput,
@@ -17,37 +18,43 @@ export interface GoogleCalendarClient {
   listEvents(
     accessToken: string,
     calendarId: string,
-    options: ListEventsInput
+    options: ListEventsInput,
+    logger?: Logger
   ): Promise<Result<CalendarEvent[], CalendarError>>;
 
   getEvent(
     accessToken: string,
     calendarId: string,
-    eventId: string
+    eventId: string,
+    logger?: Logger
   ): Promise<Result<CalendarEvent, CalendarError>>;
 
   createEvent(
     accessToken: string,
     calendarId: string,
-    event: CreateEventInput
+    event: CreateEventInput,
+    logger?: Logger
   ): Promise<Result<CalendarEvent, CalendarError>>;
 
   updateEvent(
     accessToken: string,
     calendarId: string,
     eventId: string,
-    event: UpdateEventInput
+    event: UpdateEventInput,
+    logger?: Logger
   ): Promise<Result<CalendarEvent, CalendarError>>;
 
   deleteEvent(
     accessToken: string,
     calendarId: string,
-    eventId: string
+    eventId: string,
+    logger?: Logger
   ): Promise<Result<void, CalendarError>>;
 
   getFreeBusy(
     accessToken: string,
-    input: FreeBusyInput
+    input: FreeBusyInput,
+    logger?: Logger
   ): Promise<Result<Map<string, FreeBusySlot[]>, CalendarError>>;
 }
 

@@ -1,5 +1,5 @@
 import type { FastifyPluginCallback, FastifyRequest, FastifyReply } from 'fastify';
-import { requireAuth } from '@intexuraos/common-http';
+import { logIncomingRequest, requireAuth } from '@intexuraos/common-http';
 import { getServices } from '../services.js';
 
 const commandSchema = {
@@ -88,6 +88,9 @@ export const commandsRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       },
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
+      logIncomingRequest(request, {
+        message: 'Received request to GET /commands',
+      });
       const user = await requireAuth(request, reply);
       if (user === null) {
         return;
@@ -157,6 +160,9 @@ export const commandsRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       },
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
+      logIncomingRequest(request, {
+        message: 'Received request to POST /commands',
+      });
       const user = await requireAuth(request, reply);
       if (user === null) {
         return;
@@ -240,6 +246,10 @@ export const commandsRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       },
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
+      logIncomingRequest(request, {
+        message: 'Received request to DELETE /commands/:commandId',
+        includeParams: true,
+      });
       const user = await requireAuth(request, reply);
       if (user === null) {
         return;
@@ -341,6 +351,10 @@ export const commandsRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       },
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
+      logIncomingRequest(request, {
+        message: 'Received request to PATCH /commands/:commandId',
+        includeParams: true,
+      });
       const user = await requireAuth(request, reply);
       if (user === null) {
         return;

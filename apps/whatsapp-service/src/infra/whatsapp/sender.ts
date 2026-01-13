@@ -3,11 +3,14 @@
  * Sends messages using the WhatsApp Business Cloud API.
  */
 import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
+import pino from 'pino';
 import type { WhatsAppMessageSender } from '../../domain/whatsapp/index.js';
 import type { WhatsAppError } from '../../domain/whatsapp/models/error.js';
 
 const WHATSAPP_API_BASE = 'https://graph.facebook.com/v22.0';
 const REQUEST_TIMEOUT_MS = 30000;
+
+const logger = pino({ name: 'whatsapp-sender' });
 
 /**
  * WhatsApp Cloud API implementation of message sender.
@@ -25,6 +28,7 @@ export class WhatsAppCloudApiSender implements WhatsAppMessageSender {
     phoneNumber: string,
     message: string
   ): Promise<Result<void, WhatsAppError>> {
+    logger.info({ phoneNumber, messageLength: message.length }, 'Sending WhatsApp text message');
     const controller = new AbortController();
     const timeoutId = setTimeout(() => {
       controller.abort();
@@ -57,23 +61,30 @@ export class WhatsAppCloudApiSender implements WhatsAppMessageSender {
 
       if (!response.ok) {
         const errorBody = await response.text();
+        logger.error(
+          { phoneNumber, status: response.status, errorBody },
+          'WhatsApp API returned error'
+        );
         return err({
           code: 'PERSISTENCE_ERROR',
           message: `WhatsApp API error: ${String(response.status)} - ${errorBody}`,
         });
       }
 
+      logger.info({ phoneNumber, normalizedPhone }, 'Message sent successfully');
       return ok(undefined);
     } catch (error) {
       clearTimeout(timeoutId);
 
       if (error instanceof Error && error.name === 'AbortError') {
+        logger.error({ phoneNumber, timeoutMs: REQUEST_TIMEOUT_MS }, 'WhatsApp request timed out');
         return err({
           code: 'PERSISTENCE_ERROR',
           message: `WhatsApp request timed out after ${String(REQUEST_TIMEOUT_MS)}ms`,
         });
       }
 
+      logger.error({ phoneNumber, error: getErrorMessage(error) }, 'Failed to send WhatsApp message');
       return err({
         code: 'PERSISTENCE_ERROR',
         message: `Failed to send WhatsApp message: ${getErrorMessage(error)}`,

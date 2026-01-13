@@ -15,7 +15,8 @@
  */
 
 import type { FastifyPluginCallback, FastifyReply, FastifyRequest } from 'fastify';
-import { requireAuth } from '@intexuraos/common-http';
+import { logIncomingRequest, requireAuth } from '@intexuraos/common-http';
+import type { Logger } from 'pino';
 import {
   createDraftResearch,
   createLlmResults,
@@ -115,6 +116,11 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       },
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
+      logIncomingRequest(request, {
+        message: 'Received request to POST /research',
+        bodyPreviewLength: 200,
+      });
+
       const user = await requireAuth(request, reply);
       if (user === null) {
         return;
@@ -153,7 +159,11 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       if (body.skipSynthesis === true) {
         submitParams.skipSynthesis = true;
       }
-      const result = await submitResearch(submitParams, { researchRepo, generateId });
+      const result = await submitResearch(submitParams, {
+        researchRepo,
+        generateId,
+        logger: request.log as unknown as Logger,
+      });
 
       if (!result.ok) {
         return await reply.fail('INTERNAL_ERROR', result.error.message);
@@ -1027,7 +1037,11 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         enhanceInput.removeContextIds = body.removeContextIds;
       }
 
-      const result = await enhanceResearch(enhanceInput, { researchRepo, generateId });
+      const result = await enhanceResearch(enhanceInput, {
+        researchRepo,
+        generateId,
+        logger: request.log as unknown as Logger,
+      });
 
       if (!result.ok) {
         switch (result.error.type) {

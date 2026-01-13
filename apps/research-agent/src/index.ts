@@ -24,11 +24,15 @@ const REQUIRED_ENV = [
 
 validateRequiredEnv(REQUIRED_ENV);
 
-initSentry({
-  dsn: process.env['INTEXURAOS_SENTRY_DSN'],
+const sentryConfig: Parameters<typeof initSentry>[0] = {
   environment: process.env['INTEXURAOS_ENVIRONMENT'] ?? 'development',
   serviceName: 'research-agent',
-});
+};
+const dsn = process.env['INTEXURAOS_SENTRY_DSN'];
+if (dsn !== undefined) {
+  sentryConfig.dsn = dsn;
+}
+initSentry(sentryConfig);
 
 const PORT = Number(process.env['PORT'] ?? 8080);
 const HOST = process.env['HOST'] ?? '0.0.0.0';

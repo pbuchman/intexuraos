@@ -5,6 +5,7 @@ import { err, type Result } from '@intexuraos/common-core';
 import type { Prompt, PromptId, PromptVaultError } from '../models/index.js';
 import { createPromptVaultError } from '../models/index.js';
 import type { PromptRepository } from '../ports/index.js';
+import type { Logger } from '@intexuraos/common-core';
 
 /**
  * Input for the UpdatePrompt use case.
@@ -14,6 +15,13 @@ export interface UpdatePromptUseCaseInput {
   promptId: PromptId;
   title?: string | undefined;
   content?: string | undefined;
+}
+
+/**
+ * Dependencies for the UpdatePrompt use case.
+ */
+export interface UpdatePromptDeps {
+  logger: Logger;
 }
 
 /**
@@ -72,24 +80,45 @@ function validateInput(input: UpdatePromptUseCaseInput): PromptVaultError | null
  */
 export async function updatePrompt(
   repository: PromptRepository,
-  input: UpdatePromptUseCaseInput
+  input: UpdatePromptUseCaseInput,
+  deps: UpdatePromptDeps
 ): Promise<Result<Prompt, PromptVaultError>> {
+  const { logger } = deps;
+
+  logger.debug({ userId: input.userId, promptId: input.promptId }, 'Updating prompt');
+
   const validationError = validateInput(input);
   if (validationError !== null) {
+    logger.warn(
+      { userId: input.userId, promptId: input.promptId, errorCode: validationError.code },
+      'Prompt validation failed'
+    );
     return err(validationError);
   }
 
-  return await repository.updatePrompt(input.userId, input.promptId, {
+  const result = await repository.updatePrompt(input.userId, input.promptId, {
     title: input.title,
     content: input.content,
   });
+
+  if (!result.ok) {
+    logger.error(
+      { userId: input.userId, promptId: input.promptId, errorMessage: result.error.message },
+      'Failed to update prompt'
+    );
+    return result;
+  }
+
+  logger.info({ userId: input.userId, promptId: input.promptId }, 'Prompt updated successfully');
+  return result;
 }
 
 /**
  * Factory to create a bound UpdatePrompt use case.
  */
 export function createUpdatePromptUseCase(
-  repository: PromptRepository
+  repository: PromptRepository,
+  logger: Logger
 ): (input: UpdatePromptUseCaseInput) => Promise<Result<Prompt, PromptVaultError>> {
-  return async (input) => await updatePrompt(repository, input);
+  return async (input) => await updatePrompt(repository, input, { logger });
 }

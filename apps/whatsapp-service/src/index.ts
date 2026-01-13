@@ -30,11 +30,15 @@ const REQUIRED_ENV = [
 
 validateRequiredEnv(REQUIRED_ENV);
 
-initSentry({
-  dsn: process.env['INTEXURAOS_SENTRY_DSN'],
+const sentryConfig: Parameters<typeof initSentry>[0] = {
   environment: process.env['INTEXURAOS_ENVIRONMENT'] ?? 'development',
   serviceName: 'whatsapp-service',
-});
+};
+const dsn = process.env['INTEXURAOS_SENTRY_DSN'];
+if (dsn !== undefined) {
+  sentryConfig.dsn = dsn;
+}
+initSentry(sentryConfig);
 
 async function main(): Promise<void> {
   const config = loadConfig();

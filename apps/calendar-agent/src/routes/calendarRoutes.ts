@@ -3,7 +3,7 @@
  */
 
 import type { FastifyPluginCallback, FastifyRequest, FastifyReply } from 'fastify';
-import { requireAuth } from '@intexuraos/common-http';
+import { logIncomingRequest, requireAuth } from '@intexuraos/common-http';
 import { getServices } from '../services.js';
 import {
   listEvents,
@@ -182,6 +182,7 @@ export const calendarRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       },
     },
     async (request: FastifyRequest<{ Querystring: ListEventsQuery }>, reply: FastifyReply) => {
+      logIncomingRequest(request);
       const user = await requireAuth(request, reply);
       if (user === null) {
         return;
@@ -196,7 +197,7 @@ export const calendarRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         req.calendarId = request.query.calendarId;
       }
 
-      const result = await listEvents(req, { googleCalendarClient, userServiceClient });
+      const result = await listEvents(req, { googleCalendarClient, userServiceClient, logger: request.log });
 
       if (!result.ok) {
         return await handleCalendarError(result.error, reply);
@@ -281,6 +282,7 @@ export const calendarRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       request: FastifyRequest<{ Params: EventParams; Querystring: CalendarIdQuery }>,
       reply: FastifyReply
     ) => {
+      logIncomingRequest(request, { includeParams: true });
       const user = await requireAuth(request, reply);
       if (user === null) {
         return;
@@ -295,7 +297,7 @@ export const calendarRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         req.calendarId = request.query.calendarId;
       }
 
-      const result = await getEvent(req, { googleCalendarClient, userServiceClient });
+      const result = await getEvent(req, { googleCalendarClient, userServiceClient, logger: request.log });
 
       if (!result.ok) {
         return await handleCalendarError(result.error, reply);
@@ -401,6 +403,7 @@ export const calendarRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       },
     },
     async (request: FastifyRequest<{ Body: CreateEventBody }>, reply: FastifyReply) => {
+      logIncomingRequest(request);
       const user = await requireAuth(request, reply);
       if (user === null) {
         return;
@@ -415,7 +418,7 @@ export const calendarRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         req.calendarId = request.body.calendarId;
       }
 
-      const result = await createEvent(req, { googleCalendarClient, userServiceClient });
+      const result = await createEvent(req, { googleCalendarClient, userServiceClient, logger: request.log });
 
       if (!result.ok) {
         return await handleCalendarError(result.error, reply);
@@ -540,6 +543,7 @@ export const calendarRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       request: FastifyRequest<{ Params: EventParams; Body: UpdateEventBody }>,
       reply: FastifyReply
     ) => {
+      logIncomingRequest(request, { includeParams: true });
       const user = await requireAuth(request, reply);
       if (user === null) {
         return;
@@ -555,7 +559,7 @@ export const calendarRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         req.calendarId = request.body.calendarId;
       }
 
-      const result = await updateEvent(req, { googleCalendarClient, userServiceClient });
+      const result = await updateEvent(req, { googleCalendarClient, userServiceClient, logger: request.log });
 
       if (!result.ok) {
         return await handleCalendarError(result.error, reply);
@@ -640,6 +644,7 @@ export const calendarRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       request: FastifyRequest<{ Params: EventParams; Querystring: CalendarIdQuery }>,
       reply: FastifyReply
     ) => {
+      logIncomingRequest(request, { includeParams: true });
       const user = await requireAuth(request, reply);
       if (user === null) {
         return;
@@ -654,7 +659,7 @@ export const calendarRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         req.calendarId = request.query.calendarId;
       }
 
-      const result = await deleteEvent(req, { googleCalendarClient, userServiceClient });
+      const result = await deleteEvent(req, { googleCalendarClient, userServiceClient, logger: request.log });
 
       if (!result.ok) {
         return await handleCalendarError(result.error, reply);
@@ -742,6 +747,7 @@ export const calendarRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       },
     },
     async (request: FastifyRequest<{ Body: FreeBusyBody }>, reply: FastifyReply) => {
+      logIncomingRequest(request);
       const user = await requireAuth(request, reply);
       if (user === null) {
         return;
@@ -759,7 +765,7 @@ export const calendarRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         req.input.items = request.body.items;
       }
 
-      const result = await getFreeBusy(req, { googleCalendarClient, userServiceClient });
+      const result = await getFreeBusy(req, { googleCalendarClient, userServiceClient, logger: request.log });
 
       if (!result.ok) {
         return await handleCalendarError(result.error, reply);

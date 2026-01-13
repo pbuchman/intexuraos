@@ -34,17 +34,6 @@ import type { LogDescriptor } from 'pino';
  */
 const SENTRY_DSN_ENV = 'INTEXURAOS_SENTRY_DSN';
 
-/**
- * Pino level numbers to names.
- */
-const LEVEL_NAMES: Record<number, string> = {
-  10: 'trace',
-  20: 'debug',
-  30: 'info',
-  40: 'warn',
-  50: 'error',
-  60: 'fatal',
-};
 
 /**
  * Levels that should be sent to Sentry (warn, error, fatal).
@@ -78,7 +67,7 @@ export function createSentryStream(
 
   // Cast to access internal streams array
   const ms = multistream as unknown as {
-    streams: Array<{ level: number; stream: NodeJS.WritableStream }>;
+    streams: { level: number; stream: NodeJS.WritableStream }[];
   };
 
   // Add our Sentry stream at warn level (40)
@@ -103,7 +92,9 @@ export function createSentryStream(
  * Send a log entry to Sentry.
  */
 function sendLogToSentry(logEntry: LogDescriptor): void {
-  if (!SENTRY_LEVELS.has(logEntry.level)) {
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
+  const levelValue = logEntry['level'];
+  if (levelValue === undefined || !SENTRY_LEVELS.has(levelValue)) {
     return;
   }
 
@@ -119,11 +110,17 @@ function sendLogToSentry(logEntry: LogDescriptor): void {
       // error or fatal - capture as exception
       const error = new Error(typeof msg === 'string' ? msg : String(msg));
       // Add stack trace if available in the log
-      if (typeof rest.err === 'object' && rest.err !== null && 'stack' in rest.err) {
-        error.stack = String(rest.err.stack);
-      }
-      if (typeof rest.err === 'object' && rest.err !== null && 'message' in rest.err) {
-        error.message = String(rest.err.message);
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+      const errObj = rest['err'];
+      if (typeof errObj === 'object' && errObj !== null) {
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+        if ('stack' in errObj && typeof errObj.stack === 'string') {
+          error.stack = errObj.stack;
+        }
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+        if ('message' in errObj && typeof errObj.message === 'string') {
+          error.message = errObj.message;
+        }
       }
       scope.setLevel(level >= 60 ? 'fatal' : 'error');
       Sentry.captureException(error);
