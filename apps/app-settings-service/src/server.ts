@@ -15,6 +15,7 @@ import {
   checkSecrets,
   type HealthCheck,
 } from '@intexuraos/http-server';
+import { setupSentryErrorHandler } from '@intexuraos/infra-sentry';
 import { internalRoutes } from './routes/internalRoutes.js';
 import { publicRoutes } from './routes/publicRoutes.js';
 
@@ -219,6 +220,7 @@ export async function buildServer(): Promise<FastifyInstance> {
   await app.register(fastifyCors, { origin: true });
   await app.register(intexuraFastifyPlugin);
   await app.register(fastifyAuthPlugin);
+  setupSentryErrorHandler(app as unknown as FastifyInstance);
   await app.register(fastifySwagger, buildOpenApiOptions());
   await app.register(fastifySwaggerUi, {
     routePrefix: '/docs',

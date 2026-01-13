@@ -22,6 +22,7 @@
     "@intexuraos/http-contracts": "workspace:*",
     "@intexuraos/http-server": "workspace:*",
     "@intexuraos/infra-gemini": "workspace:*",
+    "@intexuraos/infra-sentry": "workspace:*",
     "@intexuraos/llm-common": "workspace:*",
     "@intexuraos/llm-contract": "workspace:*",
     "@intexuraos/llm-pricing": "workspace:*",

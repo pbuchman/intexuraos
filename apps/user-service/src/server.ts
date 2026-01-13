@@ -16,6 +16,7 @@ import {
   checkSecrets,
   type HealthCheck,
 } from '@intexuraos/http-server';
+import { setupSentryErrorHandler } from '@intexuraos/infra-sentry';
 import { authRoutes } from './routes/routes.js';
 
 const SERVICE_NAME = 'user-service';
@@ -162,50 +163,7 @@ export async function buildServer(): Promise<FastifyInstance> {
   await app.register(intexuraFastifyPlugin);
   await app.register(fastifyAuthPlugin);
 
-  // Ensure Fastify validation errors are returned in IntexuraOS envelope
-  app.setErrorHandler(async (error, request, reply) => {
-    const fastifyError = error as { code?: string };
-    if (fastifyError.code === 'FST_ERR_CTP_INVALID_JSON_BODY') {
-      reply.status(400);
-      return await reply.fail('INVALID_REQUEST', 'Invalid JSON body');
-    }
-
-    if (
-      typeof error === 'object' &&
-      error !== null &&
-      'validation' in error &&
-      Array.isArray((error as { validation?: unknown }).validation)
-    ) {
-      const validation = (
-        error as {
-          validation: { instancePath?: string; message?: string }[];
-          message?: string;
-        }
-      ).validation;
-
-      const errors = validation.map((v) => {
-        // When instancePath is empty, extract field name from error message if possible
-        // Example: "must have required property 'device_code'" -> "device_code"
-        let path = (v.instancePath ?? '').replace(/^\//, '').replaceAll('/', '.');
-        if (path === '') {
-          const requiredMatch = /must have required property '([^']+)'/.exec(v.message ?? '');
-          path = requiredMatch?.[1] ?? '<root>';
-        }
-
-        return {
-          path,
-          message: v.message ?? 'Invalid value',
-        };
-      });
-
-      reply.status(400);
-      return await reply.fail('INVALID_REQUEST', 'Validation failed', undefined, { errors });
-    }
-
-    request.log.error({ err: error }, 'Unhandled error');
-    reply.status(500);
-    return await reply.fail('INTERNAL_ERROR', 'Internal error');
-  });
+  setupSentryErrorHandler(app as unknown as FastifyInstance);
 
   // Register shared schemas for $ref usage in routes (Diagnostics, ErrorCode, ErrorBody)
   registerCoreSchemas(app);

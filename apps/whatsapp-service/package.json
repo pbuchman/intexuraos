@@ -24,6 +24,7 @@
     "@intexuraos/http-server": "workspace:*",
     "@intexuraos/infra-firestore": "workspace:*",
     "@intexuraos/infra-pubsub": "workspace:*",
+    "@intexuraos/infra-sentry": "workspace:*",
     "@intexuraos/infra-whatsapp": "workspace:*",
     "@speechmatics/batch-client": "^5.1.0",
     "fastify": "^5.1.0",

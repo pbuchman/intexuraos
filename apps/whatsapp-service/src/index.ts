@@ -1,9 +1,19 @@
+import { initSentry } from '@intexuraos/infra-sentry';
 import { getErrorMessage } from '@intexuraos/common-core';
 import { buildServer } from './server.js';
 import { loadConfig } from './config.js';
 import { initServices } from './services.js';
 
 async function main(): Promise<void> {
+  const sentryDsn = process.env['INTEXURAOS_SENTRY_DSN'];
+  if (sentryDsn !== undefined) {
+    initSentry({
+      dsn: sentryDsn,
+      environment: process.env['INTEXURAOS_ENVIRONMENT'] ?? 'development',
+      serviceName: 'whatsapp-service',
+    });
+  }
+
   const config = loadConfig();
 
   // Initialize services with config

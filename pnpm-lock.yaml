@@ -109,6 +109,9 @@ importers:
       '@intexuraos/infra-pubsub':
         specifier: workspace:*
         version: link:../../packages/infra-pubsub
+      '@intexuraos/infra-sentry':
+        specifier: workspace:*
+        version: link:../../packages/infra-sentry
       '@intexuraos/llm-contract':
         specifier: workspace:*
         version: link:../../packages/llm-contract
@@ -136,6 +139,9 @@ importers:
       '@intexuraos/http-server':
         specifier: workspace:*
         version: link:../../packages/http-server
+      '@intexuraos/infra-sentry':
+        specifier: workspace:*
+        version: link:../../packages/infra-sentry
       fastify:
         specifier: ^5.1.0
         version: 5.6.2
@@ -166,6 +172,9 @@ importers:
       '@intexuraos/infra-firestore':
         specifier: workspace:*
         version: link:../../packages/infra-firestore
+      '@intexuraos/infra-sentry':
+        specifier: workspace:*
+        version: link:../../packages/infra-sentry
       '@intexuraos/llm-contract':
         specifier: workspace:*
         version: link:../../packages/llm-contract
@@ -209,6 +218,9 @@ importers:
       '@intexuraos/infra-pubsub':
         specifier: workspace:*
         version: link:../../packages/infra-pubsub
+      '@intexuraos/infra-sentry':
+        specifier: workspace:*
+        version: link:../../packages/infra-sentry
       fastify:
         specifier: ^5.1.0
         version: 5.6.2
@@ -249,6 +261,9 @@ importers:
       '@intexuraos/http-server':
         specifier: workspace:*
         version: link:../../packages/http-server
+      '@intexuraos/infra-sentry':
+        specifier: workspace:*
+        version: link:../../packages/infra-sentry
       fastify:
         specifier: ^5.1.0
         version: 5.6.2
@@ -297,6 +312,9 @@ importers:
       '@intexuraos/infra-pubsub':
         specifier: workspace:*
         version: link:../../packages/infra-pubsub
+      '@intexuraos/infra-sentry':
+        specifier: workspace:*
+        version: link:../../packages/infra-sentry
       '@intexuraos/llm-common':
         specifier: workspace:*
         version: link:../../packages/llm-common
@@ -348,6 +366,9 @@ importers:
       '@intexuraos/infra-gemini':
         specifier: workspace:*
         version: link:../../packages/infra-gemini
+      '@intexuraos/infra-sentry':
+        specifier: workspace:*
+        version: link:../../packages/infra-sentry
       '@intexuraos/llm-common':
         specifier: workspace:*
         version: link:../../packages/llm-common
@@ -409,6 +430,9 @@ importers:
       '@intexuraos/infra-gpt':
         specifier: workspace:*
         version: link:../../packages/infra-gpt
+      '@intexuraos/infra-sentry':
+        specifier: workspace:*
+        version: link:../../packages/infra-sentry
       '@intexuraos/llm-audit':
         specifier: workspace:*
         version: link:../../packages/llm-audit
@@ -461,6 +485,9 @@ importers:
       '@intexuraos/infra-firestore':
         specifier: workspace:*
         version: link:../../packages/infra-firestore
+      '@intexuraos/infra-sentry':
+        specifier: workspace:*
+        version: link:../../packages/infra-sentry
       fastify:
         specifier: ^5.1.0
         version: 5.6.2
@@ -498,6 +525,9 @@ importers:
       '@intexuraos/infra-firestore':
         specifier: workspace:*
         version: link:../../packages/infra-firestore
+      '@intexuraos/infra-sentry':
+        specifier: workspace:*
+        version: link:../../packages/infra-sentry
       fastify:
         specifier: ^5.1.0
         version: 5.6.2
@@ -547,6 +577,9 @@ importers:
       '@intexuraos/infra-notion':
         specifier: workspace:*
         version: link:../../packages/infra-notion
+      '@intexuraos/infra-sentry':
+        specifier: workspace:*
+        version: link:../../packages/infra-sentry
       fastify:
         specifier: ^5.1.0
         version: 5.6.2
@@ -583,6 +616,9 @@ importers:
       '@intexuraos/infra-notion':
         specifier: workspace:*
         version: link:../../packages/infra-notion
+      '@intexuraos/infra-sentry':
+        specifier: workspace:*
+        version: link:../../packages/infra-sentry
       fastify:
         specifier: ^5.1.0
         version: 5.6.2
@@ -699,6 +735,9 @@ importers:
       '@intexuraos/infra-pubsub':
         specifier: workspace:*
         version: link:../../packages/infra-pubsub
+      '@intexuraos/infra-sentry':
+        specifier: workspace:*
+        version: link:../../packages/infra-sentry
       '@intexuraos/llm-common':
         specifier: workspace:*
         version: link:../../packages/llm-common
@@ -775,6 +814,9 @@ importers:
       '@intexuraos/infra-perplexity':
         specifier: workspace:*
         version: link:../../packages/infra-perplexity
+      '@intexuraos/infra-sentry':
+        specifier: workspace:*
+        version: link:../../packages/infra-sentry
       '@intexuraos/llm-contract':
         specifier: workspace:*
         version: link:../../packages/llm-contract
@@ -927,6 +969,9 @@ importers:
       '@intexuraos/http-server':
         specifier: workspace:*
         version: link:../../packages/http-server
+      '@intexuraos/infra-sentry':
+        specifier: workspace:*
+        version: link:../../packages/infra-sentry
       cheerio:
         specifier: ^1.0.0
         version: 1.1.2
@@ -982,6 +1027,9 @@ importers:
       '@intexuraos/infra-pubsub':
         specifier: workspace:*
         version: link:../../packages/infra-pubsub
+      '@intexuraos/infra-sentry':
+        specifier: workspace:*
+        version: link:../../packages/infra-sentry
       '@intexuraos/infra-whatsapp':
         specifier: workspace:*
         version: link:../../packages/infra-whatsapp
