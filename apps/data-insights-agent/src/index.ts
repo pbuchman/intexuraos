@@ -28,7 +28,11 @@ const REQUIRED_ENV = [
 
 validateRequiredEnv(REQUIRED_ENV);
 
-const sentryDsn = process.env['INTEXURAOS_SENTRY_DSN'];
+initSentry({
+  dsn: process.env['INTEXURAOS_SENTRY_DSN'],
+  environment: process.env['INTEXURAOS_ENVIRONMENT'] ?? 'development',
+  serviceName: 'data-insights-agent',
+});
 
 /** Models used by this service */
 const REQUIRED_MODELS: FastModel[] = [LlmModels.Gemini25Flash];

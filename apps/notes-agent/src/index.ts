@@ -15,7 +15,11 @@ const REQUIRED_ENV = [
 
 validateRequiredEnv(REQUIRED_ENV);
 
-const sentryDsn = process.env['INTEXURAOS_SENTRY_DSN'];
+initSentry({
+  dsn: process.env['INTEXURAOS_SENTRY_DSN'],
+  environment: process.env['INTEXURAOS_ENVIRONMENT'] ?? 'development',
+  serviceName: 'notes-agent',
+});
 
 async function main(): Promise<void> {
   initServices({
