@@ -1,5 +1,5 @@
 # IntexuraOS Research Agent Dockerfile
-# Multi-stage build with pnpm deploy - eliminates "double install" pattern
+# Multi-stage build - esbuild generates minimal package.json with transitive deps
 
 # ==========================================
 # Stage 1: Builder
@@ -30,13 +30,16 @@ COPY apps/research-agent/ ./apps/research-agent/
 # Build service (esbuild bundles everything into one file)
 RUN pnpm run --filter @intexuraos/research-agent build
 
-# 5. PRUNE PROD DEPS: Creates standalone folder with prod deps
-# This eliminates the need for a second install in the final stage
-# --legacy flag required for pnpm v10 without inject-workspace-packages
-RUN pnpm deploy --filter @intexuraos/research-agent --prod --legacy /prod/research-agent
+# 5. EXTRACT PROD DEPS using esbuild-generated package.json
+# The build script generates dist/package.json with transitive dependencies
+# We create a minimal package.json and install prod deps
+RUN cd /app/apps/research-agent/dist && \
+    node -e "const fs=require('fs'); const pkg=JSON.parse(fs.readFileSync('package.json')); \
+    fs.writeFileSync('package.json', JSON.stringify({name:'prod',type:'module',dependencies:pkg.dependencies}))" && \
+    pnpm install --prod --frozen-lockfile
 
 # ==========================================
-# Stage 2: Production (Zero Network Usage)
+# Stage 2: Production
 # ==========================================
 FROM node:22-alpine AS runner
 
@@ -45,9 +48,8 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=8080
 
-# Copy the pruned production folder (contains package.json + node_modules)
-COPY --from=builder /prod/research-agent/node_modules ./node_modules
-COPY --from=builder /prod/research-agent/package.json ./
+# Copy node_modules from dist
+COPY --from=builder /app/apps/research-agent/dist/node_modules ./node_modules
 
 # Copy the built artifact
 COPY --from=builder /app/apps/research-agent/dist/index.js ./dist/
