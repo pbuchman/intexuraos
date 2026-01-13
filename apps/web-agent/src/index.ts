@@ -5,7 +5,6 @@ import { buildServer } from './server.js';
 import { initServices } from './services.js';
 
 const REQUIRED_ENV = [
-  'INTEXURAOS_SENTRY_DSN','INTEXURAOS_INTERNAL_AUTH_TOKEN'];
 
 validateRequiredEnv(REQUIRED_ENV);
 

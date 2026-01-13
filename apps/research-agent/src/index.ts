@@ -11,7 +11,6 @@ import { initializeServices } from './services.js';
 import { initSentry } from '@intexuraos/infra-sentry';
 
 const REQUIRED_ENV = [
-  'INTEXURAOS_SENTRY_DSN',
   'INTEXURAOS_GCP_PROJECT_ID',
   'INTEXURAOS_AUTH_JWKS_URL',
   'INTEXURAOS_AUTH_ISSUER',

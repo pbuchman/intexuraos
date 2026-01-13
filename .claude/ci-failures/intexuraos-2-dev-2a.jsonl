@@ -10,3 +10,5 @@
 {"ts":"2026-01-12T22:33:32.929Z","project":"intexuraos-2","branch":"dev-2a","workspace":"todos-agent","runNumber":10,"passed":true,"durationMs":7551,"failureCount":0,"failures":[]}
 {"ts":"2026-01-13T13:54:23.909Z","project":"intexuraos-2","branch":"dev-2a","workspace":"--","runNumber":11,"passed":false,"durationMs":488,"failureCount":0,"failures":[]}
 {"ts":"2026-01-13T18:34:47.563Z","project":"intexuraos-2","branch":"dev-2a","runNumber":12,"passed":true,"durationMs":134895,"failureCount":0,"failures":[]}
+{"ts":"2026-01-13T20:27:25.896Z","project":"intexuraos-2","branch":"dev-2a","workspace":"--","runNumber":13,"passed":false,"durationMs":352,"failureCount":0,"failures":[]}
+{"ts":"2026-01-13T20:27:34.505Z","project":"intexuraos-2","branch":"dev-2a","workspace":"--","runNumber":14,"passed":false,"durationMs":332,"failureCount":0,"failures":[]}

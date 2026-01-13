@@ -8,7 +8,6 @@ import { buildServer } from './server.js';
 import { loadConfig } from './config.js';
 
 const REQUIRED_ENV = [
-  'INTEXURAOS_SENTRY_DSN',
 ];
 
 validateRequiredEnv(REQUIRED_ENV);

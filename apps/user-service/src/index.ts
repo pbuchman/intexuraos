@@ -7,7 +7,6 @@ import { buildServer } from './server.js';
 import { initializeServices } from './services.js';
 
 const REQUIRED_ENV = [
-  'INTEXURAOS_SENTRY_DSN',
   'INTEXURAOS_GCP_PROJECT_ID',
   'INTEXURAOS_AUTH0_DOMAIN',
   'INTEXURAOS_AUTH0_CLIENT_ID',
