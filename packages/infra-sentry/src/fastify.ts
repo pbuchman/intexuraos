@@ -20,12 +20,7 @@ import type { FastifyError, FastifyInstance, FastifyReply } from 'fastify';
  * Augmented FastifyReply with .fail() method from common-http.
  */
 interface IntexuraFastifyReply extends FastifyReply {
-  fail: (
-    code: string,
-    message: string,
-    diagnostics?: unknown,
-    details?: unknown
-  ) => FastifyReply;
+  fail: (code: string, message: string, diagnostics?: unknown, details?: unknown) => FastifyReply;
 }
 
 /**
@@ -63,8 +58,8 @@ export function setupSentryErrorHandler(app: FastifyInstance): void {
     }
 
     if (
+      (error as unknown) !== null &&
       typeof error === 'object' &&
-      error !== null &&
       'validation' in error &&
       Array.isArray((error as { validation?: unknown }).validation)
     ) {
@@ -108,13 +103,7 @@ export function setupSentryErrorHandler(app: FastifyInstance): void {
 function sanitizeHeaders(
   headers: Record<string, string | string[] | undefined>
 ): Record<string, string> {
-  const SENSITIVE_HEADERS = [
-    'authorization',
-    'x-internal-auth',
-    'cookie',
-    'x-api-key',
-    'apikey',
-  ];
+  const SENSITIVE_HEADERS = ['authorization', 'x-internal-auth', 'cookie', 'x-api-key', 'apikey'];
 
   const sanitized: Record<string, string> = {};
   for (const [key, value] of Object.entries(headers)) {
