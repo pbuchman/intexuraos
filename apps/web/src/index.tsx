@@ -8,7 +8,7 @@ import './styles/index.css';
 // Initialize Sentry for error tracking
 Sentry.init({
   dsn: config.sentryDsn,
-  environment: import.meta.env.INTEXURAOS_ENVIRONMENT ?? 'development',
+  environment: import.meta.env['INTEXURAOS_ENVIRONMENT'] ?? 'development',
   tracesSampleRate: 1.0,
   sendDefaultPii: true,
 });
