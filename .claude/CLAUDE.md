@@ -387,6 +387,7 @@ Use the same command: `npm run verify:workspace:tracked -- web` — adjusted beh
 4. **Create PR** targeting `development` (if it exists), otherwise `main`
 
 **Commands:**
+
 ```bash
 git add -A && git commit -m "message"
 git fetch origin
