@@ -42,7 +42,7 @@ COPY pnpm-lock.yaml ./
 
 # Copy generated production package.json and install deps
 COPY --from=builder /app/apps/promptvault-service/dist/package.json ./
-RUN pnpm install --prod --frozen-lockfile
+RUN pnpm install --prod
 
 # Copy built file
 COPY --from=builder /app/apps/promptvault-service/dist/index.js ./dist/
