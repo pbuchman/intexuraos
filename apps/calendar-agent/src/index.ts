@@ -16,11 +16,15 @@ const REQUIRED_ENV = [
   'INTEXURAOS_USER_SERVICE_URL',
 ];
 
-const sentryDsn = process.env['INTEXURAOS_SENTRY_DSN'];
+validateRequiredEnv(REQUIRED_ENV);
+
+initSentry({
+  dsn: process.env['INTEXURAOS_SENTRY_DSN'],
+  environment: process.env['INTEXURAOS_ENVIRONMENT'] ?? 'development',
+  serviceName: 'calendar-agent',
+});
 
 async function main(): Promise<void> {
-  validateRequiredEnv(REQUIRED_ENV);
-
   const userServiceUrl = process.env['INTEXURAOS_USER_SERVICE_URL'] ?? '';
   const internalAuthToken = process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] ?? '';
 
