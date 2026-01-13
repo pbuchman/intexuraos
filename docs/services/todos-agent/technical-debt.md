@@ -2,14 +2,14 @@
 
 ## Summary
 
-| Category            | Count   | Severity   |
-| -------------------  | -------  | ----------  |
-| TODO/FIXME Comments | 0       | -          |
-| Test Coverage Gaps  | 0       | -          |
-| TypeScript Issues   | 0       | -          |
-| SRP Violations      | 0       | -          |
-| Code Duplicates     | 0       | -          |
-| Deprecations        | 0       | -          |
+| Category            | Count | Severity |
+| ------------------- | ----- | -------- |
+| TODO/FIXME Comments | 0     | -        |
+| Test Coverage Gaps  | 0     | -        |
+| TypeScript Issues   | 0     | -        |
+| SRP Violations      | 0     | -        |
+| Code Duplicates     | 0     | -        |
+| Deprecations        | 0     | -        |
 
 Last updated: 2026-01-13
 

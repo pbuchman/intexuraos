@@ -8,7 +8,7 @@
  */
 
 import { execSync } from 'node:child_process';
-import { readFileSync, existsSync, readdirSync, statSync } from 'node:fs';
+import { appendFileSync, readFileSync, existsSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
 // =============================================================================
@@ -366,10 +366,17 @@ async function main() {
   // Set GitHub Actions outputs
   const outputFile = process.env.GITHUB_OUTPUT;
   if (outputFile) {
-    const { appendFileSync } = await import('node:fs');
-    appendFileSync(outputFile, `strategy=${decision.strategy}\n`);
-    appendFileSync(outputFile, `targets=${JSON.stringify(decision.targets)}\n`);
-    appendFileSync(outputFile, `affected_count=${affected.size}\n`);
+    try {
+      appendFileSync(outputFile, `strategy=${decision.strategy}\n`);
+      appendFileSync(outputFile, `targets=${JSON.stringify(decision.targets)}\n`);
+      appendFileSync(outputFile, `affected_count=${affected.size}\n`);
+      console.error(
+        `[DEBUG] Wrote to GITHUB_OUTPUT: strategy=${decision.strategy}, targets=${decision.targets.length}, affected_count=${affected.size}`
+      );
+    } catch (writeError) {
+      console.error(`[ERROR] Failed to write to GITHUB_OUTPUT: ${writeError.message}`);
+      process.exit(1);
+    }
   }
 
   // Exit code: 0 = success, outputs set

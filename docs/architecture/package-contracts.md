@@ -131,7 +131,7 @@ infra/
 ## Import Rules
 
 | From                    | Can Import                            |
-| -----------------------  | -------------------------------------  |
+| ----------------------- | ------------------------------------- |
 | `packages/common`       | nothing                               |
 | `apps/<app>/src/domain` | `@intexuraos/common`                  |
 | `apps/<app>/src/infra`  | `@intexuraos/common`, same-app domain |
@@ -146,7 +146,7 @@ infra/
 ## Naming Conventions
 
 | Type           | Pattern                      | Example                    |
-| --------------  | ----------------------------  | --------------------------  |
+| -------------- | ---------------------------- | -------------------------- |
 | Shared package | `@intexuraos/common`         | `@intexuraos/common`       |
 | App            | `@intexuraos/<name>-service` | `@intexuraos/user-service` |
 | Repository     | `*Repository.ts`             | `authTokenRepository.ts`   |

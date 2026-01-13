@@ -24,14 +24,17 @@ Mobile-notifications-service manages the entire push flow:
 ## Key Features
 
 **Connection Types:**
+
 - Signature-based (plaintext returned once, stored hashed)
 - Device labeling for identification
 
 **Notification Filters:**
+
 - Enable/disable by source
 - Priority filtering
 
 **Webhook Support:**
+
 - Receive push from external providers
 - Verify signatures
 - Route to connected devices

@@ -19,6 +19,7 @@ Image-service provides two core capabilities:
 2. **Prompt generation** - Converts text content into optimized image prompts using LLMs
 
 Generated images are:
+
 - Stored in Google Cloud Storage with signed URLs
 - Automatically thumbnailed (256px max edge)
 - Tracked in Firestore for cost attribution

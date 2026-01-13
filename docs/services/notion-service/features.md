@@ -21,17 +21,20 @@ Notion-service provides Notion integration lifecycle:
 ## Key Features
 
 **Connection flow:**
+
 - User provides Notion token
 - Service validates with Notion API
 - Token stored securely (encrypted)
 - Workspace info retrieved
 
 **Status endpoint:**
+
 - Connection state
 - Workspace details
 - Last sync time
 
 **Disconnection:**
+
 - Removes stored token
 - Clears cached data
 

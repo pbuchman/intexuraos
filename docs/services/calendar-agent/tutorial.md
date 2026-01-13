@@ -81,11 +81,11 @@ curl -X POST https://calendar-agent.intexuraos.com/calendar/events \
     "event": {
       "id": "newEvent123",
       "summary": "Product Review",
-      "start": {"dateTime": "2026-01-15T14:00:00Z"},
-      "end": {"dateTime": "2026-01-15T15:00:00Z"},
+      "start": { "dateTime": "2026-01-15T14:00:00Z" },
+      "end": { "dateTime": "2026-01-15T15:00:00Z" },
       "attendees": [
-        {"email": "alice@example.com", "responseStatus": "needsAction"},
-        {"email": "bob@example.com", "optional": true, "responseStatus": "needsAction"}
+        { "email": "alice@example.com", "responseStatus": "needsAction" },
+        { "email": "bob@example.com", "optional": true, "responseStatus": "needsAction" }
       ]
     }
   }
@@ -195,14 +195,12 @@ curl -X POST https://calendar-agent.intexuraos.com/calendar/freebusy \
   "data": {
     "calendars": {
       "primary": {
-        "busy": [
-          {"start": "2026-01-15T10:00:00Z", "end": "2026-01-15T11:00:00Z"}
-        ]
+        "busy": [{ "start": "2026-01-15T10:00:00Z", "end": "2026-01-15T11:00:00Z" }]
       },
       "alice@example.com": {
         "busy": [
-          {"start": "2026-01-15T09:00:00Z", "end": "2026-01-15T12:00:00Z"},
-          {"start": "2026-01-15T14:00:00Z", "end": "2026-01-15T17:00:00Z"}
+          { "start": "2026-01-15T09:00:00Z", "end": "2026-01-15T12:00:00Z" },
+          { "start": "2026-01-15T14:00:00Z", "end": "2026-01-15T17:00:00Z" }
         ]
       },
       "bob@example.com": {
@@ -241,7 +239,7 @@ curl -X DELETE https://calendar-agent.intexuraos.com/calendar/events/event123 \
 ## Troubleshooting
 
 | Issue            | Symptom             | Solution                                |
-| ----------------  | -------------------  | ---------------------------------------  |
+| ---------------- | ------------------- | --------------------------------------- |
 | NOT_CONNECTED    | 403 on all requests | Connect Google account via user-service |
 | Invalid time     | 400 error           | Use ISO 8601 format with timezone       |
 | Event not found  | 404                 | Verify eventId and calendarId           |
@@ -258,16 +256,19 @@ curl -X DELETE https://calendar-agent.intexuraos.com/calendar/events/event123 \
 ## Exercises
 
 ### Easy
+
 1. List next 7 days of events
 2. Create a simple one-hour event
 3. Get a specific event by ID
 
 ### Medium
+
 1. Create an all-day event
 2. Search for events containing "meeting"
 3. Update event location
 
 ### Hard
+
 1. Find next available 1-hour slot for multiple attendees
 2. Implement sync to local storage
 3. Handle recurring event expansion

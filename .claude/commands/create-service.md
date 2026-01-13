@@ -140,7 +140,6 @@ import { initServices } from './services.js';
 
 // Fail-fast startup validation - crashes immediately if required vars are missing
 const REQUIRED_ENV = [
-  'INTEXURAOS_SENTRY_DSN',
   'INTEXURAOS_GCP_PROJECT_ID', // Required for Firestore (remove if not using Firestore)
   'INTEXURAOS_AUTH_JWKS_URL',
   'INTEXURAOS_AUTH_ISSUER',
@@ -453,6 +452,31 @@ const SERVICES = [
 ];
 ```
 
+#### 8e. Add to Terraform Change Detection
+
+Edit `scripts/detect-tf-changes.sh`, add to `ALL_SERVICES` array:
+
+```bash
+ALL_SERVICES=(
+  # ... existing services ...
+  "<service-name>"
+)
+```
+
+**Why:** This ensures the "Detect Terraform Affected Services" step in the deploy workflow correctly identifies your service when terraform changes affect it.
+
+**Optional:** If your service uses specific terraform modules, add it to `MODULE_TO_SERVICES` mapping:
+
+```bash
+# Example: if your service uses a custom Pub/Sub topic
+MODULE_TO_SERVICES[<module-name>]="<service-name>"
+```
+
+Common mappings:
+- `pubsub-push`: For services that subscribe to Pub/Sub topics
+- `<service>-bucket`: For services with dedicated Cloud Storage buckets
+- `firestore`: Most services use Firestore (already mapped to "all-services")
+
 ### 9. Create Cloud Build Deployment Script
 
 **CRITICAL:** Create `cloudbuild/scripts/deploy-<service-name>.sh` following this exact pattern:
@@ -640,6 +664,7 @@ This ensures `/create-domain-docs` can generate documentation for your service's
 - [ ] Deploy script `cloudbuild/scripts/deploy-<service>.sh` created
 - [ ] Added to `docker_services` in `terraform/modules/cloud-build/main.tf`
 - [ ] Added to `SERVICES` in `.github/scripts/smart-dispatch.mjs`
+- [ ] Added to `ALL_SERVICES` in `scripts/detect-tf-changes.sh`
 - [ ] Registered in api-docs-hub
 - [ ] Added to `CLOUD_RUN_SERVICES` in Cloud Build files
 - [ ] Added to `.envrc.local.example`

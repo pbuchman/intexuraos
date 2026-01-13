@@ -13,7 +13,6 @@ import { getServices } from './services.js';
 const REQUIRED_ENV = [
   'INTEXURAOS_GCP_PROJECT_ID',
   'INTEXURAOS_INTERNAL_AUTH_TOKEN',
-  'INTEXURAOS_SENTRY_DSN',
 ];
 
 validateRequiredEnv(REQUIRED_ENV);

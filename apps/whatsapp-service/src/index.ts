@@ -9,7 +9,6 @@ import { buildServer } from './server.js';
 import { loadConfig } from './config.js';
 
 const REQUIRED_ENV = [
-  'INTEXURAOS_SENTRY_DSN',
   'INTEXURAOS_AUTH_JWKS_URL',
   'INTEXURAOS_AUTH_ISSUER',
   'INTEXURAOS_AUTH_AUDIENCE',

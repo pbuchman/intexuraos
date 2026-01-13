@@ -39,31 +39,31 @@ graph TB
 
 ### Internal Endpoints
 
-| Method   | Path                                | Description                     | Auth            |
-| --------  | -----------------------------------  | -------------------------------  | ---------------  |
-| POST     | `/internal/images/prompts/generate` | Generate image prompt from text | Internal header |
-| POST     | `/internal/images/generate`         | Generate image from prompt      | Internal header |
-| DELETE   | `/internal/images/:id`              | Delete image (used on unshare)  | Internal header |
+| Method | Path                                | Description                     | Auth            |
+| ------ | ----------------------------------- | ------------------------------- | --------------- |
+| POST   | `/internal/images/prompts/generate` | Generate image prompt from text | Internal header |
+| POST   | `/internal/images/generate`         | Generate image from prompt      | Internal header |
+| DELETE | `/internal/images/:id`              | Delete image (used on unshare)  | Internal header |
 
 ## Domain Models
 
 ### GeneratedImage
 
-| Field          | Type       | Description                            |
-| --------------  | ----------  | --------------------------------------  |
-| `id`           | string     | Unique image identifier               |
-| `userId`       | string     | User who requested generation          |
-| `model`        | string     | Model used (e.g., `gpt-image-1`)     |
-| `prompt`       | string     | Original or enhanced prompt           |
-| `thumbnailUrl` | string     | Signed GCS URL for thumbnail (256px) |
-| `fullSizeUrl`  | string     | Signed GCS URL for full-size image   |
-| `slug`         | string     | URL-safe identifier (optional)       |
-| `createdAt`    | string     | Creation timestamp                    |
+| Field          | Type   | Description                          |
+| -------------- | ------ | ------------------------------------ |
+| `id`           | string | Unique image identifier              |
+| `userId`       | string | User who requested generation        |
+| `model`        | string | Model used (e.g., `gpt-image-1`)     |
+| `prompt`       | string | Original or enhanced prompt          |
+| `thumbnailUrl` | string | Signed GCS URL for thumbnail (256px) |
+| `fullSizeUrl`  | string | Signed GCS URL for full-size image   |
+| `slug`         | string | URL-safe identifier (optional)       |
+| `createdAt`    | string | Creation timestamp                   |
 
 ### ThumbnailPrompt
 
 | Field    | Type   | Description                          |
-| --------  | ------  | ------------------------------------  |
+| -------- | ------ | ------------------------------------ |
 | `prompt` | string | Generated image prompt               |
 | `model`  | string | LLM model used for prompt generation |
 
@@ -71,51 +71,51 @@ graph TB
 
 ### Image Generation Models
 
-| Model                    | Provider   | Description   |
-| ------------------------  | ----------  | -------------  |
-| `gpt-image-1`            | OpenAI     | DALL-E 3      |
-| `gemini-2.5-flash-image` | Google     | Imagen 3      |
+| Model                    | Provider | Description |
+| ------------------------ | -------- | ----------- |
+| `gpt-image-1`            | OpenAI   | DALL-E 3    |
+| `gemini-2.5-flash-image` | Google   | Imagen 3    |
 
 ### Prompt Generation Models
 
-| Model            | Provider   | Description                           |
-| ----------------  | ----------  | -------------------------------------  |
-| `gpt-4.1`        | OpenAI     | GPT-4.1 for prompt enhancement        |
-| `gemini-2.5-pro` | Google     | Gemini 2.5 Pro for prompt enhancement |
+| Model            | Provider | Description                           |
+| ---------------- | -------- | ------------------------------------- |
+| `gpt-4.1`        | OpenAI   | GPT-4.1 for prompt enhancement        |
+| `gemini-2.5-pro` | Google   | Gemini 2.5 Pro for prompt enhancement |
 
 ## Dependencies
 
 ### Internal Services
 
 | Service        | Purpose                          |
-| --------------  | --------------------------------  |
+| -------------- | -------------------------------- |
 | `user-service` | Fetch API keys for LLM providers |
 
 ### External Services
 
 | Service           | Purpose                   |
-| -----------------  | -------------------------  |
+| ----------------- | ------------------------- |
 | OpenAI API        | DALL-E 3 image generation |
 | Google Imagen API | Imagen 3 image generation |
 
 ### Infrastructure
 
 | Component                                 | Purpose                    |
-| -----------------------------------------  | --------------------------  |
+| ----------------------------------------- | -------------------------- |
 | Firestore (`generated_images` collection) | Image metadata persistence |
 | GCS (`generated-images/` bucket)          | Image storage              |
 
 ## Configuration
 
-| Environment Variable             | Required   | Description                      |
-| --------------------------------  | ----------  | --------------------------------  |
-| `INTEXURAOS_USER_SERVICE_URL`    | Yes        | User-service base URL            |
-| `INTEXURAOS_INTERNAL_AUTH_TOKEN` | Yes        | Shared secret for internal auth  |
-| `INTEXURAOS_GCP_PROJECT_ID`      | Yes        | Google Cloud project ID          |
-| `INTEXURAOS_GCS_BUCKET_NAME`     | Yes        | GCS bucket for image storage     |
-| `INTEXURAOS_OPENAI_IMAGE_SIZE`   | No         | Image size (default: 1024x1024)  |
-| `INTEXURAOS_OPENAI_IMAGE_MODEL`  | No         | DALL-E model (default: dall-e-3) |
-| `INTEXURAOS_GOOGLE_IMAGE_SIZE`   | No         | Imagen size (default: 1024x1024) |
+| Environment Variable             | Required | Description                      |
+| -------------------------------- | -------- | -------------------------------- |
+| `INTEXURAOS_USER_SERVICE_URL`    | Yes      | User-service base URL            |
+| `INTEXURAOS_INTERNAL_AUTH_TOKEN` | Yes      | Shared secret for internal auth  |
+| `INTEXURAOS_GCP_PROJECT_ID`      | Yes      | Google Cloud project ID          |
+| `INTEXURAOS_GCS_BUCKET_NAME`     | Yes      | GCS bucket for image storage     |
+| `INTEXURAOS_OPENAI_IMAGE_SIZE`   | No       | Image size (default: 1024x1024)  |
+| `INTEXURAOS_OPENAI_IMAGE_MODEL`  | No       | DALL-E model (default: dall-e-3) |
+| `INTEXURAOS_GOOGLE_IMAGE_SIZE`   | No       | Imagen size (default: 1024x1024) |
 
 ## Gotchas
 

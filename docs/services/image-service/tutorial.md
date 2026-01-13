@@ -186,7 +186,7 @@ curl -X DELETE https://image-service.intexuraos.com/internal/images/img_xyz789 \
 ## Troubleshooting
 
 | Issue                    | Symptom                              | Solution                           |
-| ------------------------  | ------------------------------------  | ----------------------------------  |
+| ------------------------ | ------------------------------------ | ---------------------------------- |
 | API key not found        | 400 Bad Request                      | User must add API key via settings |
 | GCS upload fails         | Image saved but URL generation fails | Check GCS bucket permissions       |
 | Image generation timeout | 502 Downstream Error                 | Provider is slow; increase timeout |
