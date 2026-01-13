@@ -1,0 +1,36 @@
+# Agent Context: {{service_name}}
+
+> **System Note:** This file is optimized for LLM consumption. Load this into context when an agent needs to interact with the {{service_name}}.
+
+## Identity
+- **Name:** {{service_name}}
+- **Role:** {{short_description}}
+- **Primary Goal:** {{primary_goal}}
+
+## Capabilities (Tools)
+
+### HTTP Endpoints
+| Method | Path | Purpose | Input Schema (TS) |
+| :--- | :--- | :--- | :--- |
+| {{method}} | {{path}} | {{purpose}} | `{{input_type}}` |
+
+### PubSub Events
+- **Publishes:** `{{published_topics}}`
+- **Subscribes:** `{{subscribed_topics}}`
+
+## Critical Rules & Constraints
+1. {{rule_1}}
+2. {{rule_2}}
+3. Do not assume authentication state; pass `userId` explicitly in internal calls.
+
+## Usage Patterns (Few-Shot)
+
+**User Request:** "{{example_user_request}}"
+**Agent Action:**
+```json
+{
+  "service": "{{service_name}}",
+  "action": "{{example_action_name}}",
+  "payload": {{example_payload}}
+}
+```
