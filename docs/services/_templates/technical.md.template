@@ -1,0 +1,85 @@
+# {Service Name} - Technical Reference
+
+## Overview
+
+Brief technical overview of the service.
+
+## Architecture
+
+```mermaid
+graph TD
+    A[Client] --> B[This Service]
+    B --> C[Dependency 1]
+    B --> D[Dependency 2]
+```
+
+## API Endpoints
+
+### Public Endpoints
+
+| Method   | Path      | Description      | Auth           |
+| --------  | ---------  | ----------------  | --------------  |
+| GET      | `/resource` | List resources   | Bearer token   |
+| POST     | `/resource` | Create resource  | Bearer token   |
+| GET      | `/resource/:id` | Get one resource | Bearer token |
+| PATCH    | `/resource/:id` | Update resource | Bearer token |
+| DELETE   | `/resource/:id` | Delete resource | Bearer token |
+
+### Internal Endpoints
+
+| Method   | Path                | Description    | Auth          |
+| --------  | -------------------  | --------------  | -------------  |
+| POST     | `/internal/resource` | Create from other service | Internal header |
+
+## Domain Models
+
+### ModelName
+
+| Field      | Type    | Description     |
+| ---------- | -------  | --------------- |
+| `id`       | string  | Unique ID       |
+| `name`     | string  | Display name    |
+| `status`   | Status  | Current state   |
+
+### Status Enum
+
+| Value      | Description      |
+| ---------- | ---------------- |
+| `active`   | Currently active |
+| `archived` | No longer active |
+
+## Dependencies
+
+| Service         | Purpose                    |
+| --------------- | --------------------------  |
+| service-name    | What it's used for         |
+
+## Configuration
+
+| Environment Variable           | Required   | Description                  |
+| ------------------------------  | ----------  | ----------------------------  |
+| `INTEXURAOS_DEPENDENCY_URL`   | Yes        | Dependency base URL          |
+
+## Gotchas
+
+**Gotcha one** - Explanation
+
+**Gotcha two** - Explanation
+
+## File Structure
+
+```
+apps/{service}/src/
+  domain/
+    models/
+      model.ts
+    ports/
+      repository.ts
+  infra/
+    firestore/
+      repository.ts
+  routes/
+    publicRoutes.ts
+    internalRoutes.ts
+  services.ts
+```
