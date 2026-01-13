@@ -8,10 +8,10 @@ This is an internal package - installed via workspace protocol.
 
 ## Environment Variables
 
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `INTEXURAOS_SENTRY_DSN` | No | Sentry DSN for error tracking |
-| `INTEXURAOS_ENVIRONMENT` | No | Environment name (defaults to 'development') |
+| Variable                 | Required | Description                                  |
+| ------------------------ | -------- | -------------------------------------------- |
+| `INTEXURAOS_SENTRY_DSN`  | No       | Sentry DSN for error tracking                |
+| `INTEXURAOS_ENVIRONMENT` | No       | Environment name (defaults to 'development') |
 
 ## Usage
 
@@ -36,10 +36,13 @@ import { createSentryTransport, setupSentryErrorHandler } from '@intexuraos/infr
 
 export async function buildServer(): Promise<FastifyInstance> {
   const app = Fastify({
-    logger: process.env['NODE_ENV'] === 'test' ? false : {
-      level: process.env['LOG_LEVEL'] ?? 'info',
-      transport: createSentryTransport(), // ← Add this
-    },
+    logger:
+      process.env['NODE_ENV'] === 'test'
+        ? false
+        : {
+            level: process.env['LOG_LEVEL'] ?? 'info',
+            transport: createSentryTransport(), // ← Add this
+          },
     disableRequestLogging: true,
   });
 
@@ -66,12 +69,12 @@ log.warn({ missingProviders }, 'Missing pricing for providers');
 
 Initialize Sentry SDK. Call at the top of `index.ts` before other imports.
 
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| dsn | string | No | Sentry DSN (from env var) |
-| environment | string | No | Environment name |
-| serviceName | string | Yes | Service identifier for Sentry |
-| tracesSampleRate | number | No | Tracing sample rate (default: 0) |
+| Parameter        | Type   | Required | Description                      |
+| ---------------- | ------ | -------- | -------------------------------- |
+| dsn              | string | No       | Sentry DSN (from env var)        |
+| environment      | string | No       | Environment name                 |
+| serviceName      | string | Yes      | Service identifier for Sentry    |
+| tracesSampleRate | number | No       | Tracing sample rate (default: 0) |
 
 ### `createSentryTransport()`
 
@@ -81,9 +84,9 @@ Creates a Pino transport that sends errors/warnings to Sentry. Returns `undefine
 
 Replaces Fastify error handler with one that sends unhandled errors to Sentry.
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| app | FastifyInstance | Fastify app instance |
+| Parameter | Type            | Description          |
+| --------- | --------------- | -------------------- |
+| app       | FastifyInstance | Fastify app instance |
 
 ## Features
 
