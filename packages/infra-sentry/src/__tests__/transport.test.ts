@@ -1,10 +1,10 @@
 /**
- * Tests for Sentry Pino transport.
+ * Tests for Sentry transport and sendToSentry function.
  */
 
 import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
 import * as Sentry from '@sentry/node';
-import { createSentryTransport } from '../transport.js';
+import { createSentryTransport, sendToSentry } from '../transport.js';
 
 // Mock Sentry
 vi.mock('@sentry/node', () => ({
@@ -41,92 +41,86 @@ describe('createSentryTransport', () => {
     expect(transport).toBeUndefined();
   });
 
-  it('returns transport when SENTRY_DSN is set', () => {
+  it('returns undefined (placeholder for future transport implementation)', () => {
     process.env['INTEXURAOS_SENTRY_DSN'] = 'https://test@sentry.io/123';
 
     const transport = createSentryTransport();
 
-    expect(transport).toBeDefined();
-    expect(transport).toHaveProperty('level', 'warn');
-    expect(transport).toHaveProperty('send');
+    // Currently returns undefined as a placeholder
+    expect(transport).toBeUndefined();
+  });
+});
+
+describe('sendToSentry', () => {
+  const originalEnv = process.env;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    process.env = { ...originalEnv };
   });
 
-  it('sends error logs to Sentry.captureException', () => {
-    process.env['INTEXURAOS_SENTRY_DSN'] = 'https://test@sentry.io/123';
-    const transport = createSentryTransport();
-    const logEvent = {
-      msg: 'Test error',
-      err: new Error('Test error'),
-      userId: 'user-123',
-    };
+  afterEach(() => {
+    process.env = originalEnv;
+  });
 
-    transport?.send('error', logEvent);
+  it('does nothing when SENTRY_DSN is not set', () => {
+    delete process.env['INTEXURAOS_SENTRY_DSN'];
+
+    sendToSentry('error', 'Test error', { userId: 'user-123' });
+
+    expect(Sentry.captureException).not.toHaveBeenCalled();
+  });
+
+  it('sends error to Sentry.captureException', () => {
+    process.env['INTEXURAOS_SENTRY_DSN'] = 'https://test@sentry.io/123';
+    const context = { userId: 'user-123' };
+
+    sendToSentry('error', 'Test error', context);
 
     expect(Sentry.captureException).toHaveBeenCalledWith(
-      logEvent.err,
+      expect.any(Error),
       expect.objectContaining({
         level: 'error',
-        extra: logEvent,
+        extra: context,
       })
     );
   });
 
-  it('creates Error from msg when err is not an Error', () => {
+  it('creates Error with correct message', () => {
     process.env['INTEXURAOS_SENTRY_DSN'] = 'https://test@sentry.io/123';
-    const transport = createSentryTransport();
-    const logEvent = {
-      msg: 'Test error without err object',
-      userId: 'user-123',
-    };
 
-    transport?.send('error', logEvent);
+    sendToSentry('error', 'Test error without context');
 
-    expect(Sentry.captureException).toHaveBeenCalled();
     const capturedError = vi.mocked(Sentry.captureException).mock.calls[0]?.[0];
     expect(capturedError).toBeInstanceOf(Error);
-    expect((capturedError as Error).message).toBe('Test error without err object');
+    expect((capturedError as Error).message).toBe('Test error without context');
   });
 
-  it('sends warn logs to Sentry.captureMessage', () => {
+  it('sends warning to Sentry.captureMessage', () => {
     process.env['INTEXURAOS_SENTRY_DSN'] = 'https://test@sentry.io/123';
-    const transport = createSentryTransport();
-    const logEvent = {
-      msg: 'Test warning',
-      userId: 'user-123',
-    };
+    const context = { userId: 'user-123' };
 
-    transport?.send('warn', logEvent);
+    sendToSentry('warn', 'Test warning', context);
 
     expect(Sentry.captureMessage).toHaveBeenCalledWith(
       'Test warning',
       expect.objectContaining({
         level: 'warning',
-        extra: logEvent,
+        extra: context,
       })
     );
   });
 
-  it('uses default message for warn when msg is not provided', () => {
+  it('handles undefined context gracefully', () => {
     process.env['INTEXURAOS_SENTRY_DSN'] = 'https://test@sentry.io/123';
-    const transport = createSentryTransport();
-    const logEvent = {
-      userId: 'user-123',
-    };
 
-    transport?.send('warn', logEvent);
+    sendToSentry('error', 'Test error');
 
-    expect(Sentry.captureMessage).toHaveBeenCalledWith(
-      'Warning',
+    expect(Sentry.captureException).toHaveBeenCalledWith(
+      expect.any(Error),
       expect.objectContaining({
-        level: 'warning',
+        level: 'error',
       })
     );
-  });
-
-  it('ignores logs below warn level', () => {
-    process.env['INTEXURAOS_SENTRY_DSN'] = 'https://test@sentry.io/123';
-    const transport = createSentryTransport();
-
-    expect(transport?.level).toBe('warn');
   });
 });
