@@ -27,6 +27,22 @@ steps:
         pnpm install --frozen-lockfile
 
   # ==========================================================
+  # FIRESTORE MIGRATIONS (Wave 0 - Start with pnpm)
+  # ==========================================================
+  - name: 'node:22-slim'
+    id: 'deploy-firestore'
+    waitFor: ['pnpm-install']
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        corepack enable
+        corepack prepare pnpm@10 --activate
+        bash cloudbuild/scripts/deploy-firestore.sh
+    env:
+      - 'PROJECT_ID=$PROJECT_ID'
+
+  # ==========================================================
   # WAVE 1: CORE SERVICES (Start Immediately)
   # ==========================================================
 
@@ -649,22 +665,6 @@ steps:
       - 'COMMIT_SHA=$COMMIT_SHA'
       - 'REGION=${_REGION}'
       - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
-
-  # ==========================================================
-  # FIRESTORE (Last)
-  # ==========================================================
-  - name: 'node:22-slim'
-    id: 'deploy-firestore'
-    waitFor: ['pnpm-install']
-    entrypoint: 'bash'
-    args:
-      - '-c'
-      - |
-        corepack enable
-        corepack prepare pnpm@10 --activate
-        bash cloudbuild/scripts/deploy-firestore.sh
-    env:
-      - 'PROJECT_ID=$PROJECT_ID'
 
 options:
   logging: CLOUD_LOGGING_ONLY
