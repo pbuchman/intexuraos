@@ -475,7 +475,7 @@ resource "google_monitoring_dashboard" "main" {
                     }
                   }
                 }
-                plotType = "STACKED_BAR"
+                plotType = "LINE"
               }]
               yAxis = {
                 scale = "LINEAR"
