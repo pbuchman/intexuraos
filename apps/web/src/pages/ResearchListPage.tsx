@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Star, StarOff } from 'lucide-react';
+import { Star } from 'lucide-react';
 import { Button, Card, Layout } from '@/components';
 import { useAuth } from '@/context';
 import { useResearches } from '@/hooks';
@@ -68,7 +68,7 @@ export function ResearchListPage(): React.JSX.Element {
     return (
       <Layout>
         <div className="flex items-center justify-center py-12">
-          <div className="h-8 w-8 animate-spin rounded-full border-4 border-blue-600 border-t-transparent" />
+          <div className="h-8 w-8 rounded-full border-4 border-blue-600 border-t-transparent" />
         </div>
       </Layout>
     );
@@ -174,35 +174,31 @@ function ResearchCard({ research, onDelete, onToggleFavourite, updatingFavourite
       onClick={handleCardClick}
       className="cursor-pointer rounded-lg border border-slate-200 bg-white p-4 transition-shadow hover:shadow-md"
     >
-      <div className="flex items-start justify-between">
-        <div className="flex-1">
+      <div className="flex items-start gap-3">
+        <button
+          onClick={(e): void => {
+            e.stopPropagation();
+            onToggleFavourite(research.id, !(research.favourite ?? false));
+          }}
+          disabled={updatingFavourite === research.id}
+          className="p-1 rounded hover:bg-slate-100 transition-colors disabled:opacity-50 flex-shrink-0"
+          aria-label={research.favourite === true ? 'Unfavourite' : 'Favourite'}
+        >
+          <Star
+            className={`h-5 w-5 ${research.favourite === true ? 'text-amber-400 fill-amber-400' : 'text-slate-300'}`}
+          />
+        </button>
+        <div className="flex-1 min-w-0">
           <h3 className="text-lg font-semibold text-slate-900 hover:text-blue-600">
             {research.title !== '' ? stripMarkdown(research.title) : 'Untitled Research'}
           </h3>
           <p className="mt-1 line-clamp-2 text-sm text-slate-600">{research.prompt}</p>
         </div>
-        <div className="ml-4 flex items-center gap-2">
-          <button
-            onClick={(e): void => {
-              e.stopPropagation();
-              onToggleFavourite(research.id, !(research.favourite ?? false));
-            }}
-            disabled={updatingFavourite === research.id}
-            className="p-1 rounded hover:bg-slate-100 transition-colors disabled:opacity-50"
-            aria-label={research.favourite === true ? 'Unfavourite' : 'Favourite'}
-          >
-            {research.favourite === true ? (
-              <Star className="h-5 w-5 text-amber-400 fill-amber-400" />
-            ) : (
-              <StarOff className="h-5 w-5 text-slate-300" />
-            )}
-          </button>
-          <span
-            className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${status.bg} ${status.text}`}
-          >
-            {status.label}
-          </span>
-        </div>
+        <span
+          className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${status.bg} ${status.text} flex-shrink-0`}
+        >
+          {status.label}
+        </span>
       </div>
 
       <div className="mt-4 flex items-center justify-between text-sm text-slate-500">

@@ -55,22 +55,31 @@ export class FirestoreResearchRepository implements ResearchRepository {
     try {
       const db = getFirestore();
       const collection = db.collection(this.collectionName);
+      const limit = options?.limit ?? 50;
 
-      let query = collection
-        .where('userId', '==', userId)
-        .orderBy('startedAt', 'desc')
-        .limit(options?.limit ?? 50);
+      // Query favorites first, then non-favorites
+      const [favoritesSnapshot, nonFavoritesSnapshot] = await Promise.all([
+        collection
+          .where('userId', '==', userId)
+          .where('favourite', '==', true)
+          .orderBy('startedAt', 'desc')
+          .limit(limit)
+          .get(),
+        collection
+          .where('userId', '==', userId)
+          .where('favourite', '==', false)
+          .orderBy('startedAt', 'desc')
+          .limit(limit)
+          .get(),
+      ]);
 
-      if (options?.cursor !== undefined && options.cursor !== '') {
-        const cursorDoc = await collection.doc(options.cursor).get();
-        if (cursorDoc.exists) {
-          query = query.startAfter(cursorDoc);
-        }
-      }
+      const favorites = favoritesSnapshot.docs.map((doc) => doc.data() as Research);
+      const nonFavorites = nonFavoritesSnapshot.docs.map((doc) => doc.data() as Research);
 
-      const snapshot = await query.get();
-      const items = snapshot.docs.map((doc) => doc.data() as Research);
-      const lastDoc = snapshot.docs[snapshot.docs.length - 1];
+      // Combine: favorites first, then non-favorites, each sorted by startedAt desc
+      const items = [...favorites, ...nonFavorites].slice(0, limit);
+
+      const lastDoc = items.length > 0 ? items[items.length - 1] : undefined;
 
       const result: { items: Research[]; nextCursor?: string } = { items };
       if (lastDoc !== undefined) {
