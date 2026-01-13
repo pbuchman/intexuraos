@@ -9,6 +9,7 @@
 ## Executive Summary
 
 IntexuraOS is a **36-workspace monorepo** (18 apps, 18 packages) currently using npm with `package-lock.json`. This plan details migration to pnpm for:
+
 - Faster install times
 - Efficient disk usage via content-addressable storage
 - Strict dependency management
@@ -17,10 +18,11 @@ IntexuraOS is a **36-workspace monorepo** (18 apps, 18 packages) currently using
 **Requirement:** After migration, NO "npm" references remain in code (unless explicitly approved).
 
 `★ Insight ─────────────────────────────────────`
+
 - **pnpm workspace protocol**: pnpm uses `"workspace:*"` for local dependencies, unlike npm's automatic hoisting. This requires updating `package.json` files to declare internal dependencies explicitly
 - **Strict node_modules**: pnpm creates a symlink-based structure where packages only have access to their declared dependencies. This prevents phantom dependencies but may reveal undeclared deps
 - **Lockfile conversion**: `pnpm import` converts `package-lock.json` to `pnpm-lock.yaml`, but manual verification is recommended for edge cases
-`─────────────────────────────────────────────────`
+  `─────────────────────────────────────────────────`
 
 ---
 
@@ -28,33 +30,33 @@ IntexuraOS is a **36-workspace monorepo** (18 apps, 18 packages) currently using
 
 ### Repository Structure
 
-| Type | Count | Locations |
-|------|-------|-----------|
-| **Apps** | 18 | `apps/*/package.json` |
-| **Packages** | 18 | `packages/*/package.json` |
-| **Dockerfiles** | 18 | `apps/*/Dockerfile` + `tools/pubsub-ui/Dockerfile` |
-| **CI Workflows** | 4 | `.github/workflows/{ci,coverage-analysis,coverage-pr-report,copilot-setup-steps}.yml` |
-| **Cloud Build configs** | 3 | `cloudbuild/*.yaml`, `apps/web/cloudbuild.yaml` |
+| Type                    | Count | Locations                                                                             |
+| ----------------------- | ----- | ------------------------------------------------------------------------------------- |
+| **Apps**                | 18    | `apps/*/package.json`                                                                 |
+| **Packages**            | 18    | `packages/*/package.json`                                                             |
+| **Dockerfiles**         | 18    | `apps/*/Dockerfile` + `tools/pubsub-ui/Dockerfile`                                    |
+| **CI Workflows**        | 4     | `.github/workflows/{ci,coverage-analysis,coverage-pr-report,copilot-setup-steps}.yml` |
+| **Cloud Build configs** | 3     | `cloudbuild/*.yaml`, `apps/web/cloudbuild.yaml`                                       |
 
 ### Current npm References Found
 
-| Location | References | Action Required |
-|----------|------------|-----------------|
-| `package.json` scripts | 3 occurrences | Replace with `pnpm` |
-| `package.json` workspaces | 1 array | Migrate to `pnpm-workspace.yaml` |
-| `package-lock.json` | 1 file | Replace with `pnpm-lock.yaml` |
-| CI workflows (4 files) | `npm ci`, `npm run` | Replace with `pnpm` |
-| Dockerfiles (18 files) | `npm ci`, `npm run` | Replace with `pnpm` |
-| Cloud Build configs (3 files) | `npm ci`, `npm run` | Replace with `pnpm` |
-| Documentation (CLAUDE.md, README.md) | `npm run ci` examples | Replace with `pnpm` |
+| Location                             | References            | Action Required                  |
+| ------------------------------------ | --------------------- | -------------------------------- |
+| `package.json` scripts               | 3 occurrences         | Replace with `pnpm`              |
+| `package.json` workspaces            | 1 array               | Migrate to `pnpm-workspace.yaml` |
+| `package-lock.json`                  | 1 file                | Replace with `pnpm-lock.yaml`    |
+| CI workflows (4 files)               | `npm ci`, `npm run`   | Replace with `pnpm`              |
+| Dockerfiles (18 files)               | `npm ci`, `npm run`   | Replace with `pnpm`              |
+| Cloud Build configs (3 files)        | `npm ci`, `npm run`   | Replace with `pnpm`              |
+| Documentation (CLAUDE.md, README.md) | `npm run ci` examples | Replace with `pnpm`              |
 
 ### Scripts Requiring Updates
 
-| Script | Current | Target |
-|--------|---------|--------|
-| `typecheck:sequential` | `npm run typecheck --workspaces` | `pnpm -r --filter './apps/*' --filter './packages/*' typecheck` |
-| `build` | `npm run build --workspaces` | `pnpm -r build` |
-| `verify:llm-architecture` | `npx tsx ...` | `pnpm tsx ...` |
+| Script                    | Current                          | Target                                                          |
+| ------------------------- | -------------------------------- | --------------------------------------------------------------- |
+| `typecheck:sequential`    | `npm run typecheck --workspaces` | `pnpm -r --filter './apps/*' --filter './packages/*' typecheck` |
+| `build`                   | `npm run build --workspaces`     | `pnpm -r build`                                                 |
+| `verify:llm-architecture` | `npx tsx ...`                    | `pnpm tsx ...`                                                  |
 
 ---
 
@@ -63,6 +65,7 @@ IntexuraOS is a **36-workspace monorepo** (18 apps, 18 packages) currently using
 ### 1.1 Create `pnpm-workspace.yaml`
 
 **NEW FILE:** `/pnpm-workspace.yaml`
+
 ```yaml
 packages:
   - 'apps/*'
@@ -72,11 +75,13 @@ packages:
 ### 1.2 Update Root `package.json`
 
 **Remove:**
+
 ```json
 "workspaces": ["apps/*", "packages/*"]
 ```
 
 **Update engines:**
+
 ```json
 "engines": {
   "node": ">=22.0.0",
@@ -86,15 +91,16 @@ packages:
 
 **Update scripts:**
 
-| Script | Before | After |
-|--------|--------|-------|
-| `typecheck:sequential` | `npm run typecheck --workspaces --if-present` | `pnpm -r --if-present typecheck` |
-| `build` | `npm run build --workspaces --if-present` | `pnpm -r --if-present build` |
-| `verify:llm-architecture` | `npx tsx scripts/verify-llm-architecture.ts` | `pnpm tsx scripts/verify-llm-architecture.ts` |
+| Script                    | Before                                        | After                                         |
+| ------------------------- | --------------------------------------------- | --------------------------------------------- |
+| `typecheck:sequential`    | `npm run typecheck --workspaces --if-present` | `pnpm -r --if-present typecheck`              |
+| `build`                   | `npm run build --workspaces --if-present`     | `pnpm -r --if-present build`                  |
+| `verify:llm-architecture` | `npx tsx scripts/verify-llm-architecture.ts`  | `pnpm tsx scripts/verify-llm-architecture.ts` |
 
 ### 1.3 Update `.npmrc`
 
 **ADD to existing `.npmrc`:**
+
 ```ini
 # pnpm configuration
 shamefully-hoist=false
@@ -120,6 +126,7 @@ pnpm install
 All 18 service Dockerfiles follow this pattern. Update each identically:
 
 **Before:**
+
 ```dockerfile
 # Stage 1: Build
 FROM node:22-alpine AS builder
@@ -165,6 +172,7 @@ CMD ["node", "dist/index.js"]
 ```
 
 **After:**
+
 ```dockerfile
 # Stage 1: Build
 FROM node:22-alpine AS builder
@@ -223,26 +231,26 @@ CMD ["node", "dist/index.js"]
 
 ### 2.2 Dockerfiles to Update
 
-| Service | Path |
-|---------|------|
-| actions-agent | `apps/actions-agent/Dockerfile` |
-| api-docs-hub | `apps/api-docs-hub/Dockerfile` |
-| app-settings-service | `apps/app-settings-service/Dockerfile` |
-| bookmarks-agent | `apps/bookmarks-agent/Dockerfile` |
-| calendar-agent | `apps/calendar-agent/Dockerfile` |
-| commands-agent | `apps/commands-agent/Dockerfile` |
-| data-insights-agent | `apps/data-insights-agent/Dockerfile` |
-| image-service | `apps/image-service/Dockerfile` |
+| Service                      | Path                                           |
+| ---------------------------- | ---------------------------------------------- |
+| actions-agent                | `apps/actions-agent/Dockerfile`                |
+| api-docs-hub                 | `apps/api-docs-hub/Dockerfile`                 |
+| app-settings-service         | `apps/app-settings-service/Dockerfile`         |
+| bookmarks-agent              | `apps/bookmarks-agent/Dockerfile`              |
+| calendar-agent               | `apps/calendar-agent/Dockerfile`               |
+| commands-agent               | `apps/commands-agent/Dockerfile`               |
+| data-insights-agent          | `apps/data-insights-agent/Dockerfile`          |
+| image-service                | `apps/image-service/Dockerfile`                |
 | mobile-notifications-service | `apps/mobile-notifications-service/Dockerfile` |
-| notes-agent | `apps/notes-agent/Dockerfile` |
-| notion-service | `apps/notion-service/Dockerfile` |
-| promptvault-service | `apps/promptvault-service/Dockerfile` |
-| research-agent | `apps/research-agent/Dockerfile` |
-| todos-agent | `apps/todos-agent/Dockerfile` |
-| user-service | `apps/user-service/Dockerfile` |
-| web-agent | `apps/web-agent/Dockerfile` |
-| whatsapp-service | `apps/whatsapp-service/Dockerfile` |
-| pubsub-ui | `tools/pubsub-ui/Dockerfile` |
+| notes-agent                  | `apps/notes-agent/Dockerfile`                  |
+| notion-service               | `apps/notion-service/Dockerfile`               |
+| promptvault-service          | `apps/promptvault-service/Dockerfile`          |
+| research-agent               | `apps/research-agent/Dockerfile`               |
+| todos-agent                  | `apps/todos-agent/Dockerfile`                  |
+| user-service                 | `apps/user-service/Dockerfile`                 |
+| web-agent                    | `apps/web-agent/Dockerfile`                    |
+| whatsapp-service             | `apps/whatsapp-service/Dockerfile`             |
+| pubsub-ui                    | `tools/pubsub-ui/Dockerfile`                   |
 
 ---
 
@@ -251,6 +259,7 @@ CMD ["node", "dist/index.js"]
 ### 3.1 Main CI Workflow (`.github/workflows/ci.yml`)
 
 **Before:**
+
 ```yaml
 - name: Setup Node.js
   uses: actions/setup-node@v4
@@ -266,6 +275,7 @@ CMD ["node", "dist/index.js"]
 ```
 
 **After:**
+
 ```yaml
 - name: Setup pnpm
   uses: pnpm/action-setup@v4
@@ -320,6 +330,7 @@ Review and update any npm references to pnpm.
 **Dependency Installation Step:**
 
 **Before:**
+
 ```yaml
 - name: 'node:22-slim'
   id: 'npm-ci'
@@ -328,6 +339,7 @@ Review and update any npm references to pnpm.
 ```
 
 **After:**
+
 ```yaml
 - name: 'node:22-slim'
   id: 'pnpm-install'
@@ -342,6 +354,7 @@ Review and update any npm references to pnpm.
 **Web Build Step:**
 
 **Before:**
+
 ```yaml
 - name: 'node:22-slim'
   id: 'build-web'
@@ -355,6 +368,7 @@ Review and update any npm references to pnpm.
 ```
 
 **After:**
+
 ```yaml
 - name: 'node:22-slim'
   id: 'build-web'
@@ -370,6 +384,7 @@ Review and update any npm references to pnpm.
 **Firestore Deploy Step:**
 
 **Before:**
+
 ```yaml
 - name: 'node:22-slim'
   id: 'deploy-firestore'
@@ -377,6 +392,7 @@ Review and update any npm references to pnpm.
 ```
 
 **After:**
+
 ```yaml
 - name: 'node:22-slim'
   id: 'deploy-firestore'
@@ -386,6 +402,7 @@ Review and update any npm references to pnpm.
 ### 4.2 Firestore Build (`cloudbuild/cloudbuild-firestore.yaml`)
 
 **Before:**
+
 ```yaml
 - name: 'node:22-slim'
   id: 'deploy'
@@ -399,6 +416,7 @@ Review and update any npm references to pnpm.
 ```
 
 **After:**
+
 ```yaml
 - name: 'node:22-slim'
   id: 'deploy'
@@ -415,6 +433,7 @@ Review and update any npm references to pnpm.
 ### 4.3 Web Build (`apps/web/cloudbuild.yaml`)
 
 **Before:**
+
 ```yaml
 - name: 'node:22-slim'
   id: 'build'
@@ -428,6 +447,7 @@ Review and update any npm references to pnpm.
 ```
 
 **After:**
+
 ```yaml
 - name: 'node:22-slim'
   id: 'build'
@@ -449,16 +469,16 @@ Review and update any npm references to pnpm.
 
 **Replace all instances:**
 
-| Before | After |
-|--------|-------|
-| `npm run ci` | `pnpm run ci` |
+| Before                             | After                               |
+| ---------------------------------- | ----------------------------------- |
+| `npm run ci`                       | `pnpm run ci`                       |
 | `npm run verify:workspace:tracked` | `pnpm run verify:workspace:tracked` |
-| `npm run ci:tracked` | `pnpm run ci:tracked` |
-| `npm run ci:report` | `pnpm run ci:report` |
-| `npm run verify:firestore` | `pnpm run verify:firestore` |
-| `npm run verify:pubsub` | `pnpm run verify:pubsub` |
-| `npm run test` | `pnpm run test` |
-| `npm run typecheck:tests` | `pnpm run typecheck:tests` |
+| `npm run ci:tracked`               | `pnpm run ci:tracked`               |
+| `npm run ci:report`                | `pnpm run ci:report`                |
+| `npm run verify:firestore`         | `pnpm run verify:firestore`         |
+| `npm run verify:pubsub`            | `pnpm run verify:pubsub`            |
+| `npm run test`                     | `pnpm run test`                     |
+| `npm run typecheck:tests`          | `pnpm run typecheck:tests`          |
 
 ### 5.2 README.md
 
@@ -467,6 +487,7 @@ Review and update any npm references to pnpm.
 ### 5.3 Other Documentation
 
 Review and update:
+
 - `docs/setup/*.md`
 - `docs/architecture/*.md`
 - `docs/patterns/*.md`
@@ -489,6 +510,7 @@ pnpm run -r --if-present build
 ```
 
 **Common issues to watch for:**
+
 - Packages importing dependencies not in their `package.json`
 - Workspace references needing `workspace:*` protocol
 
@@ -534,6 +556,7 @@ docker run --rm test-user-service node --version
 ### 7.3 CI Verification
 
 Push to a feature branch and verify:
+
 - [ ] GitHub Actions CI passes
 - [ ] Coverage workflows pass
 - [ ] No new issues introduced
@@ -556,6 +579,7 @@ Push to a feature branch and verify:
 ### 8.2 Rollback Plan
 
 If deployment fails:
+
 1. Revert merge commit
 2. Force push reverted commit
 3. Monitor Cloud Build
@@ -568,44 +592,44 @@ If deployment fails:
 
 ### Common Commands
 
-| Task | npm | pnpm |
-|------|-----|------|
-| Install | `npm ci` | `pnpm install` |
-| Add dependency | `npm install <pkg>` | `pnpm add <pkg>` |
-| Add dev dependency | `npm install -D <pkg>` | `pnpm add -D <pkg>` |
-| Run script | `npm run <script>` | `pnpm run <script>` or `pnpm <script>` |
-| Run in all workspaces | `npm run <script> -ws` | `pnpm -r <script>` |
-| Run in specific workspace | `npm run <script> -w <name>` | `pnpm run --filter <name> <script>` |
-| Run npx package | `npx <pkg>` | `pnpm <pkg>` or `pnpm dlx <pkg>` |
-| List dependencies | `npm ls` | `pnpm ls` |
-| Check outdated | `npm outdated` | `pnpm outdated` |
-| Audit | `npm audit` | `pnpm audit` |
+| Task                      | npm                          | pnpm                                   |
+| ------------------------- | ---------------------------- | -------------------------------------- |
+| Install                   | `npm ci`                     | `pnpm install`                         |
+| Add dependency            | `npm install <pkg>`          | `pnpm add <pkg>`                       |
+| Add dev dependency        | `npm install -D <pkg>`       | `pnpm add -D <pkg>`                    |
+| Run script                | `npm run <script>`           | `pnpm run <script>` or `pnpm <script>` |
+| Run in all workspaces     | `npm run <script> -ws`       | `pnpm -r <script>`                     |
+| Run in specific workspace | `npm run <script> -w <name>` | `pnpm run --filter <name> <script>`    |
+| Run npx package           | `npx <pkg>`                  | `pnpm <pkg>` or `pnpm dlx <pkg>`       |
+| List dependencies         | `npm ls`                     | `pnpm ls`                              |
+| Check outdated            | `npm outdated`               | `pnpm outdated`                        |
+| Audit                     | `npm audit`                  | `pnpm audit`                           |
 
 ### pnpm Workspace Commands
 
-| Task | Command |
-|------|---------|
-| List workspace packages | `pnpm list -r --depth=0` |
-| Run script in all workspaces | `pnpm -r <script>` |
+| Task                              | Command                                |
+| --------------------------------- | -------------------------------------- |
+| List workspace packages           | `pnpm list -r --depth=0`               |
+| Run script in all workspaces      | `pnpm -r <script>`                     |
 | Run script in filtered workspaces | `pnpm -r --filter "./apps/*" <script>` |
-| Why is package installed | `pnpm why <package>` |
+| Why is package installed          | `pnpm why <package>`                   |
 
 ---
 
 ## Appendix B: File Change Summary
 
-| File Type | Count | Change Type |
-|-----------|-------|-------------|
-| **NEW** | 1 | `pnpm-workspace.yaml` |
-| **DELETE** | 1 | `package-lock.json` |
-| **MODIFY** | 1 | `package.json` (root) |
-| **MODIFY** | 1 | `.npmrc` |
-| **MODIFY** | 18 | `apps/*/Dockerfile` |
-| **MODIFY** | 1 | `tools/pubsub-ui/Dockerfile` |
-| **MODIFY** | 4 | `.github/workflows/*.yml` |
-| **MODIFY** | 3 | `cloudbuild/*.yaml` |
-| **MODIFY** | 1 | `apps/web/cloudbuild.yaml` |
-| **MODIFY** | ~10 | Documentation files |
+| File Type  | Count | Change Type                  |
+| ---------- | ----- | ---------------------------- |
+| **NEW**    | 1     | `pnpm-workspace.yaml`        |
+| **DELETE** | 1     | `package-lock.json`          |
+| **MODIFY** | 1     | `package.json` (root)        |
+| **MODIFY** | 1     | `.npmrc`                     |
+| **MODIFY** | 18    | `apps/*/Dockerfile`          |
+| **MODIFY** | 1     | `tools/pubsub-ui/Dockerfile` |
+| **MODIFY** | 4     | `.github/workflows/*.yml`    |
+| **MODIFY** | 3     | `cloudbuild/*.yaml`          |
+| **MODIFY** | 1     | `apps/web/cloudbuild.yaml`   |
+| **MODIFY** | ~10   | Documentation files          |
 
 **Total: ~42 files to modify/create/delete**
 
@@ -620,6 +644,7 @@ If deployment fails:
 **Cause:** npm allows accessing dependencies of dependencies; pnpm does not
 
 **Solution:** Add missing dependency to the workspace's `package.json`:
+
 ```bash
 pnpm add <missing-package> --filter @intexuraos/<workspace-name>
 ```
@@ -629,6 +654,7 @@ pnpm add <missing-package> --filter @intexuraos/<workspace-name>
 **Symptom:** `pnpm import` fails or produces invalid lockfile
 
 **Solution:** Manual lockfile generation:
+
 ```bash
 rm package-lock.json
 pnpm install
@@ -645,6 +671,7 @@ pnpm install
 **Symptom:** CI fails with cache errors after migration
 
 **Solution:** Manually clear GitHub Actions cache:
+
 - Settings → Actions → Caches → Delete `pnpm` cache
 
 ---
@@ -662,6 +689,7 @@ pnpm install
 ## Approval Required
 
 Before proceeding, confirm:
+
 - [ ] pnpm version 9.x is acceptable
 - [ ] No exceptions to "no npm in code" rule
 - [ ] Timeline expectations

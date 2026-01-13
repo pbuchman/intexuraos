@@ -15,6 +15,7 @@ export default tseslint.config(
       'docker/**',
       'vitest.setup.ts',
       'vitest.config.ts',
+      'vitest-mocks/**',
       // Test files now linted with same rules as production code
     ],
   },
