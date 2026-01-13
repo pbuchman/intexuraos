@@ -148,4 +148,59 @@ describe('enrichBookmark', () => {
     expect(result.value.ogFetchStatus).toBe('failed');
     expect(result.value.ogPreview).toBeNull();
   });
+
+  it('returns error when findById fails', async () => {
+    bookmarkRepository.simulateMethodError('findById', {
+      code: 'INTERNAL_ERROR',
+      message: 'Database connection failed',
+    });
+
+    const result = await enrichBookmark(
+      { bookmarkRepository, linkPreviewFetcher, logger: silentLogger },
+      { bookmarkId: 'any-id', userId: 'user-1' }
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) return;
+    expect(result.error.code).toBe('INTERNAL_ERROR');
+    expect(result.error.message).toBe('Database connection failed');
+  });
+
+  it('handles preview with missing optional fields', async () => {
+    const createResult = await bookmarkRepository.create({
+      userId: 'user-1',
+      url: 'https://example.com/minimal',
+      source: 'test',
+      sourceId: 'test-2',
+    });
+
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) return;
+
+    linkPreviewFetcher.setDefaultPreview({
+      title: null,
+      description: null,
+      image: null,
+      siteName: null,
+      type: null,
+      favicon: null,
+    });
+
+    const result = await enrichBookmark(
+      { bookmarkRepository, linkPreviewFetcher, logger: silentLogger },
+      { bookmarkId: createResult.value.id, userId: 'user-1' }
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.ogFetchStatus).toBe('processed');
+    expect(result.value.ogPreview).toEqual({
+      title: null,
+      description: null,
+      image: null,
+      siteName: null,
+      type: null,
+      favicon: null,
+    });
+  });
 });
