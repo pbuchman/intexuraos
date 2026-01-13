@@ -101,17 +101,17 @@ Expected URL: https://docs.z.ai/guides/overview/pricing
 
 For each model, extract:
 
-| Field                     | Description                                     |
-| ------------------------- | ----------------------------------------------- |
-| `inputPricePerMillion`    | Cost per 1M input tokens                        |
-| `outputPricePerMillion`   | Cost per 1M output tokens                       |
-| `cacheReadMultiplier`     | Discount for cached tokens (0.1 = 90% off)      |
-| `cacheWriteMultiplier`    | Premium for cache creation (1.25 = 25% extra)   |
-| `webSearchCostPerCall`    | Per-search cost (Anthropic, OpenAI, Zhipu)       |
-| `cacheReadPricePerMillion`| Cached input price (Google, Zhipu)                |
-| `groundingCostPerRequest` | Per-request grounding fee (Google)              |
-| `imagePricing`            | Per-image costs by size                         |
-| `useProviderCost`         | Use provider's cost field directly (Perplexity) |
+| Field                      | Description                                     |
+| -------------------------- | ----------------------------------------------- |
+| `inputPricePerMillion`     | Cost per 1M input tokens                        |
+| `outputPricePerMillion`    | Cost per 1M output tokens                       |
+| `cacheReadMultiplier`      | Discount for cached tokens (0.1 = 90% off)      |
+| `cacheWriteMultiplier`     | Premium for cache creation (1.25 = 25% extra)   |
+| `webSearchCostPerCall`     | Per-search cost (Anthropic, OpenAI, Zhipu)      |
+| `cacheReadPricePerMillion` | Cached input price (Google, Zhipu)              |
+| `groundingCostPerRequest`  | Per-request grounding fee (Google)              |
+| `imagePricing`             | Per-image costs by size                         |
+| `useProviderCost`          | Use provider's cost field directly (Perplexity) |
 
 ---
 

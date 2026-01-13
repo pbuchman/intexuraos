@@ -164,49 +164,49 @@ Previous session completed missing tutorial.md and technical-debt.md files for t
 
 **Inferred Insights:**
 
-| Service                        | Why Exists                                         | Killer Feature                                         | Future Plans                             |
-| ------------------------------  | --------------------------------------------------  | ------------------------------------------------------  | ----------------------------------------  |
-| actions-agent                  | Central orchestration point for all user actions   | Pub/Sub distribution to specialized agents             | Action type registry expansion           |
-| research-agent                 | Multi-LLM synthesis for comprehensive research     | Parallel queries across 4 providers with aggregation   | More LLM providers, custom prompts       |
-| user-service                   | Unified auth and API key management                | AES-256-GCM encryption for API keys                    | More OAuth providers                     |
-| image-service                  | AI image generation for research covers            | DALL-E 3 and Imagen 3 support                          | More image models                        |
-| bookmarks-agent                | Save links with metadata extraction                | OpenGraph metadata via web-agent                       | Full-text search                         |
-| notes-agent                    | Quick note capture                                 | Simple CRUD with tag support                           | Rich text, versioning                    |
-| todos-agent                    | Task management with AI extraction                 | AI-powered item extraction from natural language       | Recurring tasks, sub-task dependencies   |
-| whatsapp-service               | WhatsApp Business integration                      | Media download to GCS with async transcription         | More message types                       |
-| commands-agent                 | Classify user intent into action types             | Model preference detection from natural language       | More action types                        |
-| web-agent                      | OpenGraph metadata extraction                      | Streaming with 2MB limit enforcement                   | Twitter card expansion                   |
-| calendar-agent                 | Google Calendar integration                        | Free/busy queries across multiple calendars            | Recurring event support                  |
-| data-insights-agent            | AI-powered data analysis                           | Composite feeds combining multiple sources             | More chart types                         |
-| mobile-notifications-service   | Push notification gateway                          | Signature-based device authentication                  | More platforms (iOS)                     |
-| api-docs-hub                   | Unified API documentation                          | Multi-spec aggregation with service selector           | Live API testing                         |
-| app-settings-service           | LLM pricing and usage tracking                     | Per-model cost analytics                               | More providers, budget alerts            |
-| notion-service                 | Notion integration management                      | Connection lifecycle with workspace detection          | Two-way sync                             |
-| promptvault-service            | Prompt template management                         | Notion database sync for prompts                       | Version history, sharing                 |
+| Service                      | Why Exists                                       | Killer Feature                                       | Future Plans                           |
+| ---------------------------- | ------------------------------------------------ | ---------------------------------------------------- | -------------------------------------- |
+| actions-agent                | Central orchestration point for all user actions | Pub/Sub distribution to specialized agents           | Action type registry expansion         |
+| research-agent               | Multi-LLM synthesis for comprehensive research   | Parallel queries across 4 providers with aggregation | More LLM providers, custom prompts     |
+| user-service                 | Unified auth and API key management              | AES-256-GCM encryption for API keys                  | More OAuth providers                   |
+| image-service                | AI image generation for research covers          | DALL-E 3 and Imagen 3 support                        | More image models                      |
+| bookmarks-agent              | Save links with metadata extraction              | OpenGraph metadata via web-agent                     | Full-text search                       |
+| notes-agent                  | Quick note capture                               | Simple CRUD with tag support                         | Rich text, versioning                  |
+| todos-agent                  | Task management with AI extraction               | AI-powered item extraction from natural language     | Recurring tasks, sub-task dependencies |
+| whatsapp-service             | WhatsApp Business integration                    | Media download to GCS with async transcription       | More message types                     |
+| commands-agent               | Classify user intent into action types           | Model preference detection from natural language     | More action types                      |
+| web-agent                    | OpenGraph metadata extraction                    | Streaming with 2MB limit enforcement                 | Twitter card expansion                 |
+| calendar-agent               | Google Calendar integration                      | Free/busy queries across multiple calendars          | Recurring event support                |
+| data-insights-agent          | AI-powered data analysis                         | Composite feeds combining multiple sources           | More chart types                       |
+| mobile-notifications-service | Push notification gateway                        | Signature-based device authentication                | More platforms (iOS)                   |
+| api-docs-hub                 | Unified API documentation                        | Multi-spec aggregation with service selector         | Live API testing                       |
+| app-settings-service         | LLM pricing and usage tracking                   | Per-model cost analytics                             | More providers, budget alerts          |
+| notion-service               | Notion integration management                    | Connection lifecycle with workspace detection        | Two-way sync                           |
+| promptvault-service          | Prompt template management                       | Notion database sync for prompts                     | Version history, sharing               |
 
 **Documentation Coverage:** 100%
 
 **Technical Debt Summary:**
 
-| Service                        | TODOs   | Code Smells   | Test Gaps   | Type Issues   |
-| ------------------------------  | -------  | -------------  | -----------  | -------------  |
-| actions-agent                  | 0       | 2             | 0           | 0             |
-| research-agent                 | 0       | 1             | 0           | 0             |
-| user-service                   | 0       | 0             | 0           | 0             |
-| image-service                  | 0       | 1             | 0           | 0             |
-| bookmarks-agent                | 0       | 1             | 0           | 0             |
-| notes-agent                    | 0       | 1             | 0           | 0             |
-| todos-agent                    | 0       | 0             | 0           | 0             |
-| whatsapp-service               | 0       | 2             | 0           | 0             |
-| commands-agent                 | 0       | 0             | 0           | 0             |
-| web-agent                      | 0       | 0             | 0           | 0             |
-| calendar-agent                 | 0       | 0             | 0           | 0             |
-| data-insights-agent            | 0       | 0             | 0           | 0             |
-| mobile-notifications-service   | 0       | 0             | 0           | 0             |
-| api-docs-hub                   | 0       | 0             | 0           | 0             |
-| app-settings-service           | 0       | 0             | 0           | 0             |
-| notion-service                 | 0       | 0             | 0           | 0             |
-| promptvault-service            | 0       | 0             | 0           | 0             |
+| Service                      | TODOs | Code Smells | Test Gaps | Type Issues |
+| ---------------------------- | ----- | ----------- | --------- | ----------- |
+| actions-agent                | 0     | 2           | 0         | 0           |
+| research-agent               | 0     | 1           | 0         | 0           |
+| user-service                 | 0     | 0           | 0         | 0           |
+| image-service                | 0     | 1           | 0         | 0           |
+| bookmarks-agent              | 0     | 1           | 0         | 0           |
+| notes-agent                  | 0     | 1           | 0         | 0           |
+| todos-agent                  | 0     | 0           | 0         | 0           |
+| whatsapp-service             | 0     | 2           | 0         | 0           |
+| commands-agent               | 0     | 0           | 0         | 0           |
+| web-agent                    | 0     | 0           | 0         | 0           |
+| calendar-agent               | 0     | 0           | 0         | 0           |
+| data-insights-agent          | 0     | 0           | 0         | 0           |
+| mobile-notifications-service | 0     | 0           | 0         | 0           |
+| api-docs-hub                 | 0     | 0           | 0         | 0           |
+| app-settings-service         | 0     | 0           | 0         | 0           |
+| notion-service               | 0     | 0           | 0         | 0           |
+| promptvault-service          | 0     | 0           | 0         | 0           |
 
 **Total:** 8 code smells identified across 17 services (all low severity)
 

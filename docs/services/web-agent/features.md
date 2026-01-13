@@ -26,6 +26,7 @@ Web-agent provides centralized link preview extraction:
 ## Key Features
 
 **Extracted Metadata:**
+
 - `title` - From og:title or HTML title
 - `description` - From og:description or meta description
 - `image` - Resolved absolute URL from og:image
@@ -33,6 +34,7 @@ Web-agent provides centralized link preview extraction:
 - `siteName` - From og:site_name
 
 **Error Codes:**
+
 - `FETCH_FAILED` - HTTP errors or network issues
 - `TIMEOUT` - Request exceeded timeout
 - `TOO_LARGE` - Response over 2MB

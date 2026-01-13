@@ -19,10 +19,10 @@ graph LR
 
 ## API Endpoints
 
-| Method   | Path        | Description    | Auth   |
-| --------  | -----------  | --------------  | ------  |
-| GET      | `/docs`     | Swagger UI     | None   |
-| GET      | `/health`   | Health check   | None   |
+| Method | Path      | Description  | Auth |
+| ------ | --------- | ------------ | ---- |
+| GET    | `/docs`   | Swagger UI   | None |
+| GET    | `/health` | Health check | None |
 
 ## Configuration
 
@@ -30,8 +30,8 @@ The service loads `openApiSources` from config:
 
 ```typescript
 interface OpenApiSource {
-  name: string;  // Display name in dropdown
-  url: string;   // URL to OpenAPI JSON/YAML
+  name: string; // Display name in dropdown
+  url: string; // URL to OpenAPI JSON/YAML
 }
 ```
 

@@ -186,6 +186,7 @@ curl -X DELETE https://user-service.intexuraos.com/users/YOUR_USER_ID/llm-keys/o
 **Cause:** The API key doesn't match the expected format for the provider.
 
 **Solution:** Verify the key format:
+
 - Google: Starts with `AIza`
 - OpenAI: Starts with `sk-`
 - Anthropic: Starts with `sk-ant-`
@@ -275,7 +276,7 @@ This automatically refreshes the token if expired.
 ## Troubleshooting
 
 | Issue                 | Symptom                  | Solution                                                  |
-| ---------------------  | ------------------------  | ---------------------------------------------------------  |
+| --------------------- | ------------------------ | --------------------------------------------------------- |
 | Device code expires   | Polling never succeeds   | Device codes expire in 15 minutes; user must restart flow |
 | Encryption key errors | Keys fail to save        | Verify 64-character hex string for encryption key         |
 | Auth0 errors          | 401 Unauthorized         | Verify Auth0 client ID/secret are correct                 |

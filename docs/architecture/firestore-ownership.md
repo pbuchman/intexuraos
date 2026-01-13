@@ -33,11 +33,11 @@ Benefits:
 ### Comparison with Alternatives
 
 | Approach                   | Pros                        | Cons                              | IntexuraOS Choice |
-| --------------------------  | ---------------------------  | ---------------------------------  | -----------------  |
-| **Single-owner**           | Clear boundaries, testable  | Requires HTTP for cross-service   | ✅ **CHOSEN**      |
-| **Shared collections**     | Direct access, faster reads | Tight coupling, hard to version   | ❌ Rejected        |
-| **ACL-based sharing**      | Fine-grained permissions    | Complex rules, hard to reason     | ❌ Rejected        |
-| **Collection-per-service** | Complete isolation          | Data duplication, sync complexity | ❌ Overkill        |
+| -------------------------- | --------------------------- | --------------------------------- | ----------------- |
+| **Single-owner**           | Clear boundaries, testable  | Requires HTTP for cross-service   | ✅ **CHOSEN**     |
+| **Shared collections**     | Direct access, faster reads | Tight coupling, hard to version   | ❌ Rejected       |
+| **ACL-based sharing**      | Fine-grained permissions    | Complex rules, hard to reason     | ❌ Rejected       |
+| **Collection-per-service** | Complete isolation          | Data duplication, sync complexity | ❌ Overkill       |
 
 **Decision:** Single-owner with HTTP-based cross-service access strikes the right balance.
 
@@ -65,9 +65,9 @@ Benefits:
 **Fields:**
 
 | Field         | Type   | Required | Description                              |
-| -------------  | ------  | --------  | ----------------------------------------  |
-| `owner`       | string | ✅        | Service that owns this collection        |
-| `description` | string | ✅        | Human-readable purpose of the collection |
+| ------------- | ------ | -------- | ---------------------------------------- |
+| `owner`       | string | ✅       | Service that owns this collection        |
+| `description` | string | ✅       | Human-readable purpose of the collection |
 
 **Constraints:**
 
@@ -294,7 +294,7 @@ See [service-to-service-communication.md](./service-to-service-communication.md)
 ### Naming Conventions
 
 | Pattern                | Example                   | Use Case                   |
-| ----------------------  | -------------------------  | --------------------------  |
+| ---------------------- | ------------------------- | -------------------------- |
 | `{service}_{resource}` | `whatsapp_messages`       | Service-specific resources |
 | `{feature}_settings`   | `promptvault_settings`    | Feature configuration      |
 | `{resource}_mappings`  | `whatsapp_user_mappings`  | ID mappings/lookups        |

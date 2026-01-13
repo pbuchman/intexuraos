@@ -2,10 +2,10 @@
 
 ## Summary
 
-| Category      | Count   | Severity   |
-| -------------  | -------  | ----------  |
-| TODO/FIXME    | 0       | -          |
-| Code Smells   | 0       | -          |
+| Category    | Count | Severity |
+| ----------- | ----- | -------- |
+| TODO/FIXME  | 0     | -        |
+| Code Smells | 0     | -        |
 
 ## Future Plans
 

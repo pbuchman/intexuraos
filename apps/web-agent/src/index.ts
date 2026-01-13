@@ -1,12 +1,7 @@
 import { initSentry } from '@intexuraos/infra-sentry';
-import { validateRequiredEnv } from '@intexuraos/http-server';
 import { getErrorMessage } from '@intexuraos/common-core';
 import { buildServer } from './server.js';
 import { initServices } from './services.js';
-
-const REQUIRED_ENV = [
-
-validateRequiredEnv(REQUIRED_ENV);
 
 initSentry({
   dsn: process.env['INTEXURAOS_SENTRY_DSN'],

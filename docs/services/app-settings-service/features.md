@@ -21,12 +21,14 @@ App-settings-service provides:
 ## Key Features
 
 **Pricing (`/settings/pricing`):**
+
 - All 4 providers
 - Per-model pricing
 - Input/output token costs
 - Grounding costs
 
 **Usage Costs (`/settings/usage-costs`):**
+
 - Daily aggregation
 - Monthly breakdown
 - By-model breakdown

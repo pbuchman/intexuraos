@@ -25,7 +25,7 @@ curl -X POST https://mobile-notifications.intexuraos.com/mobile-notifications/co
   "success": true,
   "data": {
     "id": "conn_123",
-    "signature": "abc123...",  // Save this - shown only once
+    "signature": "abc123...", // Save this - shown only once
     "deviceLabel": "iPhone 15 Pro",
     "createdAt": "2026-01-13T12:00:00Z"
   }
@@ -48,6 +48,6 @@ curl -X PATCH https://mobile-notifications.intexuraos.com/mobile-notifications/f
 ## Troubleshooting
 
 | Issue          | Solution                                   |
-| --------------  | ------------------------------------------  |
+| -------------- | ------------------------------------------ |
 | Lost signature | Reconnect device (new signature generated) |
 | Not receiving  | Check filter settings                      |

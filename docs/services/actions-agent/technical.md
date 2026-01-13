@@ -68,127 +68,127 @@ sequenceDiagram
 
 ### Public Endpoints
 
-| Method   | Path                                     | Description                              | Auth           |
-| --------  | ----------------------------------------  | ----------------------------------------  | --------------  |
-| GET      | `/actions`                               | List actions for authenticated user      | Bearer token   |
-| PATCH    | `/actions/:actionId`                     | Update action status or type             | Bearer token   |
-| DELETE   | `/actions/:actionId`                     | Delete an action                         | Bearer token   |
-| POST     | `/actions/batch`                         | Fetch multiple actions by IDs (max 50)   | Bearer token   |
-| POST     | `/actions/:actionId/execute`             | Synchronously execute an action          | Bearer token   |
-| POST     | `/actions/:actionId/resolve-duplicate`   | Skip or update duplicate bookmark        | Bearer token   |
+| Method | Path                                   | Description                            | Auth         |
+| ------ | -------------------------------------- | -------------------------------------- | ------------ |
+| GET    | `/actions`                             | List actions for authenticated user    | Bearer token |
+| PATCH  | `/actions/:actionId`                   | Update action status or type           | Bearer token |
+| DELETE | `/actions/:actionId`                   | Delete an action                       | Bearer token |
+| POST   | `/actions/batch`                       | Fetch multiple actions by IDs (max 50) | Bearer token |
+| POST   | `/actions/:actionId/execute`           | Synchronously execute an action        | Bearer token |
+| POST   | `/actions/:actionId/resolve-duplicate` | Skip or update duplicate bookmark      | Bearer token |
 
 ### Internal Endpoints
 
-| Method   | Path                                | Description                                        | Auth                      |
-| --------  | -----------------------------------  | --------------------------------------------------  | -------------------------  |
-| POST     | `/internal/actions`                 | Create new action from classification              | Internal header or OIDC   |
-| POST     | `/internal/actions/:actionType`     | Process action from Pub/Sub (type-specific)        | Pub/Sub OIDC              |
-| POST     | `/internal/actions/process`         | Process action from Pub/Sub (unified)              | Pub/Sub OIDC              |
-| POST     | `/internal/actions/retry-pending`   | Retry actions stuck in pending (Cloud Scheduler)   | OIDC or Internal          |
+| Method | Path                              | Description                                      | Auth                    |
+| ------ | --------------------------------- | ------------------------------------------------ | ----------------------- |
+| POST   | `/internal/actions`               | Create new action from classification            | Internal header or OIDC |
+| POST   | `/internal/actions/:actionType`   | Process action from Pub/Sub (type-specific)      | Pub/Sub OIDC            |
+| POST   | `/internal/actions/process`       | Process action from Pub/Sub (unified)            | Pub/Sub OIDC            |
+| POST   | `/internal/actions/retry-pending` | Retry actions stuck in pending (Cloud Scheduler) | OIDC or Internal        |
 
 ## Domain Models
 
 ### Action
 
-| Field          | Type                      | Description                               |
-| --------------  | -------------------------  | -----------------------------------------  |
-| `id`           | string (UUID)             | Unique action identifier                  |
-| `userId`       | string                    | User who owns the action                  |
-| `commandId`    | string                    | Original command ID from commands-agent   |
-| `type`         | ActionType                | Classification result                     |
-| `confidence`   | number (0-1)              | Classification confidence score           |
-| `title`        | string                    | Action title/description                  |
-| `status`       | ActionStatus              | Current lifecycle state                   |
-| `payload`      | Record<string, unknown>   | Action-specific data                      |
-| `createdAt`    | string (ISO 8601)         | Creation timestamp                        |
-| `updatedAt`    | string (ISO 8601)         | Last update timestamp                     |
+| Field        | Type                    | Description                             |
+| ------------ | ----------------------- | --------------------------------------- |
+| `id`         | string (UUID)           | Unique action identifier                |
+| `userId`     | string                  | User who owns the action                |
+| `commandId`  | string                  | Original command ID from commands-agent |
+| `type`       | ActionType              | Classification result                   |
+| `confidence` | number (0-1)            | Classification confidence score         |
+| `title`      | string                  | Action title/description                |
+| `status`     | ActionStatus            | Current lifecycle state                 |
+| `payload`    | Record<string, unknown> | Action-specific data                    |
+| `createdAt`  | string (ISO 8601)       | Creation timestamp                      |
+| `updatedAt`  | string (ISO 8601)       | Last update timestamp                   |
 
 ### ActionType Enum
 
-| Value        | Handler                       |
-| ------------  | -----------------------------  |
-| `todo`       | HandleTodoActionUseCase       |
-| `research`   | HandleResearchActionUseCase   |
-| `note`       | HandleNoteActionUseCase       |
-| `link`       | HandleLinkActionUseCase       |
-| `calendar`   | Not implemented               |
-| `reminder`   | Not implemented               |
+| Value      | Handler                     |
+| ---------- | --------------------------- |
+| `todo`     | HandleTodoActionUseCase     |
+| `research` | HandleResearchActionUseCase |
+| `note`     | HandleNoteActionUseCase     |
+| `link`     | HandleLinkActionUseCase     |
+| `calendar` | Not implemented             |
+| `reminder` | Not implemented             |
 
 ### ActionStatus Enum
 
-| Value                 | Description                              |
-| ---------------------  | ----------------------------------------  |
-| `pending`             | Initial state, awaiting processing       |
-| `awaiting_approval`   | Low confidence, requires user approval   |
-| `processing`          | Handler is executing                     |
-| `completed`           | Successfully executed                    |
-| `failed`              | Execution failed                         |
-| `rejected`            | User rejected the action                 |
-| `archived`            | No longer relevant                       |
+| Value               | Description                            |
+| ------------------- | -------------------------------------- |
+| `pending`           | Initial state, awaiting processing     |
+| `awaiting_approval` | Low confidence, requires user approval |
+| `processing`        | Handler is executing                   |
+| `completed`         | Successfully executed                  |
+| `failed`            | Execution failed                       |
+| `rejected`          | User rejected the action               |
+| `archived`          | No longer relevant                     |
 
 ### ActionTransition
 
-| Field         | Type                | Description                |
-| -------------  | -------------------  | --------------------------  |
-| `id`          | string              | Unique transition ID       |
-| `actionId`    | string              | Reference to action        |
-| `fromType`    | ActionType          | Original type              |
-| `toType`      | ActionType          | Corrected type             |
-| `userId`      | string              | User who made correction   |
-| `timestamp`   | string (ISO 8601)   | When correction occurred   |
+| Field       | Type              | Description              |
+| ----------- | ----------------- | ------------------------ |
+| `id`        | string            | Unique transition ID     |
+| `actionId`  | string            | Reference to action      |
+| `fromType`  | ActionType        | Original type            |
+| `toType`    | ActionType        | Corrected type           |
+| `userId`    | string            | User who made correction |
+| `timestamp` | string (ISO 8601) | When correction occurred |
 
 ## Pub/Sub Events
 
 ### Published
 
-| Event Type         | Topic             | Payload                |
-| ------------------  | -----------------  | ----------------------  |
-| `action.created`   | `actions` queue   | `ActionCreatedEvent`   |
+| Event Type       | Topic           | Payload              |
+| ---------------- | --------------- | -------------------- |
+| `action.created` | `actions` queue | `ActionCreatedEvent` |
 
 ### Subscribed
 
-| Subscription                  | Handler                           |
-| -----------------------------  | ---------------------------------  |
-| `actions-{type}` (per-type)   | `/internal/actions/:actionType`   |
-| `actions-queue` (unified)     | `/internal/actions/process`       |
+| Subscription                | Handler                         |
+| --------------------------- | ------------------------------- |
+| `actions-{type}` (per-type) | `/internal/actions/:actionType` |
+| `actions-queue` (unified)   | `/internal/actions/process`     |
 
 ## Dependencies
 
 ### Internal Services
 
-| Service             | Purpose                                |
-| -------------------  | --------------------------------------  |
-| `commands-agent`    | Create new commands from transitions   |
-| `research-agent`    | Execute research actions               |
-| `todos-agent`       | Execute todo actions                   |
-| `notes-agent`       | Execute note actions                   |
-| `bookmarks-agent`   | Execute link actions                   |
-| `user-service`      | Fetch user API keys                    |
+| Service           | Purpose                              |
+| ----------------- | ------------------------------------ |
+| `commands-agent`  | Create new commands from transitions |
+| `research-agent`  | Execute research actions             |
+| `todos-agent`     | Execute todo actions                 |
+| `notes-agent`     | Execute note actions                 |
+| `bookmarks-agent` | Execute link actions                 |
+| `user-service`    | Fetch user API keys                  |
 
 ### Infrastructure
 
-| Component                                      | Purpose                    |
-| ----------------------------------------------  | --------------------------  |
-| Firestore (`actions` collection)               | Action persistence         |
-| Firestore (`actions_transitions` collection)   | Type correction tracking   |
-| Pub/Sub (`actions` queue)                      | Event distribution         |
-| Pub/Sub (`whatsapp-send`)                      | Notification delivery      |
+| Component                                    | Purpose                  |
+| -------------------------------------------- | ------------------------ |
+| Firestore (`actions` collection)             | Action persistence       |
+| Firestore (`actions_transitions` collection) | Type correction tracking |
+| Pub/Sub (`actions` queue)                    | Event distribution       |
+| Pub/Sub (`whatsapp-send`)                    | Notification delivery    |
 
 ## Configuration
 
-| Environment Variable                | Required   | Description                                  |
-| -----------------------------------  | ----------  | --------------------------------------------  |
-| `INTEXURAOS_RESEARCH_AGENT_URL`     | Yes        | Research-agent base URL                      |
-| `INTEXURAOS_USER_SERVICE_URL`       | Yes        | User-service base URL                        |
-| `INTEXURAOS_COMMANDS_AGENT_URL`     | Yes        | Commands-agent base URL                      |
-| `INTEXURAOS_TODOS_AGENT_URL`        | Yes        | Todos-agent base URL                         |
-| `INTEXURAOS_NOTES_AGENT_URL`        | Yes        | Notes-agent base URL                         |
-| `INTEXURAOS_BOOKMARKS_AGENT_URL`    | Yes        | Bookmarks-agent base URL                     |
-| `INTEXURAOS_INTERNAL_AUTH_TOKEN`    | Yes        | Shared secret for service-to-service calls   |
-| `INTEXURAOS_GCP_PROJECT_ID`         | Yes        | Google Cloud project ID                      |
-| `INTEXURAOS_PUBSUB_ACTIONS_QUEUE`   | Yes        | Unified actions queue topic name             |
-| `INTEXURAOS_PUBSUB_WHATSAPP_SEND`   | Yes        | WhatsApp send topic                          |
-| `INTEXURAOS_WEB_APP_URL`            | Yes        | Web app URL for notification links           |
+| Environment Variable              | Required | Description                                |
+| --------------------------------- | -------- | ------------------------------------------ |
+| `INTEXURAOS_RESEARCH_AGENT_URL`   | Yes      | Research-agent base URL                    |
+| `INTEXURAOS_USER_SERVICE_URL`     | Yes      | User-service base URL                      |
+| `INTEXURAOS_COMMANDS_AGENT_URL`   | Yes      | Commands-agent base URL                    |
+| `INTEXURAOS_TODOS_AGENT_URL`      | Yes      | Todos-agent base URL                       |
+| `INTEXURAOS_NOTES_AGENT_URL`      | Yes      | Notes-agent base URL                       |
+| `INTEXURAOS_BOOKMARKS_AGENT_URL`  | Yes      | Bookmarks-agent base URL                   |
+| `INTEXURAOS_INTERNAL_AUTH_TOKEN`  | Yes      | Shared secret for service-to-service calls |
+| `INTEXURAOS_GCP_PROJECT_ID`       | Yes      | Google Cloud project ID                    |
+| `INTEXURAOS_PUBSUB_ACTIONS_QUEUE` | Yes      | Unified actions queue topic name           |
+| `INTEXURAOS_PUBSUB_WHATSAPP_SEND` | Yes      | WhatsApp send topic                        |
+| `INTEXURAOS_WEB_APP_URL`          | Yes      | Web app URL for notification links         |
 
 ## Gotchas
 

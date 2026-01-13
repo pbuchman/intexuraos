@@ -21,7 +21,7 @@ curl https://api-docs-hub.intexuraos.com/health
 
 ## Troubleshooting
 
-| Issue              | Cause                   | Solution                    |
-| ------------------  | -----------------------  | ---------------------------  |
-| Spec not loading   | Service down            | Check service status        |
-| CORS error         | Service blocks origin   | Configure CORS on service   |
+| Issue            | Cause                 | Solution                  |
+| ---------------- | --------------------- | ------------------------- |
+| Spec not loading | Service down          | Check service status      |
+| CORS error       | Service blocks origin | Configure CORS on service |

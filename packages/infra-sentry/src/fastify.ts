@@ -65,35 +65,32 @@ export function setupSentryErrorHandler(app: FastifyInstance): void {
       return;
     }
 
-    if (
-      typeof error === 'object' &&
-      error !== null &&
-      'validation' in error &&
-      Array.isArray((error as { validation?: unknown }).validation)
-    ) {
-      const validation = (
-        error as {
-          validation: { instancePath?: string; message?: string }[];
-          message?: string;
-        }
-      ).validation;
+    // Handle validation errors
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+    if (typeof error === 'object' && error !== null && 'validation' in error) {
+      const errorWithValidation = error as {
+        validation?: { instancePath?: string; message?: string }[];
+      };
+      if (Array.isArray(errorWithValidation.validation)) {
+        const validation = errorWithValidation.validation;
 
-      const errors = validation.map((v) => {
-        let path = (v.instancePath ?? '').replace(/^\//, '').replaceAll('/', '.');
-        if (path === '') {
-          const requiredMatch = /must have required property '([^']+)'/.exec(v.message ?? '');
-          path = requiredMatch?.[1] ?? '<root>';
-        }
+        const errors = validation.map((v) => {
+          let path = (v.instancePath ?? '').replace(/^\//, '').replaceAll('/', '.');
+          if (path === '') {
+            const requiredMatch = /must have required property '([^']+)'/.exec(v.message ?? '');
+            path = requiredMatch?.[1] ?? '<root>';
+          }
 
-        return {
-          path,
-          message: v.message ?? 'Invalid value',
-        };
-      });
+          return {
+            path,
+            message: v.message ?? 'Invalid value',
+          };
+        });
 
-      reply.status(400);
-      await fastifyReply.fail('INVALID_REQUEST', 'Validation failed', undefined, { errors });
-      return;
+        reply.status(400);
+        await fastifyReply.fail('INVALID_REQUEST', 'Validation failed', undefined, { errors });
+        return;
+      }
     }
 
     // Return error response

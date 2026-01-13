@@ -75,12 +75,7 @@
       "name": "Notes Agent",
       "category": "content",
       "summary": "Lightweight note-taking service",
-      "features": [
-        "CRUD operations",
-        "Tag support",
-        "Draft/active status",
-        "Source tracking"
-      ],
+      "features": ["CRUD operations", "Tag support", "Draft/active status", "Source tracking"],
       "endpoints": 5,
       "docs": "services/notes-agent"
     },
@@ -229,11 +224,7 @@
       "name": "PromptVault Service",
       "category": "content",
       "summary": "Prompt template management with Notion sync",
-      "features": [
-        "CRUD operations",
-        "Notion database sync",
-        "Created/updated tracking"
-      ],
+      "features": ["CRUD operations", "Notion database sync", "Created/updated tracking"],
       "endpoints": 5,
       "docs": "services/promptvault-service"
     }
@@ -257,7 +248,14 @@
     "infrastructure": {
       "name": "Infrastructure",
       "description": "Core platform services",
-      "services": ["actions-agent", "web-agent", "image-service", "mobile-notifications-service", "api-docs-hub", "app-settings-service"]
+      "services": [
+        "actions-agent",
+        "web-agent",
+        "image-service",
+        "mobile-notifications-service",
+        "api-docs-hub",
+        "app-settings-service"
+      ]
     }
   },
   "stats": {

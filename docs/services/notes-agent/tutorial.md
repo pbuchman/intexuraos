@@ -88,8 +88,8 @@ curl -X POST https://notes-agent.intexuraos.com/notes \
 
 ## Troubleshooting
 
-| Issue           | Symptom              | Solution           |
-| ---------------  | -------------------- | ------------------  |
-| Auth failed      | 401 Unauthorized     | Check token validity |
-| Note not found   | 404 error             | Verify note ID       |
-| Invalid request  | 400 error             | Check required fields |
+| Issue           | Symptom          | Solution              |
+| --------------- | ---------------- | --------------------- |
+| Auth failed     | 401 Unauthorized | Check token validity  |
+| Note not found  | 404 error        | Verify note ID        |
+| Invalid request | 400 error        | Check required fields |
