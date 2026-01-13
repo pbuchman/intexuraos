@@ -19,13 +19,16 @@ Data-insights-agent manages user data sources, performs AI analysis using Gemini
 
 ### Composite Feeds
 
-| Method   | Path                        | Description           | Auth         |
-| --------  | ---------------------------  | ---------------------  | ------------  |
-| POST     | `/composite-feeds`          | Create composite feed | Bearer token |
-| GET      | `/composite-feeds`          | List composite feeds  | Bearer token |
-| GET      | `/composite-feeds/:id`      | Get composite feed    | Bearer token |
-| GET      | `/composite-feeds/:id/data` | Get feed data         | Bearer token |
-| DELETE   | `/composite-feeds/:id`      | Delete feed           | Bearer token |
+| Method   | Path                          | Description                     | Auth         |
+| --------  | -----------------------------  | -------------------------------  | ------------  |
+| POST     | `/composite-feeds`            | Create composite feed           | Bearer token |
+| GET      | `/composite-feeds`            | List composite feeds            | Bearer token |
+| GET      | `/composite-feeds/:id`        | Get composite feed              | Bearer token |
+| PUT      | `/composite-feeds/:id`        | Update composite feed           | Bearer token |
+| DELETE   | `/composite-feeds/:id`        | Delete feed                     | Bearer token |
+| GET      | `/composite-feeds/:id/schema` | Get JSON Schema for feed data   | Bearer token |
+| GET      | `/composite-feeds/:id/data`   | Get feed data                   | Bearer token |
+| GET      | `/composite-feeds/:id/snapshot` | Get pre-computed snapshot data | Bearer token |
 
 ### Data Insights
 
@@ -57,14 +60,27 @@ Data-insights-agent manages user data sources, performs AI analysis using Gemini
 
 ### CompositeFeed
 
-| Field       | Type     | Description           |
-| -----------  | --------  | ---------------------  |
-| `id`        | string   | Unique identifier     |
-| `userId`    | string   | Owner user ID         |
-| `name`      | string   | Feed name             |
-| `sourceIds` | string[] | Data source IDs       |
-| `createdAt` | Date     | Creation timestamp    |
-| `updatedAt` | Date     | Last update timestamp |
+| Field                | Type                            | Description                        |
+| -------------------  | -------------------------------  | ----------------------------------  |
+| `id`                 | string                          | Unique identifier                  |
+| `userId`             | string                          | Owner user ID                      |
+| `name`               | string                          | AI-generated feed name             |
+| `purpose`            | string                          | User-provided feed purpose         |
+| `staticSourceIds`    | string[]                        | Data source IDs                    |
+| `notificationFilters` | NotificationFilterConfig[]     | Notification filter configs        |
+| `dataInsights`       | DataInsight[] | null          | AI analysis results                |
+| `createdAt`          | Date                            | Creation timestamp                 |
+| `updatedAt`          | Date                            | Last update timestamp              |
+
+### NotificationFilterConfig
+
+| Field      | Type     | Description                        |
+| ---------- | --------  | ----------------------------------  |
+| `id`       | string   | Filter identifier                  |
+| `name`     | string   | Filter name                        |
+| `app`      | string[] | Multi-select app filter            |
+| `source`   | string   | Single-select source filter        |
+| `title`    | string   | Title filter substring match       |
 
 ### Snapshot
 
