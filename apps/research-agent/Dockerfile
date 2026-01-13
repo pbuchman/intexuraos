@@ -1,5 +1,5 @@
 # IntexuraOS Research Agent Dockerfile
-# Multi-stage build - esbuild generates minimal package.json with transitive deps
+# Multi-stage build - esbuild bundles code, we only need runtime deps
 
 # ==========================================
 # Stage 1: Builder
@@ -30,13 +30,12 @@ COPY apps/research-agent/ ./apps/research-agent/
 # Build service (esbuild bundles everything into one file)
 RUN pnpm run --filter @intexuraos/research-agent build
 
-# 5. EXTRACT PROD DEPS using esbuild-generated package.json
-# The build script generates dist/package.json with transitive dependencies
-# We create a minimal package.json and install prod deps
-RUN cd /app/apps/research-agent/dist && \
-    node -e "const fs=require('fs'); const pkg=JSON.parse(fs.readFileSync('package.json')); \
-    fs.writeFileSync('package.json', JSON.stringify({name:'prod',type:'module',dependencies:pkg.dependencies}))" && \
-    CI=true pnpm install --prod --frozen-lockfile
+# 5. INSTALL PROD DEPS in dist folder
+# Use the esbuild-generated package.json which has transitive dependencies
+# Copy lockfile for resolution, install without workspace checks
+WORKDIR /app/apps/research-agent/dist
+COPY pnpm-lock.yaml ./
+RUN CI=true pnpm install --prod --no-frozen-lockfile
 
 # ==========================================
 # Stage 2: Production
