@@ -1,21 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { err, ok } from '@intexuraos/common-core';
-import { FakePricingContext } from '@intexuraos/llm-pricing';
 import { createTodoItemExtractionService } from '../infra/gemini/todoItemExtractionService.js';
 import type { UserServiceClient } from '../infra/user/userServiceClient.js';
+import type { LlmGenerateClient } from '@intexuraos/llm-factory';
 
 const mockGenerate = vi.fn();
 
-vi.mock('@intexuraos/infra-gemini', () => ({
-  createGeminiClient: vi.fn().mockImplementation(() => ({
-    generate: mockGenerate,
-  })),
-}));
-
-const fakePricingContext = new FakePricingContext();
-
 describe('todoItemExtractionService', () => {
   let mockUserServiceClient: UserServiceClient;
+  let mockLlmClient: LlmGenerateClient;
 
   beforeEach(() => {
     mockGenerate.mockReset();
@@ -35,6 +28,8 @@ describe('todoItemExtractionService', () => {
         usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150, costUsd: 0.001 },
       })
     );
+
+    mockLlmClient = { generate: mockGenerate };
   });
 
   afterEach(() => {
@@ -42,30 +37,47 @@ describe('todoItemExtractionService', () => {
   });
 
   function createMockUserServiceClient(
-    result: 'ok' | 'no_api_key' | 'api_error' | 'network_error' = 'ok'
+    result: 'ok' | 'no_api_key' | 'api_error' | 'network_error' | 'unsupported_model' = 'ok'
   ): UserServiceClient {
     switch (result) {
       case 'ok':
         return {
+          getLlmClient: vi.fn().mockResolvedValue(ok(mockLlmClient)),
           getGeminiApiKey: vi.fn().mockResolvedValue(ok('test-api-key')),
         };
       case 'no_api_key':
         return {
+          getLlmClient: vi
+            .fn()
+            .mockResolvedValue(err({ code: 'NO_API_KEY' as const, message: 'No API key configured for google' })),
           getGeminiApiKey: vi
             .fn()
             .mockResolvedValue(err({ code: 'NO_API_KEY' as const, message: 'No API key' })),
         };
       case 'api_error':
         return {
+          getLlmClient: vi
+            .fn()
+            .mockResolvedValue(err({ code: 'API_ERROR' as const, message: 'Service error' })),
           getGeminiApiKey: vi
             .fn()
             .mockResolvedValue(err({ code: 'API_ERROR' as const, message: 'Service error' })),
         };
       case 'network_error':
         return {
+          getLlmClient: vi
+            .fn()
+            .mockResolvedValue(err({ code: 'NETWORK_ERROR' as const, message: 'Network error' })),
           getGeminiApiKey: vi
             .fn()
             .mockResolvedValue(err({ code: 'NETWORK_ERROR' as const, message: 'Network error' })),
+        };
+      case 'unsupported_model':
+        return {
+          getLlmClient: vi
+            .fn()
+            .mockResolvedValue(err({ code: 'UNSUPPORTED_MODEL' as const, message: 'Unsupported model' })),
+          getGeminiApiKey: vi.fn().mockResolvedValue(ok('test-api-key')),
         };
     }
   }
@@ -94,7 +106,7 @@ describe('todoItemExtractionService', () => {
 
       mockGenerate.mockResolvedValue(ok({ content: validResponse, usage: mockUsage }));
       mockUserServiceClient = createMockUserServiceClient('ok');
-      const service = createTodoItemExtractionService(mockUserServiceClient, fakePricingContext);
+      const service = createTodoItemExtractionService(mockUserServiceClient);
 
       const result = await service.extractItems('user-123', 'Buy groceries and call mom');
 
@@ -112,41 +124,41 @@ describe('todoItemExtractionService', () => {
 
     it('returns NO_API_KEY error when user has no API key', async () => {
       mockUserServiceClient = createMockUserServiceClient('no_api_key');
-      const service = createTodoItemExtractionService(mockUserServiceClient, fakePricingContext);
+      const service = createTodoItemExtractionService(mockUserServiceClient);
 
       const result = await service.extractItems('user-123', 'Test description');
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
         expect(result.error.code).toBe('NO_API_KEY');
-        expect(result.error.message).toBe('Please configure your Gemini API key in settings first');
+        expect(result.error.message).toBe('No API key configured for google');
       }
     });
 
     it('returns USER_SERVICE_ERROR when user service fails with API_ERROR', async () => {
       mockUserServiceClient = createMockUserServiceClient('api_error');
-      const service = createTodoItemExtractionService(mockUserServiceClient, fakePricingContext);
+      const service = createTodoItemExtractionService(mockUserServiceClient);
 
       const result = await service.extractItems('user-123', 'Test description');
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
         expect(result.error.code).toBe('USER_SERVICE_ERROR');
-        expect(result.error.message).toBe('Failed to fetch API key: Service error');
+        expect(result.error.message).toBe('Failed to get LLM client: Service error');
         expect(result.error.details?.userServiceError).toBe('Service error');
       }
     });
 
     it('returns USER_SERVICE_ERROR when user service fails with NETWORK_ERROR', async () => {
       mockUserServiceClient = createMockUserServiceClient('network_error');
-      const service = createTodoItemExtractionService(mockUserServiceClient, fakePricingContext);
+      const service = createTodoItemExtractionService(mockUserServiceClient);
 
       const result = await service.extractItems('user-123', 'Test description');
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
         expect(result.error.code).toBe('USER_SERVICE_ERROR');
-        expect(result.error.message).toBe('Failed to fetch API key: Network error');
+        expect(result.error.message).toBe('Failed to get LLM client: Network error');
         expect(result.error.details?.userServiceError).toBe('Network error');
       }
     });
@@ -154,7 +166,7 @@ describe('todoItemExtractionService', () => {
     it('returns GENERATION_ERROR when LLM generation fails', async () => {
       mockGenerate.mockResolvedValue(err({ code: 'RATE_LIMIT_EXCEEDED', message: 'Rate limit exceeded' }));
       mockUserServiceClient = createMockUserServiceClient('ok');
-      const service = createTodoItemExtractionService(mockUserServiceClient, fakePricingContext);
+      const service = createTodoItemExtractionService(mockUserServiceClient);
 
       const result = await service.extractItems('user-123', 'Test description');
 
@@ -169,7 +181,7 @@ describe('todoItemExtractionService', () => {
     it('returns INVALID_RESPONSE when JSON parsing fails', async () => {
       mockGenerate.mockResolvedValue(ok({ content: 'not valid json', usage: mockUsage }));
       mockUserServiceClient = createMockUserServiceClient('ok');
-      const service = createTodoItemExtractionService(mockUserServiceClient, fakePricingContext);
+      const service = createTodoItemExtractionService(mockUserServiceClient);
 
       const result = await service.extractItems('user-123', 'Test description');
 
@@ -190,7 +202,7 @@ describe('todoItemExtractionService', () => {
 
       mockGenerate.mockResolvedValue(ok({ content: invalidResponse, usage: mockUsage }));
       mockUserServiceClient = createMockUserServiceClient('ok');
-      const service = createTodoItemExtractionService(mockUserServiceClient, fakePricingContext);
+      const service = createTodoItemExtractionService(mockUserServiceClient);
 
       const result = await service.extractItems('user-123', 'Test description');
 
@@ -210,7 +222,7 @@ describe('todoItemExtractionService', () => {
 
       mockGenerate.mockResolvedValue(ok({ content: invalidResponse, usage: mockUsage }));
       mockUserServiceClient = createMockUserServiceClient('ok');
-      const service = createTodoItemExtractionService(mockUserServiceClient, fakePricingContext);
+      const service = createTodoItemExtractionService(mockUserServiceClient);
 
       const result = await service.extractItems('user-123', 'Test description');
 
@@ -235,7 +247,7 @@ describe('todoItemExtractionService', () => {
 
       mockGenerate.mockResolvedValue(ok({ content: invalidResponse, usage: mockUsage }));
       mockUserServiceClient = createMockUserServiceClient('ok');
-      const service = createTodoItemExtractionService(mockUserServiceClient, fakePricingContext);
+      const service = createTodoItemExtractionService(mockUserServiceClient);
 
       const result = await service.extractItems('user-123', 'Test description');
 
@@ -260,7 +272,7 @@ describe('todoItemExtractionService', () => {
 
       mockGenerate.mockResolvedValue(ok({ content: invalidResponse, usage: mockUsage }));
       mockUserServiceClient = createMockUserServiceClient('ok');
-      const service = createTodoItemExtractionService(mockUserServiceClient, fakePricingContext);
+      const service = createTodoItemExtractionService(mockUserServiceClient);
 
       const result = await service.extractItems('user-123', 'Test description');
 
@@ -278,7 +290,7 @@ describe('todoItemExtractionService', () => {
 
       mockGenerate.mockResolvedValue(ok({ content: validResponse, usage: mockUsage }));
       mockUserServiceClient = createMockUserServiceClient('ok');
-      const service = createTodoItemExtractionService(mockUserServiceClient, fakePricingContext);
+      const service = createTodoItemExtractionService(mockUserServiceClient);
 
       const result = await service.extractItems('user-123', 'No actionable items here');
 
@@ -303,7 +315,7 @@ describe('todoItemExtractionService', () => {
 
       mockGenerate.mockResolvedValue(ok({ content: validResponse, usage: mockUsage }));
       mockUserServiceClient = createMockUserServiceClient('ok');
-      const service = createTodoItemExtractionService(mockUserServiceClient, fakePricingContext);
+      const service = createTodoItemExtractionService(mockUserServiceClient);
 
       const result = await service.extractItems('user-123', 'Many tasks');
 
@@ -334,7 +346,7 @@ describe('todoItemExtractionService', () => {
 
       mockGenerate.mockResolvedValue(ok({ content: validResponse, usage: mockUsage }));
       mockUserServiceClient = createMockUserServiceClient('ok');
-      const service = createTodoItemExtractionService(mockUserServiceClient, fakePricingContext);
+      const service = createTodoItemExtractionService(mockUserServiceClient);
 
       const result = await service.extractItems('user-123', 'Test');
 
@@ -360,7 +372,7 @@ describe('todoItemExtractionService', () => {
 
       mockGenerate.mockResolvedValue(ok({ content: validResponse, usage: mockUsage }));
       mockUserServiceClient = createMockUserServiceClient('ok');
-      const service = createTodoItemExtractionService(mockUserServiceClient, fakePricingContext);
+      const service = createTodoItemExtractionService(mockUserServiceClient);
 
       const result = await service.extractItems('user-123', 'Test');
 
@@ -378,11 +390,11 @@ describe('todoItemExtractionService', () => {
         })
       );
       mockUserServiceClient = createMockUserServiceClient('ok');
-      const service = createTodoItemExtractionService(mockUserServiceClient, fakePricingContext);
+      const service = createTodoItemExtractionService(mockUserServiceClient);
 
       await service.extractItems('user-abc-123', 'Test description');
 
-      expect(mockUserServiceClient.getGeminiApiKey).toHaveBeenCalledWith('user-abc-123');
+      expect(mockUserServiceClient.getLlmClient).toHaveBeenCalledWith('user-abc-123');
     });
 
     it('includes raw response preview for JSON parse errors', async () => {
@@ -393,7 +405,7 @@ describe('todoItemExtractionService', () => {
         })
       );
       mockUserServiceClient = createMockUserServiceClient('ok');
-      const service = createTodoItemExtractionService(mockUserServiceClient, fakePricingContext);
+      const service = createTodoItemExtractionService(mockUserServiceClient);
 
       const result = await service.extractItems('user-123', 'Test');
 
@@ -421,7 +433,7 @@ describe('todoItemExtractionService', () => {
 
       mockGenerate.mockResolvedValue(ok({ content: responseWithMarkdown, usage: mockUsage }));
       mockUserServiceClient = createMockUserServiceClient('ok');
-      const service = createTodoItemExtractionService(mockUserServiceClient, fakePricingContext);
+      const service = createTodoItemExtractionService(mockUserServiceClient);
 
       const result = await service.extractItems('user-123', 'Buy milk');
 
@@ -440,7 +452,7 @@ describe('todoItemExtractionService', () => {
 
       mockGenerate.mockResolvedValue(ok({ content: invalidResponseWithMarkdown, usage: mockUsage }));
       mockUserServiceClient = createMockUserServiceClient('ok');
-      const service = createTodoItemExtractionService(mockUserServiceClient, fakePricingContext);
+      const service = createTodoItemExtractionService(mockUserServiceClient);
 
       const result = await service.extractItems('user-123', 'Test');
 
@@ -463,7 +475,7 @@ describe('todoItemExtractionService', () => {
 
       mockGenerate.mockResolvedValue(ok({ content: invalidSchemaWithMarkdown, usage: mockUsage }));
       mockUserServiceClient = createMockUserServiceClient('ok');
-      const service = createTodoItemExtractionService(mockUserServiceClient, fakePricingContext);
+      const service = createTodoItemExtractionService(mockUserServiceClient);
 
       const result = await service.extractItems('user-123', 'Test');
 
@@ -483,7 +495,7 @@ describe('todoItemExtractionService', () => {
 
       mockGenerate.mockResolvedValue(ok({ content: invalidResponse, usage: mockUsage }));
       mockUserServiceClient = createMockUserServiceClient('ok');
-      const service = createTodoItemExtractionService(mockUserServiceClient, fakePricingContext);
+      const service = createTodoItemExtractionService(mockUserServiceClient);
 
       const result = await service.extractItems('user-123', 'Test');
 
@@ -501,7 +513,7 @@ describe('todoItemExtractionService', () => {
 
       mockGenerate.mockResolvedValue(ok({ content: invalidResponse, usage: mockUsage }));
       mockUserServiceClient = createMockUserServiceClient('ok');
-      const service = createTodoItemExtractionService(mockUserServiceClient, fakePricingContext);
+      const service = createTodoItemExtractionService(mockUserServiceClient);
 
       const result = await service.extractItems('user-123', 'Test');
 
@@ -519,7 +531,7 @@ describe('todoItemExtractionService', () => {
 
       mockGenerate.mockResolvedValue(ok({ content: invalidResponse, usage: mockUsage }));
       mockUserServiceClient = createMockUserServiceClient('ok');
-      const service = createTodoItemExtractionService(mockUserServiceClient, fakePricingContext);
+      const service = createTodoItemExtractionService(mockUserServiceClient);
 
       const result = await service.extractItems('user-123', 'Test');
 
@@ -537,7 +549,7 @@ describe('todoItemExtractionService', () => {
 
       mockGenerate.mockResolvedValue(ok({ content: invalidResponse, usage: mockUsage }));
       mockUserServiceClient = createMockUserServiceClient('ok');
-      const service = createTodoItemExtractionService(mockUserServiceClient, fakePricingContext);
+      const service = createTodoItemExtractionService(mockUserServiceClient);
 
       const result = await service.extractItems('user-123', 'Test');
 
@@ -555,7 +567,7 @@ describe('todoItemExtractionService', () => {
 
       mockGenerate.mockResolvedValue(ok({ content: invalidResponse, usage: mockUsage }));
       mockUserServiceClient = createMockUserServiceClient('ok');
-      const service = createTodoItemExtractionService(mockUserServiceClient, fakePricingContext);
+      const service = createTodoItemExtractionService(mockUserServiceClient);
 
       const result = await service.extractItems('user-123', 'Test');
 
@@ -568,7 +580,7 @@ describe('todoItemExtractionService', () => {
     it('returns INVALID_RESPONSE when JSON root is not an object', async () => {
       mockGenerate.mockResolvedValue(ok({ content: '["not", "an", "object"]', usage: mockUsage }));
       mockUserServiceClient = createMockUserServiceClient('ok');
-      const service = createTodoItemExtractionService(mockUserServiceClient, fakePricingContext);
+      const service = createTodoItemExtractionService(mockUserServiceClient);
 
       const result = await service.extractItems('user-123', 'Test');
 

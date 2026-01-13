@@ -1,12 +1,9 @@
 import type { Result } from '@intexuraos/common-core';
 import { err, getErrorMessage, ok } from '@intexuraos/common-core';
-import { createGeminiClient } from '@intexuraos/infra-gemini';
-import { LlmModels, type FastModel } from '@intexuraos/llm-contract';
 import { itemExtractionPrompt } from '@intexuraos/llm-common';
-import type { IPricingContext } from '@intexuraos/llm-pricing';
+import type { LlmGenerateClient } from '@intexuraos/llm-factory';
 import type { UserServiceClient } from '../user/userServiceClient.js';
 
-const EXTRACTION_MODEL: FastModel = LlmModels.Gemini25Flash;
 const MAX_ITEMS = 50;
 const MAX_DESCRIPTION_LENGTH = 10000;
 
@@ -36,47 +33,38 @@ export interface TodoItemExtractionService {
 }
 
 export function createTodoItemExtractionService(
-  userServiceClient: UserServiceClient,
-  pricingContext: IPricingContext
+  userServiceClient: UserServiceClient
 ): TodoItemExtractionService {
-  const pricing = pricingContext.getPricing(EXTRACTION_MODEL);
-
   return {
     async extractItems(
       userId: string,
       description: string
     ): Promise<Result<ExtractedItem[], ExtractionError>> {
-      const keyResult = await userServiceClient.getGeminiApiKey(userId);
+      const clientResult = await userServiceClient.getLlmClient(userId);
 
-      if (!keyResult.ok) {
-        const error = keyResult.error;
+      if (!clientResult.ok) {
+        const error = clientResult.error;
         if (error.code === 'NO_API_KEY') {
           return err({
             code: 'NO_API_KEY',
-            message: 'Please configure your Gemini API key in settings first',
+            message: error.message,
           });
         }
         return err({
           code: 'USER_SERVICE_ERROR',
-          message: `Failed to fetch API key: ${error.message}`,
+          message: `Failed to get LLM client: ${error.message}`,
           details: { userServiceError: error.message },
         });
       }
 
-      const apiKey = keyResult.value;
-      const geminiClient = createGeminiClient({
-        apiKey,
-        model: EXTRACTION_MODEL,
-        userId,
-        pricing,
-      });
+      const llmClient: LlmGenerateClient = clientResult.value;
 
       const prompt = itemExtractionPrompt.build(
         { description },
         { maxItems: MAX_ITEMS, maxDescriptionLength: MAX_DESCRIPTION_LENGTH }
       );
 
-      const result = await geminiClient.generate(prompt);
+      const result = await llmClient.generate(prompt);
 
       if (!result.ok) {
         const llmError = result.error;

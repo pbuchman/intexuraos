@@ -1,0 +1,16 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "./dist",
+    "rootDir": "./src"
+  },
+  "include": ["src/**/*.ts"],
+  "references": [
+    { "path": "../common-core" },
+    { "path": "../infra-gemini" },
+    { "path": "../infra-glm" },
+    { "path": "../llm-common" },
+    { "path": "../llm-contract" },
+    { "path": "../llm-pricing" }
+  ]
+}

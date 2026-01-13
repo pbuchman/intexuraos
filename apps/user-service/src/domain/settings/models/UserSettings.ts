@@ -3,13 +3,18 @@
  * Represents user preferences and configuration.
  */
 
-import type { LlmProvider } from '@intexuraos/llm-contract';
+import type { LlmProvider, LLMModel } from '@intexuraos/llm-contract';
 import type { EncryptedValue } from '../../../infra/encryption.js';
 
 /**
  * LLM provider identifiers.
  */
 export type { LlmProvider };
+
+/**
+ * LLM model identifiers.
+ */
+export type { LLMModel };
 
 /**
  * Result of testing an LLM API key.
@@ -29,6 +34,7 @@ export interface LlmApiKeys {
   openai?: EncryptedValue; // OpenAI API key
   anthropic?: EncryptedValue; // Anthropic API key
   perplexity?: EncryptedValue; // Perplexity API key
+  zhipu?: EncryptedValue; // Zhipu GLM API key
 }
 
 /**
@@ -39,6 +45,14 @@ export interface LlmTestResults {
   openai?: LlmTestResult;
   anthropic?: LlmTestResult;
   perplexity?: LlmTestResult;
+  zhipu?: LlmTestResult;
+}
+
+/**
+ * LLM preferences for user-selected models.
+ */
+export interface LlmPreferences {
+  defaultModel: LLMModel; // User's preferred default LLM model
 }
 
 /**
@@ -66,6 +80,7 @@ export interface UserSettings {
   notifications?: NotificationSettings;
   llmApiKeys?: LlmApiKeys;
   llmTestResults?: LlmTestResults;
+  llmPreferences?: LlmPreferences; // User's LLM model preferences
   createdAt: string;
   updatedAt: string;
 }

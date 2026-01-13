@@ -55,8 +55,8 @@ resource "google_logging_metric" "cloudbuild_network_telemetry" {
   name        = "cloudbuild-network-telemetry"
   description = "Cloud Build network telemetry events by service (rx/tx Mbps in log payload)"
   filter      = <<-EOT
-    resource.type="cloudbuild.googleapis.com/Build"
-    jsonPayload.event="network_telemetry"
+    resource.type="build"
+    textPayload:"network_telemetry"
   EOT
 
   metric_descriptor {
@@ -71,7 +71,7 @@ resource "google_logging_metric" "cloudbuild_network_telemetry" {
   }
 
   label_extractors = {
-    "service" = "EXTRACT(jsonPayload.service)"
+    "service" = "REGEXP_EXTRACT(textPayload, \"service\\\": \\\"([^\\\"]+)\\\"\")"
   }
 }
 
@@ -466,7 +466,7 @@ resource "google_monitoring_dashboard" "main" {
               dataSets = [{
                 timeSeriesQuery = {
                   timeSeriesFilter = {
-                    filter = "metric.type=\"logging.googleapis.com/user/${google_logging_metric.cloudbuild_network_telemetry.name}\" resource.type=\"cloudbuild.googleapis.com/Build\""
+                    filter = "metric.type=\"logging.googleapis.com/user/${google_logging_metric.cloudbuild_network_telemetry.name}\" resource.type=\"build\""
                     aggregation = {
                       alignmentPeriod    = "60s"
                       perSeriesAligner   = "ALIGN_RATE"
@@ -475,7 +475,7 @@ resource "google_monitoring_dashboard" "main" {
                     }
                   }
                 }
-                plotType = "STACKED_BAR"
+                plotType = "LINE"
               }]
               yAxis = {
                 scale = "LINEAR"
