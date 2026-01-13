@@ -140,7 +140,6 @@ import { initServices } from './services.js';
 
 // Fail-fast startup validation - crashes immediately if required vars are missing
 const REQUIRED_ENV = [
-  'INTEXURAOS_SENTRY_DSN',
   'INTEXURAOS_GCP_PROJECT_ID', // Required for Firestore (remove if not using Firestore)
   'INTEXURAOS_AUTH_JWKS_URL',
   'INTEXURAOS_AUTH_ISSUER',

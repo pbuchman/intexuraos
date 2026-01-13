@@ -3,15 +3,8 @@
  */
 
 import { initSentry } from '@intexuraos/infra-sentry';
-import { validateRequiredEnv } from '@intexuraos/http-server';
 import { buildServer } from './server.js';
 import { loadConfig } from './config.js';
-
-const REQUIRED_ENV = [
-  'INTEXURAOS_SENTRY_DSN',
-];
-
-validateRequiredEnv(REQUIRED_ENV);
 
 initSentry({
   dsn: process.env['INTEXURAOS_SENTRY_DSN'],
