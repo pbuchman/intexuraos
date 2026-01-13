@@ -241,18 +241,18 @@ function AppRoutes(): React.JSX.Element {
         }
       />
       <Route
-        path="/data-insights/:id"
+        path="/data-insights/:feedId/visualizations"
         element={
           <ProtectedRoute>
-            <CompositeFeedFormPage />
+            <DataInsightsPage />
           </ProtectedRoute>
         }
       />
       <Route
-        path="/data-insights/composite-feeds/:feedId/visualizations"
+        path="/data-insights/:id"
         element={
           <ProtectedRoute>
-            <DataInsightsPage />
+            <CompositeFeedFormPage />
           </ProtectedRoute>
         }
       />
