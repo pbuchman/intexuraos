@@ -74,8 +74,16 @@ tf_changed_files=$(echo "$changed_files" | grep -E "^terraform/" || true)
 
 if [[ -z "$tf_changed_files" ]]; then
   # No terraform changes
+  echo "   ✅ No Terraform changes detected in this commit"
+  echo ""
   exit 0
 fi
+
+echo "   📝 Changed Terraform files:"
+echo "$tf_changed_files" | while IFS= read -r file; do
+  echo "      • $file"
+done
+echo ""
 
 # Function to add service to affected list
 add_affected_service() {
@@ -143,8 +151,32 @@ while IFS= read -r file; do
 done <<< "$tf_changed_files"
 
 # Output affected services (sorted, excluding _ci marker)
+# Check if we have any affected services (excluding _ci)
+have_affected=false
 for svc in "${!affected_services[@]}"; do
   if [[ "$svc" != "_ci" ]]; then
-    echo "$svc:${affected_services[$svc]}"
+    have_affected=true
+    break
+  fi
+done
+
+if [[ "$have_affected" == "false" ]]; then
+  echo "   ✅ No services affected by Terraform changes"
+  echo ""
+  exit 0
+fi
+
+echo "   🔧 Affected services:"
+for svc in "${!affected_services[@]}"; do
+  if [[ "$svc" != "_ci" ]]; then
+    reason="${affected_services[$svc]}"
+    case "$reason" in
+      global:*) echo "      • $svc (global infrastructure change)" ;;
+      module:*) echo "      • $svc (module: ${reason#module:})" ;;
+      unknown:*) echo "      • $svc (unknown module impact: ${reason#unknown:})" ;;
+      env-config) echo "      • $svc (environment config)" ;;
+      *) echo "      • $svc ($reason)" ;;
+    esac
   fi
 done | sort
+echo ""
