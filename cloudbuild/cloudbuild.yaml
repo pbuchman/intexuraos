@@ -1,5 +1,5 @@
 # IntexuraOS Cloud Build Configuration
-# Optimized with "Split-Wave Strategy" (Wave 2A/2B) to prevent Network Saturation.
+# Optimized with Strict Concurrency Limits (Max 3 builds at once) to prevent Network Saturation.
 
 steps:
   # ==========================================================
@@ -26,8 +26,7 @@ steps:
         pnpm install --frozen-lockfile
 
   # ==========================================================
-  # WAVE 1: CORE SERVICES
-  # These start immediately.
+  # WAVE 1: CORE SERVICES (Passed previously, kept as is)
   # ==========================================================
 
   # [user-service]
@@ -216,6 +215,7 @@ steps:
       - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
       - 'ENVIRONMENT=${_ENVIRONMENT}'
 
+
   # ==========================================================
   # DIAGNOSTICS CHECKPOINT (Mid-Build)
   # ==========================================================
@@ -230,8 +230,8 @@ steps:
         df -h
 
   # ==========================================================
-  # WAVE 2A: HEAVY AGENTS (Group 1)
-  # Waits for Wave 1 to clear network/CPU
+  # WAVE 2A: AGENTS (Group 1 - Limit 3)
+  # Waits for Wave 1
   # ==========================================================
 
   # [research-agent]
@@ -328,8 +328,8 @@ steps:
       - 'ENVIRONMENT=${_ENVIRONMENT}'
 
   # ==========================================================
-  # WAVE 2B: HEAVY AGENTS (Group 2)
-  # Waits for Wave 2A to finish (Reducing Concurrency)
+  # WAVE 2B: AGENTS (Group 2 - Limit 3)
+  # Waits for Wave 2A
   # ==========================================================
 
   # [data-insights-agent]
@@ -425,9 +425,10 @@ steps:
       - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
       - 'ENVIRONMENT=${_ENVIRONMENT}'
 
+
   # ==========================================================
-  # WAVE 3: FRONTEND & LIGHTWEIGHT SERVICES
-  # Waits for Wave 2B to finish
+  # WAVE 3A: FRONTEND UTILS (Group 3 - Limit 2)
+  # Waits for Wave 2B
   # ==========================================================
 
   # [api-docs-hub]
@@ -492,10 +493,15 @@ steps:
       - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
       - 'ENVIRONMENT=${_ENVIRONMENT}'
 
+  # ==========================================================
+  # WAVE 3B: WEB AGENTS (Group 4 - Limit 3)
+  # Waits for Wave 3A
+  # ==========================================================
+
   # [bookmarks-agent]
   - name: 'gcr.io/cloud-builders/docker'
     id: 'build-push-bookmarks-agent'
-    waitFor: ['build-push-data-insights-agent', 'build-push-notes-agent']
+    waitFor: ['build-push-api-docs-hub', 'build-push-mobile-notifications-service']
     entrypoint: 'bash'
     args:
       - '-c'
@@ -526,7 +532,7 @@ steps:
   # [calendar-agent]
   - name: 'gcr.io/cloud-builders/docker'
     id: 'build-push-calendar-agent'
-    waitFor: ['build-push-data-insights-agent', 'build-push-notes-agent']
+    waitFor: ['build-push-api-docs-hub', 'build-push-mobile-notifications-service']
     entrypoint: 'bash'
     args:
       - '-c'
@@ -557,7 +563,7 @@ steps:
   # [web-agent]
   - name: 'gcr.io/cloud-builders/docker'
     id: 'build-push-web-agent'
-    waitFor: ['build-push-data-insights-agent', 'build-push-notes-agent']
+    waitFor: ['build-push-api-docs-hub', 'build-push-mobile-notifications-service']
     entrypoint: 'bash'
     args:
       - '-c'
@@ -585,10 +591,14 @@ steps:
       - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
       - 'ENVIRONMENT=${_ENVIRONMENT}'
 
+  # ==========================================================
+  # WAVE 4: FRONTEND APP (Depends on config from others)
+  # ==========================================================
+
   # [web - frontend]
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     id: 'fetch-web-config'
-    waitFor: ['build-push-data-insights-agent', 'build-push-notes-agent']
+    waitFor: ['build-push-calendar-agent', 'build-push-bookmarks-agent']
     entrypoint: 'bash'
     args:
       - '-c'
