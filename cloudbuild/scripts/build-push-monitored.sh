@@ -44,13 +44,9 @@ echo "🚀 [START] Building $SERVICE_NAME using $DOCKERFILE_PATH"
     TX_MBPS=$(( (TB * 8) / 5 / 1048576 ))
 
     # Structured log to stdout (for build log visibility)
-    echo "{\"event\": \"network_telemetry\", \"service\": \"$SERVICE_NAME\", \"rx_mbps\": $RX_MBPS, \"tx_mbps\": $TX_MBPS}"
-
-    # Also write to Cloud Logging as structured jsonPayload
-    # This creates proper jsonPayload that the metrics can extract from
-    gcloud logging --project=intexuraos-dev-pbuchman write \
-      --payload='{"event": "network_telemetry", "service": "'"$SERVICE_NAME"'", "rx_mbps": '"$RX_MBPS"', "tx_mbps": '"$TX_MBPS"'"}' \
-      --log-name=cloudbuild-network-telemetry 2>/dev/null || true
+    # Format: NT service <name> rx <value> tx <value>
+    # Parseable by Google Logging metrics (NT = Network Telemetry)
+    echo "NT service $SERVICE_NAME rx $RX_MBPS tx $TX_MBPS"
 
     # Reset counters
     R1=$R2
