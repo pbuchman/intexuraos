@@ -39,7 +39,6 @@ import { buildResearchPrompt } from '@intexuraos/llm-common';
 import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
 import { type AuditContext, createAuditContext } from '@intexuraos/llm-audit';
 import {
-  LlmModels,
   LlmProviders,
   type LLMClient,
   type NormalizedUsage,
@@ -57,19 +56,8 @@ const GLM_API_BASE = 'https://open.bigmodel.cn/api/paas/v4';
 interface WebSearchToolCall {
   type: string;
   web_search?: {
-    search_result?: Array<{
-      link?: string;
-    }>;
+    search_result?: { link?: string }[];
   };
-}
-
-interface GlmChatCompletionMessage {
-  role: string;
-  content?: string;
-  tool_calls?: Array<{
-    type: string;
-    web_search?: unknown;
-  }>;
 }
 
 /**
@@ -138,7 +126,12 @@ export function createGlmClient(config: GlmConfig): GlmClient {
             },
             { role: 'user', content: researchPrompt },
           ],
-          tools: [{ type: 'web_search', web_search: { search_query: prompt } }],
+          tools: [
+            {
+              type: 'web_search',
+              web_search: { search_query: prompt },
+            } as unknown as OpenAI.Chat.Completions.ChatCompletionTool,
+          ],
           max_tokens: MAX_TOKENS,
         });
 
@@ -273,7 +266,7 @@ function extractSourcesFromResponse(response: OpenAI.Chat.Completions.ChatComple
 
   if (message?.tool_calls) {
     for (const toolCall of message.tool_calls) {
-      if (toolCall.type === 'web_search') {
+      if ((toolCall.type as string) === 'web_search') {
         const webSearchData = toolCall as unknown as WebSearchToolCall;
         const searchResults = webSearchData.web_search?.search_result;
         if (Array.isArray(searchResults)) {
@@ -296,7 +289,7 @@ function countWebSearchCalls(response: OpenAI.Chat.Completions.ChatCompletion): 
 
   let count = 0;
   for (const toolCall of message.tool_calls) {
-    if (toolCall.type === 'web_search') {
+    if ((toolCall.type as string) === 'web_search') {
       count++;
     }
   }

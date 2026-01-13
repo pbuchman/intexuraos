@@ -322,6 +322,7 @@ describe('pricingClient', () => {
         openai: { provider: LlmProviders.OpenAI, models: {}, updatedAt: '' },
         anthropic: { provider: LlmProviders.Anthropic, models: {}, updatedAt: '' },
         perplexity: { provider: LlmProviders.Perplexity, models: {}, updatedAt: '' },
+        zhipu: { provider: LlmProviders.Zhipu, models: {}, updatedAt: '' },
       };
 
       const context = new PricingContext(pricingWithInvalidModel);
