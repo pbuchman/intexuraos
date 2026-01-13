@@ -102,16 +102,18 @@ actions:
 
   retry_link:
     endpoint:
-      path: /actions/{actionId}/execute
+      path: /actions/{actionId}/resolve-duplicate
       method: POST
       baseUrl: ${INTEXURAOS_ACTIONS_AGENT_URL}
+      body:
+        action: update
     ui:
       label: Retry
       variant: primary
       icon: Play
-      confirmationMessage: 'Retry saving link?'
+      confirmationMessage: 'Update existing bookmark with fresh data?'
     onSuccess:
-      message: 'Link saved!'
+      message: 'Bookmark updated!'
       linkLabel: 'View Bookmark →'
 
   reject:

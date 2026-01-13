@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - development
-      - 'dev-**'
   workflow_dispatch:
     inputs:
       force_strategy:

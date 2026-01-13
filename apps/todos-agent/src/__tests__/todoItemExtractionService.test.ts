@@ -403,5 +403,179 @@ describe('todoItemExtractionService', () => {
         expect(result.error.details?.rawResponsePreview).toBe('{invalid json');
       }
     });
+
+    it('strips markdown code blocks from LLM response', async () => {
+      const responseWithMarkdown = `\`\`\`json
+{
+  "items": [
+    {
+      "title": "Buy milk",
+      "priority": "medium",
+      "dueDate": null,
+      "reasoning": "Explicitly mentioned"
+    }
+  ],
+  "summary": "Extracted 1 item"
+}
+\`\`\``;
+
+      mockGenerate.mockResolvedValue(ok({ content: responseWithMarkdown, usage: mockUsage }));
+      mockUserServiceClient = createMockUserServiceClient('ok');
+      const service = createTodoItemExtractionService(mockUserServiceClient, fakePricingContext);
+
+      const result = await service.extractItems('user-123', 'Buy milk');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toHaveLength(1);
+        expect(result.value[0]?.title).toBe('Buy milk');
+        expect(result.value[0]?.priority).toBe('medium');
+      }
+    });
+
+    it('handles invalid JSON wrapped in markdown code blocks', async () => {
+      const invalidResponseWithMarkdown = `\`\`\`json
+{invalid json}
+\`\`\``;
+
+      mockGenerate.mockResolvedValue(ok({ content: invalidResponseWithMarkdown, usage: mockUsage }));
+      mockUserServiceClient = createMockUserServiceClient('ok');
+      const service = createTodoItemExtractionService(mockUserServiceClient, fakePricingContext);
+
+      const result = await service.extractItems('user-123', 'Test');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('INVALID_RESPONSE');
+        expect(result.error.details?.wasWrappedInMarkdown).toBe(true);
+        expect(result.error.details?.originalLength).toBeGreaterThan(0);
+        expect(result.error.details?.cleanedLength).toBeGreaterThan(0);
+      }
+    });
+
+    it('handles schema validation failure with markdown code blocks', async () => {
+      const invalidSchemaWithMarkdown = `\`\`\`json
+{
+  "items": "not an array",
+  "summary": "Invalid"
+}
+\`\`\``;
+
+      mockGenerate.mockResolvedValue(ok({ content: invalidSchemaWithMarkdown, usage: mockUsage }));
+      mockUserServiceClient = createMockUserServiceClient('ok');
+      const service = createTodoItemExtractionService(mockUserServiceClient, fakePricingContext);
+
+      const result = await service.extractItems('user-123', 'Test');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('INVALID_RESPONSE');
+        expect(result.error.message).toBe('LLM returned invalid response format');
+        expect(result.error.details?.wasWrappedInMarkdown).toBe(true);
+      }
+    });
+
+    it('returns INVALID_RESPONSE when items array contains non-object element', async () => {
+      const invalidResponse = JSON.stringify({
+        items: ['string item instead of object', { title: 'Valid item', priority: null, dueDate: null, reasoning: 'test' }],
+        summary: 'Invalid items array',
+      });
+
+      mockGenerate.mockResolvedValue(ok({ content: invalidResponse, usage: mockUsage }));
+      mockUserServiceClient = createMockUserServiceClient('ok');
+      const service = createTodoItemExtractionService(mockUserServiceClient, fakePricingContext);
+
+      const result = await service.extractItems('user-123', 'Test');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('INVALID_RESPONSE');
+      }
+    });
+
+    it('returns INVALID_RESPONSE when item has wrong type for priority', async () => {
+      const invalidResponse = JSON.stringify({
+        items: [{ title: 'Test', priority: 123, dueDate: null, reasoning: 'test' }],
+        summary: 'Invalid priority type',
+      });
+
+      mockGenerate.mockResolvedValue(ok({ content: invalidResponse, usage: mockUsage }));
+      mockUserServiceClient = createMockUserServiceClient('ok');
+      const service = createTodoItemExtractionService(mockUserServiceClient, fakePricingContext);
+
+      const result = await service.extractItems('user-123', 'Test');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('INVALID_RESPONSE');
+      }
+    });
+
+    it('returns INVALID_RESPONSE when item has wrong type for dueDate', async () => {
+      const invalidResponse = JSON.stringify({
+        items: [{ title: 'Test', priority: null, dueDate: 123, reasoning: 'test' }],
+        summary: 'Invalid dueDate type',
+      });
+
+      mockGenerate.mockResolvedValue(ok({ content: invalidResponse, usage: mockUsage }));
+      mockUserServiceClient = createMockUserServiceClient('ok');
+      const service = createTodoItemExtractionService(mockUserServiceClient, fakePricingContext);
+
+      const result = await service.extractItems('user-123', 'Test');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('INVALID_RESPONSE');
+      }
+    });
+
+    it('returns INVALID_RESPONSE when item has wrong type for reasoning', async () => {
+      const invalidResponse = JSON.stringify({
+        items: [{ title: 'Test', priority: null, dueDate: null, reasoning: 123 }],
+        summary: 'Invalid reasoning type',
+      });
+
+      mockGenerate.mockResolvedValue(ok({ content: invalidResponse, usage: mockUsage }));
+      mockUserServiceClient = createMockUserServiceClient('ok');
+      const service = createTodoItemExtractionService(mockUserServiceClient, fakePricingContext);
+
+      const result = await service.extractItems('user-123', 'Test');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('INVALID_RESPONSE');
+      }
+    });
+
+    it('returns INVALID_RESPONSE when summary has wrong type', async () => {
+      const invalidResponse = JSON.stringify({
+        items: [{ title: 'Test', priority: null, dueDate: null, reasoning: 'test' }],
+        summary: 123,
+      });
+
+      mockGenerate.mockResolvedValue(ok({ content: invalidResponse, usage: mockUsage }));
+      mockUserServiceClient = createMockUserServiceClient('ok');
+      const service = createTodoItemExtractionService(mockUserServiceClient, fakePricingContext);
+
+      const result = await service.extractItems('user-123', 'Test');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('INVALID_RESPONSE');
+      }
+    });
+
+    it('returns INVALID_RESPONSE when JSON root is not an object', async () => {
+      mockGenerate.mockResolvedValue(ok({ content: '["not", "an", "object"]', usage: mockUsage }));
+      mockUserServiceClient = createMockUserServiceClient('ok');
+      const service = createTodoItemExtractionService(mockUserServiceClient, fakePricingContext);
+
+      const result = await service.extractItems('user-123', 'Test');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('INVALID_RESPONSE');
+      }
+    });
   });
 });
