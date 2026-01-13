@@ -226,27 +226,5 @@ export async function buildServer(): Promise<FastifyInstance> {
     }
   );
 
-  // Debug endpoint for Sentry verification (temporary - remove after testing)
-  app.get(
-    '/debug-sentry',
-    {
-      schema: {
-        hide: true,
-        description: 'Debug endpoint for Sentry integration testing',
-        tags: ['system'],
-      },
-    },
-    async (request) => {
-      // Test warning capture
-      request.log.warn({ test: 'debug-sentry-warn' }, 'Debug Sentry warning test');
-
-      // Test error capture via log
-      request.log.error({ test: 'debug-sentry-error' }, 'Debug Sentry error test');
-
-      // Throw unhandled error to test error handler
-      throw new Error('Debug Sentry: Test error from /debug-sentry endpoint');
-    }
-  );
-
   return await Promise.resolve(app);
 }

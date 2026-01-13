@@ -20,6 +20,7 @@
     "@intexuraos/common-core": "workspace:*",
     "@intexuraos/common-http": "workspace:*",
     "@intexuraos/infra-firestore": "workspace:*",
+    "@intexuraos/infra-sentry": "workspace:*",
     "@intexuraos/http-contracts": "workspace:*",
     "@intexuraos/http-server": "workspace:*",
     "@intexuraos/llm-contract": "workspace:*",

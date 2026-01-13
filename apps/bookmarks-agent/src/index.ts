@@ -1,3 +1,4 @@
+import { initSentry } from '@intexuraos/infra-sentry';
 import { validateRequiredEnv } from '@intexuraos/http-server';
 import { getErrorMessage } from '@intexuraos/common-core';
 import { buildServer } from './server.js';
@@ -13,6 +14,15 @@ const REQUIRED_ENV = [
 ];
 
 validateRequiredEnv(REQUIRED_ENV);
+
+const sentryDsn = process.env['INTEXURAOS_SENTRY_DSN'];
+if (sentryDsn !== undefined) {
+  initSentry({
+    dsn: sentryDsn,
+    environment: process.env['INTEXURAOS_ENVIRONMENT'] ?? 'development',
+    serviceName: 'bookmarks-agent',
+  });
+}
 
 async function main(): Promise<void> {
   const enrichTopic = process.env['INTEXURAOS_PUBSUB_BOOKMARK_ENRICH'];

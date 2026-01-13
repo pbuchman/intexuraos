@@ -16,6 +16,7 @@
     "@intexuraos/common-http": "workspace:*",
     "@intexuraos/http-contracts": "workspace:*",
     "@intexuraos/http-server": "workspace:*",
+    "@intexuraos/infra-sentry": "workspace:*",
     "@fastify/cors": "^10.0.2",
     "@fastify/swagger": "^9.4.2",
     "@fastify/swagger-ui": "^5.2.1",

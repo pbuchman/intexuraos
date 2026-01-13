@@ -59,14 +59,18 @@ export function sendToSentry(
   }
 
   if (level === 'error') {
-    Sentry.captureException(new Error(message), {
-      level: 'error',
-      extra: context,
-    });
+    const captureContext: Parameters<typeof Sentry.captureException>[1] = {};
+    if (context !== undefined) {
+      captureContext.extra = context;
+    }
+    captureContext.level = 'error';
+    Sentry.captureException(new Error(message), captureContext);
   } else {
-    Sentry.captureMessage(message, {
-      level: 'warning',
-      extra: context,
-    });
+    const captureContext: Parameters<typeof Sentry.captureMessage>[1] = {};
+    if (context !== undefined) {
+      captureContext.extra = context;
+    }
+    captureContext.level = 'warning';
+    Sentry.captureMessage(message, captureContext);
   }
 }

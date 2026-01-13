@@ -1,3 +1,4 @@
+import { initSentry } from '@intexuraos/infra-sentry';
 import { validateRequiredEnv } from '@intexuraos/http-server';
 import { buildServer } from './server.js';
 import { initServices } from './services.js';
@@ -13,6 +14,15 @@ const REQUIRED_ENV = [
 ];
 
 validateRequiredEnv(REQUIRED_ENV);
+
+const sentryDsn = process.env['INTEXURAOS_SENTRY_DSN'];
+if (sentryDsn !== undefined) {
+  initSentry({
+    dsn: sentryDsn,
+    environment: process.env['INTEXURAOS_ENVIRONMENT'] ?? 'development',
+    serviceName: 'commands-agent',
+  });
+}
 
 async function main(): Promise<void> {
   initServices({

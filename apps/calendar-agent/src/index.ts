@@ -2,6 +2,7 @@
  * Calendar Agent entry point.
  */
 
+import { initSentry } from '@intexuraos/infra-sentry';
 import { validateRequiredEnv } from '@intexuraos/http-server';
 import { buildServer } from './server.js';
 import { initServices } from './services.js';
@@ -13,6 +14,15 @@ const REQUIRED_ENV = [
   'INTEXURAOS_INTERNAL_AUTH_TOKEN',
   'INTEXURAOS_USER_SERVICE_URL',
 ];
+
+const sentryDsn = process.env['INTEXURAOS_SENTRY_DSN'];
+if (sentryDsn !== undefined) {
+  initSentry({
+    dsn: sentryDsn,
+    environment: process.env['INTEXURAOS_ENVIRONMENT'] ?? 'development',
+    serviceName: 'calendar-agent',
+  });
+}
 
 async function main(): Promise<void> {
   validateRequiredEnv(REQUIRED_ENV);

@@ -22,6 +22,7 @@
     "@intexuraos/http-server": "workspace:*",
     "@intexuraos/infra-firestore": "workspace:*",
     "@intexuraos/infra-pubsub": "workspace:*",
+    "@intexuraos/infra-sentry": "workspace:*",
     "@intexuraos/llm-contract": "workspace:*",
     "fastify": "^5.1.0",
     "pino": "^10.1.0",

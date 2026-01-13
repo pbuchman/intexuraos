@@ -24,6 +24,7 @@
     "@intexuraos/infra-firestore": "workspace:*",
     "@intexuraos/infra-gemini": "workspace:*",
     "@intexuraos/infra-gpt": "workspace:*",
+    "@intexuraos/infra-sentry": "workspace:*",
     "@intexuraos/llm-audit": "workspace:*",
     "@intexuraos/llm-contract": "workspace:*",
     "@intexuraos/llm-pricing": "workspace:*",

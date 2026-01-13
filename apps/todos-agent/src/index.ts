@@ -1,3 +1,4 @@
+import { initSentry } from '@intexuraos/infra-sentry';
 import { validateRequiredEnv } from '@intexuraos/http-server';
 import { getErrorMessage } from '@intexuraos/common-core';
 import { buildServer } from './server.js';
@@ -15,6 +16,15 @@ const REQUIRED_ENV = [
 ];
 
 validateRequiredEnv(REQUIRED_ENV);
+
+const sentryDsn = process.env['INTEXURAOS_SENTRY_DSN'];
+if (sentryDsn !== undefined) {
+  initSentry({
+    dsn: sentryDsn,
+    environment: process.env['INTEXURAOS_ENVIRONMENT'] ?? 'development',
+    serviceName: 'todos-agent',
+  });
+}
 
 async function main(): Promise<void> {
   await initServices({
