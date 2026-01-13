@@ -48,67 +48,6 @@ resource "google_logging_metric" "whatsapp_webhook_errors" {
 }
 
 # =============================================================================
-# CLOUD BUILD NETWORK TELEMETRY METRICS
-# =============================================================================
-# Note: Cloud Build logs telemetry data as textPayload during builds.
-# The metrics extract service names from the build_step label to enable
-# per-service grouping in the dashboard.
-#
-# Current limitation: Distribution metrics (with numeric values) require
-# regex extractors that are not supported by Terraform/gcloud due to
-# parser limitations with special characters. Using counter metrics
-# (INT64) as a workaround - they count telemetry events per service.
-#
-# TODO: Implement distribution metrics for actual rx_mbps/tx_mbps values
-# via Log Router transformations or custom metric ingestion.
-
-resource "google_logging_metric" "cloudbuild_network_rx_mbps" {
-  name        = "cloudbuild-network-rx-mbps"
-  description = "Cloud Build network telemetry events (receive) by service"
-  filter      = <<-EOT
-    resource.type="build"
-    textPayload:"NT service"
-  EOT
-
-  metric_descriptor {
-    metric_kind = "DELTA"
-    value_type  = "INT64"
-    labels {
-      key         = "service"
-      value_type  = "STRING"
-      description = "Service being built"
-    }
-  }
-
-  label_extractors = {
-    "service" = "EXTRACT(labels.build_step)"
-  }
-}
-
-resource "google_logging_metric" "cloudbuild_network_tx_mbps" {
-  name        = "cloudbuild-network-tx-mbps"
-  description = "Cloud Build network telemetry events (transmit) by service"
-  filter      = <<-EOT
-    resource.type="build"
-    textPayload:"NT service"
-  EOT
-
-  metric_descriptor {
-    metric_kind = "DELTA"
-    value_type  = "INT64"
-    labels {
-      key         = "service"
-      value_type  = "STRING"
-      description = "Service being built"
-    }
-  }
-
-  label_extractors = {
-    "service" = "EXTRACT(labels.build_step)"
-  }
-}
-
-# =============================================================================
 # DASHBOARD
 # =============================================================================
 
@@ -487,52 +426,6 @@ resource "google_monitoring_dashboard" "main" {
           }
         },
 
-        # Row 6: Cloud Build Network Telemetry
-        {
-          xPos   = 0
-          yPos   = 21
-          width  = 12
-          height = 4
-          widget = {
-            title = "Cloud Build - Network Throughput (Mbps)"
-            xyChart = {
-              dataSets = [
-                {
-                  timeSeriesQuery = {
-                    timeSeriesFilter = {
-                      filter = "metric.type=\"logging.googleapis.com/user/${google_logging_metric.cloudbuild_network_rx_mbps.name}\" resource.type=\"build\""
-                      aggregation = {
-                        alignmentPeriod    = "60s"
-                        perSeriesAligner   = "ALIGN_RATE"
-                        crossSeriesReducer = "REDUCE_NONE"
-                        groupByFields      = ["metric.label.service"]
-                      }
-                    }
-                  }
-                  plotType = "LINE"
-                },
-                {
-                  timeSeriesQuery = {
-                    timeSeriesFilter = {
-                      filter = "metric.type=\"logging.googleapis.com/user/${google_logging_metric.cloudbuild_network_tx_mbps.name}\" resource.type=\"build\""
-                      aggregation = {
-                        alignmentPeriod    = "60s"
-                        perSeriesAligner   = "ALIGN_RATE"
-                        crossSeriesReducer = "REDUCE_NONE"
-                        groupByFields      = ["metric.label.service"]
-                      }
-                    }
-                  }
-                  plotType = "LINE"
-                }
-              ]
-              yAxis = {
-                scale = "LINEAR"
-                label = "Mbps"
-              }
-            }
-          }
-        }
       ]
     }
   })
