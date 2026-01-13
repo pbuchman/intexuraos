@@ -54,7 +54,7 @@ export function sendToSentry(
   context?: Record<string, unknown>
 ): void {
   const dsn = process.env[SENTRY_DSN_ENV];
-  if (!dsn) {
+  if (dsn === undefined || dsn === '') {
     return;
   }
 
