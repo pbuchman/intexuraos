@@ -31,10 +31,22 @@ initSentry({
 
 async function main(): Promise<void> {
   const config = loadConfig();
-  initServices({ config });
+  initServices({
+    mediaBucket: config.mediaBucket,
+    gcpProjectId: config.gcpProjectId,
+    mediaCleanupTopic: config.mediaCleanupTopic,
+    commandsIngestTopic: config.commandsIngestTopic,
+    webhookProcessTopic: config.webhookProcessTopic,
+    transcriptionTopic: config.transcriptionTopic,
+    whatsappAccessToken: config.accessToken,
+    whatsappPhoneNumberId: config.allowedPhoneNumberIds[0],
+    speechmaticsApiKey: config.speechmaticsApiKey,
+    webAgentUrl: config.webAgentUrl,
+    internalAuthToken: config.internalAuthToken,
+  });
   const app = await buildServer();
-  const port = Number(process.env['PORT'] ?? 8080);
-  const host = process.env['HOST'] ?? '0.0.0.0';
+  const port = config.port;
+  const host = config.host;
 
   await app.listen({ port, host });
   app.log.info(`WhatsApp Service listening on ${host}:${String(port)}`);
