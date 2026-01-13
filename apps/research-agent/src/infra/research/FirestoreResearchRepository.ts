@@ -57,36 +57,91 @@ export class FirestoreResearchRepository implements ResearchRepository {
       const collection = db.collection(this.collectionName);
       const limit = options?.limit ?? 50;
 
-      // Query favorites first, then non-favorites
-      const [favoritesSnapshot, nonFavoritesSnapshot] = await Promise.all([
-        collection
+      // Cursor format: "fav:<docId>" for favorites, "non:<docId>" for non-favorites
+      // This encodes which query we're paginating through and the start position
+      let favoritesStartAfter: string | undefined;
+      let nonFavoritesStartAfter: string | undefined;
+      let skipNonFavorites = false;
+
+      if (options?.cursor !== undefined && options.cursor !== '') {
+        const [type, id] = options.cursor.split(':', 2);
+        if (type === 'fav') {
+          favoritesStartAfter = id;
+        } else if (type === 'non') {
+          // Already done with favorites, only query non-favorites
+          skipNonFavorites = true;
+          nonFavoritesStartAfter = id;
+        } else if (type === 'done') {
+          // No more results
+          return ok({ items: [] });
+        }
+      }
+
+      let items: Research[] = [];
+
+      if (!skipNonFavorites) {
+        // Query favorites (with cursor if provided)
+        const favoritesQuery = collection
           .where('userId', '==', userId)
           .where('favourite', '==', true)
           .orderBy('startedAt', 'desc')
-          .limit(limit)
-          .get(),
-        collection
-          .where('userId', '==', userId)
-          .where('favourite', '==', false)
-          .orderBy('startedAt', 'desc')
-          .limit(limit)
-          .get(),
-      ]);
+          .limit(limit + 1); // Fetch one extra to know if there are more
 
-      const favorites = favoritesSnapshot.docs.map((doc) => doc.data() as Research);
-      const nonFavorites = nonFavoritesSnapshot.docs.map((doc) => doc.data() as Research);
+        if (favoritesStartAfter !== undefined) {
+          const startDoc = await collection.doc(favoritesStartAfter).get();
+          if (startDoc.exists) {
+            const snapshot = await favoritesQuery.startAfter(startDoc).get();
+            items = snapshot.docs.map((doc) => doc.data() as Research);
+          }
+        } else {
+          const snapshot = await favoritesQuery.get();
+          items = snapshot.docs.map((doc) => doc.data() as Research);
+        }
 
-      // Combine: favorites first, then non-favorites, each sorted by startedAt desc
-      const items = [...favorites, ...nonFavorites].slice(0, limit);
-
-      const lastDoc = items.length > 0 ? items[items.length - 1] : undefined;
-
-      const result: { items: Research[]; nextCursor?: string } = { items };
-      if (lastDoc !== undefined) {
-        result.nextCursor = lastDoc.id;
+        // If we have enough favorites, return them
+        if (items.length >= limit) {
+          const trimmed = items.slice(0, limit);
+          const lastItem = trimmed[trimmed.length - 1];
+          const cursor = items.length > limit && lastItem !== undefined ? `fav:${lastItem.id}` : undefined;
+          return cursor !== undefined
+            ? ok({ items: trimmed, nextCursor: cursor })
+            : ok({ items: trimmed });
+        }
       }
 
-      return ok(result);
+      // Not enough favorites, fetch non-favorites to fill the rest
+      const remaining = limit - items.length;
+      const nonFavoritesQuery = collection
+        .where('userId', '==', userId)
+        .where('favourite', '==', false)
+        .orderBy('startedAt', 'desc')
+        .limit(remaining + 1);
+
+      let nonFavorites: Research[] = [];
+      if (nonFavoritesStartAfter !== undefined) {
+        const startDoc = await collection.doc(nonFavoritesStartAfter).get();
+        if (startDoc.exists) {
+          const snapshot = await nonFavoritesQuery.startAfter(startDoc).get();
+          nonFavorites = snapshot.docs.map((doc) => doc.data() as Research);
+        }
+      } else {
+        const snapshot = await nonFavoritesQuery.get();
+        nonFavorites = snapshot.docs.map((doc) => doc.data() as Research);
+      }
+
+      // Combine and determine cursor
+      const combined = [...items, ...nonFavorites];
+      const resultItems = combined.slice(0, limit);
+
+      // Determine next cursor based on what we fetched
+      const lastItem = resultItems[resultItems.length - 1];
+      const cursor = combined.length > limit && lastItem !== undefined
+        ? `non:${lastItem.id}`
+        : undefined;
+
+      return cursor !== undefined
+        ? ok({ items: resultItems, nextCursor: cursor })
+        : ok({ items: resultItems });
     } catch (error) {
       return err({
         code: 'FIRESTORE_ERROR',
