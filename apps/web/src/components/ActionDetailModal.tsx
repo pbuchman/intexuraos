@@ -29,6 +29,12 @@ interface ActionDetailModalProps {
   onClose: () => void;
   onActionSuccess: (button: ResolvedActionButton) => void;
   onActionUpdated?: (action: Action) => void;
+  onExecutionResult?: (result: {
+    actionId: string;
+    resourceUrl: string;
+    message: string;
+    linkLabel: string;
+  }) => void;
 }
 
 // Types that can be selected (excludes 'unclassified')
@@ -82,6 +88,7 @@ export function ActionDetailModal({
   onClose,
   onActionSuccess,
   onActionUpdated,
+  onExecutionResult,
 }: ActionDetailModalProps): React.JSX.Element {
   const { buttons, isLoading } = useActionConfig(action);
   const { getAccessToken } = useAuth();
@@ -168,15 +175,25 @@ export function ActionDetailModal({
     }
 
     if (result.resource_url !== undefined) {
+      const normalizedUrl = normalizeResourceUrl(result.resource_url);
+      const message = button.onSuccess?.message ?? 'Action completed successfully';
+      const linkLabel = button.onSuccess?.linkLabel ?? `Open ${action.type}`;
+
+      // Report execution result to parent for global notification
+      onExecutionResult?.({
+        actionId: result.actionId,
+        resourceUrl: normalizedUrl,
+        message,
+        linkLabel,
+      });
+
       const newResult: typeof executionResult = {
         actionId: result.actionId,
         status: result.status,
-        resource_url: normalizeResourceUrl(result.resource_url),
+        resource_url: normalizedUrl,
+        message,
+        linkLabel,
       };
-      if (button.onSuccess !== undefined) {
-        newResult.message = button.onSuccess.message;
-        newResult.linkLabel = button.onSuccess.linkLabel;
-      }
       setExecutionResult(newResult);
     }
   };
@@ -368,7 +385,7 @@ export function ActionDetailModal({
             </div>
           </div>
         ) : (
-          <div className="flex items-center justify-end gap-2 border-t border-slate-200 p-4">
+          <div className="flex items-center justify-end gap-2 border-t border-slate-200 p-4 flex-nowrap">
             {isLoading ? (
               <div className="text-sm text-slate-500">Loading actions...</div>
             ) : (

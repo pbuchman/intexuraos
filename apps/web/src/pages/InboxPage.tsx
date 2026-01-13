@@ -8,6 +8,7 @@ import {
   Layout,
   ConfigurableActionButton,
 } from '@/components';
+import { X } from 'lucide-react';
 import { useAuth } from '@/context';
 import {
   ApiError,
@@ -47,6 +48,28 @@ import {
 } from 'lucide-react';
 
 type TabId = 'commands' | 'actions';
+
+interface SuccessNotification {
+  id: string;
+  message: string;
+  resourceUrl: string;
+  linkLabel: string;
+  timestamp: number;
+  isNew: boolean;
+}
+
+interface ActionItemProps {
+  action: Action;
+  onClick: () => void;
+  onActionSuccess: (button: ResolvedActionButton) => void;
+  onExecutionResult: (result: {
+    actionId: string;
+    resourceUrl: string;
+    message: string;
+    linkLabel: string;
+  }) => void;
+  isFadingOut?: boolean;
+}
 
 const ALL_ACTION_STATUSES: ActionStatus[] = [
   'pending',
@@ -148,7 +171,7 @@ function CommandItem({
 
   return (
     <div
-      className="cursor-pointer rounded-lg border border-slate-200 bg-white p-3 transition-all hover:border-slate-300 hover:shadow-sm sm:p-4"
+      className="cursor-pointer rounded-lg border border-slate-200 bg-white p-4 transition-all hover:border-slate-300 hover:shadow-sm"
       onClick={onClick}
       role="button"
       tabIndex={0}
@@ -167,27 +190,23 @@ function CommandItem({
           )}
         </div>
         <div className="min-w-0 flex-1">
-          <p className="line-clamp-3 break-words text-sm text-slate-800 sm:text-base">{command.text}</p>
-          <div className="mt-2 flex flex-wrap items-center gap-1.5 text-xs text-slate-500 sm:gap-2">
+          <p className="line-clamp-3 break-words text-sm text-slate-800">{command.text}</p>
+          <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-500">
             {command.classification !== undefined && (
               <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 font-medium text-slate-700">
                 {getTypeIcon(command.classification.type)}
-                <span className="hidden sm:inline">{getTypeLabel(command.classification.type)}</span>
+                {getTypeLabel(command.classification.type)}
               </span>
             )}
             <span className="inline-flex items-center gap-1">
               {getStatusIcon(command.status)}
-              <span className="hidden xs:inline">{command.status}</span>
+              {command.status}
             </span>
-            <span className="text-[10px] sm:text-xs">{formatDate(command.createdAt)}</span>
+            <span>{formatDate(command.createdAt)}</span>
           </div>
         </div>
-      </div>
-
-      {/* Action buttons - full width on mobile for larger touch targets */}
-      {(canDelete || canArchive) && (
         <div
-          className="mt-3 flex flex-col gap-2 sm:mt-0 sm:ml-2 sm:flex-row sm:items-center sm:gap-1"
+          className="flex shrink-0 gap-2"
           onClick={(e): void => {
             e.stopPropagation();
           }}
@@ -198,14 +217,14 @@ function CommandItem({
                 onDelete(command.id);
               }}
               disabled={isDeleting}
-              className="flex w-full items-center justify-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-600 transition-colors hover:bg-red-50 hover:text-red-600 disabled:opacity-50 sm:w-auto sm:justify-normal sm:gap-1.5 sm:border-none sm:bg-transparent sm:p-2.5 sm:px-3 sm:hover:bg-red-50"
+              className="rounded p-2.5 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
+              title="Delete command"
             >
               {isDeleting ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
                 <Trash2 className="h-4 w-4" />
               )}
-              <span>Delete</span>
             </button>
           )}
           {canArchive && (
@@ -214,18 +233,18 @@ function CommandItem({
                 onArchive(command.id);
               }}
               disabled={isArchiving}
-              className="flex w-full items-center justify-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-600 transition-colors hover:bg-amber-50 hover:text-amber-600 disabled:opacity-50 sm:w-auto sm:justify-normal sm:gap-1.5 sm:border-none sm:bg-transparent sm:p-2.5 sm:px-3 sm:hover:bg-amber-50"
+              className="rounded p-2.5 text-slate-400 transition-colors hover:bg-amber-50 hover:text-amber-600 disabled:opacity-50"
+              title="Archive command"
             >
               {isArchiving ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
                 <Archive className="h-4 w-4" />
               )}
-              <span>Archive</span>
             </button>
           )}
         </div>
-      )}
+      </div>
     </div>
   );
 }
@@ -234,16 +253,23 @@ interface ActionItemProps {
   action: Action;
   onClick: () => void;
   onActionSuccess: (button: ResolvedActionButton) => void;
-}
-
-function ActionItem({ action, onClick, onActionSuccess }: ActionItemProps): React.JSX.Element {
-  const { buttons } = useActionConfig(action);
-  const [executionResult, setExecutionResult] = useState<{
-    resource_url?: string;
+  onExecutionResult: (result: {
+    actionId: string;
+    resourceUrl: string;
     message: string;
     linkLabel: string;
-  } | null>(null);
-  // Track if action was executed successfully - hide buttons when true
+  }) => void;
+  isFadingOut?: boolean;
+}
+
+function ActionItem({
+  action,
+  onClick,
+  onActionSuccess,
+  onExecutionResult,
+  isFadingOut = false,
+}: ActionItemProps): React.JSX.Element {
+  const { buttons } = useActionConfig(action);
   const [actionExecuted, setActionExecuted] = useState(false);
 
   /**
@@ -263,7 +289,9 @@ function ActionItem({ action, onClick, onActionSuccess }: ActionItemProps): Reac
 
   return (
     <div
-      className="cursor-pointer rounded-lg border border-slate-200 bg-white p-3 transition-all hover:border-slate-300 hover:shadow-sm sm:p-4"
+      className={`cursor-pointer rounded-lg border border-slate-200 bg-white p-4 transition-[opacity,transform] duration-500 ease-out hover:border-slate-300 hover:shadow-sm ${
+        isFadingOut ? 'opacity-0 scale-95' : 'opacity-100 scale-100'
+      }`}
       onClick={onClick}
       role="button"
       tabIndex={0}
@@ -273,71 +301,53 @@ function ActionItem({ action, onClick, onActionSuccess }: ActionItemProps): Reac
         }
       }}
     >
-      {/* Main content row */}
       <div className="flex items-start gap-3">
         <div className="mt-0.5 shrink-0">{getTypeIcon(action.type)}</div>
         <div className="min-w-0 flex-1">
-          <h3 className="break-words font-medium text-slate-800 text-sm sm:text-base">{action.title}</h3>
-          <div className="mt-2 flex flex-wrap items-center gap-1.5 text-xs text-slate-500 sm:gap-2">
+          <h3 className="break-words font-medium text-slate-800">{action.title}</h3>
+          <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-500">
             <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 font-medium text-slate-700">
-              {getTypeIcon(action.type)}
-              <span className="hidden sm:inline">{getTypeLabel(action.type)}</span>
+              {getTypeLabel(action.type)}
             </span>
             <span className="inline-flex items-center gap-1">
               {getStatusIcon(action.status)}
-              <span className="hidden xs:inline">{action.status}</span>
+              {action.status}
             </span>
-            <span className="hidden sm:inline">{String(Math.round(action.confidence * 100))}% confidence</span>
-            <span className="text-[10px] sm:text-xs">{formatDate(action.createdAt)}</span>
+            <span>{String(Math.round(action.confidence * 100))}% confidence</span>
+            <span>{formatDate(action.createdAt)}</span>
           </div>
-          {/* Success notification with link */}
-          {executionResult?.resource_url !== undefined && (
-            <div className="mt-3 flex items-center gap-2 rounded-lg bg-green-50 px-3 py-2 text-sm">
-              <CheckCircle className="h-4 w-4 shrink-0 text-green-600" />
-              <span className="text-green-700">{executionResult.message}</span>
-              <RouterLink
-                to={executionResult.resource_url}
-                className="ml-1 font-medium text-green-700 underline hover:text-green-800"
-                onClick={(e): void => {
-                  e.stopPropagation();
+        </div>
+        {/* Hide buttons after action with resource_url was executed */}
+        {!actionExecuted && (
+          <div
+            className="flex shrink-0 gap-1 flex-nowrap overflow-x-auto"
+            onClick={(e): void => {
+              e.stopPropagation();
+            }}
+          >
+            {buttons.map((button) => (
+              <ConfigurableActionButton
+                key={button.id}
+                button={button}
+                onSuccess={(): void => {
+                  onActionSuccess(button);
                 }}
-              >
-                {executionResult.linkLabel}
-              </RouterLink>
-            </div>
-          )}
-        </div>
+                onResult={(result, btn): void => {
+                  if (result.resource_url !== undefined && btn.onSuccess !== undefined) {
+                    onExecutionResult({
+                      actionId: action.id,
+                      resourceUrl: normalizeResourceUrl(result.resource_url),
+                      message: btn.onSuccess.message,
+                      linkLabel: btn.onSuccess.linkLabel,
+                    });
+                    setActionExecuted(true);
+                  }
+                }}
+              />
+            ))}
+          </div>
+        )}
       </div>
-
-      {/* Action buttons - stacked on mobile for larger touch targets */}
-      {!actionExecuted && (
-        <div
-          className="mt-3 flex flex-col gap-2 sm:mt-0 sm:ml-2 sm:flex-row sm:items-center sm:gap-1"
-          onClick={(e): void => {
-            e.stopPropagation();
-          }}
-        >
-          {buttons.map((button) => (
-            <ConfigurableActionButton
-              key={button.id}
-              button={button}
-              onSuccess={(): void => {
-                onActionSuccess(button);
-              }}
-              onResult={(result, btn): void => {
-                if (result.resource_url !== undefined && btn.onSuccess !== undefined) {
-                  setExecutionResult({
-                    resource_url: normalizeResourceUrl(result.resource_url),
-                    message: btn.onSuccess.message,
-                    linkLabel: btn.onSuccess.linkLabel,
-                  });
-                  setActionExecuted(true);
-                }
-              }}
-            />
-          ))}
-        </div>
-      )}
     </div>
   );
 }
@@ -346,6 +356,50 @@ function ActionItem({ action, onClick, onActionSuccess }: ActionItemProps): Reac
 const DEBOUNCE_DELAY_MS = 500;
 // 💰 CostGuard: Max IDs per batch request (must match backend maxItems)
 const BATCH_SIZE_LIMIT = 50;
+// Fade out duration for actions that no longer match filter
+const FADE_OUT_DURATION_MS = 5000;
+
+interface NotificationAreaProps {
+  notification: SuccessNotification | null;
+  onDismiss: () => void;
+}
+
+function NotificationArea({ notification, onDismiss }: NotificationAreaProps): React.JSX.Element | null {
+  if (notification === null) return null;
+
+  return (
+    <div
+      className={`mb-4 rounded-lg border px-4 py-3 transition-all sm:flex sm:items-center sm:justify-between ${
+        notification.isNew
+          ? 'border-green-300 bg-green-50 shadow-sm animate-in slide-in-from-top-2 fade-in-0 duration-300'
+          : 'border-green-200 bg-green-50'
+      }`}
+    >
+      <div className="flex items-start gap-3 sm:items-center">
+        <CheckCircle className="mt-0.5 h-5 w-5 shrink-0 text-green-600 sm:mt-0" />
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-medium text-green-800">{notification.message}</p>
+          <RouterLink
+            to={notification.resourceUrl}
+            className="mt-1 block text-sm font-medium text-green-700 underline hover:text-green-800 sm:mt-0 sm:inline"
+            onClick={(e): void => {
+              e.stopPropagation();
+            }}
+          >
+            {notification.linkLabel}
+          </RouterLink>
+        </div>
+      </div>
+      <button
+        onClick={onDismiss}
+        className="ml-auto mt-2 shrink-0 self-start rounded p-1 text-green-600 transition-colors hover:bg-green-100 hover:text-green-800 sm:ml-0 sm:mt-0"
+        aria-label="Dismiss notification"
+      >
+        <X className="h-4 w-4" />
+      </button>
+    </div>
+  );
+}
 
 export function InboxPage(): React.JSX.Element {
   const { getAccessToken } = useAuth();
@@ -365,6 +419,8 @@ export function InboxPage(): React.JSX.Element {
   const [archivingCommandId, setArchivingCommandId] = useState<string | null>(null);
   const [selectedAction, setSelectedAction] = useState<Action | null>(null);
   const [selectedCommand, setSelectedCommand] = useState<Command | null>(null);
+  const [successNotification, setSuccessNotification] = useState<SuccessNotification | null>(null);
+  const [fadingOutActionIds, setFadingOutActionIds] = useState<Set<string>>(new Set());
   const [statusFilter, setStatusFilter] = useState<ActionStatus[]>(() => {
     const stored = localStorage.getItem('inbox-status-filter');
     if (stored !== null) {
@@ -616,16 +672,60 @@ export function InboxPage(): React.JSX.Element {
     void fetchData();
   }, [fetchData]);
 
-  // Handle tab switching: save to localStorage and refresh data
+  // Handle tab switching: save to localStorage, refresh data, and clear notifications
   useEffect(() => {
     localStorage.setItem('inbox-active-tab', activeTab);
 
     // Refresh data when switching tabs (but not on initial load)
     if (previousTabRef.current !== activeTab && !isLoadingRef.current) {
       void fetchData(true);
+      // Clear success notification when switching tabs
+      setSuccessNotification(null);
     }
     previousTabRef.current = activeTab;
   }, [activeTab, fetchData]);
+
+  // Handle execution result: show global notification and initiate fade-out
+  const handleExecutionResult = useCallback(
+    (result: {
+      actionId: string;
+      resourceUrl: string;
+      message: string;
+      linkLabel: string;
+    }): void => {
+      // Set new notification with isNew flag for visual highlight
+      const notificationId = `${result.actionId}-${String(Date.now())}`;
+      setSuccessNotification({
+        id: notificationId,
+        message: result.message,
+        resourceUrl: result.resourceUrl,
+        linkLabel: result.linkLabel,
+        timestamp: Date.now(),
+        isNew: true,
+      });
+
+      // Remove isNew flag after animation duration for future notifications
+      setTimeout(() => {
+        setSuccessNotification((prev) =>
+          prev?.id === notificationId ? { ...prev, isNew: false } : prev
+        );
+      }, 500);
+
+      // Start fade-out for this action
+      setFadingOutActionIds((prev) => new Set(prev).add(result.actionId));
+
+      // Remove from list after fade-out duration
+      setTimeout(() => {
+        setActions((prev) => prev.filter((a) => a.id !== result.actionId));
+        setFadingOutActionIds((prevSet) => {
+          const newSet = new Set(prevSet);
+          newSet.delete(result.actionId);
+          return newSet;
+        });
+      }, FADE_OUT_DURATION_MS);
+    },
+    []
+  );
 
   // Handle status filter changes: save to localStorage and refresh data
   const statusFilterRef = useRef<ActionStatus[]>(statusFilter);
@@ -743,34 +843,28 @@ export function InboxPage(): React.JSX.Element {
 
   return (
     <Layout>
-      {/* Header - mobile optimized */}
-      <div className="mb-4 sm:mb-6">
-        <div className="flex items-center justify-between gap-3">
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2">
-              <h2 className="text-xl font-bold text-slate-900 sm:text-2xl">Inbox</h2>
-              {isListening && (
-                <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">
-                  <Radio className="h-3 w-3 animate-pulse" />
-                  Live
-                </span>
-              )}
-            </div>
-            <p className="mt-0.5 truncate text-xs text-slate-500 sm:text-sm">
-              Your commands and pending actions
-            </p>
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-bold text-slate-900">Inbox</h2>
+          <div className="flex items-center gap-2">
+            <p className="text-slate-600">Your commands and pending actions</p>
+            {isListening && (
+              <span className="inline-flex items-center gap-1 text-xs text-green-600">
+                <Radio className="h-3 w-3 animate-pulse" />
+                Live
+              </span>
+            )}
           </div>
-          <Button
-            variant="secondary"
-            onClick={handleRefresh}
-            isLoading={isRefreshing}
-            className="shrink-0 px-3 py-2 sm:px-4"
-            size="sm"
-          >
-            <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
-            <span className="hidden sm:inline">Refresh</span>
-          </Button>
         </div>
+        <Button
+          variant="secondary"
+          onClick={handleRefresh}
+          isLoading={isRefreshing}
+          className="flex items-center gap-2"
+        >
+          <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+          Refresh
+        </Button>
       </div>
 
       {/* Real-time listener error warning */}
@@ -786,33 +880,41 @@ export function InboxPage(): React.JSX.Element {
         </div>
       ) : null}
 
-      {/* Tabs - full width with larger touch targets on mobile */}
+      {/* Success notification area */}
+      <NotificationArea
+        notification={successNotification}
+        onDismiss={(): void => {
+          setSuccessNotification(null);
+        }}
+      />
+
+      {/* Tabs */}
       <div className="mb-4 flex border-b border-slate-200">
         <button
           onClick={(): void => {
             setActiveTab('actions');
           }}
-          className={`flex flex-1 items-center justify-center gap-2 border-b-2 px-3 py-3 text-sm font-medium transition-colors sm:px-4 sm:py-2 ${
+          className={`flex items-center gap-2 border-b-2 px-4 py-2 text-sm font-medium transition-colors ${
             activeTab === 'actions'
               ? 'border-blue-600 text-blue-600'
               : 'border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-700'
           }`}
         >
           <ListTodo className="h-4 w-4" />
-          <span className="truncate">Actions ({String(actions.length)})</span>
+          Actions ({String(actions.length)})
         </button>
         <button
           onClick={(): void => {
             setActiveTab('commands');
           }}
-          className={`flex flex-1 items-center justify-center gap-2 border-b-2 px-3 py-3 text-sm font-medium transition-colors sm:px-4 sm:py-2 ${
+          className={`flex items-center gap-2 border-b-2 px-4 py-2 text-sm font-medium transition-colors ${
             activeTab === 'commands'
               ? 'border-blue-600 text-blue-600'
               : 'border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-700'
           }`}
         >
           <MessageSquare className="h-4 w-4" />
-          <span className="truncate">Commands ({String(commands.length)})</span>
+          Commands ({String(commands.length)})
         </button>
       </div>
 
@@ -823,21 +925,19 @@ export function InboxPage(): React.JSX.Element {
             onClick={(): void => {
               setIsFilterExpanded((prev) => !prev);
             }}
-            className="flex w-full items-center justify-between rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-800 sm:w-auto sm:justify-normal sm:gap-2 sm:border-none sm:bg-transparent sm:p-0 sm:hover:bg-transparent"
+            className="flex items-center gap-2 text-sm font-medium text-slate-600 hover:text-slate-800"
           >
-            <div className="flex items-center gap-2">
-              <Filter className="h-4 w-4" />
-              Filter by status
-              {statusFilter.length > 0 && (
-                <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs text-blue-700">
-                  {String(statusFilter.length)}
-                </span>
-              )}
-            </div>
+            <Filter className="h-4 w-4" />
+            Filter by status
+            {statusFilter.length > 0 && (
+              <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs text-blue-700">
+                {String(statusFilter.length)}
+              </span>
+            )}
             {isFilterExpanded ? (
-              <ChevronUp className="h-4 w-4 sm:ml-0" />
+              <ChevronUp className="h-4 w-4" />
             ) : (
-              <ChevronDown className="h-4 w-4 sm:ml-0" />
+              <ChevronDown className="h-4 w-4" />
             )}
           </button>
 
@@ -917,6 +1017,8 @@ export function InboxPage(): React.JSX.Element {
                       void fetchData(true);
                     }
                   }}
+                  onExecutionResult={handleExecutionResult}
+                  isFadingOut={fadingOutActionIds.has(action.id)}
                 />
               ))
             )}
@@ -987,6 +1089,7 @@ export function InboxPage(): React.JSX.Element {
             // Update selected action to reflect changes
             setSelectedAction(updatedAction);
           }}
+          onExecutionResult={handleExecutionResult}
         />
       )}
 
