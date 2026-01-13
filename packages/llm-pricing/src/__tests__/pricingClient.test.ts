@@ -113,11 +113,24 @@ describe('pricingClient', () => {
     updatedAt: '2026-01-05T12:00:00Z',
   };
 
+  const mockZhipuPricing: ProviderPricing = {
+    provider: LlmProviders.Zhipu,
+    models: {
+      [LlmModels.Glm47]: {
+        inputPricePerMillion: 0.6,
+        outputPricePerMillion: 2.2,
+        webSearchCostPerCall: 0.005,
+      },
+    },
+    updatedAt: '2026-01-05T12:00:00Z',
+  };
+
   const completeAllPricing: AllPricingResponse = {
     google: mockGooglePricing,
     openai: mockOpenaiPricing,
     anthropic: mockAnthropicPricing,
     perplexity: mockPerplexityPricing,
+    zhipu: mockZhipuPricing,
   };
 
   describe('fetchAllPricing', () => {
@@ -272,6 +285,7 @@ describe('pricingClient', () => {
         openai: { provider: LlmProviders.OpenAI, models: {}, updatedAt: '' },
         anthropic: mockAnthropicPricing,
         perplexity: mockPerplexityPricing,
+        zhipu: mockZhipuPricing,
       };
       const context = new PricingContext(incompletePricing);
 
@@ -284,7 +298,7 @@ describe('pricingClient', () => {
       const context = new PricingContext(completeAllPricing);
 
       const models = context.getModelsWithPricing();
-      expect(models).toHaveLength(14);
+      expect(models).toHaveLength(15);
       expect(models).toContain(LlmModels.Gemini25Pro);
       expect(models).toContain(LlmModels.GPT52);
     });
@@ -308,6 +322,7 @@ describe('pricingClient', () => {
         openai: { provider: LlmProviders.OpenAI, models: {}, updatedAt: '' },
         anthropic: { provider: LlmProviders.Anthropic, models: {}, updatedAt: '' },
         perplexity: { provider: LlmProviders.Perplexity, models: {}, updatedAt: '' },
+        zhipu: { provider: LlmProviders.Zhipu, models: {}, updatedAt: '' },
       };
 
       const context = new PricingContext(pricingWithInvalidModel);
@@ -327,6 +342,7 @@ describe('pricingClient', () => {
         openai: { provider: LlmProviders.OpenAI, models: {}, updatedAt: '' },
         anthropic: mockAnthropicPricing,
         perplexity: mockPerplexityPricing,
+        zhipu: mockZhipuPricing,
       };
       const context = new PricingContext(incompletePricing);
 
@@ -345,6 +361,7 @@ describe('pricingClient', () => {
         openai: mockOpenaiPricing,
         anthropic: mockAnthropicPricing,
         perplexity: mockPerplexityPricing,
+        zhipu: mockZhipuPricing,
       };
 
       expect(() => createPricingContext(incompletePricing)).toThrow('Missing pricing for models');
@@ -366,6 +383,7 @@ describe('pricingClient', () => {
         openai: { provider: LlmProviders.OpenAI, models: {}, updatedAt: '' },
         anthropic: { provider: LlmProviders.Anthropic, models: {}, updatedAt: '' },
         perplexity: { provider: LlmProviders.Perplexity, models: {}, updatedAt: '' },
+        zhipu: { provider: LlmProviders.Zhipu, models: {}, updatedAt: '' },
       };
 
       // Should not throw when only validating gemini-2.5-flash

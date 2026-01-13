@@ -29,7 +29,7 @@ Search for model definitions and usage:
 cat packages/llm-contract/src/supportedModels.ts
 
 # Check validation models (lightweight calls for API key validation)
-grep -n "google:\|openai:\|anthropic:\|perplexity:" apps/user-service/src/infra/llm/LlmValidatorImpl.ts
+grep -n "google:\|openai:\|anthropic:\|perplexity:\|zhipu:" apps/user-service/src/infra/llm/LlmValidatorImpl.ts
 
 # Check image generation models
 cat apps/image-service/src/domain/models/ImageGenerationModel.ts
@@ -89,6 +89,14 @@ Search: "Perplexity API pricing 2026" site:docs.perplexity.ai
 
 Expected URL: https://docs.perplexity.ai/getting-started/pricing
 
+**Zhipu GLM:**
+
+```
+Search: "Zhipu GLM pricing 2026" site:docs.z.ai
+```
+
+Expected URL: https://docs.z.ai/guides/overview/pricing
+
 ### Step 2.2: Extract Pricing Data
 
 For each model, extract:
@@ -99,7 +107,8 @@ For each model, extract:
 | `outputPricePerMillion`   | Cost per 1M output tokens                       |
 | `cacheReadMultiplier`     | Discount for cached tokens (0.1 = 90% off)      |
 | `cacheWriteMultiplier`    | Premium for cache creation (1.25 = 25% extra)   |
-| `webSearchCostPerCall`    | Per-search cost (Anthropic, OpenAI)             |
+| `webSearchCostPerCall`    | Per-search cost (Anthropic, OpenAI, Zhipu)       |
+| `cacheReadPricePerMillion`| Cached input price (Google, Zhipu)                |
 | `groundingCostPerRequest` | Per-request grounding fee (Google)              |
 | `imagePricing`            | Per-image costs by size                         |
 | `useProviderCost`         | Use provider's cost field directly (Perplexity) |
@@ -148,6 +157,7 @@ settings/
       openai    → { ... }
       anthropic → { ... }
       perplexity → { ... }
+      zhipu     → { ... }
 ```
 
 ### Migration Template
@@ -168,6 +178,7 @@ settings/
  * - https://openai.com/api/pricing
  * - https://docs.anthropic.com/en/docs/about-claude/models
  * - https://docs.perplexity.ai/getting-started/pricing
+ * - https://docs.z.ai/guides/overview/pricing
  */
 
 export const metadata = {
@@ -289,12 +300,19 @@ Output LLM usage documentation to `docs/current/llm-usage.md`:
 - Provides `cost.total_cost` in response
 - Use provider cost directly when `useProviderCost: true`
 
+**Zhipu GLM:**
+
+- Web search cost charged per call ($0.01/use)
+- Cached input available at $0.11/million (≈18% of input price)
+- Input/output pricing similar to other providers
+
 ## Sources
 
 - [Google Gemini Pricing](https://ai.google.dev/gemini-api/docs/pricing)
 - [OpenAI Pricing](https://openai.com/api/pricing)
 - [Anthropic Pricing](https://docs.anthropic.com/en/docs/about-claude/models)
 - [Perplexity Pricing](https://docs.perplexity.ai/getting-started/pricing)
+- [Zhipu GLM Pricing](https://docs.z.ai/guides/overview/pricing)
 ```
 
 ---
@@ -308,7 +326,7 @@ Present final summary:
 
 **Date:** YYYY-MM-DD
 **Models in codebase:** N
-**Providers:** google, openai, anthropic, perplexity
+**Providers:** google, openai, anthropic, perplexity, zhipu
 
 ### Pricing Status
 
@@ -345,7 +363,7 @@ ppnpm run migrate:status  # Should show new migration as pending
 
 ---
 
-## Quick Reference: Current Models (14 total)
+## Quick Reference: Current Models (15 total)
 
 | Provider   | Models                                                                          | Usage                               |
 | ---------- | ------------------------------------------------------------------------------- | ----------------------------------- |
@@ -353,5 +371,6 @@ ppnpm run migrate:status  # Should show new migration as pending
 | OpenAI     | o4-mini-deep-research, gpt-5.2, gpt-4o-mini, gpt-image-1                        | Research, images                    |
 | Anthropic  | claude-opus-4-5-20251101, claude-sonnet-4-5-20250929, claude-3-5-haiku-20241022 | Research                            |
 | Perplexity | sonar, sonar-pro, sonar-deep-research                                           | Research                            |
+| Zhipu      | glm-4.7                                                                         | Research, validation                |
 
 This registry should match exactly what's in `packages/llm-contract/src/supportedModels.ts`.

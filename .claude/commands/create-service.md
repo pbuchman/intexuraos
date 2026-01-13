@@ -363,7 +363,12 @@ Add build and deploy steps using the `build-push-monitored.sh` script (copy patt
   id: 'build-push-<service-name>'
   waitFor: ['-']
   entrypoint: 'bash'
-  args: ['cloudbuild/scripts/build-push-monitored.sh', '<service-name>', 'apps/<service-name>/Dockerfile']
+  args:
+    [
+      'cloudbuild/scripts/build-push-monitored.sh',
+      '<service-name>',
+      'apps/<service-name>/Dockerfile',
+    ]
   env:
     - 'DOCKER_BUILDKIT=1'
     - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
@@ -382,6 +387,7 @@ Add build and deploy steps using the `build-push-monitored.sh` script (copy patt
 ```
 
 **Note:** The `build-push-monitored.sh` script handles:
+
 - Cache warming (pulls `:latest` image)
 - BuildKit inline cache
 - Network telemetry logging (for Cloud Monitoring metrics)
@@ -395,7 +401,12 @@ steps:
   - name: 'gcr.io/cloud-builders/docker'
     id: 'build'
     entrypoint: 'bash'
-    args: ['cloudbuild/scripts/build-push-monitored.sh', '<service-name>', 'apps/<service-name>/Dockerfile']
+    args:
+      [
+        'cloudbuild/scripts/build-push-monitored.sh',
+        '<service-name>',
+        'apps/<service-name>/Dockerfile',
+      ]
     env:
       - 'DOCKER_BUILDKIT=1'
       - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
