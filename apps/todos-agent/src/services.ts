@@ -36,11 +36,16 @@ export async function initServices(config: ServiceConfig): Promise<void> {
     throw new Error(`Failed to fetch pricing: ${pricingResult.error.message}`);
   }
 
-  const pricingContext = createPricingContext(pricingResult.value, [LlmModels.Gemini25Flash] as FastModel[]);
+  // Support both Gemini and GLM for todo extraction
+  const pricingContext = createPricingContext(pricingResult.value, [
+    LlmModels.Gemini25Flash,
+    LlmModels.Glm47,
+  ] as FastModel[]);
 
   const userServiceClient = createUserServiceClient({
     baseUrl: config.userServiceUrl,
     internalAuthToken: config.internalAuthKey,
+    pricingContext,
   });
 
   container = {
@@ -51,8 +56,7 @@ export async function initServices(config: ServiceConfig): Promise<void> {
     }),
     userServiceClient,
     todoItemExtractionService: createTodoItemExtractionService(
-      userServiceClient,
-      pricingContext
+      userServiceClient
     ),
   };
 }

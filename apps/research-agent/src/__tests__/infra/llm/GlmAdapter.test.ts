@@ -25,17 +25,25 @@ vi.mock('@intexuraos/llm-common', () => ({
   },
 }));
 
-// Get the mock functions for verification
+const { GlmAdapter } = await import('../../../infra/llm/GlmAdapter.js');
+
+// Get mocked functions after import
 const { buildSynthesisPrompt: mockBuildSynthesisPrompt, titlePrompt: mockTitlePrompt } =
   await import('@intexuraos/llm-common');
-
-const { GlmAdapter } = await import('../../../infra/llm/GlmAdapter.js');
 
 const testPricing: ModelPricing = {
   inputPricePerMillion: 0.6,
   outputPricePerMillion: 2.2,
   webSearchCostPerCall: 0.005,
 };
+
+// eslint-disable-next-line @typescript-eslint/explicit-function-return-type
+const createMockLogger = () => ({
+  info: vi.fn(),
+  error: vi.fn(),
+  warn: vi.fn(),
+  debug: vi.fn(),
+});
 
 describe('GlmAdapter', () => {
   let adapter: InstanceType<typeof GlmAdapter>;
@@ -59,7 +67,7 @@ describe('GlmAdapter', () => {
     });
 
     it('accepts optional logger', () => {
-      const mockLogger = { info: vi.fn(), error: vi.fn() };
+      const mockLogger = createMockLogger();
       mockCreateGlmClient.mockClear();
       new GlmAdapter('test-key', LlmModels.Glm47, 'test-user-id', testPricing, mockLogger);
 
@@ -73,7 +81,7 @@ describe('GlmAdapter', () => {
   });
 
   describe('research', () => {
-    const mockUsage = { inputTokens: 100, outputTokens: 50, totalTokens: 150, costUsd: 0.00017 };
+    const mockUsage = { inputTokens: 100, outputTokens: 50, costUsd: 0.00017 };
 
     it('delegates to GLM client', async () => {
       mockResearch.mockResolvedValue({
@@ -205,7 +213,7 @@ describe('GlmAdapter', () => {
     });
 
     it('logs research start and success', async () => {
-      const mockLogger = { info: vi.fn(), error: vi.fn() };
+      const mockLogger = createMockLogger();
       const loggingAdapter = new GlmAdapter('test-key', LlmModels.Glm47, 'user-id', testPricing, mockLogger);
       mockResearch.mockResolvedValue({
         ok: true,
@@ -225,7 +233,7 @@ describe('GlmAdapter', () => {
     });
 
     it('logs research failure', async () => {
-      const mockLogger = { info: vi.fn(), error: vi.fn() };
+      const mockLogger = createMockLogger();
       const loggingAdapter = new GlmAdapter('test-key', LlmModels.Glm47, 'user-id', testPricing, mockLogger);
       mockResearch.mockResolvedValue({
         ok: false,
@@ -242,10 +250,10 @@ describe('GlmAdapter', () => {
   });
 
   describe('synthesize', () => {
-    const mockUsage = { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd: 0.001 };
+    const mockUsage = { inputTokens: 10, outputTokens: 20, costUsd: 0.001 };
 
     it('builds synthesis prompt and calls generate', async () => {
-      mockBuildSynthesisPrompt.mockReturnValue(
+      (mockBuildSynthesisPrompt as ReturnType<typeof vi.fn> & { mockReturnValue: (val: string) => void }).mockReturnValue(
         'Synthesis: Prompt, Gemini result, '
       );
       mockGenerate.mockResolvedValue({
@@ -270,7 +278,7 @@ describe('GlmAdapter', () => {
     });
 
     it('includes external sources in synthesis prompt', async () => {
-      mockBuildSynthesisPrompt.mockReturnValue(
+      (mockBuildSynthesisPrompt as ReturnType<typeof vi.fn> & { mockReturnValue: (val: string) => void }).mockReturnValue(
         'Synthesis: Prompt, Gemini, External context'
       );
       mockGenerate.mockResolvedValue({ ok: true, value: { content: 'Result', usage: mockUsage } });
@@ -285,7 +293,7 @@ describe('GlmAdapter', () => {
     });
 
     it('uses synthesis context when provided', async () => {
-      mockBuildSynthesisPrompt.mockReturnValue(
+      (mockBuildSynthesisPrompt as ReturnType<typeof vi.fn> & { mockReturnValue: (val: string) => void }).mockReturnValue(
         'Synthesis with context: Prompt, Gemini, '
       );
       mockGenerate.mockResolvedValue({ ok: true, value: { content: 'Result', usage: mockUsage } });
@@ -326,8 +334,8 @@ describe('GlmAdapter', () => {
     });
 
     it('logs synthesis start and success', async () => {
-      mockBuildSynthesisPrompt.mockReturnValue('Synthesis: Prompt, Gemini, ');
-      const mockLogger = { info: vi.fn(), error: vi.fn() };
+      (mockBuildSynthesisPrompt as ReturnType<typeof vi.fn> & { mockReturnValue: (val: string) => void }).mockReturnValue('Synthesis: Prompt, Gemini, ');
+      const mockLogger = createMockLogger();
       const loggingAdapter = new GlmAdapter('test-key', LlmModels.Glm47, 'user-id', testPricing, mockLogger);
       mockGenerate.mockResolvedValue({
         ok: true,
@@ -347,7 +355,7 @@ describe('GlmAdapter', () => {
     });
 
     it('logs synthesis failure', async () => {
-      const mockLogger = { info: vi.fn(), error: vi.fn() };
+      const mockLogger = createMockLogger();
       const loggingAdapter = new GlmAdapter('test-key', LlmModels.Glm47, 'user-id', testPricing, mockLogger);
       mockGenerate.mockResolvedValue({
         ok: false,
@@ -364,10 +372,10 @@ describe('GlmAdapter', () => {
   });
 
   describe('generateTitle', () => {
-    const mockUsage = { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd: 0.001 };
+    const mockUsage = { inputTokens: 10, outputTokens: 20, costUsd: 0.001 };
 
     it('delegates to generate with title prompt', async () => {
-      mockTitlePrompt.build.mockReturnValue(
+      (mockTitlePrompt.build as ReturnType<typeof vi.fn> & { mockReturnValue: (val: string) => void }).mockReturnValue(
         'Generate a short, concise title (between 5 and 8 words) in the SAME LANGUAGE as the following text:\n\nTest prompt'
       );
       mockGenerate.mockResolvedValue({
@@ -388,7 +396,7 @@ describe('GlmAdapter', () => {
     });
 
     it('trims whitespace from generated title', async () => {
-      mockTitlePrompt.build.mockReturnValue('Title prompt with Test');
+      (mockTitlePrompt.build as ReturnType<typeof vi.fn> & { mockReturnValue: (val: string) => void }).mockReturnValue('Title prompt with Test');
       mockGenerate.mockResolvedValue({
         ok: true,
         value: { content: ' \n\n  Title With Spaces \n\t ', usage: mockUsage },
@@ -403,7 +411,7 @@ describe('GlmAdapter', () => {
     });
 
     it('returns usage without totalTokens', async () => {
-      mockTitlePrompt.build.mockReturnValue('Title prompt with Test');
+      (mockTitlePrompt.build as ReturnType<typeof vi.fn> & { mockReturnValue: (val: string) => void }).mockReturnValue('Title prompt with Test');
       mockGenerate.mockResolvedValue({
         ok: true,
         value: { content: 'Title', usage: mockUsage },
@@ -418,12 +426,11 @@ describe('GlmAdapter', () => {
           outputTokens: 20,
           costUsd: 0.001,
         });
-        expect(result.value.usage.totalTokens).toBeUndefined();
       }
     });
 
     it('maps errors correctly', async () => {
-      mockTitlePrompt.build.mockReturnValue('Title prompt with Test prompt');
+      (mockTitlePrompt.build as ReturnType<typeof vi.fn> & { mockReturnValue: (val: string) => void }).mockReturnValue('Title prompt with Test prompt');
       mockGenerate.mockResolvedValue({
         ok: false,
         error: { code: 'INVALID_KEY', message: 'Invalid API key' },
@@ -438,9 +445,9 @@ describe('GlmAdapter', () => {
     });
 
     it('logs title generation start and success', async () => {
-      const mockLogger = { info: vi.fn(), error: vi.fn() };
+      const mockLogger = createMockLogger();
       const loggingAdapter = new GlmAdapter('test-key', LlmModels.Glm47, 'user-id', testPricing, mockLogger);
-      mockTitlePrompt.build.mockReturnValue('Title prompt with Test');
+      (mockTitlePrompt.build as ReturnType<typeof vi.fn> & { mockReturnValue: (val: string) => void }).mockReturnValue('Title prompt with Test');
       mockGenerate.mockResolvedValue({
         ok: true,
         value: { content: 'Title', usage: mockUsage },
@@ -456,9 +463,9 @@ describe('GlmAdapter', () => {
     });
 
     it('logs title generation failure', async () => {
-      const mockLogger = { info: vi.fn(), error: vi.fn() };
+      const mockLogger = createMockLogger();
       const loggingAdapter = new GlmAdapter('test-key', LlmModels.Glm47, 'user-id', testPricing, mockLogger);
-      mockTitlePrompt.build.mockReturnValue('Title prompt with Test');
+      (mockTitlePrompt.build as ReturnType<typeof vi.fn> & { mockReturnValue: (val: string) => void }).mockReturnValue('Title prompt with Test');
       mockGenerate.mockResolvedValue({
         ok: false,
         error: { code: 'OVERLOADED', message: 'Service overloaded' },

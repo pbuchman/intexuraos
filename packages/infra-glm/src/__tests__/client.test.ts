@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { type ModelPricing, LlmModels, LlmProviders } from '@intexuraos/llm-contract';
+import { type ModelPricing, LlmProviders } from '@intexuraos/llm-contract';
 
 const mockChatCompletionsCreate = vi.fn();
 
@@ -326,7 +326,7 @@ describe('createGlmClient', () => {
       mockChatCompletionsCreate.mockResolvedValue({
         choices: [{ message: { content: 'Content' } }],
         // usage is undefined
-      } as OpenAI.Chat.Completions.ChatCompletion);
+      } as unknown);
 
       const client = createGlmClient({
         apiKey: 'test-key',
@@ -617,7 +617,7 @@ describe('createGlmClient', () => {
       const result = await client.research('Test prompt');
 
       expect(result.ok).toBe(false);
-      if (result.ok) {
+      if (!result.ok) {
         expect(result.error.code).toBe('TIMEOUT');
       }
     });
@@ -634,7 +634,7 @@ describe('createGlmClient', () => {
       const result = await client.research('Test prompt');
 
       expect(result.ok).toBe(false);
-      if (result.ok) {
+      if (!result.ok) {
         expect(result.error.code).toBe('API_ERROR');
       }
     });

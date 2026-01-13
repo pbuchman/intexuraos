@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import type { ModelPricing } from '@intexuraos/llm-contract';
 import { calculateTextCost, normalizeUsage } from '../costCalculator.js';
 
@@ -68,8 +68,6 @@ describe('calculateTextCost', () => {
     const usage = {
       inputTokens: 100,
       outputTokens: 50,
-      cachedTokens: undefined,
-      webSearchCalls: undefined,
     };
 
     const cost = calculateTextCost(usage, pricing);
@@ -77,7 +75,7 @@ describe('calculateTextCost', () => {
   });
 
   it('uses default cache multiplier when not specified', () => {
-    const pricing = createTestPricing({ cacheReadMultiplier: undefined });
+    const pricing = createTestPricing({});
     const usage = {
       inputTokens: 100,
       outputTokens: 0,
@@ -92,7 +90,10 @@ describe('calculateTextCost', () => {
   });
 
   it('uses default search cost when not specified', () => {
-    const pricing = createTestPricing({ webSearchCostPerCall: undefined });
+    const pricing = {
+      inputPricePerMillion: 0.6,
+      outputPricePerMillion: 2.2,
+    } satisfies ModelPricing;
     const usage = {
       inputTokens: 100,
       outputTokens: 0,
@@ -100,7 +101,7 @@ describe('calculateTextCost', () => {
     };
 
     const cost = calculateTextCost(usage, pricing);
-    // Search cost defaults to 0
+    // Search cost defaults to 0 when not in pricing
     expect(cost).toBeCloseTo(0.00006, 6);
   });
 
