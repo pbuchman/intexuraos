@@ -1,5 +1,5 @@
 # IntexuraOS Cloud Build Configuration
-# Optimized with "Wave Strategy" to prevent Network/EOF errors during massive parallel pulls.
+# Optimized with "Split-Wave Strategy" (Wave 2A/2B) to prevent Network Saturation.
 
 steps:
   # ==========================================================
@@ -230,7 +230,7 @@ steps:
         df -h
 
   # ==========================================================
-  # WAVE 2: HEAVY AGENTS
+  # WAVE 2A: HEAVY AGENTS (Group 1)
   # Waits for Wave 1 to clear network/CPU
   # ==========================================================
 
@@ -327,10 +327,15 @@ steps:
       - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
       - 'ENVIRONMENT=${_ENVIRONMENT}'
 
+  # ==========================================================
+  # WAVE 2B: HEAVY AGENTS (Group 2)
+  # Waits for Wave 2A to finish (Reducing Concurrency)
+  # ==========================================================
+
   # [data-insights-agent]
   - name: 'gcr.io/cloud-builders/docker'
     id: 'build-push-data-insights-agent'
-    waitFor: ['build-push-user-service', 'build-push-app-settings-service']
+    waitFor: ['build-push-research-agent', 'build-push-commands-agent']
     entrypoint: 'bash'
     args:
       - '-c'
@@ -361,7 +366,7 @@ steps:
   # [notes-agent]
   - name: 'gcr.io/cloud-builders/docker'
     id: 'build-push-notes-agent'
-    waitFor: ['build-push-user-service', 'build-push-app-settings-service']
+    waitFor: ['build-push-research-agent', 'build-push-commands-agent']
     entrypoint: 'bash'
     args:
       - '-c'
@@ -392,7 +397,7 @@ steps:
   # [todos-agent]
   - name: 'gcr.io/cloud-builders/docker'
     id: 'build-push-todos-agent'
-    waitFor: ['build-push-user-service', 'build-push-app-settings-service']
+    waitFor: ['build-push-research-agent', 'build-push-commands-agent']
     entrypoint: 'bash'
     args:
       - '-c'
@@ -422,13 +427,13 @@ steps:
 
   # ==========================================================
   # WAVE 3: FRONTEND & LIGHTWEIGHT SERVICES
-  # Waits for Wave 2
+  # Waits for Wave 2B to finish
   # ==========================================================
 
   # [api-docs-hub]
   - name: 'gcr.io/cloud-builders/docker'
     id: 'build-push-api-docs-hub'
-    waitFor: ['build-push-research-agent', 'build-push-data-insights-agent']
+    waitFor: ['build-push-data-insights-agent', 'build-push-notes-agent']
     entrypoint: 'bash'
     args:
       - '-c'
@@ -459,7 +464,7 @@ steps:
   # [mobile-notifications-service]
   - name: 'gcr.io/cloud-builders/docker'
     id: 'build-push-mobile-notifications-service'
-    waitFor: ['build-push-research-agent', 'build-push-data-insights-agent']
+    waitFor: ['build-push-data-insights-agent', 'build-push-notes-agent']
     entrypoint: 'bash'
     args:
       - '-c'
@@ -490,7 +495,7 @@ steps:
   # [bookmarks-agent]
   - name: 'gcr.io/cloud-builders/docker'
     id: 'build-push-bookmarks-agent'
-    waitFor: ['build-push-research-agent', 'build-push-data-insights-agent']
+    waitFor: ['build-push-data-insights-agent', 'build-push-notes-agent']
     entrypoint: 'bash'
     args:
       - '-c'
@@ -521,7 +526,7 @@ steps:
   # [calendar-agent]
   - name: 'gcr.io/cloud-builders/docker'
     id: 'build-push-calendar-agent'
-    waitFor: ['build-push-research-agent', 'build-push-data-insights-agent']
+    waitFor: ['build-push-data-insights-agent', 'build-push-notes-agent']
     entrypoint: 'bash'
     args:
       - '-c'
@@ -552,7 +557,7 @@ steps:
   # [web-agent]
   - name: 'gcr.io/cloud-builders/docker'
     id: 'build-push-web-agent'
-    waitFor: ['build-push-research-agent', 'build-push-data-insights-agent']
+    waitFor: ['build-push-data-insights-agent', 'build-push-notes-agent']
     entrypoint: 'bash'
     args:
       - '-c'
@@ -583,7 +588,7 @@ steps:
   # [web - frontend]
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     id: 'fetch-web-config'
-    waitFor: ['build-push-research-agent', 'build-push-data-insights-agent']
+    waitFor: ['build-push-data-insights-agent', 'build-push-notes-agent']
     entrypoint: 'bash'
     args:
       - '-c'
