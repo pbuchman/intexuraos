@@ -280,7 +280,7 @@ curl https://research-agent.intexuraos.com/research/shared/typescript-vs-js
 ### Step 4: Unshare (delete public access)
 
 ```bash
-curl -X POST https://research-agent.intexuraos.com/research/RESEARCH_ID/unshare \
+curl -X DELETE https://research-agent.intexuraos.com/research/RESEARCH_ID/share \
   -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
 ```
 
