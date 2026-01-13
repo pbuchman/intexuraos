@@ -15,7 +15,10 @@ The interface that all LLM clients implement:
 interface LLMClient {
   research(prompt: string): Promise<Result<ResearchResult, LLMError>>;
   generate(prompt: string): Promise<Result<GenerateResult, LLMError>>;
-  generateImage?(prompt: string, options?: ImageGenerateOptions): Promise<Result<ImageGenerationResult, LLMError>>;
+  generateImage?(
+    prompt: string,
+    options?: ImageGenerateOptions
+  ): Promise<Result<ImageGenerationResult, LLMError>>;
 }
 ```
 
@@ -23,15 +26,15 @@ interface LLMClient {
 
 Error codes returned by all providers:
 
-| Code | Description | Action |
-|------|-------------|--------|
-| API_ERROR | General API error | Check message for details |
-| TIMEOUT | Request timed out | Retry with backoff |
-| INVALID_KEY | API key invalid | Check configuration |
-| RATE_LIMITED | Rate limit exceeded | Implement backoff |
-| OVERLOADED | Provider overloaded | Retry after delay |
-| CONTEXT_LENGTH | Prompt too long | Truncate prompt |
-| CONTENT_FILTERED | Content filtered | Modify content |
+| Code             | Description         | Action                    |
+| ---------------- | ------------------- | ------------------------- |
+| API_ERROR        | General API error   | Check message for details |
+| TIMEOUT          | Request timed out   | Retry with backoff        |
+| INVALID_KEY      | API key invalid     | Check configuration       |
+| RATE_LIMITED     | Rate limit exceeded | Implement backoff         |
+| OVERLOADED       | Provider overloaded | Retry after delay         |
+| CONTEXT_LENGTH   | Prompt too long     | Truncate prompt           |
+| CONTENT_FILTERED | Content filtered    | Modify content            |
 
 ### `NormalizedUsage`
 
