@@ -98,7 +98,7 @@ sequenceDiagram
 | POST     | `/research/:id/approve`      | Approve draft research                  | Bearer token         |
 | POST     | `/research/:id/enhance`      | Enhance with more models/context        | Bearer token         |
 | POST     | `/research/:id/retry-failed` | Retry failed LLM calls                  | Bearer token         |
-| POST     | `/research/:id/unshare`      | Remove public sharing                   | Bearer token         |
+| DELETE   | `/research/:id/share`        | Remove public sharing                   | Bearer token         |
 | GET      | `/research/shared/:slug`     | Get shared research (public)            | None                 |
 | GET      | `/pricing`                   | Get LLM pricing per provider/model      | Bearer token         |
 | POST     | `/app-settings`              | Update app settings (admin)             | Bearer token (admin) |
