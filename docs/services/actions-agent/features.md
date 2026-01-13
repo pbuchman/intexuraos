@@ -66,7 +66,7 @@ When classification is wrong:
 
 **No calendar/reminder handlers** - These action types are defined but handlers are not yet implemented (action stays in pending)
 
-**Manual approval required** - Low-confidence actions require user approval before execution
+**Manual approval required** - All actions currently require user approval before execution (auto-execution based on confidence is planned but not yet implemented)
 
 **WhatsApp-only notifications** - Success/failure notifications currently only sent via WhatsApp
 
