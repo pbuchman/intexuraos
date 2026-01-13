@@ -164,9 +164,9 @@ Fix: Add to firestore-collections.json:
 
 ### CI Integration
 
-**Command:** `npm run verify:firestore`
+**Command:** `pnpm run verify:firestore`
 
-**Location in CI:** Runs after `verify:common`, before `format` in `npm run ci`.
+**Location in CI:** Runs after `verify:common`, before `format` in `pnpm run ci`.
 
 **Effect:** CI fails if violations detected, preventing bad merges.
 
@@ -277,7 +277,7 @@ See [service-to-service-communication.md](./service-to-service-communication.md)
 4. **Verify:**
 
    ```bash
-   npm run verify:firestore
+   pnpm run verify:firestore
    # Should pass with no violations
    ```
 
@@ -353,8 +353,8 @@ See [service-to-service-communication.md](./service-to-service-communication.md)
 5. **Verify:**
 
    ```bash
-   npm run verify:firestore
-   npm run ci
+   pnpm run verify:firestore
+   pnpm run ci
    ```
 
 6. **Deploy both services:**
@@ -418,8 +418,8 @@ See [service-to-service-communication.md](./service-to-service-communication.md)
 
 6. **Verify and deploy:**
    ```bash
-   npm run verify:firestore
-   npm run ci
+   pnpm run verify:firestore
+   pnpm run ci
    ```
 
 ## Troubleshooting

@@ -13,11 +13,11 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@intexuraos/common-core": "*",
-    "@intexuraos/llm-common": "*",
-    "@intexuraos/llm-audit": "*",
-    "@intexuraos/llm-contract": "*",
-    "@intexuraos/llm-pricing": "*"
+    "@intexuraos/common-core": "workspace:*",
+    "@intexuraos/llm-common": "workspace:*",
+    "@intexuraos/llm-audit": "workspace:*",
+    "@intexuraos/llm-contract": "workspace:*",
+    "@intexuraos/llm-pricing": "workspace:*"
   },
   "devDependencies": {
     "nock": "^14.0.0"

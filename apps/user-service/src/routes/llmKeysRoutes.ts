@@ -119,49 +119,55 @@ export const llmKeysRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       },
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
-      const user = await requireAuth(request, reply);
-      if (!user) {
-        return;
+      try {
+        const user = await requireAuth(request, reply);
+        if (!user) {
+          return;
+        }
+
+        const params = request.params as { uid: string };
+
+        if (params.uid !== user.userId) {
+          return await reply.fail('FORBIDDEN', 'Cannot access other user settings');
+        }
+
+        const { userSettingsRepository } = getServices();
+        const result = await userSettingsRepository.getSettings(params.uid);
+
+        if (!result.ok) {
+          return await reply.fail('INTERNAL_ERROR', result.error.message);
+        }
+
+        const settings = result.value;
+        const llmApiKeys = settings?.llmApiKeys;
+        const llmTestResults = settings?.llmTestResults;
+        const { encryptor } = getServices();
+
+        // Decrypt and mask keys for display
+        const getMaskedKey = (encryptedKey: EncryptedValue | undefined): string | null => {
+          if (encryptedKey === undefined || encryptor === null) return null;
+          const decrypted = encryptor.decrypt(encryptedKey);
+          if (!decrypted.ok) return null;
+          return maskApiKey(decrypted.value);
+        };
+
+        return await reply.ok({
+          google: getMaskedKey(llmApiKeys?.google),
+          openai: getMaskedKey(llmApiKeys?.openai),
+          anthropic: getMaskedKey(llmApiKeys?.anthropic),
+          perplexity: getMaskedKey(llmApiKeys?.perplexity),
+          testResults: {
+            google: llmTestResults?.google ?? null,
+            openai: llmTestResults?.openai ?? null,
+            anthropic: llmTestResults?.anthropic ?? null,
+            perplexity: llmTestResults?.perplexity ?? null,
+          },
+        });
+      } catch (error) {
+        request.log.error({ err: error }, 'Unhandled error in getLlmApiKeys');
+        reply.status(500);
+        return await reply.fail('INTERNAL_ERROR', 'Failed to get LLM keys');
       }
-
-      const params = request.params as { uid: string };
-
-      if (params.uid !== user.userId) {
-        return await reply.fail('FORBIDDEN', 'Cannot access other user settings');
-      }
-
-      const { userSettingsRepository } = getServices();
-      const result = await userSettingsRepository.getSettings(params.uid);
-
-      if (!result.ok) {
-        return await reply.fail('INTERNAL_ERROR', result.error.message);
-      }
-
-      const settings = result.value;
-      const llmApiKeys = settings?.llmApiKeys;
-      const llmTestResults = settings?.llmTestResults;
-      const { encryptor } = getServices();
-
-      // Decrypt and mask keys for display
-      const getMaskedKey = (encryptedKey: EncryptedValue | undefined): string | null => {
-        if (encryptedKey === undefined || encryptor === null) return null;
-        const decrypted = encryptor.decrypt(encryptedKey);
-        if (!decrypted.ok) return null;
-        return maskApiKey(decrypted.value);
-      };
-
-      return await reply.ok({
-        google: getMaskedKey(llmApiKeys?.google),
-        openai: getMaskedKey(llmApiKeys?.openai),
-        anthropic: getMaskedKey(llmApiKeys?.anthropic),
-        perplexity: getMaskedKey(llmApiKeys?.perplexity),
-        testResults: {
-          google: llmTestResults?.google ?? null,
-          openai: llmTestResults?.openai ?? null,
-          anthropic: llmTestResults?.anthropic ?? null,
-          perplexity: llmTestResults?.perplexity ?? null,
-        },
-      });
     }
   );
 

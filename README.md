@@ -93,7 +93,7 @@ See [docs/setup/09-pwa.md](docs/setup/09-pwa.md) for full documentation.
 This project is developed with LLMs as **senior reviewers, architects, and automation components** — not autocomplete tools. Key practices:
 
 - **Explicit constraints** — All LLM interactions include project rules (`.github/copilot-instructions.md`) enforcing architecture boundaries, TypeScript strictness, and test coverage thresholds
-- **Verification-first** — LLMs must run `npm run ci` before claiming task completion; no silent assumptions
+- **Verification-first** — LLMs must run `pnpm run ci` before claiming task completion; no silent assumptions
 - **Structured prompts** — Reusable prompt templates in `.github/prompts/` for refactoring, documentation, and multi-step orchestration
 
 ### Continuity Ledger Pattern
@@ -150,7 +150,7 @@ Each app owns its domain logic and infrastructure adapters:
 | notion-service               | (orchestration only)     | notion, firestore                    |
 | mobile-notifications-service | notifications            | firestore                            |
 
-**Import rules** (enforced by `npm run verify:boundaries`):
+**Import rules** (enforced by `pnpm run verify:boundaries`):
 
 - Apps import only from `@intexuraos/common`
 - Apps cannot import from other apps
@@ -261,13 +261,13 @@ All responses use consistent envelopes with `success`, `error`, and `diagnostics
 # Clone and install
 git clone https://github.com/your-org/intexuraos.git
 cd intexuraos
-npm install
+pnpm install
 
 # Run tests (uses in-memory fakes, no external deps)
-npm run ci
+pnpm run ci
 
 # Start services locally
-cd apps/user-service && npm run dev
+cd apps/user-service && pnpm run dev
 ```
 
 ### Environment Variables
@@ -307,9 +307,9 @@ LOG_LEVEL=debug
 Tests use **in-memory fake repositories** via dependency injection. No external services required.
 
 ```bash
-npm run test              # Run all tests
-npm run test:coverage     # With coverage report
-npm run ci                # Full CI pipeline
+pnpm run test              # Run all tests
+ppnpm run test:coverage     # With coverage report
+pnpm run ci                # Full CI pipeline
 ```
 
 **Coverage thresholds:** 95% lines/branches/functions/statements (enforced by CI).
@@ -337,14 +337,14 @@ npm run ci                # Full CI pipeline
 ```yaml
 # cloudbuild/cloudbuild.yaml
 steps:
-  - npm ci
+  - pnpm install --frozen-lockfile
   - detect-affected.mjs # Determines which services need rebuild
   - docker build (per service, if affected)
   - docker push
   - gcloud run deploy
 ```
 
-**Independent builds:** Each app can be built separately via `npm -w apps/<app> run build`.
+**Independent builds:** Each app can be built separately via `pnpm --filter apps/<app> run build`.
 
 ### Rollback
 
@@ -389,7 +389,7 @@ See [CHANGELOG.md](CHANGELOG.md) for release history.
 ### PR Process
 
 1. Fork and create feature branch
-2. Ensure `npm run ci` passes
+2. Ensure `pnpm run ci` passes
 3. Write/update tests (maintain coverage)
 4. Submit PR with description of changes
 5. Address review feedback
@@ -405,8 +405,8 @@ Enforced automatically:
 - Explicit return types on exports
 
 ```bash
-npm run lint:fix    # Auto-fix lint issues
-npm run format      # Format with Prettier
+pnpm run lint:fix    # Auto-fix lint issues
+pnpm run format      # Format with Prettier
 ```
 
 ---
@@ -422,7 +422,7 @@ AI-assisted development is configured via:
 
 Key rules:
 
-- `npm run ci` must pass before task completion
+- `pnpm run ci` must pass before task completion
 - Follow import hierarchy (enforced by boundaries)
 - 95% coverage required
 

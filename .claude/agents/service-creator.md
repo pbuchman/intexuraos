@@ -168,7 +168,7 @@ You are an elite service architecture specialist for the IntexuraOS monorepo. Yo
 10. **Execute Deployment Pipeline**
 
 - Run `npx prettier --write .`
-- Run `npm run ci` and verify it passes
+- Run `pnpm run ci` and verify it passes
 - Run `tf fmt -check -recursive && tf validate` from `/terraform`
 - Instruct user to run `terraform apply` in `terraform/environments/dev/`
 - Wait for confirmation that service is created in Cloud Run

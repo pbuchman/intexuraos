@@ -20,20 +20,25 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '22'
-          cache: 'npm'
+          cache: 'pnpm'
 
       - name: Install dependencies
-        run: npm ci
+        run: pnpm install
 
       - name: Build
-        run: npm run build
+        run: pnpm run build
 
       - name: Run tests with coverage
-        run: npm run test:coverage
+        run: pnpm run test:coverage
 
       - name: Analyze coverage and create issues
         uses: actions/github-script@v7
@@ -224,8 +229,8 @@ jobs:
 
             1. **Read \`.github/copilot-instructions.md\`** — all coding standards
             2. **Read \`.github/instructions/apps.instructions.md\`** — app patterns
-            3. **Run Prettier before CI**: \`npx prettier --write .\`
-            4. **All verification must pass**: \`npm run ci\`
+            3. **Run Prettier before CI**: \`pnpm prettier --write .\`
+            4. **All verification must pass**: \`pnpm run ci\`
 
             ## Target File
 
@@ -239,7 +244,7 @@ jobs:
 
             ## Analysis Required
 
-            1. Run \`npm run test:coverage\` and identify uncovered lines
+            1. Run \`pnpm run test:coverage\` and identify uncovered lines
             2. Analyze which branches are not covered
             3. Create targeted tests for uncovered paths
 
@@ -247,13 +252,13 @@ jobs:
 
             - [ ] Branch coverage ≥ 90% for this file
             - [ ] All new tests pass
-            - [ ] \`npm run ci\` passes
+            - [ ] \`pnpm run ci\` passes
 
             ## Coverage Reporting (REQUIRED)
 
             **Before starting**, run:
             \`\`\`bash
-            npm run test:coverage 2>&1 | grep -A2 "${shortPath}"
+            pnpm run test:coverage 2>&1 | grep -A2 "${shortPath}"
             \`\`\`
 
             **After completing**, include BOTH outputs in PR description.

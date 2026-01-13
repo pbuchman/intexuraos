@@ -117,8 +117,8 @@ The service worker is powered by Workbox and uses:
 
 PWA features are disabled in development mode to avoid caching issues. To test:
 
-1. Build the app: `npm run build`
-2. Preview: `npm run preview`
+1. Build the app: `pnpm run build`
+2. Preview: `pnpm run preview`
 3. Open `http://localhost:3000`
 
 ### Debugging

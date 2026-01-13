@@ -6,7 +6,19 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 # IntexuraOS — Claude Instructions
 
-**All rules below are verified by `npm run ci`. If CI passes, rules are satisfied.**
+**All rules below are verified by `pnpm run ci`. If CI passes, rules are satisfied.**
+
+---
+
+## Ownership Mindset (MANDATORY)
+
+**RULE:** Any issue you find in the codebase is YOUR issue to fix. NEVER claim there were "pre-existing issues" or "pre-existing bugs."
+
+- You see a problem → you own it → you fix it
+- No finger-pointing at "previous state" or "prior work"
+- Unless user EXPLICITLY tells you otherwise (e.g., "ignore X", "this is a known issue"), assume responsibility
+
+**Corollary:** If you're unsure whether something is your responsibility, ASK — don't assume it's someone else's debt.
 
 ---
 
@@ -17,7 +29,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 When modifying a specific app, first verify that workspace passes all checks:
 
 ```bash
-npm run verify:workspace:tracked -- <app-name>   # e.g. research-agent
+pnpm run verify:workspace:tracked -- <app-name>   # e.g. research-agent
 ```
 
 This runs (in order):
@@ -30,12 +42,12 @@ This runs (in order):
 ### Step 2: Full CI
 
 ```bash
-npm run ci:tracked            # MUST pass before task completion (auto-tracks failures)
+pnpm run ci:tracked            # MUST pass before task completion (auto-tracks failures)
 tf fmt -check -recursive      # If terraform changed (from /terraform)
 tf validate                   # If terraform changed
 ```
 
-Failure data is stored in `.claude/ci-failures/` for learning. Run `npm run ci:report` to see patterns.
+Failure data is stored in `.claude/ci-failures/` for learning. Run `pnpm run ci:report` to see patterns.
 
 **IMPORTANT:** Use `tf` command instead of `terraform`. This alias clears emulator env vars that break Terraform:
 
@@ -48,6 +60,8 @@ Note: The alias may not be available in spawned subshells - if `tf` is not found
 **Do not claim complete until verification passes.**
 
 **NEVER modify `vitest.config.ts` coverage exclusions or thresholds. Write tests instead.**
+
+**ALWAYS commit `.claude/ci-failures/*` files with your changes.** These track verification failures for learning and pattern analysis.
 
 ---
 
@@ -105,7 +119,7 @@ Avoid redundant paths like `/internal/todos/todos` — use simple `/internal/tod
 **RULE:** Each collection owned by exactly ONE service. Cross-service access via HTTP only.
 
 - Registry: `firestore-collections.json`
-- Verification: `npm run verify:firestore`
+- Verification: `pnpm run verify:firestore`
 - Docs: [docs/architecture/firestore-ownership.md](../docs/architecture/firestore-ownership.md)
 
 ### Firestore Composite Indexes
@@ -137,7 +151,7 @@ Avoid redundant paths like `/internal/todos/todos` — use simple `/internal/tod
 
 **RULE:** All publishers MUST extend `BasePubSubPublisher`. Topic names from env vars only (no hardcoding).
 
-Verification: `npm run verify:pubsub`. Docs: [docs/architecture/pubsub-standards.md](../docs/architecture/pubsub-standards.md)
+Verification: `pnpm run verify:pubsub`. Docs: [docs/architecture/pubsub-standards.md](../docs/architecture/pubsub-standards.md)
 
 ### New Topic Registration (MANDATORY)
 
@@ -172,7 +186,7 @@ Verification: `npm run verify:pubsub`. Docs: [docs/architecture/pubsub-standards
 
 ### Build Pipeline Architecture
 
-**CI:** `.github/workflows/ci.yml` runs `npm run ci` on all branches (lint, typecheck, test, build)
+**CI:** `.github/workflows/ci.yml` runs `pnpm run ci` on all branches (lint, typecheck, test, build)
 
 **Deploy:** `.github/workflows/deploy.yml` triggers on push to `development` branch only:
 
@@ -184,7 +198,7 @@ Verification: `npm run verify:pubsub`. Docs: [docs/architecture/pubsub-standards
 
 **Manual override:** `workflow_dispatch` with `force_strategy: monolith` to rebuild all
 
-**Global Triggers** (force MONOLITH): `terraform/`, `cloudbuild/cloudbuild.yaml`, `cloudbuild/scripts/`, `package-lock.json`, `tsconfig.base.json`
+**Global Triggers** (force MONOLITH): `terraform/`, `cloudbuild/cloudbuild.yaml`, `cloudbuild/scripts/`, `pnpm-lock.yaml`, `tsconfig.base.json`
 
 ### File Locations
 
@@ -325,9 +339,9 @@ When adding new functionality:
 
 ## Testing
 
-**No external deps.** In-memory fakes, `nock` for HTTP. Just `npm run test`.
+**No external deps.** In-memory fakes, `nock` for HTTP. Just `pnpm run test`.
 
-- TypeScript: `npm run typecheck:tests` (uses `tsconfig.tests-check.json`)
+- TypeScript: `pnpm run typecheck:tests` (uses `tsconfig.tests-check.json`)
 - Pattern: `setServices({fakes})` in `beforeEach`, `resetServices()` in `afterEach`
 - Routes: integration via `app.inject()`. Domain: unit tests. Infra: tested via routes.
 - **Coverage: 95%. NEVER modify thresholds — write tests.**
@@ -349,7 +363,7 @@ The `web` workspace has adjusted verification (planned complete refactoring):
 - Hooks with business logic (`hooks/`)
 - Calculations, parsers, evaluators
 
-Use the same command: `npm run verify:workspace:tracked -- web` — adjusted behavior is automatic.
+Use the same command: `pnpm run verify:workspace:tracked -- web` — adjusted behavior is automatic.
 
 ---
 
@@ -360,6 +374,27 @@ Use the same command: `npm run verify:workspace:tracked -- web` — adjusted beh
 - `"commit"` → local only, no push
 - `"commit and push"` → push once
 - Multiple commits → ask before pushing
+
+---
+
+## Pull Request Workflow (DEFAULT)
+
+**When asked to create a PR, follow this default workflow:**
+
+1. **Commit all changes** in the current workspace
+2. **Fetch origin** and merge `origin/development` if it exists
+3. **Push** the branch
+4. **Create PR** targeting `development` (if it exists), otherwise `main`
+
+**Commands:**
+
+```bash
+git add -A && git commit -m "message"
+git fetch origin
+git merge origin/development  # if exists, skip if not
+git push -u origin <branch>
+gh pr create --base development  # or --base main if development doesn't exist
+```
 
 ---
 
@@ -382,5 +417,10 @@ Plans involving HTTP endpoints MUST include an "Endpoint Changes" section with t
 
 <!-- This section is auto-generated by claude-mem. Edit content outside the tags. -->
 
-_No recent activity_
+### Jan 13, 2026
+
+| ID    | Time    | T   | Title                                                                   | Read |
+| ----- | ------- | --- | ----------------------------------------------------------------------- | ---- |
+| #4926 | 2:26 AM | ✅  | Claude Instructions Updated with New Verification and Development Rules | ~468 |
+
 </claude-mem-context>

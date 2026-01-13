@@ -1,7 +1,35 @@
 /**
- * Gemini Client - with parameterized pricing.
+ * Google Gemini client implementation.
  *
- * All costs calculated from passed ModelPricing config.
+ * Implements the {@link LLMClient} interface for Gemini models with:
+ * - Grounding with Google Search integration
+ * - Image generation via Gemini 2.5 Flash
+ * - Automatic usage logging to Firestore
+ * - Audit trail for all requests
+ *
+ * @packageDocumentation
+ *
+ * @example
+ * ```ts
+ * import { createGeminiClient } from '@intexuraos/infra-gemini';
+ *
+ * const client = createGeminiClient({
+ *   apiKey: process.env.GOOGLE_API_KEY,
+ *   model: 'gemini-2.5-flash',
+ *   userId: 'user-123',
+ *   pricing: {
+ *     inputPricePerMillion: 0.075,
+ *     outputPricePerMillion: 0.30,
+ *     groundingCostPerRequest: 0.002,
+ *   }
+ * });
+ *
+ * const result = await client.generate('Explain quantum computing');
+ * if (result.ok) {
+ *   console.log(result.data.content);
+ *   console.log('Cost:', result.data.usage.costUsd);
+ * }
+ * ```
  */
 
 import { randomUUID } from 'node:crypto';

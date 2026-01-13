@@ -562,16 +562,16 @@ The service:
 
 ```bash
 # From repo root
-npm install
+ppnpm install
 
 # Set required environment variables
 export INTEXURAOS_WHATSAPP_VERIFY_TOKEN="your-verify-token"
 export INTEXURAOS_WHATSAPP_APP_SECRET="your-app-secret"
 
 # Build and run
-npm run build
+pnpm run build
 cd apps/whatsapp-service
-npm start
+pnpm start
 ```
 
 ### Docker

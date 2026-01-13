@@ -113,7 +113,7 @@ All topic configuration uses `INTEXURAOS_PUBSUB_*` prefix:
 A verification script ensures all publishers extend `BasePubSubPublisher`:
 
 ```bash
-npm run verify:pubsub
+pnpm run verify:pubsub
 ```
 
-This runs as part of `npm run ci`.
+This runs as part of `pnpm run ci`.

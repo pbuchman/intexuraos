@@ -8,7 +8,7 @@ actions:
       method: POST
       baseUrl: ${INTEXURAOS_ACTIONS_AGENT_URL}
     ui:
-      label: Approve
+      label: Research!
       variant: success
       icon: CheckCircle
       confirmationMessage: 'This will create a research draft. Continue?'
@@ -22,7 +22,7 @@ actions:
       method: POST
       baseUrl: ${INTEXURAOS_ACTIONS_AGENT_URL}
     ui:
-      label: Create Todo
+      label: Todo!
       variant: success
       icon: CheckCircle
       confirmationMessage: 'Create this todo?'
@@ -36,7 +36,7 @@ actions:
       method: POST
       baseUrl: ${INTEXURAOS_ACTIONS_AGENT_URL}
     ui:
-      label: Create Note
+      label: Note!
       variant: success
       icon: CheckCircle
       confirmationMessage: 'Create this note?'
@@ -50,7 +50,7 @@ actions:
       method: POST
       baseUrl: ${INTEXURAOS_ACTIONS_AGENT_URL}
     ui:
-      label: Save Link
+      label: Bookmark!
       variant: success
       icon: CheckCircle
       confirmationMessage: 'Save this link?'
@@ -102,16 +102,18 @@ actions:
 
   retry_link:
     endpoint:
-      path: /actions/{actionId}/execute
+      path: /actions/{actionId}/resolve-duplicate
       method: POST
       baseUrl: ${INTEXURAOS_ACTIONS_AGENT_URL}
+      body:
+        action: update
     ui:
       label: Retry
       variant: primary
       icon: Play
-      confirmationMessage: 'Retry saving link?'
+      confirmationMessage: 'Update existing bookmark with fresh data?'
     onSuccess:
-      message: 'Link saved!'
+      message: 'Bookmark updated!'
       linkLabel: 'View Bookmark →'
 
   reject:

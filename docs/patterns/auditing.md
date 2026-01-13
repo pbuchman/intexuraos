@@ -183,7 +183,7 @@ After applying a pattern across services:
 
 - [ ] Pattern applied to ALL affected services
 - [ ] Tests updated for ALL affected services
-- [ ] `npm run ci` passes
+- [ ] `pnpm run ci` passes
 - [ ] Pattern documented in CLAUDE.md (if novel)
 - [ ] Commit message references all affected services
 - [ ] Deployment verified with production logs

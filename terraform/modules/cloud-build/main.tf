@@ -33,7 +33,7 @@ resource "google_cloudbuildv2_connection" "github" {
 resource "google_cloudbuildv2_repository" "intexuraos" {
   project           = var.project_id
   location          = var.region
-  name              = var.github_repo
+  name              = "${var.github_owner}-${var.github_repo}"
   parent_connection = google_cloudbuildv2_connection.github.name
   remote_uri        = "https://github.com/${var.github_owner}/${var.github_repo}.git"
 }

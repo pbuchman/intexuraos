@@ -79,7 +79,7 @@ This test demonstrates the correct pattern:
 2. Tests verify internal auth header handling
 3. Tests cover network error scenarios
 4. Tests validate request/response schema compatibility
-5. All tests pass in CI (`npm run ci`)
+5. All tests pass in CI (`pnpm run ci`)
 
 ## Additional Context
 

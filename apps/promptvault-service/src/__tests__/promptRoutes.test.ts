@@ -6,6 +6,77 @@
  * - GET /prompt-vault/prompts/:prompt_id
  * - PATCH /prompt-vault/prompts/:prompt_id
  */
+
+// Mock @notionhq/client BEFORE any imports (vi.mock is hoisted)
+vi.mock('@notionhq/client', () => {
+  const mockMethods = {
+    retrieve: vi.fn(),
+    create: vi.fn(),
+    update: vi.fn(),
+    listBlocks: vi.fn(),
+    appendBlocks: vi.fn(),
+    updateBlock: vi.fn(),
+    deleteBlock: vi.fn(),
+  };
+
+  class MockClient {
+    pages = {
+      retrieve: mockMethods.retrieve,
+      create: mockMethods.create,
+      update: mockMethods.update,
+    };
+    blocks = {
+      children: {
+        list: mockMethods.listBlocks,
+        append: mockMethods.appendBlocks,
+      },
+      update: mockMethods.updateBlock,
+      delete: mockMethods.deleteBlock,
+    };
+  }
+
+  const mockIsNotionClientError = vi.fn((error: unknown): boolean => {
+    return typeof error === 'object' && error !== null && 'code' in error;
+  });
+
+  // Store on globalThis so tests can access the mocks
+  (globalThis as typeof globalThis & { __notionMocks: typeof mockMethods }).__notionMocks = mockMethods;
+  (globalThis as typeof globalThis & { __isNotionClientError: typeof mockIsNotionClientError }).__isNotionClientError = mockIsNotionClientError;
+
+  return {
+    Client: MockClient,
+    isNotionClientError: mockIsNotionClientError,
+    APIErrorCode: {
+      Unauthorized: 'unauthorized',
+      ObjectNotFound: 'object_not_found',
+      RateLimited: 'rate_limited',
+      ValidationError: 'validation_error',
+      InvalidJSON: 'invalid_json',
+      Conflict: 'conflict',
+    },
+    LogLevel: {
+      DEBUG: 'debug',
+      INFO: 'info',
+      WARN: 'warn',
+      ERROR: 'error',
+    },
+  };
+});
+
+declare global {
+  var __notionMocks: {
+    retrieve: import('vitest').Mock;
+    create: import('vitest').Mock;
+    update: import('vitest').Mock;
+    listBlocks: import('vitest').Mock;
+    appendBlocks: import('vitest').Mock;
+    updateBlock: import('vitest').Mock;
+    deleteBlock: import('vitest').Mock;
+  };
+}
+
+const mockNotionMethods = globalThis.__notionMocks;
+
 import {
   beforeEach,
   createToken,
@@ -15,55 +86,7 @@ import {
   setupTestContext,
   type TestContext,
 } from './testUtils.js';
-import { vi } from 'vitest';
 import { FakeNotionServiceClient } from './fakes.js';
-
-// Mock Notion Client - must be defined at top level
-const mockNotionMethods = {
-  retrieve: vi.fn(),
-  create: vi.fn(),
-  update: vi.fn(),
-  listBlocks: vi.fn(),
-  appendBlocks: vi.fn(),
-  updateBlock: vi.fn(),
-  deleteBlock: vi.fn(),
-};
-
-vi.mock('@notionhq/client', () => {
-  // Define class inside factory to avoid hoisting issues
-  class MockClient {
-    pages = {
-      retrieve: mockNotionMethods.retrieve,
-      create: mockNotionMethods.create,
-      update: mockNotionMethods.update,
-    };
-    blocks = {
-      children: {
-        list: mockNotionMethods.listBlocks,
-        append: mockNotionMethods.appendBlocks,
-      },
-      update: mockNotionMethods.updateBlock,
-      delete: mockNotionMethods.deleteBlock,
-    };
-  }
-
-  // Mock for isNotionClientError - check if error has 'code' property
-  const mockIsNotionClientError = vi.fn((error: unknown): boolean => {
-    return typeof error === 'object' && error !== null && 'code' in error;
-  });
-
-  return {
-    Client: MockClient,
-    isNotionClientError: mockIsNotionClientError,
-    APIErrorCode: {
-      Unauthorized: 'unauthorized',
-      ObjectNotFound: 'object_not_found',
-    },
-    LogLevel: {
-      DEBUG: 'debug',
-    },
-  };
-});
 
 /**
  * Helper to set up a Notion connection directly through fakes.

@@ -77,6 +77,13 @@ export async function runSynthesis(
 
   const research = researchResult.value;
 
+  // Guard against race conditions: if research is already being synthesized or completed,
+  // return early to prevent duplicate notifications
+  if (research.status === 'synthesizing' || research.status === 'completed') {
+    logger?.info('[4.1] Research already processing or completed, skipping synthesis');
+    return { ok: true };
+  }
+
   logger?.info('[4.1.1] Updating status to synthesizing');
   await researchRepo.update(researchId, { status: 'synthesizing' });
 
