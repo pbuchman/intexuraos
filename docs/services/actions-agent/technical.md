@@ -209,8 +209,8 @@ training data.
 **Calendar/reminder actions**: These types are defined in the enum but have no handlers. Actions of these types remain
 in pending status indefinitely.
 
-**Confidence-based auto-execution**: Actions with confidence >= 0.7 are auto-executed. Below 0.7, they enter
-`awaiting_approval` status.
+**Manual approval required**: All actions currently require manual approval before execution. The `shouldAutoExecute()`
+function exists but is a stub implementation (always returns `false`) - this feature is planned but not yet implemented.
 
 ## File Structure
 
