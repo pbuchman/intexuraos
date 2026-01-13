@@ -7,6 +7,7 @@ import { buildServer } from './server.js';
 import { initializeServices } from './services.js';
 
 const REQUIRED_ENV = [
+  'INTEXURAOS_SENTRY_DSN',
   'INTEXURAOS_GCP_PROJECT_ID',
   'INTEXURAOS_AUTH0_DOMAIN',
   'INTEXURAOS_AUTH0_CLIENT_ID',
@@ -22,13 +23,6 @@ const REQUIRED_ENV = [
 validateRequiredEnv(REQUIRED_ENV);
 
 const sentryDsn = process.env['INTEXURAOS_SENTRY_DSN'];
-if (sentryDsn !== undefined) {
-  initSentry({
-    dsn: sentryDsn,
-    environment: process.env['INTEXURAOS_ENVIRONMENT'] ?? 'development',
-    serviceName: 'user-service',
-  });
-}
 
 const PORT = Number(process.env['PORT'] ?? 8080);
 const HOST = process.env['HOST'] ?? '0.0.0.0';

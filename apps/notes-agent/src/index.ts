@@ -5,6 +5,7 @@ import { buildServer } from './server.js';
 import { initServices } from './services.js';
 
 const REQUIRED_ENV = [
+  'INTEXURAOS_SENTRY_DSN',
   'INTEXURAOS_GCP_PROJECT_ID',
   'INTEXURAOS_AUTH_JWKS_URL',
   'INTEXURAOS_AUTH_ISSUER',
@@ -15,13 +16,6 @@ const REQUIRED_ENV = [
 validateRequiredEnv(REQUIRED_ENV);
 
 const sentryDsn = process.env['INTEXURAOS_SENTRY_DSN'];
-if (sentryDsn !== undefined) {
-  initSentry({
-    dsn: sentryDsn,
-    environment: process.env['INTEXURAOS_ENVIRONMENT'] ?? 'development',
-    serviceName: 'notes-agent',
-  });
-}
 
 async function main(): Promise<void> {
   initServices({

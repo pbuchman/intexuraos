@@ -3,6 +3,7 @@ import { validateRequiredEnv } from '@intexuraos/http-server';
 import { buildServer } from './server.js';
 
 const REQUIRED_ENV = [
+  'INTEXURAOS_SENTRY_DSN',
   'INTEXURAOS_GCP_PROJECT_ID',
   'INTEXURAOS_AUTH_JWKS_URL',
   'INTEXURAOS_AUTH_ISSUER',
@@ -12,13 +13,6 @@ const REQUIRED_ENV = [
 validateRequiredEnv(REQUIRED_ENV);
 
 const sentryDsn = process.env['INTEXURAOS_SENTRY_DSN'];
-if (sentryDsn !== undefined) {
-  initSentry({
-    dsn: sentryDsn,
-    environment: process.env['INTEXURAOS_ENVIRONMENT'] ?? 'development',
-    serviceName: 'mobile-notifications-service',
-  });
-}
 
 const PORT = Number(process.env['PORT'] ?? 8080);
 const HOST = process.env['HOST'] ?? '0.0.0.0';
