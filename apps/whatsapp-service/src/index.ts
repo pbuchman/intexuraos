@@ -7,7 +7,6 @@ import { validateRequiredEnv } from '@intexuraos/http-server';
 import { getErrorMessage } from '@intexuraos/common-core';
 import { buildServer } from './server.js';
 import { loadConfig } from './config.js';
-import { initServices } from './services.js';
 
 const REQUIRED_ENV = [
   'INTEXURAOS_SENTRY_DSN',
@@ -39,20 +38,7 @@ initSentry({
 
 async function main(): Promise<void> {
   const config = loadConfig();
-  initServices({
-    mediaBucket: config.mediaBucket,
-    gcpProjectId: config.gcpProjectId,
-    mediaCleanupTopic: config.mediaCleanupTopic,
-    commandsIngestTopic: config.commandsIngestTopic,
-    webhookProcessTopic: config.webhookProcessTopic,
-    transcriptionTopic: config.transcriptionTopic,
-    whatsappAccessToken: config.accessToken,
-    whatsappPhoneNumberId: config.allowedPhoneNumberIds[0],
-    speechmaticsApiKey: config.speechmaticsApiKey,
-    webAgentUrl: config.webAgentUrl,
-    internalAuthToken: config.internalAuthToken,
-  });
-  const app = await buildServer();
+  const app = await buildServer(config);
   const port = config.port;
   const host = config.host;
 
