@@ -86,7 +86,7 @@ The service worker is powered by Workbox and uses:
 ### Icons
 
 | Size    | File                            | Purpose              |
-| -------  | -------------------------------  | --------------------  |
+| ------- | ------------------------------- | -------------------- |
 | 192×192 | `/pwa-192x192.png`              | Standard PWA icon    |
 | 512×512 | `/pwa-512x512.png`              | Large icon, maskable |
 | 180×180 | `/apple-touch-icon-180x180.png` | iOS home screen      |

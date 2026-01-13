@@ -107,6 +107,7 @@ curl -X POST https://web-agent.intexuraos.com/internal/link-previews \
 ```
 
 **What happened:**
+
 - All 3 URLs fetched in parallel
 - 2 succeeded, 1 failed
 - Failed URL has error code instead of preview
@@ -207,9 +208,7 @@ Integrate web-agent into bookmarks-agent:
 
 import type { LinkPreview } from '@intexuraos/web-agent';
 
-export async function fetchLinkPreviews(
-  urls: string[]
-): Promise<Map<string, LinkPreview>> {
+export async function fetchLinkPreviews(urls: string[]): Promise<Map<string, LinkPreview>> {
   const response = await fetch('https://web-agent.intexuraos.com/internal/link-previews', {
     method: 'POST',
     headers: {
@@ -237,7 +236,7 @@ export async function fetchLinkPreviews(
 ```typescript
 const previews = await fetchLinkPreviews([
   'https://blog.example.com/article',
-  'https://github.com/user/repo'
+  'https://github.com/user/repo',
 ]);
 
 for (const [url, preview] of previews) {
@@ -248,7 +247,7 @@ for (const [url, preview] of previews) {
 ## Troubleshooting
 
 | Issue            | Symptom             | Solution                     |
-| ----------------  | -------------------  | ----------------------------  |
+| ---------------- | ------------------- | ---------------------------- |
 | Unauthorized     | 401 response        | Check X-Internal-Auth header |
 | Missing metadata | Empty preview       | Site lacks OpenGraph tags    |
 | Partial success  | Mixed results       | Check error.code per result  |
@@ -265,16 +264,19 @@ for (const [url, preview] of previews) {
 ## Exercises
 
 ### Easy
+
 1. Fetch preview for a single URL
 2. Parse the response and extract title
 3. Handle INVALID_URL error
 
 ### Medium
+
 1. Fetch 10 URLs in parallel
 2. Count success vs failed results
 3. Implement retry for TIMEOUT errors
 
 ### Hard
+
 1. Build a client library with TypeScript types
 2. Implement exponential backoff for retries
 3. Add caching layer for frequently requested URLs

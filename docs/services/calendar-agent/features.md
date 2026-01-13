@@ -25,10 +25,12 @@ Calendar-agent provides full Google Calendar API access:
 ## Key Features
 
 **Event Types:**
+
 - Timed events (with dateTime and timeZone)
 - All-day events (with date only)
 
 **Operations:**
+
 - `listEvents` - List with time range, search, pagination
 - `getEvent` - Get single event by ID
 - `createEvent` - Create new event
@@ -37,6 +39,7 @@ Calendar-agent provides full Google Calendar API access:
 - `getFreeBusy` - Check availability
 
 **Search & Filter:**
+
 - Time range (timeMin, timeMax)
 - Full-text search (q parameter)
 - Max results pagination

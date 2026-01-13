@@ -40,5 +40,5 @@ curl -X PATCH https://promptvault.intexuraos.com/prompt-vault/prompts/prompt_id 
 ## Troubleshooting
 
 | Error     | Cause             | Solution           |
-| ---------  | -----------------  | ------------------  |
+| --------- | ----------------- | ------------------ |
 | Not found | Invalid prompt_id | Check ID from list |

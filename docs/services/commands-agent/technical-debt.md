@@ -2,12 +2,12 @@
 
 ## Summary
 
-| Category       | Count   | Severity   |
-| --------------  | -------  | ----------  |
-| TODO/FIXME     | 0       | -          |
-| Code Smells    | 2       | Low        |
-| Test Coverage  | 0       | -          |
-| SRP Violations | 0       | -          |
+| Category       | Count | Severity |
+| -------------- | ----- | -------- |
+| TODO/FIXME     | 0     | -        |
+| Code Smells    | 2     | Low      |
+| Test Coverage  | 0     | -        |
+| SRP Violations | 0     | -        |
 
 ## Future Plans
 

@@ -25,16 +25,19 @@ Data-insights-agent provides end-to-end data analysis:
 ## Key Features
 
 **Data Source Management:**
+
 - Create, read, update, delete custom data sources
 - Title auto-generation with Gemini
 - Content validation and storage
 
 **Analysis Capabilities:**
+
 - Natural language data queries
 - Chart type detection (bar, line, pie, scatter)
 - Data transformation for preview
 
 **Composite Feeds:**
+
 - Combine multiple data sources
 - Feed name generation
 - Mobile notifications for updates
