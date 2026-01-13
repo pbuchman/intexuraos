@@ -30,6 +30,7 @@ export function getConfig(): AppConfig {
     firebaseProjectId: getEnvVar('INTEXURAOS_FIREBASE_PROJECT_ID'),
     firebaseApiKey: getEnvVar('INTEXURAOS_FIREBASE_API_KEY'),
     firebaseAuthDomain: getEnvVar('INTEXURAOS_FIREBASE_AUTH_DOMAIN'),
+    sentryDsn: getEnvVar('INTEXURAOS_SENTRY_DSN_WEB'),
   };
 }
 
