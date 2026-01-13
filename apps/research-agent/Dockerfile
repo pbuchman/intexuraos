@@ -36,7 +36,7 @@ RUN pnpm run --filter @intexuraos/research-agent build
 RUN cd /app/apps/research-agent/dist && \
     node -e "const fs=require('fs'); const pkg=JSON.parse(fs.readFileSync('package.json')); \
     fs.writeFileSync('package.json', JSON.stringify({name:'prod',type:'module',dependencies:pkg.dependencies}))" && \
-    pnpm install --prod --frozen-lockfile
+    CI=true pnpm install --prod --frozen-lockfile
 
 # ==========================================
 # Stage 2: Production
