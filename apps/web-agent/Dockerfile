@@ -5,7 +5,7 @@
 FROM node:22-alpine AS builder
 
 # Install pnpm
-RUN npm install -g pnpm@9
+RUN corepack enable && corepack prepare pnpm@10 --activate
 
 WORKDIR /app
 
@@ -32,7 +32,7 @@ RUN pnpm run --filter @intexuraos/web-agent build
 FROM node:22-alpine
 
 # Install pnpm
-RUN npm install -g pnpm@9
+RUN corepack enable && corepack prepare pnpm@10 --activate
 
 WORKDIR /app
 
@@ -42,7 +42,7 @@ COPY pnpm-lock.yaml ./
 
 # Copy generated production package.json and install deps
 COPY --from=builder /app/apps/web-agent/dist/package.json ./
-RUN pnpm install --prod
+RUN CI=true pnpm install --prod --no-frozen-lockfile
 
 # Copy built file
 COPY --from=builder /app/apps/web-agent/dist/index.js ./dist/
