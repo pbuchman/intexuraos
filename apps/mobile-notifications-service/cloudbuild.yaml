@@ -3,19 +3,11 @@ steps:
   - name: 'gcr.io/cloud-builders/docker'
     id: 'build'
     entrypoint: 'bash'
-    args:
-      - '-c'
-      - |
-        docker pull ${_ARTIFACT_REGISTRY_URL}/mobile-notifications-service:latest || true
-        docker build \
-          --cache-from=${_ARTIFACT_REGISTRY_URL}/mobile-notifications-service:latest \
-          --build-arg BUILDKIT_INLINE_CACHE=1 \
-          -t ${_ARTIFACT_REGISTRY_URL}/mobile-notifications-service:$COMMIT_SHA \
-          -t ${_ARTIFACT_REGISTRY_URL}/mobile-notifications-service:latest \
-          -f apps/mobile-notifications-service/Dockerfile .
-        docker push ${_ARTIFACT_REGISTRY_URL}/mobile-notifications-service:$COMMIT_SHA
-        docker push ${_ARTIFACT_REGISTRY_URL}/mobile-notifications-service:latest
-    env: ['DOCKER_BUILDKIT=1']
+    args: ['cloudbuild/scripts/build-push-monitored.sh', 'mobile-notifications-service', 'apps/mobile-notifications-service/Dockerfile']
+    env:
+      - 'DOCKER_BUILDKIT=1'
+      - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
+      - 'COMMIT_SHA=$COMMIT_SHA'
 
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     id: 'deploy'
@@ -32,4 +24,3 @@ options:
   machineType: E2_HIGHCPU_8
 
 timeout: '600s'
-

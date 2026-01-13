@@ -355,7 +355,7 @@ Cloud Build requires 5 changes for a new service:
 
 #### 8a. Add to Main Pipeline (`cloudbuild/cloudbuild.yaml`)
 
-Add build and deploy steps (copy pattern from existing service like `user-service`):
+Add build and deploy steps using the `build-push-monitored.sh` script (copy pattern from existing service like `user-service`):
 
 ```yaml
 # ===== <service-name> =====
@@ -363,21 +363,11 @@ Add build and deploy steps (copy pattern from existing service like `user-servic
   id: 'build-push-<service-name>'
   waitFor: ['-']
   entrypoint: 'bash'
-  args:
-    - '-c'
-    - |
-      echo "=== Building <service-name> ==="
-      docker pull ${_ARTIFACT_REGISTRY_URL}/<service-name>:latest || true
-      docker build \
-        --cache-from=${_ARTIFACT_REGISTRY_URL}/<service-name>:latest \
-        --build-arg BUILDKIT_INLINE_CACHE=1 \
-        -t ${_ARTIFACT_REGISTRY_URL}/<service-name>:$COMMIT_SHA \
-        -t ${_ARTIFACT_REGISTRY_URL}/<service-name>:latest \
-        -f apps/<service-name>/Dockerfile .
-      docker push ${_ARTIFACT_REGISTRY_URL}/<service-name>:$COMMIT_SHA
-      docker push ${_ARTIFACT_REGISTRY_URL}/<service-name>:latest
+  args: ['cloudbuild/scripts/build-push-monitored.sh', '<service-name>', 'apps/<service-name>/Dockerfile']
   env:
     - 'DOCKER_BUILDKIT=1'
+    - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
+    - 'COMMIT_SHA=$COMMIT_SHA'
 
 - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
   id: 'deploy-<service-name>'
@@ -391,6 +381,12 @@ Add build and deploy steps (copy pattern from existing service like `user-servic
     - 'ENVIRONMENT=${_ENVIRONMENT}'
 ```
 
+**Note:** The `build-push-monitored.sh` script handles:
+- Cache warming (pulls `:latest` image)
+- BuildKit inline cache
+- Network telemetry logging (for Cloud Monitoring metrics)
+- Dual tagging (`$COMMIT_SHA` and `:latest`)
+
 #### 8b. Create Per-Service Pipeline (`apps/<service-name>/cloudbuild.yaml`)
 
 ```yaml
@@ -399,19 +395,11 @@ steps:
   - name: 'gcr.io/cloud-builders/docker'
     id: 'build'
     entrypoint: 'bash'
-    args:
-      - '-c'
-      - |
-        docker pull ${_ARTIFACT_REGISTRY_URL}/<service-name>:latest || true
-        docker build \
-          --cache-from=${_ARTIFACT_REGISTRY_URL}/<service-name>:latest \
-          --build-arg BUILDKIT_INLINE_CACHE=1 \
-          -t ${_ARTIFACT_REGISTRY_URL}/<service-name>:$COMMIT_SHA \
-          -t ${_ARTIFACT_REGISTRY_URL}/<service-name>:latest \
-          -f apps/<service-name>/Dockerfile .
-        docker push ${_ARTIFACT_REGISTRY_URL}/<service-name>:$COMMIT_SHA
-        docker push ${_ARTIFACT_REGISTRY_URL}/<service-name>:latest
-    env: ['DOCKER_BUILDKIT=1']
+    args: ['cloudbuild/scripts/build-push-monitored.sh', '<service-name>', 'apps/<service-name>/Dockerfile']
+    env:
+      - 'DOCKER_BUILDKIT=1'
+      - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
+      - 'COMMIT_SHA=$COMMIT_SHA'
 
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     id: 'deploy'

@@ -35,8 +35,7 @@ export interface SentryConfig {
  * ```
  */
 export function initSentry(config: SentryConfig): void {
-  if (!config.dsn) {
-    console.warn('[Sentry] No DSN provided, skipping initialization');
+  if (config.dsn === undefined || config.dsn === '') {
     return;
   }
 
