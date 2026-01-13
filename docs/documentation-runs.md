@@ -6,6 +6,28 @@ Log of all `/document-service` runs.
 
 <!-- Entries are prepended below this line -->
 
+## 2026-01-13 — Top-Level Documentation Update
+
+**Action:** Updated index files following tutorial completion
+**Agent:** service-scribe
+
+**Files Updated:**
+
+- `docs/services/index.md` — Added tutorial links for bookmarks-agent, notes-agent, todos-agent
+- Updated documentation count to "17 / 17 (100%) — All with tutorials"
+
+**Context:**
+
+Previous session completed missing tutorial.md and technical-debt.md files for three services. This update synchronizes the services catalog index to reflect that all services now have complete documentation (features, technical, tutorial, debt).
+
+**Changes from previous:**
+
+- bookmarks-agent: Added `[tutorial](bookmarks-agent/tutorial.md)` link
+- notes-agent: Added `[tutorial](notes-agent/tutorial.md)` link
+- todos-agent: Added `[tutorial](todos-agent/tutorial.md)` link
+
+---
+
 ## 2026-01-13 — Complete Service Documentation Run
 
 **Action:** Created / Updated

@@ -10,9 +10,9 @@ Complete documentation for all IntexuraOS services.
 | [research-agent](research-agent/features.md)                             | Multi-LLM research orchestration         | [features](research-agent/features.md)               | [technical](research-agent/technical.md) | [tutorial](research-agent/tutorial.md) | [debt](research-agent/technical-debt.md) |
 | [user-service](user-service/features.md)                                 | Authentication, settings, API keys       | [features](user-service/features.md)                 | [technical](user-service/technical.md) | [tutorial](user-service/tutorial.md) | [debt](user-service/technical-debt.md) |
 | [image-service](image-service/features.md)                               | AI image generation (DALL-E 3, Imagen 3) | [features](image-service/features.md)                | [technical](image-service/technical.md) | [tutorial](image-service/tutorial.md) | [debt](image-service/technical-debt.md) |
-| [bookmarks-agent](bookmarks-agent/features.md)                           | Link management with OpenGraph metadata  | [features](bookmarks-agent/features.md)              | [technical](bookmarks-agent/technical.md) | [debt](bookmarks-agent/technical-debt.md) |
-| [notes-agent](notes-agent/features.md)                                   | Simple note-taking                       | [features](notes-agent/features.md)                  | [technical](notes-agent/technical.md) | [debt](notes-agent/technical-debt.md) |
-| [todos-agent](todos-agent/features.md)                                   | Task management with items               | [features](todos-agent/features.md)                  | [technical](todos-agent/technical.md) | [debt](todos-agent/technical-debt.md) |
+| [bookmarks-agent](bookmarks-agent/features.md)                           | Link management with OpenGraph metadata  | [features](bookmarks-agent/features.md)              | [technical](bookmarks-agent/technical.md) | [tutorial](bookmarks-agent/tutorial.md) | [debt](bookmarks-agent/technical-debt.md) |
+| [notes-agent](notes-agent/features.md)                                   | Simple note-taking                       | [features](notes-agent/features.md)                  | [technical](notes-agent/technical.md) | [tutorial](notes-agent/tutorial.md) | [debt](notes-agent/technical-debt.md) |
+| [todos-agent](todos-agent/features.md)                                   | Task management with items               | [features](todos-agent/features.md)                  | [technical](todos-agent/technical.md) | [tutorial](todos-agent/tutorial.md) | [debt](todos-agent/technical-debt.md) |
 | [whatsapp-service](whatsapp-service/features.md)                         | WhatsApp Business integration            | [features](whatsapp-service/features.md)             | [technical](whatsapp-service/technical.md) | [tutorial](whatsapp-service/tutorial.md) | [debt](whatsapp-service/technical-debt.md) |
 | [commands-agent](commands-agent/features.md)                             | AI command classification                | [features](commands-agent/features.md)               | [technical](commands-agent/technical.md) | [debt](commands-agent/technical-debt.md) |
 | [web-agent](web-agent/features.md)                                       | OpenGraph metadata extraction            | [features](web-agent/features.md)                    | [technical](web-agent/technical.md) | [debt](web-agent/technical-debt.md) |
@@ -63,4 +63,4 @@ All 17 services have complete documentation:
 
 **Last updated:** 2026-01-13
 
-**Services documented:** 17 / 17 (100%)
+**Services documented:** 17 / 17 (100%) — All with tutorials
