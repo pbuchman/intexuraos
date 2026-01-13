@@ -404,6 +404,36 @@ For multi-step features, use numbered directories in `continuity/`. See [continu
 
 ---
 
+## Documentation
+
+When creating markdown documentation in `docs/`, follow these formatting standards:
+
+### Tables
+
+**RULE:** All tables MUST have proper column alignment for readability.
+
+```markdown
+# ❌ Wrong — no alignment
+| Method | Path | Description | Auth |
+|--------|------|-------------|------|
+| GET | `/docs` | Swagger UI | None |
+
+# ✅ Right — padded columns
+| Method | Path      | Description  | Auth |
+|--------|-----------|--------------|------|
+| GET    | `/docs`   | Swagger UI   | None |
+```
+
+**Requirements:**
+- Header cells padded to column width
+- Separator row (`|---|`) also padded
+- Data cells padded to match column max width
+- Alignment markers allowed: `:---` (left), `:---:` (center), `---:` (right)
+
+**Enforcement:** Run `pnpm run format:docs-tables` to fix all tables in `docs/`.
+
+---
+
 ## Plan Documentation
 
 Plans involving HTTP endpoints MUST include an "Endpoint Changes" section with tables for: Modified, Created, Removed, Unchanged.

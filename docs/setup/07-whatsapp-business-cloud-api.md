@@ -15,7 +15,7 @@ This guide covers setting up the WhatsApp Business Cloud API for IntexuraOS inte
 WhatsApp Cloud API uses two primary identifiers. Understanding the difference is critical for webhook validation.
 
 | ID Type                                    | Represents                                                 | Primary Use                                                     | Example           |
-| ------------------------------------------ | ---------------------------------------------------------- | --------------------------------------------------------------- | ----------------- |
+| ------------------------------------------  | ----------------------------------------------------------  | ---------------------------------------------------------------  | -----------------  |
 | **WhatsApp Business Account ID (WABA ID)** | The business entity as a whole                             | Webhook subscriptions, business settings, phone number listings | `102290129340398` |
 | **Phone Number ID**                        | A specific WhatsApp phone number registered under the WABA | Sending/receiving messages via API, message routing             | `106540352242922` |
 
@@ -281,9 +281,9 @@ Do this
 ## 7. Required Permissions/Scopes
 
 | Permission                     | Purpose                         | Required |
-| ------------------------------ | ------------------------------- | -------- |
-| `whatsapp_business_messaging`  | Send/receive messages           | ✅ Yes   |
-| `whatsapp_business_management` | Manage phone numbers, templates | ✅ Yes   |
+| ------------------------------  | -------------------------------  | --------  |
+| `whatsapp_business_messaging`  | Send/receive messages           | ✅ Yes    |
+| `whatsapp_business_management` | Manage phone numbers, templates | ✅ Yes    |
 | `business_management`          | Access business settings        | Optional |
 
 These permissions are selected when generating your System User token.
@@ -507,7 +507,7 @@ WHATSAPP_WABA_ID=1234567890123456
 ### Production (Secret Manager via Terraform)
 
 | Secret Name                           | Env Var                               | Purpose                      |
-| ------------------------------------- | ------------------------------------- | ---------------------------- |
+| -------------------------------------  | -------------------------------------  | ----------------------------  |
 | `INTEXURAOS_WHATSAPP_VERIFY_TOKEN`    | `INTEXURAOS_WHATSAPP_VERIFY_TOKEN`    | Webhook verification         |
 | `INTEXURAOS_WHATSAPP_APP_SECRET`      | `INTEXURAOS_WHATSAPP_APP_SECRET`      | Webhook signature validation |
 | `INTEXURAOS_WHATSAPP_ACCESS_TOKEN`    | `INTEXURAOS_WHATSAPP_ACCESS_TOKEN`    | API authentication           |
@@ -521,7 +521,7 @@ The `whatsapp-service` app provides webhook endpoints for receiving WhatsApp eve
 ### Endpoints
 
 | Method | Path                 | Purpose                           | Auth         |
-| ------ | -------------------- | --------------------------------- | ------------ |
+| ------  | --------------------  | ---------------------------------  | ------------  |
 | GET    | `/webhooks/whatsapp` | Webhook verification (Meta setup) | Verify token |
 | POST   | `/webhooks/whatsapp` | Receive webhook events            | Signature    |
 | GET    | `/health`            | Health check                      | None         |
