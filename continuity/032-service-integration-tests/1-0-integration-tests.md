@@ -103,7 +103,7 @@ describe('Service Integration Tests', () => {
 - [ ] Auth token validation tested end-to-end
 - [ ] Error scenarios covered (401, 503, timeout)
 - [ ] Schema compatibility verified
-- [ ] Tests pass in CI (`npm run ci`)
+- [ ] Tests pass in CI (`pnpm run ci`)
 
 ## Dependencies
 

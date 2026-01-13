@@ -4,15 +4,20 @@
 # Stage 1: Build
 FROM node:22-alpine AS builder
 
+# Install pnpm
+RUN npm install -g pnpm@9
+
 WORKDIR /app
 
-# Copy all package.json files
+# Copy workspace config and lockfile
+COPY pnpm-workspace.yaml ./
+COPY pnpm-lock.yaml ./
 COPY package*.json ./
 COPY apps/user-service/package*.json ./apps/user-service/
 COPY packages/*/package*.json ./packages/
 
 # Install dependencies
-RUN npm ci
+RUN pnpm install --frozen-lockfile
 
 # Copy source files
 COPY tsconfig*.json ./
@@ -21,16 +26,23 @@ COPY packages/ ./packages/
 COPY apps/user-service/ ./apps/user-service/
 
 # Build service (esbuild bundles everything into one file)
-RUN npm run build -w @intexuraos/user-service
+RUN pnpm run --filter @intexuraos/user-service build
 
 # Stage 2: Production
 FROM node:22-alpine
 
+# Install pnpm
+RUN npm install -g pnpm@9
+
 WORKDIR /app
+
+# Copy workspace config and lockfile
+COPY pnpm-workspace.yaml ./
+COPY pnpm-lock.yaml ./
 
 # Copy generated production package.json and install deps
 COPY --from=builder /app/apps/user-service/dist/package.json ./
-RUN npm install --omit=dev
+RUN pnpm install --prod --frozen-lockfile
 
 # Copy built file
 COPY --from=builder /app/apps/user-service/dist/index.js ./dist/

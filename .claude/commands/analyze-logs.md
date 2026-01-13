@@ -179,7 +179,7 @@ After user confirmation:
 
 1. Implement the fix
 2. Write/update tests if needed
-3. Run `npm run ci` - must pass
+3. Run `pnpm run ci` - must pass
 4. Present summary of changes
 
 ---
@@ -266,4 +266,4 @@ Observation to store:
 - **Correlate across services** - issues often span multiple services
 - **Check for patterns** - repeated issues may indicate systemic problems
 - **Consider timing** - issues after deployments suggest regression
-- **Never claim done** until `npm run ci` passes
+- **Never claim done** until `pnpm run ci` passes
