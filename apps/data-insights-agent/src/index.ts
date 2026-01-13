@@ -19,6 +19,7 @@ import { createChartDefinitionService } from './infra/gemini/chartDefinitionServ
 import { createDataTransformService } from './infra/gemini/dataTransformService.js';
 
 const REQUIRED_ENV = [
+  'INTEXURAOS_SENTRY_DSN',
   'INTEXURAOS_GCP_PROJECT_ID',
   'INTEXURAOS_AUTH_JWKS_URL',
   'INTEXURAOS_AUTH_ISSUER',
@@ -28,13 +29,6 @@ const REQUIRED_ENV = [
 validateRequiredEnv(REQUIRED_ENV);
 
 const sentryDsn = process.env['INTEXURAOS_SENTRY_DSN'];
-if (sentryDsn !== undefined) {
-  initSentry({
-    dsn: sentryDsn,
-    environment: process.env['INTEXURAOS_ENVIRONMENT'] ?? 'development',
-    serviceName: 'data-insights-agent',
-  });
-}
 
 /** Models used by this service */
 const REQUIRED_MODELS: FastModel[] = [LlmModels.Gemini25Flash];
