@@ -144,6 +144,9 @@ describe('FirestoreResearchRepository', () => {
         startedAt: '2024-01-01T00:00:00Z',
       };
 
+      // Mock doc().get() for cursor startAfter calls
+      mockDocGet.mockResolvedValue({ exists: true, id: 'research-fav', data: () => favoriteResearch });
+
       const mockFavoritesGet = vi.fn().mockResolvedValue({
         docs: [
           {
@@ -161,24 +164,34 @@ describe('FirestoreResearchRepository', () => {
         ],
       });
 
-      // Mock the two parallel queries: favorites first, then non-favorites
+      // Mock favorites query
+      const favoritesQuery = {
+        limit: vi.fn().mockReturnValue({
+          get: mockFavoritesGet,
+        }),
+      };
+      // Mock non-favorites query
+      const nonFavoritesQuery = {
+        limit: vi.fn().mockReturnValue({
+          get: mockNonFavoritesGet,
+        }),
+      };
+      // Mock startAfter chain
+      const startAfterChain = {
+        startAfter: vi.fn().mockReturnValue({
+          get: mockFavoritesGet,
+        }),
+      };
+
       mockWhere
         .mockReturnValueOnce({
           where: vi.fn().mockReturnValue({
-            orderBy: vi.fn().mockReturnValue({
-              limit: vi.fn().mockReturnValue({
-                get: mockFavoritesGet,
-              }),
-            }),
+            orderBy: vi.fn().mockReturnValue(favoritesQuery),
           }),
         })
         .mockReturnValueOnce({
           where: vi.fn().mockReturnValue({
-            orderBy: vi.fn().mockReturnValue({
-              limit: vi.fn().mockReturnValue({
-                get: mockNonFavoritesGet,
-              }),
-            }),
+            orderBy: vi.fn().mockReturnValue(nonFavoritesQuery),
           }),
         });
 
@@ -193,7 +206,8 @@ describe('FirestoreResearchRepository', () => {
         expect(items[0]?.favourite).toBe(true);
         expect(items[1]?.id).toBe('research-2');
         expect(items[1]?.favourite).toBe(false);
-        expect(result.value.nextCursor).toBe('research-2');
+        // Cursor indicates non-favorites since we fetched from both
+        expect(result.value.nextCursor).toBeUndefined();
       }
     });
 
@@ -252,6 +266,216 @@ describe('FirestoreResearchRepository', () => {
       expect(result.ok).toBe(true);
       if (result.ok) {
         expect(result.value.items).toHaveLength(5);
+      }
+    });
+
+    it('returns cursor when more favorites available', async () => {
+      const favorites: Research[] = Array.from({ length: 6 }, (_, i) => ({
+        id: `fav-${i}`,
+        userId: 'user-1',
+        title: `Favorite ${i}`,
+        prompt: 'Test',
+        selectedModels: [LlmModels.Gemini25Pro],
+        synthesisModel: LlmModels.Gemini25Pro,
+        status: 'pending',
+        llmResults: [],
+        favourite: true,
+        startedAt: '2024-01-01T00:00:00Z',
+      }));
+
+      const mockGet = vi.fn().mockResolvedValue({
+        // Return 6 items (limit + 1) to indicate more available
+        docs: favorites.map((r): { id: string; data: () => Research } => ({ id: r.id, data: (): Research => r })),
+      });
+
+      mockWhere.mockReturnValue({
+        where: vi.fn().mockReturnValue({
+          orderBy: vi.fn().mockReturnValue({
+            limit: vi.fn().mockReturnValue({
+              get: mockGet,
+            }),
+          }),
+        }),
+      });
+
+      const result = await repository.findByUserId('user-1', { limit: 5 });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.items).toHaveLength(5);
+        // Cursor should point to the last returned item (fav-4)
+        expect(result.value.nextCursor).toBe('fav:fav-4');
+      }
+    });
+
+    it('shows non-favorites when fewer favorites than limit', async () => {
+      const favorite: Research = {
+        id: 'fav-1',
+        userId: 'user-1',
+        title: 'Favorite',
+        prompt: 'Test',
+        selectedModels: [LlmModels.Gemini25Pro],
+        synthesisModel: LlmModels.Gemini25Pro,
+        status: 'pending',
+        llmResults: [],
+        favourite: true,
+        startedAt: '2024-01-02T00:00:00Z',
+      };
+      const nonFavorites: Research[] = Array.from({ length: 10 }, (_, i) => ({
+        id: `non-${i}`,
+        userId: 'user-1',
+        title: `Non-Favorite ${i}`,
+        prompt: 'Test',
+        selectedModels: [LlmModels.Gemini25Pro],
+        synthesisModel: LlmModels.Gemini25Pro,
+        status: 'pending',
+        llmResults: [],
+        favourite: false,
+        startedAt: '2024-01-01T00:00:00Z',
+      }));
+
+      let callCount = 0;
+      mockWhere.mockImplementation(() => {
+        callCount++;
+        if (callCount === 1) {
+          // Favorites query
+          return {
+            where: vi.fn().mockReturnValue({
+              orderBy: vi.fn().mockReturnValue({
+                limit: vi.fn().mockReturnValue({
+                  get: vi.fn().mockResolvedValue({
+                    docs: [{ id: favorite.id, data: (): Research => favorite }],
+                  }),
+                }),
+              }),
+            }),
+          };
+        }
+        // Non-favorites query
+        return {
+          where: vi.fn().mockReturnValue({
+            orderBy: vi.fn().mockReturnValue({
+              limit: vi.fn().mockReturnValue({
+                get: vi.fn().mockResolvedValue({
+                  docs: nonFavorites.map((r): { id: string; data: () => Research } => ({
+                    id: r.id,
+                    data: (): Research => r,
+                  })),
+                }),
+              }),
+            }),
+          }),
+        };
+      });
+
+      const result = await repository.findByUserId('user-1', { limit: 5 });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.items).toHaveLength(5);
+        // First item should be the favorite
+        expect(result.value.items[0]?.id).toBe('fav-1');
+        expect(result.value.items[0]?.favourite).toBe(true);
+        // Rest should be non-favorites
+        expect(result.value.items[1]?.favourite).toBe(false);
+        // More non-favorites available, so cursor should be 'non:non-3'
+        expect(result.value.nextCursor).toBe('non:non-3');
+      }
+    });
+
+    it('paginates through favorites using fav: cursor', async () => {
+      const favorites: Research[] = Array.from({ length: 11 }, (_, i) => ({
+        id: `fav-${i}`,
+        userId: 'user-1',
+        title: `Favorite ${i}`,
+        prompt: 'Test',
+        selectedModels: [LlmModels.Gemini25Pro],
+        synthesisModel: LlmModels.Gemini25Pro,
+        status: 'pending',
+        llmResults: [],
+        favourite: true,
+        startedAt: '2024-01-01T00:00:00Z',
+      }));
+
+      // Mock doc().get() to return the start document for startAfter
+      const startDoc = { id: 'fav-4', exists: true, data: (): Research => favorites[4] };
+      mockDocGet.mockResolvedValue(startDoc);
+
+      // Return 6 items starting after fav-4 (fav-5 to fav-10)
+      const mockStartAfter = vi.fn().mockReturnValue({
+        get: vi.fn().mockResolvedValue({
+          docs: favorites.slice(5, 11).map((r): { id: string; data: () => Research } => ({
+            id: r.id,
+            data: (): Research => r,
+          })),
+        }),
+      });
+
+      mockWhere.mockReturnValue({
+        where: vi.fn().mockReturnValue({
+          orderBy: vi.fn().mockReturnValue({
+            limit: vi.fn().mockReturnValue({
+              startAfter: mockStartAfter,
+            }),
+          }),
+        }),
+      });
+
+      const result = await repository.findByUserId('user-1', { limit: 5, cursor: 'fav:fav-4' });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.items).toHaveLength(5);
+        expect(mockDoc).toHaveBeenCalledWith('fav-4');
+        expect(mockStartAfter).toHaveBeenCalledWith(startDoc);
+        // We got 6 items but only returned 5, so there's more
+        expect(result.value.nextCursor).toBe('fav:fav-9');
+      }
+    });
+
+    it('paginates through non-favorites using non: cursor', async () => {
+      const nonFavorites: Research[] = Array.from({ length: 10 }, (_, i) => ({
+        id: `non-${i}`,
+        userId: 'user-1',
+        title: `Non-Favorite ${i}`,
+        prompt: 'Test',
+        selectedModels: [LlmModels.Gemini25Pro],
+        synthesisModel: LlmModels.Gemini25Pro,
+        status: 'pending',
+        llmResults: [],
+        favourite: false,
+        startedAt: '2024-01-01T00:00:00Z',
+      }));
+
+      const startDoc = { id: 'non-4', exists: true, data: (): Research => nonFavorites[4] };
+      mockDocGet.mockResolvedValue(startDoc);
+
+      // Mock the query chain with startAfter
+      const mockStartAfter = vi.fn().mockReturnValue({
+        get: vi.fn().mockResolvedValue({
+          docs: nonFavorites.slice(5).map((r): { id: string; data: () => Research } => ({
+            id: r.id,
+            data: (): Research => r,
+          })),
+        }),
+      });
+
+      mockWhere.mockReturnValue({
+        where: vi.fn().mockReturnValue({
+          orderBy: vi.fn().mockReturnValue({
+            limit: vi.fn().mockReturnValue({
+              startAfter: mockStartAfter,
+            }),
+          }),
+        }),
+      });
+
+      const result = await repository.findByUserId('user-1', { limit: 5, cursor: 'non:non-4' });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.items).toHaveLength(5);
+        expect(result.value.nextCursor).toBeUndefined();
       }
     });
 
