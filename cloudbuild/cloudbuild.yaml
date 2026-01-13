@@ -216,7 +216,6 @@ steps:
       - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
       - 'ENVIRONMENT=${_ENVIRONMENT}'
 
-
   # ==========================================================
   # DIAGNOSTICS CHECKPOINT (Mid-Build)
   # ==========================================================
@@ -420,7 +419,6 @@ steps:
       - 'REGION=${_REGION}'
       - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
       - 'ENVIRONMENT=${_ENVIRONMENT}'
-
 
   # ==========================================================
   # WAVE 3: FRONTEND & LIGHTWEIGHT SERVICES
