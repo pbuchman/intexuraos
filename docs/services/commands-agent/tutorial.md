@@ -51,6 +51,7 @@ curl -X POST https://commands-agent.intexuraos.com/commands \
 ```
 
 **What happened:**
+
 1. Command received and saved to Firestore
 2. Gemini classified as "todo" with 95% confidence
 3. Action created via actions-agent
@@ -148,14 +149,16 @@ async function handleWhatsAppMessage(message: WhatsAppMessage) {
 
   // Publish to commands-agent
   await pubsubClient.topic('command-ingest').publishMessage({
-    data: Buffer.from(JSON.stringify({
-      type: 'command.ingest',
-      userId,
-      sourceType: 'whatsapp_text',
-      externalId: message.id,
-      text: message.text.body,
-      timestamp: message.timestamp,
-    })),
+    data: Buffer.from(
+      JSON.stringify({
+        type: 'command.ingest',
+        userId,
+        sourceType: 'whatsapp_text',
+        externalId: message.id,
+        text: message.text.body,
+        timestamp: message.timestamp,
+      })
+    ),
   });
 
   // Quick response
@@ -168,7 +171,7 @@ async function handleWhatsAppMessage(message: WhatsAppMessage) {
 ## Troubleshooting
 
 | Issue                  | Symptom                         | Solution                                   |
-| ----------------------  | -------------------------------  | ------------------------------------------  |
+| ---------------------- | ------------------------------- | ------------------------------------------ |
 | No API key             | Status `pending_classification` | Configure Google API key in user-service   |
 | Low confidence         | Type `unclassified`             | Refine command text with more context      |
 | Duplicate command      | `isNew: false`                  | Normal - same externalId already processed |
@@ -177,16 +180,19 @@ async function handleWhatsAppMessage(message: WhatsAppMessage) {
 ## Exercises
 
 ### Easy
+
 1. Create a command with source `pwa-shared`
 2. List your commands and verify status
 3. Archive a classified command
 
 ### Medium
+
 1. Send a command mentioning specific models ("Use Claude for research")
 2. Verify the action was created with selectedModels in payload
 3. Delete a pending_classification command
 
 ### Hard
+
 1. Simulate a Pub/Sub push to `/internal/commands`
 2. Handle the case where command already exists (idempotency)
 3. Build a retry loop for failed commands

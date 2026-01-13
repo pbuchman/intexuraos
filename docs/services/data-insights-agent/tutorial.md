@@ -36,6 +36,6 @@ curl -X POST https://data-insights.intexuraos.com/data-sources/generate-title \
 ## Troubleshooting
 
 | Error          | Cause              | Solution                          |
-| --------------  | ------------------  | ---------------------------------  |
+| -------------- | ------------------ | --------------------------------- |
 | MISCONFIGURED  | No Google API key  | Configure in user-service         |
 | CONFLICT (409) | Data source in use | Remove from composite feeds first |

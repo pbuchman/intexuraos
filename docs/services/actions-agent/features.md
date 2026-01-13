@@ -24,27 +24,33 @@ Actions-agent is the **central coordinator** for all user-initiated actions in I
 ## Use Cases
 
 ### Research Actions
+
 - "Research the latest developments in AI safety"
 - "Find information about climate change solutions"
 - Action flows: pending -> processing -> completed (with research URL)
 
 ### Todo Actions
+
 - "Remind me to review the quarterly report"
 - "Add a todo to call the dentist"
 - Action flows: pending -> processing -> completed (todo created)
 
 ### Note Actions
+
 - "Take a note: meeting recap with design team"
 - "Remember: the client prefers blue over green"
 - Action flows: pending -> processing -> completed (note created)
 
 ### Link Actions
+
 - "Save this article: https://example.com/interesting-read"
 - "Bookmark this for later"
 - Action flows: pending -> processing -> completed (bookmark created, with OG metadata)
 
 ### User Correction Workflow
+
 When classification is wrong:
+
 1. User sees action in web UI with wrong type
 2. User changes type (e.g., "link" -> "todo")
 3. Action is re-routed to correct handler

@@ -6,17 +6,17 @@ Notion-service manages the lifecycle of Notion integrations - connection validat
 
 ## API Endpoints
 
-| Method   | Path                 | Description                | Auth         |
-| --------  | --------------------  | --------------------------  | ------------  |
-| POST     | `/notion/connect`    | Connect Notion integration | Bearer token |
-| GET      | `/notion/status`     | Get integration status     | Bearer token |
-| DELETE   | `/notion/disconnect` | Disconnect integration     | Bearer token |
+| Method | Path                 | Description                | Auth         |
+| ------ | -------------------- | -------------------------- | ------------ |
+| POST   | `/notion/connect`    | Connect Notion integration | Bearer token |
+| GET    | `/notion/status`     | Get integration status     | Bearer token |
+| DELETE | `/notion/disconnect` | Disconnect integration     | Bearer token |
 
 ### Connect Request
 
 ```typescript
 {
-  notionToken: string  // Notion integration token
+  notionToken: string; // Notion integration token
 }
 ```
 
@@ -46,31 +46,33 @@ Notion-service manages the lifecycle of Notion integrations - connection validat
 
 ```typescript
 {
-  message: "Notion integration disconnected"
+  message: 'Notion integration disconnected';
 }
 ```
 
 ## Error Codes
 
-| Code               | HTTP Status   | Description              |
-| ------------------  | -------------  | ------------------------  |
-| `VALIDATION_ERROR` | 400           | Invalid token format     |
-| `INVALID_TOKEN`    | 401           | Token rejected by Notion |
-| `DOWNSTREAM_ERROR` | 502           | Notion API error         |
+| Code               | HTTP Status | Description              |
+| ------------------ | ----------- | ------------------------ |
+| `VALIDATION_ERROR` | 400         | Invalid token format     |
+| `INVALID_TOKEN`    | 401         | Token rejected by Notion |
+| `DOWNSTREAM_ERROR` | 502         | Notion API error         |
 
 ## Dependencies
 
 **Infrastructure:**
+
 - Firestore (`notion_connections` collection) - Connection storage
 
 **External APIs:**
+
 - Notion API - Token validation and workspace info
 
 ## Configuration
 
-| Environment Variable             | Required   | Description                     |
-| --------------------------------  | ----------  | -------------------------------  |
-| `INTEXURAOS_INTERNAL_AUTH_TOKEN` | Yes        | Shared secret for internal auth |
+| Environment Variable             | Required | Description                     |
+| -------------------------------- | -------- | ------------------------------- |
+| `INTEXURAOS_INTERNAL_AUTH_TOKEN` | Yes      | Shared secret for internal auth |
 
 ## Gotchas
 

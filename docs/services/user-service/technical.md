@@ -64,45 +64,45 @@ sequenceDiagram
 
 ### Authentication Endpoints
 
-| Method   | Path                    | Description                             | Auth         |
-| --------  | -----------------------  | ---------------------------------------  | ------------  |
-| POST     | `/auth/device/start`    | Start device code flow                  | None         |
-| POST     | `/auth/device/poll`     | Poll for authentication token           | None         |
-| POST     | `/auth/refresh`         | Refresh access token                    | None         |
-| POST     | `/auth/oauth/token`     | OAuth token endpoint (ChatGPT Actions)  | None         |
-| GET      | `/auth/oauth/authorize` | OAuth authorization endpoint            | None         |
-| GET      | `/auth/config`          | Get Auth0 configuration                 | None         |
-| POST     | `/auth/firebase-token`  | Exchange Auth0 token for Firebase token | Bearer token |
-| GET      | `/auth/me`              | Get current user info                   | Bearer token |
-| GET      | `/auth/login`           | Frontend login page                     | None         |
-| GET      | `/auth/logout`          | Frontend logout page                    | None         |
+| Method | Path                    | Description                             | Auth         |
+| ------ | ----------------------- | --------------------------------------- | ------------ |
+| POST   | `/auth/device/start`    | Start device code flow                  | None         |
+| POST   | `/auth/device/poll`     | Poll for authentication token           | None         |
+| POST   | `/auth/refresh`         | Refresh access token                    | None         |
+| POST   | `/auth/oauth/token`     | OAuth token endpoint (ChatGPT Actions)  | None         |
+| GET    | `/auth/oauth/authorize` | OAuth authorization endpoint            | None         |
+| GET    | `/auth/config`          | Get Auth0 configuration                 | None         |
+| POST   | `/auth/firebase-token`  | Exchange Auth0 token for Firebase token | Bearer token |
+| GET    | `/auth/me`              | Get current user info                   | Bearer token |
+| GET    | `/auth/login`           | Frontend login page                     | None         |
+| GET    | `/auth/logout`          | Frontend logout page                    | None         |
 
 ### User Settings Endpoints
 
-| Method   | Path                                     | Description               | Auth         |
-| --------  | ----------------------------------------  | -------------------------  | ------------  |
-| GET      | `/users/:uid/settings`                   | Get user settings         | Bearer token |
-| PATCH    | `/users/:uid/settings`                   | Update user settings      | Bearer token |
-| PATCH    | `/users/:uid/llm-keys`                   | Update LLM API keys       | Bearer token |
-| DELETE   | `/users/:uid/llm-keys/:provider`         | Delete LLM API key        | Bearer token |
-| GET      | `/users/:uid/llm-keys/test`              | Test LLM API key          | Bearer token |
-| GET      | `/users/:uid/oauth-connections`          | List OAuth connections    | Bearer token |
-| POST     | `/users/:uid/oauth/:provider/disconnect` | Disconnect OAuth provider | Bearer token |
+| Method | Path                                     | Description               | Auth         |
+| ------ | ---------------------------------------- | ------------------------- | ------------ |
+| GET    | `/users/:uid/settings`                   | Get user settings         | Bearer token |
+| PATCH  | `/users/:uid/settings`                   | Update user settings      | Bearer token |
+| PATCH  | `/users/:uid/llm-keys`                   | Update LLM API keys       | Bearer token |
+| DELETE | `/users/:uid/llm-keys/:provider`         | Delete LLM API key        | Bearer token |
+| GET    | `/users/:uid/llm-keys/test`              | Test LLM API key          | Bearer token |
+| GET    | `/users/:uid/oauth-connections`          | List OAuth connections    | Bearer token |
+| POST   | `/users/:uid/oauth/:provider/disconnect` | Disconnect OAuth provider | Bearer token |
 
 ### Internal Endpoints
 
-| Method   | Path                                                | Description                  | Auth            |
-| --------  | ---------------------------------------------------  | ----------------------------  | ---------------  |
-| GET      | `/internal/users/:uid/llm-keys`                     | Get decrypted LLM API keys   | Internal header |
-| POST     | `/internal/users/:uid/llm-keys/:provider/last-used` | Update last used timestamp   | Internal header |
-| GET      | `/internal/users/:uid/oauth/google/token`           | Get valid Google OAuth token | Internal header |
+| Method | Path                                                | Description                  | Auth            |
+| ------ | --------------------------------------------------- | ---------------------------- | --------------- |
+| GET    | `/internal/users/:uid/llm-keys`                     | Get decrypted LLM API keys   | Internal header |
+| POST   | `/internal/users/:uid/llm-keys/:provider/last-used` | Update last used timestamp   | Internal header |
+| GET    | `/internal/users/:uid/oauth/google/token`           | Get valid Google OAuth token | Internal header |
 
 ## Domain Models
 
 ### AuthToken
 
 | Field          | Type   | Description                |
-| --------------  | ------  | --------------------------  |
+| -------------- | ------ | -------------------------- |
 | `userId`       | string | User identifier            |
 | `accessToken`  | string | Auth0 access token         |
 | `refreshToken` | string | Auth0 refresh token        |
@@ -114,7 +114,7 @@ sequenceDiagram
 ### UserSettings
 
 | Field            | Type                              | Description                   |
-| ----------------  | ---------------------------------  | -----------------------------  |
+| ---------------- | --------------------------------- | ----------------------------- |
 | `userId`         | string                            | User identifier               |
 | `llmApiKeys`     | Record\<LlmProvider, string\>     | AES-256 encrypted API keys    |
 | `llmTestResults` | Record\<LlmProvider, TestResult\> | Last test result per provider |
@@ -123,30 +123,30 @@ sequenceDiagram
 
 ### TestResult
 
-| Field          | Type      | Description              |
-| --------------  | ---------  | ------------------------  |
-| `status`       | 'valid' \ | 'invalid' \              | 'pending' \ | 'error' |
-| `testedAt`     | string    | ISO 8601 timestamp       |
-| `errorMessage` | string    | Error details if invalid |
+| Field          | Type       | Description              |
+| -------------- | ---------- | ------------------------ | ------------ | ------- |
+| `status`       | 'valid' \  | 'invalid' \              | 'pending' \  | 'error' |
+| `testedAt`     | string     | ISO 8601 timestamp       |
+| `errorMessage` | string     | Error details if invalid |
 
 ### OAuthConnection
 
-| Field          | Type       | Description                |
-| --------------  | ----------  | --------------------------  |
-| `id`           | string     | Connection ID              |
-| `userId`       | string     | User identifier            |
-| `provider`     | 'google' \ | 'microsoft'                |
-| `accessToken`  | string     | Encrypted access token     |
-| `refreshToken` | string     | Encrypted refresh token    |
-| `expiresAt`    | string     | Access token expiry        |
-| `email`        | string     | User's email from provider |
-| `scope`        | string[]   | Granted scopes             |
-| `connectedAt`  | string     | Connection timestamp       |
+| Field          | Type        | Description                |
+| -------------- | ----------- | -------------------------- |
+| `id`           | string      | Connection ID              |
+| `userId`       | string      | User identifier            |
+| `provider`     | 'google' \  | 'microsoft'                |
+| `accessToken`  | string      | Encrypted access token     |
+| `refreshToken` | string      | Encrypted refresh token    |
+| `expiresAt`    | string      | Access token expiry        |
+| `email`        | string      | User's email from provider |
+| `scope`        | string[]    | Granted scopes             |
+| `connectedAt`  | string      | Connection timestamp       |
 
 ## LLM Providers
 
 | Provider     | Key Name                    |
-| ------------  | ---------------------------  |
+| ------------ | --------------------------- |
 | `google`     | Google AI API key (Gemini)  |
 | `openai`     | OpenAI API key (GPT models) |
 | `anthropic`  | Anthropic API key (Claude)  |
@@ -161,14 +161,14 @@ None - user-service does not publish or subscribe to Pub/Sub events.
 ### External Services
 
 | Service      | Purpose                             |
-| ------------  | -----------------------------------  |
+| ------------ | ----------------------------------- |
 | Auth0        | Identity management, authentication |
 | Google OAuth | OAuth token management              |
 
 ### Infrastructure
 
 | Component                                  | Purpose                   |
-| ------------------------------------------  | -------------------------  |
+| ------------------------------------------ | ------------------------- |
 | Firestore (`users` collection)             | User settings storage     |
 | Firestore (`auth_tokens` collection)       | Auth0 token cache         |
 | Firestore (`oauth_connections` collection) | OAuth token storage       |
@@ -176,19 +176,19 @@ None - user-service does not publish or subscribe to Pub/Sub events.
 
 ## Configuration
 
-| Environment Variable                    | Required   | Description                           |
-| ---------------------------------------  | ----------  | -------------------------------------  |
-| `INTEXURAOS_AUTH0_DOMAIN`               | Yes        | Auth0 tenant domain                   |
-| `INTEXURAOS_AUTH0_CLIENT_ID`            | Yes        | Auth0 application client ID           |
-| `INTEXURAOS_AUTH0_CLIENT_SECRET`        | Yes        | Auth0 application client secret       |
-| `INTEXURAOS_AUTH0_AUDIENCE`             | Yes        | Auth0 API identifier                  |
-| `INTEXURAOS_INTERNAL_AUTH_TOKEN`        | Yes        | Shared secret for internal endpoints  |
-| `INTEXURAOS_ENCRYPTION_KEY`             | Yes        | AES-256 encryption key (32 bytes hex) |
-| `INTEXURAOS_GOOGLE_OAUTH_CLIENT_ID`     | No         | Google OAuth client ID                |
-| `INTEXURAOS_GOOGLE_OAUTH_CLIENT_SECRET` | No         | Google OAuth client secret            |
-| `INTEXURAOS_FIREBASE_PROJECT_ID`        | Yes        | Firebase project ID                   |
-| `INTEXURAOS_FIREBASE_CLIENT_EMAIL`      | Yes        | Firebase service account email        |
-| `INTEXURAOS_FIREBASE_PRIVATE_KEY`       | Yes        | Firebase service account private key  |
+| Environment Variable                    | Required | Description                           |
+| --------------------------------------- | -------- | ------------------------------------- |
+| `INTEXURAOS_AUTH0_DOMAIN`               | Yes      | Auth0 tenant domain                   |
+| `INTEXURAOS_AUTH0_CLIENT_ID`            | Yes      | Auth0 application client ID           |
+| `INTEXURAOS_AUTH0_CLIENT_SECRET`        | Yes      | Auth0 application client secret       |
+| `INTEXURAOS_AUTH0_AUDIENCE`             | Yes      | Auth0 API identifier                  |
+| `INTEXURAOS_INTERNAL_AUTH_TOKEN`        | Yes      | Shared secret for internal endpoints  |
+| `INTEXURAOS_ENCRYPTION_KEY`             | Yes      | AES-256 encryption key (32 bytes hex) |
+| `INTEXURAOS_GOOGLE_OAUTH_CLIENT_ID`     | No       | Google OAuth client ID                |
+| `INTEXURAOS_GOOGLE_OAUTH_CLIENT_SECRET` | No       | Google OAuth client secret            |
+| `INTEXURAOS_FIREBASE_PROJECT_ID`        | Yes      | Firebase project ID                   |
+| `INTEXURAOS_FIREBASE_CLIENT_EMAIL`      | Yes      | Firebase service account email        |
+| `INTEXURAOS_FIREBASE_PRIVATE_KEY`       | Yes      | Firebase service account private key  |
 
 ## Gotchas
 

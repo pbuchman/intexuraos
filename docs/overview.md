@@ -162,25 +162,25 @@ User Input
 
 ## Services Summary
 
-| Service                        | Purpose                  | Category         |
-| ------------------------------  | ------------------------  | ----------------  |
-| actions-agent                  | Action orchestration     | Infrastructure   |
-| research-agent                 | Multi-LLM research       | AI & Research    |
-| user-service                   | Auth & settings          | Integrations     |
-| image-service                  | Image generation         | Infrastructure   |
-| bookmarks-agent                | Link management          | Content          |
-| notes-agent                    | Note-taking              | Content          |
-| todos-agent                    | Task management          | Content          |
-| whatsapp-service               | WhatsApp integration     | Integrations     |
-| commands-agent                 | Command classification   | AI & Research    |
-| web-agent                      | Web scraping             | Infrastructure   |
-| calendar-agent                 | Google Calendar          | Integrations     |
-| data-insights-agent            | Data analysis            | AI & Research    |
-| mobile-notifications-service   | Push notifications       | Infrastructure   |
-| api-docs-hub                   | API documentation        | Infrastructure   |
-| app-settings-service           | App configuration        | Infrastructure   |
-| notion-service                 | Notion integration       | Integrations     |
-| promptvault-service            | Prompt templates         | Content          |
+| Service                      | Purpose                | Category       |
+| ---------------------------- | ---------------------- | -------------- |
+| actions-agent                | Action orchestration   | Infrastructure |
+| research-agent               | Multi-LLM research     | AI & Research  |
+| user-service                 | Auth & settings        | Integrations   |
+| image-service                | Image generation       | Infrastructure |
+| bookmarks-agent              | Link management        | Content        |
+| notes-agent                  | Note-taking            | Content        |
+| todos-agent                  | Task management        | Content        |
+| whatsapp-service             | WhatsApp integration   | Integrations   |
+| commands-agent               | Command classification | AI & Research  |
+| web-agent                    | Web scraping           | Infrastructure |
+| calendar-agent               | Google Calendar        | Integrations   |
+| data-insights-agent          | Data analysis          | AI & Research  |
+| mobile-notifications-service | Push notifications     | Infrastructure |
+| api-docs-hub                 | API documentation      | Infrastructure |
+| app-settings-service         | App configuration      | Infrastructure |
+| notion-service               | Notion integration     | Integrations   |
+| promptvault-service          | Prompt templates       | Content        |
 
 ## Documentation
 

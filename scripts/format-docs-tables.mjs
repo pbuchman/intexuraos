@@ -28,11 +28,14 @@ function formatTable(table) {
   const lines = table.trim().split('\n');
   if (lines.length < 2) return table;
 
-  const rows = lines.map(line => {
+  const rows = lines.map((line) => {
     const trimmed = line.trim();
     if (trimmed.startsWith('|')) {
-      const inner = trimmed.substring(1, trimmed.endsWith('|') ? trimmed.length - 1 : trimmed.length);
-      return inner.split('|').map(cell => cell.trim());
+      const inner = trimmed.substring(
+        1,
+        trimmed.endsWith('|') ? trimmed.length - 1 : trimmed.length
+      );
+      return inner.split('|').map((cell) => cell.trim());
     }
     return [];
   });
@@ -58,20 +61,27 @@ function formatTable(table) {
 
   const formattedRows = [];
 
-  const formattedHeader = '| ' + headerRow.map((cell, i) => cell.padEnd(colWidths[i])).join(' | ') + ' |';
+  const formattedHeader =
+    '| ' + headerRow.map((cell, i) => cell.padEnd(colWidths[i])).join(' | ') + ' |';
   formattedRows.push(formattedHeader);
 
-  const formattedSep = '| ' + separatorRow.map((sep, i) => {
-    const width = colWidths[i];
-    const hasLeft = sep.startsWith(':');
-    const hasRight = sep.endsWith(':');
-    const dashes = '-'.repeat(Math.max(3, width - (hasLeft ? 1 : 0) - (hasRight ? 1 : 0)));
-    return (hasLeft ? ':' : '') + dashes + (hasRight ? ':' : ' ');
-  }).join(' | ') + ' |';
+  const formattedSep =
+    '| ' +
+    separatorRow
+      .map((sep, i) => {
+        const width = colWidths[i];
+        const hasLeft = sep.startsWith(':');
+        const hasRight = sep.endsWith(':');
+        const dashes = '-'.repeat(Math.max(3, width - (hasLeft ? 1 : 0) - (hasRight ? 1 : 0)));
+        return (hasLeft ? ':' : '') + dashes + (hasRight ? ':' : ' ');
+      })
+      .join(' | ') +
+    ' |';
   formattedRows.push(formattedSep);
 
   for (const row of dataRows) {
-    const formattedRow = '| ' + row.map((cell, i) => (cell || '').padEnd(colWidths[i])).join(' | ') + ' |';
+    const formattedRow =
+      '| ' + row.map((cell, i) => (cell || '').padEnd(colWidths[i])).join(' | ') + ' |';
     formattedRows.push(formattedRow);
   }
 
@@ -97,7 +107,11 @@ function formatTablesInContent(content) {
         tableLines.push(lines[i]);
 
         i++;
-        while (i < lines.length && lines[i].trim().startsWith('|') && !lines[i].trim().startsWith('```')) {
+        while (
+          i < lines.length &&
+          lines[i].trim().startsWith('|') &&
+          !lines[i].trim().startsWith('```')
+        ) {
           tableLines.push(lines[i]);
           i++;
         }

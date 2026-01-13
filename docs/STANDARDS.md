@@ -10,12 +10,14 @@
 **RULE:** Every documentation claim must be traceable to actual source code.
 
 **Prohibited:**
+
 - ❌ Documenting "reasonable" features that don't exist
 - ❌ Inferring endpoints from similar services
 - ❌ Adding fields that "should be there"
 - ❌ Describing planned features as implemented
 
 **Required:**
+
 - ✅ Only document what explicitly exists in source files
 - ✅ Verify each claim against actual code
 - ✅ When uncertain, mark as `[NEEDS VERIFICATION]` or omit
@@ -27,13 +29,13 @@
 
 Every service MUST have these documentation files in `docs/services/<service>/`:
 
-| File | Purpose | Required |
-|------|---------|----------|
-| `features.md` | User-facing features and use cases | Yes |
-| `technical.md` | API endpoints, models, architecture | Yes |
-| `tutorial.md` | Getting started guide | Yes |
-| `technical-debt.md` | Known issues and future plans | Yes |
-| `CLAUDE.md` | Agent memory context | Auto-generated |
+| File                | Purpose                             | Required       |
+| ------------------- | ----------------------------------- | -------------- |
+| `features.md`       | User-facing features and use cases  | Yes            |
+| `technical.md`      | API endpoints, models, architecture | Yes            |
+| `tutorial.md`       | Getting started guide               | Yes            |
+| `technical-debt.md` | Known issues and future plans       | Yes            |
+| `CLAUDE.md`         | Agent memory context                | Auto-generated |
 
 ---
 
@@ -45,17 +47,20 @@ Every service MUST have these documentation files in `docs/services/<service>/`:
 
 ```markdown
 ## ❌ WRONG - Inventing endpoints
-| Method | Path | Description |
-|--------|------|-------------|
-| POST | /todos/:id/cancel | Cancel a todo |
+
+| Method | Path              | Description   |
+| ------ | ----------------- | ------------- |
+| POST   | /todos/:id/cancel | Cancel a todo |
 
 ## ✅ RIGHT - From actual code
-| Method | Path | Description |
-|--------|------|-------------|
-| PATCH | /todos/:id | Update todo (see schema for allowed fields) |
+
+| Method | Path       | Description                                 |
+| ------ | ---------- | ------------------------------------------- |
+| PATCH  | /todos/:id | Update todo (see schema for allowed fields) |
 ```
 
 **Rules:**
+
 - Only list endpoints that exist in route files
 - Use exact HTTP methods from code
 - Include exact path parameters
@@ -67,25 +72,28 @@ Every service MUST have these documentation files in `docs/services/<service>/`:
 
 ```markdown
 ## ❌ WRONG - Guessing fields
+
 interface Todo {
-  id: string;
-  title: string;
-  tags: string[];  // ← Does not exist
-  priority: 'low' | 'medium' | 'high';  // ← Does not exist
+id: string;
+title: string;
+tags: string[]; // ← Does not exist
+priority: 'low' | 'medium' | 'high'; // ← Does not exist
 }
 
 ## ✅ RIGHT - From actual code
+
 interface Todo {
-  id: string;
-  userId: string;
-  title: string;
-  status: 'pending' | 'completed';
-  createdAt: string;
-  updatedAt: string;
+id: string;
+userId: string;
+title: string;
+status: 'pending' | 'completed';
+createdAt: string;
+updatedAt: string;
 }
 ```
 
 **Rules:**
+
 - Field names must match exactly
 - Types must match (enums, not strings pretending to be enums)
 - Optional fields marked with `?`
@@ -97,9 +105,11 @@ interface Todo {
 
 ```markdown
 ## ❌ WRONG - Assuming dependencies
+
 Depends on: calendar-service (for reminders)
 
 ## ✅ RIGHT - From imports
+
 Depends on: research-agent, user-service, bookmarks-agent
 ```
 
@@ -109,9 +119,11 @@ Depends on: research-agent, user-service, bookmarks-agent
 
 ```markdown
 ## ❌ WRONG - Making up env vars
+
 INTEXURAOS_AI_MODEL - Selected AI model
 
 ## ✅ RIGHT - From config
+
 INTEXURAOS_RESEARCH_AGENT_URL - Research agent base URL (required)
 INTEXURAOS_INTERNAL_AUTH_TOKEN - Service-to-service auth (required)
 ```
@@ -178,14 +190,14 @@ Documentation changes require the same review process as code changes:
 
 ## Common Mistakes (LEARN FROM AUDIT)
 
-| Mistake | Example | Fix |
-|---------|---------|-----|
-| Documenting planned features | Auto-execution based on confidence | Mark as "Planned" or remove |
-| Wrong field names | `name` instead of `purpose` | Verify from model file |
-| Wrong HTTP methods | `PUT` instead of `PATCH` | Check route definition |
-| Inventing endpoints | `/todos/:id/cancel` | Only document existing routes |
-| Wrong enum values | `priority: low/medium/high` | Use actual enum values |
-| Missing fields | Forgot `provider` field | Compare with code |
+| Mistake                      | Example                            | Fix                           |
+| ---------------------------- | ---------------------------------- | ----------------------------- |
+| Documenting planned features | Auto-execution based on confidence | Mark as "Planned" or remove   |
+| Wrong field names            | `name` instead of `purpose`        | Verify from model file        |
+| Wrong HTTP methods           | `PUT` instead of `PATCH`           | Check route definition        |
+| Inventing endpoints          | `/todos/:id/cancel`                | Only document existing routes |
+| Wrong enum values            | `priority: low/medium/high`        | Use actual enum values        |
+| Missing fields               | Forgot `provider` field            | Compare with code             |
 
 ---
 
@@ -202,8 +214,8 @@ See `docs/services/_templates/` for starting points:
 
 ## Audit History
 
-| Date | Services Audited | Avg Accuracy | Issues Found |
-|------|------------------|--------------|--------------|
-| 2026-01-13 | 17 services | 87% | 38 major issues |
+| Date       | Services Audited | Avg Accuracy | Issues Found    |
+| ---------- | ---------------- | ------------ | --------------- |
+| 2026-01-13 | 17 services      | 87%          | 38 major issues |
 
 **Full audit log:** `.claude/doc-audit-log.md`
