@@ -796,6 +796,9 @@ importers:
       '@auth0/auth0-react':
         specifier: ^2.2.4
         version: 2.11.0(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
+      '@intexuraos/common-core':
+        specifier: workspace:*
+        version: link:../../packages/common-core
       '@intexuraos/llm-contract':
         specifier: workspace:*
         version: link:../../packages/llm-contract
@@ -847,6 +850,9 @@ importers:
       vibe-kanban-web-companion:
         specifier: ^0.0.5
         version: 0.0.5(@types/react@19.2.8)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
+      workbox-window:
+        specifier: ^7.4.0
+        version: 7.4.0
     devDependencies:
       '@tailwindcss/vite':
         specifier: ^4.1.8
@@ -887,6 +893,9 @@ importers:
       typescript:
         specifier: ^5.8.3
         version: 5.9.3
+      vite:
+        specifier: ^7.3.1
+        version: 7.3.1(@types/node@22.19.5)(jiti@2.6.1)(lightningcss@1.30.2)(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.2)
       vite-plugin-pwa:
         specifier: ^1.2.0
         version: 1.2.0(vite@7.3.1(@types/node@22.19.5)(jiti@2.6.1)(lightningcss@1.30.2)(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.2))(workbox-build@7.4.0(@types/babel__core@7.20.5))(workbox-window@7.4.0)
