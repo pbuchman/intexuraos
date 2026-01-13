@@ -19,7 +19,7 @@ function VegaChart({ spec, data, onRenderError }: VegaChartProps): React.JSX.Ele
 
     const container = containerRef.current;
 
-    embed(container, spec, {
+    void embed(container, spec, {
       actions: false,
       renderer: 'canvas',
     })

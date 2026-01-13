@@ -58,18 +58,19 @@ function getIcon(iconName: string): LucideIcon {
  * @returns Tailwind CSS classes
  */
 function getButtonClasses(variant: 'primary' | 'secondary' | 'danger' | 'success'): string {
+  // Mobile: full-width with larger padding, Desktop: inline with normal padding
   const baseClasses =
-    'inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors disabled:opacity-50';
+    'flex w-full items-center justify-center gap-2 rounded-lg px-4 py-3 text-sm font-medium transition-colors disabled:opacity-50 sm:w-auto sm:justify-normal sm:gap-1.5 sm:px-3 sm:py-2';
 
   switch (variant) {
     case 'primary':
-      return `${baseClasses} bg-blue-600 text-white hover:bg-blue-700`;
+      return `${baseClasses} bg-blue-600 text-white hover:bg-blue-700 sm:bg-blue-600 sm:hover:bg-blue-700`;
     case 'success':
-      return `${baseClasses} bg-green-600 text-white hover:bg-green-700`;
+      return `${baseClasses} bg-green-600 text-white hover:bg-green-700 sm:bg-green-600 sm:hover:bg-green-700`;
     case 'secondary':
-      return `${baseClasses} text-slate-500 hover:bg-slate-100 hover:text-slate-700`;
+      return `${baseClasses} bg-slate-100 text-slate-700 hover:bg-slate-200 sm:bg-transparent sm:text-slate-500 sm:hover:bg-slate-100 sm:hover:text-slate-700`;
     case 'danger':
-      return `${baseClasses} text-slate-500 hover:bg-red-50 hover:text-red-600`;
+      return `${baseClasses} bg-red-50 text-red-600 hover:bg-red-100 sm:bg-transparent sm:text-slate-500 sm:hover:bg-red-50 sm:hover:text-red-600`;
   }
 }
 
