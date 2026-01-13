@@ -176,12 +176,6 @@ describe('FirestoreResearchRepository', () => {
           get: mockNonFavoritesGet,
         }),
       };
-      // Mock startAfter chain
-      const startAfterChain = {
-        startAfter: vi.fn().mockReturnValue({
-          get: mockFavoritesGet,
-        }),
-      };
 
       mockWhere
         .mockReturnValueOnce({
@@ -398,7 +392,11 @@ describe('FirestoreResearchRepository', () => {
       }));
 
       // Mock doc().get() to return the start document for startAfter
-      const startDoc = { id: 'fav-4', exists: true, data: (): Research => favorites[4] };
+      const fourthFavorite = favorites[4];
+      if (fourthFavorite === undefined) {
+        throw new Error('Test setup error: favorites[4] should be defined');
+      }
+      const startDoc = { id: 'fav-4', exists: true, data: (): Research => fourthFavorite };
       mockDocGet.mockResolvedValue(startDoc);
 
       // Return 6 items starting after fav-4 (fav-5 to fav-10)
@@ -447,7 +445,11 @@ describe('FirestoreResearchRepository', () => {
         startedAt: '2024-01-01T00:00:00Z',
       }));
 
-      const startDoc = { id: 'non-4', exists: true, data: (): Research => nonFavorites[4] };
+      const fourthNonFavorite = nonFavorites[4];
+      if (fourthNonFavorite === undefined) {
+        throw new Error('Test setup error: nonFavorites[4] should be defined');
+      }
+      const startDoc = { id: 'non-4', exists: true, data: (): Research => fourthNonFavorite };
       mockDocGet.mockResolvedValue(startDoc);
 
       // Mock the query chain with startAfter

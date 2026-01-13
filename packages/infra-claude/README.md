@@ -16,12 +16,12 @@ const client = createClaudeClient({
   model: 'claude-sonnet-4-5',
   userId: 'user-123',
   pricing: {
-    inputPricePerMillion: 3.00,
-    outputPricePerMillion: 15.00,
+    inputPricePerMillion: 3.0,
+    outputPricePerMillion: 15.0,
     cacheReadMultiplier: 0.1,
     cacheWriteMultiplier: 1.25,
     webSearchCostPerCall: 0.0035,
-  }
+  },
 });
 
 // Research with web search
@@ -45,16 +45,17 @@ if (result.ok) {
 
 ### `createClaudeClient(config)`
 
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| apiKey | string | Yes | Anthropic API key from console.anthropic.com |
-| model | string | Yes | Model ID (e.g., 'claude-sonnet-4-5', 'claude-haiku-3-5') |
-| userId | string | Yes | User ID for usage tracking |
-| pricing | ModelPricing | Yes | Cost configuration per million tokens |
+| Parameter | Type         | Required | Description                                              |
+| --------- | ------------ | -------- | -------------------------------------------------------- |
+| apiKey    | string       | Yes      | Anthropic API key from console.anthropic.com             |
+| model     | string       | Yes      | Model ID (e.g., 'claude-sonnet-4-5', 'claude-haiku-3-5') |
+| userId    | string       | Yes      | User ID for usage tracking                               |
+| pricing   | ModelPricing | Yes      | Cost configuration per million tokens                    |
 
 ### Methods
 
 #### `research(prompt: string)`
+
 Performs web search research using Claude's built-in `web_search_20250305` tool.
 
 **Returns:** `Promise<Result<ResearchResult, ClaudeError>>`
@@ -64,6 +65,7 @@ Performs web search research using Claude's built-in `web_search_20250305` tool.
 - `usage`: Token usage and cost information
 
 #### `generate(prompt: string)`
+
 Generates text completion without web search (training data only).
 
 **Returns:** `Promise<Result<GenerateResult, ClaudeError>>`
@@ -73,14 +75,14 @@ Generates text completion without web search (training data only).
 
 ## Error Codes
 
-| Code | Description | Recommended Action |
-|------|-------------|-------------------|
-| INVALID_KEY | API key is invalid | Check ANTHROPIC_API_KEY env var |
-| RATE_LIMITED | Rate limit exceeded | Implement exponential backoff |
-| OVERLOADED | Anthropic API is overloaded | Retry after delay |
-| TIMEOUT | Request timed out | Retry with longer timeout |
-| CONTEXT_LENGTH | Prompt too long | Truncate and retry |
-| API_ERROR | Other API errors | Check message for details |
+| Code           | Description                 | Recommended Action              |
+| -------------- | --------------------------- | ------------------------------- |
+| INVALID_KEY    | API key is invalid          | Check ANTHROPIC_API_KEY env var |
+| RATE_LIMITED   | Rate limit exceeded         | Implement exponential backoff   |
+| OVERLOADED     | Anthropic API is overloaded | Retry after delay               |
+| TIMEOUT        | Request timed out           | Retry with longer timeout       |
+| CONTEXT_LENGTH | Prompt too long             | Truncate and retry              |
+| API_ERROR      | Other API errors            | Check message for details       |
 
 ## Cost Tracking
 
@@ -92,8 +94,8 @@ interface NormalizedUsage {
   outputTokens: number;
   totalTokens: number;
   costUsd: number;
-  cacheTokens?: number;      // Prompt cache read tokens (discounted)
-  webSearchCalls?: number;    // Number of web search calls (research only)
+  cacheTokens?: number; // Prompt cache read tokens (discounted)
+  webSearchCalls?: number; // Number of web search calls (research only)
 }
 ```
 
@@ -102,8 +104,8 @@ to Firestore for analytics.
 
 ## Supported Models
 
-| Model | Description |
-|-------|-------------|
+| Model             | Description                    |
+| ----------------- | ------------------------------ |
 | claude-sonnet-4-5 | Balanced performance and speed |
-| claude-opus-4-5 | Highest quality, slower |
-| claude-haiku-3-5 | Fastest, most cost-effective |
+| claude-opus-4-5   | Highest quality, slower        |
+| claude-haiku-3-5  | Fastest, most cost-effective   |
