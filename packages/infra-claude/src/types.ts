@@ -1,3 +1,9 @@
+/**
+ * Types for the Anthropic Claude client implementation.
+ *
+ * @packageDocumentation
+ */
+
 export type {
   LLMError as ClaudeError,
   ResearchResult,
@@ -7,11 +13,35 @@ export type {
 } from '@intexuraos/llm-contract';
 
 /**
- * Claude client configuration with explicit pricing.
+ * Configuration for creating a Claude client.
+ *
+ * Extends {@link LLMConfig} with Anthropic-specific pricing configuration.
+ *
+ * @example
+ * ```ts
+ * import { createClaudeClient } from '@intexuraos/infra-claude';
+ *
+ * const client = createClaudeClient({
+ *   apiKey: process.env.ANTHROPIC_API_KEY,
+ *   model: 'claude-sonnet-4-5',
+ *   userId: 'user-123',
+ *   pricing: {
+ *     inputPricePerMillion: 3.00,
+ *     outputPricePerMillion: 15.00,
+ *     cacheReadMultiplier: 0.1,
+ *     cacheWriteMultiplier: 1.25,
+ *     webSearchCostPerCall: 0.0035,
+ *   }
+ * });
+ * ```
  */
 export interface ClaudeConfig {
+  /** Anthropic API key from console.anthropic.com */
   apiKey: string;
+  /** Model identifier (e.g., 'claude-sonnet-4-5', 'claude-haiku-3-5') */
   model: string;
+  /** User ID for usage tracking and analytics */
   userId: string;
+  /** Cost configuration per million tokens */
   pricing: import('@intexuraos/llm-contract').ModelPricing;
 }
