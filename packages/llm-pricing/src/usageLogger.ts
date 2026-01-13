@@ -22,26 +22,93 @@ import type { LlmProvider } from './types.js';
 
 const COLLECTION_NAME = 'llm_usage_stats';
 
+/**
+ * LLM operation types for usage tracking.
+ *
+ * @remarks
+ * Each call type is tracked separately in Firestore for granular cost analysis.
+ * Used to categorize operations for both usage stats and pricing calculations.
+ *
+ * @example
+ * ```ts
+ * import type { CallType } from '@intexuraos/llm-pricing';
+ *
+ * const callType: CallType = 'research'; // Web search enhanced
+ * const simple: CallType = 'generate';   // Simple text generation
+ * const image: CallType = 'image_generation'; // Image creation
+ * ```
+ */
 export type CallType =
+  /** Web search enhanced generation (with sources) */
   | 'research'
+  /** Simple text generation (no web search) */
   | 'generate'
+  /** Image generation operations */
   | 'image_generation'
+  /** Visualization chart data analysis */
   | 'visualization_insights'
+  /** Vega-Lite chart generation */
   | 'visualization_vegalite';
 
+/**
+ * Parameters for logging LLM usage.
+ *
+ * @remarks
+ * Passed to {@link logUsage} to record token usage and costs to Firestore.
+ * Aggregated by model, call type, period (total/monthly/daily), and user.
+ *
+ * @example
+ * ```ts
+ * const params: UsageLogParams = {
+ *   userId: 'user-123',
+ *   provider: 'anthropic',
+ *   model: 'claude-sonnet-4-5',
+ *   callType: 'research',
+ *   usage: {
+ *     inputTokens: 1000,
+ *     outputTokens: 500,
+ *     totalTokens: 1500,
+ *     costUsd: 0.0105,
+ *     webSearchCalls: 3,
+ *   },
+ *   success: true,
+ * };
+ * ```
+ */
 export interface UsageLogParams {
+  /** User ID for per-user tracking */
   userId: string;
+  /** LLM provider (anthropic, openai, google, perplexity) */
   provider: LlmProvider;
+  /** Model identifier (e.g., 'claude-sonnet-4-5') */
   model: string;
+  /** Type of LLM operation performed */
   callType: CallType;
+  /** Normalized usage with token counts and calculated cost */
   usage: NormalizedUsage;
+  /** Whether the LLM call succeeded */
   success: boolean;
+  /** Error message if success is false */
   errorMessage?: string;
 }
 
 /**
  * Check if usage logging is enabled.
- * Controlled by INTEXURAOS_LOG_LLM_USAGE env var, defaults to true.
+ *
+ * @remarks
+ * Controlled by `INTEXURAOS_LOG_LLM_USAGE` environment variable.
+ * Defaults to `true` - only disabled if explicitly set to `false`, `0`, or `no` (case-insensitive).
+ *
+ * @returns `true` if logging is enabled, `false` otherwise
+ *
+ * @example
+ * ```ts
+ * import { isUsageLoggingEnabled } from '@intexuraos/llm-pricing';
+ *
+ * if (isUsageLoggingEnabled()) {
+ *   console.log('LLM usage will be tracked');
+ * }
+ * ```
  */
 export function isUsageLoggingEnabled(): boolean {
   const envValue = process.env['INTEXURAOS_LOG_LLM_USAGE'];
@@ -53,7 +120,38 @@ export function isUsageLoggingEnabled(): boolean {
 
 /**
  * Log LLM usage to Firestore and Cloud Logging.
- * Fire-and-forget - errors are logged but don't propagate.
+ *
+ * @remarks
+ * Fire-and-forget operation - errors are logged but don't propagate to avoid
+ * disrupting LLM operations. Writes to three aggregation levels:
+ * - `total`: All-time aggregate
+ * - `{YYYY-MM}`: Monthly aggregate
+ * - `{YYYY-MM-DD}`: Daily aggregate
+ *
+ * Also writes per-user stats under `by_user/{userId}` subcollection.
+ *
+ * @param params - Usage parameters including tokens, cost, and metadata
+ *
+ * @example
+ * ```ts
+ * import { logUsage } from '@intexuraos/llm-pricing';
+ *
+ * await logUsage({
+ *   userId: 'user-123',
+ *   provider: 'anthropic',
+ *   model: 'claude-sonnet-4-5',
+ *   callType: 'research',
+ *   usage: {
+ *     inputTokens: 1000,
+ *     outputTokens: 500,
+ *     totalTokens: 1500,
+ *     costUsd: 0.0105,
+ *   },
+ *   success: true,
+ * });
+ * ```
+ *
+ * @see {@link UsageLogParams} for parameter structure
  */
 export async function logUsage(params: UsageLogParams): Promise<void> {
   if (!isUsageLoggingEnabled()) return;

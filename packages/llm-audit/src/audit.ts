@@ -1,8 +1,51 @@
 /**
  * LLM Audit Logging Implementation.
  *
- * Logs all LLM API requests and responses to Firestore.
- * Controlled by INTEXURAOS_AUDIT_LLMS environment variable (defaults to true).
+ * @packageDocumentation
+ *
+ * Logs all LLM API requests and responses to Firestore for debugging,
+ * monitoring, and compliance. Controlled by `INTEXURAOS_AUDIT_LLMS`
+ * environment variable (defaults to `true`).
+ *
+ * @remarks
+ * Audit logs provide a complete trace of LLM interactions including:
+ * - Full request prompts
+ * - Response content (or error messages)
+ * - Token usage and costs
+ * - Timing information
+ * - User attribution
+ *
+ * The audit context pattern ensures proper timing even if the caller
+ * forgets to complete the audit (the timestamp is captured at creation).
+ *
+ * @example
+ * ```ts
+ * import { createAuditContext } from '@intexuraos/llm-audit';
+ *
+ * // Create audit context at the start of the request
+ * const audit = createAuditContext({
+ *   provider: 'anthropic',
+ *   model: 'claude-sonnet-4-5',
+ *   method: 'research',
+ *   prompt: 'Explain TypeScript',
+ *   startedAt: new Date(),
+ *   userId: 'user-123',
+ * });
+ *
+ * try {
+ *   const result = await llmClient.generate('Explain TypeScript');
+ *   // Log successful completion
+ *   await audit.success({
+ *     response: result.content,
+ *     inputTokens: result.usage.inputTokens,
+ *     outputTokens: result.usage.outputTokens,
+ *     costUsd: result.usage.costUsd,
+ *   });
+ * } catch (error) {
+ *   // Log error
+ *   await audit.error({ error: getErrorMessage(error) });
+ * }
+ * ```
  */
 
 import { randomUUID } from 'node:crypto';
@@ -20,7 +63,21 @@ const COLLECTION_NAME = 'llm_api_logs';
 
 /**
  * Check if audit logging is enabled.
- * Controlled by INTEXURAOS_AUDIT_LLMS env var, defaults to true.
+ *
+ * @remarks
+ * Controlled by `INTEXURAOS_AUDIT_LLMS` environment variable.
+ * Defaults to `true` - only disabled if explicitly set to `false`, `0`, or `no` (case-insensitive).
+ *
+ * @returns `true` if audit logging is enabled, `false` otherwise
+ *
+ * @example
+ * ```ts
+ * import { isAuditEnabled } from '@intexuraos/llm-audit';
+ *
+ * if (isAuditEnabled()) {
+ *   console.log('LLM calls will be audited');
+ * }
+ * ```
  */
 export function isAuditEnabled(): boolean {
   const envValue = process.env['INTEXURAOS_AUDIT_LLMS'];
@@ -33,8 +90,29 @@ export function isAuditEnabled(): boolean {
 }
 
 /**
- * Create a pending audit log entry and start timing.
- * Returns an audit context that should be completed with success or error.
+ * Create an audit context for tracking an LLM request.
+ *
+ * @remarks
+ * Creates a unique audit log entry with the captured start time.
+ * The returned {@link AuditContext} should be completed with either
+ * {@link AuditContext.success} or {@link AuditContext.error}.
+ *
+ * @param params - Audit parameters including provider, model, method, and prompt
+ * @returns Audit context for completing the log entry
+ *
+ * @example
+ * ```ts
+ * const audit = createAuditContext({
+ *   provider: 'anthropic',
+ *   model: 'claude-sonnet-4-5',
+ *   method: 'research',
+ *   prompt: 'What is TypeScript?',
+ *   startedAt: new Date(),
+ * });
+ *
+ * // Later...
+ * await audit.success({ response: 'TypeScript is...', inputTokens: 5, outputTokens: 20 });
+ * ```
  */
 export function createAuditContext(params: CreateAuditLogParams): AuditContext {
   return new AuditContext(params);
@@ -42,6 +120,30 @@ export function createAuditContext(params: CreateAuditLogParams): AuditContext {
 
 /**
  * Audit context for tracking an LLM request/response cycle.
+ *
+ * @remarks
+ * Captures the start time when created, ensuring accurate duration
+ * calculation even if there's delay before completion. Can only be
+ * completed once - subsequent calls to {@link success} or {@link error}
+ * are ignored.
+ *
+ * @example
+ * ```ts
+ * const audit = createAuditContext({...});
+ *
+ * // Complete with success
+ * await audit.success({
+ *   response: 'Generated text',
+ *   inputTokens: 100,
+ *   outputTokens: 50,
+ * });
+ *
+ * // Or complete with error
+ * await audit.error({ error: 'Rate limit exceeded' });
+ *
+ * // Subsequent calls are ignored
+ * await audit.success({...}); // Does nothing
+ * ```
  */
 export class AuditContext {
   private readonly id: string;
@@ -55,6 +157,23 @@ export class AuditContext {
 
   /**
    * Complete the audit with a successful response.
+   *
+   * @remarks
+   * Calculates duration from start time and writes the audit log to Firestore.
+   * Only the first call takes effect - subsequent calls are ignored.
+   * If audit logging is disabled, does nothing.
+   *
+   * @param result - Success parameters including response and optional token/cost info
+   *
+   * @example
+   * ```ts
+   * await audit.success({
+   *   response: 'TypeScript is a typed superset of JavaScript...',
+   *   inputTokens: 5,
+   *   outputTokens: 20,
+   *   costUsd: 0.0003,
+   * });
+   * ```
    */
   async success(result: CompleteAuditLogSuccessParams): Promise<void> {
     if (this.completed) return;
@@ -139,6 +258,23 @@ export class AuditContext {
 
   /**
    * Complete the audit with an error.
+   *
+   * @remarks
+   * Calculates duration from start time and writes the audit log with error details to Firestore.
+   * Only the first call takes effect - subsequent calls are ignored.
+   * If audit logging is disabled, does nothing.
+   *
+   * @param result - Error parameters including error message
+   *
+   * @example
+   * ```ts
+   * try {
+   *   const result = await llmClient.generate(prompt);
+   *   await audit.success({ response: result.content, ... });
+   * } catch (error) {
+   *   await audit.error({ error: getErrorMessage(error) });
+   * }
+   * ```
    */
   async error(result: CompleteAuditLogErrorParams): Promise<void> {
     if (this.completed) return;
@@ -179,8 +315,22 @@ export class AuditContext {
 
 /**
  * Save an audit log entry to Firestore.
- * Note: The log object is built with conditional property assignment,
- * so undefined values are never present - we pass it directly to Firestore.
+ *
+ * @remarks
+ * Internal function used by {@link AuditContext}. The log object is built
+ * with conditional property assignment, so undefined values are never present.
+ *
+ * @param log - Complete audit log entry to save
+ * @returns Result indicating success or failure
+ *
+ * @example
+ * ```ts
+ * // Used internally by AuditContext
+ * const result = await saveAuditLog(log);
+ * if (!result.ok) {
+ *   console.error('Failed to save audit log:', result.error);
+ * }
+ * ```
  */
 async function saveAuditLog(log: LlmAuditLog): Promise<Result<void>> {
   try {

@@ -1,12 +1,41 @@
 /**
- * Perplexity Client - with parameterized pricing.
+ * Perplexity AI client implementation.
  *
- * No hardcoded pricing - all costs calculated from passed ModelPricing config.
- * Original createPerplexityClient() remains for backwards compatibility.
+ * Implements the {@link LLMClient} interface for Perplexity Sonar models with:
+ * - Online search with source citations
+ * - Streaming support for long-running reasoning models
+ * - Automatic usage logging to Firestore
+ * - Audit trail for all requests
  *
- * STREAMING: The research() method uses SSE streaming to prevent 5-minute idle
- * timeouts on long-running reasoning models (like sonar-deep-research).
- * The generate() method uses standard buffered requests.
+ * @packageDocumentation
+ *
+ * @remarks
+ * The `research()` method uses SSE streaming to prevent 5-minute idle timeouts
+ * on long-running reasoning models like sonar-deep-research. The `generate()` method
+ * uses standard buffered requests.
+ *
+ * @example
+ * ```ts
+ * import { createPerplexityClient } from '@intexuraos/infra-perplexity';
+ *
+ * const client = createPerplexityClient({
+ *   apiKey: process.env.PERPLEXITY_API_KEY,
+ *   model: 'sonar-pro',
+ *   userId: 'user-123',
+ *   pricing: {
+ *     inputPricePerMillion: 1.00,
+ *     outputPricePerMillion: 1.00,
+ *   },
+ *   timeoutMs: 840000, // 14 minutes for deep research
+ * });
+ *
+ * const result = await client.research('Latest AI developments');
+ * if (result.ok) {
+ *   console.log(result.data.content);
+ *   console.log('Sources:', result.data.sources);
+ *   console.log('Cost:', result.data.usage.costUsd);
+ * }
+ * ```
  */
 
 import { randomUUID } from 'node:crypto';
