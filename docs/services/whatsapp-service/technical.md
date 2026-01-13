@@ -35,17 +35,15 @@ graph TB
 
 ### Public Endpoints
 
-| Method   | Path                                     | Description                      | Auth         |
-| --------  | ----------------------------------------  | --------------------------------  | ------------  |
-| GET      | `/whatsapp/messages`                     | List user's messages (paginated) | Bearer token |
-| GET      | `/whatsapp/messages/:id/media`           | Get signed URL for media         | Bearer token |
-| GET      | `/whatsapp/messages/:id/thumbnail`       | Get signed URL for thumbnail     | Bearer token |
-| DELETE   | `/whatsapp/messages/:id`                 | Delete message                   | Bearer token |
-| GET      | `/whatsapp/user-mappings`                | List user's WhatsApp numbers     | Bearer token |
-| POST     | `/whatsapp/user-mappings`                | Add phone number mapping         | Bearer token |
-| DELETE   | `/whatsapp/user-mappings/:id`            | Remove phone number mapping      | Bearer token |
-| POST     | `/whatsapp/user-mappings/:id/connect`    | Connect mapping                  | Bearer token |
-| POST     | `/whatsapp/user-mappings/:id/disconnect` | Disconnect mapping               | Bearer token |
+| Method   | Path                          | Description                           | Auth         |
+| --------  | -----------------------------  | -------------------------------------  | ------------  |
+| GET      | `/whatsapp/messages`          | List user's messages (paginated)       | Bearer token |
+| GET      | `/whatsapp/messages/:message_id/media`   | Get signed URL for media           | Bearer token |
+| GET      | `/whatsapp/messages/:message_id/thumbnail` | Get signed URL for thumbnail     | Bearer token |
+| DELETE   | `/whatsapp/messages/:message_id`         | Delete message                   | Bearer token |
+| POST     | `/whatsapp/connect`           | Connect/update WhatsApp mapping        | Bearer token |
+| GET      | `/whatsapp/status`            | Get mapping status                     | Bearer token |
+| DELETE   | `/whatsapp/disconnect`        | Disconnect mapping                     | Bearer token |
 
 ### Internal Endpoints
 
@@ -53,7 +51,8 @@ graph TB
 | --------  | -----------------------------------------------  | --------------------------------  | ------------  |
 | POST     | `/internal/whatsapp/pubsub/process-webhook`     | Process webhook from Pub/Sub     | Pub/Sub OIDC |
 | POST     | `/internal/whatsapp/pubsub/transcribe-audio`    | Process audio transcription      | Pub/Sub OIDC |
-| POST     | `/internal/whatsapp/pubsub/update-link-preview` | Update message with link preview | Pub/Sub OIDC |
+| POST     | `/internal/whatsapp/pubsub/send-message`        | Send WhatsApp message            | Pub/Sub OIDC |
+| POST     | `/internal/whatsapp/pubsub/media-cleanup`        | Delete GCS media files           | Pub/Sub OIDC |
 
 ## Domain Models
 
@@ -127,11 +126,12 @@ graph TB
 
 ### Subscribed
 
-| Event Type                    | Handler                                         |
-| -----------------------------  | -----------------------------------------------  |
-| `whatsapp.webhook.process`    | `/internal/whatsapp/pubsub/process-webhook`     |
-| `whatsapp.audio.transcribe`   | `/internal/whatsapp/pubsub/transcribe-audio`    |
-| `whatsapp.linkpreview.update` | `/internal/whatsapp/pubsub/update-link-preview` |
+| Event Type                  | Handler                                      |
+| ---------------------------  | --------------------------------------------  |
+| `whatsapp.webhook.process`  | `/internal/whatsapp/pubsub/process-webhook`  |
+| `whatsapp.audio.transcribe` | `/internal/whatsapp/pubsub/transcribe-audio` |
+| `whatsapp.message.send`     | `/internal/whatsapp/pubsub/send-message`     |
+| `whatsapp.media.cleanup`    | `/internal/whatsapp/pubsub/media-cleanup`    |
 
 ## Dependencies
 
