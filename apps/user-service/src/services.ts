@@ -88,6 +88,7 @@ export function initializeServices(pricingContext?: PricingContext): void {
       openai: pricingContext.getPricing(LlmModels.GPT4oMini),
       anthropic: pricingContext.getPricing(LlmModels.ClaudeHaiku35),
       perplexity: pricingContext.getPricing(LlmModels.Sonar),
+      zhipu: pricingContext.getPricing(LlmModels.Glm47),
     };
     llmValidator = new LlmValidatorImpl(validationPricing);
   }

@@ -698,6 +698,7 @@ export interface AllProvidersPricing {
   openai: ProviderPricing;
   anthropic: ProviderPricing;
   perplexity: ProviderPricing;
+  zhipu: ProviderPricing;
 }
 
 /**
