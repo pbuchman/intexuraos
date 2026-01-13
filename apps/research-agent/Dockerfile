@@ -1,55 +1,55 @@
 # IntexuraOS Research Agent Dockerfile
-# Multi-stage build with esbuild bundling.
+# Multi-stage build with pnpm deploy - eliminates "double install" pattern
 
-# Stage 1: Build
+# ==========================================
+# Stage 1: Builder
+# ==========================================
 FROM node:22-alpine AS builder
 
-# Install pnpm
-RUN npm install -g pnpm@9
+# Enable pnpm via Corepack
+RUN corepack enable && corepack prepare pnpm@10 --activate
 
 WORKDIR /app
 
-# Copy workspace config and lockfile
-COPY pnpm-workspace.yaml ./
-COPY pnpm-lock.yaml ./
-COPY package*.json ./
-COPY apps/research-agent/package*.json ./apps/research-agent/
+# 1. CACHE LAYER: Copy ONLY config files first
+COPY pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY package.json ./
 
+# 2. COPY MANIFESTS: Copy package.json files to resolve workspace
+COPY apps/research-agent/package.json ./apps/research-agent/
 COPY packages/ ./packages/
-# Install dependencies
+
+# 3. INSTALL DEPENDENCIES (Frozen lockfile)
 RUN pnpm install --frozen-lockfile
 
-# Copy source files
+# 4. BUILD SOURCE
 COPY tsconfig*.json ./
 COPY scripts/ ./scripts/
-COPY packages/ ./packages/
 COPY apps/research-agent/ ./apps/research-agent/
 
 # Build service (esbuild bundles everything into one file)
 RUN pnpm run --filter @intexuraos/research-agent build
 
-# Stage 2: Production
-FROM node:22-alpine
+# 5. PRUNE PROD DEPS: Creates standalone folder with prod deps
+# This eliminates the need for a second install in the final stage
+RUN pnpm deploy --filter @intexuraos/research-agent --prod /prod/research-agent
 
-# Install pnpm
-RUN npm install -g pnpm@9
+# ==========================================
+# Stage 2: Production (Zero Network Usage)
+# ==========================================
+FROM node:22-alpine AS runner
 
 WORKDIR /app
 
-# Copy workspace config and lockfile
-COPY pnpm-workspace.yaml ./
-COPY pnpm-lock.yaml ./
-
-# Copy generated production package.json and install deps
-COPY --from=builder /app/apps/research-agent/dist/package.json ./
-RUN pnpm install --prod
-
-# Copy built file
-COPY --from=builder /app/apps/research-agent/dist/index.js ./dist/
-COPY --from=builder /app/apps/research-agent/dist/index.js.map ./dist/
-
 ENV NODE_ENV=production
 ENV PORT=8080
+
+# Copy the pruned production folder (contains package.json + node_modules)
+COPY --from=builder /prod/research-agent/node_modules ./node_modules
+COPY --from=builder /prod/research-agent/package.json ./
+
+# Copy the built artifact
+COPY --from=builder /app/apps/research-agent/dist/index.js ./dist/
 
 EXPOSE 8080
 
