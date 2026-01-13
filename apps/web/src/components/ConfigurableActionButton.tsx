@@ -59,7 +59,7 @@ function getIcon(iconName: string): LucideIcon {
  */
 function getButtonClasses(variant: 'primary' | 'secondary' | 'danger' | 'success'): string {
   const baseClasses =
-    'inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors disabled:opacity-50';
+    'inline-flex items-center justify-center gap-1 rounded-lg px-1.5 py-1.5 text-xs font-medium transition-colors disabled:opacity-50 sm:gap-1.5 sm:px-3 sm:py-2 sm:text-sm sm:w-[105px] whitespace-nowrap';
 
   switch (variant) {
     case 'primary':
@@ -119,8 +119,14 @@ export function ConfigurableActionButton({
       disabled={isExecuting}
       className={getButtonClasses(button.variant)}
     >
-      {isExecuting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Icon className="h-4 w-4" />}
-      {button.label}
+      {isExecuting ? (
+        <Loader2 className="h-4 w-4 animate-spin" />
+      ) : (
+        <>
+          <Icon className="h-4 w-4" />
+          <span className="hidden sm:inline">{button.label}</span>
+        </>
+      )}
     </button>
   );
 }
