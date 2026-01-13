@@ -27,6 +27,7 @@
     "@intexuraos/infra-gpt": "workspace:*",
     "@intexuraos/infra-perplexity": "workspace:*",
     "@intexuraos/infra-pubsub": "workspace:*",
+    "@intexuraos/infra-sentry": "workspace:*",
     "@intexuraos/llm-common": "workspace:*",
     "@intexuraos/llm-contract": "workspace:*",
     "@intexuraos/llm-pricing": "workspace:*",

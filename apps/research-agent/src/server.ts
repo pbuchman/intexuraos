@@ -15,6 +15,7 @@ import {
   checkSecrets,
   type HealthCheck,
 } from '@intexuraos/http-server';
+import { createSentryTransport, setupSentryErrorHandler } from '@intexuraos/infra-sentry';
 import { researchRoutes, internalRoutes } from './routes/index.js';
 
 const SERVICE_NAME = 'research-agent';
@@ -127,12 +128,14 @@ function buildOpenApiOptions(): FastifyDynamicSwaggerOptions {
 }
 
 export async function buildServer(): Promise<FastifyInstance> {
+  const sentryTransport = createSentryTransport();
   const app = Fastify({
     logger:
       process.env['NODE_ENV'] === 'test'
         ? false
         : {
             level: process.env['LOG_LEVEL'] ?? 'info',
+            ...(sentryTransport !== undefined && { transport: sentryTransport as unknown as { target: string; options: Record<string, unknown> } }),
           },
     disableRequestLogging: true,
   });
@@ -147,47 +150,7 @@ export async function buildServer(): Promise<FastifyInstance> {
   await app.register(intexuraFastifyPlugin);
   await app.register(fastifyAuthPlugin);
 
-  app.setErrorHandler(async (error, request, reply) => {
-    const fastifyError = error as { code?: string };
-    if (fastifyError.code === 'FST_ERR_CTP_INVALID_JSON_BODY') {
-      reply.status(400);
-      return await reply.fail('INVALID_REQUEST', 'Invalid JSON body');
-    }
-
-    if (
-      typeof error === 'object' &&
-      error !== null &&
-      'validation' in error &&
-      Array.isArray((error as { validation?: unknown }).validation)
-    ) {
-      const validation = (
-        error as {
-          validation: { instancePath?: string; message?: string }[];
-          message?: string;
-        }
-      ).validation;
-
-      const errors = validation.map((v) => {
-        let path = (v.instancePath ?? '').replace(/^\//, '').replaceAll('/', '.');
-        if (path === '') {
-          const requiredMatch = /must have required property '([^']+)'/.exec(v.message ?? '');
-          path = requiredMatch?.[1] ?? '<root>';
-        }
-
-        return {
-          path,
-          message: v.message ?? 'Invalid value',
-        };
-      });
-
-      reply.status(400);
-      return await reply.fail('INVALID_REQUEST', 'Validation failed', undefined, { errors });
-    }
-
-    request.log.error({ err: error }, 'Unhandled error');
-    reply.status(500);
-    return await reply.fail('INTERNAL_ERROR', 'Internal error');
-  });
+  setupSentryErrorHandler(app as unknown as FastifyInstance);
 
   registerCoreSchemas(app);
 
@@ -262,6 +225,28 @@ export async function buildServer(): Promise<FastifyInstance> {
 
       void reply.header('x-health-duration-ms', String(Date.now() - started));
       return await reply.type('application/json').send(response);
+    }
+  );
+
+  // Debug endpoint for Sentry verification (temporary - remove after testing)
+  app.get(
+    '/debug-sentry',
+    {
+      schema: {
+        hide: true,
+        description: 'Debug endpoint for Sentry integration testing',
+        tags: ['system'],
+      },
+    },
+    async (request) => {
+      // Test warning capture
+      request.log.warn({ test: 'debug-sentry-warn' }, 'Debug Sentry warning test');
+
+      // Test error capture via log
+      request.log.error({ test: 'debug-sentry-error' }, 'Debug Sentry error test');
+
+      // Throw unhandled error to test error handler
+      throw new Error('Debug Sentry: Test error from /debug-sentry endpoint');
     }
   );
 

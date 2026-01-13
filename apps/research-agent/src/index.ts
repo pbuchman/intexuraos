@@ -8,6 +8,17 @@ import {
 import { type ResearchModel, type FastModel, LlmModels } from '@intexuraos/llm-contract';
 import { buildServer } from './server.js';
 import { initializeServices } from './services.js';
+import { initSentry } from '@intexuraos/infra-sentry';
+
+// Initialize Sentry before other imports
+const sentryDsn = process.env['INTEXURAOS_SENTRY_DSN'];
+if (sentryDsn !== undefined) {
+  initSentry({
+    dsn: sentryDsn,
+    environment: process.env['INTEXURAOS_ENVIRONMENT'] ?? 'development',
+    serviceName: 'research-agent',
+  });
+}
 
 const REQUIRED_ENV = [
   'INTEXURAOS_GCP_PROJECT_ID',
