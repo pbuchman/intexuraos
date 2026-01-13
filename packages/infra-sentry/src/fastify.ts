@@ -38,17 +38,25 @@ export function setupSentryErrorHandler(app: FastifyInstance): void {
     const fastifyReply = reply as IntexuraFastifyReply;
     const fastifyError = error as { code?: string };
 
-    // Send to Sentry with request context
-    Sentry.withScope((scope) => {
-      scope.setTag('url', request.url);
-      scope.setTag('method', request.method);
-      scope.setContext('request', {
-        url: request.url,
-        method: request.method,
-        headers: sanitizeHeaders(request.headers),
+    // Log to Pino FIRST - this is our reliable error log
+    request.log.error({ err: error }, 'Unhandled error');
+
+    // Try to send to Sentry, but don't let it break error handling
+    try {
+      Sentry.withScope((scope) => {
+        scope.setTag('url', request.url);
+        scope.setTag('method', request.method);
+        scope.setContext('request', {
+          url: request.url,
+          method: request.method,
+          headers: sanitizeHeaders(request.headers),
+        });
+        Sentry.captureException(error);
       });
-      Sentry.captureException(error);
-    });
+    } catch (sentryError) {
+      // Log that Sentry failed but don't crash the error handler
+      request.log.warn({ err: sentryError }, 'Failed to send error to Sentry');
+    }
 
     // Handle Fastify-specific errors
     if (fastifyError.code === 'FST_ERR_CTP_INVALID_JSON_BODY') {
@@ -58,8 +66,8 @@ export function setupSentryErrorHandler(app: FastifyInstance): void {
     }
 
     if (
-      (error as unknown) !== null &&
       typeof error === 'object' &&
+      error !== null &&
       'validation' in error &&
       Array.isArray((error as { validation?: unknown }).validation)
     ) {
@@ -87,9 +95,6 @@ export function setupSentryErrorHandler(app: FastifyInstance): void {
       await fastifyReply.fail('INVALID_REQUEST', 'Validation failed', undefined, { errors });
       return;
     }
-
-    // Log to Pino
-    request.log.error({ err: error }, 'Unhandled error');
 
     // Return error response
     reply.status(500);
