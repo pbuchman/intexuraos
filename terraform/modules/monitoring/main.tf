@@ -55,8 +55,8 @@ resource "google_logging_metric" "cloudbuild_network_rx_mbps" {
   name        = "cloudbuild-network-rx-mbps"
   description = "Cloud Build network receive throughput (Mbps) by service"
   filter      = <<-EOT
-    resource.type="build"
-    textPayload:"network_telemetry"
+    logName="projects/intexuraos-dev-pbuchman/logs/cloudbuild-network-telemetry"
+    jsonPayload.event="network_telemetry"
   EOT
 
   metric_descriptor {
@@ -76,9 +76,9 @@ resource "google_logging_metric" "cloudbuild_network_rx_mbps" {
     }
   }
 
-  value_extractor = "EXTRACT(textPayload, \"rx_mbps\": ([0-9]+)\")"
+  value_extractor = "EXTRACT(jsonPayload.rx_mbps)"
   label_extractors = {
-    "service" = "EXTRACT(textPayload, \"service\": \"([^\"]+)\")"
+    "service" = "EXTRACT(jsonPayload.service)"
   }
 }
 
@@ -86,8 +86,8 @@ resource "google_logging_metric" "cloudbuild_network_tx_mbps" {
   name        = "cloudbuild-network-tx-mbps"
   description = "Cloud Build network transmit throughput (Mbps) by service"
   filter      = <<-EOT
-    resource.type="build"
-    textPayload:"network_telemetry"
+    logName="projects/intexuraos-dev-pbuchman/logs/cloudbuild-network-telemetry"
+    jsonPayload.event="network_telemetry"
   EOT
 
   metric_descriptor {
@@ -107,9 +107,9 @@ resource "google_logging_metric" "cloudbuild_network_tx_mbps" {
     }
   }
 
-  value_extractor = "EXTRACT(textPayload, \"tx_mbps\": ([0-9]+)\")"
+  value_extractor = "EXTRACT(jsonPayload.tx_mbps)"
   label_extractors = {
-    "service" = "EXTRACT(textPayload, \"service\": \"([^\"]+)\")"
+    "service" = "EXTRACT(jsonPayload.service)"
   }
 }
 
