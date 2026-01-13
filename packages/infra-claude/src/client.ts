@@ -1,7 +1,47 @@
 /**
- * Claude Client - with parameterized pricing.
+ * Anthropic Claude AI client implementation.
  *
- * All costs calculated from passed ModelPricing config.
+ * Implements the {@link LLMClient} interface for Claude models with:
+ * - Web search research using Claude's built-in web_search_20250305 tool
+ * - Prompt caching with cost tracking
+ * - Automatic usage logging to Firestore
+ * - Audit trail for all requests
+ *
+ * @packageDocumentation
+ *
+ * @example
+ * ```ts
+ * import { createClaudeClient } from '@intexuraos/infra-claude';
+ *
+ * const client = createClaudeClient({
+ *   apiKey: process.env.ANTHROPIC_API_KEY,
+ *   model: 'claude-sonnet-4-5',
+ *   userId: 'user-123',
+ *   pricing: {
+ *     inputPricePerMillion: 3.00,
+ *     outputPricePerMillion: 15.00,
+ *     cacheReadMultiplier: 0.1,
+ *     cacheWriteMultiplier: 1.25,
+ *     webSearchCostPerCall: 0.0035,
+ *   }
+ * });
+ *
+ * // Research with web search
+ * const research = await client.research('Latest TypeScript features');
+ * if (research.ok) {
+ *   console.log(research.data.content);
+ *   console.log('Sources:', research.data.sources);
+ *   console.log('Cost:', research.data.usage.costUsd);
+ * }
+ *
+ * // Simple generation
+ * const result = await client.generate('Explain TypeScript');
+ * if (result.ok) {
+ *   console.log(result.data.content);
+ * } else {
+ *   console.error(result.error.code, result.error.message);
+ * }
+ * ```
  */
 
 import { randomUUID } from 'node:crypto';
@@ -23,26 +63,52 @@ export type ClaudeClient = LLMClient;
 
 const MAX_TOKENS = 8192;
 
-function createRequestContext(
-  method: string,
-  model: string,
-  prompt: string
-): { requestId: string; startTime: Date; auditContext: AuditContext } {
-  const requestId = randomUUID();
-  const startTime = new Date();
-  const auditContext = createAuditContext({
-    provider: LlmProviders.Anthropic,
-    model,
-    method,
-    prompt,
-    startedAt: startTime,
-  });
-  return { requestId, startTime, auditContext };
-}
-
+/**
+ * Creates a configured Anthropic Claude client.
+ *
+ * The client implements {@link LLMClient} with automatic cost calculation,
+ * usage logging, and audit tracking. All costs are calculated from the
+ * provided `pricing` configuration.
+ *
+ * @param config - Client configuration including API key, model, user ID, and pricing
+ * @returns A configured {@link ClaudeClient} instance
+ *
+ * @example
+ * ```ts
+ * const client = createClaudeClient({
+ *   apiKey: process.env.ANTHROPIC_API_KEY,
+ *   model: 'claude-sonnet-4-5',
+ *   userId: 'user-123',
+ *   pricing: {
+ *     inputPricePerMillion: 3.00,
+ *     outputPricePerMillion: 15.00,
+ *     cacheReadMultiplier: 0.1,
+ *     cacheWriteMultiplier: 1.25,
+ *     webSearchCostPerCall: 0.0035,
+ *   }
+ * });
+ * ```
+ */
 export function createClaudeClient(config: ClaudeConfig): ClaudeClient {
   const client = new Anthropic({ apiKey: config.apiKey });
   const { model, userId, pricing } = config;
+
+  function createRequestContext(
+    method: string,
+    model: string,
+    prompt: string
+  ): { requestId: string; startTime: Date; auditContext: AuditContext } {
+    const requestId = randomUUID();
+    const startTime = new Date();
+    const auditContext = createAuditContext({
+      provider: LlmProviders.Anthropic,
+      model,
+      method,
+      prompt,
+      startedAt: startTime,
+    });
+    return { requestId, startTime, auditContext };
+  }
 
   function trackUsage(
     callType: CallType,

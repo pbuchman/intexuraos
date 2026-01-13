@@ -54,10 +54,10 @@ export async function up(context) {
 
 ```bash
 # Run pending migrations
-npm run migrate
+pnpm run migrate
 
 # Show migration status
-npm run migrate:status
+ppnpm run migrate:status
 
 # Preview without applying
 node scripts/migrate.mjs --dry-run

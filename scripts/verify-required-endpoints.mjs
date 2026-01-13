@@ -29,6 +29,13 @@ function getApps() {
   return readdirSync(appsDir).filter((entry) => {
     if (/[*?[\]]/.test(entry)) return false;
     const fullPath = join(appsDir, entry);
+    // fix for claude-mem bug - creates historical folders
+    if (
+      ['client', '*', 'llm-orchestrator', 'data-insights-service', 'commands-router'].includes(
+        entry
+      )
+    )
+      return false;
     return statSync(fullPath).isDirectory() && !EXEMPT_APPS.includes(entry);
   });
 }

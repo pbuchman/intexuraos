@@ -22,8 +22,7 @@ const defaultLogger = pino({
 interface ApiResponse {
   success: boolean;
   data?: unknown;
-  error?: { code: string; message: string };
-  details?: { existingBookmarkId?: string };
+  error?: { code: string; message: string; details?: { existingBookmarkId?: string } };
 }
 
 export function createBookmarksServiceHttpClient(
@@ -56,7 +55,7 @@ export function createBookmarksServiceHttpClient(
         let message: string;
         try {
           const body = (await response.json()) as ApiResponse;
-          const existingBookmarkId = body.details?.existingBookmarkId;
+          const existingBookmarkId = body.error?.details?.existingBookmarkId;
           message = body.error?.message ?? `HTTP ${String(response.status)}: ${response.statusText}`;
 
           // Include existingBookmarkId in error message so caller can extract it

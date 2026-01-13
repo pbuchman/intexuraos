@@ -8,6 +8,7 @@ import {
   Layout,
   ConfigurableActionButton,
 } from '@/components';
+import { X } from 'lucide-react';
 import { useAuth } from '@/context';
 import {
   ApiError,
@@ -47,6 +48,28 @@ import {
 } from 'lucide-react';
 
 type TabId = 'commands' | 'actions';
+
+interface SuccessNotification {
+  id: string;
+  message: string;
+  resourceUrl: string;
+  linkLabel: string;
+  timestamp: number;
+  isNew: boolean;
+}
+
+interface ActionItemProps {
+  action: Action;
+  onClick: () => void;
+  onActionSuccess: (button: ResolvedActionButton) => void;
+  onExecutionResult: (result: {
+    actionId: string;
+    resourceUrl: string;
+    message: string;
+    linkLabel: string;
+  }) => void;
+  isFadingOut?: boolean;
+}
 
 const ALL_ACTION_STATUSES: ActionStatus[] = [
   'pending',
@@ -230,16 +253,23 @@ interface ActionItemProps {
   action: Action;
   onClick: () => void;
   onActionSuccess: (button: ResolvedActionButton) => void;
-}
-
-function ActionItem({ action, onClick, onActionSuccess }: ActionItemProps): React.JSX.Element {
-  const { buttons } = useActionConfig(action);
-  const [executionResult, setExecutionResult] = useState<{
-    resource_url?: string;
+  onExecutionResult: (result: {
+    actionId: string;
+    resourceUrl: string;
     message: string;
     linkLabel: string;
-  } | null>(null);
-  // Track if action was executed successfully - hide buttons when true
+  }) => void;
+  isFadingOut?: boolean;
+}
+
+function ActionItem({
+  action,
+  onClick,
+  onActionSuccess,
+  onExecutionResult,
+  isFadingOut = false,
+}: ActionItemProps): React.JSX.Element {
+  const { buttons } = useActionConfig(action);
   const [actionExecuted, setActionExecuted] = useState(false);
 
   /**
@@ -259,7 +289,9 @@ function ActionItem({ action, onClick, onActionSuccess }: ActionItemProps): Reac
 
   return (
     <div
-      className="cursor-pointer rounded-lg border border-slate-200 bg-white p-4 transition-all hover:border-slate-300 hover:shadow-sm"
+      className={`cursor-pointer rounded-lg border border-slate-200 bg-white p-4 transition-[opacity,transform] duration-500 ease-out hover:border-slate-300 hover:shadow-sm ${
+        isFadingOut ? 'opacity-0 scale-95' : 'opacity-100 scale-100'
+      }`}
       onClick={onClick}
       role="button"
       tabIndex={0}
@@ -284,27 +316,11 @@ function ActionItem({ action, onClick, onActionSuccess }: ActionItemProps): Reac
             <span>{String(Math.round(action.confidence * 100))}% confidence</span>
             <span>{formatDate(action.createdAt)}</span>
           </div>
-          {/* Success notification with link */}
-          {executionResult?.resource_url !== undefined && (
-            <div className="mt-3 flex items-center gap-2 rounded-lg bg-green-50 px-3 py-2 text-sm">
-              <CheckCircle className="h-4 w-4 shrink-0 text-green-600" />
-              <span className="text-green-700">{executionResult.message}</span>
-              <RouterLink
-                to={executionResult.resource_url}
-                className="ml-1 font-medium text-green-700 underline hover:text-green-800"
-                onClick={(e): void => {
-                  e.stopPropagation();
-                }}
-              >
-                {executionResult.linkLabel}
-              </RouterLink>
-            </div>
-          )}
         </div>
         {/* Hide buttons after action with resource_url was executed */}
         {!actionExecuted && (
           <div
-            className="flex shrink-0 gap-1"
+            className="flex shrink-0 gap-1 flex-nowrap overflow-x-auto"
             onClick={(e): void => {
               e.stopPropagation();
             }}
@@ -318,8 +334,9 @@ function ActionItem({ action, onClick, onActionSuccess }: ActionItemProps): Reac
                 }}
                 onResult={(result, btn): void => {
                   if (result.resource_url !== undefined && btn.onSuccess !== undefined) {
-                    setExecutionResult({
-                      resource_url: normalizeResourceUrl(result.resource_url),
+                    onExecutionResult({
+                      actionId: action.id,
+                      resourceUrl: normalizeResourceUrl(result.resource_url),
                       message: btn.onSuccess.message,
                       linkLabel: btn.onSuccess.linkLabel,
                     });
@@ -339,6 +356,50 @@ function ActionItem({ action, onClick, onActionSuccess }: ActionItemProps): Reac
 const DEBOUNCE_DELAY_MS = 500;
 // 💰 CostGuard: Max IDs per batch request (must match backend maxItems)
 const BATCH_SIZE_LIMIT = 50;
+// Fade out duration for actions that no longer match filter
+const FADE_OUT_DURATION_MS = 5000;
+
+interface NotificationAreaProps {
+  notification: SuccessNotification | null;
+  onDismiss: () => void;
+}
+
+function NotificationArea({ notification, onDismiss }: NotificationAreaProps): React.JSX.Element | null {
+  if (notification === null) return null;
+
+  return (
+    <div
+      className={`mb-4 rounded-lg border px-4 py-3 transition-all sm:flex sm:items-center sm:justify-between ${
+        notification.isNew
+          ? 'border-green-300 bg-green-50 shadow-sm animate-in slide-in-from-top-2 fade-in-0 duration-300'
+          : 'border-green-200 bg-green-50'
+      }`}
+    >
+      <div className="flex items-start gap-3 sm:items-center">
+        <CheckCircle className="mt-0.5 h-5 w-5 shrink-0 text-green-600 sm:mt-0" />
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-medium text-green-800">{notification.message}</p>
+          <RouterLink
+            to={notification.resourceUrl}
+            className="mt-1 block text-sm font-medium text-green-700 underline hover:text-green-800 sm:mt-0 sm:inline"
+            onClick={(e): void => {
+              e.stopPropagation();
+            }}
+          >
+            {notification.linkLabel}
+          </RouterLink>
+        </div>
+      </div>
+      <button
+        onClick={onDismiss}
+        className="ml-auto mt-2 shrink-0 self-start rounded p-1 text-green-600 transition-colors hover:bg-green-100 hover:text-green-800 sm:ml-0 sm:mt-0"
+        aria-label="Dismiss notification"
+      >
+        <X className="h-4 w-4" />
+      </button>
+    </div>
+  );
+}
 
 export function InboxPage(): React.JSX.Element {
   const { getAccessToken } = useAuth();
@@ -358,6 +419,8 @@ export function InboxPage(): React.JSX.Element {
   const [archivingCommandId, setArchivingCommandId] = useState<string | null>(null);
   const [selectedAction, setSelectedAction] = useState<Action | null>(null);
   const [selectedCommand, setSelectedCommand] = useState<Command | null>(null);
+  const [successNotification, setSuccessNotification] = useState<SuccessNotification | null>(null);
+  const [fadingOutActionIds, setFadingOutActionIds] = useState<Set<string>>(new Set());
   const [statusFilter, setStatusFilter] = useState<ActionStatus[]>(() => {
     const stored = localStorage.getItem('inbox-status-filter');
     if (stored !== null) {
@@ -609,16 +672,60 @@ export function InboxPage(): React.JSX.Element {
     void fetchData();
   }, [fetchData]);
 
-  // Handle tab switching: save to localStorage and refresh data
+  // Handle tab switching: save to localStorage, refresh data, and clear notifications
   useEffect(() => {
     localStorage.setItem('inbox-active-tab', activeTab);
 
     // Refresh data when switching tabs (but not on initial load)
     if (previousTabRef.current !== activeTab && !isLoadingRef.current) {
       void fetchData(true);
+      // Clear success notification when switching tabs
+      setSuccessNotification(null);
     }
     previousTabRef.current = activeTab;
   }, [activeTab, fetchData]);
+
+  // Handle execution result: show global notification and initiate fade-out
+  const handleExecutionResult = useCallback(
+    (result: {
+      actionId: string;
+      resourceUrl: string;
+      message: string;
+      linkLabel: string;
+    }): void => {
+      // Set new notification with isNew flag for visual highlight
+      const notificationId = `${result.actionId}-${String(Date.now())}`;
+      setSuccessNotification({
+        id: notificationId,
+        message: result.message,
+        resourceUrl: result.resourceUrl,
+        linkLabel: result.linkLabel,
+        timestamp: Date.now(),
+        isNew: true,
+      });
+
+      // Remove isNew flag after animation duration for future notifications
+      setTimeout(() => {
+        setSuccessNotification((prev) =>
+          prev?.id === notificationId ? { ...prev, isNew: false } : prev
+        );
+      }, 500);
+
+      // Start fade-out for this action
+      setFadingOutActionIds((prev) => new Set(prev).add(result.actionId));
+
+      // Remove from list after fade-out duration
+      setTimeout(() => {
+        setActions((prev) => prev.filter((a) => a.id !== result.actionId));
+        setFadingOutActionIds((prevSet) => {
+          const newSet = new Set(prevSet);
+          newSet.delete(result.actionId);
+          return newSet;
+        });
+      }, FADE_OUT_DURATION_MS);
+    },
+    []
+  );
 
   // Handle status filter changes: save to localStorage and refresh data
   const statusFilterRef = useRef<ActionStatus[]>(statusFilter);
@@ -647,6 +754,7 @@ export function InboxPage(): React.JSX.Element {
   };
 
   // Deep linking: open action modal from URL query parameter
+  // When filters are active, the action may not be in the displayed list, so fetch it directly
   useEffect(() => {
     const hash = window.location.hash;
     const queryString = hash.includes('?') ? hash.split('?')[1] : '';
@@ -657,13 +765,39 @@ export function InboxPage(): React.JSX.Element {
     const params = new URLSearchParams(queryString);
     const actionId = params.get('action');
 
-    if (actionId !== null && actions.length > 0) {
-      const action = actions.find((a) => a.id === actionId);
-      if (action !== undefined) {
-        setSelectedAction(action);
-      }
+    if (actionId === null) {
+      return;
     }
-  }, [actions]);
+
+    // First check if action is in current list (fast path)
+    const actionInList = actions.find((a) => a.id === actionId);
+    if (actionInList !== undefined) {
+      setSelectedAction(actionInList);
+      return;
+    }
+
+    // If not found and we haven't tried fetching yet, fetch directly
+    // Use sessionStorage to track attempted fetches to avoid loops
+    const fetchKey = `fetched-action-${actionId}`;
+    if (sessionStorage.getItem(fetchKey) === 'true') {
+      return;
+    }
+    sessionStorage.setItem(fetchKey, 'true');
+
+    // Fetch the specific action even if it doesn't match current filters
+    void (async (): Promise<void> => {
+      try {
+        const token = await getAccessToken();
+        const fetchedActions = await batchGetActions(token, [actionId]);
+        const action = fetchedActions.find((a) => a.id === actionId);
+        if (action !== undefined) {
+          setSelectedAction(action);
+        }
+      } catch {
+        // Action not found or fetch failed - silently ignore
+      }
+    })();
+  }, [actions, getAccessToken]);
 
   const handleRefresh = (): void => {
     void fetchData(true);
@@ -745,6 +879,14 @@ export function InboxPage(): React.JSX.Element {
           {error}
         </div>
       ) : null}
+
+      {/* Success notification area */}
+      <NotificationArea
+        notification={successNotification}
+        onDismiss={(): void => {
+          setSuccessNotification(null);
+        }}
+      />
 
       {/* Tabs */}
       <div className="mb-4 flex border-b border-slate-200">
@@ -875,6 +1017,8 @@ export function InboxPage(): React.JSX.Element {
                       void fetchData(true);
                     }
                   }}
+                  onExecutionResult={handleExecutionResult}
+                  isFadingOut={fadingOutActionIds.has(action.id)}
                 />
               ))
             )}
@@ -945,6 +1089,7 @@ export function InboxPage(): React.JSX.Element {
             // Update selected action to reflect changes
             setSelectedAction(updatedAction);
           }}
+          onExecutionResult={handleExecutionResult}
         />
       )}
 

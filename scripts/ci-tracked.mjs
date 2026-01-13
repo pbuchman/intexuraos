@@ -325,7 +325,7 @@ async function runCI() {
 
   if (!passed && failures.length > 0) {
     console.log(`\n📊 Tracked ${failures.length} failure(s) → ${filePath}`);
-    console.log(`   Run 'npm run ci:report' to see aggregated failure stats\n`);
+    console.log(`   Run 'pnpm run ci:report' to see aggregated failure stats\n`);
   } else if (!passed) {
     console.log(`\n📊 CI failed but no parseable errors found → ${filePath}\n`);
   }

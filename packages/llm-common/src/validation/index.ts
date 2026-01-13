@@ -14,4 +14,8 @@ export {
   type InputImprovementPromptDeps,
 } from './inputImprovementPrompt.js';
 
-export { isInputQualityResult, type InputQualityResult } from './guards.js';
+export {
+  isInputQualityResult,
+  getInputQualityGuardError,
+  type InputQualityResult,
+} from './guards.js';

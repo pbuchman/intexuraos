@@ -302,4 +302,64 @@ describe('FirestoreNotificationFiltersRepository', () => {
       }
     });
   });
+
+  describe('error handling: Firestore failures', () => {
+    it('returns INTERNAL_ERROR when getByUserId and Firestore get() fails', async () => {
+      fakeFirestore.configure({ errorToThrow: new Error('Firestore down') });
+
+      const result = await repository.getByUserId('user-123');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('INTERNAL_ERROR');
+      }
+    });
+
+    it('returns INTERNAL_ERROR when addOption and Firestore set() fails', async () => {
+      fakeFirestore.configure({ errorToThrow: new Error('Network error') });
+
+      const result = await repository.addOption('user-123', 'app', 'com.test');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('INTERNAL_ERROR');
+      }
+    });
+
+    it('returns INTERNAL_ERROR when addOptions and Firestore set() fails', async () => {
+      fakeFirestore.configure({ errorToThrow: new Error('Network error') });
+
+      const result = await repository.addOptions('user-123', {
+        app: 'com.test',
+        device: 'Pixel 7',
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('INTERNAL_ERROR');
+      }
+    });
+
+    it('returns INTERNAL_ERROR when addSavedFilter and Firestore fails', async () => {
+      fakeFirestore.configure({ errorToThrow: new Error('Write failure') });
+
+      const result = await repository.addSavedFilter('user-123', { name: 'Test' });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('INTERNAL_ERROR');
+      }
+    });
+
+    it('returns INTERNAL_ERROR when deleteSavedFilter and Firestore get() fails', async () => {
+      fakeFirestore.configure({ errorToThrow: new Error('Read error') });
+
+      const result = await repository.deleteSavedFilter('user-123', 'filter-id');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('INTERNAL_ERROR');
+      }
+    });
+  });
 });

@@ -13,7 +13,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@intexuraos/common-core": "*",
+    "@intexuraos/common-core": "workspace:*",
     "@google-cloud/pubsub": "^4.9.0",
     "pino": "^9.6.0"
   }

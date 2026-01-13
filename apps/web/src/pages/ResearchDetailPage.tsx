@@ -10,13 +10,11 @@ import {
   FileText,
   Link2,
   Link2Off,
-  Loader2,
   Play,
   Plus,
   RefreshCw,
   Share2,
   Star,
-  StarOff,
   Trash2,
   XCircle,
 } from 'lucide-react';
@@ -118,7 +116,7 @@ function ResearchStatusBadge({ status }: StatusBadgeProps): React.JSX.Element {
   if (status === 'processing') {
     return (
       <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-100 px-2.5 py-1 text-sm font-medium text-blue-700">
-        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+        <Clock className="h-3.5 w-3.5" />
         Processing
       </span>
     );
@@ -134,7 +132,7 @@ function ResearchStatusBadge({ status }: StatusBadgeProps): React.JSX.Element {
   if (status === 'retrying') {
     return (
       <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-100 px-2.5 py-1 text-sm font-medium text-blue-700">
-        <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+        <RefreshCw className="h-3.5 w-3.5" />
         Retrying
       </span>
     );
@@ -142,7 +140,7 @@ function ResearchStatusBadge({ status }: StatusBadgeProps): React.JSX.Element {
   if (status === 'synthesizing') {
     return (
       <span className="inline-flex items-center gap-1.5 rounded-full bg-purple-100 px-2.5 py-1 text-sm font-medium text-purple-700">
-        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+        <Clock className="h-3.5 w-3.5" />
         Synthesizing
       </span>
     );
@@ -255,6 +253,19 @@ export function ResearchDetailPage(): React.JSX.Element {
     keysLoading || keys === null
       ? []
       : PROVIDER_MODELS.filter((p) => keys[p.id] !== null).map((p) => p.id);
+
+  const failedProviders: Map<LlmProvider, string> = ((): Map<LlmProvider, string> => {
+    const map = new Map<LlmProvider, string>();
+    if (keys !== null) {
+      for (const provider of PROVIDER_MODELS) {
+        const testResult = keys.testResults[provider.id];
+        if (testResult?.status === 'failure') {
+          map.set(provider.id, testResult.message);
+        }
+      }
+    }
+    return map;
+  })();
 
   const copyToClipboard = async (text: string, section: string): Promise<void> => {
     await navigator.clipboard.writeText(text);
@@ -482,7 +493,7 @@ export function ResearchDetailPage(): React.JSX.Element {
     return (
       <Layout>
         <div className="flex items-center justify-center py-12">
-          <div className="h-8 w-8 animate-spin rounded-full border-4 border-blue-600 border-t-transparent" />
+          <div className="h-8 w-8 rounded-full border-4 border-blue-600 border-t-transparent" />
         </div>
       </Layout>
     );
@@ -492,7 +503,7 @@ export function ResearchDetailPage(): React.JSX.Element {
     return (
       <Layout>
         <div className="flex items-center justify-center py-12">
-          <div className="h-8 w-8 animate-spin rounded-full border-4 border-blue-600 border-t-transparent" />
+          <div className="h-8 w-8 rounded-full border-4 border-blue-600 border-t-transparent" />
         </div>
       </Layout>
     );
@@ -549,11 +560,9 @@ export function ResearchDetailPage(): React.JSX.Element {
             className="p-2 rounded-lg hover:bg-slate-100 transition-colors disabled:opacity-50"
             aria-label={research.favourite === true ? 'Unfavourite' : 'Favourite'}
           >
-            {research.favourite === true ? (
-              <Star className="h-5 w-5 text-amber-400 fill-amber-400" />
-            ) : (
-              <StarOff className="h-5 w-5 text-slate-300" />
-            )}
+            <Star
+              className={`h-5 w-5 ${research.favourite === true ? 'text-amber-400 fill-amber-400' : 'text-slate-300'}`}
+            />
           </button>
           <span className="text-sm text-slate-500">
             {isProcessing || research.status === 'awaiting_confirmation'
@@ -1034,6 +1043,7 @@ export function ResearchDetailPage(): React.JSX.Element {
                 onChange={handleEnhanceModelChange}
                 configuredProviders={configuredProviders}
                 disabledProviders={getExistingProviders()}
+                failedProviders={failedProviders}
                 disabled={enhancing}
               />
               <p className="text-xs text-slate-500 mt-2">

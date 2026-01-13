@@ -1,7 +1,42 @@
 /**
- * GPT Client - with parameterized pricing.
+ * OpenAI GPT client implementation.
  *
- * All costs calculated from passed ModelPricing config.
+ * Implements the {@link LLMClient} interface for GPT models with:
+ * - Web search research using OpenAI's web search tools
+ * - Image generation via DALL-E (gpt-image-1)
+ * - Prompt caching with cost tracking
+ * - Automatic usage logging to Firestore
+ * - Audit trail for all requests
+ *
+ * @packageDocumentation
+ *
+ * @example
+ * ```ts
+ * import { createGptClient } from '@intexuraos/infra-gpt';
+ *
+ * const client = createGptClient({
+ *   apiKey: process.env.OPENAI_API_KEY,
+ *   model: 'gpt-4.1',
+ *   userId: 'user-123',
+ *   pricing: {
+ *     inputPricePerMillion: 2.50,
+ *     outputPricePerMillion: 10.00,
+ *   }
+ * });
+ *
+ * // Research with web search
+ * const research = await client.research('Latest TypeScript features');
+ * if (research.ok) {
+ *   console.log(research.data.content);
+ *   console.log('Cost:', research.data.usage.costUsd);
+ * }
+ *
+ * // Image generation
+ * const image = await client.generateImage('A sunset over mountains', { size: '1024x1024' });
+ * if (image.ok) {
+ *   console.log('Image generated:', image.data.imageData);
+ * }
+ * ```
  */
 
 import { randomUUID } from 'node:crypto';
@@ -29,26 +64,54 @@ const MAX_TOKENS = 8192;
 const IMAGE_MODEL = LlmModels.GPTImage1;
 const DEFAULT_IMAGE_SIZE: ImageSize = '1024x1024';
 
-function createRequestContext(
-  method: string,
-  model: string,
-  prompt: string
-): { requestId: string; startTime: Date; auditContext: AuditContext } {
-  const requestId = randomUUID();
-  const startTime = new Date();
-  const auditContext = createAuditContext({
-    provider: LlmProviders.OpenAI,
-    model,
-    method,
-    prompt,
-    startedAt: startTime,
-  });
-  return { requestId, startTime, auditContext };
-}
-
+/**
+ * Creates a configured OpenAI GPT client.
+ *
+ * The client implements {@link LLMClient} with automatic cost calculation,
+ * usage logging, and audit tracking. Supports text generation, research,
+ * and image generation.
+ *
+ * @param config - Client configuration including API key, model, user ID, and pricing
+ * @returns A configured {@link GptClient} instance
+ *
+ * @example
+ * ```ts
+ * const client = createGptClient({
+ *   apiKey: process.env.OPENAI_API_KEY,
+ *   model: 'gpt-4.1',
+ *   userId: 'user-123',
+ *   pricing: {
+ *     inputPricePerMillion: 2.50,
+ *     outputPricePerMillion: 10.00,
+ *   },
+ *   imagePricing: {
+ *     inputPricePerMillion: 0,
+ *     outputPricePerMillion: 0,
+ *     imagePricing: { '1024x1024': 0.040 }
+ *   }
+ * });
+ * ```
+ */
 export function createGptClient(config: GptConfig): GptClient {
   const client = new OpenAI({ apiKey: config.apiKey });
   const { model, userId, pricing, imagePricing } = config;
+
+  function createRequestContext(
+    method: string,
+    model: string,
+    prompt: string
+  ): { requestId: string; startTime: Date; auditContext: AuditContext } {
+    const requestId = randomUUID();
+    const startTime = new Date();
+    const auditContext = createAuditContext({
+      provider: LlmProviders.OpenAI,
+      model,
+      method,
+      prompt,
+      startedAt: startTime,
+    });
+    return { requestId, startTime, auditContext };
+  }
 
   function trackUsage(
     callType: CallType,

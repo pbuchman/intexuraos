@@ -5,7 +5,7 @@
  * Ensures all @intexuraos/* imports are declared in package.json.
  * Prevents Docker build failures caused by undeclared workspace dependencies.
  *
- * In a monorepo, npm ci at root installs all packages, so local builds work
+ * In a monorepo, ppnpm install at root installs all packages, so local builds work
  * even without explicit dependencies. Docker builds fail because they only
  * see declared dependencies.
  */

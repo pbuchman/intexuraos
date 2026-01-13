@@ -153,6 +153,99 @@ function logResearchAgent(message) {
   log('[dev]', message, `${BOLD}\x1b[97m`);
 }
 
+/**
+ * Check if a port is already in use.
+ * @param {number} port - Port to check
+ * @returns {Promise<{inUse: boolean, process?: string, pid?: string}>}
+ */
+async function checkPortInUse(port) {
+  try {
+    // Use lsof to check port (works on macOS and Linux)
+    // -i :PORT - specific port
+    // -t - terse output (PID only)
+    // -c - command name
+    const result = execSync(`lsof -i :${String(port)} -t -c 2>/dev/null || true`, {
+      encoding: 'utf-8',
+      stdio: 'pipe',
+    });
+
+    if (!result.trim()) {
+      return { inUse: false };
+    }
+
+    // Parse lsof output to get PID and command
+    // Output format: PID\nCOMMAND
+    const lines = result.trim().split('\n');
+    const pid = lines[0];
+    const command = lines[1] || 'unknown';
+
+    return { inUse: true, process: command, pid };
+  } catch {
+    // lsof not available or other error, assume port is free
+    return { inUse: false };
+  }
+}
+
+/**
+ * Check all service ports for conflicts and fail fast if any are in use.
+ * @throws {Error} If any port is already in use
+ */
+async function checkPortsAvailable() {
+  logResearchAgent('Checking for port conflicts...');
+
+  const allPorts = [
+    ...SERVICES.map((s) => ({ name: s.name, port: s.port, type: 'service' })),
+    { name: WEB_APP.name, port: WEB_APP.port, type: 'web' },
+    { name: 'API Docs Hub', port: 8115, type: 'service' },
+    { name: 'Firestore Emulator', port: 8101, type: 'emulator' },
+    { name: 'GCS Emulator', port: 8103, type: 'emulator' },
+    { name: 'Firebase Auth Emulator', port: 8104, type: 'emulator' },
+    { name: 'Pub/Sub UI', port: 8105, type: 'emulator' },
+    { name: 'Firebase UI', port: 8100, type: 'emulator' },
+  ];
+
+  const conflicts = [];
+
+  for (const { name, port, type } of allPorts) {
+    const { inUse, process, pid } = await checkPortInUse(port);
+    if (inUse) {
+      conflicts.push({ name, port, type, process, pid });
+    }
+  }
+
+  if (conflicts.length > 0) {
+    console.error('');
+    console.error(`${BOLD}\x1b[31m✖ Port conflicts detected!\x1b[0m`);
+    console.error('');
+    console.error('The following ports are already in use:');
+    console.error('');
+
+    for (const conflict of conflicts) {
+      const { name, port, type, process, pid } = conflict;
+      const typeLabel = type === 'emulator' ? 'Emulator' : type === 'web' ? 'Web App' : 'Service';
+      console.error(
+        `  ${BOLD}\x1b[33mPort ${String(port)}\x1b[0m (${typeLabel}: ${name}) - ` +
+          `used by ${BOLD}\x1b[31m${process}\x1b[0m` +
+          (pid ? ` (PID: ${pid})` : '')
+      );
+    }
+
+    console.error('');
+    console.error('To free up the ports, you can:');
+    console.error(`  1. Kill the process: ${BOLD}kill -9 <PID>${RESET}`);
+    console.error(`  2. Or stop the service using that port`);
+    console.error('');
+    console.error('Common conflicts:');
+    console.error('  - Another dev.mjs instance (kill with: pkill -f "dev.mjs")');
+    console.error('  - Docker containers not cleaned up (run: docker compose down)');
+    console.error('');
+
+    throw new Error('Port conflicts detected. Please resolve the conflicts above and try again.');
+  }
+
+  logResearchAgent('All ports are available.');
+}
+
 async function checkDockerRunning() {
   try {
     execSync('docker info', { stdio: 'pipe' });
@@ -635,6 +728,7 @@ async function main() {
   }
 
   validateEnvVars();
+  await checkPortsAvailable();
 
   try {
     await generateFirestoreConfig();

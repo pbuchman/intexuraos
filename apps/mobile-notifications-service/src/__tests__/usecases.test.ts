@@ -1,7 +1,7 @@
 /**
  * Tests for domain usecases.
  */
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   createConnection,
   deleteNotification,
@@ -9,6 +9,7 @@ import {
   listNotifications,
   processNotification,
 } from '../domain/notifications/index.js';
+import type { NotificationFiltersRepository } from '../domain/filters/index.js';
 import { FakeNotificationRepository, FakeSignatureConnectionRepository } from './fakes.js';
 
 describe('createConnection', () => {
@@ -294,6 +295,57 @@ describe('processNotification', () => {
     if (!result.ok) {
       expect(result.error.code).toBe('INTERNAL_ERROR');
     }
+  });
+
+  it('accepts notification when filtersRepo.addOptions throws (non-critical)', async () => {
+    // Create a connection
+    const signature = 'test-signature-token';
+    await signatureRepo.save({
+      userId: 'user-123',
+      signatureHash: hashSignature(signature),
+    });
+
+    // Create a mock filtersRepo that throws on addOptions
+    const mockFiltersRepo = {
+      addOptions: vi.fn().mockRejectedValue(new Error('Filters DB down')),
+    };
+
+    const logger = {
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+    };
+
+    const result = await processNotification(
+      {
+        signature,
+        payload: {
+          source: 'tasker',
+          device: 'test-phone',
+          timestamp: Date.now(),
+          notification_id: 'notif-123',
+          post_time: '2024-01-01T00:00:00Z',
+          app: 'com.example.app',
+          title: 'Test Title',
+          text: 'Test Text',
+        },
+      },
+      signatureRepo,
+      notificationRepo,
+      logger,
+      mockFiltersRepo as unknown as NotificationFiltersRepository
+    );
+
+    // Should still succeed because filter update is non-critical
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.status).toBe('accepted');
+    }
+    // Should log warning about the failure
+    expect(logger.warn).toHaveBeenCalledWith(
+      { userId: 'user-123' },
+      'Failed to update filter options (non-critical)'
+    );
   });
 });
 

@@ -84,7 +84,7 @@ Address the 5 issues identified in the PR #275 code review before merging to mai
 ## Verification
 
 ```bash
-npm run ci  # Must pass
+pnpm run ci  # Must pass
 ```
 
 ## Recommended Order

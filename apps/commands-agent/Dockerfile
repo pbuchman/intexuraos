@@ -4,33 +4,44 @@
 # Stage 1: Build
 FROM node:22-alpine AS builder
 
+# Install pnpm
+RUN npm install -g pnpm@9
+
 WORKDIR /app
 
-# Copy all package.json files
+# Copy workspace config, lockfile, and ALL package.json files first
+COPY pnpm-workspace.yaml ./
+COPY pnpm-lock.yaml ./
 COPY package*.json ./
 COPY apps/commands-agent/package*.json ./apps/commands-agent/
-COPY packages/*/package*.json ./packages/
+COPY packages/ ./packages/
 
-# Install dependencies
-RUN npm ci
+# Install dependencies (workspace symlinks now point to copied source)
+RUN pnpm install --frozen-lockfile
 
-# Copy source files
+# Copy remaining source files (tsconfig, scripts, app source)
 COPY tsconfig*.json ./
 COPY scripts/ ./scripts/
-COPY packages/ ./packages/
 COPY apps/commands-agent/ ./apps/commands-agent/
 
 # Build service (esbuild bundles everything into one file)
-RUN npm run build -w @intexuraos/commands-agent
+RUN pnpm run --filter @intexuraos/commands-agent build
 
 # Stage 2: Production
 FROM node:22-alpine
 
+# Install pnpm
+RUN npm install -g pnpm@9
+
 WORKDIR /app
+
+# Copy workspace config and lockfile
+COPY pnpm-workspace.yaml ./
+COPY pnpm-lock.yaml ./
 
 # Copy generated production package.json and install deps
 COPY --from=builder /app/apps/commands-agent/dist/package.json ./
-RUN npm install --omit=dev
+RUN pnpm install --prod
 
 # Copy built file
 COPY --from=builder /app/apps/commands-agent/dist/index.js ./dist/

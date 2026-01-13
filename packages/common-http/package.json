@@ -13,8 +13,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@intexuraos/common-core": "*",
-    "@intexuraos/llm-common": "*",
+    "@intexuraos/common-core": "workspace:*",
+    "@intexuraos/llm-common": "workspace:*",
     "fastify": "^5.1.0",
     "fastify-plugin": "^5.0.1",
     "jose": "^5.9.6",

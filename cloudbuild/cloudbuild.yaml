@@ -13,11 +13,15 @@
 # - _ENVIRONMENT: Environment name (dev, staging, prod)
 
 steps:
-  # Step 1: Install dependencies (needed for web build)
+  # Step 1: Install pnpm and dependencies (needed for web build)
   - name: 'node:22-slim'
-    id: 'npm-ci'
-    entrypoint: 'npm'
-    args: ['ci']
+    id: 'pnpm-install'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        npm install -g pnpm@9
+        pnpm install --frozen-lockfile
 
   # ===== PARALLEL SERVICE PIPELINES =====
   # All services build unconditionally when this pipeline runs
@@ -635,13 +639,15 @@ steps:
 
   - name: 'node:22-slim'
     id: 'build-web'
-    waitFor: ['npm-ci', 'fetch-web-config']
+    waitFor: ['pnpm-install', 'fetch-web-config']
     entrypoint: 'bash'
     args:
       - '-c'
       - |
         echo "=== Building web ==="
-        npm run --workspace=@intexuraos/web build
+        corepack enable
+        corepack prepare pnpm@9 --activate
+        pnpm run --filter @intexuraos/web build
     env:
       - 'COMMIT_SHA=$COMMIT_SHA'
 
@@ -659,20 +665,28 @@ steps:
   # ===== firestore (indexes and rules) =====
   - name: 'node:22-slim'
     id: 'deploy-firestore'
-    waitFor: ['npm-ci']
+    waitFor: ['pnpm-install']
     entrypoint: 'bash'
-    args: ['-c', 'bash cloudbuild/scripts/deploy-firestore.sh']
+    args:
+      - '-c'
+      - |
+        corepack enable
+        corepack prepare pnpm@9 --activate
+        bash cloudbuild/scripts/deploy-firestore.sh
     env:
       - 'PROJECT_ID=$PROJECT_ID'
 
 options:
   logging: CLOUD_LOGGING_ONLY
-  machineType: E2_HIGHCPU_32
+  machineType: E2_HIGHCPU_8
   env:
     - 'DOCKER_BUILDKIT=1'
 
 # Substitutions
+# _REGION: Deployment target for Cloud Run services (runtime region, not build region)
+# _ARTIFACT_REGISTRY_URL: AR URL (includes runtime region)
+# _ENVIRONMENT: Environment name
 substitutions:
-  _REGION: europe-west1
+  _REGION: europe-central2
 
 timeout: 1800s

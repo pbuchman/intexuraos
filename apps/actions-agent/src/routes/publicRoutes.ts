@@ -442,6 +442,7 @@ export const publicRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                   status: { type: 'string', enum: ['completed', 'failed'] },
                   resource_url: { type: 'string' },
                   error: { type: 'string' },
+                  existingBookmarkId: { type: 'string' },
                 },
                 required: ['actionId', 'status'],
               },

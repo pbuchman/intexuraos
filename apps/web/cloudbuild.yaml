@@ -71,8 +71,9 @@ steps:
       - '-c'
       - |
         apt-get update && apt-get install -y git
-        npm ci
-        npm run --workspace=@intexuraos/web build
+        npm install -g pnpm@9
+        pnpm install --frozen-lockfile
+        pnpm run --filter @intexuraos/web build
     env:
       - 'COMMIT_SHA=$COMMIT_SHA'
 
@@ -86,7 +87,7 @@ steps:
 
 options:
   logging: CLOUD_LOGGING_ONLY
-  machineType: E2_HIGHCPU_32
+  machineType: E2_HIGHCPU_8
 
 timeout: '900s'
 

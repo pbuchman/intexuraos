@@ -4,8 +4,8 @@ This directory stores CI failure data for LLM learning purposes.
 
 ## How It Works
 
-1. **`npm run ci:tracked`** runs CI and appends failures to `{project}-{branch}.jsonl`
-2. **`npm run ci:report`** generates aggregated failure statistics
+1. **`pnpm run ci:tracked`** runs CI and appends failures to `{project}-{branch}.jsonl`
+2. **`pnpm run ci:report`** generates aggregated failure statistics
 3. Each project/branch combo has its own file to avoid merge conflicts
 
 ## Feedback Loop — `/analyze-ci-failures`
@@ -62,11 +62,11 @@ Each line is a JSON object representing one CI run:
 ## Commands
 
 ```bash
-npm run ci:tracked           # Run CI with tracking
-npm run ci:report            # Full report (last 30 days)
-npm run ci:report -- --first-run  # First-run failures only
-npm run ci:report -- --days 7     # Last 7 days
-npm run ci:report -- --json       # JSON output
+pnpm run ci:tracked           # Run CI with tracking
+pnpm run ci:report            # Full report (last 30 days)
+pnpm run ci:report -- --first-run  # First-run failures only
+pnpm run ci:report -- --days 7     # Last 7 days
+pnpm run ci:report -- --json       # JSON output
 ```
 
 ## Git Behavior
