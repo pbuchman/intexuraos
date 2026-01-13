@@ -1,0 +1,70 @@
+# {Service Name} - Tutorial
+
+Getting started with the {service name} service.
+
+## Prerequisites
+
+- IntexuraOS development environment running
+- Auth0 access token for API requests
+- Familiarity with HTTP clients
+
+## Part 1: Hello World
+
+The simplest interaction with this service.
+
+### Step 1: Authenticate
+
+```bash
+# Get your access token
+curl -X POST https://YOUR_DOMAIN/auth/oauth/token \
+  -H "Content-Type: application/json" \
+  -d '{
+    "grant_type": "password",
+    "username": "your@email.com",
+    "password": "your-password"
+  }'
+```
+
+### Step 2: Make your first request
+
+```bash
+curl -X GET https://{service}.intexuraos.com/resource \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
+```
+
+**Expected response:**
+
+```json
+{
+  "success": true,
+  "data": {}
+}
+```
+
+## Part 2: Common Operations
+
+### Creating a resource
+
+```bash
+curl -X POST https://{service}.intexuraos.com/resource \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"name": "Example"}'
+```
+
+### Updating a resource
+
+```bash
+curl -X PATCH https://{service}.intexuraos.com/resource/ID \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"name": "Updated"}'
+```
+
+## Troubleshooting
+
+| Issue           | Symptom              | Solution           |
+| ---------------  | -------------------- | ------------------  |
+| Auth failed      | 401 Unauthorized     | Check token validity |
+| Not found        | 404 error             | Verify resource ID   |
+| Invalid request  | 400 error             | Check request body   |
