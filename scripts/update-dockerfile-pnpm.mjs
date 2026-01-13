@@ -7,8 +7,8 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { glob } from 'glob';
 
 const dockerfiles = [
-  ...await glob('apps/*/Dockerfile'),
-  ...(await glob('tools/*/Dockerfile')).filter(f => !f.includes('node_modules')),
+  ...(await glob('apps/*/Dockerfile')),
+  ...(await glob('tools/*/Dockerfile')).filter((f) => !f.includes('node_modules')),
 ];
 
 for (const dockerfile of dockerfiles) {
