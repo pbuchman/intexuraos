@@ -43,7 +43,7 @@ COPY pnpm-lock.yaml ./
 
 # Copy generated production package.json and install deps
 COPY --from=builder /app/apps/research-agent/dist/package.json ./
-RUN CI=true pnpm install --prod
+RUN CI=true pnpm install --prod --no-frozen-lockfile
 
 # Copy built file
 COPY --from=builder /app/apps/research-agent/dist/index.js ./dist/
