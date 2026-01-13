@@ -1,5 +1,5 @@
 /**
- * Migration 025: Fix GLM-4.7 Pricing for Zhipu AI
+ * Migration 026: Fix GLM-4.7 Pricing for Zhipu AI
  * Cache-bust: 2026-01-13T15:00:00Z
  *
  * Corrects GLM-4.7 pricing based on official Z.ai documentation:
@@ -17,7 +17,7 @@
  */
 
 export const metadata = {
-  id: '025',
+  id: '026',
   name: 'glm47-pricing-fix',
   description: 'Fix GLM-4.7 web search and add cached input pricing',
   createdAt: '2026-01-13',
