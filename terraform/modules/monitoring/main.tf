@@ -48,6 +48,34 @@ resource "google_logging_metric" "whatsapp_webhook_errors" {
 }
 
 # =============================================================================
+# CLOUD BUILD NETWORK TELEMETRY METRICS
+# =============================================================================
+
+resource "google_logging_metric" "cloudbuild_network_telemetry" {
+  name        = "cloudbuild-network-telemetry"
+  description = "Cloud Build network telemetry events by service (rx/tx Mbps in log payload)"
+  filter      = <<-EOT
+    resource.type="cloudbuild.googleapis.com/Build"
+    jsonPayload.event="network_telemetry"
+  EOT
+
+  metric_descriptor {
+    metric_kind = "DELTA"
+    value_type  = "INT64"
+    unit        = "1"
+    labels {
+      key         = "service"
+      value_type  = "STRING"
+      description = "Service being built"
+    }
+  }
+
+  label_extractors = {
+    "service" = "EXTRACT(jsonPayload.service)"
+  }
+}
+
+# =============================================================================
 # DASHBOARD
 # =============================================================================
 
