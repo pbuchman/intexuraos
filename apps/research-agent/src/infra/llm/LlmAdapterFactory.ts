@@ -45,7 +45,7 @@ export function createResearchProvider(
       return new GptAdapter(apiKey, model, userId, pricing, logger);
     case 'perplexity':
       return new PerplexityAdapter(apiKey, model, userId, pricing, logger);
-    case 'zhipu':
+    case 'zai':
       return new GlmAdapter(apiKey, model, userId, pricing, logger);
   }
 }
@@ -68,7 +68,7 @@ export function createSynthesizer(
       return new GptAdapter(apiKey, model, userId, pricing, logger);
     case 'perplexity':
       throw new Error('Perplexity does not support synthesis');
-    case 'zhipu':
+    case 'zai':
       return new GlmAdapter(apiKey, model, userId, pricing, logger);
   }
 }

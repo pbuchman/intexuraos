@@ -49,8 +49,8 @@ const PROVIDER_MODELS: ProviderConfig[] = [
     ],
   },
   {
-    id: LlmProviders.Zhipu,
-    displayName: 'Zhipu',
+    id: LlmProviders.Zai,
+    displayName: 'Zai',
     models: [{ id: LlmModels.Glm47, name: 'GLM-4.7' }],
   },
 ];

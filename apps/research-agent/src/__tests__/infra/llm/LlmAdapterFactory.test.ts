@@ -126,15 +126,15 @@ describe('LlmAdapterFactory', () => {
       expect((provider as unknown as { model: string }).model).toBe(LlmModels.SonarPro);
     });
 
-    it('creates GlmAdapter for zhipu model', () => {
+    it('creates GlmAdapter for zai model', () => {
       const provider = createResearchProvider(
         LlmModels.Glm47,
-        'zhipu-key',
+        'zai-key',
         'test-user-id',
         testPricing
       );
 
-      expect((provider as unknown as { apiKey: string }).apiKey).toBe('zhipu-key');
+      expect((provider as unknown as { apiKey: string }).apiKey).toBe('zai-key');
       expect((provider as unknown as { model: string }).model).toBe(LlmModels.Glm47);
     });
   });
@@ -178,15 +178,15 @@ describe('LlmAdapterFactory', () => {
       ).toThrow('Perplexity does not support synthesis');
     });
 
-    it('creates GlmAdapter for zhipu model', () => {
+    it('creates GlmAdapter for zai model', () => {
       const synthesizer = createSynthesizer(
         LlmModels.Glm47,
-        'zhipu-key',
+        'zai-key',
         'test-user-id',
         testPricing
       );
 
-      expect((synthesizer as unknown as { apiKey: string }).apiKey).toBe('zhipu-key');
+      expect((synthesizer as unknown as { apiKey: string }).apiKey).toBe('zai-key');
       expect((synthesizer as unknown as { model: string }).model).toBe(LlmModels.Glm47);
     });
   });

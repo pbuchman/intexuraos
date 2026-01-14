@@ -1,5 +1,5 @@
 /**
- * Migration 026: Fix GLM-4.7 Pricing for Zhipu AI
+ * Migration 026: Fix GLM-4.7 Pricing for Zai AI
  * Cache-bust: 2026-01-13T15:00:00Z
  *
  * Corrects GLM-4.7 pricing based on official Z.ai documentation:
@@ -24,13 +24,13 @@ export const metadata = {
 };
 
 export async function up(context) {
-  console.log('  Fixing Zhipu/GLM pricing in settings/llm_pricing/providers/zhipu...');
+  console.log('  Fixing Zai/GLM pricing in settings/llm_pricing/providers/zai...');
 
   const timestamp = new Date().toISOString();
 
-  // Zhipu provider with corrected pricing
-  const zhipuPricing = {
-    provider: 'zhipu',
+  // Zai provider with corrected pricing
+  const zaiPricing = {
+    provider: 'zai',
     models: {
       'glm-4.7': {
         inputPricePerMillion: 0.6,
@@ -43,9 +43,9 @@ export async function up(context) {
   };
 
   // Use set() to replace entire provider document
-  await context.firestore.doc('settings/llm_pricing/providers/zhipu').set(zhipuPricing);
+  await context.firestore.doc('settings/llm_pricing/providers/zai').set(zaiPricing);
 
-  console.log('  Fixed pricing document for zhipu:');
+  console.log('  Fixed pricing document for zai:');
   console.log(`    - glm-4.7: webSearchCostPerCall $0.005 → $0.01`);
   console.log(`    - glm-4.7: cacheReadPricePerMillion added at $0.11`);
 }
@@ -59,8 +59,8 @@ export async function down(context) {
 
   const timestamp = new Date().toISOString();
 
-  const zhipuPricing = {
-    provider: 'zhipu',
+  const zaiPricing = {
+    provider: 'zai',
     models: {
       'glm-4.7': {
         inputPricePerMillion: 0.6,
@@ -72,5 +72,5 @@ export async function down(context) {
     updatedAt: timestamp,
   };
 
-  await context.firestore.doc('settings/llm_pricing/providers/zhipu').set(zhipuPricing);
+  await context.firestore.doc('settings/llm_pricing/providers/zai').set(zaiPricing);
 }

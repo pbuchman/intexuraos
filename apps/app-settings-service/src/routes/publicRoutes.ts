@@ -37,9 +37,9 @@ export const publicRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                   openai: { $ref: 'ProviderPricing#' },
                   anthropic: { $ref: 'ProviderPricing#' },
                   perplexity: { $ref: 'ProviderPricing#' },
-                  zhipu: { $ref: 'ProviderPricing#' },
+                  zai: { $ref: 'ProviderPricing#' },
                 },
-                required: ['google', 'openai', 'anthropic', 'perplexity', 'zhipu'],
+                required: ['google', 'openai', 'anthropic', 'perplexity', 'zai'],
               },
             },
             required: ['success', 'data'],
@@ -74,12 +74,12 @@ export const publicRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       const { pricingRepository } = getServices();
 
-      const [google, openai, anthropic, perplexity, zhipu] = await Promise.all([
+      const [google, openai, anthropic, perplexity, zai] = await Promise.all([
         pricingRepository.getByProvider(LlmProviders.Google),
         pricingRepository.getByProvider(LlmProviders.OpenAI),
         pricingRepository.getByProvider(LlmProviders.Anthropic),
         pricingRepository.getByProvider(LlmProviders.Perplexity),
-        pricingRepository.getByProvider(LlmProviders.Zhipu),
+        pricingRepository.getByProvider(LlmProviders.Zai),
       ]);
 
       // Check if any provider is missing - need individual null checks for TypeScript narrowing
@@ -123,14 +123,14 @@ export const publicRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           `Missing pricing for providers: ${LlmProviders.Perplexity}`
         );
       }
-      if (zhipu === null) {
+      if (zai === null) {
         request.log.error(
-          { missingProviders: [LlmProviders.Zhipu] },
+          { missingProviders: [LlmProviders.Zai] },
           'Missing pricing for providers'
         );
         return await reply.fail(
           'INTERNAL_ERROR',
-          `Missing pricing for providers: ${LlmProviders.Zhipu}`
+          `Missing pricing for providers: ${LlmProviders.Zai}`
         );
       }
 
@@ -140,7 +140,7 @@ export const publicRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         Object.keys(openai.models).length +
         Object.keys(anthropic.models).length +
         Object.keys(perplexity.models).length +
-        Object.keys(zhipu.models).length;
+        Object.keys(zai.models).length;
 
       request.log.info({ userId: user.userId, totalModels }, 'Returning pricing for all providers');
 
@@ -149,7 +149,7 @@ export const publicRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         openai,
         anthropic,
         perplexity,
-        zhipu,
+        zai,
       });
     }
   );
