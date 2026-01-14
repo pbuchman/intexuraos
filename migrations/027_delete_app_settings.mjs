@@ -1,5 +1,5 @@
 /**
- * Migration 026: Delete app_settings collection
+ * Migration 027: Delete app_settings collection
  * Cache-bust: 2026-01-14T01:00:00Z
  *
  * Research-agent no longer reads pricing from Firestore's app_settings/llm_pricing.
@@ -8,7 +8,7 @@
  */
 
 export const metadata = {
-  id: '026',
+  id: '027',
   name: 'delete-app-settings',
   description: 'Delete app_settings collection (legacy pricing data)',
   createdAt: '2026-01-14',
