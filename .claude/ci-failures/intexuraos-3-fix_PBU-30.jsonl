@@ -1,0 +1,2 @@
+{"ts":"2026-01-14T23:02:32.703Z","project":"intexuraos-3","branch":"fix/PBU-30","workspace":"--","runNumber":1,"passed":false,"durationMs":852,"failureCount":0,"failures":[]}
+{"ts":"2026-01-14T23:03:32.386Z","project":"intexuraos-3","branch":"fix/PBU-30","workspace":"user-service","runNumber":2,"passed":true,"durationMs":37797,"failureCount":0,"failures":[]}
