@@ -31,13 +31,7 @@ export class FakeTodosProcessingPublisher implements TodosProcessingPublisher {
 }
 
 export class FakeUserServiceClient implements UserServiceClient {
-  public getGeminiApiKeyResult?: { readonly ok: true; readonly value: string } | { readonly ok: false; readonly error: { code: 'NETWORK_ERROR' | 'API_ERROR' | 'NO_API_KEY'; message: string } };
   public getLlmClientResult?: Result<LlmGenerateClient, { code: 'NETWORK_ERROR' | 'API_ERROR' | 'NO_API_KEY' | 'INVALID_MODEL'; message: string }>;
-
-  async getGeminiApiKey(_userId: string): Promise<{ readonly ok: true; readonly value: string } | { readonly ok: false; readonly error: { code: 'NETWORK_ERROR' | 'API_ERROR' | 'NO_API_KEY'; message: string } }> {
-    if (this.getGeminiApiKeyResult) return this.getGeminiApiKeyResult;
-    return { ok: false, error: { code: 'NO_API_KEY', message: 'No API key' } };
-  }
 
   async getLlmClient(_userId: string): Promise<Result<LlmGenerateClient, { code: 'NETWORK_ERROR' | 'API_ERROR' | 'NO_API_KEY' | 'INVALID_MODEL'; message: string }>> {
     if (this.getLlmClientResult) return this.getLlmClientResult;

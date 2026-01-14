@@ -5,13 +5,9 @@ import { ok, err, type Result } from '@intexuraos/common-core';
 import type {
   GenerateResult,
   LLMError,
-  LLMClient,
   NormalizedUsage,
 } from '@intexuraos/llm-contract';
-import { FakePricingContext } from '@intexuraos/llm-pricing';
-import * as infraGemini from '@intexuraos/infra-gemini';
-
-vi.mock('@intexuraos/infra-gemini');
+import type { LlmGenerateClient } from '@intexuraos/llm-factory';
 
 const mockUsage: NormalizedUsage = {
   inputTokens: 10,
@@ -24,22 +20,19 @@ function mockGenerateResult(content: string): Result<GenerateResult, LLMError> {
   return ok({ content, usage: mockUsage });
 }
 
-const fakePricingContext = new FakePricingContext();
-
 describe('feedNameGenerationService', () => {
   let mockUserServiceClient: UserServiceClient;
   let mockGenerate: Mock<(prompt: string) => Promise<Result<GenerateResult, LLMError>>>;
   const userId = 'user-123';
 
   beforeEach(() => {
-    mockUserServiceClient = {
-      getGeminiApiKey: vi.fn().mockResolvedValue(ok('test-api-key')),
-    };
     mockGenerate = vi.fn().mockResolvedValue(mockGenerateResult('  Test Feed Name  '));
-    vi.mocked(infraGemini.createGeminiClient).mockReturnValue({
+    const mockLlmClient: LlmGenerateClient = {
       generate: mockGenerate,
-      research: vi.fn(),
-    } as unknown as LLMClient);
+    };
+    mockUserServiceClient = {
+      getLlmClient: vi.fn().mockResolvedValue(ok(mockLlmClient)),
+    };
   });
 
   afterEach(() => {
@@ -48,7 +41,7 @@ describe('feedNameGenerationService', () => {
 
   describe('generateName', () => {
     it('generates a name using Gemini', async () => {
-      const service = createFeedNameGenerationService(mockUserServiceClient, fakePricingContext);
+      const service = createFeedNameGenerationService(mockUserServiceClient);
 
       const result = await service.generateName(
         userId,
@@ -61,11 +54,11 @@ describe('feedNameGenerationService', () => {
       if (result.ok) {
         expect(result.value).toBe('Test Feed Name');
       }
-      expect(mockUserServiceClient.getGeminiApiKey).toHaveBeenCalledWith(userId);
+      expect(mockUserServiceClient.getLlmClient).toHaveBeenCalledWith(userId);
     });
 
     it('handles empty source names', async () => {
-      const service = createFeedNameGenerationService(mockUserServiceClient, fakePricingContext);
+      const service = createFeedNameGenerationService(mockUserServiceClient);
 
       const result = await service.generateName(userId, 'Purpose', [], ['Filter']);
 
@@ -73,7 +66,7 @@ describe('feedNameGenerationService', () => {
     });
 
     it('handles empty filter names', async () => {
-      const service = createFeedNameGenerationService(mockUserServiceClient, fakePricingContext);
+      const service = createFeedNameGenerationService(mockUserServiceClient);
 
       const result = await service.generateName(userId, 'Purpose', ['Source'], []);
 
@@ -81,25 +74,25 @@ describe('feedNameGenerationService', () => {
     });
 
     it('returns NO_API_KEY error when user has no key', async () => {
-      mockUserServiceClient.getGeminiApiKey = vi
+      mockUserServiceClient.getLlmClient = vi
         .fn()
         .mockResolvedValue(err({ code: 'NO_API_KEY', message: 'No API key configured' }));
-      const service = createFeedNameGenerationService(mockUserServiceClient, fakePricingContext);
+      const service = createFeedNameGenerationService(mockUserServiceClient);
 
       const result = await service.generateName(userId, 'Purpose', [], []);
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
         expect(result.error.code).toBe('NO_API_KEY');
-        expect(result.error.message).toBe('Please configure your Gemini API key in settings first');
+        expect(result.error.message).toBe('Please configure your LLM API key in settings first');
       }
     });
 
     it('returns USER_SERVICE_ERROR for other user service errors', async () => {
-      mockUserServiceClient.getGeminiApiKey = vi
+      mockUserServiceClient.getLlmClient = vi
         .fn()
         .mockResolvedValue(err({ code: 'INTERNAL_ERROR', message: 'Service unavailable' }));
-      const service = createFeedNameGenerationService(mockUserServiceClient, fakePricingContext);
+      const service = createFeedNameGenerationService(mockUserServiceClient);
 
       const result = await service.generateName(userId, 'Purpose', [], []);
 
@@ -112,7 +105,7 @@ describe('feedNameGenerationService', () => {
 
     it('returns GENERATION_ERROR when Gemini fails', async () => {
       mockGenerate.mockResolvedValue(err({ code: 'API_ERROR', message: 'Rate limit exceeded' }));
-      const service = createFeedNameGenerationService(mockUserServiceClient, fakePricingContext);
+      const service = createFeedNameGenerationService(mockUserServiceClient);
 
       const result = await service.generateName(userId, 'Purpose', [], []);
 
@@ -125,7 +118,7 @@ describe('feedNameGenerationService', () => {
 
     it('trims whitespace from generated name', async () => {
       mockGenerate.mockResolvedValue(mockGenerateResult('  Trimmed Name  '));
-      const service = createFeedNameGenerationService(mockUserServiceClient, fakePricingContext);
+      const service = createFeedNameGenerationService(mockUserServiceClient);
 
       const result = await service.generateName(userId, 'Purpose', [], []);
 
@@ -139,7 +132,7 @@ describe('feedNameGenerationService', () => {
     it('truncates name to max length of 200', async () => {
       const longName = 'A'.repeat(300);
       mockGenerate.mockResolvedValue(mockGenerateResult(longName));
-      const service = createFeedNameGenerationService(mockUserServiceClient, fakePricingContext);
+      const service = createFeedNameGenerationService(mockUserServiceClient);
 
       const result = await service.generateName(userId, 'Purpose', [], []);
 

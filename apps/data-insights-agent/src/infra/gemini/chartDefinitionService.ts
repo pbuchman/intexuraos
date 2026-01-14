@@ -1,21 +1,16 @@
 /**
- * Chart definition service using Gemini.
- * Generates chart configuration for a specific data insight using user's Gemini API key.
+ * Chart definition service using LLM client.
+ * Generates chart configuration for a specific data insight using user's LLM client.
  */
 
 import type { Result } from '@intexuraos/common-core';
 import { err, getErrorMessage, ok } from '@intexuraos/common-core';
-import { createGeminiClient } from '@intexuraos/infra-gemini';
-import { LlmModels, type FastModel } from '@intexuraos/llm-contract';
 import {
   chartDefinitionPrompt,
   parseChartDefinition,
   type ParsedChartDefinition,
 } from '@intexuraos/llm-common';
-import type { IPricingContext } from '@intexuraos/llm-pricing';
 import type { UserServiceClient } from '../user/userServiceClient.js';
-
-const CHART_DEFINITION_MODEL: FastModel = LlmModels.Gemini25Flash;
 
 /**
  * Error from chart definition operations.
@@ -47,11 +42,8 @@ export interface ChartDefinitionService {
  * Create a chart definition service.
  */
 export function createChartDefinitionService(
-  userServiceClient: UserServiceClient,
-  pricingContext: IPricingContext
+  userServiceClient: UserServiceClient
 ): ChartDefinitionService {
-  const pricing = pricingContext.getPricing(CHART_DEFINITION_MODEL);
-
   return {
     async generateChartDefinition(
       userId: string,
@@ -65,14 +57,14 @@ export function createChartDefinitionService(
         suggestedChartType: string;
       }
     ): Promise<Result<ParsedChartDefinition, ChartDefinitionError>> {
-      const keyResult = await userServiceClient.getGeminiApiKey(userId);
+      const clientResult = await userServiceClient.getLlmClient(userId);
 
-      if (!keyResult.ok) {
-        const error = keyResult.error;
+      if (!clientResult.ok) {
+        const error = clientResult.error;
         if (error.code === 'NO_API_KEY') {
           return err({
             code: 'NO_API_KEY',
-            message: 'Please configure your Gemini API key in settings first',
+            message: 'Please configure your LLM API key in settings first',
           });
         }
         return err({
@@ -81,13 +73,7 @@ export function createChartDefinitionService(
         });
       }
 
-      const apiKey = keyResult.value;
-      const geminiClient = createGeminiClient({
-        apiKey,
-        model: CHART_DEFINITION_MODEL,
-        userId,
-        pricing,
-      });
+      const llmClient = clientResult.value;
 
       const prompt = chartDefinitionPrompt.build({
         jsonSchema,
@@ -96,7 +82,7 @@ export function createChartDefinitionService(
         insight,
       });
 
-      const result = await geminiClient.generate(prompt);
+      const result = await llmClient.generate(prompt);
 
       if (!result.ok) {
         return err({

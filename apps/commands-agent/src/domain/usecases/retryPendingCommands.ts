@@ -55,32 +55,20 @@ export function createRetryPendingCommandsUseCase(deps: {
           'Processing pending command'
         );
 
-        const apiKeysResult = await userServiceClient.getApiKeys(command.userId);
+        const llmClientResult = await userServiceClient.getLlmClient(command.userId);
 
-        if (!apiKeysResult.ok) {
+        if (!llmClientResult.ok) {
           logger.debug(
-            { commandId: command.id, userId: command.userId, errorCode: apiKeysResult.error.code },
-            'Failed to fetch API keys, skipping command'
+            { commandId: command.id, userId: command.userId, errorCode: llmClientResult.error.code },
+            'Failed to fetch LLM client, skipping command'
           );
           skipped++;
-          skipReasons['api_keys_fetch_failed'] = (skipReasons['api_keys_fetch_failed'] ?? 0) + 1;
+          skipReasons['llm_client_fetch_failed'] = (skipReasons['llm_client_fetch_failed'] ?? 0) + 1;
           continue;
         }
-
-        if (apiKeysResult.value.google === undefined) {
-          logger.debug(
-            { commandId: command.id, userId: command.userId },
-            'User still has no Google API key, skipping'
-          );
-          skipped++;
-          skipReasons['no_google_api_key'] = (skipReasons['no_google_api_key'] ?? 0) + 1;
-          continue;
-        }
-
-        const apiKey = apiKeysResult.value.google;
 
         try {
-          const classifier = classifierFactory(apiKey, command.userId);
+          const classifier = classifierFactory(llmClientResult.value);
           const classification = await classifier.classify(command.text);
 
           logger.info(

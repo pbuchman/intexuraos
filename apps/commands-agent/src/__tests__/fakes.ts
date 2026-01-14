@@ -1,6 +1,8 @@
 import type { Result } from '@intexuraos/common-core';
 import { ok, err } from '@intexuraos/common-core';
 import pino from 'pino';
+import type { LlmGenerateClient } from '@intexuraos/llm-factory';
+import type { LLMError } from '@intexuraos/llm-contract';
 import type { Command, CommandStatus } from '../domain/models/command.js';
 import type { Action } from '../domain/models/action.js';
 import type { CommandRepository } from '../domain/ports/commandRepository.js';
@@ -13,7 +15,6 @@ import type { EventPublisherPort, PublishError } from '../domain/ports/eventPubl
 import type { ActionCreatedEvent } from '../domain/events/actionCreatedEvent.js';
 import type { UserServiceClient, UserApiKeys, UserServiceError } from '../infra/user/index.js';
 import type { ActionsAgentClient, CreateActionParams } from '../infra/actionsAgent/client.js';
-import type { LlmGenerateClient } from '@intexuraos/llm-factory';
 import { createProcessCommandUseCase } from '../domain/usecases/processCommand.js';
 import { createRetryPendingCommandsUseCase } from '../domain/usecases/retryPendingCommands.js';
 import type { Services } from '../services.js';
@@ -141,11 +142,15 @@ export class FakeClassifier implements Classifier {
 
 export class FakeUserServiceClient implements UserServiceClient {
   private apiKeys = new Map<string, UserApiKeys>();
+  private llmClientResult: Result<LlmGenerateClient, UserServiceError> | null = null;
   private failNext = false;
-  public llmClientResult?: Result<LlmGenerateClient, UserServiceError>;
 
   setApiKeys(userId: string, keys: UserApiKeys): void {
     this.apiKeys.set(userId, keys);
+  }
+
+  setLlmClientResult(result: Result<LlmGenerateClient, UserServiceError>): void {
+    this.llmClientResult = result;
   }
 
   setFailNext(fail: boolean): void {
@@ -160,16 +165,17 @@ export class FakeUserServiceClient implements UserServiceClient {
     return ok(this.apiKeys.get(userId) ?? {});
   }
 
-  async getLlmClient(_userId: string): Promise<Result<LlmGenerateClient, UserServiceError>> {
+  async getLlmClient(userId: string): Promise<Result<LlmGenerateClient, UserServiceError>> {
     if (this.failNext) {
       this.failNext = false;
       return err({ code: 'NETWORK_ERROR', message: 'Simulated network error' });
     }
-    if (this.llmClientResult) {
+    // Check if user has google API key
+    const keys = this.apiKeys.get(userId);
+    if (keys?.google && this.llmClientResult !== null) {
       return this.llmClientResult;
     }
-    // Default: return NO_API_KEY error
-    return err({ code: 'NO_API_KEY', message: 'No API key configured' });
+    return err({ code: 'NO_API_KEY', message: 'No API key found for user' });
   }
 }
 
@@ -202,8 +208,29 @@ export function createFakeServices(deps: {
   userServiceClient: FakeUserServiceClient;
   eventPublisher: FakeEventPublisher;
 }): Services {
-  const classifierFactory: ClassifierFactory = () => deps.classifier;
   const logger = pino({ name: 'commands-agent-test', level: 'silent' });
+
+  // Set up fake LLM client result that wraps the fake classifier
+  const fakeLlmClient: LlmGenerateClient = {
+    async generate(_prompt: string): Promise<Result<{ content: string; usage: { inputTokens: number; outputTokens: number; totalTokens: number; costUsd: number } }, LLMError>> {
+      const result = await deps.classifier.classify('');
+      if (result.type === 'unclassified') {
+        return err({ code: 'API_ERROR', message: 'Could not classify' });
+      }
+      return ok({
+        content: JSON.stringify(result),
+        usage: {
+          inputTokens: 10,
+          outputTokens: 20,
+          totalTokens: 30,
+          costUsd: 0.0001,
+        },
+      });
+    },
+  };
+  deps.userServiceClient.setLlmClientResult(ok(fakeLlmClient));
+
+  const classifierFactory: ClassifierFactory = (_client: LlmGenerateClient) => deps.classifier;
 
   return {
     commandRepository: deps.commandRepository,

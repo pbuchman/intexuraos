@@ -1,39 +1,40 @@
 import { describe, it, expect, vi } from 'vitest';
 import { ok, err } from '@intexuraos/common-core';
-import { FakePricingContext } from '@intexuraos/llm-pricing';
 import { createTitleGenerationService } from '../infra/gemini/titleGenerationService.js';
 import type { UserServiceClient } from '../infra/user/userServiceClient.js';
+import type { LlmGenerateClient } from '@intexuraos/llm-factory';
 
 const mockGenerate = vi.fn();
 
-vi.mock('@intexuraos/infra-gemini', () => ({
-  createGeminiClient: vi.fn().mockImplementation(() => ({
-    generate: mockGenerate,
-  })),
-}));
-
-const fakePricingContext = new FakePricingContext();
-
 describe('titleGenerationService', () => {
-  function createMockUserServiceClient(apiKey: string | null = 'test-api-key'): UserServiceClient {
+  function createMockUserServiceClient(
+    hasClient = true,
+    errorCode?: 'NO_API_KEY' | 'API_ERROR'
+  ): UserServiceClient {
+    if (!hasClient) {
+      return {
+        getLlmClient: vi
+          .fn()
+          .mockResolvedValue(
+            err({ code: errorCode ?? 'NO_API_KEY', message: 'No API key configured' })
+          ),
+      };
+    }
+    const mockLlmClient: LlmGenerateClient = {
+      generate: mockGenerate,
+    };
     return {
-      getGeminiApiKey: vi
-        .fn()
-        .mockResolvedValue(
-          apiKey !== null
-            ? ok(apiKey)
-            : err({ code: 'NO_API_KEY' as const, message: 'No API key configured' })
-        ),
+      getLlmClient: vi.fn().mockResolvedValue(ok(mockLlmClient)),
     };
   }
 
   describe('generateTitle', () => {
     const mockUsage = { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd: 0.001 };
 
-    it('returns generated title from Gemini', async () => {
+    it('returns generated title from LLM', async () => {
       mockGenerate.mockResolvedValue(ok({ content: 'Test Generated Title', usage: mockUsage }));
       const mockClient = createMockUserServiceClient();
-      const service = createTitleGenerationService(mockClient, fakePricingContext);
+      const service = createTitleGenerationService(mockClient);
 
       const result = await service.generateTitle('user-123', 'Some test content');
 
@@ -44,8 +45,8 @@ describe('titleGenerationService', () => {
     });
 
     it('returns NO_API_KEY error when user has no API key', async () => {
-      const mockClient = createMockUserServiceClient(null);
-      const service = createTitleGenerationService(mockClient, fakePricingContext);
+      const mockClient = createMockUserServiceClient(false, 'NO_API_KEY');
+      const service = createTitleGenerationService(mockClient);
 
       const result = await service.generateTitle('user-123', 'Some content');
 
@@ -56,12 +57,8 @@ describe('titleGenerationService', () => {
     });
 
     it('returns USER_SERVICE_ERROR when user service fails', async () => {
-      const mockClient: UserServiceClient = {
-        getGeminiApiKey: vi
-          .fn()
-          .mockResolvedValue(err({ code: 'API_ERROR' as const, message: 'Service unavailable' })),
-      };
-      const service = createTitleGenerationService(mockClient, fakePricingContext);
+      const mockClient = createMockUserServiceClient(false, 'API_ERROR');
+      const service = createTitleGenerationService(mockClient);
 
       const result = await service.generateTitle('user-123', 'Some content');
 
@@ -74,7 +71,7 @@ describe('titleGenerationService', () => {
     it('truncates long content to 5000 characters', async () => {
       mockGenerate.mockResolvedValue(ok({ content: 'Truncated Title', usage: mockUsage }));
       const mockClient = createMockUserServiceClient();
-      const service = createTitleGenerationService(mockClient, fakePricingContext);
+      const service = createTitleGenerationService(mockClient);
 
       const longContent = 'x'.repeat(10000);
       const result = await service.generateTitle('user-123', longContent);
@@ -85,7 +82,7 @@ describe('titleGenerationService', () => {
     it('trims generated title', async () => {
       mockGenerate.mockResolvedValue(ok({ content: '  Trimmed Title  ', usage: mockUsage }));
       const mockClient = createMockUserServiceClient();
-      const service = createTitleGenerationService(mockClient, fakePricingContext);
+      const service = createTitleGenerationService(mockClient);
 
       const result = await service.generateTitle('user-123', 'Some content');
 
@@ -95,17 +92,17 @@ describe('titleGenerationService', () => {
       }
     });
 
-    it('returns GENERATION_ERROR when Gemini fails', async () => {
-      mockGenerate.mockResolvedValue(err({ message: 'Gemini API error' }));
+    it('returns GENERATION_ERROR when LLM fails', async () => {
+      mockGenerate.mockResolvedValue(err({ message: 'LLM API error' }));
       const mockClient = createMockUserServiceClient();
-      const service = createTitleGenerationService(mockClient, fakePricingContext);
+      const service = createTitleGenerationService(mockClient);
 
       const result = await service.generateTitle('user-123', 'Some content');
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
         expect(result.error.code).toBe('GENERATION_ERROR');
-        expect(result.error.message).toBe('Gemini API error');
+        expect(result.error.message).toBe('LLM API error');
       }
     });
   });

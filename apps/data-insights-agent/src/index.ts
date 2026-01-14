@@ -3,7 +3,7 @@ import { initSentry } from '@intexuraos/infra-sentry';
 import { getErrorMessage } from '@intexuraos/common-core';
 import { validateRequiredEnv } from '@intexuraos/http-server';
 import { fetchAllPricing, createPricingContext } from '@intexuraos/llm-pricing';
-import { LlmModels, type FastModel } from '@intexuraos/llm-contract';
+import { LlmModels, type LLMModel } from '@intexuraos/llm-contract';
 import { buildServer } from './server.js';
 import { loadConfig } from './config.js';
 import { initServices } from './services.js';
@@ -36,7 +36,7 @@ initSentry({
 });
 
 /** Models used by this service */
-const REQUIRED_MODELS: FastModel[] = [LlmModels.Gemini25Flash];
+const REQUIRED_MODELS: LLMModel[] = [LlmModels.Gemini25Flash, LlmModels.Glm47];
 
 async function main(): Promise<void> {
   const config = loadConfig();
@@ -61,22 +61,23 @@ async function main(): Promise<void> {
   const userServiceClient = createUserServiceClient({
     baseUrl: config.userServiceUrl,
     internalAuthToken: config.internalAuthToken,
+    pricingContext,
   });
 
   initServices({
     dataSourceRepository: new FirestoreDataSourceRepository(),
-    titleGenerationService: createTitleGenerationService(userServiceClient, pricingContext),
+    titleGenerationService: createTitleGenerationService(userServiceClient),
     compositeFeedRepository: new FirestoreCompositeFeedRepository(),
-    feedNameGenerationService: createFeedNameGenerationService(userServiceClient, pricingContext),
+    feedNameGenerationService: createFeedNameGenerationService(userServiceClient),
     mobileNotificationsClient: createMobileNotificationsClient({
       baseUrl: config.mobileNotificationsServiceUrl,
       internalAuthToken: config.internalAuthToken,
       logger,
     }),
     snapshotRepository: new FirestoreSnapshotRepository(),
-    dataAnalysisService: createDataAnalysisService(userServiceClient, pricingContext),
-    chartDefinitionService: createChartDefinitionService(userServiceClient, pricingContext),
-    dataTransformService: createDataTransformService(userServiceClient, pricingContext),
+    dataAnalysisService: createDataAnalysisService(userServiceClient),
+    chartDefinitionService: createChartDefinitionService(userServiceClient),
+    dataTransformService: createDataTransformService(userServiceClient),
   });
 
   const app = await buildServer();

@@ -1,5 +1,6 @@
 import type { CommandType } from '../models/command.js';
 import type { ResearchModel } from '@intexuraos/llm-contract';
+import type { LlmGenerateClient } from '@intexuraos/llm-factory';
 
 export interface ClassificationResult {
   type: CommandType;
@@ -13,4 +14,4 @@ export interface Classifier {
   classify(text: string): Promise<ClassificationResult>;
 }
 
-export type ClassifierFactory = (apiKey: string, userId: string) => Classifier;
+export type ClassifierFactory = (client: LlmGenerateClient) => Classifier;

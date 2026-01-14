@@ -1,18 +1,13 @@
 /**
- * Title generation service using Gemini.
- * Generates concise titles from content using user's Gemini API key.
+ * Title generation service using LLM client.
+ * Generates concise titles from content.
  */
 
 import type { Result } from '@intexuraos/common-core';
 import { err, ok } from '@intexuraos/common-core';
-import { createGeminiClient } from '@intexuraos/infra-gemini';
-import { LlmModels, type FastModel } from '@intexuraos/llm-contract';
 import { titlePrompt } from '@intexuraos/llm-common';
-import type { IPricingContext } from '@intexuraos/llm-pricing';
 import type { UserServiceClient } from '../user/userServiceClient.js';
 import { MAX_TITLE_LENGTH } from '../../domain/dataSource/index.js';
-
-const TITLE_GENERATION_MODEL: FastModel = LlmModels.Gemini25Flash;
 
 /**
  * Error from title generation operations.
@@ -33,24 +28,21 @@ export interface TitleGenerationService {
  * Create a title generation service.
  */
 export function createTitleGenerationService(
-  userServiceClient: UserServiceClient,
-  pricingContext: IPricingContext
+  userServiceClient: UserServiceClient
 ): TitleGenerationService {
-  const pricing = pricingContext.getPricing(TITLE_GENERATION_MODEL);
-
   return {
     async generateTitle(
       userId: string,
       content: string
     ): Promise<Result<string, TitleGenerationError>> {
-      const keyResult = await userServiceClient.getGeminiApiKey(userId);
+      const clientResult = await userServiceClient.getLlmClient(userId);
 
-      if (!keyResult.ok) {
-        const error = keyResult.error;
+      if (!clientResult.ok) {
+        const error = clientResult.error;
         if (error.code === 'NO_API_KEY') {
           return err({
             code: 'NO_API_KEY',
-            message: 'Please configure your Gemini API key in settings first',
+            message: 'Please configure your LLM API key in settings first',
           });
         }
         return err({
@@ -59,20 +51,14 @@ export function createTitleGenerationService(
         });
       }
 
-      const apiKey = keyResult.value;
-      const geminiClient = createGeminiClient({
-        apiKey,
-        model: TITLE_GENERATION_MODEL,
-        userId,
-        pricing,
-      });
+      const llmClient = clientResult.value;
 
       const prompt = titlePrompt.build(
         { content },
         { maxLength: MAX_TITLE_LENGTH, contentPreviewLimit: 5000 }
       );
 
-      const result = await geminiClient.generate(prompt);
+      const result = await llmClient.generate(prompt);
 
       if (!result.ok) {
         return err({
