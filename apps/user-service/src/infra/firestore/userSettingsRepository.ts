@@ -207,8 +207,19 @@ export class FirestoreUserSettingsRepository implements UserSettingsRepository {
           updatedAt: now,
         });
       } else {
+        const data = doc.data() as UserSettingsDoc;
+        const existingTestResult = data?.llmTestResults?.[provider];
+
+        // Ensure we write a complete test result object, not just testedAt
+        // This handles cases where legacy/partial data exists (missing status or message)
+        const completeTestResult: LlmTestResult = {
+          status: existingTestResult?.status ?? 'success',
+          message: existingTestResult?.message ?? '',
+          testedAt: now,
+        };
+
         await docRef.update({
-          [`llmTestResults.${provider}.testedAt`]: now,
+          [`llmTestResults.${provider}`]: completeTestResult,
           updatedAt: now,
         });
       }
