@@ -42,13 +42,16 @@ export function useResearch(id: string): {
   const firebaseAuthenticatedRef = useRef(false);
   const lastStatusRef = useRef<string | null>(null);
   const lastLlmStatusesRef = useRef<string | null>(null);
+  const isMountedRef = useRef(true);
 
   const refresh = useCallback(
     async (showLoading?: boolean): Promise<void> => {
       const shouldShowLoading = showLoading !== false;
 
       if (id === '') {
-        setLoading(false);
+        if (isMountedRef.current) {
+          setLoading(false);
+        }
         return;
       }
 
@@ -60,12 +63,16 @@ export function useResearch(id: string): {
       try {
         const token = await getAccessToken();
         const data = await getResearchApi(token, id);
-        setResearch(data);
-        lastStatusRef.current = data.status;
+        if (isMountedRef.current) {
+          setResearch(data);
+          lastStatusRef.current = data.status;
+        }
       } catch (err) {
-        setError(getErrorMessage(err, 'Failed to load research'));
+        if (isMountedRef.current) {
+          setError(getErrorMessage(err, 'Failed to load research'));
+        }
       } finally {
-        if (shouldShowLoading) {
+        if (shouldShowLoading && isMountedRef.current) {
           setLoading(false);
         }
       }
@@ -75,6 +82,10 @@ export function useResearch(id: string): {
 
   useEffect(() => {
     void refresh();
+    // Cleanup: mark as unmounted to prevent state updates after unmount
+    return (): void => {
+      isMountedRef.current = false;
+    };
   }, [refresh]);
 
   // 💰 CostGuard: Conditional Firestore listener - only for active statuses
@@ -193,6 +204,7 @@ export function useResearches(): {
   const [cursor, setCursor] = useState<string | undefined>(undefined);
   const [hasMore, setHasMore] = useState(true);
   const isInitialLoadRef = useRef(true);
+  const isMountedRef = useRef(true);
 
   const refresh = useCallback(async (): Promise<void> => {
     setLoading(true);
@@ -201,18 +213,28 @@ export function useResearches(): {
     try {
       const token = await getAccessToken();
       const data = await listResearchesApi(token);
-      setResearches(data.items);
-      setCursor(data.nextCursor);
-      setHasMore(data.nextCursor !== undefined);
+      if (isMountedRef.current) {
+        setResearches(data.items);
+        setCursor(data.nextCursor);
+        setHasMore(data.nextCursor !== undefined);
+      }
     } catch (err) {
-      setError(getErrorMessage(err, 'Failed to load researches'));
+      if (isMountedRef.current) {
+        setError(getErrorMessage(err, 'Failed to load researches'));
+      }
     } finally {
-      setLoading(false);
+      if (isMountedRef.current) {
+        setLoading(false);
+      }
     }
   }, [getAccessToken]);
 
   useEffect(() => {
     void refresh();
+    // Cleanup: mark as unmounted to prevent state updates after unmount
+    return (): void => {
+      isMountedRef.current = false;
+    };
   }, [refresh]);
 
   // 💰 CostGuard: Refresh when page becomes visible to catch status updates

@@ -1,0 +1,12 @@
+# robots.txt for IntexuraOS
+# Allow all crawlers
+
+User-agent: *
+Allow: /
+
+# Disallow admin/private paths if any
+Disallow: /#/
+Disallow: /internal/
+
+# Sitemap location
+Sitemap: https://intexuraos.com/sitemap.xml
