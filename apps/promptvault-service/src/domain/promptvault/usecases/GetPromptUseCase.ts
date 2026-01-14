@@ -5,6 +5,7 @@ import { err, type Result } from '@intexuraos/common-core';
 import type { Prompt, PromptId, PromptVaultError } from '../models/index.js';
 import { createPromptVaultError } from '../models/index.js';
 import type { PromptRepository } from '../ports/index.js';
+import type { Logger } from '@intexuraos/common-core';
 
 /**
  * Input for the GetPrompt use case.
@@ -12,6 +13,13 @@ import type { PromptRepository } from '../ports/index.js';
 export interface GetPromptUseCaseInput {
   userId: string;
   promptId: PromptId;
+}
+
+/**
+ * Dependencies for the GetPrompt use case.
+ */
+export interface GetPromptDeps {
+  logger: Logger;
 }
 
 /**
@@ -29,21 +37,42 @@ function validateInput(input: GetPromptUseCaseInput): PromptVaultError | null {
  */
 export async function getPrompt(
   repository: PromptRepository,
-  input: GetPromptUseCaseInput
+  input: GetPromptUseCaseInput,
+  deps: GetPromptDeps
 ): Promise<Result<Prompt, PromptVaultError>> {
+  const { logger } = deps;
+
+  logger.debug({ userId: input.userId, promptId: input.promptId }, 'Getting prompt');
+
   const validationError = validateInput(input);
   if (validationError !== null) {
+    logger.warn(
+      { userId: input.userId, promptId: input.promptId },
+      'Prompt validation failed: promptId is required'
+    );
     return err(validationError);
   }
 
-  return await repository.getPrompt(input.userId, input.promptId);
+  const result = await repository.getPrompt(input.userId, input.promptId);
+
+  if (!result.ok) {
+    logger.error(
+      { userId: input.userId, promptId: input.promptId, errorMessage: result.error.message },
+      'Failed to get prompt'
+    );
+    return result;
+  }
+
+  logger.debug({ userId: input.userId, promptId: input.promptId }, 'Prompt retrieved successfully');
+  return result;
 }
 
 /**
  * Factory to create a bound GetPrompt use case.
  */
 export function createGetPromptUseCase(
-  repository: PromptRepository
+  repository: PromptRepository,
+  logger: Logger
 ): (input: GetPromptUseCaseInput) => Promise<Result<Prompt, PromptVaultError>> {
-  return async (input) => await getPrompt(repository, input);
+  return async (input) => await getPrompt(repository, input, { logger });
 }

@@ -8,7 +8,7 @@
  */
 
 import type { FastifyPluginCallback, FastifyReply, FastifyRequest } from 'fastify';
-import { requireAuth } from '@intexuraos/common-http';
+import { requireAuth, logIncomingRequest } from '@intexuraos/common-http';
 import { getServices } from '../services.js';
 import {
   initiateOAuthFlow,
@@ -67,6 +67,10 @@ export const oauthConnectionRoutes: FastifyPluginCallback = (fastify, _opts, don
       },
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
+      logIncomingRequest(request, {
+        message: 'Received request to POST /oauth/connections/google/initiate',
+      });
+
       const user = await requireAuth(request, reply);
       if (!user) {
         return;
@@ -84,7 +88,7 @@ export const oauthConnectionRoutes: FastifyPluginCallback = (fastify, _opts, don
 
       const result = initiateOAuthFlow(
         { userId: user.userId, provider: OAuthProviders.GOOGLE, redirectUri },
-        { googleOAuthClient }
+        { googleOAuthClient, logger: request.log }
       );
 
       if (!result.ok) {
@@ -123,6 +127,10 @@ export const oauthConnectionRoutes: FastifyPluginCallback = (fastify, _opts, don
       },
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
+      logIncomingRequest(request, {
+        message: 'Received request to GET /oauth/connections/google/callback',
+      });
+
       const query = request.query as { code?: string; state?: string; error?: string };
 
       const webAppUrl = process.env['INTEXURAOS_WEB_APP_URL'] ?? 'http://localhost:5173';
@@ -146,7 +154,7 @@ export const oauthConnectionRoutes: FastifyPluginCallback = (fastify, _opts, don
 
       const result = await exchangeOAuthCode(
         { code: query.code, state: query.state },
-        { oauthConnectionRepository, googleOAuthClient }
+        { oauthConnectionRepository, googleOAuthClient, logger: request.log }
       );
 
       if (!result.ok) {

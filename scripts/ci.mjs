@@ -26,6 +26,7 @@ const phases = [
       { name: 'hash-routing', script: 'verify-hash-routing.mjs' },
       { name: 'terraform-secrets', script: 'verify-terraform-secrets.mjs' },
       { name: 'pubsub', script: 'verify-pubsub.mjs' },
+      { name: 'logging', script: 'verify-logging.mjs' },
       { name: 'workspace-deps', script: 'verify-workspace-deps.mjs' },
       { name: 'migrations', script: 'verify-migrations.mjs' },
       { name: 'no-console', script: 'verify-no-console.mjs' },

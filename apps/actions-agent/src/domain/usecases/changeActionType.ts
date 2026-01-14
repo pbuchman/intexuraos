@@ -36,12 +36,17 @@ export function createChangeActionTypeUseCase(deps: ChangeActionTypeDeps): Chang
     // 1. Fetch action
     const action = await actionRepository.getById(actionId);
     if (action?.userId !== userId) {
+      logger.error({ actionId, userId, reason: 'not_found' }, 'Action not found for type change');
       return { ok: false, error: { code: 'NOT_FOUND', message: 'Action not found' } };
     }
 
     // 2. Validate status allows type change
     const allowedStatuses = ['pending', 'awaiting_approval'];
     if (!allowedStatuses.includes(action.status)) {
+      logger.error(
+        { actionId, currentStatus: action.status, newType, reason: 'invalid_status' },
+        'Cannot change type for action in current status'
+      );
       return {
         ok: false,
         error: {
@@ -59,6 +64,7 @@ export function createChangeActionTypeUseCase(deps: ChangeActionTypeDeps): Chang
     // 4. Fetch command text from commands-agent (never trust frontend)
     const command = await commandsAgentClient.getCommand(action.commandId);
     if (command === null) {
+      logger.error({ actionId, commandId: action.commandId, reason: 'command_not_found' }, 'Command not found for type change');
       return { ok: false, error: { code: 'NOT_FOUND', message: 'Command not found' } };
     }
 

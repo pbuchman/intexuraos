@@ -1,4 +1,5 @@
 import Fastify, { type FastifyInstance } from 'fastify';
+import pino from 'pino';
 import type { FastifyDynamicSwaggerOptions } from '@fastify/swagger';
 import fastifySwagger from '@fastify/swagger';
 import fastifySwaggerUi from '@fastify/swagger-ui';
@@ -17,7 +18,7 @@ import {
   checkSecrets,
   type HealthCheck,
 } from '@intexuraos/http-server';
-import { setupSentryErrorHandler } from '@intexuraos/infra-sentry';
+import { createSentryStream, setupSentryErrorHandler } from '@intexuraos/infra-sentry';
 import { promptVaultRoutes } from './routes/routes.js';
 import { getServices } from './services.js';
 
@@ -256,6 +257,11 @@ export async function buildServer(): Promise<FastifyInstance> {
         ? false
         : {
             level: process.env['LOG_LEVEL'] ?? 'info',
+            stream: createSentryStream(
+              pino.multistream([
+                pino.destination({ dest: 1, sync: false }),
+              ])
+            ),
           },
     disableRequestLogging: true, // We'll handle logging ourselves to skip health checks
     ajv: {

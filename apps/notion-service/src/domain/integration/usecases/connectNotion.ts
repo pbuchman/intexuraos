@@ -8,6 +8,7 @@
  */
 import { err, ok, type Result } from '@intexuraos/common-core';
 import type { ConnectionRepository, NotionApi, NotionError } from '../ports/index.js';
+import type { Logger } from '@intexuraos/common-core';
 
 /**
  * Input for the ConnectNotion use case.
@@ -15,6 +16,13 @@ import type { ConnectionRepository, NotionApi, NotionError } from '../ports/inde
 export interface ConnectNotionInput {
   userId: string;
   notionToken: string;
+}
+
+/**
+ * Dependencies for the ConnectNotion use case.
+ */
+export interface ConnectNotionDeps {
+  logger: Logger;
 }
 
 /**
@@ -51,19 +59,28 @@ export interface ConnectNotionResult {
 export async function connectNotion(
   connectionRepository: ConnectionRepository,
   notionApi: NotionApi,
-  input: ConnectNotionInput
+  input: ConnectNotionInput,
+  deps: ConnectNotionDeps
 ): Promise<Result<ConnectNotionResult, ConnectNotionError>> {
   const { userId, notionToken } = input;
+  const { logger } = deps;
+
+  logger.info({ userId }, 'Validating Notion token for connection');
 
   // Step 1: Validate token BEFORE saving connection
   const tokenValidation = await notionApi.validateToken(notionToken);
 
   if (!tokenValidation.ok) {
     // Step 2: Map Notion error codes to domain errors
+    logger.warn(
+      { userId, errorCode: tokenValidation.error.code },
+      'Notion token validation failed'
+    );
     return mapNotionErrorToConnectError(tokenValidation.error);
   }
 
   if (!tokenValidation.value) {
+    logger.warn({ userId }, 'Notion token validation returned false');
     return err({
       code: 'INVALID_TOKEN',
       message: 'Invalid Notion token. Please check your integration token.',
@@ -74,6 +91,7 @@ export async function connectNotion(
   const saveResult = await connectionRepository.saveConnection(userId, notionToken);
 
   if (!saveResult.ok) {
+    logger.error({ userId, errorMessage: saveResult.error.message }, 'Failed to save Notion connection');
     return err({
       code: 'DOWNSTREAM_ERROR',
       message: saveResult.error.message,
@@ -82,6 +100,7 @@ export async function connectNotion(
 
   // Step 4: Return result
   const config = saveResult.value;
+  logger.info({ userId, connected: config.connected }, 'Notion connection saved successfully');
   return ok({
     connected: config.connected,
     createdAt: config.createdAt,
@@ -119,7 +138,8 @@ function mapNotionErrorToConnectError(notionError: NotionError): Result<never, C
  */
 export function createConnectNotionUseCase(
   connectionRepository: ConnectionRepository,
-  notionApi: NotionApi
+  notionApi: NotionApi,
+  logger: Logger
 ): (input: ConnectNotionInput) => Promise<Result<ConnectNotionResult, ConnectNotionError>> {
-  return async (input) => await connectNotion(connectionRepository, notionApi, input);
+  return async (input) => await connectNotion(connectionRepository, notionApi, input, { logger });
 }

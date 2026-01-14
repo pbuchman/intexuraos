@@ -1,3 +1,4 @@
+import pino from 'pino';
 import type { LinkPreviewFetcherPort } from './domain/index.js';
 import { OpenGraphFetcher } from './infra/index.js';
 
@@ -9,7 +10,7 @@ let container: ServiceContainer | undefined;
 
 export function initServices(): void {
   container = {
-    linkPreviewFetcher: new OpenGraphFetcher(),
+    linkPreviewFetcher: new OpenGraphFetcher(undefined, pino({ name: 'openGraphFetcher' })),
   };
 }
 

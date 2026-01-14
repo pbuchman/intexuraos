@@ -9,6 +9,7 @@
 import type { FastifyPluginCallback, FastifyReply, FastifyRequest } from 'fastify';
 import { validateInternalAuth, logIncomingRequest } from '@intexuraos/common-http';
 import { getErrorMessage } from '@intexuraos/common-core';
+import type { Logger } from 'pino';
 import {
   checkLlmCompletion,
   createDraftResearch,
@@ -663,6 +664,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
           const keyMissingCompletionAction = await checkLlmCompletion(event.researchId, {
             researchRepo,
+            logger: request.log as unknown as Logger,
           });
           request.log.info(
             { researchId: event.researchId, action: keyMissingCompletionAction.type },
@@ -720,7 +722,10 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             formattedError
           );
 
-          const failCompletionAction = await checkLlmCompletion(event.researchId, { researchRepo });
+          const failCompletionAction = await checkLlmCompletion(event.researchId, {
+            researchRepo,
+            logger: request.log as unknown as Logger,
+          });
           request.log.info(
             { researchId: event.researchId, action: failCompletionAction.type },
             '[3.5] LLM completion check after failure'
@@ -782,7 +787,10 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           { researchId: event.researchId, model: event.model },
           '[3.5] Checking LLM completion status'
         );
-        const completionAction = await checkLlmCompletion(event.researchId, { researchRepo });
+        const completionAction = await checkLlmCompletion(event.researchId, {
+          researchRepo,
+          logger: request.log as unknown as Logger,
+        });
 
         switch (completionAction.type) {
           case 'pending':

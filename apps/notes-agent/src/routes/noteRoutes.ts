@@ -1,5 +1,5 @@
 import type { FastifyPluginCallback, FastifyRequest, FastifyReply } from 'fastify';
-import { requireAuth } from '@intexuraos/common-http';
+import { logIncomingRequest, requireAuth } from '@intexuraos/common-http';
 import { getServices } from '../services.js';
 import { createNote } from '../domain/usecases/createNote.js';
 import { getNote } from '../domain/usecases/getNote.js';
@@ -110,6 +110,7 @@ export const noteRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       },
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
+      logIncomingRequest(request);
       const user = await requireAuth(request, reply);
       if (user === null) {
         return;
@@ -149,6 +150,7 @@ export const noteRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       },
     },
     async (request: FastifyRequest<{ Body: CreateNoteBody }>, reply: FastifyReply) => {
+      logIncomingRequest(request);
       const user = await requireAuth(request, reply);
       if (user === null) {
         return;
@@ -192,6 +194,7 @@ export const noteRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       },
     },
     async (request: FastifyRequest<{ Params: NoteParams }>, reply: FastifyReply) => {
+      logIncomingRequest(request, { includeParams: true });
       const user = await requireAuth(request, reply);
       if (user === null) {
         return;
@@ -245,6 +248,7 @@ export const noteRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       request: FastifyRequest<{ Params: NoteParams; Body: UpdateNoteBody }>,
       reply: FastifyReply
     ) => {
+      logIncomingRequest(request, { includeParams: true });
       const user = await requireAuth(request, reply);
       if (user === null) {
         return;
@@ -295,6 +299,7 @@ export const noteRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       },
     },
     async (request: FastifyRequest<{ Params: NoteParams }>, reply: FastifyReply) => {
+      logIncomingRequest(request, { includeParams: true });
       const user = await requireAuth(request, reply);
       if (user === null) {
         return;

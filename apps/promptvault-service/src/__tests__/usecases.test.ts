@@ -3,6 +3,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { err, isErr, ok, type Result } from '@intexuraos/common-core';
+import type { Logger } from '@intexuraos/common-core';
 import {
   createCreatePromptUseCase,
   createPrompt,
@@ -21,6 +22,14 @@ import {
 } from '../domain/promptvault/usecases/UpdatePromptUseCase.js';
 import type { PromptRepository } from '../domain/promptvault/ports/index.js';
 import type { Prompt, PromptVaultError } from '../domain/promptvault/models/index.js';
+
+// Mock logger for testing
+const mockLogger: Logger = {
+  info: () => undefined,
+  warn: () => undefined,
+  error: () => undefined,
+  debug: () => undefined,
+};
 
 // Mock repository for testing
 function createMockRepository(prompts: Prompt[] = []): PromptRepository {
@@ -78,7 +87,7 @@ describe('createPrompt use case', () => {
       userId: 'user-1',
       title: 'Test Prompt',
       content: 'Test content',
-    });
+    }, { logger: mockLogger });
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.value.title).toBe('Test Prompt');
@@ -91,7 +100,7 @@ describe('createPrompt use case', () => {
       userId: 'user-1',
       title: '',
       content: 'Test content',
-    });
+    }, { logger: mockLogger });
     expect(isErr(result)).toBe(true);
     if (isErr(result)) {
       expect(result.error.code).toBe('VALIDATION_ERROR');
@@ -103,7 +112,7 @@ describe('createPrompt use case', () => {
       userId: 'user-1',
       title: '   ',
       content: 'Test content',
-    });
+    }, { logger: mockLogger });
     expect(isErr(result)).toBe(true);
   });
   it('returns error when content is empty', async () => {
@@ -112,7 +121,7 @@ describe('createPrompt use case', () => {
       userId: 'user-1',
       title: 'Test Title',
       content: '',
-    });
+    }, { logger: mockLogger });
     expect(isErr(result)).toBe(true);
   });
   it('returns error when title exceeds max length', async () => {
@@ -121,7 +130,7 @@ describe('createPrompt use case', () => {
       userId: 'user-1',
       title: 'a'.repeat(201),
       content: 'Test content',
-    });
+    }, { logger: mockLogger });
     expect(isErr(result)).toBe(true);
     if (isErr(result)) {
       expect(result.error.message).toContain('200');
@@ -133,7 +142,7 @@ describe('createPrompt use case', () => {
       userId: 'user-1',
       title: 'Test Title',
       content: 'a'.repeat(100001),
-    });
+    }, { logger: mockLogger });
     expect(isErr(result)).toBe(true);
     if (isErr(result)) {
       expect(result.error.code).toBe('VALIDATION_ERROR');
@@ -146,7 +155,7 @@ describe('createPrompt use case', () => {
       userId: 'user-1',
       title: 'Test Title',
       content: '   ',
-    });
+    }, { logger: mockLogger });
     expect(isErr(result)).toBe(true);
     if (isErr(result)) {
       expect(result.error.code).toBe('VALIDATION_ERROR');
@@ -164,7 +173,7 @@ describe('getPrompt use case', () => {
         updatedAt: '2024-01-01',
       },
     ]);
-    const result = await getPrompt(repo, { userId: 'user-1', promptId: 'prompt-1' });
+    const result = await getPrompt(repo, { userId: 'user-1', promptId: 'prompt-1' }, { logger: mockLogger });
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.value.id).toBe('prompt-1');
@@ -172,7 +181,7 @@ describe('getPrompt use case', () => {
   });
   it('returns error when not found', async () => {
     const repo = createMockRepository();
-    const result = await getPrompt(repo, { userId: 'user-1', promptId: 'nonexistent' });
+    const result = await getPrompt(repo, { userId: 'user-1', promptId: 'nonexistent' }, { logger: mockLogger });
     expect(isErr(result)).toBe(true);
     if (isErr(result)) {
       expect(result.error.code).toBe('NOT_FOUND');
@@ -180,7 +189,7 @@ describe('getPrompt use case', () => {
   });
   it('returns error when promptId is empty', async () => {
     const repo = createMockRepository();
-    const result = await getPrompt(repo, { userId: 'user-1', promptId: '' });
+    const result = await getPrompt(repo, { userId: 'user-1', promptId: '' }, { logger: mockLogger });
     expect(isErr(result)).toBe(true);
     if (isErr(result)) {
       expect(result.error.code).toBe('VALIDATION_ERROR');
@@ -189,7 +198,7 @@ describe('getPrompt use case', () => {
   });
   it('returns error when promptId is whitespace only', async () => {
     const repo = createMockRepository();
-    const result = await getPrompt(repo, { userId: 'user-1', promptId: '   ' });
+    const result = await getPrompt(repo, { userId: 'user-1', promptId: '   ' }, { logger: mockLogger });
     expect(isErr(result)).toBe(true);
     if (isErr(result)) {
       expect(result.error.code).toBe('VALIDATION_ERROR');
@@ -199,7 +208,7 @@ describe('getPrompt use case', () => {
 describe('listPrompts use case', () => {
   it('returns empty array when no prompts', async () => {
     const repo = createMockRepository();
-    const result = await listPrompts(repo, { userId: 'user-1' });
+    const result = await listPrompts(repo, { userId: 'user-1' }, { logger: mockLogger });
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.value).toEqual([]);
@@ -210,7 +219,7 @@ describe('listPrompts use case', () => {
       { id: 'p1', title: 'P1', content: 'C1', createdAt: '', updatedAt: '' },
       { id: 'p2', title: 'P2', content: 'C2', createdAt: '', updatedAt: '' },
     ]);
-    const result = await listPrompts(repo, { userId: 'user-1' });
+    const result = await listPrompts(repo, { userId: 'user-1' }, { logger: mockLogger });
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.value).toHaveLength(2);
@@ -226,7 +235,7 @@ describe('updatePrompt use case', () => {
       userId: 'user-1',
       promptId: 'p1',
       title: 'New Title',
-    });
+    }, { logger: mockLogger });
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.value.title).toBe('New Title');
@@ -238,7 +247,7 @@ describe('updatePrompt use case', () => {
       userId: 'user-1',
       promptId: 'nonexistent',
       title: 'New Title',
-    });
+    }, { logger: mockLogger });
     expect(isErr(result)).toBe(true);
   });
   it('returns error when title is empty', async () => {
@@ -249,7 +258,7 @@ describe('updatePrompt use case', () => {
       userId: 'user-1',
       promptId: 'p1',
       title: '',
-    });
+    }, { logger: mockLogger });
     expect(isErr(result)).toBe(true);
   });
   it('returns error when promptId is empty', async () => {
@@ -260,7 +269,7 @@ describe('updatePrompt use case', () => {
       userId: 'user-1',
       promptId: '',
       title: 'New Title',
-    });
+    }, { logger: mockLogger });
     expect(isErr(result)).toBe(true);
     if (isErr(result)) {
       expect(result.error.code).toBe('VALIDATION_ERROR');
@@ -273,7 +282,7 @@ describe('updatePrompt use case', () => {
     const result = await updatePrompt(repo, {
       userId: 'user-1',
       promptId: 'p1',
-    });
+    }, { logger: mockLogger });
     expect(isErr(result)).toBe(true);
     if (isErr(result)) {
       expect(result.error.code).toBe('VALIDATION_ERROR');
@@ -288,7 +297,7 @@ describe('updatePrompt use case', () => {
       userId: 'user-1',
       promptId: 'p1',
       title: 'a'.repeat(201),
-    });
+    }, { logger: mockLogger });
     expect(isErr(result)).toBe(true);
     if (isErr(result)) {
       expect(result.error.code).toBe('VALIDATION_ERROR');
@@ -303,7 +312,7 @@ describe('updatePrompt use case', () => {
       userId: 'user-1',
       promptId: 'p1',
       content: '',
-    });
+    }, { logger: mockLogger });
     expect(isErr(result)).toBe(true);
     if (isErr(result)) {
       expect(result.error.code).toBe('VALIDATION_ERROR');
@@ -317,7 +326,7 @@ describe('updatePrompt use case', () => {
       userId: 'user-1',
       promptId: 'p1',
       content: '   ',
-    });
+    }, { logger: mockLogger });
     expect(isErr(result)).toBe(true);
     if (isErr(result)) {
       expect(result.error.code).toBe('VALIDATION_ERROR');
@@ -331,7 +340,7 @@ describe('updatePrompt use case', () => {
       userId: 'user-1',
       promptId: 'p1',
       content: 'a'.repeat(100001),
-    });
+    }, { logger: mockLogger });
     expect(isErr(result)).toBe(true);
     if (isErr(result)) {
       expect(result.error.code).toBe('VALIDATION_ERROR');
@@ -346,7 +355,7 @@ describe('updatePrompt use case', () => {
       userId: 'user-1',
       promptId: 'p1',
       content: 'New Content',
-    });
+    }, { logger: mockLogger });
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.value.content).toBe('New Content');
@@ -361,7 +370,7 @@ describe('updatePrompt use case', () => {
       promptId: 'p1',
       title: 'New Title',
       content: 'New Content',
-    });
+    }, { logger: mockLogger });
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.value.title).toBe('New Title');
@@ -376,7 +385,7 @@ describe('updatePrompt use case', () => {
       userId: 'user-1',
       promptId: 'p1',
       title: '   ',
-    });
+    }, { logger: mockLogger });
     expect(isErr(result)).toBe(true);
     if (isErr(result)) {
       expect(result.error.code).toBe('VALIDATION_ERROR');
@@ -387,7 +396,7 @@ describe('factory functions', () => {
   describe('createCreatePromptUseCase', () => {
     it('creates a bound use case that works like the original', async () => {
       const repo = createMockRepository();
-      const boundCreatePrompt = createCreatePromptUseCase(repo);
+      const boundCreatePrompt = createCreatePromptUseCase(repo, mockLogger);
       const result = await boundCreatePrompt({
         userId: 'user-1',
         title: 'Factory Test',
@@ -404,7 +413,7 @@ describe('factory functions', () => {
       const repo = createMockRepository([
         { id: 'p1', title: 'Test', content: 'C', createdAt: '', updatedAt: '' },
       ]);
-      const boundGetPrompt = createGetPromptUseCase(repo);
+      const boundGetPrompt = createGetPromptUseCase(repo, mockLogger);
       const result = await boundGetPrompt({ userId: 'user-1', promptId: 'p1' });
       expect(result.ok).toBe(true);
       if (result.ok) {
@@ -417,7 +426,7 @@ describe('factory functions', () => {
       const repo = createMockRepository([
         { id: 'p1', title: 'P1', content: 'C1', createdAt: '', updatedAt: '' },
       ]);
-      const boundListPrompts = createListPromptsUseCase(repo);
+      const boundListPrompts = createListPromptsUseCase(repo, mockLogger);
       const result = await boundListPrompts({ userId: 'user-1' });
       expect(result.ok).toBe(true);
       if (result.ok) {
@@ -430,7 +439,7 @@ describe('factory functions', () => {
       const repo = createMockRepository([
         { id: 'p1', title: 'Old', content: 'Old', createdAt: '', updatedAt: '' },
       ]);
-      const boundUpdatePrompt = createUpdatePromptUseCase(repo);
+      const boundUpdatePrompt = createUpdatePromptUseCase(repo, mockLogger);
       const result = await boundUpdatePrompt({
         userId: 'user-1',
         promptId: 'p1',

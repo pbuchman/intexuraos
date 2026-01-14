@@ -17,8 +17,13 @@ const REQUIRED_ENV = [
 
 validateRequiredEnv(REQUIRED_ENV);
 
+const sentryDsn = process.env['INTEXURAOS_SENTRY_DSN'];
+if (sentryDsn === undefined || sentryDsn === '') {
+  throw new Error('INTEXURAOS_SENTRY_DSN is required');
+}
+
 initSentry({
-  dsn: process.env['INTEXURAOS_SENTRY_DSN'],
+  dsn: sentryDsn,
   environment: process.env['INTEXURAOS_ENVIRONMENT'] ?? 'development',
   serviceName: 'calendar-agent',
 });

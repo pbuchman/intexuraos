@@ -3,6 +3,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { err, ok, type Result } from '@intexuraos/common-core';
+import type { Logger } from '@intexuraos/common-core';
 import {
   type ConnectionRepository,
   connectNotion,
@@ -15,6 +16,14 @@ import {
   type NotionConnectionPublic,
   type NotionError,
 } from '../../domain/integration/index.js';
+
+// Mock logger for testing
+const mockLogger: Logger = {
+  info: () => undefined,
+  warn: () => undefined,
+  error: () => undefined,
+  debug: () => undefined,
+};
 
 describe('notion-service domain use-cases', () => {
   // Mock data
@@ -45,7 +54,7 @@ describe('notion-service domain use-cases', () => {
       const result = await connectNotion(connectionRepository, notionApi, {
         userId: 'user-123',
         notionToken: 'token-abc',
-      });
+      }, { logger: mockLogger });
 
       expect(result.ok).toBe(true);
       if (result.ok) {
@@ -75,7 +84,7 @@ describe('notion-service domain use-cases', () => {
       const result = await connectNotion(connectionRepository, notionApi, {
         userId: 'user-123',
         notionToken: 'invalid-token',
-      });
+      }, { logger: mockLogger });
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
@@ -105,7 +114,7 @@ describe('notion-service domain use-cases', () => {
       const result = await connectNotion(connectionRepository, notionApi, {
         userId: 'user-123',
         notionToken: 'invalid-token',
-      });
+      }, { logger: mockLogger });
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
@@ -134,7 +143,7 @@ describe('notion-service domain use-cases', () => {
       const result = await connectNotion(connectionRepository, notionApi, {
         userId: 'user-123',
         notionToken: 'token-abc',
-      });
+      }, { logger: mockLogger });
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
@@ -164,7 +173,7 @@ describe('notion-service domain use-cases', () => {
       const result = await connectNotion(connectionRepository, notionApi, {
         userId: 'user-123',
         notionToken: 'token-abc',
-      });
+      }, { logger: mockLogger });
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
@@ -185,7 +194,7 @@ describe('notion-service domain use-cases', () => {
           Promise.resolve(ok(mockConnection)),
       };
 
-      const result = await getNotionStatus(connectionRepository, { userId: 'user-123' });
+      const result = await getNotionStatus(connectionRepository, { userId: 'user-123' }, { logger: mockLogger });
 
       expect(result.ok).toBe(true);
       if (result.ok) {
@@ -206,7 +215,7 @@ describe('notion-service domain use-cases', () => {
           Promise.resolve(ok(mockConnection)),
       };
 
-      const result = await getNotionStatus(connectionRepository, { userId: 'user-123' });
+      const result = await getNotionStatus(connectionRepository, { userId: 'user-123' }, { logger: mockLogger });
 
       expect(result.ok).toBe(true);
       if (result.ok) {
@@ -228,7 +237,7 @@ describe('notion-service domain use-cases', () => {
           Promise.resolve(ok(mockConnection)),
       };
 
-      const result = await getNotionStatus(connectionRepository, { userId: 'user-123' });
+      const result = await getNotionStatus(connectionRepository, { userId: 'user-123' }, { logger: mockLogger });
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
@@ -253,7 +262,7 @@ describe('notion-service domain use-cases', () => {
           Promise.resolve(ok(disconnectedConnection)),
       };
 
-      const result = await disconnectNotion(connectionRepository, { userId: 'user-123' });
+      const result = await disconnectNotion(connectionRepository, { userId: 'user-123' }, { logger: mockLogger });
 
       expect(result.ok).toBe(true);
       if (result.ok) {
@@ -272,7 +281,7 @@ describe('notion-service domain use-cases', () => {
           Promise.resolve(err(repoError)),
       };
 
-      const result = await disconnectNotion(connectionRepository, { userId: 'user-123' });
+      const result = await disconnectNotion(connectionRepository, { userId: 'user-123' }, { logger: mockLogger });
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
@@ -300,19 +309,19 @@ describe('notion-service domain use-cases', () => {
     };
 
     it('createConnectNotionUseCase returns working usecase', async () => {
-      const useCase = createConnectNotionUseCase(mockRepo, mockApi);
+      const useCase = createConnectNotionUseCase(mockRepo, mockApi, mockLogger);
       const result = await useCase({ userId: 'user-123', notionToken: 'token-abc' });
       expect(result.ok).toBe(true);
     });
 
     it('createGetNotionStatusUseCase returns working usecase', async () => {
-      const useCase = createGetNotionStatusUseCase(mockRepo);
+      const useCase = createGetNotionStatusUseCase(mockRepo, mockLogger);
       const result = await useCase({ userId: 'user-123' });
       expect(result.ok).toBe(true);
     });
 
     it('createDisconnectNotionUseCase returns working usecase', async () => {
-      const useCase = createDisconnectNotionUseCase(mockRepo);
+      const useCase = createDisconnectNotionUseCase(mockRepo, mockLogger);
       const result = await useCase({ userId: 'user-123' });
       expect(result.ok).toBe(true);
     });

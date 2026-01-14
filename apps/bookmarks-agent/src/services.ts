@@ -1,3 +1,4 @@
+import pino from 'pino';
 import type { BookmarkRepository } from './domain/ports/bookmarkRepository.js';
 import type { LinkPreviewFetcherPort } from './domain/ports/linkPreviewFetcher.js';
 import { FirestoreBookmarkRepository } from './infra/firestore/firestoreBookmarkRepository.js';
@@ -28,6 +29,7 @@ export function initServices(config: ServiceConfig): void {
     linkPreviewFetcher: createWebAgentClient({
       baseUrl: config.webAgentUrl,
       internalAuthToken: config.internalAuthToken,
+      logger: pino({ name: 'webAgentClient' }),
     }),
     enrichPublisher: createEnrichPublisher({
       projectId: config.gcpProjectId,

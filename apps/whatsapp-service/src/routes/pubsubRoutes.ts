@@ -6,12 +6,13 @@ import type { FastifyPluginCallback, FastifyRequest, FastifyReply } from 'fastif
 import { validateInternalAuth, logIncomingRequest } from '@intexuraos/common-http';
 import { getServices } from '../services.js';
 import type {
+  ExtractLinkPreviewsEvent,
   MediaCleanupEvent,
   SendMessageEvent,
   TranscribeAudioEvent,
   WebhookProcessEvent,
 } from '../domain/whatsapp/index.js';
-import { TranscribeAudioUseCase } from '../domain/whatsapp/index.js';
+import { ExtractLinkPreviewsUseCase, TranscribeAudioUseCase } from '../domain/whatsapp/index.js';
 import { getErrorMessage } from '@intexuraos/common-core';
 import type { Config } from '../config.js';
 import { processWebhookEvent } from './webhookRoutes.js';
@@ -539,9 +540,9 @@ export function createPubsubRoutes(config: Config): FastifyPluginCallback {
       {
         schema: {
           operationId: 'processWebhookEvent',
-          summary: 'Process webhook event from PubSub',
+          summary: 'Process webhook or link preview event from PubSub',
           description:
-            'Internal endpoint for PubSub push. Receives webhook events and processes them synchronously.',
+            'Internal endpoint for PubSub push. Handles two event types: webhook.process (processes WhatsApp webhook events) and linkpreview.extract (extracts Open Graph metadata from URLs in messages).',
           tags: ['internal'],
           body: {
             type: 'object',
@@ -612,39 +613,81 @@ export function createPubsubRoutes(config: Config): FastifyPluginCallback {
         }
 
         const parsedType = eventData.type as string;
-        if (parsedType !== 'whatsapp.webhook.process') {
-          request.log.warn({ type: parsedType }, 'Unexpected event type');
+
+        if (parsedType === 'whatsapp.webhook.process') {
+          request.log.info(
+            {
+              pubsubMessageId: body.message.messageId,
+              eventId: eventData.eventId,
+              phoneNumberId: eventData.phoneNumberId,
+            },
+            'Processing webhook event'
+          );
+
+          try {
+            const payload = JSON.parse(eventData.payload) as WebhookPayload;
+
+            const mockRequest = {
+              body: payload,
+              log: request.log,
+            } as FastifyRequest<{ Body: WebhookPayload }>;
+
+            await processWebhookEvent(mockRequest, { id: eventData.eventId }, config);
+
+            request.log.info({ eventId: eventData.eventId }, 'Webhook processing completed');
+          } catch (error) {
+            request.log.error(
+              { eventId: eventData.eventId, error: getErrorMessage(error) },
+              'Failed to process webhook event'
+            );
+          }
+
           return { success: true };
         }
 
-        request.log.info(
-          {
-            pubsubMessageId: body.message.messageId,
-            eventId: eventData.eventId,
-            phoneNumberId: eventData.phoneNumberId,
-          },
-          'Processing webhook event'
-        );
+        if (parsedType === 'whatsapp.linkpreview.extract') {
+          const linkPreviewEvent = eventData as unknown as ExtractLinkPreviewsEvent;
 
-        try {
-          const payload = JSON.parse(eventData.payload) as WebhookPayload;
-
-          // Create a mock request with the properties that processWebhookEvent needs
-          const mockRequest = {
-            body: payload,
-            log: request.log,
-          } as FastifyRequest<{ Body: WebhookPayload }>;
-
-          await processWebhookEvent(mockRequest, { id: eventData.eventId }, config);
-
-          request.log.info({ eventId: eventData.eventId }, 'Webhook processing completed');
-        } catch (error) {
-          request.log.error(
-            { eventId: eventData.eventId, error: getErrorMessage(error) },
-            'Failed to process webhook event'
+          request.log.info(
+            {
+              pubsubMessageId: body.message.messageId,
+              messageId: linkPreviewEvent.messageId,
+              userId: linkPreviewEvent.userId,
+            },
+            'Processing link preview extraction event'
           );
+
+          try {
+            const services = getServices();
+            const extractLinkPreviewsUseCase = new ExtractLinkPreviewsUseCase({
+              messageRepository: services.messageRepository,
+              linkPreviewFetcher: services.linkPreviewFetcher,
+            });
+
+            await extractLinkPreviewsUseCase.execute(
+              {
+                messageId: linkPreviewEvent.messageId,
+                userId: linkPreviewEvent.userId,
+                text: linkPreviewEvent.text,
+              },
+              request.log
+            );
+
+            request.log.info(
+              { messageId: linkPreviewEvent.messageId },
+              'Link preview extraction completed'
+            );
+          } catch (error) {
+            request.log.error(
+              { messageId: linkPreviewEvent.messageId, error: getErrorMessage(error) },
+              'Failed to extract link previews'
+            );
+          }
+
+          return { success: true };
         }
 
+        request.log.warn({ type: parsedType }, 'Unexpected event type');
         return { success: true };
       }
     );

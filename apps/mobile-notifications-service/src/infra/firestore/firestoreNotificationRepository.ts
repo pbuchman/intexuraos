@@ -4,6 +4,7 @@
  */
 import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
 import { getFirestore } from '@intexuraos/infra-firestore';
+import pino from 'pino';
 import type {
   CreateNotificationInput,
   Notification,
@@ -12,6 +13,10 @@ import type {
   PaginationOptions,
   RepositoryError,
 } from '../../domain/notifications/index.js';
+
+const logger = pino({
+  name: 'FirestoreNotificationRepository',
+});
 
 const COLLECTION_NAME = 'mobile_notifications';
 
@@ -87,8 +92,11 @@ export class FirestoreNotificationRepository implements NotificationRepository {
         ...doc,
       };
 
+      logger.info({ notificationId: input.notificationId, docId: docRef.id }, 'Saved notification');
+
       return ok(notification);
     } catch (error) {
+      logger.error({ notificationId: input.notificationId, error }, 'Failed to save notification');
       return err({
         code: 'INTERNAL_ERROR',
         message: getErrorMessage(error, 'Failed to save notification'),
@@ -128,6 +136,8 @@ export class FirestoreNotificationRepository implements NotificationRepository {
       const db = getFirestore();
       const titleFilter = options.filter?.title?.toLowerCase();
       const hasTitleFilter = titleFilter !== undefined && titleFilter !== '';
+
+      logger.info({ userId, limit: options.limit, hasTitleFilter }, 'Querying notifications');
 
       // Build base query with DB-level filters
       const buildQuery = (cursor?: string): FirebaseFirestore.Query => {
@@ -199,6 +209,8 @@ export class FirestoreNotificationRepository implements NotificationRepository {
 
       const result: PaginatedNotifications = { notifications };
 
+      logger.info({ userId, resultCount: notifications.length, hasNextPage: result.nextCursor !== undefined }, 'Query completed');
+
       // Set next cursor if there might be more results
       // Use currentCursor (DB position) so user can continue even if 0 results matched filter
       if (hasMoreInDb && currentCursor !== undefined) {
@@ -207,6 +219,7 @@ export class FirestoreNotificationRepository implements NotificationRepository {
 
       return ok(result);
     } catch (error) {
+      logger.error({ userId, error }, 'Failed to list notifications');
       return err({
         code: 'INTERNAL_ERROR',
         message: getErrorMessage(error, 'Failed to list notifications'),
@@ -227,8 +240,12 @@ export class FirestoreNotificationRepository implements NotificationRepository {
         .limit(1)
         .get();
 
-      return ok(!snapshot.empty);
+      const exists = !snapshot.empty;
+      logger.info({ notificationId, userId, exists }, 'Checked notification existence (idempotency)');
+
+      return ok(exists);
     } catch (error) {
+      logger.error({ notificationId, userId, error }, 'Failed to check notification existence');
       return err({
         code: 'INTERNAL_ERROR',
         message: getErrorMessage(error, 'Failed to check notification existence'),
