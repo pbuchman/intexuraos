@@ -53,6 +53,7 @@ export class FakeResearchRepository implements ResearchRepository {
   private failNextDelete = false;
   private failNextUpdate = false;
   private failNextUpdateLlmResult = false;
+  private failNextClearShareInfo = false;
 
   async save(research: Research): Promise<Result<Research, RepositoryError>> {
     if (this.failNextSave) {
@@ -137,6 +138,10 @@ export class FakeResearchRepository implements ResearchRepository {
   }
 
   async clearShareInfo(id: string): Promise<Result<Research, RepositoryError>> {
+    if (this.failNextClearShareInfo) {
+      this.failNextClearShareInfo = false;
+      return err({ code: 'FIRESTORE_ERROR', message: 'Unknown error clearing share info' });
+    }
     const existing = this.researches.get(id);
     if (existing === undefined) {
       return err({ code: 'NOT_FOUND', message: 'Research not found' });
@@ -166,6 +171,10 @@ export class FakeResearchRepository implements ResearchRepository {
 
   setFailNextUpdateLlmResult(fail: boolean): void {
     this.failNextUpdateLlmResult = fail;
+  }
+
+  setFailNextClearShareInfo(fail: boolean): void {
+    this.failNextClearShareInfo = fail;
   }
 
   addResearch(research: Research): void {
