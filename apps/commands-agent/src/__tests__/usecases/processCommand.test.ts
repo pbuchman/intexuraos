@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { ok } from '@intexuraos/common-core';
-import type { LlmGenerateClient } from '@intexuraos/llm-factory';
+import type { Result } from '@intexuraos/common-core';
+import type { LlmGenerateClient, GenerateResult, LLMError } from '@intexuraos/llm-factory';
 import { createProcessCommandUseCase } from '../../domain/usecases/processCommand.js';
 import {
   FakeCommandRepository,
@@ -20,8 +21,8 @@ describe('processCommand usecase', () => {
   const logger = pino({ name: 'test', level: 'silent' });
 
   // Create a fake LLM client for use in tests
-  const createFakeLlmClient = (fakeClassifier: FakeClassifier): LlmGenerateClient => ({
-    async generate(_prompt: string) {
+  const createFakeLlmClient: (fakeClassifier: FakeClassifier) => LlmGenerateClient = (fakeClassifier: FakeClassifier): LlmGenerateClient => ({
+    async generate(_prompt: string): Promise<Result<GenerateResult, LLMError>> {
       const result = await fakeClassifier.classify('');
       if (result.type === 'unclassified') {
         return ok({
