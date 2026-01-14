@@ -1,6 +1,6 @@
 {
   "name": "@intexuraos/user-service",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "private": true,
   "type": "module",
   "engines": {
@@ -19,6 +19,8 @@
     "@fastify/swagger-ui": "^5.2.1",
     "@intexuraos/common-core": "workspace:*",
     "@intexuraos/common-http": "workspace:*",
+    "@intexuraos/http-contracts": "workspace:*",
+    "@intexuraos/http-server": "workspace:*",
     "@intexuraos/infra-claude": "workspace:*",
     "@intexuraos/infra-firestore": "workspace:*",
     "@intexuraos/infra-gemini": "workspace:*",
@@ -26,13 +28,11 @@
     "@intexuraos/infra-gpt": "workspace:*",
     "@intexuraos/infra-perplexity": "workspace:*",
     "@intexuraos/infra-sentry": "workspace:*",
-    "@intexuraos/http-contracts": "workspace:*",
-    "@intexuraos/http-server": "workspace:*",
     "@intexuraos/llm-contract": "workspace:*",
     "@intexuraos/llm-pricing": "workspace:*",
     "fastify": "^5.1.0",
     "firebase-admin": "^13.0.2",
-    "pino": "^10.1.0",
+    "pino": "^10.1.1",
     "zod": "^3.24.1"
   },
   "devDependencies": {

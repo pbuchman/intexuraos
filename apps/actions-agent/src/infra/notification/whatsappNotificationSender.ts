@@ -1,61 +1,45 @@
-import type { Result } from '@intexuraos/common-core';
-import { err, getErrorMessage, ok } from '@intexuraos/common-core';
-import type { Logger } from '@intexuraos/common-core';
+/**
+ * WhatsApp notification sender using Pub/Sub for message delivery.
+ * Messages are published to the whatsapp-send topic which whatsapp-service processes.
+ * Phone number lookup is handled internally by whatsapp-service.
+ */
+
+import {
+  createWhatsAppSendPublisher,
+  type WhatsAppSendPublisher,
+  type WhatsAppSendPublisherConfig,
+} from '@intexuraos/infra-pubsub';
+import { ok, type Result } from '@intexuraos/common-core';
 import type { NotificationSender } from '../../domain/ports/notificationSender.js';
 
-export interface WhatsappNotificationSenderConfig {
-  userServiceUrl: string;
-  internalAuthToken: string;
-  logger: Logger;
+export class WhatsAppNotificationSender implements NotificationSender {
+  private readonly publisher: WhatsAppSendPublisher;
+
+  constructor(config: WhatsAppSendPublisherConfig) {
+    this.publisher = createWhatsAppSendPublisher(config);
+  }
+
+  async sendDraftReady(
+    userId: string,
+    researchId: string,
+    title: string,
+    draftUrl: string
+  ): Promise<Result<void>> {
+    const displayTitle = title !== '' ? title : 'Untitled Research';
+    const message = `Research Complete!\n\n"${displayTitle}"\n${draftUrl}`;
+
+    await this.publisher.publishSendMessage({
+      userId,
+      message,
+      correlationId: `research-draft-ready-${researchId}`,
+    });
+
+    return ok(undefined);
+  }
 }
 
 export function createWhatsappNotificationSender(
-  config: WhatsappNotificationSenderConfig
+  config: WhatsAppSendPublisherConfig
 ): NotificationSender {
-  return {
-    async sendDraftReady(
-      userId: string,
-      researchId: string,
-      title: string,
-      draftUrl: string
-    ): Promise<Result<void>> {
-      const { logger } = config;
-
-      logger.info({ userId, researchId, title }, 'Sending draft ready notification');
-
-      try {
-        const response = await fetch(`${config.userServiceUrl}/internal/users/${userId}/notify`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-Internal-Auth': config.internalAuthToken,
-          },
-          body: JSON.stringify({
-            type: 'research_ready',
-            message: `Your research "${title}" is ready! View it here: ${draftUrl}`,
-            metadata: {
-              researchId,
-              title,
-              draftUrl,
-            },
-          }),
-        });
-
-        if (!response.ok) {
-          logger.error(
-            { userId, researchId, status: response.status, statusText: response.statusText },
-            'Failed to send notification'
-          );
-          return err(new Error(`HTTP ${String(response.status)}: Failed to send notification`));
-        }
-
-        logger.info({ userId, researchId }, 'Draft ready notification sent successfully');
-        return ok(undefined);
-      } catch (error) {
-        const errorMessage = getErrorMessage(error);
-        logger.error({ userId, researchId, error: errorMessage }, 'Network error sending notification');
-        return err(new Error(`Network error: ${errorMessage}`));
-      }
-    },
-  };
+  return new WhatsAppNotificationSender(config);
 }

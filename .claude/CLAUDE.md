@@ -400,6 +400,50 @@ gh pr create --base development  # or --base main if development doesn't exist
 
 ---
 
+## Linear Issue Workflow
+
+Use the `/linear` command for issue tracking and workflow management.
+
+**When "linear" appears in context**, the agent should reference `/linear` for issue creation and workflow.
+
+**Usage:**
+
+```bash
+/linear                    # Pick random backlog issue (cron mode)
+/linear <task description> # Create new issue
+/linear LIN-123            # Work on existing issue
+/linear <sentry-url>       # Create from Sentry error
+```
+
+**Examples:**
+
+```bash
+/linear Fix authentication token not refreshing
+/linear LIN-42
+/linear https://intexuraos-dev-pbuchman.sentry.io/issues/123/
+```
+
+**Mandatory Requirements:**
+
+1. All bugs/features must have corresponding Linear issues
+2. PR descriptions must link to Linear issues (`Fixes LIN-XXX`)
+3. Reasoning belongs in PR descriptions, not code comments
+4. State transitions happen automatically: Backlog → In Progress → In Review → Done
+5. `pnpm run ci:tracked` MUST pass before PR creation (unless explicitly overridden)
+
+**Cross-Linking Protocol:**
+
+| Direction | Method |
+|-----------|--------|
+| Linear → GitHub | `Fixes LIN-XXX` in PR body |
+| GitHub → Linear | PR URL in issue comments |
+| Sentry → Linear | `[sentry] <title>` naming + link in description |
+| Linear → Sentry | Comment on Sentry issue |
+
+**See:** `.claude/commands/linear.md` for complete workflow documentation.
+
+---
+
 ## Complex Tasks — Continuity Workflow
 
 For multi-step features, use numbered directories in `continuity/`. See [continuity/README.md](../continuity/README.md).

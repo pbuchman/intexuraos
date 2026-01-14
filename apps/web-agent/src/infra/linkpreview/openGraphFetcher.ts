@@ -1,4 +1,4 @@
-import { err, ok, type Result } from '@intexuraos/common-core';
+import { err, getLogLevel, ok, type Result } from '@intexuraos/common-core';
 import type { LinkPreviewFetcherPort } from '../../domain/linkpreview/ports/linkPreviewFetcher.js';
 import type { LinkPreview, LinkPreviewError } from '../../domain/linkpreview/models/LinkPreview.js';
 import type { Logger } from 'pino';
@@ -57,7 +57,7 @@ function resolveImageUrl(imageUrl: string | undefined, baseUrl: string): string 
 }
 
 function createDefaultLogger(): Logger {
-  return pino({ name: 'OpenGraphFetcher', level: 'info' });
+  return pino({ name: 'OpenGraphFetcher', level: getLogLevel() });
 }
 
 export class OpenGraphFetcher implements LinkPreviewFetcherPort {

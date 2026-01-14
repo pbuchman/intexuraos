@@ -6,6 +6,7 @@
  * POST /internal/users/:uid/llm-keys/:provider/last-used - Update last used timestamp
  * GET /internal/users/:uid/research-settings - Get research settings for a user
  * GET /internal/users/:uid/oauth/google/token - Get valid Google OAuth token for a user
+ * GET /internal/users/:uid/settings - Get user LLM preferences (default model)
  */
 
 import type { FastifyPluginCallback, FastifyReply, FastifyRequest } from 'fastify';
@@ -265,6 +266,84 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       return {
         accessToken: result.value.accessToken,
         email: result.value.email,
+      };
+    }
+  );
+
+  // GET /internal/users/:uid/settings
+  fastify.get(
+    '/internal/users/:uid/settings',
+    {
+      schema: {
+        operationId: 'getInternalUserSettings',
+        summary: 'Get user LLM preferences (internal)',
+        description:
+          'Internal endpoint for service-to-service communication. Returns user LLM preferences including default model.',
+        tags: ['internal'],
+        params: {
+          type: 'object',
+          properties: {
+            uid: { type: 'string', description: 'User ID' },
+          },
+          required: ['uid'],
+        },
+        response: {
+          200: {
+            description: 'User LLM preferences',
+            type: 'object',
+            properties: {
+              llmPreferences: {
+                type: 'object',
+                properties: {
+                  defaultModel: { type: 'string' },
+                },
+              },
+            },
+          },
+          401: {
+            description: 'Unauthorized',
+            type: 'object',
+            properties: {
+              error: { type: 'string' },
+            },
+          },
+        },
+      },
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      logIncomingRequest(request, {
+        message: 'Received request to /internal/users/:uid/settings',
+        bodyPreviewLength: 200,
+        includeParams: true,
+      });
+
+      const authResult = validateInternalAuth(request);
+      if (!authResult.valid) {
+        request.log.warn(
+          { reason: authResult.reason },
+          'Internal auth failed for users/:uid/settings endpoint'
+        );
+        reply.status(401);
+        return { error: 'Unauthorized' };
+      }
+
+      const params = request.params as { uid: string };
+      const { userSettingsRepository } = getServices();
+
+      const result = await userSettingsRepository.getSettings(params.uid);
+
+      if (!result.ok) {
+        request.log.error(
+          { userId: params.uid, error: result.error.message },
+          'Failed to fetch user settings'
+        );
+        // Return empty preferences on error instead of failing
+        return { llmPreferences: undefined };
+      }
+
+      const settings = result.value;
+      return {
+        llmPreferences: settings?.llmPreferences,
       };
     }
   );

@@ -75,7 +75,14 @@ If exemptions were found, append them to `docs/coverage/unreachable.md` using th
 
 #### 3.2: Create Linear Issues via MCP
 
-**Use the Linear MCP tools to create issues.** Linear is available via MCP integration.
+**IMPORTANT**: Use `/linear` command for issue creation to maintain workflow consistency.
+
+**Use the Linear MCP tools to create issues** or invoke `/linear <task description>`. Linear is available via MCP integration.
+
+**When using `/linear`:**
+- The command will automatically detect this is a coverage-related task
+- State management and cross-linking are handled automatically
+- Issue naming follows the `[coverage][<app>]` pattern
 
 **Naming Convention (MANDATORY):**
 
@@ -113,28 +120,59 @@ Every Linear issue MUST contain the following sections. This is non-negotiable:
    git checkout -b fix/coverage-<descriptive-name> origin/development
    \`\`\`
 
-2. Write tests to cover the identified branches in \`<test-file-path>\`
+2. **Investigate the uncovered branches**:
+   - Read the source code to understand what each branch does
+   - Determine if the branch is **truly unreachable** (guarded by other conditions, TypeScript narrowing, defensive coding for impossible states)
+   - OR if it is **testable** (requires test setup/fake configuration)
 
-3. Verify the fix:
+3. **If the branch is truly unreachable**:
+   - Add an entry to \`docs/coverage/unreachable.md\` following the existing format
+   - Include the line number, branch description, and reason why it cannot be reached
+   - Example:
+     \`\`\`markdown
+     ### \`apps/<service>/src/path/to/file.ts\`
+
+     - **Lines 45-48**: Defensive check for `undefined` user ID
+       - _Reason:_ Guaranteed by \`authMiddleware\` upstream. Cannot simulate without mocking internal framework internals.
+     \`\`\`
+
+4. **If the branch is testable**:
+   - Write tests to cover the identified branches in \`<test-file-path>\`
+   - Add necessary fake configuration if required (e.g., \`setFailXxx()\` methods)
+
+5. Verify the fix:
    \`\`\`bash
    pnpm run ci:tracked
    \`\`\`
    This command MUST pass before proceeding.
 
-4. Commit, push, and create PR:
+6. **Commit and push**:
    \`\`\`bash
    git add -A && git commit -m "[coverage] Add tests for <description>"
    git push -u origin fix/coverage-<descriptive-name>
-   gh pr create --base development --title "[coverage] <description>" --body "Closes <this-issue>"
    \`\`\`
 
-5. Verify CI passes on the PR before requesting review.
+7. **Create PR with clear description**:
+   - If you added tests: Use standard PR format
+   - **If you found unreachable branches**: The PR description MUST include an "Unreachable Branches" section:
+     \`\`\`markdown
+     ## Unreachable Branches
+
+     The following branches were identified as unreachable and have been added to \`docs/coverage/unreachable.md\`:
+
+     | File | Lines | Reason |
+     |------|-------|--------|
+     | apps/whatsapp-service/src/routes/webhookRoutes.ts | 492 | Guarded by validation at line 341 - text messages without body return early |
+     \`\`\`
+
+8. Verify CI passes on the PR before requesting review.
 
 **## Acceptance Criteria**
 
-- [ ] All identified branches are now covered
+- [ ] All identified branches are either covered OR added to \`docs/coverage/unreachable.md\`
 - [ ] \`pnpm run ci:tracked\` passes locally
 - [ ] PR CI checks pass
+- [ ] PR description clearly explains any unreachable branches (if applicable)
 - [ ] No coverage threshold modifications
 
 ---

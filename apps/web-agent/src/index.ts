@@ -3,11 +3,19 @@ import { getErrorMessage } from '@intexuraos/common-core';
 import { buildServer } from './server.js';
 import { initServices } from './services.js';
 
-initSentry({
-  dsn: process.env['INTEXURAOS_SENTRY_DSN'],
-  environment: process.env['INTEXURAOS_ENVIRONMENT'] ?? 'development',
-  serviceName: 'web-agent',
-});
+const sentryDsn = process.env['INTEXURAOS_SENTRY_DSN'];
+initSentry(
+  sentryDsn === undefined
+    ? {
+        environment: process.env['INTEXURAOS_ENVIRONMENT'] ?? 'development',
+        serviceName: 'web-agent',
+      }
+    : {
+        dsn: sentryDsn,
+        environment: process.env['INTEXURAOS_ENVIRONMENT'] ?? 'development',
+        serviceName: 'web-agent',
+      }
+);
 
 const PORT = Number(process.env['PORT'] ?? 8080);
 const HOST = process.env['HOST'] ?? '0.0.0.0';

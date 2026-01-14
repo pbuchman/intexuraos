@@ -237,3 +237,224 @@ describe('sendToSentry', () => {
     );
   });
 });
+
+describe('createSentryStream - sendLogToSentry internal function', () => {
+  beforeEach(() => {
+    const { captureException, captureMessage } = getMockedSentry();
+    captureException.mockClear();
+    captureMessage.mockClear();
+    process.env = { ...originalEnv };
+  });
+
+  afterEach(() => {
+    process.env = originalEnv;
+  });
+
+  it('ignores logs with level below warn (40)', () => {
+    process.env['INTEXURAOS_SENTRY_DSN'] = 'https://test@sentry.io/123';
+    const { captureException, captureMessage } = getMockedSentry();
+
+    const mockMultistream = { streams: [] } as unknown as ReturnType<
+      typeof import('pino').multistream
+    >;
+
+    const result = createSentryStream(mockMultistream);
+    const ms = result as unknown as {
+      streams: { level: number; stream: { write: (data: string) => void } }[];
+    };
+
+    // Info log (level 30) should be ignored
+    const infoLog = JSON.stringify({ level: 30, msg: 'Info message' });
+    ms.streams[0]?.stream.write(infoLog);
+
+    expect(captureException).not.toHaveBeenCalled();
+    expect(captureMessage).not.toHaveBeenCalled();
+  });
+
+  it('ignores logs with undefined level', () => {
+    process.env['INTEXURAOS_SENTRY_DSN'] = 'https://test@sentry.io/123';
+    const { captureException, captureMessage } = getMockedSentry();
+
+    const mockMultistream = { streams: [] } as unknown as ReturnType<
+      typeof import('pino').multistream
+    >;
+
+    const result = createSentryStream(mockMultistream);
+    const ms = result as unknown as {
+      streams: { level: number; stream: { write: (data: string) => void } }[];
+    };
+
+    // Log without level should be ignored
+    const logWithoutLevel = JSON.stringify({ msg: 'Message without level' });
+    ms.streams[0]?.stream.write(logWithoutLevel);
+
+    expect(captureException).not.toHaveBeenCalled();
+    expect(captureMessage).not.toHaveBeenCalled();
+  });
+
+  it('captures warn level logs as message', () => {
+    process.env['INTEXURAOS_SENTRY_DSN'] = 'https://test@sentry.io/123';
+    const { captureMessage } = getMockedSentry();
+
+    const mockMultistream = { streams: [] } as unknown as ReturnType<
+      typeof import('pino').multistream
+    >;
+
+    const result = createSentryStream(mockMultistream);
+    const ms = result as unknown as {
+      streams: { level: number; stream: { write: (data: string) => void } }[];
+    };
+
+    const warnLog = JSON.stringify({ level: 40, msg: 'Warning message', userId: '123' });
+    ms.streams[0]?.stream.write(warnLog);
+
+    expect(captureMessage.mock.calls[0]?.[0]).toBe('Warning message');
+  });
+
+  it('handles error logs with err object containing stack and message', () => {
+    process.env['INTEXURAOS_SENTRY_DSN'] = 'https://test@sentry.io/123';
+    const { captureException } = getMockedSentry();
+
+    const mockMultistream = { streams: [] } as unknown as ReturnType<
+      typeof import('pino').multistream
+    >;
+
+    const result = createSentryStream(mockMultistream);
+    const ms = result as unknown as {
+      streams: { level: number; stream: { write: (data: string) => void } }[];
+    };
+
+    const testStack = 'Error: Test error\n    at test.js:10:15';
+    const errorMessage = 'Original error from application';
+    const errorLog = JSON.stringify({
+      level: 50,
+      msg: 'Error occurred',
+      err: { stack: testStack, message: errorMessage },
+    });
+
+    ms.streams[0]?.stream.write(errorLog);
+
+    const capturedError = captureException.mock.calls[0]?.[0] as Error;
+    expect(capturedError).toBeInstanceOf(Error);
+    expect(capturedError.stack).toBe(testStack);
+    expect(capturedError.message).toBe(errorMessage);
+  });
+
+  it('handles error logs with err object containing only stack', () => {
+    process.env['INTEXURAOS_SENTRY_DSN'] = 'https://test@sentry.io/123';
+    const { captureException } = getMockedSentry();
+
+    const mockMultistream = { streams: [] } as unknown as ReturnType<
+      typeof import('pino').multistream
+    >;
+
+    const result = createSentryStream(mockMultistream);
+    const ms = result as unknown as {
+      streams: { level: number; stream: { write: (data: string) => void } }[];
+    };
+
+    const testStack = 'Error: Stack only\n    at test.js:5:10';
+    const errorLog = JSON.stringify({
+      level: 50,
+      msg: 'Error with stack only',
+      err: { stack: testStack },
+    });
+
+    ms.streams[0]?.stream.write(errorLog);
+
+    const capturedError = captureException.mock.calls[0]?.[0] as Error;
+    expect(capturedError.stack).toBe(testStack);
+    // Message should come from msg when err.message is not present
+    expect(capturedError.message).toBe('Error with stack only');
+  });
+
+  it('handles error logs with err object containing only message', () => {
+    process.env['INTEXURAOS_SENTRY_DSN'] = 'https://test@sentry.io/123';
+    const { captureException } = getMockedSentry();
+
+    const mockMultistream = { streams: [] } as unknown as ReturnType<
+      typeof import('pino').multistream
+    >;
+
+    const result = createSentryStream(mockMultistream);
+    const ms = result as unknown as {
+      streams: { level: number; stream: { write: (data: string) => void } }[];
+    };
+
+    const errorMessage = 'Error message from err object';
+    const errorLog = JSON.stringify({
+      level: 50,
+      msg: 'Generic error',
+      err: { message: errorMessage },
+    });
+
+    ms.streams[0]?.stream.write(errorLog);
+
+    const capturedError = captureException.mock.calls[0]?.[0] as Error;
+    expect(capturedError.message).toBe(errorMessage);
+  });
+
+  it('handles fatal level logs (60)', () => {
+    process.env['INTEXURAOS_SENTRY_DSN'] = 'https://test@sentry.io/123';
+    const { captureException } = getMockedSentry();
+
+    const mockMultistream = { streams: [] } as unknown as ReturnType<
+      typeof import('pino').multistream
+    >;
+
+    const result = createSentryStream(mockMultistream);
+    const ms = result as unknown as {
+      streams: { level: number; stream: { write: (data: string) => void } }[];
+    };
+
+    const fatalLog = JSON.stringify({ level: 60, msg: 'Fatal error' });
+    ms.streams[0]?.stream.write(fatalLog);
+
+    expect(captureException).toHaveBeenCalled();
+  });
+
+  it('handles malformed JSON gracefully', () => {
+    process.env['INTEXURAOS_SENTRY_DSN'] = 'https://test@sentry.io/123';
+    const { captureException, captureMessage } = getMockedSentry();
+
+    const mockMultistream = { streams: [] } as unknown as ReturnType<
+      typeof import('pino').multistream
+    >;
+
+    const result = createSentryStream(mockMultistream);
+    const ms = result as unknown as {
+      streams: { level: number; stream: { write: (data: string) => void } }[];
+    };
+
+    // Malformed JSON should not throw
+    expect(() => ms.streams[0]?.stream.write('not valid json')).not.toThrow();
+    expect(captureException).not.toHaveBeenCalled();
+    expect(captureMessage).not.toHaveBeenCalled();
+  });
+
+  it('adds extra context from log entries', () => {
+    process.env['INTEXURAOS_SENTRY_DSN'] = 'https://test@sentry.io/123';
+    const { captureException } = getMockedSentry();
+
+    const mockMultistream = { streams: [] } as unknown as ReturnType<
+      typeof import('pino').multistream
+    >;
+
+    const result = createSentryStream(mockMultistream);
+    const ms = result as unknown as {
+      streams: { level: number; stream: { write: (data: string) => void } }[];
+    };
+
+    const errorLog = JSON.stringify({
+      level: 50,
+      msg: 'Error with context',
+      userId: 'user-123',
+      requestId: 'req-456',
+    });
+
+    ms.streams[0]?.stream.write(errorLog);
+
+    // The withScope mock should have been called with the extra context
+    expect(captureException).toHaveBeenCalled();
+  });
+});
