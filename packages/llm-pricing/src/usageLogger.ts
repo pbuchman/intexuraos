@@ -17,6 +17,7 @@
  */
 
 import { getFirestore, FieldValue } from '@intexuraos/infra-firestore';
+import type { Logger } from '@intexuraos/common-core';
 import type { NormalizedUsage } from '@intexuraos/llm-contract';
 import type { LlmProvider } from './types.js';
 
@@ -72,6 +73,7 @@ export type CallType =
  *     webSearchCalls: 3,
  *   },
  *   success: true,
+ *   logger: pinoLogger, // Optional pino logger
  * };
  * ```
  */
@@ -90,6 +92,8 @@ export interface UsageLogParams {
   success: boolean;
   /** Error message if success is false */
   errorMessage?: string;
+  /** Optional pino logger for structured logging */
+  logger?: Logger;
 }
 
 /**
@@ -135,6 +139,9 @@ export function isUsageLoggingEnabled(): boolean {
  * @example
  * ```ts
  * import { logUsage } from '@intexuraos/llm-pricing';
+ * import pino from 'pino';
+ *
+ * const logger = pino({ name: 'my-service' });
  *
  * await logUsage({
  *   userId: 'user-123',
@@ -148,6 +155,7 @@ export function isUsageLoggingEnabled(): boolean {
  *     costUsd: 0.0105,
  *   },
  *   success: true,
+ *   logger, // Pass pino logger for structured logging
  * });
  * ```
  *
@@ -156,27 +164,27 @@ export function isUsageLoggingEnabled(): boolean {
 export async function logUsage(params: UsageLogParams): Promise<void> {
   if (!isUsageLoggingEnabled()) return;
 
-  // Skip console logging in tests
-  if (process.env['NODE_ENV'] !== 'test') {
-    // Structured log for Cloud Logging (visible in real-time)
-    // eslint-disable-next-line no-console
-    console.info(
-      JSON.stringify({
-        severity: 'INFO',
-        message: 'LLM usage logged',
-        llmUsage: {
-          userId: params.userId,
-          provider: params.provider,
-          model: params.model,
-          callType: params.callType,
-          inputTokens: params.usage.inputTokens,
-          outputTokens: params.usage.outputTokens,
-          totalTokens: params.usage.totalTokens,
-          costUsd: params.usage.costUsd,
-          success: params.success,
-          ...(params.errorMessage !== undefined && { errorMessage: params.errorMessage }),
-        },
-      })
+  const { logger } = params;
+
+  if (logger !== undefined && process.env['NODE_ENV'] !== 'test') {
+    const successText = params.success ? 'succeeded' : 'failed';
+    const errorText = params.errorMessage !== undefined ? `: ${params.errorMessage}` : '';
+    const msg = `LLM ${params.callType} call (${params.provider}/${params.model}) ${successText}${errorText}`;
+
+    logger.info(
+      {
+        userId: params.userId,
+        provider: params.provider,
+        model: params.model,
+        callType: params.callType,
+        inputTokens: params.usage.inputTokens,
+        outputTokens: params.usage.outputTokens,
+        totalTokens: params.usage.totalTokens,
+        costUsd: params.usage.costUsd,
+        success: params.success,
+        ...(params.errorMessage !== undefined && { errorMessage: params.errorMessage }),
+      },
+      msg
     );
   }
 

@@ -231,17 +231,85 @@ describe('usageLogger', () => {
       expect(periodSetCall?.[1].failedCalls).toEqual({ _increment: 1 });
     });
 
-    it('skips console logging in test environment', async () => {
+    it('skips logging when logger is provided but NODE_ENV is test', async () => {
       mockTransaction.get.mockResolvedValue({ exists: false, data: () => undefined });
-      const consoleSpy = vi.spyOn(console, 'info').mockImplementation(() => undefined);
+      const mockLogger = {
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+        debug: vi.fn(),
+      };
       const originalNodeEnv = process.env['NODE_ENV'];
       process.env['NODE_ENV'] = 'test';
 
-      await logUsage({ ...baseParams, success: false, errorMessage: 'API timeout error' });
+      await logUsage({ ...baseParams, success: false, errorMessage: 'API timeout error', logger: mockLogger });
 
-      // Console logging is skipped in test environment (NODE_ENV='test')
-      expect(consoleSpy).not.toHaveBeenCalled();
-      consoleSpy.mockRestore();
+      // Logger is not called in test environment (NODE_ENV='test')
+      expect(mockLogger.info).not.toHaveBeenCalled();
+      process.env['NODE_ENV'] = originalNodeEnv;
+    });
+
+    it('calls logger when provided and NODE_ENV is not test', async () => {
+      mockTransaction.get.mockResolvedValue({ exists: false, data: () => undefined });
+      const mockLogger = {
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+        debug: vi.fn(),
+      };
+      const originalNodeEnv = process.env['NODE_ENV'];
+      process.env['NODE_ENV'] = 'production';
+
+      await logUsage({ ...baseParams, success: true, logger: mockLogger });
+
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        {
+          userId: 'user-123',
+          provider: LlmProviders.Google,
+          model: LlmModels.Gemini25Flash,
+          callType: 'research',
+          inputTokens: 100,
+          outputTokens: 200,
+          totalTokens: 300,
+          costUsd: 0.001,
+          success: true,
+        },
+        'LLM research call (google/gemini-2.5-flash) succeeded'
+      );
+      process.env['NODE_ENV'] = originalNodeEnv;
+    });
+
+    it('includes error message in log when call fails', async () => {
+      mockTransaction.get.mockResolvedValue({ exists: false, data: () => undefined });
+      const mockLogger = {
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+        debug: vi.fn(),
+      };
+      const originalNodeEnv = process.env['NODE_ENV'];
+      process.env['NODE_ENV'] = 'production';
+
+      await logUsage({ ...baseParams, success: false, errorMessage: 'API timeout', logger: mockLogger });
+
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        expect.objectContaining({
+          errorMessage: 'API timeout',
+          success: false,
+        }),
+        'LLM research call (google/gemini-2.5-flash) failed: API timeout'
+      );
+      process.env['NODE_ENV'] = originalNodeEnv;
+    });
+
+    it('does not call logger when not provided', async () => {
+      mockTransaction.get.mockResolvedValue({ exists: false, data: () => undefined });
+      const originalNodeEnv = process.env['NODE_ENV'];
+      process.env['NODE_ENV'] = 'production';
+
+      await logUsage(baseParams);
+
+      // No assertion needed - test passes if no error is thrown
       process.env['NODE_ENV'] = originalNodeEnv;
     });
 

@@ -4,6 +4,8 @@
  * @packageDocumentation
  */
 
+import type { Logger } from '@intexuraos/common-core';
+
 export type {
   LLMError as GlmError,
   ResearchResult,
@@ -31,6 +33,7 @@ export type {
  *     outputPricePerMillion: 2.20,
  *     webSearchCostPerCall: 0.005,
  *   },
+ *   logger: pinoLogger, // Optional pino logger for structured logging
  * });
  * ```
  */
@@ -43,4 +46,6 @@ export interface GlmConfig {
   userId: string;
   /** Cost configuration per million tokens */
   pricing: import('@intexuraos/llm-contract').ModelPricing;
+  /** Optional pino logger for structured LLM usage logging */
+  logger?: Logger;
 }

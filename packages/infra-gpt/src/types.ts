@@ -4,6 +4,8 @@
  * @packageDocumentation
  */
 
+import type { Logger } from '@intexuraos/common-core';
+
 export type {
   LLMError as GptError,
   ResearchResult,
@@ -40,7 +42,8 @@ export type {
  *       '1536x1024': 0.050,
  *       '1024x1536': 0.050,
  *     }
- *   }
+ *   },
+ *   logger: pinoLogger, // Optional pino logger for structured logging
  * });
  * ```
  */
@@ -55,4 +58,6 @@ export interface GptConfig {
   pricing: import('@intexuraos/llm-contract').ModelPricing;
   /** Optional separate pricing for image generation */
   imagePricing?: import('@intexuraos/llm-contract').ModelPricing;
+  /** Optional pino logger for structured LLM usage logging */
+  logger?: Logger;
 }
