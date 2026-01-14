@@ -3,7 +3,7 @@ import { getErrorMessage } from '@intexuraos/common-core';
 import {
   fetchAllPricing,
   createPricingContext,
-  type PricingContext,
+  type IPricingContext,
 } from '@intexuraos/llm-pricing';
 import { type ResearchModel, type FastModel, LlmModels } from '@intexuraos/llm-contract';
 import { buildServer } from './server.js';
@@ -52,7 +52,7 @@ const REQUIRED_MODELS: (ResearchModel | FastModel)[] = [
   LlmModels.Gemini20Flash,
 ];
 
-async function loadPricing(): Promise<PricingContext> {
+async function loadPricing(): Promise<IPricingContext> {
   const appSettingsUrl = process.env['INTEXURAOS_APP_SETTINGS_SERVICE_URL'] ?? '';
   const internalAuthToken = process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] ?? '';
 
