@@ -27,7 +27,6 @@ All HTTP client files below have uncovered branches in the logger initialization
 - `apps/actions-agent/src/infra/research/researchAgentClient.ts` - Line 8
 - `apps/bookmarks-agent/src/infra/linkpreview/webAgentClient.ts` - Line 17
 - `apps/commands-agent/src/infra/actionsAgent/client.ts` - Line 17
-- `apps/notes-agent/src/infra/firestore/firestoreNoteRepository.ts` - Line 31
 - `apps/whatsapp-service/src/infra/linkpreview/webAgentLinkPreviewClient.ts` - Line 17
 - `apps/todos-agent/src/config.ts` - Lines 16, 20
 - `packages/infra-perplexity/src/client.ts` - Line 165
@@ -85,8 +84,8 @@ These files contain provider-specific error message parsing. Many branches repre
 
 ## Summary
 
-- **Total exempted files:** 21
-- **Total exempted branches:** ~92
+- **Total exempted files:** 20
+- **Total exempted branches:** ~91
 
 These exemptions represent genuinely unreachable or impractical-to-test branches:
 1. Module-level environment variable fallbacks
