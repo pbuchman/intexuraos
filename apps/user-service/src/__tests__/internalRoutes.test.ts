@@ -1,6 +1,7 @@
 /**
  * Tests for internal routes (service-to-service communication):
  * - GET /internal/users/:uid/llm-keys
+ * - GET /internal/users/:uid/settings
  */
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
@@ -587,6 +588,107 @@ describe('Internal Routes', () => {
       const updatedConnection = fakeOAuthRepo.getStoredConnection(userId, 'google');
       expect(updatedConnection?.tokens.refreshToken).toBe('original-refresh-token');
       expect(updatedConnection?.tokens.scope).toBe('original-scope calendar.readonly');
+    });
+  });
+
+  describe('GET /internal/users/:uid/settings', () => {
+    it('returns 401 when no internal auth header', async () => {
+      app = await buildServer();
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/internal/users/user-123/settings',
+      });
+
+      expect(response.statusCode).toBe(401);
+      const body = JSON.parse(response.body) as { error: string };
+      expect(body.error).toBe('Unauthorized');
+    });
+
+    it('returns 401 when internal auth header is invalid', async () => {
+      app = await buildServer();
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/internal/users/user-123/settings',
+        headers: {
+          'x-internal-auth': 'invalid-token',
+        },
+      });
+
+      expect(response.statusCode).toBe(401);
+      const body = JSON.parse(response.body) as { error: string };
+      expect(body.error).toBe('Unauthorized');
+    });
+
+    it('returns user llmPreferences when valid auth header', async () => {
+      const userId = 'user-with-settings';
+      fakeSettingsRepo.setSettings(userId, {
+        userId,
+        llmPreferences: {
+          defaultModel: 'gemini-2.5-flash-exp',
+        },
+        createdAt: '2025-01-01T00:00:00.000Z',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      });
+
+      app = await buildServer();
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/internal/users/${userId}/settings`,
+        headers: {
+          'x-internal-auth': INTERNAL_AUTH_TOKEN,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        llmPreferences?: { defaultModel: string };
+      };
+      expect(body.llmPreferences?.defaultModel).toBe('gemini-2.5-flash-exp');
+    });
+
+    it('returns undefined llmPreferences when user has no settings', async () => {
+      const userId = 'user-no-settings';
+      fakeSettingsRepo.setSettings(userId, null);
+
+      app = await buildServer();
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/internal/users/${userId}/settings`,
+        headers: {
+          'x-internal-auth': INTERNAL_AUTH_TOKEN,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        llmPreferences?: { defaultModel: string };
+      };
+      expect(body.llmPreferences).toBeUndefined();
+    });
+
+    it('returns undefined llmPreferences when repository errors', async () => {
+      const userId = 'user-error';
+      fakeSettingsRepo.setShouldError(true);
+
+      app = await buildServer();
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/internal/users/${userId}/settings`,
+        headers: {
+          'x-internal-auth': INTERNAL_AUTH_TOKEN,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        llmPreferences?: { defaultModel: string };
+      };
+      expect(body.llmPreferences).toBeUndefined();
     });
   });
 });
