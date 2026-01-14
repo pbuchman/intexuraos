@@ -22,10 +22,10 @@ App-settings-service provides:
 
 **Pricing (`/settings/pricing`):**
 
-- All 4 providers
+- All 5 providers (Anthropic, OpenAI, Google, Perplexity, Zai)
 - Per-model pricing
 - Input/output token costs
-- Grounding costs
+- Grounding costs (Google Gemini feature: adds fixed per-request cost when using Google Search or dynamic retrieval to enhance factual accuracy)
 
 **Usage Costs (`/settings/usage-costs`):**
 
