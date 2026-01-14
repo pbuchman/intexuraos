@@ -665,6 +665,34 @@ describe('createPerplexityClient', () => {
   });
 
   describe('edge cases', () => {
+    it('handles response with empty body in research', async () => {
+      // Test line 141: if (!response.body) throw new Error
+      // We mock global fetch to return a Response with null body
+      const mockFetch = vi.fn().mockResolvedValue(
+        Object.create(Response.prototype, {
+          ok: { value: true },
+          body: { value: null },
+        })
+      );
+      vi.stubGlobal('fetch', mockFetch);
+
+      const client = createPerplexityClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        pricing: createTestPricing(),
+      });
+      const result = await client.research('Test prompt');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('API_ERROR');
+        expect(result.error.message).toBe('Response body is empty');
+      }
+
+      vi.unstubAllGlobals();
+    });
+
     it('uses default medium search context for unknown model', async () => {
       nock(API_BASE_URL)
         .post('/chat/completions', (body) => {
