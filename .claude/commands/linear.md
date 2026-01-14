@@ -5,11 +5,32 @@ Manage Linear issues, branches, and PRs with enforced workflow and cross-linking
 ## Usage
 
 ```
-/linear                           # Pick random issue from Backlog/Todo (cron mode)
+/linear                           # NON-INTERACTIVE: Pick random Backlog issue, work on it WITHOUT asking
 /linear <task description>        # Create new issue
 /linear LIN-123                   # Work on existing issue
 /linear <sentry-url>              # Create issue from Sentry error
 ```
+
+**CRITICAL:** When `/linear` is called WITHOUT arguments, it operates in **NON-INTERACTIVE MODE**:
+- NEVER ask the user for confirmation or what to do
+- Automatically pick a random task from Backlog/Todo
+- If no tasks available, state "No items in Backlog or Todo state." and exit
+- If task cannot be completed (auth failure, missing info), create a PR explaining the blocker and proceed
+
+---
+
+## Non-Interactive Mode Contract (CRITICAL)
+
+**When invoked as:** `claude --dangerously-skip-permissions linear` (or any `/linear` with no arguments)
+
+| Rule | Description |
+|------|-------------|
+| **NO PROMPTS** | Never ask "what should I do?", "which task?", or "ready to start?" |
+| **AUTO-PROCEED** | Always proceed with the selected Backlog/Todo item automatically |
+| **NO TASKS** | If Backlog/Todo is empty, print message and exit gracefully |
+| **BLOCKER PR** | If task cannot be completed (auth, missing info), create PR with explanation and consider it done |
+
+**The command is designed for automated/cron usage. It MUST NOT block on user input.**
 
 ## Examples
 
@@ -28,7 +49,7 @@ The command automatically detects intent from input:
 
 | Input Pattern | Type | Action |
 |---------------|------|--------|
-| `/linear` (no args) | Random Backlog | Pick from Backlog/Todo and start working |
+| `/linear` (no args) | Random Backlog (NON-INTERACTIVE) | Pick from Backlog/Todo and start working WITHOUT asking user |
 | `/linear <task description>` | Create New | Detect bug/feature, create issue, start working |
 | `/linear LIN-<number>` | Work Existing | Start working on specific issue |
 | `/linear https://sentry.io/...` | Sentry Integration | Create Linear issue from Sentry error |
@@ -52,10 +73,16 @@ The command automatically detects intent from input:
 
 ### Cron Mode (Non-Interactive)
 
-When `/linear` is called without user interaction (e.g., from cron):
-- Default to `[task]` prefix when ambiguous
-- Make best-effort decisions
-- Log all actions to stdout
+**MANDATORY:** When `/linear` is called WITHOUT arguments (e.g., `claude --dangerously-skip-permissions linear`):
+
+1. **NEVER ask the user what to do** - proceed automatically with random Backlog task
+2. **NEVER ask for confirmation** - no "Ready to start?" or "Continue?" prompts
+3. If no Backlog/Todo items exist: state "No items in Backlog or Todo state." and exit
+4. If task cannot be completed (auth failure, missing info, blockers):
+   - Create a PR with explanation of the blocker
+   - The PR with reasoning is considered sufficient deliverable
+   - Proceed to next steps (branch push, PR creation, state update)
+5. Log all actions to stdout for observability
 
 ### Sentry Issues
 
@@ -154,23 +181,37 @@ For a PR to appear as an attachment in Linear's UI:
 
 User calls `/linear` with no arguments.
 
+### NON-INTERACTIVE CONTRACT (MANDATORY)
+
+**This mode operates WITHOUT user interaction. The following rules are absolute:**
+
+1. **NEVER ask "what should I do?"** - proceed with selected task automatically
+2. **NEVER ask for confirmation** - no "Ready to start?" or "Continue?" prompts
+3. **NEVER ask "which branch?"** - use logic: `origin/development` if exists, else `origin/main`
+4. **If task cannot be completed** (auth failure, missing info, unclear requirements):
+   - Create a PR explaining the blocker
+   - The PR serves as the deliverable documenting what needs to be resolved
+   - Include all investigation findings in the PR body
+   - Update Linear state to "In Review" and move on
+
 ### Selection Algorithm
 
 1. List issues where `state` is `"Backlog"` OR `"Todo"`
 2. Filter to `team: "pbuchman"`
 3. Sort by `priority` (High → Low) then `createdAt` (newest first)
 4. Pick first result
+5. **If no items found:** Print "No items in Backlog or Todo state." and exit
 
 ### Execution
 
 ```
-1. Verify tools (Linear, GitHub, GCloud)
+1. Verify tools (Linear, GitHub, GCloud) - fail fast if unavailable
 2. Fetch selected issue details
 3. Update Linear state to "In Progress"
 4. Create branch from origin/development (or origin/main)
-5. Guide through implementation
+5. Implement the task (investigate, code, test)
 6. Run CI gate: pnpm run ci:tracked
-7. Create PR with cross-links
+7. Create PR with cross-links (or PR explaining blocker if task uncompletable)
 8. Update Linear state to "In Review"
 ```
 
@@ -190,7 +231,10 @@ git checkout -b fix/LIN-123 "$BASE_BRANCH"
 
 ### When No Backlog Items
 
-Exit gracefully with message: "No items in Backlog or Todo state."
+**NON-INTERACTIVE:** Exit gracefully with message: "No items in Backlog or Todo state."
+- Do NOT ask to create a new issue
+- Do NOT ask what to do instead
+- Simply print the message and exit
 
 ---
 
@@ -446,14 +490,22 @@ pnpm run ci:tracked
 
 If `ci:tracked` fails:
 
+**In INTERACTIVE mode (user provided arguments):**
 1. Report the failure clearly
 2. Show which step failed (typecheck/lint/tests)
 3. Show `.claude/ci-failures/` content if available
 4. Ask: "CI failed. Fix and retry, or explicitly override to proceed anyway?"
 
+**In NON-INTERACTIVE mode (`/linear` called without arguments):**
+1. Report the failure clearly
+2. Show which step failed (typecheck/lint/tests)
+3. Create PR with CI failure details in the body
+4. Proceed with PR creation - the PR documenting the CI failure is the deliverable
+5. Do NOT retry, do NOT wait for user input
+
 ### Override Only When
 
-User explicitly says one of:
+User explicitly says one of (INTERACTIVE mode only):
 - "override ci"
 - "skip ci check"
 - "proceed anyway"
