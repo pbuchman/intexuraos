@@ -16,7 +16,6 @@ import {
 import type {
   LabelGenerateResult,
   LlmError,
-  LlmPricing,
   LlmProvider,
   LlmResearchProvider,
   LlmResearchResult,
@@ -24,7 +23,6 @@ import type {
   LlmSynthesisProvider,
   LlmSynthesisResult,
   NotificationError,
-  PricingRepository,
   RepositoryError,
   Research,
   ResearchRepository,
@@ -450,35 +448,6 @@ export class FakeLlmCallPublisher {
 
   clear(): void {
     this.publishedEvents = [];
-  }
-}
-
-/**
- * Fake implementation of PricingRepository for testing.
- */
-export class FakePricingRepository implements PricingRepository {
-  private pricing = new Map<string, LlmPricing>();
-
-  async findByProviderAndModel(provider: LlmProvider, model: string): Promise<LlmPricing | null> {
-    const key = `${provider}_${model}`;
-    return this.pricing.get(key) ?? null;
-  }
-
-  setPricing(
-    provider: LlmProvider,
-    model: string,
-    pricing: Omit<LlmPricing, 'provider' | 'model'>
-  ): void {
-    const key = `${provider}_${model}`;
-    this.pricing.set(key, {
-      provider,
-      model,
-      ...pricing,
-    });
-  }
-
-  clear(): void {
-    this.pricing.clear();
   }
 }
 
