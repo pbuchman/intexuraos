@@ -392,6 +392,34 @@ describe('FirestoreUserSettingsRepository', () => {
       expect(stored.ok).toBe(true);
       if (stored.ok && stored.value !== null) {
         expect(stored.value.llmTestResults?.openai?.testedAt).toBeDefined();
+        expect(stored.value.llmTestResults?.openai?.status).toBe('success');
+        expect(stored.value.llmTestResults?.openai?.message).toBe('');
+      }
+    });
+
+    it('heals partial test result data (missing status or message)', async () => {
+      // Create settings with partial test result data (simulates legacy/bad data)
+      const partialSettings = createTestSettings({
+        llmTestResults: {
+          openai: {
+            testedAt: new Date().toISOString(),
+            // Missing status and message - simulating bad data
+          } as Partial<LlmTestResult> as LlmTestResult,
+        },
+      });
+      await repo.saveSettings(partialSettings);
+
+      // Call updateLlmLastUsed - should heal the partial data
+      const result = await repo.updateLlmLastUsed('user-123', LlmProviders.OpenAI);
+      expect(result.ok).toBe(true);
+
+      const stored = await repo.getSettings('user-123');
+      expect(stored.ok).toBe(true);
+      if (stored.ok && stored.value !== null) {
+        // Verify all required fields are now present
+        expect(stored.value.llmTestResults?.openai?.status).toBe('success');
+        expect(stored.value.llmTestResults?.openai?.message).toBe('');
+        expect(stored.value.llmTestResults?.openai?.testedAt).toBeDefined();
       }
     });
 
