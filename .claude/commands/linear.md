@@ -116,6 +116,38 @@ Aborting.
 
 ---
 
+## GitHub Integration Requirements (CRITICAL)
+
+Linear's GitHub integration **automatically attaches PRs to issues** when specific naming conventions are followed.
+
+### Required Conditions
+
+For a PR to appear as an attachment in Linear's UI:
+
+1. **Branch name must contain the Linear issue ID** (e.g., `fix/LIN-123`, `feature/PBU-44-add-tests`)
+2. **PR title must contain the Linear issue ID** (e.g., `[LIN-123] Fix auth`, `PBU-44: Add tests`)
+
+### What Happens When Conditions Are Met
+
+- PR automatically appears in Linear issue's `attachments` array
+- Issue state transitions automatically: `In Progress` → `In Review` → `Done`
+- Bidirectional link established (click PR from Linear, see issue from GitHub)
+
+### What Happens When Conditions Are NOT Met
+
+- PR does NOT attach to Linear issue
+- Only manual comment with PR URL (not visible as attachment)
+- No automatic state transitions
+
+### Example: PBU-42 vs PBU-44
+
+- **PBU-42**: Branch `coverage/PBU-42-...`, PR title `[PBU-42] ...` → PR in `attachments` array ✅
+- **PBU-44**: Branch `fix/coverage-web-agent-...` (no issue ID), PR title without issue ID → Only comment link ❌
+
+**Always verify after PR creation:** Check Linear issue has PR under "Pull requests" section. If missing, the naming convention wasn't followed.
+
+---
+
 ## Workflow: Random Backlog (Cron Mode)
 
 ### Trigger
@@ -222,7 +254,7 @@ User calls `/linear LIN-123`
    - Run `pnpm run ci:tracked`
    - If fails: Report and ask to fix or explicitly override
 
-7. **Create PR**
+7. **Create PR** (CRITICAL: Title MUST include issue ID)
    ```bash
    git push -u origin fix/LIN-123
    gh pr create --base development \
@@ -230,9 +262,15 @@ User calls `/linear LIN-123`
                 --body "<PR template>"
    ```
 
+   **MANDATORY:** PR title MUST contain the Linear issue ID (e.g., `[LIN-123]`, `LIN-123:`, etc.)
+   - This enables GitHub integration to automatically attach PR to Linear issue
+   - PR appears in `attachments` array (visible in UI), not just as comment
+   - Branch name must also contain the issue ID (already enforced)
+
 8. **Update Linear**
    - Set state to "In Review"
-   - Add PR link as comment
+   - GitHub integration automatically attaches PR (verify in `attachments` array)
+   - Only add comment if attachment is missing (fallback)
 
 9. **Cross-Link Summary**
    - Show table of created artifacts
@@ -313,10 +351,12 @@ User calls `/linear https://<sentry-url>`
 
 | Trigger | From | To | Action |
 |---------|------|-----|--------|
-| `/linear LIN-123` called | Backlog/Todo | In Progress | Create branch |
-| `gh pr create` called | In Progress | In Review | Add PR link to Linear |
+| `/linear LIN-123` called | Backlog/Todo | In Progress | Create branch with issue ID in name |
+| `gh pr create` called (title has issue ID) | In Progress | In Review | GitHub integration auto-attaches PR |
 | PR approved | In Review | Done | Close Linear issue |
 | PR has review changes | In Review | In Progress | Update Linear state |
+
+**Note:** GitHub integration only works when BOTH branch name AND PR title contain the Linear issue ID (e.g., `LIN-123`, `PBU-44`).
 
 ---
 
@@ -324,12 +364,30 @@ User calls `/linear https://<sentry-url>`
 
 All issues must be linked between systems.
 
+### GitHub Integration (Automatic Attachment)
+
+**CRITICAL:** For PRs to appear as attachments in Linear UI (visible in `attachments` array):
+
+1. **Branch name MUST contain Linear issue ID** - e.g., `fix/LIN-123`, `feature/PBU-44-...`
+2. **PR title MUST contain Linear issue ID** - e.g., `[LIN-123] Fix auth`, `PBU-44: Add tests`
+
+When both conditions are met:
+- GitHub integration **automatically attaches PR** to Linear issue
+- PR appears in `attachments` array (visible in Linear UI under "Pull requests" section)
+- Issue state automatically updates: `In Progress` → `In Review` → `Done`
+- **No manual comment needed** - attachment is the canonical link
+
+**Verification:** After creating PR, check Linear issue has PR in `attachments` array. If missing, the title or branch name didn't contain the issue ID.
+
 | Direction | Method |
 |-----------|--------|
-| Linear → GitHub | `Fixes LIN-XXX` in PR body |
-| GitHub → Linear | PR URL in issue comments |
+| Linear → GitHub | PR title contains `LIN-XXX` (enables auto-attachment) |
+| GitHub → Linear | GitHub integration attaches PR (when title + branch have issue ID) |
+| Linear → GitHub | `Fixes LIN-XXX` in PR body (for issue closing behavior) |
 | Sentry → Linear | `[sentry] <title>` naming + link in description |
 | Linear → Sentry | Comment on Sentry issue |
+
+**Why Comments Don't Work:** Adding PR URL as comment only adds text - it doesn't create the attachment relationship. The GitHub integration requires the issue ID in both branch name AND PR title to establish the bidirectional link.
 
 ### PR Body Template
 
@@ -405,8 +463,11 @@ User explicitly says one of:
 
 - [ ] `pnpm run ci:tracked` passes OR user explicitly overridden
 - [ ] Branch created from correct base
+- [ ] Branch name contains Linear issue ID (e.g., `fix/LIN-123`, `feature/PBU-44-add-tests`)
+- [ ] PR title contains Linear issue ID (e.g., `[LIN-123] Fix auth`, `PBU-44: Add tests`)
 - [ ] All commits made
 - [ ] PR description complete with all sections
+- [ ] PR appears in Linear issue's `attachments` array (verify after creation)
 
 ---
 

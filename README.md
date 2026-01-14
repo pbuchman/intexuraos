@@ -89,7 +89,7 @@ Stop manually updating spreadsheets.
 
 **IntexuraOS is not just a personal operating system; it is a statement on software craftsmanship.**
 
-While functionally it serves as the execution layer for my life—bridging WhatsApp voice notes, mobile notifications, and AI agents with a structured Notion database—architecturally, it is a **production-grade blueprint** for how modern, AI-native software should be built.
+While functionally it serves as the execution layer for my life—bridging WhatsApp voice notes, mobile notifications, and AI agents with a structured database—architecturally, it is a **production-grade blueprint** for how modern, AI-native software should be built.
 
 It rejects "move fast and break things" in favor of **"move deliberately and fix the root cause."** It demonstrates that with the right abstractions, strict boundaries, and autonomous agents, a single Staff Engineer can maintain an enterprise-scale monorepo with higher quality standards than most full teams.
 
