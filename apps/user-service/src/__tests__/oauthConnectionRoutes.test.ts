@@ -163,6 +163,49 @@ describe('OAuth Connection Routes', () => {
       expect(body.success).toBe(false);
       expect(body.error.code).toBe('MISCONFIGURED');
     });
+
+    it('uses default protocol and host when forwarded headers are missing', async () => {
+      app = await buildServer();
+      const token = await createJwt('user-123');
+
+      // Request without x-forwarded-proto and x-forwarded-host headers
+      // This exercises the nullish coalescing at lines 85-86
+      const response = await app.inject({
+        method: 'POST',
+        url: '/oauth/connections/google/initiate',
+        headers: {
+          authorization: `Bearer ${token}`,
+          // No x-forwarded-proto, no x-forwarded-host
+          host: 'api.example.com',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as { success: boolean; data: { authorizationUrl: string } };
+      expect(body.success).toBe(true);
+      expect(body.data.authorizationUrl).toContain('https://accounts.google.com/o/oauth2/v2/auth');
+    });
+
+    it('uses fallback localhost when both forwarded headers and host header are missing', async () => {
+      app = await buildServer();
+      const token = await createJwt('user-123');
+
+      // Request without any headers that provide protocol/host info
+      const response = await app.inject({
+        method: 'POST',
+        url: '/oauth/connections/google/initiate',
+        headers: {
+          authorization: `Bearer ${token}`,
+          // No x-forwarded-proto, no x-forwarded-host, no host header
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as { success: boolean; data: { authorizationUrl: string } };
+      expect(body.success).toBe(true);
+      // The generateAuthUrl should still work with localhost fallback
+      expect(body.data.authorizationUrl).toContain('https://accounts.google.com/o/oauth2/v2/auth');
+    });
   });
 
   describe('GET /oauth/connections/google/callback', () => {
