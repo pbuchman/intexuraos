@@ -75,7 +75,14 @@ If exemptions were found, append them to `docs/coverage/unreachable.md` using th
 
 #### 3.2: Create Linear Issues via MCP
 
-**Use the Linear MCP tools to create issues.** Linear is available via MCP integration.
+**IMPORTANT**: Use `/linear` command for issue creation to maintain workflow consistency.
+
+**Use the Linear MCP tools to create issues** or invoke `/linear <task description>`. Linear is available via MCP integration.
+
+**When using `/linear`:**
+- The command will automatically detect this is a coverage-related task
+- State management and cross-linking are handled automatically
+- Issue naming follows the `[coverage][<app>]` pattern
 
 **Naming Convention (MANDATORY):**
 
