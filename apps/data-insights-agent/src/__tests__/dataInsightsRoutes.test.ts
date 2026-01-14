@@ -861,4 +861,77 @@ describe('dataInsightsRoutes', () => {
       expect(body.data.chartData).toEqual([]);
     });
   });
+
+  describe('POST /composite-feeds/:feedId/insights/:insightId/chart-definition - additional error cases', () => {
+    const setupFeedWithInsights = async (): Promise<string> => {
+      const feedResult = await fakeCompositeFeedRepo.create('user-123', 'Test Feed', {
+        purpose: 'Test purpose',
+        staticSourceIds: [],
+        notificationFilters: [],
+      });
+      expect(feedResult.ok).toBe(true);
+      const feed = feedResult.ok ? feedResult.value : null;
+
+      const insights: DataInsight[] = [
+        {
+          id: 'cf-1-insight-1',
+          title: 'Upward Trend',
+          description: 'Values show consistent upward trend.',
+          trackableMetric: 'Growth rate',
+          suggestedChartType: 'C1',
+          generatedAt: new Date().toISOString(),
+        },
+      ];
+
+      await fakeCompositeFeedRepo.updateDataInsights(feed?.id ?? '', 'user-123', insights);
+      await fakeSnapshotRepo.upsert(feed?.id ?? '', 'user-123', 'Test Feed', {
+        feedId: feed?.id ?? '',
+        feedName: 'Test Feed',
+        purpose: 'Test purpose',
+        generatedAt: new Date().toISOString(),
+        staticSources: [],
+        notifications: [],
+      });
+
+      return feed?.id ?? '';
+    };
+
+    it('returns 400 when chart type is invalid', async () => {
+      const app = await buildServer();
+      await setupFeedWithInsights();
+
+      // Use type assertion to test invalid chart type handling
+      const insights: DataInsight[] = [
+        {
+          id: 'cf-1-insight-1',
+          title: 'Test',
+          description: 'Test.',
+          trackableMetric: 'Test',
+          suggestedChartType: 'INVALID_TYPE' as DataInsight['suggestedChartType'],
+          generatedAt: new Date().toISOString(),
+        },
+      ];
+      await fakeCompositeFeedRepo.updateDataInsights('cf-1', 'user-123', insights);
+
+      await fakeSnapshotRepo.upsert('cf-1', 'user-123', 'Test Feed', {
+        feedId: 'cf-1',
+        feedName: 'Test Feed',
+        purpose: 'Test purpose',
+        generatedAt: new Date().toISOString(),
+        staticSources: [],
+        notifications: [],
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/composite-feeds/cf-1/insights/cf-1-insight-1/chart-definition',
+        headers: { authorization: 'Bearer valid-token' },
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.payload);
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INVALID_REQUEST');
+    });
+  });
 });
