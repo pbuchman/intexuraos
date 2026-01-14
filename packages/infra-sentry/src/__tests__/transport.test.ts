@@ -1,21 +1,50 @@
 /**
- * Tests for Sentry transport and sendToSentry function.
+ * Tests for Sentry stream and transport functions.
  */
 
 import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
 import * as Sentry from '@sentry/node';
-import { createSentryTransport, sendToSentry } from '../transport.js';
+import {
+  createSentryStream,
+  createSentryTransport,
+  sendToSentry,
+  isSentryConfigured,
+} from '../transport.js';
 
-// Mock Sentry
-vi.mock('@sentry/node', () => ({
-  init: vi.fn(),
-  captureException: vi.fn(),
-  captureMessage: vi.fn(),
-}));
+// Mock Sentry - must use factory function to avoid hoisting issues
+vi.mock('@sentry/node', () => {
+  const mockCaptureException = vi.fn();
+  const mockCaptureMessage = vi.fn();
+  const mockWithScope = vi.fn((callback: (scope: unknown) => void) => {
+    const mockScope = {
+      setExtras: vi.fn(),
+      setLevel: vi.fn(),
+      setTag: vi.fn(),
+      setContext: vi.fn(),
+    };
+    callback(mockScope);
+  });
 
-describe('createSentryTransport', () => {
-  const originalEnv = process.env;
+  return {
+    init: vi.fn(),
+    captureException: mockCaptureException,
+    captureMessage: mockCaptureMessage,
+    withScope: mockWithScope,
+  };
+});
 
+const originalEnv = process.env;
+
+// Get references to the mocked functions after mock is set up
+const getMockedSentry = (): {
+  captureException: ReturnType<typeof vi.fn>;
+  captureMessage: ReturnType<typeof vi.fn>;
+} => ({
+  captureException: vi.mocked(Sentry).captureException as ReturnType<typeof vi.fn>,
+  captureMessage: vi.mocked(Sentry).captureMessage as ReturnType<typeof vi.fn>,
+});
+
+describe('isSentryConfigured', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     process.env = { ...originalEnv };
@@ -25,37 +54,116 @@ describe('createSentryTransport', () => {
     process.env = originalEnv;
   });
 
-  it('returns undefined when SENTRY_DSN is not set', () => {
+  it('returns false when SENTRY_DSN is not set', () => {
     delete process.env['INTEXURAOS_SENTRY_DSN'];
 
-    const transport = createSentryTransport();
+    const result = isSentryConfigured();
 
-    expect(transport).toBeUndefined();
+    expect(result).toBe(false);
   });
 
-  it('returns undefined when SENTRY_DSN is empty string', () => {
+  it('returns false when SENTRY_DSN is empty string', () => {
     process.env['INTEXURAOS_SENTRY_DSN'] = '';
 
-    const transport = createSentryTransport();
+    const result = isSentryConfigured();
 
-    expect(transport).toBeUndefined();
+    expect(result).toBe(false);
   });
 
-  it('returns undefined (placeholder for future transport implementation)', () => {
+  it('returns true when SENTRY_DSN is set', () => {
+    process.env['INTEXURAOS_SENTRY_DSN'] = 'https://test@sentry.io/123';
+
+    const result = isSentryConfigured();
+
+    expect(result).toBe(true);
+  });
+});
+
+describe('createSentryTransport', () => {
+  beforeEach(() => {
+    process.env = { ...originalEnv };
+  });
+
+  afterEach(() => {
+    process.env = originalEnv;
+  });
+
+  it('returns undefined (deprecated, use createSentryStream instead)', () => {
     process.env['INTEXURAOS_SENTRY_DSN'] = 'https://test@sentry.io/123';
 
     const transport = createSentryTransport();
 
-    // Currently returns undefined as a placeholder
     expect(transport).toBeUndefined();
   });
 });
 
-describe('sendToSentry', () => {
-  const originalEnv = process.env;
-
+describe('createSentryStream', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    process.env = { ...originalEnv };
+  });
+
+  afterEach(() => {
+    process.env = originalEnv;
+  });
+
+  it('returns multistream unchanged when SENTRY_DSN is not set', () => {
+    delete process.env['INTEXURAOS_SENTRY_DSN'];
+
+    const mockMultistream = { streams: [] } as unknown as ReturnType<
+      typeof import('pino').multistream
+    >;
+
+    const result = createSentryStream(mockMultistream);
+
+    expect(result).toBe(mockMultistream);
+  });
+
+  it('adds Sentry stream to multistream when SENTRY_DSN is set', () => {
+    process.env['INTEXURAOS_SENTRY_DSN'] = 'https://test@sentry.io/123';
+
+    const mockMultistream = { streams: [] } as unknown as ReturnType<
+      typeof import('pino').multistream
+    >;
+
+    const result = createSentryStream(mockMultistream);
+
+    // Cast to access internal streams array
+    const ms = result as unknown as {
+      streams: { level: number; stream: unknown }[];
+    };
+
+    // Should have 1 stream: Sentry
+    expect(ms.streams).toHaveLength(1);
+    expect(ms.streams[0]?.level).toBe(40); // Sentry (warn+)
+  });
+
+  it('Sentry stream has write function', () => {
+    process.env['INTEXURAOS_SENTRY_DSN'] = 'https://test@sentry.io/123';
+
+    const mockMultistream = { streams: [] } as unknown as ReturnType<
+      typeof import('pino').multistream
+    >;
+
+    const result = createSentryStream(mockMultistream);
+
+    const ms = result as unknown as {
+      streams: { level: number; stream: { write: (data: string) => void } }[];
+    };
+
+    expect(typeof ms.streams[0]?.stream.write).toBe('function');
+
+    // Test write function
+    const testLog = JSON.stringify({ level: 50, msg: 'Test error', userId: '123' });
+    expect(() => ms.streams[0]?.stream.write(testLog)).not.toThrow();
+  });
+});
+
+describe('sendToSentry', () => {
+  beforeEach(() => {
+    const { captureException, captureMessage } = getMockedSentry();
+    captureException.mockClear();
+    captureMessage.mockClear();
     process.env = { ...originalEnv };
   });
 
@@ -65,19 +173,21 @@ describe('sendToSentry', () => {
 
   it('does nothing when SENTRY_DSN is not set', () => {
     delete process.env['INTEXURAOS_SENTRY_DSN'];
+    const { captureException } = getMockedSentry();
 
     sendToSentry('error', 'Test error', { userId: 'user-123' });
 
-    expect(Sentry.captureException).not.toHaveBeenCalled();
+    expect(captureException).not.toHaveBeenCalled();
   });
 
   it('sends error to Sentry.captureException', () => {
     process.env['INTEXURAOS_SENTRY_DSN'] = 'https://test@sentry.io/123';
+    const { captureException } = getMockedSentry();
     const context = { userId: 'user-123' };
 
     sendToSentry('error', 'Test error', context);
 
-    expect(Sentry.captureException).toHaveBeenCalledWith(
+    expect(captureException).toHaveBeenCalledWith(
       expect.any(Error),
       expect.objectContaining({
         level: 'error',
@@ -88,21 +198,23 @@ describe('sendToSentry', () => {
 
   it('creates Error with correct message', () => {
     process.env['INTEXURAOS_SENTRY_DSN'] = 'https://test@sentry.io/123';
+    const { captureException } = getMockedSentry();
 
     sendToSentry('error', 'Test error without context');
 
-    const capturedError = vi.mocked(Sentry.captureException).mock.calls[0]?.[0];
+    const capturedError = captureException.mock.calls[0]?.[0] as Error;
     expect(capturedError).toBeInstanceOf(Error);
-    expect((capturedError as Error).message).toBe('Test error without context');
+    expect(capturedError.message).toBe('Test error without context');
   });
 
   it('sends warning to Sentry.captureMessage', () => {
     process.env['INTEXURAOS_SENTRY_DSN'] = 'https://test@sentry.io/123';
+    const { captureMessage } = getMockedSentry();
     const context = { userId: 'user-123' };
 
     sendToSentry('warn', 'Test warning', context);
 
-    expect(Sentry.captureMessage).toHaveBeenCalledWith(
+    expect(captureMessage).toHaveBeenCalledWith(
       'Test warning',
       expect.objectContaining({
         level: 'warning',
@@ -113,10 +225,11 @@ describe('sendToSentry', () => {
 
   it('handles undefined context gracefully', () => {
     process.env['INTEXURAOS_SENTRY_DSN'] = 'https://test@sentry.io/123';
+    const { captureException } = getMockedSentry();
 
     sendToSentry('error', 'Test error');
 
-    expect(Sentry.captureException).toHaveBeenCalledWith(
+    expect(captureException).toHaveBeenCalledWith(
       expect.any(Error),
       expect.objectContaining({
         level: 'error',

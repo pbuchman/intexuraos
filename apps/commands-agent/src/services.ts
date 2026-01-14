@@ -53,12 +53,14 @@ export function initServices(config: ServiceConfig): void {
   const actionsAgentClient = createActionsAgentClient({
     baseUrl: config.actionsAgentUrl,
     internalAuthToken: config.internalAuthToken,
+    logger: pino({ name: 'actionsAgentClient' }),
   });
   const classifierFactory: ClassifierFactory = (apiKey: string, userId: string) =>
     createGeminiClassifier({ apiKey, userId, pricing: CLASSIFIER_PRICING });
   const userServiceClient = createUserServiceClient({
     baseUrl: config.userServiceUrl,
     internalAuthToken: config.internalAuthToken,
+    logger: pino({ name: 'userServiceClient' }),
   });
   const eventPublisher = createActionEventPublisher({ projectId: config.gcpProjectId });
 

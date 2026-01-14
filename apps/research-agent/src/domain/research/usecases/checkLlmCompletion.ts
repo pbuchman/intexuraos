@@ -5,6 +5,7 @@
  */
 
 import type { ResearchModel } from '../models/index.js';
+import type { Logger } from 'pino';
 import type { ResearchRepository } from '../ports/index.js';
 
 export type CompletionAction =
@@ -15,16 +16,18 @@ export type CompletionAction =
 
 export interface CheckLlmCompletionDeps {
   researchRepo: ResearchRepository;
+  logger: Logger;
 }
 
 export async function checkLlmCompletion(
   researchId: string,
   deps: CheckLlmCompletionDeps
 ): Promise<CompletionAction> {
-  const { researchRepo } = deps;
+  const { researchRepo, logger } = deps;
 
   const researchResult = await researchRepo.findById(researchId);
   if (!researchResult.ok || researchResult.value === null) {
+    logger.warn({ researchId }, 'Research not found for completion check');
     return { type: 'pending' };
   }
 
@@ -36,11 +39,29 @@ export async function checkLlmCompletion(
   const failed = results.filter((r) => r.status === 'failed');
   const pending = results.filter((r) => r.status === 'pending' || r.status === 'processing');
 
+  logger.info(
+    {
+      researchId,
+      completed: completed.length,
+      failed: failed.length,
+      pending: pending.length,
+      total: results.length,
+    },
+    'Checking LLM completion status'
+  );
+
   if (pending.length > 0) {
     return { type: 'pending' };
   }
 
   if (completed.length === 0) {
+    logger.info(
+      {
+        researchId,
+        failedModels: failed.map((r) => r.model),
+      },
+      'All LLMs failed, transitioning to all_failed state'
+    );
     await researchRepo.update(researchId, {
       status: 'failed',
       synthesisError: 'All LLM calls failed',
@@ -50,11 +71,28 @@ export async function checkLlmCompletion(
   }
 
   if (failed.length === 0) {
+    logger.info(
+      {
+        researchId,
+        completedModels: completed.map((r) => r.model),
+      },
+      'All LLMs completed successfully'
+    );
     return { type: 'all_completed' };
   }
 
   const failedModels = failed.map((r) => r.model as ResearchModel);
   const retryCount = research.partialFailure?.retryCount ?? 0;
+
+  logger.info(
+    {
+      researchId,
+      failedModels,
+      completedModels: completed.map((r) => r.model),
+      retryCount,
+    },
+    'Partial failure detected, transitioning to awaiting_confirmation'
+  );
 
   await researchRepo.update(researchId, {
     status: 'awaiting_confirmation',

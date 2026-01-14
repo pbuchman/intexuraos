@@ -5,6 +5,7 @@
  * Structure: llm_usage_stats/{model}/by_call_type/{callType}/by_period/{YYYY-MM-DD}/by_user/{userId}
  */
 import { getFirestore } from '@intexuraos/infra-firestore';
+import pino from 'pino';
 import type {
   AggregatedCosts,
   MonthlyCost,
@@ -12,6 +13,10 @@ import type {
   CallTypeCost,
   UsageStatsRepository,
 } from '../../domain/ports/index.js';
+
+const logger = pino({
+  name: 'FirestoreUsageStatsRepository',
+});
 
 interface UserUsageDoc {
   userId: string;
@@ -59,7 +64,11 @@ export class FirestoreUsageStatsRepository implements UsageStatsRepository {
     const db = getFirestore();
     const cutoffDate = getDateNDaysAgo(days);
 
+    logger.info({ userId, days, cutoffDate }, 'Querying user costs');
+
     const snapshot = await db.collectionGroup('by_user').where('userId', '==', userId).get();
+
+    logger.info({ userId, totalDocs: snapshot.docs.length }, 'Collection group query completed');
 
     const records: RawUsageRecord[] = [];
 
@@ -91,7 +100,26 @@ export class FirestoreUsageStatsRepository implements UsageStatsRepository {
       });
     }
 
-    return this.aggregateRecords(records);
+    logger.info({ userId, matchingRecords: records.length }, 'Records filtered and aggregated');
+
+    try {
+      const result = this.aggregateRecords(records);
+      logger.info(
+        {
+          userId,
+          totalCostUsd: result.totalCostUsd,
+          totalCalls: result.totalCalls,
+          monthlyCount: result.monthlyBreakdown.length,
+          modelCount: result.byModel.length,
+          callTypeCount: result.byCallType.length,
+        },
+        'Aggregation completed'
+      );
+      return result;
+    } catch (error) {
+      logger.error({ userId, recordsCount: records.length, error }, 'Failed to aggregate records');
+      throw error;
+    }
   }
 
   private aggregateRecords(records: RawUsageRecord[]): AggregatedCosts {

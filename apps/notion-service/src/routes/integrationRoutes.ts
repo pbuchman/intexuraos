@@ -9,7 +9,7 @@
  */
 
 import type { FastifyPluginCallback } from 'fastify';
-import { requireAuth } from '@intexuraos/common-http';
+import { logIncomingRequest, requireAuth } from '@intexuraos/common-http';
 import { getServices } from '../services.js';
 import {
   connectNotion,
@@ -91,6 +91,10 @@ export const integrationRoutes: FastifyPluginCallback = (fastify, _opts, done) =
       },
     },
     async (request, reply) => {
+      logIncomingRequest(request, {
+        message: 'Received request to POST /notion/connect',
+      });
+
       const user = await requireAuth(request, reply);
       if (user === null) return;
 
@@ -104,7 +108,7 @@ export const integrationRoutes: FastifyPluginCallback = (fastify, _opts, done) =
       const result = await connectNotion(connectionRepository, notionApi, {
         userId: user.userId,
         notionToken,
-      });
+      }, { logger: request.log });
 
       // Map result to HTTP response
       if (!result.ok) {
@@ -165,12 +169,16 @@ export const integrationRoutes: FastifyPluginCallback = (fastify, _opts, done) =
       },
     },
     async (request, reply) => {
+      logIncomingRequest(request, {
+        message: 'Received request to GET /notion/status',
+      });
+
       const user = await requireAuth(request, reply);
       if (user === null) return;
 
       // Delegate to use-case
       const { connectionRepository } = getServices();
-      const result = await getNotionStatus(connectionRepository, { userId: user.userId });
+      const result = await getNotionStatus(connectionRepository, { userId: user.userId }, { logger: request.log });
 
       // Map result to HTTP response
       if (!result.ok) {
@@ -226,12 +234,16 @@ export const integrationRoutes: FastifyPluginCallback = (fastify, _opts, done) =
       },
     },
     async (request, reply) => {
+      logIncomingRequest(request, {
+        message: 'Received request to DELETE /notion/disconnect',
+      });
+
       const user = await requireAuth(request, reply);
       if (user === null) return;
 
       // Delegate to use-case
       const { connectionRepository } = getServices();
-      const result = await disconnectNotion(connectionRepository, { userId: user.userId });
+      const result = await disconnectNotion(connectionRepository, { userId: user.userId }, { logger: request.log });
 
       // Map result to HTTP response
       if (!result.ok) {

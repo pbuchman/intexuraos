@@ -473,6 +473,7 @@ MODULE_TO_SERVICES[<module-name>]="<service-name>"
 ```
 
 Common mappings:
+
 - `pubsub-push`: For services that subscribe to Pub/Sub topics
 - `<service>-bucket`: For services with dedicated Cloud Storage buckets
 - `firestore`: Most services use Firestore (already mapped to "all-services")
