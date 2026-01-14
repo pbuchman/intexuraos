@@ -4,6 +4,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { APIErrorCode, Client, isNotionClientError } from '@notionhq/client';
 import {
+  calculateBodyLength,
   createNotionClient,
   extractPageTitle,
   getPageWithPreview,
@@ -137,6 +138,30 @@ describe('Notion utilities', () => {
 
       expect(mapNotionError(null).code).toBe('INTERNAL_ERROR');
       expect(mapNotionError(undefined).code).toBe('INTERNAL_ERROR');
+    });
+  });
+
+  describe('calculateBodyLength', () => {
+    it('returns length for string body', () => {
+      expect(calculateBodyLength('hello world')).toBe(11);
+    });
+
+    it('returns byteLength for ArrayBuffer body', () => {
+      const buffer = new ArrayBuffer(100);
+      expect(calculateBodyLength(buffer)).toBe(100);
+    });
+
+    it('returns 0 for other body types', () => {
+      const formData = new FormData();
+      expect(calculateBodyLength(formData)).toBe(0);
+    });
+
+    it('returns 0 for null body', () => {
+      expect(calculateBodyLength(null)).toBe(0);
+    });
+
+    it('returns 0 for undefined body', () => {
+      expect(calculateBodyLength(undefined)).toBe(0);
     });
   });
 
