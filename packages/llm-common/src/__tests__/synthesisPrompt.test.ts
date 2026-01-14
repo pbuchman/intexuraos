@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildSynthesisPrompt,
+  type ExternalReport,
   type SynthesisReport,
   type AdditionalSource,
 } from '../synthesisPrompt.js';
