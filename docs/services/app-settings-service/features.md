@@ -14,29 +14,35 @@ Users need visibility into:
 
 App-settings-service provides:
 
-1. **Pricing endpoint** - All LLM provider pricing
+1. **Pricing endpoint** - All LLM provider pricing (internal and public)
 2. **Usage costs** - Per-user aggregated usage statistics
-3. **Provider coverage** - Google, OpenAI, Anthropic, Perplexity
+3. **Provider coverage** - Google, OpenAI, Anthropic, Perplexity, Zai
 
 ## Key Features
 
 **Pricing (`/settings/pricing`):**
 
-- All 5 providers (Anthropic, OpenAI, Google, Perplexity, Zai)
+- All 5 providers (Google, OpenAI, Anthropic, Perplexity, Zai)
 - Per-model pricing
 - Input/output token costs
 - Grounding costs (Google Gemini feature: adds fixed per-request cost when using Google Search or dynamic retrieval to enhance factual accuracy)
+- Internal endpoint for service startup
 
 **Usage Costs (`/settings/usage-costs`):**
 
 - Daily aggregation
 - Monthly breakdown
 - By-model breakdown
-- Configurable time range (1-365 days)
+- By-call-type breakdown
+- Configurable time range (1-365 days, default 90)
 
 ## Use Cases
 
-### Get pricing
+### Get pricing (internal)
+
+Services fetch pricing on startup to populate PricingContext for cost tracking.
+
+### Get pricing (public)
 
 Frontend fetches pricing to display costs before API calls.
 
@@ -51,6 +57,8 @@ Users view their spending over time, broken down by model and month.
 **Personal analytics** - Track individual usage patterns
 
 **Multi-provider** - All LLM providers in one endpoint
+
+**Internal/Public separation** - Services need auth, users get their own data
 
 ## Limitations
 

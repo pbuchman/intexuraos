@@ -37,25 +37,16 @@ export interface NotionError {
  */
 export function mapNotionError(error: unknown): NotionError {
   if (isNotionClientError(error)) {
-    let code: NotionErrorCode;
+    const errorCodeMap: Partial<Record<APIErrorCode, NotionErrorCode>> = {
+      [APIErrorCode.Unauthorized]: 'UNAUTHORIZED',
+      [APIErrorCode.ObjectNotFound]: 'NOT_FOUND',
+      [APIErrorCode.RateLimited]: 'RATE_LIMITED',
+      [APIErrorCode.ValidationError]: 'VALIDATION_ERROR',
+      [APIErrorCode.InvalidJSON]: 'VALIDATION_ERROR',
+    };
 
-    switch (error.code) {
-      case APIErrorCode.Unauthorized:
-        code = 'UNAUTHORIZED';
-        break;
-      case APIErrorCode.ObjectNotFound:
-        code = 'NOT_FOUND';
-        break;
-      case APIErrorCode.RateLimited:
-        code = 'RATE_LIMITED';
-        break;
-      case APIErrorCode.ValidationError:
-      case APIErrorCode.InvalidJSON:
-        code = 'VALIDATION_ERROR';
-        break;
-      default:
-        code = 'INTERNAL_ERROR';
-    }
+    // Narrow error.code to APIErrorCode for map lookup; fall back to INTERNAL_ERROR if not found
+    const code = errorCodeMap[error.code as APIErrorCode] ?? 'INTERNAL_ERROR';
 
     return { code, message: error.message };
   }
@@ -64,6 +55,20 @@ export function mapNotionError(error: unknown): NotionError {
     code: 'INTERNAL_ERROR',
     message: getErrorMessage(error, 'Unknown Notion API error'),
   };
+}
+
+/**
+ * Calculate body length for logging purposes.
+ * @internal - exported for testing only
+ */
+export function calculateBodyLength(body: RequestInit['body']): number {
+  if (typeof body === 'string') {
+    return body.length;
+  }
+  if (body instanceof ArrayBuffer) {
+    return body.byteLength;
+  }
+  return 0;
 }
 
 /**
@@ -93,14 +98,7 @@ function createLoggingFetch(
       }
     }
 
-    let bodyLength = 0;
-    if (init?.body !== undefined) {
-      if (typeof init.body === 'string') {
-        bodyLength = init.body.length;
-      } else if (init.body instanceof ArrayBuffer) {
-        bodyLength = init.body.byteLength;
-      }
-    }
+    const bodyLength = init?.body !== undefined ? calculateBodyLength(init.body) : 0;
 
     logger.info('Notion API request', {
       method,
