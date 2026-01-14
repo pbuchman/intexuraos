@@ -168,6 +168,35 @@ describe('GptAdapter', () => {
         expect(result.error.code).toBe('TIMEOUT');
       }
     });
+
+    it('logs synthesis start with undefined additionalSources (nullish coalescing)', async () => {
+      // Covers line 61: sourceCount: additionalSources?.length ?? 0
+      const mockLogger = {
+        info: vi.fn(),
+        error: vi.fn(),
+        warn: vi.fn(),
+        debug: vi.fn(),
+      };
+      const adapterWithLogger = new GptAdapter(
+        'test-key',
+        LlmModels.O4MiniDeepResearch,
+        'test-user-id',
+        testPricing,
+        mockLogger
+      );
+
+      mockGenerate.mockResolvedValue({
+        ok: true,
+        value: { content: 'Result', usage: mockUsage },
+      });
+
+      await adapterWithLogger.synthesize('Prompt', [{ model: 'claude', content: 'Claude' }]);
+
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        { model: LlmModels.O4MiniDeepResearch, reportCount: 1, sourceCount: 0 },
+        'GPT synthesis started'
+      );
+    });
   });
 
   describe('generateTitle', () => {
