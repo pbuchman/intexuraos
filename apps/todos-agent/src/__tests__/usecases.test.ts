@@ -602,6 +602,103 @@ describe('updateTodoItem', () => {
       expect(result.error.code).toBe('NOT_FOUND');
     }
   });
+
+  it('returns NOT_FOUND for non-existent todo', async () => {
+    const result = await updateTodoItem(
+      { todoRepository, logger: mockLogger },
+      'non-existent-todo',
+      'item-id',
+      'user-1',
+      { status: 'completed' }
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('NOT_FOUND');
+    }
+  });
+
+  it('returns FORBIDDEN for non-owner', async () => {
+    const createResult = await todoRepository.create({
+      userId: 'user-1',
+      title: 'Test',
+      tags: [],
+      source: 'web',
+      sourceId: 'src-1',
+      items: [{ title: 'Item 1' }],
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) return;
+
+    const itemId = createResult.value.items[0]?.id;
+    expect(itemId).toBeDefined();
+    if (itemId === undefined) return;
+
+    const result = await updateTodoItem(
+      { todoRepository, logger: mockLogger },
+      createResult.value.id,
+      itemId,
+      'other-user',
+      { status: 'completed' }
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('FORBIDDEN');
+    }
+  });
+
+  it('returns error on storage failure', async () => {
+    const createResult = await todoRepository.create({
+      userId: 'user-1',
+      title: 'Test',
+      tags: [],
+      source: 'web',
+      sourceId: 'src-1',
+      items: [{ title: 'Item 1' }],
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) return;
+
+    const itemId = createResult.value.items[0]?.id;
+    expect(itemId).toBeDefined();
+    if (itemId === undefined) return;
+
+    todoRepository.simulateMethodError('update', {
+      code: 'STORAGE_ERROR',
+      message: 'Update failed',
+    });
+
+    const result = await updateTodoItem(
+      { todoRepository, logger: mockLogger },
+      createResult.value.id,
+      itemId,
+      'user-1',
+      { status: 'completed' }
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('STORAGE_ERROR');
+    }
+  });
+
+  it('handles todo with no items when checking status (edge case)', async () => {
+    // Create a todo without items - this tests the computeTodoStatus function's empty items branch
+    const createResult = await todoRepository.create({
+      userId: 'user-1',
+      title: 'Test',
+      tags: [],
+      source: 'web',
+      sourceId: 'src-1',
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) return;
+
+    // A todo with no items should have status 'pending'
+    expect(createResult.value.status).toBe('pending');
+    expect(createResult.value.items).toHaveLength(0);
+  });
 });
 
 describe('deleteTodoItem', () => {

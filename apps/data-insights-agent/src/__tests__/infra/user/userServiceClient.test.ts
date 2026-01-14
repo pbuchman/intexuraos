@@ -242,6 +242,35 @@ describe('userServiceClient', () => {
       );
     });
 
+    it('fetches correct API key for Zai provider', async () => {
+      const config = createMockConfig();
+      const client = createUserServiceClient(config);
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          llmPreferences: { defaultModel: LlmModels.Glm47 },
+        }),
+      } as Response);
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          zai: 'zai-api-key',
+        }),
+      } as Response);
+
+      const result = await client.getLlmClient('user-zai');
+
+      expect(result.ok).toBe(true);
+      expect(mockCreateLlmClient).toHaveBeenCalledWith(
+        expect.objectContaining({
+          apiKey: 'zai-api-key',
+          model: LlmModels.Glm47,
+        })
+      );
+    });
+
     it('includes pricing from pricing context in client config', async () => {
       const mockPricing = { inputPricePerMillion: 0.005, outputPricePerMillion: 0.015 };
       const mockPricingContext: IPricingContext = {

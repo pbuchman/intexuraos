@@ -17,11 +17,21 @@ const REQUIRED_ENV = [
 
 validateRequiredEnv(REQUIRED_ENV);
 
-initSentry({
-  dsn: process.env['INTEXURAOS_SENTRY_DSN'],
+const sentryConfig: {
+  environment: string;
+  serviceName: string;
+  dsn?: string;
+} = {
   environment: process.env['INTEXURAOS_ENVIRONMENT'] ?? 'development',
   serviceName: 'todos-agent',
-});
+};
+
+const sentryDsn = process.env['INTEXURAOS_SENTRY_DSN'];
+if (sentryDsn !== undefined) {
+  sentryConfig.dsn = sentryDsn;
+}
+
+initSentry(sentryConfig);
 
 async function main(): Promise<void> {
   await initServices({

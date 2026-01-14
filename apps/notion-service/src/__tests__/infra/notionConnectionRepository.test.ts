@@ -155,6 +155,19 @@ describe('notionConnectionRepository', () => {
         expect(result.value.connected).toBe(false);
       }
     });
+
+    it('preserves createdAt when disconnecting existing connection', async () => {
+      await saveNotionConnection('user-123', 'token');
+      const before = await getNotionConnection('user-123');
+      const createdAt = before.ok && before.value ? before.value.createdAt : undefined;
+
+      const result = await disconnectNotion('user-123');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.createdAt).toBe(createdAt);
+      }
+    });
   });
 
   describe('error handling', () => {

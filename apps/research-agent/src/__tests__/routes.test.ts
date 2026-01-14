@@ -4594,6 +4594,7 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
       // 'New long prompt that should become the title when generation fails' is 66 chars
       // slice(0, 60) gives first 60 chars: 'New long prompt that should become the title when generation'
       expect(body.data.title).toBe('New long prompt that should become the title when generation');
+      expect(body.data.title.length).toBe(60);
     });
   });
 
