@@ -21,6 +21,7 @@ import {
   type CreateEventInput,
   type UpdateEventInput,
   type ListEventsInput,
+  type FailedEventFilters,
 } from '../domain/index.js';
 
 interface ListEventsQuery {
@@ -777,6 +778,104 @@ export const calendarRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       }
 
       return await reply.ok({ calendars });
+    }
+  );
+
+  interface FailedEventsQuery {
+    limit?: number;
+  }
+
+  fastify.get<{ Querystring: FailedEventsQuery }>(
+    '/calendar/failed-events',
+    {
+      schema: {
+        operationId: 'listFailedEvents',
+        summary: 'List failed calendar event extractions',
+        description: 'Lists failed calendar event extractions for manual review',
+        tags: ['calendar'],
+        security: [{ bearerAuth: [] }],
+        querystring: {
+          type: 'object',
+          properties: {
+            limit: { type: 'integer', minimum: 1, maximum: 100, description: 'Maximum number of events (default: 10)' },
+          },
+        },
+        response: {
+          200: {
+              description: 'Success',
+              type: 'object',
+              properties: {
+                success: { type: 'boolean' },
+                data: {
+                  type: 'object',
+                  properties: {
+                    failedEvents: {
+                      type: 'array',
+                      items: {
+                        type: 'object',
+                        properties: {
+                          id: { type: 'string' },
+                          userId: { type: 'string' },
+                          actionId: { type: 'string' },
+                          originalText: { type: 'string' },
+                          summary: { type: 'string' },
+                          start: { type: ['string', 'null'] },
+                          end: { type: ['string', 'null'] },
+                          location: { type: ['string', 'null'] },
+                          description: { type: ['string', 'null'] },
+                          error: { type: 'string' },
+                          reasoning: { type: 'string' },
+                          createdAt: { type: 'string' },
+                        },
+                      },
+                    },
+                  },
+                },
+                diagnostics: { $ref: 'Diagnostics#' },
+              },
+            },
+          401: {
+              description: 'Error',
+              type: 'object',
+              properties: {
+                success: { type: 'boolean', enum: [false] },
+                error: { $ref: 'ErrorBody#' },
+                diagnostics: { $ref: 'Diagnostics#' },
+              },
+            },
+          500: {
+              description: 'Error',
+              type: 'object',
+              properties: {
+                success: { type: 'boolean', enum: [false] },
+                error: { $ref: 'ErrorBody#' },
+                diagnostics: { $ref: 'Diagnostics#' },
+              },
+            },
+        },
+      },
+    },
+    async (request: FastifyRequest<{ Querystring: FailedEventsQuery }>, reply: FastifyReply) => {
+      logIncomingRequest(request);
+      const user = await requireAuth(request, reply);
+      if (user === null) {
+        return;
+      }
+
+      const { failedEventRepository } = getServices();
+      const filters: FailedEventFilters = {};
+      if (request.query.limit !== undefined) {
+        filters.limit = request.query.limit;
+      }
+
+      const result = await failedEventRepository.list(user.userId, filters);
+
+      if (!result.ok) {
+        reply.status(500);
+        return await reply.fail('DOWNSTREAM_ERROR', result.error.message);
+      }
+
+      return await reply.ok({ failedEvents: result.value });
     }
   );
 

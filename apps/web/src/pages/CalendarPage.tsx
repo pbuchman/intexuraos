@@ -3,15 +3,19 @@ import {
   Calendar as CalendarIcon,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
+  ChevronUp,
   Clock,
   ExternalLink,
   MapPin,
   RefreshCw,
   Users,
+  AlertCircle,
+  X,
 } from 'lucide-react';
 import { Button, Card, Layout } from '@/components';
-import { useCalendarEvents } from '@/hooks';
-import type { CalendarEvent, CalendarEventDateTime } from '@/types';
+import { useCalendarEvents, useFailedCalendarEvents } from '@/hooks';
+import type { CalendarEvent, CalendarEventDateTime, FailedCalendarEvent } from '@/types';
 
 function formatTimeOnly(dt: CalendarEventDateTime): string {
   if (dt.dateTime !== undefined) {
@@ -117,6 +121,120 @@ function EventRow({ event }: EventRowProps): React.JSX.Element {
   );
 }
 
+interface FailedEventCardProps {
+  event: FailedCalendarEvent;
+  onDismiss: (id: string) => void;
+}
+
+function FailedEventCard({ event, onDismiss }: FailedEventCardProps): React.JSX.Element {
+  return (
+    <div className="flex gap-3 rounded-lg border border-amber-200 bg-amber-50 p-3">
+      <div className="flex shrink-0 items-center justify-center rounded-lg bg-amber-100 p-2 text-amber-600">
+        <AlertCircle className="h-4 w-4" />
+      </div>
+
+      <div className="min-w-0 flex-1">
+        <div className="mb-1 flex items-start justify-between gap-2">
+          <h4 className="font-medium text-amber-900">
+            {event.summary ?? 'Untitled event'}
+          </h4>
+          <button
+            type="button"
+            onClick={() => {
+              onDismiss(event.id);
+            }}
+            className="shrink-0 rounded p-1 text-amber-400 transition-colors hover:bg-amber-100 hover:text-amber-600"
+            aria-label="Dismiss"
+          >
+            <X className="h-3 w-3" />
+          </button>
+        </div>
+
+        {event.description !== null && event.description !== '' && (
+          <p className="mb-2 line-clamp-2 text-sm text-amber-700">{event.description}</p>
+        )}
+
+        <div className="mb-2 rounded-md bg-amber-100 px-2 py-1 text-xs text-amber-800">
+          <span className="font-medium">Issue:</span> {event.error}
+        </div>
+
+        <div className="text-xs text-amber-600">
+          <span className="font-medium">Original text:</span> "{event.originalText}"
+        </div>
+
+        {event.reasoning !== null && (
+          <div className="mt-1 text-xs text-amber-600">
+            <span className="font-medium">Reasoning:</span> {event.reasoning}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+interface NeedsAttentionSectionProps {
+  events: FailedCalendarEvent[];
+  onDismiss: (id: string) => void;
+}
+
+function NeedsAttentionSection({
+  events,
+  onDismiss,
+}: NeedsAttentionSectionProps): React.JSX.Element | null {
+  const [expanded, setExpanded] = useState(false);
+  const visibleCount = expanded ? events.length : Math.min(events.length, 3);
+
+  if (events.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="mb-6 rounded-lg border border-amber-200 bg-amber-50 p-4">
+      <div className="mb-3 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <AlertCircle className="h-5 w-5 text-amber-600" />
+          <h3 className="font-semibold text-amber-900">
+            Needs Attention ({events.length})
+          </h3>
+        </div>
+        {events.length > 3 && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              setExpanded(!expanded);
+            }}
+            className="text-amber-700 hover:bg-amber-100 hover:text-amber-900"
+          >
+            {expanded ? (
+              <>
+                <span>Show less</span>
+                <ChevronUp className="ml-1 h-4 w-4" />
+              </>
+            ) : (
+              <>
+                <span>Show all ({events.length})</span>
+                <ChevronDown className="ml-1 h-4 w-4" />
+              </>
+            )}
+          </Button>
+        )}
+      </div>
+
+      <p className="mb-4 text-sm text-amber-700">
+        These events couldn't be created. Please edit them and try again.
+      </p>
+
+      <div className="space-y-2">
+        {events.slice(0, visibleCount).map((event) => (
+          <FailedEventCard key={event.id} event={event} onDismiss={onDismiss} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 interface DateGroupProps {
   date: string;
   events: CalendarEvent[];
@@ -153,7 +271,13 @@ function DateGroup({ date, events }: DateGroupProps): React.JSX.Element {
 
 export function CalendarPage(): React.JSX.Element {
   const { events, loading, error, filters, setFilters, refresh } = useCalendarEvents();
+  const {
+    events: failedEvents,
+    loading: failedEventsLoading,
+    refresh: refreshFailedEvents,
+  } = useFailedCalendarEvents();
   const [refreshing, setRefreshing] = useState(false);
+  const [dismissedFailedEventIds, setDismissedFailedEventIds] = useState<Set<string>>(new Set());
 
   const currentStart = filters.timeMin !== undefined ? new Date(filters.timeMin) : new Date();
   const currentEnd = filters.timeMax !== undefined ? new Date(filters.timeMax) : new Date();
@@ -203,18 +327,26 @@ export function CalendarPage(): React.JSX.Element {
   const handleRefresh = async (): Promise<void> => {
     setRefreshing(true);
     try {
-      await refresh();
+      await Promise.all([refresh(), refreshFailedEvents()]);
     } finally {
       setRefreshing(false);
     }
   };
+
+  const handleDismissFailedEvent = (id: string): void => {
+    setDismissedFailedEventIds((prev) => new Set([...prev, id]));
+  };
+
+  const visibleFailedEvents = failedEvents.filter(
+    (event) => !dismissedFailedEventIds.has(event.id)
+  );
 
   const groupedEvents = groupEventsByDate(events);
   const sortedDates = Array.from(groupedEvents.keys()).sort(
     (a, b) => new Date(a).getTime() - new Date(b).getTime()
   );
 
-  if (loading && events.length === 0) {
+  if (loading && failedEventsLoading && events.length === 0) {
     return (
       <Layout>
         <div className="flex items-center justify-center py-12">
@@ -244,6 +376,11 @@ export function CalendarPage(): React.JSX.Element {
           Refresh
         </Button>
       </div>
+
+      <NeedsAttentionSection
+        events={visibleFailedEvents}
+        onDismiss={handleDismissFailedEvent}
+      />
 
       <div className="mb-6 flex items-center justify-between rounded-lg border border-slate-200 bg-white p-4">
         <Button type="button" variant="ghost" size="sm" onClick={handlePrevWeek}>

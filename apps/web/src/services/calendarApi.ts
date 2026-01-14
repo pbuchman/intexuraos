@@ -1,6 +1,6 @@
 import { config } from '@/config';
 import { apiRequest } from './apiClient.js';
-import type { CalendarEvent } from '@/types';
+import type { CalendarEvent, FailedCalendarEvent } from '@/types';
 
 export interface ListCalendarEventsFilters {
   timeMin?: string;
@@ -39,6 +39,21 @@ export async function listCalendarEvents(
   const response = await apiRequest<ListEventsResponse>(
     config.calendarAgentUrl,
     `/calendar/events${query}`,
+    accessToken
+  );
+  return response.events;
+}
+
+interface ListFailedEventsResponse {
+  events: FailedCalendarEvent[];
+}
+
+export async function listFailedEvents(
+  accessToken: string
+): Promise<FailedCalendarEvent[]> {
+  const response = await apiRequest<ListFailedEventsResponse>(
+    config.calendarAgentUrl,
+    '/calendar/failed-events',
     accessToken
   );
   return response.events;

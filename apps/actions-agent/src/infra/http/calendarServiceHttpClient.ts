@@ -46,7 +46,9 @@ export function createCalendarServiceHttpClient(
       let response: Response;
       try {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+        const timeoutId = setTimeout(() => {
+          controller.abort();
+        }, timeoutMs);
 
         response = await fetch(url, {
           method: 'POST',

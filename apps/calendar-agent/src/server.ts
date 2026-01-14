@@ -17,6 +17,7 @@ import {
 } from '@intexuraos/http-server';
 import { createSentryStream, setupSentryErrorHandler } from '@intexuraos/infra-sentry';
 import { calendarRoutes } from './routes/calendarRoutes.js';
+import { internalRoutes } from './routes/internalRoutes.js';
 
 const SERVICE_NAME = 'calendar-agent';
 const SERVICE_VERSION = '0.0.4';
@@ -176,6 +177,7 @@ export async function buildServer(): Promise<FastifyInstance> {
   });
 
   await app.register(calendarRoutes);
+  await app.register(internalRoutes);
 
   app.get(
     '/openapi.json',

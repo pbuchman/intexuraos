@@ -101,20 +101,21 @@ export function createExecuteCalendarActionUseCase(
     const response = result.value;
 
     if (response.status === 'failed') {
-      logger.info({ actionId, error: response.error }, 'Calendar action failed');
+      const errorMessage = response.error ?? 'Unknown error';
+      logger.info({ actionId, error: errorMessage }, 'Calendar action failed');
       const failedAction: Action = {
         ...action,
         status: 'failed',
         payload: {
           ...action.payload,
-          ...(response.error !== undefined && { error: response.error }),
+          error: errorMessage,
         },
         updatedAt: new Date().toISOString(),
       };
       await actionRepository.update(failedAction);
       return ok({
         status: 'failed',
-        error: response.error,
+        error: errorMessage,
       });
     }
 

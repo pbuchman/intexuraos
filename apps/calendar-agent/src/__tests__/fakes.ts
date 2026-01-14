@@ -7,6 +7,9 @@ import type {
   CalendarError,
   CalendarEvent,
   CreateEventInput,
+  FailedEvent,
+  CreateFailedEventInput,
+  FailedEventFilters,
   FreeBusyInput,
   FreeBusySlot,
   GoogleCalendarClient,
@@ -15,6 +18,13 @@ import type {
   UpdateEventInput,
   UserServiceClient,
 } from '../domain/index.js';
+import type { LlmGenerateClient } from '@intexuraos/llm-factory';
+import type { LLMError } from '@intexuraos/llm-contract';
+import type {
+  CalendarActionExtractionService,
+  ExtractedCalendarEvent,
+  ExtractionError,
+} from '../infra/gemini/calendarActionExtractionService.js';
 
 export class FakeUserServiceClient implements UserServiceClient {
   private tokenResult: Result<OAuthTokenResult, CalendarError> | null = null;
@@ -193,5 +203,158 @@ export class FakeGoogleCalendarClient implements GoogleCalendarClient {
       return this.freeBusyResult;
     }
     return ok(new Map([['primary', []]]));
+  }
+}
+
+export class FakeFailedEventRepository {
+  private events: FailedEvent[] = [];
+  private createResult: Result<FailedEvent, CalendarError> | null = null;
+  private listResult: Result<FailedEvent[], CalendarError> | null = null;
+  private getResult: Result<FailedEvent | null, CalendarError> | null = null;
+  private deleteResult: Result<void, CalendarError> | null = null;
+
+  setCreateResult(result: Result<FailedEvent, CalendarError>): void {
+    this.createResult = result;
+  }
+
+  setListResult(result: Result<FailedEvent[], CalendarError>): void {
+    this.listResult = result;
+  }
+
+  setGetResult(result: Result<FailedEvent | null, CalendarError>): void {
+    this.getResult = result;
+  }
+
+  setDeleteResult(result: Result<void, CalendarError>): void {
+    this.deleteResult = result;
+  }
+
+  clear(): void {
+    this.events = [];
+  }
+
+  getEvents(): FailedEvent[] {
+    return [...this.events];
+  }
+
+  async create(
+    input: CreateFailedEventInput
+  ): Promise<Result<FailedEvent, CalendarError>> {
+    if (this.createResult !== null) {
+      return this.createResult;
+    }
+    const newEvent: FailedEvent = {
+      id: `failed-${Date.now()}`,
+      userId: input.userId,
+      actionId: input.actionId,
+      originalText: input.originalText,
+      summary: input.summary,
+      start: input.start,
+      end: input.end,
+      location: input.location,
+      description: input.description,
+      error: input.error,
+      reasoning: input.reasoning,
+      createdAt: new Date(),
+    };
+    this.events.push(newEvent);
+    return ok(newEvent);
+  }
+
+  async list(
+    userId: string,
+    _filters?: FailedEventFilters
+  ): Promise<Result<FailedEvent[], CalendarError>> {
+    if (this.listResult !== null) {
+      return this.listResult;
+    }
+    const userEvents = this.events.filter((e) => e.userId === userId);
+    return ok(userEvents);
+  }
+
+  async get(id: string): Promise<Result<FailedEvent | null, CalendarError>> {
+    if (this.getResult !== null) {
+      return this.getResult;
+    }
+    const event = this.events.find((e) => e.id === id);
+    return ok(event ?? null);
+  }
+
+  async delete(id: string): Promise<Result<void, CalendarError>> {
+    if (this.deleteResult !== null) {
+      return this.deleteResult;
+    }
+    const index = this.events.findIndex((e) => e.id === id);
+    if (index === -1) {
+      return err({ code: 'NOT_FOUND', message: 'Failed event not found' });
+    }
+    this.events.splice(index, 1);
+    return ok(undefined);
+  }
+}
+
+export class FakeLlmGenerateClient implements LlmGenerateClient {
+  private generateResult: Result<
+    { content: string; usage: { inputTokens: number; outputTokens: number; totalTokens: number; costUsd: number } },
+    LLMError
+  > | null = null;
+
+  setGenerateResult(
+    result: Result<
+      { content: string; usage: { inputTokens: number; outputTokens: number; totalTokens: number; costUsd: number } },
+      LLMError
+    >
+  ): void {
+    this.generateResult = result;
+  }
+
+  async generate(
+    _prompt: string
+  ): Promise<
+    Result<
+      { content: string; usage: { inputTokens: number; outputTokens: number; totalTokens: number; costUsd: number } },
+      LLMError
+    >
+  > {
+    if (this.generateResult !== null) {
+      return this.generateResult;
+    }
+    return ok({
+      content: JSON.stringify({
+        summary: 'Test Event',
+        start: '2025-01-15T10:00:00',
+        end: '2025-01-15T11:00:00',
+        location: null,
+        description: null,
+        valid: true,
+        error: null,
+        reasoning: 'Test reasoning',
+      }),
+      usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150, costUsd: 0.001 },
+    });
+  }
+}
+
+export class FakeCalendarActionExtractionService implements CalendarActionExtractionService {
+  extractEventResult: Result<ExtractedCalendarEvent, ExtractionError> | null = null;
+
+  async extractEvent(
+    _userId: string,
+    _text: string,
+    _currentDate: string
+  ): Promise<Result<ExtractedCalendarEvent, ExtractionError>> {
+    if (this.extractEventResult !== null) {
+      return this.extractEventResult;
+    }
+    return ok({
+      summary: 'Test Event',
+      start: '2025-01-15T10:00:00',
+      end: '2025-01-15T11:00:00',
+      location: null,
+      description: null,
+      valid: true,
+      error: null,
+      reasoning: 'Test reasoning',
+    });
   }
 }
