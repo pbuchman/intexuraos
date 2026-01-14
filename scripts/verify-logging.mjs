@@ -113,10 +113,12 @@ function extractFactoryFunctions(filePath) {
  */
 function callIncludesLogger(callContent) {
   // Check if the call object includes logger: ...
-  return /logger\s*:\s*pino\s*\(/.test(callContent) ||
-         /logger\s*:\s*logger/.test(callContent) ||
-         /logger\s*:\s*config\./.test(callContent) ||
-         /logger\s*:\s*serviceConfig\./.test(callContent);
+  return (
+    /logger\s*:\s*pino\s*\(/.test(callContent) ||
+    /logger\s*:\s*logger/.test(callContent) ||
+    /logger\s*:\s*config\./.test(callContent) ||
+    /logger\s*:\s*serviceConfig\./.test(callContent)
+  );
 }
 
 /**
@@ -135,9 +137,7 @@ function checkServicesFile(servicesFile, factoryFunctions) {
   const appName = appMatch[1];
 
   // Filter factories to only those in the same app
-  const appFactories = factoryFunctions.filter((f) =>
-    f.filePath.includes(`/apps/${appName}/`)
-  );
+  const appFactories = factoryFunctions.filter((f) => f.filePath.includes(`/apps/${appName}/`));
 
   if (appFactories.length === 0) {
     return;

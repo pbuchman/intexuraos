@@ -219,6 +219,8 @@ Note: Create separate `server.ts` and `config.ts` files. See existing services f
  * Provides dependency injection for domain adapters.
  */
 
+import pino from 'pino';
+
 export interface ServiceContainer {
   // Define service dependencies here
   // exampleRepo: ExampleRepository;
@@ -228,6 +230,8 @@ export interface ServiceContainer {
 export interface ServiceConfig {
   // Add config fields as needed
   // exampleApiKey: string;
+  // todosAgentUrl: string;
+  // internalAuthToken: string;
 }
 
 let container: ServiceContainer | null = null;
@@ -239,7 +243,19 @@ let container: ServiceContainer | null = null;
 export function initServices(config: ServiceConfig): void {
   container = {
     // Initialize production dependencies using config
-    // exampleRepo: new ExampleRepositoryAdapter(config.exampleApiKey),
+    // Pattern 1: Module-level logger (infra adapters with single purpose)
+    // No logger passing needed - created at file scope in adapter
+    // Pattern 2: Factory config logger (HTTP clients for internal services)
+    // todosClient: createTodosServiceHttpClient({
+    //   baseUrl: config.todosAgentUrl,
+    //   internalAuthToken: config.internalAuthToken,
+    //   logger: pino({ name: 'todosClient' }), // Required in production
+    // }),
+    // Pattern 3: Constructor injection (reusable packages)
+    // linkPreviewFetcher: new OpenGraphFetcher(
+    //   undefined,
+    //   pino({ name: 'openGraphFetcher' })
+    // ),
   };
 }
 
@@ -271,6 +287,19 @@ export function resetServices(): void {
 // DO NOT add: export * from './infra/...'
 // Services.ts should only export DI functions, not re-export infra.
 ```
+
+**Logging Patterns Reference:**
+
+See `docs/patterns/logging.md` for complete documentation on when to use each pattern:
+
+| Pattern        | When to Use                        | Example                                               |
+| -------------- | ---------------------------------- | ----------------------------------------------------- |
+| Module-level   | Infra adapters with single purpose | `const logger = pino({ name: 'whatsapp-cloud-api' })` |
+| Factory config | HTTP clients for internal services | `logger: pino({ name: 'todosClient' })` in config     |
+| Constructor    | Reusable packages                  | `new OpenGraphFetcher(undefined, logger)`             |
+| Use case deps  | Domain use cases                   | `createProcessCommandUseCase({ logger })`             |
+
+**Verification:** Factory functions with `logger?: Logger` must be called with a logger in production. Check with: `pnpm run verify:logging`
 
 ### 6. Add Terraform Module
 

@@ -21,12 +21,14 @@ export function getMediaUrl(mediaId: string): Promise<Result<string>> {
 ```
 
 **Use cases:**
+
 - HTTP clients wrapping external APIs
 - Database adapters
 - PubSub publishers
 - Service-specific infra implementations
 
 **Examples:**
+
 - `apps/whatsapp-service/src/infra/whatsapp/cloudApiAdapter.ts`
 - `apps/whatsapp-service/src/infra/speechmatics/adapter.ts`
 
@@ -66,6 +68,7 @@ export function createTodosServiceHttpClient(
 ```
 
 **In services.ts:**
+
 ```typescript
 import pino from 'pino';
 
@@ -77,10 +80,12 @@ const todosServiceClient = createTodosServiceHttpClient({
 ```
 
 **Use cases:**
+
 - HTTP clients for internal service communication
 - Clients that may be used in multiple contexts
 
 **Examples:**
+
 - `apps/actions-agent/src/infra/http/todosServiceHttpClient.ts`
 - `apps/commands-agent/src/infra/user/userServiceClient.ts`
 
@@ -106,6 +111,7 @@ export class OpenGraphFetcher {
 ```
 
 **In services.ts:**
+
 ```typescript
 import pino from 'pino';
 
@@ -116,10 +122,12 @@ linkPreviewFetcher: new OpenGraphFetcher(
 ```
 
 **Use cases:**
+
 - Reusable packages that may be used across different services
 - Classes where caller should control logger configuration
 
 **Examples:**
+
 - `packages/infra-open-graph/src/fetcher.ts`
 
 ---
@@ -137,7 +145,7 @@ export function createProcessCommandUseCase(deps: {
   eventPublisher: EventPublisherPort;
   logger: Logger; // ← Required dependency
 }): ProcessCommandUseCase {
-  const { logger, /* ... */ } = deps;
+  const { logger /* ... */ } = deps;
 
   return {
     async execute(input: ProcessCommandInput) {
@@ -152,26 +160,28 @@ export function createProcessCommandUseCase(deps: {
 
 ## Log Levels
 
-| Level | When to Use | Example |
-|-------|-------------|---------|
-| `trace` | Very detailed debugging (rarely used) | Individual loop iterations |
-| `debug` | Detailed flow information | State values, intermediate results |
-| `info` | Normal operation, key events | "Starting X", "Completed Y" |
-| `warn` | Unexpected but recoverable | Using fallback, missing optional data |
-| `error` | Failure that breaks operation | API errors, failed operations |
-| `fatal` | Service-threatening error | Unhandled exceptions (rare) |
+| Level   | When to Use                           | Example                               |
+| ------- | ------------------------------------- | ------------------------------------- |
+| `trace` | Very detailed debugging (rarely used) | Individual loop iterations            |
+| `debug` | Detailed flow information             | State values, intermediate results    |
+| `info`  | Normal operation, key events          | "Starting X", "Completed Y"           |
+| `warn`  | Unexpected but recoverable            | Using fallback, missing optional data |
+| `error` | Failure that breaks operation         | API errors, failed operations         |
+| `fatal` | Service-threatening error             | Unhandled exceptions (rare)           |
 
 ---
 
 ## Structured Context
 
 **DO include:**
+
 - Entity IDs: `commandId`, `userId`, `actionId`
 - Status/state: `status`, `classificationType`
 - Metadata: `textLength`, `url`, `timeoutMs`
 - Error context: `error: getErrorMessage(error)`
 
 **DO NOT include:**
+
 - Secrets: API keys, tokens, passwords
 - Full payloads: entire request/response bodies
 - PII: email addresses, phone numbers (unless hashed)
@@ -209,6 +219,7 @@ logger.info({}, 'Classified'); // Vague
 ## Testing
 
 **Silent logger for tests:**
+
 ```typescript
 import pino from 'pino';
 
@@ -220,6 +231,7 @@ const logger = pino({ name: 'service-test', level: 'silent' });
 ## Verification
 
 Run the logging standards check:
+
 ```bash
 pnpm run verify:logging
 ```
@@ -230,9 +242,9 @@ This verifies that factory functions accepting `logger?: Logger` are called with
 
 ## Quick Reference
 
-| Pattern | Location | Logger Passing |
-|---------|----------|----------------|
-| Module-level | `infra/` adapters | None (created at file scope) |
+| Pattern        | Location                     | Logger Passing                 |
+| -------------- | ---------------------------- | ------------------------------ |
+| Module-level   | `infra/` adapters            | None (created at file scope)   |
 | Factory config | `infra/http/`, `infra/user/` | Via `logger:` in config object |
-| Constructor | Reusable packages | Via constructor parameter |
-| Use case deps | `domain/usecases/` | Via `deps.logger` |
+| Constructor    | Reusable packages            | Via constructor parameter      |
+| Use case deps  | `domain/usecases/`           | Via `deps.logger`              |
