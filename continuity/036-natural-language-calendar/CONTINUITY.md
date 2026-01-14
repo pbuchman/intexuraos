@@ -20,9 +20,9 @@ Constraints / Assumptions:
 
 State:
 
-- Done:
-- Now: 0-0-shared-config-prompts.md
-- Next: 1-0-actions-agent-dispatcher.md
+- Done: 0-0-shared-config-prompts.md
+- Now: 1-0-actions-agent-dispatcher.md
+- Next: 1-1-calendar-agent-worker.md
   Open questions:
   Working set:
 
@@ -33,3 +33,21 @@ State:
 - Created continuity task `036-natural-language-calendar`.
 - Defined subtasks based on approved plan.
 - Initialized ledger.
+
+### [2026-01-14] Task 0-0: Shared Configuration & Prompts
+
+**Completed:**
+1. Added `calendar_failed_events` collection to `firestore-collections.json` (owner: calendar-agent)
+2. Updated `commandClassifierPrompt.ts`:
+   - Moved `calendar` to priority #1 (above todo)
+   - Added comprehensive calendar detection rules
+   - Added English/Polish examples for calendar vs reminder distinction
+3. Created `calendarActionExtractionPrompt.ts`:
+   - Input interface: `text`, `currentDate`
+   - Output schema: `summary`, `start`, `end`, `location`, `description`, `valid`, `error`, `reasoning`
+   - Supports relative date parsing (today, tomorrow, in X days, next Monday)
+   - Supports English and Polish time expressions
+   - Default time: 09:00 if not specified
+   - Default duration: 1 hour if end time not specified
+4. Exported new prompt in `classification/index.ts` and main `index.ts`
+5. Verified typecheck passes
