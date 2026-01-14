@@ -540,9 +540,9 @@ export function createPubsubRoutes(config: Config): FastifyPluginCallback {
       {
         schema: {
           operationId: 'processWebhookEvent',
-          summary: 'Process webhook or link preview event from PubSub',
+          summary: 'Process webhook event or trigger link preview extraction via web-agent',
           description:
-            'Internal endpoint for PubSub push. Handles two event types: webhook.process (processes WhatsApp webhook events) and linkpreview.extract (extracts Open Graph metadata from URLs in messages).',
+            'Internal endpoint for PubSub push. Handles two event types: webhook.process (processes WhatsApp webhook events directly) and linkpreview.extract (delegates Open Graph metadata extraction to web-agent via internal API).',
           tags: ['internal'],
           body: {
             type: 'object',

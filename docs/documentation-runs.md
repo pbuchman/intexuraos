@@ -43,7 +43,7 @@ Log of all `/document-service` runs.
 
 **Changes Summary:**
 
-- Added Zai (glm-4-flash, glm-4-plus) to research-agent LLM providers
+- Added Zai (glm-4.7) to research-agent LLM providers
 - Updated app-settings-service to reflect 5 LLM providers (was 4)
 - Added internal endpoint documentation for app-settings-service
 - Updated all documentation dates to 2026-01-14
@@ -79,7 +79,7 @@ Previous session completed missing tutorial.md and technical-debt.md files for t
 
 **Files Created:**
 
-### Documentation Files (68 files)
+### Service Documentation Files (68 files)
 
 **actions-agent** (4 files)
 

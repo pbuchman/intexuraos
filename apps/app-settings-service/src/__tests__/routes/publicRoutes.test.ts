@@ -73,7 +73,7 @@ describe('publicRoutes', () => {
   const mockZaiPricing: ProviderPricing = {
     provider: LlmProviders.Zai,
     models: {
-      'glm-4-flash': {
+      'glm-4.7': {
         inputPricePerMillion: 0.1,
         outputPricePerMillion: 0.5,
       },
