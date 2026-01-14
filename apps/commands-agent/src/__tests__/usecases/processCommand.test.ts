@@ -21,7 +21,7 @@ describe('processCommand usecase', () => {
 
   // Create a fake LLM client for use in tests
   const createFakeLlmClient = (fakeClassifier: FakeClassifier): LlmGenerateClient => ({
-    async generate(): Promise<ReturnType<typeof ok>> {
+    async generate(_prompt: string) {
       const result = await fakeClassifier.classify('');
       if (result.type === 'unclassified') {
         return ok({
