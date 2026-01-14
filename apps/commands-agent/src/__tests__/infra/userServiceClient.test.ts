@@ -1,4 +1,4 @@
-import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import nock from 'nock';
 import { createPricingContext } from '@intexuraos/llm-pricing';
 import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
