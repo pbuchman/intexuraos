@@ -602,6 +602,76 @@ describe('createGlmClient', () => {
         expect(result.value.usage.cacheTokens).toBeUndefined();
       }
     });
+
+    it('handles usage with undefined prompt_tokens and completion_tokens', async () => {
+      // Tests the ?? 0 fallback branches in extractUsageDetails (lines 256-257)
+      mockChatCompletionsCreate.mockResolvedValue({
+        choices: [{ message: { content: 'Content' } }],
+        usage: {} as unknown, // usage exists but prompt_tokens and completion_tokens are undefined
+      });
+
+      const client = createGlmClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        pricing: createTestPricing(),
+      });
+      const result = await client.generate('Test');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.usage.inputTokens).toBe(0);
+        expect(result.value.usage.outputTokens).toBe(0);
+        expect(result.value.usage.totalTokens).toBe(0);
+        expect(result.value.usage.costUsd).toBe(0);
+      }
+    });
+
+    it('handles usage with undefined prompt_tokens only', async () => {
+      // Tests the ?? 0 fallback branch for prompt_tokens (line 256)
+      mockChatCompletionsCreate.mockResolvedValue({
+        choices: [{ message: { content: 'Content' } }],
+        usage: { completion_tokens: 50 } as unknown, // prompt_tokens is undefined
+      });
+
+      const client = createGlmClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        pricing: createTestPricing(),
+      });
+      const result = await client.generate('Test');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.usage.inputTokens).toBe(0);
+        expect(result.value.usage.outputTokens).toBe(50);
+        expect(result.value.usage.totalTokens).toBe(50);
+      }
+    });
+
+    it('handles usage with undefined completion_tokens only', async () => {
+      // Tests the ?? 0 fallback branch for completion_tokens (line 257)
+      mockChatCompletionsCreate.mockResolvedValue({
+        choices: [{ message: { content: 'Content' } }],
+        usage: { prompt_tokens: 100 } as unknown, // completion_tokens is undefined
+      });
+
+      const client = createGlmClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        pricing: createTestPricing(),
+      });
+      const result = await client.generate('Test');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.usage.inputTokens).toBe(100);
+        expect(result.value.usage.outputTokens).toBe(0);
+        expect(result.value.usage.totalTokens).toBe(100);
+      }
+    });
   });
 
   describe('timeout error handling', () => {
