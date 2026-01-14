@@ -177,6 +177,20 @@ describe('GoogleOAuthClientImpl', () => {
       }
     });
 
+    it('returns INVALID_GRANT for invalid_grant error', async () => {
+      // Tests ternary at line 135: googleError === 'invalid_grant' ? 'INVALID_GRANT' : 'TOKEN_REFRESH_FAILED'
+      nock('https://oauth2.googleapis.com')
+        .post('/token')
+        .reply(401, { error: 'invalid_grant' });
+
+      const result = await client.refreshAccessToken('expired-token');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('INVALID_GRANT');
+      }
+    });
+
     it('handles network errors', async () => {
       nock('https://oauth2.googleapis.com')
         .post('/token')
