@@ -47,6 +47,8 @@ export interface LlmResult {
   inputTokens?: number;
   outputTokens?: number;
   costUsd?: number;
+  /** Marks results copied from source research in enhanced research (costs tracked in sourceLlmCostUsd) */
+  copiedFromSource?: boolean;
 }
 
 /**
@@ -249,7 +251,10 @@ export function createEnhancedResearch(params: EnhanceResearchParams): Research 
     selectedModels: allModels,
     synthesisModel: params.synthesisModel ?? source.synthesisModel,
     status: 'pending',
-    llmResults: [...completedResults, ...newResults],
+    llmResults: [
+      ...completedResults.map((r) => ({ ...r, copiedFromSource: true })),
+      ...newResults,
+    ],
     startedAt: now,
     sourceResearchId: source.id,
     sourceLlmCostUsd,

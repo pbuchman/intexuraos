@@ -237,7 +237,14 @@ export async function runSynthesis(
   logger?.info(`[4.3.4] Attribution status: ${attributionStatus}`);
 
   // Calculate aggregate totals from all LLM results + synthesis
-  const llmTotals = research.llmResults.reduce(
+  // For enhanced research: exclude copiedFromSource results (costs tracked in sourceLlmCostUsd)
+  const completedResults = research.llmResults.filter((r) => r.status === 'completed');
+  const newCompletedResults =
+    research.sourceResearchId !== undefined
+      ? completedResults.filter((r) => r.copiedFromSource !== true)
+      : completedResults;
+
+  const llmTotals = newCompletedResults.reduce(
     (acc, r) => ({
       inputTokens: acc.inputTokens + (r.inputTokens ?? 0),
       outputTokens: acc.outputTokens + (r.outputTokens ?? 0),

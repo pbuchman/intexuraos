@@ -11,6 +11,7 @@ import {
   runSynthesis,
   type RunSynthesisDeps,
 } from '../../../../domain/research/usecases/runSynthesis.js';
+import * as repairAttributionModule from '../../../../domain/research/usecases/repairAttribution.js';
 import type { Research } from '../../../../domain/research/models/index.js';
 import type { ShareStoragePort } from '../../../../domain/research/ports/index.js';
 
@@ -102,15 +103,23 @@ function createTestResearch(overrides: Partial<Research> = {}): Research {
 
 describe('runSynthesis', () => {
   let deps: ReturnType<typeof createMockDeps>;
+  let repairAttributionSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
     deps = createMockDeps();
+    // Mock repairAttribution to fail (so no extra cost from repair attempt)
+    const repairError = new Error('Repair disabled in tests') as Error & { code: string };
+    repairError.code = 'REPAIR_DISABLED';
+    repairAttributionSpy = vi.spyOn(repairAttributionModule, 'repairAttribution').mockResolvedValue(
+      err(repairError)
+    );
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2024-01-01T12:00:00Z'));
   });
 
   afterEach(() => {
     vi.useRealTimers();
+    repairAttributionSpy.mockRestore();
   });
 
   it('returns error when research not found', async () => {
@@ -263,7 +272,7 @@ describe('runSynthesis', () => {
       totalDurationMs: 7200000,
       totalInputTokens: 500,
       totalOutputTokens: 200,
-      totalCostUsd: 0.02, // Synthesis (0.01) + attribution repair (0.01)
+      totalCostUsd: 0.01, // Synthesis (0.01) - repair attribution disabled in tests
       attributionStatus: expect.stringMatching(/^(complete|incomplete|repaired)$/),
     });
   });
@@ -732,7 +741,7 @@ describe('runSynthesis', () => {
         totalDurationMs: 7200000,
         totalInputTokens: 500,
         totalOutputTokens: 200,
-        totalCostUsd: 0.02, // Synthesis (0.01) + attribution repair (0.01)
+        totalCostUsd: 0.01, // Synthesis (0.01) - repair attribution disabled in tests
         shareInfo: expect.objectContaining({
           shareToken: expect.any(String),
           slug: 'test-research',
@@ -794,7 +803,7 @@ describe('runSynthesis', () => {
         totalDurationMs: 7200000,
         totalInputTokens: 500,
         totalOutputTokens: 200,
-        totalCostUsd: 0.02, // Synthesis (0.01) + attribution repair (0.01)
+        totalCostUsd: 0.01, // Synthesis (0.01) - repair attribution disabled in tests
       });
     });
 
@@ -849,7 +858,7 @@ describe('runSynthesis', () => {
         totalDurationMs: 7200000,
         totalInputTokens: 500,
         totalOutputTokens: 200,
-        totalCostUsd: 0.02, // Synthesis (0.01) + attribution repair (0.01)
+        totalCostUsd: 0.01, // Synthesis (0.01) - repair attribution disabled in tests
         shareInfo: expect.objectContaining({
           coverImageId: 'img-123',
         }),
@@ -958,7 +967,7 @@ describe('runSynthesis', () => {
         totalDurationMs: 7200000,
         totalInputTokens: 500,
         totalOutputTokens: 200,
-        totalCostUsd: 0.02, // Synthesis (0.01) + attribution repair (0.01)
+        totalCostUsd: 0.01, // Synthesis (0.01) - repair attribution disabled in tests
         shareInfo: expect.not.objectContaining({
           coverImageId: expect.anything(),
         }),
@@ -999,7 +1008,7 @@ describe('runSynthesis', () => {
         totalDurationMs: 7200000,
         totalInputTokens: 500,
         totalOutputTokens: 200,
-        totalCostUsd: 0.02, // Synthesis (0.01) + attribution repair (0.01)
+        totalCostUsd: 0.01, // Synthesis (0.01) - repair attribution disabled in tests
         shareInfo: expect.not.objectContaining({
           coverImageId: expect.anything(),
         }),
@@ -1038,11 +1047,335 @@ describe('runSynthesis', () => {
         totalDurationMs: 7200000,
         totalInputTokens: 500,
         totalOutputTokens: 200,
-        totalCostUsd: 0.02, // Synthesis (0.01) + attribution repair (0.01)
+        totalCostUsd: 0.01, // Synthesis (0.01) - repair attribution disabled in tests
         shareInfo: expect.not.objectContaining({
           coverImageId: expect.anything(),
         }),
       });
+    });
+  });
+
+  describe('Cost Calculation', () => {
+    const mockShareStorage: ShareStoragePort = {
+      upload: vi.fn().mockResolvedValue(ok({ gcsPath: 'research/abc123-share.html' })),
+      delete: vi.fn().mockResolvedValue(ok(undefined)),
+    };
+    const shareConfig = {
+      shareBaseUrl: 'https://share.example.com',
+      staticAssetsUrl: 'https://static.example.com',
+    };
+
+    it('correctly calculates total cost for normal research with completed LLMs', async () => {
+      const research = createTestResearch({
+        llmResults: [
+          {
+            provider: LlmProviders.Google,
+            model: LlmModels.Gemini20Flash,
+            status: 'completed',
+            result: 'Result 1',
+            inputTokens: 1000,
+            outputTokens: 500,
+            costUsd: 0.005,
+          },
+          {
+            provider: LlmProviders.OpenAI,
+            model: LlmModels.O4MiniDeepResearch,
+            status: 'completed',
+            result: 'Result 2',
+            inputTokens: 2000,
+            outputTokens: 1000,
+            costUsd: 0.015,
+          },
+          {
+            provider: LlmProviders.Anthropic,
+            model: LlmModels.ClaudeOpus45,
+            status: 'pending', // Should be excluded from cost
+          },
+        ],
+      });
+      deps.mockRepo.findById.mockResolvedValue(ok(research));
+
+      const result = await runSynthesis('research-1', {
+        ...deps,
+        shareStorage: mockShareStorage,
+        shareConfig,
+      });
+
+      expect(result).toEqual({ ok: true });
+      const updateCall = deps.mockRepo.update.mock.calls.find(
+        (call) => call[0] === 'research-1' && typeof call[1]?.totalCostUsd === 'number'
+      );
+      expect(updateCall).toBeDefined();
+      expect(updateCall?.[1].totalCostUsd).toBe(0.03); // 0.005 + 0.015 + 0.01 (synthesis) = 0.03
+    });
+
+    it('excludes failed and pending LLM results from cost calculation', async () => {
+      const research = createTestResearch({
+        llmResults: [
+          {
+            provider: LlmProviders.Google,
+            model: LlmModels.Gemini20Flash,
+            status: 'completed',
+            result: 'Success',
+            costUsd: 0.01,
+          },
+          {
+            provider: LlmProviders.OpenAI,
+            model: LlmModels.O4MiniDeepResearch,
+            status: 'completed',
+            result: 'Success 2',
+            costUsd: 0.005,
+          },
+          {
+            provider: LlmProviders.Anthropic,
+            model: LlmModels.ClaudeOpus45,
+            status: 'failed',
+            error: 'Failed',
+            // Failed calls don't have costs - costUsd omitted
+          },
+          {
+            provider: LlmProviders.Perplexity,
+            model: LlmModels.SonarPro,
+            status: 'pending',
+            // Pending calls don't have costs - costUsd omitted
+          },
+        ],
+      });
+      deps.mockRepo.findById.mockResolvedValue(ok(research));
+
+      const result = await runSynthesis('research-1', {
+        ...deps,
+        shareStorage: mockShareStorage,
+        shareConfig,
+      });
+
+      expect(result).toEqual({ ok: true });
+      const updateCall = deps.mockRepo.update.mock.calls.find(
+        (call) => call[0] === 'research-1' && typeof call[1]?.totalCostUsd === 'number'
+      );
+      expect(updateCall?.[1].totalCostUsd).toBe(0.025); // 0.01 + 0.005 (LLMs) + 0.01 (synthesis) = 0.025
+    });
+
+    it('excludes copiedFromSource results from llmTotals for enhanced research', async () => {
+      // Enhanced research: 2 source LLMs copied + 1 new LLM
+      const research = createTestResearch({
+        sourceResearchId: 'source-research-1',
+        sourceLlmCostUsd: 0.06, // Source: 0.03 + 0.02 + 0.01 (auxiliary)
+        llmResults: [
+          // Copied from source (should be excluded from llmTotals)
+          {
+            provider: LlmProviders.Google,
+            model: LlmModels.Gemini20Flash,
+            status: 'completed',
+            result: 'Source Result 1',
+            inputTokens: 1000,
+            outputTokens: 500,
+            costUsd: 0.03,
+            copiedFromSource: true,
+          },
+          {
+            provider: LlmProviders.OpenAI,
+            model: LlmModels.O4MiniDeepResearch,
+            status: 'completed',
+            result: 'Source Result 2',
+            inputTokens: 2000,
+            outputTokens: 1000,
+            costUsd: 0.02,
+            copiedFromSource: true,
+          },
+          // New LLM for enhancement (should be included in llmTotals)
+          {
+            provider: LlmProviders.Anthropic,
+            model: LlmModels.ClaudeOpus45,
+            status: 'completed',
+            result: 'New Result',
+            inputTokens: 500,
+            outputTokens: 250,
+            costUsd: 0.025,
+          },
+        ],
+        auxiliaryCostUsd: 0.01,
+      });
+      deps.mockRepo.findById.mockResolvedValue(ok(research));
+
+      const result = await runSynthesis('research-1', {
+        ...deps,
+        shareStorage: mockShareStorage,
+        shareConfig,
+      });
+
+      expect(result).toEqual({ ok: true });
+      const updateCall = deps.mockRepo.update.mock.calls.find(
+        (call) => call[0] === 'research-1' && typeof call[1]?.totalCostUsd === 'number'
+      );
+      // totalCostUsd = sourceLlmCostUsd (0.06) + new LLM (0.025) + synthesis (0.01) + auxiliary (0.01) = 0.105
+      expect(updateCall?.[1].totalCostUsd).toBeCloseTo(0.105, 6);
+      // totalInputTokens = new LLM (500) + synthesis (500) = 1000
+      expect(updateCall?.[1].totalInputTokens).toBe(1000);
+      // totalOutputTokens = new LLM (250) + synthesis (200) = 450
+      expect(updateCall?.[1].totalOutputTokens).toBe(450);
+    });
+
+    it('includes all cost components: synthesis + auxiliary + additionalCostUsd', async () => {
+      const contextInferrer = {
+        inferSynthesisContext: vi.fn().mockResolvedValue(
+          ok({
+            context: { language: 'en', domain: 'tech' } as unknown as SynthesisContext,
+            usage: { inputTokens: 100, outputTokens: 50, costUsd: 0.002 },
+          })
+        ),
+        inferResearchContext: vi.fn().mockResolvedValue(
+          ok({
+            context: { language: 'en', domain: 'tech' } as unknown as SynthesisContext,
+            usage: { inputTokens: 100, outputTokens: 50, costUsd: 0.002 },
+          })
+        ),
+      };
+
+      const research = createTestResearch({
+        llmResults: [
+          {
+            provider: LlmProviders.Google,
+            model: LlmModels.Gemini20Flash,
+            status: 'completed',
+            result: 'Result',
+            costUsd: 0.01,
+          },
+          {
+            provider: LlmProviders.OpenAI,
+            model: LlmModels.O4MiniDeepResearch,
+            status: 'completed',
+            result: 'Result 2',
+            costUsd: 0.005,
+          },
+        ],
+        auxiliaryCostUsd: 0.005, // From title generation + context inference
+      });
+      deps.mockRepo.findById.mockResolvedValue(ok(research));
+
+      const result = await runSynthesis('research-1', {
+        ...deps,
+        contextInferrer,
+        shareStorage: mockShareStorage,
+        shareConfig,
+      });
+
+      expect(result).toEqual({ ok: true });
+      // Find the update call with totalCostUsd
+      const updateCall = deps.mockRepo.update.mock.calls.find(
+        (call) => call[0] === 'research-1' && typeof call[1]?.totalCostUsd === 'number'
+      );
+      // totalCostUsd = LLMs (0.01 + 0.005) + synthesis (0.01) + auxiliary (0.005) + contextInferrer (0.002) = 0.032
+      expect(updateCall?.[1]?.totalCostUsd).toBeCloseTo(0.032, 6);
+    });
+
+    it('correctly handles enhanced research with no new completed LLMs', async () => {
+      // Edge case: enhanced research where new LLMs haven't completed yet
+      const research = createTestResearch({
+        sourceResearchId: 'source-research-1',
+        sourceLlmCostUsd: 0.05,
+        llmResults: [
+          {
+            provider: LlmProviders.Google,
+            model: LlmModels.Gemini20Flash,
+            status: 'completed',
+            result: 'Source Result',
+            costUsd: 0.03,
+            copiedFromSource: true,
+          },
+          {
+            provider: LlmProviders.OpenAI,
+            model: LlmModels.O4MiniDeepResearch,
+            status: 'completed',
+            result: 'Source Result 2',
+            costUsd: 0.02,
+            copiedFromSource: true,
+          },
+          {
+            provider: LlmProviders.Anthropic,
+            model: LlmModels.ClaudeOpus45,
+            status: 'pending', // New LLM not yet completed
+          },
+        ],
+      });
+      deps.mockRepo.findById.mockResolvedValue(ok(research));
+
+      const result = await runSynthesis('research-1', {
+        ...deps,
+        shareStorage: mockShareStorage,
+        shareConfig,
+      });
+
+      expect(result).toEqual({ ok: true });
+      // Find the update call with totalCostUsd
+      const updateCall = deps.mockRepo.update.mock.calls.find(
+        (call) => call[0] === 'research-1' && typeof call[1]?.totalCostUsd === 'number'
+      );
+      // totalCostUsd = sourceLlmCostUsd (0.05) + synthesis (0.01) = 0.06 (no new LLM costs)
+      expect(updateCall?.[1]?.totalCostUsd).toBeCloseTo(0.06, 6);
+    });
+
+    it('does NOT double-count source LLM costs in enhanced research', async () => {
+      // This is the critical bug fix test
+      // Before fix: source costs counted twice (in llmResults + sourceLlmCostUsd)
+      // After fix: source costs counted once (only in sourceLlmCostUsd)
+
+      const sourceLlmCost = 0.08; // 2 source LLMs: 0.05 + 0.03
+
+      const research = createTestResearch({
+        sourceResearchId: 'source-research-1',
+        sourceLlmCostUsd: sourceLlmCost, // Already includes source's auxiliary costs
+        llmResults: [
+          {
+            provider: LlmProviders.Google,
+            model: LlmModels.Gemini20Flash,
+            status: 'completed',
+            result: 'Source Result 1',
+            costUsd: 0.05,
+            copiedFromSource: true, // This cost is in sourceLlmCostUsd (excluded from llmTotals)
+          },
+          {
+            provider: LlmProviders.OpenAI,
+            model: LlmModels.O4MiniDeepResearch,
+            status: 'completed',
+            result: 'Source Result 2',
+            costUsd: 0.03,
+            copiedFromSource: true, // This cost is in sourceLlmCostUsd (excluded from llmTotals)
+          },
+          {
+            provider: LlmProviders.Anthropic,
+            model: LlmModels.ClaudeOpus45,
+            status: 'completed',
+            result: 'New Result',
+            costUsd: 0.04,
+            copiedFromSource: false, // New LLM for enhancement (included in llmTotals)
+          },
+        ],
+        // Note: enhanced research doesn't copy auxiliaryCostUsd from source
+        // It starts undefined and may get new auxiliary costs from its own processing
+      });
+      deps.mockRepo.findById.mockResolvedValue(ok(research));
+
+      const result = await runSynthesis('research-1', {
+        ...deps,
+        shareStorage: mockShareStorage,
+        shareConfig,
+      });
+
+      expect(result).toEqual({ ok: true });
+      // Find the update call with totalCostUsd
+      const updateCall = deps.mockRepo.update.mock.calls.find(
+        (call) => call[0] === 'research-1' && typeof call[1]?.totalCostUsd === 'number'
+      );
+
+      // totalCostUsd = new LLM (0.04) + synthesis (0.01) + sourceLlmCostUsd (0.08) = 0.13
+      const expectedCost = 0.04 + 0.01 + sourceLlmCost;
+      expect(updateCall?.[1]?.totalCostUsd).toBeCloseTo(expectedCost, 6);
+
+      // Before fix: llmTotals would include all results (0.05 + 0.03 + 0.04 = 0.12)
+      //              + sourceLlmCostUsd (0.08) + synthesis (0.01) = 0.21 (WRONG!)
+      // After fix: llmTotals only includes new results (0.04)
+      //           + sourceLlmCostUsd (0.08) + synthesis (0.01) = 0.13 (CORRECT!)
     });
   });
 });
