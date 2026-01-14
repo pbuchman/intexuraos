@@ -48,72 +48,6 @@ resource "google_logging_metric" "whatsapp_webhook_errors" {
 }
 
 # =============================================================================
-# CLOUD BUILD NETWORK TELEMETRY METRICS
-# =============================================================================
-
-resource "google_logging_metric" "cloudbuild_network_rx_mbps" {
-  name        = "cloudbuild-network-rx-mbps"
-  description = "Cloud Build network receive throughput (Mbps) by service"
-  filter      = <<-EOT
-    resource.type="build"
-    jsonPayload.event="network_telemetry"
-  EOT
-
-  metric_descriptor {
-    metric_kind = "DELTA"
-    value_type  = "DISTRIBUTION"
-    unit        = "Mi"
-    labels {
-      key         = "service"
-      value_type  = "STRING"
-      description = "Service being built"
-    }
-  }
-
-  bucket_options {
-    explicit_buckets {
-      bounds = [0, 10, 50, 100, 200, 500, 1000]
-    }
-  }
-
-  value_extractor = "EXTRACT(jsonPayload.rx_mbps)"
-  label_extractors = {
-    "service" = "EXTRACT(jsonPayload.service)"
-  }
-}
-
-resource "google_logging_metric" "cloudbuild_network_tx_mbps" {
-  name        = "cloudbuild-network-tx-mbps"
-  description = "Cloud Build network transmit throughput (Mbps) by service"
-  filter      = <<-EOT
-    resource.type="build"
-    jsonPayload.event="network_telemetry"
-  EOT
-
-  metric_descriptor {
-    metric_kind = "DELTA"
-    value_type  = "DISTRIBUTION"
-    unit        = "Mi"
-    labels {
-      key         = "service"
-      value_type  = "STRING"
-      description = "Service being built"
-    }
-  }
-
-  bucket_options {
-    explicit_buckets {
-      bounds = [0, 10, 50, 100, 200, 500, 1000]
-    }
-  }
-
-  value_extractor = "EXTRACT(jsonPayload.tx_mbps)"
-  label_extractors = {
-    "service" = "EXTRACT(jsonPayload.service)"
-  }
-}
-
-# =============================================================================
 # DASHBOARD
 # =============================================================================
 
@@ -492,52 +426,6 @@ resource "google_monitoring_dashboard" "main" {
           }
         },
 
-        # Row 6: Cloud Build Network Telemetry
-        {
-          xPos   = 0
-          yPos   = 21
-          width  = 12
-          height = 4
-          widget = {
-            title = "Cloud Build - Network Throughput (Mbps)"
-            xyChart = {
-              dataSets = [
-                {
-                  timeSeriesQuery = {
-                    timeSeriesFilter = {
-                      filter = "metric.type=\"logging.googleapis.com/user/${google_logging_metric.cloudbuild_network_rx_mbps.name}\" resource.type=\"build\""
-                      aggregation = {
-                        alignmentPeriod    = "60s"
-                        perSeriesAligner   = "ALIGN_MEAN"
-                        crossSeriesReducer = "REDUCE_NONE"
-                        groupByFields      = ["metric.label.service"]
-                      }
-                    }
-                  }
-                  plotType = "LINE"
-                },
-                {
-                  timeSeriesQuery = {
-                    timeSeriesFilter = {
-                      filter = "metric.type=\"logging.googleapis.com/user/${google_logging_metric.cloudbuild_network_tx_mbps.name}\" resource.type=\"build\""
-                      aggregation = {
-                        alignmentPeriod    = "60s"
-                        perSeriesAligner   = "ALIGN_MEAN"
-                        crossSeriesReducer = "REDUCE_NONE"
-                        groupByFields      = ["metric.label.service"]
-                      }
-                    }
-                  }
-                  plotType = "LINE"
-                }
-              ]
-              yAxis = {
-                scale = "LINEAR"
-                label = "Mbps"
-              }
-            }
-          }
-        }
       ]
     }
   })
