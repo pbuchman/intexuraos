@@ -6,6 +6,50 @@ Log of all `/document-service` runs.
 
 <!-- Entries are prepended below this line -->
 
+## 2026-01-14 — Comprehensive Service Documentation Update
+
+**Action:** Updated
+**Agent:** service-scribe (autonomous)
+
+**Files Updated:**
+
+- `docs/services/actions-agent/features.md` — Refreshed content
+- `docs/services/actions-agent/technical.md` — Refreshed content
+- `docs/services/actions-agent/technical-debt.md` — Updated date, added auto-execution TODO
+- `docs/services/research-agent/features.md` — Added Zai provider limitations
+- `docs/services/research-agent/technical.md` — Added Zai provider models
+- `docs/services/app-settings-service/features.md` — Updated to 5 providers, added internal/public endpoint distinction
+- `docs/services/app-settings-service/technical.md` — Comprehensive update with architecture diagram
+- `docs/services/whatsapp-service/technical-debt.md` — Updated date
+- `docs/site-index.json` — Updated research-agent to 5 providers, app-settings-service to 5 providers, updated date
+
+**Inferred Insights:**
+
+- Why: Services had evolved since last documentation (Zai provider added, app-settings-service now has internal endpoints)
+- Killer feature: Multi-provider LLM support with cost transparency
+- Future plans:
+  - actions-agent: Auto-execution based on confidence (stub exists)
+  - whatsapp-service: Refactor processWebhookEvent to accept raw payload
+  - actions-agent: calendar/reminder handler implementations
+
+**Documentation Coverage:** 100% (17/17 services)
+
+**Technical Debt Found:**
+
+- TODO comments: 1 (whatsapp-service: refactor processWebhookEvent)
+- Code smells: 0
+- Test gaps: 0
+- Type issues: 0
+
+**Changes Summary:**
+
+- Added Zai (glm-4-flash, glm-4-plus) to research-agent LLM providers
+- Updated app-settings-service to reflect 5 LLM providers (was 4)
+- Added internal endpoint documentation for app-settings-service
+- Updated all documentation dates to 2026-01-14
+
+---
+
 ## 2026-01-13 — Top-Level Documentation Update
 
 **Action:** Updated index files following tutorial completion
