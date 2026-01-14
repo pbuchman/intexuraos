@@ -5,7 +5,7 @@ import {
   CheckSquare,
   Database,
   FileText,
-  GitBranch,
+  Mail,
   Layers,
   Mic,
   Shield,
@@ -13,6 +13,33 @@ import {
   Zap,
 } from 'lucide-react';
 import React, { useEffect, useState } from 'react';
+
+// Custom icons since lucide-react brand icons are deprecated
+function LinkedinIcon({ className }: { className?: string }): React.JSX.Element {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z" />
+    </svg>
+  );
+}
+
+function GithubIcon({ className }: { className?: string }): React.JSX.Element {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z" />
+    </svg>
+  );
+}
 
 // --- Components ---
 
@@ -65,8 +92,29 @@ function HeroSection(): React.JSX.Element {
     <section className="relative flex min-h-[90vh] flex-col justify-center border-b-4 border-black bg-yellow-400 px-6 py-24 pattern-dots pattern-black pattern-bg-transparent pattern-size-4 pattern-opacity-10">
       <div className="mx-auto w-full max-w-7xl">
         <div className="max-w-4xl">
-          <div className="mb-6 inline-block border-2 border-black bg-white px-4 py-2 font-mono text-sm font-bold uppercase shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
-            v2.0 • Staff Engineer Edition
+          <div className="mb-6 flex flex-wrap gap-3">
+            <a
+              href="https://www.linkedin.com/in/piotrbuchman/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 border-2 border-black bg-white px-4 py-2 font-mono text-sm font-bold uppercase shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all hover:-translate-y-0.5 hover:shadow-[5px_5px_0px_0px_rgba(0,0,0,1)]"
+            >
+              <LinkedinIcon className="h-4 w-4" /> LinkedIn
+            </a>
+            <a
+              href="https://github.com/pbuchman/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 border-2 border-black bg-white px-4 py-2 font-mono text-sm font-bold uppercase shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all hover:-translate-y-0.5 hover:shadow-[5px_5px_0px_0px_rgba(0,0,0,1)]"
+            >
+              <GithubIcon className="h-4 w-4" /> GitHub
+            </a>
+            <a
+              href="mailto:kontakt@pbuchman.com"
+              className="inline-flex items-center gap-2 border-2 border-black bg-white px-4 py-2 font-mono text-sm font-bold uppercase shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all hover:-translate-y-0.5 hover:shadow-[5px_5px_0px_0px_rgba(0,0,0,1)]"
+            >
+              <Mail className="h-4 w-4" /> Email
+            </a>
           </div>
           <h1 className="mb-8 text-6xl font-black uppercase leading-[0.9] tracking-tighter text-black md:text-8xl lg:text-[7rem]">
             Your brain is for <span className="bg-white px-2 text-black">thinking</span>
@@ -82,15 +130,15 @@ function HeroSection(): React.JSX.Element {
               to="/login"
               className="group flex items-center justify-center gap-2 border-2 border-black bg-black px-8 py-4 text-lg font-bold text-white shadow-[4px_4px_0px_0px_rgba(255,255,255,1)] transition-all hover:-translate-y-1 hover:shadow-[8px_8px_0px_0px_rgba(255,255,255,1)]"
             >
-              DEPLOY SYSTEM <Terminal className="h-5 w-5" />
+              LOG IN <Terminal className="h-5 w-5" />
             </Link>
             <a
-              href="https://github.com/your-org/intexuraos"
+              href="https://github.com/pbuchman/intexuraos"
               target="_blank"
               rel="noopener noreferrer"
               className="group flex items-center justify-center gap-2 border-2 border-black bg-white px-8 py-4 text-lg font-bold text-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all hover:-translate-y-1 hover:bg-neutral-100 hover:shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]"
             >
-              VIEW SOURCE CODE <GitBranch className="h-5 w-5" />
+              VIEW SOURCE CODE <GithubIcon className="h-5 w-5" />
             </a>
           </div>
         </div>
@@ -106,7 +154,9 @@ function DemoSection(): React.JSX.Element {
     const timer = setInterval(() => {
       setStep((prev) => (prev + 1) % 4);
     }, 2000);
-    return () => clearInterval(timer);
+    return (): void => {
+      clearInterval(timer);
+    };
   }, []);
 
   return (
@@ -196,18 +246,20 @@ function CouncilSection(): React.JSX.Element {
         <h2 className="mb-16 font-mono text-3xl font-bold uppercase tracking-widest text-neutral-500">
           Powered by The Council
         </h2>
-        <div className="grid grid-cols-1 gap-8 md:grid-cols-3">
+        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-5">
           {[
-            { name: 'CLAUDE 3.5', role: 'Synthesis & Code' },
+            { name: 'CLAUDE', role: 'Synthesis & Code' },
             { name: 'GPT-5', role: 'Reasoning & Planning' },
+            { name: 'GEMINI', role: 'Multimodal Analysis' },
             { name: 'PERPLEXITY', role: 'Deep Research' },
+            { name: 'GLE', role: 'Specialized Reasoning' },
           ].map((model) => (
             <div
               key={model.name}
-              className="flex flex-col items-center justify-center border-2 border-neutral-800 p-12 transition-colors hover:border-white hover:bg-neutral-900"
+              className="flex flex-col items-center justify-center border-2 border-neutral-800 p-8 transition-colors hover:border-white hover:bg-neutral-900"
             >
-              <div className="mb-4 text-4xl font-black">{model.name}</div>
-              <div className="font-mono text-sm text-neutral-500">{model.role}</div>
+              <div className="mb-3 text-3xl font-black">{model.name}</div>
+              <div className="font-mono text-xs text-neutral-500">{model.role}</div>
             </div>
           ))}
         </div>
@@ -274,24 +326,24 @@ function Footer(): React.JSX.Element {
         <div>
           <h3 className="mb-2 text-2xl font-black uppercase tracking-tighter">IntexuraOS</h3>
           <p className="font-mono text-sm text-neutral-500">
-            © {new Date().getFullYear()} Piotr Buchman. Open Source.
+            © {new Date().getFullYear()} <a href="https://pbuchman.com" className="hover:text-cyan-600">Piotr Buchman</a>. Open Source.
           </p>
         </div>
         <div className="flex gap-8 font-mono text-sm font-bold uppercase">
           <a
-            href="https://github.com/your-org/intexuraos"
+            href="https://github.com/pbuchman/intexuraos"
             className="flex items-center gap-1 hover:text-cyan-600"
           >
             GitHub <ArrowRight className="h-4 w-4" />
           </a>
           <a
-            href="https://linkedin.com/in/piotr-buchman"
+            href="https://www.linkedin.com/in/piotrbuchman/"
             className="flex items-center gap-1 hover:text-cyan-600"
           >
             LinkedIn <ArrowRight className="h-4 w-4" />
           </a>
           <a
-            href="mailto:piotr@buchman.io"
+            href="mailto:kontakt@pbuchman.com"
             className="flex items-center gap-1 hover:text-cyan-600"
           >
             Email <ArrowRight className="h-4 w-4" />
