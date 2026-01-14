@@ -129,7 +129,7 @@ export const mappingRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         if (!validation.valid) {
           validationErrors.push({
             phoneNumber,
-            error: validation.error ?? 'Invalid phone number',
+            error: validation.error,
           });
         } else {
           normalizedPhoneNumbers.push(validation.normalized);

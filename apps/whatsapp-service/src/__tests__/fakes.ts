@@ -129,6 +129,7 @@ export class FakeWhatsAppUserMappingRepository implements WhatsAppUserMappingRep
   private shouldFailDisconnect = false;
   private shouldFailSaveMapping = false;
   private shouldFailFindUserByPhoneNumber = false;
+  private shouldFailFindPhoneByUserId = false;
   private shouldThrowOnGetMapping = false;
   private enforcePhoneUniqueness = false;
 
@@ -167,6 +168,14 @@ export class FakeWhatsAppUserMappingRepository implements WhatsAppUserMappingRep
    */
   setFailFindUserByPhoneNumber(fail: boolean): void {
     this.shouldFailFindUserByPhoneNumber = fail;
+  }
+
+  /**
+   * Configure the fake to fail findPhoneByUserId calls with an INTERNAL_ERROR.
+   * Simulates downstream failures such as database connection failures or external service timeouts.
+   */
+  setFailFindPhoneByUserId(fail: boolean): void {
+    this.shouldFailFindPhoneByUserId = fail;
   }
 
   /**
@@ -250,6 +259,11 @@ export class FakeWhatsAppUserMappingRepository implements WhatsAppUserMappingRep
   }
 
   findPhoneByUserId(userId: string): Promise<Result<string | null, WhatsAppError>> {
+    if (this.shouldFailFindPhoneByUserId) {
+      return Promise.resolve(
+        err({ code: 'INTERNAL_ERROR', message: 'Simulated phone lookup failure' })
+      );
+    }
     const mapping = this.mappings.get(userId);
     if (mapping === undefined) return Promise.resolve(ok(null));
     if (!mapping.connected) return Promise.resolve(ok(null));
@@ -279,6 +293,27 @@ export class FakeWhatsAppUserMappingRepository implements WhatsAppUserMappingRep
     return Promise.resolve(ok(mapping?.connected === true));
   }
 
+  /**
+   * Set a mapping for a phone number for testing.
+   * Convenience method to set up user mappings in tests.
+   */
+  setMappingForPhone(
+    phoneNumber: string,
+    userId: string,
+    options?: { connected?: boolean }
+  ): void {
+    const normalizedPhone = normalizePhoneNumber(phoneNumber);
+    const mapping = {
+      userId,
+      phoneNumbers: [normalizedPhone],
+      connected: options?.connected ?? true,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    this.mappings.set(userId, mapping);
+    this.phoneIndex.set(normalizedPhone, userId);
+  }
+
   clear(): void {
     this.mappings.clear();
     this.phoneIndex.clear();
@@ -286,6 +321,7 @@ export class FakeWhatsAppUserMappingRepository implements WhatsAppUserMappingRep
     this.shouldFailDisconnect = false;
     this.shouldFailSaveMapping = false;
     this.shouldFailFindUserByPhoneNumber = false;
+    this.shouldFailFindPhoneByUserId = false;
     this.shouldThrowOnGetMapping = false;
     this.enforcePhoneUniqueness = false;
   }
@@ -439,6 +475,16 @@ export class FakeWhatsAppMessageRepository implements WhatsAppMessageRepository 
 
   getAll(): WhatsAppMessage[] {
     return Array.from(this.messages.values());
+  }
+
+  /**
+   * Synchronously get messages by user for test assertions.
+   * Returns the messages array directly (not the Result wrapper).
+   */
+  getMessagesByUserSync(userId: string): WhatsAppMessage[] {
+    return Array.from(this.messages.values())
+      .filter((m) => m.userId === userId)
+      .sort((a, b) => b.receivedAt.localeCompare(a.receivedAt));
   }
 
   clear(): void {

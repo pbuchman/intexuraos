@@ -362,6 +362,29 @@ describe('Pub/Sub Routes', () => {
       expect(sentMessages).toHaveLength(1);
       expect(sentMessages[0]?.phoneNumber).toBe('15551234567');
     });
+
+    it('returns 500 when findPhoneByUserId fails', async () => {
+      userMappingRepository.setFailFindPhoneByUserId(true);
+
+      const body = createPubSubBody({
+        type: 'whatsapp.message.send',
+        userId: 'user-123',
+        message: 'Hello',
+        correlationId: 'corr-123',
+        timestamp: new Date().toISOString(),
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/send-message',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: body,
+      });
+
+      expect(response.statusCode).toBe(500);
+      const responseBody = JSON.parse(response.body) as { error: string };
+      expect(responseBody.error).toBe('Failed to look up phone number');
+    });
   });
 
   describe('POST /internal/whatsapp/pubsub/media-cleanup', () => {
