@@ -1,6 +1,6 @@
-import { createGeminiClient } from '@intexuraos/infra-gemini';
-import { LlmModels, type ModelPricing, type ResearchModel } from '@intexuraos/llm-contract';
 import { commandClassifierPrompt } from '@intexuraos/llm-common';
+import type { LlmGenerateClient } from '@intexuraos/llm-factory';
+import { LlmModels, type ResearchModel } from '@intexuraos/llm-contract';
 import type { CommandType } from '../../domain/models/command.js';
 import type { Classifier, ClassificationResult } from '../../domain/ports/classifier.js';
 
@@ -41,44 +41,7 @@ const ALL_LLMS_PATTERNS = [
   /\bwszystkie\s+(modele|llm)/i,
 ];
 
-export interface GeminiClassifierConfig {
-  apiKey: string;
-  userId: string;
-  pricing: ModelPricing;
-}
-
-export function extractSelectedModels(text: string): ResearchModel[] | undefined {
-  const lowerText = text.toLowerCase();
-
-  for (const pattern of ALL_LLMS_PATTERNS) {
-    if (pattern.test(text)) {
-      return DEFAULT_MODELS;
-    }
-  }
-
-  const found: ResearchModel[] = [];
-  for (const [model, keywords] of Object.entries(MODEL_KEYWORDS) as [ResearchModel, string[]][]) {
-    for (const keyword of keywords) {
-      if (lowerText.includes(keyword)) {
-        found.push(model);
-        break;
-      }
-    }
-  }
-
-  return found.length > 0 ? found : undefined;
-}
-
-const CLASSIFIER_MODEL = LlmModels.Gemini25Flash;
-
-export function createGeminiClassifier(config: GeminiClassifierConfig): Classifier {
-  const client = createGeminiClient({
-    apiKey: config.apiKey,
-    model: CLASSIFIER_MODEL,
-    userId: config.userId,
-    pricing: config.pricing,
-  });
-
+export function createGeminiClassifier(client: LlmGenerateClient): Classifier {
   return {
     async classify(text: string): Promise<ClassificationResult> {
       const prompt = commandClassifierPrompt.build({ message: text });
@@ -105,6 +68,28 @@ export function createGeminiClassifier(config: GeminiClassifierConfig): Classifi
       return classificationResult;
     },
   };
+}
+
+export function extractSelectedModels(text: string): ResearchModel[] | undefined {
+  const lowerText = text.toLowerCase();
+
+  for (const pattern of ALL_LLMS_PATTERNS) {
+    if (pattern.test(text)) {
+      return DEFAULT_MODELS;
+    }
+  }
+
+  const found: ResearchModel[] = [];
+  for (const [model, keywords] of Object.entries(MODEL_KEYWORDS) as [ResearchModel, string[]][]) {
+    for (const keyword of keywords) {
+      if (lowerText.includes(keyword)) {
+        found.push(model);
+        break;
+      }
+    }
+  }
+
+  return found.length > 0 ? found : undefined;
 }
 
 function parseClassifyResponse(

@@ -1,13 +1,10 @@
 /**
- * Feed name generation service using Gemini.
+ * Feed name generation service using LLM client.
  * Generates concise names for composite feeds based on their purpose and components.
  */
 
 import type { Result } from '@intexuraos/common-core';
 import { err, ok } from '@intexuraos/common-core';
-import { createGeminiClient } from '@intexuraos/infra-gemini';
-import type { IPricingContext } from '@intexuraos/llm-pricing';
-import { LlmModels, type FastModel } from '@intexuraos/llm-contract';
 import { feedNamePrompt } from '@intexuraos/llm-common';
 import type { UserServiceClient } from '../user/userServiceClient.js';
 import type {
@@ -16,17 +13,12 @@ import type {
 } from '../../domain/compositeFeed/index.js';
 import { MAX_FEED_NAME_LENGTH } from '../../domain/compositeFeed/index.js';
 
-const NAME_GENERATION_MODEL: FastModel = LlmModels.Gemini25Flash;
-
 /**
  * Create a feed name generation service.
  */
 export function createFeedNameGenerationService(
-  userServiceClient: UserServiceClient,
-  pricingContext: IPricingContext
+  userServiceClient: UserServiceClient
 ): FeedNameGenerationService {
-  const pricing = pricingContext.getPricing(NAME_GENERATION_MODEL);
-
   return {
     async generateName(
       userId: string,
@@ -34,14 +26,14 @@ export function createFeedNameGenerationService(
       sourceNames: string[],
       filterNames: string[]
     ): Promise<Result<string, NameGenerationError>> {
-      const keyResult = await userServiceClient.getGeminiApiKey(userId);
+      const clientResult = await userServiceClient.getLlmClient(userId);
 
-      if (!keyResult.ok) {
-        const error = keyResult.error;
+      if (!clientResult.ok) {
+        const error = clientResult.error;
         if (error.code === 'NO_API_KEY') {
           return err({
             code: 'NO_API_KEY',
-            message: 'Please configure your Gemini API key in settings first',
+            message: 'Please configure your LLM API key in settings first',
           });
         }
         return err({
@@ -50,20 +42,14 @@ export function createFeedNameGenerationService(
         });
       }
 
-      const apiKey = keyResult.value;
-      const geminiClient = createGeminiClient({
-        apiKey,
-        model: NAME_GENERATION_MODEL,
-        userId,
-        pricing,
-      });
+      const llmClient = clientResult.value;
 
       const prompt = feedNamePrompt.build(
         { purpose, sourceNames, filterNames },
         { maxLength: MAX_FEED_NAME_LENGTH }
       );
 
-      const result = await geminiClient.generate(prompt);
+      const result = await llmClient.generate(prompt);
 
       if (!result.ok) {
         return err({

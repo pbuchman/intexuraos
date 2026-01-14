@@ -1,5 +1,7 @@
 import pino from 'pino';
-import type { ModelPricing } from '@intexuraos/llm-contract';
+import { fetchAllPricing, createPricingContext } from '@intexuraos/llm-pricing';
+import type { LlmGenerateClient } from '@intexuraos/llm-factory';
+import { LlmModels } from '@intexuraos/llm-contract';
 import type { CommandRepository } from './domain/ports/commandRepository.js';
 import type { ClassifierFactory } from './domain/ports/classifier.js';
 import type { EventPublisherPort } from './domain/ports/eventPublisher.js';
@@ -16,8 +18,6 @@ import { createGeminiClassifier } from './infra/gemini/classifier.js';
 import { createActionEventPublisher } from './infra/pubsub/index.js';
 import { createUserServiceClient, type UserServiceClient } from './infra/user/index.js';
 import { createActionsAgentClient, type ActionsAgentClient } from './infra/actionsAgent/client.js';
-import { fetchAllPricing, createPricingContext } from '@intexuraos/llm-pricing';
-import { LlmModels, type FastModel } from '@intexuraos/llm-contract';
 
 export interface Services {
   commandRepository: CommandRepository;
@@ -32,26 +32,25 @@ export interface Services {
 export interface ServiceConfig {
   userServiceUrl: string;
   actionsAgentUrl: string;
+  appSettingsServiceUrl: string;
   internalAuthToken: string;
   gcpProjectId: string;
-  appSettingsServiceUrl: string;
 }
 
 let container: Services | null = null;
 
 /**
- * Pricing for gemini-2.5-flash used by the classifier.
- * Values from migration 012 pricing structure.
+ * Models supported for classification.
  */
-const CLASSIFIER_PRICING: ModelPricing = {
-  inputPricePerMillion: 0.3,
-  outputPricePerMillion: 2.5,
-  groundingCostPerRequest: 0.035,
-};
+const CLASSIFIER_MODELS = [
+  LlmModels.Gemini25Flash,
+  LlmModels.Glm47,
+] as const;
 
 export async function initServices(config: ServiceConfig): Promise<void> {
   const logger = pino({ name: 'commands-agent' });
 
+  // Fetch pricing data from app-settings-service
   const pricingResult = await fetchAllPricing(
     config.appSettingsServiceUrl,
     config.internalAuthToken
@@ -61,11 +60,7 @@ export async function initServices(config: ServiceConfig): Promise<void> {
     throw new Error(`Failed to fetch pricing: ${pricingResult.error.message}`);
   }
 
-  // Support all fast models for command processing
-  const pricingContext = createPricingContext(pricingResult.value, [
-    LlmModels.Gemini25Flash,
-    LlmModels.Glm47,
-  ] as FastModel[]);
+  const pricingContext = createPricingContext(pricingResult.value, [...CLASSIFIER_MODELS] as unknown as typeof LlmModels.Gemini25Flash[]);
 
   const commandRepository = createFirestoreCommandRepository();
   const actionsAgentClient = createActionsAgentClient({
@@ -73,8 +68,8 @@ export async function initServices(config: ServiceConfig): Promise<void> {
     internalAuthToken: config.internalAuthToken,
     logger: pino({ name: 'actionsAgentClient' }),
   });
-  const classifierFactory: ClassifierFactory = (apiKey: string, userId: string) =>
-    createGeminiClassifier({ apiKey, userId, pricing: CLASSIFIER_PRICING });
+  const classifierFactory: ClassifierFactory = (client: LlmGenerateClient) =>
+    createGeminiClassifier(client);
   const userServiceClient = createUserServiceClient({
     baseUrl: config.userServiceUrl,
     internalAuthToken: config.internalAuthToken,

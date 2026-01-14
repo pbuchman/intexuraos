@@ -1,29 +1,30 @@
 import { describe, it, expect, vi } from 'vitest';
 import { ok, err } from '@intexuraos/common-core';
-import { FakePricingContext } from '@intexuraos/llm-pricing';
 import { createChartDefinitionService } from '../infra/gemini/chartDefinitionService.js';
 import type { UserServiceClient } from '../infra/user/userServiceClient.js';
+import type { LlmGenerateClient } from '@intexuraos/llm-factory';
 
 const mockGenerate = vi.fn();
 
-vi.mock('@intexuraos/infra-gemini', () => ({
-  createGeminiClient: vi.fn().mockImplementation(() => ({
-    generate: mockGenerate,
-  })),
-}));
-
-const fakePricingContext = new FakePricingContext();
-
 describe('chartDefinitionService', () => {
-  function createMockUserServiceClient(apiKey: string | null = 'test-api-key'): UserServiceClient {
+  function createMockUserServiceClient(
+    hasClient = true,
+    errorCode?: 'NO_API_KEY' | 'API_ERROR'
+  ): UserServiceClient {
+    if (!hasClient) {
+      return {
+        getLlmClient: vi
+          .fn()
+          .mockResolvedValue(
+            err({ code: errorCode ?? 'NO_API_KEY', message: 'No API key configured' })
+          ),
+      };
+    }
+    const mockLlmClient: LlmGenerateClient = {
+      generate: mockGenerate,
+    };
     return {
-      getGeminiApiKey: vi
-        .fn()
-        .mockResolvedValue(
-          apiKey !== null
-            ? ok(apiKey)
-            : err({ code: 'NO_API_KEY' as const, message: 'No API key configured' })
-        ),
+      getLlmClient: vi.fn().mockResolvedValue(ok(mockLlmClient)),
     };
   }
 
@@ -72,7 +73,7 @@ TRANSFORM_INSTRUCTIONS_END`;
 
       mockGenerate.mockResolvedValue(ok({ content: validResponse, usage: mockUsage }));
       const mockClient = createMockUserServiceClient();
-      const service = createChartDefinitionService(mockClient, fakePricingContext);
+      const service = createChartDefinitionService(mockClient);
 
       const result = await service.generateChartDefinition(
         'user-123',
@@ -91,8 +92,8 @@ TRANSFORM_INSTRUCTIONS_END`;
     });
 
     it('returns NO_API_KEY error when user has no API key', async () => {
-      const mockClient = createMockUserServiceClient(null);
-      const service = createChartDefinitionService(mockClient, fakePricingContext);
+      const mockClient = createMockUserServiceClient(false, 'NO_API_KEY');
+      const service = createChartDefinitionService(mockClient);
 
       const result = await service.generateChartDefinition(
         'user-123',
@@ -105,17 +106,13 @@ TRANSFORM_INSTRUCTIONS_END`;
       expect(result.ok).toBe(false);
       if (!result.ok) {
         expect(result.error.code).toBe('NO_API_KEY');
-        expect(result.error.message).toBe('Please configure your Gemini API key in settings first');
+        expect(result.error.message).toBe('Please configure your LLM API key in settings first');
       }
     });
 
     it('returns USER_SERVICE_ERROR when user service fails', async () => {
-      const mockClient: UserServiceClient = {
-        getGeminiApiKey: vi
-          .fn()
-          .mockResolvedValue(err({ code: 'API_ERROR' as const, message: 'Service unavailable' })),
-      };
-      const service = createChartDefinitionService(mockClient, fakePricingContext);
+      const mockClient = createMockUserServiceClient(false, 'API_ERROR');
+      const service = createChartDefinitionService(mockClient);
 
       const result = await service.generateChartDefinition(
         'user-123',
@@ -128,14 +125,14 @@ TRANSFORM_INSTRUCTIONS_END`;
       expect(result.ok).toBe(false);
       if (!result.ok) {
         expect(result.error.code).toBe('USER_SERVICE_ERROR');
-        expect(result.error.message).toBe('Service unavailable');
+        expect(result.error.message).toBe('No API key configured');
       }
     });
 
     it('returns GENERATION_ERROR when LLM generation fails', async () => {
       mockGenerate.mockResolvedValue(err({ message: 'Rate limit exceeded' }));
       const mockClient = createMockUserServiceClient();
-      const service = createChartDefinitionService(mockClient, fakePricingContext);
+      const service = createChartDefinitionService(mockClient);
 
       const result = await service.generateChartDefinition(
         'user-123',
@@ -155,7 +152,7 @@ TRANSFORM_INSTRUCTIONS_END`;
     it('returns PARSE_ERROR when LLM response is invalid', async () => {
       mockGenerate.mockResolvedValue(ok({ content: 'INVALID RESPONSE', usage: mockUsage }));
       const mockClient = createMockUserServiceClient();
-      const service = createChartDefinitionService(mockClient, fakePricingContext);
+      const service = createChartDefinitionService(mockClient);
 
       const result = await service.generateChartDefinition(
         'user-123',
@@ -172,7 +169,7 @@ TRANSFORM_INSTRUCTIONS_END`;
       }
     });
 
-    it('creates Gemini client with correct configuration', async () => {
+    it('calls getLlmClient and generate', async () => {
       const validResponse = `CHART_DEFINITION:
 Title=Test
 Description=Test chart
@@ -181,7 +178,7 @@ DataSource=data`;
 
       mockGenerate.mockResolvedValue(ok({ content: validResponse, usage: mockUsage }));
       const mockClient = createMockUserServiceClient();
-      const service = createChartDefinitionService(mockClient, fakePricingContext);
+      const service = createChartDefinitionService(mockClient);
 
       await service.generateChartDefinition(
         'user-123',
@@ -191,33 +188,9 @@ DataSource=data`;
         mockInsight
       );
 
-      // Verify Gemini client was created with user's API key
-      expect(mockClient.getGeminiApiKey).toHaveBeenCalledWith('user-123');
+      // Verify getLlmClient was called with user ID
+      expect(mockClient.getLlmClient).toHaveBeenCalledWith('user-123');
       expect(mockGenerate).toHaveBeenCalled();
-    });
-
-    it('passes pricing context for Gemini 2.5 Flash model', async () => {
-      const validResponse = `CHART_DEFINITION:
-Title=Test
-Description=Test chart
-VegaLiteSpec={"mark":"bar"}
-DataSource=data`;
-
-      mockGenerate.mockResolvedValue(ok({ content: validResponse, usage: mockUsage }));
-      const getPricingSpy = vi.spyOn(fakePricingContext, 'getPricing');
-
-      const mockClient = createMockUserServiceClient();
-      const service = createChartDefinitionService(mockClient, fakePricingContext);
-
-      await service.generateChartDefinition(
-        'user-123',
-        mockJsonSchema,
-        mockSnapshotData,
-        mockTargetChartSchema,
-        mockInsight
-      );
-
-      expect(getPricingSpy).toHaveBeenCalled();
     });
   });
 });

@@ -1,22 +1,17 @@
 /**
- * Data analysis service using Gemini.
- * Analyzes composite feed data and generates up to 5 measurable insights using user's Gemini API key.
+ * Data analysis service using LLM client.
+ * Analyzes composite feed data and generates up to 5 measurable insights.
  */
 
 import type { Result } from '@intexuraos/common-core';
 import { err, getErrorMessage, ok } from '@intexuraos/common-core';
-import { createGeminiClient } from '@intexuraos/infra-gemini';
-import { LlmModels, type FastModel } from '@intexuraos/llm-contract';
 import {
   dataAnalysisPrompt,
   parseInsightResponse,
   type ChartTypeInfo,
   type ParsedDataInsight,
 } from '@intexuraos/llm-common';
-import type { IPricingContext } from '@intexuraos/llm-pricing';
 import type { UserServiceClient } from '../user/userServiceClient.js';
-
-const DATA_ANALYSIS_MODEL: FastModel = LlmModels.Gemini25Flash;
 
 /**
  * Error from data analysis operations.
@@ -50,11 +45,8 @@ export interface DataAnalysisService {
  * Create a data analysis service.
  */
 export function createDataAnalysisService(
-  userServiceClient: UserServiceClient,
-  pricingContext: IPricingContext
+  userServiceClient: UserServiceClient
 ): DataAnalysisService {
-  const pricing = pricingContext.getPricing(DATA_ANALYSIS_MODEL);
-
   return {
     async analyzeData(
       userId: string,
@@ -62,14 +54,14 @@ export function createDataAnalysisService(
       snapshotData: object,
       chartTypes: ChartTypeInfo[]
     ): Promise<Result<DataAnalysisResult, DataAnalysisError>> {
-      const keyResult = await userServiceClient.getGeminiApiKey(userId);
+      const clientResult = await userServiceClient.getLlmClient(userId);
 
-      if (!keyResult.ok) {
-        const error = keyResult.error;
+      if (!clientResult.ok) {
+        const error = clientResult.error;
         if (error.code === 'NO_API_KEY') {
           return err({
             code: 'NO_API_KEY',
-            message: 'Please configure your Gemini API key in settings first',
+            message: 'Please configure your LLM API key in settings first',
           });
         }
         return err({
@@ -78,13 +70,7 @@ export function createDataAnalysisService(
         });
       }
 
-      const apiKey = keyResult.value;
-      const geminiClient = createGeminiClient({
-        apiKey,
-        model: DATA_ANALYSIS_MODEL,
-        userId,
-        pricing,
-      });
+      const llmClient = clientResult.value;
 
       const prompt = dataAnalysisPrompt.build({
         jsonSchema,
@@ -92,7 +78,7 @@ export function createDataAnalysisService(
         chartTypes,
       });
 
-      const result = await geminiClient.generate(prompt);
+      const result = await llmClient.generate(prompt);
 
       if (!result.ok) {
         return err({

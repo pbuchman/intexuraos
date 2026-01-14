@@ -43,23 +43,16 @@ describe('todoItemExtractionService', () => {
       case 'ok':
         return {
           getLlmClient: vi.fn().mockResolvedValue(ok(mockLlmClient)),
-          getGeminiApiKey: vi.fn().mockResolvedValue(ok('test-api-key')),
         };
       case 'no_api_key':
         return {
           getLlmClient: vi
             .fn()
             .mockResolvedValue(err({ code: 'NO_API_KEY' as const, message: 'No API key configured for google' })),
-          getGeminiApiKey: vi
-            .fn()
-            .mockResolvedValue(err({ code: 'NO_API_KEY' as const, message: 'No API key' })),
         };
       case 'api_error':
         return {
           getLlmClient: vi
-            .fn()
-            .mockResolvedValue(err({ code: 'API_ERROR' as const, message: 'Service error' })),
-          getGeminiApiKey: vi
             .fn()
             .mockResolvedValue(err({ code: 'API_ERROR' as const, message: 'Service error' })),
         };
@@ -68,16 +61,12 @@ describe('todoItemExtractionService', () => {
           getLlmClient: vi
             .fn()
             .mockResolvedValue(err({ code: 'NETWORK_ERROR' as const, message: 'Network error' })),
-          getGeminiApiKey: vi
-            .fn()
-            .mockResolvedValue(err({ code: 'NETWORK_ERROR' as const, message: 'Network error' })),
         };
       case 'unsupported_model':
         return {
           getLlmClient: vi
             .fn()
-            .mockResolvedValue(err({ code: 'INVALID_MODEL' as const, message: 'Invalid model' })),
-          getGeminiApiKey: vi.fn().mockResolvedValue(ok('test-api-key')),
+            .mockResolvedValue(err({ code: 'UNSUPPORTED_MODEL' as const, message: 'Unsupported model' })),
         };
     }
   }

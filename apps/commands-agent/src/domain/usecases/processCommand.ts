@@ -86,41 +86,25 @@ export function createProcessCommandUseCase(deps: {
 
       await commandRepository.save(command);
 
-      logger.info({ commandId: command.id, userId: input.userId }, 'Fetching user API keys');
+      logger.info({ commandId: command.id, userId: input.userId }, 'Fetching LLM client');
 
-      const apiKeysResult = await userServiceClient.getApiKeys(input.userId);
+      const llmClientResult = await userServiceClient.getLlmClient(input.userId);
 
-      if (!apiKeysResult.ok) {
+      if (!llmClientResult.ok) {
         logger.warn(
           {
             commandId: command.id,
             userId: input.userId,
             reason: 'fetch_failed',
-            errorCode: apiKeysResult.error.code,
-            errorMessage: apiKeysResult.error.message,
+            errorCode: llmClientResult.error.code,
+            errorMessage: llmClientResult.error.message,
           },
-          'Failed to fetch user API keys from user-service'
+          'Failed to fetch LLM client from user-service'
         );
         command.status = 'pending_classification';
         await commandRepository.update(command);
         return { command, isNew: true };
       }
-
-      if (apiKeysResult.value.google === undefined) {
-        logger.warn(
-          {
-            commandId: command.id,
-            userId: input.userId,
-            reason: 'no_google_key',
-          },
-          'User has no Google API key configured, marking command as pending_classification'
-        );
-        command.status = 'pending_classification';
-        await commandRepository.update(command);
-        return { command, isNew: true };
-      }
-
-      const apiKey = apiKeysResult.value.google;
 
       logger.info(
         { commandId: command.id, textLength: input.text.length },
@@ -128,7 +112,7 @@ export function createProcessCommandUseCase(deps: {
       );
 
       try {
-        const classifier = classifierFactory(apiKey, input.userId);
+        const classifier = classifierFactory(llmClientResult.value);
         const classification = await classifier.classify(input.text);
 
         logger.info(

@@ -1,29 +1,30 @@
 import { describe, it, expect, vi } from 'vitest';
 import { ok, err } from '@intexuraos/common-core';
-import { FakePricingContext } from '@intexuraos/llm-pricing';
 import { createDataTransformService } from '../infra/gemini/dataTransformService.js';
 import type { UserServiceClient } from '../infra/user/userServiceClient.js';
+import type { LlmGenerateClient } from '@intexuraos/llm-factory';
 
 const mockGenerate = vi.fn();
 
-vi.mock('@intexuraos/infra-gemini', () => ({
-  createGeminiClient: vi.fn().mockImplementation(() => ({
-    generate: mockGenerate,
-  })),
-}));
-
-const fakePricingContext = new FakePricingContext();
-
 describe('dataTransformService', () => {
-  function createMockUserServiceClient(apiKey: string | null = 'test-api-key'): UserServiceClient {
+  function createMockUserServiceClient(
+    hasClient = true,
+    errorCode?: 'NO_API_KEY' | 'API_ERROR'
+  ): UserServiceClient {
+    if (!hasClient) {
+      return {
+        getLlmClient: vi
+          .fn()
+          .mockResolvedValue(
+            err({ code: errorCode ?? 'NO_API_KEY', message: 'No API key configured' })
+          ),
+      };
+    }
+    const mockLlmClient: LlmGenerateClient = {
+      generate: mockGenerate,
+    };
     return {
-      getGeminiApiKey: vi
-        .fn()
-        .mockResolvedValue(
-          apiKey !== null
-            ? ok(apiKey)
-            : err({ code: 'NO_API_KEY' as const, message: 'No API key configured' })
-        ),
+      getLlmClient: vi.fn().mockResolvedValue(ok(mockLlmClient)),
     };
   }
 
@@ -73,7 +74,7 @@ DATA_END`;
 
       mockGenerate.mockResolvedValue(ok({ content: validResponse, usage: mockUsage }));
       const mockClient = createMockUserServiceClient();
-      const service = createDataTransformService(mockClient, fakePricingContext);
+      const service = createDataTransformService(mockClient);
 
       const result = await service.transformData(
         'user-123',
@@ -92,8 +93,8 @@ DATA_END`;
     });
 
     it('returns NO_API_KEY error when user has no API key', async () => {
-      const mockClient = createMockUserServiceClient(null);
-      const service = createDataTransformService(mockClient, fakePricingContext);
+      const mockClient = createMockUserServiceClient(false, 'NO_API_KEY');
+      const service = createDataTransformService(mockClient);
 
       const result = await service.transformData(
         'user-123',
@@ -107,17 +108,13 @@ DATA_END`;
       expect(result.ok).toBe(false);
       if (!result.ok) {
         expect(result.error.code).toBe('NO_API_KEY');
-        expect(result.error.message).toBe('Please configure your Gemini API key in settings first');
+        expect(result.error.message).toBe('Please configure your LLM API key in settings first');
       }
     });
 
     it('returns USER_SERVICE_ERROR when user service fails', async () => {
-      const mockClient: UserServiceClient = {
-        getGeminiApiKey: vi
-          .fn()
-          .mockResolvedValue(err({ code: 'API_ERROR' as const, message: 'Service unavailable' })),
-      };
-      const service = createDataTransformService(mockClient, fakePricingContext);
+      const mockClient = createMockUserServiceClient(false, 'API_ERROR');
+      const service = createDataTransformService(mockClient);
 
       const result = await service.transformData(
         'user-123',
@@ -131,14 +128,14 @@ DATA_END`;
       expect(result.ok).toBe(false);
       if (!result.ok) {
         expect(result.error.code).toBe('USER_SERVICE_ERROR');
-        expect(result.error.message).toBe('Service unavailable');
+        expect(result.error.message).toBe('No API key configured');
       }
     });
 
     it('returns GENERATION_ERROR when LLM generation fails', async () => {
       mockGenerate.mockResolvedValue(err({ message: 'Rate limit exceeded' }));
       const mockClient = createMockUserServiceClient();
-      const service = createDataTransformService(mockClient, fakePricingContext);
+      const service = createDataTransformService(mockClient);
 
       const result = await service.transformData(
         'user-123',
@@ -159,7 +156,7 @@ DATA_END`;
     it('returns PARSE_ERROR when LLM response is invalid', async () => {
       mockGenerate.mockResolvedValue(ok({ content: 'INVALID RESPONSE FORMAT', usage: mockUsage }));
       const mockClient = createMockUserServiceClient();
-      const service = createDataTransformService(mockClient, fakePricingContext);
+      const service = createDataTransformService(mockClient);
 
       const result = await service.transformData(
         'user-123',
@@ -177,7 +174,7 @@ DATA_END`;
       }
     });
 
-    it('creates Gemini client with correct configuration', async () => {
+    it('calls getLlmClient and generate', async () => {
       const validResponse = `DATA_START
 [
   {"date":"2025-01-01","value":10}
@@ -186,7 +183,7 @@ DATA_END`;
 
       mockGenerate.mockResolvedValue(ok({ content: validResponse, usage: mockUsage }));
       const mockClient = createMockUserServiceClient();
-      const service = createDataTransformService(mockClient, fakePricingContext);
+      const service = createDataTransformService(mockClient);
 
       await service.transformData(
         'user-123',
@@ -197,34 +194,9 @@ DATA_END`;
         mockInsight
       );
 
-      // Verify Gemini client was created with user's API key
-      expect(mockClient.getGeminiApiKey).toHaveBeenCalledWith('user-123');
+      // Verify getLlmClient was called with user ID
+      expect(mockClient.getLlmClient).toHaveBeenCalledWith('user-123');
       expect(mockGenerate).toHaveBeenCalled();
-    });
-
-    it('passes pricing context for Gemini 2.5 Flash model', async () => {
-      const validResponse = `DATA_START
-[
-  {"date":"2025-01-01","value":10}
-]
-DATA_END`;
-
-      mockGenerate.mockResolvedValue(ok({ content: validResponse, usage: mockUsage }));
-      const getPricingSpy = vi.spyOn(fakePricingContext, 'getPricing');
-
-      const mockClient = createMockUserServiceClient();
-      const service = createDataTransformService(mockClient, fakePricingContext);
-
-      await service.transformData(
-        'user-123',
-        mockJsonSchema,
-        mockSnapshotData,
-        mockChartConfig,
-        mockTransformInstructions,
-        mockInsight
-      );
-
-      expect(getPricingSpy).toHaveBeenCalled();
     });
 
     it('handles malformed JSON response', async () => {
@@ -238,7 +210,7 @@ DATA_END`;
 
       mockGenerate.mockResolvedValue(ok({ content: malformedResponse, usage: mockUsage }));
       const mockClient = createMockUserServiceClient();
-      const service = createDataTransformService(mockClient, fakePricingContext);
+      const service = createDataTransformService(mockClient);
 
       const result = await service.transformData(
         'user-123',
@@ -262,7 +234,7 @@ DATA_END`;
 
       mockGenerate.mockResolvedValue(ok({ content: validResponse, usage: mockUsage }));
       const mockClient = createMockUserServiceClient();
-      const service = createDataTransformService(mockClient, fakePricingContext);
+      const service = createDataTransformService(mockClient);
 
       const result = await service.transformData(
         'user-123',
@@ -289,7 +261,7 @@ DATA_END`;
 
       mockGenerate.mockResolvedValue(ok({ content: validResponse, usage: mockUsage }));
       const mockClient = createMockUserServiceClient();
-      const service = createDataTransformService(mockClient, fakePricingContext);
+      const service = createDataTransformService(mockClient);
 
       const result = await service.transformData(
         'user-123',
@@ -317,7 +289,7 @@ DATA_END`;
 
       mockGenerate.mockResolvedValue(ok({ content: complexResponse, usage: mockUsage }));
       const mockClient = createMockUserServiceClient();
-      const service = createDataTransformService(mockClient, fakePricingContext);
+      const service = createDataTransformService(mockClient);
 
       const result = await service.transformData(
         'user-123',

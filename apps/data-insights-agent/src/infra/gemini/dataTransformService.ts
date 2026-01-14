@@ -1,17 +1,12 @@
 /**
- * Data transformation service using Gemini.
- * Transforms snapshot data according to chart definition instructions using user's Gemini API key.
+ * Data transformation service using LLM client.
+ * Transforms snapshot data according to chart definition instructions.
  */
 
 import type { Result } from '@intexuraos/common-core';
 import { err, getErrorMessage, ok } from '@intexuraos/common-core';
-import { createGeminiClient } from '@intexuraos/infra-gemini';
-import { LlmModels, type FastModel } from '@intexuraos/llm-contract';
 import { dataTransformPrompt, parseTransformedData } from '@intexuraos/llm-common';
-import type { IPricingContext } from '@intexuraos/llm-pricing';
 import type { UserServiceClient } from '../user/userServiceClient.js';
-
-const DATA_TRANSFORM_MODEL: FastModel = LlmModels.Gemini25Flash;
 
 /**
  * Error from data transformation operations.
@@ -42,11 +37,8 @@ export interface DataTransformService {
  * Create a data transformation service.
  */
 export function createDataTransformService(
-  userServiceClient: UserServiceClient,
-  pricingContext: IPricingContext
+  userServiceClient: UserServiceClient
 ): DataTransformService {
-  const pricing = pricingContext.getPricing(DATA_TRANSFORM_MODEL);
-
   return {
     async transformData(
       userId: string,
@@ -59,14 +51,14 @@ export function createDataTransformService(
         trackableMetric: string;
       }
     ): Promise<Result<unknown[], DataTransformError>> {
-      const keyResult = await userServiceClient.getGeminiApiKey(userId);
+      const clientResult = await userServiceClient.getLlmClient(userId);
 
-      if (!keyResult.ok) {
-        const error = keyResult.error;
+      if (!clientResult.ok) {
+        const error = clientResult.error;
         if (error.code === 'NO_API_KEY') {
           return err({
             code: 'NO_API_KEY',
-            message: 'Please configure your Gemini API key in settings first',
+            message: 'Please configure your LLM API key in settings first',
           });
         }
         return err({
@@ -75,13 +67,7 @@ export function createDataTransformService(
         });
       }
 
-      const apiKey = keyResult.value;
-      const geminiClient = createGeminiClient({
-        apiKey,
-        model: DATA_TRANSFORM_MODEL,
-        userId,
-        pricing,
-      });
+      const llmClient = clientResult.value;
 
       const prompt = dataTransformPrompt.build({
         jsonSchema,
@@ -91,7 +77,7 @@ export function createDataTransformService(
         insight,
       });
 
-      const result = await geminiClient.generate(prompt);
+      const result = await llmClient.generate(prompt);
 
       if (!result.ok) {
         return err({

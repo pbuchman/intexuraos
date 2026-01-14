@@ -1,5 +1,7 @@
 import { LlmModels } from '@intexuraos/llm-contract';
 import { describe, it, expect, beforeEach } from 'vitest';
+import { ok, type Result } from '@intexuraos/common-core';
+import type { LlmGenerateClient } from '@intexuraos/llm-factory';
 import { createRetryPendingCommandsUseCase } from '../../domain/usecases/retryPendingCommands.js';
 import type { Command } from '../../domain/models/command.js';
 import {
@@ -18,6 +20,28 @@ describe('retryPendingCommands usecase', () => {
   let userServiceClient: FakeUserServiceClient;
   let eventPublisher: FakeEventPublisher;
   const logger = pino({ name: 'test', level: 'silent' });
+
+  // Create a fake LLM client for use in tests
+  const createFakeLlmClient = (fakeClassifier: FakeClassifier): LlmGenerateClient => ({
+    async generate(): Promise<
+      Result<
+        { content: string; usage: { inputTokens: number; outputTokens: number; totalTokens: number; costUsd: number } },
+        { code: 'API_ERROR'; message: string }
+      >
+    > {
+      const result = await fakeClassifier.classify('');
+      if (result.type === 'unclassified') {
+        return ok({
+          content: JSON.stringify(result),
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd: 0.0001 },
+        });
+      }
+      return ok({
+        content: JSON.stringify(result),
+        usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd: 0.0001 },
+      });
+    },
+  });
 
   const createCommand = (overrides: Partial<Command> = {}): Command => ({
     id: 'cmd-123',
@@ -38,6 +62,9 @@ describe('retryPendingCommands usecase', () => {
     classifier = new FakeClassifier();
     userServiceClient = new FakeUserServiceClient();
     eventPublisher = new FakeEventPublisher();
+
+    // Set up the fake LLM client result
+    userServiceClient.setLlmClientResult(ok(createFakeLlmClient(classifier)));
   });
 
   it('returns empty result when no pending commands', async () => {
@@ -78,7 +105,7 @@ describe('retryPendingCommands usecase', () => {
     expect(result.skipped).toBe(1);
     expect(result.processed).toBe(0);
     expect(result.failed).toBe(0);
-    expect(result.skipReasons).toEqual({ api_keys_fetch_failed: 1 });
+    expect(result.skipReasons).toEqual({ llm_client_fetch_failed: 1 });
   });
 
   it('skips command when user has no Google API key', async () => {
@@ -99,7 +126,7 @@ describe('retryPendingCommands usecase', () => {
 
     expect(result.skipped).toBe(1);
     expect(result.processed).toBe(0);
-    expect(result.skipReasons).toEqual({ no_google_api_key: 1 });
+    expect(result.skipReasons).toEqual({ llm_client_fetch_failed: 1 });
   });
 
   it('processes command successfully when classification is not unclassified', async () => {
@@ -276,6 +303,6 @@ describe('retryPendingCommands usecase', () => {
     expect(result.total).toBe(3);
     expect(result.processed).toBe(2);
     expect(result.skipped).toBe(1);
-    expect(result.skipReasons).toEqual({ no_google_api_key: 1 });
+    expect(result.skipReasons).toEqual({ llm_client_fetch_failed: 1 });
   });
 });
