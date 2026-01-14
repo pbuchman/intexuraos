@@ -312,5 +312,26 @@ describe('UserServiceClient', () => {
         expect(result.error.message).toContain('Failed to fetch API keys');
       }
     });
+
+    it('returns INVALID_MODEL error when user has an invalid model preference', async () => {
+      nock(USER_SERVICE_URL)
+        .get('/internal/users/user-invalid-model/settings')
+        .matchHeader('X-Internal-Auth', INTERNAL_AUTH_TOKEN)
+        .reply(200, {
+          llmPreferences: {
+            defaultModel: 'not-a-real-model',
+          },
+        });
+
+      const client = createClient();
+      const result = await client.getLlmClient('user-invalid-model');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('INVALID_MODEL');
+        expect(result.error.message).toContain('Invalid model');
+        expect(result.error.message).toContain('not-a-real-model');
+      }
+    });
   });
 });

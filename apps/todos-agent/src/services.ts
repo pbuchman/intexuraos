@@ -47,6 +47,7 @@ export async function initServices(config: ServiceConfig): Promise<void> {
     baseUrl: config.userServiceUrl,
     internalAuthToken: config.internalAuthKey,
     pricingContext,
+    logger: pino({ name: 'userServiceClient' }),
   });
 
   container = {
