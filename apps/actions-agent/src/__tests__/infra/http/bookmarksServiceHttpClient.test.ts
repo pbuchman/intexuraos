@@ -211,6 +211,120 @@ describe('createBookmarksServiceHttpClient', () => {
 
       expect(scope.isDone()).toBe(true);
     });
+
+    it('includes existingBookmarkId in error message when provided by API', async () => {
+      nock(baseUrl)
+        .post('/internal/bookmarks')
+        .reply(409, {
+          success: false,
+          error: {
+            code: 'ALREADY_EXISTS',
+            message: 'Bookmark already exists',
+            details: { existingBookmarkId: 'bookmark-existing-123' },
+          },
+        });
+
+      const client = createBookmarksServiceHttpClient({ baseUrl, internalAuthToken });
+      const result = await client.createBookmark({
+        userId: 'user-456',
+        url: 'https://example.com',
+        title: 'Test',
+        tags: [],
+        source: 'actions-agent',
+        sourceId: 'action-123',
+      });
+
+      expect(isErr(result)).toBe(true);
+      if (isErr(result)) {
+        expect(result.error.message).toBe('Bookmark already exists (existingBookmarkId: bookmark-existing-123)');
+      }
+    });
+
+    it('does not include existingBookmarkId when it is undefined in error response', async () => {
+      nock(baseUrl)
+        .post('/internal/bookmarks')
+        .reply(409, {
+          success: false,
+          error: {
+            code: 'ALREADY_EXISTS',
+            message: 'Bookmark already exists',
+            details: { existingBookmarkId: undefined },
+          },
+        });
+
+      const client = createBookmarksServiceHttpClient({ baseUrl, internalAuthToken });
+      const result = await client.createBookmark({
+        userId: 'user-456',
+        url: 'https://example.com',
+        title: 'Test',
+        tags: [],
+        source: 'actions-agent',
+        sourceId: 'action-123',
+      });
+
+      expect(isErr(result)).toBe(true);
+      if (isErr(result)) {
+        expect(result.error.message).toBe('Bookmark already exists');
+        expect(result.error.message).not.toContain('existingBookmarkId');
+      }
+    });
+
+    it('does not include existingBookmarkId when it is empty string in error response', async () => {
+      nock(baseUrl)
+        .post('/internal/bookmarks')
+        .reply(409, {
+          success: false,
+          error: {
+            code: 'ALREADY_EXISTS',
+            message: 'Bookmark already exists',
+            details: { existingBookmarkId: '' },
+          },
+        });
+
+      const client = createBookmarksServiceHttpClient({ baseUrl, internalAuthToken });
+      const result = await client.createBookmark({
+        userId: 'user-456',
+        url: 'https://example.com',
+        title: 'Test',
+        tags: [],
+        source: 'actions-agent',
+        sourceId: 'action-123',
+      });
+
+      expect(isErr(result)).toBe(true);
+      if (isErr(result)) {
+        expect(result.error.message).toBe('Bookmark already exists');
+        expect(result.error.message).not.toContain('existingBookmarkId');
+      }
+    });
+
+    it('handles error response without details object', async () => {
+      nock(baseUrl)
+        .post('/internal/bookmarks')
+        .reply(409, {
+          success: false,
+          error: {
+            code: 'ALREADY_EXISTS',
+            message: 'Bookmark already exists',
+          },
+        });
+
+      const client = createBookmarksServiceHttpClient({ baseUrl, internalAuthToken });
+      const result = await client.createBookmark({
+        userId: 'user-456',
+        url: 'https://example.com',
+        title: 'Test',
+        tags: [],
+        source: 'actions-agent',
+        sourceId: 'action-123',
+      });
+
+      expect(isErr(result)).toBe(true);
+      if (isErr(result)) {
+        expect(result.error.message).toBe('Bookmark already exists');
+        expect(result.error.message).not.toContain('existingBookmarkId');
+      }
+    });
   });
 
   describe('forceRefreshBookmark', () => {
