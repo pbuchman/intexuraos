@@ -507,7 +507,7 @@ describe('FirestoreUsageStatsRepository', () => {
     const repo = new FirestoreUsageStatsRepository();
 
     // Spy on the private aggregateRecords method to make it throw
-    const aggregateSpy = vi.spyOn(repo as { aggregateRecords: (records: unknown[]) => unknown }, 'aggregateRecords');
+    const aggregateSpy = vi.spyOn(repo as unknown as { aggregateRecords: (records: unknown[]) => unknown }, 'aggregateRecords');
     aggregateSpy.mockImplementationOnce(() => {
       throw new Error('Aggregation failed');
     });

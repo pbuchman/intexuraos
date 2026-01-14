@@ -1053,6 +1053,92 @@ describe('runSynthesis', () => {
         }),
       });
     });
+
+    it('prefers OpenAI for image generation when synthesis model is OpenAI-based', async () => {
+      // Covers selectImageModel line 386: preferOpenAi=true && hasOpenAiKey=true
+      const research = createTestResearch({
+        synthesisModel: LlmModels.GPT52, // GPT model (starts with 'gpt-')
+      });
+      deps.mockRepo.findById.mockResolvedValue(ok(research));
+
+      const mockShareStorage: ShareStoragePort = {
+        upload: vi.fn().mockResolvedValue(ok({ gcsPath: 'research/abc123-share.html' })),
+        delete: vi.fn().mockResolvedValue(ok(undefined)),
+      };
+
+      const mockImageServiceClient = {
+        generatePrompt: vi
+          .fn()
+          .mockResolvedValue(ok({ title: 'Test Cover Title', prompt: 'generated prompt' })),
+        generateImage: vi.fn().mockResolvedValue(
+          ok({
+            id: 'img-123',
+            thumbnailUrl: 'https://storage.example.com/thumb.jpg',
+            fullSizeUrl: 'https://storage.example.com/full.png',
+          })
+        ),
+        deleteImage: vi.fn(),
+      };
+
+      const result = await runSynthesis('research-1', {
+        ...deps,
+        shareStorage: mockShareStorage,
+        shareConfig,
+        imageServiceClient: mockImageServiceClient,
+        imageApiKeys: { google: 'test-google-key', openai: 'test-openai-key' },
+      });
+
+      expect(result).toEqual({ ok: true });
+      expect(mockImageServiceClient.generateImage).toHaveBeenCalledWith(
+        'generated prompt',
+        LlmModels.GPTImage1, // Should prefer OpenAI when synthesis model is OpenAI-based
+        'user-1',
+        { title: 'Test Cover Title' }
+      );
+    });
+
+    it('falls back to Google for image generation when synthesis model is OpenAI-based but no OpenAI key', async () => {
+      // Covers selectImageModel line 387: preferOpenAi=true && !hasOpenAiKey && hasGoogleKey
+      const research = createTestResearch({
+        synthesisModel: LlmModels.GPT52, // GPT model (starts with 'gpt-')
+      });
+      deps.mockRepo.findById.mockResolvedValue(ok(research));
+
+      const mockShareStorage: ShareStoragePort = {
+        upload: vi.fn().mockResolvedValue(ok({ gcsPath: 'research/abc123-share.html' })),
+        delete: vi.fn().mockResolvedValue(ok(undefined)),
+      };
+
+      const mockImageServiceClient = {
+        generatePrompt: vi
+          .fn()
+          .mockResolvedValue(ok({ title: 'Test Cover Title', prompt: 'generated prompt' })),
+        generateImage: vi.fn().mockResolvedValue(
+          ok({
+            id: 'img-123',
+            thumbnailUrl: 'https://storage.example.com/thumb.jpg',
+            fullSizeUrl: 'https://storage.example.com/full.png',
+          })
+        ),
+        deleteImage: vi.fn(),
+      };
+
+      const result = await runSynthesis('research-1', {
+        ...deps,
+        shareStorage: mockShareStorage,
+        shareConfig,
+        imageServiceClient: mockImageServiceClient,
+        imageApiKeys: { google: 'test-google-key' }, // Only Google key available
+      });
+
+      expect(result).toEqual({ ok: true });
+      expect(mockImageServiceClient.generateImage).toHaveBeenCalledWith(
+        'generated prompt',
+        LlmModels.Gemini25FlashImage, // Should fall back to Google when OpenAI key not available
+        'user-1',
+        { title: 'Test Cover Title' }
+      );
+    });
   });
 
   describe('Cost Calculation', () => {
@@ -1376,6 +1462,41 @@ describe('runSynthesis', () => {
       //              + sourceLlmCostUsd (0.08) + synthesis (0.01) = 0.21 (WRONG!)
       // After fix: llmTotals only includes new results (0.04)
       //           + sourceLlmCostUsd (0.08) + synthesis (0.01) = 0.13 (CORRECT!)
+    });
+  });
+
+  describe('Attribution Repair', () => {
+    const mockShareStorage: ShareStoragePort = {
+      upload: vi.fn().mockResolvedValue(ok({ gcsPath: 'research/abc123-share.html' })),
+      delete: vi.fn().mockResolvedValue(ok(undefined)),
+    };
+    const shareConfig = {
+      shareBaseUrl: 'https://share.example.com',
+      staticAssetsUrl: 'https://static.example.com',
+    };
+
+    it('handles repair success with undefined costUsd (uses nullish coalescing)', async () => {
+      // Covers runSynthesis.ts line 220: additionalCostUsd += repairResult.value.usage.costUsd ?? 0
+      const research = createTestResearch();
+      deps.mockRepo.findById.mockResolvedValue(ok(research));
+
+      // Override the spy to return success with undefined costUsd
+      repairAttributionSpy.mockResolvedValue(
+        ok({
+          content: 'Repaired content',
+          usage: { inputTokens: 100, outputTokens: 50, costUsd: undefined },
+        })
+      );
+
+      const result = await runSynthesis('research-1', {
+        ...deps,
+        shareStorage: mockShareStorage,
+        shareConfig,
+      });
+
+      expect(result).toEqual({ ok: true });
+      // The undefined costUsd should be handled by the ?? 0 operator
+      expect(deps.mockRepo.update).toHaveBeenCalled();
     });
   });
 });

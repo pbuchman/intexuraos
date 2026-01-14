@@ -32,6 +32,12 @@ export function getLogLevel(): 'silent' | 'debug' | 'info' | 'warn' | 'error' {
   if (process.env['NODE_ENV'] === 'test') {
     return 'silent';
   }
-  const logLevel = process.env['LOG_LEVEL'] as 'silent' | 'debug' | 'info' | 'warn' | 'error' | undefined;
+  const logLevel = process.env['LOG_LEVEL'] as
+    | 'silent'
+    | 'debug'
+    | 'info'
+    | 'warn'
+    | 'error'
+    | undefined;
   return logLevel ?? 'info';
 }

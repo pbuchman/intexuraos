@@ -174,6 +174,35 @@ describe('GeminiAdapter', () => {
         expect(result.error.code).toBe('TIMEOUT');
       }
     });
+
+    it('logs synthesis start with undefined additionalSources (nullish coalescing)', async () => {
+      // Covers line 67: sourceCount: additionalSources?.length ?? 0
+      const mockLogger = {
+        info: vi.fn(),
+        error: vi.fn(),
+        warn: vi.fn(),
+        debug: vi.fn(),
+      };
+      const adapterWithLogger = new GeminiAdapter(
+        'test-key',
+        LlmModels.Gemini25Pro,
+        'test-user-id',
+        testPricing,
+        mockLogger
+      );
+
+      mockGenerate.mockResolvedValue({
+        ok: true,
+        value: { content: 'Result', usage: mockUsage },
+      });
+
+      await adapterWithLogger.synthesize('Prompt', [{ model: 'gpt', content: 'GPT' }]);
+
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        { model: LlmModels.Gemini25Pro, reportCount: 1, sourceCount: 0 },
+        'Gemini synthesis started'
+      );
+    });
   });
 
   describe('generateTitle', () => {
