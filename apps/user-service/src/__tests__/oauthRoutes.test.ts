@@ -260,6 +260,33 @@ describe('OAuth2 Routes', () => {
         expect(body.error).toBe('invalid_grant');
       });
 
+      it('returns error using error field when error_description is missing', async () => {
+        // Tests nullish coalescing at line 162: error_description ?? error
+        app = await buildServer();
+
+        nock(`https://${INTEXURAOS_AUTH0_DOMAIN}`).post('/oauth/token').reply(400, {
+          error: 'invalid_grant',
+          // No error_description field
+        });
+
+        const response = await app.inject({
+          method: 'POST',
+          url: '/auth/oauth/token',
+          payload: {
+            grant_type: 'authorization_code',
+            client_id: 'test-client',
+            client_secret: 'test-secret',
+            code: 'expired-code',
+            redirect_uri: 'https://example.com/callback',
+          },
+        });
+
+        expect(response.statusCode).toBe(400);
+        const body = JSON.parse(response.body) as { error: string; error_description: string };
+        expect(body.error).toBe('invalid_grant');
+        expect(body.error_description).toBe('invalid_grant');
+      });
+
       it('includes code_verifier in token request when provided (PKCE)', async () => {
         app = await buildServer();
 

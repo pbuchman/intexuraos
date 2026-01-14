@@ -324,6 +324,24 @@ describe('Device Authorization Flow', () => {
         expect(body.error.details.errors[0]!.path).toBe('device_code');
       });
 
+      it('returns 400 when device_code is empty string', async () => {
+        app = await buildServer();
+
+        const response = await app.inject({
+          method: 'POST',
+          url: '/auth/device/poll',
+          payload: { device_code: '' },
+        });
+
+        expect(response.statusCode).toBe(400);
+        const body = JSON.parse(response.body) as {
+          success: boolean;
+          error: { code: string };
+        };
+        expect(body.success).toBe(false);
+        expect(body.error.code).toBe('INVALID_REQUEST');
+      });
+
       it('returns 409 CONFLICT when authorization pending', async () => {
         nock(`https://${INTEXURAOS_AUTH0_DOMAIN}`).post('/oauth/token').reply(403, {
           error: 'authorization_pending',
