@@ -10,6 +10,7 @@ import {
 } from '@intexuraos/common-http';
 import { registerCoreSchemas } from '@intexuraos/http-contracts';
 import { buildHealthResponse, checkFirestore, type HealthCheck } from '@intexuraos/http-server';
+import { setupSentryErrorHandler } from '@intexuraos/infra-sentry';
 import { createWhatsappRoutes } from './routes/routes.js';
 import { type Config, validateConfigEnv } from './config.js';
 import { initServices } from './services.js';
@@ -177,6 +178,8 @@ export async function buildServer(config: Config): Promise<FastifyInstance> {
 
   // Register auth plugin (JWT validation)
   await app.register(fastifyAuthPlugin);
+
+  setupSentryErrorHandler(app as unknown as FastifyInstance);
 
   // Register whatsapp routes
   await app.register(createWhatsappRoutes(config));

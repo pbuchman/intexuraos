@@ -1,0 +1,23 @@
+{
+  "name": "@intexuraos/llm-factory",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@intexuraos/common-core": "workspace:*",
+    "@intexuraos/infra-gemini": "workspace:*",
+    "@intexuraos/infra-glm": "workspace:*",
+    "@intexuraos/llm-common": "workspace:*",
+    "@intexuraos/llm-contract": "workspace:*",
+    "@intexuraos/llm-pricing": "workspace:*"
+  }
+}

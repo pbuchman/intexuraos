@@ -180,7 +180,8 @@ describe('compositeFeedRoutes', () => {
 
       expect(response.statusCode).toBe(400);
       const body = JSON.parse(response.payload);
-      expect(body.error.message).toContain('must NOT have more than 5 items');
+      expect(body.error.message).toBe('Validation failed');
+      expect(body.error.details.errors[0].message).toContain('must NOT have more than 5 items');
     });
 
     it('returns 400 when exceeding max notification filters', async () => {
@@ -204,7 +205,8 @@ describe('compositeFeedRoutes', () => {
 
       expect(response.statusCode).toBe(400);
       const body = JSON.parse(response.payload);
-      expect(body.error.message).toContain('must NOT have more than 3 items');
+      expect(body.error.message).toBe('Validation failed');
+      expect(body.error.details.errors[0].message).toContain('must NOT have more than 3 items');
     });
 
     it('returns 404 when data source not found', async () => {

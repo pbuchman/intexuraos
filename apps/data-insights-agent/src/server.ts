@@ -10,6 +10,7 @@ import {
 } from '@intexuraos/common-http';
 import { registerCoreSchemas } from '@intexuraos/http-contracts';
 import { buildHealthResponse, checkFirestore, type HealthCheck } from '@intexuraos/http-server';
+import { setupSentryErrorHandler } from '@intexuraos/infra-sentry';
 import { dataInsightsRoutes } from './routes/index.js';
 import { validateConfigEnv } from './config.js';
 
@@ -114,44 +115,7 @@ export async function buildServer(): Promise<FastifyInstance> {
     disableRequestLogging: true,
   });
 
-  // Global error handler
-  app.setErrorHandler((error, request, reply) => {
-    const fastifyError = error as {
-      statusCode?: number;
-      validation?: unknown;
-      validationContext?: string;
-      message: string;
-    };
-
-    const statusCode = fastifyError.statusCode ?? 500;
-    const errorCode = statusCode >= 500 ? 'INTERNAL_ERROR' : 'INVALID_REQUEST';
-
-    request.log.error(
-      {
-        err: error,
-        requestId: request.id,
-        url: request.url,
-        method: request.method,
-        statusCode,
-        validation: fastifyError.validation,
-        validationContext: fastifyError.validationContext,
-      },
-      `Request error: ${fastifyError.message}`
-    );
-
-    return reply.status(statusCode).send({
-      success: false,
-      error: {
-        code: errorCode,
-        message: fastifyError.message,
-        details: fastifyError.validation ?? undefined,
-      },
-      diagnostics: {
-        requestId: request.id,
-        durationMs: Date.now() - request.startTime,
-      },
-    });
-  });
+  setupSentryErrorHandler(app as unknown as FastifyInstance);
 
   registerQuietHealthCheckLogging(app);
 

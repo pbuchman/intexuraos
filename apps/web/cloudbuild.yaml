@@ -39,13 +39,14 @@ steps:
           echo "  $${ENV_SUFFIX}: $${URL}"
         done
 
-        # Fetch actual secrets (Auth0, Firebase)
+        # Fetch actual secrets (Auth0, Firebase, Sentry)
         AUTH0_DOMAIN=$$(gcloud secrets versions access latest --secret=INTEXURAOS_AUTH0_DOMAIN)
         AUTH0_SPA_CLIENT_ID=$$(gcloud secrets versions access latest --secret=INTEXURAOS_AUTH0_SPA_CLIENT_ID)
         AUTH_AUDIENCE=$$(gcloud secrets versions access latest --secret=INTEXURAOS_AUTH_AUDIENCE)
         FIREBASE_PROJECT_ID=$$(gcloud secrets versions access latest --secret=INTEXURAOS_FIREBASE_PROJECT_ID)
         FIREBASE_API_KEY=$$(gcloud secrets versions access latest --secret=INTEXURAOS_FIREBASE_API_KEY)
         FIREBASE_AUTH_DOMAIN=$$(gcloud secrets versions access latest --secret=INTEXURAOS_FIREBASE_AUTH_DOMAIN)
+        SENTRY_DSN_WEB=$$(gcloud secrets versions access latest --secret=INTEXURAOS_SENTRY_DSN_WEB)
 
         # Write .env file with secrets and service URLs
         cat > /workspace/apps/web/.env << EOF
@@ -55,6 +56,8 @@ steps:
         INTEXURAOS_FIREBASE_PROJECT_ID=$$FIREBASE_PROJECT_ID
         INTEXURAOS_FIREBASE_API_KEY=$$FIREBASE_API_KEY
         INTEXURAOS_FIREBASE_AUTH_DOMAIN=$$FIREBASE_AUTH_DOMAIN
+        INTEXURAOS_SENTRY_DSN_WEB=$$SENTRY_DSN_WEB
+        INTEXURAOS_ENVIRONMENT=$${_ENVIRONMENT}
         EOF
 
         # Append service URLs from associative array

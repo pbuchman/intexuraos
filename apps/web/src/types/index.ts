@@ -184,6 +184,7 @@ export interface AppConfig {
   firebaseProjectId: string;
   firebaseApiKey: string;
   firebaseAuthDomain: string;
+  sentryDsn: string;
 }
 
 /**
@@ -697,6 +698,7 @@ export interface AllProvidersPricing {
   openai: ProviderPricing;
   anthropic: ProviderPricing;
   perplexity: ProviderPricing;
+  zhipu: ProviderPricing;
 }
 
 /**

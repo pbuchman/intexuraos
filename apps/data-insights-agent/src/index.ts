@@ -1,4 +1,5 @@
 import pino from 'pino';
+import { initSentry } from '@intexuraos/infra-sentry';
 import { getErrorMessage } from '@intexuraos/common-core';
 import { validateRequiredEnv } from '@intexuraos/http-server';
 import { fetchAllPricing, createPricingContext } from '@intexuraos/llm-pricing';
@@ -25,6 +26,12 @@ const REQUIRED_ENV = [
 ];
 
 validateRequiredEnv(REQUIRED_ENV);
+
+initSentry({
+  dsn: process.env['INTEXURAOS_SENTRY_DSN'],
+  environment: process.env['INTEXURAOS_ENVIRONMENT'] ?? 'development',
+  serviceName: 'data-insights-agent',
+});
 
 /** Models used by this service */
 const REQUIRED_MODELS: FastModel[] = [LlmModels.Gemini25Flash];

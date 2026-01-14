@@ -19,6 +19,7 @@
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
+    "format:docs-tables": "node scripts/format-docs-tables.mjs",
     "typecheck": "node scripts/typecheck-parallel.mjs",
     "typecheck:sequential": "pnpm -r --if-present typecheck",
     "typecheck:tests": "tsc --project tsconfig.tests-check.json --noEmit",

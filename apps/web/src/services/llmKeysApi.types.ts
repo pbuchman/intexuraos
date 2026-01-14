@@ -22,11 +22,13 @@ export interface LlmKeysResponse {
   openai: string | null;
   anthropic: string | null;
   perplexity: string | null;
+  zhipu: string | null;
   testResults: {
     google: LlmTestResult | null;
     openai: LlmTestResult | null;
     anthropic: LlmTestResult | null;
     perplexity: LlmTestResult | null;
+    zhipu: LlmTestResult | null;
   };
 }
 

@@ -8,6 +8,7 @@ import {
 import { type ResearchModel, type FastModel, LlmModels } from '@intexuraos/llm-contract';
 import { buildServer } from './server.js';
 import { initializeServices } from './services.js';
+import { initSentry } from '@intexuraos/infra-sentry';
 
 const REQUIRED_ENV = [
   'INTEXURAOS_GCP_PROJECT_ID',
@@ -21,6 +22,12 @@ const REQUIRED_ENV = [
 ];
 
 validateRequiredEnv(REQUIRED_ENV);
+
+initSentry({
+  dsn: process.env['INTEXURAOS_SENTRY_DSN'],
+  environment: process.env['INTEXURAOS_ENVIRONMENT'] ?? 'development',
+  serviceName: 'research-agent',
+});
 
 const PORT = Number(process.env['PORT'] ?? 8080);
 const HOST = process.env['HOST'] ?? '0.0.0.0';

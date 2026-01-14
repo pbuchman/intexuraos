@@ -1,0 +1,21 @@
+{
+  "name": "@intexuraos/infra-sentry",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@intexuraos/common-core": "workspace:*",
+    "@sentry/node": "^8.42.0",
+    "fastify": "^5.2.0",
+    "pino": "^9.6.0"
+  }
+}

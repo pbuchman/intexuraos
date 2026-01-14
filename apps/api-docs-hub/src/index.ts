@@ -1,33 +1,25 @@
+/**
+ * API Docs Hub entry point.
+ */
+
+import { initSentry } from '@intexuraos/infra-sentry';
 import { buildServer } from './server.js';
 import { loadConfig } from './config.js';
 
+initSentry({
+  dsn: process.env['INTEXURAOS_SENTRY_DSN'],
+  environment: process.env['INTEXURAOS_ENVIRONMENT'] ?? 'development',
+  serviceName: 'api-docs-hub',
+});
+
 async function main(): Promise<void> {
-  // Fail fast if required environment variables are missing
   const config = loadConfig();
-
   const app = await buildServer(config);
+  const port = Number(process.env['PORT'] ?? 8080);
+  const host = process.env['HOST'] ?? '0.0.0.0';
 
-  // Log which OpenAPI URLs are loaded at startup using Fastify logger
-  app.log.info('Starting api-docs-hub with OpenAPI sources:');
-  for (const source of config.openApiSources) {
-    app.log.info({ name: source.name, url: source.url }, 'OpenAPI source configured');
-  }
-
-  const close = (): void => {
-    app.close().then(
-      () => {
-        process.exit(0);
-      },
-      () => {
-        process.exit(1);
-      }
-    );
-  };
-
-  process.on('SIGTERM', close);
-  process.on('SIGINT', close);
-
-  await app.listen({ port: config.port, host: config.host });
+  await app.listen({ port, host });
+  app.log.info(`API Docs Hub listening on ${host}:${String(port)}`);
 }
 
 main().catch(() => {

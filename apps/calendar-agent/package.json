@@ -20,6 +20,7 @@
     "@intexuraos/common-http": "workspace:*",
     "@intexuraos/http-contracts": "workspace:*",
     "@intexuraos/http-server": "workspace:*",
+    "@intexuraos/infra-sentry": "workspace:*",
     "fastify": "^5.1.0",
     "googleapis": "^144.0.0",
     "pino": "^10.1.0",

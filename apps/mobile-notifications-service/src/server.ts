@@ -10,6 +10,7 @@ import {
 } from '@intexuraos/common-http';
 import { registerCoreSchemas } from '@intexuraos/http-contracts';
 import { buildHealthResponse, checkFirestore, type HealthCheck } from '@intexuraos/http-server';
+import { setupSentryErrorHandler } from '@intexuraos/infra-sentry';
 import { mobileNotificationsRoutes } from './routes/index.js';
 import { validateConfigEnv } from './config.js';
 
@@ -134,50 +135,7 @@ export async function buildServer(): Promise<FastifyInstance> {
     return payload;
   });
 
-  // Global error handler - logs all errors including schema validation
-  app.setErrorHandler((error, request, reply) => {
-    // Extract error properties safely
-    const fastifyError = error as {
-      statusCode?: number;
-      validation?: unknown;
-      validationContext?: string;
-      message: string;
-    };
-
-    const statusCode = fastifyError.statusCode ?? 500;
-    const errorCode = statusCode >= 500 ? 'INTERNAL_ERROR' : 'INVALID_REQUEST';
-
-    // Log the error with full details
-    // Include rawBody if captured (for JSON parse errors)
-    const rawBody = (request as { rawBody?: string }).rawBody;
-    request.log.error(
-      {
-        err: error,
-        requestId: request.id,
-        url: request.url,
-        method: request.method,
-        statusCode,
-        validation: fastifyError.validation,
-        validationContext: fastifyError.validationContext,
-        ...(rawBody !== undefined ? { rawBody } : {}),
-      },
-      `Request error: ${fastifyError.message}`
-    );
-
-    // Send structured error response
-    return reply.status(statusCode).send({
-      success: false,
-      error: {
-        code: errorCode,
-        message: fastifyError.message,
-        details: fastifyError.validation ?? undefined,
-      },
-      diagnostics: {
-        requestId: request.id,
-        durationMs: Date.now() - request.startTime,
-      },
-    });
-  });
+  setupSentryErrorHandler(app as unknown as FastifyInstance);
 
   // Register quiet health check logging (skips /health endpoint logs)
   registerQuietHealthCheckLogging(app);

@@ -2,7 +2,6 @@
  * @intexuraos/llm-common
  *
  * LLM-specific utilities for prompts, context inference, attribution, and redaction.
- * Pure utilities with zero infrastructure dependencies.
  */
 
 // Prompt builder types

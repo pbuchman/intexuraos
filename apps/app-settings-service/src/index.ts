@@ -1,3 +1,4 @@
+import { initSentry } from '@intexuraos/infra-sentry';
 import { validateRequiredEnv } from '@intexuraos/http-server';
 import { getErrorMessage } from '@intexuraos/common-core';
 import {
@@ -9,9 +10,19 @@ import {
 import { buildServer } from './server.js';
 import { getServices } from './services.js';
 
-const REQUIRED_ENV = ['INTEXURAOS_GCP_PROJECT_ID', 'INTEXURAOS_INTERNAL_AUTH_TOKEN'];
+const REQUIRED_ENV = [
+  'INTEXURAOS_GCP_PROJECT_ID',
+  'INTEXURAOS_INTERNAL_AUTH_TOKEN',
+];
 
 validateRequiredEnv(REQUIRED_ENV);
+
+const sentryDsn = process.env['INTEXURAOS_SENTRY_DSN'];
+initSentry({
+  ...(sentryDsn !== undefined && { dsn: sentryDsn }),
+  environment: process.env['INTEXURAOS_ENVIRONMENT'] ?? 'development',
+  serviceName: 'app-settings-service',
+});
 
 const PORT = Number(process.env['PORT'] ?? 8080);
 const HOST = process.env['HOST'] ?? '0.0.0.0';
@@ -24,11 +35,12 @@ async function validateAllModelPricing(): Promise<void> {
   const { pricingRepository } = getServices();
 
   // Fetch pricing for all providers
-  const [google, openai, anthropic, perplexity] = await Promise.all([
+  const [google, openai, anthropic, perplexity, zhipu] = await Promise.all([
     pricingRepository.getByProvider(LlmProviders.Google),
     pricingRepository.getByProvider(LlmProviders.OpenAI),
     pricingRepository.getByProvider(LlmProviders.Anthropic),
     pricingRepository.getByProvider(LlmProviders.Perplexity),
+    pricingRepository.getByProvider(LlmProviders.Zhipu),
   ]);
 
   // Build a map of all models that have pricing
@@ -51,6 +63,11 @@ async function validateAllModelPricing(): Promise<void> {
   }
   if (perplexity !== null) {
     for (const model of Object.keys(perplexity.models)) {
+      modelsWithPricing.add(model);
+    }
+  }
+  if (zhipu !== null) {
+    for (const model of Object.keys(zhipu.models)) {
       modelsWithPricing.add(model);
     }
   }

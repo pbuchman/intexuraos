@@ -11,5 +11,9 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@intexuraos/common-core": "workspace:*",
+    "@intexuraos/llm-contract": "workspace:*"
   }
 }

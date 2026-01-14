@@ -1,3 +1,4 @@
+import { initSentry } from '@intexuraos/infra-sentry';
 import { validateRequiredEnv } from '@intexuraos/http-server';
 import { buildServer } from './server.js';
 
@@ -10,6 +11,12 @@ const REQUIRED_ENV = [
 ];
 
 validateRequiredEnv(REQUIRED_ENV);
+
+initSentry({
+  dsn: process.env['INTEXURAOS_SENTRY_DSN'],
+  environment: process.env['INTEXURAOS_ENVIRONMENT'] ?? 'development',
+  serviceName: 'promptvault-service',
+});
 
 const PORT = Number(process.env['PORT'] ?? 8081);
 const HOST = process.env['HOST'] ?? '0.0.0.0';
