@@ -15,9 +15,9 @@ import {
   checkFirestore,
   checkNotionSdk,
   checkSecrets,
-  createValidationErrorHandler,
   type HealthCheck,
 } from '@intexuraos/http-server';
+import { setupSentryErrorHandler } from '@intexuraos/infra-sentry';
 import { notionRoutes } from './routes/routes.js';
 import { getServices } from './services.js';
 
@@ -232,8 +232,7 @@ export async function buildServer(): Promise<FastifyInstance> {
   await app.register(intexuraFastifyPlugin);
   await app.register(fastifyAuthPlugin);
 
-  // Ensure Fastify validation errors are returned in IntexuraOS envelope
-  app.setErrorHandler(createValidationErrorHandler());
+  setupSentryErrorHandler(app as unknown as FastifyInstance);
 
   // Register core schemas for $ref usage in routes (Diagnostics, ErrorCode, ErrorBody)
   registerCoreSchemas(app);

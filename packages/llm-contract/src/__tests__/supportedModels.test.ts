@@ -15,8 +15,8 @@ import {
 
 describe('supportedModels', () => {
   describe('ALL_LLM_MODELS', () => {
-    it('contains all 14 expected models', () => {
-      expect(ALL_LLM_MODELS).toHaveLength(14);
+    it('contains all 15 expected models', () => {
+      expect(ALL_LLM_MODELS).toHaveLength(15);
     });
 
     it('contains all Google models', () => {
@@ -44,12 +44,16 @@ describe('supportedModels', () => {
       expect(ALL_LLM_MODELS).toContain('sonar-pro');
       expect(ALL_LLM_MODELS).toContain('sonar-deep-research');
     });
+
+    it('contains all Zhipu models', () => {
+      expect(ALL_LLM_MODELS).toContain('glm-4.7');
+    });
   });
 
   describe('MODEL_PROVIDER_MAP', () => {
     it('maps every model to a provider', () => {
       for (const model of ALL_LLM_MODELS) {
-        expect(['google', 'openai', 'anthropic', 'perplexity']).toContain(
+        expect(['google', 'openai', 'anthropic', 'perplexity', 'zhipu']).toContain(
           MODEL_PROVIDER_MAP[model]
         );
       }
@@ -80,6 +84,10 @@ describe('supportedModels', () => {
       expect(MODEL_PROVIDER_MAP['sonar-pro']).toBe('perplexity');
       expect(MODEL_PROVIDER_MAP['sonar-deep-research']).toBe('perplexity');
     });
+
+    it('maps Zhipu models correctly', () => {
+      expect(MODEL_PROVIDER_MAP['glm-4.7']).toBe('zhipu');
+    });
   });
 
   describe('LlmModels constants', () => {
@@ -89,6 +97,7 @@ describe('supportedModels', () => {
       expect(LlmModels.GPT52).toBe('gpt-5.2');
       expect(LlmModels.ClaudeOpus45).toBe('claude-opus-4-5-20251101');
       expect(LlmModels.SonarPro).toBe('sonar-pro');
+      expect(LlmModels.Glm47).toBe('glm-4.7');
     });
   });
 
@@ -98,6 +107,7 @@ describe('supportedModels', () => {
       expect(LlmProviders.OpenAI).toBe('openai');
       expect(LlmProviders.Anthropic).toBe('anthropic');
       expect(LlmProviders.Perplexity).toBe('perplexity');
+      expect(LlmProviders.Zhipu).toBe('zhipu');
     });
   });
 
@@ -107,6 +117,7 @@ describe('supportedModels', () => {
       expect(getProviderForModel('claude-opus-4-5-20251101')).toBe('anthropic');
       expect(getProviderForModel('gpt-5.2')).toBe('openai');
       expect(getProviderForModel('sonar-pro')).toBe('perplexity');
+      expect(getProviderForModel('glm-4.7')).toBe('zhipu');
     });
   });
 
@@ -117,6 +128,7 @@ describe('supportedModels', () => {
       expect(isValidModel('o4-mini-deep-research')).toBe(true);
       expect(isValidModel('sonar-pro')).toBe(true);
       expect(isValidModel('gpt-image-1')).toBe(true);
+      expect(isValidModel('glm-4.7')).toBe(true);
     });
 
     it('returns false for invalid models', () => {

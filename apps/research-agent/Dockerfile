@@ -1,11 +1,11 @@
 # IntexuraOS Research Agent Dockerfile
-# Multi-stage build with esbuild bundling.
+# Multi-stage build with esbuild bundling
 
 # Stage 1: Build
 FROM node:22-alpine AS builder
 
-# Install pnpm
-RUN npm install -g pnpm@9
+# Enable pnpm via Corepack
+RUN corepack enable && corepack prepare pnpm@10 --activate
 
 WORKDIR /app
 
@@ -16,6 +16,7 @@ COPY package*.json ./
 COPY apps/research-agent/package*.json ./apps/research-agent/
 
 COPY packages/ ./packages/
+
 # Install dependencies
 RUN pnpm install --frozen-lockfile
 
@@ -31,8 +32,8 @@ RUN pnpm run --filter @intexuraos/research-agent build
 # Stage 2: Production
 FROM node:22-alpine
 
-# Install pnpm
-RUN npm install -g pnpm@9
+# Enable pnpm via Corepack
+RUN corepack enable && corepack prepare pnpm@10 --activate
 
 WORKDIR /app
 
@@ -42,7 +43,7 @@ COPY pnpm-lock.yaml ./
 
 # Copy generated production package.json and install deps
 COPY --from=builder /app/apps/research-agent/dist/package.json ./
-RUN pnpm install --prod
+RUN CI=true pnpm install --prod --no-frozen-lockfile
 
 # Copy built file
 COPY --from=builder /app/apps/research-agent/dist/index.js ./dist/

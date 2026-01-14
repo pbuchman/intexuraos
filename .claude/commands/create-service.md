@@ -131,6 +131,7 @@ Note: The build script auto-generates `dist/package.json` with all transitive de
 ### 4. Create src/index.ts
 
 ```typescript
+import { initSentry } from '@intexuraos/infra-sentry';
 import { validateRequiredEnv } from '@intexuraos/http-server';
 import { getErrorMessage } from '@intexuraos/common-core';
 import { buildServer } from './server.js';
@@ -148,6 +149,13 @@ const REQUIRED_ENV = [
 ];
 
 validateRequiredEnv(REQUIRED_ENV);
+
+// Initialize Sentry (required - DSN is validated above)
+initSentry({
+  dsn: process.env['INTEXURAOS_SENTRY_DSN'],
+  environment: process.env['INTEXURAOS_ENVIRONMENT'] ?? 'development',
+  serviceName: '<service-name>',
+});
 
 async function main(): Promise<void> {
   const config = loadConfig();
@@ -346,7 +354,7 @@ Cloud Build requires 5 changes for a new service:
 
 #### 8a. Add to Main Pipeline (`cloudbuild/cloudbuild.yaml`)
 
-Add build and deploy steps (copy pattern from existing service like `user-service`):
+Add build and deploy steps using the `build-push-monitored.sh` script (copy pattern from existing service like `user-service`):
 
 ```yaml
 # ===== <service-name> =====
@@ -355,20 +363,15 @@ Add build and deploy steps (copy pattern from existing service like `user-servic
   waitFor: ['-']
   entrypoint: 'bash'
   args:
-    - '-c'
-    - |
-      echo "=== Building <service-name> ==="
-      docker pull ${_ARTIFACT_REGISTRY_URL}/<service-name>:latest || true
-      docker build \
-        --cache-from=${_ARTIFACT_REGISTRY_URL}/<service-name>:latest \
-        --build-arg BUILDKIT_INLINE_CACHE=1 \
-        -t ${_ARTIFACT_REGISTRY_URL}/<service-name>:$COMMIT_SHA \
-        -t ${_ARTIFACT_REGISTRY_URL}/<service-name>:latest \
-        -f apps/<service-name>/Dockerfile .
-      docker push ${_ARTIFACT_REGISTRY_URL}/<service-name>:$COMMIT_SHA
-      docker push ${_ARTIFACT_REGISTRY_URL}/<service-name>:latest
+    [
+      'cloudbuild/scripts/build-push-monitored.sh',
+      '<service-name>',
+      'apps/<service-name>/Dockerfile',
+    ]
   env:
     - 'DOCKER_BUILDKIT=1'
+    - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
+    - 'COMMIT_SHA=$COMMIT_SHA'
 
 - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
   id: 'deploy-<service-name>'
@@ -382,6 +385,13 @@ Add build and deploy steps (copy pattern from existing service like `user-servic
     - 'ENVIRONMENT=${_ENVIRONMENT}'
 ```
 
+**Note:** The `build-push-monitored.sh` script handles:
+
+- Cache warming (pulls `:latest` image)
+- BuildKit inline cache
+- Network telemetry logging (for Cloud Monitoring metrics)
+- Dual tagging (`$COMMIT_SHA` and `:latest`)
+
 #### 8b. Create Per-Service Pipeline (`apps/<service-name>/cloudbuild.yaml`)
 
 ```yaml
@@ -391,18 +401,15 @@ steps:
     id: 'build'
     entrypoint: 'bash'
     args:
-      - '-c'
-      - |
-        docker pull ${_ARTIFACT_REGISTRY_URL}/<service-name>:latest || true
-        docker build \
-          --cache-from=${_ARTIFACT_REGISTRY_URL}/<service-name>:latest \
-          --build-arg BUILDKIT_INLINE_CACHE=1 \
-          -t ${_ARTIFACT_REGISTRY_URL}/<service-name>:$COMMIT_SHA \
-          -t ${_ARTIFACT_REGISTRY_URL}/<service-name>:latest \
-          -f apps/<service-name>/Dockerfile .
-        docker push ${_ARTIFACT_REGISTRY_URL}/<service-name>:$COMMIT_SHA
-        docker push ${_ARTIFACT_REGISTRY_URL}/<service-name>:latest
-    env: ['DOCKER_BUILDKIT=1']
+      [
+        'cloudbuild/scripts/build-push-monitored.sh',
+        '<service-name>',
+        'apps/<service-name>/Dockerfile',
+      ]
+    env:
+      - 'DOCKER_BUILDKIT=1'
+      - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
+      - 'COMMIT_SHA=$COMMIT_SHA'
 
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     id: 'deploy'
@@ -444,6 +451,31 @@ const SERVICES = [
   '<service-name>',
 ];
 ```
+
+#### 8e. Add to Terraform Change Detection
+
+Edit `scripts/detect-tf-changes.sh`, add to `ALL_SERVICES` array:
+
+```bash
+ALL_SERVICES=(
+  # ... existing services ...
+  "<service-name>"
+)
+```
+
+**Why:** This ensures the "Detect Terraform Affected Services" step in the deploy workflow correctly identifies your service when terraform changes affect it.
+
+**Optional:** If your service uses specific terraform modules, add it to `MODULE_TO_SERVICES` mapping:
+
+```bash
+# Example: if your service uses a custom Pub/Sub topic
+MODULE_TO_SERVICES[<module-name>]="<service-name>"
+```
+
+Common mappings:
+- `pubsub-push`: For services that subscribe to Pub/Sub topics
+- `<service>-bucket`: For services with dedicated Cloud Storage buckets
+- `firestore`: Most services use Firestore (already mapped to "all-services")
 
 ### 9. Create Cloud Build Deployment Script
 
@@ -632,6 +664,7 @@ This ensures `/create-domain-docs` can generate documentation for your service's
 - [ ] Deploy script `cloudbuild/scripts/deploy-<service>.sh` created
 - [ ] Added to `docker_services` in `terraform/modules/cloud-build/main.tf`
 - [ ] Added to `SERVICES` in `.github/scripts/smart-dispatch.mjs`
+- [ ] Added to `ALL_SERVICES` in `scripts/detect-tf-changes.sh`
 - [ ] Registered in api-docs-hub
 - [ ] Added to `CLOUD_RUN_SERVICES` in Cloud Build files
 - [ ] Added to `.envrc.local.example`

@@ -17,6 +17,7 @@
     "@intexuraos/common-http": "workspace:*",
     "@intexuraos/infra-firestore": "workspace:*",
     "@intexuraos/infra-notion": "workspace:*",
+    "@intexuraos/infra-sentry": "workspace:*",
     "@intexuraos/http-contracts": "workspace:*",
     "@intexuraos/http-server": "workspace:*",
     "@fastify/cors": "^10.0.1",

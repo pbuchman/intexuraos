@@ -248,6 +248,7 @@ locals {
   # Common env vars for ALL services (URLs + project ID)
   # Uses computed URLs to avoid circular dependencies
   common_service_env_vars = {
+    INTEXURAOS_ENVIRONMENT                      = var.environment
     INTEXURAOS_GCP_PROJECT_ID                   = var.project_id
     INTEXURAOS_USER_SERVICE_URL                 = "https://${local.services.user_service.name}-${local.cloud_run_url_suffix}"
     INTEXURAOS_PROMPTVAULT_SERVICE_URL          = "https://${local.services.promptvault_service.name}-${local.cloud_run_url_suffix}"
@@ -464,6 +465,9 @@ module "secret_manager" {
     "INTEXURAOS_GOOGLE_OAUTH_CLIENT_ID"     = "Google OAuth client ID for calendar integration"
     "INTEXURAOS_GOOGLE_OAUTH_CLIENT_SECRET" = "Google OAuth client secret for calendar integration"
     "INTEXURAOS_GOOGLE_OAUTH_REDIRECT_URI"  = "Google OAuth redirect URI (full callback URL)"
+    # Sentry error monitoring
+    "INTEXURAOS_SENTRY_DSN"     = "Sentry Data Source Name for error tracking (backend services)"
+    "INTEXURAOS_SENTRY_DSN_WEB" = "Sentry Data Source Name for error tracking (web app)"
   }
 
   depends_on = [google_project_service.apis]
@@ -499,6 +503,7 @@ locals {
     INTEXURAOS_AUTH_ISSUER         = module.secret_manager.secret_ids["INTEXURAOS_AUTH_ISSUER"]
     INTEXURAOS_AUTH_AUDIENCE       = module.secret_manager.secret_ids["INTEXURAOS_AUTH_AUDIENCE"]
     INTEXURAOS_INTERNAL_AUTH_TOKEN = module.secret_manager.secret_ids["INTEXURAOS_INTERNAL_AUTH_TOKEN"]
+    INTEXURAOS_SENTRY_DSN          = module.secret_manager.secret_ids["INTEXURAOS_SENTRY_DSN"]
   }
 }
 

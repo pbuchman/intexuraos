@@ -1,0 +1,12 @@
+.git
+.github
+.vscode
+node_modules
+apps/*/node_modules
+libs/*/node_modules
+packages/*/node_modules
+build
+dist
+coverage
+*.md
+.env

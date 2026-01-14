@@ -1,0 +1,23 @@
+{
+  "name": "@intexuraos/infra-glm",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@intexuraos/common-core": "workspace:*",
+    "@intexuraos/llm-common": "workspace:*",
+    "@intexuraos/llm-audit": "workspace:*",
+    "@intexuraos/llm-contract": "workspace:*",
+    "@intexuraos/llm-pricing": "workspace:*",
+    "openai": "^6.15.0"
+  }
+}

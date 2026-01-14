@@ -138,3 +138,14 @@ export INTEXURAOS_WEB_APP_URL="http://localhost:3000"
 # =============================================================================
 # Used by calendar-agent for Google Calendar API integration during local development
 export INTEXURAOS_GOOGLE_OAUTH_REDIRECT_URI=http://localhost:8110/oauth/connections/google/callback
+
+# =============================================================================
+# SENTRY ERROR MONITORING
+# =============================================================================
+# Sentry DSN for error tracking in local development
+# Default DSN for backend services
+export INTEXURAOS_SENTRY_DSN="https://5e5f5df6749b5153e6692c7995ec3ff9@o4510702688337920.ingest.de.sentry.io/4510703655321680"
+# Web app specific DSN
+export INTEXURAOS_SENTRY_DSN_WEB="https://e80fca02a2e9ae3a49aeafcac1cf59fa@o4510702688337920.ingest.de.sentry.io/4510703657812048"
+# Environment name for Sentry
+export INTEXURAOS_ENVIRONMENT=development

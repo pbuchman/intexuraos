@@ -4,6 +4,7 @@ import fastifySwagger from '@fastify/swagger';
 import fastifySwaggerUi from '@fastify/swagger-ui';
 import { intexuraFastifyPlugin, registerQuietHealthCheckLogging } from '@intexuraos/common-http';
 import { buildHealthResponse, type HealthCheck } from '@intexuraos/http-server';
+import { setupSentryErrorHandler } from '@intexuraos/infra-sentry';
 import type { Config } from './config.js';
 
 const SERVICE_NAME = 'api-docs-hub';
@@ -55,6 +56,8 @@ export async function buildServer(config: Config): Promise<FastifyInstance> {
   registerQuietHealthCheckLogging(app);
 
   await app.register(intexuraFastifyPlugin);
+
+  setupSentryErrorHandler(app as unknown as FastifyInstance);
 
   await app.register(fastifySwagger, buildOpenApiOptions());
 

@@ -1,0 +1,267 @@
+{
+  "services": [
+    {
+      "id": "actions-agent",
+      "name": "Actions Agent",
+      "category": "infrastructure",
+      "summary": "Central action lifecycle management for todos, research, notes, links, calendar, and reminders",
+      "features": [
+        "Unified action queue",
+        "Status workflow management",
+        "Pub/Sub event distribution",
+        "Agent orchestration"
+      ],
+      "endpoints": 8,
+      "docs": "services/actions-agent"
+    },
+    {
+      "id": "research-agent",
+      "name": "Research Agent",
+      "category": "ai-research",
+      "summary": "Multi-LLM research orchestration with parallel queries and public sharing",
+      "features": [
+        "4 LLM providers (Claude, GPT-5, Gemini, Perplexity)",
+        "Parallel query execution",
+        "Public sharing via GCS",
+        "Cover image generation"
+      ],
+      "endpoints": 10,
+      "docs": "services/research-agent"
+    },
+    {
+      "id": "user-service",
+      "name": "User Service",
+      "category": "integrations",
+      "summary": "Authentication, settings, OAuth tokens, and API key management",
+      "features": [
+        "Auth0 device code flow",
+        "AES-256-GCM encryption for API keys",
+        "Google OAuth token refresh",
+        "Settings management"
+      ],
+      "endpoints": 11,
+      "docs": "services/user-service"
+    },
+    {
+      "id": "image-service",
+      "name": "Image Service",
+      "category": "infrastructure",
+      "summary": "AI image generation with DALL-E 3 and Imagen 3",
+      "features": [
+        "DALL-E 3 and Imagen 3 support",
+        "Internal-only endpoints",
+        "GCS storage with thumbnails",
+        "Prompt enhancement with LLM"
+      ],
+      "endpoints": 2,
+      "docs": "services/image-service"
+    },
+    {
+      "id": "bookmarks-agent",
+      "name": "Bookmarks Agent",
+      "category": "content",
+      "summary": "Link management with OpenGraph metadata and AI summaries",
+      "features": [
+        "OpenGraph metadata via web-agent",
+        "AI summaries for content",
+        "Tag-based filtering",
+        "Archive management"
+      ],
+      "endpoints": 6,
+      "docs": "services/bookmarks-agent"
+    },
+    {
+      "id": "notes-agent",
+      "name": "Notes Agent",
+      "category": "content",
+      "summary": "Lightweight note-taking service",
+      "features": ["CRUD operations", "Tag support", "Draft/active status", "Source tracking"],
+      "endpoints": 5,
+      "docs": "services/notes-agent"
+    },
+    {
+      "id": "todos-agent",
+      "name": "Todos Agent",
+      "category": "content",
+      "summary": "Task management with sub-items and priorities",
+      "features": [
+        "AI-powered item extraction",
+        "Sub-items with custom ordering",
+        "Priorities: low, medium, high, urgent",
+        "Status workflow"
+      ],
+      "endpoints": 10,
+      "docs": "services/todos-agent"
+    },
+    {
+      "id": "whatsapp-service",
+      "name": "WhatsApp Service",
+      "category": "integrations",
+      "summary": "WhatsApp Business API integration for receiving messages and media",
+      "features": [
+        "Webhook signature validation",
+        "Text, image, and audio support",
+        "Media download to GCS",
+        "Async transcription"
+      ],
+      "endpoints": 14,
+      "docs": "services/whatsapp-service"
+    },
+    {
+      "id": "commands-agent",
+      "name": "Commands Agent",
+      "category": "ai-research",
+      "summary": "AI command classification using Gemini LLM",
+      "features": [
+        "6 action types (todo, research, note, link, calendar, reminder)",
+        "Model preference detection",
+        "Idempotency by source",
+        "Pending classification retry"
+      ],
+      "endpoints": 7,
+      "docs": "services/commands-agent"
+    },
+    {
+      "id": "web-agent",
+      "name": "Web Agent",
+      "category": "infrastructure",
+      "summary": "OpenGraph metadata extraction from URLs",
+      "features": [
+        "Title, description, image extraction",
+        "Favicon detection",
+        "Batch processing",
+        "2MB size limit"
+      ],
+      "endpoints": 1,
+      "docs": "services/web-agent"
+    },
+    {
+      "id": "calendar-agent",
+      "name": "Calendar Agent",
+      "category": "integrations",
+      "summary": "Google Calendar integration for event management",
+      "features": [
+        "Full CRUD operations",
+        "Free/busy queries",
+        "Multi-calendar support",
+        "Attendee management"
+      ],
+      "endpoints": 6,
+      "docs": "services/calendar-agent"
+    },
+    {
+      "id": "data-insights-agent",
+      "name": "Data Insights Agent",
+      "category": "ai-research",
+      "summary": "AI-powered data analysis with Gemini",
+      "features": [
+        "Custom data sources",
+        "Title generation",
+        "Chart definition generation",
+        "Composite feeds"
+      ],
+      "endpoints": 14,
+      "docs": "services/data-insights-agent"
+    },
+    {
+      "id": "mobile-notifications-service",
+      "name": "Mobile Notifications Service",
+      "category": "infrastructure",
+      "summary": "Push notification gateway with signature-based authentication",
+      "features": [
+        "Signature connections",
+        "Notification filters",
+        "Webhook support",
+        "Multi-device support"
+      ],
+      "endpoints": 10,
+      "docs": "services/mobile-notifications-service"
+    },
+    {
+      "id": "api-docs-hub",
+      "name": "API Docs Hub",
+      "category": "infrastructure",
+      "summary": "OpenAPI documentation aggregator",
+      "features": [
+        "Single Swagger UI",
+        "Multi-spec support",
+        "Service selector dropdown",
+        "Health check"
+      ],
+      "endpoints": 2,
+      "docs": "services/api-docs-hub"
+    },
+    {
+      "id": "app-settings-service",
+      "name": "App Settings Service",
+      "category": "infrastructure",
+      "summary": "LLM pricing and usage analytics",
+      "features": [
+        "4 provider pricing",
+        "Usage cost tracking",
+        "Monthly breakdown",
+        "Per-model statistics"
+      ],
+      "endpoints": 2,
+      "docs": "services/app-settings-service"
+    },
+    {
+      "id": "notion-service",
+      "name": "Notion Service",
+      "category": "integrations",
+      "summary": "Notion integration management",
+      "features": [
+        "Token validation",
+        "Connection status",
+        "Workspace detection",
+        "Clean disconnect"
+      ],
+      "endpoints": 3,
+      "docs": "services/notion-service"
+    },
+    {
+      "id": "promptvault-service",
+      "name": "PromptVault Service",
+      "category": "content",
+      "summary": "Prompt template management with Notion sync",
+      "features": ["CRUD operations", "Notion database sync", "Created/updated tracking"],
+      "endpoints": 5,
+      "docs": "services/promptvault-service"
+    }
+  ],
+  "categories": {
+    "ai-research": {
+      "name": "AI & Research",
+      "description": "Services that use LLMs for analysis and classification",
+      "services": ["research-agent", "commands-agent", "data-insights-agent"]
+    },
+    "content": {
+      "name": "Content Management",
+      "description": "Services for managing user content",
+      "services": ["bookmarks-agent", "notes-agent", "todos-agent", "promptvault-service"]
+    },
+    "integrations": {
+      "name": "External Integrations",
+      "description": "Services that connect to external platforms",
+      "services": ["user-service", "whatsapp-service", "calendar-agent", "notion-service"]
+    },
+    "infrastructure": {
+      "name": "Infrastructure",
+      "description": "Core platform services",
+      "services": [
+        "actions-agent",
+        "web-agent",
+        "image-service",
+        "mobile-notifications-service",
+        "api-docs-hub",
+        "app-settings-service"
+      ]
+    }
+  },
+  "stats": {
+    "total": 17,
+    "documented": 17,
+    "completion": 100,
+    "lastUpdated": "2026-01-13"
+  }
+}

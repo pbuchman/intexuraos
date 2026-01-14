@@ -24,7 +24,7 @@
 
 **Importers (apps):**
 | App | Import | File |
-|-----|--------|------|
+| ------------ | --------------------- | ------------------------ |
 | user-service | `type { AuthTokens }` | `routes/deviceRoutes.ts` |
 | user-service | `type { AuthTokens }` | `routes/tokenRoutes.ts` |
 
@@ -46,7 +46,7 @@
 
 **Importers (apps):**
 | App | Import | File |
-|-----|--------|------|
+| ---------------- | ------------------------------------------------------------------------------------------------ | ------------------------- |
 | whatsapp-service | Types: `WhatsAppWebhookEventRepository`, `WhatsAppUserMappingRepository`, `InboxNotesRepository` | `services.ts` |
 | whatsapp-service | `ProcessWhatsAppWebhookUseCase` | `routes/webhookRoutes.ts` |
 
@@ -69,7 +69,7 @@
 
 **Importers (apps):**
 | App | Import | File |
-|-----|--------|------|
+| ------------------- | ------------------------------------------------------------------------ | ------------------------ |
 | promptvault-service | Types: `NotionConnectionRepository`, `NotionApiPort`, `PromptRepository` | `services.ts` |
 | promptvault-service | Use cases: `createPrompt`, `listPrompts`, `getPrompt`, `updatePrompt` | `routes/promptRoutes.ts` |
 | promptvault-service | Type: `PromptVaultErrorCode` | `routes/shared.ts` |
@@ -96,7 +96,7 @@
 
 **Importers (apps):**
 | App | Import | File |
-|-----|--------|------|
+| ------------ | ------------------------------------ | ----------------------- |
 | user-service | `Auth0ClientImpl`, `loadAuth0Config` | `routes/tokenRoutes.ts` |
 
 **Dependencies:** `@intexuraos/common`, `@intexuraos/domain-identity`
@@ -123,7 +123,7 @@
 
 **Importers (apps):**
 | App | Import | File |
-|-----|--------|------|
+| ------------------- | -------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
 | user-service | `getFirestore` | `server.ts` |
 | user-service | `FirestoreAuthTokenRepository` | `routes/deviceRoutes.ts`, `frontendRoutes.ts`, `tokenRoutes.ts` |
 | promptvault-service | `getFirestore` | `server.ts` |
@@ -168,7 +168,7 @@
 
 **Importers (apps):**
 | App | Import | File |
-|-----|--------|------|
+| ------------------- | ------------------------------------------------------------------ | -------------------------- |
 | promptvault-service | `NotionApiAdapter`, `createNotionPromptRepository`, `NotionLogger` | `services.ts`, `server.ts` |
 | promptvault-service | `MockNotionApiAdapter`, `createNotionPromptRepository` | `__tests__/testUtils.ts` |
 | notion-service | `NotionApiAdapter`, `NotionLogger` | `services.ts`, `server.ts` |
