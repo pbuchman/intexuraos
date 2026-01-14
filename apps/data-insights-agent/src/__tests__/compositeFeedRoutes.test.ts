@@ -639,6 +639,41 @@ describe('compositeFeedRoutes', () => {
 
       expect(response.statusCode).toBe(500);
     });
+
+    it('succeeds when snapshot delete fails (non-fatal)', async () => {
+      const app = await buildServer();
+
+      const createResult = await fakeCompositeFeedRepo.create('user-123', 'Feed', {
+        purpose: 'Purpose',
+        staticSourceIds: [],
+        notificationFilters: [],
+      });
+      const feed = createResult.ok ? createResult.value : null;
+
+      // First create a snapshot
+      await fakeSnapshotRepo.upsert(feed?.id ?? '', 'user-123', 'Test Feed', {
+        feedId: feed?.id ?? '',
+        feedName: 'Test Feed',
+        purpose: 'Test purpose',
+        generatedAt: new Date().toISOString(),
+        staticSources: [],
+        notifications: [],
+      });
+
+      // Make snapshot delete fail
+      fakeSnapshotRepo.setFailNextDelete(true);
+
+      const response = await app.inject({
+        method: 'DELETE',
+        url: `/composite-feeds/${feed?.id ?? 'missing'}`,
+        headers: { authorization: 'Bearer valid-token' },
+      });
+
+      // Should still return 200 since snapshot deletion is non-fatal
+      expect(response.statusCode).toBe(200);
+      // The feed should still be deleted
+      expect(fakeCompositeFeedRepo.getAll()).toHaveLength(0);
+    });
   });
 
   describe('GET /composite-feeds/:id/schema', () => {

@@ -76,4 +76,62 @@ describe('refreshSnapshot', () => {
       expect(result.value.data.notifications).toHaveLength(0);
     }
   });
+
+  it('returns REPOSITORY_ERROR when composite feed repository fails', async () => {
+    fakeCompositeFeedRepo.setFailNextGet(true);
+
+    const result = await refreshSnapshot('feed-123', 'user-123', {
+      snapshotRepository: fakeSnapshotRepo,
+      compositeFeedRepository: fakeCompositeFeedRepo,
+      dataSourceRepository: fakeDataSourceRepo,
+      mobileNotificationsClient: fakeMobileNotificationsClient,
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('REPOSITORY_ERROR');
+      expect(result.error.message).toBe('Simulated get failure');
+    }
+  });
+
+  it('returns FEED_NOT_FOUND when feed does not exist', async () => {
+    const result = await refreshSnapshot('non-existent-feed', 'user-123', {
+      snapshotRepository: fakeSnapshotRepo,
+      compositeFeedRepository: fakeCompositeFeedRepo,
+      dataSourceRepository: fakeDataSourceRepo,
+      mobileNotificationsClient: fakeMobileNotificationsClient,
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('FEED_NOT_FOUND');
+      expect(result.error.message).toBe('Composite feed not found');
+    }
+  });
+
+  it('returns REPOSITORY_ERROR when snapshot upsert fails', async () => {
+    const feedResult = await fakeCompositeFeedRepo.create('user-123', 'Test Feed', {
+      purpose: 'Test purpose',
+      staticSourceIds: [],
+      notificationFilters: [],
+    });
+
+    expect(feedResult.ok).toBe(true);
+    const feed = feedResult.ok ? feedResult.value : null;
+
+    fakeSnapshotRepo.setFailNextUpsert(true);
+
+    const result = await refreshSnapshot(feed?.id ?? '', 'user-123', {
+      snapshotRepository: fakeSnapshotRepo,
+      compositeFeedRepository: fakeCompositeFeedRepo,
+      dataSourceRepository: fakeDataSourceRepo,
+      mobileNotificationsClient: fakeMobileNotificationsClient,
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('REPOSITORY_ERROR');
+      expect(result.error.message).toBe('Simulated upsert failure');
+    }
+  });
 });
