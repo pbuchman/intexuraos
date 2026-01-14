@@ -20,7 +20,7 @@
       "category": "ai-research",
       "summary": "Multi-LLM research orchestration with parallel queries and public sharing",
       "features": [
-        "4 LLM providers (Claude, GPT-5, Gemini, Perplexity)",
+        "5 LLM providers (Claude, OpenAI, Google, Perplexity, Zai)",
         "Parallel query execution",
         "Public sharing via GCS",
         "Cover image generation"
@@ -197,12 +197,12 @@
       "category": "infrastructure",
       "summary": "LLM pricing and usage analytics",
       "features": [
-        "4 provider pricing",
+        "5 provider pricing (Google, OpenAI, Anthropic, Perplexity, Zai)",
         "Usage cost tracking",
         "Monthly breakdown",
         "Per-model statistics"
       ],
-      "endpoints": 2,
+      "endpoints": 3,
       "docs": "services/app-settings-service"
     },
     {
@@ -262,6 +262,6 @@
     "total": 17,
     "documented": 17,
     "completion": 100,
-    "lastUpdated": "2026-01-13"
+    "lastUpdated": "2026-01-14"
   }
 }

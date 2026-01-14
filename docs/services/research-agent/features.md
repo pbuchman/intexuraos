@@ -77,4 +77,6 @@ Research-agent automates multi-model AI research:
 
 **Perplexity special handling** - Perplexity requires online search and has longer response times
 
+**Zai API limitations** - Zai (formerly智谱) has specific rate limits and model availability
+
 **No editing** - Once research is completed, it cannot be edited (only enhanced or deleted)

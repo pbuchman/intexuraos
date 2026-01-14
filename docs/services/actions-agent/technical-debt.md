@@ -11,7 +11,7 @@
 | Code Duplicates     | 0     | -        |
 | Deprecations        | 0     | -        |
 
-Last updated: 2026-01-13
+Last updated: 2026-01-14
 
 ## Future Plans
 
@@ -30,6 +30,7 @@ Actions of these types remain in `pending` status indefinitely.
 2. **Additional notification channels** - Support email or in-app notifications
 3. **Action templates** - Predefined action patterns for common tasks
 4. **Action dependencies** - Support actions that depend on other actions completing
+5. **Auto-execution based on confidence** - Currently `shouldAutoExecute()` is a stub that always returns `false`
 
 ## Code Smells
 
