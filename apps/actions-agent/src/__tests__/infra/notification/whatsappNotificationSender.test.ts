@@ -1,30 +1,37 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import nock from 'nock';
-import pino from 'pino';
-import { createWhatsappNotificationSender } from '../../../infra/notification/whatsappNotificationSender.js';
+/**
+ * Tests for WhatsAppNotificationSender.
+ */
+
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { ok } from '@intexuraos/common-core';
+
+const mockPublishSendMessage = vi.fn();
+
+vi.mock('@intexuraos/infra-pubsub', () => ({
+  createWhatsAppSendPublisher: vi.fn().mockReturnValue({
+    publishSendMessage: mockPublishSendMessage,
+  }),
+}));
+
+const { createWhatsappNotificationSender } = await import(
+  '../../../infra/notification/whatsappNotificationSender.js'
+);
 
 describe('createWhatsappNotificationSender', () => {
-  const userServiceUrl = 'http://user-service.local';
-  const internalAuthToken = 'test-token';
-  const silentLogger = pino({ level: 'silent' });
+  const mockConfig = {
+    projectId: 'test-project',
+    topicName: 'test-topic',
+  };
 
   beforeEach(() => {
-    nock.cleanAll();
-  });
-
-  afterEach(() => {
-    nock.cleanAll();
+    vi.clearAllMocks();
   });
 
   describe('sendDraftReady', () => {
     it('returns ok on successful notification', async () => {
-      nock(userServiceUrl)
-        .post('/internal/users/user-123/notify')
-        .matchHeader('X-Internal-Auth', internalAuthToken)
-        .matchHeader('Content-Type', 'application/json')
-        .reply(200);
+      mockPublishSendMessage.mockResolvedValue(ok(undefined));
 
-      const sender = createWhatsappNotificationSender({ userServiceUrl, internalAuthToken, logger: silentLogger });
+      const sender = createWhatsappNotificationSender(mockConfig);
       const result = await sender.sendDraftReady(
         'user-123',
         'research-456',
@@ -35,21 +42,28 @@ describe('createWhatsappNotificationSender', () => {
       expect(result.ok).toBe(true);
     });
 
-    it('sends correct notification payload', async () => {
-      const scope = nock(userServiceUrl)
-        .post('/internal/users/user-123/notify', (body: Record<string, unknown>) => {
-          expect(body['type']).toBe('research_ready');
-          expect(body['message']).toContain('AI Research Report');
-          expect(body['message']).toContain('https://app.example.com/research/456');
-          const metadata = body['metadata'] as Record<string, unknown>;
-          expect(metadata['researchId']).toBe('research-789');
-          expect(metadata['title']).toBe('AI Research Report');
-          expect(metadata['draftUrl']).toBe('https://app.example.com/research/456');
-          return true;
-        })
-        .reply(200);
+    it('publishes message with correct userId', async () => {
+      mockPublishSendMessage.mockResolvedValue(ok(undefined));
 
-      const sender = createWhatsappNotificationSender({ userServiceUrl, internalAuthToken, logger: silentLogger });
+      const sender = createWhatsappNotificationSender(mockConfig);
+      await sender.sendDraftReady(
+        'user-123',
+        'research-456',
+        'Test',
+        'https://example.com'
+      );
+
+      expect(mockPublishSendMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: 'user-123',
+        })
+      );
+    });
+
+    it('formats message with title when provided', async () => {
+      mockPublishSendMessage.mockResolvedValue(ok(undefined));
+
+      const sender = createWhatsappNotificationSender(mockConfig);
       await sender.sendDraftReady(
         'user-123',
         'research-789',
@@ -57,43 +71,104 @@ describe('createWhatsappNotificationSender', () => {
         'https://app.example.com/research/456'
       );
 
-      expect(scope.isDone()).toBe(true);
+      expect(mockPublishSendMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          message: expect.stringContaining('AI Research Report'),
+        })
+      );
     });
 
-    it('returns error on non-ok response', async () => {
-      nock(userServiceUrl).post('/internal/users/user-123/notify').reply(500);
+    it('uses Untitled Research when title is empty', async () => {
+      mockPublishSendMessage.mockResolvedValue(ok(undefined));
 
-      const sender = createWhatsappNotificationSender({ userServiceUrl, internalAuthToken, logger: silentLogger });
-      const result = await sender.sendDraftReady(
+      const sender = createWhatsappNotificationSender(mockConfig);
+      await sender.sendDraftReady(
+        'user-123',
+        'research-456',
+        '',
+        'https://example.com'
+      );
+
+      expect(mockPublishSendMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          message: expect.stringContaining('Untitled Research'),
+        })
+      );
+    });
+
+    it('includes draft URL in message', async () => {
+      mockPublishSendMessage.mockResolvedValue(ok(undefined));
+
+      const sender = createWhatsappNotificationSender(mockConfig);
+      await sender.sendDraftReady(
+        'user-123',
+        'research-456',
+        'My Title',
+        'https://app.example.com/research/456'
+      );
+
+      expect(mockPublishSendMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          message: expect.stringContaining('https://app.example.com/research/456'),
+        })
+      );
+    });
+
+    it('includes Research Complete header', async () => {
+      mockPublishSendMessage.mockResolvedValue(ok(undefined));
+
+      const sender = createWhatsappNotificationSender(mockConfig);
+      await sender.sendDraftReady(
         'user-123',
         'research-456',
         'Test',
         'https://example.com'
       );
 
-      expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error.message).toContain('500');
-      }
+      expect(mockPublishSendMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          message: expect.stringContaining('Research Complete!'),
+        })
+      );
     });
 
-    it('returns error on network failure', async () => {
-      nock(userServiceUrl)
-        .post('/internal/users/user-123/notify')
-        .replyWithError('Connection refused');
+    it('includes correlationId with research id', async () => {
+      mockPublishSendMessage.mockResolvedValue(ok(undefined));
 
-      const sender = createWhatsappNotificationSender({ userServiceUrl, internalAuthToken, logger: silentLogger });
-      const result = await sender.sendDraftReady(
+      const sender = createWhatsappNotificationSender(mockConfig);
+      await sender.sendDraftReady(
         'user-123',
-        'research-456',
+        'research-abc123',
         'Test',
         'https://example.com'
       );
 
-      expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error.message).toContain('Network error');
-      }
+      expect(mockPublishSendMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          correlationId: 'research-draft-ready-research-abc123',
+        })
+      );
+    });
+
+    it('formats complete message correctly', async () => {
+      mockPublishSendMessage.mockResolvedValue(ok(undefined));
+
+      const sender = createWhatsappNotificationSender(mockConfig);
+      await sender.sendDraftReady(
+        'user-123',
+        'research-456',
+        'AI Research Report',
+        'https://app.example.com/research/456'
+      );
+
+      const expectedMessage =
+        'Research Complete!\n\n"AI Research Report"\nhttps://app.example.com/research/456';
+
+      expect(mockPublishSendMessage).toHaveBeenCalledWith({
+        userId: 'user-123',
+        message: expectedMessage,
+        correlationId: 'research-draft-ready-research-456',
+      });
     });
   });
 });

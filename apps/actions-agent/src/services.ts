@@ -48,7 +48,6 @@ import {
   type ChangeActionTypeUseCase,
 } from './domain/usecases/changeActionType.js';
 import pino from 'pino';
-import type { Logger } from 'pino';
 import { createLocalActionServiceClient } from './infra/action/localActionServiceClient.js';
 import { createResearchAgentClient } from './infra/research/researchAgentClient.js';
 import { createWhatsappNotificationSender } from './infra/notification/whatsappNotificationSender.js';
@@ -110,8 +109,6 @@ export function initServices(config: ServiceConfig): void {
   const actionTransitionRepository = createFirestoreActionTransitionRepository();
   const actionServiceClient = createLocalActionServiceClient(actionRepository);
 
-  const notificationLogger: Logger = pino({ name: 'whatsappNotificationSender' });
-
   const commandsAgentClient = createCommandsAgentHttpClient({
     baseUrl: config.commandsAgentUrl,
     internalAuthToken: config.internalAuthToken,
@@ -123,9 +120,8 @@ export function initServices(config: ServiceConfig): void {
   });
 
   const notificationSender = createWhatsappNotificationSender({
-    userServiceUrl: config.userServiceUrl,
-    internalAuthToken: config.internalAuthToken,
-    logger: notificationLogger,
+    projectId: config.gcpProjectId,
+    topicName: config.whatsappSendTopic,
   });
 
   const actionEventPublisher = createActionEventPublisher({
