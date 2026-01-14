@@ -453,6 +453,28 @@ describe('Internal Routes', () => {
 
       expect(response.statusCode).toBe(200);
     });
+
+    it('generates image with slug when title is provided', async () => {
+      fakeUserClient.setApiKeys({ openai: 'test-openai-key' });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/images/generate',
+        headers: { 'x-internal-auth': TEST_INTERNAL_TOKEN },
+        payload: {
+          prompt: 'A beautiful sunset over mountains',
+          model: LlmModels.GPTImage1,
+          userId: TEST_USER_ID,
+          title: 'My Cool Image Title!!!',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const savedImage = fakeRepo.getImage('test-generated-id');
+      expect(savedImage).toBeDefined();
+      expect(savedImage?.slug).toBe('my-cool-image-title');
+    });
   });
 
   describe('DELETE /internal/images/:id', () => {
