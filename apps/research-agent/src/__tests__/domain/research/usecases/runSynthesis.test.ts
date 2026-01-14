@@ -108,8 +108,10 @@ describe('runSynthesis', () => {
   beforeEach(() => {
     deps = createMockDeps();
     // Mock repairAttribution to fail (so no extra cost from repair attempt)
+    const repairError = new Error('Repair disabled in tests') as Error & { code: string };
+    repairError.code = 'REPAIR_DISABLED';
     repairAttributionSpy = vi.spyOn(repairAttributionModule, 'repairAttribution').mockResolvedValue(
-      err({ code: 'REPAIR_DISABLED', message: 'Repair disabled in tests' })
+      err(repairError)
     );
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2024-01-01T12:00:00Z'));
@@ -1129,13 +1131,13 @@ describe('runSynthesis', () => {
             model: LlmModels.ClaudeOpus45,
             status: 'failed',
             error: 'Failed',
-            costUsd: undefined, // Failed calls don't have costs
+            // Failed calls don't have costs - costUsd omitted
           },
           {
             provider: LlmProviders.Perplexity,
             model: LlmModels.SonarPro,
             status: 'pending',
-            costUsd: undefined,
+            // Pending calls don't have costs - costUsd omitted
           },
         ],
       });
@@ -1218,7 +1220,13 @@ describe('runSynthesis', () => {
       const contextInferrer = {
         inferSynthesisContext: vi.fn().mockResolvedValue(
           ok({
-            context: { language: 'en', domain: 'tech' } as SynthesisContext,
+            context: { language: 'en', domain: 'tech' } as unknown as SynthesisContext,
+            usage: { inputTokens: 100, outputTokens: 50, costUsd: 0.002 },
+          })
+        ),
+        inferResearchContext: vi.fn().mockResolvedValue(
+          ok({
+            context: { language: 'en', domain: 'tech' } as unknown as SynthesisContext,
             usage: { inputTokens: 100, outputTokens: 50, costUsd: 0.002 },
           })
         ),
