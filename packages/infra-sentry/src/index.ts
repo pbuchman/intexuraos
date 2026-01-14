@@ -36,10 +36,8 @@
  */
 
 export { initSentry, type SentryConfig } from './init.js';
-// eslint-disable-next-line @typescript-eslint/no-deprecated -- Deprecated export kept for backward compatibility
 export {
   createSentryStream,
-  createSentryTransport,
   sendToSentry,
   isSentryConfigured,
 } from './transport.js';
