@@ -254,6 +254,44 @@ describe('dataInsightsRoutes', () => {
       expect(body.error.code).toBe('INTERNAL_ERROR');
     });
 
+    it('returns 500 when data analysis service returns USER_SERVICE_ERROR', async () => {
+      const app = await buildServer();
+
+      const feedResult = await fakeCompositeFeedRepo.create('user-123', 'Test Feed', {
+        purpose: 'Test purpose',
+        staticSourceIds: [],
+        notificationFilters: [],
+      });
+      expect(feedResult.ok).toBe(true);
+      const feed = feedResult.ok ? feedResult.value : null;
+
+      await fakeSnapshotRepo.upsert(feed?.id ?? '', 'user-123', 'Test Feed', {
+        feedId: feed?.id ?? '',
+        feedName: 'Test Feed',
+        purpose: 'Test purpose',
+        generatedAt: new Date().toISOString(),
+        staticSources: [],
+        notifications: [],
+      });
+
+      fakeDataAnalysisService.setError({
+        code: 'USER_SERVICE_ERROR',
+        message: 'User service unavailable',
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/composite-feeds/${feed?.id ?? 'missing'}/analyze`,
+        headers: { authorization: 'Bearer valid-token' },
+      });
+
+      expect(response.statusCode).toBe(500);
+      const body = JSON.parse(response.payload);
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INTERNAL_ERROR');
+      expect(body.error.message).toBe('User service unavailable');
+    });
+
     it('returns 500 when NO_INSIGHTS error occurs', async () => {
       const app = await buildServer();
 
@@ -572,6 +610,28 @@ describe('dataInsightsRoutes', () => {
       expect(body.success).toBe(false);
       expect(body.error.code).toBe('INTERNAL_ERROR');
     });
+
+    it('returns 500 when chart definition service returns USER_SERVICE_ERROR', async () => {
+      const app = await buildServer();
+      const feedId = await setupFeedWithInsights();
+
+      fakeChartDefinitionService.setError({
+        code: 'USER_SERVICE_ERROR',
+        message: 'User service unavailable',
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/composite-feeds/${feedId}/insights/cf-1-insight-1/chart-definition`,
+        headers: { authorization: 'Bearer valid-token' },
+      });
+
+      expect(response.statusCode).toBe(500);
+      const body = JSON.parse(response.payload);
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INTERNAL_ERROR');
+      expect(body.error.message).toBe('User service unavailable');
+    });
   });
 
   describe('POST /composite-feeds/:feedId/preview', () => {
@@ -800,6 +860,33 @@ describe('dataInsightsRoutes', () => {
       const body = JSON.parse(response.payload);
       expect(body.success).toBe(false);
       expect(body.error.code).toBe('INTERNAL_ERROR');
+    });
+
+    it('returns 500 when data transform service returns USER_SERVICE_ERROR', async () => {
+      const app = await buildServer();
+      const feedId = await setupFeedWithInsights();
+
+      fakeDataTransformService.setError({
+        code: 'USER_SERVICE_ERROR',
+        message: 'User service unavailable',
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/composite-feeds/${feedId}/preview`,
+        headers: { authorization: 'Bearer valid-token' },
+        payload: {
+          chartConfig: {},
+          transformInstructions: 'Test',
+          insightId: 'cf-1-insight-1',
+        },
+      });
+
+      expect(response.statusCode).toBe(500);
+      const body = JSON.parse(response.payload);
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INTERNAL_ERROR');
+      expect(body.error.message).toBe('User service unavailable');
     });
 
     it('handles complex data structures', async () => {

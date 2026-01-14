@@ -431,4 +431,35 @@ describe('executeLinkAction usecase', () => {
     const createdBookmarks = fakeBookmarksClient.getCreatedBookmarks();
     expect(createdBookmarks[0]?.source).toBe('pwa-shared');
   });
+
+  it('returns failed result without existingBookmarkId when error lacks bookmark ID', async () => {
+    const action = createAction({
+      status: 'awaiting_approval',
+      payload: { url: 'https://example.com/article' },
+    });
+    await fakeActionRepo.save(action);
+    fakeBookmarksClient.setFailNext(true, new Error('Bookmarks service temporarily unavailable'));
+
+    const usecase = createExecuteLinkActionUseCase({
+      actionRepository: fakeActionRepo,
+      bookmarksServiceClient: fakeBookmarksClient,
+      commandsAgentClient: fakeCommandsAgentClient,
+      whatsappPublisher: fakeWhatsappPublisher,
+      webAppUrl: 'https://app.test.com',
+      logger: silentLogger,
+    });
+
+    const result = await usecase('action-123');
+
+    expect(isOk(result)).toBe(true);
+    if (isOk(result)) {
+      expect(result.value.status).toBe('failed');
+      expect(result.value.error).toBe('Bookmarks service temporarily unavailable');
+      expect(result.value.existingBookmarkId).toBeUndefined();
+    }
+
+    const updatedAction = await fakeActionRepo.getById('action-123');
+    expect(updatedAction?.status).toBe('failed');
+    expect(updatedAction?.payload['existingBookmarkId']).toBeUndefined();
+  });
 });

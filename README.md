@@ -1,7 +1,7 @@
 <div align="center">
   <img src="docs/assets/branding/exports/logo-primary-light.png" alt="IntexuraOS Logo" width="280">
 
-  <h1>IntexuraOS</h1>
+  <h2><a href="https://intexuraos.cloud/" target="_blank">intexuraos.cloud</a></h2>
 
   <p>
     <em>Derived from the Latin <strong>intexere</strong> (to weave together) and <strong>textura</strong> (structure).</em><br>
@@ -46,7 +46,7 @@ graph LR
         Res -->|Query| GPT[GPT-5.2]
         Res -->|Query| CL[Claude Opus]
         Res -->|Query| PPL[Perplexity Sonar]
-        Res -->|Query| ZAI[GLE-4.7]
+        Res -->|Query| ZAI[GLM-4.7]
         Gemini & GPT & CL & PPL & ZAI -->|Synthesis| Rep[Final Report]
     end
 

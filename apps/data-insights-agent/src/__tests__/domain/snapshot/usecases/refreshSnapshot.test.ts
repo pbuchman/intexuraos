@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { refreshSnapshot } from '../../../../domain/snapshot/usecases/refreshSnapshot.js';
 import {
   FakeSnapshotRepository,
@@ -6,6 +6,7 @@ import {
   FakeDataSourceRepository,
   FakeMobileNotificationsClient,
 } from '../../../fakes.js';
+import * as getCompositeFeedDataModule from '../../../../domain/compositeFeed/usecases/getCompositeFeedData.js';
 
 describe('refreshSnapshot', () => {
   let fakeSnapshotRepo: FakeSnapshotRepository;
@@ -133,5 +134,47 @@ describe('refreshSnapshot', () => {
       expect(result.error.code).toBe('REPOSITORY_ERROR');
       expect(result.error.message).toBe('Simulated upsert failure');
     }
+  });
+
+  it('returns COMPUTATION_ERROR when getCompositeFeedData fails', async () => {
+    const feedResult = await fakeCompositeFeedRepo.create('user-123', 'Test Feed', {
+      purpose: 'Test purpose',
+      staticSourceIds: [],
+      notificationFilters: [],
+    });
+
+    expect(feedResult.ok).toBe(true);
+    const feed = feedResult.ok ? feedResult.value : null;
+
+    // Create spy inside this test to mock getCompositeFeedData failure
+    const getCompositeFeedDataSpy = vi.spyOn(getCompositeFeedDataModule, 'getCompositeFeedData');
+    getCompositeFeedDataSpy.mockResolvedValueOnce({
+      ok: false,
+      error: {
+        code: 'NOTIFICATIONS_ERROR',
+        message: 'Failed to fetch notifications',
+      },
+    });
+
+    const result = await refreshSnapshot(feed?.id ?? '', 'user-123', {
+      snapshotRepository: fakeSnapshotRepo,
+      compositeFeedRepository: fakeCompositeFeedRepo,
+      dataSourceRepository: fakeDataSourceRepo,
+      mobileNotificationsClient: fakeMobileNotificationsClient,
+      logger: {
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+      },
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('COMPUTATION_ERROR');
+      expect(result.error.message).toBe('Failed to fetch notifications');
+    }
+
+    // Restore the original implementation after test
+    getCompositeFeedDataSpy.mockRestore();
   });
 });

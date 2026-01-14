@@ -94,6 +94,32 @@ describe('Authenticated Routes', () => {
       expect(body.data.lastNotificationAt).toBe(receivedAt);
     });
 
+    it('returns null lastNotificationAt when signature exists but no notifications', async () => {
+      const userId = 'user-sig-no-notifs';
+      const token = await createToken({ sub: userId });
+
+      // Add signature connection but no notifications
+      await ctx.signatureRepo.save({
+        userId,
+        signatureHash: hashSignature('test-signature'),
+      });
+
+      const response = await ctx.app.inject({
+        method: 'GET',
+        url: '/mobile-notifications/status',
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: { configured: boolean; lastNotificationAt: string | null };
+      };
+      expect(body.success).toBe(true);
+      expect(body.data.configured).toBe(true);
+      expect(body.data.lastNotificationAt).toBeNull();
+    });
+
     it('returns 500 on repository failure', async () => {
       const token = await createToken({ sub: 'user-fail' });
       ctx.signatureRepo.setFailNextExists(true);
@@ -221,6 +247,40 @@ describe('Authenticated Routes', () => {
       expect(body.data.notifications).toEqual([]);
       // nextCursor may be undefined or null when no results
       expect(body.data.nextCursor === undefined || body.data.nextCursor === null).toBe(true);
+    });
+
+    it('handles request without query parameters (uses schema defaults)', async () => {
+      const userId = 'user-no-params';
+      const token = await createToken({ sub: userId });
+
+      ctx.notificationRepo.addNotification({
+        id: 'notif-no-params',
+        userId,
+        source: 'tasker',
+        device: 'phone',
+        app: 'com.example',
+        title: 'Test',
+        text: 'Body',
+        timestamp: Date.now(),
+        postTime: '2025-01-01T12:00:00.000Z',
+        receivedAt: '2025-01-01T12:00:00.000Z',
+        notificationId: 'ext-no-params',
+      });
+
+      const response = await ctx.app.inject({
+        method: 'GET',
+        url: '/mobile-notifications',
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: { notifications: unknown[] };
+      };
+      expect(body.success).toBe(true);
+      // Should return results using default limit from schema
+      expect(Array.isArray(body.data.notifications)).toBe(true);
     });
 
     it('returns notifications for user', async () => {

@@ -171,6 +171,30 @@ describe('GptPromptAdapter', () => {
       }
     });
 
+    it('returns API_ERROR for unknown error codes from LLM contract', async () => {
+      nock('https://api.openai.com')
+        .post('/v1/chat/completions')
+        .reply(400, {
+          error: {
+            message: 'Unknown error type',
+            type: 'some_unknown_error',
+            code: 'UNKNOWN_CODE',
+          },
+        });
+
+      const adapter = new GptPromptAdapter({
+        apiKey: 'test-key',
+        userId: 'test-user',
+        pricing: testPricing,
+      });
+      const result = await adapter.generateThumbnailPrompt('Some text');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('API_ERROR');
+      }
+    });
+
     it('handles empty response', async () => {
       nock('https://api.openai.com').post('/v1/chat/completions').reply(200, {
         choices: [],

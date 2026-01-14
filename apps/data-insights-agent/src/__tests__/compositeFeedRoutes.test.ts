@@ -295,6 +295,28 @@ describe('compositeFeedRoutes', () => {
 
       expect(response.statusCode).toBe(500);
     });
+
+    it('succeeds when snapshot refresh fails after creation (non-fatal)', async () => {
+      const app = await buildServer();
+
+      fakeSnapshotRepo.setFailNextUpsert(true);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/composite-feeds',
+        headers: { authorization: 'Bearer valid-token' },
+        payload: {
+          purpose: 'Test purpose',
+          staticSourceIds: [],
+          notificationFilters: [],
+        },
+      });
+
+      expect(response.statusCode).toBe(201);
+      const body = JSON.parse(response.payload);
+      expect(body.success).toBe(true);
+      expect(body.data).toBeDefined();
+    });
   });
 
   describe('GET /composite-feeds', () => {
@@ -572,6 +594,33 @@ describe('compositeFeedRoutes', () => {
       });
 
       expect(response.statusCode).toBe(500);
+    });
+
+    it('succeeds when snapshot refresh fails after update (non-fatal)', async () => {
+      const app = await buildServer();
+
+      const createResult = await fakeCompositeFeedRepo.create('user-123', 'Feed', {
+        purpose: 'Purpose',
+        staticSourceIds: [],
+        notificationFilters: [],
+      });
+      const feed = createResult.ok ? createResult.value : null;
+
+      fakeSnapshotRepo.setFailNextUpsert(true);
+
+      const response = await app.inject({
+        method: 'PUT',
+        url: `/composite-feeds/${feed?.id ?? 'missing'}`,
+        headers: { authorization: 'Bearer valid-token' },
+        payload: {
+          purpose: 'Updated',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.payload);
+      expect(body.success).toBe(true);
+      expect(body.data.purpose).toBe('Updated');
     });
   });
 
@@ -1075,6 +1124,30 @@ describe('compositeFeedRoutes', () => {
       expect(response.statusCode).toBe(500);
       const body = JSON.parse(response.payload);
       expect(body.success).toBe(false);
+    });
+
+    it('returns error when snapshot refresh fails with existing feed', async () => {
+      const app = await buildServer();
+
+      const feedResult = await fakeCompositeFeedRepo.create('user-123', 'Test Feed', {
+        purpose: 'Test purpose',
+        staticSourceIds: [],
+        notificationFilters: [],
+      });
+      const feed = feedResult.ok ? feedResult.value : null;
+
+      fakeSnapshotRepo.setFailNextUpsert(true);
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/composite-feeds/${feed?.id ?? 'missing'}/snapshot?refresh=true`,
+        headers: { authorization: 'Bearer valid-token' },
+      });
+
+      expect(response.statusCode).toBe(500);
+      const body = JSON.parse(response.payload);
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INTERNAL_ERROR');
     });
   });
 });

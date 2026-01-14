@@ -510,6 +510,30 @@ describe('Calendar Routes', () => {
       expect(response.statusCode).toBe(200);
     });
 
+    it('updates event with attendees', async () => {
+      const jwt = await createJwt('user-123');
+      fakeCalendarClient.addEvent({
+        id: 'event-123',
+        summary: 'Event',
+        start: { dateTime: '2025-01-01T10:00:00Z' },
+        end: { dateTime: '2025-01-01T11:00:00Z' },
+      });
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/calendar/events/event-123',
+        headers: { authorization: `Bearer ${jwt}` },
+        payload: {
+          attendees: [
+            { email: 'attendee1@example.com' },
+            { email: 'attendee2@example.com', optional: true },
+          ],
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+    });
+
     it('returns 403 when not connected', async () => {
       const jwt = await createJwt('user-123');
       fakeUserService.setTokenError('NOT_CONNECTED', 'Not connected');

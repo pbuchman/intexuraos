@@ -478,6 +478,31 @@ describe('GoogleCalendarClientImpl', () => {
       }
     });
 
+    it('handles event with organizer having all fields', async () => {
+      nock(GOOGLE_CALENDAR_API)
+        .get('/calendar/v3/calendars/primary/events/event-123')
+        .reply(200, {
+          id: 'event-123',
+          summary: 'Meeting',
+          start: { dateTime: '2025-01-08T10:00:00Z' },
+          end: { dateTime: '2025-01-08T11:00:00Z' },
+          organizer: {
+            email: 'organizer@example.com',
+            displayName: 'John Doe',
+            self: false,
+          },
+        });
+
+      const result = await client.getEvent(TEST_ACCESS_TOKEN, TEST_CALENDAR_ID, 'event-123');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.organizer?.email).toBe('organizer@example.com');
+        expect(result.value.organizer?.displayName).toBe('John Doe');
+        expect(result.value.organizer?.self).toBe(false);
+      }
+    });
+
     it('handles API errors gracefully', async () => {
       nock(GOOGLE_CALENDAR_API)
         .get('/calendar/v3/calendars/primary/events/event-123')
@@ -639,6 +664,30 @@ describe('GoogleCalendarClientImpl', () => {
       const error = {};
       const result = mapErrorToCalendarError(error);
       expect(result.code).toBe('INTERNAL_ERROR');
+      expect(result.message).toBe('Unknown error');
+    });
+
+    it('handles Google API error format without message', () => {
+      const error = {
+        response: {
+          data: {
+            error: {
+              code: 404,
+            },
+          },
+        },
+      };
+      const result = mapErrorToCalendarError(error);
+      expect(result.code).toBe('NOT_FOUND');
+      expect(result.message).toBe('Unknown error');
+    });
+
+    it('handles direct error format without message', () => {
+      const error = {
+        code: 404,
+      };
+      const result = mapErrorToCalendarError(error);
+      expect(result.code).toBe('NOT_FOUND');
       expect(result.message).toBe('Unknown error');
     });
   });
