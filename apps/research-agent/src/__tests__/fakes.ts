@@ -187,6 +187,7 @@ export class FakeResearchRepository implements ResearchRepository {
 export class FakeUserServiceClient implements UserServiceClient {
   private apiKeys = new Map<string, DecryptedApiKeys>();
   private failNextGetApiKeys = false;
+  private failNextReportLlmSuccess = false;
 
   async getApiKeys(userId: string): Promise<Result<DecryptedApiKeys, UserServiceError>> {
     if (this.failNextGetApiKeys) {
@@ -198,7 +199,10 @@ export class FakeUserServiceClient implements UserServiceClient {
   }
 
   async reportLlmSuccess(_userId: string, _provider: LlmProvider): Promise<void> {
-    // Best effort - do nothing in tests
+    if (this.failNextReportLlmSuccess) {
+      this.failNextReportLlmSuccess = false;
+      throw new Error('Test reportLlmSuccess failure');
+    }
   }
 
   // Test helpers
@@ -208,6 +212,10 @@ export class FakeUserServiceClient implements UserServiceClient {
 
   setFailNextGetApiKeys(fail: boolean): void {
     this.failNextGetApiKeys = fail;
+  }
+
+  setFailNextReportLlmSuccess(fail: boolean): void {
+    this.failNextReportLlmSuccess = fail;
   }
 
   clear(): void {
@@ -310,10 +318,20 @@ export class FakeNotificationSender implements NotificationSender {
 /**
  * Create a fake LlmResearchProvider for testing.
  */
-export function createFakeLlmResearchProvider(response = 'Research content'): LlmResearchProvider {
+export function createFakeLlmResearchProvider(
+  response = 'Research content',
+  options?: { sources?: string[]; usage?: { inputTokens: number; outputTokens: number; costUsd: number } }
+): LlmResearchProvider {
   return {
     async research(_prompt: string): Promise<Result<LlmResearchResult, LlmError>> {
-      return ok({ content: response });
+      const result: LlmResearchResult = { content: response };
+      if (options?.sources !== undefined) {
+        result.sources = options.sources;
+      }
+      if (options?.usage !== undefined) {
+        result.usage = options.usage;
+      }
+      return ok(result);
     },
   };
 }

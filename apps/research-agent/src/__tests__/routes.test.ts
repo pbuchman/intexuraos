@@ -3867,4 +3867,399 @@ describe('Internal Routes', () => {
       expect(result?.error).toContain('Unexpected repository error');
     });
   });
+
+  describe('POST /internal/llm/pubsub/report-analytics - error handling', () => {
+    let fakeUserServiceClient: FakeUserServiceClient;
+
+    function encodePubSubMessage(data: object): string {
+      return Buffer.from(JSON.stringify(data)).toString('base64');
+    }
+
+    beforeEach(() => {
+      fakeUserServiceClient = new FakeUserServiceClient();
+      const services: ServiceContainer = {
+        researchRepo: fakeRepo,
+        pricingContext: fakePricingContext,
+        generateId: (): string => 'generated-id-123',
+        researchEventPublisher: new FakeResearchEventPublisher(),
+        llmCallPublisher: new FakeLlmCallPublisher(),
+        userServiceClient: fakeUserServiceClient,
+        imageServiceClient: null,
+        notificationSender: new FakeNotificationSender(),
+        shareStorage: null,
+        shareConfig: null,
+        webAppUrl: 'https://app.example.com',
+        createResearchProvider: (_model, _apiKey, _userId, _pricing, _logger) => createFakeLlmResearchProvider(),
+        createSynthesizer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeSynthesizer(),
+        createTitleGenerator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeTitleGenerator(),
+        createContextInferrer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeContextInferrer(),
+        createInputValidator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeInputValidator(),
+      };
+      setServices(services);
+    });
+
+    it('returns success even when reportLlmSuccess throws', async () => {
+      fakeUserServiceClient.setFailNextReportLlmSuccess(true);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/llm/pubsub/report-analytics',
+        headers: { from: 'noreply@google.com' },
+        payload: {
+          message: {
+            data: encodePubSubMessage({
+              type: 'llm.report',
+              researchId: 'test-research-123',
+              userId: TEST_USER_ID,
+              model: LlmModels.Gemini25Pro,
+              inputTokens: 100,
+              outputTokens: 200,
+              durationMs: 1000,
+            }),
+            messageId: 'msg-123',
+          },
+          subscription: 'test-sub',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as { success: boolean };
+      expect(body.success).toBe(true);
+    });
+  });
+
+  describe('POST /internal/llm/pubsub/process-research - synthesis trigger', () => {
+    let fakeUserServiceClient: FakeUserServiceClient;
+    let fakeLlmCallPublisher: FakeLlmCallPublisher;
+
+    function encodePubSubMessage(data: object): string {
+      return Buffer.from(JSON.stringify(data)).toString('base64');
+    }
+
+    beforeEach(() => {
+      fakeUserServiceClient = new FakeUserServiceClient();
+      fakeLlmCallPublisher = new FakeLlmCallPublisher();
+      const services: ServiceContainer = {
+        researchRepo: fakeRepo,
+        pricingContext: fakePricingContext,
+        generateId: (): string => 'generated-id-123',
+        researchEventPublisher: new FakeResearchEventPublisher(),
+        llmCallPublisher: fakeLlmCallPublisher,
+        userServiceClient: fakeUserServiceClient,
+        imageServiceClient: null,
+        notificationSender: new FakeNotificationSender(),
+        shareStorage: null,
+        shareConfig: null,
+        webAppUrl: 'https://app.example.com',
+        createResearchProvider: (_model, _apiKey, _userId, _pricing, _logger) => createFakeLlmResearchProvider(),
+        createSynthesizer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeSynthesizer(),
+        createTitleGenerator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeTitleGenerator(),
+        createContextInferrer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeContextInferrer(),
+        createInputValidator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeInputValidator(),
+      };
+      setServices(services);
+    });
+
+    it('triggers synthesis when all LLMs are already completed', async () => {
+      const research = createTestResearch({
+        status: 'processing',
+        selectedModels: [LlmModels.Gemini25Pro],
+        llmResults: [
+          {
+            provider: LlmProviders.Google,
+            model: LlmModels.Gemini25Pro,
+            status: 'completed',
+            result: 'Already completed result',
+            completedAt: new Date().toISOString(),
+          },
+        ],
+      });
+      fakeRepo.addResearch(research);
+      fakeUserServiceClient.setApiKeys(TEST_USER_ID, {
+        google: 'google-key',
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/llm/pubsub/process-research',
+        headers: { from: 'noreply@google.com' },
+        payload: {
+          message: {
+            data: encodePubSubMessage({
+              type: 'research.process',
+              researchId: research.id,
+              userId: TEST_USER_ID,
+              triggeredBy: 'create',
+            }),
+            messageId: 'msg-123',
+            publishTime: new Date().toISOString(),
+          },
+          subscription: 'test-sub',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as { success: boolean };
+      expect(body.success).toBe(true);
+    });
+  });
+
+  describe('POST /internal/llm/pubsub/process-llm-call - sources and usage', () => {
+    let fakeUserServiceClient: FakeUserServiceClient;
+    let fakeNotificationSender: FakeNotificationSender;
+
+    function encodePubSubMessage(data: object): string {
+      return Buffer.from(JSON.stringify(data)).toString('base64');
+    }
+
+    function createLlmCallEvent(): object {
+      return {
+        type: 'llm.call',
+        researchId: 'research-123',
+        userId: TEST_USER_ID,
+        model: LlmModels.Gemini25Pro,
+        prompt: 'Test prompt',
+      };
+    }
+
+    beforeEach(() => {
+      fakeUserServiceClient = new FakeUserServiceClient();
+      fakeNotificationSender = new FakeNotificationSender();
+      const fakeLlmCallPublisher = new FakeLlmCallPublisher();
+      const services: ServiceContainer = {
+        researchRepo: fakeRepo,
+        pricingContext: fakePricingContext,
+        generateId: (): string => 'generated-id-123',
+        researchEventPublisher: new FakeResearchEventPublisher(),
+        llmCallPublisher: fakeLlmCallPublisher,
+        userServiceClient: fakeUserServiceClient,
+        imageServiceClient: null,
+        notificationSender: fakeNotificationSender,
+        shareStorage: null,
+        shareConfig: null,
+        webAppUrl: 'https://app.example.com',
+        createResearchProvider: (_model, _apiKey, _userId, _pricing, _logger) =>
+          createFakeLlmResearchProvider('Research content', {
+            sources: ['https://example.com/source1', 'https://example.com/source2'],
+            usage: { inputTokens: 100, outputTokens: 200, costUsd: 0.005 },
+          }),
+        createSynthesizer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeSynthesizer(),
+        createTitleGenerator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeTitleGenerator(),
+        createContextInferrer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeContextInferrer(),
+        createInputValidator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeInputValidator(),
+      };
+      setServices(services);
+    });
+
+    it('stores sources and usage data when provided by LLM', async () => {
+      const research = createTestResearch({
+        id: 'research-123',
+        status: 'processing',
+        selectedModels: [LlmModels.Gemini25Pro],
+        llmResults: [
+          { provider: LlmProviders.Google, model: LlmModels.Gemini25Pro, status: 'pending' },
+        ],
+      });
+      fakeRepo.addResearch(research);
+      fakeUserServiceClient.setApiKeys(TEST_USER_ID, {
+        google: 'google-key',
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/llm/pubsub/process-llm-call',
+        headers: { from: 'noreply@google.com' },
+        payload: {
+          message: {
+            data: encodePubSubMessage(createLlmCallEvent()),
+            messageId: 'msg-123',
+          },
+          subscription: 'test-sub',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as { success: boolean };
+      expect(body.success).toBe(true);
+
+      const updatedResearch = fakeRepo.getAll()[0];
+      const result = updatedResearch?.llmResults[0];
+      expect(result?.status).toBe('completed');
+      expect(result?.sources).toEqual(['https://example.com/source1', 'https://example.com/source2']);
+      expect(result?.inputTokens).toBe(100);
+      expect(result?.outputTokens).toBe(200);
+      expect(result?.costUsd).toBe(0.005);
+    });
+  });
+
+  describe('POST /internal/llm/pubsub/process-llm-call - completion states', () => {
+    let fakeUserServiceClient: FakeUserServiceClient;
+    let fakeNotificationSender: FakeNotificationSender;
+
+    function encodePubSubMessage(data: object): string {
+      return Buffer.from(JSON.stringify(data)).toString('base64');
+    }
+
+    function createLlmCallEvent(modelOverride?: Partial<{ model: string }>): object {
+      return {
+        type: 'llm.call',
+        researchId: 'research-123',
+        userId: TEST_USER_ID,
+        model: modelOverride?.model ?? LlmModels.Gemini25Pro,
+        prompt: 'Test prompt',
+      };
+    }
+
+    function createResearchWithResults(): Research {
+      return createTestResearch({
+        id: 'research-123',
+        status: 'processing',
+        selectedModels: [LlmModels.Gemini25Pro, LlmModels.O4MiniDeepResearch],
+        llmResults: [
+          { provider: LlmProviders.Google, model: LlmModels.Gemini25Pro, status: 'pending' },
+          { provider: LlmProviders.OpenAI, model: LlmModels.O4MiniDeepResearch, status: 'pending' },
+        ],
+      });
+    }
+
+    beforeEach(() => {
+      fakeUserServiceClient = new FakeUserServiceClient();
+      fakeNotificationSender = new FakeNotificationSender();
+      const fakeLlmCallPublisher = new FakeLlmCallPublisher();
+      const services: ServiceContainer = {
+        researchRepo: fakeRepo,
+        pricingContext: fakePricingContext,
+        generateId: (): string => 'generated-id-123',
+        researchEventPublisher: new FakeResearchEventPublisher(),
+        llmCallPublisher: fakeLlmCallPublisher,
+        userServiceClient: fakeUserServiceClient,
+        imageServiceClient: null,
+        notificationSender: fakeNotificationSender,
+        shareStorage: null,
+        shareConfig: null,
+        webAppUrl: 'https://app.example.com',
+        createResearchProvider: (_model, _apiKey, _userId, _pricing, _logger) =>
+          createFailingLlmResearchProvider('LLM failed'),
+        createSynthesizer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeSynthesizer(),
+        createTitleGenerator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeTitleGenerator(),
+        createContextInferrer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeContextInferrer(),
+        createInputValidator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeInputValidator(),
+      };
+      setServices(services);
+    });
+
+    it('handles all_failed completion state when all LLMs fail', async () => {
+      const research = createResearchWithResults();
+      fakeRepo.addResearch(research);
+      fakeUserServiceClient.setApiKeys(TEST_USER_ID, {
+        google: 'google-key',
+        openai: 'openai-key',
+      });
+
+      // First LLM fails
+      const response1 = await app.inject({
+        method: 'POST',
+        url: '/internal/llm/pubsub/process-llm-call',
+        headers: { from: 'noreply@google.com' },
+        payload: {
+          message: {
+            data: encodePubSubMessage(createLlmCallEvent()),
+            messageId: 'msg-1',
+          },
+          subscription: 'test-sub',
+        },
+      });
+      expect(response1.statusCode).toBe(200);
+
+      // Second LLM also fails
+      const response2 = await app.inject({
+        method: 'POST',
+        url: '/internal/llm/pubsub/process-llm-call',
+        headers: { from: 'noreply@google.com' },
+        payload: {
+          message: {
+            data: encodePubSubMessage(
+              createLlmCallEvent({ model: LlmModels.O4MiniDeepResearch })
+            ),
+            messageId: 'msg-2',
+          },
+          subscription: 'test-sub',
+        },
+      });
+      expect(response2.statusCode).toBe(200);
+
+      const updatedResearch = fakeRepo.getAll()[0];
+      expect(updatedResearch?.status).toBe('failed');
+      expect(updatedResearch?.synthesisError).toBe('All LLM calls failed');
+    });
+
+    it('handles partial_failure completion state when some LLMs fail', async () => {
+      const research = createResearchWithResults();
+      fakeRepo.addResearch(research);
+      fakeUserServiceClient.setApiKeys(TEST_USER_ID, {
+        google: 'google-key',
+        openai: 'openai-key',
+      });
+
+      // Override to have first one succeed, second fail
+      const services: ServiceContainer = {
+        researchRepo: fakeRepo,
+        pricingContext: fakePricingContext,
+        generateId: (): string => 'generated-id-123',
+        researchEventPublisher: new FakeResearchEventPublisher(),
+        llmCallPublisher: new FakeLlmCallPublisher(),
+        userServiceClient: fakeUserServiceClient,
+        imageServiceClient: null,
+        notificationSender: fakeNotificationSender,
+        shareStorage: null,
+        shareConfig: null,
+        webAppUrl: 'https://app.example.com',
+        createResearchProvider: (model) =>
+          model === LlmModels.Gemini25Pro
+            ? createFakeLlmResearchProvider('Success')
+            : createFailingLlmResearchProvider('Failed'),
+        createSynthesizer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeSynthesizer(),
+        createTitleGenerator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeTitleGenerator(),
+        createContextInferrer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeContextInferrer(),
+        createInputValidator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeInputValidator(),
+      };
+      setServices(services);
+
+      // First LLM succeeds
+      const response1 = await app.inject({
+        method: 'POST',
+        url: '/internal/llm/pubsub/process-llm-call',
+        headers: { from: 'noreply@google.com' },
+        payload: {
+          message: {
+            data: encodePubSubMessage(createLlmCallEvent()),
+            messageId: 'msg-1',
+          },
+          subscription: 'test-sub',
+        },
+      });
+      expect(response1.statusCode).toBe(200);
+
+      // Second LLM fails
+      const response2 = await app.inject({
+        method: 'POST',
+        url: '/internal/llm/pubsub/process-llm-call',
+        headers: { from: 'noreply@google.com' },
+        payload: {
+          message: {
+            data: encodePubSubMessage(
+              createLlmCallEvent({ model: LlmModels.O4MiniDeepResearch })
+            ),
+            messageId: 'msg-2',
+          },
+          subscription: 'test-sub',
+        },
+      });
+      expect(response2.statusCode).toBe(200);
+
+      const updatedResearch = fakeRepo.getAll()[0];
+      expect(updatedResearch?.status).toBe('awaiting_confirmation');
+      expect(updatedResearch?.partialFailure?.failedModels).toContain(LlmModels.O4MiniDeepResearch);
+    });
+  });
 });
