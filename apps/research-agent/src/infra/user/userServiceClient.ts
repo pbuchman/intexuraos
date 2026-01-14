@@ -69,6 +69,7 @@ export function createUserServiceClient(config: UserServiceConfig): UserServiceC
           openai?: string | null;
           anthropic?: string | null;
           perplexity?: string | null;
+          zai?: string | null;
         };
 
         // Convert null values to undefined (null is used by JSON to distinguish from missing)
@@ -84,6 +85,9 @@ export function createUserServiceClient(config: UserServiceConfig): UserServiceC
         }
         if (data.perplexity !== null && data.perplexity !== undefined) {
           result.perplexity = data.perplexity;
+        }
+        if (data.zai !== null && data.zai !== undefined) {
+          result.zai = data.zai;
         }
 
         return ok(result);
