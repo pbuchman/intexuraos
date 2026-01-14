@@ -26,14 +26,14 @@ interface UserSettingsDoc {
     openai?: EncryptedValue;
     anthropic?: EncryptedValue;
     perplexity?: EncryptedValue;
-    zhipu?: EncryptedValue;
+    zai?: EncryptedValue;
   };
   llmTestResults?: {
     google?: LlmTestResult;
     openai?: LlmTestResult;
     anthropic?: LlmTestResult;
     perplexity?: LlmTestResult;
-    zhipu?: LlmTestResult;
+    zai?: LlmTestResult;
   };
   createdAt: string;
   updatedAt: string;

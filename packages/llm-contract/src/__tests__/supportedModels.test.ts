@@ -45,7 +45,7 @@ describe('supportedModels', () => {
       expect(ALL_LLM_MODELS).toContain('sonar-deep-research');
     });
 
-    it('contains all Zhipu models', () => {
+    it('contains all Zai models', () => {
       expect(ALL_LLM_MODELS).toContain('glm-4.7');
     });
   });
@@ -53,7 +53,7 @@ describe('supportedModels', () => {
   describe('MODEL_PROVIDER_MAP', () => {
     it('maps every model to a provider', () => {
       for (const model of ALL_LLM_MODELS) {
-        expect(['google', 'openai', 'anthropic', 'perplexity', 'zhipu']).toContain(
+        expect(['google', 'openai', 'anthropic', 'perplexity', 'zai']).toContain(
           MODEL_PROVIDER_MAP[model]
         );
       }
@@ -85,8 +85,8 @@ describe('supportedModels', () => {
       expect(MODEL_PROVIDER_MAP['sonar-deep-research']).toBe('perplexity');
     });
 
-    it('maps Zhipu models correctly', () => {
-      expect(MODEL_PROVIDER_MAP['glm-4.7']).toBe('zhipu');
+    it('maps Zai models correctly', () => {
+      expect(MODEL_PROVIDER_MAP['glm-4.7']).toBe('zai');
     });
   });
 
@@ -107,7 +107,7 @@ describe('supportedModels', () => {
       expect(LlmProviders.OpenAI).toBe('openai');
       expect(LlmProviders.Anthropic).toBe('anthropic');
       expect(LlmProviders.Perplexity).toBe('perplexity');
-      expect(LlmProviders.Zhipu).toBe('zhipu');
+      expect(LlmProviders.Zai).toBe('zai');
     });
   });
 
@@ -117,7 +117,7 @@ describe('supportedModels', () => {
       expect(getProviderForModel('claude-opus-4-5-20251101')).toBe('anthropic');
       expect(getProviderForModel('gpt-5.2')).toBe('openai');
       expect(getProviderForModel('sonar-pro')).toBe('perplexity');
-      expect(getProviderForModel('glm-4.7')).toBe('zhipu');
+      expect(getProviderForModel('glm-4.7')).toBe('zai');
     });
   });
 

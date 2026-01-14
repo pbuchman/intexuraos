@@ -1,5 +1,5 @@
 /**
- * Zhipu GLM client implementation.
+ * Zai GLM client implementation.
  *
  * Implements the {@link LLMClient} interface for GLM models with:
  * - Web search research using GLM's web search tool
@@ -51,7 +51,7 @@ import { normalizeUsage } from './costCalculator.js';
 export type GlmClient = LLMClient;
 
 const MAX_TOKENS = 8192;
-const GLM_API_BASE = 'https://open.bigmodel.cn/api/paas/v4';
+const GLM_API_BASE = 'https://api.z.ai/api/paas/v4/';
 
 interface WebSearchToolCall {
   type: string;
@@ -61,7 +61,7 @@ interface WebSearchToolCall {
 }
 
 /**
- * Creates a configured Zhipu GLM client.
+ * Creates a configured Zai GLM client.
  *
  * The client implements {@link LLMClient} with automatic cost calculation,
  * usage logging, and audit tracking. Supports text generation and research.
@@ -84,7 +84,7 @@ export function createGlmClient(config: GlmConfig): GlmClient {
     const requestId = randomUUID();
     const startTime = new Date();
     const auditContext = createAuditContext({
-      provider: LlmProviders.Zhipu,
+      provider: LlmProviders.Zai,
       model,
       method,
       prompt,
@@ -101,7 +101,7 @@ export function createGlmClient(config: GlmConfig): GlmClient {
   ): void {
     void logUsage({
       userId,
-      provider: LlmProviders.Zhipu,
+      provider: LlmProviders.Zai,
       model,
       callType,
       usage,

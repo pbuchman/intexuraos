@@ -27,7 +27,7 @@ const PROVIDERS: ProviderConfig[] = [
   { id: 'openai', name: 'OpenAI (GPT)' },
   { id: 'anthropic', name: 'Anthropic (Claude)' },
   { id: 'perplexity', name: 'Perplexity (Sonar)' },
-  { id: 'zhipu', name: 'Zhipu (GLM)' },
+  { id: 'zai', name: 'Zai (GLM)' },
 ];
 
 /**
@@ -63,10 +63,8 @@ function validateApiKeyFormat(provider: LlmProvider, key: string): string | null
         return 'Perplexity API key should start with "pplx-"';
       }
       break;
-    case 'zhipu':
-      if (!key.includes('.')) {
-        return 'Zhipu API key should contain a dot (.) separator';
-      }
+    case 'zai':
+      // No format validation for zai
       break;
   }
 

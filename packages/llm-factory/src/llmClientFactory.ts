@@ -84,7 +84,7 @@ export interface LlmGenerateClient {
 /**
  * Supported providers for the factory.
  */
-type SupportedProvider = typeof LlmProviders.Google | typeof LlmProviders.Zhipu;
+type SupportedProvider = typeof LlmProviders.Google | typeof LlmProviders.Zai;
 
 /**
  * Maps model to provider and creates the appropriate client.
@@ -118,7 +118,7 @@ export function createLlmClient(config: LlmClientConfig): LlmGenerateClient {
   switch (provider) {
     case LlmProviders.Google:
       return createGeminiClient(config);
-    case LlmProviders.Zhipu:
+    case LlmProviders.Zai:
       return createGlmClient(config);
     default: {
       // This will be caught at compile time if new providers are added
@@ -133,7 +133,7 @@ export function createLlmClient(config: LlmClientConfig): LlmGenerateClient {
  * Type guard to check if a provider is supported by the factory.
  */
 export function isSupportedProvider(provider: string): provider is SupportedProvider {
-  return provider === LlmProviders.Google || provider === LlmProviders.Zhipu;
+  return provider === LlmProviders.Google || provider === LlmProviders.Zai;
 }
 
 // Re-export LLMError for convenience

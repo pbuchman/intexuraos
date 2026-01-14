@@ -198,7 +198,7 @@ describe('UserServiceClient', () => {
       nock(USER_SERVICE_URL)
         .get('/internal/users/user-glm/llm-keys')
         .matchHeader('X-Internal-Auth', INTERNAL_AUTH_TOKEN)
-        .reply(200, { zhipu: 'zhipu-api-key-123' });
+        .reply(200, { zai: 'zai-api-key-123' });
 
       const client = createClient();
       const result = await client.getLlmClient('user-glm');
@@ -244,7 +244,7 @@ describe('UserServiceClient', () => {
       nock(USER_SERVICE_URL)
         .get('/internal/users/user-no-key/llm-keys')
         .matchHeader('X-Internal-Auth', INTERNAL_AUTH_TOKEN)
-        .reply(200, { google: 'google-api-key-123' }); // No zhipu key
+        .reply(200, { google: 'google-api-key-123' }); // No zai key
 
       const client = createClient();
       const result = await client.getLlmClient('user-no-key');
@@ -252,7 +252,7 @@ describe('UserServiceClient', () => {
       expect(result.ok).toBe(false);
       if (!result.ok) {
         expect(result.error.code).toBe('NO_API_KEY');
-        expect(result.error.message).toContain('zhipu');
+        expect(result.error.message).toContain('zai');
       }
     });
 

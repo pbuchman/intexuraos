@@ -14,10 +14,10 @@ export type Google = 'google';
 export type OpenAI = 'openai';
 export type Anthropic = 'anthropic';
 export type Perplexity = 'perplexity';
-export type Zhipu = 'zhipu';
+export type Zai = 'zai';
 
 /** Union of all LLM providers */
-export type LlmProvider = Google | OpenAI | Anthropic | Perplexity | Zhipu;
+export type LlmProvider = Google | OpenAI | Anthropic | Perplexity | Zai;
 
 // =============================================================================
 // Individual Model Types - Google
@@ -54,7 +54,7 @@ export type SonarPro = 'sonar-pro';
 export type SonarDeepResearch = 'sonar-deep-research';
 
 // =============================================================================
-// Individual Model Types - Zhipu
+// Individual Model Types - Zai
 // =============================================================================
 
 export type Glm47 = 'glm-4.7';
@@ -121,7 +121,7 @@ export type LLMModel =
   | Sonar
   | SonarPro
   | SonarDeepResearch
-  // Zhipu (1 model)
+  // Zai (1 model)
   | Glm47;
 
 // =============================================================================
@@ -137,7 +137,7 @@ export const LlmProviders = {
   OpenAI: 'openai' as OpenAI,
   Anthropic: 'anthropic' as Anthropic,
   Perplexity: 'perplexity' as Perplexity,
-  Zhipu: 'zhipu' as Zhipu,
+  Zai: 'zai' as Zai,
 } as const;
 
 // =============================================================================
@@ -167,7 +167,7 @@ export const LlmModels = {
   Sonar: 'sonar' as Sonar,
   SonarPro: 'sonar-pro' as SonarPro,
   SonarDeepResearch: 'sonar-deep-research' as SonarDeepResearch,
-  // Zhipu
+  // Zai
   Glm47: 'glm-4.7' as Glm47,
 } as const;
 
@@ -198,7 +198,7 @@ export const ALL_LLM_MODELS: LLMModel[] = [
   LlmModels.Sonar,
   LlmModels.SonarPro,
   LlmModels.SonarDeepResearch,
-  // Zhipu
+  // Zai
   LlmModels.Glm47,
 ] as const;
 
@@ -228,8 +228,8 @@ export const MODEL_PROVIDER_MAP: Record<LLMModel, LlmProvider> = {
   [LlmModels.Sonar]: LlmProviders.Perplexity,
   [LlmModels.SonarPro]: LlmProviders.Perplexity,
   [LlmModels.SonarDeepResearch]: LlmProviders.Perplexity,
-  // Zhipu
-  [LlmModels.Glm47]: LlmProviders.Zhipu,
+  // Zai
+  [LlmModels.Glm47]: LlmProviders.Zai,
 } as const;
 
 /**

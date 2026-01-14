@@ -313,7 +313,7 @@ describe('createGlmClient', () => {
       expect(logUsage).toHaveBeenCalledWith(
         expect.objectContaining({
           userId: 'test-user',
-          provider: LlmProviders.Zhipu,
+          provider: LlmProviders.Zai,
           model: TEST_MODEL,
           callType: 'research',
           success: true,
