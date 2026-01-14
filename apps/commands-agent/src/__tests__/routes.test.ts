@@ -524,6 +524,31 @@ describe('Commands Agent Routes', () => {
       expect(command?.status).toBe('pending_classification');
     });
 
+    it('returns 400 when event type is not command.ingest', async () => {
+      app = await buildServer();
+
+      const event = {
+        type: 'wrong.event.type',
+        userId: 'user-123',
+        sourceType: 'whatsapp_text',
+        externalId: 'wamid.wrongtype',
+        text: 'Wrong type',
+        timestamp: '2025-01-01T12:00:00.000Z',
+      };
+      const messageData = Buffer.from(JSON.stringify(event)).toString('base64');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/commands',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: { message: { data: messageData, messageId: 'pubsub-wrongtype' } },
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.body) as { error: string };
+      expect(body.error).toBe('Invalid event type');
+    });
+
     it('classifies command when user has Gemini key configured', async () => {
       app = await buildServer();
 
