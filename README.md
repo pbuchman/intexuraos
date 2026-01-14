@@ -1,7 +1,7 @@
 <div align="center">
   <img src="docs/assets/branding/exports/logo-primary-light.png" alt="IntexuraOS Logo" width="280">
 
-  <h1>IntexuraOS</h1>
+  <h2><a href="https://itexuraos.cloud/" target="_blank"><span style="color: #3bccd1">intexuraOS</span>.<span style="color: orange">cloud</span></a></h2>
 
   <p>
     <em>Derived from the Latin <strong>intexere</strong> (to weave together) and <strong>textura</strong> (structure).</em><br>
