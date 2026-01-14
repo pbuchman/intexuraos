@@ -38,13 +38,19 @@ export function getSupportedCountries(): { country: CountryCode; callingCode: st
 
 /**
  * Validation result for phone number.
+ * Uses discriminated union to ensure error is required when valid is false.
  */
-export interface PhoneValidationResult {
-  valid: boolean;
-  normalized: string;
-  country?: CountryCode;
-  error?: string;
-}
+export type PhoneValidationResult =
+  | {
+      valid: true;
+      normalized: string;
+      country?: CountryCode;
+    }
+  | {
+      valid: false;
+      normalized: string;
+      error: string;
+    };
 
 /**
  * Validate phone number format using libphonenumber-js.
