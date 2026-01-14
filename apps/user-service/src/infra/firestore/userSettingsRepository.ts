@@ -25,11 +25,15 @@ interface UserSettingsDoc {
     google?: EncryptedValue;
     openai?: EncryptedValue;
     anthropic?: EncryptedValue;
+    perplexity?: EncryptedValue;
+    zhipu?: EncryptedValue;
   };
   llmTestResults?: {
     google?: LlmTestResult;
     openai?: LlmTestResult;
     anthropic?: LlmTestResult;
+    perplexity?: LlmTestResult;
+    zhipu?: LlmTestResult;
   };
   createdAt: string;
   updatedAt: string;
@@ -208,10 +212,8 @@ export class FirestoreUserSettingsRepository implements UserSettingsRepository {
         });
       } else {
         const data = doc.data() as UserSettingsDoc;
-        const existingTestResult = data?.llmTestResults?.[provider];
+        const existingTestResult = data.llmTestResults?.[provider];
 
-        // Ensure we write a complete test result object, not just testedAt
-        // This handles cases where legacy/partial data exists (missing status or message)
         const completeTestResult: LlmTestResult = {
           status: existingTestResult?.status ?? 'success',
           message: existingTestResult?.message ?? '',
