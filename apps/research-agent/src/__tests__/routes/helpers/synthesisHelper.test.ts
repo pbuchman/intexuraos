@@ -9,6 +9,13 @@ import { createSynthesisProviders } from '../../../routes/helpers/synthesisHelpe
 import type { DecryptedApiKeys, ServiceContainer } from '../../../services.js';
 import { LlmModels } from '@intexuraos/llm-contract';
 
+const mockLogger = {
+  info: () => {},
+  error: () => {},
+  warn: () => {},
+  debug: () => {},
+};
+
 describe('createSynthesisProviders', () => {
   const mockServices: ServiceContainer = {
     createSynthesizer: () => ({
@@ -38,7 +45,8 @@ describe('createSynthesisProviders', () => {
       LlmModels.ClaudeSonnet45,
       apiKeys,
       'user-123',
-      mockServices
+      mockServices,
+      mockLogger as never
     );
 
     expect(result.synthesizer).toBeDefined();
@@ -55,33 +63,11 @@ describe('createSynthesisProviders', () => {
       LlmModels.ClaudeSonnet45,
       apiKeys,
       'user-123',
-      mockServices
-    );
-
-    expect(result.synthesizer).toBeDefined();
-    expect(result.contextInferrer).toBeUndefined();
-  });
-
-  it('passes logger to synthesis providers when provided', () => {
-    const apiKeys: DecryptedApiKeys = {
-      anthropic: 'test-anthropic-key',
-      google: 'test-google-key',
-    };
-
-    const mockLogger = {
-      info: () => {},
-      error: () => {},
-    };
-
-    const result = createSynthesisProviders(
-      LlmModels.ClaudeSonnet45,
-      apiKeys,
-      'user-123',
       mockServices,
       mockLogger as never
     );
 
     expect(result.synthesizer).toBeDefined();
-    expect(result.contextInferrer).toBeDefined();
+    expect(result.contextInferrer).toBeUndefined();
   });
 });
