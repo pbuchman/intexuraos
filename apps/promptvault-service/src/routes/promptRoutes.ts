@@ -9,7 +9,7 @@
  */
 
 import type { FastifyPluginCallback } from 'fastify';
-import { handleValidationError, requireAuth } from '@intexuraos/common-http';
+import { handleValidationError, logIncomingRequest, requireAuth } from '@intexuraos/common-http';
 import { createPrompt, getPrompt, listPrompts, updatePrompt } from '../domain/promptvault/index.js';
 import { createPromptRequestSchema, updatePromptRequestSchema } from './schemas.js';
 import { getServices } from '../services.js';
@@ -182,12 +182,16 @@ export const promptRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       },
     },
     async (request, reply) => {
+      logIncomingRequest(request, {
+        message: 'Received request to GET /prompt-vault/prompts',
+      });
+
       const user = await requireAuth(request, reply);
       if (user === null) return;
 
       const { promptRepository } = getServices();
 
-      const result = await listPrompts(promptRepository, { userId: user.userId });
+      const result = await listPrompts(promptRepository, { userId: user.userId }, { logger: request.log });
 
       if (!result.ok) {
         return await reply.fail(mapDomainErrorCode(result.error.code), result.error.message);
@@ -272,6 +276,10 @@ export const promptRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       },
     },
     async (request, reply) => {
+      logIncomingRequest(request, {
+        message: 'Received request to POST /prompt-vault/prompts',
+      });
+
       const user = await requireAuth(request, reply);
       if (user === null) return;
 
@@ -287,7 +295,7 @@ export const promptRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         userId: user.userId,
         title,
         content: promptContent,
-      });
+      }, { logger: request.log });
 
       if (!result.ok) {
         return await reply.fail(mapDomainErrorCode(result.error.code), result.error.message);
@@ -378,6 +386,10 @@ export const promptRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       },
     },
     async (request, reply) => {
+      logIncomingRequest(request, {
+        message: 'Received request to GET /prompt-vault/prompts/:prompt_id',
+      });
+
       const user = await requireAuth(request, reply);
       if (user === null) return;
 
@@ -387,7 +399,7 @@ export const promptRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       const result = await getPrompt(promptRepository, {
         userId: user.userId,
         promptId,
-      });
+      }, { logger: request.log });
 
       if (!result.ok) {
         return await reply.fail(mapDomainErrorCode(result.error.code), result.error.message);
@@ -489,6 +501,10 @@ export const promptRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       },
     },
     async (request, reply) => {
+      logIncomingRequest(request, {
+        message: 'Received request to PATCH /prompt-vault/prompts/:prompt_id',
+      });
+
       const user = await requireAuth(request, reply);
       if (user === null) return;
 
@@ -507,7 +523,7 @@ export const promptRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         promptId,
         title,
         content: promptContent,
-      });
+      }, { logger: request.log });
 
       if (!result.ok) {
         return await reply.fail(mapDomainErrorCode(result.error.code), result.error.message);

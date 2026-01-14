@@ -3,6 +3,7 @@
  * Uses @intexuraos/infra-whatsapp for WhatsApp Graph API operations.
  */
 import { err, ok, type Result } from '@intexuraos/common-core';
+import pino from 'pino';
 import { createWhatsAppClient, type WhatsAppClient } from '@intexuraos/infra-whatsapp';
 import type {
   WhatsAppError,
@@ -10,6 +11,8 @@ import type {
   SendMessageResult,
   WhatsAppCloudApiPort,
 } from '../../domain/whatsapp/index.js';
+
+const logger = pino({ name: 'whatsapp-cloud-api' });
 
 /**
  * WhatsApp Cloud API adapter implementation.
@@ -26,9 +29,11 @@ export class WhatsAppCloudApiAdapter implements WhatsAppCloudApiPort {
   }
 
   async getMediaUrl(mediaId: string): Promise<Result<MediaUrlInfo, WhatsAppError>> {
+    logger.info({ mediaId }, 'Fetching media URL from WhatsApp');
     const result = await this.mediaClient.getMediaUrl(mediaId);
 
     if (!result.ok) {
+      logger.error({ mediaId, code: result.error.code }, 'Failed to fetch media URL');
       return err({
         code: 'INTERNAL_ERROR',
         message: result.error.message,
@@ -39,15 +44,18 @@ export class WhatsAppCloudApiAdapter implements WhatsAppCloudApiPort {
   }
 
   async downloadMedia(url: string): Promise<Result<Buffer, WhatsAppError>> {
+    logger.info({ url }, 'Downloading media from WhatsApp');
     const result = await this.mediaClient.downloadMedia(url);
 
     if (!result.ok) {
+      logger.error({ url, code: result.error.code }, 'Failed to download media');
       return err({
         code: 'INTERNAL_ERROR',
         message: result.error.message,
       });
     }
 
+    logger.info({ url, contentLength: result.value.length }, 'Media downloaded successfully');
     return ok(result.value);
   }
 
@@ -57,6 +65,10 @@ export class WhatsAppCloudApiAdapter implements WhatsAppCloudApiPort {
     message: string,
     replyToMessageId?: string
   ): Promise<Result<SendMessageResult, WhatsAppError>> {
+    logger.info(
+      { phoneNumberId, recipientPhone, messageLength: message.length, replyToMessageId },
+      'Sending WhatsApp message'
+    );
     const client = createWhatsAppClient({
       accessToken: this.accessToken,
       phoneNumberId,
@@ -72,12 +84,14 @@ export class WhatsAppCloudApiAdapter implements WhatsAppCloudApiPort {
     const result = await client.sendTextMessage(params);
 
     if (!result.ok) {
+      logger.error({ phoneNumberId, recipientPhone, code: result.error.code }, 'Failed to send message');
       return err({
         code: 'INTERNAL_ERROR',
         message: result.error.message,
       });
     }
 
+    logger.info({ phoneNumberId, recipientPhone, messageId: result.value.messageId }, 'Message sent successfully');
     return ok({ messageId: result.value.messageId });
   }
 }

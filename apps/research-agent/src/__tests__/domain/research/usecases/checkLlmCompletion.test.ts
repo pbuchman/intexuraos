@@ -12,6 +12,25 @@ import {
 } from '../../../../domain/research/usecases/checkLlmCompletion.js';
 import type { Research } from '../../../../domain/research/models/index.js';
 
+function createSilentLogger(): ReturnType<typeof vi.fn> & {
+  info: ReturnType<typeof vi.fn>;
+  warn: ReturnType<typeof vi.fn>;
+  error: ReturnType<typeof vi.fn>;
+  debug: ReturnType<typeof vi.fn>;
+} {
+  return {
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
+  } as ReturnType<typeof vi.fn> & {
+    info: ReturnType<typeof vi.fn>;
+    warn: ReturnType<typeof vi.fn>;
+    error: ReturnType<typeof vi.fn>;
+    debug: ReturnType<typeof vi.fn>;
+  };
+}
+
 function createMockDeps(): CheckLlmCompletionDeps & {
   mockRepo: {
     findById: ReturnType<typeof vi.fn>;
@@ -30,6 +49,7 @@ function createMockDeps(): CheckLlmCompletionDeps & {
 
   return {
     researchRepo: mockRepo,
+    logger: createSilentLogger() as unknown as CheckLlmCompletionDeps['logger'],
     mockRepo,
   };
 }

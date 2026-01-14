@@ -23,103 +23,121 @@ When no specific service is requested, scan all services and document them syste
 
 1. **List all services** in `apps/` directory (excluding `web`)
 2. **Check documentation status**:
-  - Services with existing docs in `docs/services/`
-  - Services without docs
-  - Last documentation date (from `docs/documentation-runs.md`)
+
+- Services with existing docs in `docs/services/`
+- Services without docs
+- Last documentation date (from `docs/documentation-runs.md`)
+
 3. **Prioritize documentation order**:
-  - First: Services with no documentation
-  - Second: Services with stale documentation (significant code changes since last doc run)
-  - Third: Services needing refresh (minor changes)
+
+- First: Services with no documentation
+- Second: Services with stale documentation (significant code changes since last doc run)
+- Third: Services needing refresh (minor changes)
 
 ### Phase 2: Autonomous Service Analysis & Context
 
 For each service, perform comprehensive code and history analysis:
 
 #### 2.1 Git History (Smart Context)
+
 Execute `git log -n 15 --pretty=format:"%h - %s (%cr)" apps/<service-name>/` to understand **intent**:
+
 - **Identify Hotspots:** Which files are changed most often?
 - **Identify Focus:** Are recent commits mostly `fix:` (stability), `feat:` (growth), or `refactor:` (debt)?
 - **Identify Features:** Extract "Added X capabilities" from commit messages for features.md.
 
 #### 2.2 Code Analysis
+
 Analyze `apps/<service-name>/src/` thoroughly:
 
 1. **Routes (all endpoints)**
-  - Public endpoints: method, path, purpose, auth requirements
-  - Internal endpoints: method, path, purpose, calling services
-  - Request/response schemas from TypeScript types
+
+- Public endpoints: method, path, purpose, auth requirements
+- Internal endpoints: method, path, purpose, calling services
+- Request/response schemas from TypeScript types
 
 2. **Domain Models**
-  - All entities with their fields
-  - Status enums and value meanings
-  - Validation rules and constraints
+
+- All entities with their fields
+- Status enums and value meanings
+- Validation rules and constraints
 
 3. **Use Cases**
-  - Business operations and their purposes
-  - Input/output types
-  - Dependencies on other services
+
+- Business operations and their purposes
+- Input/output types
+- Dependencies on other services
 
 4. **Infrastructure Layer**
-  - Firestore collections owned
-  - Pub/Sub topics published
-  - Pub/Sub subscriptions handled
-  - External API integrations
+
+- Firestore collections owned
+- Pub/Sub topics published
+- Pub/Sub subscriptions handled
+- External API integrations
 
 5. **Configuration**
-  - Required environment variables
-  - Optional variables with defaults
-  - Terraform references
+
+- Required environment variables
+- Optional variables with defaults
+- Terraform references
 
 6. **Documentation Coverage**
-  - Route docstrings (JSDoc, @summary, @description)
-  - Model field documentation
-  - Use case descriptions
-  - Environment variable documentation
+
+- Route docstrings (JSDoc, @summary, @description)
+- Model field documentation
+- Use case descriptions
+- Environment variable documentation
 
 ### Phase 3: Inference Engine (Instead of Open Questions)
 
 **CRITICAL:** You must infer answers that the skill would ask as open questions:
 
-| Question | Inference Sources |
-| :--- | :--- |
+| Question                             | Inference Sources                                                                         |
+| :----------------------------------- | :---------------------------------------------------------------------------------------- |
 | **Q1: Why does this service exist?** | Git commit messages (first commit), README.md, existing features.md "The Problem" section |
-| **Q5: What's the killer feature?** | Most complex endpoint, most use cases, primary integration point, existing docs |
-| **Q8: Future plans?** | TODO/FIXME comments, existing technical-debt.md "Future Plans", GitHub issues |
+| **Q5: What's the killer feature?**   | Most complex endpoint, most use cases, primary integration point, existing docs           |
+| **Q8: Future plans?**                | TODO/FIXME comments, existing technical-debt.md "Future Plans", GitHub issues             |
 
 **Inference Rules:**
 
 1. **Q1 - Service Purpose (Why it exists):**
-  - Search `apps/<service-name>/README.md` for problem statement
-  - Check initial Git commits for the service
-  - Read existing `docs/services/<service>/features.md` if present
-  - Analyze the main use case - what problem does it solve?
-  - **Format:** 2-3 sentences describing the pain point addressed
+
+- Search `apps/<service-name>/README.md` for problem statement
+- Check initial Git commits for the service
+- Read existing `docs/services/<service>/features.md` if present
+- Analyze the main use case - what problem does it solve?
+- **Format:** 2-3 sentences describing the pain point addressed
 
 2. **Q5 - Killer Feature:**
-  - Identify the most complex/route (most lines, most logic)
-  - Check which endpoints have the most detailed implementation
-  - Look for unique capabilities not found in other services
-  - **Format:** One specific capability with clear value
+
+- Identify the most complex/route (most lines, most logic)
+- Check which endpoints have the most detailed implementation
+- Look for unique capabilities not found in other services
+- **Format:** One specific capability with clear value
 
 3. **Q8 - Future Plans:**
-  - Grep for `TODO:`, `FIXME:`, `HACK:` comments
-  - Read existing `technical-debt.md` "Future Plans" section
-  - Check for incomplete implementations (stubs, placeholder logic)
-  - **Format:** List of planned work items
+
+- Grep for `TODO:`, `FIXME:`, `HACK:` comments
+- Read existing `technical-debt.md` "Future Plans" section
+- Check for incomplete implementations (stubs, placeholder logic)
+- **Format:** List of planned work items
 
 4. **Wizard Questions - Pure Code Analysis:**
-  - Q2 (User Type): Count `/internal/*` vs public routes
-  - Q3 (Interaction): Detect Pub/Sub, webhooks, scheduled jobs
-  - Q4 (Data Mode): Analyze HTTP methods (GET vs POST/PUT/DELETE)
-  - Q6 (State): Check for Firestore collections, external state
-  - Q7 (Limitations): Find rate limits, quotas, validation rules
+
+- Q2 (User Type): Count `/internal/*` vs public routes
+- Q3 (Interaction): Detect Pub/Sub, webhooks, scheduled jobs
+- Q4 (Data Mode): Analyze HTTP methods (GET vs POST/PUT/DELETE)
+- Q6 (State): Check for Firestore collections, external state
+- Q7 (Limitations): Find rate limits, quotas, validation rules
 
 ### Phase 4: Documentation Generation (Drafting)
 
 Generate **five output files** per service:
 
 #### 4.1: `docs/services/<service-name>/features.md`
+
 Marketing-ready documentation with:
+
 - Value proposition (from Q1 inference)
 - The Problem (from Q1 inference)
 - How It Helps (capabilities from code analysis)
@@ -128,7 +146,9 @@ Marketing-ready documentation with:
 - Limitations (from Q7 inference)
 
 #### 4.2: `docs/services/<service-name>/technical.md`
+
 Developer reference with:
+
 - Overview (2-3 sentences)
 - **Recent Changes:** Summary of last 10 commits (from Smart Context)
 - Architecture diagram (Mermaid)
@@ -142,7 +162,9 @@ Developer reference with:
 - File structure
 
 #### 4.3: `docs/services/<service-name>/tutorial.md`
+
 Getting-started guide with:
+
 - Prerequisites checklist
 - Part 1: Hello World (simplest request)
 - Part 2: Create resource (POST example)
@@ -152,7 +174,9 @@ Getting-started guide with:
 - Exercises (easy, medium, hard)
 
 #### 4.4: `docs/services/<service-name>/technical-debt.md`
+
 Debt tracking with:
+
 - Summary table (category, count, severity)
 - Future Plans (from Q8 inference)
 - Code Smells (11 categories scanned)
@@ -165,7 +189,9 @@ Debt tracking with:
 - Resolved Issues (preserve history: if a TODO is gone, move to Resolved)
 
 #### 4.5: `docs/services/<service-name>/agent.md` (NEW)
+
 Machine-readable interface definition for other AI agents:
+
 - **Identity:** Name, Role, Goal
 - **Capabilities:** Strictly typed JSON/TS schema of tools (endpoints)
 - **Constraints:** "Do not call X without Y"
@@ -176,30 +202,38 @@ Machine-readable interface definition for other AI agents:
 **Before writing files to disk, you MUST critique your own drafts:**
 
 1.  **Review `features.md`**:
-  - *Check:* Is passive voice used? ("Messages are sent...") → *Action:* Rewrite to Active ("Sends messages...")
-  - *Check:* Is there jargon? → *Action:* Rewrite to focus on user benefit.
+
+- _Check:_ Is passive voice used? ("Messages are sent...") → _Action:_ Rewrite to Active ("Sends messages...")
+- _Check:_ Is there jargon? → _Action:_ Rewrite to focus on user benefit.
 
 2.  **Review `technical.md`**:
-  - *Check:* Does the "Recent Changes" section reflect the actual git history found in Phase 2?
+
+- _Check:_ Does the "Recent Changes" section reflect the actual git history found in Phase 2?
 
 3.  **Review `agent.md`**:
-  - *Check:* Is it concise? Remove all fluff. Ensure schemas are valid TypeScript interfaces.
+
+- _Check:_ Is it concise? Remove all fluff. Ensure schemas are valid TypeScript interfaces.
 
 4.  **Review `technical-debt.md`**:
-  - *Check:* Are "Future Plans" specific? If vague ("Fix bugs"), replace with specific TODOs found in code.
+
+- _Check:_ Are "Future Plans" specific? If vague ("Fix bugs"), replace with specific TODOs found in code.
 
 ### Phase 5: Website Content Updates
 
 After documenting each service, incrementally update aggregated site content:
 
 #### 5.1: `docs/services/index.md`
+
 Service catalog with:
+
 - Documented Services section (add new, remove from pending)
 - Pending Documentation section (remove documented)
 - Links to features, technical, debt docs
 
 #### 5.2: `docs/site-marketing.md`
+
 Marketing pages with:
+
 - Hero section value propositions (aggregate from features.md)
 - Capabilities by category (Capture, Organize, Automate, Integrate)
 - Use Cases (real-world scenarios from features.md)
@@ -207,7 +241,9 @@ Marketing pages with:
 - Roadmap (from Q8 future plans across services)
 
 #### 5.3: `docs/site-developer.md`
+
 Developer documentation with:
+
 - API Reference (aggregate all endpoints from technical.md)
 - Events Reference (Pub/Sub published/subscribed)
 - Data Models (all domain models)
@@ -215,7 +251,9 @@ Developer documentation with:
 - Guides (integration examples)
 
 #### 5.4: `docs/site-index.json`
+
 Structured data for site build:
+
 - Services array with metadata
 - Capabilities grouped by category
 - Stats (total, documented, completion %)
@@ -223,6 +261,7 @@ Structured data for site build:
 ### Phase 6: Update Project Overview
 
 Update `docs/overview.md`:
+
 - Integrate new service into narrative
 - Update "How It Works" section if service adds new capability category
 - Update Services table
@@ -239,6 +278,7 @@ Append to `docs/documentation-runs.md`:
 **Agent:** service-scribe (autonomous)
 
 **Files:**
+
 - `docs/services/<service-name>/features.md`
 - `docs/services/<service-name>/technical.md`
 - `docs/services/<service-name>/tutorial.md`
@@ -251,6 +291,7 @@ Append to `docs/documentation-runs.md`:
 - `docs/overview.md` (updated)
 
 **Inferred Insights:**
+
 - Why: <summary from code analysis>
 - Killer feature: <summary from code analysis>
 - Future plans: <summary from TODO/README/debt docs>
@@ -259,6 +300,7 @@ Append to `docs/documentation-runs.md`:
 **Documentation Coverage:** <percentage>%
 
 **Technical Debt Found:**
+
 - Code smells: N
 - Test gaps: N
 - Type issues: N
@@ -315,12 +357,14 @@ const overallCoverage =
 
 1. Run Phase 1: Discovery - list all services, prioritize order
 2. For each service in priority order:
-  - Run Phase 2: Code & Git analysis
-  - Run Phase 3: Inference engine
-  - Run Phase 4: Generate 5 docs files
-  - Run Phase 4.5: Critique & Refine
-  - Run Phase 5: Update website content
-  - Run Phase 7: Log the run
+
+- Run Phase 2: Code & Git analysis
+- Run Phase 3: Inference engine
+- Run Phase 4: Generate 5 docs files
+- Run Phase 4.5: Critique & Refine
+- Run Phase 5: Update website content
+- Run Phase 7: Log the run
+
 3. After all services: Run Phase 6: Update overview.md
 4. Provide summary.
 
@@ -328,11 +372,13 @@ const overallCoverage =
 
 1. Receive list of services to document
 2. For each service:
-  - Run Phase 2: Code & Git analysis
-  - Run Phase 3: Inference engine
-  - Run Phase 4: Generate 5 docs files
-  - Run Phase 4.5: Critique & Refine
-  - Run Phase 5: Update website content
-  - Run Phase 7: Log the run
+
+- Run Phase 2: Code & Git analysis
+- Run Phase 3: Inference engine
+- Run Phase 4: Generate 5 docs files
+- Run Phase 4.5: Critique & Refine
+- Run Phase 5: Update website content
+- Run Phase 7: Log the run
+
 3. Update overview.md
 4. Provide summary per service

@@ -3,7 +3,7 @@ import { getErrorMessage } from '@intexuraos/common-core';
 import {
   fetchAllPricing,
   createPricingContext,
-  type PricingContext,
+  type IPricingContext,
 } from '@intexuraos/llm-pricing';
 import { type ResearchModel, type FastModel, LlmModels } from '@intexuraos/llm-contract';
 import { buildServer } from './server.js';
@@ -23,11 +23,15 @@ const REQUIRED_ENV = [
 
 validateRequiredEnv(REQUIRED_ENV);
 
-initSentry({
-  dsn: process.env['INTEXURAOS_SENTRY_DSN'],
+const sentryConfig: Parameters<typeof initSentry>[0] = {
   environment: process.env['INTEXURAOS_ENVIRONMENT'] ?? 'development',
   serviceName: 'research-agent',
-});
+};
+const dsn = process.env['INTEXURAOS_SENTRY_DSN'];
+if (dsn !== undefined) {
+  sentryConfig.dsn = dsn;
+}
+initSentry(sentryConfig);
 
 const PORT = Number(process.env['PORT'] ?? 8080);
 const HOST = process.env['HOST'] ?? '0.0.0.0';
@@ -48,7 +52,7 @@ const REQUIRED_MODELS: (ResearchModel | FastModel)[] = [
   LlmModels.Gemini20Flash,
 ];
 
-async function loadPricing(): Promise<PricingContext> {
+async function loadPricing(): Promise<IPricingContext> {
   const appSettingsUrl = process.env['INTEXURAOS_APP_SETTINGS_SERVICE_URL'] ?? '';
   const internalAuthToken = process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] ?? '';
 

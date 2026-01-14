@@ -2,7 +2,11 @@
  * Tests for research usecases.
  */
 
+<<<<<<< HEAD
 import { beforeEach, describe, expect, it } from 'vitest';
+=======
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+>>>>>>> origin/development
 import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
 import type { Research } from '../domain/research/index.js';
 import {
@@ -12,6 +16,25 @@ import {
   submitResearch,
 } from '../domain/research/index.js';
 import { FakeResearchRepository } from './fakes.js';
+
+function createSilentLogger(): ReturnType<typeof vi.fn> & {
+  info: ReturnType<typeof vi.fn>;
+  warn: ReturnType<typeof vi.fn>;
+  error: ReturnType<typeof vi.fn>;
+  debug: ReturnType<typeof vi.fn>;
+} {
+  return {
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
+  } as ReturnType<typeof vi.fn> & {
+    info: ReturnType<typeof vi.fn>;
+    warn: ReturnType<typeof vi.fn>;
+    error: ReturnType<typeof vi.fn>;
+    debug: ReturnType<typeof vi.fn>;
+  };
+}
 
 function createTestResearch(overrides?: Partial<Research>): Research {
   return {
@@ -52,6 +75,7 @@ describe('submitResearch', () => {
       {
         researchRepo: fakeRepo,
         generateId: (): string => 'generated-id-123',
+        logger: createSilentLogger() as unknown as Parameters<typeof submitResearch>[1]['logger'],
       }
     );
 
@@ -81,6 +105,7 @@ describe('submitResearch', () => {
       {
         researchRepo: fakeRepo,
         generateId: (): string => 'id-123',
+        logger: createSilentLogger() as unknown as Parameters<typeof submitResearch>[1]['logger'],
       }
     );
 
@@ -107,6 +132,7 @@ describe('submitResearch', () => {
       {
         researchRepo: fakeRepo,
         generateId: (): string => 'id-123',
+        logger: createSilentLogger() as unknown as Parameters<typeof submitResearch>[1]['logger'],
       }
     );
 
@@ -128,6 +154,7 @@ describe('submitResearch', () => {
       {
         researchRepo: fakeRepo,
         generateId: (): string => 'id-123',
+        logger: createSilentLogger() as unknown as Parameters<typeof submitResearch>[1]['logger'],
       }
     );
 
@@ -148,6 +175,7 @@ describe('submitResearch', () => {
       {
         researchRepo: fakeRepo,
         generateId: (): string => 'id-123',
+        logger: createSilentLogger() as unknown as Parameters<typeof submitResearch>[1]['logger'],
       }
     );
 

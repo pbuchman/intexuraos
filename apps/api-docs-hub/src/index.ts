@@ -22,6 +22,7 @@ async function main(): Promise<void> {
   app.log.info(`API Docs Hub listening on ${host}:${String(port)}`);
 }
 
-main().catch(() => {
+main().catch((error: unknown) => {
+  process.stderr.write(`Fatal error during startup: ${String(error)}\n`);
   process.exit(1);
 });

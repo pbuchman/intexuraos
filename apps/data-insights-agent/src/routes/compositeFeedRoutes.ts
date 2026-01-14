@@ -112,6 +112,7 @@ export const compositeFeedRoutes: FastifyPluginCallback = (fastify, _opts, done)
         compositeFeedRepository: services.compositeFeedRepository,
         dataSourceRepository: services.dataSourceRepository,
         feedNameGenerationService: services.feedNameGenerationService,
+        logger: request.log,
       });
 
       if (!result.ok) {

@@ -14,6 +14,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **RULE:** Any issue you find in the codebase is YOUR issue to fix. NEVER claim there were "pre-existing issues" or "pre-existing bugs."
 
+**RULE:** YOU MUST NOT USE WORDS "pre-existing", "unrelated", "not my fault", "not my responsibility". These are forbidden. Double-think before using them.
+
 - You see a problem → you own it → you fix it
 - No finger-pointing at "previous state" or "prior work"
 - Unless user EXPLICITLY tells you otherwise (e.g., "ignore X", "this is a known issue"), assume responsibility

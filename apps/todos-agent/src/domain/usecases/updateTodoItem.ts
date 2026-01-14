@@ -88,6 +88,13 @@ export async function updateTodoItem(
       : computeTodoStatus(updatedItems);
   const isTodoCompleting = newTodoStatus === 'completed' && todo.status !== 'completed';
 
+  if (isTodoCompleting) {
+    deps.logger.info(
+      { todoId, itemId, previousStatus: todo.status, newStatus: newTodoStatus },
+      'Item completion caused todo to transition to completed'
+    );
+  }
+
   const updatedTodo: Todo = {
     ...todo,
     items: updatedItems,

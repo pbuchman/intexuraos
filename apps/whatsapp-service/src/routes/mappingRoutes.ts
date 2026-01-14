@@ -8,7 +8,7 @@
 
 import type { FastifyPluginCallback, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
-import { requireAuth } from '@intexuraos/common-http';
+import { logIncomingRequest, requireAuth } from '@intexuraos/common-http';
 import { getServices } from '../services.js';
 import { validatePhoneNumber } from './shared.js';
 
@@ -98,6 +98,11 @@ export const mappingRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       },
     },
     async (request: FastifyRequest<{ Body: ConnectRequest }>, reply: FastifyReply) => {
+      logIncomingRequest(request, {
+        message: 'Received request to POST /whatsapp/connect',
+        bodyPreviewLength: 200,
+      });
+
       const user = await requireAuth(request, reply);
       if (!user) {
         return;
@@ -220,6 +225,10 @@ export const mappingRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       },
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
+      logIncomingRequest(request, {
+        message: 'Received request to GET /whatsapp/status',
+      });
+
       const user = await requireAuth(request, reply);
       if (!user) {
         return;
@@ -290,6 +299,10 @@ export const mappingRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       },
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
+      logIncomingRequest(request, {
+        message: 'Received request to DELETE /whatsapp/disconnect',
+      });
+
       const user = await requireAuth(request, reply);
       if (!user) {
         return;

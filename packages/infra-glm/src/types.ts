@@ -1,5 +1,5 @@
 /**
- * Types for the Zhipu GLM client implementation.
+ * Types for the Zai GLM client implementation.
  *
  * @packageDocumentation
  */
@@ -15,7 +15,7 @@ export type {
 /**
  * Configuration for creating a GLM client.
  *
- * Extends {@link LLMConfig} with Zhipu-specific pricing configuration.
+ * Extends {@link LLMConfig} with Zai-specific pricing configuration.
  * GLM-4.7 supports web search research via the built-in web search tool.
  *
  * @example
@@ -35,7 +35,7 @@ export type {
  * ```
  */
 export interface GlmConfig {
-  /** Zhipu GLM API key from open.bigmodel.cn */
+  /** Zai GLM API key from open.bigmodel.cn */
   apiKey: string;
   /** Model identifier (e.g., 'glm-4.7') */
   model: string;

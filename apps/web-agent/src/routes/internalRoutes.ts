@@ -1,5 +1,6 @@
 import type { FastifyPluginCallback } from 'fastify';
 import { validateInternalAuth, logIncomingRequest } from '@intexuraos/common-http';
+import type { Logger } from 'pino';
 import { getServices } from '../services.js';
 import type { LinkPreviewResult } from '../domain/index.js';
 import { OpenGraphFetcher } from '../infra/index.js';
@@ -58,7 +59,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       const fetcher =
         timeoutMs !== undefined
-          ? new OpenGraphFetcher({ timeoutMs })
+          ? new OpenGraphFetcher({ timeoutMs }, request.log as unknown as Logger)
           : (linkPreviewFetcher as OpenGraphFetcher);
 
       const results: LinkPreviewResult[] = [];

@@ -1,7 +1,12 @@
 import { err, ok, type Result } from '@intexuraos/common-core';
 import type { LinkPreviewFetcherPort } from '../../domain/linkpreview/ports/linkPreviewFetcher.js';
 import type { LinkPreview, LinkPreviewError } from '../../domain/linkpreview/models/LinkPreview.js';
+<<<<<<< HEAD
+=======
+import type { Logger } from 'pino';
+>>>>>>> origin/development
 import * as cheerio from 'cheerio';
+import pino from 'pino';
 
 export interface OpenGraphFetcherConfig {
   timeoutMs: number;
@@ -54,16 +59,28 @@ function resolveImageUrl(imageUrl: string | undefined, baseUrl: string): string 
   }
 }
 
+<<<<<<< HEAD
+=======
+function createDefaultLogger(): Logger {
+  return pino({ name: 'OpenGraphFetcher', level: 'info' });
+}
+
+>>>>>>> origin/development
 export class OpenGraphFetcher implements LinkPreviewFetcherPort {
   private readonly config: OpenGraphFetcherConfig;
+  private readonly logger: Logger;
 
-  constructor(config?: Partial<OpenGraphFetcherConfig>) {
+  constructor(config?: Partial<OpenGraphFetcherConfig>, logger?: Logger) {
     this.config = { ...DEFAULT_CONFIG, ...config };
+    this.logger = logger ?? createDefaultLogger();
   }
 
   async fetchPreview(url: string): Promise<Result<LinkPreview, LinkPreviewError>> {
+    this.logger.info({ url }, 'Starting OpenGraph fetch');
+
     const controller = new AbortController();
     const timeoutId = setTimeout((): void => {
+      this.logger.warn({ url, timeoutMs: this.config.timeoutMs }, 'Request timed out');
       controller.abort();
     }, this.config.timeoutMs);
 
@@ -81,6 +98,14 @@ export class OpenGraphFetcher implements LinkPreviewFetcherPort {
       clearTimeout(timeoutId);
 
       if (!response.ok) {
+        this.logger.warn(
+          {
+            url,
+            status: response.status,
+            statusText: response.statusText,
+          },
+          'HTTP error response'
+        );
         return err({
           code: 'FETCH_FAILED',
           message: `HTTP ${String(response.status)}: ${response.statusText}`,
@@ -89,14 +114,28 @@ export class OpenGraphFetcher implements LinkPreviewFetcherPort {
 
       const contentLength = response.headers.get('content-length');
       if (contentLength !== null && parseInt(contentLength, 10) > this.config.maxResponseSize) {
+        this.logger.warn(
+          {
+            url,
+            contentLength: parseInt(contentLength, 10),
+            maxResponseSize: this.config.maxResponseSize,
+          },
+          'Response too large (content-length header)'
+        );
         return err({
           code: 'TOO_LARGE',
           message: `Response too large: ${contentLength} bytes`,
         });
       }
 
+<<<<<<< HEAD
+=======
+      this.logger.info({ url, status: response.status }, 'HTTP request successful, reading body');
+
+>>>>>>> origin/development
       const reader = response.body?.getReader();
       if (reader === undefined) {
+        this.logger.error({ url }, 'No response body');
         return err({
           code: 'FETCH_FAILED',
           message: 'No response body',
@@ -117,6 +156,14 @@ export class OpenGraphFetcher implements LinkPreviewFetcherPort {
           reader.cancel().catch((): void => {
             // Ignore cancel errors
           });
+          this.logger.warn(
+            {
+              url,
+              totalSize,
+              maxResponseSize: this.config.maxResponseSize,
+            },
+            'Response exceeded max size during streaming'
+          );
           return err({
             code: 'TOO_LARGE',
             message: `Response exceeded ${String(this.config.maxResponseSize)} bytes`,
@@ -124,6 +171,8 @@ export class OpenGraphFetcher implements LinkPreviewFetcherPort {
         }
         chunks.push(chunk);
       }
+
+      this.logger.info({ url, totalSize }, 'Response body read, parsing HTML');
 
       const html = new TextDecoder().decode(
         chunks.reduce((acc: Uint8Array, chunk: Uint8Array): Uint8Array => {
@@ -172,24 +221,39 @@ export class OpenGraphFetcher implements LinkPreviewFetcherPort {
         preview.favicon = favicon;
       }
 
+      this.logger.info(
+        {
+          url,
+          hasTitle: preview.title !== undefined,
+          hasDescription: preview.description !== undefined,
+          hasImage: preview.image !== undefined,
+          hasFavicon: preview.favicon !== undefined,
+          hasSiteName: preview.siteName !== undefined,
+        },
+        'OpenGraph fetch completed successfully'
+      );
+
       return ok(preview);
     } catch (error) {
       clearTimeout(timeoutId);
 
       if (error instanceof Error) {
         if (error.name === 'AbortError') {
+          this.logger.warn({ url, timeoutMs: this.config.timeoutMs }, 'Request timed out (AbortError)');
           return err({
             code: 'TIMEOUT',
             message: `Request timed out after ${String(this.config.timeoutMs)}ms`,
           });
         }
 
+        this.logger.error({ url, error: error.message }, 'Fetch failed');
         return err({
           code: 'FETCH_FAILED',
           message: error.message,
         });
       }
 
+      this.logger.error({ url }, 'Unknown error during fetch');
       return err({
         code: 'FETCH_FAILED',
         message: 'Unknown error',

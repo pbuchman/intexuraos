@@ -34,7 +34,11 @@ export interface LlmApiKeys {
   openai?: EncryptedValue; // OpenAI API key
   anthropic?: EncryptedValue; // Anthropic API key
   perplexity?: EncryptedValue; // Perplexity API key
+<<<<<<< HEAD
   zhipu?: EncryptedValue; // Zhipu GLM API key
+=======
+  zai?: EncryptedValue; // Zai GLM API key
+>>>>>>> origin/development
 }
 
 /**
@@ -45,7 +49,11 @@ export interface LlmTestResults {
   openai?: LlmTestResult;
   anthropic?: LlmTestResult;
   perplexity?: LlmTestResult;
+<<<<<<< HEAD
   zhipu?: LlmTestResult;
+=======
+  zai?: LlmTestResult;
+>>>>>>> origin/development
 }
 
 /**

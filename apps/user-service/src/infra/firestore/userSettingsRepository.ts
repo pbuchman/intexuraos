@@ -25,11 +25,15 @@ interface UserSettingsDoc {
     google?: EncryptedValue;
     openai?: EncryptedValue;
     anthropic?: EncryptedValue;
+    perplexity?: EncryptedValue;
+    zai?: EncryptedValue;
   };
   llmTestResults?: {
     google?: LlmTestResult;
     openai?: LlmTestResult;
     anthropic?: LlmTestResult;
+    perplexity?: LlmTestResult;
+    zai?: LlmTestResult;
   };
   createdAt: string;
   updatedAt: string;
@@ -207,8 +211,17 @@ export class FirestoreUserSettingsRepository implements UserSettingsRepository {
           updatedAt: now,
         });
       } else {
+        const data = doc.data() as UserSettingsDoc;
+        const existingTestResult = data.llmTestResults?.[provider];
+
+        const completeTestResult: LlmTestResult = {
+          status: existingTestResult?.status ?? 'success',
+          message: existingTestResult?.message ?? '',
+          testedAt: now,
+        };
+
         await docRef.update({
-          [`llmTestResults.${provider}.testedAt`]: now,
+          [`llmTestResults.${provider}`]: completeTestResult,
           updatedAt: now,
         });
       }

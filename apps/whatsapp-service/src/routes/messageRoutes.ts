@@ -6,7 +6,7 @@
  * - DELETE /whatsapp/messages/:message_id — delete a message
  */
 import type { FastifyPluginCallback, FastifyReply, FastifyRequest } from 'fastify';
-import { requireAuth } from '@intexuraos/common-http';
+import { logIncomingRequest, requireAuth } from '@intexuraos/common-http';
 import { getServices } from '../services.js';
 
 interface MessageParams {
@@ -163,6 +163,10 @@ export const messageRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       },
     },
     async (request: FastifyRequest<{ Querystring: ListQuerystring }>, reply: FastifyReply) => {
+      logIncomingRequest(request, {
+        message: 'Received request to GET /whatsapp/messages',
+      });
+
       const user = await requireAuth(request, reply);
       if (!user) {
         return;
@@ -304,6 +308,11 @@ export const messageRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       },
     },
     async (request: FastifyRequest<{ Params: MessageParams }>, reply: FastifyReply) => {
+      logIncomingRequest(request, {
+        message: 'Received request to GET /whatsapp/messages/:message_id/media',
+        includeParams: true,
+      });
+
       const user = await requireAuth(request, reply);
       if (!user) {
         return;
@@ -420,6 +429,11 @@ export const messageRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       },
     },
     async (request: FastifyRequest<{ Params: MessageParams }>, reply: FastifyReply) => {
+      logIncomingRequest(request, {
+        message: 'Received request to GET /whatsapp/messages/:message_id/thumbnail',
+        includeParams: true,
+      });
+
       const user = await requireAuth(request, reply);
       if (!user) {
         return;

@@ -9,12 +9,16 @@
 import type { FastifyPluginCallback, FastifyReply, FastifyRequest } from 'fastify';
 import { validateInternalAuth, logIncomingRequest } from '@intexuraos/common-http';
 import { getErrorMessage } from '@intexuraos/common-core';
+import type { Logger } from 'pino';
 import {
   checkLlmCompletion,
   createDraftResearch,
   processResearch,
   runSynthesis,
+<<<<<<< HEAD
   calculateAccurateCost,
+=======
+>>>>>>> origin/development
   type ResearchModel,
 } from '../domain/research/index.js';
 import { formatLlmError } from '../domain/research/formatLlmError.js';
@@ -663,6 +667,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
           const keyMissingCompletionAction = await checkLlmCompletion(event.researchId, {
             researchRepo,
+            logger: request.log as unknown as Logger,
           });
           request.log.info(
             { researchId: event.researchId, action: keyMissingCompletionAction.type },
@@ -720,7 +725,10 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             formattedError
           );
 
-          const failCompletionAction = await checkLlmCompletion(event.researchId, { researchRepo });
+          const failCompletionAction = await checkLlmCompletion(event.researchId, {
+            researchRepo,
+            logger: request.log as unknown as Logger,
+          });
           request.log.info(
             { researchId: event.researchId, action: failCompletionAction.type },
             '[3.5] LLM completion check after failure'
@@ -755,18 +763,8 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         if (usage !== undefined) {
           updateData.inputTokens = usage.inputTokens;
           updateData.outputTokens = usage.outputTokens;
-
-          const pricing = await services.pricingRepo.findByProviderAndModel(
-            modelProvider,
-            event.model
-          );
-          if (pricing !== null) {
-            updateData.costUsd = calculateAccurateCost(usage, pricing);
-          } else {
-            request.log.warn(
-              { model: event.model },
-              'Pricing not found for model, cost not calculated'
-            );
+          if (usage.costUsd !== undefined) {
+            updateData.costUsd = usage.costUsd;
           }
         }
 
@@ -782,7 +780,10 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           { researchId: event.researchId, model: event.model },
           '[3.5] Checking LLM completion status'
         );
-        const completionAction = await checkLlmCompletion(event.researchId, { researchRepo });
+        const completionAction = await checkLlmCompletion(event.researchId, {
+          researchRepo,
+          logger: request.log as unknown as Logger,
+        });
 
         switch (completionAction.type) {
           case 'pending':

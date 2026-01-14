@@ -54,8 +54,8 @@ describe('internalRoutes', () => {
     updatedAt: '2026-01-05T12:00:00Z',
   };
 
-  const mockZhipuPricing: ProviderPricing = {
-    provider: LlmProviders.Zhipu,
+  const mockZaiPricing: ProviderPricing = {
+    provider: LlmProviders.Zai,
     models: {
       [LlmModels.Glm47]: {
         inputPricePerMillion: 0.6,
@@ -100,8 +100,8 @@ describe('internalRoutes', () => {
             return Promise.resolve(mockAnthropicPricing);
           case 'perplexity':
             return Promise.resolve(mockPerplexityPricing);
-          case 'zhipu':
-            return Promise.resolve(mockZhipuPricing);
+          case 'zai':
+            return Promise.resolve(mockZaiPricing);
           default:
             return Promise.resolve(null);
         }
@@ -125,7 +125,7 @@ describe('internalRoutes', () => {
       expect(body.data.openai.provider).toBe(LlmProviders.OpenAI);
       expect(body.data.anthropic.provider).toBe(LlmProviders.Anthropic);
       expect(body.data.perplexity.provider).toBe(LlmProviders.Perplexity);
-      expect(body.data.zhipu.provider).toBe(LlmProviders.Zhipu);
+      expect(body.data.zai.provider).toBe(LlmProviders.Zai);
       expect(body.data.google.models[LlmModels.Gemini25Pro].inputPricePerMillion).toBe(1.25);
 
       await app.close();
@@ -173,8 +173,8 @@ describe('internalRoutes', () => {
             return Promise.resolve(null); // Missing
           case 'perplexity':
             return Promise.resolve(mockPerplexityPricing);
-          case 'zhipu':
-            return Promise.resolve(mockZhipuPricing);
+          case 'zai':
+            return Promise.resolve(mockZaiPricing);
           default:
             return Promise.resolve(null);
         }
@@ -233,8 +233,8 @@ describe('internalRoutes', () => {
             return Promise.resolve(mockAnthropicPricing);
           case 'perplexity':
             return Promise.resolve(mockPerplexityPricing);
-          case 'zhipu':
-            return Promise.resolve(mockZhipuPricing);
+          case 'zai':
+            return Promise.resolve(mockZaiPricing);
           default:
             return Promise.resolve(null);
         }
@@ -269,8 +269,8 @@ describe('internalRoutes', () => {
             return Promise.resolve(mockAnthropicPricing);
           case 'perplexity':
             return Promise.resolve(mockPerplexityPricing);
-          case 'zhipu':
-            return Promise.resolve(mockZhipuPricing);
+          case 'zai':
+            return Promise.resolve(mockZaiPricing);
           default:
             return Promise.resolve(null);
         }
@@ -305,8 +305,8 @@ describe('internalRoutes', () => {
             return Promise.resolve(mockAnthropicPricing);
           case 'perplexity':
             return Promise.resolve(null); // Missing
-          case 'zhipu':
-            return Promise.resolve(mockZhipuPricing);
+          case 'zai':
+            return Promise.resolve(mockZaiPricing);
           default:
             return Promise.resolve(null);
         }
@@ -330,7 +330,7 @@ describe('internalRoutes', () => {
       await app.close();
     });
 
-    it('returns 500 when zhipu pricing is missing', async () => {
+    it('returns 500 when zai pricing is missing', async () => {
       fakePricingRepository.getByProvider.mockImplementation((provider: string) => {
         switch (provider) {
           case 'google':
@@ -341,7 +341,7 @@ describe('internalRoutes', () => {
             return Promise.resolve(mockAnthropicPricing);
           case 'perplexity':
             return Promise.resolve(mockPerplexityPricing);
-          case 'zhipu':
+          case 'zai':
             return Promise.resolve(null); // Missing
           default:
             return Promise.resolve(null);
@@ -361,7 +361,7 @@ describe('internalRoutes', () => {
 
       expect(response.statusCode).toBe(500);
       const body = JSON.parse(response.body);
-      expect(body.error).toContain('zhipu');
+      expect(body.error).toContain('zai');
 
       await app.close();
     });

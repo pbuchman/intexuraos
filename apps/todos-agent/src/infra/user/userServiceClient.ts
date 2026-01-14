@@ -13,15 +13,23 @@ import {
   type LlmProvider,
 } from '@intexuraos/llm-contract';
 import type { IPricingContext } from '@intexuraos/llm-pricing';
+import pino from 'pino';
+import type { Logger } from 'pino';
+
+const defaultLogger = pino({
+  level: process.env['LOG_LEVEL'] ?? 'info',
+  name: 'userServiceClient',
+});
 
 export interface UserServiceConfig {
   baseUrl: string;
   internalAuthToken: string;
   pricingContext: IPricingContext;
+  logger?: Logger;
 }
 
 export interface UserServiceError {
-  code: 'NETWORK_ERROR' | 'API_ERROR' | 'NO_API_KEY' | 'UNSUPPORTED_MODEL' | 'INVALID_MODEL';
+  code: 'NETWORK_ERROR' | 'API_ERROR' | 'NO_API_KEY' | 'INVALID_MODEL';
   message: string;
 }
 
@@ -49,16 +57,20 @@ function providerToKeyField(provider: LlmProvider) {
       return 'anthropic';
     case LlmProviders.Perplexity:
       return 'perplexity';
-    case LlmProviders.Zhipu:
-      return 'zhipu';
+    case LlmProviders.Zai:
+      return 'zai';
   }
 }
 
 export function createUserServiceClient(config: UserServiceConfig): UserServiceClient {
+  const logger = config.logger ?? defaultLogger;
+
   return {
     async getLlmClient(
       userId: string
     ): Promise<Result<LlmGenerateClient, UserServiceError>> {
+      logger.info({ userId }, 'Creating LLM client for user');
+
       try {
         // Step 1: Fetch user settings to get default model
         const settingsResponse = await fetch(
@@ -71,6 +83,10 @@ export function createUserServiceClient(config: UserServiceConfig): UserServiceC
         );
 
         if (!settingsResponse.ok) {
+          logger.error(
+            { userId, status: settingsResponse.status },
+            'Failed to fetch user settings'
+          );
           return err({
             code: 'API_ERROR',
             message: `Failed to fetch user settings: HTTP ${String(settingsResponse.status)}`,
@@ -88,6 +104,7 @@ export function createUserServiceClient(config: UserServiceConfig): UserServiceC
 
         // Validate that the model is supported
         if (!isValidModel(rawModel)) {
+          logger.warn({ userId, invalidModel: rawModel }, 'User has invalid model preference');
           return err({
             code: 'INVALID_MODEL',
             message: `Invalid model: ${rawModel}. Please select a valid model.`,
@@ -110,6 +127,10 @@ export function createUserServiceClient(config: UserServiceConfig): UserServiceC
         );
 
         if (!keysResponse.ok) {
+          logger.error(
+            { userId, status: keysResponse.status },
+            'Failed to fetch API keys'
+          );
           return err({
             code: 'API_ERROR',
             message: `Failed to fetch API keys: HTTP ${String(keysResponse.status)}`,
@@ -124,6 +145,7 @@ export function createUserServiceClient(config: UserServiceConfig): UserServiceC
         const apiKey = keysData[keyField];
 
         if (apiKey === null || apiKey === undefined) {
+          logger.info({ userId, provider }, 'No API key configured for provider');
           return err({
             code: 'NO_API_KEY',
             message: `No API key configured for ${provider}. Please add your ${provider} API key in settings.`,
@@ -143,8 +165,14 @@ export function createUserServiceClient(config: UserServiceConfig): UserServiceC
 
         const client = createLlmClient(clientConfig);
 
+        logger.info({ userId, model: defaultModel, provider }, 'LLM client created successfully');
+
         return ok(client);
       } catch (error) {
+        logger.error(
+          { userId, error: getErrorMessage(error) },
+          'Network error while creating LLM client'
+        );
         const message = getErrorMessage(error);
         return err({
           code: 'NETWORK_ERROR',

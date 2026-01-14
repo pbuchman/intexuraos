@@ -4,7 +4,7 @@
  * DELETE /mobile-notifications/:notification_id - Delete notification.
  */
 import type { FastifyPluginCallback, FastifyReply, FastifyRequest } from 'fastify';
-import { requireAuth } from '@intexuraos/common-http';
+import { logIncomingRequest, requireAuth } from '@intexuraos/common-http';
 import { getServices } from '../services.js';
 import { deleteNotification, listNotifications } from '../domain/notifications/index.js';
 import { listNotificationsResponseSchema } from './schemas.js';
@@ -92,6 +92,7 @@ export const notificationRoutes: FastifyPluginCallback = (fastify, _opts, done) 
       },
     },
     async (request: FastifyRequest<{ Querystring: ListQuerystring }>, reply: FastifyReply) => {
+      logIncomingRequest(request);
       const user = await requireAuth(request, reply);
       if (user === null) {
         return;
@@ -197,6 +198,7 @@ export const notificationRoutes: FastifyPluginCallback = (fastify, _opts, done) 
       },
     },
     async (request: FastifyRequest<{ Params: DeleteParams }>, reply: FastifyReply) => {
+      logIncomingRequest(request, { includeParams: true });
       const user = await requireAuth(request, reply);
       if (user === null) {
         return;

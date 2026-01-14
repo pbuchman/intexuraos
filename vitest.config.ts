@@ -15,8 +15,8 @@ export default defineConfig({
     globals: false,
     include: ['**/*.test.ts', '**/*.spec.ts'],
     exclude: ['**/node_modules/**', '**/dist/**'],
-    // Setup file to mock Firebase and suppress logging
-    setupFiles: ['./vitest.setup.ts'],
+    // Setup file to mock Firebase and suppress logging (use absolute path)
+    setupFiles: [path.resolve(__dirname, './vitest.setup.ts')],
     // Run tests sequentially to avoid race conditions in shared state
     sequence: {
       shuffle: false,

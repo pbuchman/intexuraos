@@ -35,12 +35,12 @@ async function validateAllModelPricing(): Promise<void> {
   const { pricingRepository } = getServices();
 
   // Fetch pricing for all providers
-  const [google, openai, anthropic, perplexity, zhipu] = await Promise.all([
+  const [google, openai, anthropic, perplexity, zai] = await Promise.all([
     pricingRepository.getByProvider(LlmProviders.Google),
     pricingRepository.getByProvider(LlmProviders.OpenAI),
     pricingRepository.getByProvider(LlmProviders.Anthropic),
     pricingRepository.getByProvider(LlmProviders.Perplexity),
-    pricingRepository.getByProvider(LlmProviders.Zhipu),
+    pricingRepository.getByProvider(LlmProviders.Zai),
   ]);
 
   // Build a map of all models that have pricing
@@ -66,8 +66,8 @@ async function validateAllModelPricing(): Promise<void> {
       modelsWithPricing.add(model);
     }
   }
-  if (zhipu !== null) {
-    for (const model of Object.keys(zhipu.models)) {
+  if (zai !== null) {
+    for (const model of Object.keys(zai.models)) {
       modelsWithPricing.add(model);
     }
   }
