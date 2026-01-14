@@ -280,6 +280,37 @@ describe('Bookmark Routes', () => {
       expect(body.data.id).toBe(createResult.value.id);
     });
 
+    it('returns bookmark with ogFetchedAt and aiSummarizedAt dates as ISO strings', async () => {
+      const createResult = await ctx.bookmarkRepository.create({
+        userId: 'user-1',
+        url: 'https://example.com',
+        tags: [],
+        source: 'web',
+        sourceId: 'src-1',
+      });
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) return;
+
+      // Set date fields that are normally null
+      const bookmark = createResult.value;
+      bookmark.ogFetchedAt = new Date('2025-01-15T10:00:00Z');
+      bookmark.aiSummarizedAt = new Date('2025-01-15T11:00:00Z');
+      bookmark.ogFetchStatus = 'processed';
+      await ctx.bookmarkRepository.update(bookmark.id, bookmark);
+
+      const token = await createToken({ sub: 'user-1' });
+      const response = await ctx.app.inject({
+        method: 'GET',
+        url: `/bookmarks/${bookmark.id}`,
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.data.ogFetchedAt).toBe('2025-01-15T10:00:00.000Z');
+      expect(body.data.aiSummarizedAt).toBe('2025-01-15T11:00:00.000Z');
+    });
+
     it('returns 403 for non-owner', async () => {
       const createResult = await ctx.bookmarkRepository.create({
         userId: 'user-1',
@@ -1051,6 +1082,22 @@ describe('Bookmark Routes', () => {
       expect(response.headers['content-type']).toBe('image/jpeg');
       expect(response.headers['cache-control']).toBe('public, max-age=86400');
       expect(response.headers['access-control-allow-origin']).toBe('*');
+    });
+
+    it('defaults to image/jpeg when content-type header is missing', async () => {
+      const imageData = Buffer.from('fake-image-data');
+      nock('https://example.com')
+        .get('/test-image.jpg')
+        .reply(200, imageData); // No content-type header
+
+      const encodedUrl = encodeURIComponent('https://example.com/test-image.jpg');
+      const response = await ctx.app.inject({
+        method: 'GET',
+        url: `/images/proxy?url=${encodedUrl}`,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.headers['content-type']).toBe('image/jpeg');
     });
 
     it('returns error for non-image content type', async () => {
