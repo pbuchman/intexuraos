@@ -1,6 +1,10 @@
 import type { Result } from '@intexuraos/common-core';
 import { ok, err } from '@intexuraos/common-core';
 import type { ActionServiceClient } from '../domain/ports/actionServiceClient.js';
+import type {
+  CalendarServiceClient,
+  ProcessCalendarRequest,
+} from '../domain/ports/calendarServiceClient.js';
 import type { ResearchServiceClient } from '../domain/ports/researchServiceClient.js';
 import type { NotificationSender } from '../domain/ports/notificationSender.js';
 import type { ActionRepository, ListByUserIdOptions } from '../domain/ports/actionRepository.js';
@@ -480,10 +484,54 @@ export class FakeBookmarksServiceClient implements BookmarksServiceClient {
   }
 }
 
+export class FakeCalendarServiceClient implements CalendarServiceClient {
+  private processedActions: ProcessCalendarRequest[] = [];
+  private nextResponse: {
+    status: 'completed' | 'failed';
+    resource_url?: string;
+    error?: string;
+  } = { status: 'completed', resource_url: '/#/calendar/event-123' };
+  private failNext = false;
+  private failError: Error | null = null;
+
+  getProcessedActions(): ProcessCalendarRequest[] {
+    return this.processedActions;
+  }
+
+  setNextResponse(response: {
+    status: 'completed' | 'failed';
+    resource_url?: string;
+    error?: string;
+  }): void {
+    this.nextResponse = response;
+  }
+
+  setFailNext(fail: boolean, error?: Error): void {
+    this.failNext = fail;
+    this.failError = error ?? null;
+  }
+
+  async processAction(request: ProcessCalendarRequest): Promise<
+    Result<{
+      status: 'completed' | 'failed';
+      resource_url?: string;
+      error?: string;
+    }>
+  > {
+    if (this.failNext) {
+      this.failNext = false;
+      return err(this.failError ?? new Error('Simulated failure'));
+    }
+    this.processedActions.push(request);
+    return ok(this.nextResponse);
+  }
+}
+
 import type { ExecuteResearchActionResult } from '../domain/usecases/executeResearchAction.js';
 import type { ExecuteTodoActionResult } from '../domain/usecases/executeTodoAction.js';
 import type { ExecuteNoteActionResult } from '../domain/usecases/executeNoteAction.js';
 import type { ExecuteLinkActionResult } from '../domain/usecases/executeLinkAction.js';
+import type { ExecuteCalendarActionResult } from '../domain/usecases/executeCalendarAction.js';
 import type {
   RetryResult,
   RetryPendingActionsUseCase,
@@ -573,6 +621,27 @@ export function createFakeExecuteLinkActionUseCase(config?: {
   };
 }
 
+export type FakeExecuteCalendarActionUseCase = (
+  actionId: string
+) => Promise<Result<ExecuteCalendarActionResult, Error>>;
+
+export function createFakeExecuteCalendarActionUseCase(config?: {
+  failWithError?: Error;
+  returnResult?: ExecuteCalendarActionResult;
+}): FakeExecuteCalendarActionUseCase {
+  return async (_actionId: string): Promise<Result<ExecuteCalendarActionResult, Error>> => {
+    if (config?.failWithError !== undefined) {
+      return err(config.failWithError);
+    }
+    return ok(
+      config?.returnResult ?? {
+        status: 'completed',
+        resource_url: '/#/calendar/event-123',
+      }
+    );
+  };
+}
+
 export function createFakeRetryPendingActionsUseCase(config?: {
   returnResult?: RetryResult;
 }): RetryPendingActionsUseCase {
@@ -603,6 +672,10 @@ import {
   createHandleLinkActionUseCase,
   type HandleLinkActionUseCase,
 } from '../domain/usecases/handleLinkAction.js';
+import {
+  createHandleCalendarActionUseCase,
+  type HandleCalendarActionUseCase,
+} from '../domain/usecases/handleCalendarAction.js';
 
 export function createFakeServices(deps: {
   actionServiceClient: FakeActionServiceClient;
@@ -614,12 +687,14 @@ export function createFakeServices(deps: {
   todosServiceClient?: FakeTodosServiceClient;
   notesServiceClient?: FakeNotesServiceClient;
   bookmarksServiceClient?: FakeBookmarksServiceClient;
+  calendarServiceClient?: FakeCalendarServiceClient;
   actionEventPublisher?: FakeActionEventPublisher;
   whatsappPublisher?: FakeWhatsAppSendPublisher;
   executeResearchActionUseCase?: FakeExecuteResearchActionUseCase;
   executeTodoActionUseCase?: FakeExecuteTodoActionUseCase;
   executeNoteActionUseCase?: FakeExecuteNoteActionUseCase;
   executeLinkActionUseCase?: FakeExecuteLinkActionUseCase;
+  executeCalendarActionUseCase?: FakeExecuteCalendarActionUseCase;
   retryPendingActionsUseCase?: RetryPendingActionsUseCase;
   changeActionTypeUseCase?: ChangeActionTypeUseCase;
 }): Services {
@@ -631,6 +706,7 @@ export function createFakeServices(deps: {
   const todosServiceClient = deps.todosServiceClient ?? new FakeTodosServiceClient();
   const notesServiceClient = deps.notesServiceClient ?? new FakeNotesServiceClient();
   const bookmarksServiceClient = deps.bookmarksServiceClient ?? new FakeBookmarksServiceClient();
+  const calendarServiceClient = deps.calendarServiceClient ?? new FakeCalendarServiceClient();
 
   const silentLogger = pino({ level: 'silent' });
 
@@ -663,6 +739,14 @@ export function createFakeServices(deps: {
     logger: silentLogger,
   });
 
+  const handleCalendarActionUseCase: HandleCalendarActionUseCase =
+    createHandleCalendarActionUseCase({
+      actionServiceClient: deps.actionServiceClient,
+      whatsappPublisher,
+      webAppUrl: 'http://test.app',
+      logger: silentLogger,
+    });
+
   const changeActionTypeUseCase: ChangeActionTypeUseCase =
     deps.changeActionTypeUseCase ??
     createChangeActionTypeUseCase({
@@ -682,17 +766,21 @@ export function createFakeServices(deps: {
     todosServiceClient,
     notesServiceClient,
     bookmarksServiceClient,
+    calendarServiceClient,
     actionEventPublisher: deps.actionEventPublisher ?? new FakeActionEventPublisher(),
     whatsappPublisher,
     handleResearchActionUseCase,
     handleTodoActionUseCase,
     handleNoteActionUseCase,
     handleLinkActionUseCase,
+    handleCalendarActionUseCase,
     executeResearchActionUseCase:
       deps.executeResearchActionUseCase ?? createFakeExecuteResearchActionUseCase(),
     executeTodoActionUseCase: deps.executeTodoActionUseCase ?? createFakeExecuteTodoActionUseCase(),
     executeNoteActionUseCase: deps.executeNoteActionUseCase ?? createFakeExecuteNoteActionUseCase(),
     executeLinkActionUseCase: deps.executeLinkActionUseCase ?? createFakeExecuteLinkActionUseCase(),
+    executeCalendarActionUseCase:
+      deps.executeCalendarActionUseCase ?? createFakeExecuteCalendarActionUseCase(),
     retryPendingActionsUseCase:
       deps.retryPendingActionsUseCase ?? createFakeRetryPendingActionsUseCase(),
     changeActionTypeUseCase,
@@ -700,5 +788,6 @@ export function createFakeServices(deps: {
     todo: handleTodoActionUseCase,
     note: handleNoteActionUseCase,
     link: handleLinkActionUseCase,
+    calendar: handleCalendarActionUseCase,
   };
 }
