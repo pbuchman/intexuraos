@@ -49,8 +49,8 @@ function providerToKeyField(provider: LlmProvider) {
       return 'anthropic';
     case LlmProviders.Perplexity:
       return 'perplexity';
-    case LlmProviders.Zhipu:
-      return 'zhipu';
+    case LlmProviders.Zai:
+      return 'zai';
   }
 }
 
