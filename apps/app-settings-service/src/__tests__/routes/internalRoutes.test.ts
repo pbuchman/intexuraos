@@ -54,6 +54,19 @@ describe('internalRoutes', () => {
     updatedAt: '2026-01-05T12:00:00Z',
   };
 
+  const mockZhipuPricing: ProviderPricing = {
+    provider: LlmProviders.Zhipu,
+    models: {
+      [LlmModels.Glm47]: {
+        inputPricePerMillion: 0.6,
+        outputPricePerMillion: 2.2,
+        cacheReadPricePerMillion: 0.11,
+        webSearchCostPerCall: 0.01,
+      },
+    },
+    updatedAt: '2026-01-13T12:00:00Z',
+  };
+
   const fakePricingRepository = {
     getByProvider: vi.fn(),
   };
@@ -88,6 +101,8 @@ describe('internalRoutes', () => {
             return Promise.resolve(mockAnthropicPricing);
           case 'perplexity':
             return Promise.resolve(mockPerplexityPricing);
+          case 'zhipu':
+            return Promise.resolve(mockZhipuPricing);
           default:
             return Promise.resolve(null);
         }
@@ -111,6 +126,7 @@ describe('internalRoutes', () => {
       expect(body.data.openai.provider).toBe(LlmProviders.OpenAI);
       expect(body.data.anthropic.provider).toBe(LlmProviders.Anthropic);
       expect(body.data.perplexity.provider).toBe(LlmProviders.Perplexity);
+      expect(body.data.zhipu.provider).toBe(LlmProviders.Zhipu);
       expect(body.data.google.models[LlmModels.Gemini25Pro].inputPricePerMillion).toBe(1.25);
 
       await app.close();
@@ -158,6 +174,8 @@ describe('internalRoutes', () => {
             return Promise.resolve(null); // Missing
           case 'perplexity':
             return Promise.resolve(mockPerplexityPricing);
+          case 'zhipu':
+            return Promise.resolve(mockZhipuPricing);
           default:
             return Promise.resolve(null);
         }
@@ -216,6 +234,8 @@ describe('internalRoutes', () => {
             return Promise.resolve(mockAnthropicPricing);
           case 'perplexity':
             return Promise.resolve(mockPerplexityPricing);
+          case 'zhipu':
+            return Promise.resolve(mockZhipuPricing);
           default:
             return Promise.resolve(null);
         }
@@ -250,6 +270,8 @@ describe('internalRoutes', () => {
             return Promise.resolve(mockAnthropicPricing);
           case 'perplexity':
             return Promise.resolve(mockPerplexityPricing);
+          case 'zhipu':
+            return Promise.resolve(mockZhipuPricing);
           default:
             return Promise.resolve(null);
         }
@@ -284,6 +306,8 @@ describe('internalRoutes', () => {
             return Promise.resolve(mockAnthropicPricing);
           case 'perplexity':
             return Promise.resolve(null); // Missing
+          case 'zhipu':
+            return Promise.resolve(mockZhipuPricing);
           default:
             return Promise.resolve(null);
         }
@@ -303,6 +327,42 @@ describe('internalRoutes', () => {
       expect(response.statusCode).toBe(500);
       const body = JSON.parse(response.body);
       expect(body.error).toContain('perplexity');
+
+      await app.close();
+    });
+
+    it('returns 500 when zhipu pricing is missing', async () => {
+      fakePricingRepository.getByProvider.mockImplementation((provider: string) => {
+        switch (provider) {
+          case 'google':
+            return Promise.resolve(mockGooglePricing);
+          case 'openai':
+            return Promise.resolve(mockOpenaiPricing);
+          case 'anthropic':
+            return Promise.resolve(mockAnthropicPricing);
+          case 'perplexity':
+            return Promise.resolve(mockPerplexityPricing);
+          case 'zhipu':
+            return Promise.resolve(null); // Missing
+          default:
+            return Promise.resolve(null);
+        }
+      });
+
+      const { buildServer } = await import('../../server.js');
+      const app = await buildServer();
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/internal/settings/pricing',
+        headers: {
+          'x-internal-auth': 'test-token',
+        },
+      });
+
+      expect(response.statusCode).toBe(500);
+      const body = JSON.parse(response.body);
+      expect(body.error).toContain('zhipu');
 
       await app.close();
     });

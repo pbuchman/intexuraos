@@ -17,8 +17,9 @@ const REQUIRED_ENV = [
 
 validateRequiredEnv(REQUIRED_ENV);
 
+const sentryDsn = process.env['INTEXURAOS_SENTRY_DSN'];
 initSentry({
-  dsn: process.env['INTEXURAOS_SENTRY_DSN'],
+  ...(sentryDsn !== undefined && { dsn: sentryDsn }),
   environment: process.env['INTEXURAOS_ENVIRONMENT'] ?? 'development',
   serviceName: 'app-settings-service',
 });
@@ -34,11 +35,12 @@ async function validateAllModelPricing(): Promise<void> {
   const { pricingRepository } = getServices();
 
   // Fetch pricing for all providers
-  const [google, openai, anthropic, perplexity] = await Promise.all([
+  const [google, openai, anthropic, perplexity, zhipu] = await Promise.all([
     pricingRepository.getByProvider(LlmProviders.Google),
     pricingRepository.getByProvider(LlmProviders.OpenAI),
     pricingRepository.getByProvider(LlmProviders.Anthropic),
     pricingRepository.getByProvider(LlmProviders.Perplexity),
+    pricingRepository.getByProvider(LlmProviders.Zhipu),
   ]);
 
   // Build a map of all models that have pricing
@@ -61,6 +63,11 @@ async function validateAllModelPricing(): Promise<void> {
   }
   if (perplexity !== null) {
     for (const model of Object.keys(perplexity.models)) {
+      modelsWithPricing.add(model);
+    }
+  }
+  if (zhipu !== null) {
+    for (const model of Object.keys(zhipu.models)) {
       modelsWithPricing.add(model);
     }
   }
