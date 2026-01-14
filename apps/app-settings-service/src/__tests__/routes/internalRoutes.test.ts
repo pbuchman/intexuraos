@@ -60,7 +60,6 @@ describe('internalRoutes', () => {
       [LlmModels.Glm47]: {
         inputPricePerMillion: 0.6,
         outputPricePerMillion: 2.2,
-        cacheReadPricePerMillion: 0.11,
         webSearchCostPerCall: 0.01,
       },
     },
