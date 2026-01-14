@@ -1,21 +1,255 @@
 # IntexuraOS Changelog
 
-**Current Version:** 0.0.4
+**Current Version:** 0.0.5
 
 This changelog provides a comprehensive record of IntexuraOS development.
 
 **Version Coverage:**
 
-- This changelog includes all changes from initial commit (December 28, 2025) through version 0.0.3 (January 3, 2026)
-- Total commits analyzed: 444
-- Total files: 7,209
-- Services/Apps: 14
-- Shared packages: 16
-- Test files: 914
+- This changelog includes all changes from initial commit (December 28, 2025) through version 0.0.5 (January 14, 2026)
+- Total commits analyzed: 670
+- Total files: 8,500+
+- Services/Apps: 20
+- Shared packages: 18
+- Test files: 1,000+
 
 ---
 
-## [0.0.4] - 2026-01-03
+## 2026-01-14
+
+### Added
+
+**New Services**
+
+- Todos Agent - Task management with Pub/Sub processing and user CRUD operations
+- Notes Agent - Note-taking with tags, sources, and full CRUD operations
+- App Settings Service - Centralized LLM pricing configuration serving
+- Image Service - Image prompt generation and image generation via multiple LLM providers
+- Data Insights Agent - Composite feeds, visualizations, and custom data source management
+- Web Agent - Internal link preview generation service
+- Bookmarks Agent - Bookmark management with conflict resolution and Pub/Sub processing
+
+**New Web UI Pages**
+
+- DataInsightsPage - Composite feeds and data insights visualization
+- CompositeFeedVisualizationsPage - Vega-based chart visualizations
+- BookmarksListPage - Bookmark management interface
+- NotesListPage - Notes management interface
+- TodosListPage - Tasks/todos management interface
+- CalendarPage - Calendar integration interface
+- GoogleCalendarConnectionPage - Google Calendar OAuth connection flow
+- LlmCostsPage - LLM usage cost tracking and visualization
+- LlmPricingPage - LLM pricing configuration display
+- ShareHistoryPage - Share history tracking
+
+**New Web UI Components**
+
+- ModelSelector - Configurable LLM model selection component
+- VegaChart - Vega-lite chart rendering component
+- VisualizationCard - Data visualization display card
+- DataInsightCard - Data insight summary card
+- ChartPreview - Chart definition preview component
+- BookmarkConflictModal - Bookmark conflict resolution modal
+
+**Research & Synthesis Enhancements**
+
+- Two-phase context inference for research and synthesis prompts
+- Gemini-generated collapsible input context labels
+- Real-time input context display during research processing
+- Synthesis model name display in report headers
+- Research favorite field and sorting indexes
+- Synthesis link text using descriptive names instead of model identifiers
+- Extended research response fields with input contexts
+
+**LLM Features**
+
+- Centralized LLM pricing package (llm-pricing) for cost calculation
+- LLM audit package (llm-audit) for usage tracking and validation
+- LLM usage tracking with callType categorization
+- Extended pricing fields for image generation models
+- Support for GLM-4 (zai provider) pricing
+- GPT-5.2 pricing support
+- Perplexity pricing updates
+- Image generation via Gemini native (nano-banana-pro/gemini-2.5-flash-image)
+- User-friendly LLM error message formatting
+- Model priority logic for image generation providers
+
+**API Endpoints - Image Service**
+
+- POST /internal/images/prompts/generate - Generate image prompts from text
+- POST /internal/images/generate - Generate images via LLM providers
+- DELETE /internal/images/:id - Delete stored images
+
+**API Endpoints - App Settings Service**
+
+- GET /settings/pricing - Get LLM pricing for all providers
+- GET /settings/usage-costs - Get LLM usage costs over time
+
+**API Endpoints - Notes Agent**
+
+- POST /notes - Create new note
+- GET /notes - List user notes
+- GET /notes/:id - Get specific note
+- PATCH /notes/:id - Update note
+- DELETE /notes/:id - Delete note
+
+**API Endpoints - Todos Agent**
+
+- POST /internal/todos/pubsub/todos-processing - Process todo events from PubSub
+
+**API Endpoints - Data Insights Agent**
+
+- GET /data-insights - List data insights
+- GET /data-insights/:id - Get specific insight
+- POST /data-insights - Create new insight
+- PATCH /data-insights/:id - Update insight
+- DELETE /data-insights/:id - Delete insight
+- GET /internal/data-insights/filters - Get available filters
+- GET /visualizations - List visualizations
+- GET /visualizations/:id - Get specific visualization
+- POST /visualizations - Create visualization
+- PATCH /visualizations/:id - Update visualization
+- DELETE /visualizations/:id - Delete visualization
+- GET /composite-feeds - List composite feeds
+- GET /composite-feeds/:id - Get specific composite feed
+- POST /composite-feeds - Create composite feed
+- PATCH /composite-feeds/:id - Update composite feed
+- DELETE /composite-feeds/:id - Delete composite feed
+- GET /data-sources - List custom data sources
+- POST /data-sources - Create custom data source
+- PATCH /data-sources/:id - Update data source
+- DELETE /data-sources/:id - Delete data source
+
+**API Endpoints - Bookmarks Agent**
+
+- GET /bookmarks - List user bookmarks
+- POST /bookmarks - Create bookmark
+- PATCH /bookmarks/:id - Update bookmark
+- DELETE /bookmarks/:id - Delete bookmark
+- GET /internal/bookmarks/filters - Get available filters
+- POST /internal/bookmarks/pubsub/bookmarks-processing - Process bookmark events
+
+**API Endpoints - Web Agent**
+
+- POST /internal/link-previews/generate - Generate link previews (internal)
+
+**API Endpoints - Research Agent (Enhanced)**
+
+- GET /internal/research/filters - Get available research filters
+- Internal image deletion endpoint for research media cleanup
+
+**API Endpoints - User Service (Enhanced)**
+
+- Success notification configuration for actions
+
+**API Endpoints - Actions Agent (Enhanced)**
+
+- Action transition logging with type change use case
+- GET /internal/actions/filters - Get available action filters
+
+**Other Features**
+
+- PWA Share Target redirect for HashRouter compatibility
+- Auto-generated notification filter IDs
+- API key validation success notifications
+- Custom public base URL support for image uploads
+- CDN cache invalidation for index.html
+- Web app URL rewrite for SPA fallback
+
+### Changed
+
+**Service Renames**
+
+- llm-orchestrator → research-agent (more descriptive naming)
+- commands-router → commands-agent (consistent agent naming)
+- data-insights-service → data-insights-agent (consistent agent naming)
+
+**Domain Structure**
+
+- whatsapp-service domain reorganized from inbox to whatsapp for consistency
+- Import path refactoring for note and todo repositories
+
+**Research Flow**
+
+- Research/synthesis prompts updated with improved context handling
+- Research settings removed from user service client
+- LLM synthesis results now include usage metrics
+- Token and cost data omitted from copied LLM results
+
+**UI/UX Improvements**
+
+- Model selection UI refactored for better UX
+- Mobile-optimized components (CommandItem, ActionItem, Filter button)
+- Mobile-optimized header and tab navigation
+- Inbox page component structure improvements
+- Sidebar navigation updates
+
+**Terraform**
+
+- Web app backend buckets URL rewrite configuration
+- SSL certificate resource name prefix updated
+- Generated images bucket module added
+
+### Fixed
+
+- Crypto.randomUUID type conflicts resolved with explicit imports
+- Package-lock.json sync issues for infra-perplexity
+- GPT-image-1 now handles both b64_json and url response formats
+- Nano-banana-pro uses Gemini native image generation
+- Environment variable inconsistencies across services
+- Test failures and improved coverage
+
+### Technical
+
+**Package Management**
+
+- Migrated from npm to pnpm for improved dependency management
+- Workspace configuration updated for pnpm compatibility
+
+**New Packages**
+
+- llm-pricing - Centralized LLM pricing data and cost calculation
+- llm-audit - LLM usage auditing and validation
+
+**Migrations**
+
+- 003_perplexity-pricing.mjs - Perplexity provider pricing
+- 004_llm-pricing-extended-fields.mjs - Extended pricing fields
+- 005_llm-pricing-update-jan-2026.mjs - January 2026 pricing updates
+- 006_image-generation-pricing.mjs - Image generation model pricing
+- 007_gpt-5.2-pricing-fix.mjs - GPT-5.2 pricing correction
+- 008_commands-rules-composite-feeds-index.mjs - Composite index
+- 009_llm-pricing-sync-jan-2026.mjs - Pricing synchronization
+
+**CI/CD**
+
+- Cloud Build deployment workflow optimization with batch mode
+- Smart dispatch script for affected service detection
+- Per-service deployment triggers
+- GitHub workflows for Claude Code integration
+- CI scripts enhanced (verify-connections.sh, verify-no-console.mjs)
+
+**Development Tools**
+
+- LLM pricing update automation script
+- Release notes generation script
+- Connection verification script
+
+**Documentation**
+
+- Research flow architecture documentation
+- LLM usage and pricing documentation
+- Claude Code cloud development setup guide
+- WhatsApp service domain documentation
+
+**Infrastructure**
+
+- Firestore composite indexes for multiple collections
+- Service account updates for pricing providers
+- Cloud Build module refactoring
+- Web app Terraform module enhancements
+
+---
 
 ### Added
 
