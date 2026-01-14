@@ -156,26 +156,29 @@ export function isUsageLoggingEnabled(): boolean {
 export async function logUsage(params: UsageLogParams): Promise<void> {
   if (!isUsageLoggingEnabled()) return;
 
-  // Structured log for Cloud Logging (visible in real-time)
-  // eslint-disable-next-line no-console
-  console.info(
-    JSON.stringify({
-      severity: 'INFO',
-      message: 'LLM usage logged',
-      llmUsage: {
-        userId: params.userId,
-        provider: params.provider,
-        model: params.model,
-        callType: params.callType,
-        inputTokens: params.usage.inputTokens,
-        outputTokens: params.usage.outputTokens,
-        totalTokens: params.usage.totalTokens,
-        costUsd: params.usage.costUsd,
-        success: params.success,
-        ...(params.errorMessage !== undefined && { errorMessage: params.errorMessage }),
-      },
-    })
-  );
+  // Skip console logging in tests
+  if (process.env['NODE_ENV'] !== 'test') {
+    // Structured log for Cloud Logging (visible in real-time)
+    // eslint-disable-next-line no-console
+    console.info(
+      JSON.stringify({
+        severity: 'INFO',
+        message: 'LLM usage logged',
+        llmUsage: {
+          userId: params.userId,
+          provider: params.provider,
+          model: params.model,
+          callType: params.callType,
+          inputTokens: params.usage.inputTokens,
+          outputTokens: params.usage.outputTokens,
+          totalTokens: params.usage.totalTokens,
+          costUsd: params.usage.costUsd,
+          success: params.success,
+          ...(params.errorMessage !== undefined && { errorMessage: params.errorMessage }),
+        },
+      })
+    );
+  }
 
   try {
     const firestore = getFirestore();

@@ -4,6 +4,7 @@
  *
  * Structure: llm_usage_stats/{model}/by_call_type/{callType}/by_period/{YYYY-MM-DD}/by_user/{userId}
  */
+import { getLogLevel } from '@intexuraos/common-core';
 import { getFirestore } from '@intexuraos/infra-firestore';
 import pino from 'pino';
 import type {
@@ -14,9 +15,7 @@ import type {
   UsageStatsRepository,
 } from '../../domain/ports/index.js';
 
-const logger = pino({
-  name: 'FirestoreUsageStatsRepository',
-});
+const logger = pino({ name: 'FirestoreUsageStatsRepository', level: getLogLevel() });
 
 interface UserUsageDoc {
   userId: string;

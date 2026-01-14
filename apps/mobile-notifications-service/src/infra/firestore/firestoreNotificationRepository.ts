@@ -2,7 +2,7 @@
  * Firestore implementation of NotificationRepository.
  * Stores mobile notifications with cursor-based pagination.
  */
-import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
+import { err, getErrorMessage, getLogLevel, ok, type Result } from '@intexuraos/common-core';
 import { getFirestore } from '@intexuraos/infra-firestore';
 import pino from 'pino';
 import type {
@@ -14,9 +14,7 @@ import type {
   RepositoryError,
 } from '../../domain/notifications/index.js';
 
-const logger = pino({
-  name: 'FirestoreNotificationRepository',
-});
+const logger = pino({ name: 'FirestoreNotificationRepository', level: getLogLevel() });
 
 const COLLECTION_NAME = 'mobile_notifications';
 
