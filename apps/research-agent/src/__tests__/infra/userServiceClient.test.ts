@@ -48,6 +48,27 @@ describe('UserServiceClient', () => {
       }
     });
 
+    it('returns zai API key when present', async () => {
+      nock(INTEXURAOS_USER_SERVICE_URL)
+        .get('/internal/users/user-123/llm-keys')
+        .matchHeader('X-Internal-Auth', INTERNAL_AUTH_TOKEN)
+        .reply(200, {
+          zai: 'zai-api-key',
+        });
+
+      const client = createUserServiceClient({
+        baseUrl: INTEXURAOS_USER_SERVICE_URL,
+        internalAuthToken: INTERNAL_AUTH_TOKEN,
+      });
+
+      const result = await client.getApiKeys('user-123');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.zai).toBe('zai-api-key');
+      }
+    });
+
     it('returns empty object when no keys exist', async () => {
       nock(INTEXURAOS_USER_SERVICE_URL)
         .get('/internal/users/user-123/llm-keys')
