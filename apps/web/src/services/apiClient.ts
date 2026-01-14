@@ -16,7 +16,10 @@ interface RequestOptions {
   method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
   body?: unknown;
   headers?: Record<string, string>;
+  timeout?: number; // Timeout in milliseconds (default: 30000ms)
 }
+
+const DEFAULT_TIMEOUT_MS = 30000;
 
 export async function apiRequest<T>(
   baseUrl: string,
@@ -24,7 +27,13 @@ export async function apiRequest<T>(
   accessToken: string,
   options: RequestOptions = {}
 ): Promise<T> {
-  const { method = 'GET', body, headers = {} } = options;
+  const { method = 'GET', body, headers = {}, timeout = DEFAULT_TIMEOUT_MS } = options;
+
+  // AbortController for timeout handling
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => {
+    controller.abort();
+  }, timeout);
 
   const url = `${baseUrl}${path}`;
   const requestHeaders: Record<string, string> = {
@@ -40,6 +49,7 @@ export async function apiRequest<T>(
   const fetchOptions: RequestInit = {
     method,
     headers: requestHeaders,
+    signal: controller.signal,
     // Disable caching to always get fresh data
     cache: 'no-store',
   };
@@ -48,7 +58,18 @@ export async function apiRequest<T>(
     fetchOptions.body = JSON.stringify(body);
   }
 
-  const response = await fetch(url, fetchOptions);
+  let response: Response;
+  try {
+    response = await fetch(url, fetchOptions);
+  } catch (err) {
+    // Rethrow with clearer message for abort/timeout errors
+    if (err instanceof Error && err.name === 'AbortError') {
+      throw new ApiError('TIMEOUT', 'Request timed out. Please check your connection and try again.', 408);
+    }
+    throw err;
+  } finally {
+    clearTimeout(timeoutId);
+  }
 
   // Handle 204 No Content - successful response with no body
   if (response.status === 204) {

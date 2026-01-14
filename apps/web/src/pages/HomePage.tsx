@@ -106,7 +106,9 @@ function DemoSection(): React.JSX.Element {
     const timer = setInterval(() => {
       setStep((prev) => (prev + 1) % 4);
     }, 2000);
-    return () => clearInterval(timer);
+    return (): void => {
+      clearInterval(timer);
+    };
   }, []);
 
   return (
