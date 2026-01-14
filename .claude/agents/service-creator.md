@@ -52,13 +52,26 @@ You are an elite service architecture specialist for the IntexuraOS monorepo. Yo
    - Generate required files:
      - `src/index.ts` with startup validation
      - `src/server.ts` with Fastify setup, OpenAPI config, CORS
-     - `src/services.ts` with DI container
+     - `src/services.ts` with DI container (see **Logging Patterns** below)
      - `src/routes/healthRoutes.ts`
      - `src/routes/internalRoutes.ts` (if needed)
      - `package.json` with correct dependencies
      - `Dockerfile` with proper workspace setup
      - `tsconfig.json` extending root config
      - `.env.example` documenting required variables
+
+   **Logging Patterns (CRITICAL):**
+
+   When generating `src/services.ts`, follow the logging patterns documented in `docs/patterns/logging.md`:
+
+   | Pattern        | When to Use                        | Example                                               |
+   | -------------- | ---------------------------------- | ----------------------------------------------------- |
+   | Module-level   | Infra adapters with single purpose | `const logger = pino({ name: 'whatsapp-cloud-api' })` |
+   | Factory config | HTTP clients for internal services | `logger: pino({ name: 'todosClient' })` in config     |
+   | Constructor    | Reusable packages                  | `new OpenGraphFetcher(undefined, logger)`             |
+   | Use case deps  | Domain use cases                   | `createProcessCommandUseCase({ logger })`             |
+
+   **Verification:** After service creation, run `pnpm run verify:logging` to ensure factory functions with `logger?: Logger` are called with a logger in production.
 
 6. **Update Monorepo Configuration**
    - Add to root `tsconfig.json` project references

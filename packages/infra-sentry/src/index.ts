@@ -36,9 +36,5 @@
  */
 
 export { initSentry, type SentryConfig } from './init.js';
-export {
-  createSentryStream,
-  sendToSentry,
-  isSentryConfigured,
-} from './transport.js';
+export { createSentryStream, sendToSentry, isSentryConfigured } from './transport.js';
 export { setupSentryErrorHandler } from './fastify.js';
