@@ -488,4 +488,30 @@ describe('FirestoreUsageStatsRepository', () => {
     expect(result.byCallType[0]?.percentage).toBe(0);
     expect(result.byCallType[1]?.percentage).toBe(0);
   });
+
+  it('throws error when aggregation fails', async () => {
+    const docs = [
+      createMockDoc('gemini', 'research', '2026-01-08', 'user-123', {
+        totalCalls: 10,
+        successfulCalls: 10,
+        inputTokens: 5000,
+        outputTokens: 2500,
+        costUsd: 1.0,
+      }),
+    ];
+    mockGet.mockResolvedValue({ docs });
+
+    const { FirestoreUsageStatsRepository } = await import(
+      '../../infra/firestore/usageStatsRepository.js'
+    );
+    const repo = new FirestoreUsageStatsRepository();
+
+    // Spy on the private aggregateRecords method to make it throw
+    const aggregateSpy = vi.spyOn(repo as { aggregateRecords: (records: unknown[]) => unknown }, 'aggregateRecords');
+    aggregateSpy.mockImplementationOnce(() => {
+      throw new Error('Aggregation failed');
+    });
+
+    await expect(repo.getUserCosts('user-123')).rejects.toThrow('Aggregation failed');
+  });
 });
