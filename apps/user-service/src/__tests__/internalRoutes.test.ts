@@ -8,6 +8,7 @@ import type { FastifyInstance } from 'fastify';
 import Fastify from 'fastify';
 import * as jose from 'jose';
 import { clearJwksCache } from '@intexuraos/common-http';
+import { LlmModels } from '@intexuraos/llm-contract';
 import { buildServer } from '../server.js';
 import { resetServices, setServices } from '../services.js';
 import {
@@ -626,7 +627,7 @@ describe('Internal Routes', () => {
       fakeSettingsRepo.setSettings({
         userId,
         llmPreferences: {
-          defaultModel: 'gemini-2.5-flash',
+          defaultModel: LlmModels.Gemini25Flash,
         },
         createdAt: '2025-01-01T00:00:00.000Z',
         updatedAt: '2025-01-01T00:00:00.000Z',
@@ -646,7 +647,7 @@ describe('Internal Routes', () => {
       const body = JSON.parse(response.body) as {
         llmPreferences?: { defaultModel: string };
       };
-      expect(body.llmPreferences?.defaultModel).toBe('gemini-2.5-flash');
+      expect(body.llmPreferences?.defaultModel).toBe(LlmModels.Gemini25Flash);
     });
 
     it('returns undefined llmPreferences when user has no settings', async () => {
