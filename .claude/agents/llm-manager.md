@@ -107,8 +107,8 @@ For each model, extract:
 | `outputPricePerMillion`    | Cost per 1M output tokens                       |
 | `cacheReadMultiplier`      | Discount for cached tokens (0.1 = 90% off)      |
 | `cacheWriteMultiplier`     | Premium for cache creation (1.25 = 25% extra)   |
-| `webSearchCostPerCall`     | Per-search cost (Anthropic, OpenAI, Zai)      |
-| `cacheReadPricePerMillion` | Cached input price (Google, Zai)              |
+| `webSearchCostPerCall`     | Per-search cost (Anthropic, OpenAI, Zai)        |
+| `cacheReadPricePerMillion` | Cached input price (Google, Zai)                |
 | `groundingCostPerRequest`  | Per-request grounding fee (Google)              |
 | `imagePricing`             | Per-image costs by size                         |
 | `useProviderCost`          | Use provider's cost field directly (Perplexity) |
@@ -371,6 +371,6 @@ ppnpm run migrate:status  # Should show new migration as pending
 | OpenAI     | o4-mini-deep-research, gpt-5.2, gpt-4o-mini, gpt-image-1                        | Research, images                    |
 | Anthropic  | claude-opus-4-5-20251101, claude-sonnet-4-5-20250929, claude-3-5-haiku-20241022 | Research                            |
 | Perplexity | sonar, sonar-pro, sonar-deep-research                                           | Research                            |
-| Zai      | glm-4.7                                                                         | Research, validation                |
+| Zai        | glm-4.7                                                                         | Research, validation                |
 
 This registry should match exactly what's in `packages/llm-contract/src/supportedModels.ts`.

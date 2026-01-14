@@ -13,6 +13,7 @@ import type { EventPublisherPort, PublishError } from '../domain/ports/eventPubl
 import type { ActionCreatedEvent } from '../domain/events/actionCreatedEvent.js';
 import type { UserServiceClient, UserApiKeys, UserServiceError } from '../infra/user/index.js';
 import type { ActionsAgentClient, CreateActionParams } from '../infra/actionsAgent/client.js';
+import type { LlmGenerateClient } from '@intexuraos/llm-factory';
 import { createProcessCommandUseCase } from '../domain/usecases/processCommand.js';
 import { createRetryPendingCommandsUseCase } from '../domain/usecases/retryPendingCommands.js';
 import type { Services } from '../services.js';
@@ -141,6 +142,7 @@ export class FakeClassifier implements Classifier {
 export class FakeUserServiceClient implements UserServiceClient {
   private apiKeys = new Map<string, UserApiKeys>();
   private failNext = false;
+  public llmClientResult?: Result<LlmGenerateClient, UserServiceError>;
 
   setApiKeys(userId: string, keys: UserApiKeys): void {
     this.apiKeys.set(userId, keys);
@@ -156,6 +158,18 @@ export class FakeUserServiceClient implements UserServiceClient {
       return err({ code: 'NETWORK_ERROR', message: 'Simulated network error' });
     }
     return ok(this.apiKeys.get(userId) ?? {});
+  }
+
+  async getLlmClient(_userId: string): Promise<Result<LlmGenerateClient, UserServiceError>> {
+    if (this.failNext) {
+      this.failNext = false;
+      return err({ code: 'NETWORK_ERROR', message: 'Simulated network error' });
+    }
+    if (this.llmClientResult) {
+      return this.llmClientResult;
+    }
+    // Default: return NO_API_KEY error
+    return err({ code: 'NO_API_KEY', message: 'No API key configured' });
   }
 }
 

@@ -76,7 +76,7 @@ describe('todoItemExtractionService', () => {
         return {
           getLlmClient: vi
             .fn()
-            .mockResolvedValue(err({ code: 'UNSUPPORTED_MODEL' as const, message: 'Unsupported model' })),
+            .mockResolvedValue(err({ code: 'INVALID_MODEL' as const, message: 'Invalid model' })),
           getGeminiApiKey: vi.fn().mockResolvedValue(ok('test-api-key')),
         };
     }

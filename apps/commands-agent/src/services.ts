@@ -16,6 +16,8 @@ import { createGeminiClassifier } from './infra/gemini/classifier.js';
 import { createActionEventPublisher } from './infra/pubsub/index.js';
 import { createUserServiceClient, type UserServiceClient } from './infra/user/index.js';
 import { createActionsAgentClient, type ActionsAgentClient } from './infra/actionsAgent/client.js';
+import { fetchAllPricing, createPricingContext } from '@intexuraos/llm-pricing';
+import { LlmModels, type FastModel } from '@intexuraos/llm-contract';
 
 export interface Services {
   commandRepository: CommandRepository;
@@ -32,6 +34,7 @@ export interface ServiceConfig {
   actionsAgentUrl: string;
   internalAuthToken: string;
   gcpProjectId: string;
+  appSettingsServiceUrl: string;
 }
 
 let container: Services | null = null;
@@ -46,8 +49,23 @@ const CLASSIFIER_PRICING: ModelPricing = {
   groundingCostPerRequest: 0.035,
 };
 
-export function initServices(config: ServiceConfig): void {
+export async function initServices(config: ServiceConfig): Promise<void> {
   const logger = pino({ name: 'commands-agent' });
+
+  const pricingResult = await fetchAllPricing(
+    config.appSettingsServiceUrl,
+    config.internalAuthToken
+  );
+
+  if (!pricingResult.ok) {
+    throw new Error(`Failed to fetch pricing: ${pricingResult.error.message}`);
+  }
+
+  // Support all fast models for command processing
+  const pricingContext = createPricingContext(pricingResult.value, [
+    LlmModels.Gemini25Flash,
+    LlmModels.Glm47,
+  ] as FastModel[]);
 
   const commandRepository = createFirestoreCommandRepository();
   const actionsAgentClient = createActionsAgentClient({
@@ -60,6 +78,7 @@ export function initServices(config: ServiceConfig): void {
   const userServiceClient = createUserServiceClient({
     baseUrl: config.userServiceUrl,
     internalAuthToken: config.internalAuthToken,
+    pricingContext,
     logger: pino({ name: 'userServiceClient' }),
   });
   const eventPublisher = createActionEventPublisher({ projectId: config.gcpProjectId });
