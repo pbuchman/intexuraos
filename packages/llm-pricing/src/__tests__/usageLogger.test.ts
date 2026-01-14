@@ -234,6 +234,8 @@ describe('usageLogger', () => {
     it('includes errorMessage in log when provided', async () => {
       mockTransaction.get.mockResolvedValue({ exists: false, data: () => undefined });
       const consoleSpy = vi.spyOn(console, 'info').mockImplementation(() => undefined);
+      const originalNodeEnv = process.env['NODE_ENV'];
+      process.env['NODE_ENV'] = 'development';
 
       await logUsage({ ...baseParams, success: false, errorMessage: 'API timeout error' });
 
@@ -241,6 +243,7 @@ describe('usageLogger', () => {
         expect.stringContaining('"errorMessage":"API timeout error"')
       );
       consoleSpy.mockRestore();
+      process.env['NODE_ENV'] = originalNodeEnv;
     });
 
     it('commits the batch', async () => {
