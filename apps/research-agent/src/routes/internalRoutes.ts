@@ -15,10 +15,6 @@ import {
   createDraftResearch,
   processResearch,
   runSynthesis,
-<<<<<<< HEAD
-  calculateAccurateCost,
-=======
->>>>>>> origin/development
   type ResearchModel,
 } from '../domain/research/index.js';
 import { formatLlmError } from '../domain/research/formatLlmError.js';

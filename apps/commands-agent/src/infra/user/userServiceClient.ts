@@ -1,7 +1,5 @@
 import type { Result } from '@intexuraos/common-core';
 import { err, getErrorMessage, ok } from '@intexuraos/common-core';
-<<<<<<< HEAD
-=======
 import {
   createLlmClient,
   type LlmClientConfig,
@@ -22,16 +20,12 @@ const defaultLogger = pino({
   level: process.env['LOG_LEVEL'] ?? 'info',
   name: 'userServiceClient',
 });
->>>>>>> origin/development
 
 export interface UserServiceConfig {
   baseUrl: string;
   internalAuthToken: string;
-<<<<<<< HEAD
-=======
   pricingContext: IPricingContext;
   logger?: Logger;
->>>>>>> origin/development
 }
 
 export interface UserApiKeys {
@@ -39,31 +33,15 @@ export interface UserApiKeys {
 }
 
 export interface UserServiceError {
-<<<<<<< HEAD
-  code: 'NETWORK_ERROR' | 'API_ERROR';
-=======
   code:
     | 'NETWORK_ERROR'
     | 'API_ERROR'
     | 'NO_API_KEY'
     | 'INVALID_MODEL';
->>>>>>> origin/development
   message: string;
 }
 
 export interface UserServiceClient {
-<<<<<<< HEAD
-  getApiKeys(userId: string): Promise<Result<UserApiKeys, UserServiceError>>;
-}
-
-export function createUserServiceClient(config: UserServiceConfig): UserServiceClient {
-  return {
-    async getApiKeys(userId: string): Promise<Result<UserApiKeys, UserServiceError>> {
-      const url = `${config.baseUrl}/internal/users/${userId}/llm-keys`;
-
-      try {
-        const response = await fetch(url, {
-=======
   /**
    * Get a ready-to-use LLM client based on user's settings.
    * Handles model selection, API key retrieval, and client creation.
@@ -216,41 +194,10 @@ export function createUserServiceClient(config: UserServiceConfig): UserServiceC
       let response: Response;
       try {
         response = await fetch(url, {
->>>>>>> origin/development
           headers: {
             'X-Internal-Auth': config.internalAuthToken,
           },
         });
-<<<<<<< HEAD
-
-        if (!response.ok) {
-          // Try to get error details from response body
-          let errorDetails = '';
-          try {
-            const body = await response.text();
-            errorDetails = body.length > 0 ? `: ${body.substring(0, 200)}` : '';
-          } catch {
-            // Ignore body read errors
-          }
-
-          return err({
-            code: 'API_ERROR',
-            message: `HTTP ${String(response.status)}${errorDetails}`,
-          });
-        }
-
-        const data = (await response.json()) as {
-          google?: string | null;
-        };
-
-        const result: UserApiKeys = {};
-        if (data.google !== null && data.google !== undefined) {
-          result.google = data.google;
-        }
-
-        return ok(result);
-      } catch (error) {
-=======
       } catch (error) {
         logger.error(
           {
@@ -259,14 +206,11 @@ export function createUserServiceClient(config: UserServiceConfig): UserServiceC
           },
           'Failed to fetch API keys'
         );
->>>>>>> origin/development
         return err({
           code: 'NETWORK_ERROR',
           message: getErrorMessage(error),
         });
       }
-<<<<<<< HEAD
-=======
 
       if (!response.ok) {
         let errorDetails = '';
@@ -310,7 +254,6 @@ export function createUserServiceClient(config: UserServiceConfig): UserServiceC
       );
 
       return ok(result);
->>>>>>> origin/development
     },
   };
 }

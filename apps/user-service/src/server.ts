@@ -17,11 +17,7 @@ import {
   checkSecrets,
   type HealthCheck,
 } from '@intexuraos/http-server';
-<<<<<<< HEAD
-import { setupSentryErrorHandler } from '@intexuraos/infra-sentry';
-=======
 import { createSentryStream, setupSentryErrorHandler } from '@intexuraos/infra-sentry';
->>>>>>> origin/development
 import { authRoutes } from './routes/routes.js';
 
 const SERVICE_NAME = 'user-service';

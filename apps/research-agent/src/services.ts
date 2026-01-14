@@ -53,10 +53,6 @@ export interface ShareConfig {
  */
 export interface ServiceContainer {
   researchRepo: ResearchRepository;
-<<<<<<< HEAD
-  pricingRepo: PricingRepository;
-=======
->>>>>>> origin/development
   pricingContext: IPricingContext;
   generateId: () => string;
   researchEventPublisher: ResearchEventPublisher;
@@ -219,10 +215,6 @@ export function initializeServices(pricingContext: IPricingContext): void {
 
   container = {
     researchRepo,
-<<<<<<< HEAD
-    pricingRepo,
-=======
->>>>>>> origin/development
     pricingContext,
     generateId: (): string => crypto.randomUUID(),
     researchEventPublisher,

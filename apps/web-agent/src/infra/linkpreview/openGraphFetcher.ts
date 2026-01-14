@@ -1,10 +1,7 @@
 import { err, ok, type Result } from '@intexuraos/common-core';
 import type { LinkPreviewFetcherPort } from '../../domain/linkpreview/ports/linkPreviewFetcher.js';
 import type { LinkPreview, LinkPreviewError } from '../../domain/linkpreview/models/LinkPreview.js';
-<<<<<<< HEAD
-=======
 import type { Logger } from 'pino';
->>>>>>> origin/development
 import * as cheerio from 'cheerio';
 import pino from 'pino';
 
@@ -59,13 +56,10 @@ function resolveImageUrl(imageUrl: string | undefined, baseUrl: string): string 
   }
 }
 
-<<<<<<< HEAD
-=======
 function createDefaultLogger(): Logger {
   return pino({ name: 'OpenGraphFetcher', level: 'info' });
 }
 
->>>>>>> origin/development
 export class OpenGraphFetcher implements LinkPreviewFetcherPort {
   private readonly config: OpenGraphFetcherConfig;
   private readonly logger: Logger;
@@ -128,11 +122,8 @@ export class OpenGraphFetcher implements LinkPreviewFetcherPort {
         });
       }
 
-<<<<<<< HEAD
-=======
       this.logger.info({ url, status: response.status }, 'HTTP request successful, reading body');
 
->>>>>>> origin/development
       const reader = response.body?.getReader();
       if (reader === undefined) {
         this.logger.error({ url }, 'No response body');

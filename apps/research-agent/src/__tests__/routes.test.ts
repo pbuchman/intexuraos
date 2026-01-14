@@ -75,10 +75,6 @@ describe('Research Routes - Unauthenticated', () => {
     const fakeLlmCallPublisher = new FakeLlmCallPublisher();
     const services: ServiceContainer = {
       researchRepo: fakeRepo,
-<<<<<<< HEAD
-      pricingRepo: new FakePricingRepository(),
-=======
->>>>>>> origin/development
       pricingContext: fakePricingContext,
       generateId: (): string => 'generated-id-123',
       researchEventPublisher: fakeResearchEventPublisher,
@@ -292,10 +288,6 @@ describe('Research Routes - Authenticated', () => {
     const fakeLlmCallPublisher = new FakeLlmCallPublisher();
     const services: ServiceContainer = {
       researchRepo: fakeRepo,
-<<<<<<< HEAD
-      pricingRepo: new FakePricingRepository(),
-=======
->>>>>>> origin/development
       pricingContext: fakePricingContext,
       generateId: (): string => 'generated-id-123',
       researchEventPublisher: fakeResearchEventPublisher,
@@ -1642,10 +1634,6 @@ describe('Research Routes - Authenticated', () => {
       const newFakeLlmCallPublisher = new FakeLlmCallPublisher();
       const services: ServiceContainer = {
         researchRepo: newFakeRepo,
-<<<<<<< HEAD
-        pricingRepo: new FakePricingRepository(),
-=======
->>>>>>> origin/development
         pricingContext: fakePricingContext,
         generateId: (): string => 'generated-id-123',
         researchEventPublisher: newFakeResearchEventPublisher,
@@ -1922,10 +1910,6 @@ describe('Research Routes - Authenticated', () => {
         imageServiceClient: null,
         notificationSender: new FakeNotificationSender(),
         llmCallPublisher: new FakeLlmCallPublisher(),
-<<<<<<< HEAD
-        pricingRepo: new FakePricingRepository(),
-=======
->>>>>>> origin/development
         pricingContext: fakePricingContext,
         shareStorage: null,
         shareConfig: null,
@@ -2051,10 +2035,6 @@ describe('Research Routes - Authenticated', () => {
 
       const newServices: ServiceContainer = {
         researchRepo: fakeRepo,
-<<<<<<< HEAD
-        pricingRepo: new FakePricingRepository(),
-=======
->>>>>>> origin/development
         pricingContext: fakePricingContext,
         generateId: (): string => 'generated-id-123',
         researchEventPublisher: fakeResearchEventPublisher,
@@ -2098,10 +2078,6 @@ describe('Research Routes - Authenticated', () => {
         await newApp.close();
         setServices({
           researchRepo: fakeRepo,
-<<<<<<< HEAD
-          pricingRepo: new FakePricingRepository(),
-=======
->>>>>>> origin/development
           pricingContext: fakePricingContext,
           generateId: (): string => 'generated-id-123',
           researchEventPublisher: fakeResearchEventPublisher,
@@ -2144,10 +2120,6 @@ describe('Research Routes - Authenticated', () => {
 
       const newServices: ServiceContainer = {
         researchRepo: fakeRepo,
-<<<<<<< HEAD
-        pricingRepo: new FakePricingRepository(),
-=======
->>>>>>> origin/development
         pricingContext: fakePricingContext,
         generateId: (): string => 'generated-id-123',
         researchEventPublisher: fakeResearchEventPublisher,
@@ -2191,10 +2163,6 @@ describe('Research Routes - Authenticated', () => {
         await newApp.close();
         setServices({
           researchRepo: fakeRepo,
-<<<<<<< HEAD
-          pricingRepo: new FakePricingRepository(),
-=======
->>>>>>> origin/development
           pricingContext: fakePricingContext,
           generateId: (): string => 'generated-id-123',
           researchEventPublisher: fakeResearchEventPublisher,
@@ -2238,10 +2206,6 @@ describe('Research Routes - Authenticated', () => {
 
       const newServices: ServiceContainer = {
         researchRepo: fakeRepo,
-<<<<<<< HEAD
-        pricingRepo: new FakePricingRepository(),
-=======
->>>>>>> origin/development
         pricingContext: fakePricingContext,
         generateId: (): string => 'generated-id-123',
         researchEventPublisher: fakeResearchEventPublisher,
@@ -2285,10 +2249,6 @@ describe('Research Routes - Authenticated', () => {
         await newApp.close();
         setServices({
           researchRepo: fakeRepo,
-<<<<<<< HEAD
-          pricingRepo: new FakePricingRepository(),
-=======
->>>>>>> origin/development
           pricingContext: fakePricingContext,
           generateId: (): string => 'generated-id-123',
           researchEventPublisher: fakeResearchEventPublisher,
@@ -2331,10 +2291,6 @@ describe('Research Routes - Authenticated', () => {
 
       const newServices: ServiceContainer = {
         researchRepo: fakeRepo,
-<<<<<<< HEAD
-        pricingRepo: new FakePricingRepository(),
-=======
->>>>>>> origin/development
         pricingContext: fakePricingContext,
         generateId: (): string => 'generated-id-123',
         researchEventPublisher: fakeResearchEventPublisher,
@@ -2377,10 +2333,6 @@ describe('Research Routes - Authenticated', () => {
         await newApp.close();
         setServices({
           researchRepo: fakeRepo,
-<<<<<<< HEAD
-          pricingRepo: new FakePricingRepository(),
-=======
->>>>>>> origin/development
           pricingContext: fakePricingContext,
           generateId: (): string => 'generated-id-123',
           researchEventPublisher: fakeResearchEventPublisher,
@@ -2500,10 +2452,6 @@ describe('Research Routes - Authenticated', () => {
 
       const newServices: ServiceContainer = {
         researchRepo: fakeRepo,
-<<<<<<< HEAD
-        pricingRepo: new FakePricingRepository(),
-=======
->>>>>>> origin/development
         pricingContext: fakePricingContext,
         generateId: (): string => 'generated-id-123',
         researchEventPublisher: fakeResearchEventPublisher,
@@ -2544,10 +2492,6 @@ describe('Research Routes - Authenticated', () => {
         await newApp.close();
         setServices({
           researchRepo: fakeRepo,
-<<<<<<< HEAD
-          pricingRepo: new FakePricingRepository(),
-=======
->>>>>>> origin/development
           pricingContext: fakePricingContext,
           generateId: (): string => 'generated-id-123',
           researchEventPublisher: fakeResearchEventPublisher,
@@ -2774,10 +2718,6 @@ describe('System Endpoints', () => {
     const fakeLlmCallPublisher = new FakeLlmCallPublisher();
     const services: ServiceContainer = {
       researchRepo: fakeRepo,
-<<<<<<< HEAD
-      pricingRepo: new FakePricingRepository(),
-=======
->>>>>>> origin/development
       pricingContext: fakePricingContext,
       generateId: (): string => 'generated-id-123',
       researchEventPublisher: fakeResearchEventPublisher,
@@ -2844,10 +2784,6 @@ describe('Internal Routes', () => {
     const fakeLlmCallPublisher = new FakeLlmCallPublisher();
     const services: ServiceContainer = {
       researchRepo: fakeRepo,
-<<<<<<< HEAD
-      pricingRepo: new FakePricingRepository(),
-=======
->>>>>>> origin/development
       pricingContext: fakePricingContext,
       generateId: (): string => 'generated-id-123',
       researchEventPublisher: fakeResearchEventPublisher,
@@ -3290,10 +3226,6 @@ describe('Internal Routes', () => {
       const fakeLlmCallPublisher = new FakeLlmCallPublisher();
       const services: ServiceContainer = {
         researchRepo: fakeRepo,
-<<<<<<< HEAD
-        pricingRepo: new FakePricingRepository(),
-=======
->>>>>>> origin/development
         pricingContext: fakePricingContext,
         generateId: (): string => 'generated-id-123',
         researchEventPublisher: new FakeResearchEventPublisher(),
@@ -3853,10 +3785,6 @@ describe('Internal Routes', () => {
       // Override createResearchProvider to return a failing provider
       const services: ServiceContainer = {
         researchRepo: fakeRepo,
-<<<<<<< HEAD
-        pricingRepo: new FakePricingRepository(),
-=======
->>>>>>> origin/development
         pricingContext: fakePricingContext,
         generateId: (): string => 'generated-id-123',
         researchEventPublisher: new FakeResearchEventPublisher(),

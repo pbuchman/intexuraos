@@ -18,11 +18,7 @@ import {
   checkSecrets,
   type HealthCheck,
 } from '@intexuraos/http-server';
-<<<<<<< HEAD
-import { setupSentryErrorHandler } from '@intexuraos/infra-sentry';
-=======
 import { createSentryStream, setupSentryErrorHandler } from '@intexuraos/infra-sentry';
->>>>>>> origin/development
 import { promptVaultRoutes } from './routes/routes.js';
 import { getServices } from './services.js';
 

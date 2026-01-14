@@ -25,11 +25,7 @@ export interface DecryptedApiKeys {
   openai?: string;
   anthropic?: string;
   perplexity?: string;
-<<<<<<< HEAD
-  zhipu?: string;
-=======
   zai?: string;
->>>>>>> origin/development
 }
 
 /**

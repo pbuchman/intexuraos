@@ -36,9 +36,9 @@ graph TB
 
 ### Internal Endpoints
 
-| Method | Path                    | Description                          | Auth           |
-| ------ | ----------------------- | ------------------------------------ | -------------- |
-| GET    | `/internal/settings/pricing` | Get all LLM provider pricing     | Internal header |
+| Method | Path                         | Description                  | Auth            |
+| ------ | ---------------------------- | ---------------------------- | --------------- |
+| GET    | `/internal/settings/pricing` | Get all LLM provider pricing | Internal header |
 
 ### Pricing Response
 
@@ -54,8 +54,8 @@ graph TB
 
 ### Usage Costs Query Parameters
 
-| Parameter | Type    | Default | Max | Description                      |
-| --------- | ------- | ------- | --- | -------------------------------- |
+| Parameter | Type    | Default | Max | Description                        |
+| --------- | ------- | ------- | --- | ---------------------------------- |
 | `days`    | integer | 90      | 365 | Number of days of history to fetch |
 
 ### Usage Costs Response
@@ -75,52 +75,52 @@ graph TB
 
 ### ProviderPricing
 
-| Field     | Type              | Description                     |
-| --------- | ----------------- | ------------------------------- |
-| `provider` | string            | Provider name                   |
-| `models`   | Record<string, ModelPricing> | Per-model pricing    |
+| Field      | Type                         | Description       |
+| ---------- | ---------------------------- | ----------------- |
+| `provider` | string                       | Provider name     |
+| `models`   | Record<string, ModelPricing> | Per-model pricing |
 
 ### ModelPricing
 
-| Field            | Type   | Description                  |
-| ---------------- | ------ | ---------------------------- |
-| `inputCostUsd`   | number | Cost per 1M input tokens    |
-| `outputCostUsd`  | number | Cost per 1M output tokens   |
+| Field              | Type   | Description                           |
+| ------------------ | ------ | ------------------------------------- |
+| `inputCostUsd`     | number | Cost per 1M input tokens              |
+| `outputCostUsd`    | number | Cost per 1M output tokens             |
 | `groundingCostUsd` | number | Cost per grounding request (optional) |
 
 ### AggregatedCosts
 
-| Field             | Type          | Description                         |
-| ----------------- | ------------- | ----------------------------------- |
-| `totalCostUsd`    | number        | Total cost across all calls         |
-| `totalCalls`      | number        | Total number of calls               |
-| `dailyBreakdown`  | DailyCost[]   | Cost grouped by day                 |
-| `monthlyBreakdown`| MonthlyCost[] | Cost grouped by month               |
-| `byModel`         | ModelCost[]   | Cost grouped by model               |
-| `byCallType`      | CallTypeCost[]| Cost grouped by call type          |
+| Field              | Type           | Description                 |
+| ------------------ | -------------- | --------------------------- |
+| `totalCostUsd`     | number         | Total cost across all calls |
+| `totalCalls`       | number         | Total number of calls       |
+| `dailyBreakdown`   | DailyCost[]    | Cost grouped by day         |
+| `monthlyBreakdown` | MonthlyCost[]  | Cost grouped by month       |
+| `byModel`          | ModelCost[]    | Cost grouped by model       |
+| `byCallType`       | CallTypeCost[] | Cost grouped by call type   |
 
 ## Configuration
 
-| Environment Variable                | Required | Description                               |
-| ----------------------------------- | -------- | ----------------------------------------- |
-| `INTEXURAOS_PRICING_COLLECTION`     | Yes      | Firestore pricing collection name         |
-| `INTEXURAOS_USAGE_STATS_COLLECTION` | Yes      | Firestore usage stats collection name     |
+| Environment Variable                | Required | Description                                |
+| ----------------------------------- | -------- | ------------------------------------------ |
+| `INTEXURAOS_PRICING_COLLECTION`     | Yes      | Firestore pricing collection name          |
+| `INTEXURAOS_USAGE_STATS_COLLECTION` | Yes      | Firestore usage stats collection name      |
 | `INTEXURAOS_INTERNAL_AUTH_TOKEN`    | Yes      | Shared secret for service-to-service calls |
 
 ## Dependencies
 
 ### Infrastructure
 
-| Component                               | Purpose                  |
-| --------------------------------------- | ------------------------ |
-| Firestore (`pricing` collection)        | Provider pricing config  |
-| Firestore (`usage_stats` collection)    | User usage statistics    |
+| Component                            | Purpose                 |
+| ------------------------------------ | ----------------------- |
+| Firestore (`pricing` collection)     | Provider pricing config |
+| Firestore (`usage_stats` collection) | User usage statistics   |
 
 ### Internal Services
 
-| Service       | Purpose                     |
-| ------------- | --------------------------- |
-| (multiple)    | Fetch pricing on startup    |
+| Service    | Purpose                  |
+| ---------- | ------------------------ |
+| (multiple) | Fetch pricing on startup |
 
 ## Gotchas
 

@@ -40,11 +40,7 @@ const testPricing: ValidationPricing = {
   openai: { inputPricePerMillion: 0.15, outputPricePerMillion: 0.6 },
   anthropic: { inputPricePerMillion: 0.8, outputPricePerMillion: 4.0 },
   perplexity: { inputPricePerMillion: 1.0, outputPricePerMillion: 1.0, useProviderCost: true },
-<<<<<<< HEAD
-  zhipu: { inputPricePerMillion: 0.6, outputPricePerMillion: 2.2, webSearchCostPerCall: 0.005 },
-=======
   zai: { inputPricePerMillion: 0.6, outputPricePerMillion: 2.2, webSearchCostPerCall: 0.005 },
->>>>>>> origin/development
 };
 
 describe('LlmValidatorImpl', () => {
@@ -259,33 +255,21 @@ describe('LlmValidatorImpl', () => {
       });
     });
 
-<<<<<<< HEAD
-    describe('zhipu provider', () => {
-=======
     describe('zai provider', () => {
->>>>>>> origin/development
       it('returns ok when validation succeeds', async () => {
         const mockClient = {
           generate: vi.fn().mockResolvedValue(ok({ content: 'validated', usage: mockUsage })),
         };
         vi.mocked(createGlmClient).mockReturnValue(mockClient as never);
 
-<<<<<<< HEAD
-        const result = await validator.validateKey('zhipu', 'glm-test-key', testUserId);
-=======
         const result = await validator.validateKey('zai', 'glm-test-key', testUserId);
->>>>>>> origin/development
 
         expect(result.ok).toBe(true);
         expect(createGlmClient).toHaveBeenCalledWith({
           apiKey: 'glm-test-key',
           model: LlmModels.Glm47,
           userId: testUserId,
-<<<<<<< HEAD
-          pricing: testPricing.zhipu,
-=======
           pricing: testPricing.zai,
->>>>>>> origin/development
         });
       });
 
@@ -295,20 +279,12 @@ describe('LlmValidatorImpl', () => {
         };
         vi.mocked(createGlmClient).mockReturnValue(mockClient as never);
 
-<<<<<<< HEAD
-        const result = await validator.validateKey('zhipu', 'bad-key', testUserId);
-=======
         const result = await validator.validateKey('zai', 'bad-key', testUserId);
->>>>>>> origin/development
 
         expect(result.ok).toBe(false);
         if (!result.ok) {
           expect(result.error.code).toBe('INVALID_KEY');
-<<<<<<< HEAD
-          expect(result.error.message).toBe('Invalid Zhipu API key');
-=======
           expect(result.error.message).toBe('Invalid Zai API key');
->>>>>>> origin/development
         }
       });
 
@@ -318,20 +294,12 @@ describe('LlmValidatorImpl', () => {
         };
         vi.mocked(createGlmClient).mockReturnValue(mockClient as never);
 
-<<<<<<< HEAD
-        const result = await validator.validateKey('zhipu', 'test-key', testUserId);
-=======
         const result = await validator.validateKey('zai', 'test-key', testUserId);
->>>>>>> origin/development
 
         expect(result.ok).toBe(false);
         if (!result.ok) {
           expect(result.error.code).toBe('API_ERROR');
-<<<<<<< HEAD
-          expect(result.error.message).toContain('Zhipu API error');
-=======
           expect(result.error.message).toContain('Zai API error');
->>>>>>> origin/development
         }
       });
     });
@@ -492,11 +460,7 @@ describe('LlmValidatorImpl', () => {
       });
     });
 
-<<<<<<< HEAD
-    describe('zhipu provider', () => {
-=======
     describe('zai provider', () => {
->>>>>>> origin/development
       it('returns content when test succeeds', async () => {
         const mockClient = {
           generate: vi
@@ -505,11 +469,7 @@ describe('LlmValidatorImpl', () => {
         };
         vi.mocked(createGlmClient).mockReturnValue(mockClient as never);
 
-<<<<<<< HEAD
-        const result = await validator.testRequest('zhipu', 'glm-key', testPrompt, testUserId);
-=======
         const result = await validator.testRequest('zai', 'glm-key', testPrompt, testUserId);
->>>>>>> origin/development
 
         expect(result.ok).toBe(true);
         if (result.ok) {
@@ -524,11 +484,7 @@ describe('LlmValidatorImpl', () => {
         };
         vi.mocked(createGlmClient).mockReturnValue(mockClient as never);
 
-<<<<<<< HEAD
-        const result = await validator.testRequest('zhipu', 'glm-key', testPrompt, testUserId);
-=======
         const result = await validator.testRequest('zai', 'glm-key', testPrompt, testUserId);
->>>>>>> origin/development
 
         expect(result.ok).toBe(false);
         if (!result.ok) {

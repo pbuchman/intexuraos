@@ -4,11 +4,7 @@
  */
 
 import type { FastifyPluginCallback, FastifyReply, FastifyRequest } from 'fastify';
-<<<<<<< HEAD
-import { requireAuth } from '@intexuraos/common-http';
-=======
 import { logIncomingRequest, requireAuth } from '@intexuraos/common-http';
->>>>>>> origin/development
 import { getServices } from '../services.js';
 import { analyzeData, generateChartDefinition, transformDataForPreview } from '../domain/dataInsights/index.js';
 import type { TransformDataForPreviewInput } from '../domain/dataInsights/index.js';
@@ -59,14 +55,11 @@ export const dataInsightsRoutes: FastifyPluginCallback = (fastify, _opts, done) 
       },
     },
     async (request: FastifyRequest<{ Params: AnalyzeFeedParams }>, reply: FastifyReply) => {
-<<<<<<< HEAD
-=======
       logIncomingRequest(request, {
         message: 'Received request to POST /composite-feeds/:feedId/analyze',
         includeParams: true,
       });
 
->>>>>>> origin/development
       const user = await requireAuth(request, reply);
       if (user === null) {
         return;
@@ -77,10 +70,7 @@ export const dataInsightsRoutes: FastifyPluginCallback = (fastify, _opts, done) 
         compositeFeedRepository: services.compositeFeedRepository,
         snapshotRepository: services.snapshotRepository,
         dataAnalysisService: services.dataAnalysisService,
-<<<<<<< HEAD
-=======
         logger: request.log,
->>>>>>> origin/development
       });
 
       if (!result.ok) {
@@ -130,14 +120,11 @@ export const dataInsightsRoutes: FastifyPluginCallback = (fastify, _opts, done) 
       },
     },
     async (request: FastifyRequest<{ Params: ChartDefinitionParams }>, reply: FastifyReply) => {
-<<<<<<< HEAD
-=======
       logIncomingRequest(request, {
         message: 'Received request to POST /composite-feeds/:feedId/insights/:insightId/chart-definition',
         includeParams: true,
       });
 
->>>>>>> origin/development
       const user = await requireAuth(request, reply);
       if (user === null) {
         return;
@@ -210,14 +197,11 @@ export const dataInsightsRoutes: FastifyPluginCallback = (fastify, _opts, done) 
       },
     },
     async (request: FastifyRequest<{ Params: PreviewParams; Body: PreviewBody }>, reply: FastifyReply) => {
-<<<<<<< HEAD
-=======
       logIncomingRequest(request, {
         message: 'Received request to POST /composite-feeds/:feedId/preview',
         includeParams: true,
       });
 
->>>>>>> origin/development
       const user = await requireAuth(request, reply);
       if (user === null) {
         return;

@@ -27,10 +27,7 @@
     "@intexuraos/infra-sentry": "workspace:*",
     "@intexuraos/llm-common": "workspace:*",
     "@intexuraos/llm-contract": "workspace:*",
-<<<<<<< HEAD
-=======
     "@intexuraos/llm-factory": "workspace:*",
->>>>>>> origin/development
     "@intexuraos/llm-pricing": "workspace:*",
     "fastify": "^5.1.0",
     "jose": "^5.9.6",

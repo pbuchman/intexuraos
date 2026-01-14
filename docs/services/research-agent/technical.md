@@ -246,7 +246,7 @@ sequenceDiagram
 | OpenAI     | `gpt-4o`, `gpt-4o-mini`              |
 | Google     | `gemini-2.5-pro`, `gemini-2.5-flash` |
 | Perplexity | `llama-3.1-sonar-small-128k-online`  |
-| Zai        | `glm-4.7`                           |
+| Zai        | `glm-4.7`                            |
 
 ## Configuration
 

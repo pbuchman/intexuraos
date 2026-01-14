@@ -23,11 +23,7 @@ const VALIDATION_MODELS = {
   [LlmProviders.OpenAI]: LlmModels.GPT4oMini,
   [LlmProviders.Anthropic]: LlmModels.ClaudeHaiku35,
   [LlmProviders.Perplexity]: LlmModels.Sonar,
-<<<<<<< HEAD
-  [LlmProviders.Zhipu]: LlmModels.Glm47,
-=======
   [LlmProviders.Zai]: LlmModels.Glm47,
->>>>>>> origin/development
 } as const;
 
 /**
@@ -38,11 +34,7 @@ export interface ValidationPricing {
   openai: ModelPricing;
   anthropic: ModelPricing;
   perplexity: ModelPricing;
-<<<<<<< HEAD
-  zhipu: ModelPricing;
-=======
   zai: ModelPricing;
->>>>>>> origin/development
 }
 
 /**
@@ -138,21 +130,12 @@ export class LlmValidatorImpl implements LlmValidator {
         }
         return ok(undefined);
       }
-<<<<<<< HEAD
-      case LlmProviders.Zhipu: {
-        const client = createGlmClient({
-          apiKey,
-          model: VALIDATION_MODELS[LlmProviders.Zhipu],
-          userId,
-          pricing: this.pricing.zhipu,
-=======
       case LlmProviders.Zai: {
         const client = createGlmClient({
           apiKey,
           model: VALIDATION_MODELS[LlmProviders.Zai],
           userId,
           pricing: this.pricing.zai,
->>>>>>> origin/development
         });
         const result = await client.generate(VALIDATION_PROMPT);
         if (!result.ok) {
@@ -160,13 +143,8 @@ export class LlmValidatorImpl implements LlmValidator {
             code: result.error.code === 'INVALID_KEY' ? 'INVALID_KEY' : 'API_ERROR',
             message:
               result.error.code === 'INVALID_KEY'
-<<<<<<< HEAD
-                ? 'Invalid Zhipu API key'
-                : `Zhipu API error: ${result.error.message}`,
-=======
                 ? 'Invalid Zai API key'
                 : `Zai API error: ${result.error.message}`,
->>>>>>> origin/development
           });
         }
         return ok(undefined);
@@ -245,21 +223,12 @@ export class LlmValidatorImpl implements LlmValidator {
         }
         return ok({ content: result.value.content });
       }
-<<<<<<< HEAD
-      case LlmProviders.Zhipu: {
-        const client = createGlmClient({
-          apiKey,
-          model: VALIDATION_MODELS[LlmProviders.Zhipu],
-          userId,
-          pricing: this.pricing.zhipu,
-=======
       case LlmProviders.Zai: {
         const client = createGlmClient({
           apiKey,
           model: VALIDATION_MODELS[LlmProviders.Zai],
           userId,
           pricing: this.pricing.zai,
->>>>>>> origin/development
         });
         const result = await client.generate(prompt);
         if (!result.ok) {

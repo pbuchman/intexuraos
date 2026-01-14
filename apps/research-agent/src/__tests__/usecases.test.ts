@@ -2,11 +2,7 @@
  * Tests for research usecases.
  */
 
-<<<<<<< HEAD
-import { beforeEach, describe, expect, it } from 'vitest';
-=======
 import { beforeEach, describe, expect, it, vi } from 'vitest';
->>>>>>> origin/development
 import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
 import type { Research } from '../domain/research/index.js';
 import {

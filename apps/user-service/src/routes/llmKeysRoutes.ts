@@ -44,11 +44,7 @@ export const llmKeysRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                   openai: { type: 'string', nullable: true },
                   anthropic: { type: 'string', nullable: true },
                   perplexity: { type: 'string', nullable: true },
-<<<<<<< HEAD
-                  zhipu: { type: 'string', nullable: true },
-=======
                   zai: { type: 'string', nullable: true },
->>>>>>> origin/development
                   testResults: {
                     type: 'object',
                     properties: {
@@ -92,11 +88,7 @@ export const llmKeysRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                         },
                         required: ['status', 'message', 'testedAt'],
                       },
-<<<<<<< HEAD
-                      zhipu: {
-=======
                       zai: {
->>>>>>> origin/development
                         type: 'object',
                         nullable: true,
                         properties: {
@@ -175,21 +167,13 @@ export const llmKeysRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           openai: getMaskedKey(llmApiKeys?.openai),
           anthropic: getMaskedKey(llmApiKeys?.anthropic),
           perplexity: getMaskedKey(llmApiKeys?.perplexity),
-<<<<<<< HEAD
-          zhipu: getMaskedKey(llmApiKeys?.zhipu),
-=======
           zai: getMaskedKey(llmApiKeys?.zai),
->>>>>>> origin/development
           testResults: {
             google: llmTestResults?.google ?? null,
             openai: llmTestResults?.openai ?? null,
             anthropic: llmTestResults?.anthropic ?? null,
             perplexity: llmTestResults?.perplexity ?? null,
-<<<<<<< HEAD
-            zhipu: llmTestResults?.zhipu ?? null,
-=======
             zai: llmTestResults?.zai ?? null,
->>>>>>> origin/development
           },
         });
       } catch (error) {
@@ -222,11 +206,7 @@ export const llmKeysRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           properties: {
             provider: {
               type: 'string',
-<<<<<<< HEAD
-              enum: ['google', 'openai', 'anthropic', 'perplexity', 'zhipu'],
-=======
               enum: ['google', 'openai', 'anthropic', 'perplexity', 'zai'],
->>>>>>> origin/development
               description: 'LLM provider name',
             },
             apiKey: {
@@ -364,11 +344,7 @@ export const llmKeysRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             uid: { type: 'string', description: 'User ID' },
             provider: {
               type: 'string',
-<<<<<<< HEAD
-              enum: ['google', 'openai', 'anthropic', 'perplexity', 'zhipu'],
-=======
               enum: ['google', 'openai', 'anthropic', 'perplexity', 'zai'],
->>>>>>> origin/development
               description: 'LLM provider name',
             },
           },
@@ -460,11 +436,7 @@ export const llmKeysRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         openai: 'GPT',
         anthropic: 'Claude',
         perplexity: 'Perplexity',
-<<<<<<< HEAD
-        zhipu: 'GLM',
-=======
         zai: 'GLM',
->>>>>>> origin/development
       };
       const providerName = providerNameMap[params.provider];
       const testPrompt = `Introduce yourself as ${providerName} and welcome the user to their intelligent workspace. Say you're here to intelligently improve their experience. Keep it to 2-3 sentences. Start with "Hi! I'm ${providerName}."`;
@@ -525,11 +497,7 @@ export const llmKeysRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             uid: { type: 'string', description: 'User ID' },
             provider: {
               type: 'string',
-<<<<<<< HEAD
-              enum: ['google', 'openai', 'anthropic', 'perplexity', 'zhipu'],
-=======
               enum: ['google', 'openai', 'anthropic', 'perplexity', 'zai'],
->>>>>>> origin/development
               description: 'LLM provider name',
             },
           },

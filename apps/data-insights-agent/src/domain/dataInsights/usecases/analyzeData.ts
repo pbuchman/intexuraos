@@ -12,23 +12,17 @@ import type { ChartTypeInfo } from '@intexuraos/llm-common';
 import type { DataInsight } from '../types.js';
 import { CHART_TYPES } from '../chartTypes.js';
 
-<<<<<<< HEAD
-=======
 interface BasicLogger {
   info: (obj: object, msg: string) => void;
   warn: (obj: object, msg: string) => void;
   error: (obj: object, msg: string) => void;
 }
 
->>>>>>> origin/development
 export interface AnalyzeDataDeps {
   compositeFeedRepository: CompositeFeedRepository;
   snapshotRepository: SnapshotRepository;
   dataAnalysisService: DataAnalysisService;
-<<<<<<< HEAD
-=======
   logger?: BasicLogger;
->>>>>>> origin/development
 }
 
 export interface AnalyzeDataError {
@@ -125,12 +119,6 @@ export async function analyzeData(
   userId: string,
   deps: AnalyzeDataDeps
 ): Promise<Result<AnalyzeDataResult, AnalyzeDataError>> {
-<<<<<<< HEAD
-  const { compositeFeedRepository, snapshotRepository, dataAnalysisService } = deps;
-
-  const feedResult = await compositeFeedRepository.getById(feedId, userId);
-  if (!feedResult.ok) {
-=======
   const { compositeFeedRepository, snapshotRepository, dataAnalysisService, logger } = deps;
 
   logger?.info({ feedId, userId }, 'Starting data analysis');
@@ -138,7 +126,6 @@ export async function analyzeData(
   const feedResult = await compositeFeedRepository.getById(feedId, userId);
   if (!feedResult.ok) {
     logger?.error({ feedId, userId, error: feedResult.error }, 'Failed to fetch composite feed');
->>>>>>> origin/development
     return err({
       code: 'REPOSITORY_ERROR',
       message: feedResult.error,
@@ -146,10 +133,7 @@ export async function analyzeData(
   }
 
   if (feedResult.value === null) {
-<<<<<<< HEAD
-=======
     logger?.warn({ feedId, userId }, 'Composite feed not found');
->>>>>>> origin/development
     return err({
       code: 'FEED_NOT_FOUND',
       message: 'Composite feed not found',
@@ -158,10 +142,7 @@ export async function analyzeData(
 
   const snapshotResult = await snapshotRepository.getByFeedId(feedId, userId);
   if (!snapshotResult.ok) {
-<<<<<<< HEAD
-=======
     logger?.error({ feedId, userId, error: snapshotResult.error }, 'Failed to fetch snapshot');
->>>>>>> origin/development
     return err({
       code: 'REPOSITORY_ERROR',
       message: snapshotResult.error,
@@ -169,10 +150,7 @@ export async function analyzeData(
   }
 
   if (snapshotResult.value === null) {
-<<<<<<< HEAD
-=======
     logger?.warn({ feedId, userId }, 'Snapshot not found');
->>>>>>> origin/development
     return err({
       code: 'SNAPSHOT_NOT_FOUND',
       message: 'No snapshot available. Please refresh the feed first.',
@@ -183,11 +161,8 @@ export async function analyzeData(
   const jsonSchema = buildCompositeFeedSchema();
   const chartTypes = buildChartTypesInfo();
 
-<<<<<<< HEAD
-=======
   logger?.info({ feedId, userId, snapshotId: snapshot.feedId }, 'Starting LLM analysis');
 
->>>>>>> origin/development
   const analysisResult = await dataAnalysisService.analyzeData(
     userId,
     jsonSchema,
@@ -196,10 +171,7 @@ export async function analyzeData(
   );
 
   if (!analysisResult.ok) {
-<<<<<<< HEAD
-=======
     logger?.error({ feedId, userId, error: analysisResult.error.message }, 'LLM analysis failed');
->>>>>>> origin/development
     return err({
       code: 'ANALYSIS_ERROR',
       message: analysisResult.error.message,
@@ -209,10 +181,7 @@ export async function analyzeData(
   const { insights: parsedInsights, noInsightsReason } = analysisResult.value;
 
   if (parsedInsights.length === 0 && noInsightsReason !== undefined) {
-<<<<<<< HEAD
-=======
     logger?.info({ feedId, userId, reason: noInsightsReason }, 'No insights generated');
->>>>>>> origin/development
     return err({
       code: 'NO_INSIGHTS',
       message: noInsightsReason,
@@ -229,29 +198,20 @@ export async function analyzeData(
     generatedAt: now,
   }));
 
-<<<<<<< HEAD
-  const updateResult = await compositeFeedRepository.updateDataInsights(feedId, userId, insights);
-
-  if (!updateResult.ok) {
-=======
   logger?.info({ feedId, userId, insightCount: insights.length }, 'Insights generated successfully');
 
   const updateResult = await compositeFeedRepository.updateDataInsights(feedId, userId, insights);
 
   if (!updateResult.ok) {
     logger?.error({ feedId, userId, error: updateResult.error }, 'Failed to update insights in repository');
->>>>>>> origin/development
     return err({
       code: 'REPOSITORY_ERROR',
       message: updateResult.error,
     });
   }
 
-<<<<<<< HEAD
-=======
   logger?.info({ feedId, userId, insightCount: insights.length }, 'Data analysis completed successfully');
 
->>>>>>> origin/development
   const result: AnalyzeDataResult = { insights };
   if (noInsightsReason !== undefined) {
     result.noInsightsReason = noInsightsReason;

@@ -272,11 +272,7 @@ describe('runSynthesis', () => {
       totalDurationMs: 7200000,
       totalInputTokens: 500,
       totalOutputTokens: 200,
-<<<<<<< HEAD
-      totalCostUsd: 0.02, // Synthesis (0.01) + attribution repair (0.01)
-=======
       totalCostUsd: 0.01, // Synthesis (0.01) - repair attribution disabled in tests
->>>>>>> origin/development
       attributionStatus: expect.stringMatching(/^(complete|incomplete|repaired)$/),
     });
   });
@@ -745,11 +741,7 @@ describe('runSynthesis', () => {
         totalDurationMs: 7200000,
         totalInputTokens: 500,
         totalOutputTokens: 200,
-<<<<<<< HEAD
-        totalCostUsd: 0.02, // Synthesis (0.01) + attribution repair (0.01)
-=======
         totalCostUsd: 0.01, // Synthesis (0.01) - repair attribution disabled in tests
->>>>>>> origin/development
         shareInfo: expect.objectContaining({
           shareToken: expect.any(String),
           slug: 'test-research',
@@ -811,11 +803,7 @@ describe('runSynthesis', () => {
         totalDurationMs: 7200000,
         totalInputTokens: 500,
         totalOutputTokens: 200,
-<<<<<<< HEAD
-        totalCostUsd: 0.02, // Synthesis (0.01) + attribution repair (0.01)
-=======
         totalCostUsd: 0.01, // Synthesis (0.01) - repair attribution disabled in tests
->>>>>>> origin/development
       });
     });
 
@@ -870,11 +858,7 @@ describe('runSynthesis', () => {
         totalDurationMs: 7200000,
         totalInputTokens: 500,
         totalOutputTokens: 200,
-<<<<<<< HEAD
-        totalCostUsd: 0.02, // Synthesis (0.01) + attribution repair (0.01)
-=======
         totalCostUsd: 0.01, // Synthesis (0.01) - repair attribution disabled in tests
->>>>>>> origin/development
         shareInfo: expect.objectContaining({
           coverImageId: 'img-123',
         }),
@@ -983,11 +967,7 @@ describe('runSynthesis', () => {
         totalDurationMs: 7200000,
         totalInputTokens: 500,
         totalOutputTokens: 200,
-<<<<<<< HEAD
-        totalCostUsd: 0.02, // Synthesis (0.01) + attribution repair (0.01)
-=======
         totalCostUsd: 0.01, // Synthesis (0.01) - repair attribution disabled in tests
->>>>>>> origin/development
         shareInfo: expect.not.objectContaining({
           coverImageId: expect.anything(),
         }),
@@ -1028,11 +1008,7 @@ describe('runSynthesis', () => {
         totalDurationMs: 7200000,
         totalInputTokens: 500,
         totalOutputTokens: 200,
-<<<<<<< HEAD
-        totalCostUsd: 0.02, // Synthesis (0.01) + attribution repair (0.01)
-=======
         totalCostUsd: 0.01, // Synthesis (0.01) - repair attribution disabled in tests
->>>>>>> origin/development
         shareInfo: expect.not.objectContaining({
           coverImageId: expect.anything(),
         }),
@@ -1071,11 +1047,7 @@ describe('runSynthesis', () => {
         totalDurationMs: 7200000,
         totalInputTokens: 500,
         totalOutputTokens: 200,
-<<<<<<< HEAD
-        totalCostUsd: 0.02, // Synthesis (0.01) + attribution repair (0.01)
-=======
         totalCostUsd: 0.01, // Synthesis (0.01) - repair attribution disabled in tests
->>>>>>> origin/development
         shareInfo: expect.not.objectContaining({
           coverImageId: expect.anything(),
         }),

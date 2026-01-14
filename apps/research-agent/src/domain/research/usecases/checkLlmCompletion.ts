@@ -5,10 +5,7 @@
  */
 
 import type { ResearchModel } from '../models/index.js';
-<<<<<<< HEAD
-=======
 import type { Logger } from 'pino';
->>>>>>> origin/development
 import type { ResearchRepository } from '../ports/index.js';
 
 export type CompletionAction =

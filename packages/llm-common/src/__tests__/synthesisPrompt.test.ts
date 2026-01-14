@@ -629,7 +629,9 @@ describe('buildSynthesisPrompt', () => {
 
         expect(result).toContain('## Synthesis Goals');
         expect(result).toContain('RANK RECOMMENDATIONS');
-        expect(result).toContain('Order recommendations by quality, relevance, and source authority');
+        expect(result).toContain(
+          'Order recommendations by quality, relevance, and source authority'
+        );
       });
 
       it('includes SUMMARIZE goal', () => {
@@ -653,13 +655,21 @@ describe('buildSynthesisPrompt', () => {
 
         expect(result).toContain('## Synthesis Goals');
         expect(result).toContain('CONFLICT AUDIT');
-        expect(result).toContain('Identify and explicitly analyze conflicting information between sources');
+        expect(result).toContain(
+          'Identify and explicitly analyze conflicting information between sources'
+        );
       });
 
       it('includes multiple goals together', () => {
         const reports: SynthesisReport[] = [{ model: 'GPT-4', content: 'Content' }];
         const ctx = createTestSynthesisContext({
-          synthesis_goals: ['merge', 'dedupe', 'conflict_audit', 'rank_recommendations', 'summarize'],
+          synthesis_goals: [
+            'merge',
+            'dedupe',
+            'conflict_audit',
+            'rank_recommendations',
+            'summarize',
+          ],
         });
         const result = buildSynthesisPrompt(originalPrompt, reports, ctx);
 

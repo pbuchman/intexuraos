@@ -11,11 +11,7 @@ import {
 } from '@intexuraos/common-http';
 import { registerCoreSchemas } from '@intexuraos/http-contracts';
 import { buildHealthResponse, checkFirestore, type HealthCheck } from '@intexuraos/http-server';
-<<<<<<< HEAD
-import { setupSentryErrorHandler } from '@intexuraos/infra-sentry';
-=======
 import { createSentryStream, setupSentryErrorHandler } from '@intexuraos/infra-sentry';
->>>>>>> origin/development
 import { mobileNotificationsRoutes } from './routes/index.js';
 import { validateConfigEnv } from './config.js';
 
