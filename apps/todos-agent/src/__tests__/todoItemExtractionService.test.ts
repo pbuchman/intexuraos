@@ -37,7 +37,7 @@ describe('todoItemExtractionService', () => {
   });
 
   function createMockUserServiceClient(
-    result: 'ok' | 'no_api_key' | 'api_error' | 'network_error' | 'unsupported_model' = 'ok'
+    result: 'ok' | 'no_api_key' | 'api_error' | 'network_error' | 'invalid_model' = 'ok'
   ): UserServiceClient {
     switch (result) {
       case 'ok':
@@ -62,11 +62,11 @@ describe('todoItemExtractionService', () => {
             .fn()
             .mockResolvedValue(err({ code: 'NETWORK_ERROR' as const, message: 'Network error' })),
         };
-      case 'unsupported_model':
+      case 'invalid_model':
         return {
           getLlmClient: vi
             .fn()
-            .mockResolvedValue(err({ code: 'UNSUPPORTED_MODEL' as const, message: 'Unsupported model' })),
+            .mockResolvedValue(err({ code: 'INVALID_MODEL' as const, message: 'Unsupported model' })),
         };
     }
   }

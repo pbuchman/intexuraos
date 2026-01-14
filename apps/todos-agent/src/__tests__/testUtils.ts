@@ -31,9 +31,9 @@ export class FakeTodosProcessingPublisher implements TodosProcessingPublisher {
 }
 
 export class FakeUserServiceClient implements UserServiceClient {
-  public getLlmClientResult?: Result<LlmGenerateClient, { code: 'NETWORK_ERROR' | 'API_ERROR' | 'NO_API_KEY' | 'UNSUPPORTED_MODEL'; message: string }>;
+  public getLlmClientResult?: Result<LlmGenerateClient, { code: 'NETWORK_ERROR' | 'API_ERROR' | 'NO_API_KEY' | 'INVALID_MODEL'; message: string }>;
 
-  async getLlmClient(_userId: string): Promise<Result<LlmGenerateClient, { code: 'NETWORK_ERROR' | 'API_ERROR' | 'NO_API_KEY' | 'UNSUPPORTED_MODEL'; message: string }>> {
+  async getLlmClient(_userId: string): Promise<Result<LlmGenerateClient, { code: 'NETWORK_ERROR' | 'API_ERROR' | 'NO_API_KEY' | 'INVALID_MODEL'; message: string }>> {
     if (this.getLlmClientResult) return this.getLlmClientResult;
 
     const fakeLlmClient: LlmGenerateClient = {
