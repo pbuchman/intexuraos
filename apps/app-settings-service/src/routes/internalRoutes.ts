@@ -29,8 +29,9 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                   openai: { $ref: 'ProviderPricing#' },
                   anthropic: { $ref: 'ProviderPricing#' },
                   perplexity: { $ref: 'ProviderPricing#' },
+                  zhipu: { $ref: 'ProviderPricing#' },
                 },
-                required: ['google', 'openai', 'anthropic', 'perplexity'],
+                required: ['google', 'openai', 'anthropic', 'perplexity', 'zhipu'],
               },
             },
             required: ['success', 'data'],
@@ -66,11 +67,12 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       const { pricingRepository } = getServices();
 
       // Fetch all providers in parallel
-      const [google, openai, anthropic, perplexity] = await Promise.all([
+      const [google, openai, anthropic, perplexity, zhipu] = await Promise.all([
         pricingRepository.getByProvider(LlmProviders.Google),
         pricingRepository.getByProvider(LlmProviders.OpenAI),
         pricingRepository.getByProvider(LlmProviders.Anthropic),
         pricingRepository.getByProvider(LlmProviders.Perplexity),
+        pricingRepository.getByProvider(LlmProviders.Zhipu),
       ]);
 
       // Check if any provider is missing - need individual null checks for TypeScript narrowing
@@ -94,13 +96,19 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         reply.status(500);
         return { error: 'Missing pricing for providers: perplexity' };
       }
+      if (zhipu === null) {
+        request.log.error({ missingProviders: ['zhipu'] }, 'Missing pricing for providers');
+        reply.status(500);
+        return { error: 'Missing pricing for providers: zhipu' };
+      }
 
       // At this point all providers are non-null (TypeScript can narrow from the early returns above)
       const totalModels =
         Object.keys(google.models).length +
         Object.keys(openai.models).length +
         Object.keys(anthropic.models).length +
-        Object.keys(perplexity.models).length;
+        Object.keys(perplexity.models).length +
+        Object.keys(zhipu.models).length;
 
       request.log.info({ totalModels }, 'Returning pricing for all providers');
 
@@ -111,6 +119,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           openai,
           anthropic,
           perplexity,
+          zhipu,
         },
       };
     }
