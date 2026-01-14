@@ -14,7 +14,6 @@ import {
   createDraftResearch,
   processResearch,
   runSynthesis,
-  calculateAccurateCost,
   type ResearchModel,
 } from '../domain/research/index.js';
 import { formatLlmError } from '../domain/research/formatLlmError.js';
@@ -755,18 +754,8 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         if (usage !== undefined) {
           updateData.inputTokens = usage.inputTokens;
           updateData.outputTokens = usage.outputTokens;
-
-          const pricing = await services.pricingRepo.findByProviderAndModel(
-            modelProvider,
-            event.model
-          );
-          if (pricing !== null) {
-            updateData.costUsd = calculateAccurateCost(usage, pricing);
-          } else {
-            request.log.warn(
-              { model: event.model },
-              'Pricing not found for model, cost not calculated'
-            );
+          if (usage.costUsd !== undefined) {
+            updateData.costUsd = usage.costUsd;
           }
         }
 

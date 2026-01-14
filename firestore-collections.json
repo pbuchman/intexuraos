@@ -54,10 +54,6 @@
       "owner": "research-agent",
       "description": "LLM research queries, responses, and synthesized results"
     },
-    "app_settings": {
-      "owner": "research-agent",
-      "description": "Application-wide settings including LLM pricing configuration"
-    },
     "llm_api_logs": {
       "owner": "research-agent",
       "description": "LLM API call audit logs with token usage and cost tracking"

@@ -6,7 +6,6 @@
  */
 
 import { FirestoreResearchRepository } from './infra/research/index.js';
-import { FirestorePricingRepository } from './infra/pricing/index.js';
 import {
   createContextInferrer,
   createInputValidator,
@@ -34,7 +33,6 @@ import {
   type LlmResearchProvider,
   type LlmSynthesisProvider,
   type NotificationSender,
-  type PricingRepository,
   type ResearchRepository,
   type ShareStoragePort,
   type TitleGenerator,
@@ -55,7 +53,6 @@ export interface ShareConfig {
  */
 export interface ServiceContainer {
   researchRepo: ResearchRepository;
-  pricingRepo: PricingRepository;
   pricingContext: IPricingContext;
   generateId: () => string;
   researchEventPublisher: ResearchEventPublisher;
@@ -187,7 +184,6 @@ function createShareStorageAndConfig(): {
  */
 export function initializeServices(pricingContext: IPricingContext): void {
   const researchRepo = new FirestoreResearchRepository();
-  const pricingRepo = new FirestorePricingRepository();
 
   const userServiceClient = createUserServiceClient({
     baseUrl: process.env['INTEXURAOS_USER_SERVICE_URL'] ?? 'http://localhost:8081',
@@ -219,7 +215,6 @@ export function initializeServices(pricingContext: IPricingContext): void {
 
   container = {
     researchRepo,
-    pricingRepo,
     pricingContext,
     generateId: (): string => crypto.randomUUID(),
     researchEventPublisher,
