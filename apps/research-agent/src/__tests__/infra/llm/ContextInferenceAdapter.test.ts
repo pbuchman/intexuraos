@@ -175,7 +175,7 @@ describe('ContextInferenceAdapter', () => {
       }
     });
 
-    it('returns error and logs warning on invalid JSON', async () => {
+    it('returns error and logs debug message on invalid JSON', async () => {
       mockGenerate.mockResolvedValue({
         ok: true,
         value: { content: 'not valid json', usage: mockUsage },
@@ -188,7 +188,7 @@ describe('ContextInferenceAdapter', () => {
         expect(result.error.code).toBe('API_ERROR');
         expect(result.error.message).toContain('JSON parse error');
       }
-      expect(mockLogger.warn).toHaveBeenCalledWith(
+      expect(mockLogger.debug).toHaveBeenCalledWith(
         expect.objectContaining({ error: expect.stringContaining('JSON parse error') }),
         'Failed to parse research context'
       );
@@ -285,7 +285,7 @@ describe('ContextInferenceAdapter', () => {
       }
     });
 
-    it('returns error and logs warning on invalid JSON', async () => {
+    it('returns error and logs debug message on invalid JSON', async () => {
       mockGenerate.mockResolvedValue({
         ok: true,
         value: { content: '{ malformed json', usage: mockUsage },
@@ -296,7 +296,7 @@ describe('ContextInferenceAdapter', () => {
       });
 
       expect(result.ok).toBe(false);
-      expect(mockLogger.warn).toHaveBeenCalledWith(
+      expect(mockLogger.debug).toHaveBeenCalledWith(
         expect.objectContaining({ error: expect.stringContaining('JSON parse error') }),
         'Failed to parse synthesis context'
       );
