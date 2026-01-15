@@ -251,8 +251,13 @@ describe('ContextInferenceAdapter', () => {
 
       expect(result.ok).toBe(false);
       expect(mockLogger.warn).toHaveBeenCalledWith(
-        { error: expect.any(String) },
-        'Failed to parse research context'
+        expect.objectContaining({
+          errorMessage: 'JSON parse failed: Invalid JSON in response',
+          llmResponse: 'invalid json',
+          operation: 'inferResearchContext',
+          responseLength: 12,
+        }),
+        'LLM parse error in inferResearchContext: JSON parse failed'
       );
     });
   });
@@ -342,8 +347,13 @@ describe('ContextInferenceAdapter', () => {
 
       expect(result.ok).toBe(false);
       expect(mockLogger.warn).toHaveBeenCalledWith(
-        { error: expect.any(String) },
-        'Failed to parse synthesis context'
+        expect.objectContaining({
+          errorMessage: 'JSON parse failed: Invalid JSON in response',
+          llmResponse: '{ invalid }',
+          operation: 'inferSynthesisContext',
+          responseLength: 11,
+        }),
+        'LLM parse error in inferSynthesisContext: JSON parse failed'
       );
     });
 
