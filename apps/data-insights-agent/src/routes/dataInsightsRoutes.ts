@@ -85,8 +85,7 @@ export const dataInsightsRoutes: FastifyPluginCallback = (fastify, _opts, done) 
             return await reply.fail('NOT_FOUND', error.message);
           }
           case 'REPOSITORY_ERROR':
-          case 'ANALYSIS_ERROR':
-          case 'NO_INSIGHTS': {
+          case 'ANALYSIS_ERROR': {
             return await reply.fail('INTERNAL_ERROR', error.message);
           }
         }
