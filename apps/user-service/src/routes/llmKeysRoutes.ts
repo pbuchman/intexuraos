@@ -451,7 +451,7 @@ export const llmKeysRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       if (!testResult.ok) {
         const rawError = testResult.error.message;
-        request.log.warn({ provider: params.provider, rawError }, 'LLM test failed');
+        request.log.info({ provider: params.provider, rawError }, 'LLM test returned failure');
 
         const formattedMessage = formatLlmError(rawError);
         const llmTestResult: LlmTestResult = {

@@ -50,7 +50,8 @@ steps:
     id: 'build-push-user-service'
     waitFor: ['-']
     entrypoint: 'bash'
-    args: ['cloudbuild/scripts/build-push-monitored.sh', 'user-service', 'apps/user-service/Dockerfile']
+    args:
+      ['cloudbuild/scripts/build-push-monitored.sh', 'user-service', 'apps/user-service/Dockerfile']
     env:
       - 'DOCKER_BUILDKIT=1'
       - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
@@ -60,7 +61,12 @@ steps:
     id: 'build-push-promptvault-service'
     waitFor: ['-']
     entrypoint: 'bash'
-    args: ['cloudbuild/scripts/build-push-monitored.sh', 'promptvault-service', 'apps/promptvault-service/Dockerfile']
+    args:
+      [
+        'cloudbuild/scripts/build-push-monitored.sh',
+        'promptvault-service',
+        'apps/promptvault-service/Dockerfile',
+      ]
     env:
       - 'DOCKER_BUILDKIT=1'
       - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
@@ -70,7 +76,12 @@ steps:
     id: 'build-push-notion-service'
     waitFor: ['-']
     entrypoint: 'bash'
-    args: ['cloudbuild/scripts/build-push-monitored.sh', 'notion-service', 'apps/notion-service/Dockerfile']
+    args:
+      [
+        'cloudbuild/scripts/build-push-monitored.sh',
+        'notion-service',
+        'apps/notion-service/Dockerfile',
+      ]
     env:
       - 'DOCKER_BUILDKIT=1'
       - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
@@ -80,7 +91,12 @@ steps:
     id: 'build-push-whatsapp-service'
     waitFor: ['-']
     entrypoint: 'bash'
-    args: ['cloudbuild/scripts/build-push-monitored.sh', 'whatsapp-service', 'apps/whatsapp-service/Dockerfile']
+    args:
+      [
+        'cloudbuild/scripts/build-push-monitored.sh',
+        'whatsapp-service',
+        'apps/whatsapp-service/Dockerfile',
+      ]
     env:
       - 'DOCKER_BUILDKIT=1'
       - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
@@ -90,7 +106,12 @@ steps:
     id: 'build-push-app-settings-service'
     waitFor: ['-']
     entrypoint: 'bash'
-    args: ['cloudbuild/scripts/build-push-monitored.sh', 'app-settings-service', 'apps/app-settings-service/Dockerfile']
+    args:
+      [
+        'cloudbuild/scripts/build-push-monitored.sh',
+        'app-settings-service',
+        'apps/app-settings-service/Dockerfile',
+      ]
     env:
       - 'DOCKER_BUILDKIT=1'
       - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
@@ -100,7 +121,12 @@ steps:
     id: 'build-push-image-service'
     waitFor: ['-']
     entrypoint: 'bash'
-    args: ['cloudbuild/scripts/build-push-monitored.sh', 'image-service', 'apps/image-service/Dockerfile']
+    args:
+      [
+        'cloudbuild/scripts/build-push-monitored.sh',
+        'image-service',
+        'apps/image-service/Dockerfile',
+      ]
     env:
       - 'DOCKER_BUILDKIT=1'
       - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
@@ -110,7 +136,12 @@ steps:
     id: 'build-push-research-agent'
     waitFor: ['-']
     entrypoint: 'bash'
-    args: ['cloudbuild/scripts/build-push-monitored.sh', 'research-agent', 'apps/research-agent/Dockerfile']
+    args:
+      [
+        'cloudbuild/scripts/build-push-monitored.sh',
+        'research-agent',
+        'apps/research-agent/Dockerfile',
+      ]
     env:
       - 'DOCKER_BUILDKIT=1'
       - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
@@ -120,7 +151,12 @@ steps:
     id: 'build-push-commands-agent'
     waitFor: ['-']
     entrypoint: 'bash'
-    args: ['cloudbuild/scripts/build-push-monitored.sh', 'commands-agent', 'apps/commands-agent/Dockerfile']
+    args:
+      [
+        'cloudbuild/scripts/build-push-monitored.sh',
+        'commands-agent',
+        'apps/commands-agent/Dockerfile',
+      ]
     env:
       - 'DOCKER_BUILDKIT=1'
       - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
@@ -130,7 +166,12 @@ steps:
     id: 'build-push-actions-agent'
     waitFor: ['-']
     entrypoint: 'bash'
-    args: ['cloudbuild/scripts/build-push-monitored.sh', 'actions-agent', 'apps/actions-agent/Dockerfile']
+    args:
+      [
+        'cloudbuild/scripts/build-push-monitored.sh',
+        'actions-agent',
+        'apps/actions-agent/Dockerfile',
+      ]
     env:
       - 'DOCKER_BUILDKIT=1'
       - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
@@ -140,7 +181,12 @@ steps:
     id: 'build-push-data-insights-agent'
     waitFor: ['-']
     entrypoint: 'bash'
-    args: ['cloudbuild/scripts/build-push-monitored.sh', 'data-insights-agent', 'apps/data-insights-agent/Dockerfile']
+    args:
+      [
+        'cloudbuild/scripts/build-push-monitored.sh',
+        'data-insights-agent',
+        'apps/data-insights-agent/Dockerfile',
+      ]
     env:
       - 'DOCKER_BUILDKIT=1'
       - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
@@ -150,7 +196,8 @@ steps:
     id: 'build-push-notes-agent'
     waitFor: ['-']
     entrypoint: 'bash'
-    args: ['cloudbuild/scripts/build-push-monitored.sh', 'notes-agent', 'apps/notes-agent/Dockerfile']
+    args:
+      ['cloudbuild/scripts/build-push-monitored.sh', 'notes-agent', 'apps/notes-agent/Dockerfile']
     env:
       - 'DOCKER_BUILDKIT=1'
       - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
@@ -160,7 +207,8 @@ steps:
     id: 'build-push-todos-agent'
     waitFor: ['-']
     entrypoint: 'bash'
-    args: ['cloudbuild/scripts/build-push-monitored.sh', 'todos-agent', 'apps/todos-agent/Dockerfile']
+    args:
+      ['cloudbuild/scripts/build-push-monitored.sh', 'todos-agent', 'apps/todos-agent/Dockerfile']
     env:
       - 'DOCKER_BUILDKIT=1'
       - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
@@ -170,7 +218,8 @@ steps:
     id: 'build-push-api-docs-hub'
     waitFor: ['-']
     entrypoint: 'bash'
-    args: ['cloudbuild/scripts/build-push-monitored.sh', 'api-docs-hub', 'apps/api-docs-hub/Dockerfile']
+    args:
+      ['cloudbuild/scripts/build-push-monitored.sh', 'api-docs-hub', 'apps/api-docs-hub/Dockerfile']
     env:
       - 'DOCKER_BUILDKIT=1'
       - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
@@ -180,7 +229,12 @@ steps:
     id: 'build-push-mobile-notifications-service'
     waitFor: ['-']
     entrypoint: 'bash'
-    args: ['cloudbuild/scripts/build-push-monitored.sh', 'mobile-notifications-service', 'apps/mobile-notifications-service/Dockerfile']
+    args:
+      [
+        'cloudbuild/scripts/build-push-monitored.sh',
+        'mobile-notifications-service',
+        'apps/mobile-notifications-service/Dockerfile',
+      ]
     env:
       - 'DOCKER_BUILDKIT=1'
       - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
@@ -190,7 +244,12 @@ steps:
     id: 'build-push-bookmarks-agent'
     waitFor: ['-']
     entrypoint: 'bash'
-    args: ['cloudbuild/scripts/build-push-monitored.sh', 'bookmarks-agent', 'apps/bookmarks-agent/Dockerfile']
+    args:
+      [
+        'cloudbuild/scripts/build-push-monitored.sh',
+        'bookmarks-agent',
+        'apps/bookmarks-agent/Dockerfile',
+      ]
     env:
       - 'DOCKER_BUILDKIT=1'
       - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
@@ -200,7 +259,12 @@ steps:
     id: 'build-push-calendar-agent'
     waitFor: ['-']
     entrypoint: 'bash'
-    args: ['cloudbuild/scripts/build-push-monitored.sh', 'calendar-agent', 'apps/calendar-agent/Dockerfile']
+    args:
+      [
+        'cloudbuild/scripts/build-push-monitored.sh',
+        'calendar-agent',
+        'apps/calendar-agent/Dockerfile',
+      ]
     env:
       - 'DOCKER_BUILDKIT=1'
       - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
@@ -210,7 +274,8 @@ steps:
     id: 'build-push-linear-agent'
     waitFor: ['-']
     entrypoint: 'bash'
-    args: ['cloudbuild/scripts/build-push-monitored.sh', 'linear-agent', 'apps/linear-agent/Dockerfile']
+    args:
+      ['cloudbuild/scripts/build-push-monitored.sh', 'linear-agent', 'apps/linear-agent/Dockerfile']
     env:
       - 'DOCKER_BUILDKIT=1'
       - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
@@ -394,7 +459,8 @@ steps:
   # Deploy Wave 8 (2 parallel, waits for Wave 7)
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     id: 'deploy-bookmarks-agent'
-    waitFor: ['build-push-bookmarks-agent', 'deploy-api-docs-hub', 'deploy-mobile-notifications-service']
+    waitFor:
+      ['build-push-bookmarks-agent', 'deploy-api-docs-hub', 'deploy-mobile-notifications-service']
     entrypoint: 'bash'
     args: ['-c', 'bash cloudbuild/scripts/deploy-bookmarks-agent.sh']
     env:
@@ -405,7 +471,8 @@ steps:
 
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     id: 'deploy-calendar-agent'
-    waitFor: ['build-push-calendar-agent', 'deploy-api-docs-hub', 'deploy-mobile-notifications-service']
+    waitFor:
+      ['build-push-calendar-agent', 'deploy-api-docs-hub', 'deploy-mobile-notifications-service']
     entrypoint: 'bash'
     args: ['-c', 'bash cloudbuild/scripts/deploy-calendar-agent.sh']
     env:
