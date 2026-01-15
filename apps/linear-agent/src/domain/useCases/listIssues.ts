@@ -11,7 +11,6 @@ import type {
   LinearApiClient,
   LinearConnectionRepository,
   LinearIssue,
-  DashboardColumn,
 } from '../index.js';
 import { mapStateToDashboardColumn } from '../models.js';
 
