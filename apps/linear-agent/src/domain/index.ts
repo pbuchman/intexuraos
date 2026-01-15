@@ -10,3 +10,9 @@ export type {
   LinearApiClient,
   LinearActionExtractionService,
 } from './ports.js';
+export {
+  processLinearAction,
+  type ProcessLinearActionDeps,
+  type ProcessLinearActionRequest,
+  type ProcessLinearActionResponse,
+} from './useCases/processLinearAction.js';

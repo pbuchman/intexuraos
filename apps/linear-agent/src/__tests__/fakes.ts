@@ -14,6 +14,8 @@ import type {
   CreateIssueInput,
   LinearActionExtractionService,
   ExtractedIssueData,
+  FailedIssueRepository,
+  FailedLinearIssue,
 } from '../domain/index.js';
 
 export class FakeLinearConnectionRepository implements LinearConnectionRepository {
@@ -183,7 +185,7 @@ export class FakeLinearApiClient implements LinearApiClient {
 }
 
 export class FakeLinearActionExtractionService implements LinearActionExtractionService {
-  private response: ExtractedIssueData = {
+  private defaultResponse: ExtractedIssueData = {
     title: 'Test Issue',
     priority: 0,
     functionalRequirements: null,
@@ -192,23 +194,83 @@ export class FakeLinearActionExtractionService implements LinearActionExtraction
     error: null,
     reasoning: 'Test extraction',
   };
+  private customResponse: Partial<ExtractedIssueData> | null = null;
   private shouldFail = false;
   private failError: LinearError = { code: 'EXTRACTION_FAILED', message: 'Fake extraction error' };
 
   async extractIssue(
-    userId: string,
+    _userId: string,
     text: string
   ): Promise<Result<ExtractedIssueData, LinearError>> {
     if (this.shouldFail) return err(this.failError);
-    return ok({ ...this.response, title: text.slice(0, 50) });
+
+    // Use custom response if set, otherwise use default with truncated text
+    if (this.customResponse !== null) {
+      return ok({ ...this.defaultResponse, ...this.customResponse });
+    }
+
+    return ok({ ...this.defaultResponse, title: text.slice(0, 50) });
   }
 
   setResponse(response: Partial<ExtractedIssueData>): void {
-    this.response = { ...this.response, ...response };
+    this.customResponse = response;
   }
 
   setFailure(fail: boolean, error?: LinearError): void {
     this.shouldFail = fail;
     if (error) this.failError = error;
+  }
+
+  reset(): void {
+    this.customResponse = null;
+    this.shouldFail = false;
+  }
+}
+
+export class FakeFailedIssueRepository implements FailedIssueRepository {
+  private failedIssues: FailedLinearIssue[] = [];
+  private counter = 1;
+
+  async create(input: {
+    userId: string;
+    actionId: string;
+    originalText: string;
+    extractedTitle: string | null;
+    extractedPriority: number | null;
+    error: string;
+    reasoning: string | null;
+  }): Promise<Result<FailedLinearIssue, LinearError>> {
+    const failedIssue: FailedLinearIssue = {
+      id: `failed-${this.counter++}`,
+      userId: input.userId,
+      actionId: input.actionId,
+      originalText: input.originalText,
+      extractedTitle: input.extractedTitle,
+      extractedPriority: input.extractedPriority as 0 | 1 | 2 | 3 | 4 | null,
+      error: input.error,
+      reasoning: input.reasoning,
+      createdAt: new Date().toISOString(),
+    };
+    this.failedIssues.push(failedIssue);
+    return ok(failedIssue);
+  }
+
+  async listByUser(userId: string): Promise<Result<FailedLinearIssue[], LinearError>> {
+    const userIssues = this.failedIssues.filter((fi) => fi.userId === userId);
+    return ok(userIssues);
+  }
+
+  async delete(id: string): Promise<Result<void, LinearError>> {
+    this.failedIssues = this.failedIssues.filter((fi) => fi.id !== id);
+    return ok(undefined);
+  }
+
+  reset(): void {
+    this.failedIssues = [];
+    this.counter = 1;
+  }
+
+  get count(): number {
+    return this.failedIssues.length;
   }
 }
