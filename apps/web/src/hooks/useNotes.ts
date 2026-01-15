@@ -12,8 +12,9 @@ import type { CreateNoteRequest, Note, UpdateNoteRequest } from '@/types';
 interface UseNotesResult {
   notes: Note[];
   loading: boolean;
+  refreshing: boolean;
   error: string | null;
-  refresh: () => Promise<void>;
+  refresh: (showLoading?: boolean) => Promise<void>;
   createNote: (request: CreateNoteRequest) => Promise<Note>;
   updateNote: (id: string, request: UpdateNoteRequest) => Promise<Note>;
   deleteNote: (id: string) => Promise<void>;
@@ -23,22 +24,36 @@ export function useNotes(): UseNotesResult {
   const { getAccessToken } = useAuth();
   const [notes, setNotes] = useState<Note[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const refresh = useCallback(async (): Promise<void> => {
-    setLoading(true);
-    setError(null);
+  const refresh = useCallback(
+    async (showLoading?: boolean): Promise<void> => {
+      const shouldShowLoading = showLoading !== false;
 
-    try {
-      const token = await getAccessToken();
-      const data = await listNotesApi(token);
-      setNotes(data);
-    } catch (err) {
-      setError(getErrorMessage(err, 'Failed to load notes'));
-    } finally {
-      setLoading(false);
-    }
-  }, [getAccessToken]);
+      if (shouldShowLoading) {
+        setLoading(true);
+      } else {
+        setRefreshing(true);
+      }
+      setError(null);
+
+      try {
+        const token = await getAccessToken();
+        const data = await listNotesApi(token);
+        setNotes(data);
+      } catch (err) {
+        setError(getErrorMessage(err, 'Failed to load notes'));
+      } finally {
+        if (shouldShowLoading) {
+          setLoading(false);
+        } else {
+          setRefreshing(false);
+        }
+      }
+    },
+    [getAccessToken]
+  );
 
   useEffect(() => {
     void refresh();
@@ -76,6 +91,7 @@ export function useNotes(): UseNotesResult {
   return {
     notes,
     loading,
+    refreshing,
     error,
     refresh,
     createNote,

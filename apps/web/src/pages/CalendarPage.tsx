@@ -13,7 +13,7 @@ import {
   AlertCircle,
   X,
 } from 'lucide-react';
-import { Button, Card, Layout } from '@/components';
+import { Button, Card, Layout, RefreshIndicator } from '@/components';
 import { useCalendarEvents, useFailedCalendarEvents } from '@/hooks';
 import type { CalendarEvent, CalendarEventDateTime, FailedCalendarEvent } from '@/types';
 
@@ -270,13 +270,13 @@ function DateGroup({ date, events }: DateGroupProps): React.JSX.Element {
 }
 
 export function CalendarPage(): React.JSX.Element {
-  const { events, loading, error, filters, setFilters, refresh } = useCalendarEvents();
+  const { events, loading, refreshing, error, filters, setFilters, refresh } = useCalendarEvents();
   const {
     events: failedEvents,
     loading: failedEventsLoading,
     refresh: refreshFailedEvents,
   } = useFailedCalendarEvents();
-  const [refreshing, setRefreshing] = useState(false);
+  const [isManualRefreshing, setIsManualRefreshing] = useState(false);
   const [dismissedFailedEventIds, setDismissedFailedEventIds] = useState<Set<string>>(new Set());
 
   const currentStart = filters.timeMin !== undefined ? new Date(filters.timeMin) : new Date();
@@ -325,11 +325,11 @@ export function CalendarPage(): React.JSX.Element {
   };
 
   const handleRefresh = async (): Promise<void> => {
-    setRefreshing(true);
+    setIsManualRefreshing(true);
     try {
       await Promise.all([refresh(), refreshFailedEvents()]);
     } finally {
-      setRefreshing(false);
+      setIsManualRefreshing(false);
     }
   };
 
@@ -369,13 +369,15 @@ export function CalendarPage(): React.JSX.Element {
           onClick={(): void => {
             void handleRefresh();
           }}
-          disabled={refreshing}
-          isLoading={refreshing}
+          disabled={isManualRefreshing}
+          isLoading={isManualRefreshing}
         >
           <RefreshCw className="mr-2 h-4 w-4" />
           Refresh
         </Button>
       </div>
+
+      <RefreshIndicator show={refreshing || isManualRefreshing} />
 
       <NeedsAttentionSection
         events={visibleFailedEvents}

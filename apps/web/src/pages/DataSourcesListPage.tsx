@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Database, Layers, Plus, Trash2 } from 'lucide-react';
-import { Button, Card, Layout } from '@/components';
+import { Button, Card, Layout, RefreshIndicator } from '@/components';
 import { useDataSources } from '@/hooks';
 import type { DataSource } from '@/types';
 
@@ -47,7 +47,7 @@ function DataInsightsTabs(): React.JSX.Element {
 }
 
 export function DataSourcesListPage(): React.JSX.Element {
-  const { dataSources, loading, error, deleteDataSource } = useDataSources();
+  const { dataSources, loading, refreshing, error, deleteDataSource } = useDataSources();
 
   if (loading) {
     return (
@@ -76,6 +76,8 @@ export function DataSourcesListPage(): React.JSX.Element {
           </Button>
         </Link>
       </div>
+
+      <RefreshIndicator show={refreshing} />
 
       {error !== null && error !== '' ? (
         <div className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 text-red-700">
