@@ -2,7 +2,6 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { LlmModels } from '@intexuraos/llm-contract';
 import type { Logger } from '@intexuraos/common-core';
 import { InputValidationAdapter } from '../../../infra/llm/InputValidationAdapter.js';
-import type { Logger } from '@intexuraos/common-core';
 
 const mockLogger: Logger = {
   info: vi.fn(),
@@ -12,13 +11,6 @@ const mockLogger: Logger = {
 };
 
 const mockGenerate = vi.fn();
-
-const mockLogger: Logger = {
-  info: vi.fn(),
-  error: vi.fn(),
-  warn: vi.fn(),
-  debug: vi.fn(),
-};
 
 vi.mock('@intexuraos/infra-gemini', () => ({
   createGeminiClient: vi.fn(() => ({

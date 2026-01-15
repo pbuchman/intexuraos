@@ -319,7 +319,7 @@ function parseJson<T>(
   guard: (v: unknown) => v is T,
   operation: string,
   expectedSchema: string,
-  logger?: Logger
+  logger: Logger
 ): { ok: true; value: T } | { ok: false; error: string } {
   const cleaned = raw
     .replace(/^```json\s*/i, '')
@@ -338,7 +338,7 @@ function parseJson<T>(
       expectedSchema,
       operation,
     });
-    logger?.warn(
+    logger.warn(
       {
         operation,
         errorMessage,
@@ -359,7 +359,7 @@ function parseJson<T>(
       expectedSchema,
       operation,
     });
-    logger?.warn(
+    logger.warn(
       {
         operation,
         errorMessage,

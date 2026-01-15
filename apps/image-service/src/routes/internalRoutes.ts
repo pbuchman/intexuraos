@@ -92,7 +92,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       }
 
       request.log.info({ model, provider: modelConfig.provider }, 'Starting prompt generation');
-      const generator = createPromptGenerator(modelConfig.provider, apiKey, userId);
+      const generator = createPromptGenerator(modelConfig.provider, apiKey, userId, request.log);
       const result = await generator.generateThumbnailPrompt(text);
 
       if (!result.ok) {

@@ -1,5 +1,5 @@
 import type { Result, Logger } from '@intexuraos/common-core';
-import { err, getErrorMessage, ok, getLogLevel } from '@intexuraos/common-core';
+import { err, getErrorMessage, ok } from '@intexuraos/common-core';
 import {
   createLlmClient,
   type LlmClientConfig,
@@ -13,18 +13,6 @@ import {
   type LlmProvider,
 } from '@intexuraos/llm-contract';
 import type { IPricingContext } from '@intexuraos/llm-pricing';
-import pino from 'pino';
-
-const defaultPinoLogger = pino({
-  level: getLogLevel(),
-  name: 'userServiceClient',
-});
-
-/**
- * No-op logger for when no logger is provided in config.
- * Uses pino with 'silent' level which doesn't output anything.
- */
-const silentLogger: Logger = pino({ level: 'silent' });
 
 export interface UserServiceConfig {
   baseUrl: string;
@@ -64,8 +52,6 @@ export interface UserServiceClient {
 }
 
 export function createUserServiceClient(config: UserServiceConfig): UserServiceClient {
-  const logger = config.logger ?? defaultPinoLogger;
-
   return {
     async getApiKeys(userId: string): Promise<Result<UserApiKeys, UserServiceError>> {
       const url = `${config.baseUrl}/internal/users/${userId}/llm-keys`;
@@ -218,7 +204,7 @@ export function createUserServiceClient(config: UserServiceConfig): UserServiceC
           model: defaultModel,
           userId,
           pricing,
-          logger: config.logger ?? silentLogger,
+          logger: config.logger,
         };
 
         const client = createLlmClient(clientConfig);

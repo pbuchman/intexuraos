@@ -13,18 +13,6 @@ import {
   type LlmProvider,
 } from '@intexuraos/llm-contract';
 import type { IPricingContext } from '@intexuraos/llm-pricing';
-import pino from 'pino';
-
-const defaultLogger = pino({
-  level: process.env['LOG_LEVEL'] ?? 'info',
-  name: 'userServiceClient',
-});
-
-/**
- * No-op logger for when no logger is provided in config.
- * Uses pino with 'silent' level which doesn't output anything.
- */
-const silentLogger: Logger = pino({ level: 'silent' });
 
 export interface UserServiceConfig {
   baseUrl: string;
@@ -161,7 +149,7 @@ export function createUserServiceClient(config: UserServiceConfig): UserServiceC
           model: defaultModel,
           userId,
           pricing,
-          logger: config.logger ?? silentLogger,
+          logger: config.logger,
         };
 
         const client = createLlmClient(clientConfig);

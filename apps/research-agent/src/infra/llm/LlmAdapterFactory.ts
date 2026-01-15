@@ -3,7 +3,6 @@
  * Usage logging is handled by the underlying clients (packages/infra-*).
  */
 
-import pino from 'pino';
 import type { Logger } from '@intexuraos/common-core';
 import {
   getProviderForModel,
@@ -27,12 +26,6 @@ import {
   InputValidationAdapter,
   type InputValidationProvider,
 } from './InputValidationAdapter.js';
-
-/**
- * Silent logger for when no logger is provided.
- * Uses pino with 'silent' level which doesn't output anything.
- */
-const silentLogger: Logger = pino({ level: 'silent' });
 
 export function createResearchProvider(
   model: ResearchModel,
@@ -87,8 +80,7 @@ export function createTitleGenerator(
   pricing: ModelPricing,
   logger: Logger
 ): TitleGenerator {
-  const actualLogger = logger ?? silentLogger;
-  return new GeminiAdapter(apiKey, model, userId, pricing, actualLogger);
+  return new GeminiAdapter(apiKey, model, userId, pricing, logger);
 }
 
 export function createContextInferrer(

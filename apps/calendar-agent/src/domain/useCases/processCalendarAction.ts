@@ -21,7 +21,7 @@ export interface ProcessCalendarActionDeps {
   googleCalendarClient: GoogleCalendarClient;
   failedEventRepository: FailedEventRepository;
   calendarActionExtractionService: CalendarActionExtractionService;
-  logger?: Logger;
+  logger: Logger;
 }
 
 export interface ProcessCalendarActionRequest {
@@ -98,14 +98,14 @@ export async function processCalendarAction(
   const { actionId, userId, text } = request;
   const { googleCalendarClient, failedEventRepository, calendarActionExtractionService, logger } = deps;
 
-  logger?.info({ userId, actionId, textLength: text.length }, 'processCalendarAction: entry');
+  logger.info({ userId, actionId, textLength: text.length }, 'processCalendarAction: entry');
 
   const currentDate = new Date().toISOString().split('T')[0] ?? '';
 
   const extractResult = await calendarActionExtractionService.extractEvent(userId, text, currentDate);
 
   if (!extractResult.ok) {
-    logger?.error(
+    logger.error(
       { userId, actionId, error: extractResult.error },
       'processCalendarAction: extraction failed'
     );
@@ -114,7 +114,7 @@ export async function processCalendarAction(
 
   const extracted = extractResult.value;
 
-  logger?.info(
+  logger.info(
     { userId, actionId, summary: extracted.summary, valid: extracted.valid },
     'processCalendarAction: extraction complete'
   );
@@ -122,7 +122,7 @@ export async function processCalendarAction(
   const errorMessage = extracted.error ?? 'Could not extract valid calendar event';
 
   if (!extracted.valid) {
-    logger?.info(
+    logger.info(
       { userId, actionId, error: errorMessage },
       'processCalendarAction: invalid event, saving to failed events'
     );
@@ -141,7 +141,7 @@ export async function processCalendarAction(
     });
 
     if (!failedResult.ok) {
-      logger?.error(
+      logger.error(
         { userId, actionId, error: failedResult.error },
         'processCalendarAction: failed to save failed event'
       );
@@ -155,7 +155,7 @@ export async function processCalendarAction(
   }
 
   if (!isValidIsoDateTime(extracted.start)) {
-    logger?.warn(
+    logger.warn(
       { userId, actionId, start: extracted.start },
       'processCalendarAction: invalid start date format'
     );
@@ -185,7 +185,7 @@ export async function processCalendarAction(
 
   const createInput = buildCreateEventInput(extracted);
 
-  logger?.info(
+  logger.info(
     { userId, actionId, summary: createInput.summary },
     'processCalendarAction: creating Google Calendar event'
   );
@@ -198,7 +198,7 @@ export async function processCalendarAction(
   );
 
   if (!createResult.ok) {
-    logger?.error(
+    logger.error(
       { userId, actionId, error: createResult.error },
       'processCalendarAction: Google Calendar creation failed'
     );
@@ -228,7 +228,7 @@ export async function processCalendarAction(
 
   const createdEvent = createResult.value;
 
-  logger?.info(
+  logger.info(
     { userId, actionId, eventId: createdEvent.id },
     'processCalendarAction: event created successfully'
   );

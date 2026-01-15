@@ -11,11 +11,6 @@ const MAX_DESCRIPTION_LENGTH = 1000;
 
 type MinimalLogger = pino.Logger;
 
-const defaultLogger: MinimalLogger = pino({
-  level: process.env['LOG_LEVEL'] ?? 'info',
-  name: 'calendarActionExtractionService',
-}) as unknown as MinimalLogger;
-
 export interface ExtractionError {
   code: 'NO_API_KEY' | 'USER_SERVICE_ERROR' | 'GENERATION_ERROR' | 'INVALID_RESPONSE';
   message: string;
@@ -47,9 +42,9 @@ export interface CalendarActionExtractionService {
 
 export function createCalendarActionExtractionService(
   llmUserServiceClient: LlmUserServiceClient,
-  logger?: MinimalLogger
+  logger: MinimalLogger
 ): CalendarActionExtractionService {
-  const log: MinimalLogger = logger ?? defaultLogger;
+  const log: MinimalLogger = logger;
 
   return {
     async extractEvent(

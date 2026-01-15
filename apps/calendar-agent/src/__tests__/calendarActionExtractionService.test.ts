@@ -3,8 +3,21 @@ import { err, ok } from '@intexuraos/common-core';
 import { createCalendarActionExtractionService } from '../infra/gemini/calendarActionExtractionService.js';
 import type { LlmUserServiceClient } from '../infra/user/llmUserServiceClient.js';
 import type { LlmGenerateClient } from '@intexuraos/llm-factory';
+import pino from 'pino';
 
 const mockGenerate = vi.fn();
+
+const mockLogger: pino.Logger = {
+  info: vi.fn(),
+  error: vi.fn(),
+  warn: vi.fn(),
+  debug: vi.fn(),
+  level: 'info',
+  fatal: vi.fn(),
+  trace: vi.fn(),
+  silent: vi.fn(),
+  msgPrefix: '',
+} as unknown as pino.Logger;
 
 describe('calendarActionExtractionService', () => {
   let mockUserServiceClient: LlmUserServiceClient;
@@ -85,7 +98,7 @@ describe('calendarActionExtractionService', () => {
 
       mockGenerate.mockResolvedValue(ok({ content: validResponse, usage: mockUsage }));
       mockUserServiceClient = createMockUserServiceClient('ok');
-      const service = createCalendarActionExtractionService(mockUserServiceClient);
+      const service = createCalendarActionExtractionService(mockUserServiceClient, mockLogger);
 
       const result = await service.extractEvent('user-123', 'Doctor appointment at 10am tomorrow', '2025-01-19');
 
@@ -103,7 +116,7 @@ describe('calendarActionExtractionService', () => {
 
     it('returns NO_API_KEY error when user has no API key', async () => {
       mockUserServiceClient = createMockUserServiceClient('no_api_key');
-      const service = createCalendarActionExtractionService(mockUserServiceClient);
+      const service = createCalendarActionExtractionService(mockUserServiceClient, mockLogger);
 
       const result = await service.extractEvent('user-123', 'Test text', '2025-01-19');
 
@@ -116,7 +129,7 @@ describe('calendarActionExtractionService', () => {
 
     it('returns USER_SERVICE_ERROR when user service fails with API_ERROR', async () => {
       mockUserServiceClient = createMockUserServiceClient('api_error');
-      const service = createCalendarActionExtractionService(mockUserServiceClient);
+      const service = createCalendarActionExtractionService(mockUserServiceClient, mockLogger);
 
       const result = await service.extractEvent('user-123', 'Test text', '2025-01-19');
 
@@ -131,7 +144,7 @@ describe('calendarActionExtractionService', () => {
     it('returns GENERATION_ERROR when LLM generation fails', async () => {
       mockGenerate.mockResolvedValue(err({ code: 'RATE_LIMIT_EXCEEDED', message: 'Rate limit exceeded' }));
       mockUserServiceClient = createMockUserServiceClient('ok');
-      const service = createCalendarActionExtractionService(mockUserServiceClient);
+      const service = createCalendarActionExtractionService(mockUserServiceClient, mockLogger);
 
       const result = await service.extractEvent('user-123', 'Test text', '2025-01-19');
 
@@ -146,7 +159,7 @@ describe('calendarActionExtractionService', () => {
     it('returns INVALID_RESPONSE when JSON parsing fails', async () => {
       mockGenerate.mockResolvedValue(ok({ content: 'not valid json', usage: mockUsage }));
       mockUserServiceClient = createMockUserServiceClient('ok');
-      const service = createCalendarActionExtractionService(mockUserServiceClient);
+      const service = createCalendarActionExtractionService(mockUserServiceClient, mockLogger);
 
       const result = await service.extractEvent('user-123', 'Test text', '2025-01-19');
 
@@ -167,7 +180,7 @@ describe('calendarActionExtractionService', () => {
 
       mockGenerate.mockResolvedValue(ok({ content: invalidResponse, usage: mockUsage }));
       mockUserServiceClient = createMockUserServiceClient('ok');
-      const service = createCalendarActionExtractionService(mockUserServiceClient);
+      const service = createCalendarActionExtractionService(mockUserServiceClient, mockLogger);
 
       const result = await service.extractEvent('user-123', 'Test text', '2025-01-19');
 
@@ -195,7 +208,7 @@ describe('calendarActionExtractionService', () => {
 
       mockGenerate.mockResolvedValue(ok({ content: responseWithMarkdown, usage: mockUsage }));
       mockUserServiceClient = createMockUserServiceClient('ok');
-      const service = createCalendarActionExtractionService(mockUserServiceClient);
+      const service = createCalendarActionExtractionService(mockUserServiceClient, mockLogger);
 
       const result = await service.extractEvent('user-123', 'Coffee with John', '2025-01-14');
 
@@ -220,7 +233,7 @@ describe('calendarActionExtractionService', () => {
 
       mockGenerate.mockResolvedValue(ok({ content: invalidEventResponse, usage: mockUsage }));
       mockUserServiceClient = createMockUserServiceClient('ok');
-      const service = createCalendarActionExtractionService(mockUserServiceClient);
+      const service = createCalendarActionExtractionService(mockUserServiceClient, mockLogger);
 
       const result = await service.extractEvent('user-123', 'Maybe do something later', '2025-01-14');
 
@@ -245,7 +258,7 @@ describe('calendarActionExtractionService', () => {
 
       mockGenerate.mockResolvedValue(ok({ content: nullDatesResponse, usage: mockUsage }));
       mockUserServiceClient = createMockUserServiceClient('ok');
-      const service = createCalendarActionExtractionService(mockUserServiceClient);
+      const service = createCalendarActionExtractionService(mockUserServiceClient, mockLogger);
 
       const result = await service.extractEvent('user-123', 'Company holiday on Jan 15', '2025-01-14');
 
@@ -274,7 +287,7 @@ describe('calendarActionExtractionService', () => {
         })
       );
       mockUserServiceClient = createMockUserServiceClient('ok');
-      const service = createCalendarActionExtractionService(mockUserServiceClient);
+      const service = createCalendarActionExtractionService(mockUserServiceClient, mockLogger);
 
       await service.extractEvent('user-abc-456', 'Test text', '2025-01-14');
 
@@ -288,7 +301,7 @@ describe('calendarActionExtractionService', () => {
 
       mockGenerate.mockResolvedValue(ok({ content: invalidJsonWithMarkdown, usage: mockUsage }));
       mockUserServiceClient = createMockUserServiceClient('ok');
-      const service = createCalendarActionExtractionService(mockUserServiceClient);
+      const service = createCalendarActionExtractionService(mockUserServiceClient, mockLogger);
 
       const result = await service.extractEvent('user-123', 'Test', '2025-01-14');
 
@@ -315,7 +328,7 @@ describe('calendarActionExtractionService', () => {
 
       mockGenerate.mockResolvedValue(ok({ content: invalidSchemaWithMarkdown, usage: mockUsage }));
       mockUserServiceClient = createMockUserServiceClient('ok');
-      const service = createCalendarActionExtractionService(mockUserServiceClient);
+      const service = createCalendarActionExtractionService(mockUserServiceClient, mockLogger);
 
       const result = await service.extractEvent('user-123', 'Test', '2025-01-14');
 
@@ -329,7 +342,7 @@ describe('calendarActionExtractionService', () => {
     it('returns INVALID_RESPONSE when JSON root is not an object', async () => {
       mockGenerate.mockResolvedValue(ok({ content: '["not", "an", "object"]', usage: mockUsage }));
       mockUserServiceClient = createMockUserServiceClient('ok');
-      const service = createCalendarActionExtractionService(mockUserServiceClient);
+      const service = createCalendarActionExtractionService(mockUserServiceClient, mockLogger);
 
       const result = await service.extractEvent('user-123', 'Test', '2025-01-14');
 
@@ -353,7 +366,7 @@ describe('calendarActionExtractionService', () => {
 
       mockGenerate.mockResolvedValue(ok({ content: nullSummaryResponse, usage: mockUsage }));
       mockUserServiceClient = createMockUserServiceClient('ok');
-      const service = createCalendarActionExtractionService(mockUserServiceClient);
+      const service = createCalendarActionExtractionService(mockUserServiceClient, mockLogger);
 
       const result = await service.extractEvent('user-123', 'Something maybe', '2025-01-14');
 
@@ -377,7 +390,7 @@ describe('calendarActionExtractionService', () => {
 
       mockGenerate.mockResolvedValue(ok({ content: invalidResponse, usage: mockUsage }));
       mockUserServiceClient = createMockUserServiceClient('ok');
-      const service = createCalendarActionExtractionService(mockUserServiceClient);
+      const service = createCalendarActionExtractionService(mockUserServiceClient, mockLogger);
 
       const result = await service.extractEvent('user-123', 'Test', '2025-01-14');
 
@@ -401,7 +414,7 @@ describe('calendarActionExtractionService', () => {
 
       mockGenerate.mockResolvedValue(ok({ content: invalidResponse, usage: mockUsage }));
       mockUserServiceClient = createMockUserServiceClient('ok');
-      const service = createCalendarActionExtractionService(mockUserServiceClient);
+      const service = createCalendarActionExtractionService(mockUserServiceClient, mockLogger);
 
       const result = await service.extractEvent('user-123', 'Test', '2025-01-14');
 
@@ -425,7 +438,7 @@ describe('calendarActionExtractionService', () => {
 
       mockGenerate.mockResolvedValue(ok({ content: invalidResponse, usage: mockUsage }));
       mockUserServiceClient = createMockUserServiceClient('ok');
-      const service = createCalendarActionExtractionService(mockUserServiceClient);
+      const service = createCalendarActionExtractionService(mockUserServiceClient, mockLogger);
 
       const result = await service.extractEvent('user-123', 'Test', '2025-01-14');
 
@@ -443,7 +456,7 @@ describe('calendarActionExtractionService', () => {
         })
       );
       mockUserServiceClient = createMockUserServiceClient('ok');
-      const service = createCalendarActionExtractionService(mockUserServiceClient);
+      const service = createCalendarActionExtractionService(mockUserServiceClient, mockLogger);
 
       const result = await service.extractEvent('user-123', 'Test', '2025-01-14');
 

@@ -45,7 +45,7 @@ export function initServices(config: ServiceConfig): void {
     logger: logger,
   });
 
-  const calendarActionExtractionService = createCalendarActionExtractionService(llmUserServiceClient);
+  const calendarActionExtractionService = createCalendarActionExtractionService(llmUserServiceClient, logger);
 
   container = {
     googleCalendarClient: new GoogleCalendarClientImpl(),
