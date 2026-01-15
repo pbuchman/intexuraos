@@ -14,7 +14,6 @@ export type {
 
 export {
   BasePubSubPublisher,
-  getLogLevel,
   type BasePubSubPublisherConfig,
   type PublishContext,
 } from './basePublisher.js';

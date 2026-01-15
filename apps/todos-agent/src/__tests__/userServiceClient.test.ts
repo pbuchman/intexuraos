@@ -1,5 +1,6 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import nock from 'nock';
+import pino from 'pino';
 import { ok } from '@intexuraos/common-core';
 import { LlmModels } from '@intexuraos/llm-contract';
 import { createUserServiceClient } from '../infra/user/userServiceClient.js';
@@ -25,6 +26,7 @@ function createClient(): ReturnType<typeof createUserServiceClient> {
     baseUrl: USER_SERVICE_URL,
     internalAuthToken: INTERNAL_AUTH_TOKEN,
     pricingContext,
+    logger: pino({ level: 'silent' }),
   });
 }
 

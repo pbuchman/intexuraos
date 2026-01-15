@@ -32,7 +32,7 @@ export function createResearchProvider(
   apiKey: string,
   userId: string,
   pricing: ModelPricing,
-  logger?: Logger
+  logger: Logger
 ): LlmResearchProvider {
   const provider = getProviderForModel(model);
 
@@ -55,7 +55,7 @@ export function createSynthesizer(
   apiKey: string,
   userId: string,
   pricing: ModelPricing,
-  logger?: Logger
+  logger: Logger
 ): LlmSynthesisProvider {
   const provider = getProviderForModel(model);
 
@@ -78,7 +78,7 @@ export function createTitleGenerator(
   apiKey: string,
   userId: string,
   pricing: ModelPricing,
-  logger?: Logger
+  logger: Logger
 ): TitleGenerator {
   return new GeminiAdapter(apiKey, model, userId, pricing, logger);
 }
@@ -98,7 +98,7 @@ export function createInputValidator(
   apiKey: string,
   userId: string,
   pricing: ModelPricing,
-  logger?: Logger
+  logger: Logger
 ): InputValidationProvider {
   return new InputValidationAdapter(apiKey, model, userId, pricing, logger);
 }

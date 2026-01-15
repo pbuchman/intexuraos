@@ -11,7 +11,7 @@ import type { GoogleCalendarClient, UserServiceClient } from '../ports.js';
 export interface GetEventDeps {
   userServiceClient: UserServiceClient;
   googleCalendarClient: GoogleCalendarClient;
-  logger?: Logger;
+  logger: Logger;
 }
 
 export interface GetEventRequest {
@@ -27,11 +27,11 @@ export async function getEvent(
   const { userId, calendarId = 'primary', eventId } = request;
   const { userServiceClient, googleCalendarClient, logger } = deps;
 
-  logger?.info({ userId, calendarId, eventId }, 'getEvent: entry');
+  logger.info({ userId, calendarId, eventId }, 'getEvent: entry');
 
   const tokenResult = await userServiceClient.getOAuthToken(userId);
   if (!tokenResult.ok) {
-    logger?.error({ userId, calendarId, eventId, error: tokenResult.error }, 'getEvent: failed to get OAuth token');
+    logger.error({ userId, calendarId, eventId, error: tokenResult.error }, 'getEvent: failed to get OAuth token');
     return err(tokenResult.error);
   }
 
@@ -43,9 +43,9 @@ export async function getEvent(
   );
 
   if (result.ok) {
-    logger?.info({ userId, calendarId, eventId, title: result.value.summary }, 'getEvent: success');
+    logger.info({ userId, calendarId, eventId, title: result.value.summary }, 'getEvent: success');
   } else {
-    logger?.error({ userId, calendarId, eventId, error: result.error }, 'getEvent: failed to get event');
+    logger.error({ userId, calendarId, eventId, error: result.error }, 'getEvent: failed to get event');
   }
 
   return result;

@@ -4,6 +4,7 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { type ModelPricing, LlmModels } from '@intexuraos/llm-contract';
+import type { Logger } from '@intexuraos/common-core';
 
 const mockResearch = vi.fn();
 const mockGenerate = vi.fn();
@@ -26,24 +27,32 @@ const testPricing: ModelPricing = {
   outputPricePerMillion: 10.0,
 };
 
+const mockLogger: Logger = {
+  info: vi.fn(),
+  error: vi.fn(),
+  warn: vi.fn(),
+  debug: vi.fn(),
+};
+
 describe('GeminiAdapter', () => {
   let adapter: InstanceType<typeof GeminiAdapter>;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    adapter = new GeminiAdapter('test-key', LlmModels.Gemini25Pro, 'test-user-id', testPricing);
+    adapter = new GeminiAdapter('test-key', LlmModels.Gemini25Pro, 'test-user-id', testPricing, mockLogger);
   });
 
   describe('constructor', () => {
     it('passes apiKey and model to client', () => {
       mockCreateGeminiClient.mockClear();
-      new GeminiAdapter('test-key', LlmModels.Gemini25Pro, 'test-user-id', testPricing);
+      new GeminiAdapter('test-key', LlmModels.Gemini25Pro, 'test-user-id', testPricing, mockLogger);
 
       expect(mockCreateGeminiClient).toHaveBeenCalledWith({
         apiKey: 'test-key',
         model: LlmModels.Gemini25Pro,
         userId: 'test-user-id',
         pricing: testPricing,
+        logger: mockLogger,
       });
     });
 
@@ -52,7 +61,8 @@ describe('GeminiAdapter', () => {
         'test-key',
         LlmModels.Gemini25Pro,
         'test-user-id',
-        testPricing
+        testPricing,
+        mockLogger
       );
       expect(testAdapter).toBeDefined();
     });

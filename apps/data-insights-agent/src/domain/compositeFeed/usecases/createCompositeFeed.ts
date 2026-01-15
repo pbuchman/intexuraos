@@ -22,7 +22,7 @@ export interface CreateCompositeFeedDeps {
   compositeFeedRepository: CompositeFeedRepository;
   dataSourceRepository: DataSourceRepository;
   feedNameGenerationService: FeedNameGenerationService;
-  logger?: BasicLogger;
+  logger: BasicLogger;
 }
 
 export interface CreateCompositeFeedError {
@@ -37,7 +37,7 @@ export async function createCompositeFeed(
 ): Promise<Result<CompositeFeed, CreateCompositeFeedError>> {
   const { compositeFeedRepository, dataSourceRepository, feedNameGenerationService, logger } = deps;
 
-  logger?.info(
+  logger.info(
     {
       userId,
       staticSourceCount: request.staticSourceIds.length,
@@ -47,7 +47,7 @@ export async function createCompositeFeed(
   );
 
   if (request.staticSourceIds.length > MAX_STATIC_SOURCES) {
-    logger?.warn(
+    logger.warn(
       {
         userId,
         requestedSourceCount: request.staticSourceIds.length,
@@ -62,7 +62,7 @@ export async function createCompositeFeed(
   }
 
   if (request.notificationFilters.length > MAX_NOTIFICATION_FILTERS) {
-    logger?.warn(
+    logger.warn(
       {
         userId,
         requestedFilterCount: request.notificationFilters.length,
@@ -77,7 +77,7 @@ export async function createCompositeFeed(
   }
 
   if (request.purpose.trim().length === 0) {
-    logger?.warn({ userId }, 'Validation failed: empty purpose');
+    logger.warn({ userId }, 'Validation failed: empty purpose');
     return err({
       code: 'VALIDATION_ERROR',
       message: 'Purpose is required',
@@ -88,14 +88,14 @@ export async function createCompositeFeed(
   for (const sourceId of request.staticSourceIds) {
     const sourceResult = await dataSourceRepository.getById(sourceId, userId);
     if (!sourceResult.ok) {
-      logger?.error({ userId, sourceId, error: sourceResult.error }, 'Failed to fetch data source');
+      logger.error({ userId, sourceId, error: sourceResult.error }, 'Failed to fetch data source');
       return err({
         code: 'REPOSITORY_ERROR',
         message: sourceResult.error,
       });
     }
     if (sourceResult.value === null) {
-      logger?.warn({ userId, sourceId }, 'Data source not found');
+      logger.warn({ userId, sourceId }, 'Data source not found');
       return err({
         code: 'SOURCE_NOT_FOUND',
         message: `Data source not found: ${sourceId}`,
@@ -114,7 +114,7 @@ export async function createCompositeFeed(
   );
 
   if (!nameResult.ok) {
-    logger?.error({ userId, error: nameResult.error.message }, 'Feed name generation failed');
+    logger.error({ userId, error: nameResult.error.message }, 'Feed name generation failed');
     return err({
       code: 'NAME_GENERATION_ERROR',
       message: nameResult.error.message,
@@ -124,14 +124,14 @@ export async function createCompositeFeed(
   const feedResult = await compositeFeedRepository.create(userId, nameResult.value, request);
 
   if (!feedResult.ok) {
-    logger?.error({ userId, error: feedResult.error }, 'Failed to create composite feed in repository');
+    logger.error({ userId, error: feedResult.error }, 'Failed to create composite feed in repository');
     return err({
       code: 'REPOSITORY_ERROR',
       message: feedResult.error,
     });
   }
 
-  logger?.info({ userId, feedId: feedResult.value.id, feedName: feedResult.value.name }, 'Composite feed created successfully');
+  logger.info({ userId, feedId: feedResult.value.id, feedName: feedResult.value.name }, 'Composite feed created successfully');
 
   return ok(feedResult.value);
 }

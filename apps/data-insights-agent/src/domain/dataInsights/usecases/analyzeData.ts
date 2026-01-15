@@ -22,7 +22,7 @@ export interface AnalyzeDataDeps {
   compositeFeedRepository: CompositeFeedRepository;
   snapshotRepository: SnapshotRepository;
   dataAnalysisService: DataAnalysisService;
-  logger?: BasicLogger;
+  logger: BasicLogger;
 }
 
 export interface AnalyzeDataError {
@@ -121,11 +121,11 @@ export async function analyzeData(
 ): Promise<Result<AnalyzeDataResult, AnalyzeDataError>> {
   const { compositeFeedRepository, snapshotRepository, dataAnalysisService, logger } = deps;
 
-  logger?.info({ feedId, userId }, 'Starting data analysis');
+  logger.info({ feedId, userId }, 'Starting data analysis');
 
   const feedResult = await compositeFeedRepository.getById(feedId, userId);
   if (!feedResult.ok) {
-    logger?.error({ feedId, userId, error: feedResult.error }, 'Failed to fetch composite feed');
+    logger.error({ feedId, userId, error: feedResult.error }, 'Failed to fetch composite feed');
     return err({
       code: 'REPOSITORY_ERROR',
       message: feedResult.error,
@@ -133,7 +133,7 @@ export async function analyzeData(
   }
 
   if (feedResult.value === null) {
-    logger?.warn({ feedId, userId }, 'Composite feed not found');
+    logger.warn({ feedId, userId }, 'Composite feed not found');
     return err({
       code: 'FEED_NOT_FOUND',
       message: 'Composite feed not found',
@@ -142,7 +142,7 @@ export async function analyzeData(
 
   const snapshotResult = await snapshotRepository.getByFeedId(feedId, userId);
   if (!snapshotResult.ok) {
-    logger?.error({ feedId, userId, error: snapshotResult.error }, 'Failed to fetch snapshot');
+    logger.error({ feedId, userId, error: snapshotResult.error }, 'Failed to fetch snapshot');
     return err({
       code: 'REPOSITORY_ERROR',
       message: snapshotResult.error,
@@ -150,7 +150,7 @@ export async function analyzeData(
   }
 
   if (snapshotResult.value === null) {
-    logger?.warn({ feedId, userId }, 'Snapshot not found');
+    logger.warn({ feedId, userId }, 'Snapshot not found');
     return err({
       code: 'SNAPSHOT_NOT_FOUND',
       message: 'No snapshot available. Please refresh the feed first.',
@@ -161,7 +161,7 @@ export async function analyzeData(
   const jsonSchema = buildCompositeFeedSchema();
   const chartTypes = buildChartTypesInfo();
 
-  logger?.info({ feedId, userId, snapshotId: snapshot.feedId }, 'Starting LLM analysis');
+  logger.info({ feedId, userId, snapshotId: snapshot.feedId }, 'Starting LLM analysis');
 
   const analysisResult = await dataAnalysisService.analyzeData(
     userId,
@@ -171,7 +171,7 @@ export async function analyzeData(
   );
 
   if (!analysisResult.ok) {
-    logger?.error({ feedId, userId, error: analysisResult.error.message }, 'LLM analysis failed');
+    logger.error({ feedId, userId, error: analysisResult.error.message }, 'LLM analysis failed');
     return err({
       code: 'ANALYSIS_ERROR',
       message: analysisResult.error.message,
@@ -181,7 +181,7 @@ export async function analyzeData(
   const { insights: parsedInsights, noInsightsReason } = analysisResult.value;
 
   if (parsedInsights.length === 0 && noInsightsReason !== undefined) {
-    logger?.info({ feedId, userId, reason: noInsightsReason }, 'No insights generated');
+    logger.info({ feedId, userId, reason: noInsightsReason }, 'No insights generated');
     return err({
       code: 'NO_INSIGHTS',
       message: noInsightsReason,
@@ -198,19 +198,19 @@ export async function analyzeData(
     generatedAt: now,
   }));
 
-  logger?.info({ feedId, userId, insightCount: insights.length }, 'Insights generated successfully');
+  logger.info({ feedId, userId, insightCount: insights.length }, 'Insights generated successfully');
 
   const updateResult = await compositeFeedRepository.updateDataInsights(feedId, userId, insights);
 
   if (!updateResult.ok) {
-    logger?.error({ feedId, userId, error: updateResult.error }, 'Failed to update insights in repository');
+    logger.error({ feedId, userId, error: updateResult.error }, 'Failed to update insights in repository');
     return err({
       code: 'REPOSITORY_ERROR',
       message: updateResult.error,
     });
   }
 
-  logger?.info({ feedId, userId, insightCount: insights.length }, 'Data analysis completed successfully');
+  logger.info({ feedId, userId, insightCount: insights.length }, 'Data analysis completed successfully');
 
   const result: AnalyzeDataResult = { insights };
   if (noInsightsReason !== undefined) {

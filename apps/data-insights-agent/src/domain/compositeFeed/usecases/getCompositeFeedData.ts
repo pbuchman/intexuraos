@@ -21,7 +21,7 @@ export interface GetCompositeFeedDataDeps {
   compositeFeedRepository: CompositeFeedRepository;
   dataSourceRepository: DataSourceRepository;
   mobileNotificationsClient: MobileNotificationsClient;
-  logger?: BasicLogger;
+  logger: BasicLogger;
 }
 
 export interface GetCompositeFeedDataError {
@@ -36,11 +36,11 @@ export async function getCompositeFeedData(
 ): Promise<Result<CompositeFeedData, GetCompositeFeedDataError>> {
   const { compositeFeedRepository, dataSourceRepository, mobileNotificationsClient, logger } = deps;
 
-  logger?.info({ feedId, userId }, 'Getting composite feed data');
+  logger.info({ feedId, userId }, 'Getting composite feed data');
 
   const feedResult = await compositeFeedRepository.getById(feedId, userId);
   if (!feedResult.ok) {
-    logger?.error({ feedId, userId, error: feedResult.error }, 'Failed to fetch feed from repository');
+    logger.error({ feedId, userId, error: feedResult.error }, 'Failed to fetch feed from repository');
     return err({
       code: 'REPOSITORY_ERROR',
       message: feedResult.error,
@@ -48,7 +48,7 @@ export async function getCompositeFeedData(
   }
 
   if (feedResult.value === null) {
-    logger?.warn({ feedId, userId }, 'Composite feed not found');
+    logger.warn({ feedId, userId }, 'Composite feed not found');
     return err({
       code: 'NOT_FOUND',
       message: 'Composite feed not found',
@@ -56,7 +56,7 @@ export async function getCompositeFeedData(
   }
 
   const feed = feedResult.value;
-  logger?.info(
+  logger.info(
     {
       feedId,
       feedName: feed.name,
@@ -70,7 +70,7 @@ export async function getCompositeFeedData(
   for (const sourceId of feed.staticSourceIds) {
     const sourceResult = await dataSourceRepository.getById(sourceId, userId);
     if (!sourceResult.ok) {
-      logger?.warn({ feedId, sourceId, error: sourceResult.error }, 'Failed to fetch static source');
+      logger.warn({ feedId, sourceId, error: sourceResult.error }, 'Failed to fetch static source');
       continue;
     }
     if (sourceResult.value !== null) {
@@ -80,10 +80,10 @@ export async function getCompositeFeedData(
         content: sourceResult.value.content,
       });
     } else {
-      logger?.warn({ feedId, sourceId }, 'Static source not found');
+      logger.warn({ feedId, sourceId }, 'Static source not found');
     }
   }
-  logger?.info({ feedId, staticSourcesFetched: staticSources.length }, 'Fetched static sources');
+  logger.info({ feedId, staticSourcesFetched: staticSources.length }, 'Fetched static sources');
 
   const notifications: {
     filterId: string;
@@ -104,7 +104,7 @@ export async function getCompositeFeedData(
   }[] = [];
 
   for (const filter of feed.notificationFilters) {
-    logger?.info(
+    logger.info(
       { feedId, filterId: filter.id, filterName: filter.name, criteria: { app: filter.app, source: filter.source, title: filter.title } },
       'Querying notifications for filter'
     );
@@ -123,7 +123,7 @@ export async function getCompositeFeedData(
     }
 
     if (!notificationsResult.ok) {
-      logger?.error(
+      logger.error(
         { feedId, filterId: filter.id, filterName: filter.name, error: notificationsResult.error },
         'Failed to query notifications from mobile-notifications-service'
       );
@@ -136,7 +136,7 @@ export async function getCompositeFeedData(
       continue;
     }
 
-    logger?.info(
+    logger.info(
       { feedId, filterId: filter.id, filterName: filter.name, notificationCount: notificationsResult.value.length },
       'Fetched notifications for filter'
     );
@@ -149,7 +149,7 @@ export async function getCompositeFeedData(
   }
 
   const totalNotifications = notifications.reduce((sum, n) => sum + n.items.length, 0);
-  logger?.info(
+  logger.info(
     { feedId, staticSourceCount: staticSources.length, filterCount: notifications.length, totalNotifications },
     'Composite feed data aggregation complete'
   );

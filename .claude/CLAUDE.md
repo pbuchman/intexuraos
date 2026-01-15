@@ -65,6 +65,42 @@ Note: The alias may not be available in spawned subshells - if `tf` is not found
 
 **ALWAYS commit `.claude/ci-failures/*` files with your changes.** These track verification failures for learning and pattern analysis.
 
+### Coverage Verification Efficiency (MANDATORY)
+
+**RULE:** When verifying coverage, NEVER run tests repeatedly just to grep different patterns from the output.
+
+**❌ WRONG — Re-runs tests multiple times (each run = minutes wasted):**
+```bash
+# Run 1: Initial CI check
+pnpm run ci:tracked
+
+# Run 2: Check error message
+pnpm run test:coverage 2>&1 | grep -E "(Coverage for|ERROR:|Branch coverage|% Coverage)"
+# → ERROR: Coverage for branches (94.93%) does not meet global threshold (95%)
+
+# Run 3: Find low-coverage files
+pnpm run test:coverage 2>&1 | grep -E "(\s+)(\d+\.?\d*)(\s+)(\d+\.?\d*)(\s+)(\d+\.?\d*)" | awk -v threshold=95 '{if ($5+0 < threshold) print $0}'
+
+# Run 4: Try another grep pattern...
+pnpm run test:coverage 2>&1 | grep -B2 "90\." | head -50
+```
+
+**✅ RIGHT — Capture once, analyze many times:**
+```bash
+# Run once, save output (2-3 minutes total)
+pnpm run ci:tracked 2>&1 | tee /tmp/ci-output.txt
+
+# Now analyze the saved output instantly (seconds)
+grep -E "(Coverage for|ERROR:|Branch coverage|% Coverage)" /tmp/ci-output.txt
+# → ERROR: Coverage for branches (94.93%) does not meet global threshold (95%)
+
+grep -E "(\s+)(\d+\.?\d*)(\s+)(\d+\.?\d*)(\s+)(\d+\.?\d*)" /tmp/ci-output.txt | awk -v threshold=95 '{if ($5+0 < threshold) print $0}'
+
+grep -B2 "90\." /tmp/ci-output.txt | head -50
+```
+
+**Why:** Each `test:coverage` run takes 2-5 minutes. Re-running 3-4 times just to grep different patterns wastes 10-15 minutes. `tee` saves output while displaying it—subsequent analysis is instantaneous.
+
 ---
 
 ## Architecture

@@ -182,7 +182,12 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       }
 
       request.log.info({ model, provider: modelConfig.provider }, 'Starting image generation');
-      const imageGenerator = createImageGenerator(model as ImageGenerationModel, apiKey, userId);
+      const imageGenerator = createImageGenerator(
+        model as ImageGenerationModel,
+        apiKey,
+        userId,
+        request.log
+      );
       const result = await imageGenerator.generate(prompt, { slug });
 
       if (!result.ok) {

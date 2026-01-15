@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { err, ok, type Result } from '@intexuraos/common-core';
+import { err, ok, type Logger, type Result } from '@intexuraos/common-core';
 import { createGptClient } from '@intexuraos/infra-gpt';
 import type { ModelPricing } from '@intexuraos/llm-contract';
 import type { ImageGenerationModel } from '../../domain/index.js';
@@ -18,6 +18,7 @@ export interface OpenAIImageGeneratorConfig {
   userId: string;
   pricing: ModelPricing;
   imagePricing: ModelPricing;
+  logger: Logger;
   generateId?: () => string;
 }
 
@@ -28,6 +29,7 @@ export class OpenAIImageGenerator implements ImageGenerator {
   private readonly userId: string;
   private readonly pricing: ModelPricing;
   private readonly imagePricing: ModelPricing;
+  private readonly logger: Logger;
   private readonly generateId: () => string;
 
   constructor(config: OpenAIImageGeneratorConfig) {
@@ -37,6 +39,7 @@ export class OpenAIImageGenerator implements ImageGenerator {
     this.userId = config.userId;
     this.pricing = config.pricing;
     this.imagePricing = config.imagePricing;
+    this.logger = config.logger;
     this.generateId = config.generateId ?? ((): string => randomUUID());
   }
 
@@ -52,6 +55,7 @@ export class OpenAIImageGenerator implements ImageGenerator {
       userId: this.userId,
       pricing: this.pricing,
       imagePricing: this.imagePricing,
+      logger: this.logger,
     });
 
     if (client.generateImage === undefined) {

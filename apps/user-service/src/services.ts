@@ -5,9 +5,17 @@
 import { LlmModels } from '@intexuraos/llm-contract';
 import { createEncryptor, type Encryptor } from './infra/encryption.js';
 import type { PricingContext } from '@intexuraos/llm-pricing';
+import type { Logger } from '@intexuraos/common-core';
+import pino from 'pino';
 import type { Auth0Client, AuthTokenRepository } from './domain/identity/index.js';
 import type { LlmValidator, UserSettingsRepository } from './domain/settings/index.js';
 import type { OAuthConnectionRepository, GoogleOAuthClient } from './domain/oauth/index.js';
+
+/**
+ * Silent logger used when no logger is provided to initializeServices.
+ * LLM validation is skipped in production if logger is not available.
+ */
+const silentLogger: Logger = pino({ level: 'silent' });
 import {
   FirestoreAuthTokenRepository,
   FirestoreUserSettingsRepository,
@@ -75,8 +83,9 @@ export function getServices(): ServiceContainer {
 /**
  * Initialize the service container with all dependencies.
  * @param pricingContext - Pricing context for LLM validation (optional in test env)
+ * @param logger - Logger for LLM validation (uses silent logger if not provided)
  */
-export function initializeServices(pricingContext?: PricingContext): void {
+export function initializeServices(pricingContext?: PricingContext, logger: Logger = silentLogger): void {
   const auth0Config = loadAuth0ConfigFromInfra();
   // LlmValidator is null in test environment to skip actual API calls
   const isTestEnv = process.env['NODE_ENV'] === 'test';
@@ -90,7 +99,7 @@ export function initializeServices(pricingContext?: PricingContext): void {
       perplexity: pricingContext.getPricing(LlmModels.Sonar),
       zai: pricingContext.getPricing(LlmModels.Glm47),
     };
-    llmValidator = new LlmValidatorImpl(validationPricing);
+    llmValidator = new LlmValidatorImpl(validationPricing, logger);
   }
 
   container = {

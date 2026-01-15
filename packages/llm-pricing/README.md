@@ -12,12 +12,16 @@ LLM usage logging and pricing management for IntexuraOS.
 
 ### Logging Usage
 
-The `logUsage()` function is called automatically by all LLM clients:
+The `UsageLogger` class requires a logger instance for structured logging:
 
 ```ts
-import { logUsage } from '@intexuraos/llm-pricing';
+import { UsageLogger } from '@intexuraos/llm-pricing';
+import pino from 'pino';
 
-await logUsage({
+const logger = pino({ name: 'my-service' });
+const usageLogger = new UsageLogger({ logger });
+
+await usageLogger.log({
   userId: 'user-123',
   provider: 'anthropic',
   model: 'claude-sonnet-4-5',
@@ -30,6 +34,18 @@ await logUsage({
   },
   success: true,
 });
+```
+
+Or use the factory function:
+
+```ts
+import { createUsageLogger } from '@intexuraos/llm-pricing';
+import pino from 'pino';
+
+const logger = pino({ name: 'my-service' });
+const usageLogger = createUsageLogger({ logger });
+
+await usageLogger.log({ ... });
 ```
 
 ### Fetching Pricing

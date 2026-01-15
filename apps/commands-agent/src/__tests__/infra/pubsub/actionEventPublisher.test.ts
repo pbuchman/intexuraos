@@ -1,3 +1,4 @@
+import pino from 'pino';
 import { LlmModels } from '@intexuraos/llm-contract';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -11,11 +12,9 @@ const mockPublishToTopic = vi.fn();
 vi.mock('@intexuraos/infra-pubsub', () => ({
   BasePubSubPublisher: class {
     protected projectId: string;
-    protected loggerName: string;
 
-    constructor(config: { projectId: string; loggerName?: string }) {
+    constructor(config: { projectId: string; logger: { level: string } }) {
       this.projectId = config.projectId;
-      this.loggerName = config.loggerName ?? 'test';
     }
 
     async publishToTopic(
@@ -38,7 +37,10 @@ describe('ActionEventPublisher', () => {
     mockPublishToTopic.mockReset();
     mockPublishToTopic.mockResolvedValue({ ok: true, value: undefined });
     process.env['INTEXURAOS_PUBSUB_ACTIONS_QUEUE'] = 'test-actions-queue';
-    publisher = new ActionEventPublisher({ projectId: 'test-project' });
+    publisher = new ActionEventPublisher({
+      projectId: 'test-project',
+      logger: pino({ name: 'test', level: 'silent' }),
+    });
   });
 
   afterEach(() => {
@@ -185,7 +187,10 @@ describe('ActionEventPublisher', () => {
 
   describe('createActionEventPublisher', () => {
     it('creates an ActionEventPublisher instance', async () => {
-      const publisher = createActionEventPublisher({ projectId: 'test-project' });
+      const publisher = createActionEventPublisher({
+        projectId: 'test-project',
+        logger: pino({ name: 'test', level: 'silent' }),
+      });
 
       expect(publisher).toBeInstanceOf(ActionEventPublisher);
       expect(publisher.publishActionCreated).toBeDefined();

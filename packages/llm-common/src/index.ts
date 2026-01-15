@@ -61,6 +61,8 @@ export {
   isInputQualityResult,
   getInputQualityGuardError,
   type InputQualityResult,
+  buildValidationRepairPrompt,
+  buildImprovementRepairPrompt,
 } from './validation/index.js';
 
 // Research prompt builder
@@ -106,6 +108,8 @@ export {
   // Prompt builders
   buildInferResearchContextPrompt,
   buildInferSynthesisContextPrompt,
+  buildResearchContextRepairPrompt,
+  buildSynthesisContextRepairPrompt,
 } from './context/index.js';
 
 // Attribution system

@@ -5,6 +5,7 @@
  */
 
 import { LlmModels, type GPTImage1, type Gemini25FlashImage } from '@intexuraos/llm-contract';
+import type { Logger } from '@intexuraos/common-core';
 import {
   buildSourceMap,
   validateSynthesisAttributions,
@@ -45,7 +46,7 @@ export interface RunSynthesisDeps {
   userId: string;
   webAppUrl: string;
   reportLlmSuccess?: () => void;
-  logger?: { info: (msg: string) => void; error: (obj: object, msg: string) => void };
+  logger: Logger;
   imageApiKeys?: ImageApiKeys;
 }
 
@@ -68,10 +69,10 @@ export async function runSynthesis(
     imageApiKeys,
   } = deps;
 
-  logger?.info('[4.1] Loading research from database');
+  logger.info({}, '[4.1] Loading research from database');
   const researchResult = await researchRepo.findById(researchId);
   if (!researchResult.ok || researchResult.value === null) {
-    logger?.error({}, '[4.1] Research not found');
+    logger.error({}, '[4.1] Research not found');
     return { ok: false, error: 'Research not found' };
   }
 
@@ -80,18 +81,18 @@ export async function runSynthesis(
   // Guard against race conditions: if research is already being synthesized or completed,
   // return early to prevent duplicate notifications
   if (research.status === 'synthesizing' || research.status === 'completed') {
-    logger?.info('[4.1] Research already processing or completed, skipping synthesis');
+    logger.info({}, '[4.1] Research already processing or completed, skipping synthesis');
     return { ok: true };
   }
 
-  logger?.info('[4.1.1] Updating status to synthesizing');
+  logger.info({}, '[4.1.1] Updating status to synthesizing');
   await researchRepo.update(researchId, { status: 'synthesizing' });
 
   const successfulResults = research.llmResults.filter((r) => r.status === 'completed');
   const inputContextsCount = research.inputContexts?.length ?? 0;
 
   if (successfulResults.length === 0 && inputContextsCount === 0) {
-    logger?.error({}, '[4.1.2] No successful LLM results to synthesize');
+    logger.error({}, '[4.1.2] No successful LLM results to synthesize');
     await researchRepo.update(researchId, {
       status: 'failed',
       synthesisError: 'No successful LLM results to synthesize',
@@ -103,7 +104,7 @@ export async function runSynthesis(
   const shouldSkipSynthesis = successfulResults.length <= 1 && inputContextsCount === 0;
 
   if (shouldSkipSynthesis) {
-    logger?.info('[4.1.2] Single result, skipping synthesis');
+    logger.info({}, '[4.1.2] Single result, skipping synthesis');
     const now = new Date();
     const startedAt = new Date(research.startedAt);
     const totalDurationMs = now.getTime() - startedAt.getTime();
@@ -141,7 +142,7 @@ export async function runSynthesis(
   let additionalCostUsd = 0;
 
   if (contextInferrer !== undefined) {
-    logger?.info('[4.2.1] Starting synthesis context inference');
+    logger.info({}, '[4.2.1] Starting synthesis context inference');
     const contextResult = await contextInferrer.inferSynthesisContext({
       originalPrompt: research.prompt,
       reports: reports.map((r) => ({ model: r.model, content: r.content })),
@@ -150,18 +151,19 @@ export async function runSynthesis(
     if (contextResult.ok) {
       synthesisContext = contextResult.value.context;
       additionalCostUsd += contextResult.value.usage.costUsd ?? 0;
-      logger?.info(
+      logger.info(
+        {},
         `[4.2.2] Synthesis context inferred successfully (costUsd: ${String(contextResult.value.usage.costUsd)})`
       );
     } else {
       if (contextResult.error.usage !== undefined) {
         additionalCostUsd += contextResult.error.usage.costUsd ?? 0;
-        logger?.error(
+        logger.error(
           { error: contextResult.error, costUsd: contextResult.error.usage.costUsd },
           '[4.2.2] Synthesis context inference failed but cost tracked'
         );
       } else {
-        logger?.error(
+        logger.error(
           { error: contextResult.error },
           '[4.2.2] Synthesis context inference failed, proceeding without context'
         );
@@ -169,7 +171,7 @@ export async function runSynthesis(
     }
   }
 
-  logger?.info(`[4.3.1] Starting synthesis LLM call (${String(reports.length)} reports)`);
+  logger.info({}, `[4.3.1] Starting synthesis LLM call (${String(reports.length)} reports)`);
   const synthesisResult = await synthesizer.synthesize(
     research.prompt,
     reports,
@@ -178,7 +180,7 @@ export async function runSynthesis(
   );
 
   if (!synthesisResult.ok) {
-    logger?.error({ error: synthesisResult.error.message }, '[4.3.2] Synthesis LLM call failed');
+    logger.error({ error: synthesisResult.error.message }, '[4.3.2] Synthesis LLM call failed');
     await researchRepo.update(researchId, {
       status: 'failed',
       synthesisError: synthesisResult.error.message,
@@ -190,10 +192,10 @@ export async function runSynthesis(
   const synthesisContent = synthesisResult.value.content;
   const synthesisUsage = synthesisResult.value.usage;
 
-  logger?.info(`[4.3.2] Synthesis LLM call succeeded (${String(synthesisContent.length)} chars)`);
+  logger.info({}, `[4.3.2] Synthesis LLM call succeeded (${String(synthesisContent.length)} chars)`);
 
   // [4.3.3] Post-process synthesis for attribution
-  logger?.info('[4.3.3] Starting attribution post-processing');
+  logger.info({}, '[4.3.3] Starting attribution post-processing');
 
   const sourceMap = buildSourceMap(reports, additionalSources);
   let processedContent = synthesisContent;
@@ -203,9 +205,9 @@ export async function runSynthesis(
 
   if (validation.valid) {
     attributionStatus = 'complete';
-    logger?.info('[4.3.3a] Attribution validation passed');
+    logger.info({}, '[4.3.3a] Attribution validation passed');
   } else {
-    logger?.info(`[4.3.3b] Attribution validation failed: ${validation.errors.join(', ')}`);
+    logger.info({}, `[4.3.3b] Attribution validation failed: ${validation.errors.join(', ')}`);
 
     const repairResult = await repairAttribution(synthesisContent, sourceMap, {
       synthesizer,
@@ -218,15 +220,16 @@ export async function runSynthesis(
         processedContent = repairResult.value.content;
         attributionStatus = 'repaired';
         additionalCostUsd += repairResult.value.usage.costUsd ?? 0;
-        logger?.info(
+        logger.info(
+          {},
           `[4.3.3c] Attribution repair succeeded (costUsd: ${String(repairResult.value.usage.costUsd)})`
         );
       } else {
         additionalCostUsd += repairResult.value.usage.costUsd ?? 0;
-        logger?.info('[4.3.3c] Attribution repair did not fix all issues');
+        logger.info({}, '[4.3.3c] Attribution repair did not fix all issues');
       }
     } else {
-      logger?.info('[4.3.3c] Attribution repair failed');
+      logger.info({}, '[4.3.3c] Attribution repair failed');
     }
   }
 
@@ -234,7 +237,7 @@ export async function runSynthesis(
   const breakdown = generateBreakdown(sections, sourceMap);
   processedContent = `${processedContent}\n\n${breakdown}`;
 
-  logger?.info(`[4.3.4] Attribution status: ${attributionStatus}`);
+  logger.info({}, `[4.3.4] Attribution status: ${attributionStatus}`);
 
   // Calculate aggregate totals from all LLM results + synthesis
   // For enhanced research: exclude copiedFromSource results (costs tracked in sourceLlmCostUsd)
@@ -262,7 +265,8 @@ export async function runSynthesis(
     (research.sourceLlmCostUsd ?? 0) +
     additionalCostUsd;
 
-  logger?.info(
+  logger.info(
+    {},
     `[4.3.5] Aggregate usage: inputTokens=${String(totalInputTokens)}, outputTokens=${String(totalOutputTokens)}, costUsd=${totalCostUsd.toFixed(6)} (llm=${llmTotals.costUsd.toFixed(6)}, synth=${(synthesisUsage?.costUsd ?? 0).toFixed(6)}, aux=${(research.auxiliaryCostUsd ?? 0).toFixed(6)}, source=${(research.sourceLlmCostUsd ?? 0).toFixed(6)}, add=${additionalCostUsd.toFixed(6)})`
   );
 
@@ -274,7 +278,7 @@ export async function runSynthesis(
   let coverImageId: string | undefined;
 
   if (imageServiceClient !== null) {
-    logger?.info('[4.4.1] Starting cover image generation');
+    logger.info({}, '[4.4.1] Starting cover image generation');
     const imageResult = await generateCoverImage(
       imageServiceClient,
       processedContent,
@@ -290,19 +294,19 @@ export async function runSynthesis(
         alt: research.title,
       };
       coverImageId = imageResult.id;
-      logger?.info(`[4.4.4] Cover image generation completed (id: ${imageResult.id})`);
+      logger.info({}, `[4.4.4] Cover image generation completed (id: ${imageResult.id})`);
     } else {
-      logger?.info('[4.4.4] Cover image generation returned null (see previous errors)');
+      logger.info({}, '[4.4.4] Cover image generation returned null (see previous errors)');
     }
   } else {
-    logger?.info('[4.4] Skipping cover image generation (imageServiceClient is null)');
+    logger.info({}, '[4.4] Skipping cover image generation (imageServiceClient is null)');
   }
 
   let shareInfo: ShareInfo | undefined;
   let shareUrl = `${webAppUrl}/#/research/${researchId}`;
 
   if (shareStorage !== null && shareConfig !== null) {
-    logger?.info('[4.5.1] Generating shareable HTML');
+    logger.info({}, '[4.5.1] Generating shareable HTML');
     const shareToken = generateShareToken();
     const slug = slugify(research.title);
     const idPrefix = researchId.slice(0, 6);
@@ -320,7 +324,7 @@ export async function runSynthesis(
       ...(coverImage !== undefined && { coverImage }),
     });
 
-    logger?.info('[4.5.2] Uploading HTML to GCS');
+    logger.info({}, '[4.5.2] Uploading HTML to GCS');
     const uploadResult = await shareStorage.upload(fileName, html);
     if (uploadResult.ok) {
       shareInfo = {
@@ -331,13 +335,13 @@ export async function runSynthesis(
         gcsPath: uploadResult.value.gcsPath,
         ...(coverImageId !== undefined && { coverImageId }),
       };
-      logger?.info(`[4.5.3] HTML uploaded successfully (path: ${uploadResult.value.gcsPath})`);
+      logger.info({}, `[4.5.3] HTML uploaded successfully (path: ${uploadResult.value.gcsPath})`);
     } else {
-      logger?.error({}, '[4.5.3] HTML upload failed');
+      logger.error({}, '[4.5.3] HTML upload failed');
     }
   }
 
-  logger?.info('[4.6] Saving final research result to database');
+  logger.info({}, '[4.6] Saving final research result to database');
   await researchRepo.update(researchId, {
     status: 'completed',
     synthesizedResult: processedContent,
@@ -354,7 +358,7 @@ export async function runSynthesis(
     reportLlmSuccess();
   }
 
-  logger?.info('[4.7] Sending completion notification');
+  logger.info({}, '[4.7] Sending completion notification');
   void notificationSender.sendResearchComplete(
     research.userId,
     researchId,
@@ -399,30 +403,33 @@ async function generateCoverImage(
   userId: string,
   imageApiKeys: ImageApiKeys | undefined,
   synthesisModel: string | undefined,
-  logger?: { info: (msg: string) => void; error: (obj: object, msg: string) => void }
+  logger: Logger
 ): Promise<GeneratedImageData | null> {
   const promptModel = LlmModels.Gemini25Pro;
   const imageModel = selectImageModel(imageApiKeys, synthesisModel);
 
   if (imageModel === null) {
-    logger?.info(
+    logger.info(
+      {},
       '[4.4.1a] No API keys available for image generation (neither Google nor OpenAI key set)'
     );
     return null;
   }
 
-  logger?.info(
+  logger.info(
+    {},
     `[4.4.1b] Selected image model: ${imageModel} (Google key: ${imageApiKeys?.google !== undefined ? 'present' : 'missing'}, OpenAI key: ${imageApiKeys?.openai !== undefined ? 'present' : 'missing'})`
   );
 
   try {
-    logger?.info(
+    logger.info(
+      {},
       `[4.4.2] Calling image-service /internal/images/prompts/generate (model: ${promptModel})`
     );
 
     const promptResult = await client.generatePrompt(synthesizedResult, promptModel, userId);
     if (!promptResult.ok) {
-      logger?.error(
+      logger.error(
         {
           errorCode: promptResult.error.code,
           errorMessage: promptResult.error.message,
@@ -434,7 +441,8 @@ async function generateCoverImage(
       return null;
     }
 
-    logger?.info(
+    logger.info(
+      {},
       `[4.4.3] Prompt generated (title: ${promptResult.value.title}), calling image-service /internal/images/generate (model: ${imageModel})`
     );
 
@@ -442,7 +450,7 @@ async function generateCoverImage(
       title: promptResult.value.title,
     });
     if (!imageResult.ok) {
-      logger?.error(
+      logger.error(
         {
           errorCode: imageResult.error.code,
           errorMessage: imageResult.error.message,
@@ -456,7 +464,7 @@ async function generateCoverImage(
 
     return imageResult.value;
   } catch (error) {
-    logger?.error({ error, userId }, '[4.4.ERR] Unexpected error during cover image generation');
+    logger.error({ error, userId }, '[4.4.ERR] Unexpected error during cover image generation');
     return null;
   }
 }

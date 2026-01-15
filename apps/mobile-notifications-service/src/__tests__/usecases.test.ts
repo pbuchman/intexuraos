@@ -78,10 +78,24 @@ describe('createConnection', () => {
 describe('processNotification', () => {
   let signatureRepo: FakeSignatureConnectionRepository;
   let notificationRepo: FakeNotificationRepository;
+  let mockLogger: {
+    info: (obj: Record<string, unknown>, msg: string) => void;
+    warn: (obj: Record<string, unknown>, msg: string) => void;
+    error: (obj: Record<string, unknown>, msg: string) => void;
+  };
 
   beforeEach(() => {
     signatureRepo = new FakeSignatureConnectionRepository();
     notificationRepo = new FakeNotificationRepository();
+    mockLogger = {
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+    } as {
+      info: (obj: Record<string, unknown>, msg: string) => void;
+      warn: (obj: Record<string, unknown>, msg: string) => void;
+      error: (obj: Record<string, unknown>, msg: string) => void;
+    };
   });
 
   it('accepts notification with valid signature', async () => {
@@ -107,7 +121,8 @@ describe('processNotification', () => {
         },
       },
       signatureRepo,
-      notificationRepo
+      notificationRepo,
+      mockLogger
     );
 
     expect(result.ok).toBe(true);
@@ -138,7 +153,8 @@ describe('processNotification', () => {
         },
       },
       signatureRepo,
-      notificationRepo
+      notificationRepo,
+      mockLogger
     );
 
     expect(result.ok).toBe(true);
@@ -189,7 +205,8 @@ describe('processNotification', () => {
         },
       },
       signatureRepo,
-      notificationRepo
+      notificationRepo,
+      mockLogger
     );
 
     expect(result.ok).toBe(true);
@@ -220,7 +237,8 @@ describe('processNotification', () => {
         },
       },
       signatureRepo,
-      notificationRepo
+      notificationRepo,
+      mockLogger
     );
 
     expect(result.ok).toBe(false);
@@ -254,7 +272,8 @@ describe('processNotification', () => {
         },
       },
       signatureRepo,
-      notificationRepo
+      notificationRepo,
+      mockLogger
     );
 
     expect(result.ok).toBe(false);
@@ -288,7 +307,8 @@ describe('processNotification', () => {
         },
       },
       signatureRepo,
-      notificationRepo
+      notificationRepo,
+      mockLogger
     );
 
     expect(result.ok).toBe(false);

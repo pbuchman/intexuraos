@@ -1,11 +1,15 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import nock from 'nock';
+import pino from 'pino';
+import type { Logger } from 'pino';
 import { createPricingContext } from '@intexuraos/llm-pricing';
 import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
 import { createUserServiceClient } from '../../infra/user/index.js';
 
 const INTEXURAOS_USER_SERVICE_URL = 'http://localhost:8081';
 const INTERNAL_AUTH_TOKEN = 'test-internal-token';
+
+const createFakeLogger = (): Logger => pino({ level: 'silent' });
 
 // Minimal pricing context for tests - structure matches AllPricingResponse
 const testPricing = {
@@ -63,6 +67,7 @@ describe('UserServiceClient', () => {
         baseUrl: INTEXURAOS_USER_SERVICE_URL,
         internalAuthToken: INTERNAL_AUTH_TOKEN,
         pricingContext,
+        logger: createFakeLogger(),
       });
 
       const result = await client.getApiKeys('user-123');
@@ -83,6 +88,7 @@ describe('UserServiceClient', () => {
         baseUrl: INTEXURAOS_USER_SERVICE_URL,
         internalAuthToken: INTERNAL_AUTH_TOKEN,
         pricingContext,
+        logger: createFakeLogger(),
       });
 
       const result = await client.getApiKeys('user-123');
@@ -103,6 +109,7 @@ describe('UserServiceClient', () => {
         baseUrl: INTEXURAOS_USER_SERVICE_URL,
         internalAuthToken: INTERNAL_AUTH_TOKEN,
         pricingContext,
+        logger: createFakeLogger(),
       });
 
       const result = await client.getApiKeys('user-456');
@@ -122,6 +129,7 @@ describe('UserServiceClient', () => {
         baseUrl: INTEXURAOS_USER_SERVICE_URL,
         internalAuthToken: INTERNAL_AUTH_TOKEN,
         pricingContext,
+        logger: createFakeLogger(),
       });
 
       const result = await client.getApiKeys('user-123');
@@ -142,6 +150,7 @@ describe('UserServiceClient', () => {
         baseUrl: INTEXURAOS_USER_SERVICE_URL,
         internalAuthToken: INTERNAL_AUTH_TOKEN,
         pricingContext,
+        logger: createFakeLogger(),
       });
 
       const result = await client.getApiKeys('user-123');
@@ -162,6 +171,7 @@ describe('UserServiceClient', () => {
         baseUrl: INTEXURAOS_USER_SERVICE_URL,
         internalAuthToken: INTERNAL_AUTH_TOKEN,
         pricingContext,
+        logger: createFakeLogger(),
       });
 
       const result = await client.getApiKeys('unknown-user');
@@ -183,6 +193,7 @@ describe('UserServiceClient', () => {
         baseUrl: INTEXURAOS_USER_SERVICE_URL,
         internalAuthToken: INTERNAL_AUTH_TOKEN,
         pricingContext,
+        logger: createFakeLogger(),
       });
 
       const result = await client.getApiKeys('user-empty-body');
@@ -203,6 +214,7 @@ describe('UserServiceClient', () => {
         baseUrl: INTEXURAOS_USER_SERVICE_URL,
         internalAuthToken: INTERNAL_AUTH_TOKEN,
         pricingContext,
+        logger: createFakeLogger(),
       });
 
       const result = await client.getApiKeys('user-123');
@@ -224,6 +236,7 @@ describe('UserServiceClient', () => {
         baseUrl: INTEXURAOS_USER_SERVICE_URL,
         internalAuthToken: 'custom-token',
         pricingContext,
+        logger: createFakeLogger(),
       });
 
       await client.getApiKeys('user-789');
@@ -251,6 +264,7 @@ describe('UserServiceClient', () => {
         baseUrl: INTEXURAOS_USER_SERVICE_URL,
         internalAuthToken: INTERNAL_AUTH_TOKEN,
         pricingContext,
+        logger: createFakeLogger(),
       });
 
       const result = await client.getLlmClient(userId);
@@ -279,6 +293,7 @@ describe('UserServiceClient', () => {
         baseUrl: INTEXURAOS_USER_SERVICE_URL,
         internalAuthToken: INTERNAL_AUTH_TOKEN,
         pricingContext,
+        logger: createFakeLogger(),
       });
 
       const result = await client.getLlmClient(userId);
@@ -303,6 +318,7 @@ describe('UserServiceClient', () => {
         baseUrl: INTEXURAOS_USER_SERVICE_URL,
         internalAuthToken: INTERNAL_AUTH_TOKEN,
         pricingContext,
+        logger: createFakeLogger(),
       });
 
       const result = await client.getLlmClient(userId);
@@ -323,6 +339,7 @@ describe('UserServiceClient', () => {
         baseUrl: INTEXURAOS_USER_SERVICE_URL,
         internalAuthToken: INTERNAL_AUTH_TOKEN,
         pricingContext,
+        logger: createFakeLogger(),
       });
 
       const result = await client.getLlmClient(userId);
@@ -351,6 +368,7 @@ describe('UserServiceClient', () => {
         baseUrl: INTEXURAOS_USER_SERVICE_URL,
         internalAuthToken: INTERNAL_AUTH_TOKEN,
         pricingContext,
+        logger: createFakeLogger(),
       });
 
       const result = await client.getLlmClient(userId);
@@ -379,6 +397,7 @@ describe('UserServiceClient', () => {
         baseUrl: INTEXURAOS_USER_SERVICE_URL,
         internalAuthToken: INTERNAL_AUTH_TOKEN,
         pricingContext,
+        logger: createFakeLogger(),
       });
 
       const result = await client.getLlmClient(userId);
@@ -401,6 +420,7 @@ describe('UserServiceClient', () => {
         baseUrl: INTEXURAOS_USER_SERVICE_URL,
         internalAuthToken: INTERNAL_AUTH_TOKEN,
         pricingContext,
+        logger: createFakeLogger(),
       });
 
       const result = await client.getLlmClient(userId);
@@ -429,6 +449,7 @@ describe('UserServiceClient', () => {
         baseUrl: INTEXURAOS_USER_SERVICE_URL,
         internalAuthToken: INTERNAL_AUTH_TOKEN,
         pricingContext,
+        logger: createFakeLogger(),
       });
 
       const result = await client.getLlmClient(userId);
@@ -452,6 +473,7 @@ describe('UserServiceClient', () => {
         baseUrl: INTEXURAOS_USER_SERVICE_URL,
         internalAuthToken: INTERNAL_AUTH_TOKEN,
         pricingContext,
+        logger: createFakeLogger(),
       });
 
       const result = await client.getLlmClient(userId);
@@ -481,6 +503,7 @@ describe('UserServiceClient', () => {
         baseUrl: INTEXURAOS_USER_SERVICE_URL,
         internalAuthToken: INTERNAL_AUTH_TOKEN,
         pricingContext,
+        logger: createFakeLogger(),
       });
 
       const result = await client.getLlmClient(userId);
@@ -510,6 +533,7 @@ describe('UserServiceClient', () => {
         baseUrl: INTEXURAOS_USER_SERVICE_URL,
         internalAuthToken: INTERNAL_AUTH_TOKEN,
         pricingContext,
+        logger: createFakeLogger(),
       });
 
       const result = await client.getLlmClient(userId);
@@ -540,6 +564,7 @@ describe('UserServiceClient', () => {
         baseUrl: INTEXURAOS_USER_SERVICE_URL,
         internalAuthToken: INTERNAL_AUTH_TOKEN,
         pricingContext,
+        logger: createFakeLogger(),
       });
 
       const result = await client.getLlmClient(userId);
@@ -569,6 +594,7 @@ describe('UserServiceClient', () => {
         baseUrl: INTEXURAOS_USER_SERVICE_URL,
         internalAuthToken: INTERNAL_AUTH_TOKEN,
         pricingContext,
+        logger: createFakeLogger(),
       });
 
       const result = await client.getLlmClient(userId);
@@ -598,6 +624,7 @@ describe('UserServiceClient', () => {
         baseUrl: INTEXURAOS_USER_SERVICE_URL,
         internalAuthToken: INTERNAL_AUTH_TOKEN,
         pricingContext,
+        logger: createFakeLogger(),
       });
 
       const result = await client.getLlmClient(userId);
@@ -626,6 +653,7 @@ describe('UserServiceClient', () => {
         baseUrl: INTEXURAOS_USER_SERVICE_URL,
         internalAuthToken: INTERNAL_AUTH_TOKEN,
         pricingContext,
+        logger: createFakeLogger(),
       });
 
       const result = await client.getLlmClient(userId);

@@ -204,7 +204,7 @@ async function processStreamResponse(
 }
 
 export function createPerplexityClient(config: PerplexityConfig): PerplexityClient {
-  const { apiKey, model, userId, pricing, timeoutMs = DEFAULT_TIMEOUT_MS } = config;
+  const { apiKey, model, userId, pricing, timeoutMs = DEFAULT_TIMEOUT_MS, logger } = config;
 
   function trackUsage(
     callType: CallType,
@@ -212,6 +212,7 @@ export function createPerplexityClient(config: PerplexityConfig): PerplexityClie
     success: boolean,
     errorMessage?: string
   ): void {
+    // eslint-disable-next-line @typescript-eslint/no-deprecated -- TODO: Migrate to UsageLogger class with injected logger
     void logUsage({
       userId,
       provider: LlmProviders.Perplexity,
@@ -220,6 +221,7 @@ export function createPerplexityClient(config: PerplexityConfig): PerplexityClie
       usage,
       success,
       ...(errorMessage !== undefined && { errorMessage }),
+      logger,
     });
   }
 

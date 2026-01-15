@@ -1,3 +1,4 @@
+import pino from 'pino';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createActionEventPublisher } from '../infra/pubsub/actionEventPublisher.js';
 import type { ActionCreatedEvent } from '../domain/models/actionEvent.js';
@@ -5,11 +6,9 @@ import type { ActionCreatedEvent } from '../domain/models/actionEvent.js';
 vi.mock('@intexuraos/infra-pubsub', () => ({
   BasePubSubPublisher: class {
     protected projectId: string;
-    protected loggerName: string;
 
-    constructor(config: { projectId: string; loggerName: string }) {
+    constructor(config: { projectId: string; logger: { level: string } }) {
       this.projectId = config.projectId;
-      this.loggerName = config.loggerName;
     }
 
     async publishToTopic(
@@ -58,6 +57,7 @@ describe('createActionEventPublisher', () => {
   it('creates publisher instance', () => {
     const publisher = createActionEventPublisher({
       projectId: 'test-project',
+      logger: pino({ name: 'test', level: 'silent' }),
     });
 
     expect(publisher).toBeDefined();
@@ -67,6 +67,7 @@ describe('createActionEventPublisher', () => {
   it('publishes action created event successfully', async () => {
     const publisher = createActionEventPublisher({
       projectId: 'test-project',
+      logger: pino({ name: 'test', level: 'silent' }),
     });
 
     const result = await publisher.publishActionCreated(event);
@@ -79,6 +80,7 @@ describe('createActionEventPublisher', () => {
 
     const publisher = createActionEventPublisher({
       projectId: 'test-project',
+      logger: pino({ name: 'test', level: 'silent' }),
     });
 
     const result = await publisher.publishActionCreated(event);

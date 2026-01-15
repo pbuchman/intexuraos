@@ -4,6 +4,7 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { type ModelPricing, LlmModels } from '@intexuraos/llm-contract';
+import type { Logger } from '@intexuraos/common-core';
 
 const mockResearch = vi.fn();
 const mockGenerate = vi.fn();
@@ -24,24 +25,32 @@ const testPricing: ModelPricing = {
   outputPricePerMillion: 8.0,
 };
 
+const mockLogger: Logger = {
+  info: vi.fn(),
+  error: vi.fn(),
+  warn: vi.fn(),
+  debug: vi.fn(),
+};
+
 describe('GptAdapter', () => {
   let adapter: InstanceType<typeof GptAdapter>;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    adapter = new GptAdapter('test-key', LlmModels.O4MiniDeepResearch, 'test-user-id', testPricing);
+    adapter = new GptAdapter('test-key', LlmModels.O4MiniDeepResearch, 'test-user-id', testPricing, mockLogger);
   });
 
   describe('constructor', () => {
     it('passes apiKey and model to client', () => {
       mockCreateGptClient.mockClear();
-      new GptAdapter('test-key', LlmModels.O4MiniDeepResearch, 'test-user-id', testPricing);
+      new GptAdapter('test-key', LlmModels.O4MiniDeepResearch, 'test-user-id', testPricing, mockLogger);
 
       expect(mockCreateGptClient).toHaveBeenCalledWith({
         apiKey: 'test-key',
         model: LlmModels.O4MiniDeepResearch,
         userId: 'test-user-id',
         pricing: testPricing,
+        logger: mockLogger,
       });
     });
   });

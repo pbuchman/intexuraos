@@ -1,4 +1,4 @@
-import type { Result } from '@intexuraos/common-core';
+import type { Result, Logger } from '@intexuraos/common-core';
 import { err, getErrorMessage, ok } from '@intexuraos/common-core';
 import {
   createLlmClient,
@@ -13,19 +13,12 @@ import {
   type LlmProvider,
 } from '@intexuraos/llm-contract';
 import type { IPricingContext } from '@intexuraos/llm-pricing';
-import pino from 'pino';
-import type { Logger } from 'pino';
-
-const defaultLogger = pino({
-  level: process.env['LOG_LEVEL'] ?? 'info',
-  name: 'userServiceClient',
-});
 
 export interface UserServiceConfig {
   baseUrl: string;
   internalAuthToken: string;
   pricingContext: IPricingContext;
-  logger?: Logger;
+  logger: Logger;
 }
 
 export interface UserApiKeys {
@@ -59,13 +52,11 @@ export interface UserServiceClient {
 }
 
 export function createUserServiceClient(config: UserServiceConfig): UserServiceClient {
-  const logger = config.logger ?? defaultLogger;
-
   return {
     async getApiKeys(userId: string): Promise<Result<UserApiKeys, UserServiceError>> {
       const url = `${config.baseUrl}/internal/users/${userId}/llm-keys`;
 
-      logger.info({ userId }, 'Fetching user API keys');
+      config.logger.info({ userId }, 'Fetching user API keys');
 
       let response: Response;
       try {
@@ -75,7 +66,7 @@ export function createUserServiceClient(config: UserServiceConfig): UserServiceC
           },
         });
       } catch (error) {
-        logger.error(
+        config.logger.error(
           {
             userId,
             error: getErrorMessage(error),
@@ -97,7 +88,7 @@ export function createUserServiceClient(config: UserServiceConfig): UserServiceC
           /* Body read errors are not worth logging separately */
         }
 
-        logger.error(
+        config.logger.error(
           {
             userId,
             status: response.status,
@@ -121,7 +112,7 @@ export function createUserServiceClient(config: UserServiceConfig): UserServiceC
         result.google = data.google;
       }
 
-      logger.info(
+      config.logger.info(
         {
           userId,
           hasGoogleKey: result.google !== undefined,
@@ -213,6 +204,7 @@ export function createUserServiceClient(config: UserServiceConfig): UserServiceC
           model: defaultModel,
           userId,
           pricing,
+          logger: config.logger,
         };
 
         const client = createLlmClient(clientConfig);

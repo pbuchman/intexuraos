@@ -6,10 +6,13 @@
 import { createGeminiClient, type GeminiClient } from '@intexuraos/infra-gemini';
 import type { ModelPricing } from '@intexuraos/llm-contract';
 import {
-  getInputQualityGuardError,
+  buildImprovementRepairPrompt,
+  buildValidationRepairPrompt,
+  createLlmParseError,
   inputImprovementPrompt,
   inputQualityPrompt,
   isInputQualityResult,
+  logLlmParseError,
 } from '@intexuraos/llm-common';
 import { getErrorMessage, type Logger, type Result } from '@intexuraos/common-core';
 import type { LlmError } from '../../domain/research/ports/llmProvider.js';
@@ -41,28 +44,28 @@ export interface InputValidationProvider {
 export class InputValidationAdapter implements InputValidationProvider {
   private readonly client: GeminiClient;
   private readonly model: string;
-  private readonly logger: Logger | undefined;
+  private readonly logger: Logger;
 
   constructor(
     apiKey: string,
     model: string,
     userId: string,
     pricing: ModelPricing,
-    logger?: Logger
+    logger: Logger
   ) {
-    this.client = createGeminiClient({ apiKey, model, userId, pricing });
+    this.client = createGeminiClient({ apiKey, model, userId, pricing, logger });
     this.model = model;
     this.logger = logger;
   }
 
   async validateInput(prompt: string): Promise<Result<ValidationResult, LlmError>> {
-    this.logger?.info({ model: this.model, promptLength: prompt.length }, 'Input validation started');
+    this.logger.info({ model: this.model, promptLength: prompt.length }, 'Input validation started');
     const builtPrompt = inputQualityPrompt.build({ prompt });
     const result = await this.client.generate(builtPrompt);
 
     if (!result.ok) {
       const error = mapToLlmError(result.error);
-      this.logger?.error(
+      this.logger.error(
         { model: this.model, errorCode: error.code, errorMessage: error.message },
         'Input validation LLM call failed'
       );
@@ -71,40 +74,11 @@ export class InputValidationAdapter implements InputValidationProvider {
 
     const parsed = parseJson(result.value.content, isInputQualityResult);
     if (!parsed.ok) {
-      // Try to get a more specific error from the guard
-      let guardError: string | null = null;
-      const cleaned = result.value.content
-        .replace(/^```json\s*/i, '')
-        .replace(/^```\s*/i, '')
-        .replace(/\s*```$/i, '')
-        .trim();
-      try {
-        const parsedValue: unknown = JSON.parse(cleaned);
-        guardError = getInputQualityGuardError(parsedValue);
-      } catch {
-        // JSON parse failed, use original error
-      }
-      const errorMessage = guardError ?? parsed.error;
-      this.logger?.error(
-        { model: this.model, parseError: errorMessage, rawContent: result.value.content },
-        'Input validation parse failed'
-      );
-      return {
-        ok: false,
-        error: {
-          code: 'API_ERROR',
-          message: errorMessage,
-          usage: {
-            inputTokens: result.value.usage.inputTokens,
-            outputTokens: result.value.usage.outputTokens,
-            costUsd: result.value.usage.costUsd,
-          },
-        },
-      };
+      return await this.attemptValidationRepair(prompt, result.value.content, parsed.error, result.value.usage);
     }
 
     const { usage } = result.value;
-    this.logger?.info(
+    this.logger.info(
       { model: this.model, quality: parsed.value.quality, usage },
       'Input validation completed'
     );
@@ -123,25 +97,32 @@ export class InputValidationAdapter implements InputValidationProvider {
   }
 
   async improveInput(prompt: string): Promise<Result<ImprovementResult, LlmError>> {
-    this.logger?.info({ model: this.model, promptLength: prompt.length }, 'Input improvement started');
+    this.logger.info({ model: this.model, promptLength: prompt.length }, 'Input improvement started');
     const builtPrompt = inputImprovementPrompt.build({ prompt });
     const result = await this.client.generate(builtPrompt);
 
     if (!result.ok) {
       const error = mapToLlmError(result.error);
-      this.logger?.error(
+      this.logger.error(
         { model: this.model, errorCode: error.code, errorMessage: error.message },
         'Input improvement failed'
       );
       return { ok: false, error };
     }
 
+    const cleaned = this.cleanImprovedPrompt(result.value.content);
+    const validationError = this.validateImprovedPrompt(cleaned, result.value.content);
+
+    if (validationError !== null) {
+      return await this.attemptImprovementRepair(prompt, result.value.content, validationError, result.value.usage);
+    }
+
     const { usage } = result.value;
-    this.logger?.info({ model: this.model, usage }, 'Input improvement completed');
+    this.logger.info({ model: this.model, usage }, 'Input improvement completed');
     return {
       ok: true,
       value: {
-        improvedPrompt: result.value.content.trim(),
+        improvedPrompt: cleaned,
         usage: {
           inputTokens: usage.inputTokens,
           outputTokens: usage.outputTokens,
@@ -149,6 +130,189 @@ export class InputValidationAdapter implements InputValidationProvider {
         },
       },
     };
+  }
+
+  private async attemptValidationRepair(
+    originalPrompt: string,
+    invalidResponse: string,
+    errorMessage: string,
+    initialUsage: { inputTokens: number; outputTokens: number; costUsd: number }
+  ): Promise<Result<ValidationResult, LlmError>> {
+    logLlmParseError(
+      this.logger,
+      createLlmParseError({
+        errorMessage,
+        llmResponse: invalidResponse,
+        expectedSchema: '{ quality: 0|1|2, reason: string }',
+        operation: 'validateInput',
+        prompt: originalPrompt,
+      })
+    );
+
+    const repairPrompt = buildValidationRepairPrompt(originalPrompt, invalidResponse, errorMessage);
+    const result = await this.client.generate(repairPrompt);
+
+    if (!result.ok) {
+      return {
+        ok: false,
+        error: {
+          code: 'API_ERROR',
+          message: `Initial: ${errorMessage}. Repair: ${result.error.message}`,
+          usage: initialUsage,
+        },
+      };
+    }
+
+    const parsed = parseJson(result.value.content, isInputQualityResult);
+    if (!parsed.ok) {
+      logLlmParseError(
+        this.logger,
+        createLlmParseError({
+          errorMessage: parsed.error,
+          llmResponse: result.value.content,
+          expectedSchema: '{ quality: 0|1|2, reason: string }',
+          operation: 'validateInput-repair',
+        })
+      );
+      return {
+        ok: false,
+        error: {
+          code: 'API_ERROR',
+          message: `Initial: ${errorMessage}. Repair: ${parsed.error}`,
+          usage: initialUsage,
+        },
+      };
+    }
+
+    this.logger.info({ model: this.model, repaired: true }, 'Validation repair succeeded');
+    const { usage } = result.value;
+    return {
+      ok: true,
+      value: {
+        quality: parsed.value.quality,
+        reason: parsed.value.reason,
+        usage: {
+          inputTokens: usage.inputTokens,
+          outputTokens: usage.outputTokens,
+          costUsd: usage.costUsd,
+        },
+      },
+    };
+  }
+
+  private async attemptImprovementRepair(
+    originalPrompt: string,
+    invalidResponse: string,
+    errorMessage: string,
+    initialUsage: { inputTokens: number; outputTokens: number; costUsd: number }
+  ): Promise<Result<ImprovementResult, LlmError>> {
+    logLlmParseError(
+      this.logger,
+      createLlmParseError({
+        errorMessage,
+        llmResponse: invalidResponse,
+        expectedSchema: '<plain text, single sentence, no JSON, no markdown, no explanations>',
+        operation: 'improveInput',
+        prompt: originalPrompt,
+      })
+    );
+
+    const repairPrompt = buildImprovementRepairPrompt(originalPrompt, invalidResponse, errorMessage);
+    const result = await this.client.generate(repairPrompt);
+
+    if (!result.ok) {
+      return {
+        ok: false,
+        error: {
+          code: 'API_ERROR',
+          message: `Initial: ${errorMessage}. Repair: ${result.error.message}`,
+          usage: initialUsage,
+        },
+      };
+    }
+
+    const cleaned = this.cleanImprovedPrompt(result.value.content);
+    const validationError = this.validateImprovedPrompt(cleaned, result.value.content);
+
+    if (validationError !== null) {
+      logLlmParseError(
+        this.logger,
+        createLlmParseError({
+          errorMessage: validationError,
+          llmResponse: result.value.content,
+          expectedSchema: '<plain text, single sentence, no JSON, no markdown, no explanations>',
+          operation: 'improveInput-repair',
+        })
+      );
+      return {
+        ok: false,
+        error: {
+          code: 'API_ERROR',
+          message: `Initial: ${errorMessage}. Repair: ${validationError}`,
+          usage: initialUsage,
+        },
+      };
+    }
+
+    this.logger.info({ model: this.model, repaired: true }, 'Improvement repair succeeded');
+    const { usage } = result.value;
+    return {
+      ok: true,
+      value: {
+        improvedPrompt: cleaned,
+        usage: {
+          inputTokens: usage.inputTokens,
+          outputTokens: usage.outputTokens,
+          costUsd: usage.costUsd,
+        },
+      },
+    };
+  }
+
+  private cleanImprovedPrompt(content: string): string {
+    return content
+      .replace(/^```json\s*/i, '')
+      .replace(/^```\s*/i, '')
+      .replace(/\s*```$/i, '')
+      .replace(/^(Improved:|Here is:|Result:|Improved prompt:)\s*/i, '')
+      .replace(/^["']|["']$/g, '')
+      .trim();
+  }
+
+  private validateImprovedPrompt(cleaned: string, raw: string): string | null {
+    if (cleaned.length === 0) {
+      return 'Response is empty after cleaning';
+    }
+
+    if (cleaned.length > 500) {
+      return 'Response is too long - should be a single concise sentence';
+    }
+
+    const lowerContent = raw.toLowerCase();
+    const unwantedPrefixes = [
+      'here is',
+      'the improved',
+      'improved version',
+      'below is',
+      'following is',
+      'suggestion:',
+    ];
+
+    for (const prefix of unwantedPrefixes) {
+      if (lowerContent.startsWith(prefix)) {
+        return `Response includes unwanted prefix "${prefix}"`;
+      }
+    }
+
+    if (raw.includes('{') && raw.includes('}')) {
+      return 'Response contains JSON format - should be plain text only';
+    }
+
+    if (/\b(explanation|reasoning|notes?|commentary|analysis)\b:/.exec(lowerContent) !== null) {
+      return 'Response includes explanatory text - should only contain the improved prompt';
+    }
+
+    return null;
   }
 }
 

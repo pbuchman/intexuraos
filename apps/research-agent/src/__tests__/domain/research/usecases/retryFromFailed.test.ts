@@ -6,11 +6,19 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ok, err } from '@intexuraos/common-core';
 import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
+import type { Logger } from '@intexuraos/common-core';
 import {
   retryFromFailed,
   type RetryFromFailedDeps,
 } from '../../../../domain/research/usecases/retryFromFailed.js';
 import type { Research } from '../../../../domain/research/models/index.js';
+
+const mockLogger: Logger = {
+  info: vi.fn(),
+  error: vi.fn(),
+  warn: vi.fn(),
+  debug: vi.fn(),
+};
 
 function createMockDeps(): RetryFromFailedDeps & {
   mockRepo: {
@@ -67,6 +75,7 @@ function createMockDeps(): RetryFromFailedDeps & {
       imageServiceClient: null,
       userId: 'user-1',
       webAppUrl: 'https://app.example.com',
+      logger: mockLogger,
     },
     mockRepo,
     mockPublisher,

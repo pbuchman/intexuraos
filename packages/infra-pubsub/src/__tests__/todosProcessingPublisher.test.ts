@@ -3,6 +3,7 @@
  * Mocks @google-cloud/pubsub SDK to test publishing without real Pub/Sub.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import pino from 'pino';
 import { createTodosProcessingPublisher } from '../todosProcessingPublisher.js';
 import type { TodosProcessingPublisherConfig } from '../types.js';
 
@@ -25,9 +26,11 @@ vi.mock('@google-cloud/pubsub', () => {
 });
 
 describe('createTodosProcessingPublisher', () => {
+  const mockLogger = pino({ name: 'test', level: 'silent' });
   const config: TodosProcessingPublisherConfig = {
     projectId: 'test-project',
     topicName: 'test-todos-processing-topic',
+    logger: mockLogger,
   };
 
   beforeEach(() => {

@@ -4,6 +4,8 @@
  * @packageDocumentation
  */
 
+import type { Logger } from '@intexuraos/common-core';
+
 export type {
   LLMError as PerplexityError,
   ResearchResult,
@@ -29,6 +31,7 @@ export type {
  *     outputPricePerMillion: 1.00,
  *   },
  *   timeoutMs: 840000, // 14 minutes
+ *   logger: pinoLogger, // Optional pino logger for structured logging
  * });
  * ```
  */
@@ -43,6 +46,8 @@ export interface PerplexityConfig {
   pricing: import('@intexuraos/llm-contract').ModelPricing;
   /** Request timeout in milliseconds. Default: 840000 (14 minutes) */
   timeoutMs?: number;
+  /** Pino logger for structured LLM usage logging */
+  logger: Logger;
 }
 
 /** Search context size for Perplexity requests */

@@ -1,7 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import nock from 'nock';
+import pino from 'pino';
 import { isOk, isErr } from '@intexuraos/common-core';
 import { createTodosServiceHttpClient } from '../../../infra/http/todosServiceHttpClient.js';
+
+const silentLogger = pino({ level: 'silent' });
 
 describe('createTodosServiceHttpClient', () => {
   const baseUrl = 'http://todos-agent.local';
@@ -31,7 +34,7 @@ describe('createTodosServiceHttpClient', () => {
           },
         });
 
-      const client = createTodosServiceHttpClient({ baseUrl, internalAuthToken });
+      const client = createTodosServiceHttpClient({ baseUrl, internalAuthToken, logger: silentLogger });
       const result = await client.createTodo({
         userId: 'user-456',
         title: 'Buy groceries',
@@ -53,7 +56,7 @@ describe('createTodosServiceHttpClient', () => {
     it('returns error on HTTP 500', async () => {
       nock(baseUrl).post('/internal/todos').reply(500, 'Internal Server Error');
 
-      const client = createTodosServiceHttpClient({ baseUrl, internalAuthToken });
+      const client = createTodosServiceHttpClient({ baseUrl, internalAuthToken, logger: silentLogger });
       const result = await client.createTodo({
         userId: 'user-456',
         title: 'Test',
@@ -72,7 +75,7 @@ describe('createTodosServiceHttpClient', () => {
     it('returns error on HTTP 401', async () => {
       nock(baseUrl).post('/internal/todos').reply(401, { error: 'Unauthorized' });
 
-      const client = createTodosServiceHttpClient({ baseUrl, internalAuthToken });
+      const client = createTodosServiceHttpClient({ baseUrl, internalAuthToken, logger: silentLogger });
       const result = await client.createTodo({
         userId: 'user-456',
         title: 'Test',
@@ -96,7 +99,7 @@ describe('createTodosServiceHttpClient', () => {
           error: { code: 'VALIDATION_ERROR', message: 'Title is required' },
         });
 
-      const client = createTodosServiceHttpClient({ baseUrl, internalAuthToken });
+      const client = createTodosServiceHttpClient({ baseUrl, internalAuthToken, logger: silentLogger });
       const result = await client.createTodo({
         userId: 'user-456',
         title: '',
@@ -115,7 +118,7 @@ describe('createTodosServiceHttpClient', () => {
     it('returns error when response data is undefined', async () => {
       nock(baseUrl).post('/internal/todos').reply(200, { success: true });
 
-      const client = createTodosServiceHttpClient({ baseUrl, internalAuthToken });
+      const client = createTodosServiceHttpClient({ baseUrl, internalAuthToken, logger: silentLogger });
       const result = await client.createTodo({
         userId: 'user-456',
         title: 'Test',
@@ -134,7 +137,7 @@ describe('createTodosServiceHttpClient', () => {
     it('returns error on network failure', async () => {
       nock(baseUrl).post('/internal/todos').replyWithError('Connection refused');
 
-      const client = createTodosServiceHttpClient({ baseUrl, internalAuthToken });
+      const client = createTodosServiceHttpClient({ baseUrl, internalAuthToken, logger: silentLogger });
       const result = await client.createTodo({
         userId: 'user-456',
         title: 'Test',
@@ -170,7 +173,7 @@ describe('createTodosServiceHttpClient', () => {
           },
         });
 
-      const client = createTodosServiceHttpClient({ baseUrl, internalAuthToken });
+      const client = createTodosServiceHttpClient({ baseUrl, internalAuthToken, logger: silentLogger });
       await client.createTodo({
         userId: 'user-456',
         title: 'Buy groceries',

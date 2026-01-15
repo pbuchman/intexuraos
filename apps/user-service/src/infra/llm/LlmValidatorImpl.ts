@@ -2,7 +2,7 @@
  * Implementation of LlmValidator port using @intexuraos/infra-* packages.
  * Uses generate() method with cheap models for fast key validation and testing.
  */
-import { err, ok, type Result } from '@intexuraos/common-core';
+import { err, ok, type Logger, type Result } from '@intexuraos/common-core';
 import { createGeminiClient } from '@intexuraos/infra-gemini';
 import { createGptClient } from '@intexuraos/infra-gpt';
 import { createClaudeClient } from '@intexuraos/infra-claude';
@@ -43,9 +43,11 @@ export interface ValidationPricing {
  */
 export class LlmValidatorImpl implements LlmValidator {
   private readonly pricing: ValidationPricing;
+  private readonly logger: Logger;
 
-  constructor(pricing: ValidationPricing) {
+  constructor(pricing: ValidationPricing, logger: Logger) {
     this.pricing = pricing;
+    this.logger = logger;
   }
 
   async validateKey(
@@ -60,6 +62,7 @@ export class LlmValidatorImpl implements LlmValidator {
           model: VALIDATION_MODELS[LlmProviders.Google],
           userId,
           pricing: this.pricing.google,
+          logger: this.logger,
         });
         const result = await client.generate(VALIDATION_PROMPT);
         if (!result.ok) {
@@ -79,6 +82,7 @@ export class LlmValidatorImpl implements LlmValidator {
           model: VALIDATION_MODELS[LlmProviders.OpenAI],
           userId,
           pricing: this.pricing.openai,
+          logger: this.logger,
         });
         const result = await client.generate(VALIDATION_PROMPT);
         if (!result.ok) {
@@ -98,6 +102,7 @@ export class LlmValidatorImpl implements LlmValidator {
           model: VALIDATION_MODELS[LlmProviders.Anthropic],
           userId,
           pricing: this.pricing.anthropic,
+          logger: this.logger,
         });
         const result = await client.generate(VALIDATION_PROMPT);
         if (!result.ok) {
@@ -117,6 +122,7 @@ export class LlmValidatorImpl implements LlmValidator {
           model: VALIDATION_MODELS[LlmProviders.Perplexity],
           userId,
           pricing: this.pricing.perplexity,
+          logger: this.logger,
         });
         const result = await client.generate(VALIDATION_PROMPT);
         if (!result.ok) {
@@ -136,6 +142,7 @@ export class LlmValidatorImpl implements LlmValidator {
           model: VALIDATION_MODELS[LlmProviders.Zai],
           userId,
           pricing: this.pricing.zai,
+          logger: this.logger,
         });
         const result = await client.generate(VALIDATION_PROMPT);
         if (!result.ok) {
@@ -165,6 +172,7 @@ export class LlmValidatorImpl implements LlmValidator {
           model: VALIDATION_MODELS[LlmProviders.Google],
           userId,
           pricing: this.pricing.google,
+          logger: this.logger,
         });
         const result = await client.generate(prompt);
         if (!result.ok) {
@@ -181,6 +189,7 @@ export class LlmValidatorImpl implements LlmValidator {
           model: VALIDATION_MODELS[LlmProviders.OpenAI],
           userId,
           pricing: this.pricing.openai,
+          logger: this.logger,
         });
         const result = await client.generate(prompt);
         if (!result.ok) {
@@ -197,6 +206,7 @@ export class LlmValidatorImpl implements LlmValidator {
           model: VALIDATION_MODELS[LlmProviders.Anthropic],
           userId,
           pricing: this.pricing.anthropic,
+          logger: this.logger,
         });
         const result = await client.generate(prompt);
         if (!result.ok) {
@@ -213,6 +223,7 @@ export class LlmValidatorImpl implements LlmValidator {
           model: VALIDATION_MODELS[LlmProviders.Perplexity],
           userId,
           pricing: this.pricing.perplexity,
+          logger: this.logger,
         });
         const result = await client.generate(prompt);
         if (!result.ok) {
@@ -229,6 +240,7 @@ export class LlmValidatorImpl implements LlmValidator {
           model: VALIDATION_MODELS[LlmProviders.Zai],
           userId,
           pricing: this.pricing.zai,
+          logger: this.logger,
         });
         const result = await client.generate(prompt);
         if (!result.ok) {

@@ -1,4 +1,5 @@
 import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
+import type { Logger } from '@intexuraos/common-core';
 import { beforeEach, describe, expect, it, vi, afterEach } from 'vitest';
 
 const mockBatch = {
@@ -53,7 +54,18 @@ vi.mock('@intexuraos/infra-firestore', () => ({
   },
 }));
 
-const { logUsage, isUsageLoggingEnabled } = await import('../usageLogger.js');
+/**
+ * Fake logger for tests.
+ */
+const fakeLogger: Logger = {
+  info: vi.fn(),
+  warn: vi.fn(),
+  error: vi.fn(),
+  debug: vi.fn(),
+};
+
+const { UsageLogger, createUsageLogger, logUsage, isUsageLoggingEnabled } =
+  await import('../usageLogger.js');
 
 describe('usageLogger', () => {
   const originalEnv = process.env;
@@ -134,7 +146,293 @@ describe('usageLogger', () => {
     });
   });
 
-  describe('logUsage', () => {
+  describe('UsageLogger class', () => {
+    describe('constructor', () => {
+      it('requires logger in deps', () => {
+        const usageLogger = new UsageLogger({ logger: fakeLogger });
+        expect(usageLogger.logger).toBe(fakeLogger);
+      });
+    });
+
+    describe('log', () => {
+      it('uses model as document ID in collection', async () => {
+        mockTransaction.get.mockResolvedValue({ exists: false, data: () => undefined });
+
+        const usageLogger = new UsageLogger({ logger: fakeLogger });
+        await usageLogger.log(baseParams);
+
+        expect(mockFirestore.collection).toHaveBeenCalledWith('llm_usage_stats');
+        expect(mockCollection.doc).toHaveBeenCalledWith(LlmModels.Gemini25Flash);
+      });
+
+      it('creates batch with model metadata', async () => {
+        mockTransaction.get.mockResolvedValue({ exists: false, data: () => undefined });
+        vi.useFakeTimers();
+        vi.setSystemTime(new Date('2025-01-05T10:00:00.000Z'));
+
+        const usageLogger = new UsageLogger({ logger: fakeLogger });
+        await usageLogger.log(baseParams);
+
+        const setCalls = mockBatch.set.mock.calls;
+        const modelSetCall = setCalls.find(
+          (call) =>
+            call[1]?.model === LlmModels.Gemini25Flash && call[1]?.provider === LlmProviders.Google
+        );
+        expect(modelSetCall).toBeDefined();
+        expect(modelSetCall?.[1]).toMatchObject({
+          model: LlmModels.Gemini25Flash,
+          provider: LlmProviders.Google,
+        });
+        expect(modelSetCall?.[2]).toEqual({ merge: true });
+
+        vi.useRealTimers();
+      });
+
+      it('creates batch with callType metadata', async () => {
+        mockTransaction.get.mockResolvedValue({ exists: false, data: () => undefined });
+        vi.useFakeTimers();
+        vi.setSystemTime(new Date('2025-01-05T10:00:00.000Z'));
+
+        const usageLogger = new UsageLogger({ logger: fakeLogger });
+        await usageLogger.log(baseParams);
+
+        expect(mockModelDocRef.collection).toHaveBeenCalledWith('by_call_type');
+        expect(mockByCallTypeCollection.doc).toHaveBeenCalledWith('research');
+
+        const setCalls = mockBatch.set.mock.calls;
+        const callTypeSetCall = setCalls.find(
+          (call) => call[1]?.callType === 'research' && !call[1]?.model
+        );
+        expect(callTypeSetCall).toBeDefined();
+        expect(callTypeSetCall?.[1]).toMatchObject({
+          callType: 'research',
+        });
+
+        vi.useRealTimers();
+      });
+
+      it('updates three period documents: total, month, day', async () => {
+        mockTransaction.get.mockResolvedValue({ exists: false, data: () => undefined });
+        vi.useFakeTimers();
+        vi.setSystemTime(new Date('2025-01-05T10:00:00.000Z'));
+
+        const usageLogger = new UsageLogger({ logger: fakeLogger });
+        await usageLogger.log(baseParams);
+
+        expect(mockCallTypeDocRef.collection).toHaveBeenCalledWith('by_period');
+        expect(mockByPeriodCollection.doc).toHaveBeenCalledWith('total');
+        expect(mockByPeriodCollection.doc).toHaveBeenCalledWith('2025-01');
+        expect(mockByPeriodCollection.doc).toHaveBeenCalledWith('2025-01-05');
+
+        vi.useRealTimers();
+      });
+
+      it('uses FieldValue.increment for atomic updates', async () => {
+        mockTransaction.get.mockResolvedValue({ exists: false, data: () => undefined });
+
+        const usageLogger = new UsageLogger({ logger: fakeLogger });
+        await usageLogger.log(baseParams);
+
+        const setCalls = mockBatch.set.mock.calls;
+        const periodSetCall = setCalls.find((call) => call[1]?.period === 'total');
+        expect(periodSetCall).toBeDefined();
+        expect(periodSetCall?.[1].totalCalls).toEqual({ _increment: 1 });
+        expect(periodSetCall?.[1].successfulCalls).toEqual({ _increment: 1 });
+        expect(periodSetCall?.[1].failedCalls).toEqual({ _increment: 0 });
+        expect(periodSetCall?.[1].inputTokens).toEqual({ _increment: 100 });
+        expect(periodSetCall?.[1].outputTokens).toEqual({ _increment: 200 });
+        expect(periodSetCall?.[1].totalTokens).toEqual({ _increment: 300 });
+        expect(periodSetCall?.[1].costUsd).toEqual({ _increment: 0.001 });
+      });
+
+      it('increments failedCalls when success is false', async () => {
+        mockTransaction.get.mockResolvedValue({ exists: false, data: () => undefined });
+
+        const usageLogger = new UsageLogger({ logger: fakeLogger });
+        await usageLogger.log({ ...baseParams, success: false });
+
+        const setCalls = mockBatch.set.mock.calls;
+        const periodSetCall = setCalls.find((call) => call[1]?.period === 'total');
+        expect(periodSetCall?.[1].successfulCalls).toEqual({ _increment: 0 });
+        expect(periodSetCall?.[1].failedCalls).toEqual({ _increment: 1 });
+      });
+
+      it('logs usage via logger', async () => {
+        mockTransaction.get.mockResolvedValue({ exists: false, data: () => undefined });
+
+        const usageLogger = new UsageLogger({ logger: fakeLogger });
+        await usageLogger.log(baseParams);
+
+        expect(fakeLogger.info).toHaveBeenCalledWith(
+          {
+            userId: 'user-123',
+            provider: LlmProviders.Google,
+            model: LlmModels.Gemini25Flash,
+            callType: 'research',
+            inputTokens: 100,
+            outputTokens: 200,
+            totalTokens: 300,
+            costUsd: 0.001,
+            success: true,
+          },
+          'LLM usage logged'
+        );
+      });
+
+      it('logs usage with errorMessage when success is false', async () => {
+        mockTransaction.get.mockResolvedValue({ exists: false, data: () => undefined });
+
+        const usageLogger = new UsageLogger({ logger: fakeLogger });
+        await usageLogger.log({
+          ...baseParams,
+          success: false,
+          errorMessage: 'API timeout error',
+        });
+
+        expect(fakeLogger.info).toHaveBeenCalledWith(
+          expect.objectContaining({
+            errorMessage: 'API timeout error',
+            success: false,
+          }),
+          'LLM usage logged'
+        );
+      });
+
+      it('commits the batch', async () => {
+        mockTransaction.get.mockResolvedValue({ exists: false, data: () => undefined });
+
+        const usageLogger = new UsageLogger({ logger: fakeLogger });
+        await usageLogger.log(baseParams);
+
+        expect(mockBatch.commit).toHaveBeenCalled();
+      });
+
+      it('skips logging when disabled via env var', async () => {
+        process.env['INTEXURAOS_LOG_LLM_USAGE'] = 'false';
+
+        const usageLogger = new UsageLogger({ logger: fakeLogger });
+        await usageLogger.log(baseParams);
+
+        expect(mockFirestore.batch).not.toHaveBeenCalled();
+        expect(fakeLogger.info).not.toHaveBeenCalled();
+      });
+
+      it('logs error when Firestore operation fails', async () => {
+        mockBatch.commit.mockRejectedValueOnce(new Error('Firestore error'));
+
+        const usageLogger = new UsageLogger({ logger: fakeLogger });
+        await usageLogger.log(baseParams);
+
+        expect(fakeLogger.error).toHaveBeenCalledWith(
+          {
+            error: 'Firestore error',
+            params: baseParams,
+          },
+          'Failed to log LLM usage to Firestore'
+        );
+      });
+
+      it('logs per-user stats when userId is provided', async () => {
+        mockTransaction.get.mockResolvedValue({ exists: false, data: () => undefined });
+
+        const usageLogger = new UsageLogger({ logger: fakeLogger });
+        await usageLogger.log(baseParams);
+
+        expect(mockFirestore.runTransaction).toHaveBeenCalled();
+        expect(mockByUserCollection.doc).toHaveBeenCalledWith('user-123');
+      });
+
+      it('skips per-user stats when userId is empty', async () => {
+        mockTransaction.get.mockResolvedValue({ exists: false, data: () => undefined });
+
+        const usageLogger = new UsageLogger({ logger: fakeLogger });
+        await usageLogger.log({ ...baseParams, userId: '' });
+
+        expect(mockFirestore.runTransaction).not.toHaveBeenCalled();
+      });
+
+      it('creates new user document when it does not exist', async () => {
+        mockTransaction.get.mockResolvedValue({ exists: false, data: () => undefined });
+        vi.useFakeTimers();
+        vi.setSystemTime(new Date('2025-01-05T10:00:00.000Z'));
+
+        const usageLogger = new UsageLogger({ logger: fakeLogger });
+        await usageLogger.log(baseParams);
+
+        expect(mockTransaction.set).toHaveBeenCalled();
+        const setCall = mockTransaction.set.mock.calls[0];
+        expect(setCall?.[1]).toMatchObject({
+          userId: 'user-123',
+          createdAt: '2025-01-05T10:00:00.000Z',
+        });
+
+        vi.useRealTimers();
+      });
+
+      it('updates existing user document', async () => {
+        mockTransaction.get.mockResolvedValue({ exists: true, data: () => ({}) });
+
+        const usageLogger = new UsageLogger({ logger: fakeLogger });
+        await usageLogger.log(baseParams);
+
+        expect(mockTransaction.update).toHaveBeenCalled();
+      });
+
+      it('uses FieldValue.increment for user stats', async () => {
+        mockTransaction.get.mockResolvedValue({ exists: false, data: () => undefined });
+
+        const usageLogger = new UsageLogger({ logger: fakeLogger });
+        await usageLogger.log(baseParams);
+
+        const setCall = mockTransaction.set.mock.calls[0];
+        expect(setCall?.[1].totalCalls).toEqual({ _increment: 1 });
+        expect(setCall?.[1].successfulCalls).toEqual({ _increment: 1 });
+        expect(setCall?.[1].inputTokens).toEqual({ _increment: 100 });
+        expect(setCall?.[1].outputTokens).toEqual({ _increment: 200 });
+        expect(setCall?.[1].costUsd).toEqual({ _increment: 0.001 });
+      });
+
+      it('includes updatedAt in period documents', async () => {
+        mockTransaction.get.mockResolvedValue({ exists: false, data: () => undefined });
+        vi.useFakeTimers();
+        vi.setSystemTime(new Date('2025-01-05T12:00:00.000Z'));
+
+        const usageLogger = new UsageLogger({ logger: fakeLogger });
+        await usageLogger.log(baseParams);
+
+        const setCalls = mockBatch.set.mock.calls;
+        const periodSetCall = setCalls.find((call) => call[1]?.period === 'total');
+        expect(periodSetCall?.[1].updatedAt).toBe('2025-01-05T12:00:00.000Z');
+
+        vi.useRealTimers();
+      });
+
+      it('user document path is under date period', async () => {
+        mockTransaction.get.mockResolvedValue({ exists: false, data: () => undefined });
+        vi.useFakeTimers();
+        vi.setSystemTime(new Date('2025-01-05T10:00:00.000Z'));
+
+        const usageLogger = new UsageLogger({ logger: fakeLogger });
+        await usageLogger.log(baseParams);
+
+        expect(mockByPeriodCollection.doc).toHaveBeenCalledWith('2025-01-05');
+        expect(mockPeriodDocRef.collection).toHaveBeenCalledWith('by_user');
+
+        vi.useRealTimers();
+      });
+    });
+  });
+
+  describe('createUsageLogger factory', () => {
+    it('creates UsageLogger with provided logger', () => {
+      const usageLogger = createUsageLogger({ logger: fakeLogger });
+
+      expect(usageLogger).toBeInstanceOf(UsageLogger);
+      expect(usageLogger.logger).toBe(fakeLogger);
+    });
+  });
+
+  describe('logUsage (legacy)', () => {
     it('uses model as document ID in collection', async () => {
       mockTransaction.get.mockResolvedValue({ exists: false, data: () => undefined });
 
@@ -229,20 +527,6 @@ describe('usageLogger', () => {
       const periodSetCall = setCalls.find((call) => call[1]?.period === 'total');
       expect(periodSetCall?.[1].successfulCalls).toEqual({ _increment: 0 });
       expect(periodSetCall?.[1].failedCalls).toEqual({ _increment: 1 });
-    });
-
-    it('skips console logging in test environment', async () => {
-      mockTransaction.get.mockResolvedValue({ exists: false, data: () => undefined });
-      const consoleSpy = vi.spyOn(console, 'info').mockImplementation(() => undefined);
-      const originalNodeEnv = process.env['NODE_ENV'];
-      process.env['NODE_ENV'] = 'test';
-
-      await logUsage({ ...baseParams, success: false, errorMessage: 'API timeout error' });
-
-      // Console logging is skipped in test environment (NODE_ENV='test')
-      expect(consoleSpy).not.toHaveBeenCalled();
-      consoleSpy.mockRestore();
-      process.env['NODE_ENV'] = originalNodeEnv;
     });
 
     it('commits the batch', async () => {

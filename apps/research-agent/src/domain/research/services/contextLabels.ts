@@ -22,10 +22,10 @@ export async function generateContextLabels(
     apiKey: string,
     userId: string,
     pricing: ModelPricing,
-    logger?: Logger
+    logger: Logger
   ) => TitleGenerator,
   pricing: ModelPricing,
-  logger?: Logger
+  logger: Logger
 ): Promise<ContextWithLabel[]> {
   if (googleApiKey === undefined) {
     return contexts;

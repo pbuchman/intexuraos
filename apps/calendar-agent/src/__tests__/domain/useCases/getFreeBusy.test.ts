@@ -134,6 +134,7 @@ describe('getFreeBusy', () => {
         {
           userServiceClient,
           googleCalendarClient,
+          logger: mockLogger,
         }
       );
 

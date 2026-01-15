@@ -81,28 +81,28 @@ Based on the categorized changes, determine the release type using this decision
 
 **Decision Table:**
 
-| Change Type                                      | Release Level | Example                                |
-| ------------------------------------------------ | ------------- | -------------------------------------- |
-| **Breaking Changes**                             |               |                                        |
-| Deleted routes/endpoints                         | **MAJOR**     | Removed `POST /todos`                  |
-| Deleted domain models/use cases                  | **MAJOR**     | Removed `Todo` entity                  |
-| Modified API signatures (removed params)         | **MAJOR**     | Removed `userId` from request          |
-| Required previously optional params              | **MAJOR**     | `title?: string` → `title: string`     |
-| Deleted Firestore collections                    | **MAJOR**     | Dropped `todos` collection             |
-| Terraform resource deletion                      | **MAJOR**     | Removed Cloud Run service              |
-| **New Features**                                 |               |                                        |
-| New API endpoints                                | **MINOR**     | Added `GET /bookmarks`                 |
-| New domain models/use cases                      | **MINOR**     | Added `Bookmark` entity                |
-| New UI pages/components                          | **MINOR**     | Added settings page                    |
-| New services/packages                            | **MINOR**     | Added `image-service`                  |
-| New integrations/providers                       | **MINOR**     | Added OpenAI provider                  |
-| **Bug Fixes & Improvements**                     |               |                                        |
-| Bug fixes (backward compatible)                  | **PATCH**     | Fixed null pointer in todos            |
-| Refactoring (no behavior change)                 | **PATCH**     | Extracted helper function             |
-| Testing infrastructure                           | **PATCH**     | Added tests for bookmarks              |
-| CI/CD improvements                               | **PATCH**     | Updated GitHub workflow                |
-| Documentation                                    | **PATCH**     | Updated README                         |
-| Performance improvements                          | **PATCH**     | Optimized query                        |
+| Change Type                              | Release Level | Example                            |
+| ---------------------------------------- | ------------- | ---------------------------------- |
+| **Breaking Changes**                     |               |                                    |
+| Deleted routes/endpoints                 | **MAJOR**     | Removed `POST /todos`              |
+| Deleted domain models/use cases          | **MAJOR**     | Removed `Todo` entity              |
+| Modified API signatures (removed params) | **MAJOR**     | Removed `userId` from request      |
+| Required previously optional params      | **MAJOR**     | `title?: string` → `title: string` |
+| Deleted Firestore collections            | **MAJOR**     | Dropped `todos` collection         |
+| Terraform resource deletion              | **MAJOR**     | Removed Cloud Run service          |
+| **New Features**                         |               |                                    |
+| New API endpoints                        | **MINOR**     | Added `GET /bookmarks`             |
+| New domain models/use cases              | **MINOR**     | Added `Bookmark` entity            |
+| New UI pages/components                  | **MINOR**     | Added settings page                |
+| New services/packages                    | **MINOR**     | Added `image-service`              |
+| New integrations/providers               | **MINOR**     | Added OpenAI provider              |
+| **Bug Fixes & Improvements**             |               |                                    |
+| Bug fixes (backward compatible)          | **PATCH**     | Fixed null pointer in todos        |
+| Refactoring (no behavior change)         | **PATCH**     | Extracted helper function          |
+| Testing infrastructure                   | **PATCH**     | Added tests for bookmarks          |
+| CI/CD improvements                       | **PATCH**     | Updated GitHub workflow            |
+| Documentation                            | **PATCH**     | Updated README                     |
+| Performance improvements                 | **PATCH**     | Optimized query                    |
 
 **Algorithm:**
 
@@ -133,6 +133,7 @@ ELSE:
 ```
 
 **Note for Early Development (0.0.X):**
+
 - Still follow semver rules for consistency
 - Breaking changes still warrant major bump (0.0.5 → 1.0.0)
 - This prepares for proper semver when v1.0 is released

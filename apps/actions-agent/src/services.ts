@@ -152,15 +152,18 @@ export function initServices(config: ServiceConfig): void {
   const notificationSender = createWhatsappNotificationSender({
     projectId: config.gcpProjectId,
     topicName: config.whatsappSendTopic,
+    logger: pino({ name: 'whatsapp-notification-sender' }),
   });
 
   const actionEventPublisher = createActionEventPublisher({
     projectId: config.gcpProjectId,
+    logger: pino({ name: 'action-event-publisher' }),
   });
 
   const whatsappPublisher = createWhatsAppSendPublisher({
     projectId: config.gcpProjectId,
     topicName: config.whatsappSendTopic,
+    logger: pino({ name: 'whatsapp-publisher' }),
   });
 
   const todosServiceClient = createTodosServiceHttpClient({

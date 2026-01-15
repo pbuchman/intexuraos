@@ -18,7 +18,7 @@ export interface DisconnectProviderInput {
 export interface DisconnectProviderDeps {
   oauthConnectionRepository: OAuthConnectionRepository;
   googleOAuthClient: GoogleOAuthClient;
-  logger?: { warn: (obj: object, msg: string) => void };
+  logger: { warn: (obj: object, msg: string) => void };
 }
 
 export async function disconnectProvider(
@@ -40,7 +40,7 @@ export async function disconnectProvider(
   if (connection !== null) {
     const revokeResult = await googleOAuthClient.revokeToken(connection.tokens.accessToken);
     if (!revokeResult.ok) {
-      logger?.warn(
+      logger.warn(
         { userId, provider, error: revokeResult.error.message },
         'Failed to revoke OAuth token (continuing with deletion)'
       );

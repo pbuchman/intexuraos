@@ -37,7 +37,7 @@ import {
   type LLMModel,
   type ModelPricing,
 } from '@intexuraos/llm-contract';
-import type { Result } from '@intexuraos/common-core';
+import type { Logger, Result } from '@intexuraos/common-core';
 
 /**
  * Configuration for creating an LLM client.
@@ -51,6 +51,8 @@ export interface LlmClientConfig {
   userId: string;
   /** Pricing information for the model */
   pricing: ModelPricing;
+  /** Logger for structured LLM usage logging */
+  logger: Logger;
 }
 
 /**

@@ -391,9 +391,31 @@ describe('Research Routes - Authenticated', () => {
   });
 
   describe('POST /research/draft', () => {
-    it.skip('creates draft with Google API key (title generation)', async () => {
-      // Skipped: Would require mocking Gemini API calls
-      // Title generation is tested indirectly through integration tests
+    it('creates draft with Google API key (title generation)', async () => {
+      const token = await createToken(TEST_USER_ID);
+      // Set Google API key to trigger title generation
+      fakeUserServiceClient.setApiKeys(TEST_USER_ID, { google: 'test-google-api-key' });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/research/draft',
+        headers: { authorization: `Bearer ${token}` },
+        payload: {
+          prompt: 'Test prompt for title generation',
+        },
+      });
+
+      expect(response.statusCode).toBe(201);
+      const body = JSON.parse(response.body) as { success: boolean; data: { id: string } };
+      expect(body.success).toBe(true);
+
+      const saved = fakeRepo.getAll()[0];
+      expect(saved).toBeDefined();
+      if (saved !== undefined) {
+        expect(saved.status).toBe('draft');
+        // The fake title generator returns 'Generated Title'
+        expect(saved.title).toBe('Generated Title');
+      }
     });
 
     it('creates draft without Google API key (fallback title)', async () => {
@@ -2328,15 +2350,14 @@ describe('Research Routes - Authenticated', () => {
           },
         });
 
-        expect(response.statusCode).toBe(200);
+        expect(response.statusCode).toBe(500);
         const body = JSON.parse(response.body) as {
           success: boolean;
-          data: { quality: number; reason: string; improvedPrompt: string | null };
+          error: { code: string; message: string };
         };
-        expect(body.success).toBe(true);
-        expect(body.data.quality).toBe(2); // Silent degradation returns GOOD
-        expect(body.data.reason).toBe('Validation unavailable');
-        expect(body.data.improvedPrompt).toBe(null);
+        expect(body.success).toBe(false);
+        expect(body.error.code).toBeDefined();
+        expect(body.error.message).toBeDefined();
       } finally {
         await newApp.close();
         setServices({
@@ -4873,14 +4894,14 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
         payload: { prompt: 'Test prompt' },
       });
 
-      expect(response.statusCode).toBe(200);
+      expect(response.statusCode).toBe(500);
       const body = JSON.parse(response.body) as {
         success: boolean;
-        data: { quality: number; reason: string };
+        error: { code: string; message: string };
       };
-      expect(body.success).toBe(true);
-      expect(body.data.quality).toBe(2);
-      expect(body.data.reason).toBe('Validation unavailable');
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('API_ERROR');
+      expect(body.error.message).toBe('Validation service unavailable');
     });
 
     it('includes improvement when quality is WEAK_BUT_VALID and includeImprovement is true', async () => {

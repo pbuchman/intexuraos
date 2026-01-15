@@ -3,6 +3,7 @@
  * Verifies Pub/Sub message publishing for individual LLM calls.
  */
 
+import pino from 'pino';
 import { LlmModels } from '@intexuraos/llm-contract';
 import { describe, expect, it, vi } from 'vitest';
 import {
@@ -13,11 +14,9 @@ import {
 vi.mock('@intexuraos/infra-pubsub', () => ({
   BasePubSubPublisher: class {
     protected projectId: string;
-    protected loggerName: string;
 
-    constructor(config: { projectId: string; loggerName: string }) {
+    constructor(config: { projectId: string; logger: { level: string } }) {
       this.projectId = config.projectId;
-      this.loggerName = config.loggerName;
     }
 
     async publishToTopic(
@@ -46,6 +45,7 @@ describe('LlmCallPublisher', () => {
     const publisher = createLlmCallPublisher({
       projectId: 'test-project',
       topicName: 'test-topic',
+      logger: pino({ name: 'test', level: 'silent' }),
     });
 
     expect(publisher).toBeDefined();
@@ -56,6 +56,7 @@ describe('LlmCallPublisher', () => {
     const publisher = createLlmCallPublisher({
       projectId: 'test-project',
       topicName: 'test-topic',
+      logger: pino({ name: 'test', level: 'silent' }),
     });
 
     const result = await publisher.publishLlmCall(event);
@@ -67,6 +68,7 @@ describe('LlmCallPublisher', () => {
     const publisher = createLlmCallPublisher({
       projectId: 'test-project',
       topicName: 'test-topic',
+      logger: pino({ name: 'test', level: 'silent' }),
     });
 
     const models = [

@@ -5,6 +5,7 @@ import {
   FakeCompositeFeedRepository,
   FakeDataSourceRepository,
   FakeMobileNotificationsClient,
+  FakeLogger,
 } from '../../../fakes.js';
 import * as getCompositeFeedDataModule from '../../../../domain/compositeFeed/usecases/getCompositeFeedData.js';
 
@@ -13,12 +14,14 @@ describe('refreshSnapshot', () => {
   let fakeCompositeFeedRepo: FakeCompositeFeedRepository;
   let fakeDataSourceRepo: FakeDataSourceRepository;
   let fakeMobileNotificationsClient: FakeMobileNotificationsClient;
+  let fakeLogger: FakeLogger;
 
   beforeEach(() => {
     fakeSnapshotRepo = new FakeSnapshotRepository();
     fakeCompositeFeedRepo = new FakeCompositeFeedRepository();
     fakeDataSourceRepo = new FakeDataSourceRepository();
     fakeMobileNotificationsClient = new FakeMobileNotificationsClient();
+    fakeLogger = new FakeLogger();
   });
 
   it('successfully refreshes snapshot for feed with static sources', async () => {
@@ -44,6 +47,7 @@ describe('refreshSnapshot', () => {
       compositeFeedRepository: fakeCompositeFeedRepo,
       dataSourceRepository: fakeDataSourceRepo,
       mobileNotificationsClient: fakeMobileNotificationsClient,
+      logger: fakeLogger,
     });
 
     expect(result.ok).toBe(true);
@@ -69,6 +73,7 @@ describe('refreshSnapshot', () => {
       compositeFeedRepository: fakeCompositeFeedRepo,
       dataSourceRepository: fakeDataSourceRepo,
       mobileNotificationsClient: fakeMobileNotificationsClient,
+      logger: fakeLogger,
     });
 
     expect(result.ok).toBe(true);
@@ -86,6 +91,7 @@ describe('refreshSnapshot', () => {
       compositeFeedRepository: fakeCompositeFeedRepo,
       dataSourceRepository: fakeDataSourceRepo,
       mobileNotificationsClient: fakeMobileNotificationsClient,
+      logger: fakeLogger,
     });
 
     expect(result.ok).toBe(false);
@@ -101,6 +107,7 @@ describe('refreshSnapshot', () => {
       compositeFeedRepository: fakeCompositeFeedRepo,
       dataSourceRepository: fakeDataSourceRepo,
       mobileNotificationsClient: fakeMobileNotificationsClient,
+      logger: fakeLogger,
     });
 
     expect(result.ok).toBe(false);
@@ -127,6 +134,7 @@ describe('refreshSnapshot', () => {
       compositeFeedRepository: fakeCompositeFeedRepo,
       dataSourceRepository: fakeDataSourceRepo,
       mobileNotificationsClient: fakeMobileNotificationsClient,
+      logger: fakeLogger,
     });
 
     expect(result.ok).toBe(false);
@@ -161,11 +169,7 @@ describe('refreshSnapshot', () => {
       compositeFeedRepository: fakeCompositeFeedRepo,
       dataSourceRepository: fakeDataSourceRepo,
       mobileNotificationsClient: fakeMobileNotificationsClient,
-      logger: {
-        info: vi.fn(),
-        warn: vi.fn(),
-        error: vi.fn(),
-      },
+      logger: fakeLogger,
     });
 
     expect(result.ok).toBe(false);

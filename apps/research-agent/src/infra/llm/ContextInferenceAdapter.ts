@@ -8,6 +8,8 @@ import type { ModelPricing } from '@intexuraos/llm-contract';
 import {
   buildInferResearchContextPrompt,
   buildInferSynthesisContextPrompt,
+  buildResearchContextRepairPrompt,
+  buildSynthesisContextRepairPrompt,
   createDetailedParseErrorMessage,
   isResearchContext,
   isSynthesisContext,
@@ -73,7 +75,7 @@ export class ContextInferenceAdapter implements ContextInferenceProvider {
     pricing: ModelPricing,
     logger: Logger
   ) {
-    this.client = createGeminiClient({ apiKey, model, userId, pricing });
+    this.client = createGeminiClient({ apiKey, model, userId, pricing, logger });
     this.logger = logger;
   }
 
@@ -95,12 +97,27 @@ export class ContextInferenceAdapter implements ContextInferenceProvider {
       RESEARCH_CONTEXT_SCHEMA,
       this.logger
     );
+
     if (!parsed.ok) {
+      this.logger.info(
+        { errorMessage: parsed.error },
+        'Schema validation failed, attempting repair'
+      );
+      const repairResult = await this.attemptResearchContextRepair(
+        userQuery,
+        result.value.content,
+        parsed.error
+      );
+
+      if (repairResult.ok) {
+        return { ok: true, value: repairResult.value };
+      }
+
       return {
         ok: false,
         error: {
           code: 'API_ERROR',
-          message: parsed.error,
+          message: repairResult.error,
           usage: {
             inputTokens: result.value.usage.inputTokens,
             outputTokens: result.value.usage.outputTokens,
@@ -141,12 +158,27 @@ export class ContextInferenceAdapter implements ContextInferenceProvider {
       SYNTHESIS_CONTEXT_SCHEMA,
       this.logger
     );
+
     if (!parsed.ok) {
+      this.logger.info(
+        { errorMessage: parsed.error },
+        'Schema validation failed, attempting repair'
+      );
+      const repairResult = await this.attemptSynthesisContextRepair(
+        params,
+        result.value.content,
+        parsed.error
+      );
+
+      if (repairResult.ok) {
+        return { ok: true, value: repairResult.value };
+      }
+
       return {
         ok: false,
         error: {
           code: 'API_ERROR',
-          message: parsed.error,
+          message: repairResult.error,
           usage: {
             inputTokens: result.value.usage.inputTokens,
             outputTokens: result.value.usage.outputTokens,
@@ -156,6 +188,108 @@ export class ContextInferenceAdapter implements ContextInferenceProvider {
       };
     }
 
+    const { usage } = result.value;
+    return {
+      ok: true,
+      value: {
+        context: parsed.value,
+        usage: {
+          inputTokens: usage.inputTokens,
+          outputTokens: usage.outputTokens,
+          costUsd: usage.costUsd,
+        },
+      },
+    };
+  }
+
+  private async attemptResearchContextRepair(
+    userQuery: string,
+    invalidResponse: string,
+    errorMessage: string
+  ): Promise<Result<ResearchContextResult, string>> {
+    const repairPrompt = buildResearchContextRepairPrompt(
+      userQuery,
+      invalidResponse,
+      errorMessage
+    );
+    const result = await this.client.generate(repairPrompt);
+
+    if (!result.ok) {
+      const error = mapToLlmError(result.error);
+      return { ok: false, error: `${error.message} (repair attempt)` };
+    }
+
+    const parsed = parseJson(
+      result.value.content,
+      isResearchContext,
+      'inferResearchContext',
+      RESEARCH_CONTEXT_SCHEMA,
+      this.logger
+    );
+
+    if (!parsed.ok) {
+      this.logger.warn(
+        { firstError: errorMessage, secondError: parsed.error },
+        'Repair attempt failed'
+      );
+      return { ok: false, error: `Initial: ${errorMessage}. Repair: ${parsed.error}` };
+    }
+
+    this.logger.info({}, 'Repair attempt succeeded');
+    const { usage } = result.value;
+    return {
+      ok: true,
+      value: {
+        context: parsed.value,
+        usage: {
+          inputTokens: usage.inputTokens,
+          outputTokens: usage.outputTokens,
+          costUsd: usage.costUsd,
+        },
+      },
+    };
+  }
+
+  private async attemptSynthesisContextRepair(
+    params: InferSynthesisContextParams,
+    invalidResponse: string,
+    errorMessage: string
+  ): Promise<Result<SynthesisContextResult, string>> {
+    const repairPrompt = buildSynthesisContextRepairPrompt(
+      {
+        originalPrompt: params.originalPrompt,
+        reports: params.reports ?? [],
+        additionalSources: (params.additionalSources ?? []).filter(
+          (s): s is { content: string; label: string } => s.label !== undefined
+        ),
+      },
+      invalidResponse,
+      errorMessage
+    );
+    const result = await this.client.generate(repairPrompt);
+
+    if (!result.ok) {
+      const error = mapToLlmError(result.error);
+      return { ok: false, error: `${error.message} (repair attempt)` };
+    }
+
+    const parsed = parseJson(
+      result.value.content,
+      isSynthesisContext,
+      'inferSynthesisContext',
+      SYNTHESIS_CONTEXT_SCHEMA,
+      this.logger
+    );
+
+    if (!parsed.ok) {
+      this.logger.warn(
+        { firstError: errorMessage, secondError: parsed.error },
+        'Repair attempt failed'
+      );
+      return { ok: false, error: `Initial: ${errorMessage}. Repair: ${parsed.error}` };
+    }
+
+    this.logger.info({}, 'Repair attempt succeeded');
     const { usage } = result.value;
     return {
       ok: true,
@@ -185,7 +319,7 @@ function parseJson<T>(
   guard: (v: unknown) => v is T,
   operation: string,
   expectedSchema: string,
-  logger?: Logger
+  logger: Logger
 ): { ok: true; value: T } | { ok: false; error: string } {
   const cleaned = raw
     .replace(/^```json\s*/i, '')
@@ -204,7 +338,7 @@ function parseJson<T>(
       expectedSchema,
       operation,
     });
-    logger?.warn(
+    logger.warn(
       {
         operation,
         errorMessage,
@@ -225,7 +359,7 @@ function parseJson<T>(
       expectedSchema,
       operation,
     });
-    logger?.warn(
+    logger.warn(
       {
         operation,
         errorMessage,

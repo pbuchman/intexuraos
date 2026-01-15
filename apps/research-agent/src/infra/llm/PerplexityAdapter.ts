@@ -16,37 +16,38 @@ import type {
 export class PerplexityAdapter implements LlmResearchProvider {
   private readonly client: PerplexityClient;
   private readonly model: string;
-  private readonly logger: Logger | undefined;
+  private readonly logger: Logger;
 
   constructor(
     apiKey: string,
     model: string,
     userId: string,
     pricing: ModelPricing,
-    logger?: Logger
+    logger: Logger
   ) {
     this.client = createPerplexityClient({
       apiKey,
       model,
       userId,
       pricing,
+      logger,
     });
     this.model = model;
     this.logger = logger;
   }
 
   async research(prompt: string): Promise<Result<LlmResearchResult, LlmError>> {
-    this.logger?.info({ model: this.model, promptLength: prompt.length }, 'Perplexity research started');
+    this.logger.info({ model: this.model, promptLength: prompt.length }, 'Perplexity research started');
     const result = await this.client.research(prompt);
     if (!result.ok) {
       const error = mapToLlmError(result.error);
-      this.logger?.error(
+      this.logger.error(
         { model: this.model, errorCode: error.code, errorMessage: error.message },
         'Perplexity research failed'
       );
       return { ok: false, error };
     }
-    this.logger?.info(
+    this.logger.info(
       { model: this.model, usage: result.value.usage },
       'Perplexity research completed'
     );
