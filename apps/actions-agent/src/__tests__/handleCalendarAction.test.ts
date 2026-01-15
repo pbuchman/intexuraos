@@ -17,6 +17,11 @@ describe('handleCalendarAction usecase', () => {
   let fakeActionClient: FakeActionServiceClient;
   let fakeWhatsappPublisher: FakeWhatsAppSendPublisher;
 
+  // Ensure mock is always reset after each test (prevents cross-test state leakage in coverage mode)
+  afterEach(() => {
+    vi.mocked(shouldAutoExecute).mockReturnValue(false);
+  });
+
   const createEvent = (overrides: Partial<ActionCreatedEvent> = {}): ActionCreatedEvent => ({
     type: 'action.created',
     actionId: 'action-123',
