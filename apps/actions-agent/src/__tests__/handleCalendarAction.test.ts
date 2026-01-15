@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { isOk, isErr, ok, err } from '@intexuraos/common-core';
 import { createHandleCalendarActionUseCase } from '../domain/usecases/handleCalendarAction.js';
 import type { ActionCreatedEvent } from '../domain/models/actionEvent.js';
@@ -255,6 +255,10 @@ describe('handleCalendarAction usecase', () => {
   describe('auto-execute flow', () => {
     beforeEach(() => {
       vi.mocked(shouldAutoExecute).mockReturnValue(true);
+    });
+
+    afterEach(() => {
+      vi.mocked(shouldAutoExecute).mockReturnValue(false);
     });
 
     it('auto-executes when shouldAutoExecute returns true and executeCalendarAction is provided', async () => {
