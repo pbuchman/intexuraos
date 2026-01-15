@@ -550,11 +550,7 @@ steps:
     waitFor: ['-']
     entrypoint: 'bash'
     args:
-      [
-        'cloudbuild/scripts/build-push-monitored.sh',
-        'linear-agent',
-        'apps/linear-agent/Dockerfile',
-      ]
+      ['cloudbuild/scripts/build-push-monitored.sh', 'linear-agent', 'apps/linear-agent/Dockerfile']
     env:
       [
         'DOCKER_BUILDKIT=1',

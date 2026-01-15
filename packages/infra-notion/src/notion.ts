@@ -87,7 +87,9 @@ function createLoggingFetch(
     if (init?.headers !== undefined) {
       const headers =
         init.headers instanceof Headers
-          ? Object.fromEntries((init.headers as Headers & { entries(): Iterable<[string, string]> }).entries())
+          ? Object.fromEntries(
+              (init.headers as Headers & { entries(): Iterable<[string, string]> }).entries()
+            )
           : Array.isArray(init.headers)
             ? Object.fromEntries(init.headers as [string, string][])
             : (init.headers as Record<string, string>);

@@ -82,9 +82,7 @@ describe('parseChartDefinition', () => {
       TRANSFORM_INSTRUCTIONS_END
     `;
 
-    expect(() => parseChartDefinition(response)).toThrow(
-      'Transform instructions are empty'
-    );
+    expect(() => parseChartDefinition(response)).toThrow('Transform instructions are empty');
   });
 
   it('throws when chart config JSON is invalid', () => {
