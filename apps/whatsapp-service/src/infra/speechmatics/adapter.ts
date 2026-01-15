@@ -27,9 +27,106 @@ import type {
 const logger = pino({ name: 'speechmatics-adapter' });
 
 /**
+ * Type definitions for Speechmatics json-v2 response.
+ * These are minimal types needed to extract transcript and summary.
+ */
+interface JsonV2Word {
+  alternatives?: { content?: string }[];
+}
+
+interface JsonV2Summary {
+  content: string;
+}
+
+interface JsonV2Response {
+  summary?: JsonV2Summary;
+  results: JsonV2Word[][];
+}
+
+/**
  * Speechmatics EU API base URL.
  */
 const SPEECHMATICS_EU_API_URL = 'https://asr.api.speechmatics.com/v2';
+
+/**
+ * Custom vocabulary for Speechmatics transcription.
+ *
+ * Includes IntexuraOS brand terms, development tools, agent names,
+ * and Polish-English code-mixed terms that are commonly used but
+ * may be misrecognized.
+ *
+ * Each entry provides the canonical spelling and alternative pronunciations
+ * via `sounds_like` to improve recognition accuracy.
+ */
+const ADDITIONAL_VOCAB = [
+  // Brand terms
+  { content: 'IntexuraOS', sounds_like: ['in tex ura o s', 'in tech sura o s', 'inteksura os', 'in texture os'] },
+  { content: 'pbuchman', sounds_like: ['p buck man', 'p book man', 'piotr buchman'] },
+
+  // Development tools
+  { content: 'pnpm', sounds_like: ['p n p m', 'pin pm', 'pee en pee em', 'performant npm'] },
+  { content: 'tf', sounds_like: ['tea eff', 'terraform'] },
+  { content: 'gh', sounds_like: ['gee aitch', 'git hub'] },
+  { content: 'ci:tracked', sounds_like: ['see eye tracked', 'c i tracked'] },
+
+  // Agents
+  { content: 'service-scribe', sounds_like: ['service scribe'] },
+  { content: 'sentry-triage', sounds_like: ['sentry tree ahj', 'sentry try age'] },
+  { content: 'coverage-orchestrator', sounds_like: ['coverage orchestrator'] },
+  { content: 'promptvault', sounds_like: ['prompt vault'] },
+  { content: 'z.ai', sounds_like: ['zed dot a i', 'zee dot a i', 'zai', 'the ai'] },
+  { content: 'GLM-4.7', sounds_like: ['gee el em four point seven'] },
+  { content: 'actions-agent', sounds_like: ['actions agent'] },
+  { content: 'research-agent', sounds_like: ['research agent'] },
+  { content: 'commands-agent', sounds_like: ['commands agent'] },
+  { content: 'data-insights-agent', sounds_like: ['data insights agent'] },
+  { content: 'bookmarks-agent', sounds_like: ['bookmarks agent'] },
+  { content: 'todos-agent', sounds_like: ['to dos agent', 'todos agent'] },
+  { content: 'web-agent', sounds_like: ['web agent'] },
+
+  // Platform tools
+  { content: 'Linear', sounds_like: ['line ear', 'linear app'] },
+  { content: 'Auth0', sounds_like: ['auth zero', 'oauth'] },
+  { content: 'Firestore', sounds_like: ['fire store'] },
+  { content: 'Pub/Sub', sounds_like: ['pub sub', 'publish subscribe'] },
+  { content: 'Vite', sounds_like: ['veet', 'vight'] },
+  { content: 'Vitest', sounds_like: ['veet test', 'vight test'] },
+  { content: 'Fastify', sounds_like: ['fast if i'] },
+  { content: 'Bun', sounds_like: ['bun', 'bunn'] },
+  { content: 'Bunx', sounds_like: ['bun x', 'bunks'] },
+  { content: 'Speechmatics', sounds_like: ['speech matics'] },
+  { content: 'Perplexity Sonar', sounds_like: ['perplexity sonar'] },
+  { content: 'Claude Opus', sounds_like: ['cloud opus', 'claude opus'] },
+
+  // DevOps
+  { content: 'SemVer', sounds_like: ['sem ver', 'semantic versioning'] },
+  { content: 'JWKS', sounds_like: ['jay double you kay ess', 'j w k s'] },
+  { content: 'Cloud Run', sounds_like: ['cloud run'] },
+  { content: 'Cloud Build', sounds_like: ['cloud build'] },
+  { content: 'Workload Identity', sounds_like: ['workload identity'] },
+  { content: 'Kanban', sounds_like: ['can ban', 'kahn bahn'] },
+  { content: 'TDD', sounds_like: ['tee dee dee'] },
+  { content: 'api-docs-hub', sounds_like: ['api docs hub'] },
+  { content: 'smart-dispatch', sounds_like: ['smart dispatch'] },
+
+  // Common dev terms
+  { content: 'scaffolded', sounds_like: ['scaffold it', 'ska folded'] },
+  { content: 'delikatny', sounds_like: ['deli cat ny'] },
+
+  // Polish terms commonly used in mixed context
+  { content: 'wygaszać', sounds_like: ['vi ga shatch', 've ga shatch'] },
+  { content: 'zaakceptujemy', sounds_like: ['za ak cep tu ye my', 'zah ak cep tu jemy'] },
+  { content: 'kliknięcia', sounds_like: ['click nien cia', 'klik nien cia'] },
+  { content: 'kontenerze', sounds_like: ['con ten er zhe', 'kontenerze'] },
+  { content: 'sprawdzenie', sounds_like: ['sprav dze nie'] },
+  { content: 'zapasów', sounds_like: ['za pa soof', 'zapasuv'] },
+  { content: 'grupować', sounds_like: ['group o vatch'] },
+
+  // Polish-English code-mixed verbs (Polish suffix on English root)
+  { content: 'commitować', sounds_like: ['commit o vatch'] },
+  { content: 'merge\'ować', sounds_like: ['merge o vatch'] },
+  { content: 'pushować', sounds_like: ['push o vatch'] },
+];
 
 /**
  * Extract a human-readable message from an error object.
@@ -109,6 +206,12 @@ export class SpeechmaticsTranscriptionAdapter implements SpeechTranscriptionPort
           transcription_config: {
             language: input.language ?? 'auto',
             operating_point: 'enhanced',
+            additional_vocab: ADDITIONAL_VOCAB,
+          },
+          // @ts-expect-error - summarization is supported by API but not in SDK types yet
+          summarization: {
+            type: 'bullets',
+            length: 'brief',
           },
         }
       );
@@ -246,6 +349,9 @@ export class SpeechmaticsTranscriptionAdapter implements SpeechTranscriptionPort
 
   /**
    * Fetch the transcription result for a completed job.
+   *
+   * Uses json-v2 format to retrieve both the full transcript and
+   * AI-generated summary (if available).
    */
   async getTranscript(
     jobId: string
@@ -261,26 +367,50 @@ export class SpeechmaticsTranscriptionAdapter implements SpeechTranscriptionPort
     );
 
     try {
-      const transcript = await this.client.getJobResult(jobId, 'text');
+      const result = (await this.client.getJobResult(jobId, 'json-v2')) as unknown as JsonV2Response;
       const durationMs = Date.now() - startTime;
+
+      // Extract summary from json-v2 response (optional field)
+      const summary = result.summary?.content;
+
+      // Reconstruct full text from results array
+      // Structure: results[][] where each inner array contains word segments
+      let text = '';
+      if (Array.isArray(result.results)) {
+        for (const sentence of result.results) {
+          if (Array.isArray(sentence)) {
+            for (const word of sentence) {
+              // Guard against malformed word objects
+              const alt = word.alternatives?.[0];
+              if (alt?.content !== undefined) {
+                text += alt.content + ' ';
+              }
+            }
+          }
+        }
+      }
+      text = text.trim();
 
       const apiCall = createApiCall('fetch_result', true, {
         jobId,
-        transcriptLength: transcript.length,
+        transcriptLength: text.length,
+        hasSummary: summary !== undefined,
       });
 
       logger.info(
         {
           event: 'speechmatics_transcript_success',
           jobId,
-          transcriptLength: transcript.length,
+          transcriptLength: text.length,
+          hasSummary: summary !== undefined,
           durationMs,
         },
         'Transcription fetched successfully'
       );
 
       return ok({
-        text: transcript,
+        text,
+        ...(summary !== undefined && { summary }),
         apiCall,
       });
     } catch (error) {
