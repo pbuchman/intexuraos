@@ -57,6 +57,8 @@ export {
   isInputQualityResult,
   getInputQualityGuardError,
   type InputQualityResult,
+  buildValidationRepairPrompt,
+  buildImprovementRepairPrompt,
 } from './validation/index.js';
 
 // Research prompt builder
