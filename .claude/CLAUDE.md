@@ -70,6 +70,7 @@ Note: The alias may not be available in spawned subshells - if `tf` is not found
 **RULE:** When verifying coverage, NEVER run tests repeatedly just to grep different patterns from the output.
 
 **❌ WRONG — Re-runs tests multiple times (each run = minutes wasted):**
+
 ```bash
 # Run 1: Initial CI check
 pnpm run ci:tracked
@@ -86,6 +87,7 @@ pnpm run test:coverage 2>&1 | grep -B2 "90\." | head -50
 ```
 
 **✅ RIGHT — Capture once, analyze many times:**
+
 ```bash
 # Run once, save output (2-3 minutes total)
 pnpm run ci:tracked 2>&1 | tee /tmp/ci-output.txt

@@ -1,19 +1,20 @@
 import { ok, err, type Result, getErrorMessage } from '@intexuraos/common-core';
-import type { ActionServiceClient } from '../ports/actionServiceClient.js';
 import type { ActionRepository } from '../ports/actionRepository.js';
 import type { WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
 import type { ActionCreatedEvent } from '../models/actionEvent.js';
 import type { Logger } from 'pino';
 import type { ExecuteCalendarActionUseCase } from './executeCalendarAction.js';
-import { shouldAutoExecute } from './shouldAutoExecute.js';
+import { shouldAutoExecute as defaultShouldAutoExecute } from './shouldAutoExecute.js';
+
+export type ShouldAutoExecute = (event: ActionCreatedEvent) => boolean;
 
 export interface HandleCalendarActionDeps {
-  actionServiceClient: ActionServiceClient;
   actionRepository: ActionRepository;
   whatsappPublisher: WhatsAppSendPublisher;
   webAppUrl: string;
   logger: Logger;
   executeCalendarAction?: ExecuteCalendarActionUseCase;
+  shouldAutoExecute?: ShouldAutoExecute;
 }
 
 export interface HandleCalendarActionUseCase {
@@ -23,7 +24,14 @@ export interface HandleCalendarActionUseCase {
 export function createHandleCalendarActionUseCase(
   deps: HandleCalendarActionDeps
 ): HandleCalendarActionUseCase {
-  const { actionRepository: _actionRepository, whatsappPublisher, webAppUrl, logger, executeCalendarAction } = deps;
+  const {
+    actionRepository: _actionRepository,
+    whatsappPublisher,
+    webAppUrl,
+    logger,
+    executeCalendarAction,
+    shouldAutoExecute = defaultShouldAutoExecute,
+  } = deps;
 
   return {
     async execute(event: ActionCreatedEvent): Promise<Result<{ actionId: string }>> {
