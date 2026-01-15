@@ -16,3 +16,10 @@ export {
   type ProcessLinearActionRequest,
   type ProcessLinearActionResponse,
 } from './useCases/processLinearAction.js';
+export {
+  listIssues,
+  type ListIssuesDeps,
+  type ListIssuesRequest,
+  type ListIssuesResponse,
+  type GroupedIssues,
+} from './useCases/listIssues.js';

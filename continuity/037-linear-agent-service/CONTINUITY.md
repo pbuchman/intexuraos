@@ -49,14 +49,15 @@ Implement a fully functional `linear-agent` service that enables creating Linear
 - ✅ **1-2-linear-api**: Linear API client implemented (@linear/sdk integration, tests, fakes)
 - ✅ **1-3-extraction**: LLM extraction service implemented (prompt, service, tests - 18 passing)
 - ✅ **1-4-create-issue**: Process action use case implemented (structured description, failed issues, 14 tests)
+- ✅ **1-5-list-issues**: List issues use case implemented (grouping, date filtering, 9 tests)
 
 ### Now
 
-**Task 1-5-list-issues**: Implement list issues use case
+**Task 2-0-routes**: Implement HTTP routes
 
 ### Next
 
-- 2-0-routes: Implement HTTP routes
+- 2-1-server: Implement server setup
 - Continue through all tiers...
 
 ## Open Questions
