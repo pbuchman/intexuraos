@@ -112,7 +112,7 @@ export function DataInsightsPage(): React.JSX.Element {
                     key={insight.id}
                     insight={insight}
                     onConfigureChart={handleConfigureChart}
-                    isConfiguring={chartGenerating}
+                    isConfiguring={chartGenerating && selectedInsight?.id === insight.id}
                   />
                 ))}
               </div>
