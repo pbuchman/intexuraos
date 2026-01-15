@@ -364,12 +364,14 @@ export class TranscribeAudioUseCase {
       }
 
       const transcript = transcriptResult.value.text;
+      const summary = transcriptResult.value.summary;
 
       // Step 5: Update message with completed transcription
       const completedState: TranscriptionState = {
         status: 'completed',
         jobId,
         text: transcript,
+        ...(summary !== undefined && { summary }),
         startedAt,
         completedAt: new Date().toISOString(),
         lastApiCall: transcriptResult.value.apiCall,
@@ -382,6 +384,7 @@ export class TranscribeAudioUseCase {
           messageId,
           jobId,
           transcriptLength: transcript.length,
+          hasSummary: summary !== undefined,
         },
         'Transcription completed successfully'
       );

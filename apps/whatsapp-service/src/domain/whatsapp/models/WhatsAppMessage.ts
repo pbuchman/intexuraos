@@ -84,6 +84,12 @@ export interface TranscriptionState {
   text?: string;
 
   /**
+   * Optional AI-generated summary of the audio content.
+   * Only available when using transcription providers that support summarization.
+   */
+  summary?: string;
+
+  /**
    * Error details if transcription failed.
    */
   error?: TranscriptionError;
