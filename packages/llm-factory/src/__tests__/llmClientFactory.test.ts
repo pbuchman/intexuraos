@@ -1,5 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { LlmProviders, LlmModels, type ModelPricing } from '@intexuraos/llm-contract';
+import type { Logger } from '@intexuraos/common-core';
+
+const mockLogger: Logger = {
+  info: vi.fn(),
+  error: vi.fn(),
+  warn: vi.fn(),
+  debug: vi.fn(),
+};
 
 const mockGeminiGenerate = vi.fn();
 const mockGlmGenerate = vi.fn();
@@ -41,6 +49,7 @@ describe('llmClientFactory', () => {
         model: LlmModels.Gemini25Flash,
         userId: 'user-123',
         pricing: createTestPricing(),
+        logger: mockLogger,
       });
 
       expect(client.generate).toBeDefined();
@@ -53,6 +62,7 @@ describe('llmClientFactory', () => {
         model: LlmModels.Gemini25Pro,
         userId: 'user-123',
         pricing: createTestPricing(),
+        logger: mockLogger,
       });
 
       expect(client.generate).toBeDefined();
@@ -65,6 +75,7 @@ describe('llmClientFactory', () => {
         model: LlmModels.Glm47,
         userId: 'user-123',
         pricing: createTestPricing(),
+        logger: mockLogger,
       });
 
       expect(client.generate).toBeDefined();
@@ -79,6 +90,7 @@ describe('llmClientFactory', () => {
           model: 'gemini-2.5-flash-exp-unsupported' as any,
           userId: 'user-123',
           pricing: createTestPricing(),
+          logger: mockLogger,
         })
       ).toThrow('Unsupported LLM provider');
     });
@@ -90,6 +102,7 @@ describe('llmClientFactory', () => {
           model: LlmModels.ClaudeSonnet45,
           userId: 'user-123',
           pricing: createTestPricing(),
+          logger: mockLogger,
         })
       ).toThrow('Unsupported LLM provider');
     });
@@ -101,6 +114,7 @@ describe('llmClientFactory', () => {
           model: LlmModels.GPT4oMini,
           userId: 'user-123',
           pricing: createTestPricing(),
+          logger: mockLogger,
         })
       ).toThrow('Unsupported LLM provider');
     });
@@ -112,6 +126,7 @@ describe('llmClientFactory', () => {
           model: LlmModels.SonarPro,
           userId: 'user-123',
           pricing: createTestPricing(),
+          logger: mockLogger,
         })
       ).toThrow('Unsupported LLM provider');
     });

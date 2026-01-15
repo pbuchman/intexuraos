@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { ok, err } from '@intexuraos/common-core';
+import { ok, err, type Logger } from '@intexuraos/common-core';
 import { LlmModels, type ModelPricing } from '@intexuraos/llm-contract';
 import { createGeminiClient } from '@intexuraos/infra-gemini';
 import {
@@ -34,6 +34,13 @@ const testImagePricing: ModelPricing = {
   inputPricePerMillion: 0,
   outputPricePerMillion: 0,
   imagePricing: { '1024x1024': 0.03, '1536x1024': 0.04, '1024x1536': 0.04 },
+};
+
+const mockLogger: Logger = {
+  info: vi.fn(),
+  error: vi.fn(),
+  warn: vi.fn(),
+  debug: vi.fn(),
 };
 
 function createMockStorage(): ImageStorage & {
@@ -98,6 +105,7 @@ describe('GoogleImageGenerator', () => {
         userId: 'test-user-id',
         pricing: testPricing,
         imagePricing: testImagePricing,
+        logger: mockLogger,
       });
 
       const result: Result<GeneratedImageData, ImageGenerationError> =
@@ -135,6 +143,7 @@ describe('GoogleImageGenerator', () => {
         userId: 'test-user-id',
         pricing: testPricing,
         imagePricing: testImagePricing,
+        logger: mockLogger,
       });
 
       await generator.generate(testPrompt);
@@ -165,6 +174,7 @@ describe('GoogleImageGenerator', () => {
         userId: 'test-user-id',
         pricing: testPricing,
         imagePricing: testImagePricing,
+        logger: mockLogger,
       });
 
       const result = await generator.generate(testPrompt, { slug: 'my-cool-image' });
@@ -191,6 +201,7 @@ describe('GoogleImageGenerator', () => {
         userId: 'test-user-id',
         pricing: testPricing,
         imagePricing: testImagePricing,
+        logger: mockLogger,
       });
 
       const result: Result<GeneratedImageData, ImageGenerationError> =
@@ -226,6 +237,7 @@ describe('GoogleImageGenerator', () => {
         userId: 'test-user-id',
         pricing: testPricing,
         imagePricing: testImagePricing,
+        logger: mockLogger,
       });
 
       const result: Result<GeneratedImageData, ImageGenerationError> =
@@ -249,6 +261,7 @@ describe('GoogleImageGenerator', () => {
         userId: 'test-user-id',
         pricing: testPricing,
         imagePricing: testImagePricing,
+        logger: mockLogger,
       });
 
       const result: Result<GeneratedImageData, ImageGenerationError> =
@@ -271,6 +284,7 @@ describe('GoogleImageGenerator', () => {
         userId: 'test-user-id',
         pricing: testPricing,
         imagePricing: testImagePricing,
+        logger: mockLogger,
       });
 
       const result: Result<GeneratedImageData, ImageGenerationError> =
@@ -293,6 +307,7 @@ describe('GoogleImageGenerator', () => {
         userId: 'test-user-id',
         pricing: testPricing,
         imagePricing: testImagePricing,
+        logger: mockLogger,
       });
 
       const result: Result<GeneratedImageData, ImageGenerationError> =
@@ -317,6 +332,7 @@ describe('GoogleImageGenerator', () => {
         userId: 'test-user-id',
         pricing: testPricing,
         imagePricing: testImagePricing,
+        logger: mockLogger,
       });
 
       const result: Result<GeneratedImageData, ImageGenerationError> =
@@ -344,6 +360,7 @@ describe('GoogleImageGenerator', () => {
         userId: 'test-user-id',
         pricing: testPricing,
         imagePricing: testImagePricing,
+        logger: mockLogger,
       });
 
       const result: Result<GeneratedImageData, ImageGenerationError> =
@@ -376,6 +393,7 @@ describe('GoogleImageGenerator', () => {
         userId: 'test-user-id',
         pricing: testPricing,
         imagePricing: testImagePricing,
+        logger: mockLogger,
       });
 
       const result: Result<GeneratedImageData, ImageGenerationError> =
@@ -399,6 +417,7 @@ describe('GoogleImageGenerator', () => {
         userId: 'test-user-id',
         pricing: testPricing,
         imagePricing: testImagePricing,
+        logger: mockLogger,
       });
 
       expect(generator).toBeInstanceOf(GoogleImageGenerator);

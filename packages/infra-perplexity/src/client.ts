@@ -204,7 +204,7 @@ async function processStreamResponse(
 }
 
 export function createPerplexityClient(config: PerplexityConfig): PerplexityClient {
-  const { apiKey, model, userId, pricing, timeoutMs = DEFAULT_TIMEOUT_MS } = config;
+  const { apiKey, model, userId, pricing, timeoutMs = DEFAULT_TIMEOUT_MS, logger } = config;
 
   function trackUsage(
     callType: CallType,
@@ -220,6 +220,7 @@ export function createPerplexityClient(config: PerplexityConfig): PerplexityClie
       usage,
       success,
       ...(errorMessage !== undefined && { errorMessage }),
+      logger,
     });
   }
 

@@ -5,6 +5,7 @@
 import { LlmModels } from '@intexuraos/llm-contract';
 import { createEncryptor, type Encryptor } from './infra/encryption.js';
 import type { PricingContext } from '@intexuraos/llm-pricing';
+import type { Logger } from '@intexuraos/common-core';
 import type { Auth0Client, AuthTokenRepository } from './domain/identity/index.js';
 import type { LlmValidator, UserSettingsRepository } from './domain/settings/index.js';
 import type { OAuthConnectionRepository, GoogleOAuthClient } from './domain/oauth/index.js';
@@ -75,14 +76,15 @@ export function getServices(): ServiceContainer {
 /**
  * Initialize the service container with all dependencies.
  * @param pricingContext - Pricing context for LLM validation (optional in test env)
+ * @param logger - Logger for LLM validation (optional in test env)
  */
-export function initializeServices(pricingContext?: PricingContext): void {
+export function initializeServices(pricingContext?: PricingContext, logger?: Logger): void {
   const auth0Config = loadAuth0ConfigFromInfra();
   // LlmValidator is null in test environment to skip actual API calls
   const isTestEnv = process.env['NODE_ENV'] === 'test';
 
   let llmValidator: LlmValidator | null = null;
-  if (!isTestEnv && pricingContext !== undefined) {
+  if (!isTestEnv && pricingContext !== undefined && logger !== undefined) {
     const validationPricing = {
       google: pricingContext.getPricing(LlmModels.Gemini20Flash),
       openai: pricingContext.getPricing(LlmModels.GPT4oMini),
@@ -90,7 +92,7 @@ export function initializeServices(pricingContext?: PricingContext): void {
       perplexity: pricingContext.getPricing(LlmModels.Sonar),
       zai: pricingContext.getPricing(LlmModels.Glm47),
     };
-    llmValidator = new LlmValidatorImpl(validationPricing);
+    llmValidator = new LlmValidatorImpl(validationPricing, logger);
   }
 
   container = {

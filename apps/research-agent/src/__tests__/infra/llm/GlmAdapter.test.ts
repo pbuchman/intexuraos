@@ -50,19 +50,22 @@ describe('GlmAdapter', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    adapter = new GlmAdapter('test-key', LlmModels.Glm47, 'test-user-id', testPricing);
+    const mockLogger = createMockLogger();
+    adapter = new GlmAdapter('test-key', LlmModels.Glm47, 'test-user-id', testPricing, mockLogger);
   });
 
   describe('constructor', () => {
     it('passes apiKey and model to client', () => {
       mockCreateGlmClient.mockClear();
-      new GlmAdapter('test-key', LlmModels.Glm47, 'test-user-id', testPricing);
+      const mockLogger = createMockLogger();
+      new GlmAdapter('test-key', LlmModels.Glm47, 'test-user-id', testPricing, mockLogger);
 
       expect(mockCreateGlmClient).toHaveBeenCalledWith({
         apiKey: 'test-key',
         model: LlmModels.Glm47,
         userId: 'test-user-id',
         pricing: testPricing,
+        logger: expect.any(Object),
       });
     });
 
@@ -76,6 +79,7 @@ describe('GlmAdapter', () => {
         model: LlmModels.Glm47,
         userId: 'test-user-id',
         pricing: testPricing,
+        logger: expect.any(Object),
       });
     });
   });

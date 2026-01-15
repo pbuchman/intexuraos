@@ -1,6 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import nock from 'nock';
 import { type ModelPricing, LlmModels, LlmProviders } from '@intexuraos/llm-contract';
+import type { Logger } from '@intexuraos/common-core';
+
+const mockLogger: Logger = {
+  info: vi.fn(),
+  error: vi.fn(),
+  warn: vi.fn(),
+  debug: vi.fn(),
+};
 
 vi.mock('@intexuraos/llm-audit', () => ({
   createAuditContext: vi.fn().mockReturnValue({
@@ -104,6 +112,7 @@ describe('createPerplexityClient', () => {
         model: TEST_MODEL,
         userId: 'test-user',
         pricing,
+        logger: mockLogger,
       });
       const result = await client.research('Tell me about AI');
 
@@ -144,6 +153,7 @@ describe('createPerplexityClient', () => {
         model: TEST_MODEL,
         userId: 'test-user',
         pricing,
+        logger: mockLogger,
       });
       const result = await client.research('Tell me about AI');
 
@@ -172,6 +182,7 @@ describe('createPerplexityClient', () => {
         model: TEST_MODEL,
         userId: 'test-user',
         pricing: createTestPricing(),
+        logger: mockLogger,
       });
       const result = await client.research('Test prompt');
 
@@ -201,6 +212,7 @@ describe('createPerplexityClient', () => {
         model: TEST_MODEL,
         userId: 'test-user',
         pricing: createTestPricing(),
+        logger: mockLogger,
       });
       const result = await client.research('Test prompt');
 
@@ -228,6 +240,7 @@ describe('createPerplexityClient', () => {
         model: TEST_MODEL,
         userId: 'test-user',
         pricing: createTestPricing(),
+        logger: mockLogger,
       });
       const result = await client.research('Test prompt');
 
@@ -255,6 +268,7 @@ describe('createPerplexityClient', () => {
         model: TEST_MODEL,
         userId: 'test-user',
         pricing: createTestPricing(),
+        logger: mockLogger,
       });
       await client.research('Test prompt');
 
@@ -277,6 +291,7 @@ describe('createPerplexityClient', () => {
         model: TEST_MODEL,
         userId: 'test-user',
         pricing: createTestPricing(),
+        logger: mockLogger,
       });
       const result = await client.research('Test prompt');
 
@@ -294,6 +309,7 @@ describe('createPerplexityClient', () => {
         model: TEST_MODEL,
         userId: 'test-user',
         pricing: createTestPricing(),
+        logger: mockLogger,
       });
       const result = await client.research('Test prompt');
 
@@ -311,6 +327,7 @@ describe('createPerplexityClient', () => {
         model: TEST_MODEL,
         userId: 'test-user',
         pricing: createTestPricing(),
+        logger: mockLogger,
       });
       const result = await client.research('Test prompt');
 
@@ -328,6 +345,7 @@ describe('createPerplexityClient', () => {
         model: TEST_MODEL,
         userId: 'test-user',
         pricing: createTestPricing(),
+        logger: mockLogger,
       });
       await client.research('Test prompt');
 
@@ -347,6 +365,7 @@ describe('createPerplexityClient', () => {
         model: TEST_MODEL,
         userId: 'test-user',
         pricing: createTestPricing(),
+        logger: mockLogger,
       });
       const result = await client.research('Test prompt');
 
@@ -374,6 +393,7 @@ describe('createPerplexityClient', () => {
         model: TEST_MODEL,
         userId: 'test-user',
         pricing: createTestPricing(),
+        logger: mockLogger,
       });
       const result = await client.research('Test prompt');
 
@@ -399,6 +419,7 @@ describe('createPerplexityClient', () => {
         model: TEST_MODEL,
         userId: 'test-user',
         pricing,
+        logger: mockLogger,
       });
       const result = await client.generate('Write something');
 
@@ -434,6 +455,7 @@ describe('createPerplexityClient', () => {
         model: TEST_MODEL,
         userId: 'test-user',
         pricing,
+        logger: mockLogger,
       });
       const result = await client.generate('Write something');
 
@@ -456,6 +478,7 @@ describe('createPerplexityClient', () => {
         model: TEST_MODEL,
         userId: 'test-user',
         pricing: createTestPricing(),
+        logger: mockLogger,
       });
       await client.generate('Write something');
 
@@ -480,6 +503,7 @@ describe('createPerplexityClient', () => {
         model: TEST_MODEL,
         userId: 'test-user',
         pricing: createTestPricing(),
+        logger: mockLogger,
       });
       const result = await client.generate('Write something');
 
@@ -502,6 +526,7 @@ describe('createPerplexityClient', () => {
         model: TEST_MODEL,
         userId: 'test-user',
         pricing: createTestPricing(),
+        logger: mockLogger,
       });
       const result = await client.generate('Write something');
 
@@ -519,6 +544,7 @@ describe('createPerplexityClient', () => {
         model: TEST_MODEL,
         userId: 'test-user',
         pricing: createTestPricing(),
+        logger: mockLogger,
       });
       const result = await client.generate('Write something');
 
@@ -536,6 +562,7 @@ describe('createPerplexityClient', () => {
         model: TEST_MODEL,
         userId: 'test-user',
         pricing: createTestPricing(),
+        logger: mockLogger,
       });
       const result = await client.generate('Write something');
 
@@ -566,6 +593,7 @@ describe('createPerplexityClient', () => {
         model: TEST_MODEL,
         userId: 'test-user',
         pricing,
+        logger: mockLogger,
       });
       const result = await client.research('Test prompt');
 
@@ -595,6 +623,7 @@ describe('createPerplexityClient', () => {
         model: TEST_MODEL,
         userId: 'test-user',
         pricing,
+        logger: mockLogger,
       });
       const result = await client.research('Test prompt');
 
@@ -623,6 +652,7 @@ describe('createPerplexityClient', () => {
         model: TEST_MODEL,
         userId: 'test-user',
         pricing: createTestPricing(),
+        logger: mockLogger,
       });
       const result = await client.research('Test prompt');
 
@@ -649,6 +679,7 @@ describe('createPerplexityClient', () => {
         model: TEST_MODEL,
         userId: 'test-user',
         pricing: createTestPricing(),
+        logger: mockLogger,
       });
       const result = await client.generate('Test prompt');
 
@@ -681,6 +712,7 @@ describe('createPerplexityClient', () => {
         model: TEST_MODEL,
         userId: 'test-user',
         pricing: createTestPricing(),
+        logger: mockLogger,
       });
       const result = await client.research('Test prompt');
 
@@ -713,6 +745,7 @@ describe('createPerplexityClient', () => {
         model: 'unknown-model' as (typeof LlmModels)[keyof typeof LlmModels],
         userId: 'test-user',
         pricing: createTestPricing(),
+        logger: mockLogger,
       });
       const result = await client.research('Test prompt');
 
@@ -727,6 +760,7 @@ describe('createPerplexityClient', () => {
         model: TEST_MODEL,
         userId: 'test-user',
         pricing: createTestPricing(),
+        logger: mockLogger,
       });
       const result = await client.research('Test prompt');
 
@@ -746,6 +780,7 @@ describe('createPerplexityClient', () => {
         model: TEST_MODEL,
         userId: 'test-user',
         pricing: createTestPricing(),
+        logger: mockLogger,
       });
       const result = await client.generate('Test prompt');
 
@@ -765,6 +800,7 @@ describe('createPerplexityClient', () => {
         model: TEST_MODEL,
         userId: 'test-user',
         pricing: createTestPricing(),
+        logger: mockLogger,
       });
       const result = await client.research('Test prompt');
 
@@ -782,6 +818,7 @@ describe('createPerplexityClient', () => {
         model: TEST_MODEL,
         userId: 'test-user',
         pricing: createTestPricing(),
+        logger: mockLogger,
       });
       const result = await client.research('Test prompt');
 
@@ -813,6 +850,7 @@ describe('createPerplexityClient', () => {
         model: TEST_MODEL,
         userId: 'test-user',
         pricing: createTestPricing(),
+        logger: mockLogger,
       });
       await client.research('Test prompt');
 
@@ -836,6 +874,7 @@ describe('createPerplexityClient', () => {
         model: TEST_MODEL,
         userId: 'test-user',
         pricing: createTestPricing(),
+        logger: mockLogger,
       });
       await client.generate('Test prompt');
 
@@ -852,6 +891,7 @@ describe('createPerplexityClient', () => {
         model: TEST_MODEL,
         userId: 'test-user',
         pricing: createTestPricing(),
+        logger: mockLogger,
       });
       const result = await client.research('Test prompt');
 

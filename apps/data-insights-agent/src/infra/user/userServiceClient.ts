@@ -3,7 +3,7 @@
  * Provides access to user's LLM client with provider and model selection.
  */
 
-import type { Result } from '@intexuraos/common-core';
+import type { Result, Logger } from '@intexuraos/common-core';
 import { err, getErrorMessage, ok } from '@intexuraos/common-core';
 import {
   createLlmClient,
@@ -18,6 +18,13 @@ import {
   type LlmProvider,
 } from '@intexuraos/llm-contract';
 import type { IPricingContext } from '@intexuraos/llm-pricing';
+import pino from 'pino';
+
+/**
+ * No-op logger for when no logger is provided in config.
+ * Uses pino with 'silent' level which doesn't output anything.
+ */
+const silentLogger: Logger = pino({ level: 'silent' });
 
 /**
  * Configuration for the user service client.
@@ -26,6 +33,7 @@ export interface UserServiceConfig {
   baseUrl: string;
   internalAuthToken: string;
   pricingContext: IPricingContext;
+  logger?: Logger;
 }
 
 /**
@@ -145,6 +153,7 @@ export function createUserServiceClient(config: UserServiceConfig): UserServiceC
           model: defaultModel,
           userId,
           pricing,
+          logger: config.logger ?? silentLogger,
         };
 
         const client = createLlmClient(clientConfig);

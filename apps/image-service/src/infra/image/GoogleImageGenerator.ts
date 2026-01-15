@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { err, ok, type Result } from '@intexuraos/common-core';
+import { err, ok, type Logger, type Result } from '@intexuraos/common-core';
 import { createGeminiClient } from '@intexuraos/infra-gemini';
 import { LlmModels } from '@intexuraos/llm-contract';
 import type { ModelPricing } from '@intexuraos/llm-contract';
@@ -19,6 +19,7 @@ export interface GoogleImageGeneratorConfig {
   userId: string;
   pricing: ModelPricing;
   imagePricing: ModelPricing;
+  logger: Logger;
   generateId?: () => string;
 }
 
@@ -29,6 +30,7 @@ export class GoogleImageGenerator implements ImageGenerator {
   private readonly userId: string;
   private readonly pricing: ModelPricing;
   private readonly imagePricing: ModelPricing;
+  private readonly logger: Logger;
   private readonly generateId: () => string;
 
   constructor(config: GoogleImageGeneratorConfig) {
@@ -38,6 +40,7 @@ export class GoogleImageGenerator implements ImageGenerator {
     this.userId = config.userId;
     this.pricing = config.pricing;
     this.imagePricing = config.imagePricing;
+    this.logger = config.logger;
     this.generateId = config.generateId ?? ((): string => randomUUID());
   }
 
@@ -53,6 +56,7 @@ export class GoogleImageGenerator implements ImageGenerator {
       userId: this.userId,
       pricing: this.pricing,
       imagePricing: this.imagePricing,
+      logger: this.logger,
     });
 
     if (client.generateImage === undefined) {

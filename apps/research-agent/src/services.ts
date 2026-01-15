@@ -68,14 +68,14 @@ export interface ServiceContainer {
     apiKey: string,
     userId: string,
     pricing: ModelPricing,
-    logger?: Logger
+    logger: Logger
   ) => LlmResearchProvider;
   createSynthesizer: (
     model: ResearchModel,
     apiKey: string,
     userId: string,
     pricing: ModelPricing,
-    logger?: Logger
+    logger: Logger
   ) => LlmSynthesisProvider;
   createTitleGenerator: (
     model: FastModel,
@@ -96,7 +96,7 @@ export interface ServiceContainer {
     apiKey: string,
     userId: string,
     pricing: ModelPricing,
-    logger?: Logger
+    logger: Logger
   ) => InputValidationProvider;
 }
 

@@ -41,28 +41,28 @@ export interface InputValidationProvider {
 export class InputValidationAdapter implements InputValidationProvider {
   private readonly client: GeminiClient;
   private readonly model: string;
-  private readonly logger: Logger | undefined;
+  private readonly logger: Logger;
 
   constructor(
     apiKey: string,
     model: string,
     userId: string,
     pricing: ModelPricing,
-    logger?: Logger
+    logger: Logger
   ) {
-    this.client = createGeminiClient({ apiKey, model, userId, pricing });
+    this.client = createGeminiClient({ apiKey, model, userId, pricing, logger });
     this.model = model;
     this.logger = logger;
   }
 
   async validateInput(prompt: string): Promise<Result<ValidationResult, LlmError>> {
-    this.logger?.info({ model: this.model, promptLength: prompt.length }, 'Input validation started');
+    this.logger.info({ model: this.model, promptLength: prompt.length }, 'Input validation started');
     const builtPrompt = inputQualityPrompt.build({ prompt });
     const result = await this.client.generate(builtPrompt);
 
     if (!result.ok) {
       const error = mapToLlmError(result.error);
-      this.logger?.error(
+      this.logger.error(
         { model: this.model, errorCode: error.code, errorMessage: error.message },
         'Input validation LLM call failed'
       );
@@ -85,7 +85,7 @@ export class InputValidationAdapter implements InputValidationProvider {
         // JSON parse failed, use original error
       }
       const errorMessage = guardError ?? parsed.error;
-      this.logger?.error(
+      this.logger.error(
         { model: this.model, parseError: errorMessage, rawContent: result.value.content },
         'Input validation parse failed'
       );
@@ -104,7 +104,7 @@ export class InputValidationAdapter implements InputValidationProvider {
     }
 
     const { usage } = result.value;
-    this.logger?.info(
+    this.logger.info(
       { model: this.model, quality: parsed.value.quality, usage },
       'Input validation completed'
     );
@@ -123,13 +123,13 @@ export class InputValidationAdapter implements InputValidationProvider {
   }
 
   async improveInput(prompt: string): Promise<Result<ImprovementResult, LlmError>> {
-    this.logger?.info({ model: this.model, promptLength: prompt.length }, 'Input improvement started');
+    this.logger.info({ model: this.model, promptLength: prompt.length }, 'Input improvement started');
     const builtPrompt = inputImprovementPrompt.build({ prompt });
     const result = await this.client.generate(builtPrompt);
 
     if (!result.ok) {
       const error = mapToLlmError(result.error);
-      this.logger?.error(
+      this.logger.error(
         { model: this.model, errorCode: error.code, errorMessage: error.message },
         'Input improvement failed'
       );
@@ -137,7 +137,7 @@ export class InputValidationAdapter implements InputValidationProvider {
     }
 
     const { usage } = result.value;
-    this.logger?.info({ model: this.model, usage }, 'Input improvement completed');
+    this.logger.info({ model: this.model, usage }, 'Input improvement completed');
     return {
       ok: true,
       value: {

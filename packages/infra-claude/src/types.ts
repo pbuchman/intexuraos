@@ -4,6 +4,8 @@
  * @packageDocumentation
  */
 
+import type { Logger } from '@intexuraos/common-core';
+
 export type {
   LLMError as ClaudeError,
   ResearchResult,
@@ -31,7 +33,8 @@ export type {
  *     cacheReadMultiplier: 0.1,
  *     cacheWriteMultiplier: 1.25,
  *     webSearchCostPerCall: 0.0035,
- *   }
+ *   },
+ *   logger: pinoLogger, // Optional pino logger for structured logging
  * });
  * ```
  */
@@ -44,4 +47,6 @@ export interface ClaudeConfig {
   userId: string;
   /** Cost configuration per million tokens */
   pricing: import('@intexuraos/llm-contract').ModelPricing;
+  /** Pino logger for structured LLM usage logging */
+  logger: Logger;
 }

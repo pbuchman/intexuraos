@@ -73,7 +73,7 @@ export class ContextInferenceAdapter implements ContextInferenceProvider {
     pricing: ModelPricing,
     logger: Logger
   ) {
-    this.client = createGeminiClient({ apiKey, model, userId, pricing });
+    this.client = createGeminiClient({ apiKey, model, userId, pricing, logger });
     this.logger = logger;
   }
 
@@ -96,6 +96,7 @@ export class ContextInferenceAdapter implements ContextInferenceProvider {
       this.logger
     );
     if (!parsed.ok) {
+      this.logger.warn({ error: parsed.error }, 'Failed to parse research context');
       return {
         ok: false,
         error: {
@@ -142,6 +143,7 @@ export class ContextInferenceAdapter implements ContextInferenceProvider {
       this.logger
     );
     if (!parsed.ok) {
+      this.logger.warn({ error: parsed.error }, 'Failed to parse synthesis context');
       return {
         ok: false,
         error: {

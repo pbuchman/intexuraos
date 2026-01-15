@@ -91,7 +91,7 @@ const MAX_TOKENS = 8192;
  */
 export function createClaudeClient(config: ClaudeConfig): ClaudeClient {
   const client = new Anthropic({ apiKey: config.apiKey });
-  const { model, userId, pricing } = config;
+  const { model, userId, pricing, logger } = config;
 
   function createRequestContext(
     method: string,
@@ -124,6 +124,7 @@ export function createClaudeClient(config: ClaudeConfig): ClaudeClient {
       usage,
       success,
       ...(errorMessage !== undefined && { errorMessage }),
+      logger,
     });
   }
 
