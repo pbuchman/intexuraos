@@ -15,3 +15,10 @@ export {
   type CalendarEventExtractionPromptDeps,
   type ExtractedCalendarEvent,
 } from './calendarActionExtractionPrompt.js';
+
+export {
+  linearActionExtractionPrompt,
+  type LinearIssueExtractionPromptInput,
+  type LinearIssueExtractionPromptDeps,
+  type ExtractedLinearIssue,
+} from './linearActionExtractionPrompt.js';

@@ -47,14 +47,15 @@ Implement a fully functional `linear-agent` service that enables creating Linear
 - ✅ **1-0-domain**: Domain models, ports, and errors defined (models.ts, errors.ts, ports.ts, index.ts)
 - ✅ **1-1-connection**: Linear connection repository implemented (Firestore, tests, fakes)
 - ✅ **1-2-linear-api**: Linear API client implemented (@linear/sdk integration, tests, fakes)
+- ✅ **1-3-extraction**: LLM extraction service implemented (prompt, service, tests - 18 passing)
 
 ### Now
 
-**Task 1-3-extraction**: Implement LLM extraction service
+**Task 1-4-create-issue**: Implement create issue use case
 
 ### Next
 
-- 1-4-create-issue: Implement create issue use case
+- 1-5-list-issues: Implement list issues use case
 - Continue through all tiers...
 
 ## Open Questions

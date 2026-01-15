@@ -30,6 +30,10 @@ export {
   type CalendarEventExtractionPromptInput,
   type CalendarEventExtractionPromptDeps,
   type ExtractedCalendarEvent,
+  linearActionExtractionPrompt,
+  type LinearIssueExtractionPromptInput,
+  type LinearIssueExtractionPromptDeps,
+  type ExtractedLinearIssue,
 } from './classification/index.js';
 
 // Todo prompts (item extraction)

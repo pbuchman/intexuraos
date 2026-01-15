@@ -12,6 +12,8 @@ import type {
   LinearTeam,
   LinearIssue,
   CreateIssueInput,
+  LinearActionExtractionService,
+  ExtractedIssueData,
 } from '../domain/index.js';
 
 export class FakeLinearConnectionRepository implements LinearConnectionRepository {
@@ -172,6 +174,37 @@ export class FakeLinearApiClient implements LinearApiClient {
 
   seedIssue(issue: LinearIssue): void {
     this.issues.push(issue);
+  }
+
+  setFailure(fail: boolean, error?: LinearError): void {
+    this.shouldFail = fail;
+    if (error) this.failError = error;
+  }
+}
+
+export class FakeLinearActionExtractionService implements LinearActionExtractionService {
+  private response: ExtractedIssueData = {
+    title: 'Test Issue',
+    priority: 0,
+    functionalRequirements: null,
+    technicalDetails: null,
+    valid: true,
+    error: null,
+    reasoning: 'Test extraction',
+  };
+  private shouldFail = false;
+  private failError: LinearError = { code: 'EXTRACTION_FAILED', message: 'Fake extraction error' };
+
+  async extractIssue(
+    userId: string,
+    text: string
+  ): Promise<Result<ExtractedIssueData, LinearError>> {
+    if (this.shouldFail) return err(this.failError);
+    return ok({ ...this.response, title: text.slice(0, 50) });
+  }
+
+  setResponse(response: Partial<ExtractedIssueData>): void {
+    this.response = { ...this.response, ...response };
   }
 
   setFailure(fail: boolean, error?: LinearError): void {
