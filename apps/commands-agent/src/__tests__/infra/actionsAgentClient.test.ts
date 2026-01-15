@@ -3,10 +3,14 @@
  */
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import nock from 'nock';
+import pino from 'pino';
+import type { Logger } from 'pino';
 import { createActionsAgentClient } from '../../infra/actionsAgent/client.js';
 
 const BASE_URL = 'http://localhost:8082';
 const INTERNAL_AUTH_TOKEN = 'test-internal-token';
+
+const createFakeLogger = (): Logger => pino({ level: 'silent' });
 
 describe('ActionsAgentClient', () => {
   beforeAll(() => {
@@ -45,6 +49,7 @@ describe('ActionsAgentClient', () => {
       const client = createActionsAgentClient({
         baseUrl: BASE_URL,
         internalAuthToken: INTERNAL_AUTH_TOKEN,
+        logger: createFakeLogger(),
       });
 
       const result = await client.createAction({
@@ -83,6 +88,7 @@ describe('ActionsAgentClient', () => {
       const client = createActionsAgentClient({
         baseUrl: BASE_URL,
         internalAuthToken: INTERNAL_AUTH_TOKEN,
+        logger: createFakeLogger(),
       });
 
       const result = await client.createAction({
@@ -105,6 +111,7 @@ describe('ActionsAgentClient', () => {
       const client = createActionsAgentClient({
         baseUrl: BASE_URL,
         internalAuthToken: INTERNAL_AUTH_TOKEN,
+        logger: createFakeLogger(),
       });
 
       const result = await client.createAction({
@@ -127,6 +134,7 @@ describe('ActionsAgentClient', () => {
       const client = createActionsAgentClient({
         baseUrl: BASE_URL,
         internalAuthToken: INTERNAL_AUTH_TOKEN,
+        logger: createFakeLogger(),
       });
 
       const result = await client.createAction({
@@ -149,6 +157,7 @@ describe('ActionsAgentClient', () => {
       const client = createActionsAgentClient({
         baseUrl: BASE_URL,
         internalAuthToken: INTERNAL_AUTH_TOKEN,
+        logger: createFakeLogger(),
       });
 
       const result = await client.createAction({
@@ -171,6 +180,7 @@ describe('ActionsAgentClient', () => {
       const client = createActionsAgentClient({
         baseUrl: BASE_URL,
         internalAuthToken: INTERNAL_AUTH_TOKEN,
+        logger: createFakeLogger(),
       });
 
       const result = await client.createAction({
@@ -193,6 +203,7 @@ describe('ActionsAgentClient', () => {
       const client = createActionsAgentClient({
         baseUrl: BASE_URL,
         internalAuthToken: INTERNAL_AUTH_TOKEN,
+        logger: createFakeLogger(),
       });
 
       const result = await client.createAction({
@@ -232,6 +243,7 @@ describe('ActionsAgentClient', () => {
       const client = createActionsAgentClient({
         baseUrl: BASE_URL,
         internalAuthToken: 'custom-token',
+        logger: createFakeLogger(),
       });
 
       await client.createAction({

@@ -11,7 +11,7 @@ import type { GoogleCalendarClient, UserServiceClient } from '../ports.js';
 export interface UpdateEventDeps {
   userServiceClient: UserServiceClient;
   googleCalendarClient: GoogleCalendarClient;
-  logger?: Logger;
+  logger: Logger;
 }
 
 export interface UpdateEventRequest {
@@ -28,11 +28,11 @@ export async function updateEvent(
   const { userId, calendarId = 'primary', eventId, event } = request;
   const { userServiceClient, googleCalendarClient, logger } = deps;
 
-  logger?.info({ userId, calendarId, eventId, updates: Object.keys(event) }, 'updateEvent: entry');
+  logger.info({ userId, calendarId, eventId, updates: Object.keys(event) }, 'updateEvent: entry');
 
   const tokenResult = await userServiceClient.getOAuthToken(userId);
   if (!tokenResult.ok) {
-    logger?.error({ userId, calendarId, eventId, error: tokenResult.error }, 'updateEvent: failed to get OAuth token');
+    logger.error({ userId, calendarId, eventId, error: tokenResult.error }, 'updateEvent: failed to get OAuth token');
     return err(tokenResult.error);
   }
 
@@ -45,9 +45,9 @@ export async function updateEvent(
   );
 
   if (result.ok) {
-    logger?.info({ userId, calendarId, eventId, title: result.value.summary }, 'updateEvent: success');
+    logger.info({ userId, calendarId, eventId, title: result.value.summary }, 'updateEvent: success');
   } else {
-    logger?.error({ userId, calendarId, eventId, error: result.error }, 'updateEvent: failed to update event');
+    logger.error({ userId, calendarId, eventId, error: result.error }, 'updateEvent: failed to update event');
   }
 
   return result;

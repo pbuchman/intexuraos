@@ -1,4 +1,5 @@
 import type { Result } from '@intexuraos/common-core';
+import type { Logger } from 'pino';
 import { BasePubSubPublisher, type PublishError } from '@intexuraos/infra-pubsub';
 import type { ResearchModel } from '../../domain/research/models/Research.js';
 
@@ -17,13 +18,14 @@ export interface LlmCallPublisher {
 export interface LlmCallPublisherConfig {
   projectId: string;
   topicName: string;
+  logger: Logger;
 }
 
 export class LlmCallPublisherImpl extends BasePubSubPublisher implements LlmCallPublisher {
   private readonly topicName: string;
 
   constructor(config: LlmCallPublisherConfig) {
-    super({ projectId: config.projectId, loggerName: 'llm-call-publisher' });
+    super({ projectId: config.projectId, logger: config.logger });
     this.topicName = config.topicName;
   }
 

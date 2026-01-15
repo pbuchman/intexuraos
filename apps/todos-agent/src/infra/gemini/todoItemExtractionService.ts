@@ -1,20 +1,11 @@
-import type { Result } from '@intexuraos/common-core';
+import type { Result, Logger } from '@intexuraos/common-core';
 import { err, getErrorMessage, ok } from '@intexuraos/common-core';
 import { itemExtractionPrompt } from '@intexuraos/llm-common';
 import type { LlmGenerateClient } from '@intexuraos/llm-factory';
 import type { UserServiceClient } from '../user/userServiceClient.js';
-import pino from 'pino';
 
 const MAX_ITEMS = 50;
 const MAX_DESCRIPTION_LENGTH = 10000;
-
-// eslint-disable-next-line @typescript-eslint/no-empty-object-type -- Extends Logger for type compatibility
-interface MinimalLogger extends pino.Logger {}
-
-const defaultLogger: MinimalLogger = pino({
-  level: process.env['LOG_LEVEL'] ?? 'info',
-  name: 'todoItemExtractionService',
-}) as unknown as MinimalLogger;
 
 export interface ExtractionError {
   code: 'NO_API_KEY' | 'USER_SERVICE_ERROR' | 'GENERATION_ERROR' | 'INVALID_RESPONSE';
@@ -43,16 +34,14 @@ export interface TodoItemExtractionService {
 
 export function createTodoItemExtractionService(
   userServiceClient: UserServiceClient,
-  logger?: MinimalLogger
+  logger: Logger
 ): TodoItemExtractionService {
-  const log: MinimalLogger = logger ?? defaultLogger;
-
   return {
     async extractItems(
       userId: string,
       description: string
     ): Promise<Result<ExtractedItem[], ExtractionError>> {
-      log.info(
+      logger.info(
         {
           userId,
           descriptionLength: description.length,
@@ -65,13 +54,13 @@ export function createTodoItemExtractionService(
       if (!clientResult.ok) {
         const error = clientResult.error;
         if (error.code === 'NO_API_KEY') {
-          log.warn({ userId }, 'No API key configured for LLM extraction');
+          logger.warn({ userId }, 'No API key configured for LLM extraction');
           return err({
             code: 'NO_API_KEY',
             message: error.message,
           });
         }
-        log.error(
+        logger.error(
           {
             userId,
             userServiceError: error.message,
@@ -92,7 +81,7 @@ export function createTodoItemExtractionService(
         { maxItems: MAX_ITEMS, maxDescriptionLength: MAX_DESCRIPTION_LENGTH }
       );
 
-      log.info(
+      logger.info(
         {
           userId,
           promptLength: prompt.length,
@@ -104,7 +93,7 @@ export function createTodoItemExtractionService(
 
       if (!result.ok) {
         const llmError = result.error;
-        log.error(
+        logger.error(
           {
             userId,
             llmErrorCode: llmError.code,
@@ -121,7 +110,7 @@ export function createTodoItemExtractionService(
         });
       }
 
-      log.info(
+      logger.info(
         {
           userId,
           responseLength: result.value.content.length,
@@ -135,7 +124,7 @@ export function createTodoItemExtractionService(
       const codeBlockMatch = codeBlockRegex.exec(cleaned);
       const wasWrappedInMarkdown = codeBlockMatch !== null;
       if (wasWrappedInMarkdown && codeBlockMatch[1] !== undefined) {
-        log.debug({ userId }, 'Response wrapped in markdown code block, stripping');
+        logger.debug({ userId }, 'Response wrapped in markdown code block, stripping');
         cleaned = codeBlockMatch[1].trim();
       }
 
@@ -143,7 +132,7 @@ export function createTodoItemExtractionService(
         const parsed = JSON.parse(cleaned) as unknown;
 
         if (!isValidExtractionResponse(parsed)) {
-          log.error(
+          logger.error(
             {
               userId,
               parseError: 'Schema validation failed',
@@ -170,7 +159,7 @@ export function createTodoItemExtractionService(
           dueDate: item.dueDate !== null ? new Date(item.dueDate) : null,
         }));
 
-        log.info(
+        logger.info(
           {
             userId,
             itemCount: itemsWithDates.length,
@@ -180,7 +169,7 @@ export function createTodoItemExtractionService(
 
         return ok(itemsWithDates);
       } catch (error) {
-        log.error(
+        logger.error(
           {
             userId,
             parseError: getErrorMessage(error),

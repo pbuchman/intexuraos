@@ -3,23 +3,16 @@
  * Provides common functionality for all Pub/Sub publishers.
  */
 import { PubSub, type Topic } from '@google-cloud/pubsub';
-import pino, { type Logger, type LevelWithSilent } from 'pino';
+import { type Logger } from 'pino';
 import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
 import type { PublishError } from './types.js';
-
-/**
- * Gets the pino log level based on the current environment.
- */
-export function getLogLevel(nodeEnv: string | undefined): LevelWithSilent {
-  return nodeEnv === 'test' ? 'silent' : 'info';
-}
 
 /**
  * Configuration for BasePubSubPublisher.
  */
 export interface BasePubSubPublisherConfig {
   projectId: string;
-  loggerName?: string;
+  logger: Logger;
 }
 
 /**
@@ -38,10 +31,7 @@ export abstract class BasePubSubPublisher {
 
   constructor(config: BasePubSubPublisherConfig) {
     this.pubsub = new PubSub({ projectId: config.projectId });
-    this.logger = pino({
-      name: config.loggerName ?? 'pubsub-publisher',
-      level: getLogLevel(process.env['NODE_ENV']),
-    });
+    this.logger = config.logger;
   }
 
   /**

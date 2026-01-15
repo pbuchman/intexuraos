@@ -4,16 +4,24 @@
 
 import { describe, expect, it, vi } from 'vitest';
 import { TEST_PRICING } from '@intexuraos/llm-pricing';
+import type { Logger } from '@intexuraos/common-core';
 import { LlmModels } from '@intexuraos/llm-contract';
 
 const testPricing = TEST_PRICING;
+
+const mockLogger: Logger = {
+  info: vi.fn(),
+  error: vi.fn(),
+  warn: vi.fn(),
+  debug: vi.fn(),
+};
 
 vi.mock('../../../infra/llm/GeminiAdapter.js', () => ({
   GeminiAdapter: class MockGeminiAdapter {
     apiKey: string;
     model: string;
     userId: string;
-    constructor(apiKey: string, model: string, userId: string) {
+    constructor(apiKey: string, model: string, userId: string, _pricing: unknown, _logger: Logger) {
       this.apiKey = apiKey;
       this.model = model;
       this.userId = userId;
@@ -26,7 +34,7 @@ vi.mock('../../../infra/llm/ClaudeAdapter.js', () => ({
     apiKey: string;
     model: string;
     userId: string;
-    constructor(apiKey: string, model: string, userId: string) {
+    constructor(apiKey: string, model: string, userId: string, _pricing: unknown, _logger: Logger) {
       this.apiKey = apiKey;
       this.model = model;
       this.userId = userId;
@@ -39,7 +47,7 @@ vi.mock('../../../infra/llm/GptAdapter.js', () => ({
     apiKey: string;
     model: string;
     userId: string;
-    constructor(apiKey: string, model: string, userId: string) {
+    constructor(apiKey: string, model: string, userId: string, _pricing: unknown, _logger: Logger) {
       this.apiKey = apiKey;
       this.model = model;
       this.userId = userId;
@@ -52,7 +60,7 @@ vi.mock('../../../infra/llm/PerplexityAdapter.js', () => ({
     apiKey: string;
     model: string;
     userId: string;
-    constructor(apiKey: string, model: string, userId: string) {
+    constructor(apiKey: string, model: string, userId: string, _pricing: unknown, _logger: Logger) {
       this.apiKey = apiKey;
       this.model = model;
       this.userId = userId;
@@ -65,7 +73,7 @@ vi.mock('../../../infra/llm/GlmAdapter.js', () => ({
     apiKey: string;
     model: string;
     userId: string;
-    constructor(apiKey: string, model: string, userId: string) {
+    constructor(apiKey: string, model: string, userId: string, _pricing: unknown, _logger: Logger) {
       this.apiKey = apiKey;
       this.model = model;
       this.userId = userId;
@@ -83,7 +91,8 @@ describe('LlmAdapterFactory', () => {
         LlmModels.Gemini25Pro,
         'google-key',
         'test-user-id',
-        testPricing
+        testPricing,
+        mockLogger
       );
 
       expect((provider as unknown as { apiKey: string }).apiKey).toBe('google-key');
@@ -95,7 +104,8 @@ describe('LlmAdapterFactory', () => {
         LlmModels.ClaudeOpus45,
         'anthropic-key',
         'test-user-id',
-        testPricing
+        testPricing,
+        mockLogger
       );
 
       expect((provider as unknown as { apiKey: string }).apiKey).toBe('anthropic-key');
@@ -107,7 +117,8 @@ describe('LlmAdapterFactory', () => {
         LlmModels.O4MiniDeepResearch,
         'openai-key',
         'test-user-id',
-        testPricing
+        testPricing,
+        mockLogger
       );
 
       expect((provider as unknown as { apiKey: string }).apiKey).toBe('openai-key');
@@ -119,7 +130,8 @@ describe('LlmAdapterFactory', () => {
         LlmModels.SonarPro,
         'perplexity-key',
         'test-user-id',
-        testPricing
+        testPricing,
+        mockLogger
       );
 
       expect((provider as unknown as { apiKey: string }).apiKey).toBe('perplexity-key');
@@ -131,7 +143,8 @@ describe('LlmAdapterFactory', () => {
         LlmModels.Glm47,
         'zai-key',
         'test-user-id',
-        testPricing
+        testPricing,
+        mockLogger
       );
 
       expect((provider as unknown as { apiKey: string }).apiKey).toBe('zai-key');
@@ -145,7 +158,8 @@ describe('LlmAdapterFactory', () => {
         LlmModels.Gemini25Pro,
         'google-key',
         'test-user-id',
-        testPricing
+        testPricing,
+        mockLogger
       );
 
       expect((synthesizer as unknown as { apiKey: string }).apiKey).toBe('google-key');
@@ -154,7 +168,7 @@ describe('LlmAdapterFactory', () => {
 
     it('throws error for claude model (synthesis not supported)', () => {
       expect(() =>
-        createSynthesizer(LlmModels.ClaudeOpus45, 'anthropic-key', 'test-user-id', testPricing)
+        createSynthesizer(LlmModels.ClaudeOpus45, 'anthropic-key', 'test-user-id', testPricing, mockLogger)
       ).toThrow('Anthropic does not support synthesis');
     });
 
@@ -163,7 +177,8 @@ describe('LlmAdapterFactory', () => {
         LlmModels.O4MiniDeepResearch,
         'openai-key',
         'test-user-id',
-        testPricing
+        testPricing,
+        mockLogger
       );
 
       expect((synthesizer as unknown as { apiKey: string }).apiKey).toBe('openai-key');
@@ -174,7 +189,7 @@ describe('LlmAdapterFactory', () => {
 
     it('throws error for perplexity model (synthesis not supported)', () => {
       expect(() =>
-        createSynthesizer(LlmModels.SonarPro, 'perplexity-key', 'test-user-id', testPricing)
+        createSynthesizer(LlmModels.SonarPro, 'perplexity-key', 'test-user-id', testPricing, mockLogger)
       ).toThrow('Perplexity does not support synthesis');
     });
 
@@ -183,7 +198,8 @@ describe('LlmAdapterFactory', () => {
         LlmModels.Glm47,
         'zai-key',
         'test-user-id',
-        testPricing
+        testPricing,
+        mockLogger
       );
 
       expect((synthesizer as unknown as { apiKey: string }).apiKey).toBe('zai-key');
@@ -197,7 +213,8 @@ describe('LlmAdapterFactory', () => {
         LlmModels.Gemini20Flash,
         'google-key',
         'test-user-id',
-        testPricing
+        testPricing,
+        mockLogger
       );
 
       expect((generator as unknown as { apiKey: string }).apiKey).toBe('google-key');

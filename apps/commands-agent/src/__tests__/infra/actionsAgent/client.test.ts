@@ -2,10 +2,17 @@
  * Tests for ActionsAgentClient.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import pino from 'pino';
+import type { Logger } from 'pino';
 import {
   createActionsAgentClient,
   type ActionsAgentClient,
 } from '../../../infra/actionsAgent/client.js';
+
+const createFakeLogger = (): Logger =>
+  pino({
+    level: 'silent',
+  });
 
 describe('ActionsAgentClient', () => {
   let client: ActionsAgentClient;
@@ -13,7 +20,7 @@ describe('ActionsAgentClient', () => {
   const internalAuthToken = 'test-internal-token';
 
   beforeEach(() => {
-    client = createActionsAgentClient({ baseUrl, internalAuthToken });
+    client = createActionsAgentClient({ baseUrl, internalAuthToken, logger: createFakeLogger() });
   });
 
   afterEach(() => {

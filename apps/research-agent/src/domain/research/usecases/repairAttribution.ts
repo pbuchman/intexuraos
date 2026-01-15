@@ -3,13 +3,13 @@
  * Attempts to repair invalid attributions using a single LLM call.
  */
 
-import { type Result, ok, err } from '@intexuraos/common-core';
+import { type Result, ok, err, type Logger } from '@intexuraos/common-core';
 import type { SourceMapItem } from '@intexuraos/llm-common';
 import type { LlmSynthesisProvider, LlmUsage } from '../ports/llmProvider.js';
 
 export interface RepairAttributionDeps {
   synthesizer: LlmSynthesisProvider;
-  logger?: { info: (msg: string) => void; error: (obj: object, msg: string) => void } | undefined;
+  logger?: Logger;
 }
 
 export interface RepairAttributionResult {
@@ -51,7 +51,7 @@ export async function repairAttribution(
     return err(new Error('Cannot repair attribution: empty source map'));
   }
 
-  logger?.info('Attempting attribution repair');
+  logger?.info({}, 'Attempting attribution repair');
 
   const repairPrompt = buildRepairPrompt(rawContent, sourceMap);
 
@@ -63,7 +63,7 @@ export async function repairAttribution(
     return err(new Error(`Attribution repair failed: ${error.message}`));
   }
 
-  logger?.info('Attribution repair completed');
+  logger?.info({}, 'Attribution repair completed');
   return ok({
     content: result.value.content,
     usage: result.value.usage ?? { inputTokens: 0, outputTokens: 0, costUsd: 0 },

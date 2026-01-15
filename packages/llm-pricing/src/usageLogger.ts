@@ -17,8 +17,10 @@
  */
 
 import { getFirestore, FieldValue } from '@intexuraos/infra-firestore';
+import { getErrorMessage } from '@intexuraos/common-core';
 import type { NormalizedUsage } from '@intexuraos/llm-contract';
 import type { LlmProvider } from './types.js';
+import type { Logger } from '@intexuraos/common-core';
 
 const COLLECTION_NAME = 'llm_usage_stats';
 
@@ -54,7 +56,7 @@ export type CallType =
  * Parameters for logging LLM usage.
  *
  * @remarks
- * Passed to {@link logUsage} to record token usage and costs to Firestore.
+ * Passed to {@link UsageLogger.log} to record token usage and costs to Firestore.
  * Aggregated by model, call type, period (total/monthly/daily), and user.
  *
  * @example
@@ -119,168 +121,240 @@ export function isUsageLoggingEnabled(): boolean {
 }
 
 /**
- * Log LLM usage to Firestore and Cloud Logging.
+ * LLM Usage Logger.
  *
  * @remarks
- * Fire-and-forget operation - errors are logged but don't propagate to avoid
- * disrupting LLM operations. Writes to three aggregation levels:
- * - `total`: All-time aggregate
- * - `{YYYY-MM}`: Monthly aggregate
- * - `{YYYY-MM-DD}`: Daily aggregate
- *
- * Also writes per-user stats under `by_user/{userId}` subcollection.
- *
- * @param params - Usage parameters including tokens, cost, and metadata
+ * Logs LLM usage to Firestore for cost tracking and analytics.
+ * Requires a Logger instance for structured logging - no optional logging.
  *
  * @example
  * ```ts
- * import { logUsage } from '@intexuraos/llm-pricing';
+ * import { UsageLogger } from '@intexuraos/llm-pricing';
+ * import pino from 'pino';
  *
- * await logUsage({
+ * const logger = pino({ name: 'my-service' });
+ * const usageLogger = new UsageLogger({ logger });
+ *
+ * await usageLogger.log({
  *   userId: 'user-123',
  *   provider: 'anthropic',
  *   model: 'claude-sonnet-4-5',
  *   callType: 'research',
- *   usage: {
- *     inputTokens: 1000,
- *     outputTokens: 500,
- *     totalTokens: 1500,
- *     costUsd: 0.0105,
- *   },
+ *   usage: { inputTokens: 1000, outputTokens: 500, totalTokens: 1500, costUsd: 0.0105 },
  *   success: true,
  * });
  * ```
- *
- * @see {@link UsageLogParams} for parameter structure
  */
-export async function logUsage(params: UsageLogParams): Promise<void> {
-  if (!isUsageLoggingEnabled()) return;
+export class UsageLogger {
+  readonly logger: Logger;
 
-  // Skip console logging in tests
-  if (process.env['NODE_ENV'] !== 'test') {
-    // Structured log for Cloud Logging (visible in real-time)
-    // eslint-disable-next-line no-console
-    console.info(
-      JSON.stringify({
-        severity: 'INFO',
-        message: 'LLM usage logged',
-        llmUsage: {
-          userId: params.userId,
+  constructor(deps: { logger: Logger }) {
+    this.logger = deps.logger;
+  }
+
+  /**
+   * Log LLM usage to Firestore and Cloud Logging.
+   *
+   * @remarks
+   * Fire-and-forget operation - errors are logged but don't propagate to avoid
+   * disrupting LLM operations. Writes to three aggregation levels:
+   * - `total`: All-time aggregate
+   * - `{YYYY-MM}`: Monthly aggregate
+   * - `{YYYY-MM-DD}`: Daily aggregate
+   *
+   * Also writes per-user stats under `by_user/{userId}` subcollection.
+   *
+   * @param params - Usage parameters including tokens, cost, and metadata
+   *
+   * @example
+   * ```ts
+   * await usageLogger.log({
+   *   userId: 'user-123',
+   *   provider: 'anthropic',
+   *   model: 'claude-sonnet-4-5',
+   *   callType: 'research',
+   *   usage: {
+   *     inputTokens: 1000,
+   *     outputTokens: 500,
+   *     totalTokens: 1500,
+   *     costUsd: 0.0105,
+   *   },
+   *   success: true,
+   * });
+   * ```
+   *
+   * @see {@link UsageLogParams} for parameter structure
+   */
+  async log(params: UsageLogParams): Promise<void> {
+    if (!isUsageLoggingEnabled()) return;
+
+    this.logger.info(
+      {
+        userId: params.userId,
+        provider: params.provider,
+        model: params.model,
+        callType: params.callType,
+        inputTokens: params.usage.inputTokens,
+        outputTokens: params.usage.outputTokens,
+        totalTokens: params.usage.totalTokens,
+        costUsd: params.usage.costUsd,
+        success: params.success,
+        ...(params.errorMessage !== undefined && { errorMessage: params.errorMessage }),
+      },
+      'LLM usage logged'
+    );
+
+    try {
+      const firestore = getFirestore();
+      const now = new Date();
+      const dateKey = now.toISOString().slice(0, 10); // YYYY-MM-DD
+      const monthKey = now.toISOString().slice(0, 7); // YYYY-MM
+
+      // Path: llm_usage_stats/{model}/by_call_type/{callType}/by_period/{period}
+      const modelRef = firestore.collection(COLLECTION_NAME).doc(params.model);
+      const callTypeRef = modelRef.collection('by_call_type').doc(params.callType);
+
+      const batch = firestore.batch();
+
+      // Ensure model doc exists with metadata (prevents ghost documents)
+      batch.set(
+        modelRef,
+        {
+          model: params.model,
+          provider: params.provider,
+          updatedAt: now.toISOString(),
+        },
+        { merge: true }
+      );
+
+      // Ensure callType doc exists with metadata
+      batch.set(
+        callTypeRef,
+        {
+          callType: params.callType,
+          updatedAt: now.toISOString(),
+        },
+        { merge: true }
+      );
+
+      // Update periods: total, month, day
+      const periods = ['total', monthKey, dateKey];
+      for (const period of periods) {
+        const periodRef = callTypeRef.collection('by_period').doc(period);
+        const updateData = {
           provider: params.provider,
           model: params.model,
           callType: params.callType,
-          inputTokens: params.usage.inputTokens,
-          outputTokens: params.usage.outputTokens,
-          totalTokens: params.usage.totalTokens,
-          costUsd: params.usage.costUsd,
-          success: params.success,
-          ...(params.errorMessage !== undefined && { errorMessage: params.errorMessage }),
-        },
-      })
-    );
+          period,
+          totalCalls: FieldValue.increment(1),
+          successfulCalls: FieldValue.increment(params.success ? 1 : 0),
+          failedCalls: FieldValue.increment(params.success ? 0 : 1),
+          inputTokens: FieldValue.increment(params.usage.inputTokens),
+          outputTokens: FieldValue.increment(params.usage.outputTokens),
+          totalTokens: FieldValue.increment(params.usage.inputTokens + params.usage.outputTokens),
+          costUsd: FieldValue.increment(params.usage.costUsd),
+          updatedAt: now.toISOString(),
+        };
+        batch.set(periodRef, updateData, { merge: true });
+      }
+
+      await batch.commit();
+
+      // Log per-user stats if userId is provided
+      if (params.userId !== '') {
+        await this.logUserUsage(params, now, callTypeRef, dateKey);
+      }
+    } catch (error) {
+      this.logger.error(
+        { error: getErrorMessage(error), params },
+        'Failed to log LLM usage to Firestore'
+      );
+    }
   }
 
-  try {
+  /**
+   * Log per-user usage stats.
+   * Path: llm_usage_stats/{model}/by_call_type/{callType}/by_period/{date}/by_user/{userId}
+   */
+  private async logUserUsage(
+    params: UsageLogParams,
+    now: Date,
+    callTypeRef: FirebaseFirestore.DocumentReference,
+    dateKey: string
+  ): Promise<void> {
     const firestore = getFirestore();
-    const now = new Date();
-    const dateKey = now.toISOString().slice(0, 10); // YYYY-MM-DD
-    const monthKey = now.toISOString().slice(0, 7); // YYYY-MM
+    const userDocRef = callTypeRef
+      .collection('by_period')
+      .doc(dateKey)
+      .collection('by_user')
+      .doc(params.userId);
 
-    // Path: llm_usage_stats/{model}/by_call_type/{callType}/by_period/{period}
-    const modelRef = firestore.collection(COLLECTION_NAME).doc(params.model);
-    const callTypeRef = modelRef.collection('by_call_type').doc(params.callType);
+    const updateData = {
+      userId: params.userId,
+      totalCalls: FieldValue.increment(1),
+      successfulCalls: FieldValue.increment(params.success ? 1 : 0),
+      inputTokens: FieldValue.increment(params.usage.inputTokens),
+      outputTokens: FieldValue.increment(params.usage.outputTokens),
+      costUsd: FieldValue.increment(params.usage.costUsd),
+      updatedAt: now.toISOString(),
+    };
 
-    const batch = firestore.batch();
-
-    // Ensure model doc exists with metadata (prevents ghost documents)
-    batch.set(
-      modelRef,
-      {
-        model: params.model,
-        provider: params.provider,
-        updatedAt: now.toISOString(),
-      },
-      { merge: true }
-    );
-
-    // Ensure callType doc exists with metadata
-    batch.set(
-      callTypeRef,
-      {
-        callType: params.callType,
-        updatedAt: now.toISOString(),
-      },
-      { merge: true }
-    );
-
-    // Update periods: total, month, day
-    const periods = ['total', monthKey, dateKey];
-    for (const period of periods) {
-      const periodRef = callTypeRef.collection('by_period').doc(period);
-      const updateData = {
-        provider: params.provider,
-        model: params.model,
-        callType: params.callType,
-        period,
-        totalCalls: FieldValue.increment(1),
-        successfulCalls: FieldValue.increment(params.success ? 1 : 0),
-        failedCalls: FieldValue.increment(params.success ? 0 : 1),
-        inputTokens: FieldValue.increment(params.usage.inputTokens),
-        outputTokens: FieldValue.increment(params.usage.outputTokens),
-        totalTokens: FieldValue.increment(params.usage.inputTokens + params.usage.outputTokens),
-        costUsd: FieldValue.increment(params.usage.costUsd),
-        updatedAt: now.toISOString(),
-      };
-      batch.set(periodRef, updateData, { merge: true });
-    }
-
-    await batch.commit();
-
-    // Log per-user stats if userId is provided
-    if (params.userId !== '') {
-      await logUserUsage(params, now, callTypeRef, dateKey);
-    }
-  } catch {
-    // Fire-and-forget - silently ignore errors to not disrupt LLM operations
+    await firestore.runTransaction(async (transaction) => {
+      const doc = await transaction.get(userDocRef);
+      if (doc.exists) {
+        transaction.update(userDocRef, updateData);
+      } else {
+        transaction.set(userDocRef, {
+          ...updateData,
+          createdAt: now.toISOString(),
+        });
+      }
+    });
   }
 }
 
 /**
- * Log per-user usage stats.
- * Path: llm_usage_stats/{model}/by_call_type/{callType}/by_period/{date}/by_user/{userId}
+ * Create a UsageLogger instance.
+ *
+ * @remarks
+ * Factory function for creating a UsageLogger with required logger dependency.
+ * Use this instead of `new UsageLogger()` for consistency.
+ *
+ * @param deps - Dependencies including required logger
+ * @returns Configured UsageLogger instance
+ *
+ * @example
+ * ```ts
+ * import { createUsageLogger } from '@intexuraos/llm-pricing';
+ * import pino from 'pino';
+ *
+ * const logger = pino({ name: 'my-service' });
+ * const usageLogger = createUsageLogger({ logger });
+ * ```
  */
-async function logUserUsage(
-  params: UsageLogParams,
-  now: Date,
-  callTypeRef: FirebaseFirestore.DocumentReference,
-  dateKey: string
-): Promise<void> {
-  const firestore = getFirestore();
-  const userDocRef = callTypeRef
-    .collection('by_period')
-    .doc(dateKey)
-    .collection('by_user')
-    .doc(params.userId);
+export function createUsageLogger(deps: { logger: Logger }): UsageLogger {
+  return new UsageLogger(deps);
+}
 
-  const updateData = {
-    userId: params.userId,
-    totalCalls: FieldValue.increment(1),
-    successfulCalls: FieldValue.increment(params.success ? 1 : 0),
-    inputTokens: FieldValue.increment(params.usage.inputTokens),
-    outputTokens: FieldValue.increment(params.usage.outputTokens),
-    costUsd: FieldValue.increment(params.usage.costUsd),
-    updatedAt: now.toISOString(),
+/**
+ * @deprecated Use {@link UsageLogger.log} or {@link createUsageLogger} instead.
+ * This standalone function will be removed in a future version.
+ *
+ * Log LLM usage to Firestore and Cloud Logging.
+ *
+ * @remarks
+ * This is a legacy function for backward compatibility.
+ * It uses a silent logger (no output) - migrate to UsageLogger class for proper logging.
+ *
+ * @param params - Usage parameters including tokens, cost, and metadata
+ */
+export async function logUsage(params: UsageLogParams): Promise<void> {
+  const silentLogger: Logger = {
+    info: () => undefined,
+    warn: () => undefined,
+    error: () => undefined,
+    debug: () => undefined,
   };
-
-  await firestore.runTransaction(async (transaction) => {
-    const doc = await transaction.get(userDocRef);
-    if (doc.exists) {
-      transaction.update(userDocRef, updateData);
-    } else {
-      transaction.set(userDocRef, {
-        ...updateData,
-        createdAt: now.toISOString(),
-      });
-    }
-  });
+  const usageLogger = new UsageLogger({ logger: silentLogger });
+  await usageLogger.log(params);
 }

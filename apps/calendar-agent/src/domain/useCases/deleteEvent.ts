@@ -10,7 +10,7 @@ import type { GoogleCalendarClient, UserServiceClient } from '../ports.js';
 export interface DeleteEventDeps {
   userServiceClient: UserServiceClient;
   googleCalendarClient: GoogleCalendarClient;
-  logger?: Logger;
+  logger: Logger;
 }
 
 export interface DeleteEventRequest {
@@ -26,11 +26,11 @@ export async function deleteEvent(
   const { userId, calendarId = 'primary', eventId } = request;
   const { userServiceClient, googleCalendarClient, logger } = deps;
 
-  logger?.info({ userId, calendarId, eventId }, 'deleteEvent: entry');
+  logger.info({ userId, calendarId, eventId }, 'deleteEvent: entry');
 
   const tokenResult = await userServiceClient.getOAuthToken(userId);
   if (!tokenResult.ok) {
-    logger?.error({ userId, calendarId, eventId, error: tokenResult.error }, 'deleteEvent: failed to get OAuth token');
+    logger.error({ userId, calendarId, eventId, error: tokenResult.error }, 'deleteEvent: failed to get OAuth token');
     return err(tokenResult.error);
   }
 
@@ -42,9 +42,9 @@ export async function deleteEvent(
   );
 
   if (result.ok) {
-    logger?.info({ userId, calendarId, eventId }, 'deleteEvent: success');
+    logger.info({ userId, calendarId, eventId }, 'deleteEvent: success');
   } else {
-    logger?.error({ userId, calendarId, eventId, error: result.error }, 'deleteEvent: failed to delete event');
+    logger.error({ userId, calendarId, eventId, error: result.error }, 'deleteEvent: failed to delete event');
   }
 
   return result;

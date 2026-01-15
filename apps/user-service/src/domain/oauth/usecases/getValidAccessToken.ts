@@ -23,7 +23,7 @@ export interface GetValidAccessTokenResult {
 export interface GetValidAccessTokenDeps {
   oauthConnectionRepository: OAuthConnectionRepository;
   googleOAuthClient: GoogleOAuthClient;
-  logger?: { info: (obj: object, msg: string) => void; warn: (obj: object, msg: string) => void };
+  logger: { info: (obj: object, msg: string) => void; warn: (obj: object, msg: string) => void };
 }
 
 const TOKEN_EXPIRY_BUFFER_MS = 5 * 60 * 1000;
@@ -61,7 +61,7 @@ export async function getValidAccessToken(
     });
   }
 
-  logger?.info({ userId, provider }, 'Refreshing expired OAuth token');
+  logger.info({ userId, provider }, 'Refreshing expired OAuth token');
 
   const refreshResult = await googleOAuthClient.refreshAccessToken(connection.tokens.refreshToken);
   if (!refreshResult.ok) {
@@ -89,7 +89,7 @@ export async function getValidAccessToken(
 
   const updateResult = await oauthConnectionRepository.updateTokens(userId, provider, updatedTokens);
   if (!updateResult.ok) {
-    logger?.warn(
+    logger.warn(
       { userId, provider, error: updateResult.error.message },
       'Failed to save refreshed tokens'
     );

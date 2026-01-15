@@ -1,4 +1,5 @@
 import type { Result } from '@intexuraos/common-core';
+import type { Logger } from 'pino';
 import { BasePubSubPublisher, type PublishError } from '@intexuraos/infra-pubsub';
 
 export interface ResearchProcessEvent {
@@ -15,6 +16,7 @@ export interface ResearchEventPublisher {
 export interface ResearchEventPublisherConfig {
   projectId: string;
   topicName: string;
+  logger: Logger;
 }
 
 export class ResearchEventPublisherImpl
@@ -24,7 +26,7 @@ export class ResearchEventPublisherImpl
   private readonly topicName: string;
 
   constructor(config: ResearchEventPublisherConfig) {
-    super({ projectId: config.projectId, loggerName: 'research-event-publisher' });
+    super({ projectId: config.projectId, logger: config.logger });
     this.topicName = config.topicName;
   }
 

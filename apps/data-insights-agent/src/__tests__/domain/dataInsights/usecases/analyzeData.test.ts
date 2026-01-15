@@ -4,17 +4,20 @@ import {
   FakeCompositeFeedRepository,
   FakeSnapshotRepository,
   FakeDataAnalysisService,
+  FakeLogger,
 } from '../../../fakes.js';
 
 describe('analyzeData', () => {
   let fakeCompositeFeedRepo: FakeCompositeFeedRepository;
   let fakeSnapshotRepo: FakeSnapshotRepository;
   let fakeDataAnalysisService: FakeDataAnalysisService;
+  let fakeLogger: FakeLogger;
 
   beforeEach(() => {
     fakeCompositeFeedRepo = new FakeCompositeFeedRepository();
     fakeSnapshotRepo = new FakeSnapshotRepository();
     fakeDataAnalysisService = new FakeDataAnalysisService();
+    fakeLogger = new FakeLogger();
   });
 
   describe('success paths', () => {
@@ -59,6 +62,7 @@ describe('analyzeData', () => {
         compositeFeedRepository: fakeCompositeFeedRepo,
         snapshotRepository: fakeSnapshotRepo,
         dataAnalysisService: fakeDataAnalysisService,
+        logger: fakeLogger,
       });
 
       expect(result.ok).toBe(true);
@@ -115,6 +119,7 @@ describe('analyzeData', () => {
         compositeFeedRepository: fakeCompositeFeedRepo,
         snapshotRepository: fakeSnapshotRepo,
         dataAnalysisService: fakeDataAnalysisService,
+        logger: fakeLogger,
       });
 
       expect(result.ok).toBe(true);
@@ -151,6 +156,7 @@ describe('analyzeData', () => {
         compositeFeedRepository: fakeCompositeFeedRepo,
         snapshotRepository: fakeSnapshotRepo,
         dataAnalysisService: fakeDataAnalysisService,
+        logger: fakeLogger,
       });
 
       expect(result.ok).toBe(false);
@@ -167,6 +173,7 @@ describe('analyzeData', () => {
         compositeFeedRepository: fakeCompositeFeedRepo,
         snapshotRepository: fakeSnapshotRepo,
         dataAnalysisService: fakeDataAnalysisService,
+        logger: fakeLogger,
       });
 
       expect(result.ok).toBe(false);
@@ -192,6 +199,7 @@ describe('analyzeData', () => {
         compositeFeedRepository: fakeCompositeFeedRepo,
         snapshotRepository: fakeSnapshotRepo,
         dataAnalysisService: fakeDataAnalysisService,
+        logger: fakeLogger,
       });
 
       expect(result.ok).toBe(false);
@@ -215,6 +223,7 @@ describe('analyzeData', () => {
         compositeFeedRepository: fakeCompositeFeedRepo,
         snapshotRepository: fakeSnapshotRepo,
         dataAnalysisService: fakeDataAnalysisService,
+        logger: fakeLogger,
       });
 
       expect(result.ok).toBe(false);
@@ -239,6 +248,7 @@ describe('analyzeData', () => {
         compositeFeedRepository: fakeCompositeFeedRepo,
         snapshotRepository: fakeSnapshotRepo,
         dataAnalysisService: fakeDataAnalysisService,
+        logger: fakeLogger,
       });
 
       expect(result.ok).toBe(false);
@@ -275,6 +285,7 @@ describe('analyzeData', () => {
         compositeFeedRepository: fakeCompositeFeedRepo,
         snapshotRepository: fakeSnapshotRepo,
         dataAnalysisService: fakeDataAnalysisService,
+        logger: fakeLogger,
       });
 
       expect(result.ok).toBe(false);
@@ -318,6 +329,7 @@ describe('analyzeData', () => {
         compositeFeedRepository: fakeCompositeFeedRepo,
         snapshotRepository: fakeSnapshotRepo,
         dataAnalysisService: fakeDataAnalysisService,
+        logger: fakeLogger,
       });
 
       expect(result.ok).toBe(false);
@@ -354,6 +366,7 @@ describe('analyzeData', () => {
         compositeFeedRepository: fakeCompositeFeedRepo,
         snapshotRepository: fakeSnapshotRepo,
         dataAnalysisService: fakeDataAnalysisService,
+        logger: fakeLogger,
       });
 
       expect(result.ok).toBe(false);
@@ -395,6 +408,7 @@ describe('analyzeData', () => {
         compositeFeedRepository: fakeCompositeFeedRepo,
         snapshotRepository: fakeSnapshotRepo,
         dataAnalysisService: fakeDataAnalysisService,
+        logger: fakeLogger,
       });
 
       expect(result.ok).toBe(true);
@@ -433,6 +447,7 @@ describe('analyzeData', () => {
         compositeFeedRepository: fakeCompositeFeedRepo,
         snapshotRepository: fakeSnapshotRepo,
         dataAnalysisService: fakeDataAnalysisService,
+        logger: fakeLogger,
       });
 
       expect(result.ok).toBe(false);

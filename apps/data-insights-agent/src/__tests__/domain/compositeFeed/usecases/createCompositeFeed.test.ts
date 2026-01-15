@@ -4,17 +4,20 @@ import {
   FakeCompositeFeedRepository,
   FakeDataSourceRepository,
   FakeFeedNameGenerationService,
+  FakeLogger,
 } from '../../../fakes.js';
 
 describe('createCompositeFeed', () => {
   let fakeCompositeFeedRepo: FakeCompositeFeedRepository;
   let fakeDataSourceRepo: FakeDataSourceRepository;
   let fakeFeedNameService: FakeFeedNameGenerationService;
+  let fakeLogger: FakeLogger;
 
   beforeEach(() => {
     fakeCompositeFeedRepo = new FakeCompositeFeedRepository();
     fakeDataSourceRepo = new FakeDataSourceRepository();
     fakeFeedNameService = new FakeFeedNameGenerationService();
+    fakeLogger = new FakeLogger();
   });
 
   describe('success paths', () => {
@@ -39,6 +42,7 @@ describe('createCompositeFeed', () => {
           compositeFeedRepository: fakeCompositeFeedRepo,
           dataSourceRepository: fakeDataSourceRepo,
           feedNameGenerationService: fakeFeedNameService,
+          logger: fakeLogger,
         }
       );
 
@@ -79,6 +83,7 @@ describe('createCompositeFeed', () => {
           compositeFeedRepository: fakeCompositeFeedRepo,
           dataSourceRepository: fakeDataSourceRepo,
           feedNameGenerationService: fakeFeedNameService,
+          logger: fakeLogger,
         }
       );
 
@@ -102,6 +107,7 @@ describe('createCompositeFeed', () => {
           compositeFeedRepository: fakeCompositeFeedRepo,
           dataSourceRepository: fakeDataSourceRepo,
           feedNameGenerationService: fakeFeedNameService,
+          logger: fakeLogger,
         }
       );
 
@@ -133,6 +139,7 @@ describe('createCompositeFeed', () => {
           compositeFeedRepository: fakeCompositeFeedRepo,
           dataSourceRepository: fakeDataSourceRepo,
           feedNameGenerationService: fakeFeedNameService,
+          logger: fakeLogger,
         }
       );
 
@@ -156,6 +163,7 @@ describe('createCompositeFeed', () => {
           compositeFeedRepository: fakeCompositeFeedRepo,
           dataSourceRepository: fakeDataSourceRepo,
           feedNameGenerationService: fakeFeedNameService,
+          logger: fakeLogger,
         }
       );
 
@@ -180,6 +188,7 @@ describe('createCompositeFeed', () => {
           compositeFeedRepository: fakeCompositeFeedRepo,
           dataSourceRepository: fakeDataSourceRepo,
           feedNameGenerationService: fakeFeedNameService,
+          logger: fakeLogger,
         }
       );
 
@@ -204,6 +213,7 @@ describe('createCompositeFeed', () => {
           compositeFeedRepository: fakeCompositeFeedRepo,
           dataSourceRepository: fakeDataSourceRepo,
           feedNameGenerationService: fakeFeedNameService,
+          logger: fakeLogger,
         }
       );
 
@@ -236,6 +246,7 @@ describe('createCompositeFeed', () => {
           compositeFeedRepository: fakeCompositeFeedRepo,
           dataSourceRepository: fakeDataSourceRepo,
           feedNameGenerationService: fakeFeedNameService,
+          logger: fakeLogger,
         }
       );
 
@@ -267,6 +278,7 @@ describe('createCompositeFeed', () => {
           compositeFeedRepository: fakeCompositeFeedRepo,
           dataSourceRepository: fakeDataSourceRepo,
           feedNameGenerationService: fakeFeedNameService,
+          logger: fakeLogger,
         }
       );
 

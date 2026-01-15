@@ -302,20 +302,5 @@ describe('mobileNotificationsClient', () => {
         globalThis.fetch = originalFetch;
       }
     });
-
-    it('works without a logger', async () => {
-      const clientWithoutLogger = createMobileNotificationsClient({ baseUrl, internalAuthToken });
-
-      nock(baseUrl)
-        .post('/internal/mobile-notifications/query')
-        .reply(200, {
-          success: true,
-          data: { notifications: [] },
-        });
-
-      const result = await clientWithoutLogger.queryNotifications(userId, { id: 'f1', name: 'Test' });
-
-      expect(result.ok).toBe(true);
-    });
   });
 });

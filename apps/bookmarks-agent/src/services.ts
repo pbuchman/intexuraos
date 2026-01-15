@@ -34,6 +34,7 @@ export function initServices(config: ServiceConfig): void {
     enrichPublisher: createEnrichPublisher({
       projectId: config.gcpProjectId,
       topicName: config.bookmarkEnrichTopic,
+      logger: pino({ name: 'bookmark-enrich-publisher' }),
     }),
   };
 }

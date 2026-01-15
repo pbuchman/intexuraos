@@ -48,6 +48,7 @@ function buildPubSubConfig(config: ServiceConfig): GcpPubSubPublisherConfig {
   const pubsubConfig: GcpPubSubPublisherConfig = {
     projectId: config.gcpProjectId,
     mediaCleanupTopic: config.mediaCleanupTopic,
+    logger: pino({ name: 'whatsapp-pubsub-publisher' }),
   };
   if (config.commandsIngestTopic !== undefined) {
     pubsubConfig.commandsIngestTopic = config.commandsIngestTopic;

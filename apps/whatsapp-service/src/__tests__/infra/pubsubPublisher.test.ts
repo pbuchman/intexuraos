@@ -2,19 +2,18 @@
  * Tests for GCP Pub/Sub Publisher adapter.
  * Mocks @intexuraos/infra-pubsub to test the publisher implementation.
  */
+import pino from 'pino';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { GcpPubSubPublisher, getLogLevel } from '../../infra/pubsub/index.js';
+import { GcpPubSubPublisher } from '../../infra/pubsub/index.js';
 
 const mockPublishToTopic = vi.fn();
 
 vi.mock('@intexuraos/infra-pubsub', () => ({
   BasePubSubPublisher: class {
     protected projectId: string;
-    protected loggerName: string;
 
-    constructor(config: { projectId: string; loggerName?: string }) {
+    constructor(config: { projectId: string; logger: { level: string } }) {
       this.projectId = config.projectId;
-      this.loggerName = config.loggerName ?? 'test';
     }
 
     async publishToTopic(
@@ -28,20 +27,7 @@ vi.mock('@intexuraos/infra-pubsub', () => ({
       return mockPublishToTopic(topicName, data, attributes);
     }
   },
-  getLogLevel: (env: string | undefined): string => (env === 'test' ? 'silent' : 'info'),
 }));
-
-describe('getLogLevel', () => {
-  it('returns silent for test environment', () => {
-    expect(getLogLevel('test')).toBe('silent');
-  });
-
-  it('returns info for non-test environments', () => {
-    expect(getLogLevel('development')).toBe('info');
-    expect(getLogLevel('production')).toBe('info');
-    expect(getLogLevel(undefined)).toBe('info');
-  });
-});
 
 describe('GcpPubSubPublisher', () => {
   let publisher: GcpPubSubPublisher;
@@ -52,6 +38,7 @@ describe('GcpPubSubPublisher', () => {
     publisher = new GcpPubSubPublisher({
       projectId: 'test-project',
       mediaCleanupTopic: 'media-cleanup-topic',
+      logger: pino({ name: 'test', level: 'silent' }),
     });
   });
 
@@ -121,6 +108,7 @@ describe('GcpPubSubPublisher', () => {
         projectId: 'test-project',
         mediaCleanupTopic: 'media-cleanup-topic',
         commandsIngestTopic: 'commands-ingest-topic',
+        logger: pino({ name: 'test', level: 'silent' }),
       });
 
       const event = {
@@ -145,6 +133,7 @@ describe('GcpPubSubPublisher', () => {
         projectId: 'test-project',
         mediaCleanupTopic: 'media-cleanup-topic',
         commandsIngestTopic: 'commands-ingest-topic',
+        logger: pino({ name: 'test', level: 'silent' }),
       });
       mockPublishToTopic.mockResolvedValue({
         ok: false,
@@ -189,6 +178,7 @@ describe('GcpPubSubPublisher', () => {
         projectId: 'test-project',
         mediaCleanupTopic: 'media-cleanup-topic',
         webhookProcessTopic: 'webhook-process-topic',
+        logger: pino({ name: 'test', level: 'silent' }),
       });
 
       const event = {
@@ -212,6 +202,7 @@ describe('GcpPubSubPublisher', () => {
         projectId: 'test-project',
         mediaCleanupTopic: 'media-cleanup-topic',
         webhookProcessTopic: 'webhook-process-topic',
+        logger: pino({ name: 'test', level: 'silent' }),
       });
       mockPublishToTopic.mockResolvedValue({
         ok: false,
@@ -258,6 +249,7 @@ describe('GcpPubSubPublisher', () => {
         projectId: 'test-project',
         mediaCleanupTopic: 'media-cleanup-topic',
         transcriptionTopic: 'transcription-topic',
+        logger: pino({ name: 'test', level: 'silent' }),
       });
 
       const event = {
@@ -284,6 +276,7 @@ describe('GcpPubSubPublisher', () => {
         projectId: 'test-project',
         mediaCleanupTopic: 'media-cleanup-topic',
         transcriptionTopic: 'transcription-topic',
+        logger: pino({ name: 'test', level: 'silent' }),
       });
       mockPublishToTopic.mockResolvedValue({
         ok: false,
@@ -329,6 +322,7 @@ describe('GcpPubSubPublisher', () => {
         projectId: 'test-project',
         mediaCleanupTopic: 'media-cleanup-topic',
         webhookProcessTopic: 'webhook-process-topic',
+        logger: pino({ name: 'test', level: 'silent' }),
       });
 
       const event = {
@@ -351,6 +345,7 @@ describe('GcpPubSubPublisher', () => {
         projectId: 'test-project',
         mediaCleanupTopic: 'media-cleanup-topic',
         webhookProcessTopic: 'webhook-process-topic',
+        logger: pino({ name: 'test', level: 'silent' }),
       });
       mockPublishToTopic.mockResolvedValue({
         ok: false,

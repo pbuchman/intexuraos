@@ -3,6 +3,7 @@
  *
  * These fakes implement domain port interfaces with in-memory storage.
  */
+import { vi } from 'vitest';
 import type { Result } from '@intexuraos/common-core';
 import { err, ok } from '@intexuraos/common-core';
 import type {
@@ -670,6 +671,19 @@ export class FakeChartDefinitionService implements ChartDefinitionService {
     return Promise.resolve(
       ok({ vegaLiteConfig: {}, transformInstructions: 'No transform needed' })
     );
+  }
+}
+
+/**
+ * Fake Logger for testing.
+ */
+export class FakeLogger {
+  info = vi.fn();
+  warn = vi.fn();
+  error = vi.fn();
+
+  clear(): void {
+    vi.clearAllMocks();
   }
 }
 

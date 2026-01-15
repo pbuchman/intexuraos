@@ -21,8 +21,10 @@ interface MockSynthesizer {
 }
 
 interface MockLogger {
-  info: Mock<(msg: string) => void>;
-  error: Mock<(obj: object, msg: string) => void>;
+  info: Mock<(obj: object, msg?: string) => void>;
+  error: Mock<(obj: object, msg?: string) => void>;
+  warn: Mock<(obj: object, msg?: string) => void>;
+  debug: Mock<(obj: object, msg?: string) => void>;
 }
 
 function createMockSynthesizer(): MockSynthesizer {
@@ -38,6 +40,8 @@ function createMockLogger(): MockLogger {
   return {
     info: vi.fn(),
     error: vi.fn(),
+    warn: vi.fn(),
+    debug: vi.fn(),
   };
 }
 
@@ -70,8 +74,8 @@ describe('repairAttribution', () => {
       expect(result.value.content).toContain('Repaired content');
       expect(result.value.usage.costUsd).toBe(0.005);
     }
-    expect(logger.info).toHaveBeenCalledWith('Attempting attribution repair');
-    expect(logger.info).toHaveBeenCalledWith('Attribution repair completed');
+    expect(logger.info).toHaveBeenCalledWith({}, 'Attempting attribution repair');
+    expect(logger.info).toHaveBeenCalledWith({}, 'Attribution repair completed');
   });
 
   it('returns error when source map is empty', async () => {

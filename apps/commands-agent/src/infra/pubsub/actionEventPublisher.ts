@@ -1,4 +1,5 @@
 import type { Result } from '@intexuraos/common-core';
+import type { Logger } from 'pino';
 import { BasePubSubPublisher, type PublishError } from '@intexuraos/infra-pubsub';
 import type { EventPublisherPort } from '../../domain/ports/eventPublisher.js';
 import type { ActionCreatedEvent } from '../../domain/events/actionCreatedEvent.js';
@@ -6,11 +7,12 @@ import { getActionsQueueTopic } from './config.js';
 
 export interface ActionEventPublisherConfig {
   projectId: string;
+  logger: Logger;
 }
 
 export class ActionEventPublisher extends BasePubSubPublisher implements EventPublisherPort {
   constructor(config: ActionEventPublisherConfig) {
-    super({ projectId: config.projectId, loggerName: 'action-event-publisher' });
+    super({ projectId: config.projectId, logger: config.logger });
   }
 
   async publishActionCreated(event: ActionCreatedEvent): Promise<Result<void, PublishError>> {

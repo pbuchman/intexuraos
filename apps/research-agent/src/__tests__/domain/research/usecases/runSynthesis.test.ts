@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ok, err } from '@intexuraos/common-core';
 import type { SynthesisContext } from '@intexuraos/llm-common';
 import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
+import type { Logger } from '@intexuraos/common-core';
 import {
   runSynthesis,
   type RunSynthesisDeps,
@@ -14,6 +15,13 @@ import {
 import * as repairAttributionModule from '../../../../domain/research/usecases/repairAttribution.js';
 import type { Research } from '../../../../domain/research/models/index.js';
 import type { ShareStoragePort } from '../../../../domain/research/ports/index.js';
+
+const mockLogger: Logger = {
+  info: vi.fn(),
+  error: vi.fn(),
+  warn: vi.fn(),
+  debug: vi.fn(),
+};
 
 function createMockDeps(): RunSynthesisDeps & {
   mockRepo: {
@@ -66,6 +74,7 @@ function createMockDeps(): RunSynthesisDeps & {
     userId: 'user-1',
     webAppUrl: 'https://app.example.com',
     reportLlmSuccess: mockReportSuccess,
+    logger: mockLogger,
     mockRepo,
     mockSynthesizer,
     mockNotificationSender,
@@ -313,6 +322,7 @@ describe('runSynthesis', () => {
       imageServiceClient: null,
       userId: 'user-1',
       webAppUrl: 'https://app.example.com',
+      logger: mockLogger,
     };
 
     const result = await runSynthesis('research-1', minimalDeps);
@@ -578,6 +588,7 @@ describe('runSynthesis', () => {
         additionalSources: undefined,
       });
       expect(mockLogger.info).toHaveBeenCalledWith(
+        {},
         '[4.2.2] Synthesis context inferred successfully (costUsd: 0.003)'
       );
     });

@@ -19,14 +19,14 @@ import type {
 export class  GptAdapter implements LlmResearchProvider, LlmSynthesisProvider {
   private readonly client: GptClient;
   private readonly model: string;
-  private readonly logger: Logger | undefined;
+  private readonly logger: Logger;
 
   constructor(
     apiKey: string,
     model: string,
     userId: string,
     pricing: ModelPricing,
-    logger?: Logger
+    logger: Logger
   ) {
     this.client = createGptClient({ apiKey, model, userId, pricing });
     this.model = model;
@@ -34,17 +34,17 @@ export class  GptAdapter implements LlmResearchProvider, LlmSynthesisProvider {
   }
 
   async research(prompt: string): Promise<Result<LlmResearchResult, LlmError>> {
-    this.logger?.info({ model: this.model, promptLength: prompt.length }, 'GPT research started');
+    this.logger.info({ model: this.model, promptLength: prompt.length }, 'GPT research started');
     const result = await this.client.research(prompt);
     if (!result.ok) {
       const error = mapToLlmError(result.error);
-      this.logger?.error(
+      this.logger.error(
         { model: this.model, errorCode: error.code, errorMessage: error.message },
         'GPT research failed'
       );
       return { ok: false, error };
     }
-    this.logger?.info(
+    this.logger.info(
       { model: this.model, usage: result.value.usage },
       'GPT research completed'
     );
@@ -57,7 +57,7 @@ export class  GptAdapter implements LlmResearchProvider, LlmSynthesisProvider {
     additionalSources?: { content: string; label?: string }[],
     synthesisContext?: SynthesisContext
   ): Promise<Result<LlmSynthesisResult, LlmError>> {
-    this.logger?.info(
+    this.logger.info(
       { model: this.model, reportCount: reports.length, sourceCount: additionalSources?.length ?? 0 },
       'GPT synthesis started'
     );
@@ -69,14 +69,14 @@ export class  GptAdapter implements LlmResearchProvider, LlmSynthesisProvider {
 
     if (!result.ok) {
       const error = mapToLlmError(result.error);
-      this.logger?.error(
+      this.logger.error(
         { model: this.model, errorCode: error.code, errorMessage: error.message },
         'GPT synthesis failed'
       );
       return { ok: false, error };
     }
     const { usage } = result.value;
-    this.logger?.info({ model: this.model, usage }, 'GPT synthesis completed');
+    this.logger.info({ model: this.model, usage }, 'GPT synthesis completed');
     return {
       ok: true,
       value: {
@@ -91,7 +91,7 @@ export class  GptAdapter implements LlmResearchProvider, LlmSynthesisProvider {
   }
 
   async generateTitle(prompt: string): Promise<Result<TitleGenerateResult, LlmError>> {
-    this.logger?.info({ model: this.model }, 'GPT title generation started');
+    this.logger.info({ model: this.model }, 'GPT title generation started');
     const builtPrompt = titlePrompt.build(
       { content: prompt },
       { wordRange: { min: 5, max: 8 } }
@@ -100,14 +100,14 @@ export class  GptAdapter implements LlmResearchProvider, LlmSynthesisProvider {
 
     if (!result.ok) {
       const error = mapToLlmError(result.error);
-      this.logger?.error(
+      this.logger.error(
         { model: this.model, errorCode: error.code, errorMessage: error.message },
         'GPT title generation failed'
       );
       return { ok: false, error };
     }
     const { usage } = result.value;
-    this.logger?.info({ model: this.model, usage }, 'GPT title generation completed');
+    this.logger.info({ model: this.model, usage }, 'GPT title generation completed');
     return {
       ok: true,
       value: {

@@ -24,7 +24,7 @@ export interface RefreshAllSnapshotsDeps {
   compositeFeedRepository: CompositeFeedRepository;
   dataSourceRepository: DataSourceRepository;
   mobileNotificationsClient: MobileNotificationsClient;
-  logger?: BasicLogger;
+  logger: BasicLogger;
 }
 
 export interface RefreshAllSnapshotsResult {
@@ -38,32 +38,32 @@ export async function refreshAllSnapshots(
 ): Promise<Result<RefreshAllSnapshotsResult, string>> {
   const { compositeFeedRepository, logger } = deps;
 
-  logger?.info({}, 'Starting batch snapshot refresh for all feeds');
+  logger.info({}, 'Starting batch snapshot refresh for all feeds');
 
   const feedsResult = await compositeFeedRepository.listAll();
 
   if (!feedsResult.ok) {
-    logger?.error({ error: feedsResult.error }, 'Failed to list feeds for batch refresh');
+    logger.error({ error: feedsResult.error }, 'Failed to list feeds for batch refresh');
     return err(`Failed to list feeds: ${feedsResult.error}`);
   }
 
   const feeds = feedsResult.value;
-  logger?.info({ feedCount: feeds.length }, 'Retrieved feeds for batch refresh');
+  logger.info({ feedCount: feeds.length }, 'Retrieved feeds for batch refresh');
 
   let refreshed = 0;
   let failed = 0;
   const errors: { feedId: string; error: string }[] = [];
 
   for (const feed of feeds) {
-    logger?.info({ feedId: feed.id, feedName: feed.name, userId: feed.userId }, 'Processing feed');
+    logger.info({ feedId: feed.id, feedName: feed.name, userId: feed.userId }, 'Processing feed');
     const result = await refreshSnapshot(feed.id, feed.userId, deps);
 
     if (result.ok) {
       refreshed++;
-      logger?.info({ feedId: feed.id }, 'Feed snapshot refreshed successfully');
+      logger.info({ feedId: feed.id }, 'Feed snapshot refreshed successfully');
     } else {
       failed++;
-      logger?.error({ feedId: feed.id, error: result.error }, 'Feed snapshot refresh failed');
+      logger.error({ feedId: feed.id, error: result.error }, 'Feed snapshot refresh failed');
       errors.push({
         feedId: feed.id,
         error: result.error.message,
@@ -71,7 +71,7 @@ export async function refreshAllSnapshots(
     }
   }
 
-  logger?.info({ refreshed, failed, errorCount: errors.length }, 'Batch snapshot refresh completed');
+  logger.info({ refreshed, failed, errorCount: errors.length }, 'Batch snapshot refresh completed');
 
   return ok({
     refreshed,

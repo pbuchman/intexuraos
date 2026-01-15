@@ -2,18 +2,13 @@ import type { Result } from '@intexuraos/common-core';
 import { ok, err, getErrorMessage } from '@intexuraos/common-core';
 import type { LinkPreviewFetcherPort } from '../../domain/whatsapp/ports/linkPreviewFetcher.js';
 import type { LinkPreview, LinkPreviewError } from '../../domain/whatsapp/models/LinkPreview.js';
-import pino, { type Logger } from 'pino';
+import type { Logger } from 'pino';
 
 export interface WebAgentLinkPreviewClientConfig {
   baseUrl: string;
   internalAuthToken: string;
-  logger?: Logger;
+  logger: Logger;
 }
-
-const defaultLogger = pino({
-  level: process.env['LOG_LEVEL'] ?? 'info',
-  name: 'webAgentLinkPreviewClient',
-});
 
 interface WebAgentLinkPreviewResult {
   url: string;
@@ -54,7 +49,7 @@ function mapErrorCode(
 export function createWebAgentLinkPreviewClient(
   config: WebAgentLinkPreviewClientConfig
 ): LinkPreviewFetcherPort {
-  const logger = config.logger ?? defaultLogger;
+  const logger = config.logger;
 
   return {
     async fetchPreview(url: string): Promise<Result<LinkPreview, LinkPreviewError>> {

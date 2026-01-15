@@ -1,3 +1,4 @@
+import pino from 'pino';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   createEnrichPublisher,
@@ -7,11 +8,9 @@ import {
 vi.mock('@intexuraos/infra-pubsub', () => ({
   BasePubSubPublisher: class {
     protected projectId: string;
-    protected loggerName: string;
 
-    constructor(config: { projectId: string; loggerName: string }) {
+    constructor(config: { projectId: string; logger: { level: string } }) {
       this.projectId = config.projectId;
-      this.loggerName = config.loggerName;
     }
 
     async publishToTopic(
@@ -53,6 +52,7 @@ describe('createEnrichPublisher', () => {
     const publisher = createEnrichPublisher({
       projectId: 'test-project',
       topicName: 'bookmark-enrich-topic',
+      logger: pino({ name: 'test', level: 'silent' }),
     });
 
     expect(publisher).toBeDefined();
@@ -63,6 +63,7 @@ describe('createEnrichPublisher', () => {
     const publisher = createEnrichPublisher({
       projectId: 'test-project',
       topicName: 'bookmark-enrich-topic',
+      logger: pino({ name: 'test', level: 'silent' }),
     });
 
     const result = await publisher.publishEnrichBookmark(event);
@@ -74,6 +75,7 @@ describe('createEnrichPublisher', () => {
     const publisher = createEnrichPublisher({
       projectId: 'test-project',
       topicName: null,
+      logger: pino({ name: 'test', level: 'silent' }),
     });
 
     const result = await publisher.publishEnrichBookmark(event);

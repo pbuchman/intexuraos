@@ -19,11 +19,6 @@ import {
   type DecryptedApiKeys,
 } from './infra/user/index.js';
 
-interface LoggerLike {
-  info(obj: object, msg: string): void;
-  error(obj: object, msg: string): void;
-}
-
 export interface ServiceContainer {
   generatedImageRepository: GeneratedImageRepository;
   imageStorage: ImageStorage;
@@ -32,8 +27,7 @@ export interface ServiceContainer {
   createPromptGenerator: (
     provider: Google | OpenAI,
     apiKey: string,
-    userId: string,
-    logger?: LoggerLike
+    userId: string
   ) => PromptGenerator;
   createImageGenerator: (
     model: ImageGenerationModel,
@@ -86,8 +80,7 @@ export function initializeServices(pricingContext: IPricingContext): void {
     createPromptGenerator: (
       provider: Google | OpenAI,
       apiKey: string,
-      userId: string,
-      _logger?: LoggerLike
+      userId: string
     ): PromptGenerator => {
       if (provider === LlmProviders.Google) {
         return createGeminiPromptAdapter({ apiKey, userId, pricing: geminiPricing });

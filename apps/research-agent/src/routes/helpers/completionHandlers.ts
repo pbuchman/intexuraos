@@ -108,11 +108,19 @@ export async function handleAllCompleted(params: AllCompletedHandlerParams): Pro
       void userServiceClient.reportLlmSuccess(userId, synthesisProvider);
     },
     logger: {
-      info: (msg: string): void => {
-        logger.info({ researchId }, msg);
+      info: (obj: object, msg?: string): void => {
+        logger.info({ researchId, ...obj }, msg);
       },
-      error: (obj: object, msg: string): void => {
-        logger.error({ researchId, ...obj }, msg);
+      error: (obj: object, msg?: string): void => {
+        const message = typeof msg === 'string' ? msg : typeof obj === 'string' ? obj : undefined;
+        const context = typeof obj === 'string' ? {} : obj;
+        logger.error({ researchId, ...context }, message);
+      },
+      warn: (obj: object, msg?: string): void => {
+        logger.warn({ researchId, ...obj }, msg);
+      },
+      debug: (obj: object, msg?: string): void => {
+        logger.debug({ researchId, ...obj }, msg);
       },
     },
     imageApiKeys: apiKeys,
