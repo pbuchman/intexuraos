@@ -14,8 +14,9 @@ import type { CreateDataSourceRequest, DataSource, UpdateDataSourceRequest } fro
 interface UseDataSourcesResult {
   dataSources: DataSource[];
   loading: boolean;
+  refreshing: boolean;
   error: string | null;
-  refresh: () => Promise<void>;
+  refresh: (showLoading?: boolean) => Promise<void>;
   createDataSource: (request: CreateDataSourceRequest) => Promise<DataSource>;
   deleteDataSource: (id: string) => Promise<void>;
 }
@@ -24,22 +25,36 @@ export function useDataSources(): UseDataSourcesResult {
   const { getAccessToken } = useAuth();
   const [dataSources, setDataSources] = useState<DataSource[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const refresh = useCallback(async (): Promise<void> => {
-    setLoading(true);
-    setError(null);
+  const refresh = useCallback(
+    async (showLoading?: boolean): Promise<void> => {
+      const shouldShowLoading = showLoading !== false;
 
-    try {
-      const token = await getAccessToken();
-      const data = await listDataSourcesApi(token);
-      setDataSources(data);
-    } catch (err) {
-      setError(getErrorMessage(err, 'Failed to load data sources'));
-    } finally {
-      setLoading(false);
-    }
-  }, [getAccessToken]);
+      if (shouldShowLoading) {
+        setLoading(true);
+      } else {
+        setRefreshing(true);
+      }
+      setError(null);
+
+      try {
+        const token = await getAccessToken();
+        const data = await listDataSourcesApi(token);
+        setDataSources(data);
+      } catch (err) {
+        setError(getErrorMessage(err, 'Failed to load data sources'));
+      } finally {
+        if (shouldShowLoading) {
+          setLoading(false);
+        } else {
+          setRefreshing(false);
+        }
+      }
+    },
+    [getAccessToken]
+  );
 
   useEffect(() => {
     void refresh();
@@ -67,6 +82,7 @@ export function useDataSources(): UseDataSourcesResult {
   return {
     dataSources,
     loading,
+    refreshing,
     error,
     refresh,
     createDataSource,
@@ -77,8 +93,9 @@ export function useDataSources(): UseDataSourcesResult {
 interface UseDataSourceResult {
   dataSource: DataSource | null;
   loading: boolean;
+  refreshing: boolean;
   error: string | null;
-  refresh: () => Promise<void>;
+  refresh: (showLoading?: boolean) => Promise<void>;
   updateDataSource: (request: UpdateDataSourceRequest) => Promise<DataSource>;
   generateTitle: (content: string) => Promise<string>;
   generatingTitle: boolean;
@@ -88,28 +105,42 @@ export function useDataSource(id: string): UseDataSourceResult {
   const { getAccessToken } = useAuth();
   const [dataSource, setDataSource] = useState<DataSource | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [generatingTitle, setGeneratingTitle] = useState(false);
 
-  const refresh = useCallback(async (): Promise<void> => {
-    if (id === '') {
-      setLoading(false);
-      return;
-    }
+  const refresh = useCallback(
+    async (showLoading?: boolean): Promise<void> => {
+      if (id === '') {
+        setLoading(false);
+        return;
+      }
 
-    setLoading(true);
-    setError(null);
+      const shouldShowLoading = showLoading !== false;
 
-    try {
-      const token = await getAccessToken();
-      const data = await getDataSourceApi(token, id);
-      setDataSource(data);
-    } catch (err) {
-      setError(getErrorMessage(err, 'Failed to load data source'));
-    } finally {
-      setLoading(false);
-    }
-  }, [id, getAccessToken]);
+      if (shouldShowLoading) {
+        setLoading(true);
+      } else {
+        setRefreshing(true);
+      }
+      setError(null);
+
+      try {
+        const token = await getAccessToken();
+        const data = await getDataSourceApi(token, id);
+        setDataSource(data);
+      } catch (err) {
+        setError(getErrorMessage(err, 'Failed to load data source'));
+      } finally {
+        if (shouldShowLoading) {
+          setLoading(false);
+        } else {
+          setRefreshing(false);
+        }
+      }
+    },
+    [id, getAccessToken]
+  );
 
   useEffect(() => {
     void refresh();
@@ -146,6 +177,7 @@ export function useDataSource(id: string): UseDataSourceResult {
   return {
     dataSource,
     loading,
+    refreshing,
     error,
     refresh,
     updateDataSource,

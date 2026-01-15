@@ -2,13 +2,16 @@ import type { ActionCreatedEvent } from '../models/actionEvent.js';
 
 /**
  * Determines whether an action should be auto-executed based on confidence
- * and action type. Currently returns false for all actions (stub implementation).
+ * and action type.
  *
- * Future implementation will evaluate:
- * - Action type (some types may always require approval)
- * - Confidence score from classification
- * - User preferences
+ * Current auto-execution rules:
+ * - link actions with 100% confidence (1.0) are auto-executed
+ *
+ * Future enhancements may include:
+ * - Additional action types
+ * - User preferences for auto-execution threshold
+ * - Different confidence thresholds for different action types
  */
-export function shouldAutoExecute(_event: ActionCreatedEvent): boolean {
-  return false;
+export function shouldAutoExecute(event: ActionCreatedEvent): boolean {
+  return event.actionType === 'link' && event.payload.confidence === 1;
 }

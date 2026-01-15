@@ -26,8 +26,67 @@ The current transcription implementation is functional but lacks polish:
 
 Leverage Speechmatics' `additional_vocab` feature to inject domain-specific terms.
 
-- **Term**: `IntexuraOS`
-- **Sounds Like**: `['in tex ura o s', 'in tex ura os', 'inteksura os']` (Phonetic variations for PL/EN)
+**Configuration:**
+
+```json
+[
+  {
+    "content": "IntexuraOS",
+    "sounds_like": ["in tex ura o s", "in tech sura o s", "inteksura os", "in texture os"]
+  },
+  { "content": "pbuchman", "sounds_like": ["p buck man", "p book man", "piotr buchman"] },
+  { "content": "pnpm", "sounds_like": ["p n p m", "pin pm", "pee en pee em", "performant npm"] },
+  { "content": "tf", "sounds_like": ["tea eff", "terraform"] },
+  { "content": "gh", "sounds_like": ["gee aitch", "git hub"] },
+  { "content": "ci:tracked", "sounds_like": ["see eye tracked", "c i tracked"] },
+  { "content": "service-scribe", "sounds_like": ["service scribe"] },
+  { "content": "sentry-triage", "sounds_like": ["sentry tree ahj", "sentry try age"] },
+  { "content": "coverage-orchestrator", "sounds_like": ["coverage orchestrator"] },
+  { "content": "promptvault", "sounds_like": ["prompt vault"] },
+  { "content": "z.ai", "sounds_like": ["zed dot a i", "zee dot a i", "zai", "the ai"] },
+  { "content": "GLM-4.7", "sounds_like": ["gee el em four point seven"] },
+  { "content": "Linear", "sounds_like": ["line ear", "linear app"] },
+  { "content": "Auth0", "sounds_like": ["auth zero", "oauth"] },
+  { "content": "Firestore", "sounds_like": ["fire store"] },
+  { "content": "Pub/Sub", "sounds_like": ["pub sub", "publish subscribe"] },
+  { "content": "Vite", "sounds_like": ["veet", "vight"] },
+  { "content": "Vitest", "sounds_like": ["veet test", "vight test"] },
+  { "content": "Fastify", "sounds_like": ["fast if i"] },
+  { "content": "Bun", "sounds_like": ["bun", "bunn"] },
+  { "content": "Bunx", "sounds_like": ["bun x", "bunks"] },
+  { "content": "Speechmatics", "sounds_like": ["speech matics"] },
+  { "content": "Perplexity Sonar", "sounds_like": ["perplexity sonar"] },
+  { "content": "Claude Opus", "sounds_like": ["cloud opus", "claude opus"] },
+  { "content": "SemVer", "sounds_like": ["sem ver", "semantic versioning"] },
+  { "content": "JWKS", "sounds_like": ["jay double you kay ess", "j w k s"] },
+  { "content": "scaffolded", "sounds_like": ["scaffold it", "ska folded"] },
+  { "content": "wygaszać", "sounds_like": ["vi ga shatch", "ve ga shatch"] },
+  { "content": "zaakceptujemy", "sounds_like": ["za ak cep tu ye my", "zah ak cep tu jemy"] },
+  { "content": "kliknięcia", "sounds_like": ["click nien cia", "klik nien cia"] },
+  { "content": "kontenerze", "sounds_like": ["con ten er zhe", "kontenerze"] },
+  { "content": "sprawdzenie", "sounds_like": ["sprav dze nie"] },
+  { "content": "zapasów", "sounds_like": ["za pa soof", "zapasuv"] },
+  { "content": "grupować", "sounds_like": ["group o vatch"] },
+  { "content": "delikatny", "sounds_like": ["deli cat ny"] },
+  { "content": "actions-agent", "sounds_like": ["actions agent"] },
+  { "content": "research-agent", "sounds_like": ["research agent"] },
+  { "content": "commands-agent", "sounds_like": ["commands agent"] },
+  { "content": "data-insights-agent", "sounds_like": ["data insights agent"] },
+  { "content": "bookmarks-agent", "sounds_like": ["bookmarks agent"] },
+  { "content": "todos-agent", "sounds_like": ["to dos agent", "todos agent"] },
+  { "content": "web-agent", "sounds_like": ["web agent"] },
+  { "content": "api-docs-hub", "sounds_like": ["api docs hub"] },
+  { "content": "smart-dispatch", "sounds_like": ["smart dispatch"] },
+  { "content": "Cloud Run", "sounds_like": ["cloud run"] },
+  { "content": "Cloud Build", "sounds_like": ["cloud build"] },
+  { "content": "Workload Identity", "sounds_like": ["workload identity"] },
+  { "content": "Kanban", "sounds_like": ["can ban", "kahn bahn"] },
+  { "content": "TDD", "sounds_like": ["tee dee dee"] },
+  { "content": "commitować", "sounds_like": ["commit o vatch"] },
+  { "content": "merge'ować", "sounds_like": ["merge o vatch"] },
+  { "content": "pushować", "sounds_like": ["push o vatch"] }
+]
+```
 
 ### 2. Summarization
 

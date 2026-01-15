@@ -254,4 +254,69 @@ describe('FirestoreActionRepository', () => {
       expect(result).toHaveLength(2);
     });
   });
+
+  describe('updateStatusIf', () => {
+    it('updates status when current status matches expected', async () => {
+      const action = createTestAction({ status: 'pending' });
+      await repository.save(action);
+
+      const updated = await repository.updateStatusIf(action.id, 'awaiting_approval', 'pending');
+
+      expect(updated).toBe(true);
+
+      const result = await repository.getById(action.id);
+      expect(result?.status).toBe('awaiting_approval');
+    });
+
+    it('returns false when current status does not match expected', async () => {
+      const action = createTestAction({ status: 'completed' });
+      await repository.save(action);
+
+      const updated = await repository.updateStatusIf(action.id, 'awaiting_approval', 'pending');
+
+      expect(updated).toBe(false);
+
+      const result = await repository.getById(action.id);
+      expect(result?.status).toBe('completed');
+    });
+
+    it('returns false for non-existent action', async () => {
+      const updated = await repository.updateStatusIf('nonexistent', 'awaiting_approval', 'pending');
+
+      expect(updated).toBe(false);
+    });
+
+    it('prevents race condition - only one concurrent update succeeds', async () => {
+      const action = createTestAction({ status: 'pending' });
+      await repository.save(action);
+
+      const promises = [
+        repository.updateStatusIf(action.id, 'awaiting_approval', 'pending'),
+        repository.updateStatusIf(action.id, 'processing', 'pending'),
+        repository.updateStatusIf(action.id, 'awaiting_approval', 'pending'),
+      ];
+
+      const results = await Promise.all(promises);
+
+      const successCount = results.filter((r) => r === true).length;
+
+      expect(successCount).toBe(1);
+
+      const result = await repository.getById(action.id);
+      expect(result?.status).not.toBe('pending');
+    });
+
+    it('updates updatedAt timestamp on successful update', async () => {
+      const action = createTestAction({ status: 'pending' });
+      await repository.save(action);
+
+      const originalUpdatedAt = action.updatedAt;
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      await repository.updateStatusIf(action.id, 'awaiting_approval', 'pending');
+
+      const result = await repository.getById(action.id);
+      expect(result?.updatedAt).not.toBe(originalUpdatedAt);
+    });
+  });
 });
