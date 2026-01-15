@@ -127,7 +127,7 @@ export function createGptClient(config: GptConfig): GptClient {
       usage,
       success,
       ...(errorMessage !== undefined && { errorMessage }),
-      ...(logger !== undefined && { logger }),
+      logger,
     });
   }
 

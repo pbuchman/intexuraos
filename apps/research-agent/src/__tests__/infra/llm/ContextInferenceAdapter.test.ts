@@ -103,13 +103,15 @@ describe('ContextInferenceAdapter', () => {
   describe('constructor', () => {
     it('passes apiKey, model, and userId to client', () => {
       mockCreateGeminiClient.mockClear();
-      new ContextInferenceAdapter('test-key', LlmModels.Gemini20Flash, 'test-user', testPricing);
+      const testLogger = createMockLogger();
+      new ContextInferenceAdapter('test-key', LlmModels.Gemini20Flash, 'test-user', testPricing, testLogger);
 
       expect(mockCreateGeminiClient).toHaveBeenCalledWith({
         apiKey: 'test-key',
         model: LlmModels.Gemini20Flash,
         userId: 'test-user',
         pricing: testPricing,
+        logger: testLogger,
       });
     });
   });
@@ -237,7 +239,7 @@ describe('ContextInferenceAdapter', () => {
     });
 
     it('works without logger', async () => {
-      const adapterNoLogger = new ContextInferenceAdapter('key', 'model', 'test-user', testPricing);
+      const adapterNoLogger = new ContextInferenceAdapter('key', 'model', 'test-user', testPricing, mockLogger);
       mockGenerate.mockResolvedValue({
         ok: true,
         value: { content: 'invalid json', usage: mockUsage },
@@ -319,7 +321,7 @@ describe('ContextInferenceAdapter', () => {
     });
 
     it('works without logger on parse failure', async () => {
-      const adapterNoLogger = new ContextInferenceAdapter('key', 'model', 'test-user', testPricing);
+      const adapterNoLogger = new ContextInferenceAdapter('key', 'model', 'test-user', testPricing, mockLogger);
       mockGenerate.mockResolvedValue({
         ok: true,
         value: { content: '{ invalid }', usage: mockUsage },

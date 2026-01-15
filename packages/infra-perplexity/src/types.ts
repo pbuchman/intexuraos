@@ -46,8 +46,8 @@ export interface PerplexityConfig {
   pricing: import('@intexuraos/llm-contract').ModelPricing;
   /** Request timeout in milliseconds. Default: 840000 (14 minutes) */
   timeoutMs?: number;
-  /** Optional pino logger for structured LLM usage logging */
-  logger?: Logger;
+  /** Pino logger for structured LLM usage logging */
+  logger: Logger;
 }
 
 /** Search context size for Perplexity requests */

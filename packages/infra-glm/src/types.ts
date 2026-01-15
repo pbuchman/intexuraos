@@ -46,6 +46,6 @@ export interface GlmConfig {
   userId: string;
   /** Cost configuration per million tokens */
   pricing: import('@intexuraos/llm-contract').ModelPricing;
-  /** Optional pino logger for structured LLM usage logging */
-  logger?: Logger;
+  /** Pino logger for structured LLM usage logging */
+  logger: Logger;
 }

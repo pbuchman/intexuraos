@@ -3,6 +3,7 @@
  * Usage logging is handled by the underlying clients (packages/infra-*).
  */
 
+import pino from 'pino';
 import type { Logger } from '@intexuraos/common-core';
 import {
   getProviderForModel,
@@ -27,12 +28,18 @@ import {
   type InputValidationProvider,
 } from './InputValidationAdapter.js';
 
+/**
+ * Silent logger for when no logger is provided.
+ * Uses pino with 'silent' level which doesn't output anything.
+ */
+const silentLogger: Logger = pino({ level: 'silent' });
+
 export function createResearchProvider(
   model: ResearchModel,
   apiKey: string,
   userId: string,
   pricing: ModelPricing,
-  logger?: Logger
+  logger: Logger
 ): LlmResearchProvider {
   const provider = getProviderForModel(model);
 
@@ -55,7 +62,7 @@ export function createSynthesizer(
   apiKey: string,
   userId: string,
   pricing: ModelPricing,
-  logger?: Logger
+  logger: Logger
 ): LlmSynthesisProvider {
   const provider = getProviderForModel(model);
 
@@ -80,7 +87,8 @@ export function createTitleGenerator(
   pricing: ModelPricing,
   logger?: Logger
 ): TitleGenerator {
-  return new GeminiAdapter(apiKey, model, userId, pricing, logger);
+  const actualLogger = logger ?? silentLogger;
+  return new GeminiAdapter(apiKey, model, userId, pricing, actualLogger);
 }
 
 export function createContextInferrer(
@@ -88,7 +96,7 @@ export function createContextInferrer(
   apiKey: string,
   userId: string,
   pricing: ModelPricing,
-  logger?: Logger
+  logger: Logger
 ): ContextInferenceProvider {
   return new ContextInferenceAdapter(apiKey, model, userId, pricing, logger);
 }
@@ -98,7 +106,7 @@ export function createInputValidator(
   apiKey: string,
   userId: string,
   pricing: ModelPricing,
-  logger?: Logger
+  logger: Logger
 ): InputValidationProvider {
   return new InputValidationAdapter(apiKey, model, userId, pricing, logger);
 }

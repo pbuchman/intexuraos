@@ -107,7 +107,7 @@ export function createGlmClient(config: GlmConfig): GlmClient {
       usage,
       success,
       ...(errorMessage !== undefined && { errorMessage }),
-      ...(logger !== undefined && { logger }),
+      logger,
     });
   }
 

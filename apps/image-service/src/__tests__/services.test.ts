@@ -1,6 +1,7 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { FakePricingContext } from '@intexuraos/llm-pricing';
 import { LlmModels } from '@intexuraos/llm-contract';
+import type { Logger } from '@intexuraos/common-core';
 import {
   getServices,
   setServices,
@@ -17,6 +18,13 @@ import {
 } from './fakes.js';
 
 const fakePricingContext = new FakePricingContext();
+
+const mockLogger: Logger = {
+  info: vi.fn(),
+  error: vi.fn(),
+  warn: vi.fn(),
+  debug: vi.fn(),
+};
 
 describe('services', () => {
   beforeEach(() => {
@@ -75,7 +83,7 @@ describe('services', () => {
       initializeServices(fakePricingContext);
 
       const services = getServices();
-      const generator = services.createPromptGenerator('google', 'test-key', 'test-user-id');
+      const generator = services.createPromptGenerator('google', 'test-key', 'test-user-id', mockLogger);
 
       expect(generator).toBeDefined();
       expect(generator.generateThumbnailPrompt).toBeDefined();
@@ -85,7 +93,7 @@ describe('services', () => {
       initializeServices(fakePricingContext);
 
       const services = getServices();
-      const generator = services.createPromptGenerator('openai', 'test-key', 'test-user-id');
+      const generator = services.createPromptGenerator('openai', 'test-key', 'test-user-id', mockLogger);
 
       expect(generator).toBeDefined();
       expect(generator.generateThumbnailPrompt).toBeDefined();
@@ -98,7 +106,8 @@ describe('services', () => {
       const generator = services.createImageGenerator(
         LlmModels.GPTImage1,
         'test-key',
-        'test-user-id'
+        'test-user-id',
+        mockLogger
       );
 
       expect(generator).toBeDefined();
@@ -112,7 +121,8 @@ describe('services', () => {
       const generator = services.createImageGenerator(
         LlmModels.Gemini25FlashImage,
         'test-key',
-        'test-user-id'
+        'test-user-id',
+        mockLogger
       );
 
       expect(generator).toBeDefined();

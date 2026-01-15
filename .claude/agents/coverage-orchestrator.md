@@ -80,6 +80,7 @@ If exemptions were found, append them to `docs/coverage/unreachable.md` using th
 **Use the Linear MCP tools to create issues** or invoke `/linear <task description>`. Linear is available via MCP integration.
 
 **When using `/linear`:**
+
 - The command will automatically detect this is a coverage-related task
 - State management and cross-linking are handled automatically
 - Issue naming follows the `[coverage][<app>]` pattern
@@ -130,11 +131,11 @@ Every Linear issue MUST contain the following sections. This is non-negotiable:
    - Include the line number, branch description, and reason why it cannot be reached
    - Example:
      \`\`\`markdown
-     ### \`apps/<service>/src/path/to/file.ts\`
 
+     ### \`apps/<service>/src/path/to/file.ts\`
      - **Lines 45-48**: Defensive check for `undefined` user ID
        - _Reason:_ Guaranteed by \`authMiddleware\` upstream. Cannot simulate without mocking internal framework internals.
-     \`\`\`
+         \`\`\`
 
 4. **If the branch is testable**:
    - Write tests to cover the identified branches in \`<test-file-path>\`
@@ -156,13 +157,15 @@ Every Linear issue MUST contain the following sections. This is non-negotiable:
    - If you added tests: Use standard PR format
    - **If you found unreachable branches**: The PR description MUST include an "Unreachable Branches" section:
      \`\`\`markdown
+
      ## Unreachable Branches
 
      The following branches were identified as unreachable and have been added to \`docs/coverage/unreachable.md\`:
 
-     | File | Lines | Reason |
-     |------|-------|--------|
-     | apps/whatsapp-service/src/routes/webhookRoutes.ts | 492 | Guarded by validation at line 341 - text messages without body return early |
+     | File                                              | Lines | Reason                                                                      |
+     | ------------------------------------------------- | ----- | --------------------------------------------------------------------------- |
+     | apps/whatsapp-service/src/routes/webhookRoutes.ts | 492   | Guarded by validation at line 341 - text messages without body return early |
+
      \`\`\`
 
 8. Verify CI passes on the PR before requesting review.

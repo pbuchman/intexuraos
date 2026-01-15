@@ -1,5 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ModelPricing } from '@intexuraos/llm-contract';
+import type { Logger } from '@intexuraos/common-core';
+
+const mockLogger: Logger = {
+  info: vi.fn(),
+  error: vi.fn(),
+  warn: vi.fn(),
+  debug: vi.fn(),
+};
 
 const mockMessagesCreate = vi.fn();
 
@@ -62,6 +70,7 @@ describe('createClaudeClient', () => {
         model: TEST_MODEL,
         userId: 'test-user',
         pricing,
+        logger: mockLogger,
       });
       const result = await client.research('Tell me about AI');
 
@@ -87,6 +96,7 @@ describe('createClaudeClient', () => {
         model: TEST_MODEL,
         userId: 'test-user',
         pricing,
+        logger: mockLogger,
       });
       const result = await client.research('Test prompt');
 
@@ -113,6 +123,7 @@ describe('createClaudeClient', () => {
         model: TEST_MODEL,
         userId: 'test-user',
         pricing,
+        logger: mockLogger,
       });
       const result = await client.research('Test prompt');
 
@@ -144,6 +155,7 @@ describe('createClaudeClient', () => {
         model: TEST_MODEL,
         userId: 'test-user',
         pricing,
+        logger: mockLogger,
       });
       const result = await client.research('Test prompt');
 
@@ -172,6 +184,7 @@ describe('createClaudeClient', () => {
         model: TEST_MODEL,
         userId: 'test-user',
         pricing,
+        logger: mockLogger,
       });
       const result = await client.research('Test prompt');
 
@@ -201,6 +214,7 @@ describe('createClaudeClient', () => {
         model: TEST_MODEL,
         userId: 'test-user',
         pricing,
+        logger: mockLogger,
       });
       const result = await client.research('Test prompt');
 
@@ -219,6 +233,7 @@ describe('createClaudeClient', () => {
         model: TEST_MODEL,
         userId: 'test-user',
         pricing,
+        logger: mockLogger,
       });
       const result = await client.research('Test prompt');
 
@@ -237,6 +252,7 @@ describe('createClaudeClient', () => {
         model: TEST_MODEL,
         userId: 'test-user',
         pricing,
+        logger: mockLogger,
       });
       const result = await client.research('Test prompt');
 
@@ -255,6 +271,7 @@ describe('createClaudeClient', () => {
         model: TEST_MODEL,
         userId: 'test-user',
         pricing,
+        logger: mockLogger,
       });
       const result = await client.research('Test prompt');
 
@@ -273,6 +290,7 @@ describe('createClaudeClient', () => {
         model: TEST_MODEL,
         userId: 'test-user',
         pricing,
+        logger: mockLogger,
       });
       const result = await client.research('Test prompt');
 
@@ -291,6 +309,7 @@ describe('createClaudeClient', () => {
         model: TEST_MODEL,
         userId: 'test-user',
         pricing,
+        logger: mockLogger,
       });
       const result = await client.research('Test prompt');
 
@@ -309,6 +328,7 @@ describe('createClaudeClient', () => {
         model: TEST_MODEL,
         userId: 'test-user',
         pricing,
+        logger: mockLogger,
       });
       const result = await client.research('Test prompt');
 
@@ -333,6 +353,7 @@ describe('createClaudeClient', () => {
         model: TEST_MODEL,
         userId: 'test-user',
         pricing,
+        logger: mockLogger,
       });
       const result = await client.generate('Generate something');
 
@@ -362,6 +383,7 @@ describe('createClaudeClient', () => {
         model: TEST_MODEL,
         userId: 'test-user',
         pricing,
+        logger: mockLogger,
       });
       const result = await client.generate('Test prompt');
 
@@ -380,6 +402,7 @@ describe('createClaudeClient', () => {
         model: TEST_MODEL,
         userId: 'test-user',
         pricing,
+        logger: mockLogger,
       });
       const result = await client.generate('Test prompt');
 

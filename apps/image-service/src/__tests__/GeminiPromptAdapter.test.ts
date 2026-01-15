@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vites
 import nock from 'nock';
 import { LlmModels, type ModelPricing } from '@intexuraos/llm-contract';
 import { GeminiPromptAdapter } from '../infra/llm/GeminiPromptAdapter.js';
+import type { Logger } from '@intexuraos/common-core';
 
 vi.mock('@intexuraos/llm-audit', (): object => ({
   createAuditContext: (): object => ({
@@ -17,6 +18,13 @@ vi.mock('@intexuraos/llm-pricing', (): object => ({
 const testPricing: ModelPricing = {
   inputPricePerMillion: 1.25,
   outputPricePerMillion: 10.0,
+};
+
+const mockLogger: Logger = {
+  info: vi.fn(),
+  error: vi.fn(),
+  warn: vi.fn(),
+  debug: vi.fn(),
 };
 
 describe('GeminiPromptAdapter', () => {
@@ -70,6 +78,7 @@ describe('GeminiPromptAdapter', () => {
         apiKey: 'test-key',
         userId: 'test-user',
         pricing: testPricing,
+        logger: mockLogger,
       });
       const result = await adapter.generateThumbnailPrompt('Machine learning article');
 
@@ -97,6 +106,7 @@ describe('GeminiPromptAdapter', () => {
         apiKey: 'test-key',
         userId: 'test-user',
         pricing: testPricing,
+        logger: mockLogger,
       });
       const result = await adapter.generateThumbnailPrompt('Some text');
 
@@ -115,6 +125,7 @@ describe('GeminiPromptAdapter', () => {
         apiKey: 'bad-key',
         userId: 'test-user',
         pricing: testPricing,
+        logger: mockLogger,
       });
       const result = await adapter.generateThumbnailPrompt('Some text');
 
@@ -133,6 +144,7 @@ describe('GeminiPromptAdapter', () => {
         apiKey: 'test-key',
         userId: 'test-user',
         pricing: testPricing,
+        logger: mockLogger,
       });
       const result = await adapter.generateThumbnailPrompt('Some text');
 
@@ -149,6 +161,7 @@ describe('GeminiPromptAdapter', () => {
         apiKey: 'test-key',
         userId: 'test-user',
         pricing: testPricing,
+        logger: mockLogger,
       });
       const result = await adapter.generateThumbnailPrompt('Some text');
 
@@ -165,6 +178,7 @@ describe('GeminiPromptAdapter', () => {
         apiKey: 'test-key',
         userId: 'test-user',
         pricing: testPricing,
+        logger: mockLogger,
       });
       const result = await adapter.generateThumbnailPrompt('Some text');
 
@@ -201,6 +215,7 @@ describe('GeminiPromptAdapter', () => {
         model: LlmModels.Gemini20Flash,
         userId: 'test-user',
         pricing: testPricing,
+        logger: mockLogger,
       });
       const result = await adapter.generateThumbnailPrompt('Test');
 

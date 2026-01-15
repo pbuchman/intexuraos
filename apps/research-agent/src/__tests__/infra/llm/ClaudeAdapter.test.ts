@@ -4,6 +4,14 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { type ModelPricing, LlmModels } from '@intexuraos/llm-contract';
+import type { Logger } from '@intexuraos/common-core';
+
+const mockLogger: Logger = {
+  info: vi.fn(),
+  error: vi.fn(),
+  warn: vi.fn(),
+  debug: vi.fn(),
+};
 
 const mockResearch = vi.fn();
 
@@ -27,19 +35,20 @@ describe('ClaudeAdapter', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    adapter = new ClaudeAdapter('test-key', LlmModels.ClaudeOpus45, 'test-user-id', testPricing);
+    adapter = new ClaudeAdapter('test-key', LlmModels.ClaudeOpus45, 'test-user-id', testPricing, mockLogger);
   });
 
   describe('constructor', () => {
     it('passes apiKey and model to client', () => {
       mockCreateClaudeClient.mockClear();
-      new ClaudeAdapter('test-key', LlmModels.ClaudeOpus45, 'test-user-id', testPricing);
+      new ClaudeAdapter('test-key', LlmModels.ClaudeOpus45, 'test-user-id', testPricing, mockLogger);
 
       expect(mockCreateClaudeClient).toHaveBeenCalledWith({
         apiKey: 'test-key',
         model: LlmModels.ClaudeOpus45,
         userId: 'test-user-id',
         pricing: testPricing,
+        logger: mockLogger,
       });
     });
   });

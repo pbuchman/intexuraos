@@ -242,7 +242,12 @@ describe('usageLogger', () => {
       const originalNodeEnv = process.env['NODE_ENV'];
       process.env['NODE_ENV'] = 'test';
 
-      await logUsage({ ...baseParams, success: false, errorMessage: 'API timeout error', logger: mockLogger });
+      await logUsage({
+        ...baseParams,
+        success: false,
+        errorMessage: 'API timeout error',
+        logger: mockLogger,
+      });
 
       // Logger is not called in test environment (NODE_ENV='test')
       expect(mockLogger.info).not.toHaveBeenCalled();
@@ -290,7 +295,12 @@ describe('usageLogger', () => {
       const originalNodeEnv = process.env['NODE_ENV'];
       process.env['NODE_ENV'] = 'production';
 
-      await logUsage({ ...baseParams, success: false, errorMessage: 'API timeout', logger: mockLogger });
+      await logUsage({
+        ...baseParams,
+        success: false,
+        errorMessage: 'API timeout',
+        logger: mockLogger,
+      });
 
       expect(mockLogger.info).toHaveBeenCalledWith(
         expect.objectContaining({

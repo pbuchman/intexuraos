@@ -58,6 +58,6 @@ export interface GptConfig {
   pricing: import('@intexuraos/llm-contract').ModelPricing;
   /** Optional separate pricing for image generation */
   imagePricing?: import('@intexuraos/llm-contract').ModelPricing;
-  /** Optional pino logger for structured LLM usage logging */
-  logger?: Logger;
+  /** Pino logger for structured LLM usage logging */
+  logger: Logger;
 }

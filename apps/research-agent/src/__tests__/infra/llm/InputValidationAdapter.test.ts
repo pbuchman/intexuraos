@@ -1,6 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { LlmModels } from '@intexuraos/llm-contract';
 import { InputValidationAdapter } from '../../../infra/llm/InputValidationAdapter.js';
+import type { Logger } from '@intexuraos/common-core';
+
+const mockLogger: Logger = {
+  info: vi.fn(),
+  error: vi.fn(),
+  warn: vi.fn(),
+  debug: vi.fn(),
+};
 
 const mockGenerate = vi.fn();
 
@@ -20,7 +28,8 @@ describe('InputValidationAdapter', () => {
       'test-api-key',
       LlmModels.Gemini25Flash,
       'user-123',
-      { inputPricePerMillion: 0.1, outputPricePerMillion: 0.2 }
+      { inputPricePerMillion: 0.1, outputPricePerMillion: 0.2 },
+      mockLogger
     );
 
   describe('validateInput', () => {

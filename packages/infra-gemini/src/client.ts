@@ -91,7 +91,7 @@ export function createGeminiClient(config: GeminiConfig): GeminiClient {
       usage,
       success,
       ...(errorMessage !== undefined && { errorMessage }),
-      ...(logger !== undefined && { logger }),
+      logger,
     });
   }
 

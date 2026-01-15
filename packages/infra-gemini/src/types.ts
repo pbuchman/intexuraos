@@ -50,6 +50,6 @@ export interface GeminiConfig {
   pricing: import('@intexuraos/llm-contract').ModelPricing;
   /** Optional separate pricing for image generation (Gemini 2.5 Flash) */
   imagePricing?: import('@intexuraos/llm-contract').ModelPricing;
-  /** Optional pino logger for structured LLM usage logging */
-  logger?: Logger;
+  /** Pino logger for structured LLM usage logging */
+  logger: Logger;
 }

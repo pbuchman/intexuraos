@@ -1,5 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { type ModelPricing, LlmModels } from '@intexuraos/llm-contract';
+import type { Logger } from '@intexuraos/common-core';
+
+const mockLogger: Logger = {
+  info: vi.fn(),
+  error: vi.fn(),
+  warn: vi.fn(),
+  debug: vi.fn(),
+};
 
 const mockResearch = vi.fn();
 
@@ -24,19 +32,20 @@ describe('PerplexityAdapter', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    adapter = new PerplexityAdapter('test-key', LlmModels.SonarPro, 'test-user-id', testPricing);
+    adapter = new PerplexityAdapter('test-key', LlmModels.SonarPro, 'test-user-id', testPricing, mockLogger);
   });
 
   describe('constructor', () => {
     it('passes apiKey and model to client', () => {
       mockCreatePerplexityClient.mockClear();
-      new PerplexityAdapter('test-key', LlmModels.SonarPro, 'test-user-id', testPricing);
+      new PerplexityAdapter('test-key', LlmModels.SonarPro, 'test-user-id', testPricing, mockLogger);
 
       expect(mockCreatePerplexityClient).toHaveBeenCalledWith({
         apiKey: 'test-key',
         model: LlmModels.SonarPro,
         userId: 'test-user-id',
         pricing: testPricing,
+        logger: mockLogger,
       });
     });
   });

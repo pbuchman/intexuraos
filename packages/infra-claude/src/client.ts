@@ -124,7 +124,7 @@ export function createClaudeClient(config: ClaudeConfig): ClaudeClient {
       usage,
       success,
       ...(errorMessage !== undefined && { errorMessage }),
-      ...(logger !== undefined && { logger }),
+      logger,
     });
   }
 

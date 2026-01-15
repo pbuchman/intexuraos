@@ -4,8 +4,15 @@
  */
 import { LlmModels } from '@intexuraos/llm-contract';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { err, ok } from '@intexuraos/common-core';
+import { err, ok, type Logger } from '@intexuraos/common-core';
 import { LlmValidatorImpl, type ValidationPricing } from '../../infra/llm/LlmValidatorImpl.js';
+
+const mockLogger: Logger = {
+  info: vi.fn(),
+  error: vi.fn(),
+  warn: vi.fn(),
+  debug: vi.fn(),
+};
 
 // Mock the infra packages
 vi.mock('@intexuraos/infra-gemini', () => ({
@@ -50,7 +57,7 @@ describe('LlmValidatorImpl', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    validator = new LlmValidatorImpl(testPricing);
+    validator = new LlmValidatorImpl(testPricing, mockLogger);
   });
 
   describe('validateKey', () => {
@@ -69,6 +76,7 @@ describe('LlmValidatorImpl', () => {
           model: LlmModels.Gemini20Flash,
           userId: testUserId,
           pricing: testPricing.google,
+          logger: mockLogger,
         });
         expect(mockClient.generate).toHaveBeenCalled();
       });
@@ -121,6 +129,7 @@ describe('LlmValidatorImpl', () => {
           model: LlmModels.GPT4oMini,
           userId: testUserId,
           pricing: testPricing.openai,
+          logger: mockLogger,
         });
       });
 
@@ -170,6 +179,7 @@ describe('LlmValidatorImpl', () => {
           model: LlmModels.ClaudeHaiku35,
           userId: testUserId,
           pricing: testPricing.anthropic,
+          logger: mockLogger,
         });
       });
 
@@ -221,6 +231,7 @@ describe('LlmValidatorImpl', () => {
           model: LlmModels.Sonar,
           userId: testUserId,
           pricing: testPricing.perplexity,
+          logger: mockLogger,
         });
       });
 
@@ -270,6 +281,7 @@ describe('LlmValidatorImpl', () => {
           model: LlmModels.Glm47,
           userId: testUserId,
           pricing: testPricing.zai,
+          logger: mockLogger,
         });
       });
 

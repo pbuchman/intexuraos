@@ -1,4 +1,4 @@
-import { err, type Result } from '@intexuraos/common-core';
+import { err, type Logger, type Result } from '@intexuraos/common-core';
 import { createGeminiClient } from '@intexuraos/infra-gemini';
 import { generateThumbnailPrompt, LlmModels } from '@intexuraos/llm-contract';
 import type { ModelPricing } from '@intexuraos/llm-contract';
@@ -9,6 +9,7 @@ export interface GeminiPromptAdapterConfig {
   apiKey: string;
   userId: string;
   pricing: ModelPricing;
+  logger: Logger;
   model?: string;
 }
 
@@ -19,12 +20,14 @@ export class GeminiPromptAdapter implements PromptGenerator {
   private readonly userId: string;
   private readonly model: string;
   private readonly pricing: ModelPricing;
+  private readonly logger: Logger;
 
   constructor(config: GeminiPromptAdapterConfig) {
     this.apiKey = config.apiKey;
     this.userId = config.userId;
     this.model = config.model ?? DEFAULT_MODEL;
     this.pricing = config.pricing;
+    this.logger = config.logger;
   }
 
   async generateThumbnailPrompt(
@@ -35,6 +38,7 @@ export class GeminiPromptAdapter implements PromptGenerator {
       model: this.model,
       userId: this.userId,
       pricing: this.pricing,
+      logger: this.logger,
     });
 
     const result = await generateThumbnailPrompt(client, text);

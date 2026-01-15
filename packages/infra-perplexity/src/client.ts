@@ -220,7 +220,7 @@ export function createPerplexityClient(config: PerplexityConfig): PerplexityClie
       usage,
       success,
       ...(errorMessage !== undefined && { errorMessage }),
-      ...(logger !== undefined && { logger }),
+      logger,
     });
   }
 
