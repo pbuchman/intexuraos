@@ -51,7 +51,7 @@ export interface RefreshAccessTokenError {
 export interface RefreshAccessTokenDeps {
   authTokenRepository: AuthTokenRepository;
   auth0Client: Auth0Client;
-  logger?: {
+  logger: {
     warn: (obj: object, msg: string) => void;
   };
 }
@@ -125,7 +125,7 @@ export async function refreshAccessToken(
   const saveResult = await authTokenRepository.saveTokens(userId, tokensToStore);
   if (isErr(saveResult)) {
     // Best-effort save, log warning but don't fail the request
-    logger?.warn(
+    logger.warn(
       { userId, errorMessage: saveResult.error.message },
       'Failed to save refreshed tokens'
     );
