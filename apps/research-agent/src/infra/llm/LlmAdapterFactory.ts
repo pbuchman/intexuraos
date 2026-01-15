@@ -78,7 +78,7 @@ export function createTitleGenerator(
   apiKey: string,
   userId: string,
   pricing: ModelPricing,
-  logger?: Logger
+  logger: Logger
 ): TitleGenerator {
   return new GeminiAdapter(apiKey, model, userId, pricing, logger);
 }

@@ -82,7 +82,7 @@ export interface ServiceContainer {
     apiKey: string,
     userId: string,
     pricing: ModelPricing,
-    logger?: Logger
+    logger: Logger
   ) => TitleGenerator;
   createContextInferrer: (
     model: FastModel,

@@ -4,10 +4,11 @@
 
 /* eslint-disable @typescript-eslint/explicit-function-return-type */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { generateContextLabels } from '../../../../domain/research/services/contextLabels.js';
 import { LlmModels } from '@intexuraos/llm-contract';
 import type { ModelPricing } from '@intexuraos/llm-contract';
+import type { Logger } from '@intexuraos/common-core';
 import { ok, err } from '@intexuraos/common-core';
 
 describe('generateContextLabels', () => {
@@ -15,6 +16,13 @@ describe('generateContextLabels', () => {
     inputPricePerMillion: 0.075,
     outputPricePerMillion: 0.3,
   };
+
+  const mockLogger: Logger = {
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
+  } as unknown as Logger;
 
   it('returns contexts unchanged when no Google API key provided', async () => {
     const contexts = [
@@ -29,7 +37,8 @@ describe('generateContextLabels', () => {
       () => {
         throw new Error('Should not be called');
       },
-      mockPricing
+      mockPricing,
+      mockLogger
     );
 
     expect(result).toEqual(contexts);
@@ -60,7 +69,8 @@ describe('generateContextLabels', () => {
       'google-api-key',
       'user-123',
       () => mockGenerator,
-      mockPricing
+      mockPricing,
+      mockLogger
     );
 
     expect(result).toEqual([
@@ -84,7 +94,8 @@ describe('generateContextLabels', () => {
       'google-api-key',
       'user-123',
       () => mockGenerator,
-      mockPricing
+      mockPricing,
+      mockLogger
     );
 
     expect(result).toEqual([{ content: 'Test content' }]);
@@ -108,7 +119,8 @@ describe('generateContextLabels', () => {
       'google-api-key',
       'user-123',
       () => mockGenerator,
-      mockPricing
+      mockPricing,
+      mockLogger
     );
 
     expect(result).toEqual([
@@ -123,6 +135,7 @@ describe('generateContextLabels', () => {
     let capturedApiKey: unknown;
     let capturedUserId: unknown;
     let capturedPricing: unknown;
+    let capturedLogger: unknown;
 
     const mockGenerator = {
       generateTitle: async () => ok({ title: 'Title', usage: { inputTokens: 10, outputTokens: 5 } }),
@@ -133,20 +146,23 @@ describe('generateContextLabels', () => {
       contexts,
       'test-api-key',
       'test-user-id',
-      (model, apiKey, userId, pricing) => {
+      (model, apiKey, userId, pricing, logger) => {
         capturedModel = model;
         capturedApiKey = apiKey;
         capturedUserId = userId;
         capturedPricing = pricing;
+        capturedLogger = logger;
         return mockGenerator;
       },
-      mockPricing
+      mockPricing,
+      mockLogger
     );
 
     expect(capturedModel).toBe(LlmModels.Gemini25Flash);
     expect(capturedApiKey).toBe('test-api-key');
     expect(capturedUserId).toBe('test-user-id');
     expect(capturedPricing).toBe(mockPricing);
+    expect(capturedLogger).toBe(mockLogger);
   });
 
   it('processes multiple contexts in parallel', async () => {
@@ -166,7 +182,7 @@ describe('generateContextLabels', () => {
       },
     };
 
-    await generateContextLabels(contexts, 'api-key', 'user', () => mockGenerator, mockPricing);
+    await generateContextLabels(contexts, 'api-key', 'user', () => mockGenerator, mockPricing, mockLogger);
 
     expect(callOrder).toEqual([1, 2, 3]);
   });
