@@ -239,7 +239,9 @@ describe('parseError', () => {
         operation: 'parseUserSettings',
       });
 
-      expect(result).toBe('Invalid JSON structure\n\nExpected: Valid JSON object with all required fields\n\nReceived (first 500 chars):\n{"incomplete": json');
+      expect(result).toBe(
+        'Invalid JSON structure\n\nExpected: Valid JSON object with all required fields\n\nReceived (first 500 chars):\n{"incomplete": json'
+      );
     });
 
     it('truncates long response to 500 characters', () => {

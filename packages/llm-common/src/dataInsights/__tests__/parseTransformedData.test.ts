@@ -23,9 +23,7 @@ describe('parseTransformedData', () => {
   it('throws when DATA_START markers are missing', () => {
     const response = 'No markers here';
 
-    expect(() => parseTransformedData(response)).toThrow(
-      'Missing DATA_START...DATA_END markers'
-    );
+    expect(() => parseTransformedData(response)).toThrow('Missing DATA_START...DATA_END markers');
   });
 
   it('throws when data is empty', () => {
@@ -75,9 +73,7 @@ describe('parseTransformedData', () => {
       DATA_END
     `;
 
-    expect(() => parseTransformedData(response)).toThrow(
-      'Item at index 1 must be an object'
-    );
+    expect(() => parseTransformedData(response)).toThrow('Item at index 1 must be an object');
   });
 
   it('throws when array item is null', () => {
