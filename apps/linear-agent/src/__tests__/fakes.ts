@@ -20,6 +20,8 @@ import type {
 
 export class FakeLinearConnectionRepository implements LinearConnectionRepository {
   private connections = new Map<string, LinearConnection>();
+  private shouldFailGetFullConnection = false;
+  private failError: LinearError = { code: 'INTERNAL_ERROR', message: 'Database error' };
 
   async save(
     userId: string,
@@ -71,9 +73,15 @@ export class FakeLinearConnectionRepository implements LinearConnectionRepositor
   }
 
   async getFullConnection(userId: string): Promise<Result<LinearConnection | null, LinearError>> {
+    if (this.shouldFailGetFullConnection) return err(this.failError);
     const conn = this.connections.get(userId);
     if (!conn || !conn.connected) return ok(null);
     return ok(conn);
+  }
+
+  setGetFullConnectionFailure(fail: boolean, error?: LinearError): void {
+    this.shouldFailGetFullConnection = fail;
+    if (error) this.failError = error;
   }
 
   async isConnected(userId: string): Promise<Result<boolean, LinearError>> {
@@ -101,6 +109,7 @@ export class FakeLinearConnectionRepository implements LinearConnectionRepositor
 
   reset(): void {
     this.connections.clear();
+    this.shouldFailGetFullConnection = false;
   }
 
   seedConnection(conn: LinearConnection): void {

@@ -283,6 +283,24 @@ describe('listIssues', () => {
   });
 
   describe('error cases', () => {
+    it('returns error when connection repository fails', async () => {
+      fakeConnectionRepo.setGetFullConnectionFailure(true, {
+        code: 'INTERNAL_ERROR',
+        message: 'Database error',
+      });
+
+      const result = await listIssues(defaultRequest, {
+        linearApiClient: fakeLinearClient,
+        connectionRepository: fakeConnectionRepo,
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('INTERNAL_ERROR');
+        expect(result.error.message).toBe('Database error');
+      }
+    });
+
     it('returns NOT_CONNECTED error when user has no connection', async () => {
       const result = await listIssues(defaultRequest, {
         linearApiClient: fakeLinearClient,
