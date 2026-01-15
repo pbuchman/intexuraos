@@ -23,6 +23,7 @@ For each expected warning, use this format:
 - **Reason**: When external LLM providers fail (rate limits, network issues, invalid API keys), the system correctly transitions to `awaiting_confirmation` state and lets the user decide whether to proceed with successful results. This is an **expected operational state**, not a bug.
 
 The application handles partial failures correctly by:
+
 1. Detecting which models failed
 2. Preserving successful results
 3. Notifying the user via the warning
@@ -43,6 +44,7 @@ The application handles partial failures correctly by:
 ## Summary
 
 These warnings are **intentional observability signals** that:
+
 1. Provide operational visibility into external service dependencies
 2. Allow monitoring of partial/complete LLM failures
 3. Enable user intervention when needed

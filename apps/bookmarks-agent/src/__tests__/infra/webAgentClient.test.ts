@@ -249,6 +249,30 @@ describe('webAgentClient', () => {
         expect(result.error.message).toBe('Unknown error');
       }
     });
+
+    it('maps unknown error codes to FETCH_FAILED', async () => {
+      nock(baseUrl).post('/internal/link-previews').reply(200, {
+        success: true,
+        data: {
+          results: [
+            {
+              url: 'https://example.com/',
+              status: 'failed',
+              error: { code: 'UNKNOWN_ERROR', message: 'Something went wrong' },
+            },
+          ],
+          metadata: { requestedCount: 1, successCount: 0, failedCount: 1, durationMs: 50 },
+        },
+      });
+
+      const result = await client.fetchPreview('https://example.com/');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('FETCH_FAILED');
+        expect(result.error.message).toBe('Something went wrong');
+      }
+    });
   });
 
   describe('default logger', () => {

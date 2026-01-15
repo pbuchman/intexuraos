@@ -36,6 +36,7 @@ State:
 ### [2026-01-14] Task 0-0: Shared Configuration & Prompts
 
 **Completed:**
+
 1. Added `calendar_failed_events` collection to `firestore-collections.json` (owner: calendar-agent)
 2. Updated `commandClassifierPrompt.ts`:
    - Moved `calendar` to priority #1 (above todo)
@@ -54,6 +55,7 @@ State:
 ### [2026-01-14] Task 1-0: Actions Agent (Dispatcher)
 
 **Completed:**
+
 1. Created `src/domain/ports/calendarServiceClient.ts` - port interface for calendar service
 2. Created `src/infra/http/calendarServiceHttpClient.ts` - HTTP client with 60s timeout
 3. Created `src/domain/usecases/executeCalendarAction.ts` - use case for executing calendar actions
@@ -83,6 +85,7 @@ State:
 ### [2026-01-14] Task 1-1: Calendar Agent (Worker)
 
 **Completed:**
+
 1. Created `src/infra/firestore/failedEventRepository.ts` - Firestore repository for failed events
 2. Created `src/infra/gemini/calendarActionExtractionService.ts` - LLM-based event extraction service
 3. Created `src/domain/useCases/processCalendarAction.ts` - use case for processing calendar actions
@@ -102,6 +105,7 @@ State:
 ### [2026-01-14] Task 1-2: Frontend Implementation
 
 **Completed:**
+
 1. Updated `src/services/calendarApi.ts`:
    - Added `FailedCalendarEvent` type import
    - Added `listFailedEvents` function calling `/calendar/failed-events`
@@ -121,6 +125,7 @@ State:
 ### [2026-01-14] Task 2-0: Verify and Polish
 
 **Completed:**
+
 1. Fixed logging standard violation in `calendar-agent/src/services.ts`:
    - Changed `logger` to `logger: logger` for `createLlmUserServiceClient` call
    - Logging check now passes
@@ -136,11 +141,13 @@ State:
    - Added eslint-disable comments for `any` types
 
 **All workspace verifications pass:**
+
 - calendar-agent: 114 tests (36 new), 95%+ coverage
 - actions-agent: 318 tests (including 11 new calendar tests)
 - web: typecheck, lint, and build all pass
 
 **Overall CI status:**
+
 - Static validation: All checks passed ✓
 - Type & Lint: All passed ✓
 - Tests: All passed ✓

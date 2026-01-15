@@ -49,11 +49,10 @@ export const calendarActionExtractionPrompt: PromptBuilder<
 
   build(
     input: CalendarEventExtractionPromptInput,
-    deps?: CalendarEventExtractionPromptDeps,
+    deps?: CalendarEventExtractionPromptDeps
   ): string {
     const maxLength = deps?.maxDescriptionLength ?? 1000;
-    const textPreview =
-      input.text.length > maxLength ? input.text.slice(0, maxLength) : input.text;
+    const textPreview = input.text.length > maxLength ? input.text.slice(0, maxLength) : input.text;
 
     const truncationWarning =
       input.text.length > maxLength

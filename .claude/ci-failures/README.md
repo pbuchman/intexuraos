@@ -115,6 +115,7 @@ pnpm run ci:report -- --json       # JSON output
 | TS2345 (readonly arrays) | 63 | typecheck |
 
 **Actions taken:**
+
 1. Added pattern #5: "Unsafe Type Operations — Add explicit type assertions"
 2. Added pattern #6: "Async Template Expressions — Await or wrap in String()"
 

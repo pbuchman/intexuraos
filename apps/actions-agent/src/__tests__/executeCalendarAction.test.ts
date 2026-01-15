@@ -152,6 +152,35 @@ describe('executeCalendarAction usecase', () => {
     expect(updatedAction?.status).toBe('failed');
   });
 
+  it('updates action to failed with default error message when calendar service returns failed without error', async () => {
+    const action = createAction({ status: 'awaiting_approval' });
+    await fakeActionRepo.save(action);
+    // Omit error field to trigger ?? fallback (simulating calendar service not providing error details)
+    fakeCalendarClient.setNextResponse({
+      status: 'failed',
+    } as { status: 'failed'; error?: string });
+
+    const usecase = createExecuteCalendarActionUseCase({
+      actionRepository: fakeActionRepo,
+      calendarServiceClient: fakeCalendarClient,
+      whatsappPublisher: fakeWhatsappPublisher,
+      webAppUrl: 'https://app.test.com',
+      logger: silentLogger,
+    });
+
+    const result = await usecase('action-123');
+
+    expect(isOk(result)).toBe(true);
+    if (isOk(result)) {
+      expect(result.value.status).toBe('failed');
+      expect(result.value.error).toBe('Unknown error');
+    }
+
+    const updatedAction = await fakeActionRepo.getById('action-123');
+    expect(updatedAction?.status).toBe('failed');
+    expect(updatedAction?.payload['error']).toBe('Unknown error');
+  });
+
   it('updates action to failed when calendar service call fails', async () => {
     const action = createAction({ status: 'awaiting_approval' });
     await fakeActionRepo.save(action);
