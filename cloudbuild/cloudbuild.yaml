@@ -1,5 +1,5 @@
 # IntexuraOS Cloud Build Configuration
-# Optimized with Modular Scripts & Split-Wave Strategy
+# Optimized with max 2 parallel deploys to avoid race conditions
 
 steps:
   # ==========================================================
@@ -27,7 +27,7 @@ steps:
         pnpm install --frozen-lockfile
 
   # ==========================================================
-  # FIRESTORE MIGRATIONS (Wave 0 - Start with pnpm)
+  # FIRESTORE MIGRATIONS
   # ==========================================================
   - name: 'node:22-slim'
     id: 'deploy-firestore'
@@ -43,51 +43,204 @@ steps:
       - 'PROJECT_ID=$PROJECT_ID'
 
   # ==========================================================
-  # WAVE 1: CORE SERVICES (Start Immediately)
+  # BUILD STEPS (all start immediately, run in parallel)
   # ==========================================================
 
-  # [user-service]
   - name: 'gcr.io/cloud-builders/docker'
     id: 'build-push-user-service'
     waitFor: ['-']
     entrypoint: 'bash'
-    args:
-      ['cloudbuild/scripts/build-push-monitored.sh', 'user-service', 'apps/user-service/Dockerfile']
+    args: ['cloudbuild/scripts/build-push-monitored.sh', 'user-service', 'apps/user-service/Dockerfile']
     env:
       - 'DOCKER_BUILDKIT=1'
       - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
       - 'COMMIT_SHA=$COMMIT_SHA'
 
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'build-push-promptvault-service'
+    waitFor: ['-']
+    entrypoint: 'bash'
+    args: ['cloudbuild/scripts/build-push-monitored.sh', 'promptvault-service', 'apps/promptvault-service/Dockerfile']
+    env:
+      - 'DOCKER_BUILDKIT=1'
+      - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
+      - 'COMMIT_SHA=$COMMIT_SHA'
+
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'build-push-notion-service'
+    waitFor: ['-']
+    entrypoint: 'bash'
+    args: ['cloudbuild/scripts/build-push-monitored.sh', 'notion-service', 'apps/notion-service/Dockerfile']
+    env:
+      - 'DOCKER_BUILDKIT=1'
+      - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
+      - 'COMMIT_SHA=$COMMIT_SHA'
+
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'build-push-whatsapp-service'
+    waitFor: ['-']
+    entrypoint: 'bash'
+    args: ['cloudbuild/scripts/build-push-monitored.sh', 'whatsapp-service', 'apps/whatsapp-service/Dockerfile']
+    env:
+      - 'DOCKER_BUILDKIT=1'
+      - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
+      - 'COMMIT_SHA=$COMMIT_SHA'
+
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'build-push-app-settings-service'
+    waitFor: ['-']
+    entrypoint: 'bash'
+    args: ['cloudbuild/scripts/build-push-monitored.sh', 'app-settings-service', 'apps/app-settings-service/Dockerfile']
+    env:
+      - 'DOCKER_BUILDKIT=1'
+      - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
+      - 'COMMIT_SHA=$COMMIT_SHA'
+
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'build-push-image-service'
+    waitFor: ['-']
+    entrypoint: 'bash'
+    args: ['cloudbuild/scripts/build-push-monitored.sh', 'image-service', 'apps/image-service/Dockerfile']
+    env:
+      - 'DOCKER_BUILDKIT=1'
+      - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
+      - 'COMMIT_SHA=$COMMIT_SHA'
+
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'build-push-research-agent'
+    waitFor: ['-']
+    entrypoint: 'bash'
+    args: ['cloudbuild/scripts/build-push-monitored.sh', 'research-agent', 'apps/research-agent/Dockerfile']
+    env:
+      - 'DOCKER_BUILDKIT=1'
+      - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
+      - 'COMMIT_SHA=$COMMIT_SHA'
+
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'build-push-commands-agent'
+    waitFor: ['-']
+    entrypoint: 'bash'
+    args: ['cloudbuild/scripts/build-push-monitored.sh', 'commands-agent', 'apps/commands-agent/Dockerfile']
+    env:
+      - 'DOCKER_BUILDKIT=1'
+      - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
+      - 'COMMIT_SHA=$COMMIT_SHA'
+
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'build-push-actions-agent'
+    waitFor: ['-']
+    entrypoint: 'bash'
+    args: ['cloudbuild/scripts/build-push-monitored.sh', 'actions-agent', 'apps/actions-agent/Dockerfile']
+    env:
+      - 'DOCKER_BUILDKIT=1'
+      - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
+      - 'COMMIT_SHA=$COMMIT_SHA'
+
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'build-push-data-insights-agent'
+    waitFor: ['-']
+    entrypoint: 'bash'
+    args: ['cloudbuild/scripts/build-push-monitored.sh', 'data-insights-agent', 'apps/data-insights-agent/Dockerfile']
+    env:
+      - 'DOCKER_BUILDKIT=1'
+      - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
+      - 'COMMIT_SHA=$COMMIT_SHA'
+
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'build-push-notes-agent'
+    waitFor: ['-']
+    entrypoint: 'bash'
+    args: ['cloudbuild/scripts/build-push-monitored.sh', 'notes-agent', 'apps/notes-agent/Dockerfile']
+    env:
+      - 'DOCKER_BUILDKIT=1'
+      - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
+      - 'COMMIT_SHA=$COMMIT_SHA'
+
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'build-push-todos-agent'
+    waitFor: ['-']
+    entrypoint: 'bash'
+    args: ['cloudbuild/scripts/build-push-monitored.sh', 'todos-agent', 'apps/todos-agent/Dockerfile']
+    env:
+      - 'DOCKER_BUILDKIT=1'
+      - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
+      - 'COMMIT_SHA=$COMMIT_SHA'
+
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'build-push-api-docs-hub'
+    waitFor: ['-']
+    entrypoint: 'bash'
+    args: ['cloudbuild/scripts/build-push-monitored.sh', 'api-docs-hub', 'apps/api-docs-hub/Dockerfile']
+    env:
+      - 'DOCKER_BUILDKIT=1'
+      - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
+      - 'COMMIT_SHA=$COMMIT_SHA'
+
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'build-push-mobile-notifications-service'
+    waitFor: ['-']
+    entrypoint: 'bash'
+    args: ['cloudbuild/scripts/build-push-monitored.sh', 'mobile-notifications-service', 'apps/mobile-notifications-service/Dockerfile']
+    env:
+      - 'DOCKER_BUILDKIT=1'
+      - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
+      - 'COMMIT_SHA=$COMMIT_SHA'
+
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'build-push-bookmarks-agent'
+    waitFor: ['-']
+    entrypoint: 'bash'
+    args: ['cloudbuild/scripts/build-push-monitored.sh', 'bookmarks-agent', 'apps/bookmarks-agent/Dockerfile']
+    env:
+      - 'DOCKER_BUILDKIT=1'
+      - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
+      - 'COMMIT_SHA=$COMMIT_SHA'
+
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'build-push-calendar-agent'
+    waitFor: ['-']
+    entrypoint: 'bash'
+    args: ['cloudbuild/scripts/build-push-monitored.sh', 'calendar-agent', 'apps/calendar-agent/Dockerfile']
+    env:
+      - 'DOCKER_BUILDKIT=1'
+      - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
+      - 'COMMIT_SHA=$COMMIT_SHA'
+
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'build-push-linear-agent'
+    waitFor: ['-']
+    entrypoint: 'bash'
+    args: ['cloudbuild/scripts/build-push-monitored.sh', 'linear-agent', 'apps/linear-agent/Dockerfile']
+    env:
+      - 'DOCKER_BUILDKIT=1'
+      - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
+      - 'COMMIT_SHA=$COMMIT_SHA'
+
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'build-push-web-agent'
+    waitFor: ['-']
+    entrypoint: 'bash'
+    args: ['cloudbuild/scripts/build-push-monitored.sh', 'web-agent', 'apps/web-agent/Dockerfile']
+    env:
+      - 'DOCKER_BUILDKIT=1'
+      - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
+      - 'COMMIT_SHA=$COMMIT_SHA'
+
+  # ==========================================================
+  # DEPLOY STEPS (max 2 parallel at a time)
+  # ==========================================================
+
+  # Deploy Wave 1 (2 parallel)
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     id: 'deploy-user-service'
     waitFor: ['build-push-user-service']
     entrypoint: 'bash'
     args: ['-c', 'bash cloudbuild/scripts/deploy-user-service.sh']
     env:
-      [
-        'COMMIT_SHA=$COMMIT_SHA',
-        'REGION=${_REGION}',
-        'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}',
-        'ENVIRONMENT=${_ENVIRONMENT}',
-      ]
-
-  # [promptvault-service]
-  - name: 'gcr.io/cloud-builders/docker'
-    id: 'build-push-promptvault-service'
-    waitFor: ['-']
-    entrypoint: 'bash'
-    args:
-      [
-        'cloudbuild/scripts/build-push-monitored.sh',
-        'promptvault-service',
-        'apps/promptvault-service/Dockerfile',
-      ]
-    env:
-      [
-        'DOCKER_BUILDKIT=1',
-        'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}',
-        'COMMIT_SHA=$COMMIT_SHA',
-      ]
+      - 'COMMIT_SHA=$COMMIT_SHA'
+      - 'REGION=${_REGION}'
+      - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
+      - 'ENVIRONMENT=${_ENVIRONMENT}'
 
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     id: 'deploy-promptvault-service'
@@ -95,516 +248,202 @@ steps:
     entrypoint: 'bash'
     args: ['-c', 'bash cloudbuild/scripts/deploy-promptvault-service.sh']
     env:
-      [
-        'COMMIT_SHA=$COMMIT_SHA',
-        'REGION=${_REGION}',
-        'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}',
-        'ENVIRONMENT=${_ENVIRONMENT}',
-      ]
+      - 'COMMIT_SHA=$COMMIT_SHA'
+      - 'REGION=${_REGION}'
+      - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
+      - 'ENVIRONMENT=${_ENVIRONMENT}'
 
-  # [notion-service]
-  - name: 'gcr.io/cloud-builders/docker'
-    id: 'build-push-notion-service'
-    waitFor: ['-']
-    entrypoint: 'bash'
-    args:
-      [
-        'cloudbuild/scripts/build-push-monitored.sh',
-        'notion-service',
-        'apps/notion-service/Dockerfile',
-      ]
-    env:
-      [
-        'DOCKER_BUILDKIT=1',
-        'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}',
-        'COMMIT_SHA=$COMMIT_SHA',
-      ]
-
+  # Deploy Wave 2 (2 parallel, waits for Wave 1)
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     id: 'deploy-notion-service'
-    waitFor: ['build-push-notion-service']
+    waitFor: ['build-push-notion-service', 'deploy-user-service', 'deploy-promptvault-service']
     entrypoint: 'bash'
     args: ['-c', 'bash cloudbuild/scripts/deploy-notion-service.sh']
     env:
-      [
-        'COMMIT_SHA=$COMMIT_SHA',
-        'REGION=${_REGION}',
-        'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}',
-        'ENVIRONMENT=${_ENVIRONMENT}',
-      ]
-
-  # [whatsapp-service]
-  - name: 'gcr.io/cloud-builders/docker'
-    id: 'build-push-whatsapp-service'
-    waitFor: ['-']
-    entrypoint: 'bash'
-    args:
-      [
-        'cloudbuild/scripts/build-push-monitored.sh',
-        'whatsapp-service',
-        'apps/whatsapp-service/Dockerfile',
-      ]
-    env:
-      [
-        'DOCKER_BUILDKIT=1',
-        'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}',
-        'COMMIT_SHA=$COMMIT_SHA',
-      ]
+      - 'COMMIT_SHA=$COMMIT_SHA'
+      - 'REGION=${_REGION}'
+      - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
+      - 'ENVIRONMENT=${_ENVIRONMENT}'
 
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     id: 'deploy-whatsapp-service'
-    waitFor: ['build-push-whatsapp-service']
+    waitFor: ['build-push-whatsapp-service', 'deploy-user-service', 'deploy-promptvault-service']
     entrypoint: 'bash'
     args: ['-c', 'bash cloudbuild/scripts/deploy-whatsapp-service.sh']
     env:
-      [
-        'COMMIT_SHA=$COMMIT_SHA',
-        'REGION=${_REGION}',
-        'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}',
-        'ENVIRONMENT=${_ENVIRONMENT}',
-      ]
+      - 'COMMIT_SHA=$COMMIT_SHA'
+      - 'REGION=${_REGION}'
+      - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
+      - 'ENVIRONMENT=${_ENVIRONMENT}'
 
-  # [app-settings-service]
-  - name: 'gcr.io/cloud-builders/docker'
-    id: 'build-push-app-settings-service'
-    waitFor: ['-']
-    entrypoint: 'bash'
-    args:
-      [
-        'cloudbuild/scripts/build-push-monitored.sh',
-        'app-settings-service',
-        'apps/app-settings-service/Dockerfile',
-      ]
-    env:
-      [
-        'DOCKER_BUILDKIT=1',
-        'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}',
-        'COMMIT_SHA=$COMMIT_SHA',
-      ]
-
+  # Deploy Wave 3 (2 parallel, waits for Wave 2)
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     id: 'deploy-app-settings-service'
-    waitFor: ['build-push-app-settings-service']
+    waitFor: ['build-push-app-settings-service', 'deploy-notion-service', 'deploy-whatsapp-service']
     entrypoint: 'bash'
     args: ['-c', 'bash cloudbuild/scripts/deploy-app-settings-service.sh']
     env:
-      [
-        'COMMIT_SHA=$COMMIT_SHA',
-        'REGION=${_REGION}',
-        'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}',
-        'ENVIRONMENT=${_ENVIRONMENT}',
-      ]
-
-  # [image-service]
-  - name: 'gcr.io/cloud-builders/docker'
-    id: 'build-push-image-service'
-    waitFor: ['-']
-    entrypoint: 'bash'
-    args:
-      [
-        'cloudbuild/scripts/build-push-monitored.sh',
-        'image-service',
-        'apps/image-service/Dockerfile',
-      ]
-    env:
-      [
-        'DOCKER_BUILDKIT=1',
-        'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}',
-        'COMMIT_SHA=$COMMIT_SHA',
-      ]
+      - 'COMMIT_SHA=$COMMIT_SHA'
+      - 'REGION=${_REGION}'
+      - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
+      - 'ENVIRONMENT=${_ENVIRONMENT}'
 
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     id: 'deploy-image-service'
-    waitFor: ['build-push-image-service']
+    waitFor: ['build-push-image-service', 'deploy-notion-service', 'deploy-whatsapp-service']
     entrypoint: 'bash'
     args: ['-c', 'bash cloudbuild/scripts/deploy-image-service.sh']
     env:
-      [
-        'COMMIT_SHA=$COMMIT_SHA',
-        'REGION=${_REGION}',
-        'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}',
-        'ENVIRONMENT=${_ENVIRONMENT}',
-      ]
+      - 'COMMIT_SHA=$COMMIT_SHA'
+      - 'REGION=${_REGION}'
+      - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
+      - 'ENVIRONMENT=${_ENVIRONMENT}'
 
-  # ==========================================================
-  # WAVE 2A: AGENTS (Group 1 - Limit 3)
-  # Waits for Wave 1
-  # ==========================================================
-
-  # [research-agent]
-  - name: 'gcr.io/cloud-builders/docker'
-    id: 'build-push-research-agent'
-    waitFor: ['build-push-user-service', 'build-push-app-settings-service']
-    entrypoint: 'bash'
-    args:
-      [
-        'cloudbuild/scripts/build-push-monitored.sh',
-        'research-agent',
-        'apps/research-agent/Dockerfile',
-      ]
-    env:
-      [
-        'DOCKER_BUILDKIT=1',
-        'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}',
-        'COMMIT_SHA=$COMMIT_SHA',
-      ]
-
+  # Deploy Wave 4 (2 parallel, waits for Wave 3)
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     id: 'deploy-research-agent'
-    waitFor: ['build-push-research-agent']
+    waitFor: ['build-push-research-agent', 'deploy-app-settings-service', 'deploy-image-service']
     entrypoint: 'bash'
     args: ['-c', 'bash cloudbuild/scripts/deploy-research-agent.sh']
     env:
-      [
-        'COMMIT_SHA=$COMMIT_SHA',
-        'REGION=${_REGION}',
-        'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}',
-        'ENVIRONMENT=${_ENVIRONMENT}',
-      ]
-
-  # [commands-agent]
-  - name: 'gcr.io/cloud-builders/docker'
-    id: 'build-push-commands-agent'
-    waitFor: ['build-push-user-service', 'build-push-app-settings-service']
-    entrypoint: 'bash'
-    args:
-      [
-        'cloudbuild/scripts/build-push-monitored.sh',
-        'commands-agent',
-        'apps/commands-agent/Dockerfile',
-      ]
-    env:
-      [
-        'DOCKER_BUILDKIT=1',
-        'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}',
-        'COMMIT_SHA=$COMMIT_SHA',
-      ]
+      - 'COMMIT_SHA=$COMMIT_SHA'
+      - 'REGION=${_REGION}'
+      - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
+      - 'ENVIRONMENT=${_ENVIRONMENT}'
 
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     id: 'deploy-commands-agent'
-    waitFor: ['build-push-commands-agent']
+    waitFor: ['build-push-commands-agent', 'deploy-app-settings-service', 'deploy-image-service']
     entrypoint: 'bash'
     args: ['-c', 'bash cloudbuild/scripts/deploy-commands-agent.sh']
     env:
-      [
-        'COMMIT_SHA=$COMMIT_SHA',
-        'REGION=${_REGION}',
-        'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}',
-        'ENVIRONMENT=${_ENVIRONMENT}',
-      ]
+      - 'COMMIT_SHA=$COMMIT_SHA'
+      - 'REGION=${_REGION}'
+      - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
+      - 'ENVIRONMENT=${_ENVIRONMENT}'
 
-  # [actions-agent]
-  - name: 'gcr.io/cloud-builders/docker'
-    id: 'build-push-actions-agent'
-    waitFor: ['build-push-user-service', 'build-push-app-settings-service']
-    entrypoint: 'bash'
-    args:
-      [
-        'cloudbuild/scripts/build-push-monitored.sh',
-        'actions-agent',
-        'apps/actions-agent/Dockerfile',
-      ]
-    env:
-      [
-        'DOCKER_BUILDKIT=1',
-        'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}',
-        'COMMIT_SHA=$COMMIT_SHA',
-      ]
-
+  # Deploy Wave 5 (2 parallel, waits for Wave 4)
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     id: 'deploy-actions-agent'
-    waitFor: ['build-push-actions-agent']
+    waitFor: ['build-push-actions-agent', 'deploy-research-agent', 'deploy-commands-agent']
     entrypoint: 'bash'
     args: ['-c', 'bash cloudbuild/scripts/deploy-actions-agent.sh']
     env:
-      [
-        'COMMIT_SHA=$COMMIT_SHA',
-        'REGION=${_REGION}',
-        'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}',
-        'ENVIRONMENT=${_ENVIRONMENT}',
-      ]
-
-  # ==========================================================
-  # WAVE 2B: AGENTS (Group 2 - Limit 3)
-  # Waits for Wave 2A
-  # ==========================================================
-
-  # [data-insights-agent]
-  - name: 'gcr.io/cloud-builders/docker'
-    id: 'build-push-data-insights-agent'
-    waitFor: ['build-push-research-agent', 'build-push-commands-agent']
-    entrypoint: 'bash'
-    args:
-      [
-        'cloudbuild/scripts/build-push-monitored.sh',
-        'data-insights-agent',
-        'apps/data-insights-agent/Dockerfile',
-      ]
-    env:
-      [
-        'DOCKER_BUILDKIT=1',
-        'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}',
-        'COMMIT_SHA=$COMMIT_SHA',
-      ]
+      - 'COMMIT_SHA=$COMMIT_SHA'
+      - 'REGION=${_REGION}'
+      - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
+      - 'ENVIRONMENT=${_ENVIRONMENT}'
 
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     id: 'deploy-data-insights-agent'
-    waitFor: ['build-push-data-insights-agent']
+    waitFor: ['build-push-data-insights-agent', 'deploy-research-agent', 'deploy-commands-agent']
     entrypoint: 'bash'
     args: ['-c', 'bash cloudbuild/scripts/deploy-data-insights-agent.sh']
     env:
-      [
-        'COMMIT_SHA=$COMMIT_SHA',
-        'REGION=${_REGION}',
-        'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}',
-        'ENVIRONMENT=${_ENVIRONMENT}',
-      ]
+      - 'COMMIT_SHA=$COMMIT_SHA'
+      - 'REGION=${_REGION}'
+      - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
+      - 'ENVIRONMENT=${_ENVIRONMENT}'
 
-  # [notes-agent]
-  - name: 'gcr.io/cloud-builders/docker'
-    id: 'build-push-notes-agent'
-    waitFor: ['build-push-research-agent', 'build-push-commands-agent']
-    entrypoint: 'bash'
-    args:
-      ['cloudbuild/scripts/build-push-monitored.sh', 'notes-agent', 'apps/notes-agent/Dockerfile']
-    env:
-      [
-        'DOCKER_BUILDKIT=1',
-        'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}',
-        'COMMIT_SHA=$COMMIT_SHA',
-      ]
-
+  # Deploy Wave 6 (2 parallel, waits for Wave 5)
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     id: 'deploy-notes-agent'
-    waitFor: ['build-push-notes-agent']
+    waitFor: ['build-push-notes-agent', 'deploy-actions-agent', 'deploy-data-insights-agent']
     entrypoint: 'bash'
     args: ['-c', 'bash cloudbuild/scripts/deploy-notes-agent.sh']
     env:
-      [
-        'COMMIT_SHA=$COMMIT_SHA',
-        'REGION=${_REGION}',
-        'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}',
-        'ENVIRONMENT=${_ENVIRONMENT}',
-      ]
-
-  # [todos-agent]
-  - name: 'gcr.io/cloud-builders/docker'
-    id: 'build-push-todos-agent'
-    waitFor: ['build-push-research-agent', 'build-push-commands-agent']
-    entrypoint: 'bash'
-    args:
-      ['cloudbuild/scripts/build-push-monitored.sh', 'todos-agent', 'apps/todos-agent/Dockerfile']
-    env:
-      [
-        'DOCKER_BUILDKIT=1',
-        'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}',
-        'COMMIT_SHA=$COMMIT_SHA',
-      ]
+      - 'COMMIT_SHA=$COMMIT_SHA'
+      - 'REGION=${_REGION}'
+      - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
+      - 'ENVIRONMENT=${_ENVIRONMENT}'
 
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     id: 'deploy-todos-agent'
-    waitFor: ['build-push-todos-agent']
+    waitFor: ['build-push-todos-agent', 'deploy-actions-agent', 'deploy-data-insights-agent']
     entrypoint: 'bash'
     args: ['-c', 'bash cloudbuild/scripts/deploy-todos-agent.sh']
     env:
-      [
-        'COMMIT_SHA=$COMMIT_SHA',
-        'REGION=${_REGION}',
-        'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}',
-        'ENVIRONMENT=${_ENVIRONMENT}',
-      ]
+      - 'COMMIT_SHA=$COMMIT_SHA'
+      - 'REGION=${_REGION}'
+      - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
+      - 'ENVIRONMENT=${_ENVIRONMENT}'
 
-  # ==========================================================
-  # WAVE 3A: FRONTEND UTILS (Group 3 - Limit 2)
-  # Waits for Wave 2B
-  # ==========================================================
-
-  # [api-docs-hub]
-  - name: 'gcr.io/cloud-builders/docker'
-    id: 'build-push-api-docs-hub'
-    waitFor: ['build-push-data-insights-agent', 'build-push-notes-agent']
-    entrypoint: 'bash'
-    args:
-      ['cloudbuild/scripts/build-push-monitored.sh', 'api-docs-hub', 'apps/api-docs-hub/Dockerfile']
-    env:
-      [
-        'DOCKER_BUILDKIT=1',
-        'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}',
-        'COMMIT_SHA=$COMMIT_SHA',
-      ]
-
+  # Deploy Wave 7 (2 parallel, waits for Wave 6)
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     id: 'deploy-api-docs-hub'
-    waitFor: ['build-push-api-docs-hub']
+    waitFor: ['build-push-api-docs-hub', 'deploy-notes-agent', 'deploy-todos-agent']
     entrypoint: 'bash'
     args: ['-c', 'bash cloudbuild/scripts/deploy-api-docs-hub.sh']
     env:
-      [
-        'COMMIT_SHA=$COMMIT_SHA',
-        'REGION=${_REGION}',
-        'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}',
-        'ENVIRONMENT=${_ENVIRONMENT}',
-      ]
-
-  # [mobile-notifications-service]
-  - name: 'gcr.io/cloud-builders/docker'
-    id: 'build-push-mobile-notifications-service'
-    waitFor: ['build-push-data-insights-agent', 'build-push-notes-agent']
-    entrypoint: 'bash'
-    args:
-      [
-        'cloudbuild/scripts/build-push-monitored.sh',
-        'mobile-notifications-service',
-        'apps/mobile-notifications-service/Dockerfile',
-      ]
-    env:
-      [
-        'DOCKER_BUILDKIT=1',
-        'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}',
-        'COMMIT_SHA=$COMMIT_SHA',
-      ]
+      - 'COMMIT_SHA=$COMMIT_SHA'
+      - 'REGION=${_REGION}'
+      - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
+      - 'ENVIRONMENT=${_ENVIRONMENT}'
 
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     id: 'deploy-mobile-notifications-service'
-    waitFor: ['build-push-mobile-notifications-service']
+    waitFor: ['build-push-mobile-notifications-service', 'deploy-notes-agent', 'deploy-todos-agent']
     entrypoint: 'bash'
     args: ['-c', 'bash cloudbuild/scripts/deploy-mobile-notifications-service.sh']
     env:
-      [
-        'COMMIT_SHA=$COMMIT_SHA',
-        'REGION=${_REGION}',
-        'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}',
-        'ENVIRONMENT=${_ENVIRONMENT}',
-      ]
+      - 'COMMIT_SHA=$COMMIT_SHA'
+      - 'REGION=${_REGION}'
+      - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
+      - 'ENVIRONMENT=${_ENVIRONMENT}'
 
-  # ==========================================================
-  # WAVE 3B: WEB AGENTS (Group 4 - Limit 3)
-  # Waits for Wave 3A
-  # ==========================================================
-
-  # [bookmarks-agent]
-  - name: 'gcr.io/cloud-builders/docker'
-    id: 'build-push-bookmarks-agent'
-    waitFor: ['build-push-api-docs-hub', 'build-push-mobile-notifications-service']
-    entrypoint: 'bash'
-    args:
-      [
-        'cloudbuild/scripts/build-push-monitored.sh',
-        'bookmarks-agent',
-        'apps/bookmarks-agent/Dockerfile',
-      ]
-    env:
-      [
-        'DOCKER_BUILDKIT=1',
-        'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}',
-        'COMMIT_SHA=$COMMIT_SHA',
-      ]
-
+  # Deploy Wave 8 (2 parallel, waits for Wave 7)
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     id: 'deploy-bookmarks-agent'
-    waitFor: ['build-push-bookmarks-agent']
+    waitFor: ['build-push-bookmarks-agent', 'deploy-api-docs-hub', 'deploy-mobile-notifications-service']
     entrypoint: 'bash'
     args: ['-c', 'bash cloudbuild/scripts/deploy-bookmarks-agent.sh']
     env:
-      [
-        'COMMIT_SHA=$COMMIT_SHA',
-        'REGION=${_REGION}',
-        'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}',
-        'ENVIRONMENT=${_ENVIRONMENT}',
-      ]
-
-  # [calendar-agent]
-  - name: 'gcr.io/cloud-builders/docker'
-    id: 'build-push-calendar-agent'
-    waitFor: ['build-push-api-docs-hub', 'build-push-mobile-notifications-service']
-    entrypoint: 'bash'
-    args:
-      [
-        'cloudbuild/scripts/build-push-monitored.sh',
-        'calendar-agent',
-        'apps/calendar-agent/Dockerfile',
-      ]
-    env:
-      [
-        'DOCKER_BUILDKIT=1',
-        'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}',
-        'COMMIT_SHA=$COMMIT_SHA',
-      ]
+      - 'COMMIT_SHA=$COMMIT_SHA'
+      - 'REGION=${_REGION}'
+      - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
+      - 'ENVIRONMENT=${_ENVIRONMENT}'
 
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     id: 'deploy-calendar-agent'
-    waitFor: ['build-push-calendar-agent']
+    waitFor: ['build-push-calendar-agent', 'deploy-api-docs-hub', 'deploy-mobile-notifications-service']
     entrypoint: 'bash'
     args: ['-c', 'bash cloudbuild/scripts/deploy-calendar-agent.sh']
     env:
-      [
-        'COMMIT_SHA=$COMMIT_SHA',
-        'REGION=${_REGION}',
-        'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}',
-        'ENVIRONMENT=${_ENVIRONMENT}',
-      ]
+      - 'COMMIT_SHA=$COMMIT_SHA'
+      - 'REGION=${_REGION}'
+      - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
+      - 'ENVIRONMENT=${_ENVIRONMENT}'
 
-  # [linear-agent]
-  - name: 'gcr.io/cloud-builders/docker'
-    id: 'build-push-linear-agent'
-    waitFor: ['-']
-    entrypoint: 'bash'
-    args:
-      ['cloudbuild/scripts/build-push-monitored.sh', 'linear-agent', 'apps/linear-agent/Dockerfile']
-    env:
-      [
-        'DOCKER_BUILDKIT=1',
-        'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}',
-        'COMMIT_SHA=$COMMIT_SHA',
-      ]
-
+  # Deploy Wave 9 (2 parallel, waits for Wave 8)
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     id: 'deploy-linear-agent'
-    waitFor: ['build-push-linear-agent']
+    waitFor: ['build-push-linear-agent', 'deploy-bookmarks-agent', 'deploy-calendar-agent']
     entrypoint: 'bash'
     args: ['-c', 'bash cloudbuild/scripts/deploy-linear-agent.sh']
     env:
-      [
-        'COMMIT_SHA=$COMMIT_SHA',
-        'REGION=${_REGION}',
-        'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}',
-        'ENVIRONMENT=${_ENVIRONMENT}',
-      ]
-
-  # [web-agent]
-  - name: 'gcr.io/cloud-builders/docker'
-    id: 'build-push-web-agent'
-    waitFor: ['build-push-api-docs-hub', 'build-push-mobile-notifications-service']
-    entrypoint: 'bash'
-    args: ['cloudbuild/scripts/build-push-monitored.sh', 'web-agent', 'apps/web-agent/Dockerfile']
-    env:
-      [
-        'DOCKER_BUILDKIT=1',
-        'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}',
-        'COMMIT_SHA=$COMMIT_SHA',
-      ]
+      - 'COMMIT_SHA=$COMMIT_SHA'
+      - 'REGION=${_REGION}'
+      - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
+      - 'ENVIRONMENT=${_ENVIRONMENT}'
 
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     id: 'deploy-web-agent'
-    waitFor: ['build-push-web-agent']
+    waitFor: ['build-push-web-agent', 'deploy-bookmarks-agent', 'deploy-calendar-agent']
     entrypoint: 'bash'
     args: ['-c', 'bash cloudbuild/scripts/deploy-web-agent.sh']
     env:
-      [
-        'COMMIT_SHA=$COMMIT_SHA',
-        'REGION=${_REGION}',
-        'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}',
-        'ENVIRONMENT=${_ENVIRONMENT}',
-      ]
+      - 'COMMIT_SHA=$COMMIT_SHA'
+      - 'REGION=${_REGION}'
+      - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
+      - 'ENVIRONMENT=${_ENVIRONMENT}'
 
   # ==========================================================
-  # WAVE 4: FRONTEND APP (Depends on config from others)
+  # WEB FRONTEND (waits for all service deploys)
   # ==========================================================
 
-  # [web - frontend]
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     id: 'fetch-web-config'
-    waitFor: ['build-push-calendar-agent', 'build-push-bookmarks-agent']
+    waitFor: ['deploy-linear-agent', 'deploy-web-agent']
     entrypoint: 'bash'
     args:
       - '-c'
@@ -628,6 +467,7 @@ steps:
           "bookmarks-agent:BOOKMARKS_AGENT"
           "calendar-agent:CALENDAR_AGENT"
           "app-settings-service:APP_SETTINGS_SERVICE"
+          "linear-agent:LINEAR_AGENT"
         )
 
         # Fetch service URLs
