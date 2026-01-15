@@ -1,4 +1,5 @@
 import type { Result } from '@intexuraos/common-core';
+import type { Logger } from 'pino';
 import { BasePubSubPublisher, type PublishError } from '@intexuraos/infra-pubsub';
 
 export interface EnrichBookmarkEvent {
@@ -15,13 +16,14 @@ export interface EnrichPublisher {
 export interface EnrichPublisherConfig {
   projectId: string;
   topicName: string | null;
+  logger: Logger;
 }
 
 class EnrichPublisherImpl extends BasePubSubPublisher implements EnrichPublisher {
   private readonly topicName: string | null;
 
   constructor(config: EnrichPublisherConfig) {
-    super({ projectId: config.projectId, loggerName: 'bookmark-enrich-publisher' });
+    super({ projectId: config.projectId, logger: config.logger });
     this.topicName = config.topicName;
   }
 

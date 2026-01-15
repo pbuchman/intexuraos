@@ -55,6 +55,7 @@ export async function initServices(config: ServiceConfig): Promise<void> {
     todosProcessingPublisher: createTodosProcessingPublisher({
       projectId: config.gcpProjectId,
       topicName: config.todosProcessingTopic,
+      logger: pino({ name: 'todos-processing-publisher' }),
     }),
     userServiceClient,
     todoItemExtractionService: createTodoItemExtractionService(

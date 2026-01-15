@@ -76,7 +76,10 @@ export async function initServices(config: ServiceConfig): Promise<void> {
     pricingContext,
     logger: pino({ name: 'userServiceClient' }),
   });
-  const eventPublisher = createActionEventPublisher({ projectId: config.gcpProjectId });
+  const eventPublisher = createActionEventPublisher({
+    projectId: config.gcpProjectId,
+    logger: pino({ name: 'action-event-publisher' }),
+  });
 
   container = {
     commandRepository,

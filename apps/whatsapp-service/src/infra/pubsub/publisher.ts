@@ -2,6 +2,7 @@
  * GCP Pub/Sub Publisher Adapter.
  * Implements EventPublisherPort for publishing events to Pub/Sub topics.
  */
+import type { Logger } from 'pino';
 import { err, ok, type Result } from '@intexuraos/common-core';
 import { BasePubSubPublisher, type PublishError } from '@intexuraos/infra-pubsub';
 import type {
@@ -20,6 +21,7 @@ export interface GcpPubSubPublisherConfig {
   commandsIngestTopic?: string;
   webhookProcessTopic?: string;
   transcriptionTopic?: string;
+  logger: Logger;
 }
 
 /**
@@ -32,7 +34,7 @@ export class GcpPubSubPublisher extends BasePubSubPublisher implements EventPubl
   private readonly transcriptionTopic: string | null;
 
   constructor(config: GcpPubSubPublisherConfig) {
-    super({ projectId: config.projectId, loggerName: 'whatsapp-pubsub-publisher' });
+    super({ projectId: config.projectId, logger: config.logger });
     this.mediaCleanupTopic = config.mediaCleanupTopic;
     this.commandsIngestTopic = config.commandsIngestTopic ?? null;
     this.webhookProcessTopic = config.webhookProcessTopic ?? null;

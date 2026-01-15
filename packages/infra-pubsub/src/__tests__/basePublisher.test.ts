@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { BasePubSubPublisher, getLogLevel, type PublishContext } from '../basePublisher.js';
+import pino from 'pino';
+import { BasePubSubPublisher, type PublishContext } from '../basePublisher.js';
 import type { Result } from '@intexuraos/common-core';
 import type { PublishError } from '../types.js';
 
@@ -31,36 +32,18 @@ class TestPublisher extends BasePubSubPublisher {
   }
 }
 
-describe('getLogLevel', () => {
-  it('returns silent for test environment', () => {
-    expect(getLogLevel('test')).toBe('silent');
-  });
-
-  it('returns info for non-test environment', () => {
-    expect(getLogLevel('production')).toBe('info');
-    expect(getLogLevel('development')).toBe('info');
-    expect(getLogLevel(undefined)).toBe('info');
-  });
-});
-
 describe('BasePubSubPublisher', () => {
   let publisher: TestPublisher;
+  const mockLogger = pino({ name: 'test', level: 'silent' });
 
   beforeEach(() => {
     mockPublishMessage.mockReset();
     mockPublishMessage.mockResolvedValue('message-id-123');
-    publisher = new TestPublisher({ projectId: 'test-project', loggerName: 'test' });
+    publisher = new TestPublisher({ projectId: 'test-project', logger: mockLogger });
   });
 
   afterEach(() => {
     vi.clearAllMocks();
-  });
-
-  describe('constructor', () => {
-    it('uses default loggerName when not provided', () => {
-      const pub = new TestPublisher({ projectId: 'test-project' });
-      expect(pub).toBeDefined();
-    });
   });
 
   describe('publishToTopic', () => {

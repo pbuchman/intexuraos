@@ -1,4 +1,5 @@
 import type { Result } from '@intexuraos/common-core';
+import type { Logger } from 'pino';
 import { BasePubSubPublisher, type PublishError } from '@intexuraos/infra-pubsub';
 
 export interface LlmAnalyticsEvent {
@@ -19,6 +20,7 @@ export interface AnalyticsEventPublisher {
 export interface AnalyticsEventPublisherConfig {
   projectId: string;
   topicName: string;
+  logger: Logger;
 }
 
 export class AnalyticsEventPublisherImpl
@@ -28,7 +30,7 @@ export class AnalyticsEventPublisherImpl
   private readonly topicName: string;
 
   constructor(config: AnalyticsEventPublisherConfig) {
-    super({ projectId: config.projectId, loggerName: 'analytics-event-publisher' });
+    super({ projectId: config.projectId, logger: config.logger });
     this.topicName = config.topicName;
   }
 

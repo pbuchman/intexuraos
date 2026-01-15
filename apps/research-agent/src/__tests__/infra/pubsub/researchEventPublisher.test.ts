@@ -1,3 +1,4 @@
+import pino from 'pino';
 import { describe, it, expect, vi } from 'vitest';
 import {
   createResearchEventPublisher,
@@ -7,11 +8,9 @@ import {
 vi.mock('@intexuraos/infra-pubsub', () => ({
   BasePubSubPublisher: class {
     protected projectId: string;
-    protected loggerName: string;
 
-    constructor(config: { projectId: string; loggerName: string }) {
+    constructor(config: { projectId: string; logger: { level: string } }) {
       this.projectId = config.projectId;
-      this.loggerName = config.loggerName;
     }
 
     async publishToTopic(
@@ -39,6 +38,7 @@ describe('createResearchEventPublisher', () => {
     const publisher = createResearchEventPublisher({
       projectId: 'test-project',
       topicName: 'test-topic',
+      logger: pino({ name: 'test', level: 'silent' }),
     });
 
     expect(publisher).toBeDefined();
@@ -49,6 +49,7 @@ describe('createResearchEventPublisher', () => {
     const publisher = createResearchEventPublisher({
       projectId: 'test-project',
       topicName: 'test-topic',
+      logger: pino({ name: 'test', level: 'silent' }),
     });
 
     const result = await publisher.publishProcessResearch(event);
@@ -60,6 +61,7 @@ describe('createResearchEventPublisher', () => {
     const publisher = createResearchEventPublisher({
       projectId: 'test-project',
       topicName: 'test-topic',
+      logger: pino({ name: 'test', level: 'silent' }),
     });
 
     const result = await publisher.publishProcessResearch({
