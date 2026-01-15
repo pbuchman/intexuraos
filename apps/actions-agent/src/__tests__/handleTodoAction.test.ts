@@ -32,7 +32,18 @@ describe('handleTodoAction usecase', () => {
     ...overrides,
   });
 
-  const createAction = () => ({
+  const createAction = (): {
+    id: 'action-123';
+    userId: 'user-456';
+    commandId: 'cmd-789';
+    type: 'todo';
+    confidence: number;
+    title: string;
+    status: 'pending';
+    payload: Record<string, unknown>;
+    createdAt: string;
+    updatedAt: string;
+  } => ({
     id: 'action-123',
     userId: 'user-456',
     commandId: 'cmd-789',

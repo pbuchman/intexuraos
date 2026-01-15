@@ -120,7 +120,9 @@ export interface ServiceConfig {
 let container: Services | null = null;
 
 export function initServices(config: ServiceConfig): void {
-  const actionRepository = createFirestoreActionRepository();
+  const actionRepository = createFirestoreActionRepository({
+    logger: pino({ name: 'actionRepository' }),
+  });
   const actionTransitionRepository = createFirestoreActionTransitionRepository();
   const actionServiceClient = createLocalActionServiceClient(actionRepository);
 

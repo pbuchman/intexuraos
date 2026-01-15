@@ -718,33 +718,31 @@ class FakeFirestoreImpl {
    */
   async runTransaction<T>(updateFn: (transaction: FakeTransaction) => Promise<T>): Promise<T> {
     // Enqueue this transaction to run after all previous transactions complete
-    transactionQueue = transactionQueue.then(
-      async (): Promise<T> => {
-        const pendingWrites = new Map<string, { data: DocumentData; deleted: boolean }>();
-        const transaction = new FakeTransaction(this.store, pendingWrites);
+    transactionQueue = transactionQueue.then(async (): Promise<T> => {
+      const pendingWrites = new Map<string, { data: DocumentData; deleted: boolean }>();
+      const transaction = new FakeTransaction(this.store, pendingWrites);
 
-        const result = await updateFn(transaction);
-        // Commit: apply all pending writes to the store
-        for (const [key, value] of pendingWrites.entries()) {
-          const [collectionName, docId] = key.split('/');
-          if (collectionName === undefined || docId === undefined) {
-            continue; // Skip malformed keys
-          }
-          let collection = this.store.get(collectionName) as Map<string, DocumentData> | undefined;
-          if (collection === undefined) {
-            const newCollection = new Map<string, DocumentData>();
-            this.store.set(collectionName, newCollection);
-            collection = newCollection;
-          }
-          if (value.deleted) {
-            collection.delete(docId);
-          } else {
-            collection.set(docId, value.data);
-          }
+      const result = await updateFn(transaction);
+      // Commit: apply all pending writes to the store
+      for (const [key, value] of pendingWrites.entries()) {
+        const [collectionName, docId] = key.split('/');
+        if (collectionName === undefined || docId === undefined) {
+          continue; // Skip malformed keys
         }
-        return result;
+        let collection = this.store.get(collectionName) as Map<string, DocumentData> | undefined;
+        if (collection === undefined) {
+          const newCollection = new Map<string, DocumentData>();
+          this.store.set(collectionName, newCollection);
+          collection = newCollection;
+        }
+        if (value.deleted) {
+          collection.delete(docId);
+        } else {
+          collection.set(docId, value.data);
+        }
       }
-    );
+      return result;
+    });
 
     // eslint-disable-next-line @typescript-eslint/return-await
     return transactionQueue as Promise<T>;

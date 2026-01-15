@@ -1,8 +1,13 @@
 import { getFirestore } from '@intexuraos/infra-firestore';
 import type { Action } from '../../domain/models/action.js';
 import type { ActionRepository, ListByUserIdOptions } from '../../domain/ports/actionRepository.js';
+import type { Logger } from 'pino';
 
 const COLLECTION = 'actions';
+
+interface CreateFirestoreActionRepositoryDeps {
+  logger?: Logger;
+}
 
 interface ActionDoc {
   userId: string;
@@ -45,7 +50,9 @@ function toDoc(action: Action): ActionDoc {
   };
 }
 
-export function createFirestoreActionRepository(): ActionRepository {
+export function createFirestoreActionRepository(deps?: CreateFirestoreActionRepositoryDeps): ActionRepository {
+  const { logger } = deps ?? {};
+  const hasLogger = logger !== undefined;
   return {
     async getById(id: string): Promise<Action | null> {
       const db = getFirestore();
@@ -139,7 +146,15 @@ export function createFirestoreActionRepository(): ActionRepository {
         });
 
         return result;
-      } catch {
+      } catch (error) {
+        // Log Firestore transaction errors for debugging
+        // Returning false allows caller to handle gracefully (idempotent operation)
+        if (hasLogger) {
+          logger.error(
+            { actionId, newStatus, expectedStatus, error },
+            'Firestore transaction failed in updateStatusIf'
+          );
+        }
         return false;
       }
     },
