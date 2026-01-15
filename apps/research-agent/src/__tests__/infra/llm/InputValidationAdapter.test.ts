@@ -90,13 +90,19 @@ describe('InputValidationAdapter', () => {
       }
     });
 
-    it('returns error for invalid JSON', async () => {
+    it('returns error for invalid JSON (repair also fails)', async () => {
+      // Initial call returns invalid JSON
       mockGenerate.mockResolvedValueOnce({
         ok: true,
         value: {
           content: 'not valid json',
           usage: { inputTokens: 10, outputTokens: 5, costUsd: 0.001 },
         },
+      });
+      // Repair attempt also fails
+      mockGenerate.mockResolvedValueOnce({
+        ok: false,
+        error: { code: 'API_ERROR', message: 'Repair failed' },
       });
 
       const adapter = createAdapter();
@@ -106,16 +112,26 @@ describe('InputValidationAdapter', () => {
       if (!result.ok) {
         expect(result.error.code).toBe('API_ERROR');
         expect(result.error.message).toContain('JSON parse error');
+        expect(result.error.message).toContain('Repair: Repair failed');
         expect(result.error.usage?.inputTokens).toBe(10);
       }
     });
 
-    it('returns error for invalid schema', async () => {
+    it('returns error for invalid schema (repair also fails)', async () => {
+      // Initial call returns invalid schema
       mockGenerate.mockResolvedValueOnce({
         ok: true,
         value: {
           content: JSON.stringify({ invalid: 'schema' }),
           usage: { inputTokens: 10, outputTokens: 5, costUsd: 0.001 },
+        },
+      });
+      // Repair attempt also returns invalid schema
+      mockGenerate.mockResolvedValueOnce({
+        ok: true,
+        value: {
+          content: JSON.stringify({ still: 'invalid' }),
+          usage: { inputTokens: 8, outputTokens: 4, costUsd: 0.0008 },
         },
       });
 
@@ -125,7 +141,9 @@ describe('InputValidationAdapter', () => {
       expect(result.ok).toBe(false);
       if (!result.ok) {
         expect(result.error.code).toBe('API_ERROR');
-        expect(result.error.message).toContain('Missing "quality" field');
+        expect(result.error.message).toContain('expected schema');
+        expect(result.error.message).toContain('Repair:');
+        expect(result.error.usage?.inputTokens).toBe(10);
       }
     });
 
@@ -164,13 +182,18 @@ describe('InputValidationAdapter', () => {
     });
 
     it('logs error when parsing fails', async () => {
-      const mockLogger = { info: vi.fn(), error: vi.fn() };
+      const mockLogger = { info: vi.fn(), error: vi.fn(), warn: vi.fn(), debug: vi.fn() };
       mockGenerate.mockResolvedValueOnce({
         ok: true,
         value: {
           content: 'invalid json',
           usage: { inputTokens: 10, outputTokens: 5, costUsd: 0.001 },
         },
+      });
+      // Repair attempt also fails
+      mockGenerate.mockResolvedValueOnce({
+        ok: false,
+        error: { code: 'API_ERROR', message: 'Repair failed' },
       });
 
       const adapter = new InputValidationAdapter(
@@ -182,10 +205,7 @@ describe('InputValidationAdapter', () => {
       );
       await adapter.validateInput('Test prompt');
 
-      expect(mockLogger.error).toHaveBeenCalledWith(
-        expect.objectContaining({ parseError: expect.any(String), rawContent: 'invalid json' }),
-        'Input validation parse failed'
-      );
+      expect(mockLogger.warn).toHaveBeenCalled();
     });
   });
 

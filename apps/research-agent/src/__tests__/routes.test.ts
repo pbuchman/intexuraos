@@ -2328,15 +2328,14 @@ describe('Research Routes - Authenticated', () => {
           },
         });
 
-        expect(response.statusCode).toBe(200);
+        expect(response.statusCode).toBe(500);
         const body = JSON.parse(response.body) as {
           success: boolean;
-          data: { quality: number; reason: string; improvedPrompt: string | null };
+          error: { code: string; message: string };
         };
-        expect(body.success).toBe(true);
-        expect(body.data.quality).toBe(2); // Silent degradation returns GOOD
-        expect(body.data.reason).toBe('Validation unavailable');
-        expect(body.data.improvedPrompt).toBe(null);
+        expect(body.success).toBe(false);
+        expect(body.error.code).toBeDefined();
+        expect(body.error.message).toBeDefined();
       } finally {
         await newApp.close();
         setServices({
@@ -4873,14 +4872,14 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
         payload: { prompt: 'Test prompt' },
       });
 
-      expect(response.statusCode).toBe(200);
+      expect(response.statusCode).toBe(500);
       const body = JSON.parse(response.body) as {
         success: boolean;
-        data: { quality: number; reason: string };
+        error: { code: string; message: string };
       };
-      expect(body.success).toBe(true);
-      expect(body.data.quality).toBe(2);
-      expect(body.data.reason).toBe('Validation unavailable');
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('API_ERROR');
+      expect(body.error.message).toBe('Validation service unavailable');
     });
 
     it('includes improvement when quality is WEAK_BUT_VALID and includeImprovement is true', async () => {

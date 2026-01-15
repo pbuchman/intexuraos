@@ -19,3 +19,8 @@ export {
   getInputQualityGuardError,
   type InputQualityResult,
 } from './guards.js';
+
+export {
+  buildValidationRepairPrompt,
+  buildImprovementRepairPrompt,
+} from './buildInputValidationRepairPrompt.js';
