@@ -120,3 +120,25 @@ pnpm run ci:report -- --json       # JSON output
 2. Added pattern #6: "Async Template Expressions — Await or wrap in String()"
 
 **Result:** Added 2 new patterns addressing 630+ lint failures
+
+### 2026-01-15 — Mock Logger & Empty Functions Analysis
+
+**Data analyzed:** 213 CI runs across 16 branch files
+
+**Top errors identified:**
+| Error                                       | Count | Category  |
+| ------------------------------------------- | ----- | --------- |
+| @typescript-eslint/no-unsafe-member-access  | 552   | lint      |
+| @typescript-eslint/no-unsafe-assignment     | 384   | lint      |
+| @typescript-eslint/no-unsafe-call           | 312   | lint      |
+| TS2345 (argument type mismatch)             | 100   | typecheck |
+| @typescript-eslint/no-empty-function        | 90    | lint      |
+
+**Actions taken:**
+
+1. Expanded pattern #5 "Unsafe Type Operations" with Result narrowing and enum resolution examples
+2. Added pattern #6 "Mock Logger — Include ALL required methods" (info, warn, error, debug)
+3. Added pattern #7 "Empty Functions in Mocks — Use arrow functions"
+4. Renumbered pattern #8 "Async Template Expressions"
+
+**Result:** Added 3 new/expanded patterns addressing 1,438 lint + typecheck failures
