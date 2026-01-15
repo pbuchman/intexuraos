@@ -14,6 +14,7 @@
   },
   "dependencies": {
     "@intexuraos/common-core": "workspace:*",
-    "@intexuraos/llm-contract": "workspace:*"
+    "@intexuraos/llm-contract": "workspace:*",
+    "pino": "^10.1.0"
   }
 }
