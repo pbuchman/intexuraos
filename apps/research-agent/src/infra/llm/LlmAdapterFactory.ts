@@ -88,7 +88,7 @@ export function createContextInferrer(
   apiKey: string,
   userId: string,
   pricing: ModelPricing,
-  logger?: Logger
+  logger: Logger
 ): ContextInferenceProvider {
   return new ContextInferenceAdapter(apiKey, model, userId, pricing, logger);
 }

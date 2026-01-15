@@ -64,14 +64,14 @@ const SYNTHESIS_CONTEXT_SCHEMA = `{
 
 export class ContextInferenceAdapter implements ContextInferenceProvider {
   private readonly client: GeminiClient;
-  private readonly logger: Logger | undefined;
+  private readonly logger: Logger;
 
   constructor(
     apiKey: string,
     model: string,
     userId: string,
     pricing: ModelPricing,
-    logger?: Logger
+    logger: Logger
   ) {
     this.client = createGeminiClient({ apiKey, model, userId, pricing });
     this.logger = logger;

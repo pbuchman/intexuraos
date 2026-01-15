@@ -930,7 +930,8 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         synthesisModel,
         apiKeysResult.value,
         user.userId,
-        getServices()
+        getServices(),
+        request.log
       );
 
       const retryResult = await retryFromFailed(id, {

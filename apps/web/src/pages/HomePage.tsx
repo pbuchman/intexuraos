@@ -252,7 +252,7 @@ function CouncilSection(): React.JSX.Element {
             { name: 'GPT-5', role: 'Reasoning & Planning' },
             { name: 'GEMINI', role: 'Multimodal Analysis' },
             { name: 'PERPLEXITY', role: 'Deep Research' },
-            { name: 'GLE', role: 'Specialized Reasoning' },
+            { name: 'GLM', role: 'Specialized Reasoning' },
           ].map((model) => (
             <div
               key={model.name}

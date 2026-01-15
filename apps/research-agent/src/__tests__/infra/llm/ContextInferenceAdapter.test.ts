@@ -103,7 +103,7 @@ describe('ContextInferenceAdapter', () => {
   describe('constructor', () => {
     it('passes apiKey, model, and userId to client', () => {
       mockCreateGeminiClient.mockClear();
-      new ContextInferenceAdapter('test-key', LlmModels.Gemini20Flash, 'test-user', testPricing);
+      new ContextInferenceAdapter('test-key', LlmModels.Gemini20Flash, 'test-user', testPricing, mockLogger);
 
       expect(mockCreateGeminiClient).toHaveBeenCalledWith({
         apiKey: 'test-key',
@@ -240,16 +240,20 @@ describe('ContextInferenceAdapter', () => {
       expect(result.ok).toBe(true);
     });
 
-    it('works without logger', async () => {
-      const adapterNoLogger = new ContextInferenceAdapter('key', 'model', 'test-user', testPricing);
+    it('logs warning on parse failure', async () => {
+      const adapterWithLogger = new ContextInferenceAdapter('key', 'model', 'test-user', testPricing, mockLogger);
       mockGenerate.mockResolvedValue({
         ok: true,
         value: { content: 'invalid json', usage: mockUsage },
       });
 
-      const result = await adapterNoLogger.inferResearchContext('Test query');
+      const result = await adapterWithLogger.inferResearchContext('Test query');
 
       expect(result.ok).toBe(false);
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        { error: expect.any(String) },
+        'Failed to parse research context'
+      );
     });
   });
 
@@ -325,18 +329,22 @@ describe('ContextInferenceAdapter', () => {
       }
     });
 
-    it('works without logger on parse failure', async () => {
-      const adapterNoLogger = new ContextInferenceAdapter('key', 'model', 'test-user', testPricing);
+    it('logs warning on parse failure', async () => {
+      const adapterWithLogger = new ContextInferenceAdapter('key', 'model', 'test-user', testPricing, mockLogger);
       mockGenerate.mockResolvedValue({
         ok: true,
         value: { content: '{ invalid }', usage: mockUsage },
       });
 
-      const result = await adapterNoLogger.inferSynthesisContext({
+      const result = await adapterWithLogger.inferSynthesisContext({
         originalPrompt: 'Test prompt',
       });
 
       expect(result.ok).toBe(false);
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        { error: expect.any(String) },
+        'Failed to parse synthesis context'
+      );
     });
 
     it('includes additional sources in prompt', async () => {
