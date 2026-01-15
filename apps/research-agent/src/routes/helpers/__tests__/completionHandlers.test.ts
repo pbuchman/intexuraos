@@ -2,8 +2,6 @@
  * Tests for completion handlers.
  */
 
-/* eslint-disable @typescript-eslint/explicit-function-return-type */
-
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { handleAllCompleted } from '../../../routes/helpers/completionHandlers.js';
 import type { AllCompletedHandlerParams } from '../../../routes/helpers/completionHandlers.js';
@@ -281,7 +279,7 @@ describe('handleAllCompleted', () => {
   });
 
   it('correctly wraps info calls with researchId', async () => {
-    const infoLogs: Array<{ obj: object; msg: string | undefined }> = [];
+    const infoLogs: { obj: object; msg: string | undefined }[] = [];
     const testLogger = {
       info: vi.fn((obj: object, msg?: string) => {
         infoLogs.push({ obj, msg });
@@ -307,7 +305,7 @@ describe('handleAllCompleted', () => {
   });
 
   it('handles error logger calls with string obj (ternary branch)', async () => {
-    const errorLogs: Array<{ obj: object | string; msg: string | undefined }> = [];
+    const errorLogs: { obj: object | string; msg: string | undefined }[] = [];
     const testLogger = {
       info: vi.fn(),
       error: vi.fn((obj: object | string, msg?: string) => {

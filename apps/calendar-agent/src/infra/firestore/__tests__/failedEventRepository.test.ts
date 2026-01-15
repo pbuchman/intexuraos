@@ -1,21 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-interface MockDocRef {
-  id: string;
-  set: ReturnType<typeof vi.fn>;
-  delete: ReturnType<typeof vi.fn>;
-  get: ReturnType<typeof vi.fn>;
-}
-
 interface MockCollection {
   doc: ReturnType<typeof vi.fn>;
-  where: ReturnType<typeof vi.fn>;
-  orderBy: ReturnType<typeof vi.fn>;
-  limit: ReturnType<typeof vi.fn>;
-  get: ReturnType<typeof vi.fn>;
-}
-
-interface MockQuery {
   where: ReturnType<typeof vi.fn>;
   orderBy: ReturnType<typeof vi.fn>;
   limit: ReturnType<typeof vi.fn>;
@@ -51,7 +37,7 @@ const mockFirestore = {
   collection: mockCollection,
 } as MockDb;
 
-vi.mock('@intexuraos/infra-firestore', () => ({
+vi.mock('@intexuraos/infra-firestore', (): { getFirestore: () => typeof mockFirestore } => ({
   getFirestore: () => mockFirestore,
 }));
 
@@ -215,7 +201,19 @@ describe('FirestoreFailedEventRepository', () => {
       const mockDocs = [
         {
           id: 'doc-1',
-          data: () => ({
+          data: (): {
+            userId: string;
+            actionId: string;
+            originalText: string;
+            summary: string;
+            start: string;
+            end: string;
+            location: string;
+            description: null;
+            error: string;
+            reasoning: string;
+            createdAt: string;
+          } => ({
             userId: 'user-123',
             actionId: 'action-1',
             originalText: 'Meeting',
@@ -231,7 +229,19 @@ describe('FirestoreFailedEventRepository', () => {
         },
         {
           id: 'doc-2',
-          data: () => ({
+          data: (): {
+            userId: string;
+            actionId: string;
+            originalText: string;
+            summary: string;
+            start: string;
+            end: string;
+            location: string;
+            description: string;
+            error: string;
+            reasoning: string;
+            createdAt: string;
+          } => ({
             userId: 'user-123',
             actionId: 'action-2',
             originalText: 'Lunch',
@@ -276,7 +286,19 @@ describe('FirestoreFailedEventRepository', () => {
       const mockDocs = [
         {
           id: 'doc-1',
-          data: () => ({
+          data: (): {
+            userId: string;
+            actionId: string;
+            originalText: string;
+            summary: string;
+            start: null;
+            end: null;
+            location: null;
+            description: null;
+            error: string;
+            reasoning: string;
+            createdAt: string;
+          } => ({
             userId: 'user-123',
             actionId: 'action-1',
             originalText: 'Meeting',
