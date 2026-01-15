@@ -3,9 +3,8 @@
  *
  * Handles incoming Linear action events by:
  * 1. Checking if action exists and is in valid state
- * 2. Optionally auto-executing if appropriate
- * 3. Otherwise setting to awaiting_approval
- * 4. Sending WhatsApp notification for approval
+ * 2. Setting to awaiting_approval
+ * 3. Sending WhatsApp notification for approval
  */
 
 import { ok, err, type Result, getErrorMessage } from '@intexuraos/common-core';
@@ -13,15 +12,12 @@ import type { ActionServiceClient } from '../ports/actionServiceClient.js';
 import type { WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
 import type { ActionCreatedEvent } from '../models/actionEvent.js';
 import type { Logger } from 'pino';
-import type { ExecuteLinearActionUseCase } from './executeLinearAction.js';
-import { shouldAutoExecute } from './shouldAutoExecute.js';
 
 export interface HandleLinearActionDeps {
   actionServiceClient: ActionServiceClient;
   whatsappPublisher: WhatsAppSendPublisher;
   webAppUrl: string;
   logger: Logger;
-  executeLinearAction?: ExecuteLinearActionUseCase;
 }
 
 export interface HandleLinearActionUseCase {
@@ -31,8 +27,7 @@ export interface HandleLinearActionUseCase {
 export function createHandleLinearActionUseCase(
   deps: HandleLinearActionDeps
 ): HandleLinearActionUseCase {
-  const { actionServiceClient, whatsappPublisher, webAppUrl, logger, executeLinearAction } =
-    deps;
+  const { actionServiceClient, whatsappPublisher, webAppUrl, logger } = deps;
 
   return {
     async execute(event: ActionCreatedEvent): Promise<Result<{ actionId: string }>> {
@@ -64,23 +59,6 @@ export function createHandleLinearActionUseCase(
           { actionId: event.actionId, currentStatus: action.status },
           'Action already processed, skipping (idempotent)'
         );
-        return ok({ actionId: event.actionId });
-      }
-
-      if (shouldAutoExecute(event) && executeLinearAction !== undefined) {
-        logger.info({ actionId: event.actionId }, 'Auto-executing linear action');
-
-        const executeResult = await executeLinearAction(event.actionId);
-
-        if (!executeResult.ok) {
-          logger.error(
-            { actionId: event.actionId, error: getErrorMessage(executeResult.error) },
-            'Failed to auto-execute linear action'
-          );
-          return err(executeResult.error);
-        }
-
-        logger.info({ actionId: event.actionId }, 'Linear action auto-executed successfully');
         return ok({ actionId: event.actionId });
       }
 

@@ -299,7 +299,6 @@ export function initServices(config: ServiceConfig): void {
       whatsappPublisher,
       webAppUrl: config.webAppUrl,
       logger: pino({ name: 'handleCalendarAction' }),
-      executeCalendarAction: executeCalendarActionUseCase,
     }
   );
 
@@ -308,7 +307,6 @@ export function initServices(config: ServiceConfig): void {
     whatsappPublisher,
     webAppUrl: config.webAppUrl,
     logger: pino({ name: 'handleLinearAction' }),
-    executeLinearAction: executeLinearActionUseCase,
   });
 
   const retryPendingActionsUseCase = createRetryPendingActionsUseCase({

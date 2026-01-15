@@ -162,6 +162,20 @@ EXTRA_LINE`;
     );
   });
 
+  it('throws on INSIGHT line with wrong prefix format', () => {
+    // Missing colon after INSIGHT_N - triggers line 21 branch (!match)
+    const response = 'INSIGHT_1 Title=Test; Description=Test; Trackable=Test; ChartType=C1';
+
+    expect(() => parseInsightResponse(response)).toThrow('Invalid INSIGHT format');
+  });
+
+  it('throws on INSIGHT line with missing number', () => {
+    // Missing number after INSIGHT_ - triggers line 21 branch (!match)
+    const response = 'INSIGHT_: Title=Test; Description=Test; Trackable=Test; ChartType=C1';
+
+    expect(() => parseInsightResponse(response)).toThrow('Invalid INSIGHT format');
+  });
+
   it('handles whitespace trimming around parts', () => {
     const response = `  INSIGHT_1: Title=Sales Trend ; Description=Sales increased ; Trackable=Revenue ; ChartType=C1  `;
 

@@ -466,5 +466,115 @@ describe('calendarActionExtractionService', () => {
         expect(result.error.details?.rawResponsePreview).toBe('{invalid json');
       }
     });
+
+    it('handles non-string start value', async () => {
+      const invalidResponse = JSON.stringify({
+        summary: 'Test',
+        start: 1234567890,
+        end: '2025-01-15T11:00:00',
+        location: null,
+        description: null,
+        valid: true,
+        error: null,
+        reasoning: 'test',
+      });
+
+      mockGenerate.mockResolvedValue(ok({ content: invalidResponse, usage: mockUsage }));
+      mockUserServiceClient = createMockUserServiceClient('ok');
+      const service = createCalendarActionExtractionService(mockUserServiceClient, mockLogger);
+
+      const result = await service.extractEvent('user-123', 'Test', '2025-01-14');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('INVALID_RESPONSE');
+      }
+    });
+
+    it('handles non-string end value', async () => {
+      const invalidResponse = JSON.stringify({
+        summary: 'Test',
+        start: '2025-01-15T10:00:00',
+        end: { invalid: 'object' },
+        location: null,
+        description: null,
+        valid: true,
+        error: null,
+        reasoning: 'test',
+      });
+
+      mockGenerate.mockResolvedValue(ok({ content: invalidResponse, usage: mockUsage }));
+      mockUserServiceClient = createMockUserServiceClient('ok');
+      const service = createCalendarActionExtractionService(mockUserServiceClient, mockLogger);
+
+      const result = await service.extractEvent('user-123', 'Test', '2025-01-14');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('INVALID_RESPONSE');
+      }
+    });
+
+    it('handles non-string location value', async () => {
+      const invalidResponse = JSON.stringify({
+        summary: 'Test',
+        start: '2025-01-15T10:00:00',
+        end: '2025-01-15T11:00:00',
+        location: ['Office'],
+        description: null,
+        valid: true,
+        error: null,
+        reasoning: 'test',
+      });
+
+      mockGenerate.mockResolvedValue(ok({ content: invalidResponse, usage: mockUsage }));
+      mockUserServiceClient = createMockUserServiceClient('ok');
+      const service = createCalendarActionExtractionService(mockUserServiceClient, mockLogger);
+
+      const result = await service.extractEvent('user-123', 'Test', '2025-01-14');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('INVALID_RESPONSE');
+      }
+    });
+
+    it('handles non-string error value', async () => {
+      const invalidResponse = JSON.stringify({
+        summary: 'Test',
+        start: '2025-01-15T10:00:00',
+        end: '2025-01-15T11:00:00',
+        location: null,
+        description: null,
+        valid: false,
+        error: { message: 'Error details' },
+        reasoning: 'test',
+      });
+
+      mockGenerate.mockResolvedValue(ok({ content: invalidResponse, usage: mockUsage }));
+      mockUserServiceClient = createMockUserServiceClient('ok');
+      const service = createCalendarActionExtractionService(mockUserServiceClient, mockLogger);
+
+      const result = await service.extractEvent('user-123', 'Test', '2025-01-14');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('INVALID_RESPONSE');
+      }
+    });
+
+    it('handles null value passed to validator', async () => {
+      const nullResponse = 'null';
+      mockGenerate.mockResolvedValue(ok({ content: nullResponse, usage: mockUsage }));
+      mockUserServiceClient = createMockUserServiceClient('ok');
+      const service = createCalendarActionExtractionService(mockUserServiceClient, mockLogger);
+
+      const result = await service.extractEvent('user-123', 'Test', '2025-01-14');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('INVALID_RESPONSE');
+      }
+    });
   });
 });

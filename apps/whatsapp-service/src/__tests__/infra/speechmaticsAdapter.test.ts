@@ -349,4 +349,58 @@ describe('SpeechmaticsTranscriptionAdapter', () => {
       }
     });
   });
+
+  describe('extractErrorMessage', () => {
+    it('extracts error from object with error property', async () => {
+      mockGetJob.mockResolvedValue({
+        job: {
+          status: 'rejected',
+          errors: [{ error: 'Connection refused' }],
+        },
+      });
+
+      const result = await adapter.pollJob('job-123');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.status).toBe('rejected');
+        expect(result.value.error?.code).toBe('JOB_REJECTED');
+        expect(result.value.error?.message).toBe('Connection refused');
+      }
+    });
+
+    it('extracts error from object with reason property', async () => {
+      mockGetJob.mockResolvedValue({
+        job: {
+          status: 'rejected',
+          errors: [{ reason: 'Unauthorized access' }],
+        },
+      });
+
+      const result = await adapter.pollJob('job-456');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.status).toBe('rejected');
+        expect(result.value.error?.code).toBe('JOB_REJECTED');
+        expect(result.value.error?.message).toBe('Unauthorized access');
+      }
+    });
+
+    it('prioritizes message over other properties', async () => {
+      mockGetJob.mockResolvedValue({
+        job: {
+          status: 'rejected',
+          errors: [{ message: 'Main error', error: 'Secondary error', reason: 'Tertiary reason' }],
+        },
+      });
+
+      const result = await adapter.pollJob('job-789');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.error?.message).toBe('Main error');
+      }
+    });
+  });
 });
