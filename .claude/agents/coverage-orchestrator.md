@@ -64,13 +64,52 @@ We do not use percentage thresholds (e.g., "95% is good enough"). We operate on 
 
 #### 3.1: Update Exemption Registry
 
+**CRITICAL: Before adding ANY exemption, VERIFY the gap still exists:**
+
+1. Run coverage: `pnpm run test:coverage`
+2. Check the specific file's coverage in the output
+3. Only add exemptions for branches that are **currently uncovered**
+
 If exemptions were found, append them to `docs/coverage/unreachable.md` using this format:
 
-```markdown
-### `apps/<service>/src/path/to/file.ts`
+**Structure Requirements:**
 
-- **Lines 45-48**: Defensive check for `undefined` user ID.
-  - _Reason:_ Guaranteed by `authMiddleware` upstream. Cannot simulate without mocking internal framework internals.
+1. **Group by application/package** - Each app or package gets its own section
+2. **Include code snippets** - Line numbers change; code snippets identify the exact gap
+3. **Keep snippets minimal** - Just enough to identify the branch (5-15 chars typically)
+
+```markdown
+## `apps/actions-agent`
+
+### `src/infra/http/client.ts`
+
+- **Line ~45**: `?? 'info'` fallback in logger initialization
+  ```typescript
+  const logger = pino({ level: process.env['LOG_LEVEL'] ?? 'info' });
+  //                                                     ^^^^^^^^
+  ```
+  - _Reason:_ `LOG_LEVEL` always set in test environment. Module-level initialization.
+
+### `src/domain/usecases/handleAction.ts`
+
+- **Line ~72**: `if (!user)` defensive check
+  ```typescript
+  if (!user) {
+    return err(new Error('User not found'));
+  }
+  ```
+  - _Reason:_ Guaranteed by `authMiddleware` upstream. Cannot reach without mocking internals.
+
+## `packages/llm-common`
+
+### `src/attribution.ts`
+
+- **Lines ~23-25**: Array index access after split
+  ```typescript
+  const [key, value] = line.split('=');
+  if (!key || !value) { ... }  // TypeScript narrowing makes this unreachable
+  ```
+  - _Reason:_ TypeScript control flow analysis narrows type after split().
 ```
 
 #### 3.2: Create Linear Issues via MCP
@@ -128,14 +167,22 @@ Every Linear issue MUST contain the following sections. This is non-negotiable:
 
 3. **If the branch is truly unreachable**:
    - Add an entry to \`docs/coverage/unreachable.md\` following the existing format
-   - Include the line number, branch description, and reason why it cannot be reached
+   - **MUST include code snippet** to identify the gap when line numbers change
+   - **Group under the correct app/package section**
    - Example:
      \`\`\`markdown
+     ## \`apps/<service>\`
 
-     ### \`apps/<service>/src/path/to/file.ts\`
-     - **Lines 45-48**: Defensive check for `undefined` user ID
+     ### \`src/path/to/file.ts\`
+
+     - **Line ~45**: \`if (!user)\` defensive check
+       \`\`\`typescript
+       if (!user) {
+         return err(new Error('User not found'));
+       }
+       \`\`\`
        - _Reason:_ Guaranteed by \`authMiddleware\` upstream. Cannot simulate without mocking internal framework internals.
-         \`\`\`
+     \`\`\`
 
 4. **If the branch is testable**:
    - Write tests to cover the identified branches in \`<test-file-path>\`
@@ -180,15 +227,30 @@ Every Linear issue MUST contain the following sections. This is non-negotiable:
 
 ---
 
-### Phase 4: Final Verification
+### Phase 4: Verify Existing Exemptions Still Apply
+
+**MANDATORY: Check that existing exemptions in `unreachable.md` are still valid:**
+
+1. For each file listed in `unreachable.md`:
+   - Read the current source code
+   - Search for the **code snippet** (not line number - those change!)
+   - Verify the branch is still uncovered in the latest coverage run
+2. **Remove stale exemptions** - If a branch:
+   - No longer exists in the code (refactored away)
+   - Is now covered by tests
+   - Has different code at that location
+3. **Update code snippets** if the code changed but the branch is still unreachable
+
+### Phase 5: Final Verification
 
 **Before declaring completion, verify:**
 
 1. Run coverage again to get the final count
 2. Cross-reference EVERY file with `branches.pct < 100` against:
-   - `docs/coverage/unreachable.md` entries
+   - `docs/coverage/unreachable.md` entries (verify by code snippet, not line number)
    - Created Linear issues
 3. **If ANY gap is not accounted for, go back to Phase 2**
+4. **If ANY exemption in unreachable.md is stale, remove it**
 
 ### Output Format
 
@@ -201,20 +263,35 @@ Your final output MUST include:
 - Total files analyzed: X
 - Branches covered: X
 - Branches exempted (unreachable.md): X
+- Stale exemptions removed: X
 - Linear issues created: X
 
-### Exemptions Added to docs/coverage/unreachable.md
-| File | Lines | Reason |
-|------|-------|--------|
-| ... | ... | ... |
+### Exemptions by Application
+
+#### `apps/actions-agent`
+| File | Code Snippet | Reason |
+|------|--------------|--------|
+| `src/infra/client.ts` | `?? 'info'` | LOG_LEVEL always set in tests |
+
+#### `packages/llm-common`
+| File | Code Snippet | Reason |
+|------|--------------|--------|
+| `src/attribution.ts` | `if (!key \|\| !value)` | TS narrowing after split() |
+
+### Stale Exemptions Removed
+| App/Package | File | Code Snippet | Reason for Removal |
+|-------------|------|--------------|-------------------|
+| actions-agent | src/old.ts | `if (!x)` | File deleted |
 
 ### Linear Issues Created
 | Issue | App/Package | File | Description |
 |-------|-------------|------|-------------|
 | [coverage][user-service] ... | user-service | src/... | ... |
 
-### Verification
+### Verification Checklist
 - [ ] Every file with branches.pct < 100 has ALL its gaps accounted for
+- [ ] All exemptions verified by code snippet (not line number)
+- [ ] Stale exemptions removed
 - [ ] No "quick wins" left behind - full exhaustive analysis completed
 ```
 
@@ -229,7 +306,13 @@ You have **FAILED** your task if:
 3. You skip files because they seem "hard" or "complex"
 4. You create Linear issues without the mandatory body template (especially missing `.claude/claude.md` reference)
 5. You use incorrect naming convention for Linear issues
+6. **You add exemptions without code snippets** - Line numbers alone are NOT sufficient
+7. **You add exemptions without verifying they still exist** - Always check current coverage first
+8. **You leave stale exemptions in unreachable.md** - Exemptions for deleted/refactored code must be removed
+9. **Exemptions are not grouped by application/package** - The file must be organized hierarchically
 
 ---
 
 **REMEMBER: Your job is NOT to report coverage percentages. Your job is to ensure EVERY SINGLE BRANCH is either covered, exempted, or ticketed. No exceptions.**
+
+**Code snippets are MANDATORY** - They allow future runs to verify exemptions still apply even when line numbers change.
