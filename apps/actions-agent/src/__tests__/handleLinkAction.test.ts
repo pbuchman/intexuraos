@@ -1,20 +1,15 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { isOk, isErr, ok, err } from '@intexuraos/common-core';
 import { createHandleLinkActionUseCase } from '../domain/usecases/handleLinkAction.js';
+import { registerActionHandler } from '../domain/usecases/createIdempotentActionHandler.js';
 import type { ActionCreatedEvent } from '../domain/models/actionEvent.js';
-import { FakeActionServiceClient, FakeWhatsAppSendPublisher } from './fakes.js';
+import { FakeActionRepository, FakeWhatsAppSendPublisher } from './fakes.js';
 import pino from 'pino';
-
-vi.mock('../domain/usecases/shouldAutoExecute.js', () => ({
-  shouldAutoExecute: vi.fn(() => false),
-}));
-
-import { shouldAutoExecute } from '../domain/usecases/shouldAutoExecute.js';
 
 const silentLogger = pino({ level: 'silent' });
 
 describe('handleLinkAction usecase', () => {
-  let fakeActionClient: FakeActionServiceClient;
+  let fakeActionRepository: FakeActionRepository;
   let fakeWhatsappPublisher: FakeWhatsAppSendPublisher;
 
   const createEvent = (overrides: Partial<ActionCreatedEvent> = {}): ActionCreatedEvent => ({
@@ -32,32 +27,46 @@ describe('handleLinkAction usecase', () => {
     ...overrides,
   });
 
+  const createAction = (): {
+    id: 'action-123';
+    userId: 'user-456';
+    commandId: 'cmd-789';
+    type: 'link';
+    confidence: number;
+    title: string;
+    status: 'pending';
+    payload: Record<string, unknown>;
+    createdAt: string;
+    updatedAt: string;
+  } => ({
+    id: 'action-123',
+    userId: 'user-456',
+    commandId: 'cmd-789',
+    type: 'link' as const,
+    confidence: 0.95,
+    title: 'Save this article https://example.com/article',
+    status: 'pending' as const,
+    payload: {},
+    createdAt: '2025-01-01T12:00:00.000Z',
+    updatedAt: '2025-01-01T12:00:00.000Z',
+  });
+
   beforeEach(() => {
-    fakeActionClient = new FakeActionServiceClient();
+    fakeActionRepository = new FakeActionRepository();
     fakeWhatsappPublisher = new FakeWhatsAppSendPublisher();
   });
 
-  it('sets action to awaiting_approval and publishes WhatsApp notification', async () => {
-    fakeActionClient.setAction({
-      id: 'action-123',
-      userId: 'user-456',
-      commandId: 'cmd-789',
-      type: 'link',
-      confidence: 0.95,
-      title: 'Save this article https://example.com/article',
-      status: 'pending',
-      payload: {},
-      createdAt: '2025-01-01T12:00:00.000Z',
-      updatedAt: '2025-01-01T12:00:00.000Z',
-    });
+  it('sets action to awaiting_approval and publishes WhatsApp notification for non-100% confidence', async () => {
+    await fakeActionRepository.save(createAction());
 
-    const usecase = createHandleLinkActionUseCase({
-      actionServiceClient: fakeActionClient,
+    const usecase = registerActionHandler(createHandleLinkActionUseCase, {
+      actionRepository: fakeActionRepository,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.intexuraos.com',
       logger: silentLogger,
     });
 
+    // Default event has 0.95 confidence (< 100%), so it requires approval
     const event = createEvent();
     const result = await usecase.execute(event);
 
@@ -66,8 +75,8 @@ describe('handleLinkAction usecase', () => {
       expect(result.value.actionId).toBe('action-123');
     }
 
-    const actionStatus = fakeActionClient.getStatusUpdates().get('action-123');
-    expect(actionStatus).toBe('awaiting_approval');
+    const action = await fakeActionRepository.getById('action-123');
+    expect(action?.status).toBe('awaiting_approval');
 
     const messages = fakeWhatsappPublisher.getSentMessages();
     expect(messages).toHaveLength(1);
@@ -77,27 +86,16 @@ describe('handleLinkAction usecase', () => {
   });
 
   it('fails when marking action as awaiting_approval fails', async () => {
-    fakeActionClient.setAction({
-      id: 'action-123',
-      userId: 'user-456',
-      commandId: 'cmd-789',
-      type: 'link',
-      confidence: 0.95,
-      title: 'Save this article https://example.com/article',
-      status: 'pending',
-      payload: {},
-      createdAt: '2025-01-01T12:00:00.000Z',
-      updatedAt: '2025-01-01T12:00:00.000Z',
-    });
+    await fakeActionRepository.save(createAction());
 
-    const usecase = createHandleLinkActionUseCase({
-      actionServiceClient: fakeActionClient,
+    const usecase = registerActionHandler(createHandleLinkActionUseCase, {
+      actionRepository: fakeActionRepository,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.intexuraos.com',
       logger: silentLogger,
     });
 
-    fakeActionClient.setFailOn('updateActionStatus', new Error('Database unavailable'));
+    fakeActionRepository.setFailNext(true, new Error('Database unavailable'));
 
     const event = createEvent();
     const result = await usecase.execute(event);
@@ -109,21 +107,10 @@ describe('handleLinkAction usecase', () => {
   });
 
   it('succeeds even when WhatsApp publish fails (best-effort notification)', async () => {
-    fakeActionClient.setAction({
-      id: 'action-123',
-      userId: 'user-456',
-      commandId: 'cmd-789',
-      type: 'link',
-      confidence: 0.95,
-      title: 'Save this article https://example.com/article',
-      status: 'pending',
-      payload: {},
-      createdAt: '2025-01-01T12:00:00.000Z',
-      updatedAt: '2025-01-01T12:00:00.000Z',
-    });
+    await fakeActionRepository.save(createAction());
 
-    const usecase = createHandleLinkActionUseCase({
-      actionServiceClient: fakeActionClient,
+    const usecase = registerActionHandler(createHandleLinkActionUseCase, {
+      actionRepository: fakeActionRepository,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.intexuraos.com',
       logger: silentLogger,
@@ -142,32 +129,13 @@ describe('handleLinkAction usecase', () => {
       expect(result.value.actionId).toBe('action-123');
     }
 
-    const actionStatus = fakeActionClient.getStatusUpdates().get('action-123');
-    expect(actionStatus).toBe('awaiting_approval');
+    const action = await fakeActionRepository.getById('action-123');
+    expect(action?.status).toBe('awaiting_approval');
   });
 
-  it('returns success when getAction fails (deleted action)', async () => {
-    const usecase = createHandleLinkActionUseCase({
-      actionServiceClient: fakeActionClient,
-      whatsappPublisher: fakeWhatsappPublisher,
-      webAppUrl: 'https://app.intexuraos.com',
-      logger: silentLogger,
-    });
-
-    fakeActionClient.setFailOn('getAction', new Error('Database error'));
-
-    const event = createEvent();
-    const result = await usecase.execute(event);
-
-    expect(isOk(result)).toBe(true);
-    if (isOk(result)) {
-      expect(result.value.actionId).toBe('action-123');
-    }
-  });
-
-  it('returns success when action is null (deleted between creation and handling)', async () => {
-    const usecase = createHandleLinkActionUseCase({
-      actionServiceClient: fakeActionClient,
+  it('returns success when action does not exist (deleted between creation and handling)', async () => {
+    const usecase = registerActionHandler(createHandleLinkActionUseCase, {
+      actionRepository: fakeActionRepository,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.intexuraos.com',
       logger: silentLogger,
@@ -180,111 +148,82 @@ describe('handleLinkAction usecase', () => {
     if (isOk(result)) {
       expect(result.value.actionId).toBe('action-123');
     }
-  });
 
-  it('returns success without sending notification when action already processed (idempotency)', async () => {
-    const usecase = createHandleLinkActionUseCase({
-      actionServiceClient: fakeActionClient,
-      whatsappPublisher: fakeWhatsappPublisher,
-      webAppUrl: 'https://app.intexuraos.com',
-      logger: silentLogger,
-    });
-
-    fakeActionClient.setAction({
-      id: 'action-123',
-      userId: 'user-456',
-      commandId: 'cmd-789',
-      type: 'link',
-      confidence: 0.95,
-      title: 'Save this article https://example.com/article',
-      status: 'awaiting_approval',
-      payload: {},
-      createdAt: '2025-01-01T12:00:00.000Z',
-      updatedAt: '2025-01-01T12:00:00.000Z',
-    });
-
-    const event = createEvent();
-    const result = await usecase.execute(event);
-
-    expect(isOk(result)).toBe(true);
-    if (isOk(result)) {
-      expect(result.value.actionId).toBe('action-123');
-    }
-
-    expect(fakeActionClient.getStatusUpdates().size).toBe(0);
+    // Should not send WhatsApp message since action doesn't exist
     expect(fakeWhatsappPublisher.getSentMessages()).toHaveLength(0);
   });
 
-  describe('auto-execute flow', () => {
-    beforeEach(() => {
-      vi.mocked(shouldAutoExecute).mockReturnValue(true);
+  it('returns success without sending notification when action already processed (idempotency)', async () => {
+    const action = createAction();
+    await fakeActionRepository.save({ ...action, status: 'awaiting_approval' });
+
+    const usecase = registerActionHandler(createHandleLinkActionUseCase, {
+      actionRepository: fakeActionRepository,
+      whatsappPublisher: fakeWhatsappPublisher,
+      webAppUrl: 'https://app.intexuraos.com',
+      logger: silentLogger,
     });
 
-    afterEach(() => {
-      vi.mocked(shouldAutoExecute).mockReturnValue(false);
-    });
+    const event = createEvent();
+    const result = await usecase.execute(event);
 
-    it('auto-executes when shouldAutoExecute returns true and executeLinkAction is provided', async () => {
-      fakeActionClient.setAction({
-        id: 'action-123',
-        userId: 'user-456',
-        commandId: 'cmd-789',
-        type: 'link',
-        confidence: 0.95,
-        title: 'Save this article https://example.com/article',
-        status: 'pending',
-        payload: {},
-        createdAt: '2025-01-01T12:00:00.000Z',
-        updatedAt: '2025-01-01T12:00:00.000Z',
-      });
+    expect(isOk(result)).toBe(true);
+    if (isOk(result)) {
+      expect(result.value.actionId).toBe('action-123');
+    }
+
+    // Should not send WhatsApp message since action was already processed
+    expect(fakeWhatsappPublisher.getSentMessages()).toHaveLength(0);
+  });
+
+  describe('auto-execute flow for 100% confidence links', () => {
+    it('auto-executes when confidence is 100% and executeLinkAction is provided', async () => {
+      await fakeActionRepository.save(createAction());
 
       const fakeExecuteLinkAction = vi.fn().mockResolvedValue(
         ok({ status: 'completed' as const, resource_url: '/#/bookmarks/bookmark-123' })
       );
 
-      const usecase = createHandleLinkActionUseCase({
-        actionServiceClient: fakeActionClient,
+      const usecase = registerActionHandler(createHandleLinkActionUseCase, {
+        actionRepository: fakeActionRepository,
         whatsappPublisher: fakeWhatsappPublisher,
         webAppUrl: 'https://app.intexuraos.com',
         logger: silentLogger,
         executeLinkAction: fakeExecuteLinkAction,
       });
 
-      const event = createEvent();
+      // Event with 100% confidence triggers auto-execute
+      const event = createEvent({ payload: { prompt: 'https://example.com/article', confidence: 1 } });
       const result = await usecase.execute(event);
 
       expect(isOk(result)).toBe(true);
       expect(fakeExecuteLinkAction).toHaveBeenCalledWith('action-123');
-      expect(fakeActionClient.getStatusUpdates().get('action-123')).toBeUndefined();
+
+      // Decorator updated status to awaiting_approval; real executeLinkAction would update to processing/completed
+      const action = await fakeActionRepository.getById('action-123');
+      expect(action?.status).toBe('awaiting_approval');
+
+      // No "awaiting_approval" message should be sent for auto-executed actions
+      const messages = fakeWhatsappPublisher.getSentMessages();
+      expect(messages).toHaveLength(0);
     });
 
     it('returns error when auto-execute fails', async () => {
-      fakeActionClient.setAction({
-        id: 'action-123',
-        userId: 'user-456',
-        commandId: 'cmd-789',
-        type: 'link',
-        confidence: 0.95,
-        title: 'Save this article https://example.com/article',
-        status: 'pending',
-        payload: {},
-        createdAt: '2025-01-01T12:00:00.000Z',
-        updatedAt: '2025-01-01T12:00:00.000Z',
-      });
+      await fakeActionRepository.save(createAction());
 
       const fakeExecuteLinkAction = vi.fn().mockResolvedValue(
         err(new Error('Execution failed'))
       );
 
-      const usecase = createHandleLinkActionUseCase({
-        actionServiceClient: fakeActionClient,
+      const usecase = registerActionHandler(createHandleLinkActionUseCase, {
+        actionRepository: fakeActionRepository,
         whatsappPublisher: fakeWhatsappPublisher,
         webAppUrl: 'https://app.intexuraos.com',
         logger: silentLogger,
         executeLinkAction: fakeExecuteLinkAction,
       });
 
-      const event = createEvent();
+      const event = createEvent({ payload: { prompt: 'https://example.com/article', confidence: 1 } });
       const result = await usecase.execute(event);
 
       expect(isErr(result)).toBe(true);
@@ -294,31 +233,55 @@ describe('handleLinkAction usecase', () => {
     });
 
     it('falls back to approval flow when executeLinkAction is not provided', async () => {
-      fakeActionClient.setAction({
-        id: 'action-123',
-        userId: 'user-456',
-        commandId: 'cmd-789',
-        type: 'link',
-        confidence: 0.95,
-        title: 'Save this article https://example.com/article',
-        status: 'pending',
-        payload: {},
-        createdAt: '2025-01-01T12:00:00.000Z',
-        updatedAt: '2025-01-01T12:00:00.000Z',
-      });
+      await fakeActionRepository.save(createAction());
 
-      const usecase = createHandleLinkActionUseCase({
-        actionServiceClient: fakeActionClient,
+      const usecase = registerActionHandler(createHandleLinkActionUseCase, {
+        actionRepository: fakeActionRepository,
         whatsappPublisher: fakeWhatsappPublisher,
         webAppUrl: 'https://app.intexuraos.com',
         logger: silentLogger,
       });
 
-      const event = createEvent();
+      const event = createEvent({ payload: { prompt: 'https://example.com/article', confidence: 1 } });
       const result = await usecase.execute(event);
 
       expect(isOk(result)).toBe(true);
-      expect(fakeActionClient.getStatusUpdates().get('action-123')).toBe('awaiting_approval');
+
+      // Action should be updated to awaiting_approval when executeLinkAction is not available
+      const action = await fakeActionRepository.getById('action-123');
+      expect(action?.status).toBe('awaiting_approval');
+    });
+
+    it('does NOT auto-execute when confidence is less than 100%', async () => {
+      await fakeActionRepository.save(createAction());
+
+      const fakeExecuteLinkAction = vi.fn().mockResolvedValue(
+        ok({ status: 'completed' as const, resource_url: '/#/bookmarks/bookmark-123' })
+      );
+
+      const usecase = registerActionHandler(createHandleLinkActionUseCase, {
+        actionRepository: fakeActionRepository,
+        whatsappPublisher: fakeWhatsappPublisher,
+        webAppUrl: 'https://app.intexuraos.com',
+        logger: silentLogger,
+        executeLinkAction: fakeExecuteLinkAction,
+      });
+
+      // Event with 99% confidence does NOT trigger auto-execute
+      const event = createEvent({ payload: { prompt: 'https://example.com/article', confidence: 0.99 } });
+      const result = await usecase.execute(event);
+
+      expect(isOk(result)).toBe(true);
+      expect(fakeExecuteLinkAction).not.toHaveBeenCalled();
+
+      // Action should be updated to awaiting_approval
+      const action = await fakeActionRepository.getById('action-123');
+      expect(action?.status).toBe('awaiting_approval');
+
+      // Approval message should be sent
+      const messages = fakeWhatsappPublisher.getSentMessages();
+      expect(messages).toHaveLength(1);
+      expect(messages[0]?.message).toContain('New link ready to save');
     });
   });
 });

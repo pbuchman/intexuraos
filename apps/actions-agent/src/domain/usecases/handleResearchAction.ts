@@ -1,5 +1,5 @@
 import { ok, err, type Result, getErrorMessage } from '@intexuraos/common-core';
-import type { ActionServiceClient } from '../ports/actionServiceClient.js';
+import type { ActionRepository } from '../ports/actionRepository.js';
 import type { WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
 import type { ActionCreatedEvent } from '../models/actionEvent.js';
 import type { Logger } from 'pino';
@@ -7,7 +7,7 @@ import type { ExecuteResearchActionUseCase } from './executeResearchAction.js';
 import { shouldAutoExecute } from './shouldAutoExecute.js';
 
 export interface HandleResearchActionDeps {
-  actionServiceClient: ActionServiceClient;
+  actionRepository: ActionRepository;
   whatsappPublisher: WhatsAppSendPublisher;
   webAppUrl: string;
   logger: Logger;
@@ -21,7 +21,7 @@ export interface HandleResearchActionUseCase {
 export function createHandleResearchActionUseCase(
   deps: HandleResearchActionDeps
 ): HandleResearchActionUseCase {
-  const { actionServiceClient, whatsappPublisher, webAppUrl, logger, executeResearchAction } = deps;
+  const { actionRepository: _actionRepository, whatsappPublisher, webAppUrl, logger, executeResearchAction } = deps;
 
   return {
     async execute(event: ActionCreatedEvent): Promise<Result<{ actionId: string }>> {
@@ -35,26 +35,6 @@ export function createHandleResearchActionUseCase(
         },
         'Processing research action'
       );
-
-      const actionResult = await actionServiceClient.getAction(event.actionId);
-      if (!actionResult.ok) {
-        logger.warn({ actionId: event.actionId }, 'Action not found, may have been deleted');
-        return ok({ actionId: event.actionId });
-      }
-
-      const action = actionResult.value;
-      if (action === null) {
-        logger.warn({ actionId: event.actionId }, 'Action not found, may have been deleted');
-        return ok({ actionId: event.actionId });
-      }
-
-      if (action.status !== 'pending') {
-        logger.info(
-          { actionId: event.actionId, currentStatus: action.status },
-          'Action already processed, skipping (idempotent)'
-        );
-        return ok({ actionId: event.actionId });
-      }
 
       if (shouldAutoExecute(event) && executeResearchAction !== undefined) {
         logger.info({ actionId: event.actionId }, 'Auto-executing research action');
@@ -73,26 +53,7 @@ export function createHandleResearchActionUseCase(
         return ok({ actionId: event.actionId });
       }
 
-      logger.info({ actionId: event.actionId }, 'Setting research action to awaiting_approval');
-
-      const result = await actionServiceClient.updateActionStatus(
-        event.actionId,
-        'awaiting_approval'
-      );
-
-      if (!result.ok) {
-        logger.error(
-          {
-            actionId: event.actionId,
-            error: getErrorMessage(result.error),
-          },
-          'Failed to set action to awaiting_approval'
-        );
-        return err(new Error(`Failed to update action status: ${getErrorMessage(result.error)}`));
-      }
-
-      logger.info({ actionId: event.actionId }, 'Action set to awaiting_approval');
-
+      // Idempotency check and status update handled by registerActionHandler decorator
       const actionLink = `${webAppUrl}/#/inbox?action=${event.actionId}`;
       const message = `Your research request is ready for approval. Review it here: ${actionLink}`;
 
