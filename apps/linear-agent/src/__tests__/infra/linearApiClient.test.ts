@@ -4,7 +4,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { FakeLinearApiClient } from '../fakes.js';
-import type { LinearIssue, LinearTeam, LinearError } from '../domain/index.js';
+import type { LinearTeam } from '../../domain/models.js';
 
 describe('LinearApiClient', () => {
   let fakeClient: FakeLinearApiClient;
@@ -159,8 +159,8 @@ describe('LinearApiClient', () => {
       expect(result.ok).toBe(true);
       if (result.ok) {
         expect(result.value).toHaveLength(2);
-        expect(result.value[0].title).toBe('Active Issue');
-        expect(result.value[1].title).toBe('Completed Issue');
+        expect(result.value[0]?.title).toBe('Active Issue');
+        expect(result.value[1]?.title).toBe('Completed Issue');
       }
     });
 
@@ -234,7 +234,8 @@ describe('LinearApiClient', () => {
         teamId: 'team-1',
       });
 
-      expect((await fakeClient.listIssues('key', 'team-1')).ok && (await fakeClient.listIssues('key', 'team-1')).value).toHaveLength(1);
+      const beforeResetResult = await fakeClient.listIssues('key', 'team-1');
+      expect(beforeResetResult.ok && beforeResetResult.value).toHaveLength(1);
 
       fakeClient.reset();
 

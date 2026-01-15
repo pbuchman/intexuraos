@@ -2,9 +2,9 @@
  * Tests for Linear action extraction service.
  * Tests the factory function and uses a fake LLM client for behavior testing.
  */
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { err, ok } from '@intexuraos/common-core';
-import type { LlmGenerateResult, LlmGenerateClient } from '@intexuraos/llm-factory';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { err, ok, type Result } from '@intexuraos/common-core';
+import type { GenerateResult, LlmGenerateClient } from '@intexuraos/llm-factory';
 import type {
   LlmUserServiceClient,
   LlmUserServiceError,
@@ -369,13 +369,16 @@ class FakeLlmUserServiceClient implements LlmUserServiceClient {
     const generateError = this.llmGenerateError;
 
     const fakeLlmClient: LlmGenerateClient = {
-      async generate(_prompt: string): Promise<LlmGenerateResult> {
+      async generate(_prompt: string): Promise<Result<GenerateResult, { code: string; message: string }>> {
         if (generateError) {
           return err(generateError);
         }
 
         if (responseContent !== null) {
-          return ok({ content: responseContent });
+          return ok({
+            content: responseContent,
+            usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUsd: 0 },
+          });
         }
 
         return err({ code: 'INTERNAL_ERROR', message: 'No response configured' });

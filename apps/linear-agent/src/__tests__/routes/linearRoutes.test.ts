@@ -14,12 +14,6 @@ describe('Linear Routes', () => {
       expect(typeof linearRoutes).toBe('function');
       expect(linearRoutes.length).toBeGreaterThanOrEqual(2); // FastifyPluginCallback signature
     });
-
-    it('has expected plugin name', () => {
-      expect(linearRoutes.displayName).toBeUndefined();
-      // Function is a valid Fastify plugin
-      expect(typeof linearRoutes).toBe('function');
-    });
   });
 
   describe('internalRoutes', () => {

@@ -4,7 +4,7 @@
  */
 import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
 import { getFirestore } from '@intexuraos/infra-firestore';
-import type { FailedLinearIssue, LinearError } from '../../domain/index.js';
+import type { FailedLinearIssue, FailedIssueRepository, LinearError } from '../../domain/index.js';
 
 const COLLECTION_NAME = 'linear_failed_issues';
 
@@ -111,7 +111,7 @@ export async function deleteFailedIssue(id: string): Promise<Result<void, Linear
 }
 
 /** Factory for creating repository with interface */
-export function createFailedIssueRepository() {
+export function createFailedIssueRepository(): FailedIssueRepository {
   return {
     create: createFailedIssue,
     listByUser: listFailedIssuesByUser,

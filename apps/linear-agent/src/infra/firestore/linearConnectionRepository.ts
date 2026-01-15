@@ -4,7 +4,12 @@
  */
 import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
 import { getFirestore } from '@intexuraos/infra-firestore';
-import type { LinearConnection, LinearConnectionPublic, LinearError } from '../../domain/index.js';
+import type {
+  LinearConnection,
+  LinearConnectionPublic,
+  LinearConnectionRepository,
+  LinearError,
+} from '../../domain/index.js';
 
 interface LinearConnectionDoc {
   userId: string;
@@ -171,7 +176,7 @@ export async function disconnectLinear(
 }
 
 /** Factory for creating repository with interface */
-export function createLinearConnectionRepository() {
+export function createLinearConnectionRepository(): LinearConnectionRepository {
   return {
     save: saveLinearConnection,
     getConnection: getLinearConnection,

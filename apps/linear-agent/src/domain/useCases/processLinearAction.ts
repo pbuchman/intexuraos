@@ -16,7 +16,6 @@ import type {
   FailedIssueRepository,
   LinearActionExtractionService,
   ExtractedIssueData,
-  LinearPriority,
 } from '../index.js';
 
 export interface ProcessLinearActionDeps {
@@ -150,7 +149,7 @@ export async function processLinearAction(
   const createResult = await linearApiClient.createIssue(connection.apiKey, {
     title: extracted.title,
     description,
-    priority: extracted.priority as LinearPriority,
+    priority: extracted.priority,
     teamId: connection.teamId,
   });
 

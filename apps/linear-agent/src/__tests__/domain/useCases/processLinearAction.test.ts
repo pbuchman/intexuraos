@@ -41,7 +41,7 @@ describe('processLinearAction', () => {
     text: 'Create a Linear issue for fixing the login bug',
   };
 
-  function setupConnectedUser() {
+  function setupConnectedUser(): void {
     const connection: LinearConnection = {
       userId: 'user-456',
       apiKey: 'linear-api-key',
@@ -109,7 +109,7 @@ describe('processLinearAction', () => {
     });
 
     it('builds structured description with both sections', async () => {
-      const result = await processLinearAction(defaultRequest, {
+      await processLinearAction(defaultRequest, {
         linearApiClient: fakeLinearClient,
         connectionRepository: fakeConnectionRepo,
         failedIssueRepository: fakeFailedIssueRepo,
@@ -118,7 +118,7 @@ describe('processLinearAction', () => {
 
       // Verify the Linear API client received the structured description
       const issuesResult = await fakeLinearClient.listIssues('key', 'team-789');
-      if (issuesResult.ok) {
+      if (issuesResult.ok && issuesResult.value[0]) {
         expect(issuesResult.value[0].description).toContain('## Functional Requirements');
         expect(issuesResult.value[0].description).toContain('## Technical Details');
       }
@@ -171,7 +171,7 @@ describe('processLinearAction', () => {
       // Verify failed issue was saved
       expect(fakeFailedIssueRepo.count).toBe(1);
       const failedIssues = await fakeFailedIssueRepo.listByUser('user-456');
-      if (failedIssues.ok) {
+      if (failedIssues.ok && failedIssues.value[0]) {
         expect(failedIssues.value[0].error).toBe('LLM service unavailable');
         expect(failedIssues.value[0].extractedTitle).toBeNull();
       }
@@ -217,7 +217,7 @@ describe('processLinearAction', () => {
 
       expect(fakeFailedIssueRepo.count).toBe(1);
       const failedIssues = await fakeFailedIssueRepo.listByUser('user-456');
-      if (failedIssues.ok) {
+      if (failedIssues.ok && failedIssues.value[0]) {
         const failed = failedIssues.value[0];
         expect(failed.extractedTitle).toBe('Unclear request');
         expect(failed.extractedPriority).toBe(0);
@@ -283,7 +283,7 @@ describe('processLinearAction', () => {
       // Verify failed issue was saved with extracted data
       expect(fakeFailedIssueRepo.count).toBe(1);
       const failedIssues = await fakeFailedIssueRepo.listByUser('user-456');
-      if (failedIssues.ok) {
+      if (failedIssues.ok && failedIssues.value[0]) {
         const failed = failedIssues.value[0];
         expect(failed.extractedTitle).toBe('API Test Issue');
         expect(failed.extractedPriority).toBe(1);
@@ -346,7 +346,7 @@ describe('processLinearAction', () => {
       });
 
       const issuesResult = await fakeLinearClient.listIssues('key', 'team-789');
-      if (issuesResult.ok && issuesResult.value[0].description) {
+      if (issuesResult.ok && issuesResult.value[0]?.description) {
         expect(issuesResult.value[0].description).toContain('## Functional Requirements');
         expect(issuesResult.value[0].description).toContain(
           'Users need to reset password via email'
@@ -373,7 +373,7 @@ describe('processLinearAction', () => {
       });
 
       const issuesResult = await fakeLinearClient.listIssues('key', 'team-789');
-      if (issuesResult.ok && issuesResult.value[0].description) {
+      if (issuesResult.ok && issuesResult.value[0]?.description) {
         expect(issuesResult.value[0].description).toContain('## Technical Details');
         expect(issuesResult.value[0].description).toContain(
           'Update auth.ts to validate JWT expiration'
@@ -400,7 +400,7 @@ describe('processLinearAction', () => {
       });
 
       const issuesResult = await fakeLinearClient.listIssues('key', 'team-789');
-      if (issuesResult.ok && issuesResult.value[0].description) {
+      if (issuesResult.ok && issuesResult.value[0]?.description) {
         expect(issuesResult.value[0].description).toContain('## Functional Requirements\n\nMust support OAuth2\n\n## Technical Details');
       }
     });
@@ -424,7 +424,7 @@ describe('processLinearAction', () => {
       });
 
       const issuesResult = await fakeLinearClient.listIssues('key', 'team-789');
-      if (issuesResult.ok) {
+      if (issuesResult.ok && issuesResult.value[0]) {
         expect(issuesResult.value[0].description).toBeNull();
       }
     });

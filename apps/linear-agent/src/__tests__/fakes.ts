@@ -124,7 +124,7 @@ export class FakeLinearApiClient implements LinearApiClient {
   }
 
   async createIssue(
-    apiKey: string,
+    _apiKey: string,
     input: CreateIssueInput
   ): Promise<Result<LinearIssue, LinearError>> {
     if (this.shouldFail) return err(this.failError);
@@ -147,16 +147,16 @@ export class FakeLinearApiClient implements LinearApiClient {
   }
 
   async listIssues(
-    apiKey: string,
-    teamId: string,
-    options?: { completedSinceDays?: number }
+    _apiKey: string,
+    _teamId: string,
+    _options?: { completedSinceDays?: number }
   ): Promise<Result<LinearIssue[], LinearError>> {
     if (this.shouldFail) return err(this.failError);
     return ok(this.issues);
   }
 
   async getIssue(
-    apiKey: string,
+    _apiKey: string,
     issueId: string
   ): Promise<Result<LinearIssue | null, LinearError>> {
     if (this.shouldFail) return err(this.failError);

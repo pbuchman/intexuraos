@@ -42,7 +42,7 @@ async function mapIssue(issue: Issue): Promise<LinearIssue> {
     identifier: issue.identifier,
     title: issue.title,
     description: issue.description ?? null,
-    priority: (issue.priority ?? 0) as 0 | 1 | 2 | 3 | 4,
+    priority: issue.priority as 0 | 1 | 2 | 3 | 4,
     state: {
       id: state?.id ?? '',
       name: state?.name ?? 'Unknown',
@@ -92,11 +92,8 @@ export function createLinearApiClient(): LinearApiClient {
 
         const client = new LinearClient({ apiKey });
 
-        // Fetch viewer to validate API key
-        const viewer = await client.viewer;
-        if (!viewer) {
-          return err({ code: 'INVALID_API_KEY', message: 'Could not authenticate with Linear' });
-        }
+        // Fetch viewer to validate API key (throws on auth failure)
+        await client.viewer;
 
         // Fetch all teams the user has access to
         const teamsConnection = await client.teams();
@@ -211,10 +208,6 @@ export function createLinearApiClient(): LinearApiClient {
         const client = new LinearClient({ apiKey });
 
         const issue = await client.issue(issueId);
-        if (!issue) {
-          return ok(null);
-        }
-
         const mapped = await mapIssue(issue);
         return ok(mapped);
       } catch (error) {

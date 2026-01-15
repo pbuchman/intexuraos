@@ -30,7 +30,7 @@ describe('listIssues', () => {
     userId: 'user-456',
   };
 
-  function setupConnectedUser() {
+  function setupConnectedUser(): void {
     const connection: LinearConnection = {
       userId: 'user-456',
       apiKey: 'linear-api-key',
@@ -43,7 +43,7 @@ describe('listIssues', () => {
     fakeConnectionRepo.seedConnection(connection);
   }
 
-  function seedIssue(issue: LinearIssue) {
+  function seedIssue(issue: LinearIssue): void {
     fakeLinearClient.seedIssue(issue);
   }
 
@@ -108,11 +108,11 @@ describe('listIssues', () => {
       if (result.ok) {
         expect(result.value.teamName).toBe('Engineering');
         expect(result.value.issues.backlog).toHaveLength(1);
-        expect(result.value.issues.backlog[0].title).toBe('Backlog Issue');
+        expect(result.value.issues.backlog[0]?.title).toBe('Backlog Issue');
         expect(result.value.issues.in_progress).toHaveLength(1);
-        expect(result.value.issues.in_progress[0].title).toBe('In Progress Issue');
+        expect(result.value.issues.in_progress[0]?.title).toBe('In Progress Issue');
         expect(result.value.issues.in_review).toHaveLength(1);
-        expect(result.value.issues.in_review[0].title).toBe('In Review Issue');
+        expect(result.value.issues.in_review[0]?.title).toBe('In Review Issue');
       }
     });
 
@@ -157,9 +157,9 @@ describe('listIssues', () => {
 
       if (result.ok) {
         expect(result.value.issues.backlog).toHaveLength(3);
-        expect(result.value.issues.backlog[0].title).toBe('New Issue');
-        expect(result.value.issues.backlog[1].title).toBe('Middle Issue');
-        expect(result.value.issues.backlog[2].title).toBe('Old Issue');
+        expect(result.value.issues.backlog[0]?.title).toBe('New Issue');
+        expect(result.value.issues.backlog[1]?.title).toBe('Middle Issue');
+        expect(result.value.issues.backlog[2]?.title).toBe('Old Issue');
       }
     });
   });
@@ -189,7 +189,7 @@ describe('listIssues', () => {
 
       if (result.ok) {
         expect(result.value.issues.done).toHaveLength(1);
-        expect(result.value.issues.done[0].title).toBe('Recently Completed');
+        expect(result.value.issues.done[0]?.title).toBe('Recently Completed');
         expect(result.value.issues.archive).toHaveLength(0);
       }
     });
@@ -216,7 +216,7 @@ describe('listIssues', () => {
       if (result.ok) {
         expect(result.value.issues.done).toHaveLength(0);
         expect(result.value.issues.archive).toHaveLength(1);
-        expect(result.value.issues.archive[0].title).toBe('Old Completed');
+        expect(result.value.issues.archive[0]?.title).toBe('Old Completed');
       }
     });
 
