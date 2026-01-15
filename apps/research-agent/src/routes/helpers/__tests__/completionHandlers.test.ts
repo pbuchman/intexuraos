@@ -202,11 +202,11 @@ describe('handleAllCompleted', () => {
 
     expect(mockResearchRepo.update).toHaveBeenCalledWith('research-123', {
       status: 'failed',
-      synthesisError: 'API key required for synthesis with claude-sonnet-4-5-20250929',
+      synthesisError: `API key required for synthesis with ${LlmModels.ClaudeSonnet45}`,
       completedAt: '2024-01-01T12:00:00.000Z',
     });
     expect(mockLogger.error).toHaveBeenCalledWith(
-      { researchId: 'research-123', model: 'claude-sonnet-4-5-20250929' },
+      { researchId: 'research-123', model: LlmModels.ClaudeSonnet45 },
       '[3.5.2] API key missing for synthesis model'
     );
   });
