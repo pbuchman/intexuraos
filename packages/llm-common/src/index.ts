@@ -102,6 +102,8 @@ export {
   // Prompt builders
   buildInferResearchContextPrompt,
   buildInferSynthesisContextPrompt,
+  buildResearchContextRepairPrompt,
+  buildSynthesisContextRepairPrompt,
 } from './context/index.js';
 
 // Attribution system
