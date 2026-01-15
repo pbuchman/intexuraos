@@ -42,6 +42,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
               openai: { type: 'string', nullable: true },
               anthropic: { type: 'string', nullable: true },
               perplexity: { type: 'string', nullable: true },
+              zai: { type: 'string', nullable: true },
             },
           },
           401: {
@@ -103,6 +104,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         openai: getDecryptedKey('openai'),
         anthropic: getDecryptedKey('anthropic'),
         perplexity: getDecryptedKey('perplexity'),
+        zai: getDecryptedKey('zai'),
       };
     }
   );
