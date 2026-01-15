@@ -68,9 +68,27 @@ interface EventRowProps {
 
 function EventRow({ event }: EventRowProps): React.JSX.Element {
   const allDay = isAllDayEvent(event);
+  const hasLink = event.htmlLink !== undefined;
+
+  const handleClick = (): void => {
+    if (hasLink) {
+      window.open(event.htmlLink, '_blank', 'noopener,noreferrer');
+    }
+  };
 
   return (
-    <div className="flex gap-4 rounded-lg border border-slate-200 bg-white p-4 transition-colors hover:bg-slate-50">
+    <div
+      role={hasLink ? 'button' : undefined}
+      tabIndex={hasLink ? 0 : undefined}
+      onClick={handleClick}
+      onKeyDown={(e) => {
+        if (hasLink && (e.key === 'Enter' || e.key === ' ')) {
+          e.preventDefault();
+          handleClick();
+        }
+      }}
+      className={`flex gap-4 rounded-lg border border-slate-200 bg-white p-4 transition-colors hover:bg-slate-50 ${hasLink ? 'cursor-pointer' : ''}`}
+    >
       <div className="flex w-20 shrink-0 flex-col items-center justify-center rounded-lg bg-blue-50 p-2 text-center">
         <Clock className="mb-1 h-4 w-4 text-blue-600" />
         <span className="text-xs font-medium text-blue-700">
@@ -86,15 +104,10 @@ function EventRow({ event }: EventRowProps): React.JSX.Element {
       <div className="min-w-0 flex-1">
         <div className="flex items-start justify-between gap-2">
           <h3 className="font-medium text-slate-900">{event.summary}</h3>
-          {event.htmlLink !== undefined && (
-            <a
-              href={event.htmlLink}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="shrink-0 rounded p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-blue-600"
-            >
+          {hasLink && (
+            <span className="shrink-0 rounded p-1 text-slate-400">
               <ExternalLink className="h-4 w-4" />
-            </a>
+            </span>
           )}
         </div>
 

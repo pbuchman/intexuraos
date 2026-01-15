@@ -49,7 +49,7 @@ export async function validateLinearApiKey(
     accessToken,
     {
       method: 'POST',
-      body: JSON.stringify({ apiKey }),
+      body: { apiKey },
     }
   );
   return response.teams;
@@ -68,7 +68,7 @@ export async function saveLinearConnection(
     accessToken,
     {
       method: 'POST',
-      body: JSON.stringify(request),
+      body: request,
     }
   );
 }
