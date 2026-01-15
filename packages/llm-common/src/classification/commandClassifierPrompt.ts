@@ -12,6 +12,7 @@ export type CommandCategory =
   | 'link'
   | 'calendar'
   | 'reminder'
+  | 'linear'
   | 'unclassified';
 
 export interface CommandClassifierPromptInput {
@@ -39,9 +40,10 @@ CATEGORIES (in priority order - when multiple could apply, use the FIRST matchin
 2. todo: A task that needs to be done (e.g., "buy groceries", "call mom", "finish report")
 3. research: A question or topic to research (e.g., "how does X work?", "find out about Y")
 4. reminder: Something to be reminded about at a specific time (e.g., "remind me to X in 2 hours")
-5. note: Information to remember or store (e.g., "meeting notes from today", "idea for project")
-6. link: A URL or reference to save (e.g., contains a URL or asks to save a link)
-7. unclassified: Cannot be classified into any of the above categories
+5. linear: A task or issue to create in Linear (project management)
+6. note: Information to remember or store (e.g., "meeting notes from today", "idea for project")
+7. link: A URL or reference to save (e.g., contains a URL or asks to save a link)
+8. unclassified: Cannot be classified into any of the above categories
 
 CALENDAR DETECTION (Priority #1):
 Classify as "calendar" when the message contains:
@@ -64,6 +66,36 @@ Examples (POLISH):
 - "obiad z Janem w piątek o 13" → calendar
 - "zadzwoń do mamy jutro" → calendar
 - "przypomnij o spotkaniu" → reminder
+
+LINEAR DETECTION (Priority #5):
+Classify as "linear" when the message contains:
+- Explicit Linear mentions: "linear", "create linear issue", "add to linear"
+- Polish equivalents: "do lineara", "nowe zadanie w linear", "dodaj do lineara"
+- Task/issue phrasing combined with work context: "new issue", "new ticket", "bug report"
+- Issue tracker keywords: "issue", "ticket", "bug", "feature request", "task"
+
+IMPORTANT: Only classify as "linear" when:
+- The user explicitly mentions Linear by name, OR
+- The context clearly indicates a work/project management task (bug, feature, issue)
+
+Do NOT classify as "linear" when:
+- It's a personal todo without work context (use "todo" instead)
+- It's a reminder without issue context (use "reminder" instead)
+
+Examples (ENGLISH):
+- "create linear issue for dark mode feature" → linear
+- "add to linear: fix login bug" → linear
+- "new ticket: API rate limiting" → linear
+- "bug: mobile menu not working" → linear (work context)
+- "buy groceries" → todo (personal task, not linear)
+- "remind me about the bug" → reminder (not a new issue)
+
+Examples (POLISH):
+- "nowe zadanie w linear: napraw walidację" → linear
+- "dodaj do lineara bug z logowaniem" → linear
+- "nowy ticket: API rate limiting" → linear
+- "bug: menu mobilne nie działa" → linear
+- "zrób zakupy" → todo (not linear)
 
 IMPORTANT: If a message could fit multiple categories, always choose the HIGHER priority category.
 For example: "research and write a report about AI" → todo (because there's a task to complete)

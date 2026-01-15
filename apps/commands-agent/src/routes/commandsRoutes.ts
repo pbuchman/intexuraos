@@ -21,7 +21,7 @@ const commandSchema = {
       properties: {
         type: {
           type: 'string',
-          enum: ['todo', 'research', 'note', 'link', 'calendar', 'reminder', 'unclassified'],
+          enum: ['todo', 'research', 'note', 'link', 'calendar', 'reminder', 'linear', 'unclassified'],
         },
         confidence: { type: 'number' },
         reasoning: { type: 'string' },

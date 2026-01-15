@@ -18,7 +18,7 @@ export interface ActionsAgentClientConfig {
 export interface CreateActionParams {
   userId: string;
   commandId: string;
-  type: 'todo' | 'research' | 'note' | 'link' | 'calendar' | 'reminder';
+  type: 'todo' | 'research' | 'note' | 'link' | 'calendar' | 'reminder' | 'linear';
   title: string;
   confidence: number;
   payload?: Record<string, unknown>;
