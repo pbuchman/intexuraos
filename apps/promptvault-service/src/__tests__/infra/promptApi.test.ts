@@ -89,6 +89,15 @@ import {
 } from '../../infra/notion/promptApi.js';
 import type { PromptVaultSettingsPort } from '../../domain/promptvault/ports/index.js';
 import { FakePromptVaultSettingsRepository } from '../fakes.js';
+import type { NotionLogger } from '@intexuraos/infra-notion';
+
+function createMockLogger(): NotionLogger {
+  return {
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  };
+}
 
 function createMockNotionServiceClient(
   overrides: Partial<{
@@ -105,6 +114,7 @@ function createMockNotionServiceClient(
 
 describe('promptApi', () => {
   let fakeSettings: FakePromptVaultSettingsRepository;
+  let mockLogger: NotionLogger;
 
   beforeEach(() => {
     mockNotionMethods.create.mockReset();
@@ -115,6 +125,7 @@ describe('promptApi', () => {
     mockNotionMethods.updateBlock.mockReset();
     mockNotionMethods.deleteBlock.mockReset();
     fakeSettings = new FakePromptVaultSettingsRepository();
+    mockLogger = createMockLogger();
   });
 
   interface CreatePageCallArgs {
@@ -129,9 +140,10 @@ describe('promptApi', () => {
   function setupValidUserContext(): {
     client: NotionServiceClient;
     settings: PromptVaultSettingsPort;
+    logger: NotionLogger;
   } {
     fakeSettings.setPageId('user-1', 'vault-page-id');
-    return { client: createMockNotionServiceClient(), settings: fakeSettings };
+    return { client: createMockNotionServiceClient(), settings: fakeSettings, logger: mockLogger };
   }
 
   describe('getUserContext (tested through exported functions)', () => {
@@ -142,7 +154,7 @@ describe('promptApi', () => {
       });
       fakeSettings.setPageId('user-1', 'vault-page-id');
 
-      const result = await createPrompt('user-1', 'title', 'content', client, fakeSettings);
+      const result = await createPrompt('user-1', 'title', 'content', client, fakeSettings, mockLogger);
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
@@ -158,7 +170,7 @@ describe('promptApi', () => {
       });
       fakeSettings.setPageId('user-1', 'vault-page-id');
 
-      const result = await createPrompt('user-1', 'title', 'content', client, fakeSettings);
+      const result = await createPrompt('user-1', 'title', 'content', client, fakeSettings, mockLogger);
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
@@ -173,7 +185,7 @@ describe('promptApi', () => {
       });
       fakeSettings.setPageId('user-1', 'vault-page-id');
 
-      const result = await createPrompt('user-1', 'title', 'content', client, fakeSettings);
+      const result = await createPrompt('user-1', 'title', 'content', client, fakeSettings, mockLogger);
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
@@ -189,7 +201,7 @@ describe('promptApi', () => {
       });
       fakeSettings.setPageId('user-1', 'vault-page-id');
 
-      const result = await createPrompt('user-1', 'title', 'content', client, fakeSettings);
+      const result = await createPrompt('user-1', 'title', 'content', client, fakeSettings, mockLogger);
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
@@ -201,7 +213,7 @@ describe('promptApi', () => {
       const { client } = setupValidUserContext();
       fakeSettings.setGetPageIdError({ code: 'INTERNAL_ERROR', message: 'Firestore error' });
 
-      const result = await createPrompt('user-1', 'title', 'content', client, fakeSettings);
+      const result = await createPrompt('user-1', 'title', 'content', client, fakeSettings, mockLogger);
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
@@ -214,7 +226,7 @@ describe('promptApi', () => {
       const client = createMockNotionServiceClient();
       // fakeSettings returns null by default when no pageId is set
 
-      const result = await createPrompt('user-1', 'title', 'content', client, fakeSettings);
+      const result = await createPrompt('user-1', 'title', 'content', client, fakeSettings, mockLogger);
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
@@ -226,13 +238,13 @@ describe('promptApi', () => {
 
   describe('createPrompt', () => {
     it('creates a prompt successfully', async () => {
-      const { client, settings } = setupValidUserContext();
+      const { client, settings, logger } = setupValidUserContext();
       mockNotionMethods.create.mockResolvedValue({
         id: 'new-page-id',
         url: 'https://notion.so/new-page-id',
       });
 
-      const result = await createPrompt('user-1', 'My Title', 'My content', client, settings);
+      const result = await createPrompt('user-1', 'My Title', 'My content', client, settings, logger);
 
       expect(result.ok).toBe(true);
       if (result.ok) {
@@ -246,12 +258,12 @@ describe('promptApi', () => {
     });
 
     it('uses fallback URL when response has no url property', async () => {
-      const { client, settings } = setupValidUserContext();
+      const { client, settings, logger } = setupValidUserContext();
       mockNotionMethods.create.mockResolvedValue({
         id: 'new-page-id',
       });
 
-      const result = await createPrompt('user-1', 'My Title', 'My content', client, settings);
+      const result = await createPrompt('user-1', 'My Title', 'My content', client, settings, logger);
 
       expect(result.ok).toBe(true);
       if (result.ok) {
@@ -260,14 +272,14 @@ describe('promptApi', () => {
     });
 
     it('handles long content by splitting into chunks', async () => {
-      const { client, settings } = setupValidUserContext();
+      const { client, settings, logger } = setupValidUserContext();
       const longContent = 'A'.repeat(4000);
       mockNotionMethods.create.mockResolvedValue({
         id: 'new-page-id',
         url: 'https://notion.so/new-page-id',
       });
 
-      const result = await createPrompt('user-1', 'My Title', longContent, client, settings);
+      const result = await createPrompt('user-1', 'My Title', longContent, client, settings, logger);
 
       expect(result.ok).toBe(true);
       expect(mockNotionMethods.create).toHaveBeenCalledTimes(1);
@@ -276,10 +288,10 @@ describe('promptApi', () => {
     });
 
     it('returns DOWNSTREAM_ERROR when Notion API throws', async () => {
-      const { client, settings } = setupValidUserContext();
+      const { client, settings, logger } = setupValidUserContext();
       mockNotionMethods.create.mockRejectedValue(new Error('API Error'));
 
-      const result = await createPrompt('user-1', 'My Title', 'My content', client, settings);
+      const result = await createPrompt('user-1', 'My Title', 'My content', client, settings, logger);
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
@@ -290,10 +302,10 @@ describe('promptApi', () => {
 
   describe('listPrompts', () => {
     it('returns empty list when no child pages exist', async () => {
-      const { client, settings } = setupValidUserContext();
+      const { client, settings, logger } = setupValidUserContext();
       mockNotionMethods.listBlocks.mockResolvedValue({ results: [] });
 
-      const result = await listPrompts('user-1', client, settings);
+      const result = await listPrompts('user-1', client, settings, logger);
 
       expect(result.ok).toBe(true);
       if (result.ok) {
@@ -302,7 +314,7 @@ describe('promptApi', () => {
     });
 
     it('returns prompts from child pages', async () => {
-      const { client, settings } = setupValidUserContext();
+      const { client, settings, logger } = setupValidUserContext();
       mockNotionMethods.listBlocks.mockResolvedValueOnce({
         results: [
           { type: 'child_page', id: 'prompt-1', child_page: { title: 'Prompt 1' } },
@@ -338,7 +350,7 @@ describe('promptApi', () => {
           ],
         });
 
-      const result = await listPrompts('user-1', client, settings);
+      const result = await listPrompts('user-1', client, settings, logger);
 
       expect(result.ok).toBe(true);
       if (result.ok) {
@@ -349,7 +361,7 @@ describe('promptApi', () => {
     });
 
     it('skips non-child_page blocks', async () => {
-      const { client, settings } = setupValidUserContext();
+      const { client, settings, logger } = setupValidUserContext();
       mockNotionMethods.listBlocks.mockResolvedValue({
         results: [
           { type: 'paragraph', id: 'para-1' },
@@ -357,7 +369,7 @@ describe('promptApi', () => {
         ],
       });
 
-      const result = await listPrompts('user-1', client, settings);
+      const result = await listPrompts('user-1', client, settings, logger);
 
       expect(result.ok).toBe(true);
       if (result.ok) {
@@ -366,7 +378,7 @@ describe('promptApi', () => {
     });
 
     it('skips child pages that fail to retrieve', async () => {
-      const { client, settings } = setupValidUserContext();
+      const { client, settings, logger } = setupValidUserContext();
       mockNotionMethods.listBlocks.mockResolvedValueOnce({
         results: [
           { type: 'child_page', id: 'prompt-1', child_page: { title: 'Prompt 1' } },
@@ -388,7 +400,7 @@ describe('promptApi', () => {
         ],
       });
 
-      const result = await listPrompts('user-1', client, settings);
+      const result = await listPrompts('user-1', client, settings, logger);
 
       expect(result.ok).toBe(true);
       if (result.ok) {
@@ -398,10 +410,10 @@ describe('promptApi', () => {
     });
 
     it('returns DOWNSTREAM_ERROR when initial list fails', async () => {
-      const { client, settings } = setupValidUserContext();
+      const { client, settings, logger } = setupValidUserContext();
       mockNotionMethods.listBlocks.mockRejectedValue(new Error('API Error'));
 
-      const result = await listPrompts('user-1', client, settings);
+      const result = await listPrompts('user-1', client, settings, logger);
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
@@ -412,7 +424,7 @@ describe('promptApi', () => {
 
   describe('getPrompt', () => {
     it('retrieves a prompt successfully', async () => {
-      const { client, settings } = setupValidUserContext();
+      const { client, settings, logger } = setupValidUserContext();
       mockNotionMethods.retrieve.mockResolvedValue({
         id: 'prompt-1',
         properties: { title: { title: [{ plain_text: 'My Prompt' }] } },
@@ -426,7 +438,7 @@ describe('promptApi', () => {
         ],
       });
 
-      const result = await getPrompt('user-1', 'prompt-1', client, settings);
+      const result = await getPrompt('user-1', 'prompt-1', client, settings, logger);
 
       expect(result.ok).toBe(true);
       if (result.ok) {
@@ -440,14 +452,14 @@ describe('promptApi', () => {
     });
 
     it('handles page response without url property', async () => {
-      const { client, settings } = setupValidUserContext();
+      const { client, settings, logger } = setupValidUserContext();
       mockNotionMethods.retrieve.mockResolvedValue({
         id: 'prompt-1',
         properties: { title: { title: [{ plain_text: 'My Prompt' }] } },
       });
       mockNotionMethods.listBlocks.mockResolvedValue({ results: [] });
 
-      const result = await getPrompt('user-1', 'prompt-1', client, settings);
+      const result = await getPrompt('user-1', 'prompt-1', client, settings, logger);
 
       expect(result.ok).toBe(true);
       if (result.ok) {
@@ -456,12 +468,12 @@ describe('promptApi', () => {
     });
 
     it('returns INTERNAL_ERROR when page response has no properties', async () => {
-      const { client, settings } = setupValidUserContext();
+      const { client, settings, logger } = setupValidUserContext();
       mockNotionMethods.retrieve.mockResolvedValue({
         id: 'prompt-1',
       });
 
-      const result = await getPrompt('user-1', 'prompt-1', client, settings);
+      const result = await getPrompt('user-1', 'prompt-1', client, settings, logger);
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
@@ -471,7 +483,7 @@ describe('promptApi', () => {
     });
 
     it('joins multiple code blocks into single content', async () => {
-      const { client, settings } = setupValidUserContext();
+      const { client, settings, logger } = setupValidUserContext();
       mockNotionMethods.retrieve.mockResolvedValue({
         id: 'prompt-1',
         properties: { title: { title: [{ plain_text: 'My Prompt' }] } },
@@ -483,7 +495,7 @@ describe('promptApi', () => {
         ],
       });
 
-      const result = await getPrompt('user-1', 'prompt-1', client, settings);
+      const result = await getPrompt('user-1', 'prompt-1', client, settings, logger);
 
       expect(result.ok).toBe(true);
       if (result.ok) {
@@ -492,7 +504,7 @@ describe('promptApi', () => {
     });
 
     it('skips non-code blocks', async () => {
-      const { client, settings } = setupValidUserContext();
+      const { client, settings, logger } = setupValidUserContext();
       mockNotionMethods.retrieve.mockResolvedValue({
         id: 'prompt-1',
         properties: { title: { title: [{ plain_text: 'My Prompt' }] } },
@@ -504,7 +516,7 @@ describe('promptApi', () => {
         ],
       });
 
-      const result = await getPrompt('user-1', 'prompt-1', client, settings);
+      const result = await getPrompt('user-1', 'prompt-1', client, settings, logger);
 
       expect(result.ok).toBe(true);
       if (result.ok) {
@@ -513,7 +525,7 @@ describe('promptApi', () => {
     });
 
     it('handles code blocks without rich_text', async () => {
-      const { client, settings } = setupValidUserContext();
+      const { client, settings, logger } = setupValidUserContext();
       mockNotionMethods.retrieve.mockResolvedValue({
         id: 'prompt-1',
         properties: { title: { title: [{ plain_text: 'My Prompt' }] } },
@@ -522,7 +534,7 @@ describe('promptApi', () => {
         results: [{ type: 'code', id: 'block-1', code: {} }],
       });
 
-      const result = await getPrompt('user-1', 'prompt-1', client, settings);
+      const result = await getPrompt('user-1', 'prompt-1', client, settings, logger);
 
       expect(result.ok).toBe(true);
       if (result.ok) {
@@ -531,7 +543,7 @@ describe('promptApi', () => {
     });
 
     it('handles empty code blocks content', async () => {
-      const { client, settings } = setupValidUserContext();
+      const { client, settings, logger } = setupValidUserContext();
       mockNotionMethods.retrieve.mockResolvedValue({
         id: 'prompt-1',
         properties: { title: { title: [{ plain_text: 'My Prompt' }] } },
@@ -540,7 +552,7 @@ describe('promptApi', () => {
         results: [{ type: 'code', id: 'block-1', code: { rich_text: [{ plain_text: '' }] } }],
       });
 
-      const result = await getPrompt('user-1', 'prompt-1', client, settings);
+      const result = await getPrompt('user-1', 'prompt-1', client, settings, logger);
 
       expect(result.ok).toBe(true);
       if (result.ok) {
@@ -549,14 +561,14 @@ describe('promptApi', () => {
     });
 
     it('handles page without created_time or last_edited_time', async () => {
-      const { client, settings } = setupValidUserContext();
+      const { client, settings, logger } = setupValidUserContext();
       mockNotionMethods.retrieve.mockResolvedValue({
         id: 'prompt-1',
         properties: { title: { title: [{ plain_text: 'My Prompt' }] } },
       });
       mockNotionMethods.listBlocks.mockResolvedValue({ results: [] });
 
-      const result = await getPrompt('user-1', 'prompt-1', client, settings);
+      const result = await getPrompt('user-1', 'prompt-1', client, settings, logger);
 
       expect(result.ok).toBe(true);
       if (result.ok) {
@@ -566,10 +578,10 @@ describe('promptApi', () => {
     });
 
     it('returns DOWNSTREAM_ERROR when Notion API throws', async () => {
-      const { client, settings } = setupValidUserContext();
+      const { client, settings, logger } = setupValidUserContext();
       mockNotionMethods.retrieve.mockRejectedValue(new Error('Page not found'));
 
-      const result = await getPrompt('user-1', 'prompt-1', client, settings);
+      const result = await getPrompt('user-1', 'prompt-1', client, settings, logger);
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
@@ -580,7 +592,7 @@ describe('promptApi', () => {
 
   describe('updatePrompt', () => {
     it('updates title only', async () => {
-      const { client, settings } = setupValidUserContext();
+      const { client, settings, logger } = setupValidUserContext();
       mockNotionMethods.update.mockResolvedValue({ id: 'prompt-1' });
       mockNotionMethods.retrieve.mockResolvedValue({
         id: 'prompt-1',
@@ -597,7 +609,8 @@ describe('promptApi', () => {
         'prompt-1',
         { title: 'Updated Title' },
         client,
-        settings
+        settings,
+        logger
       );
 
       expect(result.ok).toBe(true);
@@ -608,7 +621,7 @@ describe('promptApi', () => {
     });
 
     it('updates content only', async () => {
-      const { client, settings } = setupValidUserContext();
+      const { client, settings, logger } = setupValidUserContext();
       mockNotionMethods.listBlocks
         .mockResolvedValueOnce({
           results: [
@@ -631,7 +644,8 @@ describe('promptApi', () => {
         'prompt-1',
         { content: 'New content' },
         client,
-        settings
+        settings,
+        logger
       );
 
       expect(result.ok).toBe(true);
@@ -646,7 +660,7 @@ describe('promptApi', () => {
     });
 
     it('updates both title and content', async () => {
-      const { client, settings } = setupValidUserContext();
+      const { client, settings, logger } = setupValidUserContext();
       mockNotionMethods.update.mockResolvedValue({ id: 'prompt-1' });
       mockNotionMethods.listBlocks
         .mockResolvedValueOnce({
@@ -666,7 +680,8 @@ describe('promptApi', () => {
         'prompt-1',
         { title: 'New Title', content: 'New' },
         client,
-        settings
+        settings,
+        logger
       );
 
       expect(result.ok).toBe(true);
@@ -675,7 +690,7 @@ describe('promptApi', () => {
     });
 
     it('deletes extra code blocks when new content is shorter', async () => {
-      const { client, settings } = setupValidUserContext();
+      const { client, settings, logger } = setupValidUserContext();
       mockNotionMethods.listBlocks
         .mockResolvedValueOnce({
           results: [
@@ -700,7 +715,8 @@ describe('promptApi', () => {
         'prompt-1',
         { content: 'Short' },
         client,
-        settings
+        settings,
+        logger
       );
 
       expect(result.ok).toBe(true);
@@ -710,7 +726,7 @@ describe('promptApi', () => {
     });
 
     it('appends new code blocks when new content is longer', async () => {
-      const { client, settings } = setupValidUserContext();
+      const { client, settings, logger } = setupValidUserContext();
       const longContent = 'A'.repeat(4000);
       mockNotionMethods.listBlocks
         .mockResolvedValueOnce({
@@ -735,7 +751,8 @@ describe('promptApi', () => {
         'prompt-1',
         { content: longContent },
         client,
-        settings
+        settings,
+        logger
       );
 
       expect(result.ok).toBe(true);
@@ -744,7 +761,7 @@ describe('promptApi', () => {
     });
 
     it('returns DOWNSTREAM_ERROR when Notion API throws during update', async () => {
-      const { client, settings } = setupValidUserContext();
+      const { client, settings, logger } = setupValidUserContext();
       mockNotionMethods.update.mockRejectedValue(new Error('Update failed'));
 
       const result = await updatePrompt(
@@ -752,7 +769,8 @@ describe('promptApi', () => {
         'prompt-1',
         { title: 'New Title' },
         client,
-        settings
+        settings,
+        logger
       );
 
       expect(result.ok).toBe(false);
@@ -764,7 +782,7 @@ describe('promptApi', () => {
 
   describe('mapError (tested through error paths)', () => {
     it('maps NOT_FOUND to NOT_FOUND', async () => {
-      const { client, settings } = setupValidUserContext();
+      const { client, settings, logger } = setupValidUserContext();
       const { isNotionClientError } = await import('@notionhq/client');
       vi.mocked(isNotionClientError).mockReturnValueOnce(true);
       mockNotionMethods.retrieve.mockRejectedValue({
@@ -772,13 +790,13 @@ describe('promptApi', () => {
         message: 'Page not found',
       });
 
-      const result = await getPrompt('user-1', 'prompt-1', client, settings);
+      const result = await getPrompt('user-1', 'prompt-1', client, settings, logger);
 
       expect(result.ok).toBe(false);
     });
 
     it('maps UNAUTHORIZED to UNAUTHORIZED', async () => {
-      const { client, settings } = setupValidUserContext();
+      const { client, settings, logger } = setupValidUserContext();
       const { isNotionClientError } = await import('@notionhq/client');
       vi.mocked(isNotionClientError).mockReturnValueOnce(true);
       mockNotionMethods.retrieve.mockRejectedValue({
@@ -786,7 +804,7 @@ describe('promptApi', () => {
         message: 'Invalid token',
       });
 
-      const result = await getPrompt('user-1', 'prompt-1', client, settings);
+      const result = await getPrompt('user-1', 'prompt-1', client, settings, logger);
 
       expect(result.ok).toBe(false);
     });
@@ -794,14 +812,14 @@ describe('promptApi', () => {
 
   describe('splitTextIntoChunks (tested through createPrompt and updatePrompt)', () => {
     it('handles text shorter than MAX_CHUNK_SIZE', async () => {
-      const { client, settings } = setupValidUserContext();
+      const { client, settings, logger } = setupValidUserContext();
       mockNotionMethods.create.mockResolvedValue({
         id: 'new-page-id',
         url: 'https://notion.so/new-page-id',
       });
 
       const shortContent = 'Short content';
-      await createPrompt('user-1', 'Title', shortContent, client, settings);
+      await createPrompt('user-1', 'Title', shortContent, client, settings, logger);
 
       expect(mockNotionMethods.create).toHaveBeenCalledTimes(1);
       const codeBlocks = getCodeBlocksFromCreateCall();
@@ -809,7 +827,7 @@ describe('promptApi', () => {
     });
 
     it('splits at double newline boundary when possible', async () => {
-      const { client, settings } = setupValidUserContext();
+      const { client, settings, logger } = setupValidUserContext();
       mockNotionMethods.create.mockResolvedValue({
         id: 'new-page-id',
         url: 'https://notion.so/new-page-id',
@@ -819,13 +837,13 @@ describe('promptApi', () => {
       const chunk2 = 'B'.repeat(1000);
       const content = chunk1 + '\n\n' + chunk2;
 
-      await createPrompt('user-1', 'Title', content, client, settings);
+      await createPrompt('user-1', 'Title', content, client, settings, logger);
 
       expect(mockNotionMethods.create).toHaveBeenCalledTimes(1);
     });
 
     it('splits at single newline when no double newline is available', async () => {
-      const { client, settings } = setupValidUserContext();
+      const { client, settings, logger } = setupValidUserContext();
       mockNotionMethods.create.mockResolvedValue({
         id: 'new-page-id',
         url: 'https://notion.so/new-page-id',
@@ -835,13 +853,13 @@ describe('promptApi', () => {
       const chunk2 = 'B'.repeat(1000);
       const content = chunk1 + '\n' + chunk2;
 
-      await createPrompt('user-1', 'Title', content, client, settings);
+      await createPrompt('user-1', 'Title', content, client, settings, logger);
 
       expect(mockNotionMethods.create).toHaveBeenCalledTimes(1);
     });
 
     it('splits at period when no newline is available', async () => {
-      const { client, settings } = setupValidUserContext();
+      const { client, settings, logger } = setupValidUserContext();
       mockNotionMethods.create.mockResolvedValue({
         id: 'new-page-id',
         url: 'https://notion.so/new-page-id',
@@ -851,13 +869,13 @@ describe('promptApi', () => {
       const chunk2 = 'B'.repeat(1000);
       const content = chunk1 + '. ' + chunk2;
 
-      await createPrompt('user-1', 'Title', content, client, settings);
+      await createPrompt('user-1', 'Title', content, client, settings, logger);
 
       expect(mockNotionMethods.create).toHaveBeenCalledTimes(1);
     });
 
     it('splits at space when no other boundary is available', async () => {
-      const { client, settings } = setupValidUserContext();
+      const { client, settings, logger } = setupValidUserContext();
       mockNotionMethods.create.mockResolvedValue({
         id: 'new-page-id',
         url: 'https://notion.so/new-page-id',
@@ -867,13 +885,13 @@ describe('promptApi', () => {
       const chunk2 = 'B'.repeat(1000);
       const content = chunk1 + ' ' + chunk2;
 
-      await createPrompt('user-1', 'Title', content, client, settings);
+      await createPrompt('user-1', 'Title', content, client, settings, logger);
 
       expect(mockNotionMethods.create).toHaveBeenCalledTimes(1);
     });
 
     it('forces split at MAX_CHUNK_SIZE when no boundary is available', async () => {
-      const { client, settings } = setupValidUserContext();
+      const { client, settings, logger } = setupValidUserContext();
       mockNotionMethods.create.mockResolvedValue({
         id: 'new-page-id',
         url: 'https://notion.so/new-page-id',
@@ -881,7 +899,7 @@ describe('promptApi', () => {
 
       const content = 'A'.repeat(4000);
 
-      await createPrompt('user-1', 'Title', content, client, settings);
+      await createPrompt('user-1', 'Title', content, client, settings, logger);
 
       expect(mockNotionMethods.create).toHaveBeenCalledTimes(1);
       const codeBlocks = getCodeBlocksFromCreateCall();
@@ -891,14 +909,14 @@ describe('promptApi', () => {
 
   describe('joinTextChunks (tested through getPrompt)', () => {
     it('returns empty string for empty array', async () => {
-      const { client, settings } = setupValidUserContext();
+      const { client, settings, logger } = setupValidUserContext();
       mockNotionMethods.retrieve.mockResolvedValue({
         id: 'prompt-1',
         properties: { title: { title: [{ plain_text: 'Title' }] } },
       });
       mockNotionMethods.listBlocks.mockResolvedValue({ results: [] });
 
-      const result = await getPrompt('user-1', 'prompt-1', client, settings);
+      const result = await getPrompt('user-1', 'prompt-1', client, settings, logger);
 
       expect(result.ok).toBe(true);
       if (result.ok) {
@@ -907,7 +925,7 @@ describe('promptApi', () => {
     });
 
     it('returns single chunk as-is', async () => {
-      const { client, settings } = setupValidUserContext();
+      const { client, settings, logger } = setupValidUserContext();
       mockNotionMethods.retrieve.mockResolvedValue({
         id: 'prompt-1',
         properties: { title: { title: [{ plain_text: 'Title' }] } },
@@ -918,7 +936,7 @@ describe('promptApi', () => {
         ],
       });
 
-      const result = await getPrompt('user-1', 'prompt-1', client, settings);
+      const result = await getPrompt('user-1', 'prompt-1', client, settings, logger);
 
       expect(result.ok).toBe(true);
       if (result.ok) {
@@ -927,7 +945,7 @@ describe('promptApi', () => {
     });
 
     it('joins multiple chunks with newlines', async () => {
-      const { client, settings } = setupValidUserContext();
+      const { client, settings, logger } = setupValidUserContext();
       mockNotionMethods.retrieve.mockResolvedValue({
         id: 'prompt-1',
         properties: { title: { title: [{ plain_text: 'Title' }] } },
@@ -940,7 +958,7 @@ describe('promptApi', () => {
         ],
       });
 
-      const result = await getPrompt('user-1', 'prompt-1', client, settings);
+      const result = await getPrompt('user-1', 'prompt-1', client, settings, logger);
 
       expect(result.ok).toBe(true);
       if (result.ok) {
@@ -949,7 +967,7 @@ describe('promptApi', () => {
     });
 
     it('filters out empty chunks', async () => {
-      const { client, settings } = setupValidUserContext();
+      const { client, settings, logger } = setupValidUserContext();
       mockNotionMethods.retrieve.mockResolvedValue({
         id: 'prompt-1',
         properties: { title: { title: [{ plain_text: 'Title' }] } },
@@ -962,7 +980,7 @@ describe('promptApi', () => {
         ],
       });
 
-      const result = await getPrompt('user-1', 'prompt-1', client, settings);
+      const result = await getPrompt('user-1', 'prompt-1', client, settings, logger);
 
       expect(result.ok).toBe(true);
       if (result.ok) {
@@ -973,7 +991,7 @@ describe('promptApi', () => {
 
   describe('edge cases', () => {
     it('handles page with empty created_time string', async () => {
-      const { client, settings } = setupValidUserContext();
+      const { client, settings, logger } = setupValidUserContext();
       mockNotionMethods.retrieve.mockResolvedValue({
         id: 'prompt-1',
         properties: { title: { title: [{ plain_text: 'Title' }] } },
@@ -982,7 +1000,7 @@ describe('promptApi', () => {
       });
       mockNotionMethods.listBlocks.mockResolvedValue({ results: [] });
 
-      const result = await getPrompt('user-1', 'prompt-1', client, settings);
+      const result = await getPrompt('user-1', 'prompt-1', client, settings, logger);
 
       expect(result.ok).toBe(true);
       if (result.ok) {
@@ -992,7 +1010,7 @@ describe('promptApi', () => {
     });
 
     it('handles code block with missing plain_text in rich_text items', async () => {
-      const { client, settings } = setupValidUserContext();
+      const { client, settings, logger } = setupValidUserContext();
       mockNotionMethods.retrieve.mockResolvedValue({
         id: 'prompt-1',
         properties: { title: { title: [{ plain_text: 'Title' }] } },
@@ -1001,7 +1019,7 @@ describe('promptApi', () => {
         results: [{ type: 'code', id: 'block-1', code: { rich_text: [{}] } }],
       });
 
-      const result = await getPrompt('user-1', 'prompt-1', client, settings);
+      const result = await getPrompt('user-1', 'prompt-1', client, settings, logger);
 
       expect(result.ok).toBe(true);
       if (result.ok) {

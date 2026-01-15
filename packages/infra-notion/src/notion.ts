@@ -155,17 +155,14 @@ function createLoggingFetch(
 }
 
 /**
- * Create a Notion client with optional logging.
+ * Create a Notion client with logging.
  */
-export function createNotionClient(token: string, logger?: NotionLogger): Client {
-  if (logger !== undefined) {
-    return new Client({
-      auth: token,
-      logLevel: LogLevel.DEBUG,
-      fetch: createLoggingFetch(logger),
-    });
-  }
-  return new Client({ auth: token });
+export function createNotionClient(token: string, logger: NotionLogger): Client {
+  return new Client({
+    auth: token,
+    logLevel: LogLevel.DEBUG,
+    fetch: createLoggingFetch(logger),
+  });
 }
 
 // Re-export useful types from Notion SDK
@@ -192,7 +189,7 @@ export interface NotionPagePreview {
  */
 export async function validateNotionToken(
   token: string,
-  logger?: NotionLogger
+  logger: NotionLogger
 ): Promise<Result<boolean, NotionError>> {
   try {
     const client = createNotionClient(token, logger);
@@ -211,7 +208,7 @@ export async function validateNotionToken(
 export async function getPageWithPreview(
   token: string,
   pageId: string,
-  logger?: NotionLogger
+  logger: NotionLogger
 ): Promise<Result<NotionPagePreview, NotionError>> {
   try {
     const client = createNotionClient(token, logger);

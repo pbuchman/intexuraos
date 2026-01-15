@@ -43,6 +43,8 @@ vi.mock('@notionhq/client', () => {
 });
 
 describe('Notion utilities', () => {
+  let mockLogger: NotionLogger;
+
   beforeEach(() => {
     vi.clearAllMocks();
     // Reset mock client instance
@@ -50,6 +52,12 @@ describe('Notion utilities', () => {
       users: { me: vi.fn() },
       pages: { retrieve: vi.fn() },
       blocks: { children: { list: vi.fn() } },
+    };
+    // Create mock logger
+    mockLogger = {
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
     };
   });
 
@@ -273,13 +281,6 @@ describe('Notion utilities', () => {
 
     afterEach(() => {
       global.fetch = originalFetch;
-    });
-
-    it('creates client without logger', () => {
-      const client = createNotionClient('test-token');
-
-      expect(Client).toHaveBeenCalledWith({ auth: 'test-token' });
-      expect(client).toBeDefined();
     });
 
     it('creates client with logger and custom fetch', () => {
@@ -672,9 +673,14 @@ describe('Notion utilities', () => {
     });
 
     it('returns ok(true) for valid token', async () => {
+      const logger: NotionLogger = {
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+      };
       mockClientInstance.users.me.mockResolvedValue({ id: 'user-123' });
 
-      const result = await validateNotionToken('valid-token');
+      const result = await validateNotionToken('valid-token', logger);
 
       expect(result.ok).toBe(true);
       if (result.ok) {
@@ -683,13 +689,18 @@ describe('Notion utilities', () => {
     });
 
     it('returns ok(false) for unauthorized token', async () => {
+      const logger: NotionLogger = {
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+      };
       vi.mocked(isNotionClientError).mockReturnValue(true);
       mockClientInstance.users.me.mockRejectedValue({
         code: APIErrorCode.Unauthorized,
         message: 'Invalid token',
       });
 
-      const result = await validateNotionToken('invalid-token');
+      const result = await validateNotionToken('invalid-token', logger);
 
       expect(result.ok).toBe(true);
       if (result.ok) {
@@ -698,13 +709,18 @@ describe('Notion utilities', () => {
     });
 
     it('returns err for other API errors', async () => {
+      const logger: NotionLogger = {
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+      };
       vi.mocked(isNotionClientError).mockReturnValue(true);
       mockClientInstance.users.me.mockRejectedValue({
         code: APIErrorCode.RateLimited,
         message: 'Rate limited',
       });
 
-      const result = await validateNotionToken('token');
+      const result = await validateNotionToken('token', logger);
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
@@ -759,7 +775,7 @@ describe('Notion utilities', () => {
         ],
       });
 
-      const result = await getPageWithPreview('token', 'page-123');
+      const result = await getPageWithPreview('token', 'page-123', mockLogger);
 
       expect(result.ok).toBe(true);
       if (result.ok) {
@@ -777,7 +793,7 @@ describe('Notion utilities', () => {
         // No properties field - this is a PartialPageObjectResponse
       });
 
-      const result = await getPageWithPreview('token', 'page-123');
+      const result = await getPageWithPreview('token', 'page-123', mockLogger);
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
@@ -794,7 +810,7 @@ describe('Notion utilities', () => {
       });
       mockClientInstance.blocks.children.list.mockResolvedValue({ results: [] });
 
-      const result = await getPageWithPreview('token', 'page-123');
+      const result = await getPageWithPreview('token', 'page-123', mockLogger);
 
       expect(result.ok).toBe(true);
       if (result.ok) {
@@ -815,7 +831,7 @@ describe('Notion utilities', () => {
         ],
       });
 
-      const result = await getPageWithPreview('token', 'page-123');
+      const result = await getPageWithPreview('token', 'page-123', mockLogger);
 
       expect(result.ok).toBe(true);
       if (result.ok) {
@@ -835,7 +851,7 @@ describe('Notion utilities', () => {
         results: [{ type: 'divider', divider: {} }], // No rich_text
       });
 
-      const result = await getPageWithPreview('token', 'page-123');
+      const result = await getPageWithPreview('token', 'page-123', mockLogger);
 
       expect(result.ok).toBe(true);
       if (result.ok) {
@@ -851,7 +867,7 @@ describe('Notion utilities', () => {
         message: 'Page not found',
       });
 
-      const result = await getPageWithPreview('token', 'page-123');
+      const result = await getPageWithPreview('token', 'page-123', mockLogger);
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
@@ -880,7 +896,7 @@ describe('Notion utilities', () => {
         ],
       });
 
-      const result = await getPageWithPreview('token', 'page-123');
+      const result = await getPageWithPreview('token', 'page-123', mockLogger);
 
       expect(result.ok).toBe(true);
       if (result.ok) {
@@ -903,7 +919,7 @@ describe('Notion utilities', () => {
         ],
       });
 
-      const result = await getPageWithPreview('token', 'page-123');
+      const result = await getPageWithPreview('token', 'page-123', mockLogger);
 
       expect(result.ok).toBe(true);
       if (result.ok) {
