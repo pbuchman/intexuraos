@@ -14,8 +14,8 @@ import { shouldAutoExecute } from '../domain/usecases/shouldAutoExecute.js';
 const silentLogger = pino({ level: 'silent' });
 
 describe('handleCalendarAction usecase', () => {
-  // Reset mock state after each test to prevent cross-test contamination in coverage mode
-  afterEach(() => {
+  // Reset mock state before each test to prevent cross-test contamination in coverage mode
+  beforeEach(() => {
     vi.mocked(shouldAutoExecute).mockReturnValue(false);
   });
   let fakeActionClient: FakeActionServiceClient;
@@ -255,10 +255,6 @@ describe('handleCalendarAction usecase', () => {
   describe('auto-execute flow', () => {
     beforeEach(() => {
       vi.mocked(shouldAutoExecute).mockReturnValue(true);
-    });
-
-    afterEach(() => {
-      vi.mocked(shouldAutoExecute).mockReturnValue(false);
     });
 
     it('auto-executes when shouldAutoExecute returns true and executeCalendarAction is provided', async () => {
