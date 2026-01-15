@@ -15,4 +15,5 @@ export { LinkPreview } from './LinkPreview.js';
 export { LinkPreviewList } from './LinkPreviewList.js';
 export { ModelSelector, getSelectedModelsList, PROVIDER_MODELS } from './ModelSelector.js';
 export { VegaChart } from './VegaChart.js';
+export { RefreshIndicator } from './RefreshIndicator.js';
 export * from './ui/index.js';

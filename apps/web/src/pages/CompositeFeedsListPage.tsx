@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Layers, Plus, Trash2, Database, FileText } from 'lucide-react';
-import { Button, Card, Layout } from '@/components';
+import { Button, Card, Layout, RefreshIndicator } from '@/components';
 import { useCompositeFeeds, useDataSources } from '@/hooks';
 import type { CompositeFeed } from '@/types';
 
@@ -47,7 +47,7 @@ function DataInsightsTabs(): React.JSX.Element {
 }
 
 export function CompositeFeedsListPage(): React.JSX.Element {
-  const { compositeFeeds, loading, error, deleteCompositeFeed } = useCompositeFeeds();
+  const { compositeFeeds, loading, refreshing, error, deleteCompositeFeed } = useCompositeFeeds();
   const { dataSources } = useDataSources();
   const navigate = useNavigate();
 
@@ -83,6 +83,8 @@ export function CompositeFeedsListPage(): React.JSX.Element {
           Create Feed
         </Button>
       </div>
+
+      <RefreshIndicator show={refreshing} />
 
       {dataSources.length === 0 ? (
         <Card>
