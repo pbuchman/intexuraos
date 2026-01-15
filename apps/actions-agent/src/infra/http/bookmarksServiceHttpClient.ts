@@ -6,18 +6,13 @@ import type {
   CreateBookmarkResponse,
   ForceRefreshBookmarkResponse,
 } from '../../domain/ports/bookmarksServiceClient.js';
-import pino, { type Logger } from 'pino';
+import { type Logger } from 'pino';
 
 export interface BookmarksServiceHttpClientConfig {
   baseUrl: string;
   internalAuthToken: string;
-  logger?: Logger;
+  logger: Logger;
 }
-
-const defaultLogger = pino({
-  level: process.env['LOG_LEVEL'] ?? 'info',
-  name: 'bookmarksServiceHttpClient',
-});
 
 interface ApiResponse {
   success: boolean;
@@ -28,7 +23,7 @@ interface ApiResponse {
 export function createBookmarksServiceHttpClient(
   config: BookmarksServiceHttpClientConfig
 ): BookmarksServiceClient {
-  const logger = config.logger ?? defaultLogger;
+  const { logger } = config;
 
   return {
     async createBookmark(request: CreateBookmarkRequest): Promise<Result<CreateBookmarkResponse>> {

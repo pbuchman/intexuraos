@@ -5,18 +5,13 @@ import type {
   CreateNoteRequest,
   CreateNoteResponse,
 } from '../../domain/ports/notesServiceClient.js';
-import pino, { type Logger } from 'pino';
+import { type Logger } from 'pino';
 
 export interface NotesServiceHttpClientConfig {
   baseUrl: string;
   internalAuthToken: string;
-  logger?: Logger;
+  logger: Logger;
 }
-
-const defaultLogger = pino({
-  level: process.env['LOG_LEVEL'] ?? 'info',
-  name: 'notesServiceHttpClient',
-});
 
 interface ApiResponse {
   success: boolean;
@@ -31,7 +26,7 @@ interface ApiResponse {
 export function createNotesServiceHttpClient(
   config: NotesServiceHttpClientConfig
 ): NotesServiceClient {
-  const logger = config.logger ?? defaultLogger;
+  const { logger } = config;
 
   return {
     async createNote(request: CreateNoteRequest): Promise<Result<CreateNoteResponse>> {
