@@ -4,6 +4,9 @@
  */
 import type { Result } from '@intexuraos/common-core';
 import type { NotionError, NotionLogger } from '@intexuraos/infra-notion';
+import pino from 'pino';
+
+const defaultNotionLogger: NotionLogger = pino({ level: 'silent' });
 import {
   disconnectNotion,
   getNotionConnection,
@@ -53,7 +56,7 @@ interface NotionApiAdapter {
  * Service container for routes.
  */
 export interface ServiceContainer {
-  logger: NotionLogger | undefined;
+  logger: NotionLogger;
   connectionRepository: ConnectionRepository;
   notionApi: NotionApiAdapter;
 }
@@ -71,7 +74,7 @@ function createConnectionRepository(): ConnectionRepository {
   };
 }
 
-function createNotionApiAdapter(logger: NotionLogger | undefined): NotionApiAdapter {
+function createNotionApiAdapter(logger: NotionLogger): NotionApiAdapter {
   return {
     validateToken: async (token): Promise<Result<boolean, NotionError>> =>
       await validateNotionToken(token, logger),
@@ -99,7 +102,7 @@ function createNotionApiAdapter(logger: NotionLogger | undefined): NotionApiAdap
  * Initialize services with dependencies.
  * Call this early in server startup.
  */
-export function getServices(logger?: NotionLogger): ServiceContainer {
+export function getServices(logger: NotionLogger = defaultNotionLogger): ServiceContainer {
   container ??= {
     logger,
     connectionRepository: createConnectionRepository(),

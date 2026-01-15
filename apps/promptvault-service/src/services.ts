@@ -3,11 +3,14 @@
  * Provides backward-compatible service container for routes.
  */
 import type { Result } from '@intexuraos/common-core';
+import pino from 'pino';
 import {
   type NotionLogger,
   type NotionError,
   getPageWithPreview as getPageWithPreviewFn,
 } from '@intexuraos/infra-notion';
+
+const defaultNotionLogger: NotionLogger = pino({ level: 'silent' });
 import {
   createNotionServiceClient,
   type NotionServiceClient,
@@ -61,7 +64,7 @@ interface PromptRepository {
  * Service container for routes.
  */
 export interface ServiceContainer {
-  logger: NotionLogger | undefined;
+  logger: NotionLogger;
   notionServiceClient: NotionServiceClient;
   notionPageClient: NotionPageClient;
   promptRepository: PromptRepository;
@@ -73,7 +76,7 @@ let container: ServiceContainer | null = null;
 function createPromptRepository(
   notionServiceClient: NotionServiceClient,
   promptVaultSettings: PromptVaultSettingsPort,
-  logger: NotionLogger | undefined
+  logger: NotionLogger
 ): PromptRepository {
   return {
     createPrompt: async (userId, input): Promise<Result<Prompt, PromptVaultError>> =>
@@ -112,7 +115,7 @@ function createPromptVaultSettingsAdapter(): PromptVaultSettingsPort {
  * Initialize services with dependencies.
  * Call this early in server startup.
  */
-export function getServices(logger?: NotionLogger): ServiceContainer {
+export function getServices(logger: NotionLogger = defaultNotionLogger): ServiceContainer {
   if (container !== null) return container;
 
   const notionServiceUrl = process.env['INTEXURAOS_NOTION_SERVICE_URL'];
