@@ -126,13 +126,13 @@ pnpm run ci:report -- --json       # JSON output
 **Data analyzed:** 213 CI runs across 16 branch files
 
 **Top errors identified:**
-| Error | Count | Category |
+| Error                                       | Count | Category  |
 | ------------------------------------------- | ----- | --------- |
-| @typescript-eslint/no-unsafe-member-access | 552 | lint |
-| @typescript-eslint/no-unsafe-assignment | 384 | lint |
-| @typescript-eslint/no-unsafe-call | 312 | lint |
-| TS2345 (argument type mismatch) | 100 | typecheck |
-| @typescript-eslint/no-empty-function | 90 | lint |
+| @typescript-eslint/no-unsafe-member-access  | 552   | lint      |
+| @typescript-eslint/no-unsafe-assignment     | 384   | lint      |
+| @typescript-eslint/no-unsafe-call           | 312   | lint      |
+| TS2345 (argument type mismatch)             | 100   | typecheck |
+| @typescript-eslint/no-empty-function        | 90    | lint      |
 
 **Actions taken:**
 
