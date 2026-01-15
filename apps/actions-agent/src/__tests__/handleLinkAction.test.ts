@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { isOk, isErr, ok, err } from '@intexuraos/common-core';
 import { createHandleLinkActionUseCase } from '../domain/usecases/handleLinkAction.js';
+import { registerActionHandler } from '../domain/usecases/createIdempotentActionHandler.js';
 import type { ActionCreatedEvent } from '../domain/models/actionEvent.js';
 import { FakeActionRepository, FakeWhatsAppSendPublisher } from './fakes.js';
 import pino from 'pino';
@@ -58,7 +59,7 @@ describe('handleLinkAction usecase', () => {
   it('sets action to awaiting_approval and publishes WhatsApp notification for non-100% confidence', async () => {
     await fakeActionRepository.save(createAction());
 
-    const usecase = createHandleLinkActionUseCase({
+    const usecase = registerActionHandler(createHandleLinkActionUseCase, {
       actionRepository: fakeActionRepository,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.intexuraos.com',
@@ -87,7 +88,7 @@ describe('handleLinkAction usecase', () => {
   it('fails when marking action as awaiting_approval fails', async () => {
     await fakeActionRepository.save(createAction());
 
-    const usecase = createHandleLinkActionUseCase({
+    const usecase = registerActionHandler(createHandleLinkActionUseCase, {
       actionRepository: fakeActionRepository,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.intexuraos.com',
@@ -108,7 +109,7 @@ describe('handleLinkAction usecase', () => {
   it('succeeds even when WhatsApp publish fails (best-effort notification)', async () => {
     await fakeActionRepository.save(createAction());
 
-    const usecase = createHandleLinkActionUseCase({
+    const usecase = registerActionHandler(createHandleLinkActionUseCase, {
       actionRepository: fakeActionRepository,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.intexuraos.com',
@@ -133,7 +134,7 @@ describe('handleLinkAction usecase', () => {
   });
 
   it('returns success when action does not exist (deleted between creation and handling)', async () => {
-    const usecase = createHandleLinkActionUseCase({
+    const usecase = registerActionHandler(createHandleLinkActionUseCase, {
       actionRepository: fakeActionRepository,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.intexuraos.com',
@@ -156,7 +157,7 @@ describe('handleLinkAction usecase', () => {
     const action = createAction();
     await fakeActionRepository.save({ ...action, status: 'awaiting_approval' });
 
-    const usecase = createHandleLinkActionUseCase({
+    const usecase = registerActionHandler(createHandleLinkActionUseCase, {
       actionRepository: fakeActionRepository,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.intexuraos.com',
@@ -183,7 +184,7 @@ describe('handleLinkAction usecase', () => {
         ok({ status: 'completed' as const, resource_url: '/#/bookmarks/bookmark-123' })
       );
 
-      const usecase = createHandleLinkActionUseCase({
+      const usecase = registerActionHandler(createHandleLinkActionUseCase, {
         actionRepository: fakeActionRepository,
         whatsappPublisher: fakeWhatsappPublisher,
         webAppUrl: 'https://app.intexuraos.com',
@@ -198,9 +199,9 @@ describe('handleLinkAction usecase', () => {
       expect(isOk(result)).toBe(true);
       expect(fakeExecuteLinkAction).toHaveBeenCalledWith('action-123');
 
-      // Action should still be pending (executeLinkAction handles status update)
+      // Decorator updated status to awaiting_approval; real executeLinkAction would update to processing/completed
       const action = await fakeActionRepository.getById('action-123');
-      expect(action?.status).toBe('pending');
+      expect(action?.status).toBe('awaiting_approval');
 
       // No "awaiting_approval" message should be sent for auto-executed actions
       const messages = fakeWhatsappPublisher.getSentMessages();
@@ -214,7 +215,7 @@ describe('handleLinkAction usecase', () => {
         err(new Error('Execution failed'))
       );
 
-      const usecase = createHandleLinkActionUseCase({
+      const usecase = registerActionHandler(createHandleLinkActionUseCase, {
         actionRepository: fakeActionRepository,
         whatsappPublisher: fakeWhatsappPublisher,
         webAppUrl: 'https://app.intexuraos.com',
@@ -234,7 +235,7 @@ describe('handleLinkAction usecase', () => {
     it('falls back to approval flow when executeLinkAction is not provided', async () => {
       await fakeActionRepository.save(createAction());
 
-      const usecase = createHandleLinkActionUseCase({
+      const usecase = registerActionHandler(createHandleLinkActionUseCase, {
         actionRepository: fakeActionRepository,
         whatsappPublisher: fakeWhatsappPublisher,
         webAppUrl: 'https://app.intexuraos.com',
@@ -258,7 +259,7 @@ describe('handleLinkAction usecase', () => {
         ok({ status: 'completed' as const, resource_url: '/#/bookmarks/bookmark-123' })
       );
 
-      const usecase = createHandleLinkActionUseCase({
+      const usecase = registerActionHandler(createHandleLinkActionUseCase, {
         actionRepository: fakeActionRepository,
         whatsappPublisher: fakeWhatsappPublisher,
         webAppUrl: 'https://app.intexuraos.com',

@@ -1,5 +1,6 @@
 import type { Result } from '@intexuraos/common-core';
 import { ok, err } from '@intexuraos/common-core';
+import { registerActionHandler } from '../domain/usecases/createIdempotentActionHandler.js';
 import type { ActionServiceClient } from '../domain/ports/actionServiceClient.js';
 import type {
   CalendarServiceClient,
@@ -752,43 +753,56 @@ export function createFakeServices(deps: {
 
   const silentLogger = pino({ level: 'silent' });
 
-  const handleResearchActionUseCase: HandleResearchActionUseCase =
-    createHandleResearchActionUseCase({
+  const handleResearchActionUseCase: HandleResearchActionUseCase = registerActionHandler(
+    createHandleResearchActionUseCase,
+    {
       actionRepository,
       whatsappPublisher,
       webAppUrl: 'http://test.app',
       logger: silentLogger,
-    });
+    }
+  );
 
-  const handleTodoActionUseCase: HandleTodoActionUseCase = createHandleTodoActionUseCase({
-    actionRepository,
-    whatsappPublisher,
-    webAppUrl: 'http://test.app',
-    logger: silentLogger,
-  });
+  const handleTodoActionUseCase: HandleTodoActionUseCase = registerActionHandler(
+    createHandleTodoActionUseCase,
+    {
+      actionRepository,
+      whatsappPublisher,
+      webAppUrl: 'http://test.app',
+      logger: silentLogger,
+    }
+  );
 
-  const handleNoteActionUseCase: HandleNoteActionUseCase = createHandleNoteActionUseCase({
-    actionRepository,
-    whatsappPublisher,
-    webAppUrl: 'http://test.app',
-    logger: silentLogger,
-  });
+  const handleNoteActionUseCase: HandleNoteActionUseCase = registerActionHandler(
+    createHandleNoteActionUseCase,
+    {
+      actionRepository,
+      whatsappPublisher,
+      webAppUrl: 'http://test.app',
+      logger: silentLogger,
+    }
+  );
 
-  const handleLinkActionUseCase: HandleLinkActionUseCase = createHandleLinkActionUseCase({
-    actionRepository,
-    whatsappPublisher,
-    webAppUrl: 'http://test.app',
-    logger: silentLogger,
-  });
+  const handleLinkActionUseCase: HandleLinkActionUseCase = registerActionHandler(
+    createHandleLinkActionUseCase,
+    {
+      actionRepository,
+      whatsappPublisher,
+      webAppUrl: 'http://test.app',
+      logger: silentLogger,
+    }
+  );
 
-  const handleCalendarActionUseCase: HandleCalendarActionUseCase =
-    createHandleCalendarActionUseCase({
+  const handleCalendarActionUseCase: HandleCalendarActionUseCase = registerActionHandler(
+    createHandleCalendarActionUseCase,
+    {
       actionServiceClient: deps.actionServiceClient,
       actionRepository,
       whatsappPublisher,
       webAppUrl: 'http://test.app',
       logger: silentLogger,
-    });
+    }
+  );
 
   const changeActionTypeUseCase: ChangeActionTypeUseCase =
     deps.changeActionTypeUseCase ??

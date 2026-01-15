@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { isOk, isErr, ok, err } from '@intexuraos/common-core';
 import { createHandleResearchActionUseCase } from '../domain/usecases/handleResearchAction.js';
+import { registerActionHandler } from '../domain/usecases/createIdempotentActionHandler.js';
 import type { ActionCreatedEvent } from '../domain/models/actionEvent.js';
 import { FakeActionRepository, FakeWhatsAppSendPublisher } from './fakes.js';
 import pino from 'pino';
@@ -64,7 +65,7 @@ describe('handleResearchAction usecase', () => {
   it('sets action to awaiting_approval and publishes WhatsApp notification', async () => {
     await fakeActionRepository.save(createAction());
 
-    const usecase = createHandleResearchActionUseCase({
+    const usecase = registerActionHandler(createHandleResearchActionUseCase, {
       actionRepository: fakeActionRepository,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.intexuraos.com',
@@ -92,7 +93,7 @@ describe('handleResearchAction usecase', () => {
   it('fails when marking action as awaiting_approval fails', async () => {
     await fakeActionRepository.save(createAction());
 
-    const usecase = createHandleResearchActionUseCase({
+    const usecase = registerActionHandler(createHandleResearchActionUseCase, {
       actionRepository: fakeActionRepository,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.intexuraos.com',
@@ -113,7 +114,7 @@ describe('handleResearchAction usecase', () => {
   it('succeeds even when WhatsApp publish fails (best-effort notification)', async () => {
     await fakeActionRepository.save(createAction());
 
-    const usecase = createHandleResearchActionUseCase({
+    const usecase = registerActionHandler(createHandleResearchActionUseCase, {
       actionRepository: fakeActionRepository,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.intexuraos.com',
@@ -138,7 +139,7 @@ describe('handleResearchAction usecase', () => {
   });
 
   it('returns success when action does not exist (deleted between creation and handling)', async () => {
-    const usecase = createHandleResearchActionUseCase({
+    const usecase = registerActionHandler(createHandleResearchActionUseCase, {
       actionRepository: fakeActionRepository,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.intexuraos.com',
@@ -161,7 +162,7 @@ describe('handleResearchAction usecase', () => {
     const action = createAction();
     await fakeActionRepository.save({ ...action, status: 'awaiting_approval' });
 
-    const usecase = createHandleResearchActionUseCase({
+    const usecase = registerActionHandler(createHandleResearchActionUseCase, {
       actionRepository: fakeActionRepository,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.intexuraos.com',
@@ -196,7 +197,7 @@ describe('handleResearchAction usecase', () => {
         ok({ status: 'completed' as const, resource_url: '/#/research/research-123' })
       );
 
-      const usecase = createHandleResearchActionUseCase({
+      const usecase = registerActionHandler(createHandleResearchActionUseCase, {
         actionRepository: fakeActionRepository,
         whatsappPublisher: fakeWhatsappPublisher,
         webAppUrl: 'https://app.intexuraos.com',
@@ -210,9 +211,9 @@ describe('handleResearchAction usecase', () => {
       expect(isOk(result)).toBe(true);
       expect(fakeExecuteResearchAction).toHaveBeenCalledWith('action-123');
 
-      // Action should still be pending (not updated to awaiting_approval)
+      // Decorator updated status to awaiting_approval; real executeResearchAction would update to processing/completed
       const action = await fakeActionRepository.getById('action-123');
-      expect(action?.status).toBe('pending');
+      expect(action?.status).toBe('awaiting_approval');
     });
 
     it('returns error when auto-execute fails', async () => {
@@ -222,7 +223,7 @@ describe('handleResearchAction usecase', () => {
         err(new Error('Execution failed'))
       );
 
-      const usecase = createHandleResearchActionUseCase({
+      const usecase = registerActionHandler(createHandleResearchActionUseCase, {
         actionRepository: fakeActionRepository,
         whatsappPublisher: fakeWhatsappPublisher,
         webAppUrl: 'https://app.intexuraos.com',
@@ -242,7 +243,7 @@ describe('handleResearchAction usecase', () => {
     it('falls back to approval flow when executeResearchAction is not provided', async () => {
       await fakeActionRepository.save(createAction());
 
-      const usecase = createHandleResearchActionUseCase({
+      const usecase = registerActionHandler(createHandleResearchActionUseCase, {
         actionRepository: fakeActionRepository,
         whatsappPublisher: fakeWhatsappPublisher,
         webAppUrl: 'https://app.intexuraos.com',

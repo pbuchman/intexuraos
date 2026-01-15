@@ -19,7 +19,7 @@ export interface HandleTodoActionUseCase {
 }
 
 export function createHandleTodoActionUseCase(deps: HandleTodoActionDeps): HandleTodoActionUseCase {
-  const { actionRepository, whatsappPublisher, webAppUrl, logger, executeTodoAction } = deps;
+  const { actionRepository: _actionRepository, whatsappPublisher, webAppUrl, logger, executeTodoAction } = deps;
 
   return {
     async execute(event: ActionCreatedEvent): Promise<Result<{ actionId: string }>> {
@@ -51,30 +51,7 @@ export function createHandleTodoActionUseCase(deps: HandleTodoActionDeps): Handl
         return ok({ actionId: event.actionId });
       }
 
-      logger.info({ actionId: event.actionId }, 'Setting todo action to awaiting_approval');
-
-      // Atomically update status only if still 'pending' - prevents duplicate WhatsApp messages
-      let updated: boolean;
-      try {
-        updated = await actionRepository.updateStatusIf(event.actionId, 'awaiting_approval', 'pending');
-      } catch (error) {
-        logger.error(
-          { actionId: event.actionId, error: getErrorMessage(error) },
-          'Failed to update action status'
-        );
-        return err(new Error('Failed to update action status'));
-      }
-
-      if (!updated) {
-        logger.info(
-          { actionId: event.actionId },
-          'Action already processed by another handler (idempotent)'
-        );
-        return ok({ actionId: event.actionId });
-      }
-
-      logger.info({ actionId: event.actionId }, 'Todo action set to awaiting_approval');
-
+      // Idempotency check and status update handled by registerActionHandler decorator
       const actionLink = `${webAppUrl}/#/inbox?action=${event.actionId}`;
       const message = `New todo ready for approval: "${event.title}". Review it here: ${actionLink}`;
 

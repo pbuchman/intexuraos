@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { isOk, isErr, ok, err } from '@intexuraos/common-core';
 import { createHandleTodoActionUseCase } from '../domain/usecases/handleTodoAction.js';
+import { registerActionHandler } from '../domain/usecases/createIdempotentActionHandler.js';
 import type { ActionCreatedEvent } from '../domain/models/actionEvent.js';
 import { FakeActionRepository, FakeWhatsAppSendPublisher } from './fakes.js';
 import pino from 'pino';
@@ -64,7 +65,7 @@ describe('handleTodoAction usecase', () => {
   it('sets action to awaiting_approval and publishes WhatsApp notification', async () => {
     await fakeActionRepository.save(createAction());
 
-    const usecase = createHandleTodoActionUseCase({
+    const usecase = registerActionHandler(createHandleTodoActionUseCase, {
       actionRepository: fakeActionRepository,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.intexuraos.com',
@@ -92,7 +93,7 @@ describe('handleTodoAction usecase', () => {
   it('fails when marking action as awaiting_approval fails', async () => {
     await fakeActionRepository.save(createAction());
 
-    const usecase = createHandleTodoActionUseCase({
+    const usecase = registerActionHandler(createHandleTodoActionUseCase, {
       actionRepository: fakeActionRepository,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.intexuraos.com',
@@ -113,7 +114,7 @@ describe('handleTodoAction usecase', () => {
   it('succeeds even when WhatsApp publish fails (best-effort notification)', async () => {
     await fakeActionRepository.save(createAction());
 
-    const usecase = createHandleTodoActionUseCase({
+    const usecase = registerActionHandler(createHandleTodoActionUseCase, {
       actionRepository: fakeActionRepository,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.intexuraos.com',
@@ -141,7 +142,7 @@ describe('handleTodoAction usecase', () => {
     const action = createAction();
     await fakeActionRepository.save({ ...action, status: 'awaiting_approval' });
 
-    const usecase = createHandleTodoActionUseCase({
+    const usecase = registerActionHandler(createHandleTodoActionUseCase, {
       actionRepository: fakeActionRepository,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.intexuraos.com',
@@ -176,7 +177,7 @@ describe('handleTodoAction usecase', () => {
         ok({ status: 'completed' as const, resource_url: '/#/todos/todo-123' })
       );
 
-      const usecase = createHandleTodoActionUseCase({
+      const usecase = registerActionHandler(createHandleTodoActionUseCase, {
         actionRepository: fakeActionRepository,
         whatsappPublisher: fakeWhatsappPublisher,
         webAppUrl: 'https://app.intexuraos.com',
@@ -190,9 +191,9 @@ describe('handleTodoAction usecase', () => {
       expect(isOk(result)).toBe(true);
       expect(fakeExecuteTodoAction).toHaveBeenCalledWith('action-123');
 
-      // Action should still be pending (not updated to awaiting_approval)
+      // Decorator updated status to awaiting_approval; real executeTodoAction would update to processing/completed
       const action = await fakeActionRepository.getById('action-123');
-      expect(action?.status).toBe('pending');
+      expect(action?.status).toBe('awaiting_approval');
     });
 
     it('returns error when auto-execute fails', async () => {
@@ -202,7 +203,7 @@ describe('handleTodoAction usecase', () => {
         err(new Error('Execution failed'))
       );
 
-      const usecase = createHandleTodoActionUseCase({
+      const usecase = registerActionHandler(createHandleTodoActionUseCase, {
         actionRepository: fakeActionRepository,
         whatsappPublisher: fakeWhatsappPublisher,
         webAppUrl: 'https://app.intexuraos.com',
@@ -222,7 +223,7 @@ describe('handleTodoAction usecase', () => {
     it('falls back to approval flow when executeTodoAction is not provided', async () => {
       await fakeActionRepository.save(createAction());
 
-      const usecase = createHandleTodoActionUseCase({
+      const usecase = registerActionHandler(createHandleTodoActionUseCase, {
         actionRepository: fakeActionRepository,
         whatsappPublisher: fakeWhatsappPublisher,
         webAppUrl: 'https://app.intexuraos.com',

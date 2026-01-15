@@ -61,6 +61,7 @@ import { createLocalActionServiceClient } from './infra/action/localActionServic
 import { createResearchAgentClient } from './infra/research/researchAgentClient.js';
 import { createWhatsappNotificationSender } from './infra/notification/whatsappNotificationSender.js';
 import { createFirestoreActionRepository } from './infra/firestore/actionRepository.js';
+import { registerActionHandler } from './domain/usecases/createIdempotentActionHandler.js';
 import { createFirestoreActionTransitionRepository } from './infra/firestore/actionTransitionRepository.js';
 import { createCommandsAgentHttpClient } from './infra/http/commandsAgentHttpClient.js';
 import { createTodosServiceHttpClient } from './infra/http/todosServiceHttpClient.js';
@@ -215,46 +216,61 @@ export function initServices(config: ServiceConfig): void {
     logger: pino({ name: 'executeCalendarAction' }),
   });
 
-  const handleResearchActionUseCase = createHandleResearchActionUseCase({
-    actionRepository,
-    whatsappPublisher,
-    webAppUrl: config.webAppUrl,
-    logger: pino({ name: 'handleResearchAction' }),
-    executeResearchAction: executeResearchActionUseCase,
-  });
+  const handleResearchActionUseCase = registerActionHandler(
+    createHandleResearchActionUseCase,
+    {
+      actionRepository,
+      whatsappPublisher,
+      webAppUrl: config.webAppUrl,
+      logger: pino({ name: 'handleResearchAction' }),
+      executeResearchAction: executeResearchActionUseCase,
+    }
+  );
 
-  const handleTodoActionUseCase = createHandleTodoActionUseCase({
-    actionRepository,
-    whatsappPublisher,
-    webAppUrl: config.webAppUrl,
-    logger: pino({ name: 'handleTodoAction' }),
-    executeTodoAction: executeTodoActionUseCase,
-  });
+  const handleTodoActionUseCase = registerActionHandler(
+    createHandleTodoActionUseCase,
+    {
+      actionRepository,
+      whatsappPublisher,
+      webAppUrl: config.webAppUrl,
+      logger: pino({ name: 'handleTodoAction' }),
+      executeTodoAction: executeTodoActionUseCase,
+    }
+  );
 
-  const handleNoteActionUseCase = createHandleNoteActionUseCase({
-    actionRepository,
-    whatsappPublisher,
-    webAppUrl: config.webAppUrl,
-    logger: pino({ name: 'handleNoteAction' }),
-    executeNoteAction: executeNoteActionUseCase,
-  });
+  const handleNoteActionUseCase = registerActionHandler(
+    createHandleNoteActionUseCase,
+    {
+      actionRepository,
+      whatsappPublisher,
+      webAppUrl: config.webAppUrl,
+      logger: pino({ name: 'handleNoteAction' }),
+      executeNoteAction: executeNoteActionUseCase,
+    }
+  );
 
-  const handleLinkActionUseCase = createHandleLinkActionUseCase({
-    actionRepository,
-    whatsappPublisher,
-    webAppUrl: config.webAppUrl,
-    logger: pino({ name: 'handleLinkAction' }),
-    executeLinkAction: executeLinkActionUseCase,
-  });
+  const handleLinkActionUseCase = registerActionHandler(
+    createHandleLinkActionUseCase,
+    {
+      actionRepository,
+      whatsappPublisher,
+      webAppUrl: config.webAppUrl,
+      logger: pino({ name: 'handleLinkAction' }),
+      executeLinkAction: executeLinkActionUseCase,
+    }
+  );
 
-  const handleCalendarActionUseCase = createHandleCalendarActionUseCase({
-    actionServiceClient,
-    actionRepository,
-    whatsappPublisher,
-    webAppUrl: config.webAppUrl,
-    logger: pino({ name: 'handleCalendarAction' }),
-    executeCalendarAction: executeCalendarActionUseCase,
-  });
+  const handleCalendarActionUseCase = registerActionHandler(
+    createHandleCalendarActionUseCase,
+    {
+      actionServiceClient,
+      actionRepository,
+      whatsappPublisher,
+      webAppUrl: config.webAppUrl,
+      logger: pino({ name: 'handleCalendarAction' }),
+      executeCalendarAction: executeCalendarActionUseCase,
+    }
+  );
 
   const retryPendingActionsUseCase = createRetryPendingActionsUseCase({
     actionRepository,

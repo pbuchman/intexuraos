@@ -21,7 +21,7 @@ export interface HandleResearchActionUseCase {
 export function createHandleResearchActionUseCase(
   deps: HandleResearchActionDeps
 ): HandleResearchActionUseCase {
-  const { actionRepository, whatsappPublisher, webAppUrl, logger, executeResearchAction } = deps;
+  const { actionRepository: _actionRepository, whatsappPublisher, webAppUrl, logger, executeResearchAction } = deps;
 
   return {
     async execute(event: ActionCreatedEvent): Promise<Result<{ actionId: string }>> {
@@ -53,30 +53,7 @@ export function createHandleResearchActionUseCase(
         return ok({ actionId: event.actionId });
       }
 
-      logger.info({ actionId: event.actionId }, 'Setting research action to awaiting_approval');
-
-      // Atomically update status only if still 'pending' - prevents duplicate WhatsApp messages
-      let updated: boolean;
-      try {
-        updated = await actionRepository.updateStatusIf(event.actionId, 'awaiting_approval', 'pending');
-      } catch (error) {
-        logger.error(
-          { actionId: event.actionId, error: getErrorMessage(error) },
-          'Failed to update action status'
-        );
-        return err(new Error('Failed to update action status'));
-      }
-
-      if (!updated) {
-        logger.info(
-          { actionId: event.actionId },
-          'Action already processed by another handler (idempotent)'
-        );
-        return ok({ actionId: event.actionId });
-      }
-
-      logger.info({ actionId: event.actionId }, 'Action set to awaiting_approval');
-
+      // Idempotency check and status update handled by registerActionHandler decorator
       const actionLink = `${webAppUrl}/#/inbox?action=${event.actionId}`;
       const message = `Your research request is ready for approval. Review it here: ${actionLink}`;
 
