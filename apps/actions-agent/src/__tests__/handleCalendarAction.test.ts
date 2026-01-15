@@ -14,10 +14,6 @@ import { shouldAutoExecute } from '../domain/usecases/shouldAutoExecute.js';
 const silentLogger = pino({ level: 'silent' });
 
 describe('handleCalendarAction usecase', () => {
-  // Reset mock state before each test to prevent cross-test contamination in coverage mode
-  beforeEach(() => {
-    vi.mocked(shouldAutoExecute).mockReturnValue(false);
-  });
   let fakeActionClient: FakeActionServiceClient;
   let fakeWhatsappPublisher: FakeWhatsAppSendPublisher;
 
