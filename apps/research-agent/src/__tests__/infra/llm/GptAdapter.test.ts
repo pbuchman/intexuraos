@@ -6,13 +6,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { type ModelPricing, LlmModels } from '@intexuraos/llm-contract';
 import type { Logger } from '@intexuraos/common-core';
 
-const mockLogger: Logger = {
-  info: vi.fn(),
-  error: vi.fn(),
-  warn: vi.fn(),
-  debug: vi.fn(),
-};
-
 const mockResearch = vi.fn();
 const mockGenerate = vi.fn();
 
@@ -30,6 +23,13 @@ const { GptAdapter } = await import('../../../infra/llm/GptAdapter.js');
 const testPricing: ModelPricing = {
   inputPricePerMillion: 2.0,
   outputPricePerMillion: 8.0,
+};
+
+const mockLogger: Logger = {
+  info: vi.fn(),
+  error: vi.fn(),
+  warn: vi.fn(),
+  debug: vi.fn(),
 };
 
 describe('GptAdapter', () => {

@@ -29,7 +29,7 @@ class TodosProcessingPublisherImpl extends BasePubSubPublisher implements TodosP
   private readonly topicName: string;
 
   constructor(config: TodosProcessingPublisherConfig) {
-    super({ projectId: config.projectId, loggerName: 'todos-processing-publisher' });
+    super({ projectId: config.projectId, logger: config.logger });
     this.topicName = config.topicName;
   }
 

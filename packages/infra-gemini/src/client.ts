@@ -83,6 +83,7 @@ export function createGeminiClient(config: GeminiConfig): GeminiClient {
     success: boolean,
     errorMessage?: string
   ): void {
+    // eslint-disable-next-line @typescript-eslint/no-deprecated -- TODO: Migrate to UsageLogger class with injected logger
     void logUsage({
       userId,
       provider: LlmProviders.Google,

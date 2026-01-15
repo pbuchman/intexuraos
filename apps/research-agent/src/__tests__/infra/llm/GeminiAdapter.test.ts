@@ -6,13 +6,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { type ModelPricing, LlmModels } from '@intexuraos/llm-contract';
 import type { Logger } from '@intexuraos/common-core';
 
-const mockLogger: Logger = {
-  info: vi.fn(),
-  error: vi.fn(),
-  warn: vi.fn(),
-  debug: vi.fn(),
-};
-
 const mockResearch = vi.fn();
 const mockGenerate = vi.fn();
 
@@ -32,6 +25,13 @@ const mockUsage = { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd:
 const testPricing: ModelPricing = {
   inputPricePerMillion: 1.25,
   outputPricePerMillion: 10.0,
+};
+
+const mockLogger: Logger = {
+  info: vi.fn(),
+  error: vi.fn(),
+  warn: vi.fn(),
+  debug: vi.fn(),
 };
 
 describe('GeminiAdapter', () => {

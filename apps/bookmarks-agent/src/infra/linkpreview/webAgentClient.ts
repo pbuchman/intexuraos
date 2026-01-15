@@ -5,18 +5,13 @@ import type {
   LinkPreviewFetcherPort,
   LinkPreviewError,
 } from '../../domain/ports/linkPreviewFetcher.js';
-import pino, { type Logger } from 'pino';
+import type { Logger } from 'pino';
 
 export interface WebAgentClientConfig {
   baseUrl: string;
   internalAuthToken: string;
-  logger?: Logger;
+  logger: Logger;
 }
-
-const defaultLogger = pino({
-  level: process.env['LOG_LEVEL'] ?? 'info',
-  name: 'webAgentClient',
-});
 
 interface WebAgentPreview {
   url: string;
@@ -64,7 +59,7 @@ function mapErrorCode(
 }
 
 export function createWebAgentClient(config: WebAgentClientConfig): LinkPreviewFetcherPort {
-  const logger = config.logger ?? defaultLogger;
+  const logger = config.logger;
 
   return {
     async fetchPreview(url: string): Promise<Result<OpenGraphPreview, LinkPreviewError>> {

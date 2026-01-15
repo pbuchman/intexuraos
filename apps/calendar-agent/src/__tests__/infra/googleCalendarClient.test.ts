@@ -2,13 +2,21 @@
  * Tests for Google Calendar API client.
  * Uses nock to mock HTTP requests to Google APIs.
  */
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import nock from 'nock';
 import { GoogleCalendarClientImpl, mapErrorToCalendarError } from '../../infra/google/googleCalendarClient.js';
+import type { Logger } from '@intexuraos/common-core';
 
 const GOOGLE_CALENDAR_API = 'https://www.googleapis.com';
 const TEST_ACCESS_TOKEN = 'test-access-token';
 const TEST_CALENDAR_ID = 'primary';
+
+const mockLogger: Logger = {
+  info: vi.fn(),
+  warn: vi.fn(),
+  error: vi.fn(),
+  debug: vi.fn(),
+};
 
 describe('GoogleCalendarClientImpl', () => {
   let client: GoogleCalendarClientImpl;
@@ -23,6 +31,7 @@ describe('GoogleCalendarClientImpl', () => {
 
   beforeEach(() => {
     nock.cleanAll();
+    vi.clearAllMocks();
     client = new GoogleCalendarClientImpl();
   });
 
@@ -58,7 +67,7 @@ describe('GoogleCalendarClientImpl', () => {
       const result = await client.listEvents(TEST_ACCESS_TOKEN, TEST_CALENDAR_ID, {
         timeMin: '2025-01-08T00:00:00Z',
         timeMax: '2025-01-09T00:00:00Z',
-      });
+      }, mockLogger);
 
       expect(result.ok).toBe(true);
       if (result.ok) {
@@ -77,7 +86,7 @@ describe('GoogleCalendarClientImpl', () => {
         .query(true)
         .reply(200, { items: undefined });
 
-      const result = await client.listEvents(TEST_ACCESS_TOKEN, TEST_CALENDAR_ID, {});
+      const result = await client.listEvents(TEST_ACCESS_TOKEN, TEST_CALENDAR_ID, {}, mockLogger);
 
       expect(result.ok).toBe(true);
       if (result.ok) {
@@ -91,7 +100,7 @@ describe('GoogleCalendarClientImpl', () => {
         .query(true)
         .reply(401, { message: 'Invalid token' });
 
-      const result = await client.listEvents(TEST_ACCESS_TOKEN, TEST_CALENDAR_ID, {});
+      const result = await client.listEvents(TEST_ACCESS_TOKEN, TEST_CALENDAR_ID, {}, mockLogger);
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
@@ -105,7 +114,7 @@ describe('GoogleCalendarClientImpl', () => {
         .query(true)
         .replyWithError('Network error');
 
-      const result = await client.listEvents(TEST_ACCESS_TOKEN, TEST_CALENDAR_ID, {});
+      const result = await client.listEvents(TEST_ACCESS_TOKEN, TEST_CALENDAR_ID, {}, mockLogger);
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
@@ -143,7 +152,7 @@ describe('GoogleCalendarClientImpl', () => {
           ],
         });
 
-      const result = await client.getEvent(TEST_ACCESS_TOKEN, TEST_CALENDAR_ID, 'event-123');
+      const result = await client.getEvent(TEST_ACCESS_TOKEN, TEST_CALENDAR_ID, 'event-123', mockLogger);
 
       expect(result.ok).toBe(true);
       if (result.ok) {
@@ -162,7 +171,7 @@ describe('GoogleCalendarClientImpl', () => {
         .get('/calendar/v3/calendars/primary/events/nonexistent')
         .reply(404, { message: 'Event not found' });
 
-      const result = await client.getEvent(TEST_ACCESS_TOKEN, TEST_CALENDAR_ID, 'nonexistent');
+      const result = await client.getEvent(TEST_ACCESS_TOKEN, TEST_CALENDAR_ID, 'nonexistent', mockLogger);
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
@@ -187,7 +196,7 @@ describe('GoogleCalendarClientImpl', () => {
         summary: 'New Meeting',
         start: { dateTime: '2025-01-10T14:00:00Z' },
         end: { dateTime: '2025-01-10T15:00:00Z' },
-      });
+      }, mockLogger);
 
       expect(result.ok).toBe(true);
       if (result.ok) {
@@ -205,7 +214,7 @@ describe('GoogleCalendarClientImpl', () => {
         summary: 'Test',
         start: { dateTime: 'invalid' },
         end: { dateTime: 'invalid' },
-      });
+      }, mockLogger);
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
@@ -227,7 +236,7 @@ describe('GoogleCalendarClientImpl', () => {
 
       const result = await client.updateEvent(TEST_ACCESS_TOKEN, TEST_CALENDAR_ID, 'event-123', {
         summary: 'Updated Meeting',
-      });
+      }, mockLogger);
 
       expect(result.ok).toBe(true);
       if (result.ok) {
@@ -242,7 +251,7 @@ describe('GoogleCalendarClientImpl', () => {
 
       const result = await client.updateEvent(TEST_ACCESS_TOKEN, TEST_CALENDAR_ID, 'nonexistent', {
         summary: 'Test',
-      });
+      }, mockLogger);
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
@@ -257,7 +266,7 @@ describe('GoogleCalendarClientImpl', () => {
         .delete('/calendar/v3/calendars/primary/events/event-123')
         .reply(204);
 
-      const result = await client.deleteEvent(TEST_ACCESS_TOKEN, TEST_CALENDAR_ID, 'event-123');
+      const result = await client.deleteEvent(TEST_ACCESS_TOKEN, TEST_CALENDAR_ID, 'event-123', mockLogger);
 
       expect(result.ok).toBe(true);
     });
@@ -267,7 +276,7 @@ describe('GoogleCalendarClientImpl', () => {
         .delete('/calendar/v3/calendars/primary/events/nonexistent')
         .reply(404, { message: 'Event not found' });
 
-      const result = await client.deleteEvent(TEST_ACCESS_TOKEN, TEST_CALENDAR_ID, 'nonexistent');
+      const result = await client.deleteEvent(TEST_ACCESS_TOKEN, TEST_CALENDAR_ID, 'nonexistent', mockLogger);
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
@@ -298,7 +307,7 @@ describe('GoogleCalendarClientImpl', () => {
         timeMin: '2025-01-08T00:00:00Z',
         timeMax: '2025-01-09T00:00:00Z',
         items: [{ id: 'primary' }, { id: 'secondary@example.com' }],
-      });
+      }, mockLogger);
 
       expect(result.ok).toBe(true);
       if (result.ok) {
@@ -325,7 +334,7 @@ describe('GoogleCalendarClientImpl', () => {
       const result = await client.getFreeBusy(TEST_ACCESS_TOKEN, {
         timeMin: '2025-01-08T00:00:00Z',
         timeMax: '2025-01-09T00:00:00Z',
-      });
+      }, mockLogger);
 
       expect(result.ok).toBe(true);
       if (result.ok) {
@@ -341,7 +350,7 @@ describe('GoogleCalendarClientImpl', () => {
       const result = await client.getFreeBusy(TEST_ACCESS_TOKEN, {
         timeMin: '2025-01-08T00:00:00Z',
         timeMax: '2025-01-09T00:00:00Z',
-      });
+      }, mockLogger);
 
       expect(result.ok).toBe(true);
       if (result.ok) {
@@ -363,7 +372,7 @@ describe('GoogleCalendarClientImpl', () => {
       const result = await client.getFreeBusy(TEST_ACCESS_TOKEN, {
         timeMin: '2025-01-08T00:00:00Z',
         timeMax: '2025-01-09T00:00:00Z',
-      });
+      }, mockLogger);
 
       expect(result.ok).toBe(true);
       if (result.ok) {
@@ -381,7 +390,7 @@ describe('GoogleCalendarClientImpl', () => {
       const result = await client.getFreeBusy(TEST_ACCESS_TOKEN, {
         timeMin: '2025-01-08T00:00:00Z',
         timeMax: '2025-01-09T00:00:00Z',
-      });
+      }, mockLogger);
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
@@ -402,7 +411,7 @@ describe('GoogleCalendarClientImpl', () => {
           status: 'cancelled',
         });
 
-      const result = await client.getEvent(TEST_ACCESS_TOKEN, TEST_CALENDAR_ID, 'event-123');
+      const result = await client.getEvent(TEST_ACCESS_TOKEN, TEST_CALENDAR_ID, 'event-123', mockLogger);
 
       expect(result.ok).toBe(true);
       if (result.ok) {
@@ -420,7 +429,7 @@ describe('GoogleCalendarClientImpl', () => {
           end: {},
         });
 
-      const result = await client.getEvent(TEST_ACCESS_TOKEN, TEST_CALENDAR_ID, 'event-123');
+      const result = await client.getEvent(TEST_ACCESS_TOKEN, TEST_CALENDAR_ID, 'event-123', mockLogger);
 
       expect(result.ok).toBe(true);
       if (result.ok) {
@@ -447,7 +456,7 @@ describe('GoogleCalendarClientImpl', () => {
           ],
         });
 
-      const result = await client.getEvent(TEST_ACCESS_TOKEN, TEST_CALENDAR_ID, 'event-123');
+      const result = await client.getEvent(TEST_ACCESS_TOKEN, TEST_CALENDAR_ID, 'event-123', mockLogger);
 
       expect(result.ok).toBe(true);
       if (result.ok) {
@@ -470,7 +479,7 @@ describe('GoogleCalendarClientImpl', () => {
           organizer: null,
         });
 
-      const result = await client.getEvent(TEST_ACCESS_TOKEN, TEST_CALENDAR_ID, 'event-123');
+      const result = await client.getEvent(TEST_ACCESS_TOKEN, TEST_CALENDAR_ID, 'event-123', mockLogger);
 
       expect(result.ok).toBe(true);
       if (result.ok) {
@@ -493,7 +502,7 @@ describe('GoogleCalendarClientImpl', () => {
           },
         });
 
-      const result = await client.getEvent(TEST_ACCESS_TOKEN, TEST_CALENDAR_ID, 'event-123');
+      const result = await client.getEvent(TEST_ACCESS_TOKEN, TEST_CALENDAR_ID, 'event-123', mockLogger);
 
       expect(result.ok).toBe(true);
       if (result.ok) {
@@ -511,7 +520,7 @@ describe('GoogleCalendarClientImpl', () => {
           errors: [{ reason: 'quotaExceeded' }],
         });
 
-      const result = await client.getEvent(TEST_ACCESS_TOKEN, TEST_CALENDAR_ID, 'event-123');
+      const result = await client.getEvent(TEST_ACCESS_TOKEN, TEST_CALENDAR_ID, 'event-123', mockLogger);
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
@@ -524,7 +533,7 @@ describe('GoogleCalendarClientImpl', () => {
         .get('/calendar/v3/calendars/primary/events/event-123')
         .reply(500, { message: 'Internal Server Error' });
 
-      const result = await client.getEvent(TEST_ACCESS_TOKEN, TEST_CALENDAR_ID, 'event-123');
+      const result = await client.getEvent(TEST_ACCESS_TOKEN, TEST_CALENDAR_ID, 'event-123', mockLogger);
 
       expect(result.ok).toBe(false);
       if (!result.ok) {

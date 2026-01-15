@@ -136,7 +136,7 @@ export async function createPrompt(
   content: string,
   notionServiceClient: NotionServiceClient,
   promptVaultSettings: PromptVaultSettingsPort,
-  logger?: NotionLogger
+  logger: NotionLogger
 ): Promise<Result<Prompt, PromptVaultError>> {
   const ctx = await getUserContext(userId, notionServiceClient, promptVaultSettings);
   if (!ctx.ok) return err(ctx.error);
@@ -206,7 +206,7 @@ export async function listPrompts(
   userId: string,
   notionServiceClient: NotionServiceClient,
   promptVaultSettings: PromptVaultSettingsPort,
-  logger?: NotionLogger
+  logger: NotionLogger
 ): Promise<Result<Prompt[], PromptVaultError>> {
   const ctx = await getUserContext(userId, notionServiceClient, promptVaultSettings);
   if (!ctx.ok) return err(ctx.error);
@@ -250,7 +250,7 @@ export async function getPrompt(
   promptId: string,
   notionServiceClient: NotionServiceClient,
   promptVaultSettings: PromptVaultSettingsPort,
-  logger?: NotionLogger
+  logger: NotionLogger
 ): Promise<Result<Prompt, PromptVaultError>> {
   const ctx = await getUserContext(userId, notionServiceClient, promptVaultSettings);
   if (!ctx.ok) return err(ctx.error);
@@ -261,7 +261,7 @@ export async function getPrompt(
 async function getPromptById(
   token: string,
   pageId: string,
-  logger?: NotionLogger
+  logger: NotionLogger
 ): Promise<Result<Prompt, PromptVaultError>> {
   try {
     const client = createNotionClient(token, logger);
@@ -318,7 +318,7 @@ export async function updatePrompt(
   update: { title?: string; content?: string },
   notionServiceClient: NotionServiceClient,
   promptVaultSettings: PromptVaultSettingsPort,
-  logger?: NotionLogger
+  logger: NotionLogger
 ): Promise<Result<Prompt, PromptVaultError>> {
   const ctx = await getUserContext(userId, notionServiceClient, promptVaultSettings);
   if (!ctx.ok) return err(ctx.error);

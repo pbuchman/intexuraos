@@ -2,13 +2,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { type ModelPricing, LlmModels } from '@intexuraos/llm-contract';
 import type { Logger } from '@intexuraos/common-core';
 
-const mockLogger: Logger = {
-  info: vi.fn(),
-  error: vi.fn(),
-  warn: vi.fn(),
-  debug: vi.fn(),
-};
-
 const mockResearch = vi.fn();
 
 const mockCreatePerplexityClient = vi.fn().mockReturnValue({
@@ -25,6 +18,13 @@ const testPricing: ModelPricing = {
   inputPricePerMillion: 3.0,
   outputPricePerMillion: 15.0,
   useProviderCost: true,
+};
+
+const mockLogger: Logger = {
+  info: vi.fn(),
+  error: vi.fn(),
+  warn: vi.fn(),
+  debug: vi.fn(),
 };
 
 describe('PerplexityAdapter', () => {

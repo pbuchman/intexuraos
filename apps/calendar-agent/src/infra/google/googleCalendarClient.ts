@@ -181,9 +181,9 @@ export class GoogleCalendarClientImpl implements GoogleCalendarClient {
     accessToken: string,
     calendarId: string,
     options: ListEventsInput,
-    logger?: Logger
+    logger: Logger
   ): Promise<Result<CalendarEvent[], CalendarError>> {
-    logger?.debug({ calendarId, options }, 'GoogleCalendarClient.listEvents: request');
+    logger.debug({ calendarId, options }, 'GoogleCalendarClient.listEvents: request');
     try {
       const oauth2Client = new google.auth.OAuth2();
       oauth2Client.setCredentials({ access_token: accessToken });
@@ -201,11 +201,11 @@ export class GoogleCalendarClientImpl implements GoogleCalendarClient {
 
       const response = await calendar.events.list(params);
       const events = (response.data.items ?? []).map(mapGoogleEventToCalendarEvent);
-      logger?.debug({ calendarId, eventCount: events.length }, 'GoogleCalendarClient.listEvents: response');
+      logger.debug({ calendarId, eventCount: events.length }, 'GoogleCalendarClient.listEvents: response');
       return ok(events);
     } catch (error) {
       const calendarError = mapErrorToCalendarError(error);
-      logger?.error({ calendarId, error: calendarError }, 'GoogleCalendarClient.listEvents: error');
+      logger.error({ calendarId, error: calendarError }, 'GoogleCalendarClient.listEvents: error');
       return err(calendarError);
     }
   }
@@ -214,20 +214,20 @@ export class GoogleCalendarClientImpl implements GoogleCalendarClient {
     accessToken: string,
     calendarId: string,
     eventId: string,
-    logger?: Logger
+    logger: Logger
   ): Promise<Result<CalendarEvent, CalendarError>> {
-    logger?.debug({ calendarId, eventId }, 'GoogleCalendarClient.getEvent: request');
+    logger.debug({ calendarId, eventId }, 'GoogleCalendarClient.getEvent: request');
     try {
       const oauth2Client = new google.auth.OAuth2();
       oauth2Client.setCredentials({ access_token: accessToken });
       const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
 
       const response = await calendar.events.get({ calendarId, eventId });
-      logger?.debug({ calendarId, eventId, title: response.data.summary }, 'GoogleCalendarClient.getEvent: response');
+      logger.debug({ calendarId, eventId, title: response.data.summary }, 'GoogleCalendarClient.getEvent: response');
       return ok(mapGoogleEventToCalendarEvent(response.data));
     } catch (error) {
       const calendarError = mapErrorToCalendarError(error);
-      logger?.error({ calendarId, eventId, error: calendarError }, 'GoogleCalendarClient.getEvent: error');
+      logger.error({ calendarId, eventId, error: calendarError }, 'GoogleCalendarClient.getEvent: error');
       return err(calendarError);
     }
   }
@@ -236,9 +236,9 @@ export class GoogleCalendarClientImpl implements GoogleCalendarClient {
     accessToken: string,
     calendarId: string,
     event: CreateEventInput,
-    logger?: Logger
+    logger: Logger
   ): Promise<Result<CalendarEvent, CalendarError>> {
-    logger?.debug({ calendarId, title: event.summary }, 'GoogleCalendarClient.createEvent: request');
+    logger.debug({ calendarId, title: event.summary }, 'GoogleCalendarClient.createEvent: request');
     try {
       const oauth2Client = new google.auth.OAuth2();
       oauth2Client.setCredentials({ access_token: accessToken });
@@ -257,11 +257,11 @@ export class GoogleCalendarClientImpl implements GoogleCalendarClient {
         calendarId,
         requestBody,
       });
-      logger?.debug({ calendarId, eventId: response.data.id }, 'GoogleCalendarClient.createEvent: response');
+      logger.debug({ calendarId, eventId: response.data.id }, 'GoogleCalendarClient.createEvent: response');
       return ok(mapGoogleEventToCalendarEvent(response.data));
     } catch (error) {
       const calendarError = mapErrorToCalendarError(error);
-      logger?.error({ calendarId, error: calendarError }, 'GoogleCalendarClient.createEvent: error');
+      logger.error({ calendarId, error: calendarError }, 'GoogleCalendarClient.createEvent: error');
       return err(calendarError);
     }
   }
@@ -271,9 +271,9 @@ export class GoogleCalendarClientImpl implements GoogleCalendarClient {
     calendarId: string,
     eventId: string,
     event: UpdateEventInput,
-    logger?: Logger
+    logger: Logger
   ): Promise<Result<CalendarEvent, CalendarError>> {
-    logger?.debug({ calendarId, eventId, updates: Object.keys(event) }, 'GoogleCalendarClient.updateEvent: request');
+    logger.debug({ calendarId, eventId, updates: Object.keys(event) }, 'GoogleCalendarClient.updateEvent: request');
     try {
       const oauth2Client = new google.auth.OAuth2();
       oauth2Client.setCredentials({ access_token: accessToken });
@@ -293,11 +293,11 @@ export class GoogleCalendarClientImpl implements GoogleCalendarClient {
         eventId,
         requestBody,
       });
-      logger?.debug({ calendarId, eventId, title: response.data.summary }, 'GoogleCalendarClient.updateEvent: response');
+      logger.debug({ calendarId, eventId, title: response.data.summary }, 'GoogleCalendarClient.updateEvent: response');
       return ok(mapGoogleEventToCalendarEvent(response.data));
     } catch (error) {
       const calendarError = mapErrorToCalendarError(error);
-      logger?.error({ calendarId, eventId, error: calendarError }, 'GoogleCalendarClient.updateEvent: error');
+      logger.error({ calendarId, eventId, error: calendarError }, 'GoogleCalendarClient.updateEvent: error');
       return err(calendarError);
     }
   }
@@ -306,20 +306,20 @@ export class GoogleCalendarClientImpl implements GoogleCalendarClient {
     accessToken: string,
     calendarId: string,
     eventId: string,
-    logger?: Logger
+    logger: Logger
   ): Promise<Result<void, CalendarError>> {
-    logger?.debug({ calendarId, eventId }, 'GoogleCalendarClient.deleteEvent: request');
+    logger.debug({ calendarId, eventId }, 'GoogleCalendarClient.deleteEvent: request');
     try {
       const oauth2Client = new google.auth.OAuth2();
       oauth2Client.setCredentials({ access_token: accessToken });
       const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
 
       await calendar.events.delete({ calendarId, eventId });
-      logger?.debug({ calendarId, eventId }, 'GoogleCalendarClient.deleteEvent: response');
+      logger.debug({ calendarId, eventId }, 'GoogleCalendarClient.deleteEvent: response');
       return ok(undefined);
     } catch (error) {
       const calendarError = mapErrorToCalendarError(error);
-      logger?.error({ calendarId, eventId, error: calendarError }, 'GoogleCalendarClient.deleteEvent: error');
+      logger.error({ calendarId, eventId, error: calendarError }, 'GoogleCalendarClient.deleteEvent: error');
       return err(calendarError);
     }
   }
@@ -327,9 +327,9 @@ export class GoogleCalendarClientImpl implements GoogleCalendarClient {
   async getFreeBusy(
     accessToken: string,
     input: FreeBusyInput,
-    logger?: Logger
+    logger: Logger
   ): Promise<Result<Map<string, FreeBusySlot[]>, CalendarError>> {
-    logger?.debug({ timeMin: input.timeMin, timeMax: input.timeMax, calendarCount: input.items?.length ?? 1 }, 'GoogleCalendarClient.getFreeBusy: request');
+    logger.debug({ timeMin: input.timeMin, timeMax: input.timeMax, calendarCount: input.items?.length ?? 1 }, 'GoogleCalendarClient.getFreeBusy: request');
     try {
       const oauth2Client = new google.auth.OAuth2();
       oauth2Client.setCredentials({ access_token: accessToken });
@@ -357,11 +357,11 @@ export class GoogleCalendarClientImpl implements GoogleCalendarClient {
         result.set(calId, slots);
       }
 
-      logger?.debug({ calendarCount: result.size }, 'GoogleCalendarClient.getFreeBusy: response');
+      logger.debug({ calendarCount: result.size }, 'GoogleCalendarClient.getFreeBusy: response');
       return ok(result);
     } catch (error) {
       const calendarError = mapErrorToCalendarError(error);
-      logger?.error({ error: calendarError }, 'GoogleCalendarClient.getFreeBusy: error');
+      logger.error({ error: calendarError }, 'GoogleCalendarClient.getFreeBusy: error');
       return err(calendarError);
     }
   }

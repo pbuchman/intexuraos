@@ -810,11 +810,19 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
               void userServiceClient.reportLlmSuccess(user.userId, synthesisProvider);
             },
             logger: {
-              info: (msg: string): void => {
-                request.log.info({ researchId: id }, msg);
+              info: (obj: object, msg?: string): void => {
+                request.log.info({ researchId: id, ...obj }, msg);
               },
-              error: (obj: object, msg: string): void => {
-                request.log.error({ researchId: id, ...obj }, msg);
+              error: (obj: object, msg?: string): void => {
+                const message = typeof msg === 'string' ? msg : typeof obj === 'string' ? obj : undefined;
+                const context = typeof obj === 'string' ? {} : obj;
+                request.log.error({ researchId: id, ...context }, message);
+              },
+              warn: (obj: object, msg?: string): void => {
+                request.log.warn({ researchId: id, ...obj }, msg);
+              },
+              debug: (obj: object, msg?: string): void => {
+                request.log.debug({ researchId: id, ...obj }, msg);
               },
             },
           });
@@ -953,6 +961,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             void userServiceClient.reportLlmSuccess(user.userId, synthesisProvider);
           },
           imageApiKeys: apiKeysResult.value,
+          logger: request.log,
         },
       });
 

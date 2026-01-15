@@ -3,8 +3,16 @@ import { err, ok } from '@intexuraos/common-core';
 import { createTodoItemExtractionService } from '../infra/gemini/todoItemExtractionService.js';
 import type { UserServiceClient } from '../infra/user/userServiceClient.js';
 import type { LlmGenerateClient } from '@intexuraos/llm-factory';
+import type { Logger } from '@intexuraos/common-core';
 
 const mockGenerate = vi.fn();
+
+const mockLogger: Logger = {
+  info: vi.fn(),
+  error: vi.fn(),
+  warn: vi.fn(),
+  debug: vi.fn(),
+};
 
 describe('todoItemExtractionService', () => {
   let mockUserServiceClient: UserServiceClient;
@@ -95,7 +103,7 @@ describe('todoItemExtractionService', () => {
 
       mockGenerate.mockResolvedValue(ok({ content: validResponse, usage: mockUsage }));
       mockUserServiceClient = createMockUserServiceClient('ok');
-      const service = createTodoItemExtractionService(mockUserServiceClient);
+      const service = createTodoItemExtractionService(mockUserServiceClient, mockLogger);
 
       const result = await service.extractItems('user-123', 'Buy groceries and call mom');
 
@@ -113,7 +121,7 @@ describe('todoItemExtractionService', () => {
 
     it('returns NO_API_KEY error when user has no API key', async () => {
       mockUserServiceClient = createMockUserServiceClient('no_api_key');
-      const service = createTodoItemExtractionService(mockUserServiceClient);
+      const service = createTodoItemExtractionService(mockUserServiceClient, mockLogger);
 
       const result = await service.extractItems('user-123', 'Test description');
 
@@ -126,7 +134,7 @@ describe('todoItemExtractionService', () => {
 
     it('returns USER_SERVICE_ERROR when user service fails with API_ERROR', async () => {
       mockUserServiceClient = createMockUserServiceClient('api_error');
-      const service = createTodoItemExtractionService(mockUserServiceClient);
+      const service = createTodoItemExtractionService(mockUserServiceClient, mockLogger);
 
       const result = await service.extractItems('user-123', 'Test description');
 
@@ -140,7 +148,7 @@ describe('todoItemExtractionService', () => {
 
     it('returns USER_SERVICE_ERROR when user service fails with NETWORK_ERROR', async () => {
       mockUserServiceClient = createMockUserServiceClient('network_error');
-      const service = createTodoItemExtractionService(mockUserServiceClient);
+      const service = createTodoItemExtractionService(mockUserServiceClient, mockLogger);
 
       const result = await service.extractItems('user-123', 'Test description');
 
@@ -155,7 +163,7 @@ describe('todoItemExtractionService', () => {
     it('returns GENERATION_ERROR when LLM generation fails', async () => {
       mockGenerate.mockResolvedValue(err({ code: 'RATE_LIMIT_EXCEEDED', message: 'Rate limit exceeded' }));
       mockUserServiceClient = createMockUserServiceClient('ok');
-      const service = createTodoItemExtractionService(mockUserServiceClient);
+      const service = createTodoItemExtractionService(mockUserServiceClient, mockLogger);
 
       const result = await service.extractItems('user-123', 'Test description');
 
@@ -170,7 +178,7 @@ describe('todoItemExtractionService', () => {
     it('returns INVALID_RESPONSE when JSON parsing fails', async () => {
       mockGenerate.mockResolvedValue(ok({ content: 'not valid json', usage: mockUsage }));
       mockUserServiceClient = createMockUserServiceClient('ok');
-      const service = createTodoItemExtractionService(mockUserServiceClient);
+      const service = createTodoItemExtractionService(mockUserServiceClient, mockLogger);
 
       const result = await service.extractItems('user-123', 'Test description');
 
@@ -191,7 +199,7 @@ describe('todoItemExtractionService', () => {
 
       mockGenerate.mockResolvedValue(ok({ content: invalidResponse, usage: mockUsage }));
       mockUserServiceClient = createMockUserServiceClient('ok');
-      const service = createTodoItemExtractionService(mockUserServiceClient);
+      const service = createTodoItemExtractionService(mockUserServiceClient, mockLogger);
 
       const result = await service.extractItems('user-123', 'Test description');
 
@@ -211,7 +219,7 @@ describe('todoItemExtractionService', () => {
 
       mockGenerate.mockResolvedValue(ok({ content: invalidResponse, usage: mockUsage }));
       mockUserServiceClient = createMockUserServiceClient('ok');
-      const service = createTodoItemExtractionService(mockUserServiceClient);
+      const service = createTodoItemExtractionService(mockUserServiceClient, mockLogger);
 
       const result = await service.extractItems('user-123', 'Test description');
 
@@ -236,7 +244,7 @@ describe('todoItemExtractionService', () => {
 
       mockGenerate.mockResolvedValue(ok({ content: invalidResponse, usage: mockUsage }));
       mockUserServiceClient = createMockUserServiceClient('ok');
-      const service = createTodoItemExtractionService(mockUserServiceClient);
+      const service = createTodoItemExtractionService(mockUserServiceClient, mockLogger);
 
       const result = await service.extractItems('user-123', 'Test description');
 
@@ -261,7 +269,7 @@ describe('todoItemExtractionService', () => {
 
       mockGenerate.mockResolvedValue(ok({ content: invalidResponse, usage: mockUsage }));
       mockUserServiceClient = createMockUserServiceClient('ok');
-      const service = createTodoItemExtractionService(mockUserServiceClient);
+      const service = createTodoItemExtractionService(mockUserServiceClient, mockLogger);
 
       const result = await service.extractItems('user-123', 'Test description');
 
@@ -279,7 +287,7 @@ describe('todoItemExtractionService', () => {
 
       mockGenerate.mockResolvedValue(ok({ content: validResponse, usage: mockUsage }));
       mockUserServiceClient = createMockUserServiceClient('ok');
-      const service = createTodoItemExtractionService(mockUserServiceClient);
+      const service = createTodoItemExtractionService(mockUserServiceClient, mockLogger);
 
       const result = await service.extractItems('user-123', 'No actionable items here');
 
@@ -304,7 +312,7 @@ describe('todoItemExtractionService', () => {
 
       mockGenerate.mockResolvedValue(ok({ content: validResponse, usage: mockUsage }));
       mockUserServiceClient = createMockUserServiceClient('ok');
-      const service = createTodoItemExtractionService(mockUserServiceClient);
+      const service = createTodoItemExtractionService(mockUserServiceClient, mockLogger);
 
       const result = await service.extractItems('user-123', 'Many tasks');
 
@@ -335,7 +343,7 @@ describe('todoItemExtractionService', () => {
 
       mockGenerate.mockResolvedValue(ok({ content: validResponse, usage: mockUsage }));
       mockUserServiceClient = createMockUserServiceClient('ok');
-      const service = createTodoItemExtractionService(mockUserServiceClient);
+      const service = createTodoItemExtractionService(mockUserServiceClient, mockLogger);
 
       const result = await service.extractItems('user-123', 'Test');
 
@@ -361,7 +369,7 @@ describe('todoItemExtractionService', () => {
 
       mockGenerate.mockResolvedValue(ok({ content: validResponse, usage: mockUsage }));
       mockUserServiceClient = createMockUserServiceClient('ok');
-      const service = createTodoItemExtractionService(mockUserServiceClient);
+      const service = createTodoItemExtractionService(mockUserServiceClient, mockLogger);
 
       const result = await service.extractItems('user-123', 'Test');
 
@@ -379,7 +387,7 @@ describe('todoItemExtractionService', () => {
         })
       );
       mockUserServiceClient = createMockUserServiceClient('ok');
-      const service = createTodoItemExtractionService(mockUserServiceClient);
+      const service = createTodoItemExtractionService(mockUserServiceClient, mockLogger);
 
       await service.extractItems('user-abc-123', 'Test description');
 
@@ -394,7 +402,7 @@ describe('todoItemExtractionService', () => {
         })
       );
       mockUserServiceClient = createMockUserServiceClient('ok');
-      const service = createTodoItemExtractionService(mockUserServiceClient);
+      const service = createTodoItemExtractionService(mockUserServiceClient, mockLogger);
 
       const result = await service.extractItems('user-123', 'Test');
 
@@ -422,7 +430,7 @@ describe('todoItemExtractionService', () => {
 
       mockGenerate.mockResolvedValue(ok({ content: responseWithMarkdown, usage: mockUsage }));
       mockUserServiceClient = createMockUserServiceClient('ok');
-      const service = createTodoItemExtractionService(mockUserServiceClient);
+      const service = createTodoItemExtractionService(mockUserServiceClient, mockLogger);
 
       const result = await service.extractItems('user-123', 'Buy milk');
 
@@ -441,7 +449,7 @@ describe('todoItemExtractionService', () => {
 
       mockGenerate.mockResolvedValue(ok({ content: invalidResponseWithMarkdown, usage: mockUsage }));
       mockUserServiceClient = createMockUserServiceClient('ok');
-      const service = createTodoItemExtractionService(mockUserServiceClient);
+      const service = createTodoItemExtractionService(mockUserServiceClient, mockLogger);
 
       const result = await service.extractItems('user-123', 'Test');
 
@@ -464,7 +472,7 @@ describe('todoItemExtractionService', () => {
 
       mockGenerate.mockResolvedValue(ok({ content: invalidSchemaWithMarkdown, usage: mockUsage }));
       mockUserServiceClient = createMockUserServiceClient('ok');
-      const service = createTodoItemExtractionService(mockUserServiceClient);
+      const service = createTodoItemExtractionService(mockUserServiceClient, mockLogger);
 
       const result = await service.extractItems('user-123', 'Test');
 
@@ -484,7 +492,7 @@ describe('todoItemExtractionService', () => {
 
       mockGenerate.mockResolvedValue(ok({ content: invalidResponse, usage: mockUsage }));
       mockUserServiceClient = createMockUserServiceClient('ok');
-      const service = createTodoItemExtractionService(mockUserServiceClient);
+      const service = createTodoItemExtractionService(mockUserServiceClient, mockLogger);
 
       const result = await service.extractItems('user-123', 'Test');
 
@@ -502,7 +510,7 @@ describe('todoItemExtractionService', () => {
 
       mockGenerate.mockResolvedValue(ok({ content: invalidResponse, usage: mockUsage }));
       mockUserServiceClient = createMockUserServiceClient('ok');
-      const service = createTodoItemExtractionService(mockUserServiceClient);
+      const service = createTodoItemExtractionService(mockUserServiceClient, mockLogger);
 
       const result = await service.extractItems('user-123', 'Test');
 
@@ -520,7 +528,7 @@ describe('todoItemExtractionService', () => {
 
       mockGenerate.mockResolvedValue(ok({ content: invalidResponse, usage: mockUsage }));
       mockUserServiceClient = createMockUserServiceClient('ok');
-      const service = createTodoItemExtractionService(mockUserServiceClient);
+      const service = createTodoItemExtractionService(mockUserServiceClient, mockLogger);
 
       const result = await service.extractItems('user-123', 'Test');
 
@@ -538,7 +546,7 @@ describe('todoItemExtractionService', () => {
 
       mockGenerate.mockResolvedValue(ok({ content: invalidResponse, usage: mockUsage }));
       mockUserServiceClient = createMockUserServiceClient('ok');
-      const service = createTodoItemExtractionService(mockUserServiceClient);
+      const service = createTodoItemExtractionService(mockUserServiceClient, mockLogger);
 
       const result = await service.extractItems('user-123', 'Test');
 
@@ -556,7 +564,7 @@ describe('todoItemExtractionService', () => {
 
       mockGenerate.mockResolvedValue(ok({ content: invalidResponse, usage: mockUsage }));
       mockUserServiceClient = createMockUserServiceClient('ok');
-      const service = createTodoItemExtractionService(mockUserServiceClient);
+      const service = createTodoItemExtractionService(mockUserServiceClient, mockLogger);
 
       const result = await service.extractItems('user-123', 'Test');
 
@@ -569,7 +577,7 @@ describe('todoItemExtractionService', () => {
     it('returns INVALID_RESPONSE when JSON root is not an object', async () => {
       mockGenerate.mockResolvedValue(ok({ content: '["not", "an", "object"]', usage: mockUsage }));
       mockUserServiceClient = createMockUserServiceClient('ok');
-      const service = createTodoItemExtractionService(mockUserServiceClient);
+      const service = createTodoItemExtractionService(mockUserServiceClient, mockLogger);
 
       const result = await service.extractItems('user-123', 'Test');
 

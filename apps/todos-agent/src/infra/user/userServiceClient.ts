@@ -1,5 +1,5 @@
 import type { Result, Logger } from '@intexuraos/common-core';
-import { err, getErrorMessage, ok, getLogLevel } from '@intexuraos/common-core';
+import { err, getErrorMessage, ok } from '@intexuraos/common-core';
 import {
   createLlmClient,
   type LlmClientConfig,
@@ -16,7 +16,7 @@ import type { IPricingContext } from '@intexuraos/llm-pricing';
 import pino from 'pino';
 
 const defaultLogger = pino({
-  level: getLogLevel(),
+  level: process.env['LOG_LEVEL'] ?? 'info',
   name: 'userServiceClient',
 });
 
@@ -30,7 +30,7 @@ export interface UserServiceConfig {
   baseUrl: string;
   internalAuthToken: string;
   pricingContext: IPricingContext;
-  logger?: Logger;
+  logger: Logger;
 }
 
 export interface UserServiceError {
@@ -63,7 +63,7 @@ function providerToKeyField(provider: LlmProvider) {
 }
 
 export function createUserServiceClient(config: UserServiceConfig): UserServiceClient {
-  const logger = config.logger ?? defaultLogger;
+  const { logger } = config;
 
   return {
     async getLlmClient(

@@ -1,10 +1,15 @@
 export type { LlmPricing, LlmProvider } from './types.js';
+
 export {
-  logUsage,
   isUsageLoggingEnabled,
+  UsageLogger,
+  createUsageLogger,
   type UsageLogParams,
   type CallType,
 } from './usageLogger.js';
+
+// eslint-disable-next-line @typescript-eslint/no-deprecated
+export { logUsage } from './usageLogger.js';
 export {
   fetchAllPricing,
   createPricingContext,

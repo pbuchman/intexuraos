@@ -12,7 +12,7 @@ const defaultLogger = pino({
 export interface ActionsAgentClientConfig {
   baseUrl: string;
   internalAuthToken: string;
-  logger?: Logger;
+  logger: Logger;
 }
 
 export interface CreateActionParams {
@@ -29,13 +29,11 @@ export interface ActionsAgentClient {
 }
 
 export function createActionsAgentClient(config: ActionsAgentClientConfig): ActionsAgentClient {
-  const logger = config.logger ?? defaultLogger;
-
   return {
     async createAction(params: CreateActionParams): Promise<Result<Action>> {
       const endpoint = `${config.baseUrl}/internal/actions`;
 
-      logger.info(
+      config.logger.info(
         {
           userId: params.userId,
           commandId: params.commandId,
@@ -56,7 +54,7 @@ export function createActionsAgentClient(config: ActionsAgentClientConfig): Acti
           body: JSON.stringify(params),
         });
       } catch (error) {
-        logger.error(
+        config.logger.error(
           {
             userId: params.userId,
             commandId: params.commandId,
@@ -71,7 +69,7 @@ export function createActionsAgentClient(config: ActionsAgentClientConfig): Acti
 
       if (!response.ok) {
         const text = await response.text();
-        logger.error(
+        config.logger.error(
           {
             userId: params.userId,
             commandId: params.commandId,
@@ -94,7 +92,7 @@ export function createActionsAgentClient(config: ActionsAgentClientConfig): Acti
       };
 
       if (!body.success) {
-        logger.error(
+        config.logger.error(
           {
             userId: params.userId,
             commandId: params.commandId,
@@ -104,7 +102,7 @@ export function createActionsAgentClient(config: ActionsAgentClientConfig): Acti
         return err(new Error('Failed to create action: response.success is false'));
       }
 
-      logger.info(
+      config.logger.info(
         {
           userId: params.userId,
           commandId: params.commandId,

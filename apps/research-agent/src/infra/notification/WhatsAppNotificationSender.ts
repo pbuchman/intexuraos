@@ -4,19 +4,29 @@
  * Phone number lookup is handled internally by whatsapp-service.
  */
 
+import type { Logger } from 'pino';
 import {
   createWhatsAppSendPublisher,
   type WhatsAppSendPublisher,
-  type WhatsAppSendPublisherConfig,
 } from '@intexuraos/infra-pubsub';
 import { ok, type Result } from '@intexuraos/common-core';
 import type { NotificationError, NotificationSender } from '../../domain/research/index.js';
 
+export interface WhatsAppNotificationSenderConfig {
+  projectId: string;
+  topicName: string;
+  logger: Logger;
+}
+
 export class WhatsAppNotificationSender implements NotificationSender {
   private readonly publisher: WhatsAppSendPublisher;
 
-  constructor(config: WhatsAppSendPublisherConfig) {
-    this.publisher = createWhatsAppSendPublisher(config);
+  constructor(config: WhatsAppNotificationSenderConfig) {
+    this.publisher = createWhatsAppSendPublisher({
+      projectId: config.projectId,
+      topicName: config.topicName,
+      logger: config.logger,
+    });
   }
 
   async sendResearchComplete(

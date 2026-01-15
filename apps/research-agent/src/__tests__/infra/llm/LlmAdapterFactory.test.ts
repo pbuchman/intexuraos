@@ -4,8 +4,8 @@
 
 import { describe, expect, it, vi } from 'vitest';
 import { TEST_PRICING } from '@intexuraos/llm-pricing';
-import { LlmModels } from '@intexuraos/llm-contract';
 import type { Logger } from '@intexuraos/common-core';
+import { LlmModels } from '@intexuraos/llm-contract';
 
 const testPricing = TEST_PRICING;
 const mockLogger: Logger = {
@@ -21,11 +21,11 @@ vi.mock('../../../infra/llm/GeminiAdapter.js', () => ({
     model: string;
     userId: string;
     logger: Logger;
-    constructor(apiKey: string, model: string, userId: string, _pricing: unknown, logger: Logger) {
+    constructor(apiKey: string, model: string, userId: string, _pricing: unknown, _logger: Logger) {
       this.apiKey = apiKey;
       this.model = model;
       this.userId = userId;
-      this.logger = logger;
+      this.logger = _logger;
     }
   },
 }));
@@ -36,11 +36,11 @@ vi.mock('../../../infra/llm/ClaudeAdapter.js', () => ({
     model: string;
     userId: string;
     logger: Logger;
-    constructor(apiKey: string, model: string, userId: string, _pricing: unknown, logger: Logger) {
+    constructor(apiKey: string, model: string, userId: string, _pricing: unknown, _logger: Logger) {
       this.apiKey = apiKey;
       this.model = model;
       this.userId = userId;
-      this.logger = logger;
+      this.logger = _logger;
     }
   },
 }));
@@ -51,11 +51,11 @@ vi.mock('../../../infra/llm/GptAdapter.js', () => ({
     model: string;
     userId: string;
     logger: Logger;
-    constructor(apiKey: string, model: string, userId: string, _pricing: unknown, logger: Logger) {
+    constructor(apiKey: string, model: string, userId: string, _pricing: unknown, _logger: Logger) {
       this.apiKey = apiKey;
       this.model = model;
       this.userId = userId;
-      this.logger = logger;
+      this.logger = _logger;
     }
   },
 }));
@@ -66,11 +66,11 @@ vi.mock('../../../infra/llm/PerplexityAdapter.js', () => ({
     model: string;
     userId: string;
     logger: Logger;
-    constructor(apiKey: string, model: string, userId: string, _pricing: unknown, logger: Logger) {
+    constructor(apiKey: string, model: string, userId: string, _pricing: unknown, _logger: Logger) {
       this.apiKey = apiKey;
       this.model = model;
       this.userId = userId;
-      this.logger = logger;
+      this.logger = _logger;
     }
   },
 }));
@@ -81,11 +81,11 @@ vi.mock('../../../infra/llm/GlmAdapter.js', () => ({
     model: string;
     userId: string;
     logger: Logger;
-    constructor(apiKey: string, model: string, userId: string, _pricing: unknown, logger: Logger) {
+    constructor(apiKey: string, model: string, userId: string, _pricing: unknown, _logger: Logger) {
       this.apiKey = apiKey;
       this.model = model;
       this.userId = userId;
-      this.logger = logger;
+      this.logger = _logger;
     }
   },
 }));

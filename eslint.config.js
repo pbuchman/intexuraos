@@ -690,6 +690,11 @@ export default tseslint.config(
           message:
             'Use getErrorMessage(error, fallback) from @intexuraos/common-core instead of inline error extraction.',
         },
+        {
+          selector: 'Identifier[name=/^logger$/i][optional=true]',
+          message:
+            'Logger parameter must be required (logger: Logger), not optional (logger?: Logger). Logger must be injected via dependency injection.',
+        },
       ],
     },
   },

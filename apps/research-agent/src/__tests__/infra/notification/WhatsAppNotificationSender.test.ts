@@ -2,6 +2,7 @@
  * Tests for WhatsAppNotificationSender.
  */
 
+import pino from 'pino';
 import { LlmModels } from '@intexuraos/llm-contract';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ok } from '@intexuraos/common-core';
@@ -18,9 +19,11 @@ const { WhatsAppNotificationSender } =
   await import('../../../infra/notification/WhatsAppNotificationSender.js');
 
 describe('WhatsAppNotificationSender', () => {
+  const mockLogger = pino({ name: 'test', level: 'silent' });
   const mockConfig = {
     projectId: 'test-project',
     topicName: 'test-topic',
+    logger: mockLogger,
   };
 
   beforeEach(() => {

@@ -3,6 +3,7 @@
  * Mocks @google-cloud/pubsub SDK to test publishing without real Pub/Sub.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import pino from 'pino';
 import { createWhatsAppSendPublisher } from '../whatsappSendPublisher.js';
 import type { WhatsAppSendPublisherConfig } from '../types.js';
 
@@ -25,9 +26,11 @@ vi.mock('@google-cloud/pubsub', () => {
 });
 
 describe('createWhatsAppSendPublisher', () => {
+  const mockLogger = pino({ name: 'test', level: 'silent' });
   const config: WhatsAppSendPublisherConfig = {
     projectId: 'test-project',
     topicName: 'test-whatsapp-send-topic',
+    logger: mockLogger,
   };
 
   beforeEach(() => {

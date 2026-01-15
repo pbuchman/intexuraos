@@ -99,6 +99,7 @@ export function createGlmClient(config: GlmConfig): GlmClient {
     success: boolean,
     errorMessage?: string
   ): void {
+    // eslint-disable-next-line @typescript-eslint/no-deprecated -- TODO: Migrate to UsageLogger class with injected logger
     void logUsage({
       userId,
       provider: LlmProviders.Zai,

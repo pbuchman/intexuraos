@@ -22,21 +22,21 @@ export interface GoogleCalendarClient {
     accessToken: string,
     calendarId: string,
     options: ListEventsInput,
-    logger?: Logger
+    logger: Logger
   ): Promise<Result<CalendarEvent[], CalendarError>>;
 
   getEvent(
     accessToken: string,
     calendarId: string,
     eventId: string,
-    logger?: Logger
+    logger: Logger
   ): Promise<Result<CalendarEvent, CalendarError>>;
 
   createEvent(
     accessToken: string,
     calendarId: string,
     event: CreateEventInput,
-    logger?: Logger
+    logger: Logger
   ): Promise<Result<CalendarEvent, CalendarError>>;
 
   updateEvent(
@@ -44,20 +44,20 @@ export interface GoogleCalendarClient {
     calendarId: string,
     eventId: string,
     event: UpdateEventInput,
-    logger?: Logger
+    logger: Logger
   ): Promise<Result<CalendarEvent, CalendarError>>;
 
   deleteEvent(
     accessToken: string,
     calendarId: string,
     eventId: string,
-    logger?: Logger
+    logger: Logger
   ): Promise<Result<void, CalendarError>>;
 
   getFreeBusy(
     accessToken: string,
     input: FreeBusyInput,
-    logger?: Logger
+    logger: Logger
   ): Promise<Result<Map<string, FreeBusySlot[]>, CalendarError>>;
 }
 

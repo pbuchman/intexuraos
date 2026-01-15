@@ -30,7 +30,7 @@ class WhatsAppSendPublisherImpl extends BasePubSubPublisher implements WhatsAppS
   private readonly topicName: string;
 
   constructor(config: WhatsAppSendPublisherConfig) {
-    super({ projectId: config.projectId, loggerName: 'whatsapp-send-publisher' });
+    super({ projectId: config.projectId, logger: config.logger });
     this.topicName = config.topicName;
   }
 

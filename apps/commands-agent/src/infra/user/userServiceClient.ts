@@ -30,7 +30,7 @@ export interface UserServiceConfig {
   baseUrl: string;
   internalAuthToken: string;
   pricingContext: IPricingContext;
-  logger?: Logger;
+  logger: Logger;
 }
 
 export interface UserApiKeys {
@@ -70,7 +70,7 @@ export function createUserServiceClient(config: UserServiceConfig): UserServiceC
     async getApiKeys(userId: string): Promise<Result<UserApiKeys, UserServiceError>> {
       const url = `${config.baseUrl}/internal/users/${userId}/llm-keys`;
 
-      logger.info({ userId }, 'Fetching user API keys');
+      config.logger.info({ userId }, 'Fetching user API keys');
 
       let response: Response;
       try {
@@ -80,7 +80,7 @@ export function createUserServiceClient(config: UserServiceConfig): UserServiceC
           },
         });
       } catch (error) {
-        logger.error(
+        config.logger.error(
           {
             userId,
             error: getErrorMessage(error),
@@ -102,7 +102,7 @@ export function createUserServiceClient(config: UserServiceConfig): UserServiceC
           /* Body read errors are not worth logging separately */
         }
 
-        logger.error(
+        config.logger.error(
           {
             userId,
             status: response.status,
@@ -126,7 +126,7 @@ export function createUserServiceClient(config: UserServiceConfig): UserServiceC
         result.google = data.google;
       }
 
-      logger.info(
+      config.logger.info(
         {
           userId,
           hasGoogleKey: result.google !== undefined,

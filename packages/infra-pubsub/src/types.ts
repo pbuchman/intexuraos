@@ -1,6 +1,7 @@
 /**
  * Pub/Sub infrastructure types.
  */
+import type { Logger } from 'pino';
 
 /**
  * Error returned when a publish operation fails.
@@ -53,6 +54,7 @@ export interface SendMessageEvent {
 export interface WhatsAppSendPublisherConfig {
   projectId: string;
   topicName: string;
+  logger: Logger;
 }
 
 /**
@@ -97,4 +99,5 @@ export interface TodoProcessingEvent {
 export interface TodosProcessingPublisherConfig {
   projectId: string;
   topicName: string;
+  logger: Logger;
 }

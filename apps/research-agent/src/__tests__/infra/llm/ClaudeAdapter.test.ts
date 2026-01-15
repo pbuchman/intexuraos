@@ -6,13 +6,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { type ModelPricing, LlmModels } from '@intexuraos/llm-contract';
 import type { Logger } from '@intexuraos/common-core';
 
-const mockLogger: Logger = {
-  info: vi.fn(),
-  error: vi.fn(),
-  warn: vi.fn(),
-  debug: vi.fn(),
-};
-
 const mockResearch = vi.fn();
 
 const mockCreateClaudeClient = vi.fn().mockReturnValue({
@@ -28,6 +21,13 @@ const { ClaudeAdapter } = await import('../../../infra/llm/ClaudeAdapter.js');
 const testPricing: ModelPricing = {
   inputPricePerMillion: 5.0,
   outputPricePerMillion: 25.0,
+};
+
+const mockLogger: Logger = {
+  info: vi.fn(),
+  error: vi.fn(),
+  warn: vi.fn(),
+  debug: vi.fn(),
 };
 
 describe('ClaudeAdapter', () => {

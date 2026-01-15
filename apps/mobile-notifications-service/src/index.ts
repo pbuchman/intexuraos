@@ -11,14 +11,15 @@ const REQUIRED_ENV = [
 
 validateRequiredEnv(REQUIRED_ENV);
 
+const sentryDsn = process.env['INTEXURAOS_SENTRY_DSN'];
 initSentry(
-  process.env['INTEXURAOS_SENTRY_DSN'] === undefined
+  sentryDsn === undefined
     ? {
         environment: process.env['INTEXURAOS_ENVIRONMENT'] ?? 'development',
         serviceName: 'mobile-notifications-service',
       }
     : {
-        dsn: process.env['INTEXURAOS_SENTRY_DSN'],
+        dsn: sentryDsn,
         environment: process.env['INTEXURAOS_ENVIRONMENT'] ?? 'development',
         serviceName: 'mobile-notifications-service',
       }

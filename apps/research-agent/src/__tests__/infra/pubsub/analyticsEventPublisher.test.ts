@@ -1,3 +1,4 @@
+import pino from 'pino';
 import { LlmProviders } from '@intexuraos/llm-contract';
 import { describe, it, expect, vi } from 'vitest';
 import {
@@ -8,11 +9,9 @@ import {
 vi.mock('@intexuraos/infra-pubsub', () => ({
   BasePubSubPublisher: class {
     protected projectId: string;
-    protected loggerName: string;
 
-    constructor(config: { projectId: string; loggerName: string }) {
+    constructor(config: { projectId: string; logger: { level: string } }) {
       this.projectId = config.projectId;
-      this.loggerName = config.loggerName;
     }
 
     async publishToTopic(
@@ -44,6 +43,7 @@ describe('createAnalyticsEventPublisher', () => {
     const publisher = createAnalyticsEventPublisher({
       projectId: 'test-project',
       topicName: 'test-analytics-topic',
+      logger: pino({ name: 'test', level: 'silent' }),
     });
 
     expect(publisher).toBeDefined();
@@ -54,6 +54,7 @@ describe('createAnalyticsEventPublisher', () => {
     const publisher = createAnalyticsEventPublisher({
       projectId: 'test-project',
       topicName: 'test-analytics-topic',
+      logger: pino({ name: 'test', level: 'silent' }),
     });
 
     const result = await publisher.publishLlmAnalytics(event);
@@ -65,6 +66,7 @@ describe('createAnalyticsEventPublisher', () => {
     const publisher = createAnalyticsEventPublisher({
       projectId: 'test-project',
       topicName: 'test-analytics-topic',
+      logger: pino({ name: 'test', level: 'silent' }),
     });
 
     const openaiEvent: LlmAnalyticsEvent = {

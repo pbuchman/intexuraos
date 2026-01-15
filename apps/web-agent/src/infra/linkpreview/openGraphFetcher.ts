@@ -1,9 +1,8 @@
-import { err, getLogLevel, ok, type Result } from '@intexuraos/common-core';
+import { err, ok, type Result } from '@intexuraos/common-core';
 import type { LinkPreviewFetcherPort } from '../../domain/linkpreview/ports/linkPreviewFetcher.js';
 import type { LinkPreview, LinkPreviewError } from '../../domain/linkpreview/models/LinkPreview.js';
 import type { Logger } from 'pino';
 import * as cheerio from 'cheerio';
-import pino from 'pino';
 
 export interface OpenGraphFetcherConfig {
   timeoutMs: number;
@@ -56,17 +55,13 @@ function resolveImageUrl(imageUrl: string | undefined, baseUrl: string): string 
   }
 }
 
-function createDefaultLogger(): Logger {
-  return pino({ name: 'OpenGraphFetcher', level: getLogLevel() });
-}
-
 export class OpenGraphFetcher implements LinkPreviewFetcherPort {
   private readonly config: OpenGraphFetcherConfig;
   private readonly logger: Logger;
 
-  constructor(config?: Partial<OpenGraphFetcherConfig>, logger?: Logger) {
+  constructor(config: Partial<OpenGraphFetcherConfig> = {}, logger: Logger) {
     this.config = { ...DEFAULT_CONFIG, ...config };
-    this.logger = logger ?? createDefaultLogger();
+    this.logger = logger;
   }
 
   async fetchPreview(url: string): Promise<Result<LinkPreview, LinkPreviewError>> {
