@@ -46,14 +46,15 @@ Implement a fully functional `linear-agent` service that enables creating Linear
 - ✅ **0-2-cloudbuild**: Cloud Build configuration added (build/deploy steps, scripts, all config files)
 - ✅ **1-0-domain**: Domain models, ports, and errors defined (models.ts, errors.ts, ports.ts, index.ts)
 - ✅ **1-1-connection**: Linear connection repository implemented (Firestore, tests, fakes)
+- ✅ **1-2-linear-api**: Linear API client implemented (@linear/sdk integration, tests, fakes)
 
 ### Now
 
-**Task 1-2-linear-api**: Implement Linear API client
+**Task 1-3-extraction**: Implement LLM extraction service
 
 ### Next
 
-- 1-3-extraction: Implement LLM extraction service
+- 1-4-create-issue: Implement create issue use case
 - Continue through all tiers...
 
 ## Open Questions
