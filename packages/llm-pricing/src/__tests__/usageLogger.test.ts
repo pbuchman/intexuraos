@@ -64,9 +64,8 @@ const fakeLogger: Logger = {
   debug: vi.fn(),
 };
 
-const { UsageLogger, createUsageLogger, logUsage, isUsageLoggingEnabled } = await import(
-  '../usageLogger.js'
-);
+const { UsageLogger, createUsageLogger, logUsage, isUsageLoggingEnabled } =
+  await import('../usageLogger.js');
 
 describe('usageLogger', () => {
   const originalEnv = process.env;

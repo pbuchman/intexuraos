@@ -116,7 +116,7 @@ export function getServices(logger: NotionLogger = defaultNotionLogger): Service
  * Set custom services (for testing).
  */
 export function setServices(services: Partial<ServiceContainer>): void {
-  const logger = services.logger;
+  const logger = services.logger ?? defaultNotionLogger;
   container = {
     logger,
     connectionRepository: services.connectionRepository ?? createConnectionRepository(),

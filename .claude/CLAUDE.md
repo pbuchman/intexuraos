@@ -433,12 +433,12 @@ Use the `/linear` command for issue tracking and workflow management.
 
 **Cross-Linking Protocol:**
 
-| Direction | Method |
-|-----------|--------|
-| Linear → GitHub | `Fixes LIN-XXX` in PR body |
-| GitHub → Linear | PR URL in issue comments |
+| Direction       | Method                                          |
+| --------------- | ----------------------------------------------- |
+| Linear → GitHub | `Fixes LIN-XXX` in PR body                      |
+| GitHub → Linear | PR URL in issue comments                        |
 | Sentry → Linear | `[sentry] <title>` naming + link in description |
-| Linear → Sentry | Comment on Sentry issue |
+| Linear → Sentry | Comment on Sentry issue                         |
 
 **See:** `.claude/commands/linear.md` for complete workflow documentation.
 

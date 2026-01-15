@@ -204,7 +204,6 @@ export function createUserServiceClient(config: UserServiceConfig): UserServiceC
           model: defaultModel,
           userId,
           pricing,
-          logger: config.logger,
         };
 
         const client = createLlmClient(clientConfig);

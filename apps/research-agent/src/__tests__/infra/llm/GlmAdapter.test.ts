@@ -5,6 +5,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ModelPricing } from '@intexuraos/llm-contract';
 import { LlmModels } from '@intexuraos/llm-contract';
+import type { Logger } from '@intexuraos/common-core';
 
 const mockResearch = vi.fn();
 const mockGenerate = vi.fn();
@@ -37,26 +38,25 @@ const testPricing: ModelPricing = {
   webSearchCostPerCall: 0.005,
 };
 
-// eslint-disable-next-line @typescript-eslint/explicit-function-return-type
-const createMockLogger = () => ({
+const mockLogger: Logger = {
   info: vi.fn(),
   error: vi.fn(),
   warn: vi.fn(),
   debug: vi.fn(),
-});
+};
 
 describe('GlmAdapter', () => {
   let adapter: InstanceType<typeof GlmAdapter>;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    adapter = new GlmAdapter('test-key', LlmModels.Glm47, 'test-user-id', testPricing);
+    adapter = new GlmAdapter('test-key', LlmModels.Glm47, 'test-user-id', testPricing, mockLogger);
   });
 
   describe('constructor', () => {
     it('passes apiKey and model to client', () => {
       mockCreateGlmClient.mockClear();
-      new GlmAdapter('test-key', LlmModels.Glm47, 'test-user-id', testPricing);
+      new GlmAdapter('test-key', LlmModels.Glm47, 'test-user-id', testPricing, mockLogger);
 
       expect(mockCreateGlmClient).toHaveBeenCalledWith({
         apiKey: 'test-key',
@@ -66,8 +66,7 @@ describe('GlmAdapter', () => {
       });
     });
 
-    it('accepts optional logger', () => {
-      const mockLogger = createMockLogger();
+    it('accepts required logger', () => {
       mockCreateGlmClient.mockClear();
       new GlmAdapter('test-key', LlmModels.Glm47, 'test-user-id', testPricing, mockLogger);
 
@@ -213,7 +212,15 @@ describe('GlmAdapter', () => {
     });
 
     it('logs research start and success', async () => {
-      const mockLogger = createMockLogger();
+      const mockLogger = {
+        info: vi.fn(),
+        error: vi.fn(),
+        warn: vi.fn(),
+        debug: vi.fn(),
+        trace: vi.fn(),
+        fatal: vi.fn(),
+        child: vi.fn().mockReturnThis(),
+      };
       const loggingAdapter = new GlmAdapter('test-key', LlmModels.Glm47, 'user-id', testPricing, mockLogger);
       mockResearch.mockResolvedValue({
         ok: true,
@@ -233,7 +240,15 @@ describe('GlmAdapter', () => {
     });
 
     it('logs research failure', async () => {
-      const mockLogger = createMockLogger();
+      const mockLogger = {
+        info: vi.fn(),
+        error: vi.fn(),
+        warn: vi.fn(),
+        debug: vi.fn(),
+        trace: vi.fn(),
+        fatal: vi.fn(),
+        child: vi.fn().mockReturnThis(),
+      };
       const loggingAdapter = new GlmAdapter('test-key', LlmModels.Glm47, 'user-id', testPricing, mockLogger);
       mockResearch.mockResolvedValue({
         ok: false,
@@ -335,7 +350,15 @@ describe('GlmAdapter', () => {
 
     it('logs synthesis start and success', async () => {
       (mockBuildSynthesisPrompt as ReturnType<typeof vi.fn> & { mockReturnValue: (val: string) => void }).mockReturnValue('Synthesis: Prompt, Gemini, ');
-      const mockLogger = createMockLogger();
+      const mockLogger = {
+        info: vi.fn(),
+        error: vi.fn(),
+        warn: vi.fn(),
+        debug: vi.fn(),
+        trace: vi.fn(),
+        fatal: vi.fn(),
+        child: vi.fn().mockReturnThis(),
+      };
       const loggingAdapter = new GlmAdapter('test-key', LlmModels.Glm47, 'user-id', testPricing, mockLogger);
       mockGenerate.mockResolvedValue({
         ok: true,
@@ -355,7 +378,15 @@ describe('GlmAdapter', () => {
     });
 
     it('logs synthesis failure', async () => {
-      const mockLogger = createMockLogger();
+      const mockLogger = {
+        info: vi.fn(),
+        error: vi.fn(),
+        warn: vi.fn(),
+        debug: vi.fn(),
+        trace: vi.fn(),
+        fatal: vi.fn(),
+        child: vi.fn().mockReturnThis(),
+      };
       const loggingAdapter = new GlmAdapter('test-key', LlmModels.Glm47, 'user-id', testPricing, mockLogger);
       mockGenerate.mockResolvedValue({
         ok: false,
@@ -445,7 +476,15 @@ describe('GlmAdapter', () => {
     });
 
     it('logs title generation start and success', async () => {
-      const mockLogger = createMockLogger();
+      const mockLogger = {
+        info: vi.fn(),
+        error: vi.fn(),
+        warn: vi.fn(),
+        debug: vi.fn(),
+        trace: vi.fn(),
+        fatal: vi.fn(),
+        child: vi.fn().mockReturnThis(),
+      };
       const loggingAdapter = new GlmAdapter('test-key', LlmModels.Glm47, 'user-id', testPricing, mockLogger);
       (mockTitlePrompt.build as ReturnType<typeof vi.fn> & { mockReturnValue: (val: string) => void }).mockReturnValue('Title prompt with Test');
       mockGenerate.mockResolvedValue({
@@ -463,7 +502,15 @@ describe('GlmAdapter', () => {
     });
 
     it('logs title generation failure', async () => {
-      const mockLogger = createMockLogger();
+      const mockLogger = {
+        info: vi.fn(),
+        error: vi.fn(),
+        warn: vi.fn(),
+        debug: vi.fn(),
+        trace: vi.fn(),
+        fatal: vi.fn(),
+        child: vi.fn().mockReturnThis(),
+      };
       const loggingAdapter = new GlmAdapter('test-key', LlmModels.Glm47, 'user-id', testPricing, mockLogger);
       (mockTitlePrompt.build as ReturnType<typeof vi.fn> & { mockReturnValue: (val: string) => void }).mockReturnValue('Title prompt with Test');
       mockGenerate.mockResolvedValue({

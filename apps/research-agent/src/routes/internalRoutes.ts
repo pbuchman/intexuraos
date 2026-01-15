@@ -355,11 +355,19 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
               void userServiceClient.reportLlmSuccess(research.userId, synthesisProvider);
             },
             logger: {
-              info: (msg: string): void => {
-                request.log.info({ researchId: event.researchId }, msg);
+              info: (obj: object, msg?: string): void => {
+                request.log.info({ researchId: event.researchId, ...obj }, msg);
               },
-              error: (obj: object, msg: string): void => {
-                request.log.error({ researchId: event.researchId, ...obj }, msg);
+              error: (obj: object, msg?: string): void => {
+                const message = typeof msg === 'string' ? msg : typeof obj === 'string' ? obj : undefined;
+                const context = typeof obj === 'string' ? {} : obj;
+                request.log.error({ researchId: event.researchId, ...context }, message);
+              },
+              warn: (obj: object, msg?: string): void => {
+                request.log.warn({ researchId: event.researchId, ...obj }, msg);
+              },
+              debug: (obj: object, msg?: string): void => {
+                request.log.debug({ researchId: event.researchId, ...obj }, msg);
               },
             },
             imageApiKeys: apiKeys,
