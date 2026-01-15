@@ -33,12 +33,14 @@ Before processing any issues, verify access to all required tools:
 **If ANY of these fail, abort the run immediately with a clear error message.**
 
 **Note:** For full Linear workflow integration, the `/linear` command handles:
+
 - Automatic state transitions (Backlog → In Progress → In Review → Done)
 - Branch naming with issue ID (fix/LIN-123 or fix/sentry-XXX)
 - PR template with cross-references
 - Comment synchronization between systems
 
 If `/linear` is unavailable, manual workflow must still maintain:
+
 - Proper issue naming: `[sentry] <error-message>`
 - All three-way linking (Sentry ↔ Linear ↔ GitHub)
 
@@ -68,6 +70,7 @@ Process issues **ONE BY ONE** to avoid duplication and ensure focus. For each Se
 3.  **Link**: Add a comment to the Sentry issue pointing to the Linear ticket.
 
 **Cross-linking protocol (enforced):**
+
 - Sentry issue → Linear issue (comment with link)
 - Linear issue → Sentry issue (in description)
 - Linear issue → GitHub PR (when PR created)

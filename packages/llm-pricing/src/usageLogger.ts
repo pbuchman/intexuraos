@@ -157,7 +157,9 @@ export async function logUsage(params: UsageLogParams): Promise<void> {
   if (!isUsageLoggingEnabled()) return;
 
   // Skip console logging in tests
+  /* c8 ignore next */ // Covered in integration tests with NODE_ENV=production
   if (process.env['NODE_ENV'] !== 'test') {
+    /* c8 ignore next */ // Console logging only happens outside test environment
     // Structured log for Cloud Logging (visible in real-time)
     // eslint-disable-next-line no-console
     console.info(

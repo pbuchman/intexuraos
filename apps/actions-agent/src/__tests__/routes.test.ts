@@ -1828,7 +1828,7 @@ describe('Research Agent Routes', () => {
         headers: {
           'x-internal-auth': INTERNAL_AUTH_TOKEN,
         },
-        payload: createValidPayload({ actionType: 'calendar' }),
+        payload: createValidPayload({ actionType: 'reminder' }),
       });
 
       expect(response.statusCode).toBe(200);

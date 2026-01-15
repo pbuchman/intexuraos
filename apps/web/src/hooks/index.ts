@@ -6,6 +6,7 @@ export {
 } from './useBookmarkChanges.js';
 export { useBookmarks } from './useBookmarks.js';
 export { useCalendarEvents } from './useCalendarEvents.js';
+export { useFailedCalendarEvents } from './useFailedCalendarEvents.js';
 export { useChartDefinition } from './useChartDefinition.js';
 export { useChartPreview } from './useChartPreview.js';
 export { useCommandChanges, type UseCommandChangesResult } from './useCommandChanges.js';

@@ -11,6 +11,9 @@ import type {
   FreeBusySlot,
   ListEventsInput,
   UpdateEventInput,
+  FailedEvent,
+  CreateFailedEventInput,
+  FailedEventFilters,
 } from './models.js';
 import type { CalendarError } from './errors.js';
 
@@ -65,4 +68,11 @@ export interface OAuthTokenResult {
 
 export interface UserServiceClient {
   getOAuthToken(userId: string): Promise<Result<OAuthTokenResult, CalendarError>>;
+}
+
+export interface FailedEventRepository {
+  create(input: CreateFailedEventInput): Promise<Result<FailedEvent, CalendarError>>;
+  list(userId: string, filters?: FailedEventFilters): Promise<Result<FailedEvent[], CalendarError>>;
+  get(id: string): Promise<Result<FailedEvent | null, CalendarError>>;
+  delete(id: string): Promise<Result<void, CalendarError>>;
 }

@@ -26,6 +26,10 @@ export {
   type CommandCategory,
   type CommandClassifierPromptInput,
   type CommandClassifierPromptDeps,
+  calendarActionExtractionPrompt,
+  type CalendarEventExtractionPromptInput,
+  type CalendarEventExtractionPromptDeps,
+  type ExtractedCalendarEvent,
 } from './classification/index.js';
 
 // Todo prompts (item extraction)

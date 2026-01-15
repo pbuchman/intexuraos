@@ -12,6 +12,7 @@ Manage Linear issues, branches, and PRs with enforced workflow and cross-linking
 ```
 
 **CRITICAL:** When `/linear` is called WITHOUT arguments, it operates in **NON-INTERACTIVE MODE**:
+
 - NEVER ask the user for confirmation or what to do
 - Automatically pick a random task from Backlog/Todo
 - If no tasks available, state "No items in Backlog or Todo state." and exit
@@ -23,12 +24,12 @@ Manage Linear issues, branches, and PRs with enforced workflow and cross-linking
 
 **When invoked as:** `claude --dangerously-skip-permissions linear` (or any `/linear` with no arguments)
 
-| Rule | Description |
-|------|-------------|
-| **NO PROMPTS** | Never ask "what should I do?", "which task?", or "ready to start?" |
-| **AUTO-PROCEED** | Always proceed with the selected Backlog/Todo item automatically |
-| **NO TASKS** | If Backlog/Todo is empty, print message and exit gracefully |
-| **BLOCKER PR** | If task cannot be completed (auth, missing info), create PR with explanation and consider it done |
+| Rule             | Description                                                                                       |
+| ---------------- | ------------------------------------------------------------------------------------------------- |
+| **NO PROMPTS**   | Never ask "what should I do?", "which task?", or "ready to start?"                                |
+| **AUTO-PROCEED** | Always proceed with the selected Backlog/Todo item automatically                                  |
+| **NO TASKS**     | If Backlog/Todo is empty, print message and exit gracefully                                       |
+| **BLOCKER PR**   | If task cannot be completed (auth, missing info), create PR with explanation and consider it done |
 
 **The command is designed for automated/cron usage. It MUST NOT block on user input.**
 
@@ -47,12 +48,12 @@ Manage Linear issues, branches, and PRs with enforced workflow and cross-linking
 
 The command automatically detects intent from input:
 
-| Input Pattern | Type | Action |
-|---------------|------|--------|
-| `/linear` (no args) | Random Backlog (NON-INTERACTIVE) | Pick from Backlog/Todo and start working WITHOUT asking user |
-| `/linear <task description>` | Create New | Detect bug/feature, create issue, start working |
-| `/linear LIN-<number>` | Work Existing | Start working on specific issue |
-| `/linear https://sentry.io/...` | Sentry Integration | Create Linear issue from Sentry error |
+| Input Pattern                   | Type                             | Action                                                       |
+| ------------------------------- | -------------------------------- | ------------------------------------------------------------ |
+| `/linear` (no args)             | Random Backlog (NON-INTERACTIVE) | Pick from Backlog/Todo and start working WITHOUT asking user |
+| `/linear <task description>`    | Create New                       | Detect bug/feature, create issue, start working              |
+| `/linear LIN-<number>`          | Work Existing                    | Start working on specific issue                              |
+| `/linear https://sentry.io/...` | Sentry Integration               | Create Linear issue from Sentry error                        |
 
 ---
 
@@ -60,12 +61,12 @@ The command automatically detects intent from input:
 
 ### Automatic Detection
 
-| Pattern | Type | Prefix |
-|---------|------|--------|
-| fix, error, bug, broken, fail, crash | Bug | `[bug]` |
-| add, create, implement, support, enhance | Feature | `[feature]` |
-| refactoring, extract, refactor | Refactor | `[refactor]` |
-| docs, documentation, readme | Documentation | `[docs]` |
+| Pattern                                  | Type          | Prefix       |
+| ---------------------------------------- | ------------- | ------------ |
+| fix, error, bug, broken, fail, crash     | Bug           | `[bug]`      |
+| add, create, implement, support, enhance | Feature       | `[feature]`  |
+| refactoring, extract, refactor           | Refactor      | `[refactor]` |
+| docs, documentation, readme              | Documentation | `[docs]`     |
 
 ### When Ambiguous
 
@@ -96,16 +97,16 @@ Before ANY operation, verify all required tools are available.
 
 ### Required Tools
 
-| Tool | Verification Command | Purpose |
-|------|---------------------|---------|
+| Tool       | Verification Command             | Purpose          |
+| ---------- | -------------------------------- | ---------------- |
 | Linear MCP | `mcp__linear-server__list_teams` | Issue management |
-| GitHub CLI | `gh auth status` | PR creation |
-| GCloud | `gcloud auth list` | Firestore access |
+| GitHub CLI | `gh auth status`                 | PR creation      |
+| GCloud     | `gcloud auth list`               | Firestore access |
 
 ### Optional Tools
 
-| Tool | Verification | When Needed |
-|------|--------------|-------------|
+| Tool       | Verification          | When Needed          |
+| ---------- | --------------------- | -------------------- |
 | Sentry MCP | `mcp__sentry__whoami` | Sentry workflow only |
 
 ### Failure Handling
@@ -232,6 +233,7 @@ git checkout -b fix/LIN-123 "$BASE_BRANCH"
 ### When No Backlog Items
 
 **NON-INTERACTIVE:** Exit gracefully with message: "No items in Backlog or Todo state."
+
 - Do NOT ask to create a new issue
 - Do NOT ask what to do instead
 - Simply print the message and exit
@@ -284,6 +286,7 @@ User calls `/linear LIN-123`
 3. **Update State** - Set to "In Progress"
 
 4. **Create Branch**
+
    ```bash
    git fetch origin
    BASE_BRANCH="origin/development"  # or origin/main if development doesn't exist
@@ -299,6 +302,7 @@ User calls `/linear LIN-123`
    - If fails: Report and ask to fix or explicitly override
 
 7. **Create PR** (CRITICAL: Title MUST include issue ID)
+
    ```bash
    git push -u origin fix/LIN-123
    gh pr create --base development \
@@ -393,12 +397,12 @@ User calls `/linear https://<sentry-url>`
 
 ### State Transition Triggers
 
-| Trigger | From | To | Action |
-|---------|------|-----|--------|
-| `/linear LIN-123` called | Backlog/Todo | In Progress | Create branch with issue ID in name |
-| `gh pr create` called (title has issue ID) | In Progress | In Review | GitHub integration auto-attaches PR |
-| PR approved | In Review | Done | Close Linear issue |
-| PR has review changes | In Review | In Progress | Update Linear state |
+| Trigger                                    | From         | To          | Action                              |
+| ------------------------------------------ | ------------ | ----------- | ----------------------------------- |
+| `/linear LIN-123` called                   | Backlog/Todo | In Progress | Create branch with issue ID in name |
+| `gh pr create` called (title has issue ID) | In Progress  | In Review   | GitHub integration auto-attaches PR |
+| PR approved                                | In Review    | Done        | Close Linear issue                  |
+| PR has review changes                      | In Review    | In Progress | Update Linear state                 |
 
 **Note:** GitHub integration only works when BOTH branch name AND PR title contain the Linear issue ID (e.g., `LIN-123`, `PBU-44`).
 
@@ -416,6 +420,7 @@ All issues must be linked between systems.
 2. **PR title MUST contain Linear issue ID** - e.g., `[LIN-123] Fix auth`, `PBU-44: Add tests`
 
 When both conditions are met:
+
 - GitHub integration **automatically attaches PR** to Linear issue
 - PR appears in `attachments` array (visible in Linear UI under "Pull requests" section)
 - Issue state automatically updates: `In Progress` → `In Review` → `Done`
@@ -423,13 +428,13 @@ When both conditions are met:
 
 **Verification:** After creating PR, check Linear issue has PR in `attachments` array. If missing, the title or branch name didn't contain the issue ID.
 
-| Direction | Method |
-|-----------|--------|
-| Linear → GitHub | PR title contains `LIN-XXX` (enables auto-attachment) |
+| Direction       | Method                                                             |
+| --------------- | ------------------------------------------------------------------ |
+| Linear → GitHub | PR title contains `LIN-XXX` (enables auto-attachment)              |
 | GitHub → Linear | GitHub integration attaches PR (when title + branch have issue ID) |
-| Linear → GitHub | `Fixes LIN-XXX` in PR body (for issue closing behavior) |
-| Sentry → Linear | `[sentry] <title>` naming + link in description |
-| Linear → Sentry | Comment on Sentry issue |
+| Linear → GitHub | `Fixes LIN-XXX` in PR body (for issue closing behavior)            |
+| Sentry → Linear | `[sentry] <title>` naming + link in description                    |
+| Linear → Sentry | Comment on Sentry issue                                            |
 
 **Why Comments Don't Work:** Adding PR URL as comment only adds text - it doesn't create the attachment relationship. The GitHub integration requires the issue ID in both branch name AND PR title to establish the bidirectional link.
 
@@ -491,12 +496,14 @@ pnpm run ci:tracked
 If `ci:tracked` fails:
 
 **In INTERACTIVE mode (user provided arguments):**
+
 1. Report the failure clearly
 2. Show which step failed (typecheck/lint/tests)
 3. Show `.claude/ci-failures/` content if available
 4. Ask: "CI failed. Fix and retry, or explicitly override to proceed anyway?"
 
 **In NON-INTERACTIVE mode (`/linear` called without arguments):**
+
 1. Report the failure clearly
 2. Show which step failed (typecheck/lint/tests)
 3. Create PR with CI failure details in the body
@@ -506,6 +513,7 @@ If `ci:tracked` fails:
 ### Override Only When
 
 User explicitly says one of (INTERACTIVE mode only):
+
 - "override ci"
 - "skip ci check"
 - "proceed anyway"
@@ -525,26 +533,26 @@ User explicitly says one of (INTERACTIVE mode only):
 
 ## Branch Naming Conventions
 
-| Issue Type | Branch Pattern | Example |
-|------------|---------------|---------|
-| Bug | `fix/LIN-XXX` | `fix/LIN-42` |
-| Feature | `feature/LIN-XXX` | `feature/LIN-42` |
-| Sentry | `fix/sentry-XXX` | `fix/sentry-INTEXURAOS-4` |
-| Refactor | `refactor/LIN-XXX` | `refactor/LIN-42` |
-| Documentation | `docs/LIN-XXX` | `docs/LIN-42` |
+| Issue Type    | Branch Pattern     | Example                   |
+| ------------- | ------------------ | ------------------------- |
+| Bug           | `fix/LIN-XXX`      | `fix/LIN-42`              |
+| Feature       | `feature/LIN-XXX`  | `feature/LIN-42`          |
+| Sentry        | `fix/sentry-XXX`   | `fix/sentry-INTEXURAOS-4` |
+| Refactor      | `refactor/LIN-XXX` | `refactor/LIN-42`         |
+| Documentation | `docs/LIN-XXX`     | `docs/LIN-42`             |
 
 ---
 
 ## Issue Naming Conventions
 
-| Type | Pattern | Examples |
-|------|---------|----------|
-| Bug | `[bug] <short-error-message>` | `[bug] Cannot read property 'id' of undefined in TodoService` |
-| Feature | `[feature] <action-object-context>` | `[feature] Add OAuth token refresh for calendar service` |
-| Sentry | `[sentry] <error-name>` | `[sentry] TypeError: null is not an object in AuthService` |
-| Coverage | `[coverage][<app>] <description>` | `[coverage][user-service] Add tests for token validation` |
-| Refactoring | `[refactor] <component-name>` | `[refactor] Extract shared HTTP client utilities` |
-| Documentation | `[docs] <topic>` | `[docs] API authentication flow` |
+| Type          | Pattern                             | Examples                                                      |
+| ------------- | ----------------------------------- | ------------------------------------------------------------- |
+| Bug           | `[bug] <short-error-message>`       | `[bug] Cannot read property 'id' of undefined in TodoService` |
+| Feature       | `[feature] <action-object-context>` | `[feature] Add OAuth token refresh for calendar service`      |
+| Sentry        | `[sentry] <error-name>`             | `[sentry] TypeError: null is not an object in AuthService`    |
+| Coverage      | `[coverage][<app>] <description>`   | `[coverage][user-service] Add tests for token validation`     |
+| Refactoring   | `[refactor] <component-name>`       | `[refactor] Extract shared HTTP client utilities`             |
+| Documentation | `[docs] <topic>`                    | `[docs] API authentication flow`                              |
 
 ### Title Generation Rules
 
@@ -558,16 +566,16 @@ User explicitly says one of (INTERACTIVE mode only):
 
 ## Edge Cases and Error Handling
 
-| Edge Case | Detection | Handling |
-|-----------|-----------|----------|
-| Issue already exists | Search Linear for matching title/desc | Link to existing, don't duplicate |
-| Ambiguous bug/feature | Keywords match both patterns | Ask user to clarify |
-| No development branch | `git ls-remote` returns empty for development | Fall back to `main` |
-| Unauthenticated gh | `gh auth status` fails | Instruct user to run `gh auth login` |
-| Linear MCP unavailable | MCP tool call throws error | Suggest manual Linear creation |
-| Sentry URL malformed | URL doesn't match Sentry pattern | Ask for correct URL or issue ID |
-| Issue in wrong state | Current state != expected for operation | Confirm with user before proceeding |
-| Branch already exists | `git branch` shows matching branch | Ask to checkout existing or create new name |
+| Edge Case              | Detection                                     | Handling                                    |
+| ---------------------- | --------------------------------------------- | ------------------------------------------- |
+| Issue already exists   | Search Linear for matching title/desc         | Link to existing, don't duplicate           |
+| Ambiguous bug/feature  | Keywords match both patterns                  | Ask user to clarify                         |
+| No development branch  | `git ls-remote` returns empty for development | Fall back to `main`                         |
+| Unauthenticated gh     | `gh auth status` fails                        | Instruct user to run `gh auth login`        |
+| Linear MCP unavailable | MCP tool call throws error                    | Suggest manual Linear creation              |
+| Sentry URL malformed   | URL doesn't match Sentry pattern              | Ask for correct URL or issue ID             |
+| Issue in wrong state   | Current state != expected for operation       | Confirm with user before proceeding         |
+| Branch already exists  | `git branch` shows matching branch            | Ask to checkout existing or create new name |
 
 ---
 

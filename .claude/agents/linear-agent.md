@@ -76,12 +76,12 @@ Aborting.
 
 Parse user input to determine workflow:
 
-| Input Pattern | Type | Next Phase |
-|---------------|------|------------|
-| `/linear` (no args) | Random Backlog | Phase 3A |
-| `/linear <task description>` | Create New | Phase 3B |
-| `/linear LIN-<number>` | Work Existing | Phase 3C |
-| `/linear https://sentry.io/...` | Sentry Integration | Phase 3D |
+| Input Pattern                   | Type               | Next Phase |
+| ------------------------------- | ------------------ | ---------- |
+| `/linear` (no args)             | Random Backlog     | Phase 3A   |
+| `/linear <task description>`    | Create New         | Phase 3B   |
+| `/linear LIN-<number>`          | Work Existing      | Phase 3C   |
+| `/linear https://sentry.io/...` | Sentry Integration | Phase 3D   |
 
 ### Phase 3A: Random Backlog Selection (Cron Mode)
 
@@ -104,6 +104,7 @@ Parse user input to determine workflow:
 ```
 
 **Cron-Friendly Behavior**:
+
 - NEVER ask - make best-effort decisions
 - Log all actions to stdout
 - Skip ambiguous bug/feature → default to `[task]`
@@ -152,6 +153,7 @@ Parse user input to determine workflow:
    - Set `state: "In Progress"`
 
 3. **Create Branch**
+
    ```bash
    git fetch origin
 
@@ -179,6 +181,7 @@ Parse user input to determine workflow:
      - Ask: "CI failed. Fix and retry, or explicitly override to proceed anyway?"
 
 6. **Create PR** (only after CI passes or explicit override)
+
    ```bash
    git push -u origin fix/LIN-123
 
@@ -241,12 +244,12 @@ In Review → In Progress     (when PR has review changes)
 
 ## Cross-Linking Protocol
 
-| Direction | Method |
-|-----------|--------|
-| Linear → GitHub | `Fixes LIN-XXX` in PR body |
-| GitHub → Linear | PR URL in issue comments |
+| Direction       | Method                                   |
+| --------------- | ---------------------------------------- |
+| Linear → GitHub | `Fixes LIN-XXX` in PR body               |
+| GitHub → Linear | PR URL in issue comments                 |
 | Sentry → Linear | `[sentry] <title>` + link in description |
-| Linear → Sentry | Comment on Sentry issue |
+| Linear → Sentry | Comment on Sentry issue                  |
 
 ## PR Description Template
 
@@ -291,24 +294,24 @@ Co-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>
 
 ## Branch Naming
 
-| Issue Type | Branch Pattern |
-|------------|---------------|
-| Bug | `fix/LIN-XXX` |
-| Feature | `feature/LIN-XXX` |
-| Sentry | `fix/sentry-XXX` |
-| Refactor | `refactor/LIN-XXX` |
-| Documentation | `docs/LIN-XXX` |
+| Issue Type    | Branch Pattern     |
+| ------------- | ------------------ |
+| Bug           | `fix/LIN-XXX`      |
+| Feature       | `feature/LIN-XXX`  |
+| Sentry        | `fix/sentry-XXX`   |
+| Refactor      | `refactor/LIN-XXX` |
+| Documentation | `docs/LIN-XXX`     |
 
 ## Edge Cases
 
-| Situation | Handling |
-|-----------|----------|
-| Issue already exists | Link to existing, don't duplicate |
-| Ambiguous bug/feature | Ask user to clarify |
-| No development branch | Fall back to `main` |
-| Unauthenticated gh | Instruct: `gh auth login` |
-| Linear MCP unavailable | Suggest manual Linear creation |
-| Branch already exists | Ask to checkout or create new name |
+| Situation              | Handling                           |
+| ---------------------- | ---------------------------------- |
+| Issue already exists   | Link to existing, don't duplicate  |
+| Ambiguous bug/feature  | Ask user to clarify                |
+| No development branch  | Fall back to `main`                |
+| Unauthenticated gh     | Instruct: `gh auth login`          |
+| Linear MCP unavailable | Suggest manual Linear creation     |
+| Branch already exists  | Ask to checkout or create new name |
 
 ## References
 
