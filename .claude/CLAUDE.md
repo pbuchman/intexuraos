@@ -278,6 +278,24 @@ setServices({ existingRepo: fakeRepo, newService: fakeNewService });
 // ✅ `Status: ${String(response.status)}`
 ```
 
+### 5. Unsafe Type Operations — Add explicit type assertions
+
+```typescript
+// ❌ result.then(data => ...) // result is 'error' typed
+// ✅ (result as Promise<Success>).then(data => ...)
+
+// ❌ const value = someErrorTypedVar
+// ✅ const value = someErrorTypedVar as ExpectedType
+```
+
+### 6. Async Template Expressions — Await or wrap in `String()`
+
+```typescript
+// ❌ `Result: ${asyncFunction()}` // Promise<string> in template
+// ✅ `Result: ${await asyncFunction()}`
+// OR: `Result: ${String(asyncFunction())}`
+```
+
 ---
 
 ## Code Smells (Fix & Document)

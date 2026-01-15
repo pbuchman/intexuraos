@@ -103,7 +103,7 @@ describe('ContextInferenceAdapter', () => {
   describe('constructor', () => {
     it('passes apiKey, model, and userId to client', () => {
       mockCreateGeminiClient.mockClear();
-      new ContextInferenceAdapter('test-key', LlmModels.Gemini20Flash, 'test-user', testPricing);
+      new ContextInferenceAdapter('test-key', LlmModels.Gemini20Flash, 'test-user', testPricing, mockLogger);
 
       expect(mockCreateGeminiClient).toHaveBeenCalledWith({
         apiKey: 'test-key',
@@ -175,7 +175,7 @@ describe('ContextInferenceAdapter', () => {
       }
     });
 
-    it('returns error and logs warning on invalid JSON', async () => {
+    it('returns error and logs warn message on invalid JSON', async () => {
       mockGenerate.mockResolvedValue({
         ok: true,
         value: { content: 'not valid json', usage: mockUsage },
@@ -186,12 +186,15 @@ describe('ContextInferenceAdapter', () => {
       expect(result.ok).toBe(false);
       if (!result.ok) {
         expect(result.error.code).toBe('API_ERROR');
-        expect(result.error.message).toContain('JSON parse error');
+        expect(result.error.message).toContain('JSON parse failed');
       }
-      expect(mockLogger.warn).toHaveBeenCalledWith(
-        expect.objectContaining({ error: expect.stringContaining('JSON parse error') }),
-        'Failed to parse research context'
-      );
+      const warnCall = mockLogger.warn.mock.calls[0];
+      expect(warnCall).toBeDefined();
+      const logData = warnCall?.[0] as Record<string, unknown>;
+      expect(logData['llmResponse']).toBe('not valid json');
+      expect(logData['operation']).toBe('inferResearchContext');
+      expect(logData['errorMessage']).toContain('JSON parse failed');
+      expect(warnCall?.[1]).toBe('LLM parse error in inferResearchContext: JSON parse failed');
     });
 
     it('returns error on schema mismatch', async () => {
@@ -205,6 +208,7 @@ describe('ContextInferenceAdapter', () => {
       expect(result.ok).toBe(false);
       if (!result.ok) {
         expect(result.error.message).toContain('does not match expected schema');
+        expect(result.error.message).toContain('Expected:');
       }
     });
 
@@ -236,16 +240,25 @@ describe('ContextInferenceAdapter', () => {
       expect(result.ok).toBe(true);
     });
 
-    it('works without logger', async () => {
-      const adapterNoLogger = new ContextInferenceAdapter('key', 'model', 'test-user', testPricing);
+    it('logs warning on parse failure', async () => {
+      const adapterWithLogger = new ContextInferenceAdapter('key', 'model', 'test-user', testPricing, mockLogger);
       mockGenerate.mockResolvedValue({
         ok: true,
         value: { content: 'invalid json', usage: mockUsage },
       });
 
-      const result = await adapterNoLogger.inferResearchContext('Test query');
+      const result = await adapterWithLogger.inferResearchContext('Test query');
 
       expect(result.ok).toBe(false);
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          errorMessage: 'JSON parse failed: Invalid JSON in response',
+          llmResponse: 'invalid json',
+          operation: 'inferResearchContext',
+          responseLength: 12,
+        }),
+        'LLM parse error in inferResearchContext: JSON parse failed'
+      );
     });
   });
 
@@ -285,7 +298,7 @@ describe('ContextInferenceAdapter', () => {
       }
     });
 
-    it('returns error and logs warning on invalid JSON', async () => {
+    it('returns error and logs warn message on invalid JSON', async () => {
       mockGenerate.mockResolvedValue({
         ok: true,
         value: { content: '{ malformed json', usage: mockUsage },
@@ -296,10 +309,13 @@ describe('ContextInferenceAdapter', () => {
       });
 
       expect(result.ok).toBe(false);
-      expect(mockLogger.warn).toHaveBeenCalledWith(
-        expect.objectContaining({ error: expect.stringContaining('JSON parse error') }),
-        'Failed to parse synthesis context'
-      );
+      const warnCall = mockLogger.warn.mock.calls[0];
+      expect(warnCall).toBeDefined();
+      const logData = warnCall?.[0] as Record<string, unknown>;
+      expect(logData['llmResponse']).toBe('{ malformed json');
+      expect(logData['operation']).toBe('inferSynthesisContext');
+      expect(typeof logData['errorMessage']).toBe('string');
+      expect(warnCall?.[1]).toBe('LLM parse error in inferSynthesisContext: JSON parse failed');
     });
 
     it('returns error on schema mismatch', async () => {
@@ -318,18 +334,27 @@ describe('ContextInferenceAdapter', () => {
       }
     });
 
-    it('works without logger on parse failure', async () => {
-      const adapterNoLogger = new ContextInferenceAdapter('key', 'model', 'test-user', testPricing);
+    it('logs warning on parse failure', async () => {
+      const adapterWithLogger = new ContextInferenceAdapter('key', 'model', 'test-user', testPricing, mockLogger);
       mockGenerate.mockResolvedValue({
         ok: true,
         value: { content: '{ invalid }', usage: mockUsage },
       });
 
-      const result = await adapterNoLogger.inferSynthesisContext({
+      const result = await adapterWithLogger.inferSynthesisContext({
         originalPrompt: 'Test prompt',
       });
 
       expect(result.ok).toBe(false);
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          errorMessage: 'JSON parse failed: Invalid JSON in response',
+          llmResponse: '{ invalid }',
+          operation: 'inferSynthesisContext',
+          responseLength: 11,
+        }),
+        'LLM parse error in inferSynthesisContext: JSON parse failed'
+      );
     });
 
     it('includes additional sources in prompt', async () => {

@@ -19,7 +19,7 @@ export function createSynthesisProviders(
   apiKeys: DecryptedApiKeys,
   userId: string,
   services: ServiceContainer,
-  logger?: Logger
+  logger: Logger
 ): SynthesisProviders {
   const { createSynthesizer, createContextInferrer, pricingContext } = services;
 

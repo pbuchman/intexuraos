@@ -89,7 +89,7 @@ export interface ServiceContainer {
     apiKey: string,
     userId: string,
     pricing: ModelPricing,
-    logger?: Logger
+    logger: Logger
   ) => ContextInferenceProvider;
   createInputValidator: (
     model: FastModel,
