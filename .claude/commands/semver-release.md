@@ -75,7 +75,69 @@ git show <commit-hash>               # See actual diff
 | `**/vitest.config.ts`, `**/__tests__/**` | Testing Infrastructure     |
 | `scripts/*`                              | Development Tools          |
 
-### 6. Build the Changelog Entry
+### 6. Determine Semver Version Bump
+
+Based on the categorized changes, determine the release type using this decision tree:
+
+**Decision Table:**
+
+| Change Type                                      | Release Level | Example                                |
+| ------------------------------------------------ | ------------- | -------------------------------------- |
+| **Breaking Changes**                             |               |                                        |
+| Deleted routes/endpoints                         | **MAJOR**     | Removed `POST /todos`                  |
+| Deleted domain models/use cases                  | **MAJOR**     | Removed `Todo` entity                  |
+| Modified API signatures (removed params)         | **MAJOR**     | Removed `userId` from request          |
+| Required previously optional params              | **MAJOR**     | `title?: string` → `title: string`     |
+| Deleted Firestore collections                    | **MAJOR**     | Dropped `todos` collection             |
+| Terraform resource deletion                      | **MAJOR**     | Removed Cloud Run service              |
+| **New Features**                                 |               |                                        |
+| New API endpoints                                | **MINOR**     | Added `GET /bookmarks`                 |
+| New domain models/use cases                      | **MINOR**     | Added `Bookmark` entity                |
+| New UI pages/components                          | **MINOR**     | Added settings page                    |
+| New services/packages                            | **MINOR**     | Added `image-service`                  |
+| New integrations/providers                       | **MINOR**     | Added OpenAI provider                  |
+| **Bug Fixes & Improvements**                     |               |                                        |
+| Bug fixes (backward compatible)                  | **PATCH**     | Fixed null pointer in todos            |
+| Refactoring (no behavior change)                 | **PATCH**     | Extracted helper function             |
+| Testing infrastructure                           | **PATCH**     | Added tests for bookmarks              |
+| CI/CD improvements                               | **PATCH**     | Updated GitHub workflow                |
+| Documentation                                    | **PATCH**     | Updated README                         |
+| Performance improvements                          | **PATCH**     | Optimized query                        |
+
+**Algorithm:**
+
+```
+IF any breaking_changes_found:
+    RETURN "major"
+ELSE IF any new_features_found:
+    RETURN "minor"
+ELSE:
+    RETURN "patch"
+```
+
+**Examples:**
+
+```
+# Breaking change detected
+- Removed `GET /internal/todos` endpoint → MAJOR (0.0.5 → 1.0.0)
+
+# New feature only
+- Added `POST /bookmarks` endpoint → MINOR (0.0.5 → 0.1.0)
+
+# Bug fixes only
+- Fixed todo pagination bug → PATCH (0.0.5 → 0.0.6)
+
+# Mixed (new feature + bug fixes)
+- Added `POST /bookmarks` + fixed pagination → MINOR (0.0.5 → 0.1.0)
+  (new features take precedence over patches)
+```
+
+**Note for Early Development (0.0.X):**
+- Still follow semver rules for consistency
+- Breaking changes still warrant major bump (0.0.5 → 1.0.0)
+- This prepares for proper semver when v1.0 is released
+
+### 7. Build the Changelog Entry
 
 **Format:** Unnumbered version headers with date only.
 
@@ -109,7 +171,7 @@ git show <commit-hash>               # See actual diff
 - Group related changes together
 - Most recent release at the top
 
-### 7. Update All Package Versions
+### 8. Update All Package Versions
 
 **CRITICAL:** All package.json files must have the same version.
 
@@ -131,10 +193,10 @@ for pkg in packages/*/package.json; do
 done
 
 # Regenerate lock file
-ppnpm install
+pnpm install
 ```
 
-### 8. Update CHANGELOG.md Header
+### 9. Update CHANGELOG.md Header
 
 Update the "Current Version" line at the top of CHANGELOG.md:
 
@@ -142,7 +204,7 @@ Update the "Current Version" line at the top of CHANGELOG.md:
 **Current Version:** X.Y.Z
 ```
 
-### 9. Commit Release
+### 10. Commit Release
 
 ```bash
 git add CHANGELOG.md package.json package-lock.json apps/*/package.json packages/*/package.json
