@@ -61,30 +61,18 @@ export async function processNotification(
   input: ProcessNotificationInput,
   signatureRepo: SignatureConnectionRepository,
   notificationRepo: NotificationRepository,
-  logger?: ProcessNotificationLogger,
+  logger: ProcessNotificationLogger,
   filtersRepo?: NotificationFiltersRepository
 ): Promise<Result<ProcessNotificationOutput, RepositoryError>> {
-  const log = logger ?? {
-    info: (_obj: Record<string, unknown>, _msg: string): void => {
-      // No-op when no logger provided
-    },
-    warn: (_obj: Record<string, unknown>, _msg: string): void => {
-      // No-op when no logger provided
-    },
-    error: (_obj: Record<string, unknown>, _msg: string): void => {
-      // No-op when no logger provided
-    },
-  };
-
   // Hash the incoming signature
   const signatureHash = hashSignature(input.signature);
-  log.info({ signatureHashPrefix: signatureHash.slice(0, 8) }, 'Signature hashed for lookup');
+  logger.info({ signatureHashPrefix: signatureHash.slice(0, 8) }, 'Signature hashed for lookup');
 
   // Look up user by signature hash
-  log.info({}, 'Looking up user by signature hash');
+  logger.info({}, 'Looking up user by signature hash');
   const connectionResult = await signatureRepo.findBySignatureHash(signatureHash);
   if (!connectionResult.ok) {
-    log.error(
+    logger.error(
       { errorCode: connectionResult.error.code, errorMessage: connectionResult.error.message },
       'Failed to look up signature connection'
     );
@@ -93,7 +81,7 @@ export async function processNotification(
 
   // If no connection found, ignore
   if (connectionResult.value === null) {
-    log.warn(
+    logger.warn(
       { signatureHashPrefix: signatureHash.slice(0, 8) },
       'No user found for signature hash - invalid signature'
     );
@@ -102,10 +90,10 @@ export async function processNotification(
 
   const userId = connectionResult.value.userId;
   const connectionId = connectionResult.value.id;
-  log.info({ userId, connectionId }, 'User found for signature');
+  logger.info({ userId, connectionId }, 'User found for signature');
 
   // Check for idempotency (notification_id per user)
-  log.info(
+  logger.info(
     { notificationId: input.payload.notification_id, userId },
     'Checking for duplicate notification'
   );
@@ -114,7 +102,7 @@ export async function processNotification(
     userId
   );
   if (!existsResult.ok) {
-    log.error(
+    logger.error(
       { errorCode: existsResult.error.code, errorMessage: existsResult.error.message },
       'Failed to check for duplicate notification'
     );
@@ -123,7 +111,7 @@ export async function processNotification(
 
   // If already exists, ignore (idempotent)
   if (existsResult.value) {
-    log.info(
+    logger.info(
       { notificationId: input.payload.notification_id, userId },
       'Duplicate notification ignored'
     );
@@ -131,7 +119,7 @@ export async function processNotification(
   }
 
   // Save the notification
-  log.info(
+  logger.info(
     {
       userId,
       app: input.payload.app,
@@ -152,14 +140,14 @@ export async function processNotification(
   });
 
   if (!saveResult.ok) {
-    log.error(
+    logger.error(
       { errorCode: saveResult.error.code, errorMessage: saveResult.error.message },
       'Failed to save notification'
     );
     return err(saveResult.error);
   }
 
-  log.info(
+  logger.info(
     { id: saveResult.value.id, userId, app: input.payload.app },
     'Notification saved successfully'
   );
@@ -172,9 +160,9 @@ export async function processNotification(
         device: input.payload.device,
         source: input.payload.source,
       });
-      log.info({ userId }, 'Filter options updated');
+      logger.info({ userId }, 'Filter options updated');
     } catch {
-      log.warn({ userId }, 'Failed to update filter options (non-critical)');
+      logger.warn({ userId }, 'Failed to update filter options (non-critical)');
     }
   }
 

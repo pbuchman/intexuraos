@@ -11,11 +11,19 @@ const REQUIRED_ENV = [
 
 validateRequiredEnv(REQUIRED_ENV);
 
-initSentry({
-  dsn: process.env['INTEXURAOS_SENTRY_DSN'],
-  environment: process.env['INTEXURAOS_ENVIRONMENT'] ?? 'development',
-  serviceName: 'mobile-notifications-service',
-});
+const sentryDsn = process.env['INTEXURAOS_SENTRY_DSN'];
+initSentry(
+  sentryDsn === undefined
+    ? {
+        environment: process.env['INTEXURAOS_ENVIRONMENT'] ?? 'development',
+        serviceName: 'mobile-notifications-service',
+      }
+    : {
+        dsn: sentryDsn,
+        environment: process.env['INTEXURAOS_ENVIRONMENT'] ?? 'development',
+        serviceName: 'mobile-notifications-service',
+      }
+);
 
 const PORT = Number(process.env['PORT'] ?? 8080);
 const HOST = process.env['HOST'] ?? '0.0.0.0';
