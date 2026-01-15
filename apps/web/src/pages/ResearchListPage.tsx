@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Star } from 'lucide-react';
-import { Button, Card, Layout } from '@/components';
+import { Button, Card, Layout, RefreshIndicator } from '@/components';
 import { useAuth } from '@/context';
 import { useResearches } from '@/hooks';
 import { toggleResearchFavourite } from '@/services/researchAgentApi';
@@ -45,7 +45,8 @@ const STATUS_STYLES: Record<ResearchStatus, StatusStyle> = {
 };
 
 export function ResearchListPage(): React.JSX.Element {
-  const { researches, loading, error, hasMore, loadMore, deleteResearch, refresh } = useResearches();
+  const { researches, loading, loadingMore, refreshing, error, hasMore, loadMore, deleteResearch, refresh } =
+    useResearches();
   const { getAccessToken } = useAuth();
   const [updatingFavourite, setUpdatingFavourite] = useState<string | null>(null);
 
@@ -68,7 +69,7 @@ export function ResearchListPage(): React.JSX.Element {
     return (
       <Layout>
         <div className="flex items-center justify-center py-12">
-          <div className="h-8 w-8 rounded-full border-4 border-blue-600 border-t-transparent" />
+          <div className="h-8 w-8 animate-spin rounded-full border-4 border-blue-600 border-t-transparent" />
         </div>
       </Layout>
     );
@@ -85,6 +86,8 @@ export function ResearchListPage(): React.JSX.Element {
           <Button>New Research</Button>
         </Link>
       </div>
+
+      <RefreshIndicator show={refreshing} />
 
       {error !== null && error !== '' ? (
         <div className="mb-6 break-words rounded-lg border border-red-200 bg-red-50 p-4 text-red-700">
@@ -122,8 +125,16 @@ export function ResearchListPage(): React.JSX.Element {
                 onClick={(): void => {
                   void loadMore();
                 }}
+                disabled={loadingMore}
               >
-                Load More
+                {loadingMore ? (
+                  <div className="flex items-center gap-2">
+                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-slate-600 border-t-transparent" />
+                    <span>Loading...</span>
+                  </div>
+                ) : (
+                  'Load More'
+                )}
               </Button>
             </div>
           ) : null}

@@ -26,6 +26,14 @@ export {
   type CommandCategory,
   type CommandClassifierPromptInput,
   type CommandClassifierPromptDeps,
+  calendarActionExtractionPrompt,
+  type CalendarEventExtractionPromptInput,
+  type CalendarEventExtractionPromptDeps,
+  type ExtractedCalendarEvent,
+  linearActionExtractionPrompt,
+  type LinearIssueExtractionPromptInput,
+  type LinearIssueExtractionPromptDeps,
+  type ExtractedLinearIssue,
 } from './classification/index.js';
 
 // Todo prompts (item extraction)
@@ -53,6 +61,8 @@ export {
   isInputQualityResult,
   getInputQualityGuardError,
   type InputQualityResult,
+  buildValidationRepairPrompt,
+  buildImprovementRepairPrompt,
 } from './validation/index.js';
 
 // Research prompt builder
@@ -98,6 +108,8 @@ export {
   // Prompt builders
   buildInferResearchContextPrompt,
   buildInferSynthesisContextPrompt,
+  buildResearchContextRepairPrompt,
+  buildSynthesisContextRepairPrompt,
 } from './context/index.js';
 
 // Attribution system
@@ -118,6 +130,15 @@ export {
 
 // Security utilities
 export { redactToken, redactObject, SENSITIVE_FIELDS } from './redaction.js';
+
+// LLM parse error utilities
+export {
+  createLlmParseError,
+  logLlmParseError,
+  withLlmParseErrorLogging,
+  createDetailedParseErrorMessage,
+  type LlmParseErrorDetails,
+} from './llm/parseError.js';
 
 // Data insights prompts and parsers
 export {

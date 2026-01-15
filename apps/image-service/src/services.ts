@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { IPricingContext } from '@intexuraos/llm-pricing';
 import { LlmModels, LlmProviders, type Google, type OpenAI } from '@intexuraos/llm-contract';
+import type { Logger } from '@intexuraos/common-core';
 import type {
   GeneratedImageRepository,
   PromptGenerator,
@@ -27,12 +28,14 @@ export interface ServiceContainer {
   createPromptGenerator: (
     provider: Google | OpenAI,
     apiKey: string,
-    userId: string
+    userId: string,
+    logger: Logger
   ) => PromptGenerator;
   createImageGenerator: (
     model: ImageGenerationModel,
     apiKey: string,
-    userId: string
+    userId: string,
+    logger: Logger
   ) => ImageGenerator;
   generateId: () => string;
 }
@@ -80,17 +83,19 @@ export function initializeServices(pricingContext: IPricingContext): void {
     createPromptGenerator: (
       provider: Google | OpenAI,
       apiKey: string,
-      userId: string
+      userId: string,
+      logger: Logger
     ): PromptGenerator => {
       if (provider === LlmProviders.Google) {
-        return createGeminiPromptAdapter({ apiKey, userId, pricing: geminiPricing });
+        return createGeminiPromptAdapter({ apiKey, userId, pricing: geminiPricing, logger });
       }
-      return createGptPromptAdapter({ apiKey, userId, pricing: gptPricing });
+      return createGptPromptAdapter({ apiKey, userId, pricing: gptPricing, logger });
     },
     createImageGenerator: (
       model: ImageGenerationModel,
       apiKey: string,
-      userId: string
+      userId: string,
+      logger: Logger
     ): ImageGenerator => {
       const config = IMAGE_GENERATION_MODELS[model];
       if (config.provider === LlmProviders.OpenAI) {
@@ -101,6 +106,7 @@ export function initializeServices(pricingContext: IPricingContext): void {
           userId,
           pricing: gptPricing,
           imagePricing: openaiImagePricing,
+          logger,
         });
       }
       return createGoogleImageGenerator({
@@ -110,6 +116,7 @@ export function initializeServices(pricingContext: IPricingContext): void {
         userId,
         pricing: geminiPricing,
         imagePricing: googleImagePricing,
+        logger,
       });
     },
     generateId: (): string => randomUUID(),

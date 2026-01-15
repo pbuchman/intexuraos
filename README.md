@@ -46,7 +46,7 @@ graph LR
         Res -->|Query| GPT[GPT-5.2]
         Res -->|Query| CL[Claude Opus]
         Res -->|Query| PPL[Perplexity Sonar]
-        Res -->|Query| ZAI[GLE-4.7]
+        Res -->|Query| ZAI[GLM-4.7]
         Gemini & GPT & CL & PPL & ZAI -->|Synthesis| Rep[Final Report]
     end
 
@@ -161,7 +161,7 @@ graph TD
 
 ### The Continuity Ledger Pattern
 
-For complex, multi-step engineering tasks, we utilize a **Continuity Ledger**. Instead of relying on ephemeral chat context, the AI maintains a persistent `CONTINUITY.md` file that acts as a state machine for the task.
+For complex, multi-step engineering tasks, IntexuraOS uses a **Continuity Ledger**. Instead of relying on ephemeral chat context, the AI maintains a persistent `CONTINUITY.md` file that acts as a state machine for the task.
 
 - **Benefit**: Deterministic resumption of work after interruptions.
 - **Audit**: A permanent record of _why_ architectural decisions were made.
@@ -172,7 +172,7 @@ For complex, multi-step engineering tasks, we utilize a **Continuity Ledger**. I
 
 ### "No Dummy Success"
 
-We strictly avoid the pattern of catching errors and returning `null` or `undefined` just to keep the app running. Every operation returns a `Result<T, E>` type. Errors are modeled as part of the domain, not exceptions to it. This forces the consumer to handle failure cases explicitly, eliminating an entire class of runtime "undefined is not a function" crashes.
+IntexuraOS strictly avoids the pattern of catching errors and returning `null` or `undefined` just to keep the app running. Every operation returns a `Result<T, E>` type. Errors are modeled as part of the domain, not exceptions to it. This forces the consumer to handle failure cases explicitly, eliminating an entire class of runtime "undefined is not a function" crashes.
 
 ### The "Sleep at Night" Standard
 
@@ -199,17 +199,55 @@ A production-grade GCP environment managed entirely via Terraform.
 
 ---
 
-## ⚡️ Getting Started
+## 📚 Documentation
 
-To explore the architecture or run the services locally:
+Comprehensive documentation lives in the [`docs/`](docs/) directory.
 
-### 1. Architecture Tour
+### Getting Started
 
-Start by reading `docs/architecture/package-contracts.md` to understand how the monorepo enforces boundaries. Then, check `docs/services/` for the autonomous documentation of each microservice.
+| Document                                                              | Description                             |
+| --------------------------------------------------------------------- | --------------------------------------- |
+| [Overview](docs/overview.md)                                          | Platform capabilities and service map   |
+| [Setup Guide](docs/setup/01-gcp-project.md)                           | Step-by-step GCP project setup          |
+| [Terraform Bootstrap](docs/setup/02-terraform-bootstrap.md)           | Infrastructure provisioning             |
+| [Local Development](docs/setup/05-local-dev-with-gcp-deps.md)         | Running services locally with emulators |
+| [Auth0 Configuration](docs/setup/06-auth0.md)                         | Authentication setup                    |
+| [WhatsApp Business API](docs/setup/07-whatsapp-business-cloud-api.md) | WhatsApp integration                    |
 
-### 2. Local Environment
+### Architecture
 
-We use emulators to avoid cloud dependencies during development.
+| Document                                                                                  | Description                     |
+| ----------------------------------------------------------------------------------------- | ------------------------------- |
+| [Package Contracts](docs/architecture/package-contracts.md)                               | Monorepo boundary enforcement   |
+| [Service-to-Service Communication](docs/architecture/service-to-service-communication.md) | Internal HTTP patterns          |
+| [Firestore Ownership](docs/architecture/firestore-ownership.md)                           | Collection ownership model      |
+| [Pub/Sub Standards](docs/architecture/pubsub-standards.md)                                | Event-driven messaging patterns |
+| [API Contracts](docs/architecture/api-contracts.md)                                       | HTTP API design guidelines      |
+
+### Services
+
+Each service has feature, technical, and tutorial documentation in [`docs/services/`](docs/services/).
+
+| Service                                                        | Purpose                       |
+| -------------------------------------------------------------- | ----------------------------- |
+| [research-agent](docs/services/research-agent/features.md)     | Multi-LLM research synthesis  |
+| [whatsapp-service](docs/services/whatsapp-service/features.md) | WhatsApp Business integration |
+| [calendar-agent](docs/services/calendar-agent/features.md)     | Google Calendar operations    |
+| [todos-agent](docs/services/todos-agent/features.md)           | Task management               |
+| [bookmarks-agent](docs/services/bookmarks-agent/features.md)   | Link saving with AI summaries |
+| [notes-agent](docs/services/notes-agent/features.md)           | Note-taking                   |
+
+### Standards
+
+| Document                                              | Description                             |
+| ----------------------------------------------------- | --------------------------------------- |
+| [Documentation Standards](docs/STANDARDS.md)          | Zero-hallucination documentation policy |
+| [Use Case Logging](docs/patterns/use-case-logging.md) | Logging patterns for use cases          |
+| [Auditing](docs/patterns/auditing.md)                 | Code consistency auditing               |
+
+---
+
+## ⚡️ Quick Start
 
 ```bash
 # Install dependencies
@@ -217,7 +255,6 @@ pnpm install
 
 # Setup environment
 cp .env.example .env.local
-# Note: You will need Auth0 credentials for full functionality
 
 # Run the test suite (uses in-memory fakes)
 pnpm run ci
@@ -225,6 +262,8 @@ pnpm run ci
 # Start local services with emulators
 pnpm run dev
 ```
+
+For full setup instructions, see the [Setup Guide](docs/setup/01-gcp-project.md).
 
 ---
 

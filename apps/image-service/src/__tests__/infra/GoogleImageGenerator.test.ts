@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { ok, err } from '@intexuraos/common-core';
+import { ok, err, type Logger } from '@intexuraos/common-core';
 import { LlmModels, type ModelPricing } from '@intexuraos/llm-contract';
+import { createGeminiClient } from '@intexuraos/infra-gemini';
 import {
   GoogleImageGenerator,
   createGoogleImageGenerator,
@@ -35,6 +36,13 @@ const testImagePricing: ModelPricing = {
   imagePricing: { '1024x1024': 0.03, '1536x1024': 0.04, '1024x1536': 0.04 },
 };
 
+const mockLogger: Logger = {
+  info: vi.fn(),
+  error: vi.fn(),
+  warn: vi.fn(),
+  debug: vi.fn(),
+};
+
 function createMockStorage(): ImageStorage & {
   uploadMock: ReturnType<
     typeof vi.fn<(id: string, data: Buffer) => Promise<Result<ImageUrls, StorageError>>>
@@ -63,6 +71,11 @@ describe('GoogleImageGenerator', () => {
   beforeEach(() => {
     mockStorage = createMockStorage();
     vi.clearAllMocks();
+    vi.mocked(createGeminiClient).mockReturnValue({
+      research: vi.fn(),
+      generate: vi.fn(),
+      generateImage: mockGenerateImage,
+    });
   });
 
   describe('generate', () => {
@@ -92,6 +105,7 @@ describe('GoogleImageGenerator', () => {
         userId: 'test-user-id',
         pricing: testPricing,
         imagePricing: testImagePricing,
+        logger: mockLogger,
       });
 
       const result: Result<GeneratedImageData, ImageGenerationError> =
@@ -129,6 +143,7 @@ describe('GoogleImageGenerator', () => {
         userId: 'test-user-id',
         pricing: testPricing,
         imagePricing: testImagePricing,
+        logger: mockLogger,
       });
 
       await generator.generate(testPrompt);
@@ -159,6 +174,7 @@ describe('GoogleImageGenerator', () => {
         userId: 'test-user-id',
         pricing: testPricing,
         imagePricing: testImagePricing,
+        logger: mockLogger,
       });
 
       const result = await generator.generate(testPrompt, { slug: 'my-cool-image' });
@@ -185,6 +201,7 @@ describe('GoogleImageGenerator', () => {
         userId: 'test-user-id',
         pricing: testPricing,
         imagePricing: testImagePricing,
+        logger: mockLogger,
       });
 
       const result: Result<GeneratedImageData, ImageGenerationError> =
@@ -220,6 +237,7 @@ describe('GoogleImageGenerator', () => {
         userId: 'test-user-id',
         pricing: testPricing,
         imagePricing: testImagePricing,
+        logger: mockLogger,
       });
 
       const result: Result<GeneratedImageData, ImageGenerationError> =
@@ -243,6 +261,7 @@ describe('GoogleImageGenerator', () => {
         userId: 'test-user-id',
         pricing: testPricing,
         imagePricing: testImagePricing,
+        logger: mockLogger,
       });
 
       const result: Result<GeneratedImageData, ImageGenerationError> =
@@ -265,6 +284,7 @@ describe('GoogleImageGenerator', () => {
         userId: 'test-user-id',
         pricing: testPricing,
         imagePricing: testImagePricing,
+        logger: mockLogger,
       });
 
       const result: Result<GeneratedImageData, ImageGenerationError> =
@@ -287,6 +307,7 @@ describe('GoogleImageGenerator', () => {
         userId: 'test-user-id',
         pricing: testPricing,
         imagePricing: testImagePricing,
+        logger: mockLogger,
       });
 
       const result: Result<GeneratedImageData, ImageGenerationError> =
@@ -311,6 +332,7 @@ describe('GoogleImageGenerator', () => {
         userId: 'test-user-id',
         pricing: testPricing,
         imagePricing: testImagePricing,
+        logger: mockLogger,
       });
 
       const result: Result<GeneratedImageData, ImageGenerationError> =
@@ -319,6 +341,35 @@ describe('GoogleImageGenerator', () => {
       expect(result.ok).toBe(false);
       if (!result.ok) {
         expect(result.error.code).toBe('API_ERROR');
+      }
+    });
+
+    it('returns API_ERROR when generateImage is not supported by client', async () => {
+      const mockClientWithoutImageGen = {
+        research: vi.fn(),
+        generate: vi.fn(),
+      } as const;
+
+      vi.mocked(createGeminiClient).mockReturnValue(mockClientWithoutImageGen as never);
+
+      const generator = new GoogleImageGenerator({
+        apiKey: testApiKey,
+        model: testModel,
+        storage: mockStorage,
+        generateId: (): string => testImageId,
+        userId: 'test-user-id',
+        pricing: testPricing,
+        imagePricing: testImagePricing,
+        logger: mockLogger,
+      });
+
+      const result: Result<GeneratedImageData, ImageGenerationError> =
+        await generator.generate(testPrompt);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('API_ERROR');
+        expect(result.error.message).toBe('Image generation not supported');
       }
     });
 
@@ -342,6 +393,7 @@ describe('GoogleImageGenerator', () => {
         userId: 'test-user-id',
         pricing: testPricing,
         imagePricing: testImagePricing,
+        logger: mockLogger,
       });
 
       const result: Result<GeneratedImageData, ImageGenerationError> =
@@ -365,6 +417,7 @@ describe('GoogleImageGenerator', () => {
         userId: 'test-user-id',
         pricing: testPricing,
         imagePricing: testImagePricing,
+        logger: mockLogger,
       });
 
       expect(generator).toBeInstanceOf(GoogleImageGenerator);

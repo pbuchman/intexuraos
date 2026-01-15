@@ -6,6 +6,8 @@ import type { HandleResearchActionUseCase } from '../domain/usecases/handleResea
 import type { HandleTodoActionUseCase } from '../domain/usecases/handleTodoAction.js';
 import type { HandleNoteActionUseCase } from '../domain/usecases/handleNoteAction.js';
 import type { HandleLinkActionUseCase } from '../domain/usecases/handleLinkAction.js';
+import type { HandleCalendarActionUseCase } from '../domain/usecases/handleCalendarAction.js';
+import type { HandleLinearActionUseCase } from '../domain/usecases/handleLinearAction.js';
 import pino from 'pino';
 import { ok } from '@intexuraos/common-core';
 
@@ -23,6 +25,8 @@ describe('retryPendingActions usecase', () => {
     todo: HandleTodoActionUseCase;
     note: HandleNoteActionUseCase;
     link: HandleLinkActionUseCase;
+    calendar: HandleCalendarActionUseCase;
+    linear: HandleLinearActionUseCase;
   };
 
   const createAction = (overrides: Partial<Action> = {}): Action => ({
@@ -47,6 +51,8 @@ describe('retryPendingActions usecase', () => {
       todo: createFakeHandler() as unknown as HandleTodoActionUseCase,
       note: createFakeHandler() as unknown as HandleNoteActionUseCase,
       link: createFakeHandler() as unknown as HandleLinkActionUseCase,
+      calendar: createFakeHandler() as unknown as HandleCalendarActionUseCase,
+      linear: createFakeHandler() as unknown as HandleLinearActionUseCase,
     };
   });
 
@@ -121,12 +127,13 @@ describe('retryPendingActions usecase', () => {
   });
 
   it('skips actions without registered handler', async () => {
-    const calendarAction = createAction({
-      id: 'calendar-action',
-      type: 'calendar', // No handler registered for this type
+    const unsupportedAction = createAction({
+      id: 'unsupported-action',
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      type: 'unsupported' as any, // No handler registered for this type
       createdAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
     });
-    fakeActionRepository.getActions().set(calendarAction.id, calendarAction);
+    fakeActionRepository.getActions().set(unsupportedAction.id, unsupportedAction);
 
     const usecase = createRetryPendingActionsUseCase({
       actionRepository: fakeActionRepository,

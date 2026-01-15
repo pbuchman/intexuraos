@@ -1,6 +1,6 @@
 import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
 import { createLocalActionServiceClient } from '../../../infra/action/localActionServiceClient.js';
-import type { ActionRepository } from '../../../domain/ports/actionRepository.js';
+import type { ActionRepository, UpdateStatusIfResult } from '../../../domain/ports/actionRepository.js';
 import type { Action } from '../../../domain/models/action.js';
 
 describe('localActionServiceClient', () => {
@@ -28,6 +28,7 @@ describe('localActionServiceClient', () => {
       delete: vi.fn().mockResolvedValue(undefined),
       listByUserId: vi.fn().mockResolvedValue([]),
       listByStatus: vi.fn().mockResolvedValue([]),
+      updateStatusIf: vi.fn().mockResolvedValue({ outcome: 'updated' } as UpdateStatusIfResult),
     };
   });
 

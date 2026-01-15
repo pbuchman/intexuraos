@@ -30,6 +30,7 @@ export class PerplexityAdapter implements LlmResearchProvider {
       model,
       userId,
       pricing,
+      logger,
     });
     this.model = model;
     this.logger = logger;

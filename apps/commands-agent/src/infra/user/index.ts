@@ -1,7 +1,5 @@
 export {
   createUserServiceClient,
-  type UserServiceClient,
   type UserServiceConfig,
-  type UserApiKeys,
-  type UserServiceError,
 } from './userServiceClient.js';
+export type { UserServiceClient, UserApiKeys, UserServiceError } from './userServiceClient.js';

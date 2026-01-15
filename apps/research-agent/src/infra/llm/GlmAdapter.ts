@@ -28,7 +28,7 @@ export class GlmAdapter implements LlmResearchProvider, LlmSynthesisProvider {
     pricing: ModelPricing,
     logger: Logger
   ) {
-    this.client = createGlmClient({ apiKey, model, userId, pricing });
+    this.client = createGlmClient({ apiKey, model, userId, pricing, logger });
     this.model = model;
     this.logger = logger;
   }

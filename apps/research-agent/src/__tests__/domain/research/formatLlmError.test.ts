@@ -168,6 +168,24 @@ describe('formatLlmError', () => {
       const result = formatLlmError(rawError);
       expect(result).toBe('An error occurred with the Gemini API');
     });
+
+    it('returns null when JSON has error key but error property is undefined', () => {
+      // This tests line 79 - when parsed.error === undefined
+      const rawError = '{"error": null}';
+      const result = formatLlmError(rawError);
+      // Should fall back to generic error parsing
+      expect(result).toBeTruthy();
+    });
+
+    it('handles malformed JSON that passes initial string checks', () => {
+      // This tests line 129 - when JSON.parse throws after string checks pass
+      // The error string has "error" and "message" but is invalid JSON
+      const rawError = '{"error": {"message": "incomplete json"';
+      const result = formatLlmError(rawError);
+      // Should fall back to generic error parsing
+      expect(result).toBeTruthy();
+      expect(result).toContain('incomplete json');
+    });
   });
 
   describe('OpenAI errors', () => {

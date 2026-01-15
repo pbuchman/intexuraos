@@ -8,7 +8,6 @@ import type { Logger } from '@intexuraos/common-core';
 import { LlmModels } from '@intexuraos/llm-contract';
 
 const testPricing = TEST_PRICING;
-
 const mockLogger: Logger = {
   info: vi.fn(),
   error: vi.fn(),
@@ -21,10 +20,12 @@ vi.mock('../../../infra/llm/GeminiAdapter.js', () => ({
     apiKey: string;
     model: string;
     userId: string;
+    logger: Logger;
     constructor(apiKey: string, model: string, userId: string, _pricing: unknown, _logger: Logger) {
       this.apiKey = apiKey;
       this.model = model;
       this.userId = userId;
+      this.logger = _logger;
     }
   },
 }));
@@ -34,10 +35,12 @@ vi.mock('../../../infra/llm/ClaudeAdapter.js', () => ({
     apiKey: string;
     model: string;
     userId: string;
+    logger: Logger;
     constructor(apiKey: string, model: string, userId: string, _pricing: unknown, _logger: Logger) {
       this.apiKey = apiKey;
       this.model = model;
       this.userId = userId;
+      this.logger = _logger;
     }
   },
 }));
@@ -47,10 +50,12 @@ vi.mock('../../../infra/llm/GptAdapter.js', () => ({
     apiKey: string;
     model: string;
     userId: string;
+    logger: Logger;
     constructor(apiKey: string, model: string, userId: string, _pricing: unknown, _logger: Logger) {
       this.apiKey = apiKey;
       this.model = model;
       this.userId = userId;
+      this.logger = _logger;
     }
   },
 }));
@@ -60,10 +65,12 @@ vi.mock('../../../infra/llm/PerplexityAdapter.js', () => ({
     apiKey: string;
     model: string;
     userId: string;
+    logger: Logger;
     constructor(apiKey: string, model: string, userId: string, _pricing: unknown, _logger: Logger) {
       this.apiKey = apiKey;
       this.model = model;
       this.userId = userId;
+      this.logger = _logger;
     }
   },
 }));
@@ -73,10 +80,12 @@ vi.mock('../../../infra/llm/GlmAdapter.js', () => ({
     apiKey: string;
     model: string;
     userId: string;
+    logger: Logger;
     constructor(apiKey: string, model: string, userId: string, _pricing: unknown, _logger: Logger) {
       this.apiKey = apiKey;
       this.model = model;
       this.userId = userId;
+      this.logger = _logger;
     }
   },
 }));

@@ -4,6 +4,8 @@
  * @packageDocumentation
  */
 
+import type { Logger } from '@intexuraos/common-core';
+
 export type {
   LLMError as GeminiError,
   ResearchResult,
@@ -32,7 +34,8 @@ export type {
  *     inputPricePerMillion: 0.075,
  *     outputPricePerMillion: 0.30,
  *     groundingCostPerRequest: 0.002,
- *   }
+ *   },
+ *   logger: pinoLogger, // Optional pino logger for structured logging
  * });
  * ```
  */
@@ -47,4 +50,6 @@ export interface GeminiConfig {
   pricing: import('@intexuraos/llm-contract').ModelPricing;
   /** Optional separate pricing for image generation (Gemini 2.5 Flash) */
   imagePricing?: import('@intexuraos/llm-contract').ModelPricing;
+  /** Pino logger for structured LLM usage logging */
+  logger: Logger;
 }

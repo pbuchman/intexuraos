@@ -48,6 +48,7 @@ describe('ClaudeAdapter', () => {
         model: LlmModels.ClaudeOpus45,
         userId: 'test-user-id',
         pricing: testPricing,
+        logger: mockLogger,
       });
     });
   });

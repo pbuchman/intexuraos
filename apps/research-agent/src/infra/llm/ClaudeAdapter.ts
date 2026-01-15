@@ -24,7 +24,7 @@ export class ClaudeAdapter implements LlmResearchProvider {
     pricing: ModelPricing,
     logger: Logger
   ) {
-    this.client = createClaudeClient({ apiKey, model, userId, pricing });
+    this.client = createClaudeClient({ apiKey, model, userId, pricing, logger });
     this.model = model;
     this.logger = logger;
   }

@@ -181,6 +181,7 @@ function ApiKeyRow({
 
   const handleTest = async (): Promise<void> => {
     setIsTesting(true);
+    setSaveSuccess(false);
     try {
       await onTest();
     } finally {

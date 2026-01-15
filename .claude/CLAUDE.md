@@ -65,6 +65,44 @@ Note: The alias may not be available in spawned subshells - if `tf` is not found
 
 **ALWAYS commit `.claude/ci-failures/*` files with your changes.** These track verification failures for learning and pattern analysis.
 
+### Coverage Verification Efficiency (MANDATORY)
+
+**RULE:** When verifying coverage, NEVER run tests repeatedly just to grep different patterns from the output.
+
+**❌ WRONG — Re-runs tests multiple times (each run = minutes wasted):**
+
+```bash
+# Run 1: Initial CI check
+pnpm run ci:tracked
+
+# Run 2: Check error message
+pnpm run test:coverage 2>&1 | grep -E "(Coverage for|ERROR:|Branch coverage|% Coverage)"
+# → ERROR: Coverage for branches (94.93%) does not meet global threshold (95%)
+
+# Run 3: Find low-coverage files
+pnpm run test:coverage 2>&1 | grep -E "(\s+)(\d+\.?\d*)(\s+)(\d+\.?\d*)(\s+)(\d+\.?\d*)" | awk -v threshold=95 '{if ($5+0 < threshold) print $0}'
+
+# Run 4: Try another grep pattern...
+pnpm run test:coverage 2>&1 | grep -B2 "90\." | head -50
+```
+
+**✅ RIGHT — Capture once, analyze many times:**
+
+```bash
+# Run once, save output (2-3 minutes total)
+pnpm run ci:tracked 2>&1 | tee /tmp/ci-output.txt
+
+# Now analyze the saved output instantly (seconds)
+grep -E "(Coverage for|ERROR:|Branch coverage|% Coverage)" /tmp/ci-output.txt
+# → ERROR: Coverage for branches (94.93%) does not meet global threshold (95%)
+
+grep -E "(\s+)(\d+\.?\d*)(\s+)(\d+\.?\d*)(\s+)(\d+\.?\d*)" /tmp/ci-output.txt | awk -v threshold=95 '{if ($5+0 < threshold) print $0}'
+
+grep -B2 "90\." /tmp/ci-output.txt | head -50
+```
+
+**Why:** Each `test:coverage` run takes 2-5 minutes. Re-running 3-4 times just to grep different patterns wastes 10-15 minutes. `tee` saves output while displaying it—subsequent analysis is instantaneous.
+
 ---
 
 ## Architecture
@@ -276,6 +314,76 @@ setServices({ existingRepo: fakeRepo, newService: fakeNewService });
 ```typescript
 // ❌ `Status: ${response.status}` // status is number
 // ✅ `Status: ${String(response.status)}`
+```
+
+### 5. Unsafe Type Operations — Resolve types before accessing
+
+ESLint's `no-unsafe-*` rules fire when TypeScript can't resolve a type. Common causes:
+
+```typescript
+// ❌ Accessing Result without narrowing
+const result = await repo.findById(id);
+console.log(result.value);  // no-unsafe-member-access: .value unresolved
+
+// ✅ Narrow first, then access
+const result = await repo.findById(id);
+if (!result.ok) return result;
+console.log(result.value);  // TypeScript knows it's Success<T>
+
+// ❌ Using enum from unresolved import
+import { ModelId } from '@intexuraos/llm-factory';
+const model = ModelId.Gemini25Flash;  // no-unsafe-member-access
+
+// ✅ Ensure package is built, or use string literal
+const model = 'gemini-2.5-flash' as const;
+```
+
+**Root cause:** If `no-unsafe-*` errors appear, the type isn't resolving — check imports, run `pnpm build`, or add explicit type annotations.
+
+### 6. Mock Logger — Include ALL required methods
+
+The `Logger` interface requires `info`, `warn`, `error`, AND `debug`. Missing any causes TS2345.
+
+```typescript
+// ❌ Missing debug method
+const logger = {
+  info: vi.fn(),
+  warn: vi.fn(),
+  error: vi.fn(),
+};  // TS2345: not assignable to Logger
+
+// ✅ Include all four methods
+const logger: Logger = {
+  info: vi.fn(),
+  warn: vi.fn(),
+  error: vi.fn(),
+  debug: vi.fn(),
+};
+
+// ✅ Or use FakeLogger class if available in the service
+import { FakeLogger } from './fakes.js';
+const logger = new FakeLogger();
+```
+
+### 7. Empty Functions in Mocks — Use arrow functions
+
+ESLint's `no-empty-function` forbids `() => {}`. Use explicit return or vi.fn().
+
+```typescript
+// ❌ Empty function body
+const mock = { process: () => {} };  // no-empty-function
+
+// ✅ Return undefined explicitly, or use vi.fn()
+const mock = { process: (): undefined => undefined };
+const mock = { process: vi.fn() };
+```
+
+### 8. Async Template Expressions — Await or wrap in `String()`
+
+```typescript
+// ❌ `Result: ${asyncFunction()}` // Promise<string> in template
+// ✅ `Result: ${await asyncFunction()}`
+// OR: `Result: ${String(asyncFunction())}`
 ```
 
 ---

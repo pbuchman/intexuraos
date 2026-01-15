@@ -85,6 +85,12 @@ export interface TranscriptionTextResult {
   text: string;
 
   /**
+   * Optional AI-generated summary of the audio content.
+   * Only available when using transcription providers that support summarization.
+   */
+  summary?: string;
+
+  /**
    * API call details for tracking.
    */
   apiCall: TranscriptionApiCall;

@@ -14,7 +14,7 @@ import {
   Trash2,
   X,
 } from 'lucide-react';
-import { Button, Card, Input, Layout } from '@/components';
+import { Button, Card, Input, Layout, RefreshIndicator } from '@/components';
 import { useAuth } from '@/context';
 import { useBookmarkChanges, useBookmarks } from '@/hooks';
 import { ApiError } from '@/services/apiClient';
@@ -919,6 +919,7 @@ export function BookmarksListPage(): React.JSX.Element {
   const {
     bookmarks,
     loading,
+    refreshing,
     error,
     filters,
     setFilters,
@@ -1023,6 +1024,8 @@ export function BookmarksListPage(): React.JSX.Element {
           New Bookmark
         </Button>
       </div>
+
+      <RefreshIndicator show={refreshing} />
 
       <FilterBar filters={filters} onFiltersChange={setFilters} availableTags={availableTags} />
 

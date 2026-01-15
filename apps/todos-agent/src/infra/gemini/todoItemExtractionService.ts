@@ -3,34 +3,16 @@ import { err, getErrorMessage, ok } from '@intexuraos/common-core';
 import { itemExtractionPrompt } from '@intexuraos/llm-common';
 import type { LlmGenerateClient } from '@intexuraos/llm-factory';
 import type { UserServiceClient } from '../user/userServiceClient.js';
+import type {
+  TodoItemExtractionService,
+  ExtractionError,
+  ExtractedItem,
+} from '../../domain/ports/todoItemExtractionService.js';
+
+export type { TodoItemExtractionService, ExtractionError, ExtractedItem };
 
 const MAX_ITEMS = 50;
 const MAX_DESCRIPTION_LENGTH = 10000;
-
-export interface ExtractionError {
-  code: 'NO_API_KEY' | 'USER_SERVICE_ERROR' | 'GENERATION_ERROR' | 'INVALID_RESPONSE';
-  message: string;
-  details?: {
-    llmErrorCode?: string;
-    parseError?: string;
-    rawResponsePreview?: string | undefined;
-    userServiceError?: string;
-    wasWrappedInMarkdown?: boolean;
-    originalLength?: number;
-    cleanedLength?: number;
-  };
-}
-
-export interface ExtractedItem {
-  title: string;
-  priority: 'low' | 'medium' | 'high' | 'urgent' | null;
-  dueDate: Date | null;
-  reasoning: string;
-}
-
-export interface TodoItemExtractionService {
-  extractItems(userId: string, description: string): Promise<Result<ExtractedItem[], ExtractionError>>;
-}
 
 export function createTodoItemExtractionService(
   userServiceClient: UserServiceClient,

@@ -9,7 +9,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { setupSentryErrorHandler } from '../fastify.js';
 import * as Sentry from '@sentry/node';
-import Fastify, { type FastifyInstance } from 'fastify';
+import Fastify, { type FastifyInstance, type FastifyError } from 'fastify';
 
 // Mock Sentry - must be defined inline to avoid hoisting issues
 vi.mock('@sentry/node', () => {
@@ -83,6 +83,61 @@ describe('setupSentryErrorHandler', () => {
     expect(response.statusCode).toBe(404);
     // 404s are not errors, so Sentry shouldn't be called
     expect(Sentry.captureException).not.toHaveBeenCalled();
+  });
+
+  it('handles FST_ERR_CTP_INVALID_JSON_BODY error', async () => {
+    setupSentryErrorHandler(app);
+
+    app.get('/test', async () => {
+      const error: Partial<FastifyError> = new Error('Invalid JSON');
+      error.code = 'FST_ERR_CTP_INVALID_JSON_BODY';
+      throw error;
+    });
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/test',
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(Sentry.captureException).toHaveBeenCalled();
+  });
+
+  it('handles validation error with non-array validation property', async () => {
+    setupSentryErrorHandler(app);
+
+    app.get('/test', async () => {
+      const error = new Error('Validation error') as Error & Partial<{ validation: unknown }>;
+      // Validation property exists but is not an array
+      error.validation = { some: 'object' };
+      throw error;
+    });
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/test',
+    });
+
+    expect(response.statusCode).toBe(500);
+    expect(Sentry.captureException).toHaveBeenCalled();
+  });
+
+  it('handles error without validation property', async () => {
+    setupSentryErrorHandler(app);
+
+    app.get('/test', async () => {
+      const error: Partial<FastifyError> = new Error('Some other error');
+      error.code = 'SOME_OTHER_CODE';
+      throw error;
+    });
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/test',
+    });
+
+    expect(response.statusCode).toBe(500);
+    expect(Sentry.captureException).toHaveBeenCalled();
   });
 });
 

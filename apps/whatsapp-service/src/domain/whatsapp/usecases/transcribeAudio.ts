@@ -364,12 +364,14 @@ export class TranscribeAudioUseCase {
       }
 
       const transcript = transcriptResult.value.text;
+      const summary = transcriptResult.value.summary;
 
       // Step 5: Update message with completed transcription
       const completedState: TranscriptionState = {
         status: 'completed',
         jobId,
         text: transcript,
+        ...(summary !== undefined && { summary }),
         startedAt,
         completedAt: new Date().toISOString(),
         lastApiCall: transcriptResult.value.apiCall,
@@ -382,6 +384,7 @@ export class TranscribeAudioUseCase {
           messageId,
           jobId,
           transcriptLength: transcript.length,
+          hasSummary: summary !== undefined,
         },
         'Transcription completed successfully'
       );
@@ -416,7 +419,8 @@ export class TranscribeAudioUseCase {
         phoneNumberId,
         userPhoneNumber,
         originalWaMessageId,
-        transcript
+        transcript,
+        summary
       );
     } catch (error) {
       // Log raw error for debugging
@@ -519,9 +523,13 @@ export class TranscribeAudioUseCase {
     phoneNumberId: string,
     userPhoneNumber: string,
     originalWaMessageId: string,
-    transcript: string
+    transcript: string,
+    summary?: string
   ): Promise<void> {
-    const message = `🎙️ *Transcription:*\n\n${transcript}`;
+    let message = `🎙️ *Transcription:*\n\n${transcript}`;
+    if (summary !== undefined) {
+      message += `\n\n📝 *Summary:*\n\n${summary}`;
+    }
     await whatsappCloudApi.sendMessage(
       phoneNumberId,
       userPhoneNumber,

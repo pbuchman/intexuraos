@@ -271,6 +271,20 @@ describe('listResearches', () => {
 
     expect(result.ok).toBe(false);
   });
+
+  it('passes cursor parameter to repository', async () => {
+    fakeRepo.addResearch(createTestResearch({ id: 'r1', userId: 'user-123' }));
+
+    const result = await listResearches(
+      { userId: 'user-123', cursor: 'some-cursor' },
+      { researchRepo: fakeRepo }
+    );
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.items).toHaveLength(1);
+    }
+  });
 });
 
 describe('deleteResearch', () => {

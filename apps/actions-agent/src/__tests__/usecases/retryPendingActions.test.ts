@@ -51,6 +51,12 @@ describe('retryPendingActions', () => {
       link: {
         execute: vi.fn().mockResolvedValue(ok({ actionId: 'action-1' })),
       },
+      calendar: {
+        execute: vi.fn().mockResolvedValue(ok({ actionId: 'action-1' })),
+      },
+      linear: {
+        execute: vi.fn().mockResolvedValue(ok({ actionId: 'action-1' })),
+      },
     };
   });
 
@@ -71,10 +77,11 @@ describe('retryPendingActions', () => {
   });
 
   it('skips actions without handler', async () => {
-    mockRepository.listByStatus.mockResolvedValue([
-      createTestAction({ type: 'calendar' }),
-      createTestAction({ id: 'action-2', type: 'reminder' }),
-    ]);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const unsupportedAction = createTestAction({ type: 'unsupported' as any });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const unknownAction = createTestAction({ id: 'action-2', type: 'unknown' as any });
+    mockRepository.listByStatus.mockResolvedValue([unsupportedAction, unknownAction]);
 
     const useCase = createRetryPendingActionsUseCase({
       actionRepository: mockRepository as unknown as ActionRepository,
@@ -149,9 +156,11 @@ describe('retryPendingActions', () => {
   });
 
   it('processes multiple actions independently', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const unsupportedAction = createTestAction({ id: 'action-2', type: 'unsupported' as any });
     mockRepository.listByStatus.mockResolvedValue([
       createTestAction({ id: 'action-1', type: 'research' }),
-      createTestAction({ id: 'action-2', type: 'calendar' }),
+      unsupportedAction,
       createTestAction({ id: 'action-3', type: 'research' }),
     ]);
     mockPublisher.publishActionCreated

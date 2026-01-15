@@ -75,7 +75,7 @@ function createRequestContext(
 
 export function createGeminiClient(config: GeminiConfig): GeminiClient {
   const ai = new GoogleGenAI({ apiKey: config.apiKey });
-  const { model, userId, pricing, imagePricing } = config;
+  const { model, userId, pricing, imagePricing, logger } = config;
 
   function trackUsage(
     callType: CallType,
@@ -92,6 +92,7 @@ export function createGeminiClient(config: GeminiConfig): GeminiClient {
       usage,
       success,
       ...(errorMessage !== undefined && { errorMessage }),
+      logger,
     });
   }
 

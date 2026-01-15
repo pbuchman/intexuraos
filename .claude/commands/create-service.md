@@ -30,6 +30,36 @@ apps/<service-name>/
     └── routes/           # HTTP transport layer
 ```
 
+### Clean Architecture Enforcement (ESLint)
+
+ESLint enforces Clean Architecture boundaries within each app:
+
+| Layer  | Can Import From              | Cannot Import From |
+| ------ | ---------------------------- | ------------------ |
+| Routes | Domain, packages             | Infra              |
+| Domain | packages (common-\*, llm-\*) | Infra              |
+| Infra  | Domain, packages             | Routes             |
+
+**ESLint rules location:** `eslint.config.js` (search for "CRITICAL #1", "CRITICAL #2", "CRITICAL #3")
+
+**Dependency Direction:** Routes → Domain ← Infra
+
+- Domain defines **port interfaces** (e.g., `domain/ports/`)
+- Infra **implements** those interfaces (e.g., `infra/firestore/`)
+- Routes call domain use cases, which use ports (not concrete infra)
+
+**Example violation (ESLint will catch):**
+
+```typescript
+// ❌ domain/usecases/processAction.ts
+import { GeminiService } from '../../infra/gemini/service.js'; // ERROR!
+
+// ✅ domain/usecases/processAction.ts
+import type { ActionExtractionPort } from '../ports/actionExtraction.js'; // OK
+```
+
+If you see domain importing from infra, define a port interface in domain and inject the implementation via `getServices()`.
+
 ### Route Naming Convention
 
 When creating routes for your service:

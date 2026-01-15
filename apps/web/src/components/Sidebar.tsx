@@ -17,6 +17,7 @@ import {
   Inbox,
   Key,
   LayoutDashboard,
+  LayoutList,
   List,
   Menu,
   MessageCircle,
@@ -43,6 +44,7 @@ const settingsItems: NavItem[] = [
   { to: '/settings/mobile', label: 'Mobile', icon: Bell },
   { to: '/settings/notion', label: 'Notion', icon: FileText },
   { to: '/settings/calendar', label: 'Google Calendar', icon: Calendar },
+  { to: '/settings/linear', label: 'Linear', icon: LayoutList },
   { to: '/settings/api-keys', label: 'API Keys', icon: Key },
   { to: '/settings/llm-pricing', label: 'LLM Pricing', icon: DollarSign },
   { to: '/settings/usage-costs', label: 'Usage Costs', icon: TrendingUp },
@@ -423,6 +425,22 @@ export function Sidebar(): React.JSX.Element {
           >
             <Calendar className="h-5 w-5 shrink-0" />
             {!isCollapsed ? <span>Calendar</span> : null}
+          </NavLink>
+
+          {/* Linear Issues */}
+          <NavLink
+            to="/linear"
+            end
+            className={({ isActive }): string =>
+              `flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
+                isActive
+                  ? 'bg-blue-50 text-blue-700'
+                  : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+              }`
+            }
+          >
+            <LayoutList className="h-5 w-5 shrink-0" />
+            {!isCollapsed ? <span>Linear Issues</span> : null}
           </NavLink>
 
           {/* WhatsApp */}

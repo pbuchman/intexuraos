@@ -3,15 +3,19 @@ import {
   Calendar as CalendarIcon,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
+  ChevronUp,
   Clock,
   ExternalLink,
   MapPin,
   RefreshCw,
   Users,
+  AlertCircle,
+  X,
 } from 'lucide-react';
-import { Button, Card, Layout } from '@/components';
-import { useCalendarEvents } from '@/hooks';
-import type { CalendarEvent, CalendarEventDateTime } from '@/types';
+import { Button, Card, Layout, RefreshIndicator } from '@/components';
+import { useCalendarEvents, useFailedCalendarEvents } from '@/hooks';
+import type { CalendarEvent, CalendarEventDateTime, FailedCalendarEvent } from '@/types';
 
 function formatTimeOnly(dt: CalendarEventDateTime): string {
   if (dt.dateTime !== undefined) {
@@ -64,9 +68,27 @@ interface EventRowProps {
 
 function EventRow({ event }: EventRowProps): React.JSX.Element {
   const allDay = isAllDayEvent(event);
+  const hasLink = event.htmlLink !== undefined;
+
+  const handleClick = (): void => {
+    if (hasLink) {
+      window.open(event.htmlLink, '_blank', 'noopener,noreferrer');
+    }
+  };
 
   return (
-    <div className="flex gap-4 rounded-lg border border-slate-200 bg-white p-4 transition-colors hover:bg-slate-50">
+    <div
+      role={hasLink ? 'button' : undefined}
+      tabIndex={hasLink ? 0 : undefined}
+      onClick={handleClick}
+      onKeyDown={(e) => {
+        if (hasLink && (e.key === 'Enter' || e.key === ' ')) {
+          e.preventDefault();
+          handleClick();
+        }
+      }}
+      className={`flex gap-4 rounded-lg border border-slate-200 bg-white p-4 transition-colors hover:bg-slate-50 ${hasLink ? 'cursor-pointer' : ''}`}
+    >
       <div className="flex w-20 shrink-0 flex-col items-center justify-center rounded-lg bg-blue-50 p-2 text-center">
         <Clock className="mb-1 h-4 w-4 text-blue-600" />
         <span className="text-xs font-medium text-blue-700">
@@ -82,15 +104,10 @@ function EventRow({ event }: EventRowProps): React.JSX.Element {
       <div className="min-w-0 flex-1">
         <div className="flex items-start justify-between gap-2">
           <h3 className="font-medium text-slate-900">{event.summary}</h3>
-          {event.htmlLink !== undefined && (
-            <a
-              href={event.htmlLink}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="shrink-0 rounded p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-blue-600"
-            >
+          {hasLink && (
+            <span className="shrink-0 rounded p-1 text-slate-400">
               <ExternalLink className="h-4 w-4" />
-            </a>
+            </span>
           )}
         </div>
 
@@ -112,6 +129,120 @@ function EventRow({ event }: EventRowProps): React.JSX.Element {
             </span>
           )}
         </div>
+      </div>
+    </div>
+  );
+}
+
+interface FailedEventCardProps {
+  event: FailedCalendarEvent;
+  onDismiss: (id: string) => void;
+}
+
+function FailedEventCard({ event, onDismiss }: FailedEventCardProps): React.JSX.Element {
+  return (
+    <div className="flex gap-3 rounded-lg border border-amber-200 bg-amber-50 p-3">
+      <div className="flex shrink-0 items-center justify-center rounded-lg bg-amber-100 p-2 text-amber-600">
+        <AlertCircle className="h-4 w-4" />
+      </div>
+
+      <div className="min-w-0 flex-1">
+        <div className="mb-1 flex items-start justify-between gap-2">
+          <h4 className="font-medium text-amber-900">
+            {event.summary ?? 'Untitled event'}
+          </h4>
+          <button
+            type="button"
+            onClick={() => {
+              onDismiss(event.id);
+            }}
+            className="shrink-0 rounded p-1 text-amber-400 transition-colors hover:bg-amber-100 hover:text-amber-600"
+            aria-label="Dismiss"
+          >
+            <X className="h-3 w-3" />
+          </button>
+        </div>
+
+        {event.description !== null && event.description !== '' && (
+          <p className="mb-2 line-clamp-2 text-sm text-amber-700">{event.description}</p>
+        )}
+
+        <div className="mb-2 rounded-md bg-amber-100 px-2 py-1 text-xs text-amber-800">
+          <span className="font-medium">Issue:</span> {event.error}
+        </div>
+
+        <div className="text-xs text-amber-600">
+          <span className="font-medium">Original text:</span> "{event.originalText}"
+        </div>
+
+        {event.reasoning !== null && (
+          <div className="mt-1 text-xs text-amber-600">
+            <span className="font-medium">Reasoning:</span> {event.reasoning}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+interface NeedsAttentionSectionProps {
+  events: FailedCalendarEvent[];
+  onDismiss: (id: string) => void;
+}
+
+function NeedsAttentionSection({
+  events,
+  onDismiss,
+}: NeedsAttentionSectionProps): React.JSX.Element | null {
+  const [expanded, setExpanded] = useState(false);
+  const visibleCount = expanded ? events.length : Math.min(events.length, 3);
+
+  if (events.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="mb-6 rounded-lg border border-amber-200 bg-amber-50 p-4">
+      <div className="mb-3 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <AlertCircle className="h-5 w-5 text-amber-600" />
+          <h3 className="font-semibold text-amber-900">
+            Needs Attention ({events.length})
+          </h3>
+        </div>
+        {events.length > 3 && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              setExpanded(!expanded);
+            }}
+            className="text-amber-700 hover:bg-amber-100 hover:text-amber-900"
+          >
+            {expanded ? (
+              <>
+                <span>Show less</span>
+                <ChevronUp className="ml-1 h-4 w-4" />
+              </>
+            ) : (
+              <>
+                <span>Show all ({events.length})</span>
+                <ChevronDown className="ml-1 h-4 w-4" />
+              </>
+            )}
+          </Button>
+        )}
+      </div>
+
+      <p className="mb-4 text-sm text-amber-700">
+        These events couldn't be created. Please edit them and try again.
+      </p>
+
+      <div className="space-y-2">
+        {events.slice(0, visibleCount).map((event) => (
+          <FailedEventCard key={event.id} event={event} onDismiss={onDismiss} />
+        ))}
       </div>
     </div>
   );
@@ -152,8 +283,14 @@ function DateGroup({ date, events }: DateGroupProps): React.JSX.Element {
 }
 
 export function CalendarPage(): React.JSX.Element {
-  const { events, loading, error, filters, setFilters, refresh } = useCalendarEvents();
-  const [refreshing, setRefreshing] = useState(false);
+  const { events, loading, refreshing, error, filters, setFilters, refresh } = useCalendarEvents();
+  const {
+    events: failedEvents,
+    loading: failedEventsLoading,
+    refresh: refreshFailedEvents,
+  } = useFailedCalendarEvents();
+  const [isManualRefreshing, setIsManualRefreshing] = useState(false);
+  const [dismissedFailedEventIds, setDismissedFailedEventIds] = useState<Set<string>>(new Set());
 
   const currentStart = filters.timeMin !== undefined ? new Date(filters.timeMin) : new Date();
   const currentEnd = filters.timeMax !== undefined ? new Date(filters.timeMax) : new Date();
@@ -201,20 +338,28 @@ export function CalendarPage(): React.JSX.Element {
   };
 
   const handleRefresh = async (): Promise<void> => {
-    setRefreshing(true);
+    setIsManualRefreshing(true);
     try {
-      await refresh();
+      await Promise.all([refresh(), refreshFailedEvents()]);
     } finally {
-      setRefreshing(false);
+      setIsManualRefreshing(false);
     }
   };
+
+  const handleDismissFailedEvent = (id: string): void => {
+    setDismissedFailedEventIds((prev) => new Set([...prev, id]));
+  };
+
+  const visibleFailedEvents = failedEvents.filter(
+    (event) => !dismissedFailedEventIds.has(event.id)
+  );
 
   const groupedEvents = groupEventsByDate(events);
   const sortedDates = Array.from(groupedEvents.keys()).sort(
     (a, b) => new Date(a).getTime() - new Date(b).getTime()
   );
 
-  if (loading && events.length === 0) {
+  if (loading && failedEventsLoading && events.length === 0) {
     return (
       <Layout>
         <div className="flex items-center justify-center py-12">
@@ -237,13 +382,20 @@ export function CalendarPage(): React.JSX.Element {
           onClick={(): void => {
             void handleRefresh();
           }}
-          disabled={refreshing}
-          isLoading={refreshing}
+          disabled={isManualRefreshing}
+          isLoading={isManualRefreshing}
         >
           <RefreshCw className="mr-2 h-4 w-4" />
           Refresh
         </Button>
       </div>
+
+      <RefreshIndicator show={refreshing || isManualRefreshing} />
+
+      <NeedsAttentionSection
+        events={visibleFailedEvents}
+        onDismiss={handleDismissFailedEvent}
+      />
 
       <div className="mb-6 flex items-center justify-between rounded-lg border border-slate-200 bg-white p-4">
         <Button type="button" variant="ghost" size="sm" onClick={handlePrevWeek}>

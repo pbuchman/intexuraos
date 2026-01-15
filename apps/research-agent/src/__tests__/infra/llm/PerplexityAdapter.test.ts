@@ -45,6 +45,7 @@ describe('PerplexityAdapter', () => {
         model: LlmModels.SonarPro,
         userId: 'test-user-id',
         pricing: testPricing,
+        logger: mockLogger,
       });
     });
   });

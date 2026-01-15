@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Sparkles } from 'lucide-react';
-import { Button, Card, Input, Layout } from '@/components';
+import { Button, Card, Input, Layout, RefreshIndicator } from '@/components';
 import { useAuth } from '@/context';
 import { useDataSource } from '@/hooks';
 import { createDataSource } from '@/services/dataSourceApi';
@@ -18,6 +18,7 @@ export function DataSourceFormPage(): React.JSX.Element {
   const {
     dataSource,
     loading: fetchLoading,
+    refreshing,
     error: fetchError,
     updateDataSource,
     generateTitle,
@@ -125,6 +126,8 @@ export function DataSourceFormPage(): React.JSX.Element {
           {isEditMode ? 'Update your data source content.' : 'Add a new data source for analysis.'}
         </p>
       </div>
+
+      <RefreshIndicator show={refreshing} />
 
       {error !== null && error !== '' ? (
         <div className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 text-red-700">

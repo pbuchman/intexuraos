@@ -74,7 +74,7 @@ export function createGlmClient(config: GlmConfig): GlmClient {
     apiKey: config.apiKey,
     baseURL: GLM_API_BASE,
   });
-  const { model, userId, pricing } = config;
+  const { model, userId, pricing, logger } = config;
 
   function createRequestContext(
     method: string,
@@ -108,6 +108,7 @@ export function createGlmClient(config: GlmConfig): GlmClient {
       usage,
       success,
       ...(errorMessage !== undefined && { errorMessage }),
+      logger,
     });
   }
 

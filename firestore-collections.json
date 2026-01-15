@@ -109,6 +109,18 @@
     "visualizations": {
       "owner": "data-insights-agent",
       "description": "LLM-generated data visualizations with insights and Vega-Lite specs"
+    },
+    "calendar_failed_events": {
+      "owner": "calendar-agent",
+      "description": "Failed calendar event extractions for manual review"
+    },
+    "linear_connections": {
+      "owner": "linear-agent",
+      "description": "Linear API key connections and team configuration"
+    },
+    "linear_failed_issues": {
+      "owner": "linear-agent",
+      "description": "Failed Linear issue creations for manual review"
     }
   }
 }

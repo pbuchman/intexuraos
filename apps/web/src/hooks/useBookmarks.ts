@@ -16,10 +16,11 @@ import type { Bookmark, CreateBookmarkRequest, UpdateBookmarkRequest } from '@/t
 interface UseBookmarksResult {
   bookmarks: Bookmark[];
   loading: boolean;
+  refreshing: boolean;
   error: string | null;
   filters: ListBookmarksFilters;
   setFilters: (filters: ListBookmarksFilters) => void;
-  refresh: () => Promise<void>;
+  refresh: (showLoading?: boolean) => Promise<void>;
   refreshBookmarkById: (id: string) => Promise<void>;
   createBookmark: (request: CreateBookmarkRequest) => Promise<Bookmark>;
   updateBookmark: (id: string, request: UpdateBookmarkRequest) => Promise<Bookmark>;
@@ -32,23 +33,37 @@ export function useBookmarks(): UseBookmarksResult {
   const { getAccessToken } = useAuth();
   const [bookmarks, setBookmarks] = useState<Bookmark[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [filters, setFilters] = useState<ListBookmarksFilters>({});
 
-  const refresh = useCallback(async (): Promise<void> => {
-    setLoading(true);
-    setError(null);
+  const refresh = useCallback(
+    async (showLoading?: boolean): Promise<void> => {
+      const shouldShowLoading = showLoading !== false;
 
-    try {
-      const token = await getAccessToken();
-      const data = await listBookmarksApi(token, filters);
-      setBookmarks(data);
-    } catch (err) {
-      setError(getErrorMessage(err, 'Failed to load bookmarks'));
-    } finally {
-      setLoading(false);
-    }
-  }, [getAccessToken, filters]);
+      if (shouldShowLoading) {
+        setLoading(true);
+      } else {
+        setRefreshing(true);
+      }
+      setError(null);
+
+      try {
+        const token = await getAccessToken();
+        const data = await listBookmarksApi(token, filters);
+        setBookmarks(data);
+      } catch (err) {
+        setError(getErrorMessage(err, 'Failed to load bookmarks'));
+      } finally {
+        if (shouldShowLoading) {
+          setLoading(false);
+        } else {
+          setRefreshing(false);
+        }
+      }
+    },
+    [getAccessToken, filters]
+  );
 
   useEffect(() => {
     void refresh();
@@ -127,6 +142,7 @@ export function useBookmarks(): UseBookmarksResult {
   return {
     bookmarks,
     loading,
+    refreshing,
     error,
     filters,
     setFilters,

@@ -12,6 +12,9 @@ export type {
   EventDateTime,
   EventPerson,
   EventAttendee,
+  FailedEvent,
+  CreateFailedEventInput,
+  FailedEventFilters,
 } from './models.js';
 
 export type { CalendarError, CalendarErrorCode } from './errors.js';
@@ -20,6 +23,10 @@ export type {
   GoogleCalendarClient,
   UserServiceClient,
   OAuthTokenResult,
+  FailedEventRepository,
+  CalendarActionExtractionService,
+  ExtractedCalendarEvent,
+  ExtractionError,
 } from './ports.js';
 
 export {
@@ -52,3 +59,9 @@ export {
   type GetFreeBusyRequest,
   type GetFreeBusyDeps,
 } from './useCases/getFreeBusy.js';
+export {
+  processCalendarAction,
+  type ProcessCalendarActionRequest,
+  type ProcessCalendarActionDeps,
+  type ProcessCalendarActionResponse,
+} from './useCases/processCalendarAction.js';

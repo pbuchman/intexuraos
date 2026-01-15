@@ -52,6 +52,7 @@ describe('GeminiAdapter', () => {
         model: LlmModels.Gemini25Pro,
         userId: 'test-user-id',
         pricing: testPricing,
+        logger: mockLogger,
       });
     });
 

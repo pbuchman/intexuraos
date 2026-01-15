@@ -51,6 +51,7 @@ export INTEXURAOS_APP_SETTINGS_SERVICE_URL=http://localhost:8122
 export INTEXURAOS_TODOS_AGENT_URL=http://localhost:8123
 export INTEXURAOS_BOOKMARKS_AGENT_URL=http://localhost:8124
 export INTEXURAOS_CALENDAR_AGENT_URL=http://localhost:8125
+export INTEXURAOS_LINEAR_AGENT_URL=http://localhost:8126
 
 # =============================================================================
 # GCS BUCKETS (for local fake-gcs-server)

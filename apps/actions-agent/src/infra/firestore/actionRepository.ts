@@ -1,8 +1,17 @@
 import { getFirestore } from '@intexuraos/infra-firestore';
 import type { Action } from '../../domain/models/action.js';
-import type { ActionRepository, ListByUserIdOptions } from '../../domain/ports/actionRepository.js';
+import type {
+  ActionRepository,
+  ListByUserIdOptions,
+  UpdateStatusIfResult,
+} from '../../domain/ports/actionRepository.js';
+import type { Logger } from 'pino';
 
 const COLLECTION = 'actions';
+
+interface CreateFirestoreActionRepositoryDeps {
+  logger?: Logger;
+}
 
 interface ActionDoc {
   userId: string;
@@ -45,7 +54,9 @@ function toDoc(action: Action): ActionDoc {
   };
 }
 
-export function createFirestoreActionRepository(): ActionRepository {
+export function createFirestoreActionRepository(deps?: CreateFirestoreActionRepositoryDeps): ActionRepository {
+  const { logger } = deps ?? {};
+  const hasLogger = logger !== undefined;
   return {
     async getById(id: string): Promise<Action | null> {
       const db = getFirestore();
@@ -103,6 +114,48 @@ export function createFirestoreActionRepository(): ActionRepository {
         .get();
 
       return snapshot.docs.map((doc) => toAction(doc.id, doc.data() as ActionDoc));
+    },
+
+    async updateStatusIf(
+      actionId: string,
+      newStatus: Action['status'],
+      expectedStatus: Action['status']
+    ): Promise<UpdateStatusIfResult> {
+      const db = getFirestore();
+      const docRef = db.collection(COLLECTION).doc(actionId);
+
+      try {
+        const result = await db.runTransaction(async (transaction) => {
+          const snapshot = await transaction.get(docRef);
+
+          if (!snapshot.exists) {
+            return { outcome: 'not_found' } as const;
+          }
+
+          const currentStatus = snapshot.get('status') as string;
+
+          if (currentStatus !== expectedStatus) {
+            return { outcome: 'status_mismatch', currentStatus } as const;
+          }
+
+          transaction.update(docRef, {
+            status: newStatus,
+            updatedAt: new Date().toISOString(),
+          });
+
+          return { outcome: 'updated' } as const;
+        });
+
+        return result;
+      } catch (error) {
+        if (hasLogger) {
+          logger.error(
+            { actionId, newStatus, expectedStatus, error },
+            'Firestore transaction failed in updateStatusIf'
+          );
+        }
+        return { outcome: 'error', error: error instanceof Error ? error : new Error(String(error)) };
+      }
     },
   };
 }

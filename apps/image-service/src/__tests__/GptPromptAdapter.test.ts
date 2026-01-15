@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vites
 import nock from 'nock';
 import type { ModelPricing } from '@intexuraos/llm-contract';
 import { GptPromptAdapter } from '../infra/llm/GptPromptAdapter.js';
+import type { Logger } from '@intexuraos/common-core';
 
 vi.mock('@intexuraos/llm-audit', (): object => ({
   createAuditContext: (): object => ({
@@ -17,6 +18,13 @@ vi.mock('@intexuraos/llm-pricing', (): object => ({
 const testPricing: ModelPricing = {
   inputPricePerMillion: 1.75,
   outputPricePerMillion: 14.0,
+};
+
+const mockLogger: Logger = {
+  info: vi.fn(),
+  error: vi.fn(),
+  warn: vi.fn(),
+  debug: vi.fn(),
 };
 
 describe('GptPromptAdapter', () => {
@@ -70,6 +78,7 @@ describe('GptPromptAdapter', () => {
         apiKey: 'test-key',
         userId: 'test-user',
         pricing: testPricing,
+        logger: mockLogger,
       });
       const result = await adapter.generateThumbnailPrompt('AI technology article');
 
@@ -97,6 +106,7 @@ describe('GptPromptAdapter', () => {
         apiKey: 'test-key',
         userId: 'test-user',
         pricing: testPricing,
+        logger: mockLogger,
       });
       const result = await adapter.generateThumbnailPrompt('Some text');
 
@@ -121,6 +131,7 @@ describe('GptPromptAdapter', () => {
         apiKey: 'bad-key',
         userId: 'test-user',
         pricing: testPricing,
+        logger: mockLogger,
       });
       const result = await adapter.generateThumbnailPrompt('Some text');
 
@@ -146,6 +157,7 @@ describe('GptPromptAdapter', () => {
         apiKey: 'test-key',
         userId: 'test-user',
         pricing: testPricing,
+        logger: mockLogger,
       });
       const result = await adapter.generateThumbnailPrompt('Some text');
 
@@ -162,6 +174,32 @@ describe('GptPromptAdapter', () => {
         apiKey: 'test-key',
         userId: 'test-user',
         pricing: testPricing,
+        logger: mockLogger,
+      });
+      const result = await adapter.generateThumbnailPrompt('Some text');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('API_ERROR');
+      }
+    });
+
+    it('returns API_ERROR for unknown error codes from LLM contract', async () => {
+      nock('https://api.openai.com')
+        .post('/v1/chat/completions')
+        .reply(400, {
+          error: {
+            message: 'Unknown error type',
+            type: 'some_unknown_error',
+            code: 'UNKNOWN_CODE',
+          },
+        });
+
+      const adapter = new GptPromptAdapter({
+        apiKey: 'test-key',
+        userId: 'test-user',
+        pricing: testPricing,
+        logger: mockLogger,
       });
       const result = await adapter.generateThumbnailPrompt('Some text');
 
@@ -180,6 +218,7 @@ describe('GptPromptAdapter', () => {
         apiKey: 'test-key',
         userId: 'test-user',
         pricing: testPricing,
+        logger: mockLogger,
       });
       const result = await adapter.generateThumbnailPrompt('Some text');
 
@@ -216,6 +255,7 @@ describe('GptPromptAdapter', () => {
         model: 'gpt-4o',
         userId: 'test-user',
         pricing: testPricing,
+        logger: mockLogger,
       });
       const result = await adapter.generateThumbnailPrompt('Test');
 

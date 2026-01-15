@@ -440,17 +440,20 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       // Validate
       const validationResult = await validator.validateInput(body.prompt);
       if (!validationResult.ok) {
-        request.log.warn(
+        request.log.error(
           {
             requestId,
             errorCode: validationResult.error.code,
             errorMessage: validationResult.error.message,
           },
-          'Validation failed, returning GOOD quality as fallback'
+          'Validation failed'
         );
-        return await reply.code(200).send({
-          success: true,
-          data: { quality: 2, reason: 'Validation unavailable', improvedPrompt: null },
+        return await reply.code(500).send({
+          success: false,
+          error: {
+            code: validationResult.error.code,
+            message: validationResult.error.message,
+          },
           diagnostics: { requestId, durationMs: Date.now() - startTime },
         });
       }

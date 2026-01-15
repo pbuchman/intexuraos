@@ -74,6 +74,7 @@ export type CallType =
  *     webSearchCalls: 3,
  *   },
  *   success: true,
+ *   logger: pinoLogger, // Optional pino logger
  * };
  * ```
  */
@@ -92,6 +93,8 @@ export interface UsageLogParams {
   success: boolean;
   /** Error message if success is false */
   errorMessage?: string;
+  /** Optional pino logger for structured logging */
+  logger?: Logger;
 }
 
 /**

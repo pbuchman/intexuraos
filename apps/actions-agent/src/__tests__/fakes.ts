@@ -1,9 +1,18 @@
 import type { Result } from '@intexuraos/common-core';
 import { ok, err } from '@intexuraos/common-core';
+import { registerActionHandler } from '../domain/usecases/createIdempotentActionHandler.js';
 import type { ActionServiceClient } from '../domain/ports/actionServiceClient.js';
+import type {
+  CalendarServiceClient,
+  ProcessCalendarRequest,
+} from '../domain/ports/calendarServiceClient.js';
 import type { ResearchServiceClient } from '../domain/ports/researchServiceClient.js';
 import type { NotificationSender } from '../domain/ports/notificationSender.js';
-import type { ActionRepository, ListByUserIdOptions } from '../domain/ports/actionRepository.js';
+import type {
+  ActionRepository,
+  ListByUserIdOptions,
+  UpdateStatusIfResult,
+} from '../domain/ports/actionRepository.js';
 import type { ActionTransitionRepository } from '../domain/ports/actionTransitionRepository.js';
 import type {
   CommandsAgentClient,
@@ -25,6 +34,7 @@ import type {
   CreateBookmarkResponse,
   ForceRefreshBookmarkResponse,
 } from '../domain/ports/bookmarksServiceClient.js';
+import type { LinearAgentClient } from '../domain/ports/linearAgentClient.js';
 import type { Action } from '../domain/models/action.js';
 import type { ActionTransition } from '../domain/models/actionTransition.js';
 import type { ActionCreatedEvent } from '../domain/models/actionEvent.js';
@@ -182,9 +192,14 @@ export class FakeActionRepository implements ActionRepository {
   private actions = new Map<string, Action>();
   private failNext = false;
   private failError: Error | null = null;
+  private updateStatusIfResults = new Map<string, UpdateStatusIfResult>();
 
   getActions(): Map<string, Action> {
     return this.actions;
+  }
+
+  setUpdateStatusIfResult(actionId: string, result: UpdateStatusIfResult): void {
+    this.updateStatusIfResults.set(actionId, result);
   }
 
   setFailNext(fail: boolean, error?: Error): void {
@@ -244,6 +259,40 @@ export class FakeActionRepository implements ActionRepository {
     return Array.from(this.actions.values())
       .filter((a) => a.status === status)
       .slice(0, limit);
+  }
+
+  async updateStatusIf(
+    actionId: string,
+    newStatus: Action['status'],
+    expectedStatus: Action['status']
+  ): Promise<UpdateStatusIfResult> {
+    if (this.failNext) {
+      this.failNext = false;
+      return { outcome: 'error', error: this.failError ?? new Error('Simulated failure') };
+    }
+
+    if (this.updateStatusIfResults.has(actionId)) {
+      const result = this.updateStatusIfResults.get(actionId);
+      if (result !== undefined && result.outcome === 'updated') {
+        const action = this.actions.get(actionId);
+        if (action !== undefined) {
+          action.status = newStatus;
+          action.updatedAt = new Date().toISOString();
+        }
+      }
+      return result ?? { outcome: 'not_found' };
+    }
+
+    const action = this.actions.get(actionId);
+    if (action === undefined) {
+      return { outcome: 'not_found' };
+    }
+    if (action.status !== expectedStatus) {
+      return { outcome: 'status_mismatch', currentStatus: action.status };
+    }
+    action.status = newStatus;
+    action.updatedAt = new Date().toISOString();
+    return { outcome: 'updated' };
   }
 }
 
@@ -480,10 +529,113 @@ export class FakeBookmarksServiceClient implements BookmarksServiceClient {
   }
 }
 
+export class FakeCalendarServiceClient implements CalendarServiceClient {
+  private processedActions: ProcessCalendarRequest[] = [];
+  private nextResponse: {
+    status: 'completed' | 'failed';
+    resource_url?: string;
+    error?: string;
+  } = { status: 'completed', resource_url: '/#/calendar/event-123' };
+  private failNext = false;
+  private failError: Error | null = null;
+
+  getProcessedActions(): ProcessCalendarRequest[] {
+    return this.processedActions;
+  }
+
+  setNextResponse(response: {
+    status: 'completed' | 'failed';
+    resource_url?: string;
+    error?: string;
+  }): void {
+    this.nextResponse = response;
+  }
+
+  setFailNext(fail: boolean, error?: Error): void {
+    this.failNext = fail;
+    this.failError = error ?? null;
+  }
+
+  async processAction(request: ProcessCalendarRequest): Promise<
+    Result<{
+      status: 'completed' | 'failed';
+      resource_url?: string;
+      error?: string;
+    }>
+  > {
+    if (this.failNext) {
+      this.failNext = false;
+      return err(this.failError ?? new Error('Simulated failure'));
+    }
+    this.processedActions.push(request);
+    return ok(this.nextResponse);
+  }
+}
+
+export class FakeLinearAgentClient implements LinearAgentClient {
+  private processedActions: {
+    actionId: string;
+    userId: string;
+    title: string;
+  }[] = [];
+  private nextResponse: {
+    status: 'completed' | 'failed';
+    resourceUrl?: string;
+    issueIdentifier?: string;
+    error?: string;
+  } = {
+    status: 'completed',
+    resourceUrl: 'https://linear.app/issue/TEST-123',
+    issueIdentifier: 'TEST-123',
+  };
+  private failNext = false;
+  private failError: Error | null = null;
+
+  getProcessedActions(): typeof this.processedActions {
+    return this.processedActions;
+  }
+
+  setNextResponse(response: {
+    status: 'completed' | 'failed';
+    resourceUrl?: string;
+    issueIdentifier?: string;
+    error?: string;
+  }): void {
+    this.nextResponse = response;
+  }
+
+  setFailNext(fail: boolean, error?: Error): void {
+    this.failNext = fail;
+    this.failError = error ?? null;
+  }
+
+  async processAction(
+    _actionId: string,
+    _userId: string,
+    _title: string
+  ): Promise<
+    Result<{
+      status: 'completed' | 'failed';
+      resourceUrl?: string;
+      issueIdentifier?: string;
+      error?: string;
+    }>
+  > {
+    if (this.failNext) {
+      this.failNext = false;
+      return err(this.failError ?? new Error('Simulated failure'));
+    }
+    this.processedActions.push({ actionId: _actionId, userId: _userId, title: _title });
+    return ok(this.nextResponse);
+  }
+}
+
 import type { ExecuteResearchActionResult } from '../domain/usecases/executeResearchAction.js';
 import type { ExecuteTodoActionResult } from '../domain/usecases/executeTodoAction.js';
 import type { ExecuteNoteActionResult } from '../domain/usecases/executeNoteAction.js';
 import type { ExecuteLinkActionResult } from '../domain/usecases/executeLinkAction.js';
+import type { ExecuteCalendarActionResult } from '../domain/usecases/executeCalendarAction.js';
+import type { ExecuteLinearActionResult } from '../domain/usecases/executeLinearAction.js';
 import type {
   RetryResult,
   RetryPendingActionsUseCase,
@@ -573,6 +725,49 @@ export function createFakeExecuteLinkActionUseCase(config?: {
   };
 }
 
+export type FakeExecuteCalendarActionUseCase = (
+  actionId: string
+) => Promise<Result<ExecuteCalendarActionResult, Error>>;
+
+export function createFakeExecuteCalendarActionUseCase(config?: {
+  failWithError?: Error;
+  returnResult?: ExecuteCalendarActionResult;
+}): FakeExecuteCalendarActionUseCase {
+  return async (_actionId: string): Promise<Result<ExecuteCalendarActionResult, Error>> => {
+    if (config?.failWithError !== undefined) {
+      return err(config.failWithError);
+    }
+    return ok(
+      config?.returnResult ?? {
+        status: 'completed',
+        resource_url: '/#/calendar/event-123',
+      }
+    );
+  };
+}
+
+export type FakeExecuteLinearActionUseCase = (
+  actionId: string
+) => Promise<Result<ExecuteLinearActionResult, Error>>;
+
+export function createFakeExecuteLinearActionUseCase(config?: {
+  failWithError?: Error;
+  returnResult?: ExecuteLinearActionResult;
+}): FakeExecuteLinearActionUseCase {
+  return async (_actionId: string): Promise<Result<ExecuteLinearActionResult, Error>> => {
+    if (config?.failWithError !== undefined) {
+      return err(config.failWithError);
+    }
+    return ok(
+      config?.returnResult ?? {
+        status: 'completed',
+        resourceUrl: 'https://linear.app/issue/TEST-123',
+        issueIdentifier: 'TEST-123',
+      }
+    );
+  };
+}
+
 export function createFakeRetryPendingActionsUseCase(config?: {
   returnResult?: RetryResult;
 }): RetryPendingActionsUseCase {
@@ -603,6 +798,14 @@ import {
   createHandleLinkActionUseCase,
   type HandleLinkActionUseCase,
 } from '../domain/usecases/handleLinkAction.js';
+import {
+  createHandleCalendarActionUseCase,
+  type HandleCalendarActionUseCase,
+} from '../domain/usecases/handleCalendarAction.js';
+import {
+  createHandleLinearActionUseCase,
+  type HandleLinearActionUseCase,
+} from '../domain/usecases/handleLinearAction.js';
 
 export function createFakeServices(deps: {
   actionServiceClient: FakeActionServiceClient;
@@ -614,12 +817,16 @@ export function createFakeServices(deps: {
   todosServiceClient?: FakeTodosServiceClient;
   notesServiceClient?: FakeNotesServiceClient;
   bookmarksServiceClient?: FakeBookmarksServiceClient;
+  calendarServiceClient?: FakeCalendarServiceClient;
+  linearAgentClient?: FakeLinearAgentClient;
   actionEventPublisher?: FakeActionEventPublisher;
   whatsappPublisher?: FakeWhatsAppSendPublisher;
   executeResearchActionUseCase?: FakeExecuteResearchActionUseCase;
   executeTodoActionUseCase?: FakeExecuteTodoActionUseCase;
   executeNoteActionUseCase?: FakeExecuteNoteActionUseCase;
   executeLinkActionUseCase?: FakeExecuteLinkActionUseCase;
+  executeCalendarActionUseCase?: FakeExecuteCalendarActionUseCase;
+  executeLinearActionUseCase?: FakeExecuteLinearActionUseCase;
   retryPendingActionsUseCase?: RetryPendingActionsUseCase;
   changeActionTypeUseCase?: ChangeActionTypeUseCase;
 }): Services {
@@ -631,37 +838,69 @@ export function createFakeServices(deps: {
   const todosServiceClient = deps.todosServiceClient ?? new FakeTodosServiceClient();
   const notesServiceClient = deps.notesServiceClient ?? new FakeNotesServiceClient();
   const bookmarksServiceClient = deps.bookmarksServiceClient ?? new FakeBookmarksServiceClient();
+  const calendarServiceClient = deps.calendarServiceClient ?? new FakeCalendarServiceClient();
+  const linearAgentClient = deps.linearAgentClient ?? new FakeLinearAgentClient();
 
   const silentLogger = pino({ level: 'silent' });
 
-  const handleResearchActionUseCase: HandleResearchActionUseCase =
-    createHandleResearchActionUseCase({
+  const handleResearchActionUseCase: HandleResearchActionUseCase = registerActionHandler(
+    createHandleResearchActionUseCase,
+    {
+      actionRepository,
+      whatsappPublisher,
+      webAppUrl: 'http://test.app',
+      logger: silentLogger,
+    }
+  );
+
+  const handleTodoActionUseCase: HandleTodoActionUseCase = registerActionHandler(
+    createHandleTodoActionUseCase,
+    {
+      actionRepository,
+      whatsappPublisher,
+      webAppUrl: 'http://test.app',
+      logger: silentLogger,
+    }
+  );
+
+  const handleNoteActionUseCase: HandleNoteActionUseCase = registerActionHandler(
+    createHandleNoteActionUseCase,
+    {
+      actionRepository,
+      whatsappPublisher,
+      webAppUrl: 'http://test.app',
+      logger: silentLogger,
+    }
+  );
+
+  const handleLinkActionUseCase: HandleLinkActionUseCase = registerActionHandler(
+    createHandleLinkActionUseCase,
+    {
+      actionRepository,
+      whatsappPublisher,
+      webAppUrl: 'http://test.app',
+      logger: silentLogger,
+    }
+  );
+
+  const handleCalendarActionUseCase: HandleCalendarActionUseCase = registerActionHandler(
+    createHandleCalendarActionUseCase,
+    {
+      actionServiceClient: deps.actionServiceClient,
+      actionRepository,
+      whatsappPublisher,
+      webAppUrl: 'http://test.app',
+      logger: silentLogger,
+    }
+  );
+
+  const handleLinearActionUseCase: HandleLinearActionUseCase =
+    createHandleLinearActionUseCase({
       actionServiceClient: deps.actionServiceClient,
       whatsappPublisher,
       webAppUrl: 'http://test.app',
       logger: silentLogger,
     });
-
-  const handleTodoActionUseCase: HandleTodoActionUseCase = createHandleTodoActionUseCase({
-    actionServiceClient: deps.actionServiceClient,
-    whatsappPublisher,
-    webAppUrl: 'http://test.app',
-    logger: silentLogger,
-  });
-
-  const handleNoteActionUseCase: HandleNoteActionUseCase = createHandleNoteActionUseCase({
-    actionServiceClient: deps.actionServiceClient,
-    whatsappPublisher,
-    webAppUrl: 'http://test.app',
-    logger: silentLogger,
-  });
-
-  const handleLinkActionUseCase: HandleLinkActionUseCase = createHandleLinkActionUseCase({
-    actionServiceClient: deps.actionServiceClient,
-    whatsappPublisher,
-    webAppUrl: 'http://test.app',
-    logger: silentLogger,
-  });
 
   const changeActionTypeUseCase: ChangeActionTypeUseCase =
     deps.changeActionTypeUseCase ??
@@ -682,17 +921,25 @@ export function createFakeServices(deps: {
     todosServiceClient,
     notesServiceClient,
     bookmarksServiceClient,
+    calendarServiceClient,
+    linearAgentClient,
     actionEventPublisher: deps.actionEventPublisher ?? new FakeActionEventPublisher(),
     whatsappPublisher,
     handleResearchActionUseCase,
     handleTodoActionUseCase,
     handleNoteActionUseCase,
     handleLinkActionUseCase,
+    handleCalendarActionUseCase,
+    handleLinearActionUseCase,
     executeResearchActionUseCase:
       deps.executeResearchActionUseCase ?? createFakeExecuteResearchActionUseCase(),
     executeTodoActionUseCase: deps.executeTodoActionUseCase ?? createFakeExecuteTodoActionUseCase(),
     executeNoteActionUseCase: deps.executeNoteActionUseCase ?? createFakeExecuteNoteActionUseCase(),
     executeLinkActionUseCase: deps.executeLinkActionUseCase ?? createFakeExecuteLinkActionUseCase(),
+    executeCalendarActionUseCase:
+      deps.executeCalendarActionUseCase ?? createFakeExecuteCalendarActionUseCase(),
+    executeLinearActionUseCase:
+      deps.executeLinearActionUseCase ?? createFakeExecuteLinearActionUseCase(),
     retryPendingActionsUseCase:
       deps.retryPendingActionsUseCase ?? createFakeRetryPendingActionsUseCase(),
     changeActionTypeUseCase,
@@ -700,5 +947,7 @@ export function createFakeServices(deps: {
     todo: handleTodoActionUseCase,
     note: handleNoteActionUseCase,
     link: handleLinkActionUseCase,
+    calendar: handleCalendarActionUseCase,
+    linear: handleLinearActionUseCase,
   };
 }

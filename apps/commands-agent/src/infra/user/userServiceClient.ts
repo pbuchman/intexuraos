@@ -13,21 +13,19 @@ import {
   type LlmProvider,
 } from '@intexuraos/llm-contract';
 import type { IPricingContext } from '@intexuraos/llm-pricing';
+import type {
+  UserServiceClient,
+  UserApiKeys,
+  UserServiceError,
+} from '../../domain/ports/userServiceClient.js';
+
+export type { UserServiceClient, UserApiKeys, UserServiceError };
 
 export interface UserServiceConfig {
   baseUrl: string;
   internalAuthToken: string;
   pricingContext: IPricingContext;
   logger: Logger;
-}
-
-export interface UserApiKeys {
-  google?: string;
-}
-
-export interface UserServiceError {
-  code: 'NETWORK_ERROR' | 'API_ERROR' | 'NO_API_KEY' | 'UNSUPPORTED_MODEL' | 'INVALID_MODEL';
-  message: string;
 }
 
 // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
@@ -44,11 +42,6 @@ function providerToKeyField(provider: LlmProvider) {
     case LlmProviders.Zai:
       return 'zai';
   }
-}
-
-export interface UserServiceClient {
-  getApiKeys(userId: string): Promise<Result<UserApiKeys, UserServiceError>>;
-  getLlmClient(userId: string): Promise<Result<LlmGenerateClient, UserServiceError>>;
 }
 
 export function createUserServiceClient(config: UserServiceConfig): UserServiceClient {
@@ -204,6 +197,7 @@ export function createUserServiceClient(config: UserServiceConfig): UserServiceC
           model: defaultModel,
           userId,
           pricing,
+          logger: config.logger,
         };
 
         const client = createLlmClient(clientConfig);

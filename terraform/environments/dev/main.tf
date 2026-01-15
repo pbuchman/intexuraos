@@ -234,6 +234,13 @@ locals {
       min_scale = 0
       max_scale = 1
     }
+    linear_agent = {
+      name      = "intexuraos-linear-agent"
+      app_path  = "apps/linear-agent"
+      port      = 8080
+      min_scale = 0
+      max_scale = 1
+    }
   }
 
   common_labels = {
@@ -266,6 +273,7 @@ locals {
     INTEXURAOS_APP_SETTINGS_SERVICE_URL         = "https://${local.services.app_settings_service.name}-${local.cloud_run_url_suffix}"
     INTEXURAOS_CALENDAR_AGENT_URL               = "https://${local.services.calendar_agent.name}-${local.cloud_run_url_suffix}"
     INTEXURAOS_WEB_AGENT_URL                    = "https://${local.services.web_agent.name}-${local.cloud_run_url_suffix}"
+    INTEXURAOS_LINEAR_AGENT_URL                 = "https://${local.services.linear_agent.name}-${local.cloud_run_url_suffix}"
     INTEXURAOS_API_DOCS_HUB_URL                 = "https://${local.services.api_docs_hub.name}-${local.cloud_run_url_suffix}"
   }
 }
@@ -1284,6 +1292,32 @@ module "calendar_agent" {
   labels          = local.common_labels
 
   image = "${var.region}-docker.pkg.dev/${var.project_id}/${module.artifact_registry.repository_id}/calendar-agent:latest"
+
+  secrets  = local.common_service_secrets
+  env_vars = local.common_service_env_vars
+
+  depends_on = [
+    module.artifact_registry,
+    module.iam,
+    module.secret_manager,
+  ]
+}
+
+# Linear Agent - Linear issue creation and management
+module "linear_agent" {
+  source = "../../modules/cloud-run-service"
+
+  project_id      = var.project_id
+  region          = var.region
+  environment     = var.environment
+  service_name    = local.services.linear_agent.name
+  service_account = module.iam.service_accounts["linear_agent"]
+  port            = local.services.linear_agent.port
+  min_scale       = local.services.linear_agent.min_scale
+  max_scale       = local.services.linear_agent.max_scale
+  labels          = local.common_labels
+
+  image = "${var.region}-docker.pkg.dev/${var.project_id}/${module.artifact_registry.repository_id}/linear-agent:latest"
 
   secrets  = local.common_service_secrets
   env_vars = local.common_service_env_vars

@@ -1,5 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { type ModelPricing, LlmProviders } from '@intexuraos/llm-contract';
+import type { Logger } from '@intexuraos/common-core';
+
+const mockLogger: Logger = {
+  info: vi.fn(),
+  error: vi.fn(),
+  warn: vi.fn(),
+  debug: vi.fn(),
+};
 
 const mockChatCompletionsCreate = vi.fn();
 
@@ -67,6 +75,7 @@ describe('createGlmClient', () => {
         model: TEST_MODEL,
         userId: 'test-user',
         pricing,
+        logger: mockLogger,
       });
       const result = await client.research('Tell me about AI');
 
@@ -94,6 +103,7 @@ describe('createGlmClient', () => {
         model: TEST_MODEL,
         userId: 'test-user',
         pricing: createTestPricing(),
+        logger: mockLogger,
       });
       await client.research('Search query');
 
@@ -133,6 +143,7 @@ describe('createGlmClient', () => {
         model: TEST_MODEL,
         userId: 'test-user',
         pricing: createTestPricing(),
+        logger: mockLogger,
       });
       const result = await client.research('Test prompt');
 
@@ -171,6 +182,7 @@ describe('createGlmClient', () => {
         model: TEST_MODEL,
         userId: 'test-user',
         pricing: createTestPricing(),
+        logger: mockLogger,
       });
       const result = await client.research('Test prompt');
 
@@ -202,6 +214,7 @@ describe('createGlmClient', () => {
         model: TEST_MODEL,
         userId: 'test-user',
         pricing,
+        logger: mockLogger,
       });
       const result = await client.research('Test prompt');
 
@@ -231,6 +244,7 @@ describe('createGlmClient', () => {
         model: TEST_MODEL,
         userId: 'test-user',
         pricing: createTestPricing(),
+        logger: mockLogger,
       });
       const result = await client.research('Test prompt');
 
@@ -259,6 +273,7 @@ describe('createGlmClient', () => {
         model: TEST_MODEL,
         userId: 'test-user',
         pricing: createTestPricing(),
+        logger: mockLogger,
       });
       const result = await client.research('Test prompt');
 
@@ -284,6 +299,7 @@ describe('createGlmClient', () => {
         model: TEST_MODEL,
         userId: 'test-user',
         pricing,
+        logger: mockLogger,
       });
       const result = await client.research('Test prompt');
 
@@ -307,6 +323,7 @@ describe('createGlmClient', () => {
         model: TEST_MODEL,
         userId: 'test-user',
         pricing: createTestPricing(),
+        logger: mockLogger,
       });
       await client.research('Test prompt');
 
@@ -333,6 +350,7 @@ describe('createGlmClient', () => {
         model: TEST_MODEL,
         userId: 'test-user',
         pricing: createTestPricing(),
+        logger: mockLogger,
       });
       const result = await client.research('Test prompt');
 
@@ -352,6 +370,7 @@ describe('createGlmClient', () => {
         model: TEST_MODEL,
         userId: 'test-user',
         pricing: createTestPricing(),
+        logger: mockLogger,
       });
       const result = await client.research('Test prompt');
 
@@ -369,6 +388,7 @@ describe('createGlmClient', () => {
         model: TEST_MODEL,
         userId: 'test-user',
         pricing: createTestPricing(),
+        logger: mockLogger,
       });
       const result = await client.research('Test prompt');
 
@@ -386,6 +406,7 @@ describe('createGlmClient', () => {
         model: TEST_MODEL,
         userId: 'test-user',
         pricing: createTestPricing(),
+        logger: mockLogger,
       });
       const result = await client.research('Test prompt');
 
@@ -405,6 +426,7 @@ describe('createGlmClient', () => {
         model: TEST_MODEL,
         userId: 'test-user',
         pricing: createTestPricing(),
+        logger: mockLogger,
       });
       const result = await client.research('Test prompt');
 
@@ -424,6 +446,7 @@ describe('createGlmClient', () => {
         model: TEST_MODEL,
         userId: 'test-user',
         pricing: createTestPricing(),
+        logger: mockLogger,
       });
       const result = await client.research('Test prompt');
 
@@ -442,6 +465,7 @@ describe('createGlmClient', () => {
         model: TEST_MODEL,
         userId: 'test-user',
         pricing: createTestPricing(),
+        logger: mockLogger,
       });
       const result = await client.research('Test prompt');
 
@@ -460,6 +484,7 @@ describe('createGlmClient', () => {
         model: TEST_MODEL,
         userId: 'test-user',
         pricing: createTestPricing(),
+        logger: mockLogger,
       });
       await client.research('Test prompt');
 
@@ -485,6 +510,7 @@ describe('createGlmClient', () => {
         model: TEST_MODEL,
         userId: 'test-user',
         pricing,
+        logger: mockLogger,
       });
       const result = await client.generate('Write something');
 
@@ -512,6 +538,7 @@ describe('createGlmClient', () => {
         model: TEST_MODEL,
         userId: 'test-user',
         pricing: createTestPricing(),
+        logger: mockLogger,
       });
       await client.generate('Write something');
 
@@ -534,6 +561,7 @@ describe('createGlmClient', () => {
         model: TEST_MODEL,
         userId: 'test-user',
         pricing: createTestPricing(),
+        logger: mockLogger,
       });
       const result = await client.generate('Write something');
 
@@ -551,6 +579,7 @@ describe('createGlmClient', () => {
         model: TEST_MODEL,
         userId: 'test-user',
         pricing: createTestPricing(),
+        logger: mockLogger,
       });
       const result = await client.generate('Write something');
 
@@ -573,6 +602,7 @@ describe('createGlmClient', () => {
         model: TEST_MODEL,
         userId: 'test-user',
         pricing: createTestPricing(),
+        logger: mockLogger,
       });
       const result = await client.generate('Test');
 
@@ -594,6 +624,7 @@ describe('createGlmClient', () => {
         model: TEST_MODEL,
         userId: 'test-user',
         pricing: createTestPricing(),
+        logger: mockLogger,
       });
       const result = await client.research('Test');
 
@@ -615,6 +646,7 @@ describe('createGlmClient', () => {
         model: TEST_MODEL,
         userId: 'test-user',
         pricing: createTestPricing(),
+        logger: mockLogger,
       });
       const result = await client.generate('Test');
 
@@ -639,6 +671,7 @@ describe('createGlmClient', () => {
         model: TEST_MODEL,
         userId: 'test-user',
         pricing: createTestPricing(),
+        logger: mockLogger,
       });
       const result = await client.generate('Test');
 
@@ -662,6 +695,7 @@ describe('createGlmClient', () => {
         model: TEST_MODEL,
         userId: 'test-user',
         pricing: createTestPricing(),
+        logger: mockLogger,
       });
       const result = await client.generate('Test');
 
@@ -683,6 +717,7 @@ describe('createGlmClient', () => {
         model: TEST_MODEL,
         userId: 'test-user',
         pricing: createTestPricing(),
+        logger: mockLogger,
       });
       const result = await client.research('Test prompt');
 
@@ -700,6 +735,7 @@ describe('createGlmClient', () => {
         model: TEST_MODEL,
         userId: 'test-user',
         pricing: createTestPricing(),
+        logger: mockLogger,
       });
       const result = await client.research('Test prompt');
 
@@ -736,6 +772,7 @@ describe('createGlmClient', () => {
         model: TEST_MODEL,
         userId: 'test-user',
         pricing: createTestPricing(),
+        logger: mockLogger,
       });
       const result = await client.research('Test');
 
@@ -768,6 +805,7 @@ describe('createGlmClient', () => {
         model: TEST_MODEL,
         userId: 'test-user',
         pricing: createTestPricing(),
+        logger: mockLogger,
       });
       const result = await client.research('Test');
 
@@ -801,6 +839,7 @@ describe('createGlmClient', () => {
         model: TEST_MODEL,
         userId: 'test-user',
         pricing: createTestPricing(),
+        logger: mockLogger,
       });
       const result = await client.research('Test');
 
@@ -821,6 +860,7 @@ describe('createGlmClient', () => {
         model: TEST_MODEL,
         userId: 'test-user',
         pricing: createTestPricing(),
+        logger: mockLogger,
       });
       const result = await client.research('Test');
 

@@ -28,6 +28,7 @@ import {
   Layout,
   ModelSelector,
   PROVIDER_MODELS,
+  RefreshIndicator,
   getSelectedModelsList,
 } from '@/components';
 import { useAuth } from '@/context';
@@ -220,7 +221,7 @@ function getModelDisplayName(modelId: SupportedModel): string {
 
 export function ResearchDetailPage(): React.JSX.Element {
   const { id } = useParams<{ id: string }>();
-  const { research, loading, error, refresh } = useResearch(id ?? '');
+  const { research, loading, refreshing, error, refresh } = useResearch(id ?? '');
   const { getAccessToken } = useAuth();
   const { keys, loading: keysLoading } = useLlmKeys();
   const navigate = useNavigate();
@@ -493,7 +494,7 @@ export function ResearchDetailPage(): React.JSX.Element {
     return (
       <Layout>
         <div className="flex items-center justify-center py-12">
-          <div className="h-8 w-8 rounded-full border-4 border-blue-600 border-t-transparent" />
+          <div className="h-8 w-8 animate-spin rounded-full border-4 border-blue-600 border-t-transparent" />
         </div>
       </Layout>
     );
@@ -503,7 +504,7 @@ export function ResearchDetailPage(): React.JSX.Element {
     return (
       <Layout>
         <div className="flex items-center justify-center py-12">
-          <div className="h-8 w-8 rounded-full border-4 border-blue-600 border-t-transparent" />
+          <div className="h-8 w-8 animate-spin rounded-full border-4 border-blue-600 border-t-transparent" />
         </div>
       </Layout>
     );
@@ -547,6 +548,8 @@ export function ResearchDetailPage(): React.JSX.Element {
           ← Back to list
         </Link>
       </div>
+
+      <RefreshIndicator show={refreshing} />
 
       <div className="mb-6">
         <div className="flex flex-wrap items-center gap-3">

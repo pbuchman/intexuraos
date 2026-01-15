@@ -103,13 +103,15 @@ describe('ContextInferenceAdapter', () => {
   describe('constructor', () => {
     it('passes apiKey, model, and userId to client', () => {
       mockCreateGeminiClient.mockClear();
-      new ContextInferenceAdapter('test-key', LlmModels.Gemini20Flash, 'test-user', testPricing, mockLogger);
+      const testLogger = createMockLogger();
+      new ContextInferenceAdapter('test-key', LlmModels.Gemini20Flash, 'test-user', testPricing, testLogger);
 
       expect(mockCreateGeminiClient).toHaveBeenCalledWith({
         apiKey: 'test-key',
         model: LlmModels.Gemini20Flash,
         userId: 'test-user',
         pricing: testPricing,
+        logger: testLogger,
       });
     });
   });
@@ -175,36 +177,94 @@ describe('ContextInferenceAdapter', () => {
       }
     });
 
-    it('returns error and logs warning on invalid JSON', async () => {
-      mockGenerate.mockResolvedValue({
-        ok: true,
-        value: { content: 'not valid json', usage: mockUsage },
-      });
+    it('attempts repair on schema validation failure and succeeds', async () => {
+      mockGenerate
+        .mockResolvedValueOnce({
+          ok: true,
+          value: { content: JSON.stringify({ invalid: 'schema' }), usage: mockUsage },
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          value: { content: JSON.stringify(validResearchContext), usage: mockUsage },
+        });
+
+      const result = await adapter.inferResearchContext('Test query');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.context.domain).toBe('technical');
+      }
+      expect(mockGenerate).toHaveBeenCalledTimes(2);
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        { errorMessage: expect.any(String) },
+        'Schema validation failed, attempting repair'
+      );
+      expect(mockLogger.info).toHaveBeenCalledWith({}, 'Repair attempt succeeded');
+    });
+
+    it('attempts repair on JSON parse failure and succeeds', async () => {
+      mockGenerate
+        .mockResolvedValueOnce({
+          ok: true,
+          value: { content: 'not valid json', usage: mockUsage },
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          value: { content: JSON.stringify(validResearchContext), usage: mockUsage },
+        });
+
+      const result = await adapter.inferResearchContext('Test query');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.context.domain).toBe('technical');
+      }
+      expect(mockGenerate).toHaveBeenCalledTimes(2);
+    });
+
+    it('returns error when repair attempt also fails', async () => {
+      mockGenerate
+        .mockResolvedValueOnce({
+          ok: true,
+          value: { content: JSON.stringify({ invalid: 'schema' }), usage: mockUsage },
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          value: { content: JSON.stringify({ also: 'invalid' }), usage: mockUsage },
+        });
 
       const result = await adapter.inferResearchContext('Test query');
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
         expect(result.error.code).toBe('API_ERROR');
-        expect(result.error.message).toContain('JSON parse error');
+        expect(result.error.message).toContain('Initial:');
+        expect(result.error.message).toContain('Repair:');
       }
+      expect(mockGenerate).toHaveBeenCalledTimes(2);
       expect(mockLogger.warn).toHaveBeenCalledWith(
-        expect.objectContaining({ error: expect.stringContaining('JSON parse error') }),
-        'Failed to parse research context'
+        { firstError: expect.any(String), secondError: expect.any(String) },
+        'Repair attempt failed'
       );
     });
 
-    it('returns error on schema mismatch', async () => {
-      mockGenerate.mockResolvedValue({
-        ok: true,
-        value: { content: JSON.stringify({ invalid: 'schema' }), usage: mockUsage },
-      });
+    it('returns error when repair attempt fails at API level', async () => {
+      mockGenerate
+        .mockResolvedValueOnce({
+          ok: true,
+          value: { content: JSON.stringify({ invalid: 'schema' }), usage: mockUsage },
+        })
+        .mockResolvedValueOnce({
+          ok: false,
+          error: { code: 'TIMEOUT', message: 'Repair timed out' },
+        });
 
       const result = await adapter.inferResearchContext('Test query');
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
-        expect(result.error.message).toContain('does not match expected schema');
+        expect(result.error.message).toContain('Repair timed out');
+        expect(result.error.message).toContain('(repair attempt)');
       }
     });
 
@@ -236,20 +296,21 @@ describe('ContextInferenceAdapter', () => {
       expect(result.ok).toBe(true);
     });
 
-    it('logs warning on parse failure', async () => {
-      const adapterWithLogger = new ContextInferenceAdapter('key', 'model', 'test-user', testPricing, mockLogger);
-      mockGenerate.mockResolvedValue({
-        ok: true,
-        value: { content: 'invalid json', usage: mockUsage },
-      });
+    it('logs warning on parse failure during repair', async () => {
+      mockGenerate
+        .mockResolvedValueOnce({
+          ok: true,
+          value: { content: 'invalid json', usage: mockUsage },
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          value: { content: '{ also invalid }', usage: mockUsage },
+        });
 
-      const result = await adapterWithLogger.inferResearchContext('Test query');
+      const result = await adapter.inferResearchContext('Test query');
 
       expect(result.ok).toBe(false);
-      expect(mockLogger.warn).toHaveBeenCalledWith(
-        { error: expect.any(String) },
-        'Failed to parse research context'
-      );
+      expect(mockLogger.warn).toHaveBeenCalled();
     });
   });
 
@@ -289,28 +350,60 @@ describe('ContextInferenceAdapter', () => {
       }
     });
 
-    it('returns error and logs warning on invalid JSON', async () => {
-      mockGenerate.mockResolvedValue({
-        ok: true,
-        value: { content: '{ malformed json', usage: mockUsage },
-      });
+    it('attempts repair on schema validation failure and succeeds', async () => {
+      mockGenerate
+        .mockResolvedValueOnce({
+          ok: true,
+          value: { content: JSON.stringify({ wrong: 'structure' }), usage: mockUsage },
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          value: { content: JSON.stringify(validSynthesisContext), usage: mockUsage },
+        });
 
       const result = await adapter.inferSynthesisContext({
         originalPrompt: 'Test prompt',
       });
 
-      expect(result.ok).toBe(false);
-      expect(mockLogger.warn).toHaveBeenCalledWith(
-        expect.objectContaining({ error: expect.stringContaining('JSON parse error') }),
-        'Failed to parse synthesis context'
-      );
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.context.domain).toBe('technical');
+      }
+      expect(mockGenerate).toHaveBeenCalledTimes(2);
     });
 
-    it('returns error on schema mismatch', async () => {
-      mockGenerate.mockResolvedValue({
-        ok: true,
-        value: { content: JSON.stringify({ wrong: 'structure' }), usage: mockUsage },
+    it('attempts repair on JSON parse failure and succeeds', async () => {
+      mockGenerate
+        .mockResolvedValueOnce({
+          ok: true,
+          value: { content: '{ malformed json', usage: mockUsage },
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          value: { content: JSON.stringify(validSynthesisContext), usage: mockUsage },
+        });
+
+      const result = await adapter.inferSynthesisContext({
+        originalPrompt: 'Test prompt',
       });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.context.domain).toBe('technical');
+      }
+      expect(mockGenerate).toHaveBeenCalledTimes(2);
+    });
+
+    it('returns error when repair attempt also fails', async () => {
+      mockGenerate
+        .mockResolvedValueOnce({
+          ok: true,
+          value: { content: JSON.stringify({ wrong: 'structure' }), usage: mockUsage },
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          value: { content: JSON.stringify({ also: 'invalid' }), usage: mockUsage },
+        });
 
       const result = await adapter.inferSynthesisContext({
         originalPrompt: 'Test prompt',
@@ -318,26 +411,32 @@ describe('ContextInferenceAdapter', () => {
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
-        expect(result.error.message).toContain('does not match expected schema');
+        expect(result.error.message).toContain('Initial:');
+        expect(result.error.message).toContain('Repair:');
       }
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        { firstError: expect.any(String), secondError: expect.any(String) },
+        'Repair attempt failed'
+      );
     });
 
-    it('logs warning on parse failure', async () => {
-      const adapterWithLogger = new ContextInferenceAdapter('key', 'model', 'test-user', testPricing, mockLogger);
-      mockGenerate.mockResolvedValue({
-        ok: true,
-        value: { content: '{ invalid }', usage: mockUsage },
-      });
+    it('logs warning on parse failure during repair', async () => {
+      mockGenerate
+        .mockResolvedValueOnce({
+          ok: true,
+          value: { content: '{ invalid }', usage: mockUsage },
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          value: { content: '{ also invalid }', usage: mockUsage },
+        });
 
-      const result = await adapterWithLogger.inferSynthesisContext({
+      const result = await adapter.inferSynthesisContext({
         originalPrompt: 'Test prompt',
       });
 
       expect(result.ok).toBe(false);
-      expect(mockLogger.warn).toHaveBeenCalledWith(
-        { error: expect.any(String) },
-        'Failed to parse synthesis context'
-      );
+      expect(mockLogger.warn).toHaveBeenCalled();
     });
 
     it('includes additional sources in prompt', async () => {

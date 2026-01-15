@@ -30,12 +30,14 @@ import {
 export function useResearch(id: string): {
   research: Research | null;
   loading: boolean;
+  refreshing: boolean;
   error: string | null;
   refresh: (showLoading?: boolean) => Promise<void>;
 } {
   const { getAccessToken, isAuthenticated, user } = useAuth();
   const [research, setResearch] = useState<Research | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const unsubscribeRef = useRef<Unsubscribe | null>(null);
@@ -57,6 +59,8 @@ export function useResearch(id: string): {
 
       if (shouldShowLoading) {
         setLoading(true);
+      } else {
+        setRefreshing(true);
       }
       setError(null);
 
@@ -72,8 +76,12 @@ export function useResearch(id: string): {
           setError(getErrorMessage(err, 'Failed to load research'));
         }
       } finally {
-        if (shouldShowLoading && isMountedRef.current) {
-          setLoading(false);
+        if (isMountedRef.current) {
+          if (shouldShowLoading) {
+            setLoading(false);
+          } else {
+            setRefreshing(false);
+          }
         }
       }
     },
@@ -177,7 +185,7 @@ export function useResearch(id: string): {
     };
   }, [isAuthenticated, user, id, research?.status, getAccessToken, refresh]);
 
-  return { research, loading, error, refresh };
+  return { research, loading, refreshing, error, refresh };
 }
 
 /**
@@ -189,6 +197,8 @@ export function useResearch(id: string): {
 export function useResearches(): {
   researches: Research[];
   loading: boolean;
+  loadingMore: boolean;
+  refreshing: boolean;
   error: string | null;
   hasMore: boolean;
   loadMore: () => Promise<void>;
@@ -200,34 +210,49 @@ export function useResearches(): {
   const { getAccessToken } = useAuth();
   const [researches, setResearches] = useState<Research[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [cursor, setCursor] = useState<string | undefined>(undefined);
   const [hasMore, setHasMore] = useState(true);
   const isInitialLoadRef = useRef(true);
   const isMountedRef = useRef(true);
 
-  const refresh = useCallback(async (): Promise<void> => {
-    setLoading(true);
-    setError(null);
+  const refresh = useCallback(
+    async (showLoading?: boolean): Promise<void> => {
+      const shouldShowLoading = showLoading !== false;
 
-    try {
-      const token = await getAccessToken();
-      const data = await listResearchesApi(token);
-      if (isMountedRef.current) {
-        setResearches(data.items);
-        setCursor(data.nextCursor);
-        setHasMore(data.nextCursor !== undefined);
+      if (shouldShowLoading) {
+        setLoading(true);
+      } else {
+        setRefreshing(true);
       }
-    } catch (err) {
-      if (isMountedRef.current) {
-        setError(getErrorMessage(err, 'Failed to load researches'));
+      setError(null);
+
+      try {
+        const token = await getAccessToken();
+        const data = await listResearchesApi(token);
+        if (isMountedRef.current) {
+          setResearches(data.items);
+          setCursor(data.nextCursor);
+          setHasMore(data.nextCursor !== undefined);
+        }
+      } catch (err) {
+        if (isMountedRef.current) {
+          setError(getErrorMessage(err, 'Failed to load researches'));
+        }
+      } finally {
+        if (isMountedRef.current) {
+          if (shouldShowLoading) {
+            setLoading(false);
+          } else {
+            setRefreshing(false);
+          }
+        }
       }
-    } finally {
-      if (isMountedRef.current) {
-        setLoading(false);
-      }
-    }
-  }, [getAccessToken]);
+    },
+    [getAccessToken]
+  );
 
   useEffect(() => {
     void refresh();
@@ -242,7 +267,7 @@ export function useResearches(): {
   useEffect(() => {
     const handleVisibilityChange = (): void => {
       if (document.visibilityState === 'visible' && !isInitialLoadRef.current) {
-        void refresh();
+        void refresh(false);
       }
       isInitialLoadRef.current = false;
     };
@@ -254,8 +279,9 @@ export function useResearches(): {
   }, [refresh]);
 
   const loadMore = useCallback(async (): Promise<void> => {
-    if (!hasMore || loading) return;
+    if (!hasMore || loading || loadingMore) return;
 
+    setLoadingMore(true);
     try {
       const token = await getAccessToken();
       const data = await listResearchesApi(token, cursor);
@@ -264,8 +290,10 @@ export function useResearches(): {
       setHasMore(data.nextCursor !== undefined);
     } catch (err) {
       setError(getErrorMessage(err, 'Failed to load more'));
+    } finally {
+      setLoadingMore(false);
     }
-  }, [cursor, hasMore, loading, getAccessToken]);
+  }, [cursor, hasMore, loading, loadingMore, getAccessToken]);
 
   const deleteResearch = useCallback(
     async (id: string): Promise<void> => {
@@ -299,6 +327,8 @@ export function useResearches(): {
   return {
     researches,
     loading,
+    loadingMore,
+    refreshing,
     error,
     hasMore,
     loadMore,

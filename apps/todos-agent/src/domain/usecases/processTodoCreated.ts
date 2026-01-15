@@ -1,7 +1,7 @@
 import type { Result } from '@intexuraos/common-core';
 import type { Todo, TodoItem } from '../models/todo.js';
 import type { TodoRepository, TodoError } from '../ports/todoRepository.js';
-import type { TodoItemExtractionService } from '../../infra/gemini/todoItemExtractionService.js';
+import type { TodoItemExtractionService } from '../ports/todoItemExtractionService.js';
 
 interface MinimalLogger {
   info: (obj: object, msg?: string) => void;

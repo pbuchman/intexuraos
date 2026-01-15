@@ -462,4 +462,38 @@ describe('executeLinkAction usecase', () => {
     expect(updatedAction?.status).toBe('failed');
     expect(updatedAction?.payload['existingBookmarkId']).toBeUndefined();
   });
+
+  it('returns failed result with existingBookmarkId when error contains bookmark ID', async () => {
+    const action = createAction({
+      status: 'awaiting_approval',
+      payload: { url: 'https://example.com/article' },
+    });
+    await fakeActionRepo.save(action);
+    fakeBookmarksClient.setFailNext(
+      true,
+      new Error('Bookmark already exists (existingBookmarkId: bookmark-existing-123)')
+    );
+
+    const usecase = createExecuteLinkActionUseCase({
+      actionRepository: fakeActionRepo,
+      bookmarksServiceClient: fakeBookmarksClient,
+      commandsAgentClient: fakeCommandsAgentClient,
+      whatsappPublisher: fakeWhatsappPublisher,
+      webAppUrl: 'https://app.test.com',
+      logger: silentLogger,
+    });
+
+    const result = await usecase('action-123');
+
+    expect(isOk(result)).toBe(true);
+    if (isOk(result)) {
+      expect(result.value.status).toBe('failed');
+      expect(result.value.error).toBe('Bookmark already exists (existingBookmarkId: bookmark-existing-123)');
+      expect(result.value.existingBookmarkId).toBe('bookmark-existing-123');
+    }
+
+    const updatedAction = await fakeActionRepo.getById('action-123');
+    expect(updatedAction?.status).toBe('failed');
+    expect(updatedAction?.payload['existingBookmarkId']).toBe('bookmark-existing-123');
+  });
 });

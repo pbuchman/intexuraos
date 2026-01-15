@@ -86,15 +86,22 @@ describe('SpeechmaticsTranscriptionAdapter', () => {
         expect(result.value.apiCall.response).toEqual({ jobId: 'job-123' });
       }
 
-      expect(mockCreateTranscriptionJob).toHaveBeenCalledWith(
-        { url: 'https://storage.example.com/audio.ogg' },
-        {
-          transcription_config: {
-            language: 'en',
-            operating_point: 'enhanced',
-          },
-        }
-      );
+      const callArgs = mockCreateTranscriptionJob.mock.calls[0];
+      if (callArgs === undefined) {
+        throw new Error('mock was not called');
+      }
+      expect(callArgs[0]).toEqual({ url: 'https://storage.example.com/audio.ogg' });
+      expect(callArgs[1]).toMatchObject({
+        transcription_config: {
+          language: 'en',
+          operating_point: 'enhanced',
+          additional_vocab: expect.any(Array),
+        },
+        summarization: {
+          type: 'bullets',
+          length: 'brief',
+        },
+      });
     });
 
     it('uses auto language detection when language is not specified', async () => {
@@ -108,14 +115,33 @@ describe('SpeechmaticsTranscriptionAdapter', () => {
       });
 
       expect(result.ok).toBe(true);
-      expect(mockCreateTranscriptionJob).toHaveBeenCalledWith(
-        { url: 'https://storage.example.com/audio.ogg' },
-        {
-          transcription_config: {
-            language: 'auto',
-            operating_point: 'enhanced',
-          },
-        }
+      const callArgs = mockCreateTranscriptionJob.mock.calls[0];
+      if (callArgs === undefined) {
+        throw new Error('mock was not called');
+      }
+      expect(callArgs[1].transcription_config.language).toBe('auto');
+    });
+
+    it('includes IntexuraOS in additional vocabulary', async () => {
+      mockCreateTranscriptionJob.mockResolvedValue({
+        id: 'job-789',
+      });
+
+      await adapter.submitJob({
+        audioUrl: 'https://storage.example.com/audio.ogg',
+        mimeType: 'audio/ogg',
+      });
+
+      const callArgs = mockCreateTranscriptionJob.mock.calls[0];
+      if (callArgs === undefined) {
+        throw new Error('mock was not called');
+      }
+      const vocab = callArgs[1].transcription_config.additional_vocab;
+
+      const intexuraEntry = vocab.find((v: { content: string }) => v.content === 'IntexuraOS');
+      expect(intexuraEntry).toBeDefined();
+      expect(intexuraEntry.sounds_like).toEqual(
+        expect.arrayContaining(['in tex ura o s'])
       );
     });
 
@@ -304,23 +330,84 @@ describe('SpeechmaticsTranscriptionAdapter', () => {
   });
 
   describe('getTranscript', () => {
-    it('returns transcript text on success', async () => {
-      mockGetJobResult.mockResolvedValue('This is the transcribed text');
+    it('returns transcript text and summary when present', async () => {
+      const mockJsonV2Response = {
+        summary: { content: 'Summary of the audio' },
+        results: [
+          [
+            { alternatives: [{ content: 'Hello', confidence: 0.95 }] },
+            { alternatives: [{ content: 'world', confidence: 0.92 }] },
+          ],
+        ],
+      };
+      mockGetJobResult.mockResolvedValue(mockJsonV2Response);
 
       const result = await adapter.getTranscript('job-123');
 
       expect(result.ok).toBe(true);
       if (result.ok) {
-        expect(result.value.text).toBe('This is the transcribed text');
+        expect(result.value.text).toBe('Hello world');
+        expect(result.value.summary).toBe('Summary of the audio');
         expect(result.value.apiCall.operation).toBe('fetch_result');
         expect(result.value.apiCall.success).toBe(true);
         expect(result.value.apiCall.response).toEqual({
           jobId: 'job-123',
-          transcriptLength: 28,
+          transcriptLength: 11,
+          hasSummary: true,
         });
       }
 
-      expect(mockGetJobResult).toHaveBeenCalledWith('job-123', 'text');
+      expect(mockGetJobResult).toHaveBeenCalledWith('job-123', 'json-v2');
+    });
+
+    it('returns transcript without summary when summary missing', async () => {
+      const mockJsonV2Response = {
+        results: [
+          [
+            { alternatives: [{ content: 'No', confidence: 0.9 }] },
+            { alternatives: [{ content: 'summary', confidence: 0.88 }] },
+          ],
+        ],
+      };
+      mockGetJobResult.mockResolvedValue(mockJsonV2Response);
+
+      const result = await adapter.getTranscript('job-456');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.text).toBe('No summary');
+        expect(result.value.summary).toBeUndefined();
+      }
+    });
+
+    it('handles empty results array', async () => {
+      mockGetJobResult.mockResolvedValue({
+        results: [],
+      });
+
+      const result = await adapter.getTranscript('job-empty');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.text).toBe('');
+      }
+    });
+
+    it('handles missing alternatives in results', async () => {
+      mockGetJobResult.mockResolvedValue({
+        results: [
+          [{ alternatives: [{ content: 'Valid' }] }],
+          [{ alternatives: [] }], // No alternatives
+          [{}], // Missing alternatives key
+        ],
+      });
+
+      const result = await adapter.getTranscript('job-malformed');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.text).toBe('Valid');
+      }
     });
 
     it('returns error when transcript fetch fails', async () => {
@@ -346,6 +433,60 @@ describe('SpeechmaticsTranscriptionAdapter', () => {
       if (!result.ok) {
         expect(result.error.code).toBe('SPEECHMATICS_TRANSCRIPT_ERROR');
         expect(result.error.message).toBe('Unknown error');
+      }
+    });
+  });
+
+  describe('extractErrorMessage', () => {
+    it('extracts error from object with error property', async () => {
+      mockGetJob.mockResolvedValue({
+        job: {
+          status: 'rejected',
+          errors: [{ error: 'Connection refused' }],
+        },
+      });
+
+      const result = await adapter.pollJob('job-123');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.status).toBe('rejected');
+        expect(result.value.error?.code).toBe('JOB_REJECTED');
+        expect(result.value.error?.message).toBe('Connection refused');
+      }
+    });
+
+    it('extracts error from object with reason property', async () => {
+      mockGetJob.mockResolvedValue({
+        job: {
+          status: 'rejected',
+          errors: [{ reason: 'Unauthorized access' }],
+        },
+      });
+
+      const result = await adapter.pollJob('job-456');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.status).toBe('rejected');
+        expect(result.value.error?.code).toBe('JOB_REJECTED');
+        expect(result.value.error?.message).toBe('Unauthorized access');
+      }
+    });
+
+    it('prioritizes message over other properties', async () => {
+      mockGetJob.mockResolvedValue({
+        job: {
+          status: 'rejected',
+          errors: [{ message: 'Main error', error: 'Secondary error', reason: 'Tertiary reason' }],
+        },
+      });
+
+      const result = await adapter.pollJob('job-789');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.error?.message).toBe('Main error');
       }
     });
   });

@@ -4,6 +4,8 @@ import type { HandleResearchActionUseCase } from './handleResearchAction.js';
 import type { HandleTodoActionUseCase } from './handleTodoAction.js';
 import type { HandleNoteActionUseCase } from './handleNoteAction.js';
 import type { HandleLinkActionUseCase } from './handleLinkAction.js';
+import type { HandleCalendarActionUseCase } from './handleCalendarAction.js';
+import type { HandleLinearActionUseCase } from './handleLinearAction.js';
 
 export interface ActionHandler {
   execute(event: ActionCreatedEvent): Promise<Result<{ actionId: string }>>;
@@ -14,6 +16,8 @@ export interface ActionHandlerRegistry {
   todo: HandleTodoActionUseCase;
   note: HandleNoteActionUseCase;
   link: HandleLinkActionUseCase;
+  calendar: HandleCalendarActionUseCase;
+  linear: HandleLinearActionUseCase;
 }
 
 export function getHandlerForType(

@@ -50,6 +50,7 @@ describe('GptAdapter', () => {
         model: LlmModels.O4MiniDeepResearch,
         userId: 'test-user-id',
         pricing: testPricing,
+        logger: mockLogger,
       });
     });
   });

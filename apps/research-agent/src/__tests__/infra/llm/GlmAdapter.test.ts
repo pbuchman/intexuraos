@@ -63,6 +63,7 @@ describe('GlmAdapter', () => {
         model: LlmModels.Glm47,
         userId: 'test-user-id',
         pricing: testPricing,
+        logger: expect.any(Object),
       });
     });
 
@@ -75,6 +76,7 @@ describe('GlmAdapter', () => {
         model: LlmModels.Glm47,
         userId: 'test-user-id',
         pricing: testPricing,
+        logger: expect.any(Object),
       });
     });
   });

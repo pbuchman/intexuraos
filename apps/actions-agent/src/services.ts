@@ -7,6 +7,8 @@ import type { CommandsAgentClient } from './domain/ports/commandsAgentClient.js'
 import type { TodosServiceClient } from './domain/ports/todosServiceClient.js';
 import type { NotesServiceClient } from './domain/ports/notesServiceClient.js';
 import type { BookmarksServiceClient } from './domain/ports/bookmarksServiceClient.js';
+import type { CalendarServiceClient } from './domain/ports/calendarServiceClient.js';
+import type { LinearAgentClient } from './domain/ports/linearAgentClient.js';
 import {
   createHandleResearchActionUseCase,
   type HandleResearchActionUseCase,
@@ -24,6 +26,14 @@ import {
   type HandleLinkActionUseCase,
 } from './domain/usecases/handleLinkAction.js';
 import {
+  createHandleCalendarActionUseCase,
+  type HandleCalendarActionUseCase,
+} from './domain/usecases/handleCalendarAction.js';
+import {
+  createHandleLinearActionUseCase,
+  type HandleLinearActionUseCase,
+} from './domain/usecases/handleLinearAction.js';
+import {
   createExecuteResearchActionUseCase,
   type ExecuteResearchActionUseCase,
 } from './domain/usecases/executeResearchAction.js';
@@ -40,6 +50,14 @@ import {
   type ExecuteLinkActionUseCase,
 } from './domain/usecases/executeLinkAction.js';
 import {
+  createExecuteCalendarActionUseCase,
+  type ExecuteCalendarActionUseCase,
+} from './domain/usecases/executeCalendarAction.js';
+import {
+  createExecuteLinearActionUseCase,
+  type ExecuteLinearActionUseCase,
+} from './domain/usecases/executeLinearAction.js';
+import {
   createRetryPendingActionsUseCase,
   type RetryPendingActionsUseCase,
 } from './domain/usecases/retryPendingActions.js';
@@ -52,11 +70,14 @@ import { createLocalActionServiceClient } from './infra/action/localActionServic
 import { createResearchAgentClient } from './infra/research/researchAgentClient.js';
 import { createWhatsappNotificationSender } from './infra/notification/whatsappNotificationSender.js';
 import { createFirestoreActionRepository } from './infra/firestore/actionRepository.js';
+import { registerActionHandler } from './domain/usecases/createIdempotentActionHandler.js';
 import { createFirestoreActionTransitionRepository } from './infra/firestore/actionTransitionRepository.js';
 import { createCommandsAgentHttpClient } from './infra/http/commandsAgentHttpClient.js';
 import { createTodosServiceHttpClient } from './infra/http/todosServiceHttpClient.js';
 import { createNotesServiceHttpClient } from './infra/http/notesServiceHttpClient.js';
 import { createBookmarksServiceHttpClient } from './infra/http/bookmarksServiceHttpClient.js';
+import { createCalendarServiceHttpClient } from './infra/http/calendarServiceHttpClient.js';
+import { createLinearAgentHttpClient } from './infra/http/linearAgentHttpClient.js';
 import { createActionEventPublisher, type ActionEventPublisher } from './infra/pubsub/index.js';
 import { createWhatsAppSendPublisher, type WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
 
@@ -70,16 +91,22 @@ export interface Services {
   todosServiceClient: TodosServiceClient;
   notesServiceClient: NotesServiceClient;
   bookmarksServiceClient: BookmarksServiceClient;
+  calendarServiceClient: CalendarServiceClient;
+  linearAgentClient: LinearAgentClient;
   actionEventPublisher: ActionEventPublisher;
   whatsappPublisher: WhatsAppSendPublisher;
   handleResearchActionUseCase: HandleResearchActionUseCase;
   handleTodoActionUseCase: HandleTodoActionUseCase;
   handleNoteActionUseCase: HandleNoteActionUseCase;
   handleLinkActionUseCase: HandleLinkActionUseCase;
+  handleCalendarActionUseCase: HandleCalendarActionUseCase;
+  handleLinearActionUseCase: HandleLinearActionUseCase;
   executeResearchActionUseCase: ExecuteResearchActionUseCase;
   executeTodoActionUseCase: ExecuteTodoActionUseCase;
   executeNoteActionUseCase: ExecuteNoteActionUseCase;
   executeLinkActionUseCase: ExecuteLinkActionUseCase;
+  executeCalendarActionUseCase: ExecuteCalendarActionUseCase;
+  executeLinearActionUseCase: ExecuteLinearActionUseCase;
   retryPendingActionsUseCase: RetryPendingActionsUseCase;
   changeActionTypeUseCase: ChangeActionTypeUseCase;
   // Action handler registry (for dynamic routing)
@@ -87,6 +114,8 @@ export interface Services {
   todo: HandleTodoActionUseCase;
   note: HandleNoteActionUseCase;
   link: HandleLinkActionUseCase;
+  calendar: HandleCalendarActionUseCase;
+  linear: HandleLinearActionUseCase;
 }
 
 export interface ServiceConfig {
@@ -96,6 +125,8 @@ export interface ServiceConfig {
   todosAgentUrl: string;
   notesAgentUrl: string;
   bookmarksAgentUrl: string;
+  calendarAgentUrl: string;
+  linearAgentUrl: string;
   internalAuthToken: string;
   gcpProjectId: string;
   whatsappSendTopic: string;
@@ -105,7 +136,9 @@ export interface ServiceConfig {
 let container: Services | null = null;
 
 export function initServices(config: ServiceConfig): void {
-  const actionRepository = createFirestoreActionRepository();
+  const actionRepository = createFirestoreActionRepository({
+    logger: pino({ name: 'actionRepository' }),
+  });
   const actionTransitionRepository = createFirestoreActionTransitionRepository();
   const actionServiceClient = createLocalActionServiceClient(actionRepository);
 
@@ -154,6 +187,18 @@ export function initServices(config: ServiceConfig): void {
     logger: pino({ name: 'bookmarksServiceClient' }),
   });
 
+  const calendarServiceClient = createCalendarServiceHttpClient({
+    baseUrl: config.calendarAgentUrl,
+    internalAuthToken: config.internalAuthToken,
+    logger: pino({ name: 'calendarServiceClient' }),
+  });
+
+  const linearAgentClient = createLinearAgentHttpClient({
+    baseUrl: config.linearAgentUrl,
+    internalAuthToken: config.internalAuthToken,
+    logger: pino({ name: 'linearAgentClient' }),
+  });
+
   const executeResearchActionUseCase = createExecuteResearchActionUseCase({
     actionRepository,
     researchServiceClient,
@@ -187,36 +232,80 @@ export function initServices(config: ServiceConfig): void {
     logger: pino({ name: 'executeLinkAction' }),
   });
 
-  const handleResearchActionUseCase = createHandleResearchActionUseCase({
-    actionServiceClient,
+  const executeCalendarActionUseCase = createExecuteCalendarActionUseCase({
+    actionRepository,
+    calendarServiceClient,
     whatsappPublisher,
     webAppUrl: config.webAppUrl,
-    logger: pino({ name: 'handleResearchAction' }),
-    executeResearchAction: executeResearchActionUseCase,
+    logger: pino({ name: 'executeCalendarAction' }),
   });
 
-  const handleTodoActionUseCase = createHandleTodoActionUseCase({
-    actionServiceClient,
+  const executeLinearActionUseCase = createExecuteLinearActionUseCase({
+    actionRepository,
+    linearAgentClient,
     whatsappPublisher,
-    webAppUrl: config.webAppUrl,
-    logger: pino({ name: 'handleTodoAction' }),
-    executeTodoAction: executeTodoActionUseCase,
+    logger: pino({ name: 'executeLinearAction' }),
   });
 
-  const handleNoteActionUseCase = createHandleNoteActionUseCase({
-    actionServiceClient,
-    whatsappPublisher,
-    webAppUrl: config.webAppUrl,
-    logger: pino({ name: 'handleNoteAction' }),
-    executeNoteAction: executeNoteActionUseCase,
-  });
+  const handleResearchActionUseCase = registerActionHandler(
+    createHandleResearchActionUseCase,
+    {
+      actionRepository,
+      whatsappPublisher,
+      webAppUrl: config.webAppUrl,
+      logger: pino({ name: 'handleResearchAction' }),
+      executeResearchAction: executeResearchActionUseCase,
+    }
+  );
 
-  const handleLinkActionUseCase = createHandleLinkActionUseCase({
+  const handleTodoActionUseCase = registerActionHandler(
+    createHandleTodoActionUseCase,
+    {
+      actionRepository,
+      whatsappPublisher,
+      webAppUrl: config.webAppUrl,
+      logger: pino({ name: 'handleTodoAction' }),
+      executeTodoAction: executeTodoActionUseCase,
+    }
+  );
+
+  const handleNoteActionUseCase = registerActionHandler(
+    createHandleNoteActionUseCase,
+    {
+      actionRepository,
+      whatsappPublisher,
+      webAppUrl: config.webAppUrl,
+      logger: pino({ name: 'handleNoteAction' }),
+      executeNoteAction: executeNoteActionUseCase,
+    }
+  );
+
+  const handleLinkActionUseCase = registerActionHandler(
+    createHandleLinkActionUseCase,
+    {
+      actionRepository,
+      whatsappPublisher,
+      webAppUrl: config.webAppUrl,
+      logger: pino({ name: 'handleLinkAction' }),
+      executeLinkAction: executeLinkActionUseCase,
+    }
+  );
+
+  const handleCalendarActionUseCase = registerActionHandler(
+    createHandleCalendarActionUseCase,
+    {
+      actionRepository,
+      whatsappPublisher,
+      webAppUrl: config.webAppUrl,
+      logger: pino({ name: 'handleCalendarAction' }),
+    }
+  );
+
+  const handleLinearActionUseCase = createHandleLinearActionUseCase({
     actionServiceClient,
     whatsappPublisher,
     webAppUrl: config.webAppUrl,
-    logger: pino({ name: 'handleLinkAction' }),
-    executeLinkAction: executeLinkActionUseCase,
+    logger: pino({ name: 'handleLinearAction' }),
   });
 
   const retryPendingActionsUseCase = createRetryPendingActionsUseCase({
@@ -227,6 +316,8 @@ export function initServices(config: ServiceConfig): void {
       todo: handleTodoActionUseCase,
       note: handleNoteActionUseCase,
       link: handleLinkActionUseCase,
+      calendar: handleCalendarActionUseCase,
+      linear: handleLinearActionUseCase,
     },
     logger: pino({ name: 'retryPendingActions' }),
   });
@@ -248,16 +339,22 @@ export function initServices(config: ServiceConfig): void {
     todosServiceClient,
     notesServiceClient,
     bookmarksServiceClient,
+    calendarServiceClient,
+    linearAgentClient,
     actionEventPublisher,
     whatsappPublisher,
     handleResearchActionUseCase,
     handleTodoActionUseCase,
     handleNoteActionUseCase,
     handleLinkActionUseCase,
+    handleCalendarActionUseCase,
+    handleLinearActionUseCase,
     executeResearchActionUseCase,
     executeTodoActionUseCase,
     executeNoteActionUseCase,
     executeLinkActionUseCase,
+    executeCalendarActionUseCase,
+    executeLinearActionUseCase,
     retryPendingActionsUseCase,
     changeActionTypeUseCase,
     // Action handler registry (for dynamic routing)
@@ -265,6 +362,8 @@ export function initServices(config: ServiceConfig): void {
     todo: handleTodoActionUseCase,
     note: handleNoteActionUseCase,
     link: handleLinkActionUseCase,
+    calendar: handleCalendarActionUseCase,
+    linear: handleLinearActionUseCase,
   };
 }
 
