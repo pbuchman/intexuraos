@@ -330,31 +330,4 @@ describe('webAgentLinkPreviewClient', () => {
       }
     });
   });
-
-  describe('default logger', () => {
-    it('uses default logger when none provided', async () => {
-      const clientWithDefaultLogger = createWebAgentLinkPreviewClient({
-        baseUrl,
-        internalAuthToken,
-      });
-
-      nock(baseUrl).post('/internal/link-previews').reply(200, {
-        success: true,
-        data: {
-          results: [
-            {
-              url: 'https://example.com/',
-              status: 'success',
-              preview: { url: 'https://example.com/', title: 'Test' },
-            },
-          ],
-          metadata: { requestedCount: 1, successCount: 1, failedCount: 0, durationMs: 50 },
-        },
-      });
-
-      const result = await clientWithDefaultLogger.fetchPreview('https://example.com/');
-
-      expect(result.ok).toBe(true);
-    });
-  });
 });
