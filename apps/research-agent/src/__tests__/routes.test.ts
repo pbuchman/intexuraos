@@ -391,9 +391,31 @@ describe('Research Routes - Authenticated', () => {
   });
 
   describe('POST /research/draft', () => {
-    it.skip('creates draft with Google API key (title generation)', async () => {
-      // Skipped: Would require mocking Gemini API calls
-      // Title generation is tested indirectly through integration tests
+    it('creates draft with Google API key (title generation)', async () => {
+      const token = await createToken(TEST_USER_ID);
+      // Set Google API key to trigger title generation
+      fakeUserServiceClient.setApiKeys(TEST_USER_ID, { google: 'test-google-api-key' });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/research/draft',
+        headers: { authorization: `Bearer ${token}` },
+        payload: {
+          prompt: 'Test prompt for title generation',
+        },
+      });
+
+      expect(response.statusCode).toBe(201);
+      const body = JSON.parse(response.body) as { success: boolean; data: { id: string } };
+      expect(body.success).toBe(true);
+
+      const saved = fakeRepo.getAll()[0];
+      expect(saved).toBeDefined();
+      if (saved !== undefined) {
+        expect(saved.status).toBe('draft');
+        // The fake title generator returns 'Generated Title'
+        expect(saved.title).toBe('Generated Title');
+      }
     });
 
     it('creates draft without Google API key (fallback title)', async () => {
