@@ -784,6 +784,7 @@ export function createFakeServices(deps: {
   const handleCalendarActionUseCase: HandleCalendarActionUseCase =
     createHandleCalendarActionUseCase({
       actionServiceClient: deps.actionServiceClient,
+      actionRepository,
       whatsappPublisher,
       webAppUrl: 'http://test.app',
       logger: silentLogger,

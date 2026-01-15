@@ -249,6 +249,7 @@ export function initServices(config: ServiceConfig): void {
 
   const handleCalendarActionUseCase = createHandleCalendarActionUseCase({
     actionServiceClient,
+    actionRepository,
     whatsappPublisher,
     webAppUrl: config.webAppUrl,
     logger: pino({ name: 'handleCalendarAction' }),
