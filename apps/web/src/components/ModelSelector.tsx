@@ -118,7 +118,7 @@ export function ModelSelector({
                 {isTestFailed ? (
                   <div className="flex items-center gap-1 group relative">
                     <AlertTriangle className="h-4 w-4 text-red-500" />
-                    <span className="text-xs text-red-600">Test failed</span>
+                    <span className="text-xs text-red-600">Action required</span>
                     <div className="absolute left-0 top-full mt-1 hidden group-hover:block z-10 w-64 p-2 bg-white border border-red-200 rounded shadow-lg">
                       <p className="text-xs text-red-700 mb-2">{testFailedError ?? ''}</p>
                       <Link
