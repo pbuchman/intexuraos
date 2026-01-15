@@ -80,7 +80,7 @@ export class FakeGoogleCalendarClient implements GoogleCalendarClient {
     _accessToken: string,
     _calendarId: string,
     _options: ListEventsInput,
-    _logger?: unknown
+    _logger: unknown
   ): Promise<Result<CalendarEvent[], CalendarError>> {
     if (this.listResult !== null) {
       return this.listResult;
@@ -92,7 +92,7 @@ export class FakeGoogleCalendarClient implements GoogleCalendarClient {
     _accessToken: string,
     _calendarId: string,
     eventId: string,
-    _logger?: unknown
+    _logger: unknown
   ): Promise<Result<CalendarEvent, CalendarError>> {
     if (this.getResult !== null) {
       return this.getResult;
@@ -108,7 +108,7 @@ export class FakeGoogleCalendarClient implements GoogleCalendarClient {
     _accessToken: string,
     _calendarId: string,
     event: CreateEventInput,
-    _logger?: unknown
+    _logger: unknown
   ): Promise<Result<CalendarEvent, CalendarError>> {
     if (this.createResult !== null) {
       return this.createResult;
@@ -134,7 +134,7 @@ export class FakeGoogleCalendarClient implements GoogleCalendarClient {
     _calendarId: string,
     eventId: string,
     updates: UpdateEventInput,
-    _logger?: unknown
+    _logger: unknown
   ): Promise<Result<CalendarEvent, CalendarError>> {
     if (this.updateResult !== null) {
       return this.updateResult;
@@ -171,7 +171,7 @@ export class FakeGoogleCalendarClient implements GoogleCalendarClient {
     _accessToken: string,
     _calendarId: string,
     eventId: string,
-    _logger?: unknown
+    _logger: unknown
   ): Promise<Result<void, CalendarError>> {
     if (this.deleteResult !== null) {
       return this.deleteResult;
@@ -187,7 +187,7 @@ export class FakeGoogleCalendarClient implements GoogleCalendarClient {
   async getFreeBusy(
     _accessToken: string,
     _input: FreeBusyInput,
-    _logger?: unknown
+    _logger: unknown
   ): Promise<Result<Map<string, FreeBusySlot[]>, CalendarError>> {
     if (this.freeBusyResult !== null) {
       return this.freeBusyResult;
