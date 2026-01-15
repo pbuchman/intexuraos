@@ -28,6 +28,7 @@ ALL_SERVICES=(
   "bookmarks-agent"
   "app-settings-service"
   "calendar-agent"
+  "linear-agent"
   "web-agent"
   "web"
 )

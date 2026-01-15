@@ -544,6 +544,37 @@ steps:
         'ENVIRONMENT=${_ENVIRONMENT}',
       ]
 
+  # [linear-agent]
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'build-push-linear-agent'
+    waitFor: ['-']
+    entrypoint: 'bash'
+    args:
+      [
+        'cloudbuild/scripts/build-push-monitored.sh',
+        'linear-agent',
+        'apps/linear-agent/Dockerfile',
+      ]
+    env:
+      [
+        'DOCKER_BUILDKIT=1',
+        'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}',
+        'COMMIT_SHA=$COMMIT_SHA',
+      ]
+
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    id: 'deploy-linear-agent'
+    waitFor: ['build-push-linear-agent']
+    entrypoint: 'bash'
+    args: ['-c', 'bash cloudbuild/scripts/deploy-linear-agent.sh']
+    env:
+      [
+        'COMMIT_SHA=$COMMIT_SHA',
+        'REGION=${_REGION}',
+        'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}',
+        'ENVIRONMENT=${_ENVIRONMENT}',
+      ]
+
   # [web-agent]
   - name: 'gcr.io/cloud-builders/docker'
     id: 'build-push-web-agent'

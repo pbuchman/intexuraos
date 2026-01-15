@@ -43,14 +43,15 @@ Implement a fully functional `linear-agent` service that enables creating Linear
 
 - ✅ **0-0-setup**: Service scaffolding created (package.json, Dockerfile, tsconfig.json, directory structure)
 - ✅ **0-1-terraform**: Terraform configuration added (service module, IAM service account, Firestore collections)
+- ✅ **0-2-cloudbuild**: Cloud Build configuration added (build/deploy steps, scripts, all config files)
 
 ### Now
 
-**Task 0-2-cloudbuild**: Add Cloud Build configuration
+**Task 1-0-domain**: Define domain models, ports, errors
 
 ### Next
 
-- 1-0-domain: Define domain models, ports, errors
+- 1-1-connection: Implement Linear connection repository
 - Continue through all tiers...
 
 ## Open Questions
