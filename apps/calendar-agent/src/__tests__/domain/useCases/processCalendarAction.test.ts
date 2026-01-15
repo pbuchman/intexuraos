@@ -155,6 +155,82 @@ describe('processCalendarAction', () => {
         expect(result.value.error).toBe('Could not extract valid calendar event');
       }
     });
+
+    it('returns error when repository fails to save invalid event', async () => {
+      calendarActionExtractionService.extractEventResult = ok({
+        summary: 'Unclear request',
+        start: null,
+        end: null,
+        location: null,
+        description: null,
+        valid: false,
+        error: 'Could not determine time',
+        reasoning: 'No specific time mentioned',
+      });
+
+      failedEventRepository.setCreateResult(
+        err({ code: 'INTERNAL_ERROR', message: 'Database unavailable' })
+      );
+
+      const result = await processCalendarAction(
+        {
+          actionId: 'action-123',
+          userId: 'user-456',
+          text: 'Maybe do something later',
+        },
+        {
+          googleCalendarClient,
+          failedEventRepository,
+          calendarActionExtractionService,
+          logger: mockLogger,
+        }
+      );
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('INTERNAL_ERROR');
+        expect(result.error.message).toBe('Database unavailable');
+      }
+    });
+
+    it('handles edge case where valid flag is true but dates are null', async () => {
+      // Edge case: LLM marks event as valid but with null dates
+      // This tests the toEventDateTime(null) path (line 61)
+      calendarActionExtractionService.extractEventResult = ok({
+        summary: 'Task reminder',
+        start: null,
+        end: null,
+        location: null,
+        description: null,
+        valid: true, // Flagged as valid despite null dates
+        error: null,
+        reasoning: 'Reminder task',
+      });
+
+      const result = await processCalendarAction(
+        {
+          actionId: 'action-123',
+          userId: 'user-456',
+          text: 'Remind me to do something',
+        },
+        {
+          googleCalendarClient,
+          failedEventRepository,
+          calendarActionExtractionService,
+          logger: mockLogger,
+        }
+      );
+
+      // Null dates fail the isValidIsoDateTime check
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.status).toBe('failed');
+        expect(result.value.error).toBe('Invalid date format');
+      }
+
+      const failedEvents = failedEventRepository.getEvents();
+      expect(failedEvents.length).toBe(1);
+    });
   });
 
   describe('when date format is invalid', () => {
@@ -193,6 +269,43 @@ describe('processCalendarAction', () => {
       const failedEvents = failedEventRepository.getEvents();
       expect(failedEvents.length).toBe(1);
       expect(failedEvents[0]?.error).toBe('Invalid date format');
+    });
+
+    it('returns error when repository fails to save invalid date format event', async () => {
+      calendarActionExtractionService.extractEventResult = ok({
+        summary: 'Meeting',
+        start: 'invalid-date',
+        end: null,
+        location: null,
+        description: null,
+        valid: true,
+        error: null,
+        reasoning: 'Has invalid start date',
+      });
+
+      failedEventRepository.setCreateResult(
+        err({ code: 'INTERNAL_ERROR', message: 'Storage unavailable' })
+      );
+
+      const result = await processCalendarAction(
+        {
+          actionId: 'action-123',
+          userId: 'user-456',
+          text: 'Meeting on baddate',
+        },
+        {
+          googleCalendarClient,
+          failedEventRepository,
+          calendarActionExtractionService,
+          logger: mockLogger,
+        }
+      );
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('INTERNAL_ERROR');
+        expect(result.error.message).toBe('Storage unavailable');
+      }
     });
   });
 
