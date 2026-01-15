@@ -152,6 +152,61 @@ function extractErrorMessage(error: unknown): string {
 }
 
 /**
+ * Extract detailed error context for debugging.
+ * Captures HTTP status, response body, and nested error properties.
+ */
+function extractErrorContext(error: unknown): Record<string, unknown> {
+  const context: Record<string, unknown> = {
+    errorType: typeof error,
+    errorName: error instanceof Error ? error.name : undefined,
+    errorStack: error instanceof Error ? error.stack : undefined,
+  };
+
+  if (error !== null && typeof error === 'object') {
+    const obj = error as Record<string, unknown>;
+
+    // HTTP-related properties (axios, fetch, etc.)
+    if (obj['status'] !== undefined) context['httpStatus'] = obj['status'];
+    if (obj['statusCode'] !== undefined) context['httpStatusCode'] = obj['statusCode'];
+    if (obj['statusText'] !== undefined) context['httpStatusText'] = obj['statusText'];
+
+    // Response body properties
+    if (obj['response'] !== undefined) {
+      const resp = obj['response'] as Record<string, unknown>;
+      context['responseStatus'] = resp['status'];
+      context['responseStatusText'] = resp['statusText'];
+      context['responseData'] = resp['data'];
+    }
+
+    // Speechmatics-specific error properties
+    if (obj['code'] !== undefined) context['errorCode'] = obj['code'];
+    if (obj['reason'] !== undefined) context['reason'] = obj['reason'];
+    if (obj['detail'] !== undefined) context['detail'] = obj['detail'];
+    if (obj['errors'] !== undefined) context['errors'] = obj['errors'];
+
+    // Body content (some HTTP clients put response here)
+    if (obj['body'] !== undefined) context['body'] = obj['body'];
+
+    // Request info for context
+    if (obj['request'] !== undefined) {
+      const req = obj['request'] as Record<string, unknown>;
+      context['requestUrl'] = req['url'];
+      context['requestMethod'] = req['method'];
+    }
+
+    // Cause chain (modern Error.cause)
+    if (obj['cause'] !== undefined) {
+      context['cause'] = extractErrorMessage(obj['cause']);
+    }
+
+    // Raw object keys to see what we might be missing
+    context['availableKeys'] = Object.keys(obj);
+  }
+
+  return context;
+}
+
+/**
  * Create a TranscriptionApiCall record.
  */
 function createApiCall(
@@ -235,14 +290,23 @@ export class SpeechmaticsTranscriptionAdapter implements SpeechTranscriptionPort
     } catch (error) {
       const durationMs = Date.now() - startTime;
       const errorMessage = getErrorMessage(error);
-      const apiCall = createApiCall('submit', false, { error: errorMessage });
+
+      // Extract detailed error context for debugging
+      const errorContext = extractErrorContext(error);
+      const apiCall = createApiCall('submit', false, {
+        error: errorMessage,
+        errorContext,
+      });
 
       logger.error(
         {
           event: 'speechmatics_submit_error',
           error: errorMessage,
+          errorContext,
           durationMs,
           audioUrl: input.audioUrl,
+          mimeType: input.mimeType,
+          language: input.language ?? 'auto',
         },
         'Failed to submit transcription job'
       );
@@ -327,13 +391,15 @@ export class SpeechmaticsTranscriptionAdapter implements SpeechTranscriptionPort
     } catch (error) {
       const durationMs = Date.now() - startTime;
       const errorMessage = getErrorMessage(error);
-      const apiCall = createApiCall('poll', false, { error: errorMessage });
+      const errorContext = extractErrorContext(error);
+      const apiCall = createApiCall('poll', false, { error: errorMessage, errorContext });
 
       logger.error(
         {
           event: 'speechmatics_poll_error',
           jobId,
           error: errorMessage,
+          errorContext,
           durationMs,
         },
         'Failed to poll job status'
@@ -416,13 +482,15 @@ export class SpeechmaticsTranscriptionAdapter implements SpeechTranscriptionPort
     } catch (error) {
       const durationMs = Date.now() - startTime;
       const errorMessage = getErrorMessage(error);
-      const apiCall = createApiCall('fetch_result', false, { error: errorMessage });
+      const errorContext = extractErrorContext(error);
+      const apiCall = createApiCall('fetch_result', false, { error: errorMessage, errorContext });
 
       logger.error(
         {
           event: 'speechmatics_transcript_error',
           jobId,
           error: errorMessage,
+          errorContext,
           durationMs,
         },
         'Failed to fetch transcription'
