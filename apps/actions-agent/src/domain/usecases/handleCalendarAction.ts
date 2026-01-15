@@ -1,6 +1,6 @@
 import { ok, type Result } from '@intexuraos/common-core';
 import type { ActionRepository } from '../ports/actionRepository.js';
-import type { WhatsAppSendPublisher } from '../infra-pubsub';
+import type { WhatsAppSendPublisher } from '../infra-pubsub/index.js';
 import type { ActionCreatedEvent } from '../models/actionEvent.js';
 import type { Logger } from 'pino';
 
