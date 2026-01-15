@@ -145,6 +145,7 @@ export function createLlmUserServiceClient(config: LlmUserServiceConfig): LlmUse
           model: defaultModel,
           userId,
           pricing,
+          logger: config.logger ?? defaultLogger,
         };
 
         const client = createLlmClient(clientConfig);

@@ -46,7 +46,7 @@ export function initServices(config: ServiceConfig): void {
     logger: logger,
   });
 
-  const extractionService = createLinearActionExtractionService(llmUserServiceClient);
+  const extractionService = createLinearActionExtractionService(llmUserServiceClient, logger);
 
   container = {
     connectionRepository: createLinearConnectionRepository(),

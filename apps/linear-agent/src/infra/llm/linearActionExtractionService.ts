@@ -15,20 +15,15 @@ const MAX_DESCRIPTION_LENGTH = 2000;
 
 type MinimalLogger = pino.Logger;
 
-const defaultLogger: MinimalLogger = pino({
-  level: process.env['LOG_LEVEL'] ?? 'info',
-  name: 'linearActionExtractionService',
-}) as unknown as MinimalLogger;
-
 export interface LinearActionExtractionService {
   extractIssue(userId: string, text: string): Promise<Result<ExtractedIssueData, LinearError>>;
 }
 
 export function createLinearActionExtractionService(
   llmUserServiceClient: LlmUserServiceClient,
-  logger?: MinimalLogger
+  logger: MinimalLogger
 ): LinearActionExtractionService {
-  const log: MinimalLogger = logger ?? defaultLogger;
+  const log: MinimalLogger = logger;
 
   return {
     async extractIssue(

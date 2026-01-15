@@ -14,6 +14,9 @@ import {
   type LinearActionExtractionService,
 } from '../../infra/llm/linearActionExtractionService.js';
 import type { ExtractedIssueData } from '../../domain/index.js';
+import pino from 'pino';
+
+const silentLogger = pino({ level: 'silent' });
 
 describe('LinearActionExtractionService', () => {
   let fakeLlmUserService: FakeLlmUserServiceClient;
@@ -21,7 +24,7 @@ describe('LinearActionExtractionService', () => {
 
   beforeEach(() => {
     fakeLlmUserService = new FakeLlmUserServiceClient();
-    service = createLinearActionExtractionService(fakeLlmUserService);
+    service = createLinearActionExtractionService(fakeLlmUserService, silentLogger);
   });
 
   afterEach(() => {

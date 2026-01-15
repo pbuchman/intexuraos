@@ -19,6 +19,7 @@ import type { CalendarEvent, FreeBusySlot } from '../domain/index.js';
 
 const AUTH_AUDIENCE = 'urn:intexuraos:api';
 const AUTH_DOMAIN = 'test-tenant.eu.auth0.com';
+const INTERNAL_AUTH_TOKEN = 'test-internal-auth-token';
 
 describe('Calendar Routes', () => {
   let app: FastifyInstance;
@@ -70,6 +71,7 @@ describe('Calendar Routes', () => {
     process.env['INTEXURAOS_AUTH_AUDIENCE'] = AUTH_AUDIENCE;
     process.env['INTEXURAOS_AUTH_JWKS_URL'] = jwksUrl;
     process.env['INTEXURAOS_AUTH_ISSUER'] = issuer;
+    process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = INTERNAL_AUTH_TOKEN;
 
     clearJwksCache();
 
@@ -730,6 +732,198 @@ describe('Calendar Routes', () => {
       expect(response.statusCode).toBe(200);
       const body = response.json();
       expect(body.serviceName).toBe('calendar-agent');
+    });
+  });
+
+  describe('POST /internal/calendar/process-action', () => {
+    const validActionPayload = {
+      action: {
+        id: 'action-123',
+        userId: 'user-456',
+        title: 'Meeting at 2pm tomorrow',
+      },
+    };
+
+    it('returns 401 without internal auth header', async () => {
+      // Create a new app instance without the internal auth token
+      await app.close();
+      delete process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'];
+      clearJwksCache();
+      setServices({
+        userServiceClient: fakeUserService,
+        googleCalendarClient: fakeCalendarClient,
+        failedEventRepository: fakeFailedEventRepository,
+        calendarActionExtractionService: fakeCalendarActionExtractionService,
+      });
+      app = await buildServer();
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/calendar/process-action',
+        payload: validActionPayload,
+      });
+
+      expect(response.statusCode).toBe(401);
+
+      // Restore for other tests
+      await app.close();
+      process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = INTERNAL_AUTH_TOKEN;
+      clearJwksCache();
+      setServices({
+        userServiceClient: fakeUserService,
+        googleCalendarClient: fakeCalendarClient,
+        failedEventRepository: fakeFailedEventRepository,
+        calendarActionExtractionService: fakeCalendarActionExtractionService,
+      });
+      app = await buildServer();
+    });
+
+    it('returns 401 with wrong internal auth token', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/calendar/process-action',
+        headers: { 'x-internal-auth': 'wrong-token' },
+        payload: validActionPayload,
+      });
+
+      expect(response.statusCode).toBe(401);
+    });
+
+    it('processes valid action and returns completed status', async () => {
+      fakeCalendarActionExtractionService.extractEventResult = {
+        ok: true,
+        value: {
+          summary: 'Team Meeting',
+          start: '2025-01-15T14:00:00',
+          end: '2025-01-15T15:00:00',
+          location: 'Conference Room A',
+          description: 'Weekly sync',
+          valid: true,
+          error: null,
+          reasoning: 'Clear meeting request',
+        },
+      };
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/calendar/process-action',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: validActionPayload,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      expect(body.status).toBe('completed');
+      expect(body.resourceUrl).toMatch(/^\/#\/calendar\/event-\d+$/);
+    });
+
+    it('returns failed status when event extraction is invalid', async () => {
+      fakeCalendarActionExtractionService.extractEventResult = {
+        ok: true,
+        value: {
+          summary: 'Unclear Request',
+          start: null,
+          end: null,
+          location: null,
+          description: null,
+          valid: false,
+          error: 'Could not determine event time',
+          reasoning: 'No specific time mentioned',
+        },
+      };
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/calendar/process-action',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: validActionPayload,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      expect(body.status).toBe('failed');
+      expect(body.error).toBe('Could not determine event time');
+    });
+
+    it('returns 403 when extraction returns NOT_CONNECTED error', async () => {
+      fakeCalendarActionExtractionService.extractEventResult = {
+        ok: false,
+        error: { code: 'NO_API_KEY', message: 'No API key configured' },
+      };
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/calendar/process-action',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: validActionPayload,
+      });
+
+      expect(response.statusCode).toBe(403);
+      const body = response.json();
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('FORBIDDEN');
+    });
+
+    it('returns failed status when Google Calendar returns TOKEN_ERROR', async () => {
+      fakeCalendarActionExtractionService.extractEventResult = {
+        ok: true,
+        value: {
+          summary: 'Test Event',
+          start: '2025-01-15T10:00:00',
+          end: '2025-01-15T11:00:00',
+          location: null,
+          description: null,
+          valid: true,
+          error: null,
+          reasoning: 'test',
+        },
+      };
+      fakeCalendarClient.setCreateResult(
+        err({ code: 'TOKEN_ERROR', message: 'Invalid access token' })
+      );
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/calendar/process-action',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: validActionPayload,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      expect(body.status).toBe('failed');
+      expect(body.error).toBe('Invalid access token');
+    });
+
+    it('returns failed status when Google Calendar returns INTERNAL_ERROR', async () => {
+      fakeCalendarActionExtractionService.extractEventResult = {
+        ok: true,
+        value: {
+          summary: 'Test Event',
+          start: '2025-01-15T10:00:00',
+          end: '2025-01-15T11:00:00',
+          location: null,
+          description: null,
+          valid: true,
+          error: null,
+          reasoning: 'test',
+        },
+      };
+      fakeCalendarClient.setCreateResult(
+        err({ code: 'INTERNAL_ERROR', message: 'Calendar API error' })
+      );
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/calendar/process-action',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: validActionPayload,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      expect(body.status).toBe('failed');
+      expect(body.error).toBe('Calendar API error');
     });
   });
 });

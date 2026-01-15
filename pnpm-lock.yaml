@@ -515,6 +515,9 @@ importers:
       '@intexuraos/llm-common':
         specifier: workspace:*
         version: link:../../packages/llm-common
+      '@intexuraos/llm-contract':
+        specifier: workspace:*
+        version: link:../../packages/llm-contract
       '@intexuraos/llm-factory':
         specifier: workspace:*
         version: link:../../packages/llm-factory

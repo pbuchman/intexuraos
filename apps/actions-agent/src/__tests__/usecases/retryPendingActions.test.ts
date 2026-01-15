@@ -54,6 +54,9 @@ describe('retryPendingActions', () => {
       calendar: {
         execute: vi.fn().mockResolvedValue(ok({ actionId: 'action-1' })),
       },
+      linear: {
+        execute: vi.fn().mockResolvedValue(ok({ actionId: 'action-1' })),
+      },
     };
   });
 
