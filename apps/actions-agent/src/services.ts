@@ -294,7 +294,6 @@ export function initServices(config: ServiceConfig): void {
   const handleCalendarActionUseCase = registerActionHandler(
     createHandleCalendarActionUseCase,
     {
-      actionServiceClient,
       actionRepository,
       whatsappPublisher,
       webAppUrl: config.webAppUrl,

@@ -8,7 +8,11 @@ import type {
 } from '../domain/ports/calendarServiceClient.js';
 import type { ResearchServiceClient } from '../domain/ports/researchServiceClient.js';
 import type { NotificationSender } from '../domain/ports/notificationSender.js';
-import type { ActionRepository, ListByUserIdOptions } from '../domain/ports/actionRepository.js';
+import type {
+  ActionRepository,
+  ListByUserIdOptions,
+  UpdateStatusIfResult,
+} from '../domain/ports/actionRepository.js';
 import type { ActionTransitionRepository } from '../domain/ports/actionTransitionRepository.js';
 import type {
   CommandsAgentClient,
@@ -188,13 +192,13 @@ export class FakeActionRepository implements ActionRepository {
   private actions = new Map<string, Action>();
   private failNext = false;
   private failError: Error | null = null;
-  private updateStatusIfResults = new Map<string, boolean>();
+  private updateStatusIfResults = new Map<string, UpdateStatusIfResult>();
 
   getActions(): Map<string, Action> {
     return this.actions;
   }
 
-  setUpdateStatusIfResult(actionId: string, result: boolean): void {
+  setUpdateStatusIfResult(actionId: string, result: UpdateStatusIfResult): void {
     this.updateStatusIfResults.set(actionId, result);
   }
 
@@ -261,37 +265,34 @@ export class FakeActionRepository implements ActionRepository {
     actionId: string,
     newStatus: Action['status'],
     expectedStatus: Action['status']
-  ): Promise<boolean> {
+  ): Promise<UpdateStatusIfResult> {
     if (this.failNext) {
       this.failNext = false;
-      throw this.failError ?? new Error('Simulated failure');
+      return { outcome: 'error', error: this.failError ?? new Error('Simulated failure') };
     }
 
-    // Check if there's a pre-configured result for this action
     if (this.updateStatusIfResults.has(actionId)) {
-      const result = this.updateStatusIfResults.get(actionId) ?? false;
-      // If result is true, actually update the action
-      if (result) {
+      const result = this.updateStatusIfResults.get(actionId);
+      if (result !== undefined && result.outcome === 'updated') {
         const action = this.actions.get(actionId);
         if (action !== undefined) {
           action.status = newStatus;
           action.updatedAt = new Date().toISOString();
         }
       }
-      return result;
+      return result ?? { outcome: 'not_found' };
     }
 
-    // Default behavior: check current status and update if matches
     const action = this.actions.get(actionId);
     if (action === undefined) {
-      return false;
+      return { outcome: 'not_found' };
     }
     if (action.status !== expectedStatus) {
-      return false;
+      return { outcome: 'status_mismatch', currentStatus: action.status };
     }
     action.status = newStatus;
     action.updatedAt = new Date().toISOString();
-    return true;
+    return { outcome: 'updated' };
   }
 }
 

@@ -19,13 +19,15 @@ const defaultLogger = pino({
 });
 
 interface ApiResponse {
-  success: boolean;
-  data?: {
-    status: 'completed' | 'failed';
-    resource_url?: string;
-    error?: string;
-  };
-  error?: { code: string; message: string };
+  status: 'completed' | 'failed';
+  resource_url?: string;
+  error?: string;
+}
+
+function isValidApiResponse(value: unknown): value is ApiResponse {
+  if (typeof value !== 'object' || value === null) return false;
+  const obj = value as Record<string, unknown>;
+  return obj['status'] === 'completed' || obj['status'] === 'failed';
 }
 
 export function createCalendarServiceHttpClient(
@@ -35,7 +37,7 @@ export function createCalendarServiceHttpClient(
 
   return {
     async processAction(request: ProcessCalendarRequest): Promise<Result<ProcessCalendarResponse>> {
-      const url = `${config.baseUrl}/internal/calendar/process`;
+      const url = `${config.baseUrl}/internal/calendar/process-action`;
       const timeoutMs = 60_000; // 60 second timeout as specified
 
       logger.info(
@@ -74,16 +76,16 @@ export function createCalendarServiceHttpClient(
         return err(new Error(`HTTP ${String(response.status)}: ${response.statusText}`));
       }
 
-      const body = (await response.json()) as ApiResponse;
-      if (!body.success || body.data === undefined) {
+      const body: unknown = await response.json();
+      if (!isValidApiResponse(body)) {
         logger.error({ body }, 'Invalid response from calendar-agent');
-        return err(new Error(body.error?.message ?? 'Invalid response from calendar-agent'));
+        return err(new Error('Invalid response from calendar-agent: missing or invalid status'));
       }
 
       const result: ProcessCalendarResponse = {
-        status: body.data.status,
-        ...(body.data.resource_url !== undefined && { resource_url: body.data.resource_url }),
-        ...(body.data.error !== undefined && { error: body.data.error }),
+        status: body.status,
+        ...(body.resource_url !== undefined && { resource_url: body.resource_url }),
+        ...(body.error !== undefined && { error: body.error }),
       };
 
       logger.info({ actionId: request.action.id, status: result.status }, 'Calendar action processed');

@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { ok, err } from '@intexuraos/common-core';
 import { registerActionHandler } from '../domain/usecases/createIdempotentActionHandler.js';
 import type { ActionHandler } from '../domain/usecases/actionHandlerRegistry.js';
-import type { ActionRepository } from '../domain/ports/actionRepository.js';
+import type { ActionRepository, UpdateStatusIfResult } from '../domain/ports/actionRepository.js';
 import type { ActionCreatedEvent } from '../domain/models/actionEvent.js';
 import pino from 'pino';
 
@@ -38,7 +38,7 @@ describe('registerActionHandler', () => {
       delete: vi.fn(),
       listByUserId: vi.fn(),
       listByStatus: vi.fn(),
-      updateStatusIf: vi.fn().mockResolvedValue(true),
+      updateStatusIf: vi.fn().mockResolvedValue({ outcome: 'updated' } as UpdateStatusIfResult),
     };
   });
 
@@ -58,9 +58,12 @@ describe('registerActionHandler', () => {
       expect(mockHandler.execute).toHaveBeenCalledWith(event);
     });
 
-    it('returns early when action already claimed (idempotent)', async () => {
+    it('returns early when action already claimed (status_mismatch)', async () => {
       const factory = (): ActionHandler => mockHandler;
-      vi.mocked(mockRepository.updateStatusIf).mockResolvedValue(false); // Already claimed
+      vi.mocked(mockRepository.updateStatusIf).mockResolvedValue({
+        outcome: 'status_mismatch',
+        currentStatus: 'awaiting_approval',
+      });
 
       const wrapped = registerActionHandler(factory, { actionRepository: mockRepository, logger: silentLogger });
       const event = createEvent();
@@ -68,12 +71,28 @@ describe('registerActionHandler', () => {
       const result = await wrapped.execute(event);
 
       expect(result).toEqual(ok({ actionId: 'action-123' }));
-      expect(mockHandler.execute).not.toHaveBeenCalled(); // Handler never called
+      expect(mockHandler.execute).not.toHaveBeenCalled();
     });
 
-    it('returns error when updateStatusIf throws', async () => {
+    it('returns success when action not found (may have been deleted)', async () => {
       const factory = (): ActionHandler => mockHandler;
-      vi.mocked(mockRepository.updateStatusIf).mockRejectedValue(new Error('Firestore error'));
+      vi.mocked(mockRepository.updateStatusIf).mockResolvedValue({ outcome: 'not_found' });
+
+      const wrapped = registerActionHandler(factory, { actionRepository: mockRepository, logger: silentLogger });
+      const event = createEvent();
+
+      const result = await wrapped.execute(event);
+
+      expect(result).toEqual(ok({ actionId: 'action-123' }));
+      expect(mockHandler.execute).not.toHaveBeenCalled();
+    });
+
+    it('returns error when updateStatusIf returns error outcome', async () => {
+      const factory = (): ActionHandler => mockHandler;
+      vi.mocked(mockRepository.updateStatusIf).mockResolvedValue({
+        outcome: 'error',
+        error: new Error('Firestore error'),
+      });
 
       const wrapped = registerActionHandler(factory, { actionRepository: mockRepository, logger: silentLogger });
       const event = createEvent();
@@ -81,14 +100,14 @@ describe('registerActionHandler', () => {
       const result = await wrapped.execute(event);
 
       expect(result).toEqual(err(new Error('Failed to update action status')));
-      expect(mockHandler.execute).not.toHaveBeenCalled(); // Handler never called
+      expect(mockHandler.execute).not.toHaveBeenCalled();
     });
   });
 
   describe('normal execution flow', () => {
-    it('executes handler when updateStatusIf returns true', async () => {
+    it('executes handler when updateStatusIf returns updated', async () => {
       const factory = (): ActionHandler => mockHandler;
-      vi.mocked(mockRepository.updateStatusIf).mockResolvedValue(true);
+      vi.mocked(mockRepository.updateStatusIf).mockResolvedValue({ outcome: 'updated' });
 
       const wrapped = registerActionHandler(factory, { actionRepository: mockRepository, logger: silentLogger });
       const event = createEvent();
@@ -104,7 +123,7 @@ describe('registerActionHandler', () => {
       const factory = (): ActionHandler => ({
         execute: vi.fn().mockResolvedValue(err(handlerError)),
       });
-      vi.mocked(mockRepository.updateStatusIf).mockResolvedValue(true);
+      vi.mocked(mockRepository.updateStatusIf).mockResolvedValue({ outcome: 'updated' });
 
       const wrapped = registerActionHandler(factory, { actionRepository: mockRepository, logger: silentLogger });
       const event = createEvent();

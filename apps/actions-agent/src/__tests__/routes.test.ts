@@ -157,6 +157,18 @@ describe('Research Agent Routes', () => {
     describe('Pub/Sub OIDC authentication', () => {
       it('accepts Pub/Sub push with from: noreply@google.com header (no x-internal-auth)', async () => {
         fakeResearchClient.setNextResearchId('research-123');
+        await fakeActionRepository.save({
+          id: 'action-123',
+          userId: 'user-456',
+          commandId: 'cmd-789',
+          type: 'research',
+          title: 'Test Research',
+          status: 'pending',
+          confidence: 0.9,
+          payload: { prompt: 'What is AI?', confidence: 0.9 },
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        });
 
         const response = await app.inject({
           method: 'POST',
@@ -1771,6 +1783,21 @@ describe('Research Agent Routes', () => {
       };
     };
 
+    const saveDefaultAction = async (): Promise<void> => {
+      await fakeActionRepository.save({
+        id: 'action-123',
+        userId: 'user-456',
+        commandId: 'cmd-789',
+        type: 'research',
+        title: 'Test Research',
+        status: 'pending',
+        confidence: 0.95,
+        payload: { prompt: 'What is AI?', confidence: 0.95 },
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
+    };
+
     it('returns 401 without auth', async () => {
       const response = await app.inject({
         method: 'POST',
@@ -1782,6 +1809,7 @@ describe('Research Agent Routes', () => {
     });
 
     it('accepts Pub/Sub auth (from: noreply@google.com)', async () => {
+      await saveDefaultAction();
       const response = await app.inject({
         method: 'POST',
         url: '/internal/actions/process',
@@ -1795,6 +1823,7 @@ describe('Research Agent Routes', () => {
     });
 
     it('accepts internal auth header', async () => {
+      await saveDefaultAction();
       const response = await app.inject({
         method: 'POST',
         url: '/internal/actions/process',
@@ -1808,6 +1837,7 @@ describe('Research Agent Routes', () => {
     });
 
     it('processes research action type with handler', async () => {
+      await saveDefaultAction();
       const response = await app.inject({
         method: 'POST',
         url: '/internal/actions/process',

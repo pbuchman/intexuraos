@@ -1,6 +1,10 @@
 import { getFirestore } from '@intexuraos/infra-firestore';
 import type { Action } from '../../domain/models/action.js';
-import type { ActionRepository, ListByUserIdOptions } from '../../domain/ports/actionRepository.js';
+import type {
+  ActionRepository,
+  ListByUserIdOptions,
+  UpdateStatusIfResult,
+} from '../../domain/ports/actionRepository.js';
 import type { Logger } from 'pino';
 
 const COLLECTION = 'actions';
@@ -116,25 +120,22 @@ export function createFirestoreActionRepository(deps?: CreateFirestoreActionRepo
       actionId: string,
       newStatus: Action['status'],
       expectedStatus: Action['status']
-    ): Promise<boolean> {
+    ): Promise<UpdateStatusIfResult> {
       const db = getFirestore();
       const docRef = db.collection(COLLECTION).doc(actionId);
 
-      // Use Firestore transaction to atomically check and update status
-      // This prevents race conditions when multiple PubSub messages arrive
       try {
         const result = await db.runTransaction(async (transaction) => {
           const snapshot = await transaction.get(docRef);
 
           if (!snapshot.exists) {
-            return false;
+            return { outcome: 'not_found' } as const;
           }
 
           const currentStatus = snapshot.get('status') as string;
 
-          // Only update if current status matches expected
           if (currentStatus !== expectedStatus) {
-            return false;
+            return { outcome: 'status_mismatch', currentStatus } as const;
           }
 
           transaction.update(docRef, {
@@ -142,20 +143,18 @@ export function createFirestoreActionRepository(deps?: CreateFirestoreActionRepo
             updatedAt: new Date().toISOString(),
           });
 
-          return true;
+          return { outcome: 'updated' } as const;
         });
 
         return result;
       } catch (error) {
-        // Log Firestore transaction errors for debugging
-        // Returning false allows caller to handle gracefully (idempotent operation)
         if (hasLogger) {
           logger.error(
             { actionId, newStatus, expectedStatus, error },
             'Firestore transaction failed in updateStatusIf'
           );
         }
-        return false;
+        return { outcome: 'error', error: error instanceof Error ? error : new Error(String(error)) };
       }
     },
   };

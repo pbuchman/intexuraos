@@ -49,13 +49,13 @@ export function createHandleCalendarActionUseCase(
       });
 
       if (!publishResult.ok) {
-        logger.error(
+        logger.warn(
           {
             actionId: event.actionId,
             userId: event.userId,
             error: publishResult.error.message,
           },
-          'Failed to publish WhatsApp message (non-fatal)'
+          'Failed to publish WhatsApp message (non-fatal, best-effort notification)'
         );
       } else {
         logger.info({ actionId: event.actionId }, 'WhatsApp approval notification sent for calendar');

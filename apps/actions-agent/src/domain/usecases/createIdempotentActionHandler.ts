@@ -26,32 +26,37 @@ function createIdempotentActionHandler(
 
   return {
     async execute(event: ActionCreatedEvent): Promise<Result<{ actionId: string }>> {
-      // Atomically claim this action for processing
-      let updated: boolean;
-      try {
-        updated = await actionRepository.updateStatusIf(
-          event.actionId,
-          'awaiting_approval',
-          'pending'
-        );
-      } catch (error) {
-        logger.error(
-          { actionId: event.actionId, error: getErrorMessage(error) },
-          'Failed to update action status'
-        );
-        return err(new Error('Failed to update action status'));
-      }
+      const updateResult = await actionRepository.updateStatusIf(
+        event.actionId,
+        'awaiting_approval',
+        'pending'
+      );
 
-      if (!updated) {
-        logger.info(
-          { actionId: event.actionId },
-          'Action already processed by another handler (idempotent)'
-        );
-        return ok({ actionId: event.actionId });
-      }
+      switch (updateResult.outcome) {
+        case 'updated':
+          return await handler.execute(event);
 
-      // Proceed with handler execution
-      return await handler.execute(event);
+        case 'status_mismatch':
+          logger.info(
+            { actionId: event.actionId, currentStatus: updateResult.currentStatus },
+            'Action already processed by another handler (idempotent)'
+          );
+          return ok({ actionId: event.actionId });
+
+        case 'not_found':
+          logger.warn(
+            { actionId: event.actionId },
+            'Action not found (may have been deleted between creation and handling)'
+          );
+          return ok({ actionId: event.actionId });
+
+        case 'error':
+          logger.error(
+            { actionId: event.actionId, error: getErrorMessage(updateResult.error) },
+            'Failed to update action status'
+          );
+          return err(new Error('Failed to update action status'));
+      }
     },
   };
 }

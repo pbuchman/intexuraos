@@ -34,11 +34,11 @@ apps/<service-name>/
 
 ESLint enforces Clean Architecture boundaries within each app:
 
-| Layer    | Can Import From           | Cannot Import From |
-| -------- | ------------------------- | ------------------ |
-| Routes   | Domain, packages          | Infra              |
-| Domain   | packages (common-\*, llm-\*) | Infra              |
-| Infra    | Domain, packages          | Routes             |
+| Layer  | Can Import From              | Cannot Import From |
+| ------ | ---------------------------- | ------------------ |
+| Routes | Domain, packages             | Infra              |
+| Domain | packages (common-\*, llm-\*) | Infra              |
+| Infra  | Domain, packages             | Routes             |
 
 **ESLint rules location:** `eslint.config.js` (search for "CRITICAL #1", "CRITICAL #2", "CRITICAL #3")
 
