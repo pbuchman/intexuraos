@@ -724,7 +724,12 @@ export class FakeMessageSender implements WhatsAppMessageSender {
 export class FakeSpeechTranscriptionPort implements SpeechTranscriptionPort {
   private jobs = new Map<
     string,
-    { status: 'running' | 'done' | 'rejected'; transcript?: string; error?: string }
+    {
+      status: 'running' | 'done' | 'rejected';
+      transcript?: string;
+      summary?: string;
+      error?: string;
+    }
   >();
   private jobCounter = 0;
   private shouldFail = false;
@@ -767,11 +772,14 @@ export class FakeSpeechTranscriptionPort implements SpeechTranscriptionPort {
   /**
    * Set job completion result (for testing polling).
    */
-  setJobResult(jobId: string, transcript: string): void {
+  setJobResult(jobId: string, transcript: string, summary?: string): void {
     const job = this.jobs.get(jobId);
     if (job !== undefined) {
       job.status = 'done';
       job.transcript = transcript;
+      if (summary !== undefined) {
+        job.summary = summary;
+      }
     }
   }
 
@@ -918,11 +926,15 @@ export class FakeSpeechTranscriptionPort implements SpeechTranscriptionPort {
     return Promise.resolve(
       ok({
         text: job.transcript,
+        ...(job.summary !== undefined && { summary: job.summary }),
         apiCall: {
           timestamp: new Date().toISOString(),
           operation: 'fetch_result',
           success: true,
-          response: { transcriptLength: job.transcript.length },
+          response: {
+            transcriptLength: job.transcript.length,
+            hasSummary: job.summary !== undefined,
+          },
         },
       })
     );
@@ -930,7 +942,12 @@ export class FakeSpeechTranscriptionPort implements SpeechTranscriptionPort {
 
   getJobs(): Map<
     string,
-    { status: 'running' | 'done' | 'rejected'; transcript?: string; error?: string }
+    {
+      status: 'running' | 'done' | 'rejected';
+      transcript?: string;
+      summary?: string;
+      error?: string;
+    }
   > {
     return this.jobs;
   }
