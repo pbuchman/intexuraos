@@ -959,10 +959,10 @@ export interface LinearTeam {
  */
 export interface LinearConnectionStatus {
   connected: boolean;
-  team?: LinearTeam;
-  apiKey?: string;
-  createdAt: string | null;
-  updatedAt: string | null;
+  teamId: string | null;
+  teamName: string | null;
+  createdAt: string;
+  updatedAt: string;
 }
 
 /**
@@ -982,31 +982,4 @@ export interface GroupedIssues {
 export interface ListIssuesResponse {
   issues: GroupedIssues;
   total: number;
-}
-
-/**
- * Validate Linear API key response
- */
-export interface ValidateLinearApiKeyResponse {
-  valid: boolean;
-  teams: LinearTeam[];
-  error?: string;
-}
-
-/**
- * Save Linear connection request
- */
-export interface SaveLinearConnectionRequest {
-  apiKey: string;
-  teamId: string;
-}
-
-/**
- * Save Linear connection response
- */
-export interface SaveLinearConnectionResponse {
-  connected: boolean;
-  team: LinearTeam;
-  createdAt: string;
-  updatedAt: string;
 }

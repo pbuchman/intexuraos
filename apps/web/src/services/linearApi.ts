@@ -1,13 +1,20 @@
 import { config } from '@/config';
-import { apiRequest } from './apiClient.js';
+import { apiRequest, ApiError } from './apiClient.js';
 import type {
   LinearConnectionStatus,
   ListIssuesResponse,
   LinearTeam,
-  ValidateLinearApiKeyResponse,
-  SaveLinearConnectionRequest,
-  SaveLinearConnectionResponse,
 } from '@/types';
+
+interface ValidateResponse {
+  teams: LinearTeam[];
+}
+
+interface SaveConnectionRequest {
+  apiKey: string;
+  teamId: string;
+  teamName: string;
+}
 
 /**
  * Get the current Linear connection status
@@ -21,8 +28,11 @@ export async function getLinearConnection(
       '/linear/connection',
       accessToken
     );
-  } catch {
-    return null;
+  } catch (e) {
+    if (e instanceof ApiError && e.status === 403) {
+      return null;
+    }
+    throw e;
   }
 }
 
@@ -33,9 +43,9 @@ export async function validateLinearApiKey(
   accessToken: string,
   apiKey: string
 ): Promise<LinearTeam[]> {
-  const response = await apiRequest<ValidateLinearApiKeyResponse>(
+  const response = await apiRequest<ValidateResponse>(
     config.linearAgentUrl,
-    '/linear/validate-api-key',
+    '/linear/connection/validate',
     accessToken,
     {
       method: 'POST',
@@ -50,9 +60,9 @@ export async function validateLinearApiKey(
  */
 export async function saveLinearConnection(
   accessToken: string,
-  request: SaveLinearConnectionRequest
+  request: SaveConnectionRequest
 ): Promise<LinearConnectionStatus> {
-  return await apiRequest<SaveLinearConnectionResponse>(
+  return await apiRequest<LinearConnectionStatus>(
     config.linearAgentUrl,
     '/linear/connection',
     accessToken,
@@ -93,3 +103,5 @@ export async function listLinearIssues(
     accessToken
   );
 }
+
+export type { ValidateResponse, SaveConnectionRequest };
