@@ -23,7 +23,7 @@ interface BasicLogger {
 export interface MobileNotificationsClientConfig {
   baseUrl: string;
   internalAuthToken: string;
-  logger?: BasicLogger;
+  logger: BasicLogger;
 }
 
 /**
@@ -67,7 +67,7 @@ export function createMobileNotificationsClient(
         }
 
         const url = `${config.baseUrl}/internal/mobile-notifications/query`;
-        logger?.info(
+        logger.info(
           { url, userId, filter: body.filter, limit: body.limit },
           'Querying mobile-notifications-service'
         );
@@ -83,7 +83,7 @@ export function createMobileNotificationsClient(
 
         if (!response.ok) {
           const errorText = await response.text().catch(() => 'Unable to read response body');
-          logger?.error(
+          logger.error(
             { url, status: response.status, statusText: response.statusText, errorText },
             'Mobile-notifications-service returned error status'
           );
@@ -99,21 +99,21 @@ export function createMobileNotificationsClient(
         };
 
         if (!data.success || data.data === undefined) {
-          logger?.error(
+          logger.error(
             { url, error: data.error, success: data.success },
             'Mobile-notifications-service returned error response'
           );
           return err(data.error ?? 'Unknown error from mobile-notifications-service');
         }
 
-        logger?.info(
+        logger.info(
           { url, notificationCount: data.data.notifications.length },
           'Successfully queried mobile-notifications-service'
         );
         return ok(data.data.notifications);
       } catch (error) {
         const errorMessage = getErrorMessage(error, 'Failed to connect to mobile-notifications-service');
-        logger?.error(
+        logger.error(
           { baseUrl: config.baseUrl, error: errorMessage },
           'Failed to connect to mobile-notifications-service'
         );
