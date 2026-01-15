@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Edit2, FileText, Plus, Tag, Trash2, X } from 'lucide-react';
-import { Button, Card, Input, Layout } from '@/components';
+import { Button, Card, Input, Layout, RefreshIndicator } from '@/components';
 import { useNotes } from '@/hooks';
 import type { Note, UpdateNoteRequest } from '@/types';
 
@@ -485,7 +485,7 @@ function NoteRow({ note, onOpen, onDelete }: NoteRowProps): React.JSX.Element {
 }
 
 export function NotesListPage(): React.JSX.Element {
-  const { notes, loading, error, createNote, updateNote, deleteNote } = useNotes();
+  const { notes, loading, refreshing, error, createNote, updateNote, deleteNote } = useNotes();
   const [selectedNote, setSelectedNote] = useState<Note | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
@@ -529,6 +529,8 @@ export function NotesListPage(): React.JSX.Element {
           New Note
         </Button>
       </div>
+
+      <RefreshIndicator show={refreshing} />
 
       {error !== null && error !== '' ? (
         <div className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 text-red-700">

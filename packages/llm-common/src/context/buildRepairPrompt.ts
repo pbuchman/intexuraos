@@ -82,7 +82,11 @@ Output the corrected JSON:`;
  * Build a repair prompt for synthesis context inference.
  */
 export function buildSynthesisContextRepairPrompt(
-  params: { originalPrompt: string; reports: { model: string; content: string }[]; additionalSources: { content: string; label?: string }[] },
+  params: {
+    originalPrompt: string;
+    reports: { model: string; content: string }[];
+    additionalSources: { content: string; label?: string }[];
+  },
   invalidResponse: string,
   errorMessage: string
 ): string {

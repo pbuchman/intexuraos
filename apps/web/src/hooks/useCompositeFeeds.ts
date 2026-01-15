@@ -21,8 +21,9 @@ import type {
 interface UseCompositeFeedsResult {
   compositeFeeds: CompositeFeed[];
   loading: boolean;
+  refreshing: boolean;
   error: string | null;
-  refresh: () => Promise<void>;
+  refresh: (showLoading?: boolean) => Promise<void>;
   createCompositeFeed: (request: CreateCompositeFeedRequest) => Promise<CompositeFeed>;
   deleteCompositeFeed: (id: string) => Promise<void>;
 }
@@ -31,22 +32,36 @@ export function useCompositeFeeds(): UseCompositeFeedsResult {
   const { getAccessToken } = useAuth();
   const [compositeFeeds, setCompositeFeeds] = useState<CompositeFeed[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const refresh = useCallback(async (): Promise<void> => {
-    setLoading(true);
-    setError(null);
+  const refresh = useCallback(
+    async (showLoading?: boolean): Promise<void> => {
+      const shouldShowLoading = showLoading !== false;
 
-    try {
-      const token = await getAccessToken();
-      const data = await listCompositeFeedsApi(token);
-      setCompositeFeeds(data);
-    } catch (err) {
-      setError(getErrorMessage(err, 'Failed to load composite feeds'));
-    } finally {
-      setLoading(false);
-    }
-  }, [getAccessToken]);
+      if (shouldShowLoading) {
+        setLoading(true);
+      } else {
+        setRefreshing(true);
+      }
+      setError(null);
+
+      try {
+        const token = await getAccessToken();
+        const data = await listCompositeFeedsApi(token);
+        setCompositeFeeds(data);
+      } catch (err) {
+        setError(getErrorMessage(err, 'Failed to load composite feeds'));
+      } finally {
+        if (shouldShowLoading) {
+          setLoading(false);
+        } else {
+          setRefreshing(false);
+        }
+      }
+    },
+    [getAccessToken]
+  );
 
   useEffect(() => {
     void refresh();
@@ -74,6 +89,7 @@ export function useCompositeFeeds(): UseCompositeFeedsResult {
   return {
     compositeFeeds,
     loading,
+    refreshing,
     error,
     refresh,
     createCompositeFeed,
@@ -84,8 +100,9 @@ export function useCompositeFeeds(): UseCompositeFeedsResult {
 interface UseCompositeFeedResult {
   compositeFeed: CompositeFeed | null;
   loading: boolean;
+  refreshing: boolean;
   error: string | null;
-  refresh: () => Promise<void>;
+  refresh: (showLoading?: boolean) => Promise<void>;
   updateCompositeFeed: (request: UpdateCompositeFeedRequest) => Promise<CompositeFeed>;
   getFeedData: () => Promise<CompositeFeedData>;
   feedData: CompositeFeedData | null;
@@ -99,31 +116,45 @@ export function useCompositeFeed(id: string): UseCompositeFeedResult {
   const { getAccessToken } = useAuth();
   const [compositeFeed, setCompositeFeed] = useState<CompositeFeed | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [feedData, setFeedData] = useState<CompositeFeedData | null>(null);
   const [feedDataLoading, setFeedDataLoading] = useState(false);
   const [snapshot, setSnapshot] = useState<CompositeFeedSnapshot | null>(null);
   const [snapshotLoading, setSnapshotLoading] = useState(false);
 
-  const refresh = useCallback(async (): Promise<void> => {
-    if (id === '') {
-      setLoading(false);
-      return;
-    }
+  const refresh = useCallback(
+    async (showLoading?: boolean): Promise<void> => {
+      if (id === '') {
+        setLoading(false);
+        return;
+      }
 
-    setLoading(true);
-    setError(null);
+      const shouldShowLoading = showLoading !== false;
 
-    try {
-      const token = await getAccessToken();
-      const data = await getCompositeFeedApi(token, id);
-      setCompositeFeed(data);
-    } catch (err) {
-      setError(getErrorMessage(err, 'Failed to load composite feed'));
-    } finally {
-      setLoading(false);
-    }
-  }, [id, getAccessToken]);
+      if (shouldShowLoading) {
+        setLoading(true);
+      } else {
+        setRefreshing(true);
+      }
+      setError(null);
+
+      try {
+        const token = await getAccessToken();
+        const data = await getCompositeFeedApi(token, id);
+        setCompositeFeed(data);
+      } catch (err) {
+        setError(getErrorMessage(err, 'Failed to load composite feed'));
+      } finally {
+        if (shouldShowLoading) {
+          setLoading(false);
+        } else {
+          setRefreshing(false);
+        }
+      }
+    },
+    [id, getAccessToken]
+  );
 
   useEffect(() => {
     void refresh();
@@ -181,6 +212,7 @@ export function useCompositeFeed(id: string): UseCompositeFeedResult {
   return {
     compositeFeed,
     loading,
+    refreshing,
     error,
     refresh,
     updateCompositeFeed,

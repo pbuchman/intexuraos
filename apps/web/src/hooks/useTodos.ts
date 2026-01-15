@@ -25,10 +25,11 @@ import type {
 interface UseTodosResult {
   todos: Todo[];
   loading: boolean;
+  refreshing: boolean;
   error: string | null;
   filters: ListTodosFilters;
   setFilters: (filters: ListTodosFilters) => void;
-  refresh: () => Promise<void>;
+  refresh: (showLoading?: boolean) => Promise<void>;
   createTodo: (request: CreateTodoRequest) => Promise<Todo>;
   updateTodo: (id: string, request: UpdateTodoRequest) => Promise<Todo>;
   deleteTodo: (id: string) => Promise<void>;
@@ -44,23 +45,37 @@ export function useTodos(): UseTodosResult {
   const { getAccessToken } = useAuth();
   const [todos, setTodos] = useState<Todo[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [filters, setFilters] = useState<ListTodosFilters>({});
 
-  const refresh = useCallback(async (): Promise<void> => {
-    setLoading(true);
-    setError(null);
+  const refresh = useCallback(
+    async (showLoading?: boolean): Promise<void> => {
+      const shouldShowLoading = showLoading !== false;
 
-    try {
-      const token = await getAccessToken();
-      const data = await listTodosApi(token, filters);
-      setTodos(data);
-    } catch (err) {
-      setError(getErrorMessage(err, 'Failed to load todos'));
-    } finally {
-      setLoading(false);
-    }
-  }, [getAccessToken, filters]);
+      if (shouldShowLoading) {
+        setLoading(true);
+      } else {
+        setRefreshing(true);
+      }
+      setError(null);
+
+      try {
+        const token = await getAccessToken();
+        const data = await listTodosApi(token, filters);
+        setTodos(data);
+      } catch (err) {
+        setError(getErrorMessage(err, 'Failed to load todos'));
+      } finally {
+        if (shouldShowLoading) {
+          setLoading(false);
+        } else {
+          setRefreshing(false);
+        }
+      }
+    },
+    [getAccessToken, filters]
+  );
 
   useEffect(() => {
     void refresh();
@@ -158,6 +173,7 @@ export function useTodos(): UseTodosResult {
   return {
     todos,
     loading,
+    refreshing,
     error,
     filters,
     setFilters,

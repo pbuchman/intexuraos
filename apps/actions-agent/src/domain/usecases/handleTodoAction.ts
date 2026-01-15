@@ -1,5 +1,5 @@
 import { ok, err, type Result, getErrorMessage } from '@intexuraos/common-core';
-import type { ActionServiceClient } from '../ports/actionServiceClient.js';
+import type { ActionRepository } from '../ports/actionRepository.js';
 import type { WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
 import type { ActionCreatedEvent } from '../models/actionEvent.js';
 import type { Logger } from 'pino';
@@ -7,7 +7,7 @@ import type { ExecuteTodoActionUseCase } from './executeTodoAction.js';
 import { shouldAutoExecute } from './shouldAutoExecute.js';
 
 export interface HandleTodoActionDeps {
-  actionServiceClient: ActionServiceClient;
+  actionRepository: ActionRepository;
   whatsappPublisher: WhatsAppSendPublisher;
   webAppUrl: string;
   logger: Logger;
@@ -19,7 +19,7 @@ export interface HandleTodoActionUseCase {
 }
 
 export function createHandleTodoActionUseCase(deps: HandleTodoActionDeps): HandleTodoActionUseCase {
-  const { actionServiceClient, whatsappPublisher, webAppUrl, logger, executeTodoAction } = deps;
+  const { actionRepository: _actionRepository, whatsappPublisher, webAppUrl, logger, executeTodoAction } = deps;
 
   return {
     async execute(event: ActionCreatedEvent): Promise<Result<{ actionId: string }>> {
@@ -33,26 +33,6 @@ export function createHandleTodoActionUseCase(deps: HandleTodoActionDeps): Handl
         },
         'Processing todo action'
       );
-
-      const actionResult = await actionServiceClient.getAction(event.actionId);
-      if (!actionResult.ok) {
-        logger.warn({ actionId: event.actionId }, 'Action not found, may have been deleted');
-        return ok({ actionId: event.actionId });
-      }
-
-      const action = actionResult.value;
-      if (action === null) {
-        logger.warn({ actionId: event.actionId }, 'Action not found, may have been deleted');
-        return ok({ actionId: event.actionId });
-      }
-
-      if (action.status !== 'pending') {
-        logger.info(
-          { actionId: event.actionId, currentStatus: action.status },
-          'Action already processed, skipping (idempotent)'
-        );
-        return ok({ actionId: event.actionId });
-      }
 
       if (shouldAutoExecute(event) && executeTodoAction !== undefined) {
         logger.info({ actionId: event.actionId }, 'Auto-executing todo action');
@@ -71,26 +51,7 @@ export function createHandleTodoActionUseCase(deps: HandleTodoActionDeps): Handl
         return ok({ actionId: event.actionId });
       }
 
-      logger.info({ actionId: event.actionId }, 'Setting todo action to awaiting_approval');
-
-      const result = await actionServiceClient.updateActionStatus(
-        event.actionId,
-        'awaiting_approval'
-      );
-
-      if (!result.ok) {
-        logger.error(
-          {
-            actionId: event.actionId,
-            error: getErrorMessage(result.error),
-          },
-          'Failed to set todo action to awaiting_approval'
-        );
-        return err(new Error(`Failed to update action status: ${getErrorMessage(result.error)}`));
-      }
-
-      logger.info({ actionId: event.actionId }, 'Todo action set to awaiting_approval');
-
+      // Idempotency check and status update handled by registerActionHandler decorator
       const actionLink = `${webAppUrl}/#/inbox?action=${event.actionId}`;
       const message = `New todo ready for approval: "${event.title}". Review it here: ${actionLink}`;
 

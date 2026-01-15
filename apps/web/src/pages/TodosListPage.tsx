@@ -16,7 +16,7 @@ import {
   Trash2,
   X,
 } from 'lucide-react';
-import { Button, Card, Input, Layout } from '@/components';
+import { Button, Card, Input, Layout, RefreshIndicator } from '@/components';
 import { useTodos } from '@/hooks';
 import type {
   CreateTodoItemRequest,
@@ -1009,6 +1009,7 @@ export function TodosListPage(): React.JSX.Element {
   const {
     todos,
     loading,
+    refreshing,
     error,
     createTodo,
     updateTodo,
@@ -1063,6 +1064,8 @@ export function TodosListPage(): React.JSX.Element {
           New Todo
         </Button>
       </div>
+
+      <RefreshIndicator show={refreshing} />
 
       {error !== null && error !== '' ? (
         <div className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 text-red-700">
