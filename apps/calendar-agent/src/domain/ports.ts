@@ -76,3 +76,36 @@ export interface FailedEventRepository {
   get(id: string): Promise<Result<FailedEvent | null, CalendarError>>;
   delete(id: string): Promise<Result<void, CalendarError>>;
 }
+
+export interface ExtractionError {
+  code: 'NO_API_KEY' | 'USER_SERVICE_ERROR' | 'GENERATION_ERROR' | 'INVALID_RESPONSE';
+  message: string;
+  details?: {
+    llmErrorCode?: string;
+    parseError?: string;
+    rawResponsePreview?: string;
+    userServiceError?: string;
+    wasWrappedInMarkdown?: boolean;
+    originalLength?: number;
+    cleanedLength?: number;
+  };
+}
+
+export interface ExtractedCalendarEvent {
+  summary: string;
+  start: string | null;
+  end: string | null;
+  location: string | null;
+  description: string | null;
+  valid: boolean;
+  error: string | null;
+  reasoning: string;
+}
+
+export interface CalendarActionExtractionService {
+  extractEvent(
+    userId: string,
+    text: string,
+    currentDate: string
+  ): Promise<Result<ExtractedCalendarEvent, ExtractionError>>;
+}

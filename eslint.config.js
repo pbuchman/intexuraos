@@ -603,6 +603,53 @@ export default tseslint.config(
       ],
     },
   },
+  // CRITICAL #3: Domain layer must not import from infra layer (Clean Architecture)
+  // Dependency direction: Routes → Domain ← Infra (domain is the core, infra implements domain ports)
+  {
+    files: ['apps/*/src/domain/**/*.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: [
+                '../infra/*',
+                '../infra/**',
+                '../../infra/*',
+                '../../infra/**',
+                '../../../infra/*',
+                '../../../infra/**',
+              ],
+              message:
+                'Domain layer must not import from infra layer. Define port interfaces in domain and implement them in infra.',
+            },
+            {
+              group: ['@intexuraos/*/src/*', '@intexuraos/*/src/**'],
+              message:
+                'Deep imports into package internals are forbidden. Import from the package entrypoint instead.',
+            },
+            {
+              group: ['@intexuraos/*-service', '@intexuraos/*-service/**'],
+              message: 'Cross-app imports are forbidden. Apps cannot import from other apps.',
+            },
+            {
+              group: ['@intexuraos/*-agent', '@intexuraos/*-agent/**'],
+              message: 'Cross-app imports are forbidden. Apps cannot import from other apps.',
+            },
+            {
+              group: ['@intexuraos/web', '@intexuraos/web/**'],
+              message: 'Cross-app imports are forbidden. Apps cannot import from other apps.',
+            },
+            {
+              group: ['@intexuraos/api-docs-hub', '@intexuraos/api-docs-hub/**'],
+              message: 'Cross-app imports are forbidden. Apps cannot import from other apps.',
+            },
+          ],
+        },
+      ],
+    },
+  },
   // Rule 1.2: Test isolation - tests must not make real network calls
   {
     files: ['**/__tests__/**/*.ts', '**/*.test.ts', '**/*.spec.ts'],

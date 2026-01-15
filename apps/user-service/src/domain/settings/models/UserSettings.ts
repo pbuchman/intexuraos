@@ -4,7 +4,7 @@
  */
 
 import type { LlmProvider, LLMModel } from '@intexuraos/llm-contract';
-import type { EncryptedValue } from '../../../infra/encryption.js';
+import type { EncryptedValue } from '../ports/Encryptor.js';
 
 /**
  * LLM provider identifiers.

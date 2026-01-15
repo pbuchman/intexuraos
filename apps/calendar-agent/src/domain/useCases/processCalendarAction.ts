@@ -11,11 +11,12 @@ import { err, ok, type Result } from '@intexuraos/common-core';
 import type { Logger } from '@intexuraos/common-core';
 import type { CalendarError } from '../errors.js';
 import type { CreateEventInput } from '../models.js';
-import type { GoogleCalendarClient, FailedEventRepository } from '../ports.js';
 import type {
+  GoogleCalendarClient,
+  FailedEventRepository,
   CalendarActionExtractionService,
   ExtractionError,
-} from '../../infra/gemini/calendarActionExtractionService.js';
+} from '../ports.js';
 
 export interface ProcessCalendarActionDeps {
   googleCalendarClient: GoogleCalendarClient;

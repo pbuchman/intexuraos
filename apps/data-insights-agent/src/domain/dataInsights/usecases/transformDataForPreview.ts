@@ -7,7 +7,7 @@ import type { Result } from '@intexuraos/common-core';
 import { err, ok } from '@intexuraos/common-core';
 import type { CompositeFeedRepository } from '../../compositeFeed/index.js';
 import type { SnapshotRepository } from '../../snapshot/index.js';
-import type { DataTransformService } from '../../../infra/gemini/dataTransformService.js';
+import type { DataTransformService } from '../ports.js';
 
 export interface TransformDataForPreviewDeps {
   compositeFeedRepository: CompositeFeedRepository;

@@ -1,6 +1,6 @@
 import type { Logger } from 'pino';
 import type { ActionRepository } from '../ports/actionRepository.js';
-import type { ActionEventPublisher } from '../../infra/pubsub/actionEventPublisher.js';
+import type { ActionEventPublisher } from '../ports/actionEventPublisher.js';
 import type { ActionCreatedEvent } from '../models/actionEvent.js';
 import { getHandlerForType, type ActionHandlerRegistry } from './actionHandlerRegistry.js';
 

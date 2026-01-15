@@ -2,11 +2,10 @@ import type { Result } from '@intexuraos/common-core';
 import type { Logger } from 'pino';
 import { BasePubSubPublisher, type PublishError } from '@intexuraos/infra-pubsub';
 import type { ActionCreatedEvent } from '../../domain/models/actionEvent.js';
+import type { ActionEventPublisher } from '../../domain/ports/actionEventPublisher.js';
 import { getActionsQueueTopic } from './config.js';
 
-export interface ActionEventPublisher {
-  publishActionCreated(event: ActionCreatedEvent): Promise<Result<void, PublishError>>;
-}
+export type { ActionEventPublisher };
 
 export interface ActionEventPublisherConfig {
   projectId: string;

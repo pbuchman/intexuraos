@@ -2,43 +2,19 @@ import type { Result } from '@intexuraos/common-core';
 import { err, getErrorMessage, ok } from '@intexuraos/common-core';
 import { calendarActionExtractionPrompt } from '@intexuraos/llm-common';
 import type { LlmGenerateClient } from '@intexuraos/llm-factory';
+import type { LlmUserServiceClient } from '../user/llmUserServiceClient.js';
 import type {
-  LlmUserServiceClient,
-} from '../user/llmUserServiceClient.js';
+  CalendarActionExtractionService,
+  ExtractedCalendarEvent,
+  ExtractionError,
+} from '../../domain/ports.js';
 import pino from 'pino';
+
+export type { CalendarActionExtractionService, ExtractedCalendarEvent, ExtractionError };
 
 const MAX_DESCRIPTION_LENGTH = 1000;
 
 type MinimalLogger = pino.Logger;
-
-export interface ExtractionError {
-  code: 'NO_API_KEY' | 'USER_SERVICE_ERROR' | 'GENERATION_ERROR' | 'INVALID_RESPONSE';
-  message: string;
-  details?: {
-    llmErrorCode?: string;
-    parseError?: string;
-    rawResponsePreview?: string;
-    userServiceError?: string;
-    wasWrappedInMarkdown?: boolean;
-    originalLength?: number;
-    cleanedLength?: number;
-  };
-}
-
-export interface ExtractedCalendarEvent {
-  summary: string;
-  start: string | null;
-  end: string | null;
-  location: string | null;
-  description: string | null;
-  valid: boolean;
-  error: string | null;
-  reasoning: string;
-}
-
-export interface CalendarActionExtractionService {
-  extractEvent(userId: string, text: string, currentDate: string): Promise<Result<ExtractedCalendarEvent, ExtractionError>>;
-}
 
 export function createCalendarActionExtractionService(
   llmUserServiceClient: LlmUserServiceClient,
