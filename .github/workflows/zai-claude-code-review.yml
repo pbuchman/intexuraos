@@ -1,4 +1,4 @@
-name: Claude Code Review
+name: Claude Code Review (Z.ai)
 
 on:
   pull_request:
