@@ -60,7 +60,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       const fetcher =
         timeoutMs !== undefined
           ? new OpenGraphFetcher({ timeoutMs }, request.log as unknown as Logger)
-          : (linkPreviewFetcher as OpenGraphFetcher);
+          : linkPreviewFetcher;
 
       const results: LinkPreviewResult[] = [];
       let successCount = 0;

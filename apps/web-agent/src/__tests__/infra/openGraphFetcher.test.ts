@@ -1,13 +1,17 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import nock from 'nock';
+import pino from 'pino';
+import type { Logger } from 'pino';
 import { OpenGraphFetcher } from '../../infra/linkpreview/openGraphFetcher.js';
+
+const silentLogger: Logger = pino({ level: 'silent' });
 
 describe('OpenGraphFetcher', () => {
   let fetcher: OpenGraphFetcher;
 
   beforeAll(() => {
     nock.disableNetConnect();
-    fetcher = new OpenGraphFetcher({ timeoutMs: 5000, maxResponseSize: 2097152 });
+    fetcher = new OpenGraphFetcher({ timeoutMs: 5000, maxResponseSize: 2097152 }, silentLogger);
   });
 
   afterAll(() => {
@@ -234,7 +238,7 @@ describe('OpenGraphFetcher', () => {
     it('returns TIMEOUT when request times out', async () => {
       vi.useFakeTimers();
 
-      const shortTimeoutFetcher = new OpenGraphFetcher({ timeoutMs: 100 });
+      const shortTimeoutFetcher = new OpenGraphFetcher({ timeoutMs: 100 }, silentLogger);
 
       nock('https://example.com').get('/slow').delay(200).reply(200, '<html></html>');
 
@@ -253,10 +257,13 @@ describe('OpenGraphFetcher', () => {
     });
 
     it('returns TOO_LARGE when streaming response exceeds limit (no content-length header)', async () => {
-      const smallFetcher = new OpenGraphFetcher({
-        timeoutMs: 5000,
-        maxResponseSize: 50,
-      });
+      const smallFetcher = new OpenGraphFetcher(
+        {
+          timeoutMs: 5000,
+          maxResponseSize: 50,
+        },
+        silentLogger
+      );
 
       const largeContent = '<html>'.padEnd(100, 'x') + '</html>';
       nock('https://example.com').get('/large-stream').reply(200, largeContent, {
@@ -327,9 +334,12 @@ describe('OpenGraphFetcher', () => {
           return [200, '<html lang="en"></html>'];
         });
 
-      const customFetcher = new OpenGraphFetcher({
-        userAgent: 'CustomBot/1.0',
-      });
+      const customFetcher = new OpenGraphFetcher(
+        {
+          userAgent: 'CustomBot/1.0',
+        },
+        silentLogger
+      );
 
       await customFetcher.fetchPreview('https://example.com/');
 
