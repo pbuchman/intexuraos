@@ -24,6 +24,9 @@ export type {
   UserServiceClient,
   OAuthTokenResult,
   FailedEventRepository,
+  CalendarActionExtractionService,
+  ExtractedCalendarEvent,
+  ExtractionError,
 } from './ports.js';
 
 export {
@@ -62,9 +65,3 @@ export {
   type ProcessCalendarActionDeps,
   type ProcessCalendarActionResponse,
 } from './useCases/processCalendarAction.js';
-
-export type {
-  CalendarActionExtractionService,
-  ExtractedCalendarEvent,
-  ExtractionError,
-} from '../infra/gemini/calendarActionExtractionService.js';

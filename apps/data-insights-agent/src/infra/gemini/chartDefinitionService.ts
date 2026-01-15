@@ -11,32 +11,12 @@ import {
   type ParsedChartDefinition,
 } from '@intexuraos/llm-common';
 import type { UserServiceClient } from '../user/userServiceClient.js';
+import type {
+  ChartDefinitionService,
+  ChartDefinitionError,
+} from '../../domain/dataInsights/ports.js';
 
-/**
- * Error from chart definition operations.
- */
-export interface ChartDefinitionError {
-  code: 'NO_API_KEY' | 'GENERATION_ERROR' | 'USER_SERVICE_ERROR' | 'PARSE_ERROR';
-  message: string;
-}
-
-/**
- * Chart definition service interface.
- */
-export interface ChartDefinitionService {
-  generateChartDefinition(
-    userId: string,
-    jsonSchema: object,
-    snapshotData: object,
-    targetChartSchema: object,
-    insight: {
-      title: string;
-      description: string;
-      trackableMetric: string;
-      suggestedChartType: string;
-    }
-  ): Promise<Result<ParsedChartDefinition, ChartDefinitionError>>;
-}
+export type { ChartDefinitionService, ChartDefinitionError };
 
 /**
  * Create a chart definition service.

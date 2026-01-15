@@ -607,6 +607,59 @@ describe('TranscribeAudioUseCase', () => {
       expect(successMessage?.replyToMessageId).toBe('wamid.original123');
     });
 
+    it('sends success message with transcript and summary when available', async () => {
+      await createTestMessage('test-message-id', 'test-user-id');
+
+      const input = createTestInput();
+      const executePromise = usecase.execute(input, logger);
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      const jobs = transcriptionService.getJobs();
+      const jobId = Array.from(jobs.keys())[0];
+      if (jobId !== undefined) {
+        transcriptionService.setJobResult(
+          jobId,
+          'Create a todo for reviewing the PR',
+          '• User wants to create a new todo\n• Todo is for reviewing PR 445'
+        );
+      }
+
+      await executePromise;
+
+      const sentMessages = whatsappCloudApi.getSentMessages();
+      const successMessage = sentMessages.find((m) => m.message.includes('🎙️'));
+      expect(successMessage).toBeDefined();
+      expect(successMessage?.message).toContain('Create a todo for reviewing the PR');
+      expect(successMessage?.message).toContain('📝 *Summary:*');
+      expect(successMessage?.message).toContain('• User wants to create a new todo');
+      expect(successMessage?.message).toContain('• Todo is for reviewing PR 445');
+    });
+
+    it('sends success message without summary section when summary is not available', async () => {
+      await createTestMessage('test-message-id', 'test-user-id');
+
+      const input = createTestInput();
+      const executePromise = usecase.execute(input, logger);
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      const jobs = transcriptionService.getJobs();
+      const jobId = Array.from(jobs.keys())[0];
+      if (jobId !== undefined) {
+        // Set result without summary
+        transcriptionService.setJobResult(jobId, 'Transcript without summary');
+      }
+
+      await executePromise;
+
+      const sentMessages = whatsappCloudApi.getSentMessages();
+      const successMessage = sentMessages.find((m) => m.message.includes('🎙️'));
+      expect(successMessage).toBeDefined();
+      expect(successMessage?.message).toContain('Transcript without summary');
+      expect(successMessage?.message).not.toContain('📝 *Summary:*');
+    });
+
     it('sends failure message with error details', async () => {
       await createTestMessage('test-message-id', 'test-user-id');
 

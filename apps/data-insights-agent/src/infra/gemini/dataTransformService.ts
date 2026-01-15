@@ -7,31 +7,12 @@ import type { Result } from '@intexuraos/common-core';
 import { err, getErrorMessage, ok } from '@intexuraos/common-core';
 import { dataTransformPrompt, parseTransformedData } from '@intexuraos/llm-common';
 import type { UserServiceClient } from '../user/userServiceClient.js';
+import type {
+  DataTransformService,
+  DataTransformError,
+} from '../../domain/dataInsights/ports.js';
 
-/**
- * Error from data transformation operations.
- */
-export interface DataTransformError {
-  code: 'NO_API_KEY' | 'GENERATION_ERROR' | 'USER_SERVICE_ERROR' | 'PARSE_ERROR';
-  message: string;
-}
-
-/**
- * Data transformation service interface.
- */
-export interface DataTransformService {
-  transformData(
-    userId: string,
-    jsonSchema: object,
-    snapshotData: object,
-    chartConfig: object,
-    transformInstructions: string,
-    insight: {
-      title: string;
-      trackableMetric: string;
-    }
-  ): Promise<Result<unknown[], DataTransformError>>;
-}
+export type { DataTransformService, DataTransformError };
 
 /**
  * Create a data transformation service.

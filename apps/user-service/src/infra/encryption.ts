@@ -1,19 +1,11 @@
 import { createCipheriv, createDecipheriv, randomBytes } from 'crypto';
 import { err, ok, type Result } from '@intexuraos/common-core';
+import type { EncryptedValue, Encryptor } from '../domain/settings/ports/Encryptor.js';
+
+export type { EncryptedValue, Encryptor };
 
 const ALGORITHM = 'aes-256-gcm';
 const IV_LENGTH = 12;
-
-export interface EncryptedValue {
-  ciphertext: string; // base64
-  iv: string; // base64
-  tag: string; // base64
-}
-
-export interface Encryptor {
-  encrypt(plaintext: string): Result<EncryptedValue>;
-  decrypt(encrypted: EncryptedValue): Result<string>;
-}
 
 export function createEncryptor(keyBase64: string): Encryptor {
   const key = Buffer.from(keyBase64, 'base64');

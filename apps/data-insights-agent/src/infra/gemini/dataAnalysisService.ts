@@ -9,37 +9,15 @@ import {
   dataAnalysisPrompt,
   parseInsightResponse,
   type ChartTypeInfo,
-  type ParsedDataInsight,
 } from '@intexuraos/llm-common';
 import type { UserServiceClient } from '../user/userServiceClient.js';
+import type {
+  DataAnalysisService,
+  DataAnalysisError,
+  DataAnalysisResult,
+} from '../../domain/dataInsights/ports.js';
 
-/**
- * Error from data analysis operations.
- */
-export interface DataAnalysisError {
-  code: 'NO_API_KEY' | 'GENERATION_ERROR' | 'USER_SERVICE_ERROR' | 'PARSE_ERROR';
-  message: string;
-}
-
-/**
- * Result of data analysis.
- */
-export interface DataAnalysisResult {
-  insights: ParsedDataInsight[];
-  noInsightsReason?: string;
-}
-
-/**
- * Data analysis service interface.
- */
-export interface DataAnalysisService {
-  analyzeData(
-    userId: string,
-    jsonSchema: object,
-    snapshotData: object,
-    chartTypes: ChartTypeInfo[]
-  ): Promise<Result<DataAnalysisResult, DataAnalysisError>>;
-}
+export type { DataAnalysisService, DataAnalysisError, DataAnalysisResult };
 
 /**
  * Create a data analysis service.
