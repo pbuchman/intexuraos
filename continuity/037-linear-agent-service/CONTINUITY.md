@@ -45,14 +45,15 @@ Implement a fully functional `linear-agent` service that enables creating Linear
 - ✅ **0-1-terraform**: Terraform configuration added (service module, IAM service account, Firestore collections)
 - ✅ **0-2-cloudbuild**: Cloud Build configuration added (build/deploy steps, scripts, all config files)
 - ✅ **1-0-domain**: Domain models, ports, and errors defined (models.ts, errors.ts, ports.ts, index.ts)
+- ✅ **1-1-connection**: Linear connection repository implemented (Firestore, tests, fakes)
 
 ### Now
 
-**Task 1-1-connection**: Implement Linear connection repository
+**Task 1-2-linear-api**: Implement Linear API client
 
 ### Next
 
-- 1-2-linear-api: Implement Linear API client
+- 1-3-extraction: Implement LLM extraction service
 - Continue through all tiers...
 
 ## Open Questions
