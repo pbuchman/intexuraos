@@ -27,6 +27,8 @@ import {
   HomePage,
   InboxPage,
   LlmCostsPage,
+  LinearConnectionPage,
+  LinearIssuesPage,
   ResearchAgentPage,
   LlmPricingPage,
   LoginPage,
@@ -163,6 +165,14 @@ function AppRoutes(): React.JSX.Element {
         element={
           <ProtectedRoute>
             <GoogleCalendarConnectionPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/settings/linear"
+        element={
+          <ProtectedRoute>
+            <LinearConnectionPage />
           </ProtectedRoute>
         }
       />
@@ -350,6 +360,14 @@ function AppRoutes(): React.JSX.Element {
         element={
           <ProtectedRoute>
             <CalendarPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/linear"
+        element={
+          <ProtectedRoute>
+            <LinearIssuesPage />
           </ProtectedRoute>
         }
       />

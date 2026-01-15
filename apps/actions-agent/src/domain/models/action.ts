@@ -1,4 +1,4 @@
-export type ActionType = 'todo' | 'research' | 'note' | 'link' | 'calendar' | 'reminder';
+export type ActionType = 'todo' | 'research' | 'note' | 'link' | 'calendar' | 'reminder' | 'linear';
 export type ActionStatus =
   | 'pending'
   | 'awaiting_approval'

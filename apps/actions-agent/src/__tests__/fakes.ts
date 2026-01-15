@@ -30,6 +30,7 @@ import type {
   CreateBookmarkResponse,
   ForceRefreshBookmarkResponse,
 } from '../domain/ports/bookmarksServiceClient.js';
+import type { LinearAgentClient } from '../domain/ports/linearAgentClient.js';
 import type { Action } from '../domain/models/action.js';
 import type { ActionTransition } from '../domain/models/actionTransition.js';
 import type { ActionCreatedEvent } from '../domain/models/actionEvent.js';
@@ -570,11 +571,70 @@ export class FakeCalendarServiceClient implements CalendarServiceClient {
   }
 }
 
+export class FakeLinearAgentClient implements LinearAgentClient {
+  private processedActions: {
+    actionId: string;
+    userId: string;
+    title: string;
+  }[] = [];
+  private nextResponse: {
+    status: 'completed' | 'failed';
+    resourceUrl?: string;
+    issueIdentifier?: string;
+    error?: string;
+  } = {
+    status: 'completed',
+    resourceUrl: 'https://linear.app/issue/TEST-123',
+    issueIdentifier: 'TEST-123',
+  };
+  private failNext = false;
+  private failError: Error | null = null;
+
+  getProcessedActions(): typeof this.processedActions {
+    return this.processedActions;
+  }
+
+  setNextResponse(response: {
+    status: 'completed' | 'failed';
+    resourceUrl?: string;
+    issueIdentifier?: string;
+    error?: string;
+  }): void {
+    this.nextResponse = response;
+  }
+
+  setFailNext(fail: boolean, error?: Error): void {
+    this.failNext = fail;
+    this.failError = error ?? null;
+  }
+
+  async processAction(
+    _actionId: string,
+    _userId: string,
+    _title: string
+  ): Promise<
+    Result<{
+      status: 'completed' | 'failed';
+      resourceUrl?: string;
+      issueIdentifier?: string;
+      error?: string;
+    }>
+  > {
+    if (this.failNext) {
+      this.failNext = false;
+      return err(this.failError ?? new Error('Simulated failure'));
+    }
+    this.processedActions.push({ actionId: _actionId, userId: _userId, title: _title });
+    return ok(this.nextResponse);
+  }
+}
+
 import type { ExecuteResearchActionResult } from '../domain/usecases/executeResearchAction.js';
 import type { ExecuteTodoActionResult } from '../domain/usecases/executeTodoAction.js';
 import type { ExecuteNoteActionResult } from '../domain/usecases/executeNoteAction.js';
 import type { ExecuteLinkActionResult } from '../domain/usecases/executeLinkAction.js';
 import type { ExecuteCalendarActionResult } from '../domain/usecases/executeCalendarAction.js';
+import type { ExecuteLinearActionResult } from '../domain/usecases/executeLinearAction.js';
 import type {
   RetryResult,
   RetryPendingActionsUseCase,
@@ -685,6 +745,28 @@ export function createFakeExecuteCalendarActionUseCase(config?: {
   };
 }
 
+export type FakeExecuteLinearActionUseCase = (
+  actionId: string
+) => Promise<Result<ExecuteLinearActionResult, Error>>;
+
+export function createFakeExecuteLinearActionUseCase(config?: {
+  failWithError?: Error;
+  returnResult?: ExecuteLinearActionResult;
+}): FakeExecuteLinearActionUseCase {
+  return async (_actionId: string): Promise<Result<ExecuteLinearActionResult, Error>> => {
+    if (config?.failWithError !== undefined) {
+      return err(config.failWithError);
+    }
+    return ok(
+      config?.returnResult ?? {
+        status: 'completed',
+        resourceUrl: 'https://linear.app/issue/TEST-123',
+        issueIdentifier: 'TEST-123',
+      }
+    );
+  };
+}
+
 export function createFakeRetryPendingActionsUseCase(config?: {
   returnResult?: RetryResult;
 }): RetryPendingActionsUseCase {
@@ -719,6 +801,10 @@ import {
   createHandleCalendarActionUseCase,
   type HandleCalendarActionUseCase,
 } from '../domain/usecases/handleCalendarAction.js';
+import {
+  createHandleLinearActionUseCase,
+  type HandleLinearActionUseCase,
+} from '../domain/usecases/handleLinearAction.js';
 
 export function createFakeServices(deps: {
   actionServiceClient: FakeActionServiceClient;
@@ -731,6 +817,7 @@ export function createFakeServices(deps: {
   notesServiceClient?: FakeNotesServiceClient;
   bookmarksServiceClient?: FakeBookmarksServiceClient;
   calendarServiceClient?: FakeCalendarServiceClient;
+  linearAgentClient?: FakeLinearAgentClient;
   actionEventPublisher?: FakeActionEventPublisher;
   whatsappPublisher?: FakeWhatsAppSendPublisher;
   executeResearchActionUseCase?: FakeExecuteResearchActionUseCase;
@@ -738,6 +825,7 @@ export function createFakeServices(deps: {
   executeNoteActionUseCase?: FakeExecuteNoteActionUseCase;
   executeLinkActionUseCase?: FakeExecuteLinkActionUseCase;
   executeCalendarActionUseCase?: FakeExecuteCalendarActionUseCase;
+  executeLinearActionUseCase?: FakeExecuteLinearActionUseCase;
   retryPendingActionsUseCase?: RetryPendingActionsUseCase;
   changeActionTypeUseCase?: ChangeActionTypeUseCase;
 }): Services {
@@ -750,6 +838,7 @@ export function createFakeServices(deps: {
   const notesServiceClient = deps.notesServiceClient ?? new FakeNotesServiceClient();
   const bookmarksServiceClient = deps.bookmarksServiceClient ?? new FakeBookmarksServiceClient();
   const calendarServiceClient = deps.calendarServiceClient ?? new FakeCalendarServiceClient();
+  const linearAgentClient = deps.linearAgentClient ?? new FakeLinearAgentClient();
 
   const silentLogger = pino({ level: 'silent' });
 
@@ -804,6 +893,14 @@ export function createFakeServices(deps: {
     }
   );
 
+  const handleLinearActionUseCase: HandleLinearActionUseCase =
+    createHandleLinearActionUseCase({
+      actionServiceClient: deps.actionServiceClient,
+      whatsappPublisher,
+      webAppUrl: 'http://test.app',
+      logger: silentLogger,
+    });
+
   const changeActionTypeUseCase: ChangeActionTypeUseCase =
     deps.changeActionTypeUseCase ??
     createChangeActionTypeUseCase({
@@ -824,6 +921,7 @@ export function createFakeServices(deps: {
     notesServiceClient,
     bookmarksServiceClient,
     calendarServiceClient,
+    linearAgentClient,
     actionEventPublisher: deps.actionEventPublisher ?? new FakeActionEventPublisher(),
     whatsappPublisher,
     handleResearchActionUseCase,
@@ -831,6 +929,7 @@ export function createFakeServices(deps: {
     handleNoteActionUseCase,
     handleLinkActionUseCase,
     handleCalendarActionUseCase,
+    handleLinearActionUseCase,
     executeResearchActionUseCase:
       deps.executeResearchActionUseCase ?? createFakeExecuteResearchActionUseCase(),
     executeTodoActionUseCase: deps.executeTodoActionUseCase ?? createFakeExecuteTodoActionUseCase(),
@@ -838,6 +937,8 @@ export function createFakeServices(deps: {
     executeLinkActionUseCase: deps.executeLinkActionUseCase ?? createFakeExecuteLinkActionUseCase(),
     executeCalendarActionUseCase:
       deps.executeCalendarActionUseCase ?? createFakeExecuteCalendarActionUseCase(),
+    executeLinearActionUseCase:
+      deps.executeLinearActionUseCase ?? createFakeExecuteLinearActionUseCase(),
     retryPendingActionsUseCase:
       deps.retryPendingActionsUseCase ?? createFakeRetryPendingActionsUseCase(),
     changeActionTypeUseCase,
@@ -846,5 +947,6 @@ export function createFakeServices(deps: {
     note: handleNoteActionUseCase,
     link: handleLinkActionUseCase,
     calendar: handleCalendarActionUseCase,
+    linear: handleLinearActionUseCase,
   };
 }

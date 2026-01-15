@@ -7,6 +7,7 @@ import type { HandleTodoActionUseCase } from '../domain/usecases/handleTodoActio
 import type { HandleNoteActionUseCase } from '../domain/usecases/handleNoteAction.js';
 import type { HandleLinkActionUseCase } from '../domain/usecases/handleLinkAction.js';
 import type { HandleCalendarActionUseCase } from '../domain/usecases/handleCalendarAction.js';
+import type { HandleLinearActionUseCase } from '../domain/usecases/handleLinearAction.js';
 import pino from 'pino';
 import { ok } from '@intexuraos/common-core';
 
@@ -25,6 +26,7 @@ describe('retryPendingActions usecase', () => {
     note: HandleNoteActionUseCase;
     link: HandleLinkActionUseCase;
     calendar: HandleCalendarActionUseCase;
+    linear: HandleLinearActionUseCase;
   };
 
   const createAction = (overrides: Partial<Action> = {}): Action => ({
@@ -50,6 +52,7 @@ describe('retryPendingActions usecase', () => {
       note: createFakeHandler() as unknown as HandleNoteActionUseCase,
       link: createFakeHandler() as unknown as HandleLinkActionUseCase,
       calendar: createFakeHandler() as unknown as HandleCalendarActionUseCase,
+      linear: createFakeHandler() as unknown as HandleLinearActionUseCase,
     };
   });
 

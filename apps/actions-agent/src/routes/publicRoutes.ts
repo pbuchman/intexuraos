@@ -513,6 +513,7 @@ export const publicRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         todo: services.executeTodoActionUseCase,
         note: services.executeNoteActionUseCase,
         link: services.executeLinkActionUseCase,
+        linear: services.executeLinearActionUseCase,
       };
 
       const executor = executorMap[action.type];

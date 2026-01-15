@@ -144,6 +144,9 @@ importers:
       fastify:
         specifier: ^5.1.0
         version: 5.6.2
+      pino:
+        specifier: ^10.1.0
+        version: 10.1.1
 
   apps/app-settings-service:
     dependencies:
@@ -481,6 +484,60 @@ importers:
       nock:
         specifier: ^14.0.0
         version: 14.0.10
+
+  apps/linear-agent:
+    dependencies:
+      '@fastify/cors':
+        specifier: ^10.0.1
+        version: 10.1.0
+      '@fastify/swagger':
+        specifier: ^9.4.2
+        version: 9.6.1
+      '@fastify/swagger-ui':
+        specifier: ^5.2.1
+        version: 5.2.4
+      '@intexuraos/common-core':
+        specifier: workspace:*
+        version: link:../../packages/common-core
+      '@intexuraos/common-http':
+        specifier: workspace:*
+        version: link:../../packages/common-http
+      '@intexuraos/http-contracts':
+        specifier: workspace:*
+        version: link:../../packages/http-contracts
+      '@intexuraos/http-server':
+        specifier: workspace:*
+        version: link:../../packages/http-server
+      '@intexuraos/infra-firestore':
+        specifier: workspace:*
+        version: link:../../packages/infra-firestore
+      '@intexuraos/infra-sentry':
+        specifier: workspace:*
+        version: link:../../packages/infra-sentry
+      '@intexuraos/llm-common':
+        specifier: workspace:*
+        version: link:../../packages/llm-common
+      '@intexuraos/llm-contract':
+        specifier: workspace:*
+        version: link:../../packages/llm-contract
+      '@intexuraos/llm-factory':
+        specifier: workspace:*
+        version: link:../../packages/llm-factory
+      '@intexuraos/llm-pricing':
+        specifier: workspace:*
+        version: link:../../packages/llm-pricing
+      '@linear/sdk':
+        specifier: ^29.0.0
+        version: 29.0.0(encoding@0.1.13)
+      fastify:
+        specifier: ^5.1.0
+        version: 5.6.2
+      pino:
+        specifier: ^10.1.0
+        version: 10.1.1
+      zod:
+        specifier: ^3.24.1
+        version: 3.25.76
 
   apps/mobile-notifications-service:
     dependencies:
@@ -1319,6 +1376,9 @@ importers:
       '@intexuraos/llm-contract':
         specifier: workspace:*
         version: link:../llm-contract
+      pino:
+        specifier: ^10.1.0
+        version: 10.1.1
 
   packages/llm-contract:
     dependencies:
@@ -3682,6 +3742,14 @@ packages:
       }
     engines: { node: '>=12.0.0' }
 
+  '@graphql-typed-document-node/core@3.2.0':
+    resolution:
+      {
+        integrity: sha512-mB9oAsNCm9aM3/SOv4YtBMqZbYj10R7dkq8byBqxGY/ncFwhf2oQzMV+LCRlWoDSEBJ3COiR1yeDvMtsoOsuFQ==,
+      }
+    peerDependencies:
+      graphql: ^0.8.0 || ^0.9.0 || ^0.10.0 || ^0.11.0 || ^0.12.0 || ^0.13.0 || ^14.0.0 || ^15.0.0 || ^16.0.0 || ^17.0.0
+
   '@grpc/grpc-js@1.14.3':
     resolution:
       {
@@ -4199,6 +4267,13 @@ packages:
       {
         integrity: sha512-4JQNk+3mVzK3xh2rqd6RB4J46qUR19azEHBneZyTZM+c456qOrbbM/5xcR8huNCCcbVt7+UmizG6GuUvPvKUYg==,
       }
+
+  '@linear/sdk@29.0.0':
+    resolution:
+      {
+        integrity: sha512-c3hmWW4L0sIL2Aaf0wt7LhfIc58AHdsHcQOCxWZC3nXb0dDvrG6/g9WFXM5k2dYSgPJHcZ21O/+KlI/KTOkK1A==,
+      }
+    engines: { node: '>=12.x', yarn: 1.x }
 
   '@lukeed/ms@2.0.2':
     resolution:
@@ -8545,6 +8620,13 @@ packages:
         integrity: sha512-RbJ5/jmFcNNCcDV5o9eTnBLJ/HszWV0P73bc+Ff4nS/rJj+YaS6IGyiOL0VoBYX+l1Wrl3k63h/KrH+nhJ0XvQ==,
       }
 
+  graphql@15.10.1:
+    resolution:
+      {
+        integrity: sha512-BL/Xd/T9baO6NFzoMpiMD7YUZ62R6viR5tp/MULVEnbYJXZA//kRNW7J0j1w/wXArgL0sCxhDfK5dczSKn3+cg==,
+      }
+    engines: { node: '>= 10.x' }
+
   gtoken@7.1.0:
     resolution:
       {
@@ -9337,6 +9419,12 @@ packages:
     resolution:
       {
         integrity: sha512-qvUtwJ3j6qwsF3jLxkZ72qCgjMysPzDfeV240JHiGZsANBYd+EEuu35v7dfrJ9Up0Ak07D7GGSkGhCHTqg/5wA==,
+      }
+
+  isomorphic-unfetch@3.1.0:
+    resolution:
+      {
+        integrity: sha512-geDJjpoZ8N0kWexiwkX8F9NkTsXhetLPVbZFQ+JTW239QNOwvB0gniuR1Wc6f0AMTn7/mFGyXvHTifrCp/GH8Q==,
       }
 
   istanbul-lib-coverage@3.2.2:
@@ -12941,6 +13029,12 @@ packages:
       }
     engines: { node: '>=20.18.1' }
 
+  unfetch@4.2.0:
+    resolution:
+      {
+        integrity: sha512-F9p7yYCn6cIW9El1zi0HI6vqpeIvBsr3dSuRO6Xuppb1u5rXpCPmMvLSyECLhybr9isec8Ohl0hPekMVrEinDA==,
+      }
+
   unicode-canonical-property-names-ecmascript@2.0.1:
     resolution:
       {
@@ -15746,6 +15840,10 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
+  '@graphql-typed-document-node/core@3.2.0(graphql@15.10.1)':
+    dependencies:
+      graphql: 15.10.1
+
   '@grpc/grpc-js@1.14.3':
     dependencies:
       '@grpc/proto-loader': 0.8.0
@@ -16047,6 +16145,14 @@ snapshots:
   '@js-sdsl/ordered-map@4.4.2': {}
 
   '@jsdevtools/ono@7.1.3': {}
+
+  '@linear/sdk@29.0.0(encoding@0.1.13)':
+    dependencies:
+      '@graphql-typed-document-node/core': 3.2.0(graphql@15.10.1)
+      graphql: 15.10.1
+      isomorphic-unfetch: 3.1.0(encoding@0.1.13)
+    transitivePeerDependencies:
+      - encoding
 
   '@lukeed/ms@2.0.2': {}
 
@@ -19232,6 +19338,8 @@ snapshots:
 
   graceful-fs@4.2.11: {}
 
+  graphql@15.10.1: {}
+
   gtoken@7.1.0(encoding@0.1.13):
     dependencies:
       gaxios: 6.7.1(encoding@0.1.13)
@@ -19658,6 +19766,13 @@ snapshots:
     dependencies:
       node-fetch: 2.7.0(encoding@0.1.13)
       whatwg-fetch: 3.6.20
+    transitivePeerDependencies:
+      - encoding
+
+  isomorphic-unfetch@3.1.0(encoding@0.1.13):
+    dependencies:
+      node-fetch: 2.7.0(encoding@0.1.13)
+      unfetch: 4.2.0
     transitivePeerDependencies:
       - encoding
 
@@ -22130,6 +22245,8 @@ snapshots:
   undici-types@6.21.0: {}
 
   undici@7.18.2: {}
+
+  unfetch@4.2.0: {}
 
   unicode-canonical-property-names-ecmascript@2.0.1: {}
 

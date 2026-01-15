@@ -61,7 +61,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             type: 'object',
             properties: {
               status: { type: 'string', enum: ['completed', 'failed'] },
-              resource_url: { type: 'string', description: 'Frontend URL for created event' },
+              resourceUrl: { type: 'string', description: 'Frontend URL for created event' },
               error: { type: 'string', description: 'Error message if failed' },
             },
           },

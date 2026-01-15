@@ -60,6 +60,7 @@ const SERVICES = [
   { name: 'todos-agent', port: 8123, color: '\x1b[38;5;208m' },
   { name: 'bookmarks-agent', port: 8124, color: '\x1b[38;5;141m' },
   { name: 'calendar-agent', port: 8125, color: '\x1b[38;5;220m' },
+  { name: 'linear-agent', port: 8126, color: '\x1b[95m' },
 
   // these services depend on app-settings-service, so start them after
   { name: 'user-service', port: 8110, color: '\x1b[36m' },

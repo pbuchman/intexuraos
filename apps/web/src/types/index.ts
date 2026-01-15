@@ -180,6 +180,7 @@ export interface AppConfig {
   todosAgentUrl: string;
   bookmarksAgentUrl: string;
   calendarAgentUrl: string;
+  linearAgentUrl: string;
   appSettingsServiceUrl: string;
   firebaseProjectId: string;
   firebaseApiKey: string;
@@ -282,6 +283,7 @@ export type CommandType =
   | 'link'
   | 'calendar'
   | 'reminder'
+  | 'linear'
   | 'unclassified';
 
 /**
@@ -876,4 +878,108 @@ export interface FailedCalendarEvent {
   error: string;
   reasoning: string | null;
   createdAt: string;
+}
+
+/**
+ * Linear priority levels (0 = No priority, 1 = Urgent, 2 = High, 3 = Normal, 4 = Low)
+ */
+export type LinearPriority = 0 | 1 | 2 | 3 | 4;
+
+/**
+ * Linear issue state category
+ */
+export type IssueStateCategory =
+  | 'backlog'
+  | 'unstarted'
+  | 'started'
+  | 'completed'
+  | 'cancelled';
+
+/**
+ * Linear issue state
+ */
+export interface LinearIssueState {
+  id: string;
+  name: string;
+  type: IssueStateCategory;
+  color: string;
+  position: number;
+}
+
+/**
+ * Linear issue from linear-agent
+ */
+export interface LinearIssue {
+  id: string;
+  identifier: string;
+  title: string;
+  description: string | null;
+  status: LinearIssueState;
+  priority: LinearPriority;
+  assignee?: LinearUser;
+  creator?: LinearUser;
+  createdAt: string;
+  updatedAt: string;
+  dueDate: string | null;
+  url: string;
+  labels: LinearLabel[];
+}
+
+/**
+ * Linear user
+ */
+export interface LinearUser {
+  id: string;
+  name: string;
+  email: string;
+  avatarUrl?: string;
+}
+
+/**
+ * Linear label
+ */
+export interface LinearLabel {
+  id: string;
+  name: string;
+  color: string;
+}
+
+/**
+ * Linear team
+ */
+export interface LinearTeam {
+  id: string;
+  name: string;
+  key: string;
+  description?: string;
+}
+
+/**
+ * Linear connection status from linear-agent
+ */
+export interface LinearConnectionStatus {
+  connected: boolean;
+  teamId: string | null;
+  teamName: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * Grouped issues by state category
+ */
+export interface GroupedIssues {
+  backlog: LinearIssue[];
+  unstarted: LinearIssue[];
+  started: LinearIssue[];
+  completed: LinearIssue[];
+  cancelled: LinearIssue[];
+}
+
+/**
+ * Response from list issues endpoint
+ */
+export interface ListIssuesResponse {
+  issues: GroupedIssues;
+  total: number;
 }

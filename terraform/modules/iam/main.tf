@@ -120,6 +120,13 @@ resource "google_service_account" "web_agent" {
   description  = "Service account for web-agent Cloud Run deployment"
 }
 
+# Service account for linear-agent
+resource "google_service_account" "linear_agent" {
+  account_id   = "intexuraos-linear-${var.environment}"
+  display_name = "IntexuraOS Linear Agent (${var.environment})"
+  description  = "Service account for linear-agent Cloud Run deployment"
+}
+
 
 # User service: Secret Manager access
 resource "google_secret_manager_secret_iam_member" "user_service_secrets" {
@@ -265,6 +272,15 @@ resource "google_secret_manager_secret_iam_member" "web_agent_secrets" {
   member    = "serviceAccount:${google_service_account.web_agent.email}"
 }
 
+# Linear Agent: Secret Manager access
+resource "google_secret_manager_secret_iam_member" "linear_agent_secrets" {
+  for_each = var.secret_ids
+
+  secret_id = each.value
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.linear_agent.email}"
+}
+
 # API Docs Hub: Secret Manager access
 resource "google_secret_manager_secret_iam_member" "api_docs_hub_secrets" {
   for_each = var.secret_ids
@@ -385,6 +401,13 @@ resource "google_project_iam_member" "bookmarks_agent_firestore" {
   project = var.project_id
   role    = "roles/datastore.user"
   member  = "serviceAccount:${google_service_account.bookmarks_agent.email}"
+}
+
+# Linear Agent: Firestore access
+resource "google_project_iam_member" "linear_agent_firestore" {
+  project = var.project_id
+  role    = "roles/datastore.user"
+  member  = "serviceAccount:${google_service_account.linear_agent.email}"
 }
 
 
@@ -511,4 +534,11 @@ resource "google_project_iam_member" "web_agent_logging" {
   project = var.project_id
   role    = "roles/logging.logWriter"
   member  = "serviceAccount:${google_service_account.web_agent.email}"
+}
+
+# Linear Agent: Cloud Logging
+resource "google_project_iam_member" "linear_agent_logging" {
+  project = var.project_id
+  role    = "roles/logging.logWriter"
+  member  = "serviceAccount:${google_service_account.linear_agent.email}"
 }

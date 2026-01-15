@@ -778,6 +778,88 @@ describe('promptApi', () => {
         expect(result.error.code).toBe('DOWNSTREAM_ERROR');
       }
     });
+
+    it('skips non-code blocks when updating content', async () => {
+      const { client, settings, logger } = setupValidUserContext();
+      mockNotionMethods.listBlocks
+        .mockResolvedValueOnce({
+          results: [
+            { type: 'paragraph', id: 'para-1', paragraph: { rich_text: [{ plain_text: 'Text' }] } },
+            { type: 'code', id: 'block-1', code: { rich_text: [{ plain_text: 'Code content' }] } },
+            { type: 'heading_1', id: 'head-1', heading_1: { rich_text: [{ plain_text: 'Heading' }] } },
+          ],
+        })
+        .mockResolvedValueOnce({
+          results: [
+            { type: 'code', id: 'block-1', code: { rich_text: [{ plain_text: 'Code content' }] } },
+          ],
+        });
+      mockNotionMethods.updateBlock.mockResolvedValue({});
+      mockNotionMethods.retrieve.mockResolvedValue({
+        id: 'prompt-1',
+        properties: { title: { title: [{ plain_text: 'Title' }] } },
+      });
+
+      const result = await updatePrompt(
+        'user-1',
+        'prompt-1',
+        { content: 'Updated code' },
+        client,
+        settings,
+        logger
+      );
+
+      expect(result.ok).toBe(true);
+      // Only code blocks should be updated, paragraph and heading skipped
+      expect(mockNotionMethods.updateBlock).toHaveBeenCalledTimes(1);
+      expect(mockNotionMethods.updateBlock).toHaveBeenCalledWith({
+        block_id: 'block-1',
+        code: expect.objectContaining({
+          language: 'markdown',
+        }),
+      });
+    });
+
+    it('handles blocks without type property when updating content', async () => {
+      const { client, settings, logger } = setupValidUserContext();
+      mockNotionMethods.listBlocks
+        .mockResolvedValueOnce({
+          results: [
+            // Block without type property to test type guard in adapter
+            { id: 'unknown-block', object: 'block' } as Record<string, unknown>,
+            { type: 'code', id: 'block-1', code: { rich_text: [{ plain_text: 'Code' }] } },
+          ],
+        })
+        .mockResolvedValueOnce({
+          results: [
+            { type: 'code', id: 'block-1', code: { rich_text: [{ plain_text: 'Code' }] } },
+          ],
+        });
+      mockNotionMethods.updateBlock.mockResolvedValue({});
+      mockNotionMethods.retrieve.mockResolvedValue({
+        id: 'prompt-1',
+        properties: { title: { title: [{ plain_text: 'Title' }] } },
+      });
+
+      const result = await updatePrompt(
+        'user-1',
+        'prompt-1',
+        { content: 'Updated' },
+        client,
+        settings,
+        logger
+      );
+
+      expect(result.ok).toBe(true);
+      // Should skip block without type and only update code block
+      expect(mockNotionMethods.updateBlock).toHaveBeenCalledTimes(1);
+      expect(mockNotionMethods.updateBlock).toHaveBeenCalledWith({
+        block_id: 'block-1',
+        code: expect.objectContaining({
+          language: 'markdown',
+        }),
+      });
+    });
   });
 
   describe('mapError (tested through error paths)', () => {
