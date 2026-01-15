@@ -20,7 +20,7 @@ const defaultLogger = pino({
 
 interface ApiResponse {
   status: 'completed' | 'failed';
-  resource_url?: string;
+  resourceUrl?: string;
   error?: string;
 }
 
@@ -84,7 +84,7 @@ export function createCalendarServiceHttpClient(
 
       const result: ProcessCalendarResponse = {
         status: body.status,
-        ...(body.resource_url !== undefined && { resource_url: body.resource_url }),
+        ...(body.resourceUrl !== undefined && { resource_url: body.resourceUrl }),
         ...(body.error !== undefined && { error: body.error }),
       };
 

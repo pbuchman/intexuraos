@@ -42,7 +42,7 @@ describe('calendarServiceHttpClient', () => {
     it('returns completed status with resource_url', async () => {
       const action = createTestAction({ title: 'Meeting at 3pm' });
       const scope = nock(baseUrl)
-        .post('/internal/calendar/process', {
+        .post('/internal/calendar/process-action', {
           action: {
             id: 'action-123',
             userId: 'user-456',
@@ -58,11 +58,8 @@ describe('calendarServiceHttpClient', () => {
         })
         .matchHeader('X-Internal-Auth', internalAuthToken)
         .reply(200, {
-          success: true,
-          data: {
-            status: 'completed',
-            resource_url: 'https://calendar.google.com/event/abc123',
-          },
+          status: 'completed',
+          resourceUrl: 'https://calendar.google.com/event/abc123',
         });
 
       const client = createClient();
@@ -79,14 +76,11 @@ describe('calendarServiceHttpClient', () => {
     it('returns failed status with error message', async () => {
       const action = createTestAction();
       const scope = nock(baseUrl)
-        .post('/internal/calendar/process')
+        .post('/internal/calendar/process-action')
         .matchHeader('X-Internal-Auth', internalAuthToken)
         .reply(200, {
-          success: true,
-          data: {
-            status: 'failed',
-            error: 'Invalid calendar event format',
-          },
+          status: 'failed',
+          error: 'Invalid calendar event format',
         });
 
       const client = createClient();
@@ -103,13 +97,10 @@ describe('calendarServiceHttpClient', () => {
     it('returns completed status without resource_url', async () => {
       const action = createTestAction();
       const scope = nock(baseUrl)
-        .post('/internal/calendar/process')
+        .post('/internal/calendar/process-action')
         .matchHeader('X-Internal-Auth', internalAuthToken)
         .reply(200, {
-          success: true,
-          data: {
-            status: 'completed',
-          },
+          status: 'completed',
         });
 
       const client = createClient();
@@ -128,7 +119,7 @@ describe('calendarServiceHttpClient', () => {
     it('returns error for 401 Unauthorized', async () => {
       const action = createTestAction();
       const scope = nock(baseUrl)
-        .post('/internal/calendar/process')
+        .post('/internal/calendar/process-action')
         .matchHeader('X-Internal-Auth', internalAuthToken)
         .reply(401, 'Unauthorized');
 
@@ -145,7 +136,7 @@ describe('calendarServiceHttpClient', () => {
     it('returns error for 403 Forbidden', async () => {
       const action = createTestAction();
       const scope = nock(baseUrl)
-        .post('/internal/calendar/process')
+        .post('/internal/calendar/process-action')
         .matchHeader('X-Internal-Auth', internalAuthToken)
         .reply(403, 'Forbidden');
 
@@ -162,7 +153,7 @@ describe('calendarServiceHttpClient', () => {
     it('returns error for 404 Not Found', async () => {
       const action = createTestAction();
       const scope = nock(baseUrl)
-        .post('/internal/calendar/process')
+        .post('/internal/calendar/process-action')
         .matchHeader('X-Internal-Auth', internalAuthToken)
         .reply(404, 'Not Found');
 
@@ -179,7 +170,7 @@ describe('calendarServiceHttpClient', () => {
     it('returns error for 500 Internal Server Error', async () => {
       const action = createTestAction();
       const scope = nock(baseUrl)
-        .post('/internal/calendar/process')
+        .post('/internal/calendar/process-action')
         .matchHeader('X-Internal-Auth', internalAuthToken)
         .reply(500, 'Internal Server Error');
 
@@ -196,7 +187,7 @@ describe('calendarServiceHttpClient', () => {
     it('returns error for 502 Bad Gateway', async () => {
       const action = createTestAction();
       const scope = nock(baseUrl)
-        .post('/internal/calendar/process')
+        .post('/internal/calendar/process-action')
         .matchHeader('X-Internal-Auth', internalAuthToken)
         .reply(502, 'Bad Gateway');
 
@@ -213,7 +204,7 @@ describe('calendarServiceHttpClient', () => {
     it('returns error for 503 Service Unavailable', async () => {
       const action = createTestAction();
       const scope = nock(baseUrl)
-        .post('/internal/calendar/process')
+        .post('/internal/calendar/process-action')
         .matchHeader('X-Internal-Auth', internalAuthToken)
         .reply(503, 'Service Unavailable');
 
@@ -229,14 +220,13 @@ describe('calendarServiceHttpClient', () => {
   });
 
   describe('response validation errors', () => {
-    it('returns error when success is false', async () => {
+    it('returns error when status is missing', async () => {
       const action = createTestAction();
       const scope = nock(baseUrl)
-        .post('/internal/calendar/process')
+        .post('/internal/calendar/process-action')
         .matchHeader('X-Internal-Auth', internalAuthToken)
         .reply(200, {
-          success: false,
-          error: { code: 'VALIDATION_ERROR', message: 'Invalid input' },
+          resourceUrl: 'https://calendar.example.com/123',
         });
 
       const client = createClient();
@@ -245,17 +235,17 @@ describe('calendarServiceHttpClient', () => {
       expect(scope.isDone()).toBe(true);
       expect(isErr(result)).toBe(true);
       if (isErr(result)) {
-        expect(result.error.message).toBe('Invalid input');
+        expect(result.error.message).toContain('Invalid response from calendar-agent');
       }
     });
 
-    it('returns error when data field is missing', async () => {
+    it('returns error when status is invalid', async () => {
       const action = createTestAction();
       const scope = nock(baseUrl)
-        .post('/internal/calendar/process')
+        .post('/internal/calendar/process-action')
         .matchHeader('X-Internal-Auth', internalAuthToken)
         .reply(200, {
-          success: true,
+          status: 'unknown',
         });
 
       const client = createClient();
@@ -264,18 +254,16 @@ describe('calendarServiceHttpClient', () => {
       expect(scope.isDone()).toBe(true);
       expect(isErr(result)).toBe(true);
       if (isErr(result)) {
-        expect(result.error.message).toBe('Invalid response from calendar-agent');
+        expect(result.error.message).toContain('Invalid response from calendar-agent');
       }
     });
 
-    it('returns error when success is false without error message', async () => {
+    it('returns error when response is empty object', async () => {
       const action = createTestAction();
       const scope = nock(baseUrl)
-        .post('/internal/calendar/process')
+        .post('/internal/calendar/process-action')
         .matchHeader('X-Internal-Auth', internalAuthToken)
-        .reply(200, {
-          success: false,
-        });
+        .reply(200, {});
 
       const client = createClient();
       const result = await client.processAction({ action });
@@ -283,19 +271,16 @@ describe('calendarServiceHttpClient', () => {
       expect(scope.isDone()).toBe(true);
       expect(isErr(result)).toBe(true);
       if (isErr(result)) {
-        expect(result.error.message).toBe('Invalid response from calendar-agent');
+        expect(result.error.message).toContain('Invalid response from calendar-agent');
       }
     });
 
-    it('returns error when success is false with error object but undefined message', async () => {
+    it('returns error when response is array instead of object', async () => {
       const action = createTestAction();
       const scope = nock(baseUrl)
-        .post('/internal/calendar/process')
+        .post('/internal/calendar/process-action')
         .matchHeader('X-Internal-Auth', internalAuthToken)
-        .reply(200, {
-          success: false,
-          error: { code: 'UNKNOWN_ERROR' },
-        });
+        .reply(200, []);
 
       const client = createClient();
       const result = await client.processAction({ action });
@@ -303,7 +288,7 @@ describe('calendarServiceHttpClient', () => {
       expect(scope.isDone()).toBe(true);
       expect(isErr(result)).toBe(true);
       if (isErr(result)) {
-        expect(result.error.message).toBe('Invalid response from calendar-agent');
+        expect(result.error.message).toContain('Invalid response from calendar-agent');
       }
     });
   });
@@ -312,7 +297,7 @@ describe('calendarServiceHttpClient', () => {
     it('returns error on network connection failure', async () => {
       const action = createTestAction();
       nock(baseUrl)
-        .post('/internal/calendar/process')
+        .post('/internal/calendar/process-action')
         .matchHeader('X-Internal-Auth', internalAuthToken)
         .replyWithError({ code: 'ECONNREFUSED', message: 'Connection refused' });
 
@@ -329,7 +314,7 @@ describe('calendarServiceHttpClient', () => {
     it('returns error on DNS resolution failure', async () => {
       const action = createTestAction();
       nock(baseUrl)
-        .post('/internal/calendar/process')
+        .post('/internal/calendar/process-action')
         .matchHeader('X-Internal-Auth', internalAuthToken)
         .replyWithError({ code: 'ENOTFOUND', message: 'getaddrinfo ENOTFOUND' });
 
@@ -346,7 +331,7 @@ describe('calendarServiceHttpClient', () => {
     it('returns error on timeout', async () => {
       const action = createTestAction();
       nock(baseUrl)
-        .post('/internal/calendar/process')
+        .post('/internal/calendar/process-action')
         .matchHeader('X-Internal-Auth', internalAuthToken)
         .replyWithError({ name: 'AbortError', message: 'The operation was aborted' });
 
@@ -369,12 +354,12 @@ describe('calendarServiceHttpClient', () => {
         title: 'Team standup',
       });
       const scope = nock(baseUrl)
-        .post('/internal/calendar/process')
+        .post('/internal/calendar/process-action')
         .matchHeader('X-Internal-Auth', internalAuthToken)
         .matchHeader('Content-Type', 'application/json')
         .reply(200, {
-          success: true,
-          data: { status: 'completed', resource_url: 'https://calendar.example.com/123' },
+          status: 'completed',
+          resourceUrl: 'https://calendar.example.com/123',
         });
 
       const client = createClient();
@@ -387,11 +372,11 @@ describe('calendarServiceHttpClient', () => {
       const action = createTestAction();
       const customToken = 'custom-auth-token';
       const scope = nock(baseUrl)
-        .post('/internal/calendar/process')
+        .post('/internal/calendar/process-action')
         .matchHeader('X-Internal-Auth', customToken)
         .reply(200, {
-          success: true,
-          data: { status: 'completed', resource_url: 'https://calendar.example.com/123' },
+          status: 'completed',
+          resourceUrl: 'https://calendar.example.com/123',
         });
 
       const client = createCalendarServiceHttpClient({
@@ -410,11 +395,11 @@ describe('calendarServiceHttpClient', () => {
       const specialTitle = "Meeting: discuss \"project X\" & review <notes>";
       const action = createTestAction({ title: specialTitle });
       const scope = nock(baseUrl)
-        .post('/internal/calendar/process')
+        .post('/internal/calendar/process-action')
         .matchHeader('X-Internal-Auth', internalAuthToken)
         .reply(200, {
-          success: true,
-          data: { status: 'completed', resource_url: 'https://calendar.example.com/123' },
+          status: 'completed',
+          resourceUrl: 'https://calendar.example.com/123',
         });
 
       const client = createClient();
@@ -428,11 +413,11 @@ describe('calendarServiceHttpClient', () => {
       const unicodeTitle = '团队会议 📅 Team meeting';
       const action = createTestAction({ title: unicodeTitle });
       const scope = nock(baseUrl)
-        .post('/internal/calendar/process')
+        .post('/internal/calendar/process-action')
         .matchHeader('X-Internal-Auth', internalAuthToken)
         .reply(200, {
-          success: true,
-          data: { status: 'completed', resource_url: 'https://calendar.example.com/123' },
+          status: 'completed',
+          resourceUrl: 'https://calendar.example.com/123',
         });
 
       const client = createClient();
@@ -447,11 +432,11 @@ describe('calendarServiceHttpClient', () => {
     it('handles empty string title', async () => {
       const action = createTestAction({ title: '' });
       const scope = nock(baseUrl)
-        .post('/internal/calendar/process')
+        .post('/internal/calendar/process-action')
         .matchHeader('X-Internal-Auth', internalAuthToken)
         .reply(200, {
-          success: true,
-          data: { status: 'failed', error: 'Title is required' },
+          status: 'failed',
+          error: 'Title is required',
         });
 
       const client = createClient();
@@ -469,11 +454,11 @@ describe('calendarServiceHttpClient', () => {
       const longTitle = 'A'.repeat(1000);
       const action = createTestAction({ title: longTitle });
       const scope = nock(baseUrl)
-        .post('/internal/calendar/process')
+        .post('/internal/calendar/process-action')
         .matchHeader('X-Internal-Auth', internalAuthToken)
         .reply(200, {
-          success: true,
-          data: { status: 'completed', resource_url: 'https://calendar.example.com/123' },
+          status: 'completed',
+          resourceUrl: 'https://calendar.example.com/123',
         });
 
       const client = createClient();
@@ -486,11 +471,11 @@ describe('calendarServiceHttpClient', () => {
     it('uses default logger when none provided', async () => {
       const action = createTestAction();
       const scope = nock(baseUrl)
-        .post('/internal/calendar/process')
+        .post('/internal/calendar/process-action')
         .matchHeader('X-Internal-Auth', internalAuthToken)
         .reply(200, {
-          success: true,
-          data: { status: 'completed', resource_url: 'https://calendar.example.com/123' },
+          status: 'completed',
+          resourceUrl: 'https://calendar.example.com/123',
         });
 
       const client = createCalendarServiceHttpClient({ baseUrl, internalAuthToken });
