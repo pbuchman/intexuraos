@@ -152,12 +152,21 @@ function tryParseOpenaiError(raw: string): string | null {
 }
 
 function tryParseAnthropicError(raw: string): string | null {
+  // Check for credit balance billing error first (most specific pattern)
+  if (raw.includes('credit balance') || raw.includes('credit_balance')) {
+    return 'Insufficient Anthropic API credits. Please add funds at console.anthropic.com';
+  }
+
   const jsonMatch = /\{[\s\S]*"type"\s*:\s*"error"[\s\S]*\}/.exec(raw);
   if (jsonMatch !== null) {
     try {
       const parsed: unknown = JSON.parse(jsonMatch[0]);
       if (isAnthropicError(parsed)) {
         const { message } = parsed.error;
+        // Double-check parsed message for billing error
+        if (message.includes('credit balance') || message.includes('credit_balance')) {
+          return 'Insufficient Anthropic API credits. Please add funds at console.anthropic.com';
+        }
         return message.length > 150 ? message.slice(0, 147) + '...' : message;
       }
     } catch {

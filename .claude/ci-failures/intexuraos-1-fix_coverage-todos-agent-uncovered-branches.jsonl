@@ -1,3 +1,0 @@
-{"ts":"2026-01-14T21:51:07.668Z","project":"intexuraos-1","branch":"fix/coverage-todos-agent-uncovered-branches","workspace":"--","runNumber":1,"passed":false,"durationMs":3752,"failureCount":0,"failures":[]}
-{"ts":"2026-01-14T21:51:20.784Z","project":"intexuraos-1","branch":"fix/coverage-todos-agent-uncovered-branches","workspace":"--","runNumber":2,"passed":false,"durationMs":1275,"failureCount":0,"failures":[]}
-{"ts":"2026-01-14T22:03:29.624Z","project":"intexuraos-1","branch":"fix/coverage-todos-agent-uncovered-branches","workspace":"--","runNumber":3,"passed":false,"durationMs":387,"failureCount":0,"failures":[]}

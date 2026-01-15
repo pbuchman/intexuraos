@@ -8,7 +8,7 @@ import type { FastifyInstance } from 'fastify';
 import Fastify from 'fastify';
 import * as jose from 'jose';
 import { clearJwksCache } from '@intexuraos/common-http';
-import { err, ok } from '@intexuraos/common-core';
+import { err, ok, type Result } from '@intexuraos/common-core';
 import { FakePricingContext } from '@intexuraos/llm-pricing';
 import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
 import { buildServer } from '../server.js';
@@ -28,7 +28,15 @@ import {
   FakeUserServiceClient,
 } from './fakes.js';
 import type { Research } from '../domain/research/index.js';
-import type { InputValidationProvider } from '../infra/llm/InputValidationAdapter.js';
+import type {
+  LlmError,
+  TitleGenerateResult,
+} from '../domain/research/ports/llmProvider.js';
+import type {
+  ImprovementResult,
+  InputValidationProvider,
+  ValidationResult,
+} from '../infra/llm/InputValidationAdapter.js';
 
 const fakePricingContext = new FakePricingContext();
 
@@ -4260,6 +4268,794 @@ describe('Internal Routes', () => {
       const updatedResearch = fakeRepo.getAll()[0];
       expect(updatedResearch?.status).toBe('awaiting_confirmation');
       expect(updatedResearch?.partialFailure?.failedModels).toContain(LlmModels.O4MiniDeepResearch);
+    });
+  });
+});
+
+/**
+ * COVERAGE TESTS - Tests for uncovered branches
+ * These tests cover edge cases and error handling paths not reached by the main test suite.
+ */
+describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
+  let app: FastifyInstance;
+  let jwksServer: FastifyInstance;
+  let privateKey: jose.KeyLike;
+  let jwksUrl: string;
+  const issuer = `https://${INTEXURAOS_AUTH0_DOMAIN}/`;
+
+  let fakeRepo: FakeResearchRepository;
+  let fakeUserServiceClient: FakeUserServiceClient;
+  let fakeResearchEventPublisher: FakeResearchEventPublisher;
+  let fakeNotificationSender: FakeNotificationSender;
+  let fakeLlmCallPublisher: import('./fakes.js').FakeLlmCallPublisher;
+
+  async function createToken(sub: string): Promise<string> {
+    const builder = new jose.SignJWT({ sub })
+      .setProtectedHeader({ alg: 'RS256', kid: 'test-key-1' })
+      .setIssuedAt()
+      .setIssuer(issuer)
+      .setAudience(INTEXURAOS_AUTH_AUDIENCE)
+      .setExpirationTime('1h');
+
+    return await builder.sign(privateKey);
+  }
+
+  beforeAll(async () => {
+    const { publicKey, privateKey: privKey } = await jose.generateKeyPair('RS256');
+    privateKey = privKey;
+
+    const publicKeyJwk = await jose.exportJWK(publicKey);
+    publicKeyJwk.kid = 'test-key-1';
+    publicKeyJwk.alg = 'RS256';
+    publicKeyJwk.use = 'sig';
+
+    jwksServer = Fastify({ logger: false });
+
+    jwksServer.get('/.well-known/jwks.json', async (_req, reply) => {
+      return await reply.send({
+        keys: [publicKeyJwk],
+      });
+    });
+
+    await jwksServer.listen({ port: 0, host: '127.0.0.1' });
+    const address = jwksServer.server.address();
+    if (address !== null && typeof address === 'object') {
+      jwksUrl = `http://127.0.0.1:${String(address.port)}/.well-known/jwks.json`;
+    }
+  });
+
+  afterAll(async () => {
+    await jwksServer.close();
+  });
+
+  beforeEach(async () => {
+    process.env['INTEXURAOS_AUTH_JWKS_URL'] = jwksUrl;
+    process.env['INTEXURAOS_AUTH_ISSUER'] = issuer;
+    process.env['INTEXURAOS_AUTH_AUDIENCE'] = INTEXURAOS_AUTH_AUDIENCE;
+    process.env['INTEXURAOS_WEB_APP_URL'] = 'https://app.example.com';
+
+    clearJwksCache();
+
+    fakeRepo = new FakeResearchRepository();
+    fakeUserServiceClient = new FakeUserServiceClient();
+    fakeResearchEventPublisher = new FakeResearchEventPublisher();
+    fakeNotificationSender = new FakeNotificationSender();
+    fakeLlmCallPublisher = new (await import('./fakes.js')).FakeLlmCallPublisher();
+
+    const services: ServiceContainer = {
+      researchRepo: fakeRepo,
+      pricingContext: fakePricingContext,
+      generateId: (): string => 'generated-id-123',
+      researchEventPublisher: fakeResearchEventPublisher,
+      llmCallPublisher: fakeLlmCallPublisher,
+      userServiceClient: fakeUserServiceClient,
+      imageServiceClient: null,
+      notificationSender: fakeNotificationSender,
+      shareStorage: null,
+      shareConfig: null,
+      webAppUrl: 'https://app.example.com',
+      createResearchProvider: (_model, _apiKey, _userId, _pricing, _logger) =>
+        createFakeLlmResearchProvider(),
+      createSynthesizer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeSynthesizer(),
+      createTitleGenerator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeTitleGenerator(),
+      createContextInferrer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeContextInferrer(),
+      createInputValidator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeInputValidator(),
+    };
+    setServices(services);
+
+    app = await buildServer();
+  });
+
+  afterEach(async () => {
+    await app.close();
+    resetServices();
+  });
+
+  describe('POST /research - Uncovered branches', () => {
+    it('handles getApiKeys failure gracefully (line 140)', async () => {
+      const token = await createToken(TEST_USER_ID);
+      fakeUserServiceClient.setFailNextGetApiKeys(true);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/research',
+        headers: { authorization: `Bearer ${token}` },
+        payload: {
+          prompt: 'Test prompt',
+          selectedModels: [LlmModels.Gemini25Pro],
+        },
+      });
+
+      expect(response.statusCode).toBe(201);
+      const body = JSON.parse(response.body) as { success: boolean; data: Research };
+      expect(body.success).toBe(true);
+      // apiKeys falls back to {} when getApiKeys fails
+    });
+
+    it('uses default synthesisModel when synthesisModel is omitted and first selectedModel exists (line 146)', async () => {
+      const token = await createToken(TEST_USER_ID);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/research',
+        headers: { authorization: `Bearer ${token}` },
+        payload: {
+          prompt: 'Test prompt',
+          selectedModels: [LlmModels.Gemini25Flash],
+          // synthesisModel omitted - should use first selectedModel
+        },
+      });
+
+      expect(response.statusCode).toBe(201);
+      const body = JSON.parse(response.body) as { success: boolean; data: Research };
+      expect(body.success).toBe(true);
+      // synthesisModel ?? body.selectedModels[0] ?? LlmModels.Gemini25Pro
+      // Here: undefined ?? 'gemini-2.5-flash' ?? default = 'gemini-2.5-flash'
+      expect(body.data.synthesisModel).toBe(LlmModels.Gemini25Flash);
+    });
+
+    it('handles skipSynthesis flag (line 159)', async () => {
+      const token = await createToken(TEST_USER_ID);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/research',
+        headers: { authorization: `Bearer ${token}` },
+        payload: {
+          prompt: 'Test prompt',
+          selectedModels: [LlmModels.Gemini25Pro],
+          skipSynthesis: true,
+        },
+      });
+
+      expect(response.statusCode).toBe(201);
+      const body = JSON.parse(response.body) as { success: boolean; data: Research };
+      expect(body.success).toBe(true);
+    });
+  });
+
+  describe('POST /research/draft - Uncovered branches', () => {
+    it('handles getApiKeys failure gracefully when creating draft (line 211)', async () => {
+      const token = await createToken(TEST_USER_ID);
+      fakeUserServiceClient.setFailNextGetApiKeys(true);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/research/draft',
+        headers: { authorization: `Bearer ${token}` },
+        payload: {
+          prompt: 'This is a test prompt for draft',
+        },
+      });
+
+      expect(response.statusCode).toBe(201);
+      const body = JSON.parse(response.body) as { success: boolean; data: { id: string } };
+      expect(body.success).toBe(true);
+      const saved = fakeRepo.getAll()[0];
+      expect(saved).toBeDefined();
+      if (saved !== undefined) {
+        // Falls back to first 60 chars of prompt when apiKeys fetch fails
+        expect(saved.title).toBe('This is a test prompt for draft');
+      }
+    });
+
+    it('handles title generation failure (line 224)', async () => {
+      const token = await createToken(TEST_USER_ID);
+      fakeUserServiceClient.setApiKeys(TEST_USER_ID, { google: 'test-key' });
+
+      // Use a title generator that fails
+      const services: ServiceContainer = {
+        researchRepo: fakeRepo,
+        pricingContext: fakePricingContext,
+        generateId: (): string => 'generated-id-123',
+        researchEventPublisher: fakeResearchEventPublisher,
+        llmCallPublisher: fakeLlmCallPublisher,
+        userServiceClient: fakeUserServiceClient,
+        imageServiceClient: null,
+        notificationSender: fakeNotificationSender,
+        shareStorage: null,
+        shareConfig: null,
+        webAppUrl: 'https://app.example.com',
+        createResearchProvider: () => createFakeLlmResearchProvider(),
+        createSynthesizer: () => createFakeSynthesizer(),
+        createTitleGenerator: () => {
+          const generator = createFakeTitleGenerator();
+          // Override generateTitle to return error - use valid LlmError code
+          generator.generateTitle = async (): Promise<Result<TitleGenerateResult, LlmError>> =>
+            err({ code: 'API_ERROR', message: 'Failed to generate title' });
+          return generator;
+        },
+        createContextInferrer: () => createFakeContextInferrer(),
+        createInputValidator: () => createFakeInputValidator(),
+      };
+      setServices(services);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/research/draft',
+        headers: { authorization: `Bearer ${token}` },
+        payload: {
+          prompt: 'This is a very long test prompt that will be used as a fallback title when generation fails',
+        },
+      });
+
+      expect(response.statusCode).toBe(201);
+      const body = JSON.parse(response.body) as { success: boolean; data: { id: string } };
+      expect(body.success).toBe(true);
+      const saved = fakeRepo.getAll()[0];
+      expect(saved).toBeDefined();
+      if (saved !== undefined) {
+        // Falls back to first 60 chars of prompt when title generation fails
+        // slice(0, 60) gives exactly 60 characters
+        expect(saved.title).toBe('This is a very long test prompt that will be used as a fallb');
+      }
+    });
+  });
+
+  describe('PATCH /research/:id - Uncovered branches', () => {
+    it('handles getApiKeys failure when updating draft (line 324)', async () => {
+      const token = await createToken(TEST_USER_ID);
+      const draft = createTestResearch({
+        id: 'draft-123',
+        status: 'draft',
+        prompt: 'Old prompt',
+        title: 'Old Title',
+      });
+      fakeRepo.addResearch(draft);
+      fakeUserServiceClient.setFailNextGetApiKeys(true);
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/research/draft-123',
+        headers: { authorization: `Bearer ${token}` },
+        payload: {
+          prompt: 'New prompt that will be used as title since api keys failed',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as { success: boolean; data: Research };
+      expect(body.success).toBe(true);
+      // Title should fall back to first 60 chars when apiKeys fetch fails
+      expect(body.data.title).toBe('New prompt that will be used as title since api keys failed');
+    });
+
+    it('handles title generation failure when prompt changes (line 338)', async () => {
+      const token = await createToken(TEST_USER_ID);
+      const draft = createTestResearch({
+        id: 'draft-123',
+        status: 'draft',
+        prompt: 'Old prompt',
+        title: 'Old Title',
+      });
+      fakeRepo.addResearch(draft);
+      fakeUserServiceClient.setApiKeys(TEST_USER_ID, { google: 'test-key' });
+
+      // Use a title generator that fails
+      const services: ServiceContainer = {
+        researchRepo: fakeRepo,
+        pricingContext: fakePricingContext,
+        generateId: (): string => 'generated-id-123',
+        researchEventPublisher: fakeResearchEventPublisher,
+        llmCallPublisher: fakeLlmCallPublisher,
+        userServiceClient: fakeUserServiceClient,
+        imageServiceClient: null,
+        notificationSender: fakeNotificationSender,
+        shareStorage: null,
+        shareConfig: null,
+        webAppUrl: 'https://app.example.com',
+        createResearchProvider: () => createFakeLlmResearchProvider(),
+        createSynthesizer: () => createFakeSynthesizer(),
+        createTitleGenerator: () => {
+          const generator = createFakeTitleGenerator();
+          // Override generateTitle to return error - use valid LlmError code
+          generator.generateTitle = async (): Promise<Result<TitleGenerateResult, LlmError>> =>
+            err({ code: 'API_ERROR', message: 'Failed to generate title' });
+          return generator;
+        },
+        createContextInferrer: () => createFakeContextInferrer(),
+        createInputValidator: () => createFakeInputValidator(),
+      };
+      setServices(services);
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/research/draft-123',
+        headers: { authorization: `Bearer ${token}` },
+        payload: {
+          prompt: 'New long prompt that should become the title when generation fails',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as { success: boolean; data: Research };
+      expect(body.success).toBe(true);
+      // Title generation failed, so it falls back to slice(0, 60) of the prompt
+      // 'New long prompt that should become the title when generation fails' is 66 chars
+      // slice(0, 60) gives first 60 chars: 'New long prompt that should become the title when generation'
+      expect(body.data.title).toBe('New long prompt that should become the title when generation');
+      expect(body.data.title.length).toBe(60);
+    });
+  });
+
+  describe('POST /research/:id/confirm - Uncovered branches', () => {
+    it('proceeds with synthesis after user confirmation (line 825)', async () => {
+      const token = await createToken(TEST_USER_ID);
+      const research = createTestResearch({
+        id: 'research-123',
+        status: 'awaiting_confirmation',
+        partialFailure: {
+          failedModels: [LlmModels.O4MiniDeepResearch],
+          detectedAt: new Date().toISOString(),
+          retryCount: 0,
+        },
+        llmResults: [
+          {
+            provider: LlmProviders.Google,
+            model: LlmModels.Gemini25Pro,
+            status: 'completed',
+            result: 'Google Result',
+          },
+          {
+            provider: LlmProviders.OpenAI,
+            model: LlmModels.O4MiniDeepResearch,
+            status: 'failed',
+            error: 'Failed',
+          },
+        ],
+      });
+      fakeRepo.addResearch(research);
+      fakeUserServiceClient.setApiKeys(TEST_USER_ID, { google: 'test-key' });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/research/research-123/confirm',
+        headers: { authorization: `Bearer ${token}` },
+        payload: { action: 'proceed' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as { success: boolean; data: { action: string } };
+      expect(body.success).toBe(true);
+      expect(body.data.action).toBe('proceed');
+    });
+
+    it('retries failed models on retry action (line 844)', async () => {
+      const token = await createToken(TEST_USER_ID);
+      const research = createTestResearch({
+        id: 'research-123',
+        status: 'awaiting_confirmation',
+        partialFailure: {
+          failedModels: [LlmModels.O4MiniDeepResearch],
+          detectedAt: new Date().toISOString(),
+          retryCount: 0,
+        },
+        llmResults: [
+          {
+            provider: LlmProviders.Google,
+            model: LlmModels.Gemini25Pro,
+            status: 'completed',
+            result: 'Google Result',
+          },
+          {
+            provider: LlmProviders.OpenAI,
+            model: LlmModels.O4MiniDeepResearch,
+            status: 'failed',
+            error: 'Failed',
+          },
+        ],
+      });
+      fakeRepo.addResearch(research);
+      fakeUserServiceClient.setApiKeys(TEST_USER_ID, { openai: 'test-key' });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/research/research-123/confirm',
+        headers: { authorization: `Bearer ${token}` },
+        payload: { action: 'retry' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as { success: boolean; data: { action: string } };
+      expect(body.success).toBe(true);
+      expect(body.data.action).toBe('retry');
+    });
+  });
+
+  describe('POST /research/:id/retry - Uncovered branches', () => {
+    it('returns 409 when cannot retry from synthesizing status (line 957)', async () => {
+      const token = await createToken(TEST_USER_ID);
+      const research = createTestResearch({
+        id: 'research-123',
+        status: 'synthesizing',
+        llmResults: [
+          {
+            provider: LlmProviders.Google,
+            model: LlmModels.Gemini25Pro,
+            status: 'completed',
+            result: 'Google Result',
+          },
+        ],
+      });
+      fakeRepo.addResearch(research);
+      fakeUserServiceClient.setApiKeys(TEST_USER_ID, { google: 'test-key' });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/research/research-123/retry',
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      // Should return CONFLICT (409) when cannot retry from synthesizing status
+      expect(response.statusCode).toBe(409);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('CONFLICT');
+    });
+
+    it('returns default message when already completed (line 970)', async () => {
+      const token = await createToken(TEST_USER_ID);
+      const research = createTestResearch({
+        id: 'research-123',
+        status: 'completed',
+        llmResults: [
+          {
+            provider: LlmProviders.Google,
+            model: LlmModels.Gemini25Pro,
+            status: 'completed',
+            result: 'Google Result',
+          },
+        ],
+      });
+      fakeRepo.addResearch(research);
+      fakeUserServiceClient.setApiKeys(TEST_USER_ID, { google: 'test-key' });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/research/research-123/retry',
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      // When already in completed state, returns success with 'already_completed' action
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as { success: boolean; data: { message: string } };
+      expect(body.success).toBe(true);
+      expect(body.data.message).toBe('Research is already completed');
+    });
+  });
+
+  describe('POST /research/:id/enhance - Uncovered branches', () => {
+    it('handles getApiKeys failure gracefully (line 1013)', async () => {
+      const token = await createToken(TEST_USER_ID);
+      const research = createTestResearch({
+        id: 'research-123',
+        status: 'completed',
+        llmResults: [
+          {
+            provider: LlmProviders.Google,
+            model: LlmModels.Gemini25Pro,
+            status: 'completed',
+            result: 'Original result',
+          },
+        ],
+      });
+      fakeRepo.addResearch(research);
+      fakeUserServiceClient.setFailNextGetApiKeys(true);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/research/research-123/enhance',
+        headers: { authorization: `Bearer ${token}` },
+        payload: {
+          additionalModels: [LlmModels.O4MiniDeepResearch],
+        },
+      });
+
+      // apiKeys falls back to {} when getApiKeys fails, createResearch should still work
+      expect(response.statusCode).toBe(201);
+      const body = JSON.parse(response.body) as { success: boolean; data: Research };
+      expect(body.success).toBe(true);
+    });
+  });
+
+  describe('DELETE /research/:id/share - Uncovered branches', () => {
+    it('returns 409 when research is not shared (line 1160)', async () => {
+      const token = await createToken(TEST_USER_ID);
+      const research = createTestResearch({
+        id: 'research-123',
+        userId: TEST_USER_ID,
+        status: 'completed',
+        // shareInfo is undefined by default in createTestResearch, omitting it here
+      });
+      // Explicitly omit shareInfo to test the "not shared" branch
+      const { shareInfo: _, ...researchWithoutShare } = research;
+      fakeRepo.addResearch(researchWithoutShare);
+
+      const response = await app.inject({
+        method: 'DELETE',
+        url: '/research/research-123/share',
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(409);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('CONFLICT');
+    });
+
+    it('returns 500 error when unshare fails with unknown error (line 1162)', async () => {
+      const token = await createToken(TEST_USER_ID);
+      const research = createTestResearch({
+        id: 'research-123',
+        userId: TEST_USER_ID,
+        status: 'completed',
+        shareInfo: {
+          shareToken: 'token',
+          slug: 'test-slug',
+          shareUrl: 'https://example.com/share',
+          sharedAt: '2024-01-01T00:00:00Z',
+          gcsPath: 'path/to/file.html',
+        },
+      });
+      fakeRepo.addResearch(research);
+      // Force the repo to fail on clearShareInfo with an unknown error
+      fakeRepo.setFailNextClearShareInfo(true);
+
+      const response = await app.inject({
+        method: 'DELETE',
+        url: '/research/research-123/share',
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(500);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INTERNAL_ERROR');
+    });
+  });
+
+  describe('POST /research/validate-input - Uncovered branches', () => {
+    it('returns fallback GOOD quality when validation fails (line 451)', async () => {
+      const token = await createToken(TEST_USER_ID);
+      fakeUserServiceClient.setApiKeys(TEST_USER_ID, { google: 'test-key' });
+
+      // Use a validator that fails
+      const services: ServiceContainer = {
+        researchRepo: fakeRepo,
+        pricingContext: fakePricingContext,
+        generateId: (): string => 'generated-id-123',
+        researchEventPublisher: fakeResearchEventPublisher,
+        llmCallPublisher: fakeLlmCallPublisher,
+        userServiceClient: fakeUserServiceClient,
+        imageServiceClient: null,
+        notificationSender: fakeNotificationSender,
+        shareStorage: null,
+        shareConfig: null,
+        webAppUrl: 'https://app.example.com',
+        createResearchProvider: () => createFakeLlmResearchProvider(),
+        createSynthesizer: () => createFakeSynthesizer(),
+        createTitleGenerator: () => createFakeTitleGenerator(),
+        createContextInferrer: () => createFakeContextInferrer(),
+        createInputValidator: () => {
+          const validator = createFakeInputValidator();
+          // Use valid LlmError code
+          validator.validateInput = async (): Promise<Result<ValidationResult, LlmError>> =>
+            err({ code: 'API_ERROR', message: 'Validation service unavailable' });
+          return validator;
+        },
+      };
+      setServices(services);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/research/validate-input',
+        headers: { authorization: `Bearer ${token}` },
+        payload: { prompt: 'Test prompt' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: { quality: number; reason: string };
+      };
+      expect(body.success).toBe(true);
+      expect(body.data.quality).toBe(2);
+      expect(body.data.reason).toBe('Validation unavailable');
+    });
+
+    it('includes improvement when quality is WEAK_BUT_VALID and includeImprovement is true', async () => {
+      const token = await createToken(TEST_USER_ID);
+      fakeUserServiceClient.setApiKeys(TEST_USER_ID, { google: 'test-key' });
+
+      // Use a validator that returns WEAK_BUT_VALID
+      const services: ServiceContainer = {
+        researchRepo: fakeRepo,
+        pricingContext: fakePricingContext,
+        generateId: (): string => 'generated-id-123',
+        researchEventPublisher: fakeResearchEventPublisher,
+        llmCallPublisher: fakeLlmCallPublisher,
+        userServiceClient: fakeUserServiceClient,
+        imageServiceClient: null,
+        notificationSender: fakeNotificationSender,
+        shareStorage: null,
+        shareConfig: null,
+        webAppUrl: 'https://app.example.com',
+        createResearchProvider: () => createFakeLlmResearchProvider(),
+        createSynthesizer: () => createFakeSynthesizer(),
+        createTitleGenerator: () => createFakeTitleGenerator(),
+        createContextInferrer: () => createFakeContextInferrer(),
+        createInputValidator: () => {
+          const validator = createFakeInputValidator();
+          validator.validateInput = async (): Promise<Result<ValidationResult, LlmError>> =>
+            ok({
+              quality: 1,
+              reason: 'Prompt is too brief',
+              usage: { inputTokens: 10, outputTokens: 5, costUsd: 0.0001 },
+            });
+          validator.improveInput = async (): Promise<Result<ImprovementResult, LlmError>> =>
+            ok({
+              improvedPrompt: 'Improved: Test prompt with more details',
+              usage: { inputTokens: 15, outputTokens: 10, costUsd: 0.0002 },
+            });
+          return validator;
+        },
+      };
+      setServices(services);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/research/validate-input',
+        headers: { authorization: `Bearer ${token}` },
+        payload: { prompt: 'hi', includeImprovement: true },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: { improvedPrompt: string | null };
+      };
+      expect(body.success).toBe(true);
+      expect(body.data.improvedPrompt).toBe('Improved: Test prompt with more details');
+    });
+  });
+
+  describe('GET /research - Uncovered branches', () => {
+    it('filters by limit parameter (line 571)', async () => {
+      const token = await createToken(TEST_USER_ID);
+      for (let i = 0; i < 10; i++) {
+        fakeRepo.addResearch(
+          createTestResearch({
+            id: `research-${i}`,
+            userId: TEST_USER_ID,
+          })
+        );
+      }
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/research?limit=5',
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as { success: boolean; data: { items: Research[] } };
+      expect(body.success).toBe(true);
+      expect(body.data.items).toHaveLength(5);
+    });
+
+    it('filters by cursor parameter (line 575)', async () => {
+      const token = await createToken(TEST_USER_ID);
+      for (let i = 0; i < 5; i++) {
+        fakeRepo.addResearch(
+          createTestResearch({
+            id: `research-${i}`,
+            userId: TEST_USER_ID,
+          })
+        );
+      }
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/research?cursor=some-cursor',
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as { success: boolean; data: { items: Research[] } };
+      expect(body.success).toBe(true);
+    });
+  });
+
+  describe('POST /research/improve-input - Uncovered branches', () => {
+    it('returns original prompt when improvement fails', async () => {
+      const token = await createToken(TEST_USER_ID);
+      fakeUserServiceClient.setApiKeys(TEST_USER_ID, { google: 'test-key' });
+
+      // Use a validator that fails improvement
+      const services: ServiceContainer = {
+        researchRepo: fakeRepo,
+        pricingContext: fakePricingContext,
+        generateId: (): string => 'generated-id-123',
+        researchEventPublisher: fakeResearchEventPublisher,
+        llmCallPublisher: fakeLlmCallPublisher,
+        userServiceClient: fakeUserServiceClient,
+        imageServiceClient: null,
+        notificationSender: fakeNotificationSender,
+        shareStorage: null,
+        shareConfig: null,
+        webAppUrl: 'https://app.example.com',
+        createResearchProvider: () => createFakeLlmResearchProvider(),
+        createSynthesizer: () => createFakeSynthesizer(),
+        createTitleGenerator: () => createFakeTitleGenerator(),
+        createContextInferrer: () => createFakeContextInferrer(),
+        createInputValidator: () => {
+          const validator = createFakeInputValidator();
+          // Use valid LlmError code
+          validator.improveInput = async (): Promise<Result<ImprovementResult, LlmError>> =>
+            err({ code: 'API_ERROR', message: 'Improvement failed' });
+          return validator;
+        },
+      };
+      setServices(services);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/research/improve-input',
+        headers: { authorization: `Bearer ${token}` },
+        payload: { prompt: 'Test prompt' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: { improvedPrompt: string };
+      };
+      expect(body.success).toBe(true);
+      expect(body.data.improvedPrompt).toBe('Test prompt');
+    });
+  });
+
+  describe('POST /research/:id/approve - Uncovered branches', () => {
+    it('returns INVALID_REQUEST when no models and no contexts (line 677)', async () => {
+      const token = await createToken(TEST_USER_ID);
+      const research = createTestResearch({
+        id: 'draft-123',
+        status: 'draft',
+        selectedModels: [],
+        // inputContexts is optional, defaults to undefined
+      });
+      fakeRepo.addResearch(research);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/research/draft-123/approve',
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INVALID_REQUEST');
     });
   });
 });

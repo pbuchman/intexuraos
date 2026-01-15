@@ -236,6 +236,36 @@ describe('sendToSentry', () => {
       })
     );
   });
+
+  it('handles warn level without context', () => {
+    process.env['INTEXURAOS_SENTRY_DSN'] = 'https://test@sentry.io/123';
+    const { captureMessage } = getMockedSentry();
+
+    sendToSentry('warn', 'Test warning');
+
+    expect(captureMessage).toHaveBeenCalledWith(
+      'Test warning',
+      expect.objectContaining({
+        level: 'warning',
+      })
+    );
+  });
+
+  it('handles warn level with context', () => {
+    process.env['INTEXURAOS_SENTRY_DSN'] = 'https://test@sentry.io/123';
+    const { captureMessage } = getMockedSentry();
+    const context = { userId: 'user-123' };
+
+    sendToSentry('warn', 'Test warning', context);
+
+    expect(captureMessage).toHaveBeenCalledWith(
+      'Test warning',
+      expect.objectContaining({
+        level: 'warning',
+        extra: context,
+      })
+    );
+  });
 });
 
 describe('createSentryStream - sendLogToSentry internal function', () => {
@@ -456,5 +486,56 @@ describe('createSentryStream - sendLogToSentry internal function', () => {
 
     // The withScope mock should have been called with the extra context
     expect(captureException).toHaveBeenCalled();
+  });
+
+  it('handles error level with non-string msg (number)', () => {
+    process.env['INTEXURAOS_SENTRY_DSN'] = 'https://test@sentry.io/123';
+    const { captureException } = getMockedSentry();
+
+    const mockMultistream = { streams: [] } as unknown as ReturnType<
+      typeof import('pino').multistream
+    >;
+
+    const result = createSentryStream(mockMultistream);
+    const ms = result as unknown as {
+      streams: { level: number; stream: { write: (data: string) => void } }[];
+    };
+
+    // msg is a number, should be converted to string
+    const errorLog = JSON.stringify({
+      level: 50,
+      msg: 500,
+    });
+
+    ms.streams[0]?.stream.write(errorLog);
+
+    const capturedError = captureException.mock.calls[0]?.[0] as Error;
+    expect(capturedError.message).toBe('500');
+  });
+
+  it('handles warn level with non-string msg (object)', () => {
+    process.env['INTEXURAOS_SENTRY_DSN'] = 'https://test@sentry.io/123';
+    const { captureMessage } = getMockedSentry();
+
+    const mockMultistream = { streams: [] } as unknown as ReturnType<
+      typeof import('pino').multistream
+    >;
+
+    const result = createSentryStream(mockMultistream);
+    const ms = result as unknown as {
+      streams: { level: number; stream: { write: (data: string) => void } }[];
+    };
+
+    // msg is an object, should be converted to string
+    const warnLog = JSON.stringify({
+      level: 40,
+      msg: { code: 'WARN_123', details: 'Something went wrong' },
+    });
+
+    ms.streams[0]?.stream.write(warnLog);
+
+    expect(captureMessage).toHaveBeenCalled();
+    const capturedMsg = captureMessage.mock.calls[0]?.[0] as string;
+    expect(capturedMsg).toBe('[object Object]');
   });
 });

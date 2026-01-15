@@ -35,13 +35,35 @@ export const commandClassifierPrompt: PromptBuilder<
     return `You are a command classifier. Analyze the user's message and classify it into one of these categories:
 
 CATEGORIES (in priority order - when multiple could apply, use the FIRST matching category):
-1. todo: A task that needs to be done (e.g., "buy groceries", "call mom", "finish report")
-2. research: A question or topic to research (e.g., "how does X work?", "find out about Y")
-3. calendar: A time-based event or appointment (e.g., "meeting tomorrow at 3pm", "dentist on Friday")
+1. calendar: A time-based event or appointment (highest priority for time-sensitive requests)
+2. todo: A task that needs to be done (e.g., "buy groceries", "call mom", "finish report")
+3. research: A question or topic to research (e.g., "how does X work?", "find out about Y")
 4. reminder: Something to be reminded about at a specific time (e.g., "remind me to X in 2 hours")
 5. note: Information to remember or store (e.g., "meeting notes from today", "idea for project")
 6. link: A URL or reference to save (e.g., contains a URL or asks to save a link)
 7. unclassified: Cannot be classified into any of the above categories
+
+CALENDAR DETECTION (Priority #1):
+Classify as "calendar" when the message contains:
+- Time expressions: "tomorrow", "today", "Monday", "next week", "3pm", "15:00", "at 5"
+- Event keywords: "meeting", "appointment", "call", "dentist", "doctor", "lunch", "dinner"
+- Scheduling verbs: "schedule", "arrange", "book", "set up", "organize"
+- Date formats: "2024-01-15", "15.01.2024", "15/01"
+- Relative dates: "in 2 days", "next Friday", "this afternoon"
+
+Examples (ENGLISH):
+- "meeting tomorrow at 3pm" → calendar
+- "schedule lunch with John on Friday" → calendar
+- "dentist appointment next Tuesday at 10" → calendar
+- "call mom tomorrow" → calendar (time-based)
+- "remind me about the meeting" → reminder (not a new event)
+
+Examples (POLISH):
+- "spotkanie jutro o 15" → calendar
+- "umów wizytę u dentysty we wtorek" → calendar
+- "obiad z Janem w piątek o 13" → calendar
+- "zadzwoń do mamy jutro" → calendar
+- "przypomnij o spotkaniu" → reminder
 
 IMPORTANT: If a message could fit multiple categories, always choose the HIGHER priority category.
 For example: "research and write a report about AI" → todo (because there's a task to complete)

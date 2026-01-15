@@ -26,6 +26,10 @@ export {
   type CommandCategory,
   type CommandClassifierPromptInput,
   type CommandClassifierPromptDeps,
+  calendarActionExtractionPrompt,
+  type CalendarEventExtractionPromptInput,
+  type CalendarEventExtractionPromptDeps,
+  type ExtractedCalendarEvent,
 } from './classification/index.js';
 
 // Todo prompts (item extraction)
@@ -118,6 +122,15 @@ export {
 
 // Security utilities
 export { redactToken, redactObject, SENSITIVE_FIELDS } from './redaction.js';
+
+// LLM parse error utilities
+export {
+  createLlmParseError,
+  logLlmParseError,
+  withLlmParseErrorLogging,
+  createDetailedParseErrorMessage,
+  type LlmParseErrorDetails,
+} from './llm/parseError.js';
 
 // Data insights prompts and parsers
 export {

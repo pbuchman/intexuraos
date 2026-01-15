@@ -263,9 +263,24 @@ importers:
       '@intexuraos/http-server':
         specifier: workspace:*
         version: link:../../packages/http-server
+      '@intexuraos/infra-firestore':
+        specifier: workspace:*
+        version: link:../../packages/infra-firestore
       '@intexuraos/infra-sentry':
         specifier: workspace:*
         version: link:../../packages/infra-sentry
+      '@intexuraos/llm-common':
+        specifier: workspace:*
+        version: link:../../packages/llm-common
+      '@intexuraos/llm-contract':
+        specifier: workspace:*
+        version: link:../../packages/llm-contract
+      '@intexuraos/llm-factory':
+        specifier: workspace:*
+        version: link:../../packages/llm-factory
+      '@intexuraos/llm-pricing':
+        specifier: workspace:*
+        version: link:../../packages/llm-pricing
       fastify:
         specifier: ^5.1.0
         version: 5.6.2

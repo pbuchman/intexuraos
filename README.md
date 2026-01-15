@@ -46,7 +46,7 @@ graph LR
         Res -->|Query| GPT[GPT-5.2]
         Res -->|Query| CL[Claude Opus]
         Res -->|Query| PPL[Perplexity Sonar]
-        Res -->|Query| ZAI[GLE-4.7]
+        Res -->|Query| ZAI[GLM-4.7]
         Gemini & GPT & CL & PPL & ZAI -->|Synthesis| Rep[Final Report]
     end
 

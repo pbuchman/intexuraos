@@ -9,7 +9,12 @@ import { clearJwksCache } from '@intexuraos/common-http';
 import { err, ok } from '@intexuraos/common-core';
 import { buildServer } from '../server.js';
 import { resetServices, setServices } from '../services.js';
-import { FakeGoogleCalendarClient, FakeUserServiceClient } from './fakes.js';
+import {
+  FakeGoogleCalendarClient,
+  FakeUserServiceClient,
+  FakeFailedEventRepository,
+  FakeCalendarActionExtractionService,
+} from './fakes.js';
 import type { CalendarEvent, FreeBusySlot } from '../domain/index.js';
 
 const AUTH_AUDIENCE = 'urn:intexuraos:api';
@@ -24,6 +29,8 @@ describe('Calendar Routes', () => {
 
   let fakeUserService: FakeUserServiceClient;
   let fakeCalendarClient: FakeGoogleCalendarClient;
+  let fakeFailedEventRepository: FakeFailedEventRepository;
+  let fakeCalendarActionExtractionService: FakeCalendarActionExtractionService;
 
   async function createJwt(userId: string): Promise<string> {
     return await new jose.SignJWT({ sub: userId })
@@ -68,10 +75,14 @@ describe('Calendar Routes', () => {
 
     fakeUserService = new FakeUserServiceClient();
     fakeCalendarClient = new FakeGoogleCalendarClient();
+    fakeFailedEventRepository = new FakeFailedEventRepository();
+    fakeCalendarActionExtractionService = new FakeCalendarActionExtractionService();
 
     setServices({
       userServiceClient: fakeUserService,
       googleCalendarClient: fakeCalendarClient,
+      failedEventRepository: fakeFailedEventRepository,
+      calendarActionExtractionService: fakeCalendarActionExtractionService,
     });
 
     app = await buildServer();

@@ -65,6 +65,30 @@ describe('FirestoreNotificationFiltersRepository', () => {
         expect(result.value.savedFilters).toEqual([]);
       }
     });
+
+    it('uses fallback timestamp when updatedAt is missing from document', async () => {
+      const db = fakeFirestore as unknown as {
+        collection: (name: string) => {
+          doc: (id: string) => { set: (data: object) => Promise<void> };
+        };
+      };
+      await db
+        .collection('mobile_notifications_filters')
+        .doc('user-no-updatedAt')
+        .set({
+          options: { app: ['com.test'], device: [], source: [] },
+          savedFilters: [],
+          createdAt: '2024-01-01T00:00:00.000Z',
+        });
+
+      const result = await repository.getByUserId('user-no-updatedAt');
+
+      expect(result.ok).toBe(true);
+      if (result.ok && result.value) {
+        expect(result.value.updatedAt).toBeDefined();
+        expect(result.value.updatedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+      }
+    });
   });
 
   describe('addOption', () => {
@@ -235,6 +259,20 @@ describe('FirestoreNotificationFiltersRepository', () => {
       expect(filter2.ok).toBe(true);
       if (filter1.ok && filter2.ok) {
         expect(filter1.value.id).not.toBe(filter2.value.id);
+      }
+    });
+
+    it('adds second saved filter to existing user document', async () => {
+      const firstFilter = await repository.addSavedFilter('user-existing', { name: 'First Filter' });
+      expect(firstFilter.ok).toBe(true);
+
+      const secondFilter = await repository.addSavedFilter('user-existing', { name: 'Second Filter' });
+      expect(secondFilter.ok).toBe(true);
+
+      const result = await repository.getByUserId('user-existing');
+      expect(result.ok).toBe(true);
+      if (result.ok && result.value) {
+        expect(result.value.savedFilters).toHaveLength(2);
       }
     });
   });

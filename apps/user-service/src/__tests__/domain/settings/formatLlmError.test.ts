@@ -3,13 +3,30 @@ import { formatLlmError } from '../../../domain/settings/formatLlmError.js';
 
 describe('formatLlmError', () => {
   describe('Anthropic errors', () => {
-    it('extracts message from Anthropic JSON error format', () => {
+    it('returns user-friendly message for credit balance billing error', () => {
       const rawError =
         '400 {"type":"error","error":{"type":"invalid_request_error","message":"Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits."}}';
       const result = formatLlmError(rawError);
-      expect(result).toBe(
-        'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'
-      );
+      expect(result).toBe('Insufficient Anthropic API credits. Please add funds at console.anthropic.com');
+    });
+
+    it('detects credit balance error without JSON wrapper', () => {
+      const rawError = 'credit balance is too low';
+      const result = formatLlmError(rawError);
+      expect(result).toBe('Insufficient Anthropic API credits. Please add funds at console.anthropic.com');
+    });
+
+    it('detects credit_balance underscore variant', () => {
+      const rawError = 'credit_balance is insufficient';
+      const result = formatLlmError(rawError);
+      expect(result).toBe('Insufficient Anthropic API credits. Please add funds at console.anthropic.com');
+    });
+
+    it('extracts message from Anthropic JSON error format for non-billing errors', () => {
+      const rawError =
+        '400 {"type":"error","error":{"type":"invalid_request_error","message":"Invalid request body"}}';
+      const result = formatLlmError(rawError);
+      expect(result).toBe('Invalid request body');
     });
 
     it('truncates long Anthropic messages', () => {

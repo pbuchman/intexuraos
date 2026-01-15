@@ -310,6 +310,22 @@ describe('FirestoreNotificationRepository', () => {
 
       expect(result.ok).toBe(true);
     });
+
+    it('handles pagination when snapshot contains no documents', async () => {
+      // This tests the defensive check at line 201-203:
+      // Even though docs.length > 0 is checked, lastDoc !== undefined is also checked
+      // This test verifies cursor handling when the query returns results but snapshot edge cases occur
+      const result = await repository.findByUserIdPaginated('user-empty-snapshot', {
+        limit: 10,
+      });
+
+      // For a user with no notifications, should return empty results with no cursor
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.notifications).toHaveLength(0);
+        expect(result.value.nextCursor).toBeUndefined();
+      }
+    });
   });
 
   describe('existsByNotificationIdAndUserId', () => {

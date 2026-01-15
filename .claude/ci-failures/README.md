@@ -98,3 +98,25 @@ pnpm run ci:report -- --json       # JSON output
 4. Cleared all `.jsonl` files to start fresh collection
 
 **Result:** Instructions now address 80% of historical CI failures
+
+### 2026-01-15 — Unsafe Type Operations Analysis
+
+**Data analyzed:** 432 CI runs across 33 branch files
+
+**Top errors identified:**
+| Error | Count | Category |
+|-------|-------|----------|
+| @typescript-eslint/no-unsafe-member-access | 226 | lint |
+| @typescript-eslint/no-unsafe-call | 169 | lint |
+| @typescript-eslint/strict-template-expressions | 135 | lint |
+| @typescript-eslint/no-unsafe-assignment | 100 | lint |
+| TS2322 (type incompatibility) | 99 | typecheck |
+| TS2307 (module not found) | 64 | typecheck |
+| TS2345 (readonly arrays) | 63 | typecheck |
+
+**Actions taken:**
+
+1. Added pattern #5: "Unsafe Type Operations — Add explicit type assertions"
+2. Added pattern #6: "Async Template Expressions — Await or wrap in String()"
+
+**Result:** Added 2 new patterns addressing 630+ lint failures

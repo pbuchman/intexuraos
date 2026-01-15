@@ -1,11 +1,11 @@
 import type { Result } from '@intexuraos/common-core';
-import { ok, err, getErrorMessage } from '@intexuraos/common-core';
+import { ok, err, getErrorMessage, getLogLevel } from '@intexuraos/common-core';
 import type { Action } from '../../domain/models/action.js';
 import pino from 'pino';
 import type { Logger } from 'pino';
 
 const defaultLogger = pino({
-  level: process.env['LOG_LEVEL'] ?? 'info',
+  level: getLogLevel(),
   name: 'actionsAgentClient',
 });
 

@@ -8,13 +8,6 @@ import type { ServiceContainer, DecryptedApiKeys } from '../../services.js';
 import type { Logger } from '@intexuraos/common-core';
 import type { LlmSynthesisProvider } from '../../domain/research/ports/index.js';
 import type { ContextInferenceProvider } from '../../domain/research/ports/contextInference.js';
-import pino from 'pino';
-
-/**
- * No-op logger for when no logger is provided.
- * Uses pino with 'silent' level which doesn't output anything.
- */
-const silentLogger: Logger = pino({ level: 'silent' });
 
 export interface SynthesisProviders {
   synthesizer: LlmSynthesisProvider;
@@ -26,21 +19,19 @@ export function createSynthesisProviders(
   apiKeys: DecryptedApiKeys,
   userId: string,
   services: ServiceContainer,
-  logger?: Logger
+  logger: Logger
 ): SynthesisProviders {
   const { createSynthesizer, createContextInferrer, pricingContext } = services;
 
   const synthesisProvider = getProviderForModel(synthesisModel);
   const synthesisKey = apiKeys[synthesisProvider];
 
-  const actualLogger = logger ?? silentLogger;
-
   const synthesizer = createSynthesizer(
     synthesisModel,
     synthesisKey as string,
     userId,
     pricingContext.getPricing(synthesisModel),
-    actualLogger
+    logger
   );
 
   const result: SynthesisProviders = { synthesizer };
@@ -51,7 +42,7 @@ export function createSynthesisProviders(
       apiKeys.google,
       userId,
       pricingContext.getPricing(LlmModels.Gemini25Flash),
-      actualLogger
+      logger
     );
   }
 

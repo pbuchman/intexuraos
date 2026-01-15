@@ -858,3 +858,22 @@ export interface CalendarEvent {
   created?: string;
   updated?: string;
 }
+
+/**
+ * Failed calendar event from calendar-agent
+ * These are events that couldn't be created due to missing/invalid information
+ */
+export interface FailedCalendarEvent {
+  id: string;
+  userId: string;
+  actionId: string;
+  originalText: string;
+  summary: string | null;
+  start: string | null;
+  end: string | null;
+  location: string | null;
+  description: string | null;
+  error: string;
+  reasoning: string | null;
+  createdAt: string;
+}

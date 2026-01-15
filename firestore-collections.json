@@ -109,6 +109,10 @@
     "visualizations": {
       "owner": "data-insights-agent",
       "description": "LLM-generated data visualizations with insights and Vega-Lite specs"
+    },
+    "calendar_failed_events": {
+      "owner": "calendar-agent",
+      "description": "Failed calendar event extractions for manual review"
     }
   }
 }
