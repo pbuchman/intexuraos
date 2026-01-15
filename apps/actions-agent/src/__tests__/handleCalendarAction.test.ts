@@ -1,31 +1,19 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { isOk, isErr, ok, err } from '@intexuraos/common-core';
 import { createHandleCalendarActionUseCase } from '../domain/usecases/handleCalendarAction.js';
 import type { ActionCreatedEvent } from '../domain/models/actionEvent.js';
+import type { ShouldAutoExecute } from '../domain/usecases/handleCalendarAction.js';
 import { FakeActionServiceClient, FakeWhatsAppSendPublisher } from './fakes.js';
 import pino from 'pino';
 
-vi.mock('../domain/usecases/shouldAutoExecute.js', () => ({
-  shouldAutoExecute: vi.fn(() => false),
-}));
-
-import { shouldAutoExecute } from '../domain/usecases/shouldAutoExecute.js';
-
 const silentLogger = pino({ level: 'silent' });
+
+const mockShouldAutoExecuteFalse: ShouldAutoExecute = vi.fn(() => false);
+const mockShouldAutoExecuteTrue: ShouldAutoExecute = vi.fn(() => true);
 
 describe('handleCalendarAction usecase', () => {
   let fakeActionClient: FakeActionServiceClient;
   let fakeWhatsappPublisher: FakeWhatsAppSendPublisher;
-
-  // Clear all mocks before each test to prevent cross-test state leakage in coverage mode
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
-  // Ensure mock is reset after each test
-  afterEach(() => {
-    vi.clearAllMocks();
-  });
 
   const createEvent = (overrides: Partial<ActionCreatedEvent> = {}): ActionCreatedEvent => ({
     type: 'action.created',
@@ -66,6 +54,7 @@ describe('handleCalendarAction usecase', () => {
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.intexuraos.com',
       logger: silentLogger,
+      shouldAutoExecute: mockShouldAutoExecuteFalse,
     });
 
     const event = createEvent();
@@ -105,6 +94,7 @@ describe('handleCalendarAction usecase', () => {
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.intexuraos.com',
       logger: silentLogger,
+      shouldAutoExecute: mockShouldAutoExecuteFalse,
     });
 
     fakeActionClient.setFailOn('updateActionStatus', new Error('Database unavailable'));
@@ -137,6 +127,7 @@ describe('handleCalendarAction usecase', () => {
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.intexuraos.com',
       logger: silentLogger,
+      shouldAutoExecute: mockShouldAutoExecuteFalse,
     });
 
     fakeWhatsappPublisher.setFailNext(true, {
@@ -162,6 +153,7 @@ describe('handleCalendarAction usecase', () => {
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.intexuraos.com',
       logger: silentLogger,
+      shouldAutoExecute: mockShouldAutoExecuteFalse,
     });
 
     fakeActionClient.setFailOn('getAction', new Error('Database error'));
@@ -181,6 +173,7 @@ describe('handleCalendarAction usecase', () => {
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.intexuraos.com',
       logger: silentLogger,
+      shouldAutoExecute: mockShouldAutoExecuteFalse,
     });
 
     const event = createEvent();
@@ -198,6 +191,7 @@ describe('handleCalendarAction usecase', () => {
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.intexuraos.com',
       logger: silentLogger,
+      shouldAutoExecute: mockShouldAutoExecuteFalse,
     });
 
     fakeActionClient.setAction({
@@ -231,6 +225,7 @@ describe('handleCalendarAction usecase', () => {
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.intexuraos.com',
       logger: silentLogger,
+      shouldAutoExecute: mockShouldAutoExecuteFalse,
     });
 
     fakeActionClient.setAction({
@@ -259,14 +254,6 @@ describe('handleCalendarAction usecase', () => {
   });
 
   describe('auto-execute flow', () => {
-    beforeEach(() => {
-      vi.mocked(shouldAutoExecute).mockReturnValue(true);
-    });
-
-    afterEach(() => {
-      vi.mocked(shouldAutoExecute).mockReturnValue(false);
-    });
-
     it('auto-executes when shouldAutoExecute returns true and executeCalendarAction is provided', async () => {
       fakeActionClient.setAction({
         id: 'action-123',
@@ -291,6 +278,7 @@ describe('handleCalendarAction usecase', () => {
         webAppUrl: 'https://app.intexuraos.com',
         logger: silentLogger,
         executeCalendarAction: fakeExecuteCalendarAction,
+        shouldAutoExecute: mockShouldAutoExecuteTrue,
       });
 
       const event = createEvent();
@@ -325,6 +313,7 @@ describe('handleCalendarAction usecase', () => {
         webAppUrl: 'https://app.intexuraos.com',
         logger: silentLogger,
         executeCalendarAction: fakeExecuteCalendarAction,
+        shouldAutoExecute: mockShouldAutoExecuteTrue,
       });
 
       const event = createEvent();
@@ -355,6 +344,7 @@ describe('handleCalendarAction usecase', () => {
         whatsappPublisher: fakeWhatsappPublisher,
         webAppUrl: 'https://app.intexuraos.com',
         logger: silentLogger,
+        shouldAutoExecute: mockShouldAutoExecuteTrue,
       });
 
       const event = createEvent();
