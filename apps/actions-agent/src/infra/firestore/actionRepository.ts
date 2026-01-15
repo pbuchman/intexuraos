@@ -104,5 +104,44 @@ export function createFirestoreActionRepository(): ActionRepository {
 
       return snapshot.docs.map((doc) => toAction(doc.id, doc.data() as ActionDoc));
     },
+
+    async updateStatusIf(
+      actionId: string,
+      newStatus: Action['status'],
+      expectedStatus: Action['status']
+    ): Promise<boolean> {
+      const db = getFirestore();
+      const docRef = db.collection(COLLECTION).doc(actionId);
+
+      // Use Firestore transaction to atomically check and update status
+      // This prevents race conditions when multiple PubSub messages arrive
+      try {
+        const result = await db.runTransaction(async (transaction) => {
+          const snapshot = await transaction.get(docRef);
+
+          if (!snapshot.exists) {
+            return false;
+          }
+
+          const currentStatus = snapshot.get('status') as string;
+
+          // Only update if current status matches expected
+          if (currentStatus !== expectedStatus) {
+            return false;
+          }
+
+          transaction.update(docRef, {
+            status: newStatus,
+            updatedAt: new Date().toISOString(),
+          });
+
+          return true;
+        });
+
+        return result;
+      } catch {
+        return false;
+      }
+    },
   };
 }

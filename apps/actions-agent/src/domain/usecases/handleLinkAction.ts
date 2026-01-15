@@ -1,5 +1,5 @@
 import { ok, err, type Result, getErrorMessage } from '@intexuraos/common-core';
-import type { ActionServiceClient } from '../ports/actionServiceClient.js';
+import type { ActionRepository } from '../ports/actionRepository.js';
 import type { WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
 import type { ActionCreatedEvent } from '../models/actionEvent.js';
 import type { Logger } from 'pino';
@@ -7,7 +7,7 @@ import type { ExecuteLinkActionUseCase } from './executeLinkAction.js';
 import { shouldAutoExecute } from './shouldAutoExecute.js';
 
 export interface HandleLinkActionDeps {
-  actionServiceClient: ActionServiceClient;
+  actionRepository: ActionRepository;
   whatsappPublisher: WhatsAppSendPublisher;
   webAppUrl: string;
   logger: Logger;
@@ -19,7 +19,7 @@ export interface HandleLinkActionUseCase {
 }
 
 export function createHandleLinkActionUseCase(deps: HandleLinkActionDeps): HandleLinkActionUseCase {
-  const { actionServiceClient, whatsappPublisher, webAppUrl, logger, executeLinkAction } = deps;
+  const { actionRepository, whatsappPublisher, webAppUrl, logger, executeLinkAction } = deps;
 
   return {
     async execute(event: ActionCreatedEvent): Promise<Result<{ actionId: string }>> {
@@ -33,26 +33,6 @@ export function createHandleLinkActionUseCase(deps: HandleLinkActionDeps): Handl
         },
         'Processing link action'
       );
-
-      const actionResult = await actionServiceClient.getAction(event.actionId);
-      if (!actionResult.ok) {
-        logger.warn({ actionId: event.actionId }, 'Action not found, may have been deleted');
-        return ok({ actionId: event.actionId });
-      }
-
-      const action = actionResult.value;
-      if (action === null) {
-        logger.warn({ actionId: event.actionId }, 'Action not found, may have been deleted');
-        return ok({ actionId: event.actionId });
-      }
-
-      if (action.status !== 'pending') {
-        logger.info(
-          { actionId: event.actionId, currentStatus: action.status },
-          'Action already processed, skipping (idempotent)'
-        );
-        return ok({ actionId: event.actionId });
-      }
 
       if (shouldAutoExecute(event) && executeLinkAction !== undefined) {
         logger.info({ actionId: event.actionId }, 'Auto-executing link action');
@@ -73,20 +53,24 @@ export function createHandleLinkActionUseCase(deps: HandleLinkActionDeps): Handl
 
       logger.info({ actionId: event.actionId }, 'Setting link action to awaiting_approval');
 
-      const result = await actionServiceClient.updateActionStatus(
-        event.actionId,
-        'awaiting_approval'
-      );
-
-      if (!result.ok) {
+      // Atomically update status only if still 'pending' - prevents duplicate WhatsApp messages
+      let updated: boolean;
+      try {
+        updated = await actionRepository.updateStatusIf(event.actionId, 'awaiting_approval', 'pending');
+      } catch (error) {
         logger.error(
-          {
-            actionId: event.actionId,
-            error: getErrorMessage(result.error),
-          },
-          'Failed to set link action to awaiting_approval'
+          { actionId: event.actionId, error: getErrorMessage(error) },
+          'Failed to update action status'
         );
-        return err(new Error(`Failed to update action status: ${getErrorMessage(result.error)}`));
+        return err(new Error('Failed to update action status'));
+      }
+
+      if (!updated) {
+        logger.info(
+          { actionId: event.actionId },
+          'Action already processed by another handler (idempotent)'
+        );
+        return ok({ actionId: event.actionId });
       }
 
       logger.info({ actionId: event.actionId }, 'Link action set to awaiting_approval');

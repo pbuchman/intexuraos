@@ -28,6 +28,7 @@ describe('localActionServiceClient', () => {
       delete: vi.fn().mockResolvedValue(undefined),
       listByUserId: vi.fn().mockResolvedValue([]),
       listByStatus: vi.fn().mockResolvedValue([]),
+      updateStatusIf: vi.fn().mockResolvedValue(true),
     };
   });
 

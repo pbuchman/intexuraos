@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { isOk, isErr, ok, err } from '@intexuraos/common-core';
 import { createHandleResearchActionUseCase } from '../domain/usecases/handleResearchAction.js';
 import type { ActionCreatedEvent } from '../domain/models/actionEvent.js';
-import { FakeActionServiceClient, FakeWhatsAppSendPublisher } from './fakes.js';
+import { FakeActionRepository, FakeWhatsAppSendPublisher } from './fakes.js';
 import pino from 'pino';
 
 vi.mock('../domain/usecases/shouldAutoExecute.js', () => ({
@@ -14,7 +14,7 @@ import { shouldAutoExecute } from '../domain/usecases/shouldAutoExecute.js';
 const silentLogger = pino({ level: 'silent' });
 
 describe('handleResearchAction usecase', () => {
-  let fakeActionClient: FakeActionServiceClient;
+  let fakeActionRepository: FakeActionRepository;
   let fakeWhatsappPublisher: FakeWhatsAppSendPublisher;
 
   const createEvent = (overrides: Partial<ActionCreatedEvent> = {}): ActionCreatedEvent => ({
@@ -32,27 +32,29 @@ describe('handleResearchAction usecase', () => {
     ...overrides,
   });
 
+  const createAction = () => ({
+    id: 'action-123',
+    userId: 'user-456',
+    commandId: 'cmd-789',
+    type: 'research' as const,
+    confidence: 0.95,
+    title: 'Test Research',
+    status: 'pending' as const,
+    payload: {},
+    createdAt: '2025-01-01T12:00:00.000Z',
+    updatedAt: '2025-01-01T12:00:00.000Z',
+  });
+
   beforeEach(() => {
-    fakeActionClient = new FakeActionServiceClient();
+    fakeActionRepository = new FakeActionRepository();
     fakeWhatsappPublisher = new FakeWhatsAppSendPublisher();
   });
 
   it('sets action to awaiting_approval and publishes WhatsApp notification', async () => {
-    fakeActionClient.setAction({
-      id: 'action-123',
-      userId: 'user-456',
-      commandId: 'cmd-789',
-      type: 'research',
-      confidence: 0.95,
-      title: 'Test Research',
-      status: 'pending',
-      payload: {},
-      createdAt: '2025-01-01T12:00:00.000Z',
-      updatedAt: '2025-01-01T12:00:00.000Z',
-    });
+    await fakeActionRepository.save(createAction());
 
     const usecase = createHandleResearchActionUseCase({
-      actionServiceClient: fakeActionClient,
+      actionRepository: fakeActionRepository,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.intexuraos.com',
       logger: silentLogger,
@@ -66,8 +68,8 @@ describe('handleResearchAction usecase', () => {
       expect(result.value.actionId).toBe('action-123');
     }
 
-    const actionStatus = fakeActionClient.getStatusUpdates().get('action-123');
-    expect(actionStatus).toBe('awaiting_approval');
+    const action = await fakeActionRepository.getById('action-123');
+    expect(action?.status).toBe('awaiting_approval');
 
     const messages = fakeWhatsappPublisher.getSentMessages();
     expect(messages).toHaveLength(1);
@@ -77,27 +79,16 @@ describe('handleResearchAction usecase', () => {
   });
 
   it('fails when marking action as awaiting_approval fails', async () => {
-    fakeActionClient.setAction({
-      id: 'action-123',
-      userId: 'user-456',
-      commandId: 'cmd-789',
-      type: 'research',
-      confidence: 0.95,
-      title: 'Test Research',
-      status: 'pending',
-      payload: {},
-      createdAt: '2025-01-01T12:00:00.000Z',
-      updatedAt: '2025-01-01T12:00:00.000Z',
-    });
+    await fakeActionRepository.save(createAction());
 
     const usecase = createHandleResearchActionUseCase({
-      actionServiceClient: fakeActionClient,
+      actionRepository: fakeActionRepository,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.intexuraos.com',
       logger: silentLogger,
     });
 
-    fakeActionClient.setFailOn('updateActionStatus', new Error('Database unavailable'));
+    fakeActionRepository.setFailNext(true, new Error('Database unavailable'));
 
     const event = createEvent();
     const result = await usecase.execute(event);
@@ -109,21 +100,10 @@ describe('handleResearchAction usecase', () => {
   });
 
   it('succeeds even when WhatsApp publish fails (best-effort notification)', async () => {
-    fakeActionClient.setAction({
-      id: 'action-123',
-      userId: 'user-456',
-      commandId: 'cmd-789',
-      type: 'research',
-      confidence: 0.95,
-      title: 'Test Research',
-      status: 'pending',
-      payload: {},
-      createdAt: '2025-01-01T12:00:00.000Z',
-      updatedAt: '2025-01-01T12:00:00.000Z',
-    });
+    await fakeActionRepository.save(createAction());
 
     const usecase = createHandleResearchActionUseCase({
-      actionServiceClient: fakeActionClient,
+      actionRepository: fakeActionRepository,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.intexuraos.com',
       logger: silentLogger,
@@ -142,32 +122,13 @@ describe('handleResearchAction usecase', () => {
       expect(result.value.actionId).toBe('action-123');
     }
 
-    const actionStatus = fakeActionClient.getStatusUpdates().get('action-123');
-    expect(actionStatus).toBe('awaiting_approval');
+    const action = await fakeActionRepository.getById('action-123');
+    expect(action?.status).toBe('awaiting_approval');
   });
 
-  it('returns success when getAction fails (deleted action)', async () => {
+  it('returns success when action does not exist (deleted between creation and handling)', async () => {
     const usecase = createHandleResearchActionUseCase({
-      actionServiceClient: fakeActionClient,
-      whatsappPublisher: fakeWhatsappPublisher,
-      webAppUrl: 'https://app.intexuraos.com',
-      logger: silentLogger,
-    });
-
-    fakeActionClient.setFailOn('getAction', new Error('Database error'));
-
-    const event = createEvent();
-    const result = await usecase.execute(event);
-
-    expect(isOk(result)).toBe(true);
-    if (isOk(result)) {
-      expect(result.value.actionId).toBe('action-123');
-    }
-  });
-
-  it('returns success when action is null (deleted between creation and handling)', async () => {
-    const usecase = createHandleResearchActionUseCase({
-      actionServiceClient: fakeActionClient,
+      actionRepository: fakeActionRepository,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.intexuraos.com',
       logger: silentLogger,
@@ -180,27 +141,20 @@ describe('handleResearchAction usecase', () => {
     if (isOk(result)) {
       expect(result.value.actionId).toBe('action-123');
     }
+
+    // Should not send WhatsApp message since action doesn't exist
+    expect(fakeWhatsappPublisher.getSentMessages()).toHaveLength(0);
   });
 
   it('returns success without sending notification when action already processed (idempotency)', async () => {
+    const action = createAction();
+    await fakeActionRepository.save({ ...action, status: 'awaiting_approval' });
+
     const usecase = createHandleResearchActionUseCase({
-      actionServiceClient: fakeActionClient,
+      actionRepository: fakeActionRepository,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.intexuraos.com',
       logger: silentLogger,
-    });
-
-    fakeActionClient.setAction({
-      id: 'action-123',
-      userId: 'user-456',
-      commandId: 'cmd-789',
-      type: 'research',
-      confidence: 0.95,
-      title: 'Test Research',
-      status: 'awaiting_approval',
-      payload: {},
-      createdAt: '2025-01-01T12:00:00.000Z',
-      updatedAt: '2025-01-01T12:00:00.000Z',
     });
 
     const event = createEvent();
@@ -211,7 +165,7 @@ describe('handleResearchAction usecase', () => {
       expect(result.value.actionId).toBe('action-123');
     }
 
-    expect(fakeActionClient.getStatusUpdates().size).toBe(0);
+    // Should not send WhatsApp message since action was already processed
     expect(fakeWhatsappPublisher.getSentMessages()).toHaveLength(0);
   });
 
@@ -225,25 +179,14 @@ describe('handleResearchAction usecase', () => {
     });
 
     it('auto-executes when shouldAutoExecute returns true and executeResearchAction is provided', async () => {
-      fakeActionClient.setAction({
-        id: 'action-123',
-        userId: 'user-456',
-        commandId: 'cmd-789',
-        type: 'research',
-        confidence: 0.95,
-        title: 'Test Research',
-        status: 'pending',
-        payload: {},
-        createdAt: '2025-01-01T12:00:00.000Z',
-        updatedAt: '2025-01-01T12:00:00.000Z',
-      });
+      await fakeActionRepository.save(createAction());
 
       const fakeExecuteResearchAction = vi.fn().mockResolvedValue(
         ok({ status: 'completed' as const, resource_url: '/#/research/research-123' })
       );
 
       const usecase = createHandleResearchActionUseCase({
-        actionServiceClient: fakeActionClient,
+        actionRepository: fakeActionRepository,
         whatsappPublisher: fakeWhatsappPublisher,
         webAppUrl: 'https://app.intexuraos.com',
         logger: silentLogger,
@@ -255,29 +198,21 @@ describe('handleResearchAction usecase', () => {
 
       expect(isOk(result)).toBe(true);
       expect(fakeExecuteResearchAction).toHaveBeenCalledWith('action-123');
-      expect(fakeActionClient.getStatusUpdates().get('action-123')).toBeUndefined();
+
+      // Action should still be pending (not updated to awaiting_approval)
+      const action = await fakeActionRepository.getById('action-123');
+      expect(action?.status).toBe('pending');
     });
 
     it('returns error when auto-execute fails', async () => {
-      fakeActionClient.setAction({
-        id: 'action-123',
-        userId: 'user-456',
-        commandId: 'cmd-789',
-        type: 'research',
-        confidence: 0.95,
-        title: 'Test Research',
-        status: 'pending',
-        payload: {},
-        createdAt: '2025-01-01T12:00:00.000Z',
-        updatedAt: '2025-01-01T12:00:00.000Z',
-      });
+      await fakeActionRepository.save(createAction());
 
       const fakeExecuteResearchAction = vi.fn().mockResolvedValue(
         err(new Error('Execution failed'))
       );
 
       const usecase = createHandleResearchActionUseCase({
-        actionServiceClient: fakeActionClient,
+        actionRepository: fakeActionRepository,
         whatsappPublisher: fakeWhatsappPublisher,
         webAppUrl: 'https://app.intexuraos.com',
         logger: silentLogger,
@@ -294,21 +229,10 @@ describe('handleResearchAction usecase', () => {
     });
 
     it('falls back to approval flow when executeResearchAction is not provided', async () => {
-      fakeActionClient.setAction({
-        id: 'action-123',
-        userId: 'user-456',
-        commandId: 'cmd-789',
-        type: 'research',
-        confidence: 0.95,
-        title: 'Test Research',
-        status: 'pending',
-        payload: {},
-        createdAt: '2025-01-01T12:00:00.000Z',
-        updatedAt: '2025-01-01T12:00:00.000Z',
-      });
+      await fakeActionRepository.save(createAction());
 
       const usecase = createHandleResearchActionUseCase({
-        actionServiceClient: fakeActionClient,
+        actionRepository: fakeActionRepository,
         whatsappPublisher: fakeWhatsappPublisher,
         webAppUrl: 'https://app.intexuraos.com',
         logger: silentLogger,
@@ -318,7 +242,10 @@ describe('handleResearchAction usecase', () => {
       const result = await usecase.execute(event);
 
       expect(isOk(result)).toBe(true);
-      expect(fakeActionClient.getStatusUpdates().get('action-123')).toBe('awaiting_approval');
+
+      // Action should be updated to awaiting_approval
+      const action = await fakeActionRepository.getById('action-123');
+      expect(action?.status).toBe('awaiting_approval');
     });
   });
 });

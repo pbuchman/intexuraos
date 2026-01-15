@@ -1,5 +1,5 @@
 import { ok, err, type Result, getErrorMessage } from '@intexuraos/common-core';
-import type { ActionServiceClient } from '../ports/actionServiceClient.js';
+import type { ActionRepository } from '../ports/actionRepository.js';
 import type { WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
 import type { ActionCreatedEvent } from '../models/actionEvent.js';
 import type { Logger } from 'pino';
@@ -7,7 +7,7 @@ import type { ExecuteNoteActionUseCase } from './executeNoteAction.js';
 import { shouldAutoExecute } from './shouldAutoExecute.js';
 
 export interface HandleNoteActionDeps {
-  actionServiceClient: ActionServiceClient;
+  actionRepository: ActionRepository;
   whatsappPublisher: WhatsAppSendPublisher;
   webAppUrl: string;
   logger: Logger;
@@ -19,7 +19,7 @@ export interface HandleNoteActionUseCase {
 }
 
 export function createHandleNoteActionUseCase(deps: HandleNoteActionDeps): HandleNoteActionUseCase {
-  const { actionServiceClient, whatsappPublisher, webAppUrl, logger, executeNoteAction } = deps;
+  const { actionRepository, whatsappPublisher, webAppUrl, logger, executeNoteAction } = deps;
 
   return {
     async execute(event: ActionCreatedEvent): Promise<Result<{ actionId: string }>> {
@@ -33,26 +33,6 @@ export function createHandleNoteActionUseCase(deps: HandleNoteActionDeps): Handl
         },
         'Processing note action'
       );
-
-      const actionResult = await actionServiceClient.getAction(event.actionId);
-      if (!actionResult.ok) {
-        logger.warn({ actionId: event.actionId }, 'Action not found, may have been deleted');
-        return ok({ actionId: event.actionId });
-      }
-
-      const action = actionResult.value;
-      if (action === null) {
-        logger.warn({ actionId: event.actionId }, 'Action not found, may have been deleted');
-        return ok({ actionId: event.actionId });
-      }
-
-      if (action.status !== 'pending') {
-        logger.info(
-          { actionId: event.actionId, currentStatus: action.status },
-          'Action already processed, skipping (idempotent)'
-        );
-        return ok({ actionId: event.actionId });
-      }
 
       if (shouldAutoExecute(event) && executeNoteAction !== undefined) {
         logger.info({ actionId: event.actionId }, 'Auto-executing note action');
@@ -73,20 +53,24 @@ export function createHandleNoteActionUseCase(deps: HandleNoteActionDeps): Handl
 
       logger.info({ actionId: event.actionId }, 'Setting note action to awaiting_approval');
 
-      const result = await actionServiceClient.updateActionStatus(
-        event.actionId,
-        'awaiting_approval'
-      );
-
-      if (!result.ok) {
+      // Atomically update status only if still 'pending' - prevents duplicate WhatsApp messages
+      let updated: boolean;
+      try {
+        updated = await actionRepository.updateStatusIf(event.actionId, 'awaiting_approval', 'pending');
+      } catch (error) {
         logger.error(
-          {
-            actionId: event.actionId,
-            error: getErrorMessage(result.error),
-          },
-          'Failed to set note action to awaiting_approval'
+          { actionId: event.actionId, error: getErrorMessage(error) },
+          'Failed to update action status'
         );
-        return err(new Error(`Failed to update action status: ${getErrorMessage(result.error)}`));
+        return err(new Error('Failed to update action status'));
+      }
+
+      if (!updated) {
+        logger.info(
+          { actionId: event.actionId },
+          'Action already processed by another handler (idempotent)'
+        );
+        return ok({ actionId: event.actionId });
       }
 
       logger.info({ actionId: event.actionId }, 'Note action set to awaiting_approval');

@@ -214,7 +214,7 @@ export function initServices(config: ServiceConfig): void {
   });
 
   const handleResearchActionUseCase = createHandleResearchActionUseCase({
-    actionServiceClient,
+    actionRepository,
     whatsappPublisher,
     webAppUrl: config.webAppUrl,
     logger: pino({ name: 'handleResearchAction' }),
@@ -222,7 +222,7 @@ export function initServices(config: ServiceConfig): void {
   });
 
   const handleTodoActionUseCase = createHandleTodoActionUseCase({
-    actionServiceClient,
+    actionRepository,
     whatsappPublisher,
     webAppUrl: config.webAppUrl,
     logger: pino({ name: 'handleTodoAction' }),
@@ -230,7 +230,7 @@ export function initServices(config: ServiceConfig): void {
   });
 
   const handleNoteActionUseCase = createHandleNoteActionUseCase({
-    actionServiceClient,
+    actionRepository,
     whatsappPublisher,
     webAppUrl: config.webAppUrl,
     logger: pino({ name: 'handleNoteAction' }),
@@ -238,7 +238,7 @@ export function initServices(config: ServiceConfig): void {
   });
 
   const handleLinkActionUseCase = createHandleLinkActionUseCase({
-    actionServiceClient,
+    actionRepository,
     whatsappPublisher,
     webAppUrl: config.webAppUrl,
     logger: pino({ name: 'handleLinkAction' }),

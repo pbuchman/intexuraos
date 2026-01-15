@@ -197,6 +197,22 @@ class FakeDocumentSnapshot {
     return this._data;
   }
 
+  get(field: string): unknown {
+    if (this._data === undefined) {
+      return undefined;
+    }
+    // Support nested field paths (e.g., 'user.name')
+    const parts = field.split('.');
+    let value: unknown = this._data;
+    for (const part of parts) {
+      if (value === null || typeof value !== 'object') {
+        return undefined;
+      }
+      value = (value as Record<string, unknown>)[part];
+    }
+    return value;
+  }
+
   get ref(): FakeDocumentReference {
     return new FakeDocumentReference(this._collectionName, this._id, this._store);
   }
@@ -360,6 +376,16 @@ class FakeDocumentReference {
     return this.docId;
   }
 
+  /** Expose collection name for transaction access */
+  get _collectionName(): string {
+    return this.collectionName;
+  }
+
+  /** Expose store for transaction access */
+  get _store(): DocumentStore {
+    return this.store;
+  }
+
   get(): Promise<FakeDocumentSnapshot> {
     const collection = this.store.get(this.collectionName);
     const data = collection?.get(this.docId);
@@ -494,6 +520,128 @@ export interface FakeFirestoreConfig {
 }
 
 /**
+ * Transaction context for fake transactions.
+ * Provides read and write operations within a transaction.
+ */
+class FakeTransaction {
+  constructor(
+    private readonly store: DocumentStore,
+    private readonly pendingWrites: Map<string, { data: DocumentData; deleted: boolean }>
+  ) {}
+
+  /**
+   * Get a document snapshot within the transaction.
+   * Returns pending writes if available, otherwise reads from store.
+   */
+  get(docRef: FakeDocumentReference): Promise<FakeDocumentSnapshot> {
+    const key = `${docRef._collectionName}/${docRef.id}`;
+    const pending = this.pendingWrites.get(key);
+
+    if (pending) {
+      if (pending.deleted) {
+        return Promise.resolve(
+          new FakeDocumentSnapshot(docRef.id, undefined, false, docRef._collectionName, this.store)
+        );
+      }
+      return Promise.resolve(
+        new FakeDocumentSnapshot(docRef.id, pending.data, true, docRef._collectionName, this.store)
+      );
+    }
+
+    // Read from underlying store
+    return docRef.get();
+  }
+
+  /**
+   * Update a document within the transaction.
+   * Writes are buffered until commit.
+   */
+  update(docRef: FakeDocumentReference, data: Partial<DocumentData>): void {
+    const key = `${docRef._collectionName}/${docRef.id}`;
+
+    // Get existing data (either from previous writes in this transaction, or from store)
+    const collection = this.store.get(docRef._collectionName);
+    const existing = this.pendingWrites.get(key)?.data ?? collection?.get(docRef.id);
+
+    if (existing === undefined) {
+      throw new Error(`Document ${docRef._collectionName}/${docRef.id} does not exist`);
+    }
+
+    const updated = { ...existing } as Record<string, unknown>;
+    for (const key of Object.keys(data)) {
+      const value: unknown = data[key as keyof typeof data];
+
+      const arrayElements = extractArrayUnionElements(value);
+      if (arrayElements !== null) {
+        const existingArray = key.includes('.') ? getNestedField(updated, key) : updated[key];
+        const currentArray: unknown[] = Array.isArray(existingArray)
+          ? (existingArray as unknown[]).slice()
+          : [];
+        for (const elem of arrayElements) {
+          if (!currentArray.some((e) => JSON.stringify(e) === JSON.stringify(elem))) {
+            currentArray.push(elem);
+          }
+        }
+        if (key.includes('.')) {
+          setNestedField(updated, key, currentArray);
+        } else {
+          updated[key] = currentArray;
+        }
+        continue;
+      }
+
+      if (isFieldValueDelete(value)) {
+        if (key.includes('.')) {
+          deleteNestedField(updated, key);
+        } else {
+          Reflect.deleteProperty(updated, key);
+        }
+        continue;
+      }
+
+      if (key.includes('.')) {
+        setNestedField(updated, key, value);
+      } else {
+        updated[key] = value;
+      }
+    }
+
+    this.pendingWrites.set(key, { data: updated, deleted: false });
+  }
+
+  /**
+   * Create (or replace) a document within the transaction.
+   */
+  set(docRef: FakeDocumentReference, data: DocumentData, options?: { merge?: boolean }): void {
+    const key = `${docRef._collectionName}/${docRef.id}`;
+    const existing = this.pendingWrites.get(key)?.data;
+
+    let finalData = data;
+    if (options?.merge === true && existing !== undefined) {
+      const merged = { ...existing } as Record<string, unknown>;
+      deepMerge(merged, data as Record<string, unknown>);
+      finalData = merged as DocumentData;
+    }
+
+    this.pendingWrites.set(key, { data: finalData, deleted: false });
+  }
+
+  /**
+   * Delete a document within the transaction.
+   */
+  delete(docRef: FakeDocumentReference): void {
+    const key = `${docRef._collectionName}/${docRef.id}`;
+    this.pendingWrites.set(key, { data: {} as DocumentData, deleted: true });
+  }
+}
+
+/**
+ * Transaction queue for serializing transactions.
+ * Ensures that only one transaction runs at a time, preventing race conditions.
+ */
+let transactionQueue: Promise<unknown> = Promise.resolve();
+
+/**
  * Fake Firestore implementation.
  */
 class FakeFirestoreImpl {
@@ -521,6 +669,8 @@ class FakeFirestoreImpl {
   clear(): void {
     this.store.clear();
     this.config = {};
+    // Reset transaction queue when clearing data
+    transactionQueue = Promise.resolve();
   }
 
   /**
@@ -559,6 +709,45 @@ class FakeFirestoreImpl {
    */
   batch(): FakeBatch {
     return new FakeBatch();
+  }
+
+  /**
+   * Run a transaction atomically.
+   * Transactions provide isolation and atomicity for read-modify-write operations.
+   * Uses a global queue to serialize transactions and prevent race conditions.
+   */
+  async runTransaction<T>(updateFn: (transaction: FakeTransaction) => Promise<T>): Promise<T> {
+    // Enqueue this transaction to run after all previous transactions complete
+    transactionQueue = transactionQueue.then(
+      async (): Promise<T> => {
+        const pendingWrites = new Map<string, { data: DocumentData; deleted: boolean }>();
+        const transaction = new FakeTransaction(this.store, pendingWrites);
+
+        const result = await updateFn(transaction);
+        // Commit: apply all pending writes to the store
+        for (const [key, value] of pendingWrites.entries()) {
+          const [collectionName, docId] = key.split('/');
+          if (collectionName === undefined || docId === undefined) {
+            continue; // Skip malformed keys
+          }
+          let collection = this.store.get(collectionName) as Map<string, DocumentData> | undefined;
+          if (collection === undefined) {
+            const newCollection = new Map<string, DocumentData>();
+            this.store.set(collectionName, newCollection);
+            collection = newCollection;
+          }
+          if (value.deleted) {
+            collection.delete(docId);
+          } else {
+            collection.set(docId, value.data);
+          }
+        }
+        return result;
+      }
+    );
+
+    // eslint-disable-next-line @typescript-eslint/return-await
+    return transactionQueue as Promise<T>;
   }
 }
 

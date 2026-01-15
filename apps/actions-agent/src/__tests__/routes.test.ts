@@ -287,7 +287,7 @@ describe('Research Agent Routes', () => {
     });
 
     it('processes valid research action and returns 200', async () => {
-      fakeActionClient.setAction({
+      await fakeActionRepository.save({
         id: 'action-123',
         userId: 'user-456',
         commandId: 'cmd-789',
@@ -314,11 +314,12 @@ describe('Research Agent Routes', () => {
       expect(body.success).toBe(true);
       expect(body.actionId).toBe('action-123');
 
-      expect(fakeActionClient.getStatusUpdates().get('action-123')).toBe('awaiting_approval');
+      const updatedAction = await fakeActionRepository.getById('action-123');
+      expect(updatedAction?.status).toBe('awaiting_approval');
     });
 
     it('returns 200 when action already processed (idempotency)', async () => {
-      fakeActionClient.setAction({
+      await fakeActionRepository.save({
         id: 'action-123',
         userId: 'user-456',
         commandId: 'cmd-789',
@@ -345,7 +346,8 @@ describe('Research Agent Routes', () => {
       expect(body.success).toBe(true);
       expect(body.actionId).toBe('action-123');
 
-      expect(fakeActionClient.getStatusUpdates().size).toBe(0);
+      const action = await fakeActionRepository.getById('action-123');
+      expect(action?.status).toBe('awaiting_approval');
     });
 
     it('returns 400 for unsupported action type', async () => {
@@ -382,7 +384,7 @@ describe('Research Agent Routes', () => {
     });
 
     it('returns 500 when handler execution fails', async () => {
-      fakeActionClient.setAction({
+      await fakeActionRepository.save({
         id: 'action-123',
         userId: 'user-456',
         commandId: 'cmd-789',
@@ -395,7 +397,7 @@ describe('Research Agent Routes', () => {
         updatedAt: '2025-01-01T12:00:00.000Z',
       });
 
-      fakeActionClient.setFailOn('updateActionStatus', new Error('Database connection failed'));
+      fakeActionRepository.setFailNext(true, new Error('Database connection failed'));
 
       setServices(
         createFakeServices({
@@ -420,7 +422,7 @@ describe('Research Agent Routes', () => {
 
       expect(response.statusCode).toBe(500);
       const body = JSON.parse(response.body) as { error: string };
-      expect(body.error).toContain('Database connection failed');
+      expect(body.error).toContain('Failed to update action status');
     });
   });
 
@@ -1884,7 +1886,7 @@ describe('Research Agent Routes', () => {
     });
 
     it('returns 200 when action already processed (idempotency)', async () => {
-      fakeActionClient.setAction({
+      await fakeActionRepository.save({
         id: 'action-123',
         userId: 'user-456',
         commandId: 'cmd-789',
@@ -1916,7 +1918,7 @@ describe('Research Agent Routes', () => {
     });
 
     it('returns 500 when handler execution fails with other error', async () => {
-      fakeActionClient.setAction({
+      await fakeActionRepository.save({
         id: 'action-123',
         userId: 'user-456',
         commandId: 'cmd-789',
@@ -1929,7 +1931,7 @@ describe('Research Agent Routes', () => {
         updatedAt: '2025-01-01T12:00:00.000Z',
       });
 
-      fakeActionClient.setFailOn('updateActionStatus', new Error('Database connection failed'));
+      fakeActionRepository.setFailNext(true, new Error('Database connection failed'));
 
       setServices(
         createFakeServices({
@@ -1954,7 +1956,7 @@ describe('Research Agent Routes', () => {
 
       expect(response.statusCode).toBe(500);
       const body = JSON.parse(response.body) as { error: string };
-      expect(body.error).toContain('Database connection failed');
+      expect(body.error).toContain('Failed to update action status');
     });
   });
 

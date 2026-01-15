@@ -11,4 +11,15 @@ export interface ActionRepository {
   delete(id: string): Promise<void>;
   listByUserId(userId: string, options?: ListByUserIdOptions): Promise<Action[]>;
   listByStatus(status: ActionStatus, limit?: number): Promise<Action[]>;
+
+  /**
+   * Atomically update action status only if current status matches expectedStatus.
+   * Returns true if update was applied, false if status didn't match (concurrent modification).
+   * Used to prevent race conditions in PubSub message handlers.
+   */
+  updateStatusIf(
+    actionId: string,
+    newStatus: ActionStatus,
+    expectedStatus: ActionStatus
+  ): Promise<boolean>;
 }
