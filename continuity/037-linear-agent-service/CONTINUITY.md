@@ -41,15 +41,14 @@ Implement a fully functional `linear-agent` service that enables creating Linear
 
 ### Done
 
-_No tasks completed yet_
+- ✅ **0-0-setup**: Service scaffolding created (package.json, Dockerfile, tsconfig.json, directory structure)
 
 ### Now
 
-**Task 0-0-setup**: Create service scaffolding
+**Task 0-1-terraform**: Add Terraform configuration
 
 ### Next
 
-- 0-1-terraform: Add Terraform configuration
 - 0-2-cloudbuild: Add Cloud Build configuration
 - Continue through all tiers...
 
