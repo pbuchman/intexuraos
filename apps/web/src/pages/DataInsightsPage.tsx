@@ -128,12 +128,14 @@ export function DataInsightsPage(): React.JSX.Element {
                       onPreview={handlePreview}
                       isPreviewing={previewing}
                     />
-                    <ChartPreview
-                      chartDefinition={chartDefinition}
-                      chartData={chartData as object[]}
-                      isLoading={previewing}
-                      error={previewError}
-                    />
+                    {(previewing || chartData !== null || previewError !== null) && (
+                      <ChartPreview
+                        chartDefinition={chartDefinition}
+                        chartData={(chartData ?? []) as object[]}
+                        isLoading={previewing}
+                        error={previewError}
+                      />
+                    )}
                   </div>
                 </>
               )}
