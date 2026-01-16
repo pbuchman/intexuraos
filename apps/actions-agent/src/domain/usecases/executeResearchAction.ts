@@ -73,6 +73,11 @@ export function createExecuteResearchActionUseCase(
     const selectedModels: ResearchModel[] = [];
     const prompt =
       typeof action.payload['prompt'] === 'string' ? action.payload['prompt'] : action.title;
+    const summary =
+      typeof action.payload['summary'] === 'string' ? action.payload['summary'] : undefined;
+
+    const promptWithKeyPoints =
+      summary !== undefined ? `## Key Points\n\n${summary}\n\n---\n\n${prompt}` : prompt;
 
     logger.info(
       { actionId, userId: action.userId, title: action.title, models: selectedModels },
@@ -82,7 +87,7 @@ export function createExecuteResearchActionUseCase(
     const result = await researchServiceClient.createDraft({
       userId: action.userId,
       title: action.title,
-      prompt,
+      prompt: promptWithKeyPoints,
       selectedModels,
       sourceActionId: action.id,
     });

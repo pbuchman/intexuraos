@@ -71,6 +71,11 @@ export function createExecuteNoteActionUseCase(
 
     const prompt =
       typeof action.payload['prompt'] === 'string' ? action.payload['prompt'] : action.title;
+    const summary =
+      typeof action.payload['summary'] === 'string' ? action.payload['summary'] : undefined;
+
+    const contentWithKeyPoints =
+      summary !== undefined ? `## Key Points\n\n${summary}\n\n---\n\n${prompt}` : prompt;
 
     logger.info(
       { actionId, userId: action.userId, title: action.title },
@@ -80,7 +85,7 @@ export function createExecuteNoteActionUseCase(
     const result = await notesServiceClient.createNote({
       userId: action.userId,
       title: action.title,
-      content: prompt,
+      content: contentWithKeyPoints,
       tags: [],
       source: 'actions-agent',
       sourceId: action.id,

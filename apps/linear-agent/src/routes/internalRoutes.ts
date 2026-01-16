@@ -11,7 +11,8 @@ interface ProcessActionBody {
   action: {
     id: string;
     userId: string;
-    title: string;
+    text: string;
+    summary?: string;
   };
 }
 
@@ -43,7 +44,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       const { action } = request.body;
 
       request.log.info(
-        { actionId: action.id, userId: action.userId, textLength: action.title.length },
+        { actionId: action.id, userId: action.userId, textLength: action.text.length, hasSummary: action.summary !== undefined },
         'internal/processLinearAction: processing action'
       );
 
@@ -51,7 +52,8 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         {
           actionId: action.id,
           userId: action.userId,
-          text: action.title,
+          text: action.text,
+          ...(action.summary !== undefined && { summary: action.summary }),
         },
         {
           linearApiClient: services.linearApiClient,

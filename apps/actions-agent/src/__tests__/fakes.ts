@@ -576,7 +576,8 @@ export class FakeLinearAgentClient implements LinearAgentClient {
   private processedActions: {
     actionId: string;
     userId: string;
-    title: string;
+    text: string;
+    summary?: string;
   }[] = [];
   private nextResponse: {
     status: 'completed' | 'failed';
@@ -612,7 +613,8 @@ export class FakeLinearAgentClient implements LinearAgentClient {
   async processAction(
     _actionId: string,
     _userId: string,
-    _title: string
+    _text: string,
+    _summary?: string
   ): Promise<
     Result<{
       status: 'completed' | 'failed';
@@ -625,7 +627,12 @@ export class FakeLinearAgentClient implements LinearAgentClient {
       this.failNext = false;
       return err(this.failError ?? new Error('Simulated failure'));
     }
-    this.processedActions.push({ actionId: _actionId, userId: _userId, title: _title });
+    this.processedActions.push({
+      actionId: _actionId,
+      userId: _userId,
+      text: _text,
+      ...((_summary !== undefined) && { summary: _summary }),
+    });
     return ok(this.nextResponse);
   }
 }

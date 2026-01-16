@@ -27,6 +27,7 @@ export interface Command {
   sourceType: CommandSourceType;
   externalId: string;
   text: string;
+  summary?: string;
   timestamp: string;
   status: CommandStatus;
   classification?: CommandClassification;
@@ -45,6 +46,7 @@ export function createCommand(params: {
   sourceType: CommandSourceType;
   externalId: string;
   text: string;
+  summary?: string;
   timestamp: string;
 }): Command {
   const now = new Date().toISOString();
@@ -54,6 +56,7 @@ export function createCommand(params: {
     sourceType: params.sourceType,
     externalId: params.externalId,
     text: params.text,
+    ...(params.summary !== undefined && { summary: params.summary }),
     timestamp: params.timestamp,
     status: 'received',
     createdAt: now,
