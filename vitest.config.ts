@@ -9,6 +9,8 @@ export default defineConfig({
     alias: {
       // Redirect @notionhq/client to our mock for all packages in the workspace
       '@notionhq/client': path.resolve(__dirname, './vitest-mocks/notion-client.ts'),
+      // Web app path alias (used in apps/web/src)
+      '@': path.resolve(__dirname, './apps/web/src'),
     },
   },
   test: {
