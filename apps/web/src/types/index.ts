@@ -914,7 +914,7 @@ export interface LinearIssue {
   identifier: string;
   title: string;
   description: string | null;
-  status: LinearIssueState;
+  status?: LinearIssueState;
   priority: LinearPriority;
   assignee?: LinearUser;
   creator?: LinearUser;
