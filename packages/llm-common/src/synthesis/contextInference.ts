@@ -2,7 +2,7 @@
  * Prompt builder for inferring synthesis context from LLM reports.
  */
 
-import type { InferSynthesisContextParams } from './types.js';
+import type { InferSynthesisContextParams } from './contextTypes.js';
 
 function getDatePart(isoString: string): string {
   return isoString.split('T')[0] as string;

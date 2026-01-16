@@ -3,7 +3,7 @@
  * Used by all LLM providers (OpenAI, Claude, Gemini) for consistent research quality.
  */
 
-import type { ResearchContext } from './context/types.js';
+import type { ResearchContext } from './contextTypes.js';
 
 function buildDomainGuidelines(ctx: ResearchContext): string {
   const domainGuides: Record<string, string> = {

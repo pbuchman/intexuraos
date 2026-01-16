@@ -3,7 +3,7 @@
  * Improves prompt quality while preserving intent and language.
  */
 
-import type { PromptBuilder, PromptDeps } from '../types.js';
+import type { PromptBuilder, PromptDeps } from '../shared/types.js';
 
 export interface InputImprovementPromptInput {
   /** The research prompt to improve */

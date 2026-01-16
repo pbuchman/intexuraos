@@ -5,7 +5,7 @@ import {
   type SynthesisReport,
   type AdditionalSource,
 } from '../synthesisPrompt.js';
-import type { SynthesisContext } from '../context/types.js';
+import type { SynthesisContext } from '../../synthesis/contextTypes.js';
 
 const createTestSynthesisContext = (overrides?: Partial<SynthesisContext>): SynthesisContext => ({
   language: 'en',
