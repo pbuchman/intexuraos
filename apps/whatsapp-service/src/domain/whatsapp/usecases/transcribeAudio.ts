@@ -177,15 +177,16 @@ export class TranscribeAudioUseCase {
         const rawError = submitResult.error.message;
         const formattedMessage = formatSpeechmaticsError(rawError);
 
-        // Log raw error for debugging
-        logger.info(
+        // Log full error context for debugging
+        logger.error(
           {
             event: 'transcription_submit_error_raw',
             messageId,
             rawError,
             errorCode: submitResult.error.code,
+            apiCall: submitResult.error.apiCall,
           },
-          'Raw Speechmatics submit error'
+          'Speechmatics submit error with full context'
         );
 
         const errorState: TranscriptionState = {
@@ -269,16 +270,17 @@ export class TranscribeAudioUseCase {
         const rawError = pollResult.error?.message ?? 'Job was rejected';
         const formattedMessage = formatSpeechmaticsError(rawError);
 
-        // Log raw error for debugging
-        logger.info(
+        // Log full error context for debugging
+        logger.error(
           {
             event: 'transcription_rejected_raw',
             messageId,
             jobId,
             rawError,
             errorCode: pollResult.error?.code,
+            lastApiCall: pollResult.lastApiCall,
           },
-          'Raw Speechmatics rejection error'
+          'Speechmatics job rejection with full context'
         );
 
         const errorState: TranscriptionState = {
@@ -323,16 +325,17 @@ export class TranscribeAudioUseCase {
         const rawError = transcriptResult.error.message;
         const formattedMessage = formatSpeechmaticsError(rawError);
 
-        // Log raw error for debugging
-        logger.info(
+        // Log full error context for debugging
+        logger.error(
           {
             event: 'transcription_fetch_error_raw',
             messageId,
             jobId,
             rawError,
             errorCode: transcriptResult.error.code,
+            apiCall: transcriptResult.error.apiCall,
           },
-          'Raw Speechmatics fetch error'
+          'Speechmatics fetch error with full context'
         );
 
         const errorState: TranscriptionState = {

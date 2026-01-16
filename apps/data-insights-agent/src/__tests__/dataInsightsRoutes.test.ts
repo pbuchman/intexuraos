@@ -292,7 +292,7 @@ describe('dataInsightsRoutes', () => {
       expect(body.error.message).toBe('User service unavailable');
     });
 
-    it('returns 500 when NO_INSIGHTS error occurs', async () => {
+    it('returns success with empty insights and noInsightsReason when no insights generated', async () => {
       const app = await buildServer();
 
       const feedResult = await fakeCompositeFeedRepo.create('user-123', 'Test Feed', {
@@ -323,11 +323,11 @@ describe('dataInsightsRoutes', () => {
         headers: { authorization: 'Bearer valid-token' },
       });
 
-      expect(response.statusCode).toBe(500);
+      expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.payload);
-      expect(body.success).toBe(false);
-      expect(body.error.code).toBe('INTERNAL_ERROR');
-      expect(body.error.message).toBe('Data is too static and lacks variance');
+      expect(body.success).toBe(true);
+      expect(body.data.insights).toHaveLength(0);
+      expect(body.data.noInsightsReason).toBe('Data is too static and lacks variance');
     });
 
     it('returns noInsightsReason when insights exist with reason', async () => {

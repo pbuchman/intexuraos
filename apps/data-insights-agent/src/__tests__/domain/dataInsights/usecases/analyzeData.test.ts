@@ -129,7 +129,7 @@ describe('analyzeData', () => {
       }
     });
 
-    it('handles empty insights list with noInsightsReason', async () => {
+    it('returns success with empty insights and noInsightsReason when no insights generated', async () => {
       const feedResult = await fakeCompositeFeedRepo.create('user-123', 'Test Feed', {
         purpose: 'Test purpose',
         staticSourceIds: [],
@@ -159,10 +159,10 @@ describe('analyzeData', () => {
         logger: fakeLogger,
       });
 
-      expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error.code).toBe('NO_INSIGHTS');
-        expect(result.error.message).toBe('Data is too static and lacks variance for meaningful analysis');
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.insights).toHaveLength(0);
+        expect(result.value.noInsightsReason).toBe('Data is too static and lacks variance for meaningful analysis');
       }
     });
   });

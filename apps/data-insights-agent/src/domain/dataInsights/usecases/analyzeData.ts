@@ -26,12 +26,7 @@ export interface AnalyzeDataDeps {
 }
 
 export interface AnalyzeDataError {
-  code:
-    | 'FEED_NOT_FOUND'
-    | 'SNAPSHOT_NOT_FOUND'
-    | 'REPOSITORY_ERROR'
-    | 'ANALYSIS_ERROR'
-    | 'NO_INSIGHTS';
+  code: 'FEED_NOT_FOUND' | 'SNAPSHOT_NOT_FOUND' | 'REPOSITORY_ERROR' | 'ANALYSIS_ERROR';
   message: string;
 }
 
@@ -180,12 +175,13 @@ export async function analyzeData(
 
   const { insights: parsedInsights, noInsightsReason } = analysisResult.value;
 
-  if (parsedInsights.length === 0 && noInsightsReason !== undefined) {
+  if (parsedInsights.length === 0) {
     logger.info({ feedId, userId, reason: noInsightsReason }, 'No insights generated');
-    return err({
-      code: 'NO_INSIGHTS',
-      message: noInsightsReason,
-    });
+    const result: AnalyzeDataResult = { insights: [] };
+    if (noInsightsReason !== undefined) {
+      result.noInsightsReason = noInsightsReason;
+    }
+    return ok(result);
   }
 
   const now = new Date().toISOString();

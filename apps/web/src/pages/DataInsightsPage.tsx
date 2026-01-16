@@ -112,7 +112,7 @@ export function DataInsightsPage(): React.JSX.Element {
                     key={insight.id}
                     insight={insight}
                     onConfigureChart={handleConfigureChart}
-                    isConfiguring={chartGenerating}
+                    isConfiguring={chartGenerating && selectedInsight?.id === insight.id}
                   />
                 ))}
               </div>
@@ -128,12 +128,14 @@ export function DataInsightsPage(): React.JSX.Element {
                       onPreview={handlePreview}
                       isPreviewing={previewing}
                     />
-                    <ChartPreview
-                      chartDefinition={chartDefinition}
-                      chartData={chartData as object[]}
-                      isLoading={previewing}
-                      error={previewError}
-                    />
+                    {(previewing || chartData !== null || previewError !== null) && (
+                      <ChartPreview
+                        chartDefinition={chartDefinition}
+                        chartData={(chartData ?? []) as object[]}
+                        isLoading={previewing}
+                        error={previewError}
+                      />
+                    )}
                   </div>
                 </>
               )}

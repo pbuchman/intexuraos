@@ -142,17 +142,21 @@ describe('Internal Routes', () => {
         google: string | null;
         openai: string | null;
         anthropic: string | null;
+        perplexity: string | null;
+        zai: string | null;
       };
-      // Returns null (not undefined) to ensure JSON serialization preserves the key
       expect(body.google).toBeNull();
       expect(body.openai).toBeNull();
       expect(body.anthropic).toBeNull();
+      expect(body.perplexity).toBeNull();
+      expect(body.zai).toBeNull();
     });
 
     it('returns decrypted keys for configured providers', async () => {
       const userId = 'user-with-keys';
       const googleKey = 'AIzaSyB1234567890abcdefghij';
       const anthropicKey = 'sk-ant-api1234567890abcd';
+      const zaiKey = 'zai_test_key_1234567890';
       fakeSettingsRepo.setSettings({
         userId,
         notifications: { filters: [] },
@@ -163,6 +167,7 @@ describe('Internal Routes', () => {
             tag: 'tag',
             ciphertext: Buffer.from(anthropicKey).toString('base64'),
           },
+          zai: { iv: 'iv', tag: 'tag', ciphertext: Buffer.from(zaiKey).toString('base64') },
         },
         createdAt: '2025-01-01T00:00:00.000Z',
         updatedAt: '2025-01-01T00:00:00.000Z',
@@ -183,11 +188,14 @@ describe('Internal Routes', () => {
         google: string | null;
         openai: string | null;
         anthropic: string | null;
+        perplexity: string | null;
+        zai: string | null;
       };
-      // Returns decrypted keys for service-to-service use
       expect(body.google).toBe(googleKey);
       expect(body.openai).toBeNull();
       expect(body.anthropic).toBe(anthropicKey);
+      expect(body.perplexity).toBeNull();
+      expect(body.zai).toBe(zaiKey);
     });
 
     it('returns empty when repository fails', async () => {
