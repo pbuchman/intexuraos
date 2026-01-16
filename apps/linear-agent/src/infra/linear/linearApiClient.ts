@@ -1,6 +1,12 @@
 /**
  * Linear API client using @linear/sdk.
  * Handles all communication with Linear's GraphQL API.
+ *
+ * OPTIMIZATIONS (INT-95):
+ * 1. Client caching: Reuses LinearClient instances per API key to leverage SDK optimizations
+ * 2. Batch state fetching: Uses Promise.all to fetch states in parallel instead of N+1 queries
+ * 3. Request deduplication: Caches in-flight requests to prevent duplicate API calls
+ * 4. TTL-based cache invalidation: Clients expire after 5 minutes of inactivity
  */
 
 import { LinearClient, type Issue, type Team } from '@linear/sdk';
@@ -16,6 +22,43 @@ import type {
 import pino from 'pino';
 
 const logger = pino({ name: 'linear-api-client' });
+
+const CLIENT_TTL_MS = 5 * 60 * 1000;
+const DEDUP_TTL_MS = 10 * 1000;
+
+interface CachedClient {
+  client: LinearClient;
+  lastUsed: number;
+}
+
+const clientCache = new Map<string, CachedClient>();
+const requestDedup = new Map<string, Promise<unknown>>();
+
+function getOrCreateClient(apiKey: string): LinearClient {
+  const cached = clientCache.get(apiKey);
+  const now = Date.now();
+
+  if (cached !== undefined && now - cached.lastUsed < CLIENT_TTL_MS) {
+    cached.lastUsed = now;
+    return cached.client;
+  }
+
+  const client = new LinearClient({ apiKey });
+  clientCache.set(apiKey, { client, lastUsed: now });
+
+  return client;
+}
+
+function cleanupExpiredClients(): void {
+  const now = Date.now();
+  for (const [key, cached] of clientCache.entries()) {
+    if (now - cached.lastUsed >= CLIENT_TTL_MS) {
+      clientCache.delete(key);
+    }
+  }
+}
+
+setInterval(cleanupExpiredClients, CLIENT_TTL_MS);
 
 function mapIssueStateType(type: string): IssueStateCategory {
   switch (type) {
@@ -34,8 +77,42 @@ function mapIssueStateType(type: string): IssueStateCategory {
   }
 }
 
-async function mapIssue(issue: Issue): Promise<LinearIssue> {
-  const state = await issue.state;
+interface IssueState {
+  id: string;
+  name: string;
+  type: string;
+}
+
+async function mapIssuesWithBatchedStates(issues: Issue[]): Promise<LinearIssue[]> {
+  const statePromises = issues.map(async (issue) => {
+    const state = issue.state;
+    return state !== undefined ? await state : null;
+  });
+  const states = await Promise.all(statePromises);
+
+  return issues.map((issue, index) => {
+    const state = states[index] as IssueState | null | undefined;
+    return {
+      id: issue.id,
+      identifier: issue.identifier,
+      title: issue.title,
+      description: issue.description ?? null,
+      priority: issue.priority as 0 | 1 | 2 | 3 | 4,
+      state: {
+        id: state?.id ?? '',
+        name: state?.name ?? 'Unknown',
+        type: mapIssueStateType(state?.type ?? 'backlog'),
+      },
+      url: issue.url,
+      createdAt: issue.createdAt.toISOString(),
+      updatedAt: issue.updatedAt.toISOString(),
+      completedAt: issue.completedAt?.toISOString() ?? null,
+    };
+  });
+}
+
+async function mapSingleIssue(issue: Issue): Promise<LinearIssue> {
+  const state = (await issue.state) as IssueState | null | undefined;
 
   return {
     id: issue.id,
@@ -66,7 +143,6 @@ function mapTeam(team: Team): LinearTeam {
 function mapLinearError(error: unknown): LinearError {
   const message = getErrorMessage(error, 'Unknown Linear API error');
 
-  // Check for common error patterns
   if (
     message.includes('401') ||
     message.includes('Unauthorized') ||
@@ -84,23 +160,48 @@ function mapLinearError(error: unknown): LinearError {
   return { code: 'API_ERROR', message };
 }
 
+function createDedupKey(operation: string, ...args: string[]): string {
+  return `${operation}:${args.join(':')}`;
+}
+
+async function withDeduplication<T>(
+  key: string,
+  fn: () => Promise<T>
+): Promise<T> {
+  const existing = requestDedup.get(key) as Promise<T> | undefined;
+  if (existing !== undefined) {
+    logger.debug({ key }, 'Request deduplication hit');
+    return await existing;
+  }
+
+  const promise = fn().finally(() => {
+    setTimeout(() => {
+      requestDedup.delete(key);
+    }, DEDUP_TTL_MS);
+  });
+
+  requestDedup.set(key, promise);
+  return await promise;
+}
+
 export function createLinearApiClient(): LinearApiClient {
   return {
     async validateAndGetTeams(apiKey: string): Promise<Result<LinearTeam[], LinearError>> {
+      const dedupKey = createDedupKey('validateAndGetTeams', apiKey.slice(0, 8));
+
       try {
-        logger.info('Validating Linear API key and fetching teams');
+        const teams = await withDeduplication(dedupKey, async () => {
+          logger.info('Validating Linear API key and fetching teams');
 
-        const client = new LinearClient({ apiKey });
+          const client = getOrCreateClient(apiKey);
 
-        // Fetch viewer to validate API key (throws on auth failure)
-        await client.viewer;
+          await client.viewer;
 
-        // Fetch all teams the user has access to
-        const teamsConnection = await client.teams();
-        const teams = teamsConnection.nodes.map(mapTeam);
+          const teamsConnection = await client.teams();
+          return teamsConnection.nodes.map(mapTeam);
+        });
 
         logger.info({ teamCount: teams.length }, 'Successfully validated API key');
-
         return ok(teams);
       } catch (error) {
         logger.error({ error: getErrorMessage(error) }, 'Failed to validate Linear API key');
@@ -115,7 +216,7 @@ export function createLinearApiClient(): LinearApiClient {
       try {
         logger.info({ teamId: input.teamId, title: input.title }, 'Creating Linear issue');
 
-        const client = new LinearClient({ apiKey });
+        const client = getOrCreateClient(apiKey);
 
         const payload = await client.createIssue({
           teamId: input.teamId,
@@ -129,11 +230,11 @@ export function createLinearApiClient(): LinearApiClient {
         }
 
         const issue = await payload.issue;
-        if (!issue) {
+        if (issue === undefined) {
           return err({ code: 'API_ERROR', message: 'Issue created but could not fetch details' });
         }
 
-        const mapped = await mapIssue(issue);
+        const mapped = await mapSingleIssue(issue);
         logger.info(
           { issueId: mapped.id, identifier: mapped.identifier },
           'Issue created successfully'
@@ -151,46 +252,46 @@ export function createLinearApiClient(): LinearApiClient {
       teamId: string,
       options?: { completedSinceDays?: number }
     ): Promise<Result<LinearIssue[], LinearError>> {
+      const completedSinceDays = options?.completedSinceDays ?? 7;
+      const dedupKey = createDedupKey(
+        'listIssues',
+        apiKey.slice(0, 8),
+        teamId,
+        String(completedSinceDays)
+      );
+
       try {
-        const completedSinceDays = options?.completedSinceDays ?? 7;
+        const issues = await withDeduplication(dedupKey, async () => {
+          logger.info({ teamId, completedSinceDays }, 'Listing Linear issues');
 
-        logger.info({ teamId, completedSinceDays }, 'Listing Linear issues');
+          const client = getOrCreateClient(apiKey);
 
-        const client = new LinearClient({ apiKey });
+          const completedSinceDate = new Date();
+          completedSinceDate.setDate(completedSinceDate.getDate() - completedSinceDays);
 
-        // Calculate date filter for completed issues
-        const completedSinceDate = new Date();
-        completedSinceDate.setDate(completedSinceDate.getDate() - completedSinceDays);
+          const issuesConnection = await client.issues({
+            filter: {
+              team: { id: { eq: teamId } },
+            },
+            first: 100,
+          });
 
-        // Fetch all issues for the team
-        // We'll filter completed issues client-side for simplicity
-        const issuesConnection = await client.issues({
-          filter: {
-            team: { id: { eq: teamId } },
-          },
-          first: 100, // Reasonable limit for dashboard
-        });
+          const allMappedIssues = await mapIssuesWithBatchedStates(issuesConnection.nodes);
 
-        const issues: LinearIssue[] = [];
-
-        for (const issue of issuesConnection.nodes) {
-          const mapped = await mapIssue(issue);
-
-          // Filter out old completed issues
-          if (mapped.state.type === 'completed' || mapped.state.type === 'cancelled') {
-            if (mapped.completedAt !== null) {
-              const completedDate = new Date(mapped.completedAt);
-              if (completedDate < completedSinceDate) {
-                continue; // Skip old completed issues
+          return allMappedIssues.filter((mapped) => {
+            if (mapped.state.type === 'completed' || mapped.state.type === 'cancelled') {
+              if (mapped.completedAt !== null) {
+                const completedDate = new Date(mapped.completedAt);
+                if (completedDate < completedSinceDate) {
+                  return false;
+                }
               }
             }
-          }
-
-          issues.push(mapped);
-        }
+            return true;
+          });
+        });
 
         logger.info({ issueCount: issues.length }, 'Fetched Linear issues');
-
         return ok(issues);
       } catch (error) {
         logger.error({ error: getErrorMessage(error) }, 'Failed to list Linear issues');
@@ -202,13 +303,18 @@ export function createLinearApiClient(): LinearApiClient {
       apiKey: string,
       issueId: string
     ): Promise<Result<LinearIssue | null, LinearError>> {
+      const dedupKey = createDedupKey('getIssue', apiKey.slice(0, 8), issueId);
+
       try {
-        logger.info({ issueId }, 'Fetching Linear issue');
+        const mapped = await withDeduplication(dedupKey, async () => {
+          logger.info({ issueId }, 'Fetching Linear issue');
 
-        const client = new LinearClient({ apiKey });
+          const client = getOrCreateClient(apiKey);
 
-        const issue = await client.issue(issueId);
-        const mapped = await mapIssue(issue);
+          const issue = await client.issue(issueId);
+          return await mapSingleIssue(issue);
+        });
+
         return ok(mapped);
       } catch (error) {
         logger.error({ error: getErrorMessage(error) }, 'Failed to fetch Linear issue');
@@ -216,4 +322,17 @@ export function createLinearApiClient(): LinearApiClient {
       }
     },
   };
+}
+
+export function clearClientCache(): void {
+  clientCache.clear();
+  requestDedup.clear();
+}
+
+export function getClientCacheSize(): number {
+  return clientCache.size;
+}
+
+export function getDedupCacheSize(): number {
+  return requestDedup.size;
 }
