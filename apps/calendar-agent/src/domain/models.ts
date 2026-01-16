@@ -120,3 +120,12 @@ export interface CreateFailedEventInput {
 export interface FailedEventFilters {
   limit?: number;
 }
+
+/** Successfully processed calendar action record for idempotency */
+export interface ProcessedAction {
+  actionId: string;
+  userId: string;
+  eventId: string;
+  resourceUrl: string;
+  createdAt: string;
+}

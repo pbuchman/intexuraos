@@ -6,6 +6,7 @@ import {
   FakeFailedEventRepository,
   FakeCalendarActionExtractionService,
   FakeUserServiceClient,
+  FakeProcessedActionRepository,
 } from '../../fakes.js';
 import type { Logger } from '@intexuraos/common-core';
 
@@ -21,12 +22,14 @@ describe('processCalendarAction', () => {
   let googleCalendarClient: FakeGoogleCalendarClient;
   let failedEventRepository: FakeFailedEventRepository;
   let calendarActionExtractionService: FakeCalendarActionExtractionService;
+  let processedActionRepository: FakeProcessedActionRepository;
 
   beforeEach(() => {
     userServiceClient = new FakeUserServiceClient();
     googleCalendarClient = new FakeGoogleCalendarClient();
     failedEventRepository = new FakeFailedEventRepository();
     calendarActionExtractionService = new FakeCalendarActionExtractionService();
+    processedActionRepository = new FakeProcessedActionRepository();
     vi.clearAllMocks();
   });
 
@@ -48,6 +51,7 @@ describe('processCalendarAction', () => {
           googleCalendarClient,
           failedEventRepository,
           calendarActionExtractionService,
+          processedActionRepository,
           logger: mockLogger,
         }
       );
@@ -78,6 +82,7 @@ describe('processCalendarAction', () => {
           googleCalendarClient,
           failedEventRepository,
           calendarActionExtractionService,
+          processedActionRepository,
           logger: mockLogger,
         }
       );
@@ -114,6 +119,7 @@ describe('processCalendarAction', () => {
           googleCalendarClient,
           failedEventRepository,
           calendarActionExtractionService,
+          processedActionRepository,
           logger: mockLogger,
         }
       );
@@ -152,6 +158,7 @@ describe('processCalendarAction', () => {
           googleCalendarClient,
           failedEventRepository,
           calendarActionExtractionService,
+          processedActionRepository,
           logger: mockLogger,
         }
       );
@@ -190,6 +197,7 @@ describe('processCalendarAction', () => {
           googleCalendarClient,
           failedEventRepository,
           calendarActionExtractionService,
+          processedActionRepository,
           logger: mockLogger,
         }
       );
@@ -226,6 +234,7 @@ describe('processCalendarAction', () => {
           googleCalendarClient,
           failedEventRepository,
           calendarActionExtractionService,
+          processedActionRepository,
           logger: mockLogger,
         }
       );
@@ -266,6 +275,7 @@ describe('processCalendarAction', () => {
           googleCalendarClient,
           failedEventRepository,
           calendarActionExtractionService,
+          processedActionRepository,
           logger: mockLogger,
         }
       );
@@ -308,6 +318,7 @@ describe('processCalendarAction', () => {
           googleCalendarClient,
           failedEventRepository,
           calendarActionExtractionService,
+          processedActionRepository,
           logger: mockLogger,
         }
       );
@@ -346,6 +357,7 @@ describe('processCalendarAction', () => {
           googleCalendarClient,
           failedEventRepository,
           calendarActionExtractionService,
+          processedActionRepository,
           logger: mockLogger,
         }
       );
@@ -382,6 +394,7 @@ describe('processCalendarAction', () => {
           googleCalendarClient,
           failedEventRepository,
           calendarActionExtractionService,
+          processedActionRepository,
           logger: mockLogger,
         }
       );
@@ -422,6 +435,7 @@ describe('processCalendarAction', () => {
           googleCalendarClient,
           failedEventRepository,
           calendarActionExtractionService,
+          processedActionRepository,
           logger: mockLogger,
         }
       );
@@ -468,6 +482,7 @@ describe('processCalendarAction', () => {
           googleCalendarClient,
           failedEventRepository,
           calendarActionExtractionService,
+          processedActionRepository,
           logger: mockLogger,
         }
       );
@@ -516,6 +531,7 @@ describe('processCalendarAction', () => {
           googleCalendarClient,
           failedEventRepository,
           calendarActionExtractionService,
+          processedActionRepository,
           logger: mockLogger,
         }
       );
@@ -560,6 +576,7 @@ describe('processCalendarAction', () => {
           googleCalendarClient,
           failedEventRepository,
           calendarActionExtractionService,
+          processedActionRepository,
           logger: mockLogger,
         }
       );
@@ -604,6 +621,7 @@ describe('processCalendarAction', () => {
           googleCalendarClient,
           failedEventRepository,
           calendarActionExtractionService,
+          processedActionRepository,
           logger: mockLogger,
         }
       );
@@ -612,6 +630,201 @@ describe('processCalendarAction', () => {
       if (result.ok) {
         expect(result.value.status).toBe('completed');
       }
+    });
+  });
+
+  describe('idempotency', () => {
+    it('returns cached result when action was already processed', async () => {
+      processedActionRepository.seedProcessedAction({
+        actionId: 'action-123',
+        userId: 'user-456',
+        eventId: 'existing-event-id',
+        resourceUrl: '/#/calendar/existing-event-id',
+        createdAt: '2025-01-15T10:00:00Z',
+      });
+
+      const result = await processCalendarAction(
+        {
+          actionId: 'action-123',
+          userId: 'user-456',
+          text: 'Meeting tomorrow at 2pm',
+        },
+        {
+          userServiceClient,
+          googleCalendarClient,
+          failedEventRepository,
+          calendarActionExtractionService,
+          processedActionRepository,
+          logger: mockLogger,
+        }
+      );
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.status).toBe('completed');
+        expect(result.value.resourceUrl).toBe('/#/calendar/existing-event-id');
+      }
+    });
+
+    it('saves processed action after successful event creation', async () => {
+      const mockEvent = {
+        id: 'new-event-123',
+        summary: 'New Meeting',
+        start: { dateTime: '2025-01-20T14:00:00' },
+        end: { dateTime: '2025-01-20T15:00:00' },
+        htmlLink: 'https://calendar.google.com/event',
+      };
+
+      calendarActionExtractionService.extractEventResult = ok({
+        summary: 'New Meeting',
+        start: '2025-01-20T14:00:00',
+        end: '2025-01-20T15:00:00',
+        location: null,
+        description: null,
+        valid: true,
+        error: null,
+        reasoning: 'Clear meeting request',
+      });
+
+      googleCalendarClient.setCreateResult(ok(mockEvent));
+
+      const result = await processCalendarAction(
+        {
+          actionId: 'action-new',
+          userId: 'user-456',
+          text: 'New meeting tomorrow',
+        },
+        {
+          userServiceClient,
+          googleCalendarClient,
+          failedEventRepository,
+          calendarActionExtractionService,
+          processedActionRepository,
+          logger: mockLogger,
+        }
+      );
+
+      expect(result.ok).toBe(true);
+      expect(processedActionRepository.count).toBe(1);
+    });
+
+    it('returns error when idempotency check fails', async () => {
+      processedActionRepository.setGetByActionIdResult(
+        err({ code: 'INTERNAL_ERROR', message: 'Database unavailable' })
+      );
+
+      const result = await processCalendarAction(
+        {
+          actionId: 'action-123',
+          userId: 'user-456',
+          text: 'Meeting tomorrow',
+        },
+        {
+          userServiceClient,
+          googleCalendarClient,
+          failedEventRepository,
+          calendarActionExtractionService,
+          processedActionRepository,
+          logger: mockLogger,
+        }
+      );
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('INTERNAL_ERROR');
+        expect(result.error.message).toBe('Database unavailable');
+      }
+    });
+
+    it('succeeds even when saving processed action fails', async () => {
+      const mockEvent = {
+        id: 'event-save-fail',
+        summary: 'Test Event',
+        start: { dateTime: '2025-01-20T14:00:00' },
+        end: { dateTime: '2025-01-20T15:00:00' },
+        htmlLink: 'https://calendar.google.com/event',
+      };
+
+      calendarActionExtractionService.extractEventResult = ok({
+        summary: 'Test Event',
+        start: '2025-01-20T14:00:00',
+        end: '2025-01-20T15:00:00',
+        location: null,
+        description: null,
+        valid: true,
+        error: null,
+        reasoning: 'Test',
+      });
+
+      googleCalendarClient.setCreateResult(ok(mockEvent));
+
+      processedActionRepository.setCreateResult(
+        err({ code: 'INTERNAL_ERROR', message: 'Failed to save' })
+      );
+
+      const result = await processCalendarAction(
+        {
+          actionId: 'action-save-fail',
+          userId: 'user-456',
+          text: 'Test event',
+        },
+        {
+          userServiceClient,
+          googleCalendarClient,
+          failedEventRepository,
+          calendarActionExtractionService,
+          processedActionRepository,
+          logger: mockLogger,
+        }
+      );
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.status).toBe('completed');
+      }
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ actionId: 'action-save-fail' }),
+        expect.stringContaining('failed to save processed action')
+      );
+    });
+
+    it('handles null start time by returning failed status with invalid date error', async () => {
+      calendarActionExtractionService.extractEventResult = ok({
+        summary: 'All Day Event',
+        start: null,
+        end: null,
+        location: null,
+        description: null,
+        valid: true,
+        error: null,
+        reasoning: 'Event without time',
+      });
+
+      const result = await processCalendarAction(
+        {
+          actionId: 'action-null-times',
+          userId: 'user-456',
+          text: 'Event without specific time',
+        },
+        {
+          userServiceClient,
+          googleCalendarClient,
+          failedEventRepository,
+          calendarActionExtractionService,
+          processedActionRepository,
+          logger: mockLogger,
+        }
+      );
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.status).toBe('failed');
+        expect(result.value.error).toBe('Invalid date format');
+      }
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ actionId: 'action-null-times', start: null }),
+        expect.stringContaining('invalid start date format')
+      );
     });
   });
 });
