@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ok, err } from '@intexuraos/common-core';
 import { createDataAnalysisService } from '../infra/gemini/dataAnalysisService.js';
 import type { UserServiceClient } from '../infra/user/userServiceClient.js';
@@ -7,6 +7,10 @@ import type { LlmGenerateClient } from '@intexuraos/llm-factory';
 const mockGenerate = vi.fn();
 
 describe('dataAnalysisService', () => {
+  beforeEach(() => {
+    mockGenerate.mockReset();
+  });
+
   function createMockUserServiceClient(
     hasClient = true,
     errorCode?: 'NO_API_KEY' | 'API_ERROR'
@@ -162,8 +166,10 @@ INSIGHT_2: Title=Maximum Value; Description=The highest value reached was 30 on 
       }
     });
 
-    it('returns PARSE_ERROR when LLM response is invalid', async () => {
-      mockGenerate.mockResolvedValue(ok({ content: 'INVALID RESPONSE FORMAT', usage: mockUsage }));
+    it('returns PARSE_ERROR when LLM response is invalid and repair fails', async () => {
+      mockGenerate
+        .mockResolvedValueOnce(ok({ content: 'INVALID RESPONSE FORMAT', usage: mockUsage }))
+        .mockResolvedValueOnce(ok({ content: 'STILL INVALID', usage: mockUsage }));
       const mockClient = createMockUserServiceClient();
       const service = createDataAnalysisService(mockClient);
 
@@ -177,7 +183,54 @@ INSIGHT_2: Title=Maximum Value; Description=The highest value reached was 30 on 
       expect(result.ok).toBe(false);
       if (!result.ok) {
         expect(result.error.code).toBe('PARSE_ERROR');
-        expect(result.error.message).toContain('Failed to parse LLM response');
+        expect(result.error.message).toContain('after repair attempt');
+      }
+      expect(mockGenerate).toHaveBeenCalledTimes(2);
+    });
+
+    it('successfully repairs invalid LLM response', async () => {
+      const invalidResponse = `INSIGHT_1: Title=Test; Description=One sentence. Two sentences. Three sentences. Four sentences too many.; Trackable=Metric; ChartType=C1`;
+      const validResponse = `INSIGHT_1: Title=Test; Description=One sentence. Two sentences. Three sentences.; Trackable=Metric; ChartType=C1`;
+
+      mockGenerate
+        .mockResolvedValueOnce(ok({ content: invalidResponse, usage: mockUsage }))
+        .mockResolvedValueOnce(ok({ content: validResponse, usage: mockUsage }));
+      const mockClient = createMockUserServiceClient();
+      const service = createDataAnalysisService(mockClient);
+
+      const result = await service.analyzeData(
+        'user-123',
+        mockJsonSchema,
+        mockSnapshotData,
+        mockChartTypes
+      );
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.insights).toHaveLength(1);
+        expect(result.value.insights[0]?.title).toBe('Test');
+      }
+      expect(mockGenerate).toHaveBeenCalledTimes(2);
+    });
+
+    it('returns GENERATION_ERROR when repair generation fails', async () => {
+      mockGenerate
+        .mockResolvedValueOnce(ok({ content: 'INVALID FORMAT', usage: mockUsage }))
+        .mockResolvedValueOnce(err({ message: 'Rate limit during repair' }));
+      const mockClient = createMockUserServiceClient();
+      const service = createDataAnalysisService(mockClient);
+
+      const result = await service.analyzeData(
+        'user-123',
+        mockJsonSchema,
+        mockSnapshotData,
+        mockChartTypes
+      );
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('GENERATION_ERROR');
+        expect(result.error.message).toContain('Repair generation failed');
       }
     });
 
@@ -199,7 +252,9 @@ INSIGHT_2: Title=Maximum Value; Description=The highest value reached was 30 on 
       const malformedResponse = `INSIGHT_1: Title=Missing fields
 INSIGHT_2: Incomplete insight`;
 
-      mockGenerate.mockResolvedValue(ok({ content: malformedResponse, usage: mockUsage }));
+      mockGenerate
+        .mockResolvedValueOnce(ok({ content: malformedResponse, usage: mockUsage }))
+        .mockResolvedValueOnce(ok({ content: 'STILL MALFORMED', usage: mockUsage }));
       const mockClient = createMockUserServiceClient();
       const service = createDataAnalysisService(mockClient);
 
@@ -213,6 +268,7 @@ INSIGHT_2: Incomplete insight`;
       expect(result.ok).toBe(false);
       if (!result.ok) {
         expect(result.error.code).toBe('PARSE_ERROR');
+        expect(result.error.message).toContain('after repair attempt');
       }
     });
 

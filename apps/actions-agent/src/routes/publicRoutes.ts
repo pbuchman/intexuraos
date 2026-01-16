@@ -514,6 +514,7 @@ export const publicRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         note: services.executeNoteActionUseCase,
         link: services.executeLinkActionUseCase,
         linear: services.executeLinearActionUseCase,
+        calendar: services.executeCalendarActionUseCase,
       };
 
       const executor = executorMap[action.type];

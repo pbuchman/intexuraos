@@ -323,16 +323,16 @@ ESLint's `no-unsafe-*` rules fire when TypeScript can't resolve a type. Common c
 ```typescript
 // ❌ Accessing Result without narrowing
 const result = await repo.findById(id);
-console.log(result.value);  // no-unsafe-member-access: .value unresolved
+console.log(result.value); // no-unsafe-member-access: .value unresolved
 
 // ✅ Narrow first, then access
 const result = await repo.findById(id);
 if (!result.ok) return result;
-console.log(result.value);  // TypeScript knows it's Success<T>
+console.log(result.value); // TypeScript knows it's Success<T>
 
 // ❌ Using enum from unresolved import
 import { ModelId } from '@intexuraos/llm-factory';
-const model = ModelId.Gemini25Flash;  // no-unsafe-member-access
+const model = ModelId.Gemini25Flash; // no-unsafe-member-access
 
 // ✅ Ensure package is built, or use string literal
 const model = 'gemini-2.5-flash' as const;
@@ -350,7 +350,7 @@ const logger = {
   info: vi.fn(),
   warn: vi.fn(),
   error: vi.fn(),
-};  // TS2345: not assignable to Logger
+}; // TS2345: not assignable to Logger
 
 // ✅ Include all four methods
 const logger: Logger = {
@@ -371,7 +371,7 @@ ESLint's `no-empty-function` forbids `() => {}`. Use explicit return or vi.fn().
 
 ```typescript
 // ❌ Empty function body
-const mock = { process: () => {} };  // no-empty-function
+const mock = { process: () => {} }; // no-empty-function
 
 // ✅ Return undefined explicitly, or use vi.fn()
 const mock = { process: (): undefined => undefined };

@@ -78,7 +78,7 @@ If exemptions were found, append them to `docs/coverage/unreachable.md` using th
 2. **Include code snippets** - Line numbers change; code snippets identify the exact gap
 3. **Keep snippets minimal** - Just enough to identify the branch (5-15 chars typically)
 
-```markdown
+````markdown
 ## `apps/actions-agent`
 
 ### `src/infra/http/client.ts`
@@ -88,16 +88,20 @@ If exemptions were found, append them to `docs/coverage/unreachable.md` using th
   const logger = pino({ level: process.env['LOG_LEVEL'] ?? 'info' });
   //                                                     ^^^^^^^^
   ```
-  - _Reason:_ `LOG_LEVEL` always set in test environment. Module-level initialization.
+````
+
+- _Reason:_ `LOG_LEVEL` always set in test environment. Module-level initialization.
 
 ### `src/domain/usecases/handleAction.ts`
 
 - **Line ~72**: `if (!user)` defensive check
+
   ```typescript
   if (!user) {
     return err(new Error('User not found'));
   }
   ```
+
   - _Reason:_ Guaranteed by `authMiddleware` upstream. Cannot reach without mocking internals.
 
 ## `packages/llm-common`
@@ -105,11 +109,14 @@ If exemptions were found, append them to `docs/coverage/unreachable.md` using th
 ### `src/attribution.ts`
 
 - **Lines ~23-25**: Array index access after split
+
   ```typescript
   const [key, value] = line.split('=');
   if (!key || !value) { ... }  // TypeScript narrowing makes this unreachable
   ```
+
   - _Reason:_ TypeScript control flow analysis narrows type after split().
+
 ```
 
 #### 3.2: Create Linear Issues via MCP
@@ -127,7 +134,9 @@ If exemptions were found, append them to `docs/coverage/unreachable.md` using th
 **Naming Convention (MANDATORY):**
 
 ```
+
 [coverage][<app-or-package>] <descriptive-name>
+
 ```
 
 Examples:
@@ -257,9 +266,11 @@ Every Linear issue MUST contain the following sections. This is non-negotiable:
 Your final output MUST include:
 
 ```
+
 ## Coverage Orchestrator Run Complete
 
 ### Summary
+
 - Total files analyzed: X
 - Branches covered: X
 - Branches exempted (unreachable.md): X
@@ -269,30 +280,36 @@ Your final output MUST include:
 ### Exemptions by Application
 
 #### `apps/actions-agent`
-| File | Code Snippet | Reason |
-|------|--------------|--------|
-| `src/infra/client.ts` | `?? 'info'` | LOG_LEVEL always set in tests |
+
+| File                  | Code Snippet | Reason                        |
+| --------------------- | ------------ | ----------------------------- |
+| `src/infra/client.ts` | `?? 'info'`  | LOG_LEVEL always set in tests |
 
 #### `packages/llm-common`
-| File | Code Snippet | Reason |
-|------|--------------|--------|
+
+| File                 | Code Snippet            | Reason                     |
+| -------------------- | ----------------------- | -------------------------- |
 | `src/attribution.ts` | `if (!key \|\| !value)` | TS narrowing after split() |
 
 ### Stale Exemptions Removed
-| App/Package | File | Code Snippet | Reason for Removal |
-|-------------|------|--------------|-------------------|
-| actions-agent | src/old.ts | `if (!x)` | File deleted |
+
+| App/Package   | File       | Code Snippet | Reason for Removal |
+| ------------- | ---------- | ------------ | ------------------ |
+| actions-agent | src/old.ts | `if (!x)`    | File deleted       |
 
 ### Linear Issues Created
-| Issue | App/Package | File | Description |
-|-------|-------------|------|-------------|
-| [coverage][user-service] ... | user-service | src/... | ... |
+
+| Issue                        | App/Package  | File    | Description |
+| ---------------------------- | ------------ | ------- | ----------- |
+| [coverage][user-service] ... | user-service | src/... | ...         |
 
 ### Verification Checklist
+
 - [ ] Every file with branches.pct < 100 has ALL its gaps accounted for
 - [ ] All exemptions verified by code snippet (not line number)
 - [ ] Stale exemptions removed
 - [ ] No "quick wins" left behind - full exhaustive analysis completed
+
 ```
 
 ---
@@ -316,3 +333,4 @@ You have **FAILED** your task if:
 **REMEMBER: Your job is NOT to report coverage percentages. Your job is to ensure EVERY SINGLE BRANCH is either covered, exempted, or ticketed. No exceptions.**
 
 **Code snippets are MANDATORY** - They allow future runs to verify exemptions still apply even when line numbers change.
+```

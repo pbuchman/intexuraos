@@ -29,8 +29,12 @@ const logger = pino({ name: 'speechmatics-adapter' });
 /**
  * Type definitions for Speechmatics json-v2 response.
  * These are minimal types needed to extract transcript and summary.
+ *
+ * json-v2 returns a flat array of recognition results (words, punctuation,
+ * speaker changes). Each result has alternatives with the actual content.
  */
-interface JsonV2Word {
+interface JsonV2Result {
+  type?: string;
   alternatives?: { content?: string }[];
 }
 
@@ -40,7 +44,7 @@ interface JsonV2Summary {
 
 interface JsonV2Response {
   summary?: JsonV2Summary;
-  results: JsonV2Word[][];
+  results: JsonV2Result[];
 }
 
 /**
@@ -440,18 +444,13 @@ export class SpeechmaticsTranscriptionAdapter implements SpeechTranscriptionPort
       const summary = result.summary?.content;
 
       // Reconstruct full text from results array
-      // Structure: results[][] where each inner array contains word segments
+      // json-v2 returns flat array of words/punctuation with alternatives
       let text = '';
       if (Array.isArray(result.results)) {
-        for (const sentence of result.results) {
-          if (Array.isArray(sentence)) {
-            for (const word of sentence) {
-              // Guard against malformed word objects
-              const alt = word.alternatives?.[0];
-              if (alt?.content !== undefined) {
-                text += alt.content + ' ';
-              }
-            }
+        for (const item of result.results) {
+          const alt = item.alternatives?.[0];
+          if (alt?.content !== undefined) {
+            text += alt.content + ' ';
           }
         }
       }

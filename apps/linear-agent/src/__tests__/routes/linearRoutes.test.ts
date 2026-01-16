@@ -307,4 +307,88 @@ describe('linearRoutes', () => {
       expect(body.success).toBe(false);
     });
   });
+
+  describe('GET /linear/failed-issues', () => {
+    it('returns failed issues for authenticated user', async () => {
+      await ctx.failedIssueRepository.create({
+        userId: 'test-user-123',
+        actionId: 'action-1',
+        originalText: 'Create a task for testing',
+        extractedTitle: 'Testing task',
+        extractedPriority: 2,
+        error: 'Connection error',
+        reasoning: 'Network timeout',
+      });
+
+      const token = await createToken({ sub: 'test-user-123' });
+      const response = await ctx.app.inject({
+        method: 'GET',
+        url: '/linear/failed-issues',
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      expect(body.success).toBe(true);
+      expect(body.data.failedIssues).toHaveLength(1);
+      expect(body.data.failedIssues[0].originalText).toBe('Create a task for testing');
+      expect(body.data.failedIssues[0].error).toBe('Connection error');
+    });
+
+    it('returns empty array when no failed issues exist', async () => {
+      const token = await createToken({ sub: 'test-user-123' });
+      const response = await ctx.app.inject({
+        method: 'GET',
+        url: '/linear/failed-issues',
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      expect(body.success).toBe(true);
+      expect(body.data.failedIssues).toHaveLength(0);
+    });
+
+    it('only returns failed issues for the authenticated user', async () => {
+      await ctx.failedIssueRepository.create({
+        userId: 'test-user-123',
+        actionId: 'action-1',
+        originalText: 'User 1 task',
+        extractedTitle: null,
+        extractedPriority: null,
+        error: 'Failed',
+        reasoning: null,
+      });
+      await ctx.failedIssueRepository.create({
+        userId: 'other-user',
+        actionId: 'action-2',
+        originalText: 'Other user task',
+        extractedTitle: null,
+        extractedPriority: null,
+        error: 'Failed',
+        reasoning: null,
+      });
+
+      const token = await createToken({ sub: 'test-user-123' });
+      const response = await ctx.app.inject({
+        method: 'GET',
+        url: '/linear/failed-issues',
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      expect(body.data.failedIssues).toHaveLength(1);
+      expect(body.data.failedIssues[0].originalText).toBe('User 1 task');
+    });
+
+    it('returns 401 when no auth token provided', async () => {
+      const response = await ctx.app.inject({
+        method: 'GET',
+        url: '/linear/failed-issues',
+      });
+
+      expect(response.statusCode).toBe(401);
+    });
+  });
 });

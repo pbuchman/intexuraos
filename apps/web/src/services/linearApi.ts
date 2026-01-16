@@ -4,6 +4,7 @@ import type {
   LinearConnectionStatus,
   ListIssuesResponse,
   LinearTeam,
+  FailedLinearIssue,
 } from '@/types';
 
 interface ValidateResponse {
@@ -102,6 +103,24 @@ export async function listLinearIssues(
     `/linear/issues${query}`,
     accessToken
   );
+}
+
+interface ListFailedIssuesResponse {
+  failedIssues: FailedLinearIssue[];
+}
+
+/**
+ * List failed Linear issue extractions for manual review
+ */
+export async function listFailedLinearIssues(
+  accessToken: string
+): Promise<FailedLinearIssue[]> {
+  const response = await apiRequest<ListFailedIssuesResponse>(
+    config.linearAgentUrl,
+    '/linear/failed-issues',
+    accessToken
+  );
+  return response.failedIssues;
 }
 
 export type { ValidateResponse, SaveConnectionRequest };

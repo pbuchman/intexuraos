@@ -881,6 +881,21 @@ export interface FailedCalendarEvent {
 }
 
 /**
+ * A failed Linear issue extraction, stored for manual review.
+ */
+export interface FailedLinearIssue {
+  id: string;
+  userId: string;
+  actionId: string;
+  originalText: string;
+  extractedTitle: string | null;
+  extractedPriority: LinearPriority | null;
+  error: string;
+  reasoning: string | null;
+  createdAt: string;
+}
+
+/**
  * Linear priority levels (0 = No priority, 1 = Urgent, 2 = High, 3 = Normal, 4 = Low)
  */
 export type LinearPriority = 0 | 1 | 2 | 3 | 4;
@@ -914,7 +929,7 @@ export interface LinearIssue {
   identifier: string;
   title: string;
   description: string | null;
-  status: LinearIssueState;
+  status?: LinearIssueState;
   priority: LinearPriority;
   assignee?: LinearUser;
   creator?: LinearUser;

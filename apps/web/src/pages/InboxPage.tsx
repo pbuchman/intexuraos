@@ -31,6 +31,7 @@ import {
   ChevronDown,
   ChevronUp,
   Clock,
+  Cog,
   FileText,
   Filter,
   HelpCircle,
@@ -126,7 +127,7 @@ function getStatusIcon(status: string): React.JSX.Element {
     case 'pending_classification':
       return <Clock className={`${iconClass} text-amber-500`} />;
     case 'processing':
-      return <Loader2 className={`${iconClass} text-blue-500 animate-spin`} />;
+      return <Cog className={`${iconClass} text-blue-500`} />;
     case 'failed':
     case 'rejected':
       return <XCircle className={`${iconClass} text-red-500`} />;
