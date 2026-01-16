@@ -241,20 +241,14 @@ export function LinearIssuesPage(): React.JSX.Element {
   }
 
   // Group all issues by dashboard column
-  const allIssues = data?.issues ?? {
-    backlog: [],
-    unstarted: [],
-    started: [],
-    completed: [],
-    cancelled: [],
-  };
+  const allIssues = data?.issues;
 
   const flatIssues = [
-    ...allIssues.backlog,
-    ...allIssues.unstarted,
-    ...allIssues.started,
-    ...allIssues.completed,
-    ...allIssues.cancelled,
+    ...(allIssues?.backlog ?? []),
+    ...(allIssues?.unstarted ?? []),
+    ...(allIssues?.started ?? []),
+    ...(allIssues?.completed ?? []),
+    ...(allIssues?.cancelled ?? []),
   ];
 
   const columnIssues = groupIssuesByColumn(flatIssues);
