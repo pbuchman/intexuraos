@@ -132,6 +132,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           googleCalendarClient: services.googleCalendarClient,
           failedEventRepository: services.failedEventRepository,
           calendarActionExtractionService: services.calendarActionExtractionService,
+          processedActionRepository: services.processedActionRepository,
           logger: request.log,
         }
       );

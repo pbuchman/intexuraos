@@ -17,6 +17,8 @@ import type {
   OAuthTokenResult,
   UpdateEventInput,
   UserServiceClient,
+  ProcessedAction,
+  ProcessedActionRepository,
 } from '../domain/index.js';
 import type { LlmGenerateClient } from '@intexuraos/llm-factory';
 import type { LLMError } from '@intexuraos/llm-contract';
@@ -356,5 +358,60 @@ export class FakeCalendarActionExtractionService implements CalendarActionExtrac
       error: null,
       reasoning: 'Test reasoning',
     });
+  }
+}
+
+export class FakeProcessedActionRepository implements ProcessedActionRepository {
+  private processedActions = new Map<string, ProcessedAction>();
+  private getByActionIdResult: Result<ProcessedAction | null, CalendarError> | null = null;
+  private createResult: Result<ProcessedAction, CalendarError> | null = null;
+
+  setGetByActionIdResult(result: Result<ProcessedAction | null, CalendarError>): void {
+    this.getByActionIdResult = result;
+  }
+
+  setCreateResult(result: Result<ProcessedAction, CalendarError>): void {
+    this.createResult = result;
+  }
+
+  seedProcessedAction(action: ProcessedAction): void {
+    this.processedActions.set(action.actionId, action);
+  }
+
+  reset(): void {
+    this.processedActions.clear();
+    this.getByActionIdResult = null;
+    this.createResult = null;
+  }
+
+  get count(): number {
+    return this.processedActions.size;
+  }
+
+  async getByActionId(actionId: string): Promise<Result<ProcessedAction | null, CalendarError>> {
+    if (this.getByActionIdResult !== null) {
+      return this.getByActionIdResult;
+    }
+    return ok(this.processedActions.get(actionId) ?? null);
+  }
+
+  async create(input: {
+    actionId: string;
+    userId: string;
+    eventId: string;
+    resourceUrl: string;
+  }): Promise<Result<ProcessedAction, CalendarError>> {
+    if (this.createResult !== null) {
+      return this.createResult;
+    }
+    const processedAction: ProcessedAction = {
+      actionId: input.actionId,
+      userId: input.userId,
+      eventId: input.eventId,
+      resourceUrl: input.resourceUrl,
+      createdAt: new Date().toISOString(),
+    };
+    this.processedActions.set(input.actionId, processedAction);
+    return ok(processedAction);
   }
 }

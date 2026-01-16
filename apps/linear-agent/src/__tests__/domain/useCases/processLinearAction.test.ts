@@ -13,6 +13,7 @@ import {
   FakeLinearApiClient,
   FakeLinearActionExtractionService,
   FakeFailedIssueRepository,
+  FakeProcessedActionRepository,
 } from '../../fakes.js';
 
 describe('processLinearAction', () => {
@@ -20,12 +21,14 @@ describe('processLinearAction', () => {
   let fakeLinearClient: FakeLinearApiClient;
   let fakeExtractionService: FakeLinearActionExtractionService;
   let fakeFailedIssueRepo: FakeFailedIssueRepository;
+  let fakeProcessedActionRepo: FakeProcessedActionRepository;
 
   beforeEach(() => {
     fakeConnectionRepo = new FakeLinearConnectionRepository();
     fakeLinearClient = new FakeLinearApiClient();
     fakeExtractionService = new FakeLinearActionExtractionService();
     fakeFailedIssueRepo = new FakeFailedIssueRepository();
+    fakeProcessedActionRepo = new FakeProcessedActionRepository();
   });
 
   afterEach(() => {
@@ -33,6 +36,7 @@ describe('processLinearAction', () => {
     fakeLinearClient.reset();
     fakeExtractionService.reset();
     fakeFailedIssueRepo.reset();
+    fakeProcessedActionRepo.reset();
   });
 
   const defaultRequest: ProcessLinearActionRequest = {
@@ -74,6 +78,7 @@ describe('processLinearAction', () => {
         connectionRepository: fakeConnectionRepo,
         failedIssueRepository: fakeFailedIssueRepo,
         extractionService: fakeExtractionService,
+        processedActionRepository: fakeProcessedActionRepo,
       });
 
       expect(result.ok).toBe(true);
@@ -85,6 +90,9 @@ describe('processLinearAction', () => {
 
       // Verify no failed issues were created
       expect(fakeFailedIssueRepo.count).toBe(0);
+
+      // Verify the action was recorded as processed
+      expect(fakeProcessedActionRepo.count).toBe(1);
     });
 
     it('creates issue with null functional and technical details', async () => {
@@ -103,6 +111,7 @@ describe('processLinearAction', () => {
         connectionRepository: fakeConnectionRepo,
         failedIssueRepository: fakeFailedIssueRepo,
         extractionService: fakeExtractionService,
+        processedActionRepository: fakeProcessedActionRepo,
       });
 
       expect(result.ok && result.value.status).toBe('completed');
@@ -114,6 +123,7 @@ describe('processLinearAction', () => {
         connectionRepository: fakeConnectionRepo,
         failedIssueRepository: fakeFailedIssueRepo,
         extractionService: fakeExtractionService,
+        processedActionRepository: fakeProcessedActionRepo,
       });
 
       // Verify the Linear API client received the structured description
@@ -132,6 +142,7 @@ describe('processLinearAction', () => {
         connectionRepository: fakeConnectionRepo,
         failedIssueRepository: fakeFailedIssueRepo,
         extractionService: fakeExtractionService,
+        processedActionRepository: fakeProcessedActionRepo,
       });
 
       expect(result.ok).toBe(false);
@@ -160,6 +171,7 @@ describe('processLinearAction', () => {
         connectionRepository: fakeConnectionRepo,
         failedIssueRepository: fakeFailedIssueRepo,
         extractionService: fakeExtractionService,
+        processedActionRepository: fakeProcessedActionRepo,
       });
 
       expect(result.ok).toBe(true);
@@ -198,6 +210,7 @@ describe('processLinearAction', () => {
         connectionRepository: fakeConnectionRepo,
         failedIssueRepository: fakeFailedIssueRepo,
         extractionService: fakeExtractionService,
+        processedActionRepository: fakeProcessedActionRepo,
       });
 
       expect(result.ok).toBe(true);
@@ -213,6 +226,7 @@ describe('processLinearAction', () => {
         connectionRepository: fakeConnectionRepo,
         failedIssueRepository: fakeFailedIssueRepo,
         extractionService: fakeExtractionService,
+        processedActionRepository: fakeProcessedActionRepo,
       });
 
       expect(fakeFailedIssueRepo.count).toBe(1);
@@ -242,6 +256,7 @@ describe('processLinearAction', () => {
         connectionRepository: fakeConnectionRepo,
         failedIssueRepository: fakeFailedIssueRepo,
         extractionService: fakeExtractionService,
+        processedActionRepository: fakeProcessedActionRepo,
       });
 
       expect(result.ok && result.value.error).toBe('Could not extract valid issue from message');
@@ -272,6 +287,7 @@ describe('processLinearAction', () => {
         connectionRepository: fakeConnectionRepo,
         failedIssueRepository: fakeFailedIssueRepo,
         extractionService: fakeExtractionService,
+        processedActionRepository: fakeProcessedActionRepo,
       });
 
       expect(result.ok).toBe(true);
@@ -312,6 +328,7 @@ describe('processLinearAction', () => {
         connectionRepository: failingRepo,
         failedIssueRepository: fakeFailedIssueRepo,
         extractionService: fakeExtractionService,
+        processedActionRepository: fakeProcessedActionRepo,
       });
 
       expect(result.ok).toBe(false);
@@ -343,6 +360,7 @@ describe('processLinearAction', () => {
         connectionRepository: fakeConnectionRepo,
         failedIssueRepository: fakeFailedIssueRepo,
         extractionService: fakeExtractionService,
+        processedActionRepository: fakeProcessedActionRepo,
       });
 
       const issuesResult = await fakeLinearClient.listIssues('key', 'team-789');
@@ -370,6 +388,7 @@ describe('processLinearAction', () => {
         connectionRepository: fakeConnectionRepo,
         failedIssueRepository: fakeFailedIssueRepo,
         extractionService: fakeExtractionService,
+        processedActionRepository: fakeProcessedActionRepo,
       });
 
       const issuesResult = await fakeLinearClient.listIssues('key', 'team-789');
@@ -397,6 +416,7 @@ describe('processLinearAction', () => {
         connectionRepository: fakeConnectionRepo,
         failedIssueRepository: fakeFailedIssueRepo,
         extractionService: fakeExtractionService,
+        processedActionRepository: fakeProcessedActionRepo,
       });
 
       const issuesResult = await fakeLinearClient.listIssues('key', 'team-789');
@@ -421,6 +441,7 @@ describe('processLinearAction', () => {
         connectionRepository: fakeConnectionRepo,
         failedIssueRepository: fakeFailedIssueRepo,
         extractionService: fakeExtractionService,
+        processedActionRepository: fakeProcessedActionRepo,
       });
 
       const issuesResult = await fakeLinearClient.listIssues('key', 'team-789');
@@ -450,6 +471,7 @@ describe('processLinearAction', () => {
         connectionRepository: fakeConnectionRepo,
         failedIssueRepository: fakeFailedIssueRepo,
         extractionService: fakeExtractionService,
+        processedActionRepository: fakeProcessedActionRepo,
       });
 
       const issuesResult = await fakeLinearClient.listIssues('key', 'team-789');
@@ -462,6 +484,124 @@ describe('processLinearAction', () => {
         const functionalIndex = desc.indexOf('## Functional Requirements');
         expect(keyPointsIndex).toBeLessThan(functionalIndex);
       }
+    });
+  });
+
+  describe('idempotency', () => {
+    beforeEach(() => {
+      setupConnectedUser();
+      fakeExtractionService.setResponse({
+        title: 'Fix login bug',
+        priority: 2,
+        functionalRequirements: null,
+        technicalDetails: null,
+        valid: true,
+        error: null,
+        reasoning: 'Valid issue',
+      });
+    });
+
+    it('returns existing result when action was already processed', async () => {
+      fakeProcessedActionRepo.seedProcessedAction({
+        actionId: 'action-123',
+        userId: 'user-456',
+        issueId: 'existing-issue-id',
+        issueIdentifier: 'ENG-42',
+        resourceUrl: 'https://linear.app/team/issue/ENG-42',
+        createdAt: '2025-01-15T00:00:00Z',
+      });
+
+      const result = await processLinearAction(defaultRequest, {
+        linearApiClient: fakeLinearClient,
+        connectionRepository: fakeConnectionRepo,
+        failedIssueRepository: fakeFailedIssueRepo,
+        extractionService: fakeExtractionService,
+        processedActionRepository: fakeProcessedActionRepo,
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.status).toBe('completed');
+        expect(result.value.issueIdentifier).toBe('ENG-42');
+        expect(result.value.resourceUrl).toBe('https://linear.app/team/issue/ENG-42');
+      }
+
+      // Verify no new issue was created in Linear
+      const issues = await fakeLinearClient.listIssues('key', 'team-789');
+      expect(issues.ok && issues.value.length).toBe(0);
+
+      // Verify no new processed action was saved
+      expect(fakeProcessedActionRepo.count).toBe(1);
+    });
+
+    it('prevents duplicate issue creation on concurrent requests', async () => {
+      // First request creates the issue
+      const result1 = await processLinearAction(defaultRequest, {
+        linearApiClient: fakeLinearClient,
+        connectionRepository: fakeConnectionRepo,
+        failedIssueRepository: fakeFailedIssueRepo,
+        extractionService: fakeExtractionService,
+        processedActionRepository: fakeProcessedActionRepo,
+      });
+
+      expect(result1.ok && result1.value.status).toBe('completed');
+      const firstIdentifier = result1.ok ? result1.value.issueIdentifier : null;
+
+      // Second request with same actionId should return existing result
+      const result2 = await processLinearAction(defaultRequest, {
+        linearApiClient: fakeLinearClient,
+        connectionRepository: fakeConnectionRepo,
+        failedIssueRepository: fakeFailedIssueRepo,
+        extractionService: fakeExtractionService,
+        processedActionRepository: fakeProcessedActionRepo,
+      });
+
+      expect(result2.ok).toBe(true);
+      if (result2.ok) {
+        expect(result2.value.status).toBe('completed');
+        expect(result2.value.issueIdentifier).toBe(firstIdentifier);
+      }
+
+      // Only one issue should exist
+      const issues = await fakeLinearClient.listIssues('key', 'team-789');
+      expect(issues.ok && issues.value.length).toBe(1);
+    });
+
+    it('allows different actionIds to create separate issues', async () => {
+      const request1: ProcessLinearActionRequest = {
+        actionId: 'action-1',
+        userId: 'user-456',
+        text: 'First issue',
+      };
+
+      const request2: ProcessLinearActionRequest = {
+        actionId: 'action-2',
+        userId: 'user-456',
+        text: 'Second issue',
+      };
+
+      await processLinearAction(request1, {
+        linearApiClient: fakeLinearClient,
+        connectionRepository: fakeConnectionRepo,
+        failedIssueRepository: fakeFailedIssueRepo,
+        extractionService: fakeExtractionService,
+        processedActionRepository: fakeProcessedActionRepo,
+      });
+
+      await processLinearAction(request2, {
+        linearApiClient: fakeLinearClient,
+        connectionRepository: fakeConnectionRepo,
+        failedIssueRepository: fakeFailedIssueRepo,
+        extractionService: fakeExtractionService,
+        processedActionRepository: fakeProcessedActionRepo,
+      });
+
+      // Two different issues should exist
+      const issues = await fakeLinearClient.listIssues('key', 'team-789');
+      expect(issues.ok && issues.value.length).toBe(2);
+
+      // Two processed actions should be recorded
+      expect(fakeProcessedActionRepo.count).toBe(2);
     });
   });
 });
