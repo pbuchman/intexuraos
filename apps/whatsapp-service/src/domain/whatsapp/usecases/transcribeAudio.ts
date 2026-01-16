@@ -184,7 +184,7 @@ export class TranscribeAudioUseCase {
             messageId,
             rawError,
             errorCode: submitResult.error.code,
-            apiCall: submitResult.error.apiCall,
+            ...(submitResult.error.apiCall !== undefined && { apiCall: submitResult.error.apiCall }),
           },
           'Speechmatics submit error with full context'
         );
@@ -333,7 +333,7 @@ export class TranscribeAudioUseCase {
             jobId,
             rawError,
             errorCode: transcriptResult.error.code,
-            apiCall: transcriptResult.error.apiCall,
+            ...(transcriptResult.error.apiCall !== undefined && { apiCall: transcriptResult.error.apiCall }),
           },
           'Speechmatics fetch error with full context'
         );

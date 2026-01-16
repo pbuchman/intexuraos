@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { getErrorMessage } from '@intexuraos/common-core/errors';
+import { getErrorMessage } from '@intexuraos/common-core/errors.js';
 import { useAuth } from '@/context';
 import { listFailedLinearIssues } from '@/services/linearApi';
 import type { FailedLinearIssue } from '@/types';
