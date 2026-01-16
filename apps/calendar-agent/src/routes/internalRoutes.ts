@@ -108,6 +108,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           text: action.title,
         },
         {
+          userServiceClient: services.userServiceClient,
           googleCalendarClient: services.googleCalendarClient,
           failedEventRepository: services.failedEventRepository,
           calendarActionExtractionService: services.calendarActionExtractionService,
