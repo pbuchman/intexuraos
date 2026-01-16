@@ -103,7 +103,12 @@ steps:
     waitFor: ['pnpm-install']
     timeout: 900s
     entrypoint: 'bash'
-    args: ['cloudbuild/scripts/build-push-monitored.sh', 'promptvault-service', 'apps/promptvault-service/Dockerfile']
+    args:
+      [
+        'cloudbuild/scripts/build-push-monitored.sh',
+        'promptvault-service',
+        'apps/promptvault-service/Dockerfile',
+      ]
     env:
       - 'DOCKER_BUILDKIT=1'
       - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
@@ -114,7 +119,12 @@ steps:
     waitFor: ['pnpm-install']
     timeout: 900s
     entrypoint: 'bash'
-    args: ['cloudbuild/scripts/build-push-monitored.sh', 'image-service', 'apps/image-service/Dockerfile']
+    args:
+      [
+        'cloudbuild/scripts/build-push-monitored.sh',
+        'image-service',
+        'apps/image-service/Dockerfile',
+      ]
     env:
       - 'DOCKER_BUILDKIT=1'
       - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
@@ -125,7 +135,8 @@ steps:
     waitFor: ['pnpm-install']
     timeout: 900s
     entrypoint: 'bash'
-    args: ['cloudbuild/scripts/build-push-monitored.sh', 'api-docs-hub', 'apps/api-docs-hub/Dockerfile']
+    args:
+      ['cloudbuild/scripts/build-push-monitored.sh', 'api-docs-hub', 'apps/api-docs-hub/Dockerfile']
     env:
       - 'DOCKER_BUILDKIT=1'
       - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
@@ -136,7 +147,12 @@ steps:
     waitFor: ['pnpm-install']
     timeout: 900s
     entrypoint: 'bash'
-    args: ['cloudbuild/scripts/build-push-monitored.sh', 'notion-service', 'apps/notion-service/Dockerfile']
+    args:
+      [
+        'cloudbuild/scripts/build-push-monitored.sh',
+        'notion-service',
+        'apps/notion-service/Dockerfile',
+      ]
     env:
       - 'DOCKER_BUILDKIT=1'
       - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
@@ -194,10 +210,17 @@ steps:
   # --- Batch 2 Builds (wait for Batch 1 deploys) ---
   - name: 'gcr.io/cloud-builders/docker'
     id: 'build-push-user-service'
-    waitFor: ['deploy-promptvault-service', 'deploy-image-service', 'deploy-api-docs-hub', 'deploy-notion-service']
+    waitFor:
+      [
+        'deploy-promptvault-service',
+        'deploy-image-service',
+        'deploy-api-docs-hub',
+        'deploy-notion-service',
+      ]
     timeout: 900s
     entrypoint: 'bash'
-    args: ['cloudbuild/scripts/build-push-monitored.sh', 'user-service', 'apps/user-service/Dockerfile']
+    args:
+      ['cloudbuild/scripts/build-push-monitored.sh', 'user-service', 'apps/user-service/Dockerfile']
     env:
       - 'DOCKER_BUILDKIT=1'
       - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
@@ -205,10 +228,21 @@ steps:
 
   - name: 'gcr.io/cloud-builders/docker'
     id: 'build-push-whatsapp-service'
-    waitFor: ['deploy-promptvault-service', 'deploy-image-service', 'deploy-api-docs-hub', 'deploy-notion-service']
+    waitFor:
+      [
+        'deploy-promptvault-service',
+        'deploy-image-service',
+        'deploy-api-docs-hub',
+        'deploy-notion-service',
+      ]
     timeout: 900s
     entrypoint: 'bash'
-    args: ['cloudbuild/scripts/build-push-monitored.sh', 'whatsapp-service', 'apps/whatsapp-service/Dockerfile']
+    args:
+      [
+        'cloudbuild/scripts/build-push-monitored.sh',
+        'whatsapp-service',
+        'apps/whatsapp-service/Dockerfile',
+      ]
     env:
       - 'DOCKER_BUILDKIT=1'
       - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
@@ -216,10 +250,21 @@ steps:
 
   - name: 'gcr.io/cloud-builders/docker'
     id: 'build-push-app-settings-service'
-    waitFor: ['deploy-promptvault-service', 'deploy-image-service', 'deploy-api-docs-hub', 'deploy-notion-service']
+    waitFor:
+      [
+        'deploy-promptvault-service',
+        'deploy-image-service',
+        'deploy-api-docs-hub',
+        'deploy-notion-service',
+      ]
     timeout: 900s
     entrypoint: 'bash'
-    args: ['cloudbuild/scripts/build-push-monitored.sh', 'app-settings-service', 'apps/app-settings-service/Dockerfile']
+    args:
+      [
+        'cloudbuild/scripts/build-push-monitored.sh',
+        'app-settings-service',
+        'apps/app-settings-service/Dockerfile',
+      ]
     env:
       - 'DOCKER_BUILDKIT=1'
       - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
@@ -227,10 +272,21 @@ steps:
 
   - name: 'gcr.io/cloud-builders/docker'
     id: 'build-push-mobile-notifications-service'
-    waitFor: ['deploy-promptvault-service', 'deploy-image-service', 'deploy-api-docs-hub', 'deploy-notion-service']
+    waitFor:
+      [
+        'deploy-promptvault-service',
+        'deploy-image-service',
+        'deploy-api-docs-hub',
+        'deploy-notion-service',
+      ]
     timeout: 900s
     entrypoint: 'bash'
-    args: ['cloudbuild/scripts/build-push-monitored.sh', 'mobile-notifications-service', 'apps/mobile-notifications-service/Dockerfile']
+    args:
+      [
+        'cloudbuild/scripts/build-push-monitored.sh',
+        'mobile-notifications-service',
+        'apps/mobile-notifications-service/Dockerfile',
+      ]
     env:
       - 'DOCKER_BUILDKIT=1'
       - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
@@ -238,10 +294,21 @@ steps:
 
   - name: 'gcr.io/cloud-builders/docker'
     id: 'build-push-research-agent'
-    waitFor: ['deploy-promptvault-service', 'deploy-image-service', 'deploy-api-docs-hub', 'deploy-notion-service']
+    waitFor:
+      [
+        'deploy-promptvault-service',
+        'deploy-image-service',
+        'deploy-api-docs-hub',
+        'deploy-notion-service',
+      ]
     timeout: 900s
     entrypoint: 'bash'
-    args: ['cloudbuild/scripts/build-push-monitored.sh', 'research-agent', 'apps/research-agent/Dockerfile']
+    args:
+      [
+        'cloudbuild/scripts/build-push-monitored.sh',
+        'research-agent',
+        'apps/research-agent/Dockerfile',
+      ]
     env:
       - 'DOCKER_BUILDKIT=1'
       - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
@@ -310,10 +377,22 @@ steps:
   # --- Batch 3 Builds (wait for Batch 2 deploys) ---
   - name: 'gcr.io/cloud-builders/docker'
     id: 'build-push-commands-agent'
-    waitFor: ['deploy-user-service', 'deploy-whatsapp-service', 'deploy-app-settings-service', 'deploy-mobile-notifications-service', 'deploy-research-agent']
+    waitFor:
+      [
+        'deploy-user-service',
+        'deploy-whatsapp-service',
+        'deploy-app-settings-service',
+        'deploy-mobile-notifications-service',
+        'deploy-research-agent',
+      ]
     timeout: 900s
     entrypoint: 'bash'
-    args: ['cloudbuild/scripts/build-push-monitored.sh', 'commands-agent', 'apps/commands-agent/Dockerfile']
+    args:
+      [
+        'cloudbuild/scripts/build-push-monitored.sh',
+        'commands-agent',
+        'apps/commands-agent/Dockerfile',
+      ]
     env:
       - 'DOCKER_BUILDKIT=1'
       - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
@@ -321,10 +400,22 @@ steps:
 
   - name: 'gcr.io/cloud-builders/docker'
     id: 'build-push-actions-agent'
-    waitFor: ['deploy-user-service', 'deploy-whatsapp-service', 'deploy-app-settings-service', 'deploy-mobile-notifications-service', 'deploy-research-agent']
+    waitFor:
+      [
+        'deploy-user-service',
+        'deploy-whatsapp-service',
+        'deploy-app-settings-service',
+        'deploy-mobile-notifications-service',
+        'deploy-research-agent',
+      ]
     timeout: 900s
     entrypoint: 'bash'
-    args: ['cloudbuild/scripts/build-push-monitored.sh', 'actions-agent', 'apps/actions-agent/Dockerfile']
+    args:
+      [
+        'cloudbuild/scripts/build-push-monitored.sh',
+        'actions-agent',
+        'apps/actions-agent/Dockerfile',
+      ]
     env:
       - 'DOCKER_BUILDKIT=1'
       - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
@@ -332,10 +423,22 @@ steps:
 
   - name: 'gcr.io/cloud-builders/docker'
     id: 'build-push-data-insights-agent'
-    waitFor: ['deploy-user-service', 'deploy-whatsapp-service', 'deploy-app-settings-service', 'deploy-mobile-notifications-service', 'deploy-research-agent']
+    waitFor:
+      [
+        'deploy-user-service',
+        'deploy-whatsapp-service',
+        'deploy-app-settings-service',
+        'deploy-mobile-notifications-service',
+        'deploy-research-agent',
+      ]
     timeout: 900s
     entrypoint: 'bash'
-    args: ['cloudbuild/scripts/build-push-monitored.sh', 'data-insights-agent', 'apps/data-insights-agent/Dockerfile']
+    args:
+      [
+        'cloudbuild/scripts/build-push-monitored.sh',
+        'data-insights-agent',
+        'apps/data-insights-agent/Dockerfile',
+      ]
     env:
       - 'DOCKER_BUILDKIT=1'
       - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
@@ -343,10 +446,18 @@ steps:
 
   - name: 'gcr.io/cloud-builders/docker'
     id: 'build-push-notes-agent'
-    waitFor: ['deploy-user-service', 'deploy-whatsapp-service', 'deploy-app-settings-service', 'deploy-mobile-notifications-service', 'deploy-research-agent']
+    waitFor:
+      [
+        'deploy-user-service',
+        'deploy-whatsapp-service',
+        'deploy-app-settings-service',
+        'deploy-mobile-notifications-service',
+        'deploy-research-agent',
+      ]
     timeout: 900s
     entrypoint: 'bash'
-    args: ['cloudbuild/scripts/build-push-monitored.sh', 'notes-agent', 'apps/notes-agent/Dockerfile']
+    args:
+      ['cloudbuild/scripts/build-push-monitored.sh', 'notes-agent', 'apps/notes-agent/Dockerfile']
     env:
       - 'DOCKER_BUILDKIT=1'
       - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
@@ -354,10 +465,18 @@ steps:
 
   - name: 'gcr.io/cloud-builders/docker'
     id: 'build-push-todos-agent'
-    waitFor: ['deploy-user-service', 'deploy-whatsapp-service', 'deploy-app-settings-service', 'deploy-mobile-notifications-service', 'deploy-research-agent']
+    waitFor:
+      [
+        'deploy-user-service',
+        'deploy-whatsapp-service',
+        'deploy-app-settings-service',
+        'deploy-mobile-notifications-service',
+        'deploy-research-agent',
+      ]
     timeout: 900s
     entrypoint: 'bash'
-    args: ['cloudbuild/scripts/build-push-monitored.sh', 'todos-agent', 'apps/todos-agent/Dockerfile']
+    args:
+      ['cloudbuild/scripts/build-push-monitored.sh', 'todos-agent', 'apps/todos-agent/Dockerfile']
     env:
       - 'DOCKER_BUILDKIT=1'
       - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
@@ -426,10 +545,22 @@ steps:
   # --- Batch 4 Builds (wait for Batch 3 deploys) ---
   - name: 'gcr.io/cloud-builders/docker'
     id: 'build-push-bookmarks-agent'
-    waitFor: ['deploy-commands-agent', 'deploy-actions-agent', 'deploy-data-insights-agent', 'deploy-notes-agent', 'deploy-todos-agent']
+    waitFor:
+      [
+        'deploy-commands-agent',
+        'deploy-actions-agent',
+        'deploy-data-insights-agent',
+        'deploy-notes-agent',
+        'deploy-todos-agent',
+      ]
     timeout: 900s
     entrypoint: 'bash'
-    args: ['cloudbuild/scripts/build-push-monitored.sh', 'bookmarks-agent', 'apps/bookmarks-agent/Dockerfile']
+    args:
+      [
+        'cloudbuild/scripts/build-push-monitored.sh',
+        'bookmarks-agent',
+        'apps/bookmarks-agent/Dockerfile',
+      ]
     env:
       - 'DOCKER_BUILDKIT=1'
       - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
@@ -437,10 +568,22 @@ steps:
 
   - name: 'gcr.io/cloud-builders/docker'
     id: 'build-push-calendar-agent'
-    waitFor: ['deploy-commands-agent', 'deploy-actions-agent', 'deploy-data-insights-agent', 'deploy-notes-agent', 'deploy-todos-agent']
+    waitFor:
+      [
+        'deploy-commands-agent',
+        'deploy-actions-agent',
+        'deploy-data-insights-agent',
+        'deploy-notes-agent',
+        'deploy-todos-agent',
+      ]
     timeout: 900s
     entrypoint: 'bash'
-    args: ['cloudbuild/scripts/build-push-monitored.sh', 'calendar-agent', 'apps/calendar-agent/Dockerfile']
+    args:
+      [
+        'cloudbuild/scripts/build-push-monitored.sh',
+        'calendar-agent',
+        'apps/calendar-agent/Dockerfile',
+      ]
     env:
       - 'DOCKER_BUILDKIT=1'
       - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
@@ -448,10 +591,18 @@ steps:
 
   - name: 'gcr.io/cloud-builders/docker'
     id: 'build-push-linear-agent'
-    waitFor: ['deploy-commands-agent', 'deploy-actions-agent', 'deploy-data-insights-agent', 'deploy-notes-agent', 'deploy-todos-agent']
+    waitFor:
+      [
+        'deploy-commands-agent',
+        'deploy-actions-agent',
+        'deploy-data-insights-agent',
+        'deploy-notes-agent',
+        'deploy-todos-agent',
+      ]
     timeout: 900s
     entrypoint: 'bash'
-    args: ['cloudbuild/scripts/build-push-monitored.sh', 'linear-agent', 'apps/linear-agent/Dockerfile']
+    args:
+      ['cloudbuild/scripts/build-push-monitored.sh', 'linear-agent', 'apps/linear-agent/Dockerfile']
     env:
       - 'DOCKER_BUILDKIT=1'
       - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
@@ -459,7 +610,14 @@ steps:
 
   - name: 'gcr.io/cloud-builders/docker'
     id: 'build-push-web-agent'
-    waitFor: ['deploy-commands-agent', 'deploy-actions-agent', 'deploy-data-insights-agent', 'deploy-notes-agent', 'deploy-todos-agent']
+    waitFor:
+      [
+        'deploy-commands-agent',
+        'deploy-actions-agent',
+        'deploy-data-insights-agent',
+        'deploy-notes-agent',
+        'deploy-todos-agent',
+      ]
     timeout: 900s
     entrypoint: 'bash'
     args: ['cloudbuild/scripts/build-push-monitored.sh', 'web-agent', 'apps/web-agent/Dockerfile']
@@ -516,7 +674,14 @@ steps:
   # --- Web Frontend (builds in parallel with Batch 4 services) ---
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     id: 'fetch-web-config'
-    waitFor: ['deploy-commands-agent', 'deploy-actions-agent', 'deploy-data-insights-agent', 'deploy-notes-agent', 'deploy-todos-agent']
+    waitFor:
+      [
+        'deploy-commands-agent',
+        'deploy-actions-agent',
+        'deploy-data-insights-agent',
+        'deploy-notes-agent',
+        'deploy-todos-agent',
+      ]
     entrypoint: 'bash'
     args:
       - '-c'
