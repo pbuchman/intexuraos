@@ -24,8 +24,18 @@ describe('shouldAutoExecute', () => {
       expect(shouldAutoExecute(event)).toBe(true);
     });
 
-    it('returns false when confidence is less than 100%', () => {
-      const event = createEvent({ actionType: 'link', payload: { prompt: 'test', confidence: 0.99 } });
+    it('returns true when confidence is exactly 90%', () => {
+      const event = createEvent({ actionType: 'link', payload: { prompt: 'test', confidence: 0.9 } });
+      expect(shouldAutoExecute(event)).toBe(true);
+    });
+
+    it('returns true when confidence is above 90%', () => {
+      const event = createEvent({ actionType: 'link', payload: { prompt: 'test', confidence: 0.95 } });
+      expect(shouldAutoExecute(event)).toBe(true);
+    });
+
+    it('returns false when confidence is below 90%', () => {
+      const event = createEvent({ actionType: 'link', payload: { prompt: 'test', confidence: 0.89 } });
       expect(shouldAutoExecute(event)).toBe(false);
     });
 
@@ -68,8 +78,13 @@ describe('shouldAutoExecute', () => {
   });
 
   describe('edge cases', () => {
-    it('returns false for link action with confidence slightly less than 1', () => {
+    it('returns true for link action with confidence slightly below 100%', () => {
       const event = createEvent({ actionType: 'link', payload: { prompt: 'test', confidence: 0.999 } });
+      expect(shouldAutoExecute(event)).toBe(true);
+    });
+
+    it('returns false for link action with confidence slightly below 90%', () => {
+      const event = createEvent({ actionType: 'link', payload: { prompt: 'test', confidence: 0.899 } });
       expect(shouldAutoExecute(event)).toBe(false);
     });
   });
