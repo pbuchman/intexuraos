@@ -901,13 +901,15 @@ export function createFakeServices(deps: {
     }
   );
 
-  const handleLinearActionUseCase: HandleLinearActionUseCase =
-    createHandleLinearActionUseCase({
-      actionServiceClient: deps.actionServiceClient,
+  const handleLinearActionUseCase: HandleLinearActionUseCase = registerActionHandler(
+    createHandleLinearActionUseCase,
+    {
+      actionRepository,
       whatsappPublisher,
       webAppUrl: 'http://test.app',
       logger: silentLogger,
-    });
+    }
+  );
 
   const changeActionTypeUseCase: ChangeActionTypeUseCase =
     deps.changeActionTypeUseCase ??
