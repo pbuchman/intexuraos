@@ -332,13 +332,12 @@ describe('SpeechmaticsTranscriptionAdapter', () => {
 
   describe('getTranscript', () => {
     it('returns transcript text and summary when present', async () => {
+      // json-v2 returns a flat array of word/punctuation results
       const mockJsonV2Response = {
         summary: { content: 'Summary of the audio' },
         results: [
-          [
-            { alternatives: [{ content: 'Hello', confidence: 0.95 }] },
-            { alternatives: [{ content: 'world', confidence: 0.92 }] },
-          ],
+          { alternatives: [{ content: 'Hello', confidence: 0.95 }] },
+          { alternatives: [{ content: 'world', confidence: 0.92 }] },
         ],
       };
       mockGetJobResult.mockResolvedValue(mockJsonV2Response);
@@ -364,10 +363,8 @@ describe('SpeechmaticsTranscriptionAdapter', () => {
     it('returns transcript without summary when summary missing', async () => {
       const mockJsonV2Response = {
         results: [
-          [
-            { alternatives: [{ content: 'No', confidence: 0.9 }] },
-            { alternatives: [{ content: 'summary', confidence: 0.88 }] },
-          ],
+          { alternatives: [{ content: 'No', confidence: 0.9 }] },
+          { alternatives: [{ content: 'summary', confidence: 0.88 }] },
         ],
       };
       mockGetJobResult.mockResolvedValue(mockJsonV2Response);
@@ -397,9 +394,9 @@ describe('SpeechmaticsTranscriptionAdapter', () => {
     it('handles missing alternatives in results', async () => {
       mockGetJobResult.mockResolvedValue({
         results: [
-          [{ alternatives: [{ content: 'Valid' }] }],
-          [{ alternatives: [] }], // No alternatives
-          [{}], // Missing alternatives key
+          { alternatives: [{ content: 'Valid' }] },
+          { alternatives: [] }, // No alternatives
+          {}, // Missing alternatives key
         ],
       });
 
