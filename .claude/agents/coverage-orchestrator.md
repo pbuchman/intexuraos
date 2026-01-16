@@ -95,6 +95,7 @@ If exemptions were found, append them to `docs/coverage/unreachable.md` using th
 ### `src/domain/usecases/handleAction.ts`
 
 - **Line ~72**: `if (!user)` defensive check
+
   ```typescript
   if (!user) {
     return err(new Error('User not found'));
@@ -108,6 +109,7 @@ If exemptions were found, append them to `docs/coverage/unreachable.md` using th
 ### `src/attribution.ts`
 
 - **Lines ~23-25**: Array index access after split
+
   ```typescript
   const [key, value] = line.split('=');
   if (!key || !value) { ... }  // TypeScript narrowing makes this unreachable

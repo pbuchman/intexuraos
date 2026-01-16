@@ -25,15 +25,18 @@ vi.mock('@sentry/node', () => {
 });
 
 function addMockFailMethod(app: FastifyInstance): void {
-  app.decorateReply('fail', function (
-    this: FastifyReply,
-    _code: string,
-    _message: string,
-    _diagnostics?: unknown,
-    _details?: unknown
-  ) {
-    return this.send({ error: _code, message: _message, details: _details });
-  });
+  app.decorateReply(
+    'fail',
+    function (
+      this: FastifyReply,
+      _code: string,
+      _message: string,
+      _diagnostics?: unknown,
+      _details?: unknown
+    ) {
+      return this.send({ error: _code, message: _message, details: _details });
+    }
+  );
 }
 
 describe('setupSentryErrorHandler', () => {
@@ -200,9 +203,7 @@ describe('setupSentryErrorHandler', () => {
       const error = new Error('Validation error') as Error & {
         validation: { instancePath?: string; message?: string }[];
       };
-      error.validation = [
-        { instancePath: '', message: "must have required property 'name'" },
-      ];
+      error.validation = [{ instancePath: '', message: "must have required property 'name'" }];
       throw error;
     });
 
