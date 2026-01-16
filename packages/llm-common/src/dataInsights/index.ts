@@ -30,3 +30,5 @@ export {
 } from './dataTransformPrompt.js';
 
 export { parseTransformedData } from './parseTransformedData.js';
+
+export { buildInsightRepairPrompt } from './buildInsightRepairPrompt.js';

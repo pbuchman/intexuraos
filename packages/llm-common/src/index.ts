@@ -158,4 +158,5 @@ export {
   type DataTransformPromptInput,
   type DataTransformPromptDeps,
   parseTransformedData,
+  buildInsightRepairPrompt,
 } from './dataInsights/index.js';
