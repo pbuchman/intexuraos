@@ -56,8 +56,8 @@ speechmatics-js-sdk/
 # Local Firestore export data
 data/firestore-export/
 
-# Generated Firestore config (source of truth: migrations/*.mjs)
-firestore.indexes.json
+# Firestore rules (deployed via firebase deploy)
+# firestore.indexes.json - tracked in git for version control
 firestore.rules
 
 # Local Next.js build output
