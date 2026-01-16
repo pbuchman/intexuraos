@@ -268,4 +268,31 @@ describe('executeNoteAction usecase', () => {
     expect(createdNotes).toHaveLength(1);
     expect(createdNotes[0]?.content).toBe('Meeting notes');
   });
+
+  it('prepends Key Points section when summary is provided', async () => {
+    const action = createAction({
+      status: 'awaiting_approval',
+      payload: {
+        prompt: 'Full meeting transcript here...',
+        summary: '- Discussed Q4 goals\n- Action items assigned',
+      },
+    });
+    await fakeActionRepo.save(action);
+
+    const usecase = createExecuteNoteActionUseCase({
+      actionRepository: fakeActionRepo,
+      notesServiceClient: fakeNotesClient,
+      whatsappPublisher: fakeWhatsappPublisher,
+      webAppUrl: 'https://app.test.com',
+      logger: silentLogger,
+    });
+
+    await usecase('action-123');
+
+    const createdNotes = fakeNotesClient.getCreatedNotes();
+    expect(createdNotes).toHaveLength(1);
+    expect(createdNotes[0]?.content).toBe(
+      '## Key Points\n\n- Discussed Q4 goals\n- Action items assigned\n\n---\n\nFull meeting transcript here...'
+    );
+  });
 });

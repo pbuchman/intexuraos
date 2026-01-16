@@ -70,15 +70,35 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             type: 'object',
             properties: {
               success: { type: 'boolean', enum: [false] },
-              error: { type: 'string' },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
             },
           },
-          500: {
-            description: 'Server Error',
+          403: {
+            description: 'Forbidden',
             type: 'object',
             properties: {
               success: { type: 'boolean', enum: [false] },
-              error: { type: 'string' },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+          },
+          500: {
+            description: 'Internal Server Error',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+          },
+          502: {
+            description: 'Bad Gateway',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
             },
           },
         },

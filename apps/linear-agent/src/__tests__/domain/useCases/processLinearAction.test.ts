@@ -428,5 +428,40 @@ describe('processLinearAction', () => {
         expect(issuesResult.value[0].description).toBeNull();
       }
     });
+
+    it('prepends Key Points section when summary is provided', async () => {
+      fakeExtractionService.setResponse({
+        title: 'Feature with summary',
+        priority: 2,
+        functionalRequirements: 'User can export data',
+        technicalDetails: null,
+        valid: true,
+        error: null,
+        reasoning: 'Valid',
+      });
+
+      const requestWithSummary: ProcessLinearActionRequest = {
+        ...defaultRequest,
+        summary: '- Main requirement A\n- Main requirement B',
+      };
+
+      await processLinearAction(requestWithSummary, {
+        linearApiClient: fakeLinearClient,
+        connectionRepository: fakeConnectionRepo,
+        failedIssueRepository: fakeFailedIssueRepo,
+        extractionService: fakeExtractionService,
+      });
+
+      const issuesResult = await fakeLinearClient.listIssues('key', 'team-789');
+      if (issuesResult.ok && issuesResult.value[0]?.description) {
+        const desc = issuesResult.value[0].description;
+        expect(desc).toContain('## Key Points');
+        expect(desc).toContain('- Main requirement A\n- Main requirement B');
+        expect(desc).toContain('## Functional Requirements');
+        const keyPointsIndex = desc.indexOf('## Key Points');
+        const functionalIndex = desc.indexOf('## Functional Requirements');
+        expect(keyPointsIndex).toBeLessThan(functionalIndex);
+      }
+    });
   });
 });

@@ -83,15 +83,21 @@ export function createExecuteLinearActionUseCase(
     };
     await actionRepository.update(updatedAction);
 
+    const prompt =
+      typeof action.payload['prompt'] === 'string' ? action.payload['prompt'] : action.title;
+    const summary =
+      typeof action.payload['summary'] === 'string' ? action.payload['summary'] : undefined;
+
     logger.info(
-      { actionId, userId: action.userId, title: action.title },
+      { actionId, userId: action.userId, title: action.title, hasSummary: summary !== undefined },
       'Processing linear action via linear-agent'
     );
 
     const result = await linearAgentClient.processAction(
       actionId,
       action.userId,
-      action.title
+      prompt,
+      summary
     );
 
     if (!result.ok) {

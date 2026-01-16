@@ -350,7 +350,7 @@ describe('executeLinearAction usecase', () => {
     expect(processedActions).toHaveLength(1);
     expect(processedActions[0]?.actionId).toBe('action-123');
     expect(processedActions[0]?.userId).toBe('user-456');
-    expect(processedActions[0]?.title).toBe('Fix authentication bug');
+    expect(processedActions[0]?.text).toBe('Fix authentication bug');
   });
 
   it('returns result with issueIdentifier only when resourceUrl is missing', async () => {
@@ -429,5 +429,30 @@ describe('executeLinearAction usecase', () => {
     const updatedAction = await fakeActionRepo.getById('action-123');
     expect(updatedAction?.status).toBe('completed');
     expect(updatedAction?.payload['resource_url']).toBeDefined();
+  });
+
+  it('passes summary to linear agent when provided in payload', async () => {
+    const action = createAction({
+      status: 'pending',
+      payload: {
+        prompt: 'Full issue description...',
+        summary: '- Key point 1\n- Key point 2',
+      },
+    });
+    await fakeActionRepo.save(action);
+
+    const usecase = createExecuteLinearActionUseCase({
+      actionRepository: fakeActionRepo,
+      linearAgentClient: fakeLinearClient,
+      whatsappPublisher: fakeWhatsappPublisher,
+      logger: silentLogger,
+    });
+
+    await usecase('action-123');
+
+    const processedActions = fakeLinearClient.getProcessedActions();
+    expect(processedActions).toHaveLength(1);
+    expect(processedActions[0]?.text).toBe('Full issue description...');
+    expect(processedActions[0]?.summary).toBe('- Key point 1\n- Key point 2');
   });
 });

@@ -30,6 +30,7 @@ export interface ProcessLinearActionRequest {
   actionId: string;
   userId: string;
   text: string;
+  summary?: string;
 }
 
 export interface ProcessLinearActionResponse {
@@ -42,8 +43,12 @@ export interface ProcessLinearActionResponse {
 /**
  * Build structured markdown description from extracted data.
  */
-function buildDescription(extracted: ExtractedIssueData): string | null {
+function buildDescription(extracted: ExtractedIssueData, summary?: string): string | null {
   const sections: string[] = [];
+
+  if (summary !== undefined) {
+    sections.push(`## Key Points\n\n${summary}`);
+  }
 
   if (extracted.functionalRequirements !== null) {
     sections.push(`## Functional Requirements\n\n${extracted.functionalRequirements}`);
@@ -64,7 +69,7 @@ export async function processLinearAction(
   request: ProcessLinearActionRequest,
   deps: ProcessLinearActionDeps
 ): Promise<Result<ProcessLinearActionResponse, LinearError>> {
-  const { actionId, userId, text } = request;
+  const { actionId, userId, text, summary } = request;
   const {
     linearApiClient,
     connectionRepository,
@@ -140,8 +145,8 @@ export async function processLinearAction(
     });
   }
 
-  // Build description from extracted sections
-  const description = buildDescription(extracted);
+  // Build description from extracted sections (with Key Points from summary if available)
+  const description = buildDescription(extracted, summary);
 
   // Create issue in Linear
   logger?.info({ userId, actionId, title: extracted.title }, 'Creating Linear issue');

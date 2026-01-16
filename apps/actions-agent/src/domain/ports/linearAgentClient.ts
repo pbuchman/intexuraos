@@ -15,6 +15,7 @@ export interface LinearAgentClient {
   processAction(
     actionId: string,
     userId: string,
-    title: string
+    text: string,
+    summary?: string
   ): Promise<Result<ProcessLinearActionResponse>>;
 }

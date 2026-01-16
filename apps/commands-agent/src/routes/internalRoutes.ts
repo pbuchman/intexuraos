@@ -18,6 +18,7 @@ interface CommandEvent {
   sourceType: CommandSourceType;
   externalId: string;
   text: string;
+  summary?: string;
   timestamp: string;
 }
 
@@ -161,6 +162,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         sourceType: eventData.sourceType,
         externalId: eventData.externalId,
         text: eventData.text,
+        ...(eventData.summary !== undefined && { summary: eventData.summary }),
         timestamp: eventData.timestamp,
       });
 

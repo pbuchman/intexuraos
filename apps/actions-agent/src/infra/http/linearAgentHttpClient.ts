@@ -40,13 +40,14 @@ export function createLinearAgentHttpClient(
     async processAction(
       actionId: string,
       userId: string,
-      title: string
+      text: string,
+      summary?: string
     ): Promise<Result<ProcessLinearActionResponse>> {
       const url = `${config.baseUrl}/internal/linear/process-action`;
       const timeoutMs = 60_000; // 60 second timeout
 
       logger.info(
-        { url, actionId, userId, title },
+        { url, actionId, userId, textLength: text.length, hasSummary: summary !== undefined },
         'Processing linear action via linear-agent'
       );
 
@@ -64,7 +65,12 @@ export function createLinearAgentHttpClient(
             'X-Internal-Auth': config.internalAuthToken,
           },
           body: JSON.stringify({
-            action: { id: actionId, userId, title },
+            action: {
+              id: actionId,
+              userId,
+              text,
+              ...(summary !== undefined && { summary }),
+            },
           }),
           signal: controller.signal,
         });
