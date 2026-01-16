@@ -101,6 +101,16 @@ export interface FailedLinearIssue {
   createdAt: string;
 }
 
+/** Successfully processed action record for idempotency */
+export interface ProcessedAction {
+  actionId: string;
+  userId: string;
+  issueId: string;
+  issueIdentifier: string;
+  resourceUrl: string;
+  createdAt: string;
+}
+
 /** Dashboard filter for issue states */
 export type DashboardColumn = 'backlog' | 'in_progress' | 'in_review' | 'done';
 

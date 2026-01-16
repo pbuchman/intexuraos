@@ -114,6 +114,10 @@
       "owner": "calendar-agent",
       "description": "Failed calendar event extractions for manual review"
     },
+    "calendar_processed_actions": {
+      "owner": "calendar-agent",
+      "description": "Successfully processed calendar actions for idempotency"
+    },
     "linear_connections": {
       "owner": "linear-agent",
       "description": "Linear API key connections and team configuration"
@@ -121,6 +125,10 @@
     "linear_failed_issues": {
       "owner": "linear-agent",
       "description": "Failed Linear issue creations for manual review"
+    },
+    "linear_processed_actions": {
+      "owner": "linear-agent",
+      "description": "Successfully processed actions for idempotency"
     }
   }
 }

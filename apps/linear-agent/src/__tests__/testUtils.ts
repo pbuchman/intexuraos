@@ -8,6 +8,7 @@ import {
   FakeLinearApiClient,
   FakeLinearActionExtractionService,
   FakeFailedIssueRepository,
+  FakeProcessedActionRepository,
 } from './fakes.js';
 import { resetServices, setServices } from '../services.js';
 
@@ -74,6 +75,7 @@ export interface TestContext {
   linearApiClient: FakeLinearApiClient;
   extractionService: FakeLinearActionExtractionService;
   failedIssueRepository: FakeFailedIssueRepository;
+  processedActionRepository: FakeProcessedActionRepository;
 }
 
 export function setupTestContext(): TestContext {
@@ -83,6 +85,7 @@ export function setupTestContext(): TestContext {
     linearApiClient: null as unknown as FakeLinearApiClient,
     extractionService: null as unknown as FakeLinearActionExtractionService,
     failedIssueRepository: null as unknown as FakeFailedIssueRepository,
+    processedActionRepository: null as unknown as FakeProcessedActionRepository,
   };
 
   beforeAll(async () => {
@@ -99,11 +102,13 @@ export function setupTestContext(): TestContext {
     context.linearApiClient = new FakeLinearApiClient();
     context.extractionService = new FakeLinearActionExtractionService();
     context.failedIssueRepository = new FakeFailedIssueRepository();
+    context.processedActionRepository = new FakeProcessedActionRepository();
     setServices({
       connectionRepository: context.connectionRepository,
       linearApiClient: context.linearApiClient,
       extractionService: context.extractionService,
       failedIssueRepository: context.failedIssueRepository,
+      processedActionRepository: context.processedActionRepository,
     });
     clearJwksCache();
     context.app = await buildServer();
@@ -117,6 +122,7 @@ export function setupTestContext(): TestContext {
     context.linearApiClient.reset();
     context.extractionService.reset();
     context.failedIssueRepository.reset();
+    context.processedActionRepository.reset();
     delete process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'];
   });
 

@@ -11,6 +11,7 @@ import {
   FakeUserServiceClient,
   FakeFailedEventRepository,
   FakeCalendarActionExtractionService,
+  FakeProcessedActionRepository,
 } from '../fakes.js';
 
 const INTERNAL_AUTH_TOKEN = 'test-internal-auth-token';
@@ -21,6 +22,7 @@ describe('Internal Routes', () => {
   let fakeCalendarClient: FakeGoogleCalendarClient;
   let fakeFailedEventRepository: FakeFailedEventRepository;
   let fakeCalendarActionExtractionService: FakeCalendarActionExtractionService;
+  let fakeProcessedActionRepository: FakeProcessedActionRepository;
 
   beforeEach(async () => {
     process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = INTERNAL_AUTH_TOKEN;
@@ -32,12 +34,14 @@ describe('Internal Routes', () => {
     fakeCalendarClient = new FakeGoogleCalendarClient();
     fakeFailedEventRepository = new FakeFailedEventRepository();
     fakeCalendarActionExtractionService = new FakeCalendarActionExtractionService();
+    fakeProcessedActionRepository = new FakeProcessedActionRepository();
 
     setServices({
       userServiceClient: fakeUserService,
       googleCalendarClient: fakeCalendarClient,
       failedEventRepository: fakeFailedEventRepository,
       calendarActionExtractionService: fakeCalendarActionExtractionService,
+      processedActionRepository: fakeProcessedActionRepository,
     });
 
     app = await buildServer();

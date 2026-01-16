@@ -9,6 +9,7 @@ export type {
   FailedIssueRepository,
   LinearApiClient,
   LinearActionExtractionService,
+  ProcessedActionRepository,
 } from './ports.js';
 export {
   processLinearAction,
