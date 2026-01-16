@@ -33,9 +33,17 @@ export function useChartDefinition(feedId: string): UseChartDefinitionResult {
 
       try {
         const token = await getAccessToken();
+        // eslint-disable-next-line no-console -- temporary debug
+        console.log('[useChartDefinition] Calling API for insightId:', insightId);
         const definition = await generateChartDefinitionApi(token, feedId, insightId);
+        // eslint-disable-next-line no-console -- temporary debug
+        console.log('[useChartDefinition] API returned:', definition);
         setChartDefinition(definition);
+        // eslint-disable-next-line no-console -- temporary debug
+        console.log('[useChartDefinition] State set successfully');
       } catch (err) {
+        // eslint-disable-next-line no-console -- temporary debug
+        console.error('[useChartDefinition] Error:', err);
         setError(getErrorMessage(err, 'Failed to generate chart definition'));
         setChartDefinition(null);
       } finally {
