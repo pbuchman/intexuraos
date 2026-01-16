@@ -83,9 +83,9 @@ export function CommandDetailModal({
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
       onClick={handleBackdropClick}
     >
-      <div className="w-full max-w-lg rounded-xl bg-white shadow-2xl">
+      <div className="flex max-h-[90vh] w-full max-w-lg flex-col rounded-xl bg-white shadow-2xl">
         {/* Header */}
-        <div className="flex items-start justify-between border-b border-slate-200 p-4">
+        <div className="flex shrink-0 items-start justify-between border-b border-slate-200 p-4">
           <div className="flex items-start gap-3">
             <div className="mt-0.5 rounded-lg bg-slate-100 p-2">
               {isVoice ? (
@@ -119,7 +119,7 @@ export function CommandDetailModal({
         </div>
 
         {/* Content */}
-        <div className="space-y-4 p-4">
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
           {/* Command text */}
           <div>
             <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-500">
@@ -189,7 +189,7 @@ export function CommandDetailModal({
         </div>
 
         {/* Footer - Close button */}
-        <div className="flex items-center justify-end border-t border-slate-200 p-4">
+        <div className="flex shrink-0 items-center justify-end border-t border-slate-200 p-4">
           <button
             onClick={onClose}
             className="rounded-lg bg-slate-100 px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-200"

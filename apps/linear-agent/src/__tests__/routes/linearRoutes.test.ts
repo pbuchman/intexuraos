@@ -57,6 +57,25 @@ describe('linearRoutes', () => {
 
       expect(response.statusCode).toBe(401);
     });
+
+    it('handles repository error', async () => {
+      ctx.connectionRepository.setGetConnectionFailure(true, {
+        code: 'INTERNAL_ERROR',
+        message: 'Database unavailable',
+      });
+
+      const token = await createToken({ sub: 'test-user-123' });
+      const response = await ctx.app.inject({
+        method: 'GET',
+        url: '/linear/connection',
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(502);
+      const body = response.json();
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('DOWNSTREAM_ERROR');
+    });
   });
 
   describe('POST /linear/connection/validate', () => {
@@ -163,6 +182,33 @@ describe('linearRoutes', () => {
 
       expect(response.statusCode).toBe(401);
     });
+
+    it('handles repository save error', async () => {
+      ctx.connectionRepository.setSaveFailure(true, {
+        code: 'INTERNAL_ERROR',
+        message: 'Database write failed',
+      });
+
+      const token = await createToken({ sub: 'test-user-123' });
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/linear/connection',
+        headers: {
+          authorization: `Bearer ${token}`,
+          'content-type': 'application/json',
+        },
+        payload: {
+          apiKey: 'linear-api-key-new',
+          teamId: 'team-new',
+          teamName: 'New Team',
+        },
+      });
+
+      expect(response.statusCode).toBe(502);
+      const body = response.json();
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('DOWNSTREAM_ERROR');
+    });
   });
 
   describe('DELETE /linear/connection', () => {
@@ -189,6 +235,26 @@ describe('linearRoutes', () => {
       });
 
       expect(response.statusCode).toBe(401);
+    });
+
+    it('handles repository disconnect error', async () => {
+      seedConnection('test-user-123');
+      ctx.connectionRepository.setDisconnectFailure(true, {
+        code: 'INTERNAL_ERROR',
+        message: 'Database disconnect failed',
+      });
+
+      const token = await createToken({ sub: 'test-user-123' });
+      const response = await ctx.app.inject({
+        method: 'DELETE',
+        url: '/linear/connection',
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(502);
+      const body = response.json();
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('DOWNSTREAM_ERROR');
     });
   });
 
@@ -389,6 +455,25 @@ describe('linearRoutes', () => {
       });
 
       expect(response.statusCode).toBe(401);
+    });
+
+    it('handles repository list error', async () => {
+      ctx.failedIssueRepository.setListByUserFailure(true, {
+        code: 'INTERNAL_ERROR',
+        message: 'Database query failed',
+      });
+
+      const token = await createToken({ sub: 'test-user-123' });
+      const response = await ctx.app.inject({
+        method: 'GET',
+        url: '/linear/failed-issues',
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(502);
+      const body = response.json();
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('DOWNSTREAM_ERROR');
     });
   });
 });

@@ -1,11 +1,12 @@
 /**
  * Tests for Firestore action repository.
  */
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createFakeFirestore, resetFirestore, setFirestore } from '@intexuraos/infra-firestore';
 import { createFirestoreActionRepository } from '../../../infra/firestore/actionRepository.js';
 import type { ActionRepository } from '../../../domain/ports/actionRepository.js';
 import type { Action } from '../../../domain/models/action.js';
+import type { Logger } from 'pino';
 
 function createTestAction(overrides: Partial<Action> = {}): Action {
   const now = new Date().toISOString();
@@ -320,6 +321,74 @@ describe('FirestoreActionRepository', () => {
 
       const result = await repository.getById(action.id);
       expect(result?.updatedAt).not.toBe(originalUpdatedAt);
+    });
+
+    it('returns error outcome when transaction fails (without logger)', async () => {
+      const action = createTestAction({ status: 'pending' });
+      await repository.save(action);
+
+      vi.spyOn(fakeFirestore, 'runTransaction').mockRejectedValueOnce(
+        new Error('Transaction failed')
+      );
+
+      const updateResult = await repository.updateStatusIf(action.id, 'processing', 'pending');
+
+      expect(updateResult.outcome).toBe('error');
+      if (updateResult.outcome === 'error') {
+        expect(updateResult.error.message).toBe('Transaction failed');
+      }
+    });
+
+    it('returns error outcome and logs when transaction fails (with logger)', async () => {
+      const mockLogger: Logger = {
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+        debug: vi.fn(),
+      } as unknown as Logger;
+
+      const repositoryWithLogger = createFirestoreActionRepository({ logger: mockLogger });
+      const action = createTestAction({ status: 'pending' });
+      await repositoryWithLogger.save(action);
+
+      vi.spyOn(fakeFirestore, 'runTransaction').mockRejectedValueOnce(
+        new Error('Transaction failed with logging')
+      );
+
+      const updateResult = await repositoryWithLogger.updateStatusIf(
+        action.id,
+        'processing',
+        'pending'
+      );
+
+      expect(updateResult.outcome).toBe('error');
+      if (updateResult.outcome === 'error') {
+        expect(updateResult.error.message).toBe('Transaction failed with logging');
+      }
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        expect.objectContaining({
+          actionId: action.id,
+          newStatus: 'processing',
+          expectedStatus: 'pending',
+          error: expect.any(Error),
+        }),
+        'Firestore transaction failed in updateStatusIf'
+      );
+    });
+
+    it('wraps non-Error objects in Error when transaction fails', async () => {
+      const action = createTestAction({ status: 'pending' });
+      await repository.save(action);
+
+      vi.spyOn(fakeFirestore, 'runTransaction').mockRejectedValueOnce('string error');
+
+      const updateResult = await repository.updateStatusIf(action.id, 'processing', 'pending');
+
+      expect(updateResult.outcome).toBe('error');
+      if (updateResult.outcome === 'error') {
+        expect(updateResult.error).toBeInstanceOf(Error);
+        expect(updateResult.error.message).toBe('string error');
+      }
     });
   });
 });
