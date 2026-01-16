@@ -48,6 +48,9 @@ const TABS: { id: TabType; label: string; icon: React.ReactNode }[] = [
  * Map Linear state to dashboard column
  */
 function mapToColumn(issue: LinearIssue): TabType {
+  if (!issue.status) {
+    return 'backlog';
+  }
   const stateName = issue.status.name.toLowerCase();
   const stateType = issue.status.type;
 
@@ -125,7 +128,7 @@ function IssueCard({ issue }: IssueCardProps): React.JSX.Element {
       )}
 
       <div className="flex items-center justify-between text-xs text-slate-400">
-        <span>{issue.status.name}</span>
+        <span>{issue.status?.name ?? 'Unknown'}</span>
         <ExternalLink className="h-3 w-3" />
       </div>
     </a>
