@@ -37,11 +37,6 @@ export function DataInsightsPage(): React.JSX.Element {
     }
   }, [feedId, analyzeData]);
 
-  useEffect(() => {
-    // eslint-disable-next-line no-console -- temporary debug
-    console.log('[DataInsightsPage] State changed - chartDefinition:', chartDefinition, 'selectedInsight:', selectedInsight);
-  }, [chartDefinition, selectedInsight]);
-
   const handleConfigureChart = (insightId: string): void => {
     const insight = insights?.find((i) => i.id === insightId);
     if (insight !== undefined) {
