@@ -97,9 +97,10 @@ describe('SpeechmaticsTranscriptionAdapter', () => {
           operating_point: 'enhanced',
           additional_vocab: expect.any(Array),
         },
-        summarization: {
-          type: 'bullets',
-          length: 'brief',
+        summarization_config: {
+          summary_type: 'bullets',
+          summary_length: 'brief',
+          content_type: 'auto',
         },
       });
     });
