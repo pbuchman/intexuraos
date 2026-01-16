@@ -60,6 +60,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           connectionRepository: services.connectionRepository,
           failedIssueRepository: services.failedIssueRepository,
           extractionService: services.extractionService,
+          processedActionRepository: services.processedActionRepository,
           logger: request.log,
         }
       );

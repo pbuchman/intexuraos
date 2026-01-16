@@ -16,6 +16,7 @@ import type {
   FailedIssueRepository,
   LinearActionExtractionService,
   ExtractedIssueData,
+  ProcessedActionRepository,
 } from '../index.js';
 
 export interface ProcessLinearActionDeps {
@@ -23,6 +24,7 @@ export interface ProcessLinearActionDeps {
   connectionRepository: LinearConnectionRepository;
   failedIssueRepository: FailedIssueRepository;
   extractionService: LinearActionExtractionService;
+  processedActionRepository: ProcessedActionRepository;
   logger?: Logger;
 }
 
@@ -75,10 +77,31 @@ export async function processLinearAction(
     connectionRepository,
     failedIssueRepository,
     extractionService,
+    processedActionRepository,
     logger,
   } = deps;
 
   logger?.info({ userId, actionId, textLength: text.length }, 'processLinearAction: entry');
+
+  // Idempotency check: return existing result if action was already processed
+  const existingResult = await processedActionRepository.getByActionId(actionId);
+  if (!existingResult.ok) {
+    logger?.error({ actionId, error: existingResult.error }, 'Failed to check processed action');
+    return err(existingResult.error);
+  }
+
+  if (existingResult.value !== null) {
+    const existing = existingResult.value;
+    logger?.info(
+      { actionId, issueIdentifier: existing.issueIdentifier },
+      'Action already processed, returning existing result'
+    );
+    return ok({
+      status: 'completed',
+      resourceUrl: existing.resourceUrl,
+      issueIdentifier: existing.issueIdentifier,
+    });
+  }
 
   // Get user's connection
   const connectionResult = await connectionRepository.getFullConnection(userId);
@@ -182,6 +205,22 @@ export async function processLinearAction(
     { userId, actionId, issueId: createdIssue.id, identifier: createdIssue.identifier },
     'Issue created successfully'
   );
+
+  // Save processed action for idempotency
+  const saveResult = await processedActionRepository.create({
+    actionId,
+    userId,
+    issueId: createdIssue.id,
+    issueIdentifier: createdIssue.identifier,
+    resourceUrl: createdIssue.url,
+  });
+
+  if (!saveResult.ok) {
+    logger?.warn(
+      { actionId, error: saveResult.error },
+      'Failed to save processed action (issue was created successfully)'
+    );
+  }
 
   return ok({
     status: 'completed',

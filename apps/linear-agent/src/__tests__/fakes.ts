@@ -16,6 +16,8 @@ import type {
   ExtractedIssueData,
   FailedIssueRepository,
   FailedLinearIssue,
+  ProcessedActionRepository,
+  ProcessedAction,
 } from '../domain/index.js';
 
 export class FakeLinearConnectionRepository implements LinearConnectionRepository {
@@ -281,5 +283,45 @@ export class FakeFailedIssueRepository implements FailedIssueRepository {
 
   get count(): number {
     return this.failedIssues.length;
+  }
+}
+
+export class FakeProcessedActionRepository implements ProcessedActionRepository {
+  private processedActions = new Map<string, ProcessedAction>();
+
+  async getByActionId(actionId: string): Promise<Result<ProcessedAction | null, LinearError>> {
+    const action = this.processedActions.get(actionId);
+    return ok(action ?? null);
+  }
+
+  async create(input: {
+    actionId: string;
+    userId: string;
+    issueId: string;
+    issueIdentifier: string;
+    resourceUrl: string;
+  }): Promise<Result<ProcessedAction, LinearError>> {
+    const processedAction: ProcessedAction = {
+      actionId: input.actionId,
+      userId: input.userId,
+      issueId: input.issueId,
+      issueIdentifier: input.issueIdentifier,
+      resourceUrl: input.resourceUrl,
+      createdAt: new Date().toISOString(),
+    };
+    this.processedActions.set(input.actionId, processedAction);
+    return ok(processedAction);
+  }
+
+  reset(): void {
+    this.processedActions.clear();
+  }
+
+  seedProcessedAction(action: ProcessedAction): void {
+    this.processedActions.set(action.actionId, action);
+  }
+
+  get count(): number {
+    return this.processedActions.size;
   }
 }

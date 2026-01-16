@@ -121,6 +121,10 @@
     "linear_failed_issues": {
       "owner": "linear-agent",
       "description": "Failed Linear issue creations for manual review"
+    },
+    "linear_processed_actions": {
+      "owner": "linear-agent",
+      "description": "Successfully processed actions for idempotency"
     }
   }
 }
