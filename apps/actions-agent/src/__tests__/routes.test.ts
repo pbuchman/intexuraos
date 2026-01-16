@@ -1413,9 +1413,9 @@ describe('Research Agent Routes', () => {
         id: 'action-1',
         userId: 'user-123',
         commandId: 'cmd-1',
-        type: 'calendar',
+        type: 'reminder',
         confidence: 0.95,
-        title: 'Test Calendar',
+        title: 'Test Reminder',
         status: 'awaiting_approval',
         payload: {},
         createdAt: '2025-01-01T00:00:00.000Z',
@@ -1435,7 +1435,7 @@ describe('Research Agent Routes', () => {
 
       expect(response.statusCode).toBe(400);
       const body = JSON.parse(response.body) as { error: { message: string } };
-      expect(body.error.message).toContain('Action type calendar not supported');
+      expect(body.error.message).toContain('Action type reminder not supported');
     });
 
     it('executes research action successfully', async () => {
