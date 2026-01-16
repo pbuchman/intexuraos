@@ -117,7 +117,6 @@ export function DataInsightsPage(): React.JSX.Element {
                 ))}
               </div>
 
-              {console.log('[DataInsightsPage] chartDefinition:', chartDefinition, 'selectedInsight:', selectedInsight)}
               {chartDefinition !== null && selectedInsight !== null && (
                 <>
                   <div className="mt-6 border-t border-slate-200 pt-6">

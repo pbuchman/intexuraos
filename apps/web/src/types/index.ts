@@ -980,14 +980,14 @@ export interface LinearConnectionStatus {
 }
 
 /**
- * Grouped issues by state category
+ * Grouped issues by dashboard column
  */
 export interface GroupedIssues {
   backlog: LinearIssue[];
-  unstarted: LinearIssue[];
-  started: LinearIssue[];
-  completed: LinearIssue[];
-  cancelled: LinearIssue[];
+  in_progress: LinearIssue[];
+  in_review: LinearIssue[];
+  done: LinearIssue[];
+  archive: LinearIssue[];
 }
 
 /**
@@ -995,5 +995,5 @@ export interface GroupedIssues {
  */
 export interface ListIssuesResponse {
   issues: GroupedIssues;
-  total: number;
+  teamName: string;
 }

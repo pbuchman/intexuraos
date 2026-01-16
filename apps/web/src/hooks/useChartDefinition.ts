@@ -33,13 +33,9 @@ export function useChartDefinition(feedId: string): UseChartDefinitionResult {
 
       try {
         const token = await getAccessToken();
-        console.log('[useChartDefinition] Calling API for insightId:', insightId);
         const definition = await generateChartDefinitionApi(token, feedId, insightId);
-        console.log('[useChartDefinition] API returned:', definition);
         setChartDefinition(definition);
-        console.log('[useChartDefinition] State set successfully');
       } catch (err) {
-        console.error('[useChartDefinition] Error:', err);
         setError(getErrorMessage(err, 'Failed to generate chart definition'));
         setChartDefinition(null);
       } finally {

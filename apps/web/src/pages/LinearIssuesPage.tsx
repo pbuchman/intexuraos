@@ -46,62 +46,6 @@ const TABS: { id: TabType; label: string; icon: React.ReactNode }[] = [
   { id: 'archive', label: 'Archive', icon: <ChevronDown className="h-4 w-4" /> },
 ];
 
-/**
- * Map Linear state to dashboard column
- */
-function mapToColumn(issue: LinearIssue): TabType {
-  if (!issue.status) {
-    return 'backlog';
-  }
-  const stateName = issue.status.name.toLowerCase();
-  const stateType = issue.status.type;
-
-  // In Review detection (Linear uses "started" type for review states)
-  if (stateName.includes('review')) {
-    return 'in_review';
-  }
-
-  // Check if completed within last week
-  const weekAgo = new Date();
-  weekAgo.setDate(weekAgo.getDate() - 7);
-  const completedAt = issue.updatedAt ? new Date(issue.updatedAt) : null;
-  const isRecent = completedAt !== null && completedAt >= weekAgo;
-
-  switch (stateType) {
-    case 'backlog':
-    case 'unstarted':
-      return 'backlog';
-    case 'started':
-      return 'in_progress';
-    case 'completed':
-      return isRecent ? 'done' : 'archive';
-    case 'cancelled':
-      return 'archive';
-    default:
-      return 'backlog';
-  }
-}
-
-/**
- * Group issues by dashboard column
- */
-function groupIssuesByColumn(issues: LinearIssue[]): Record<TabType, LinearIssue[]> {
-  const grouped: Record<TabType, LinearIssue[]> = {
-    backlog: [],
-    in_progress: [],
-    in_review: [],
-    done: [],
-    archive: [],
-  };
-
-  for (const issue of issues) {
-    const column = mapToColumn(issue);
-    grouped[column].push(issue);
-  }
-
-  return grouped;
-}
-
 interface IssueCardProps {
   issue: LinearIssue;
 }
@@ -341,7 +285,7 @@ export function LinearIssuesPage(): React.JSX.Element {
     (issue) => !dismissedFailedIssueIds.has(issue.id)
   );
 
-  if (loading && failedIssuesLoading) {
+  if (loading || failedIssuesLoading) {
     return (
       <Layout>
         <div className="flex items-center justify-center py-12">
@@ -371,18 +315,13 @@ export function LinearIssuesPage(): React.JSX.Element {
     );
   }
 
-  // Group all issues by dashboard column
-  const allIssues = data?.issues;
-
-  const flatIssues = [
-    ...(allIssues?.backlog ?? []),
-    ...(allIssues?.unstarted ?? []),
-    ...(allIssues?.started ?? []),
-    ...(allIssues?.completed ?? []),
-    ...(allIssues?.cancelled ?? []),
-  ];
-
-  const columnIssues = groupIssuesByColumn(flatIssues);
+  const columnIssues = {
+    backlog: data?.issues.backlog ?? [],
+    in_progress: data?.issues.in_progress ?? [],
+    in_review: data?.issues.in_review ?? [],
+    done: data?.issues.done ?? [],
+    archive: data?.issues.archive ?? [],
+  };
 
   return (
     <Layout>
