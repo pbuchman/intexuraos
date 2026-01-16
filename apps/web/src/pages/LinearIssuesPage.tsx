@@ -9,12 +9,14 @@ import {
   ExternalLink,
   Eye,
   RefreshCw,
+  X,
 } from 'lucide-react';
 import { Button, Layout } from '@/components';
 import { useAuth } from '@/context';
+import { useFailedLinearIssues } from '@/hooks';
 import { getErrorMessage } from '@intexuraos/common-core/errors';
 import { listLinearIssues } from '@/services';
-import type { LinearIssue, ListIssuesResponse } from '@/types';
+import type { FailedLinearIssue, LinearIssue, ListIssuesResponse } from '@/types';
 
 const POLLING_INTERVAL_MS = 60_000; // 1 minute
 
@@ -169,14 +171,122 @@ function IssueColumn({
   );
 }
 
+interface FailedIssueCardProps {
+  issue: FailedLinearIssue;
+  onDismiss: (id: string) => void;
+}
+
+function FailedIssueCard({ issue, onDismiss }: FailedIssueCardProps): React.JSX.Element {
+  return (
+    <div className="flex gap-3 rounded-lg border border-amber-200 bg-amber-50 p-3">
+      <div className="flex shrink-0 items-center justify-center rounded-lg bg-amber-100 p-2 text-amber-600">
+        <AlertCircle className="h-4 w-4" />
+      </div>
+
+      <div className="min-w-0 flex-1">
+        <div className="mb-1 flex items-start justify-between gap-2">
+          <h4 className="font-medium text-amber-900">
+            {issue.extractedTitle ?? 'Untitled issue'}
+          </h4>
+          <button
+            type="button"
+            onClick={() => {
+              onDismiss(issue.id);
+            }}
+            className="shrink-0 rounded p-1 text-amber-400 transition-colors hover:bg-amber-100 hover:text-amber-600"
+            aria-label="Dismiss"
+          >
+            <X className="h-3 w-3" />
+          </button>
+        </div>
+
+        <p className="mb-2 line-clamp-2 text-sm text-amber-700">{issue.originalText}</p>
+
+        <div className="flex items-center gap-2 text-xs text-amber-600">
+          <span className="rounded bg-amber-100 px-1.5 py-0.5">{issue.error}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+interface NeedsAttentionSectionProps {
+  issues: FailedLinearIssue[];
+  onDismiss: (id: string) => void;
+}
+
+function NeedsAttentionSection({
+  issues,
+  onDismiss,
+}: NeedsAttentionSectionProps): React.JSX.Element | null {
+  const [expanded, setExpanded] = useState(false);
+  const visibleCount = expanded ? issues.length : Math.min(issues.length, 3);
+
+  if (issues.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="mb-6 rounded-lg border border-amber-200 bg-amber-50 p-4">
+      <div className="mb-3 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <AlertCircle className="h-5 w-5 text-amber-600" />
+          <h3 className="font-semibold text-amber-900">
+            Needs Attention ({issues.length})
+          </h3>
+        </div>
+        {issues.length > 3 && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              setExpanded(!expanded);
+            }}
+            className="text-amber-700 hover:bg-amber-100 hover:text-amber-900"
+          >
+            {expanded ? (
+              <>
+                <span>Show less</span>
+                <ChevronUp className="ml-1 h-4 w-4" />
+              </>
+            ) : (
+              <>
+                <span>Show all ({issues.length})</span>
+                <ChevronDown className="ml-1 h-4 w-4" />
+              </>
+            )}
+          </Button>
+        )}
+      </div>
+
+      <p className="mb-4 text-sm text-amber-700">
+        These issues couldn't be created. Please edit them and try again.
+      </p>
+
+      <div className="space-y-2">
+        {issues.slice(0, visibleCount).map((issue) => (
+          <FailedIssueCard key={issue.id} issue={issue} onDismiss={onDismiss} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export function LinearIssuesPage(): React.JSX.Element {
   const { getAccessToken } = useAuth();
+  const {
+    issues: failedIssues,
+    loading: failedIssuesLoading,
+    refresh: refreshFailedIssues,
+  } = useFailedLinearIssues();
   const [data, setData] = useState<ListIssuesResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<TabType>('backlog');
   const [archiveExpanded, setArchiveExpanded] = useState(false);
+  const [dismissedFailedIssueIds, setDismissedFailedIssueIds] = useState<Set<string>>(new Set());
 
   const loadIssues = useCallback(
     async (showRefreshIndicator = false): Promise<void> => {
@@ -214,11 +324,24 @@ export function LinearIssuesPage(): React.JSX.Element {
     };
   }, [loadIssues]);
 
-  const handleRefresh = (): void => {
-    void loadIssues(true);
+  const handleRefresh = async (): Promise<void> => {
+    setRefreshing(true);
+    try {
+      await Promise.all([loadIssues(true), refreshFailedIssues()]);
+    } finally {
+      setRefreshing(false);
+    }
   };
 
-  if (loading) {
+  const handleDismissFailedIssue = (id: string): void => {
+    setDismissedFailedIssueIds((prev) => new Set([...prev, id]));
+  };
+
+  const visibleFailedIssues = failedIssues.filter(
+    (issue) => !dismissedFailedIssueIds.has(issue.id)
+  );
+
+  if (loading && failedIssuesLoading) {
     return (
       <Layout>
         <div className="flex items-center justify-center py-12">
@@ -235,7 +358,12 @@ export function LinearIssuesPage(): React.JSX.Element {
           <AlertCircle className="mb-4 h-12 w-12 text-red-500" />
           <h3 className="mb-2 text-lg font-medium text-slate-900">Unable to load issues</h3>
           <p className="mb-4 text-slate-500">{error}</p>
-          <Button type="button" onClick={handleRefresh}>
+          <Button
+            type="button"
+            onClick={() => {
+              void handleRefresh();
+            }}
+          >
             Try Again
           </Button>
         </div>
@@ -267,7 +395,9 @@ export function LinearIssuesPage(): React.JSX.Element {
         <Button
           type="button"
           variant="secondary"
-          onClick={handleRefresh}
+          onClick={() => {
+            void handleRefresh();
+          }}
           disabled={refreshing}
           isLoading={refreshing}
         >
@@ -275,6 +405,8 @@ export function LinearIssuesPage(): React.JSX.Element {
           Refresh
         </Button>
       </div>
+
+      <NeedsAttentionSection issues={visibleFailedIssues} onDismiss={handleDismissFailedIssue} />
 
       {/* Mobile: Tabs */}
       <div className="mb-4 flex gap-1 overflow-x-auto rounded-lg bg-slate-100 p-1 md:hidden">
