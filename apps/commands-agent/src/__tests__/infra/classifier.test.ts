@@ -125,7 +125,7 @@ describe('GeminiClassifier', () => {
       const classifier = createGeminiClassifier(mockLlmClient);
       await classifier.classify('Team meeting tomorrow at 3pm');
 
-      expect(mockGenerate).toHaveBeenCalledWith(expect.stringContaining('command classifier'));
+      expect(mockGenerate).toHaveBeenCalledWith(expect.stringContaining('Classify the message'));
     });
 
     it('handles timeout error', async () => {
