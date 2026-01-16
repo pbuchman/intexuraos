@@ -1,0 +1,2 @@
+{"ts":"2026-01-16T02:07:07.900Z","project":"intexuraos","branch":"fix/INT-88-provider-validation","workspace":"--","runNumber":1,"passed":false,"durationMs":3046,"failureCount":0,"failures":[]}
+{"ts":"2026-01-16T02:12:21.968Z","project":"intexuraos","branch":"fix/INT-88-provider-validation","workspace":"user-service","runNumber":2,"passed":true,"durationMs":304702,"failureCount":0,"failures":[]}

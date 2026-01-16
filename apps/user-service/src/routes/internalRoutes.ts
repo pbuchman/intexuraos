@@ -125,7 +125,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             uid: { type: 'string', description: 'User ID' },
             provider: {
               type: 'string',
-              enum: ['google', 'openai', 'anthropic', 'perplexity'],
+              enum: ['google', 'openai', 'anthropic', 'perplexity', 'zai'],
               description: 'LLM provider',
             },
           },
