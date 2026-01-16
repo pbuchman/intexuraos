@@ -12,8 +12,7 @@ export type CommandCategory =
   | 'link'
   | 'calendar'
   | 'reminder'
-  | 'linear'
-  | 'unclassified';
+  | 'linear';
 
 export interface CommandClassifierPromptInput {
   /** The user message to classify */

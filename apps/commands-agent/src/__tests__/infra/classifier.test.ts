@@ -61,7 +61,7 @@ describe('GeminiClassifier', () => {
       expect(classificationResult.confidence).toBe(0.88);
     });
 
-    it('returns unclassified when classify returns unclassified type', async () => {
+    it('returns note as fallback when LLM returns unknown type', async () => {
       mockGenerate.mockResolvedValue(
         ok(generateResult(jsonResponse('unclassified', 0, 'Unclassified')))
       );
@@ -69,7 +69,7 @@ describe('GeminiClassifier', () => {
       const classifier = createGeminiClassifier(mockLlmClient);
       const classificationResult = await classifier.classify('random gibberish');
 
-      expect(classificationResult.type).toBe('unclassified');
+      expect(classificationResult.type).toBe('note');
       expect(classificationResult.confidence).toBe(0);
       expect(classificationResult.title).toBe('Unclassified');
     });
@@ -150,24 +150,24 @@ describe('GeminiClassifier', () => {
       );
     });
 
-    it('returns unclassified for invalid JSON response', async () => {
+    it('returns note for invalid JSON response', async () => {
       mockGenerate.mockResolvedValue(ok(generateResult('This is not valid JSON')));
 
       const classifier = createGeminiClassifier(mockLlmClient);
       const classificationResult = await classifier.classify('test');
 
-      expect(classificationResult.type).toBe('unclassified');
-      expect(classificationResult.confidence).toBe(0.5);
+      expect(classificationResult.type).toBe('note');
+      expect(classificationResult.confidence).toBe(0.3);
       expect(classificationResult.title).toBe('Unknown');
     });
 
-    it('returns unclassified for unknown type in response', async () => {
+    it('returns note for unknown type in response', async () => {
       mockGenerate.mockResolvedValue(ok(generateResult(jsonResponse('unknown_type', 0.9, 'Test'))));
 
       const classifier = createGeminiClassifier(mockLlmClient);
       const classificationResult = await classifier.classify('test');
 
-      expect(classificationResult.type).toBe('unclassified');
+      expect(classificationResult.type).toBe('note');
     });
 
     it('clamps confidence to valid range', async () => {
@@ -200,7 +200,7 @@ describe('GeminiClassifier', () => {
       expect(classificationResult.confidence).toBe(0.9);
     });
 
-    it('returns unclassified when JSON parses to non-object (defensive)', async () => {
+    it('returns note when JSON parses to non-object (defensive)', async () => {
       const originalParse = JSON.parse;
       JSON.parse = (): null => null;
 
@@ -210,8 +210,8 @@ describe('GeminiClassifier', () => {
         const classifier = createGeminiClassifier(mockLlmClient);
         const classificationResult = await classifier.classify('test');
 
-        expect(classificationResult.type).toBe('unclassified');
-        expect(classificationResult.reasoning).toBe('Invalid response format');
+        expect(classificationResult.type).toBe('note');
+        expect(classificationResult.reasoning).toContain('Invalid response format');
       } finally {
         JSON.parse = originalParse;
       }
