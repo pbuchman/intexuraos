@@ -58,6 +58,34 @@ actions:
       message: 'Link saved!'
       linkLabel: 'View Bookmark →'
 
+  approve_calendar:
+    endpoint:
+      path: /actions/{actionId}/execute
+      method: POST
+      baseUrl: ${INTEXURAOS_ACTIONS_AGENT_URL}
+    ui:
+      label: Event!
+      variant: success
+      icon: CheckCircle
+      confirmationMessage: 'Create this calendar event?'
+    onSuccess:
+      message: 'Calendar event created!'
+      linkLabel: 'View Event →'
+
+  approve_linear:
+    endpoint:
+      path: /actions/{actionId}/execute
+      method: POST
+      baseUrl: ${INTEXURAOS_ACTIONS_AGENT_URL}
+    ui:
+      label: Issue!
+      variant: success
+      icon: CheckCircle
+      confirmationMessage: 'Create this Linear issue?'
+    onSuccess:
+      message: 'Linear issue created!'
+      linkLabel: 'View Issue →'
+
   retry:
     endpoint:
       path: /actions/{actionId}/execute
@@ -115,6 +143,34 @@ actions:
     onSuccess:
       message: 'Bookmark updated!'
       linkLabel: 'View Bookmark →'
+
+  retry_calendar:
+    endpoint:
+      path: /actions/{actionId}/execute
+      method: POST
+      baseUrl: ${INTEXURAOS_ACTIONS_AGENT_URL}
+    ui:
+      label: Retry
+      variant: primary
+      icon: Play
+      confirmationMessage: 'Retry creating calendar event?'
+    onSuccess:
+      message: 'Calendar event created!'
+      linkLabel: 'View Event →'
+
+  retry_linear:
+    endpoint:
+      path: /actions/{actionId}/execute
+      method: POST
+      baseUrl: ${INTEXURAOS_ACTIONS_AGENT_URL}
+    ui:
+      label: Retry
+      variant: primary
+      icon: Play
+      confirmationMessage: 'Retry creating Linear issue?'
+    onSuccess:
+      message: 'Linear issue created!'
+      linkLabel: 'View Issue →'
 
   reject:
     endpoint:
@@ -249,6 +305,62 @@ types:
           value: awaiting_approval
 
       - action: retry_link
+        when:
+          field: status
+          op: eq
+          value: failed
+
+      - action: reject
+        when:
+          field: status
+          op: eq
+          value: awaiting_approval
+
+      - action: archive
+        when:
+          field: status
+          op: in
+          value: [completed, failed, rejected]
+
+      - action: delete
+
+  calendar:
+    actions:
+      - action: approve_calendar
+        when:
+          field: status
+          op: eq
+          value: awaiting_approval
+
+      - action: retry_calendar
+        when:
+          field: status
+          op: eq
+          value: failed
+
+      - action: reject
+        when:
+          field: status
+          op: eq
+          value: awaiting_approval
+
+      - action: archive
+        when:
+          field: status
+          op: in
+          value: [completed, failed, rejected]
+
+      - action: delete
+
+  linear:
+    actions:
+      - action: approve_linear
+        when:
+          field: status
+          op: eq
+          value: awaiting_approval
+
+      - action: retry_linear
         when:
           field: status
           op: eq

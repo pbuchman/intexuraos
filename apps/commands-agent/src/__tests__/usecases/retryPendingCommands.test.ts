@@ -30,12 +30,6 @@ describe('retryPendingCommands usecase', () => {
       >
     > {
       const result = await fakeClassifier.classify('');
-      if (result.type === 'unclassified') {
-        return ok({
-          content: JSON.stringify(result),
-          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd: 0.0001 },
-        });
-      }
       return ok({
         content: JSON.stringify(result),
         usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd: 0.0001 },
@@ -217,15 +211,15 @@ describe('retryPendingCommands usecase', () => {
     ]);
   });
 
-  it('handles unclassified type without creating action', async () => {
+  it('creates action for low-confidence note classification', async () => {
     const command = createCommand();
     commandRepository.addCommand(command);
     userServiceClient.setApiKeys('user-456', { google: 'google-key' });
     classifier.setResult({
-      type: 'unclassified',
-      confidence: 0.1,
+      type: 'note',
+      confidence: 0.3,
       title: 'Unknown',
-      reasoning: 'Cannot determine type',
+      reasoning: 'Cannot determine type, defaulting to note',
     });
 
     const usecase = createRetryPendingCommandsUseCase({
@@ -239,13 +233,16 @@ describe('retryPendingCommands usecase', () => {
 
     const result = await usecase.execute();
 
+    // Now every classification creates an action (note is valid)
     expect(result.processed).toBe(1);
 
     const events = eventPublisher.getPublishedEvents();
-    expect(events).toHaveLength(0);
+    expect(events).toHaveLength(1);
+    expect(events[0]?.actionType).toBe('note');
 
     const actions = actionsAgentClient.getCreatedActions();
-    expect(actions).toHaveLength(0);
+    expect(actions).toHaveLength(1);
+    expect(actions[0]?.type).toBe('note');
   });
 
   it('marks command as failed when classification throws', async () => {

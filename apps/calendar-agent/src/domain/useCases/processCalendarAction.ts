@@ -16,9 +16,11 @@ import type {
   FailedEventRepository,
   CalendarActionExtractionService,
   ExtractionError,
+  UserServiceClient,
 } from '../ports.js';
 
 export interface ProcessCalendarActionDeps {
+  userServiceClient: UserServiceClient;
   googleCalendarClient: GoogleCalendarClient;
   failedEventRepository: FailedEventRepository;
   calendarActionExtractionService: CalendarActionExtractionService;
@@ -97,7 +99,8 @@ export async function processCalendarAction(
   deps: ProcessCalendarActionDeps
 ): Promise<Result<ProcessCalendarActionResponse, CalendarError>> {
   const { actionId, userId, text } = request;
-  const { googleCalendarClient, failedEventRepository, calendarActionExtractionService, logger } = deps;
+  const { userServiceClient, googleCalendarClient, failedEventRepository, calendarActionExtractionService, logger } =
+    deps;
 
   logger.info({ userId, actionId, textLength: text.length }, 'processCalendarAction: entry');
 
@@ -191,8 +194,14 @@ export async function processCalendarAction(
     'processCalendarAction: creating Google Calendar event'
   );
 
+  const tokenResult = await userServiceClient.getOAuthToken(userId);
+  if (!tokenResult.ok) {
+    logger.error({ userId, actionId, error: tokenResult.error }, 'processCalendarAction: failed to get OAuth token');
+    return err(tokenResult.error);
+  }
+
   const createResult = await googleCalendarClient.createEvent(
-    'DUMMY_TOKEN',
+    tokenResult.value.accessToken,
     'primary',
     createInput,
     logger

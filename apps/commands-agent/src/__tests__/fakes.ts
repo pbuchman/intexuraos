@@ -214,9 +214,6 @@ export function createFakeServices(deps: {
   const fakeLlmClient: LlmGenerateClient = {
     async generate(_prompt: string): Promise<Result<{ content: string; usage: { inputTokens: number; outputTokens: number; totalTokens: number; costUsd: number } }, LLMError>> {
       const result = await deps.classifier.classify('');
-      if (result.type === 'unclassified') {
-        return err({ code: 'API_ERROR', message: 'Could not classify' });
-      }
       return ok({
         content: JSON.stringify(result),
         usage: {

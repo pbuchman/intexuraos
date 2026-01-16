@@ -387,21 +387,21 @@ describe('Commands Agent Routes', () => {
       expect(actions[0]?.confidence).toBe(0.95);
     });
 
-    it('handles unclassified commands without creating action', async () => {
+    it('creates action for low-confidence note classification', async () => {
       app = await buildServer();
 
       fakeClassifier.setResult({
-        type: 'unclassified',
+        type: 'note',
         confidence: 0.3,
         title: 'Unknown',
-        reasoning: 'No clear intent detected',
+        reasoning: 'No clear intent detected, defaulting to note',
       });
 
       const event = {
         type: 'command.ingest',
         userId: 'user-789',
         sourceType: 'whatsapp_text',
-        externalId: 'wamid.unclass',
+        externalId: 'wamid.lowconf',
         text: 'Random gibberish',
         timestamp: '2025-01-01T12:00:00.000Z',
       };
@@ -414,13 +414,13 @@ describe('Commands Agent Routes', () => {
           'x-internal-auth': INTERNAL_AUTH_TOKEN,
         },
         payload: {
-          message: { data: messageData, messageId: 'pubsub-unclass' },
+          message: { data: messageData, messageId: 'pubsub-lowconf' },
         },
       });
 
       expect(response.statusCode).toBe(200);
 
-      // Command should be saved but no action created
+      // Command should be saved and action should be created (note is a valid type)
       const commands = await fakeCommandRepo.listByUserId('user-789');
       expect(commands).toHaveLength(1);
       expect(commands[0]?.status).toBe('classified');
@@ -428,7 +428,8 @@ describe('Commands Agent Routes', () => {
       const actions = fakeActionsAgentClient
         .getCreatedActions()
         .filter((a) => a.userId === 'user-789');
-      expect(actions).toHaveLength(0);
+      expect(actions).toHaveLength(1);
+      expect(actions[0]?.type).toBe('note');
     });
 
     it('handles classifier failure gracefully', async () => {
@@ -803,14 +804,14 @@ describe('Commands Agent Routes', () => {
       expect(publishedEvents[0]?.payload.prompt).toBe('Research the latest AI trends');
     });
 
-    it('does not publish event for unclassified commands', async () => {
+    it('publishes event for low-confidence note classification', async () => {
       app = await buildServer();
 
       fakeClassifier.setResult({
-        type: 'unclassified',
+        type: 'note',
         confidence: 0.3,
         title: 'Unknown',
-        reasoning: 'No clear intent detected',
+        reasoning: 'No clear intent detected, defaulting to note',
       });
 
       const event = {
@@ -832,8 +833,10 @@ describe('Commands Agent Routes', () => {
         payload: { message: { data: messageData, messageId: 'pubsub-event2' } },
       });
 
+      // Now every classification (including note) publishes an event
       const publishedEvents = fakeEventPublisher.getPublishedEvents();
-      expect(publishedEvents).toHaveLength(0);
+      expect(publishedEvents).toHaveLength(1);
+      expect(publishedEvents[0]?.actionType).toBe('note');
     });
 
     it('includes selectedModels in event payload', async () => {

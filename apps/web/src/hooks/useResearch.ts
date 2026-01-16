@@ -89,8 +89,8 @@ export function useResearch(id: string): {
   );
 
   useEffect(() => {
+    isMountedRef.current = true;
     void refresh();
-    // Cleanup: mark as unmounted to prevent state updates after unmount
     return (): void => {
       isMountedRef.current = false;
     };
@@ -255,8 +255,8 @@ export function useResearches(): {
   );
 
   useEffect(() => {
+    isMountedRef.current = true;
     void refresh();
-    // Cleanup: mark as unmounted to prevent state updates after unmount
     return (): void => {
       isMountedRef.current = false;
     };

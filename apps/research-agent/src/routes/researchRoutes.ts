@@ -137,13 +137,39 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       } = getServices();
 
       const apiKeysResult = await userServiceClient.getApiKeys(user.userId);
-      const apiKeys = apiKeysResult.ok ? apiKeysResult.value : {};
+      if (!apiKeysResult.ok) {
+        return await reply.fail('INTERNAL_ERROR', 'Failed to fetch API keys');
+      }
+      const apiKeys = apiKeysResult.value;
+
+      const missingModels = body.selectedModels.filter((model) => {
+        const provider = getProviderForModel(model);
+        return apiKeys[provider] === undefined;
+      });
+
+      if (missingModels.length > 0) {
+        return await reply.fail(
+          'MISCONFIGURED',
+          `API keys missing for: ${missingModels.join(', ')}`
+        );
+      }
+
+      const synthesisModel = body.synthesisModel ?? body.selectedModels[0] ?? LlmModels.Gemini25Pro;
+      if (body.skipSynthesis !== true) {
+        const synthesisProvider = getProviderForModel(synthesisModel);
+        if (apiKeys[synthesisProvider] === undefined) {
+          return await reply.fail(
+            'MISCONFIGURED',
+            `API key required for synthesis with ${synthesisModel}`
+          );
+        }
+      }
 
       const submitParams: Parameters<typeof submitResearch>[0] = {
         userId: user.userId,
         prompt: body.prompt,
         selectedModels: body.selectedModels,
-        synthesisModel: body.synthesisModel ?? body.selectedModels[0] ?? LlmModels.Gemini25Pro,
+        synthesisModel,
       };
       if (body.inputContexts !== undefined) {
         const contextsWithLabels = await generateContextLabels(
@@ -673,6 +699,33 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         return await reply.fail('CONFLICT', 'Research is not in draft status');
       }
 
+      const { userServiceClient } = getServices();
+      const apiKeysResult = await userServiceClient.getApiKeys(user.userId);
+      if (!apiKeysResult.ok) {
+        return await reply.fail('INTERNAL_ERROR', 'Failed to fetch API keys');
+      }
+      const apiKeys = apiKeysResult.value;
+
+      const missingModels = existing.value.selectedModels.filter((model) => {
+        const provider = getProviderForModel(model);
+        return apiKeys[provider] === undefined;
+      });
+
+      if (missingModels.length > 0) {
+        return await reply.fail(
+          'MISCONFIGURED',
+          `API keys missing for: ${missingModels.join(', ')}`
+        );
+      }
+
+      const synthesisProvider = getProviderForModel(existing.value.synthesisModel);
+      if (apiKeys[synthesisProvider] === undefined && existing.value.skipSynthesis !== true) {
+        return await reply.fail(
+          'MISCONFIGURED',
+          `API key required for synthesis with ${existing.value.synthesisModel}`
+        );
+      }
+
       // Require at least one source: either models or input contexts
       const hasModels = existing.value.selectedModels.length > 0;
       const hasContexts =
@@ -1023,7 +1076,34 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       } = getServices();
 
       const apiKeysResult = await userServiceClient.getApiKeys(user.userId);
-      const apiKeys = apiKeysResult.ok ? apiKeysResult.value : {};
+      if (!apiKeysResult.ok) {
+        return await reply.fail('INTERNAL_ERROR', 'Failed to fetch API keys');
+      }
+      const apiKeys = apiKeysResult.value;
+
+      if (body.additionalModels !== undefined && body.additionalModels.length > 0) {
+        const missingModels = body.additionalModels.filter((model) => {
+          const provider = getProviderForModel(model);
+          return apiKeys[provider] === undefined;
+        });
+
+        if (missingModels.length > 0) {
+          return await reply.fail(
+            'MISCONFIGURED',
+            `API keys missing for: ${missingModels.join(', ')}`
+          );
+        }
+      }
+
+      if (body.synthesisModel !== undefined) {
+        const synthesisProvider = getProviderForModel(body.synthesisModel);
+        if (apiKeys[synthesisProvider] === undefined) {
+          return await reply.fail(
+            'MISCONFIGURED',
+            `API key required for synthesis with ${body.synthesisModel}`
+          );
+        }
+      }
 
       const enhanceInput: Parameters<typeof enhanceResearch>[0] = {
         sourceResearchId: id,

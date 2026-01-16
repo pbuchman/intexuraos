@@ -181,12 +181,16 @@ export function LinearConnectionPage(): React.JSX.Element {
               ) : null}
               <div className="flex justify-between">
                 <dt className="text-slate-600">Connected At</dt>
-                <dd className="text-slate-900">{new Date(connection.updatedAt).toLocaleString()}</dd>
+                <dd className="text-slate-900">
+                  {new Date(connection.updatedAt).toLocaleString()}
+                </dd>
               </div>
             </dl>
 
             <div className="mt-4 rounded-lg bg-slate-50 p-4">
-              <p className="text-sm text-slate-600 mb-2">You can now create Linear issues by saying:</p>
+              <p className="text-sm text-slate-600 mb-2">
+                You can now create Linear issues by saying:
+              </p>
               <ul className="space-y-1 text-sm text-slate-700">
                 <li className="flex items-start">
                   <span className="mr-2 text-slate-400">•</span>
@@ -204,11 +208,7 @@ export function LinearConnectionPage(): React.JSX.Element {
             </div>
 
             <div className="mt-4 flex gap-3 border-t border-slate-200 pt-4">
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={handleStartConfiguring}
-              >
+              <Button type="button" variant="secondary" onClick={handleStartConfiguring}>
                 Reconfigure
               </Button>
               <Button
@@ -238,21 +238,20 @@ export function LinearConnectionPage(): React.JSX.Element {
             </div>
 
             <div className="bg-slate-50 rounded-lg p-4 mb-4">
-              <h4 className="text-sm font-medium text-slate-900 mb-2">
-                How to get your API key:
-              </h4>
+              <h4 className="text-sm font-medium text-slate-900 mb-2">How to get your API key:</h4>
               <ol className="text-sm text-slate-600 space-y-1 list-decimal list-inside">
-                <li>Go to{' '}
+                <li>
+                  Go to{' '}
                   <a
-                    href="https://linear.app/settings/api"
+                    href="https://linear.app/"
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-blue-600 hover:underline"
                   >
-                    linear.app/settings/api
+                    Settings -&gt; Security & access
                   </a>
                 </li>
-                <li>Click "Create new API key"</li>
+                <li>Click "New API key"</li>
                 <li>Give it a name (e.g., "IntexuraOS")</li>
                 <li>Copy the key and paste it below</li>
               </ol>
@@ -328,11 +327,7 @@ export function LinearConnectionPage(): React.JSX.Element {
                 >
                   Save Connection
                 </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  onClick={handleCancelConfiguring}
-                >
+                <Button type="button" variant="ghost" onClick={handleCancelConfiguring}>
                   Cancel
                 </Button>
               </div>

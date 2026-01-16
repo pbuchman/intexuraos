@@ -252,7 +252,7 @@ describe('handleLinkAction usecase', () => {
       expect(action?.status).toBe('awaiting_approval');
     });
 
-    it('does NOT auto-execute when confidence is less than 100%', async () => {
+    it('does NOT auto-execute when confidence is below 90%', async () => {
       await fakeActionRepository.save(createAction());
 
       const fakeExecuteLinkAction = vi.fn().mockResolvedValue(
@@ -267,8 +267,8 @@ describe('handleLinkAction usecase', () => {
         executeLinkAction: fakeExecuteLinkAction,
       });
 
-      // Event with 99% confidence does NOT trigger auto-execute
-      const event = createEvent({ payload: { prompt: 'https://example.com/article', confidence: 0.99 } });
+      // Event with 85% confidence does NOT trigger auto-execute (threshold is 90%)
+      const event = createEvent({ payload: { prompt: 'https://example.com/article', confidence: 0.85 } });
       const result = await usecase.execute(event);
 
       expect(isOk(result)).toBe(true);
