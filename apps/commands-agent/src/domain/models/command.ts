@@ -12,7 +12,7 @@ export type CommandType =
   | 'link'
   | 'calendar'
   | 'reminder'
-  | 'unclassified';
+  | 'linear';
 
 export interface CommandClassification {
   type: CommandType;

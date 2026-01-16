@@ -11,7 +11,7 @@ const VALID_TYPES: readonly CommandType[] = [
   'link',
   'calendar',
   'reminder',
-  'unclassified',
+  'linear',
 ] as const;
 
 const MODEL_KEYWORDS: Record<ResearchModel, string[]> = {
@@ -99,10 +99,10 @@ function parseClassifyResponse(
   const jsonMatch = /\{[\s\S]*}/.exec(response);
   if (jsonMatch === null) {
     return {
-      type: 'unclassified',
-      confidence: 0.5,
+      type: 'note',
+      confidence: 0.3,
       title: 'Unknown',
-      reasoning: 'Failed to parse response',
+      reasoning: 'Failed to parse response, defaulting to note',
     };
   }
 
@@ -110,10 +110,10 @@ function parseClassifyResponse(
 
   if (typeof parsed !== 'object' || parsed === null) {
     return {
-      type: 'unclassified',
-      confidence: 0.5,
+      type: 'note',
+      confidence: 0.3,
       title: 'Unknown',
-      reasoning: 'Invalid response format',
+      reasoning: 'Invalid response format, defaulting to note',
     };
   }
 
@@ -121,7 +121,7 @@ function parseClassifyResponse(
 
   const type = validTypes.includes(obj['type'] as CommandType)
     ? (obj['type'] as CommandType)
-    : 'unclassified';
+    : 'note';
 
   const confidence =
     typeof obj['confidence'] === 'number' ? Math.max(0, Math.min(1, obj['confidence'])) : 0.5;

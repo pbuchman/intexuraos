@@ -5,6 +5,7 @@ import {
   FakeGoogleCalendarClient,
   FakeFailedEventRepository,
   FakeCalendarActionExtractionService,
+  FakeUserServiceClient,
 } from '../../fakes.js';
 import type { Logger } from '@intexuraos/common-core';
 
@@ -16,11 +17,13 @@ const mockLogger: Logger = {
 };
 
 describe('processCalendarAction', () => {
+  let userServiceClient: FakeUserServiceClient;
   let googleCalendarClient: FakeGoogleCalendarClient;
   let failedEventRepository: FakeFailedEventRepository;
   let calendarActionExtractionService: FakeCalendarActionExtractionService;
 
   beforeEach(() => {
+    userServiceClient = new FakeUserServiceClient();
     googleCalendarClient = new FakeGoogleCalendarClient();
     failedEventRepository = new FakeFailedEventRepository();
     calendarActionExtractionService = new FakeCalendarActionExtractionService();
@@ -41,6 +44,7 @@ describe('processCalendarAction', () => {
           text: 'Meeting tomorrow',
         },
         {
+          userServiceClient,
           googleCalendarClient,
           failedEventRepository,
           calendarActionExtractionService,
@@ -70,6 +74,7 @@ describe('processCalendarAction', () => {
           text: 'Meeting tomorrow',
         },
         {
+          userServiceClient,
           googleCalendarClient,
           failedEventRepository,
           calendarActionExtractionService,
@@ -105,6 +110,7 @@ describe('processCalendarAction', () => {
           text: 'Maybe do something later',
         },
         {
+          userServiceClient,
           googleCalendarClient,
           failedEventRepository,
           calendarActionExtractionService,
@@ -142,6 +148,7 @@ describe('processCalendarAction', () => {
           text: 'Maybe do something later',
         },
         {
+          userServiceClient,
           googleCalendarClient,
           failedEventRepository,
           calendarActionExtractionService,
@@ -179,6 +186,7 @@ describe('processCalendarAction', () => {
           text: 'Maybe do something later',
         },
         {
+          userServiceClient,
           googleCalendarClient,
           failedEventRepository,
           calendarActionExtractionService,
@@ -214,6 +222,7 @@ describe('processCalendarAction', () => {
           text: 'Remind me to do something',
         },
         {
+          userServiceClient,
           googleCalendarClient,
           failedEventRepository,
           calendarActionExtractionService,
@@ -253,6 +262,7 @@ describe('processCalendarAction', () => {
           text: 'Meeting on baddate',
         },
         {
+          userServiceClient,
           googleCalendarClient,
           failedEventRepository,
           calendarActionExtractionService,
@@ -294,6 +304,7 @@ describe('processCalendarAction', () => {
           text: 'Meeting on baddate',
         },
         {
+          userServiceClient,
           googleCalendarClient,
           failedEventRepository,
           calendarActionExtractionService,
@@ -305,6 +316,80 @@ describe('processCalendarAction', () => {
       if (!result.ok) {
         expect(result.error.code).toBe('INTERNAL_ERROR');
         expect(result.error.message).toBe('Storage unavailable');
+      }
+    });
+  });
+
+  describe('when OAuth token retrieval fails', () => {
+    it('returns error without creating event', async () => {
+      calendarActionExtractionService.extractEventResult = ok({
+        summary: 'Team Meeting',
+        start: '2025-01-20T14:00:00',
+        end: '2025-01-20T15:00:00',
+        location: 'Room A',
+        description: 'Weekly sync',
+        valid: true,
+        error: null,
+        reasoning: 'Clear meeting request',
+      });
+
+      userServiceClient.setTokenError('NOT_CONNECTED', 'Google Calendar not connected');
+
+      const result = await processCalendarAction(
+        {
+          actionId: 'action-123',
+          userId: 'user-456',
+          text: 'Team meeting tomorrow at 2pm',
+        },
+        {
+          userServiceClient,
+          googleCalendarClient,
+          failedEventRepository,
+          calendarActionExtractionService,
+          logger: mockLogger,
+        }
+      );
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('NOT_CONNECTED');
+        expect(result.error.message).toBe('Google Calendar not connected');
+      }
+    });
+
+    it('returns TOKEN_ERROR when token is invalid', async () => {
+      calendarActionExtractionService.extractEventResult = ok({
+        summary: 'Team Meeting',
+        start: '2025-01-20T14:00:00',
+        end: '2025-01-20T15:00:00',
+        location: null,
+        description: null,
+        valid: true,
+        error: null,
+        reasoning: 'Clear meeting request',
+      });
+
+      userServiceClient.setTokenError('TOKEN_ERROR', 'Token expired');
+
+      const result = await processCalendarAction(
+        {
+          actionId: 'action-123',
+          userId: 'user-456',
+          text: 'Team meeting tomorrow at 2pm',
+        },
+        {
+          userServiceClient,
+          googleCalendarClient,
+          failedEventRepository,
+          calendarActionExtractionService,
+          logger: mockLogger,
+        }
+      );
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('TOKEN_ERROR');
+        expect(result.error.message).toBe('Token expired');
       }
     });
   });
@@ -333,6 +418,7 @@ describe('processCalendarAction', () => {
           text: 'Team meeting tomorrow at 2pm',
         },
         {
+          userServiceClient,
           googleCalendarClient,
           failedEventRepository,
           calendarActionExtractionService,
@@ -378,6 +464,7 @@ describe('processCalendarAction', () => {
           text: 'Team meeting tomorrow at 2pm',
         },
         {
+          userServiceClient,
           googleCalendarClient,
           failedEventRepository,
           calendarActionExtractionService,
@@ -425,6 +512,7 @@ describe('processCalendarAction', () => {
           text: 'Doctor appointment at 10am tomorrow',
         },
         {
+          userServiceClient,
           googleCalendarClient,
           failedEventRepository,
           calendarActionExtractionService,
@@ -468,6 +556,7 @@ describe('processCalendarAction', () => {
           text: 'Company holiday on Jan 15',
         },
         {
+          userServiceClient,
           googleCalendarClient,
           failedEventRepository,
           calendarActionExtractionService,
@@ -511,6 +600,7 @@ describe('processCalendarAction', () => {
           text: 'Quick call at 2pm',
         },
         {
+          userServiceClient,
           googleCalendarClient,
           failedEventRepository,
           calendarActionExtractionService,

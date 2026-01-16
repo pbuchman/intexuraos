@@ -24,12 +24,6 @@ describe('processCommand usecase', () => {
   const createFakeLlmClient: (fakeClassifier: FakeClassifier) => LlmGenerateClient = (fakeClassifier: FakeClassifier): LlmGenerateClient => ({
     async generate(_prompt: string): Promise<Result<GenerateResult, LLMError>> {
       const result = await fakeClassifier.classify('');
-      if (result.type === 'unclassified') {
-        return ok({
-          content: JSON.stringify(result),
-          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd: 0.0001 },
-        });
-      }
       return ok({
         content: JSON.stringify(result),
         usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd: 0.0001 },
@@ -222,15 +216,15 @@ describe('processCommand usecase', () => {
       expect(result.command.text).toBe('Existing command'); // Original text preserved
     });
 
-    it('handles unclassified classification without creating action', async () => {
-      const userId = 'user-test-unclassified';
+    it('creates action for low-confidence note classification', async () => {
+      const userId = 'user-test-lowconf';
       userServiceClient.setApiKeys(userId, { google: 'google-key' });
 
       classifier.setResult({
-        type: 'unclassified',
-        confidence: 0.1,
+        type: 'note',
+        confidence: 0.3,
         title: 'Unknown',
-        reasoning: 'Cannot determine intent',
+        reasoning: 'Cannot determine intent, defaulting to note',
       });
 
       const usecase = createProcessCommandUseCase({
@@ -245,21 +239,23 @@ describe('processCommand usecase', () => {
       const result = await usecase.execute({
         userId,
         sourceType: 'whatsapp_text',
-        externalId: 'msg-unclassified',
+        externalId: 'msg-lowconf',
         text: 'Some unclear message',
         timestamp: '2025-01-01T12:00:00.000Z',
       });
 
+      // Now every classification creates an action (note is valid)
       expect(result.isNew).toBe(true);
       expect(result.command.status).toBe('classified');
-      expect(result.command.classification?.type).toBe('unclassified');
-      expect(result.command.actionId).toBeUndefined();
+      expect(result.command.classification?.type).toBe('note');
+      expect(result.command.actionId).toBeDefined();
 
       const actions = actionsAgentClient.getCreatedActions();
-      expect(actions).toHaveLength(0);
+      expect(actions).toHaveLength(1);
+      expect(actions[0]?.type).toBe('note');
 
       const events = eventPublisher.getPublishedEvents();
-      expect(events).toHaveLength(0);
+      expect(events).toHaveLength(1);
     });
   });
 });

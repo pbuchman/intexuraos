@@ -37,14 +37,14 @@ interface ActionDetailModalProps {
   }) => void;
 }
 
-// Types that can be selected (excludes 'unclassified')
-const ACTION_TYPES: Exclude<CommandType, 'unclassified'>[] = [
+const ACTION_TYPES: CommandType[] = [
   'todo',
   'research',
   'note',
   'link',
   'calendar',
   'reminder',
+  'linear',
 ];
 
 function getTypeIcon(type: CommandType): React.JSX.Element {
@@ -115,7 +115,6 @@ export function ActionDetailModal({
   const handleTypeChange = useCallback(
     async (newType: CommandType): Promise<void> => {
       if (newType === selectedType) return;
-      if (newType === 'unclassified') return; // Can't select unclassified
 
       setIsChangingType(true);
       setTypeChangeError(null);

@@ -147,5 +147,85 @@ export const linearRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
     }
   );
 
+  // List failed issue extractions
+  fastify.get(
+    '/linear/failed-issues',
+    {
+      schema: {
+        operationId: 'listFailedIssues',
+        summary: 'List failed Linear issue extractions',
+        description: 'Lists failed Linear issue extractions for manual review',
+        tags: ['linear'],
+        security: [{ bearerAuth: [] }],
+        response: {
+          200: {
+            description: 'Success',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean' },
+              data: {
+                type: 'object',
+                properties: {
+                  failedIssues: {
+                    type: 'array',
+                    items: {
+                      type: 'object',
+                      properties: {
+                        id: { type: 'string' },
+                        userId: { type: 'string' },
+                        actionId: { type: 'string' },
+                        originalText: { type: 'string' },
+                        extractedTitle: { type: ['string', 'null'] },
+                        extractedPriority: { type: ['number', 'null'] },
+                        error: { type: 'string' },
+                        reasoning: { type: ['string', 'null'] },
+                        createdAt: { type: 'string' },
+                      },
+                    },
+                  },
+                },
+              },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+          },
+          401: {
+            description: 'Unauthorized',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+          },
+          500: {
+            description: 'Server error',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+          },
+        },
+      },
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      logIncomingRequest(request);
+      const user = await requireAuth(request, reply);
+      if (user === null) {
+        return;
+      }
+
+      const { failedIssueRepository } = getServices();
+      const result = await failedIssueRepository.listByUser(user.userId);
+
+      if (!result.ok) {
+        return await handleLinearError(result.error, reply);
+      }
+
+      return await reply.ok({ failedIssues: result.value });
+    }
+  );
+
   done();
 };

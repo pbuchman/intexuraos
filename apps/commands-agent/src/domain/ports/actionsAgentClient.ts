@@ -1,10 +1,10 @@
 import type { Result } from '@intexuraos/common-core';
-import type { Action } from '../models/action.js';
+import type { Action, ActionType } from '../models/action.js';
 
 export interface CreateActionParams {
   userId: string;
   commandId: string;
-  type: 'todo' | 'research' | 'note' | 'link' | 'calendar' | 'reminder';
+  type: ActionType;
   title: string;
   confidence: number;
   payload?: Record<string, unknown>;

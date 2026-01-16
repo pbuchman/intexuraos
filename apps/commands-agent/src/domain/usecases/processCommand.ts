@@ -127,123 +127,105 @@ export function createProcessCommandUseCase(deps: {
           'Classification completed'
         );
 
-        if (classification.type !== 'unclassified') {
-          logger.info(
-            {
-              commandId: command.id,
-              actionType: classification.type,
-              title: classification.title,
-            },
-            'Creating action via actions-agent'
-          );
-
-          const actionResult = await actionsAgentClient.createAction({
-            userId: input.userId,
-            commandId: command.id,
-            type: classification.type,
-            confidence: classification.confidence,
-            title: classification.title,
-            payload: {
-              prompt: input.text,
-              ...(input.summary !== undefined && { summary: input.summary }),
-            },
-          });
-
-          if (!actionResult.ok) {
-            logger.error(
-              {
-                commandId: command.id,
-                error: actionResult.error.message,
-              },
-              'Failed to create action via actions-agent'
-            );
-            command.status = 'failed';
-            command.failureReason = actionResult.error.message;
-            await commandRepository.update(command);
-            return { command, isNew: true };
-          }
-
-          const action = actionResult.value;
-
-          logger.info(
-            { commandId: command.id, actionId: action.id },
-            'Action created via actions-agent successfully'
-          );
-
-          const eventPayload: ActionCreatedEvent['payload'] = {
-            prompt: input.text,
-            confidence: classification.confidence,
-          };
-          if (input.summary !== undefined) {
-            eventPayload.summary = input.summary;
-          }
-          if (classification.selectedModels !== undefined) {
-            eventPayload.selectedModels = classification.selectedModels;
-          }
-
-          const event: ActionCreatedEvent = {
-            type: 'action.created',
-            actionId: action.id,
-            userId: input.userId,
+        logger.info(
+          {
             commandId: command.id,
             actionType: classification.type,
             title: classification.title,
-            payload: eventPayload,
-            timestamp: new Date().toISOString(),
-          };
+          },
+          'Creating action via actions-agent'
+        );
 
-          logger.info(
+        const actionResult = await actionsAgentClient.createAction({
+          userId: input.userId,
+          commandId: command.id,
+          type: classification.type,
+          confidence: classification.confidence,
+          title: classification.title,
+          payload: {
+            prompt: input.text,
+            ...(input.summary !== undefined && { summary: input.summary }),
+          },
+        });
+
+        if (!actionResult.ok) {
+          logger.error(
+            {
+              commandId: command.id,
+              error: actionResult.error.message,
+            },
+            'Failed to create action via actions-agent'
+          );
+          command.status = 'failed';
+          command.failureReason = actionResult.error.message;
+          await commandRepository.update(command);
+          return { command, isNew: true };
+        }
+
+        const action = actionResult.value;
+
+        logger.info(
+          { commandId: command.id, actionId: action.id },
+          'Action created via actions-agent successfully'
+        );
+
+        const eventPayload: ActionCreatedEvent['payload'] = {
+          prompt: input.text,
+          confidence: classification.confidence,
+        };
+        if (input.summary !== undefined) {
+          eventPayload.summary = input.summary;
+        }
+        if (classification.selectedModels !== undefined) {
+          eventPayload.selectedModels = classification.selectedModels;
+        }
+
+        const event: ActionCreatedEvent = {
+          type: 'action.created',
+          actionId: action.id,
+          userId: input.userId,
+          commandId: command.id,
+          actionType: classification.type,
+          title: classification.title,
+          payload: eventPayload,
+          timestamp: new Date().toISOString(),
+        };
+
+        logger.info(
+          {
+            commandId: command.id,
+            actionId: action.id,
+            actionType: classification.type,
+          },
+          'Publishing action.created event to PubSub'
+        );
+
+        const publishResult = await eventPublisher.publishActionCreated(event);
+
+        if (!publishResult.ok) {
+          logger.error(
             {
               commandId: command.id,
               actionId: action.id,
-              actionType: classification.type,
+              error: publishResult.error.message,
             },
-            'Publishing action.created event to PubSub'
+            'Failed to publish action.created event'
           );
-
-          const publishResult = await eventPublisher.publishActionCreated(event);
-
-          if (!publishResult.ok) {
-            logger.error(
-              {
-                commandId: command.id,
-                actionId: action.id,
-                error: publishResult.error.message,
-              },
-              'Failed to publish action.created event'
-            );
-            // Continue processing - action is already saved
-          } else {
-            logger.info(
-              { commandId: command.id, actionId: action.id },
-              'Action event published successfully'
-            );
-          }
-
-          command.classification = {
-            type: classification.type,
-            confidence: classification.confidence,
-            reasoning: classification.reasoning,
-            classifiedAt: new Date().toISOString(),
-          };
-          command.actionId = action.id;
-          command.status = 'classified';
         } else {
           logger.info(
-            {
-              commandId: command.id,
-              confidence: classification.confidence,
-            },
-            'Command classified as unclassified (no actionable intent detected)'
+            { commandId: command.id, actionId: action.id },
+            'Action event published successfully'
           );
-          command.classification = {
-            type: 'unclassified',
-            confidence: classification.confidence,
-            reasoning: classification.reasoning,
-            classifiedAt: new Date().toISOString(),
-          };
-          command.status = 'classified';
         }
+
+        command.classification = {
+          type: classification.type,
+          confidence: classification.confidence,
+          reasoning: classification.reasoning,
+          classifiedAt: new Date().toISOString(),
+        };
+        command.actionId = action.id;
+        command.status = 'classified';
 
         logger.info(
           { commandId: command.id, status: command.status },
@@ -257,7 +239,7 @@ export function createProcessCommandUseCase(deps: {
             commandId: command.id,
             status: command.status,
             classificationType: classification.type,
-            hasAction: command.actionId !== undefined,
+            actionId: command.actionId,
           },
           'Command processing completed successfully'
         );

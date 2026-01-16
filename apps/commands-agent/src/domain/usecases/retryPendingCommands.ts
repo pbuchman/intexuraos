@@ -80,58 +80,56 @@ export function createRetryPendingCommandsUseCase(deps: {
             'Classification completed'
           );
 
-          if (classification.type !== 'unclassified') {
-            const actionResult = await actionsAgentClient.createAction({
-              userId: command.userId,
-              commandId: command.id,
-              type: classification.type,
-              confidence: classification.confidence,
-              title: classification.title,
-              payload: { prompt: command.text },
-            });
+          const actionResult = await actionsAgentClient.createAction({
+            userId: command.userId,
+            commandId: command.id,
+            type: classification.type,
+            confidence: classification.confidence,
+            title: classification.title,
+            payload: { prompt: command.text },
+          });
 
-            if (!actionResult.ok) {
-              logger.error(
-                {
-                  commandId: command.id,
-                  error: actionResult.error.message,
-                },
-                'Failed to create action via actions-agent'
-              );
-              failed++;
-              continue;
-            }
-
-            const action = actionResult.value;
-
-            const eventPayload: ActionCreatedEvent['payload'] = {
-              prompt: command.text,
-              confidence: classification.confidence,
-            };
-            if (classification.selectedModels !== undefined) {
-              eventPayload.selectedModels = classification.selectedModels;
-            }
-
-            const event: ActionCreatedEvent = {
-              type: 'action.created',
-              actionId: action.id,
-              userId: command.userId,
-              commandId: command.id,
-              actionType: classification.type,
-              title: classification.title,
-              payload: eventPayload,
-              timestamp: new Date().toISOString(),
-            };
-
-            await eventPublisher.publishActionCreated(event);
-
-            command.actionId = action.id;
-
-            logger.info(
-              { commandId: command.id, actionId: action.id },
-              'Action created and event published'
+          if (!actionResult.ok) {
+            logger.error(
+              {
+                commandId: command.id,
+                error: actionResult.error.message,
+              },
+              'Failed to create action via actions-agent'
             );
+            failed++;
+            continue;
           }
+
+          const action = actionResult.value;
+
+          const eventPayload: ActionCreatedEvent['payload'] = {
+            prompt: command.text,
+            confidence: classification.confidence,
+          };
+          if (classification.selectedModels !== undefined) {
+            eventPayload.selectedModels = classification.selectedModels;
+          }
+
+          const event: ActionCreatedEvent = {
+            type: 'action.created',
+            actionId: action.id,
+            userId: command.userId,
+            commandId: command.id,
+            actionType: classification.type,
+            title: classification.title,
+            payload: eventPayload,
+            timestamp: new Date().toISOString(),
+          };
+
+          await eventPublisher.publishActionCreated(event);
+
+          command.actionId = action.id;
+
+          logger.info(
+            { commandId: command.id, actionId: action.id },
+            'Action created and event published'
+          );
 
           command.classification = {
             type: classification.type,

@@ -17,7 +17,7 @@ const mockDocDelete = vi.fn();
 const mockDocGet = vi.fn();
 const mockQueryGet = vi.fn();
 const mockCollectionDoc = vi.fn(() => ({
-  id: 'default-id',
+  id: 'default-doc-id',
   set: mockDocSet,
   delete: mockDocDelete,
   get: mockDocGet,

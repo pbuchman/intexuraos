@@ -12,8 +12,7 @@ export type CommandCategory =
   | 'link'
   | 'calendar'
   | 'reminder'
-  | 'linear'
-  | 'unclassified';
+  | 'linear';
 
 export interface CommandClassifierPromptInput {
   /** The user message to classify */
@@ -90,8 +89,6 @@ Signals: notes, idea, remember that, jot down
 - "finish the report" → todo
 - "call mom" → todo (no time specified)
 
-**unclassified** — Cannot determine intent (confidence < 0.5)
-
 ## OUTPUT FORMAT
 Return ONLY valid JSON:
 {
@@ -101,7 +98,11 @@ Return ONLY valid JSON:
   "reasoning": "<brief explanation>"
 }
 
-Confidence guide: 0.9+ very confident, 0.7-0.9 fairly confident, 0.5-0.7 uncertain
+## CONFIDENCE SEMANTICS
+- 0.90+: Clear match (explicit prefix, multiple strong signals)
+- 0.70-0.90: Strong match (single clear signal like "bug", time expression)
+- 0.50-0.70: Choosing between 2-3 plausible categories, picked the best fit
+- <0.50: Genuinely uncertain → default to "note" (everything can be a note)
 
 Message to classify:
 ${input.message}`;

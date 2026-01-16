@@ -9,7 +9,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { setupSentryErrorHandler } from '../fastify.js';
 import * as Sentry from '@sentry/node';
-import Fastify, { type FastifyInstance, type FastifyError } from 'fastify';
+import Fastify, { type FastifyInstance, type FastifyError, type FastifyReply } from 'fastify';
 
 // Mock Sentry - must be defined inline to avoid hoisting issues
 vi.mock('@sentry/node', () => {
@@ -24,11 +24,27 @@ vi.mock('@sentry/node', () => {
   };
 });
 
+function addMockFailMethod(app: FastifyInstance): void {
+  app.decorateReply(
+    'fail',
+    function (
+      this: FastifyReply,
+      _code: string,
+      _message: string,
+      _diagnostics?: unknown,
+      _details?: unknown
+    ) {
+      return this.send({ error: _code, message: _message, details: _details });
+    }
+  );
+}
+
 describe('setupSentryErrorHandler', () => {
   let app: FastifyInstance;
 
   beforeEach(() => {
     app = Fastify({ logger: false });
+    addMockFailMethod(app);
     vi.clearAllMocks();
   });
 
@@ -137,6 +153,106 @@ describe('setupSentryErrorHandler', () => {
     });
 
     expect(response.statusCode).toBe(500);
+    expect(Sentry.captureException).toHaveBeenCalled();
+  });
+
+  it('handles validation error with undefined instancePath', async () => {
+    setupSentryErrorHandler(app);
+
+    app.get('/test', async () => {
+      const error = new Error('Validation error') as Error & {
+        validation: { instancePath?: string; message?: string }[];
+      };
+      error.validation = [{ message: 'must be string' }];
+      throw error;
+    });
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/test',
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(Sentry.captureException).toHaveBeenCalled();
+  });
+
+  it('handles validation error with undefined message', async () => {
+    setupSentryErrorHandler(app);
+
+    app.get('/test', async () => {
+      const error = new Error('Validation error') as Error & {
+        validation: { instancePath?: string; message?: string }[];
+      };
+      error.validation = [{ instancePath: '/field' }];
+      throw error;
+    });
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/test',
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(Sentry.captureException).toHaveBeenCalled();
+  });
+
+  it('handles validation error with empty instancePath triggering required property regex', async () => {
+    setupSentryErrorHandler(app);
+
+    app.get('/test', async () => {
+      const error = new Error('Validation error') as Error & {
+        validation: { instancePath?: string; message?: string }[];
+      };
+      error.validation = [{ instancePath: '', message: "must have required property 'name'" }];
+      throw error;
+    });
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/test',
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(Sentry.captureException).toHaveBeenCalled();
+  });
+
+  it('handles validation error with empty instancePath and undefined message', async () => {
+    setupSentryErrorHandler(app);
+
+    app.get('/test', async () => {
+      const error = new Error('Validation error') as Error & {
+        validation: { instancePath?: string; message?: string }[];
+      };
+      error.validation = [{ instancePath: '' }];
+      throw error;
+    });
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/test',
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(Sentry.captureException).toHaveBeenCalled();
+  });
+
+  it('handles validation error with both instancePath and message undefined', async () => {
+    setupSentryErrorHandler(app);
+
+    app.get('/test', async () => {
+      const error = new Error('Validation error') as Error & {
+        validation: { instancePath?: string; message?: string }[];
+      };
+      error.validation = [{}];
+      throw error;
+    });
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/test',
+    });
+
+    expect(response.statusCode).toBe(400);
     expect(Sentry.captureException).toHaveBeenCalled();
   });
 });
@@ -251,6 +367,24 @@ describe('sanitizeHeaders (via error handler)', () => {
       method: 'GET',
       url: '/test',
       headers: { accept: ['application/json', 'text/plain'] },
+    });
+
+    expect(response.statusCode).toBe(500);
+    expect(Sentry.withScope).toHaveBeenCalled();
+  });
+
+  it('handles requests with empty array header values', async () => {
+    const app = Fastify({ logger: false });
+    setupSentryErrorHandler(app);
+
+    app.get('/test', async (request) => {
+      (request.headers as Record<string, string | string[] | undefined>)['x-custom'] = [];
+      throw new Error('Test error');
+    });
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/test',
     });
 
     expect(response.statusCode).toBe(500);
