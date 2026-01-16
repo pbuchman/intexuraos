@@ -276,94 +276,94 @@ Phase 1 maintains backward compatibility — consumers don't need to change. Pha
 
 ### 8.1 research-agent
 
-| Current Import                                                                 | New Import                                             |
-|--------------------------------------------------------------------------------|--------------------------------------------------------|
+| Current Import                                                                    | New Import                                                                                 |
+| --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
 | `import { buildSynthesisPrompt, SynthesisContext } from '@intexuraos/llm-common'` | `import { buildSynthesisPrompt, SynthesisContext } from '@intexuraos/llm-common/research'` |
-| `import { ResearchContext } from '@intexuraos/llm-common'`                     | `import { ResearchContext } from '@intexuraos/llm-common/research'`                        |
-| `import { titlePrompt } from '@intexuraos/llm-common'`                         | `import { titlePrompt } from '@intexuraos/llm-common/generation'`                          |
-| `import { stripAttributionLines } from '@intexuraos/llm-common'`               | `import { stripAttributionLines } from '@intexuraos/llm-common/research'`                  |
-| `import { buildInferResearchContextPrompt, ... } from '@intexuraos/llm-common'`| `import { buildInferResearchContextPrompt, ... } from '@intexuraos/llm-common/research'`   |
-| `import { inputQualityPrompt, ... } from '@intexuraos/llm-common'`             | `import { inputQualityPrompt, ... } from '@intexuraos/llm-common/validation'`              |
+| `import { ResearchContext } from '@intexuraos/llm-common'`                        | `import { ResearchContext } from '@intexuraos/llm-common/research'`                        |
+| `import { titlePrompt } from '@intexuraos/llm-common'`                            | `import { titlePrompt } from '@intexuraos/llm-common/generation'`                          |
+| `import { stripAttributionLines } from '@intexuraos/llm-common'`                  | `import { stripAttributionLines } from '@intexuraos/llm-common/research'`                  |
+| `import { buildInferResearchContextPrompt, ... } from '@intexuraos/llm-common'`   | `import { buildInferResearchContextPrompt, ... } from '@intexuraos/llm-common/research'`   |
+| `import { inputQualityPrompt, ... } from '@intexuraos/llm-common'`                | `import { inputQualityPrompt, ... } from '@intexuraos/llm-common/validation'`              |
 
 **Files to update:** 9 files in `apps/research-agent/src/`
 
 ### 8.2 data-insights-agent
 
-| Current Import                                                          | New Import                                                              |
-|-------------------------------------------------------------------------|-------------------------------------------------------------------------|
-| `import { dataAnalysisPrompt, ... } from '@intexuraos/llm-common'`      | `import { dataAnalysisPrompt, ... } from '@intexuraos/llm-common/dataInsights'` |
-| `import { titlePrompt } from '@intexuraos/llm-common'`                  | `import { titlePrompt } from '@intexuraos/llm-common/generation'`       |
-| `import { feedNamePrompt } from '@intexuraos/llm-common'`               | `import { feedNamePrompt } from '@intexuraos/llm-common/generation'`    |
+| Current Import                                                     | New Import                                                                      |
+| ------------------------------------------------------------------ | ------------------------------------------------------------------------------- |
+| `import { dataAnalysisPrompt, ... } from '@intexuraos/llm-common'` | `import { dataAnalysisPrompt, ... } from '@intexuraos/llm-common/dataInsights'` |
+| `import { titlePrompt } from '@intexuraos/llm-common'`             | `import { titlePrompt } from '@intexuraos/llm-common/generation'`               |
+| `import { feedNamePrompt } from '@intexuraos/llm-common'`          | `import { feedNamePrompt } from '@intexuraos/llm-common/generation'`            |
 
 **Files to update:** 6 files in `apps/data-insights-agent/src/`
 
 ### 8.3 commands-agent
 
-| Current Import                                                    | New Import                                                                     |
-|-------------------------------------------------------------------|--------------------------------------------------------------------------------|
-| `import { commandClassifierPrompt } from '@intexuraos/llm-common'`| `import { commandClassifierPrompt } from '@intexuraos/llm-common/classification'` |
+| Current Import                                                     | New Import                                                                        |
+| ------------------------------------------------------------------ | --------------------------------------------------------------------------------- |
+| `import { commandClassifierPrompt } from '@intexuraos/llm-common'` | `import { commandClassifierPrompt } from '@intexuraos/llm-common/classification'` |
 
 **Files to update:** 1 file (`apps/commands-agent/src/infra/gemini/classifier.ts`)
 
 ### 8.4 calendar-agent
 
-| Current Import                                                           | New Import                                                                          |
-|--------------------------------------------------------------------------|-------------------------------------------------------------------------------------|
-| `import { calendarActionExtractionPrompt } from '@intexuraos/llm-common'`| `import { calendarActionExtractionPrompt } from '@intexuraos/llm-common/classification'` |
+| Current Import                                                            | New Import                                                                               |
+| ------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| `import { calendarActionExtractionPrompt } from '@intexuraos/llm-common'` | `import { calendarActionExtractionPrompt } from '@intexuraos/llm-common/classification'` |
 
 **Files to update:** 1 file (`apps/calendar-agent/src/infra/gemini/calendarActionExtractionService.ts`)
 
 ### 8.5 linear-agent
 
-| Current Import                                                         | New Import                                                                        |
-|------------------------------------------------------------------------|-----------------------------------------------------------------------------------|
-| `import { linearActionExtractionPrompt } from '@intexuraos/llm-common'`| `import { linearActionExtractionPrompt } from '@intexuraos/llm-common/classification'` |
+| Current Import                                                          | New Import                                                                             |
+| ----------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| `import { linearActionExtractionPrompt } from '@intexuraos/llm-common'` | `import { linearActionExtractionPrompt } from '@intexuraos/llm-common/classification'` |
 
 **Files to update:** 1 file (`apps/linear-agent/src/infra/llm/linearActionExtractionService.ts`)
 
 ### 8.6 todos-agent
 
-| Current Import                                                  | New Import                                                         |
-|-----------------------------------------------------------------|--------------------------------------------------------------------|
+| Current Import                                                  | New Import                                                            |
+| --------------------------------------------------------------- | --------------------------------------------------------------------- |
 | `import { itemExtractionPrompt } from '@intexuraos/llm-common'` | `import { itemExtractionPrompt } from '@intexuraos/llm-common/todos'` |
 
 **Files to update:** 1 file (`apps/todos-agent/src/infra/gemini/todoItemExtractionService.ts`)
 
-### 8.7 infra-* packages (gemini, gpt, claude, glm, perplexity)
+### 8.7 infra-\* packages (gemini, gpt, claude, glm, perplexity)
 
-| Current Import                                               | New Import                                                       |
-|--------------------------------------------------------------|------------------------------------------------------------------|
-| `import { buildResearchPrompt } from '@intexuraos/llm-common'`| `import { buildResearchPrompt } from '@intexuraos/llm-common/research'` |
+| Current Import                                                 | New Import                                                              |
+| -------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| `import { buildResearchPrompt } from '@intexuraos/llm-common'` | `import { buildResearchPrompt } from '@intexuraos/llm-common/research'` |
 
 **Files to update:** 5 files (one per infra package)
 
 ### 8.8 common-http
 
-| Current Import                                                              | New Import                                                                 |
-|-----------------------------------------------------------------------------|----------------------------------------------------------------------------|
+| Current Import                                                                         | New Import                                                                                    |
+| -------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
 | `import { redactToken, redactObject, SENSITIVE_FIELDS } from '@intexuraos/llm-common'` | `import { redactToken, redactObject, SENSITIVE_FIELDS } from '@intexuraos/llm-common/shared'` |
 
 **Files to update:** 2 files (`packages/common-http/src/index.ts`, `packages/common-http/src/http/logger.ts`)
 
 ### 8.9 llm-contract
 
-| Current Import                                            | New Import                                                    |
-|-----------------------------------------------------------|---------------------------------------------------------------|
-| `import { thumbnailPrompt } from '@intexuraos/llm-common'`| `import { thumbnailPrompt } from '@intexuraos/llm-common/image'` |
+| Current Import                                             | New Import                                                       |
+| ---------------------------------------------------------- | ---------------------------------------------------------------- |
+| `import { thumbnailPrompt } from '@intexuraos/llm-common'` | `import { thumbnailPrompt } from '@intexuraos/llm-common/image'` |
 
 **Files to update:** 1 file (`packages/llm-contract/src/helpers.ts`)
 
 ### 8.10 Summary
 
 | Consumer              | Files to Update | Complexity |
-|-----------------------|-----------------|------------|
+| --------------------- | --------------- | ---------- |
 | research-agent        | 9               | Medium     |
 | data-insights-agent   | 6               | Low        |
 | commands-agent        | 1               | Trivial    |
 | calendar-agent        | 1               | Trivial    |
 | linear-agent          | 1               | Trivial    |
 | todos-agent           | 1               | Trivial    |
-| infra-* (5 packages)  | 5               | Trivial    |
+| infra-\* (5 packages) | 5               | Trivial    |
 | common-http           | 2               | Trivial    |
 | llm-contract          | 1               | Trivial    |
 | **Total**             | **27**          | Low-Medium |

@@ -3,7 +3,7 @@
  * Used by adapters in research-agent to synthesize research from multiple providers.
  */
 
-import type { SynthesisContext } from './context/types.js';
+import type { SynthesisContext } from '../synthesis/contextTypes.js';
 
 export interface SynthesisReport {
   model: string;

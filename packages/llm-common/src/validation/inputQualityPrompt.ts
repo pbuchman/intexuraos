@@ -3,7 +3,7 @@
  * Evaluates prompt quality on a 0-2 scale.
  */
 
-import type { PromptBuilder, PromptDeps } from '../types.js';
+import type { PromptBuilder, PromptDeps } from '../shared/types.js';
 
 export interface InputQualityPromptInput {
   /** The research prompt to evaluate */
