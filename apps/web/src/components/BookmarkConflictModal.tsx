@@ -42,9 +42,9 @@ export function BookmarkConflictModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="w-full max-w-lg rounded-xl bg-white shadow-2xl">
+      <div className="flex max-h-[90vh] w-full max-w-lg flex-col rounded-xl bg-white shadow-2xl">
         {/* Header */}
-        <div className="flex items-start justify-between border-b border-slate-200 p-4">
+        <div className="flex shrink-0 items-start justify-between border-b border-slate-200 p-4">
           <div className="flex items-start gap-3">
             <div className="mt-0.5 rounded-lg bg-amber-100 p-2">
               <AlertTriangle className="h-5 w-5 text-amber-600" />
@@ -67,7 +67,7 @@ export function BookmarkConflictModal({
         </div>
 
         {/* Content */}
-        <div className="p-4">
+        <div className="min-h-0 flex-1 overflow-y-auto p-4">
           <div className="rounded-lg border border-amber-200 bg-amber-50 p-4">
             <p className="text-sm text-amber-800">
               You already have this link saved in your bookmarks. Would you like to skip this
@@ -84,7 +84,7 @@ export function BookmarkConflictModal({
         </div>
 
         {/* Actions */}
-        <div className="flex items-center justify-end gap-2 border-t border-slate-200 p-4">
+        <div className="flex shrink-0 items-center justify-end gap-2 border-t border-slate-200 p-4">
           <Button variant="secondary" onClick={handleSkip} disabled={isUpdating}>
             Skip
           </Button>

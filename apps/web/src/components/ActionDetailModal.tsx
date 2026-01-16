@@ -248,9 +248,9 @@ export function ActionDetailModal({
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
       onClick={handleBackdropClick}
     >
-      <div className="w-full max-w-lg rounded-xl bg-white shadow-2xl">
+      <div className="flex max-h-[90vh] w-full max-w-lg flex-col rounded-xl bg-white shadow-2xl">
         {/* Header */}
-        <div className="flex items-start justify-between border-b border-slate-200 p-4">
+        <div className="flex shrink-0 items-start justify-between border-b border-slate-200 p-4">
           <div className="flex items-start gap-3">
             <div className="mt-0.5 rounded-lg bg-slate-100 p-2">{getTypeIcon(selectedType)}</div>
             <div>
@@ -298,7 +298,7 @@ export function ActionDetailModal({
         </div>
 
         {/* Content */}
-        <div className="space-y-4 p-4">
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
           {/* Original command text */}
           {command !== undefined && (
             <div>
@@ -359,7 +359,7 @@ export function ActionDetailModal({
 
         {/* Actions or Success View */}
         {executionResult !== null ? (
-          <div className="border-t border-slate-200 p-4">
+          <div className="shrink-0 border-t border-slate-200 p-4">
             <div className="rounded-lg border border-green-200 bg-green-50 p-4">
               <div className="flex items-start gap-3">
                 <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-green-600" />
@@ -384,7 +384,7 @@ export function ActionDetailModal({
             </div>
           </div>
         ) : (
-          <div className="flex items-center justify-end gap-2 border-t border-slate-200 p-4 flex-nowrap">
+          <div className="flex shrink-0 flex-nowrap items-center justify-end gap-2 border-t border-slate-200 p-4">
             {isLoading ? (
               <div className="text-sm text-slate-500">Loading actions...</div>
             ) : (
