@@ -20,7 +20,7 @@ import type {
 } from '../ports/index.js';
 import type { ContextInferenceProvider } from '../ports/contextInference.js';
 import type { ShareInfo, AttributionStatus } from '../models/Research.js';
-import type { CoverImageInput } from '../utils/htmlGenerator.js';
+import type { CoverImageInput, GeneratedByUserInfo } from '../utils/htmlGenerator.js';
 import { generateShareableHtml, slugify, generateShareToken } from '../utils/index.js';
 import type { ImageServiceClient, GeneratedImageData } from '../../../services.js';
 import { repairAttribution } from './repairAttribution.js';
@@ -48,6 +48,7 @@ export interface RunSynthesisDeps {
   reportLlmSuccess?: () => void;
   logger: Logger;
   imageApiKeys?: ImageApiKeys;
+  generatedBy?: GeneratedByUserInfo;
 }
 
 export async function runSynthesis(
@@ -67,6 +68,7 @@ export async function runSynthesis(
     reportLlmSuccess,
     logger,
     imageApiKeys,
+    generatedBy,
   } = deps;
 
   logger.info({}, '[4.1] Loading research from database');
@@ -322,6 +324,7 @@ export async function runSynthesis(
       llmResults: research.llmResults,
       ...(research.inputContexts !== undefined && { inputContexts: research.inputContexts }),
       ...(coverImage !== undefined && { coverImage }),
+      ...(generatedBy !== undefined && { generatedBy }),
     });
 
     logger.info({}, '[4.5.2] Uploading HTML to GCS');
