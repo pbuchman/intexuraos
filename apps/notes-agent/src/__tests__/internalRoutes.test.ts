@@ -26,11 +26,9 @@ describe('internalRoutes', () => {
       expect(response.statusCode).toBe(201);
       const body = response.json();
       expect(body.success).toBe(true);
-      expect(body.data.id).toBeDefined();
-      expect(body.data.url).toMatch(/^\/#\/notes\//);
-      expect(body.data.note.title).toBe('Internal Note');
-      expect(body.data.note.userId).toBe('user-from-service');
-      expect(body.data.note.source).toBe('whatsapp');
+      expect(body.data.status).toBe('completed');
+      expect(body.data.message).toContain('Internal Note');
+      expect(body.data.resourceUrl).toMatch(/^\/#\/notes\//);
     });
 
     it('returns 401 with invalid internal auth', async () => {
@@ -99,8 +97,9 @@ describe('internalRoutes', () => {
 
       expect(response.statusCode).toBe(500);
       const body = response.json();
-      expect(body.error.code).toBe('INTERNAL_ERROR');
-      expect(body.error.message).toBe('Database write failed');
+      expect(body.success).toBe(true);
+      expect(body.data.status).toBe('failed');
+      expect(body.data.message).toBe('Database write failed');
     });
   });
 });

@@ -19,7 +19,7 @@ describe('createNotesServiceHttpClient', () => {
   });
 
   describe('createNote', () => {
-    it('returns note on successful creation', async () => {
+    it('returns ActionFeedback on successful creation', async () => {
       nock(baseUrl)
         .post('/internal/notes')
         .matchHeader('X-Internal-Auth', internalAuthToken)
@@ -27,9 +27,9 @@ describe('createNotesServiceHttpClient', () => {
         .reply(200, {
           success: true,
           data: {
-            id: 'note-123',
-            userId: 'user-456',
-            title: 'Meeting notes',
+            status: 'completed',
+            message: 'Note created successfully',
+            resourceUrl: '/#/notes/note-123',
           },
         });
 
@@ -45,9 +45,9 @@ describe('createNotesServiceHttpClient', () => {
 
       expect(isOk(result)).toBe(true);
       if (isOk(result)) {
-        expect(result.value.id).toBe('note-123');
-        expect(result.value.userId).toBe('user-456');
-        expect(result.value.title).toBe('Meeting notes');
+        expect(result.value.status).toBe('completed');
+        expect(result.value.message).toBe('Note created successfully');
+        expect(result.value.resourceUrl).toBe('/#/notes/note-123');
       }
     });
 
@@ -164,9 +164,9 @@ describe('createNotesServiceHttpClient', () => {
         .reply(200, {
           success: true,
           data: {
-            id: 'note-new',
-            userId: 'user-456',
-            title: 'Meeting notes',
+            status: 'completed',
+            message: 'Note created successfully',
+            resourceUrl: '/#/notes/note-new',
           },
         });
 

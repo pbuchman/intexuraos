@@ -1,9 +1,8 @@
-import type { Result } from '@intexuraos/common-core';
+import type { Result, ServiceFeedback } from '@intexuraos/common-core';
 import { ok, err, getErrorMessage } from '@intexuraos/common-core';
 import type {
   TodosServiceClient,
   CreateTodoRequest,
-  CreateTodoResponse,
 } from '../../domain/ports/todosServiceClient.js';
 import { type Logger } from 'pino';
 
@@ -16,10 +15,10 @@ export interface TodosServiceHttpClientConfig {
 interface ApiResponse {
   success: boolean;
   data?: {
-    id: string;
-    userId: string;
-    title: string;
-    status: string;
+    status: 'completed' | 'failed';
+    message: string;
+    resourceUrl?: string;
+    errorCode?: string;
   };
   error?: { code: string; message: string };
 }
@@ -30,7 +29,7 @@ export function createTodosServiceHttpClient(
   const { logger } = config;
 
   return {
-    async createTodo(request: CreateTodoRequest): Promise<Result<CreateTodoResponse>> {
+    async createTodo(request: CreateTodoRequest): Promise<Result<ServiceFeedback>> {
       const url = `${config.baseUrl}/internal/todos`;
 
       logger.info({ url, userId: request.userId }, 'Creating todo via todos-agent');
@@ -64,14 +63,14 @@ export function createTodosServiceHttpClient(
         return err(new Error(body.error?.message ?? 'Invalid response from todos-agent'));
       }
 
-      const result: CreateTodoResponse = {
-        id: body.data.id,
-        userId: body.data.userId,
-        title: body.data.title,
+      const result: ServiceFeedback = {
         status: body.data.status,
+        message: body.data.message,
+        ...(body.data.resourceUrl !== undefined && { resourceUrl: body.data.resourceUrl }),
+        ...(body.data.errorCode !== undefined && { errorCode: body.data.errorCode }),
       };
 
-      logger.info({ todoId: result.id }, 'Todo created successfully');
+      logger.info({ status: result.status }, 'Todo action processed');
       return ok(result);
     },
   };

@@ -1,4 +1,4 @@
-import type { Result } from '@intexuraos/common-core';
+import type { Result, ServiceFeedback } from '@intexuraos/common-core';
 
 export interface CreateTodoRequest {
   userId: string;
@@ -11,13 +11,6 @@ export interface CreateTodoRequest {
   sourceId: string;
 }
 
-export interface CreateTodoResponse {
-  id: string;
-  userId: string;
-  title: string;
-  status: string;
-}
-
 export interface TodosServiceClient {
-  createTodo(request: CreateTodoRequest): Promise<Result<CreateTodoResponse>>;
+  createTodo(request: CreateTodoRequest): Promise<Result<ServiceFeedback>>;
 }

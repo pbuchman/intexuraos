@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { err, ok } from '@intexuraos/common-core';
+import { err, ok, ServiceErrorCodes } from '@intexuraos/common-core';
 import { processCalendarAction } from '../../../domain/useCases/processCalendarAction.js';
 import {
   FakeGoogleCalendarClient,
@@ -127,7 +127,8 @@ describe('processCalendarAction', () => {
       expect(result.ok).toBe(true);
       if (result.ok) {
         expect(result.value.status).toBe('failed');
-        expect(result.value.error).toBe('Could not determine event time');
+        expect(result.value.message).toBe('Could not determine event time');
+        expect(result.value.errorCode).toBe(ServiceErrorCodes.EXTRACTION_FAILED);
       }
 
       const failedEvents = failedEventRepository.getEvents();
@@ -166,7 +167,8 @@ describe('processCalendarAction', () => {
       expect(result.ok).toBe(true);
       if (result.ok) {
         expect(result.value.status).toBe('failed');
-        expect(result.value.error).toBe('Could not extract valid calendar event');
+        expect(result.value.message).toBe('Could not extract valid calendar event');
+        expect(result.value.errorCode).toBe(ServiceErrorCodes.EXTRACTION_FAILED);
       }
     });
 
@@ -243,7 +245,8 @@ describe('processCalendarAction', () => {
       expect(result.ok).toBe(true);
       if (result.ok) {
         expect(result.value.status).toBe('failed');
-        expect(result.value.error).toBe('Invalid date format');
+        expect(result.value.message).toBe('Invalid date format');
+        expect(result.value.errorCode).toBe(ServiceErrorCodes.VALIDATION_ERROR);
       }
 
       const failedEvents = failedEventRepository.getEvents();
@@ -283,7 +286,8 @@ describe('processCalendarAction', () => {
       expect(result.ok).toBe(true);
       if (result.ok) {
         expect(result.value.status).toBe('failed');
-        expect(result.value.error).toBe('Invalid date format');
+        expect(result.value.message).toBe('Invalid date format');
+        expect(result.value.errorCode).toBe(ServiceErrorCodes.VALIDATION_ERROR);
       }
 
       const failedEvents = failedEventRepository.getEvents();
@@ -539,6 +543,7 @@ describe('processCalendarAction', () => {
       expect(result.ok).toBe(true);
       if (result.ok) {
         expect(result.value.status).toBe('completed');
+        expect(result.value.message).toBe('Event "Doctor Appointment" created successfully');
         expect(result.value.resourceUrl).toBe('/#/calendar/event-abc-123');
       }
     });
@@ -584,6 +589,7 @@ describe('processCalendarAction', () => {
       expect(result.ok).toBe(true);
       if (result.ok) {
         expect(result.value.status).toBe('completed');
+        expect(result.value.message).toBe('Event "Company Holiday" created successfully');
         expect(result.value.resourceUrl).toBe('/#/calendar/event-holiday-123');
       }
     });
@@ -819,7 +825,8 @@ describe('processCalendarAction', () => {
       expect(result.ok).toBe(true);
       if (result.ok) {
         expect(result.value.status).toBe('failed');
-        expect(result.value.error).toBe('Invalid date format');
+        expect(result.value.message).toBe('Invalid date format');
+        expect(result.value.errorCode).toBe(ServiceErrorCodes.VALIDATION_ERROR);
       }
       expect(mockLogger.warn).toHaveBeenCalledWith(
         expect.objectContaining({ actionId: 'action-null-times', start: null }),

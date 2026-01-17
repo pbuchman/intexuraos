@@ -819,8 +819,9 @@ describe('Calendar Routes', () => {
 
       expect(response.statusCode).toBe(200);
       const body = response.json();
-      expect(body.status).toBe('completed');
-      expect(body.resourceUrl).toMatch(/^\/#\/calendar\/event-\d+$/);
+      expect(body.success).toBe(true);
+      expect(body.data.status).toBe('completed');
+      expect(body.data.resourceUrl).toMatch(/^\/#\/calendar\/event-\d+$/);
     });
 
     it('returns failed status when event extraction is invalid', async () => {
@@ -847,8 +848,9 @@ describe('Calendar Routes', () => {
 
       expect(response.statusCode).toBe(200);
       const body = response.json();
-      expect(body.status).toBe('failed');
-      expect(body.error).toBe('Could not determine event time');
+      expect(body.success).toBe(true);
+      expect(body.data.status).toBe('failed');
+      expect(body.data.message).toBe('Could not determine event time');
     });
 
     it('returns 403 when extraction returns NOT_CONNECTED error', async () => {
@@ -928,8 +930,9 @@ describe('Calendar Routes', () => {
 
       expect(response.statusCode).toBe(200);
       const body = response.json();
-      expect(body.status).toBe('failed');
-      expect(body.error).toBe('Calendar API error');
+      expect(body.success).toBe(true);
+      expect(body.data.status).toBe('failed');
+      expect(body.data.message).toBe('Calendar API error');
     });
   });
 

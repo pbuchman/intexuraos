@@ -27,11 +27,9 @@ describe('Internal Routes', () => {
       expect(response.statusCode).toBe(201);
       const body = JSON.parse(response.body);
       expect(body.success).toBe(true);
-      expect(body.data.id).toBeDefined();
-      expect(body.data.url).toMatch(/^\/#\/todos\//);
-      expect(body.data.todo.title).toBe('Internal Todo');
-      expect(body.data.todo.userId).toBe('user-1');
-      expect(body.data.todo.source).toBe('actions-agent');
+      expect(body.data.status).toBe('completed');
+      expect(body.data.message).toContain('Internal Todo');
+      expect(body.data.resourceUrl).toMatch(/^\/#\/todos\//);
     });
 
     it('creates a todo with items', async () => {
@@ -54,9 +52,9 @@ describe('Internal Routes', () => {
 
       expect(response.statusCode).toBe(201);
       const body = JSON.parse(response.body);
-      expect(body.data.todo.items).toHaveLength(2);
-      expect(body.data.todo.items[0].title).toBe('Task 1');
-      expect(body.data.todo.items[1].priority).toBe('high');
+      expect(body.data.status).toBe('completed');
+      expect(body.data.message).toContain('Todo with Items');
+      expect(body.data.resourceUrl).toBeDefined();
     });
 
     it('returns 401 without internal auth header', async () => {
@@ -136,8 +134,9 @@ describe('Internal Routes', () => {
 
       expect(response.statusCode).toBe(201);
       const body = JSON.parse(response.body);
-      expect(body.data.todo.priority).toBe('urgent');
-      expect(body.data.todo.dueDate).toBe(dueDate.toISOString());
+      expect(body.data.status).toBe('completed');
+      expect(body.data.message).toContain('Priority Todo');
+      expect(body.data.resourceUrl).toBeDefined();
     });
 
     it('returns 500 on storage error', async () => {
@@ -187,11 +186,9 @@ describe('Internal Routes', () => {
 
       expect(response.statusCode).toBe(201);
       const body = JSON.parse(response.body);
-      expect(body.data.todo.items).toHaveLength(3);
-      expect(body.data.todo.items[0].priority).toBe('high');
-      expect(body.data.todo.items[1].dueDate).toBe(itemDueDate.toISOString());
-      expect(body.data.todo.items[2].priority).toBe('urgent');
-      expect(body.data.todo.items[2].dueDate).toBe(itemDueDate.toISOString());
+      expect(body.data.status).toBe('completed');
+      expect(body.data.message).toContain('Todo with detailed items');
+      expect(body.data.resourceUrl).toBeDefined();
     });
 
     it('creates todo with all optional fields', async () => {
@@ -217,9 +214,9 @@ describe('Internal Routes', () => {
 
       expect(response.statusCode).toBe(201);
       const body = JSON.parse(response.body);
-      expect(body.data.todo.description).toBe('A detailed description');
-      expect(body.data.todo.priority).toBe('high');
-      expect(body.data.todo.dueDate).toBe(dueDate.toISOString());
+      expect(body.data.status).toBe('completed');
+      expect(body.data.message).toBe('Todo "Complete Todo" created successfully');
+      expect(body.data.resourceUrl).toBeDefined();
     });
 
     it('creates todo without optional fields', async () => {
@@ -241,10 +238,9 @@ describe('Internal Routes', () => {
 
       expect(response.statusCode).toBe(201);
       const body = JSON.parse(response.body);
-      expect(body.data.todo.description).toBeNull();
-      expect(body.data.todo.priority).toBe('medium');
-      expect(body.data.todo.dueDate).toBeNull();
-      expect(body.data.todo.items).toHaveLength(0);
+      expect(body.data.status).toBe('completed');
+      expect(body.data.message).toBe('Todo "Minimal Todo" created successfully');
+      expect(body.data.resourceUrl).toBeDefined();
     });
 
     it('creates todo with null optional fields explicitly', async () => {
@@ -268,8 +264,8 @@ describe('Internal Routes', () => {
 
       expect(response.statusCode).toBe(201);
       const body = JSON.parse(response.body);
-      expect(body.data.todo.description).toBeNull();
-      expect(body.data.todo.dueDate).toBeNull();
+      expect(body.data.status).toBe('completed');
+      expect(body.data.message).toBe('Todo "Todo with nulls" created successfully');
     });
   });
 });

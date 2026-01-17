@@ -1,9 +1,8 @@
-import type { Result } from '@intexuraos/common-core';
+import type { Result, ServiceFeedback } from '@intexuraos/common-core';
 import { ok, err, getErrorMessage } from '@intexuraos/common-core';
 import type {
   NotesServiceClient,
   CreateNoteRequest,
-  CreateNoteResponse,
 } from '../../domain/ports/notesServiceClient.js';
 import { type Logger } from 'pino';
 
@@ -16,9 +15,10 @@ export interface NotesServiceHttpClientConfig {
 interface ApiResponse {
   success: boolean;
   data?: {
-    id: string;
-    userId: string;
-    title: string;
+    status: 'completed' | 'failed';
+    message: string;
+    resourceUrl?: string;
+    errorCode?: string;
   };
   error?: { code: string; message: string };
 }
@@ -29,7 +29,7 @@ export function createNotesServiceHttpClient(
   const { logger } = config;
 
   return {
-    async createNote(request: CreateNoteRequest): Promise<Result<CreateNoteResponse>> {
+    async createNote(request: CreateNoteRequest): Promise<Result<ServiceFeedback>> {
       const url = `${config.baseUrl}/internal/notes`;
 
       logger.info({ url, userId: request.userId }, 'Creating note via notes-agent');
@@ -63,13 +63,14 @@ export function createNotesServiceHttpClient(
         return err(new Error(body.error?.message ?? 'Invalid response from notes-agent'));
       }
 
-      const result: CreateNoteResponse = {
-        id: body.data.id,
-        userId: body.data.userId,
-        title: body.data.title,
+      const result: ServiceFeedback = {
+        status: body.data.status,
+        message: body.data.message,
+        ...(body.data.resourceUrl !== undefined && { resourceUrl: body.data.resourceUrl }),
+        ...(body.data.errorCode !== undefined && { errorCode: body.data.errorCode }),
       };
 
-      logger.info({ noteId: result.id }, 'Note created successfully');
+      logger.info({ status: result.status }, 'Note action processed');
       return ok(result);
     },
   };

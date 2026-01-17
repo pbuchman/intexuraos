@@ -23,7 +23,7 @@ describe('linearAgentHttpClient', () => {
     });
 
   describe('successful responses', () => {
-    it('returns completed status with resourceUrl and issueIdentifier', async () => {
+    it('returns completed status with resourceUrl and message', async () => {
       const scope = nock(baseUrl)
         .post('/internal/linear/process-action', {
           action: { id: 'action-123', userId: 'user-456', text: 'Fix bug' },
@@ -33,8 +33,8 @@ describe('linearAgentHttpClient', () => {
           success: true,
           data: {
             status: 'completed',
+            message: 'Linear issue created: TEST-123',
             resourceUrl: 'https://linear.app/issue/TEST-123',
-            issueIdentifier: 'TEST-123',
           },
         });
 
@@ -45,12 +45,12 @@ describe('linearAgentHttpClient', () => {
       expect(isOk(result)).toBe(true);
       if (isOk(result)) {
         expect(result.value.status).toBe('completed');
+        expect(result.value.message).toBe('Linear issue created: TEST-123');
         expect(result.value.resourceUrl).toBe('https://linear.app/issue/TEST-123');
-        expect(result.value.issueIdentifier).toBe('TEST-123');
       }
     });
 
-    it('returns completed status with only issueIdentifier when resourceUrl is missing', async () => {
+    it('returns completed status with message only when resourceUrl is missing', async () => {
       const scope = nock(baseUrl)
         .post('/internal/linear/process-action')
         .matchHeader('X-Internal-Auth', internalAuthToken)
@@ -58,7 +58,7 @@ describe('linearAgentHttpClient', () => {
           success: true,
           data: {
             status: 'completed',
-            issueIdentifier: 'TEST-456',
+            message: 'Linear issue created: TEST-456',
           },
         });
 
@@ -69,12 +69,12 @@ describe('linearAgentHttpClient', () => {
       expect(isOk(result)).toBe(true);
       if (isOk(result)) {
         expect(result.value.status).toBe('completed');
+        expect(result.value.message).toBe('Linear issue created: TEST-456');
         expect(result.value.resourceUrl).toBeUndefined();
-        expect(result.value.issueIdentifier).toBe('TEST-456');
       }
     });
 
-    it('returns failed status with error message', async () => {
+    it('returns failed status with error message and errorCode', async () => {
       const scope = nock(baseUrl)
         .post('/internal/linear/process-action')
         .matchHeader('X-Internal-Auth', internalAuthToken)
@@ -82,7 +82,8 @@ describe('linearAgentHttpClient', () => {
           success: true,
           data: {
             status: 'failed',
-            error: 'Invalid Linear issue format',
+            message: 'Invalid Linear issue format',
+            errorCode: 'VALIDATION_ERROR',
           },
         });
 
@@ -93,7 +94,8 @@ describe('linearAgentHttpClient', () => {
       expect(isOk(result)).toBe(true);
       if (isOk(result)) {
         expect(result.value.status).toBe('failed');
-        expect(result.value.error).toBe('Invalid Linear issue format');
+        expect(result.value.message).toBe('Invalid Linear issue format');
+        expect(result.value.errorCode).toBe('VALIDATION_ERROR');
       }
     });
 
@@ -105,9 +107,8 @@ describe('linearAgentHttpClient', () => {
           success: true,
           data: {
             status: 'completed',
+            message: 'Linear issue created: TEST-789',
             resourceUrl: 'https://linear.app/issue/TEST-789',
-            issueIdentifier: 'TEST-789',
-            // error field intentionally omitted (undefined)
           },
         });
 
@@ -117,9 +118,9 @@ describe('linearAgentHttpClient', () => {
       expect(scope.isDone()).toBe(true);
       expect(isOk(result)).toBe(true);
       if (isOk(result)) {
+        expect(result.value.message).toBe('Linear issue created: TEST-789');
         expect(result.value.resourceUrl).toBe('https://linear.app/issue/TEST-789');
-        expect(result.value.issueIdentifier).toBe('TEST-789');
-        expect(result.value.error).toBeUndefined();
+        expect(result.value.errorCode).toBeUndefined();
       }
     });
   });
@@ -358,7 +359,7 @@ describe('linearAgentHttpClient', () => {
         .matchHeader('Content-Type', 'application/json')
         .reply(200, {
           success: true,
-          data: { status: 'completed', issueIdentifier: 'TEST-1' },
+          data: { status: 'completed', message: 'Linear issue created: TEST-1' },
         });
 
       const client = createClient();
@@ -374,7 +375,7 @@ describe('linearAgentHttpClient', () => {
         .matchHeader('X-Internal-Auth', customToken)
         .reply(200, {
           success: true,
-          data: { status: 'completed', issueIdentifier: 'TEST-1' },
+          data: { status: 'completed', message: 'Linear issue created: TEST-1' },
         });
 
       const client = createLinearAgentHttpClient({
@@ -398,7 +399,7 @@ describe('linearAgentHttpClient', () => {
         .matchHeader('X-Internal-Auth', internalAuthToken)
         .reply(200, {
           success: true,
-          data: { status: 'completed', issueIdentifier: 'TEST-1' },
+          data: { status: 'completed', message: 'Linear issue created: TEST-1' },
         });
 
       const client = createClient();
@@ -417,7 +418,7 @@ describe('linearAgentHttpClient', () => {
         .matchHeader('X-Internal-Auth', internalAuthToken)
         .reply(200, {
           success: true,
-          data: { status: 'completed', issueIdentifier: 'TEST-1' },
+          data: { status: 'completed', message: 'Linear issue created: TEST-1' },
         });
 
       const client = createClient();
@@ -437,7 +438,7 @@ describe('linearAgentHttpClient', () => {
         .matchHeader('X-Internal-Auth', internalAuthToken)
         .reply(200, {
           success: true,
-          data: { status: 'failed', error: 'Title is required' },
+          data: { status: 'failed', message: 'Title is required', errorCode: 'VALIDATION_ERROR' },
         });
 
       const client = createClient();
@@ -447,7 +448,7 @@ describe('linearAgentHttpClient', () => {
       expect(isOk(result)).toBe(true);
       if (isOk(result)) {
         expect(result.value.status).toBe('failed');
-        expect(result.value.error).toBe('Title is required');
+        expect(result.value.message).toBe('Title is required');
       }
     });
 
@@ -458,7 +459,7 @@ describe('linearAgentHttpClient', () => {
         .matchHeader('X-Internal-Auth', internalAuthToken)
         .reply(200, {
           success: true,
-          data: { status: 'completed', issueIdentifier: 'TEST-1' },
+          data: { status: 'completed', message: 'Linear issue created: TEST-1' },
         });
 
       const client = createClient();
@@ -474,7 +475,7 @@ describe('linearAgentHttpClient', () => {
         .matchHeader('X-Internal-Auth', internalAuthToken)
         .reply(200, {
           success: true,
-          data: { status: 'completed', issueIdentifier: 'TEST-1' },
+          data: { status: 'completed', message: 'Linear issue created: TEST-1' },
         });
 
       // Create client without logger to test default logger path

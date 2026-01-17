@@ -17,8 +17,9 @@ export interface ExecuteResearchActionDeps {
 
 export interface ExecuteResearchActionResult {
   status: 'completed' | 'failed';
-  resource_url?: string;
-  error?: string;
+  message?: string;
+  resourceUrl?: string;
+  errorCode?: string;
 }
 
 export type ExecuteResearchActionUseCase = (
@@ -46,10 +47,12 @@ export function createExecuteResearchActionUseCase(
 
     if (action.status === 'completed') {
       const resourceUrl = action.payload['resource_url'] as string | undefined;
+      const message = action.payload['message'] as string | undefined;
       logger.info({ actionId, resourceUrl }, 'Action already completed, returning existing result');
       return ok({
         status: 'completed' as const,
-        ...(resourceUrl !== undefined && { resource_url: resourceUrl }),
+        ...(message !== undefined && { message }),
+        ...(resourceUrl !== undefined && { resourceUrl }),
       });
     }
 
@@ -102,7 +105,7 @@ export function createExecuteResearchActionUseCase(
         status: 'failed',
         payload: {
           ...action.payload,
-          error: result.error.message,
+          message: result.error.message,
         },
         updatedAt: new Date().toISOString(),
       };
@@ -110,57 +113,81 @@ export function createExecuteResearchActionUseCase(
       logger.info({ actionId, status: 'failed' }, 'Action marked as failed');
       return ok({
         status: 'failed',
-        error: result.error.message,
+        message: result.error.message,
       });
     }
 
-    const researchId = result.value.id;
-    const resourceUrl = `/#/research/${researchId}`;
+    const response = result.value;
 
-    logger.info({ actionId, researchId }, 'Research draft created successfully');
+    if (response.status === 'failed') {
+      const errorMessage = response.message;
+      logger.info({ actionId, message: errorMessage }, 'Research action failed');
+      const failedAction: Action = {
+        ...action,
+        status: 'failed',
+        payload: {
+          ...action.payload,
+          message: errorMessage,
+          ...(response.errorCode !== undefined && { errorCode: response.errorCode }),
+        },
+        updatedAt: new Date().toISOString(),
+      };
+      await actionRepository.update(failedAction);
+      return ok({
+        status: 'failed',
+        message: errorMessage,
+        ...(response.errorCode !== undefined && { errorCode: response.errorCode }),
+      });
+    }
+
+    const { resourceUrl, message } = response;
+    logger.info({ actionId, resourceUrl }, 'Research draft created successfully');
 
     const completedAction: Action = {
       ...action,
       status: 'completed',
       payload: {
         ...action.payload,
-        researchId,
-        resource_url: resourceUrl,
+        message,
+        ...(resourceUrl !== undefined && { resource_url: resourceUrl }),
       },
       updatedAt: new Date().toISOString(),
     };
     await actionRepository.update(completedAction);
 
-    logger.info({ actionId, researchId, status: 'completed' }, 'Action marked as completed');
+    logger.info({ actionId, status: 'completed' }, 'Action marked as completed');
 
-    const fullUrl = `${webAppUrl}${resourceUrl}`;
-    const message = `Your research draft is ready. Edit it here: ${fullUrl}`;
+    if (resourceUrl !== undefined) {
+      const fullUrl = `${webAppUrl}${resourceUrl}`;
+      const whatsappMessage = `${message} View it here: ${fullUrl}`;
 
-    logger.info({ actionId, userId: action.userId }, 'Sending WhatsApp completion notification');
+      logger.info({ actionId, userId: action.userId }, 'Sending WhatsApp completion notification');
 
-    const publishResult = await whatsappPublisher.publishSendMessage({
-      userId: action.userId,
-      message,
-      correlationId: `research-complete-${researchId}`,
-    });
+      const publishResult = await whatsappPublisher.publishSendMessage({
+        userId: action.userId,
+        message: whatsappMessage,
+        correlationId: `research-complete-${actionId}`,
+      });
 
-    if (!publishResult.ok) {
-      logger.warn(
-        { actionId, userId: action.userId, error: publishResult.error.message },
-        'Failed to send WhatsApp notification (non-fatal)'
-      );
-    } else {
-      logger.info({ actionId }, 'WhatsApp completion notification sent');
+      if (!publishResult.ok) {
+        logger.warn(
+          { actionId, userId: action.userId, error: publishResult.error.message },
+          'Failed to send WhatsApp notification (non-fatal)'
+        );
+      } else {
+        logger.info({ actionId }, 'WhatsApp completion notification sent');
+      }
     }
 
     logger.info(
-      { actionId, researchId, resourceUrl, status: 'completed' },
+      { actionId, resourceUrl, status: 'completed' },
       'Research action execution completed successfully'
     );
 
     return ok({
       status: 'completed',
-      resource_url: resourceUrl,
+      message,
+      ...(resourceUrl !== undefined && { resourceUrl }),
     });
   };
 }

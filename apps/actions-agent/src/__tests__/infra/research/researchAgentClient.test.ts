@@ -16,14 +16,18 @@ describe('createResearchAgentClient', () => {
   });
 
   describe('createDraft', () => {
-    it('returns draft id on successful creation', async () => {
+    it('returns ActionFeedback on successful creation', async () => {
       nock(baseUrl)
         .post('/internal/research/draft')
         .matchHeader('X-Internal-Auth', internalAuthToken)
         .matchHeader('Content-Type', 'application/json')
         .reply(200, {
           success: true,
-          data: { id: 'draft-123' },
+          data: {
+            status: 'completed',
+            message: 'Research draft created successfully',
+            resourceUrl: '/#/research/draft-123',
+          },
         });
 
       const client = createResearchAgentClient({ baseUrl, internalAuthToken });
@@ -36,7 +40,9 @@ describe('createResearchAgentClient', () => {
 
       expect(result.ok).toBe(true);
       if (result.ok) {
-        expect(result.value.id).toBe('draft-123');
+        expect(result.value.status).toBe('completed');
+        expect(result.value.message).toBe('Research draft created successfully');
+        expect(result.value.resourceUrl).toBe('/#/research/draft-123');
       }
     });
 
@@ -49,7 +55,14 @@ describe('createResearchAgentClient', () => {
           selectedModels: [LlmModels.Gemini25Pro, LlmModels.ClaudeOpus45],
           sourceActionId: 'action-111',
         })
-        .reply(200, { success: true, data: { id: 'draft-456' } });
+        .reply(200, {
+          success: true,
+          data: {
+            status: 'completed',
+            message: 'Research draft created successfully',
+            resourceUrl: '/#/research/draft-456',
+          },
+        });
 
       const client = createResearchAgentClient({ baseUrl, internalAuthToken });
       await client.createDraft({

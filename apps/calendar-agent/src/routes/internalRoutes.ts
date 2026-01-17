@@ -60,9 +60,18 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             description: 'Success',
             type: 'object',
             properties: {
-              status: { type: 'string', enum: ['completed', 'failed'] },
-              resourceUrl: { type: 'string', description: 'Frontend URL for created event' },
-              error: { type: 'string', description: 'Error message if failed' },
+              success: { type: 'boolean', enum: [true] },
+              data: {
+                type: 'object',
+                required: ['status', 'message'],
+                properties: {
+                  status: { type: 'string', enum: ['completed', 'failed'] },
+                  message: { type: 'string', description: 'Human-readable feedback message' },
+                  resourceUrl: { type: 'string', description: 'URL to created resource (success only)' },
+                  errorCode: { type: 'string', description: 'Error code for debugging (failure only)' },
+                },
+              },
+              diagnostics: { $ref: 'Diagnostics#' },
             },
           },
           401: {
@@ -146,7 +155,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         'internal/processCalendarAction: complete'
       );
 
-      return await reply.send(result.value);
+      return await reply.ok(result.value);
     }
   );
 

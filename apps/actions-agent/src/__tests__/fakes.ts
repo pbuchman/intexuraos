@@ -1,4 +1,4 @@
-import type { Result } from '@intexuraos/common-core';
+import type { Result, ServiceFeedback } from '@intexuraos/common-core';
 import { ok, err } from '@intexuraos/common-core';
 import { registerActionHandler } from '../domain/usecases/createIdempotentActionHandler.js';
 import type { ActionServiceClient } from '../domain/ports/actionServiceClient.js';
@@ -21,12 +21,10 @@ import type {
 import type {
   TodosServiceClient,
   CreateTodoRequest,
-  CreateTodoResponse,
 } from '../domain/ports/todosServiceClient.js';
 import type {
   NotesServiceClient,
   CreateNoteRequest,
-  CreateNoteResponse,
 } from '../domain/ports/notesServiceClient.js';
 import type {
   BookmarksServiceClient,
@@ -121,7 +119,11 @@ export class FakeResearchServiceClient implements ResearchServiceClient {
     selectedModels: ResearchModel[];
     sourceActionId?: string;
   } | null = null;
-  private nextResearchId = 'research-123';
+  private nextResponse: ServiceFeedback = {
+    status: 'completed',
+    message: 'Research draft created successfully',
+    resourceUrl: '/#/research/research-123',
+  };
   private failNext = false;
   private failError: Error | null = null;
 
@@ -129,8 +131,8 @@ export class FakeResearchServiceClient implements ResearchServiceClient {
     return this.lastCreateDraftParams;
   }
 
-  setNextResearchId(id: string): void {
-    this.nextResearchId = id;
+  setNextResponse(response: ServiceFeedback): void {
+    this.nextResponse = response;
   }
 
   setFailNext(fail: boolean, error?: Error): void {
@@ -144,13 +146,13 @@ export class FakeResearchServiceClient implements ResearchServiceClient {
     prompt: string;
     selectedModels: ResearchModel[];
     sourceActionId?: string;
-  }): Promise<Result<{ id: string }>> {
+  }): Promise<Result<ServiceFeedback>> {
     if (this.failNext) {
       this.failNext = false;
       return err(this.failError ?? new Error('Simulated failure'));
     }
     this.lastCreateDraftParams = params;
-    return ok({ id: this.nextResearchId });
+    return ok(this.nextResponse);
   }
 }
 
@@ -414,7 +416,11 @@ export class FakeCommandsAgentClient implements CommandsAgentClient {
 
 export class FakeTodosServiceClient implements TodosServiceClient {
   private createdTodos: CreateTodoRequest[] = [];
-  private nextTodoId = 'todo-123';
+  private nextResponse: ServiceFeedback = {
+    status: 'completed',
+    message: 'Todo created successfully',
+    resourceUrl: '/#/todos/todo-123',
+  };
   private failNext = false;
   private failError: Error | null = null;
 
@@ -422,8 +428,8 @@ export class FakeTodosServiceClient implements TodosServiceClient {
     return this.createdTodos;
   }
 
-  setNextTodoId(id: string): void {
-    this.nextTodoId = id;
+  setNextResponse(response: ServiceFeedback): void {
+    this.nextResponse = response;
   }
 
   setFailNext(fail: boolean, error?: Error): void {
@@ -431,24 +437,23 @@ export class FakeTodosServiceClient implements TodosServiceClient {
     this.failError = error ?? null;
   }
 
-  async createTodo(request: CreateTodoRequest): Promise<Result<CreateTodoResponse>> {
+  async createTodo(request: CreateTodoRequest): Promise<Result<ServiceFeedback>> {
     if (this.failNext) {
       this.failNext = false;
       return err(this.failError ?? new Error('Simulated failure'));
     }
     this.createdTodos.push(request);
-    return ok({
-      id: this.nextTodoId,
-      userId: request.userId,
-      title: request.title,
-      status: 'pending',
-    });
+    return ok(this.nextResponse);
   }
 }
 
 export class FakeNotesServiceClient implements NotesServiceClient {
   private createdNotes: CreateNoteRequest[] = [];
-  private nextNoteId = 'note-123';
+  private nextResponse: ServiceFeedback = {
+    status: 'completed',
+    message: 'Note created successfully',
+    resourceUrl: '/#/notes/note-123',
+  };
   private failNext = false;
   private failError: Error | null = null;
 
@@ -456,8 +461,8 @@ export class FakeNotesServiceClient implements NotesServiceClient {
     return this.createdNotes;
   }
 
-  setNextNoteId(id: string): void {
-    this.nextNoteId = id;
+  setNextResponse(response: ServiceFeedback): void {
+    this.nextResponse = response;
   }
 
   setFailNext(fail: boolean, error?: Error): void {
@@ -465,17 +470,13 @@ export class FakeNotesServiceClient implements NotesServiceClient {
     this.failError = error ?? null;
   }
 
-  async createNote(request: CreateNoteRequest): Promise<Result<CreateNoteResponse>> {
+  async createNote(request: CreateNoteRequest): Promise<Result<ServiceFeedback>> {
     if (this.failNext) {
       this.failNext = false;
       return err(this.failError ?? new Error('Simulated failure'));
     }
     this.createdNotes.push(request);
-    return ok({
-      id: this.nextNoteId,
-      userId: request.userId,
-      title: request.title,
-    });
+    return ok(this.nextResponse);
   }
 }
 
@@ -532,11 +533,11 @@ export class FakeBookmarksServiceClient implements BookmarksServiceClient {
 
 export class FakeCalendarServiceClient implements CalendarServiceClient {
   private processedActions: ProcessCalendarRequest[] = [];
-  private nextResponse: {
-    status: 'completed' | 'failed';
-    resource_url?: string;
-    error?: string;
-  } = { status: 'completed', resource_url: '/#/calendar/event-123' };
+  private nextResponse: ServiceFeedback = {
+    status: 'completed',
+    message: 'Calendar event created successfully',
+    resourceUrl: '/#/calendar/event-123',
+  };
   private failNext = false;
   private failError: Error | null = null;
 
@@ -544,11 +545,7 @@ export class FakeCalendarServiceClient implements CalendarServiceClient {
     return this.processedActions;
   }
 
-  setNextResponse(response: {
-    status: 'completed' | 'failed';
-    resource_url?: string;
-    error?: string;
-  }): void {
+  setNextResponse(response: ServiceFeedback): void {
     this.nextResponse = response;
   }
 
@@ -557,13 +554,7 @@ export class FakeCalendarServiceClient implements CalendarServiceClient {
     this.failError = error ?? null;
   }
 
-  async processAction(request: ProcessCalendarRequest): Promise<
-    Result<{
-      status: 'completed' | 'failed';
-      resource_url?: string;
-      error?: string;
-    }>
-  > {
+  async processAction(request: ProcessCalendarRequest): Promise<Result<ServiceFeedback>> {
     if (this.failNext) {
       this.failNext = false;
       return err(this.failError ?? new Error('Simulated failure'));
@@ -580,15 +571,10 @@ export class FakeLinearAgentClient implements LinearAgentClient {
     text: string;
     summary?: string;
   }[] = [];
-  private nextResponse: {
-    status: 'completed' | 'failed';
-    resourceUrl?: string;
-    issueIdentifier?: string;
-    error?: string;
-  } = {
+  private nextResponse: ServiceFeedback = {
     status: 'completed',
+    message: 'Linear issue created: TEST-123',
     resourceUrl: 'https://linear.app/issue/TEST-123',
-    issueIdentifier: 'TEST-123',
   };
   private failNext = false;
   private failError: Error | null = null;
@@ -597,12 +583,7 @@ export class FakeLinearAgentClient implements LinearAgentClient {
     return this.processedActions;
   }
 
-  setNextResponse(response: {
-    status: 'completed' | 'failed';
-    resourceUrl?: string;
-    issueIdentifier?: string;
-    error?: string;
-  }): void {
+  setNextResponse(response: ServiceFeedback): void {
     this.nextResponse = response;
   }
 
@@ -616,14 +597,7 @@ export class FakeLinearAgentClient implements LinearAgentClient {
     _userId: string,
     _text: string,
     _summary?: string
-  ): Promise<
-    Result<{
-      status: 'completed' | 'failed';
-      resourceUrl?: string;
-      issueIdentifier?: string;
-      error?: string;
-    }>
-  > {
+  ): Promise<Result<ServiceFeedback>> {
     if (this.failNext) {
       this.failNext = false;
       return err(this.failError ?? new Error('Simulated failure'));
@@ -664,7 +638,8 @@ export function createFakeExecuteResearchActionUseCase(config?: {
     return ok(
       config?.returnResult ?? {
         status: 'completed',
-        resource_url: '/#/research/test-123',
+        message: 'Research draft created successfully',
+        resourceUrl: '/#/research/test-123',
       }
     );
   };
@@ -685,7 +660,8 @@ export function createFakeExecuteTodoActionUseCase(config?: {
     return ok(
       config?.returnResult ?? {
         status: 'completed',
-        resource_url: '/#/todos/todo-123',
+        message: 'Todo created successfully',
+        resourceUrl: '/#/todos/todo-123',
       }
     );
   };
@@ -706,7 +682,8 @@ export function createFakeExecuteNoteActionUseCase(config?: {
     return ok(
       config?.returnResult ?? {
         status: 'completed',
-        resource_url: '/#/notes/note-123',
+        message: 'Note created successfully',
+        resourceUrl: '/#/notes/note-123',
       }
     );
   };
@@ -727,7 +704,8 @@ export function createFakeExecuteLinkActionUseCase(config?: {
     return ok(
       config?.returnResult ?? {
         status: 'completed',
-        resource_url: '/#/bookmarks/bookmark-123',
+        message: 'Bookmark created successfully',
+        resourceUrl: '/#/bookmarks/bookmark-123',
       }
     );
   };
@@ -748,7 +726,8 @@ export function createFakeExecuteCalendarActionUseCase(config?: {
     return ok(
       config?.returnResult ?? {
         status: 'completed',
-        resource_url: '/#/calendar/event-123',
+        message: 'Calendar event created successfully',
+        resourceUrl: '/#/calendar/event-123',
       }
     );
   };
@@ -769,8 +748,8 @@ export function createFakeExecuteLinearActionUseCase(config?: {
     return ok(
       config?.returnResult ?? {
         status: 'completed',
+        message: 'Linear issue created: TEST-123',
         resourceUrl: 'https://linear.app/issue/TEST-123',
-        issueIdentifier: 'TEST-123',
       }
     );
   };

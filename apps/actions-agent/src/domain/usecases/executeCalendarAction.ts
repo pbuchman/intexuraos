@@ -16,8 +16,9 @@ export interface ExecuteCalendarActionDeps {
 
 export interface ExecuteCalendarActionResult {
   status: 'completed' | 'failed';
-  resource_url?: string;
-  error?: string;
+  message?: string;
+  resourceUrl?: string;
+  errorCode?: string;
 }
 
 export type ExecuteCalendarActionUseCase = (
@@ -45,10 +46,12 @@ export function createExecuteCalendarActionUseCase(
 
     if (action.status === 'completed') {
       const resourceUrl = action.payload['resource_url'] as string | undefined;
+      const message = action.payload['message'] as string | undefined;
       logger.info({ actionId, resourceUrl }, 'Action already completed, returning existing result');
       return ok({
         status: 'completed' as const,
-        ...(resourceUrl !== undefined && { resource_url: resourceUrl }),
+        ...(message !== undefined && { message }),
+        ...(resourceUrl !== undefined && { resourceUrl }),
       });
     }
 
@@ -86,7 +89,7 @@ export function createExecuteCalendarActionUseCase(
         status: 'failed',
         payload: {
           ...action.payload,
-          error: result.error.message,
+          message: result.error.message,
         },
         updatedAt: new Date().toISOString(),
       };
@@ -94,32 +97,34 @@ export function createExecuteCalendarActionUseCase(
       logger.info({ actionId, status: 'failed' }, 'Action marked as failed');
       return ok({
         status: 'failed',
-        error: result.error.message,
+        message: result.error.message,
       });
     }
 
     const response = result.value;
 
     if (response.status === 'failed') {
-      const errorMessage = response.error ?? 'Unknown error';
-      logger.info({ actionId, error: errorMessage }, 'Calendar action failed');
+      const errorMessage = response.message;
+      logger.info({ actionId, message: errorMessage }, 'Calendar action failed');
       const failedAction: Action = {
         ...action,
         status: 'failed',
         payload: {
           ...action.payload,
-          error: errorMessage,
+          message: errorMessage,
+          ...(response.errorCode !== undefined && { errorCode: response.errorCode }),
         },
         updatedAt: new Date().toISOString(),
       };
       await actionRepository.update(failedAction);
       return ok({
         status: 'failed',
-        error: errorMessage,
+        message: errorMessage,
+        ...(response.errorCode !== undefined && { errorCode: response.errorCode }),
       });
     }
 
-    const resourceUrl = response.resource_url;
+    const { resourceUrl, message } = response;
     logger.info({ actionId, resourceUrl }, 'Calendar action completed successfully');
 
     const completedAction: Action = {
@@ -127,6 +132,7 @@ export function createExecuteCalendarActionUseCase(
       status: 'completed',
       payload: {
         ...action.payload,
+        message,
         ...(resourceUrl !== undefined && { resource_url: resourceUrl }),
       },
       updatedAt: new Date().toISOString(),
@@ -137,13 +143,13 @@ export function createExecuteCalendarActionUseCase(
 
     if (resourceUrl !== undefined) {
       const fullUrl = `${webAppUrl}${resourceUrl}`;
-      const message = `Calendar event created: "${action.title}". View it here: ${fullUrl}`;
+      const whatsappMessage = `${message} View it here: ${fullUrl}`;
 
       logger.info({ actionId, userId: action.userId }, 'Sending WhatsApp completion notification');
 
       const publishResult = await whatsappPublisher.publishSendMessage({
         userId: action.userId,
-        message,
+        message: whatsappMessage,
         correlationId: `calendar-complete-${actionId}`,
       });
 
@@ -164,7 +170,8 @@ export function createExecuteCalendarActionUseCase(
 
     return ok({
       status: 'completed',
-      ...(resourceUrl !== undefined && { resource_url: resourceUrl }),
+      message,
+      ...(resourceUrl !== undefined && { resourceUrl }),
     });
   };
 }

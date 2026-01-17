@@ -7,8 +7,8 @@
  * 3. Saving failed extractions for manual review
  */
 
-import { err, ok, type Result } from '@intexuraos/common-core';
-import type { Logger } from '@intexuraos/common-core';
+import { err, ok, type Result, ServiceErrorCodes } from '@intexuraos/common-core';
+import type { Logger, ServiceFeedback } from '@intexuraos/common-core';
 import type {
   LinearError,
   LinearApiClient,
@@ -35,12 +35,7 @@ export interface ProcessLinearActionRequest {
   summary?: string;
 }
 
-export interface ProcessLinearActionResponse {
-  status: 'completed' | 'failed';
-  resourceUrl?: string;
-  issueIdentifier?: string;
-  error?: string;
-}
+export type ProcessLinearActionResponse = ServiceFeedback;
 
 /**
  * Build structured markdown description from extracted data.
@@ -103,8 +98,8 @@ export async function processLinearAction(
     );
     return ok({
       status: 'completed',
+      message: `Issue ${existing.issueIdentifier} created successfully`,
       resourceUrl: existing.resourceUrl,
-      issueIdentifier: existing.issueIdentifier,
     });
   }
 
@@ -142,7 +137,8 @@ export async function processLinearAction(
 
     return ok({
       status: 'failed',
-      error: extractResult.error.message,
+      message: extractResult.error.message,
+      errorCode: ServiceErrorCodes.EXTRACTION_FAILED,
     });
   }
 
@@ -169,7 +165,8 @@ export async function processLinearAction(
 
     return ok({
       status: 'failed',
-      error: errorMessage,
+      message: errorMessage,
+      errorCode: ServiceErrorCodes.EXTRACTION_FAILED,
     });
   }
 
@@ -201,7 +198,8 @@ export async function processLinearAction(
 
     return ok({
       status: 'failed',
-      error: createResult.error.message,
+      message: createResult.error.message,
+      errorCode: ServiceErrorCodes.EXTERNAL_API_ERROR,
     });
   }
 
@@ -229,7 +227,7 @@ export async function processLinearAction(
 
   return ok({
     status: 'completed',
+    message: `Issue ${createdIssue.identifier} created successfully`,
     resourceUrl: createdIssue.url,
-    issueIdentifier: createdIssue.identifier,
   });
 }

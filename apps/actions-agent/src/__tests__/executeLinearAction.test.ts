@@ -52,12 +52,12 @@ describe('executeLinearAction usecase', () => {
     }
   });
 
-  it('returns completed status for already completed action with resourceUrl and issueIdentifier', async () => {
+  it('returns completed status for already completed action with resourceUrl and message', async () => {
     const action = createAction({
       status: 'completed',
       payload: {
         resource_url: 'https://linear.app/issue/TEST-123',
-        issue_identifier: 'TEST-123',
+        message: 'Linear issue created: TEST-123',
       },
     });
     await fakeActionRepo.save(action);
@@ -75,14 +75,14 @@ describe('executeLinearAction usecase', () => {
     if (isOk(result)) {
       expect(result.value.status).toBe('completed');
       expect(result.value.resourceUrl).toBe('https://linear.app/issue/TEST-123');
-      expect(result.value.issueIdentifier).toBe('TEST-123');
+      expect(result.value.message).toBe('Linear issue created: TEST-123');
     }
   });
 
-  it('returns completed status with only issueIdentifier when resourceUrl is missing', async () => {
+  it('returns completed status with message when resourceUrl is missing', async () => {
     const action = createAction({
       status: 'completed',
-      payload: { issue_identifier: 'TEST-456' },
+      payload: { message: 'Linear issue created: TEST-456' },
     });
     await fakeActionRepo.save(action);
 
@@ -99,7 +99,7 @@ describe('executeLinearAction usecase', () => {
     if (isOk(result)) {
       expect(result.value.status).toBe('completed');
       expect(result.value.resourceUrl).toBeUndefined();
-      expect(result.value.issueIdentifier).toBe('TEST-456');
+      expect(result.value.message).toBe('Linear issue created: TEST-456');
     }
   });
 
@@ -139,13 +139,13 @@ describe('executeLinearAction usecase', () => {
     if (isOk(result)) {
       expect(result.value.status).toBe('completed');
       expect(result.value.resourceUrl).toBe('https://linear.app/issue/TEST-123');
-      expect(result.value.issueIdentifier).toBe('TEST-123');
+      expect(result.value.message).toBe('Linear issue created: TEST-123');
     }
 
     const updatedAction = await fakeActionRepo.getById('action-123');
     expect(updatedAction?.status).toBe('completed');
     expect(updatedAction?.payload['resource_url']).toBe('https://linear.app/issue/TEST-123');
-    expect(updatedAction?.payload['issue_identifier']).toBe('TEST-123');
+    expect(updatedAction?.payload['message']).toBe('Linear issue created: TEST-123');
   });
 
   it('processes linear action from failed status (retry)', async () => {
@@ -197,7 +197,8 @@ describe('executeLinearAction usecase', () => {
     await fakeActionRepo.save(action);
     fakeLinearClient.setNextResponse({
       status: 'failed',
-      error: 'Invalid Linear issue format',
+      message: 'Invalid Linear issue format',
+      errorCode: 'VALIDATION_ERROR',
     });
 
     const usecase = createExecuteLinearActionUseCase({
@@ -212,20 +213,22 @@ describe('executeLinearAction usecase', () => {
     expect(isOk(result)).toBe(true);
     if (isOk(result)) {
       expect(result.value.status).toBe('failed');
-      expect(result.value.error).toBe('Invalid Linear issue format');
+      expect(result.value.message).toBe('Invalid Linear issue format');
     }
 
     const updatedAction = await fakeActionRepo.getById('action-123');
     expect(updatedAction?.status).toBe('failed');
-    expect(updatedAction?.payload['error']).toBe('Invalid Linear issue format');
+    expect(updatedAction?.payload['message']).toBe('Invalid Linear issue format');
   });
 
-  it('updates action to failed with default error when linear agent returns failed without error', async () => {
+  it('updates action to failed with default error when linear agent returns failed without details', async () => {
     const action = createAction({ status: 'pending' });
     await fakeActionRepo.save(action);
     fakeLinearClient.setNextResponse({
       status: 'failed',
-    } as { status: 'completed' | 'failed'; error?: string });
+      message: 'Unknown error',
+      errorCode: 'UNKNOWN_ERROR',
+    });
 
     const usecase = createExecuteLinearActionUseCase({
       actionRepository: fakeActionRepo,
@@ -239,7 +242,7 @@ describe('executeLinearAction usecase', () => {
     expect(isOk(result)).toBe(true);
     if (isOk(result)) {
       expect(result.value.status).toBe('failed');
-      expect(result.value.error).toBe('Unknown error');
+      expect(result.value.message).toBe('Unknown error');
     }
   });
 
@@ -260,7 +263,7 @@ describe('executeLinearAction usecase', () => {
     expect(isOk(result)).toBe(true);
     if (isOk(result)) {
       expect(result.value.status).toBe('failed');
-      expect(result.value.error).toBe('Linear agent unavailable');
+      expect(result.value.message).toBe('Linear agent unavailable');
     }
 
     const updatedAction = await fakeActionRepo.getById('action-123');
@@ -283,9 +286,9 @@ describe('executeLinearAction usecase', () => {
     const messages = fakeWhatsappPublisher.getSentMessages();
     expect(messages).toHaveLength(1);
     expect(messages[0]?.userId).toBe('user-456');
-    expect(messages[0]?.message).toContain('Linear issue created');
-    expect(messages[0]?.message).toContain('Fix authentication bug');
-    expect(messages[0]?.message).toContain('(TEST-123)');
+    expect(messages[0]?.message).toContain('Linear issue created: TEST-123');
+    expect(messages[0]?.message).toContain('View it here:');
+    expect(messages[0]?.message).toContain('https://linear.app/issue/TEST-123');
     expect(messages[0]?.correlationId).toBe('linear-complete-action-123');
   });
 
@@ -294,7 +297,7 @@ describe('executeLinearAction usecase', () => {
     await fakeActionRepo.save(action);
     fakeLinearClient.setNextResponse({
       status: 'completed',
-      issueIdentifier: 'TEST-456',
+      message: 'Linear issue created: TEST-456',
     });
 
     const usecase = createExecuteLinearActionUseCase({
@@ -353,12 +356,12 @@ describe('executeLinearAction usecase', () => {
     expect(processedActions[0]?.text).toBe('Fix authentication bug');
   });
 
-  it('returns result with issueIdentifier only when resourceUrl is missing', async () => {
+  it('returns result with message only when resourceUrl is missing', async () => {
     const action = createAction({ status: 'pending' });
     await fakeActionRepo.save(action);
     fakeLinearClient.setNextResponse({
       status: 'completed',
-      issueIdentifier: 'TEST-789',
+      message: 'Linear issue created: TEST-789',
     });
 
     const usecase = createExecuteLinearActionUseCase({
@@ -374,17 +377,17 @@ describe('executeLinearAction usecase', () => {
     if (isOk(result)) {
       expect(result.value.status).toBe('completed');
       expect(result.value.resourceUrl).toBeUndefined();
-      expect(result.value.issueIdentifier).toBe('TEST-789');
+      expect(result.value.message).toBe('Linear issue created: TEST-789');
     }
   });
 
-  it('handles resourceUrl without issueIdentifier in WhatsApp notification', async () => {
+  it('handles resourceUrl with message in WhatsApp notification', async () => {
     const action = createAction({ status: 'pending' });
     await fakeActionRepo.save(action);
     fakeLinearClient.setNextResponse({
       status: 'completed',
+      message: 'Linear issue created: TEST-999',
       resourceUrl: 'https://linear.app/issue/TEST-999',
-      // issueIdentifier intentionally omitted
     });
 
     const usecase = createExecuteLinearActionUseCase({
@@ -400,16 +403,14 @@ describe('executeLinearAction usecase', () => {
     if (isOk(result)) {
       expect(result.value.status).toBe('completed');
       expect(result.value.resourceUrl).toBe('https://linear.app/issue/TEST-999');
-      expect(result.value.issueIdentifier).toBeUndefined();
+      expect(result.value.message).toBe('Linear issue created: TEST-999');
     }
 
     const messages = fakeWhatsappPublisher.getSentMessages();
     expect(messages).toHaveLength(1);
-    expect(messages[0]?.message).toContain('Linear issue created');
-    expect(messages[0]?.message).toContain('Fix authentication bug');
+    expect(messages[0]?.message).toContain('Linear issue created: TEST-999');
+    expect(messages[0]?.message).toContain('View it here:');
     expect(messages[0]?.message).toContain('https://linear.app/issue/TEST-999');
-    // Should not have parentheses for issue identifier when it's undefined
-    expect(messages[0]?.message).not.toMatch(/\(\w+-\d+\)/);
   });
 
   it('handles action update to processing before calling linear agent', async () => {
@@ -425,7 +426,6 @@ describe('executeLinearAction usecase', () => {
 
     await usecase('action-123');
 
-    // Check that status was set to processing during execution
     const updatedAction = await fakeActionRepo.getById('action-123');
     expect(updatedAction?.status).toBe('completed');
     expect(updatedAction?.payload['resource_url']).toBeDefined();

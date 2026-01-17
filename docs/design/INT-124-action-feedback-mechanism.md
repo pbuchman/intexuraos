@@ -19,9 +19,9 @@ Users experience misleading feedback when executing actions via WhatsApp voice c
 
 ## Implementation Status
 
-| Phase | Issue | Status |
-|-------|-------|--------|
-| Phase 1: Hotfix | [INT-125](https://linear.app/pbuchman/issue/INT-125) | ✅ Completed |
+| Phase                         | Issue                                                | Status         |
+| ----------------------------- | ---------------------------------------------------- | -------------- |
+| Phase 1: Hotfix               | [INT-125](https://linear.app/pbuchman/issue/INT-125) | ✅ Completed   |
 | Phase 2: Standardize Contract | [INT-126](https://linear.app/pbuchman/issue/INT-126) | 🔄 In Progress |
 
 ---
@@ -48,13 +48,13 @@ export interface ActionFeedback {
 
 ### Key Decisions
 
-| Decision | Rationale | Date |
-|----------|-----------|------|
-| Single `message` field | Simpler than separate successMessage/failureReason; status determines context | 2026-01-17 |
-| `resourceUrl` only | Dropped `resourceIdentifier` - URL is sufficient, ID can be parsed if needed | 2026-01-17 |
-| `message` required | Every response MUST include user-facing feedback | 2026-01-17 |
-| `errorCode` required on failure | Enables debugging; standard codes defined in common-core | 2026-01-17 |
-| No metadata field | Keep it simple; add later if needed | 2026-01-17 |
+| Decision                        | Rationale                                                                     | Date       |
+| ------------------------------- | ----------------------------------------------------------------------------- | ---------- |
+| Single `message` field          | Simpler than separate successMessage/failureReason; status determines context | 2026-01-17 |
+| `resourceUrl` only              | Dropped `resourceIdentifier` - URL is sufficient, ID can be parsed if needed  | 2026-01-17 |
+| `message` required              | Every response MUST include user-facing feedback                              | 2026-01-17 |
+| `errorCode` required on failure | Enables debugging; standard codes defined in common-core                      | 2026-01-17 |
+| No metadata field               | Keep it simple; add later if needed                                           | 2026-01-17 |
 
 ---
 
@@ -113,14 +113,14 @@ export const ActionErrorCodes = {
 
 All 6 services must return `ActionFeedback`:
 
-| Service | Endpoint | Status |
-|---------|----------|--------|
-| linear-agent | `/internal/linear/process-action` | 🔄 Pending |
-| todos-agent | `/internal/todos` | 🔄 Pending |
-| notes-agent | `/internal/notes` | 🔄 Pending |
-| links-agent | `/internal/links` | 🔄 Pending |
-| calendar-agent | `/internal/calendar` | 🔄 Pending |
-| research-agent | `/internal/research` | 🔄 Pending |
+| Service        | Endpoint                          | Status     |
+| -------------- | --------------------------------- | ---------- |
+| linear-agent   | `/internal/linear/process-action` | 🔄 Pending |
+| todos-agent    | `/internal/todos`                 | 🔄 Pending |
+| notes-agent    | `/internal/notes`                 | 🔄 Pending |
+| links-agent    | `/internal/links`                 | 🔄 Pending |
+| calendar-agent | `/internal/calendar`              | 🔄 Pending |
+| research-agent | `/internal/research`              | 🔄 Pending |
 
 ---
 
@@ -153,12 +153,12 @@ For each downstream service, verify:
 
 ## Appendix: Affected Files
 
-| File | Change Type |
-|------|-------------|
-| `packages/common-core/src/types/actionFeedback.ts` | New file |
-| `packages/common-core/src/types/errorCodes.ts` | New file |
-| `apps/*/src/routes/internalRoutes.ts` | Update response |
-| `apps/actions-agent/src/infra/http/*Client.ts` | Parse `message` |
-| `apps/web/src/types/actionConfig.ts` | Add `message` to result |
-| `apps/web/src/pages/InboxPage.tsx` | Display backend message |
-| `apps/web/src/components/ConfigurableActionButton.tsx` | Pass `message` |
+| File                                                   | Change Type             |
+| ------------------------------------------------------ | ----------------------- |
+| `packages/common-core/src/types/actionFeedback.ts`     | New file                |
+| `packages/common-core/src/types/errorCodes.ts`         | New file                |
+| `apps/*/src/routes/internalRoutes.ts`                  | Update response         |
+| `apps/actions-agent/src/infra/http/*Client.ts`         | Parse `message`         |
+| `apps/web/src/types/actionConfig.ts`                   | Add `message` to result |
+| `apps/web/src/pages/InboxPage.tsx`                     | Display backend message |
+| `apps/web/src/components/ConfigurableActionButton.tsx` | Pass `message`          |
