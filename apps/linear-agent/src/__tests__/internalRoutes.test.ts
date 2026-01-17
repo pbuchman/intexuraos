@@ -87,11 +87,11 @@ describe('Internal Routes', () => {
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body) as {
         success: boolean;
-        data: { status: string; error: string };
+        data: { status: string; message: string };
       };
       expect(body.success).toBe(true);
       expect(body.data.status).toBe('failed');
-      expect(body.data.error).toBe('Linear service unavailable');
+      expect(body.data.message).toBe('Linear service unavailable');
     });
 
     it('returns 502 when connection repository fails', async () => {
@@ -149,14 +149,14 @@ describe('Internal Routes', () => {
         success: boolean;
         data: {
           status: string;
-          resource_url: string;
-          issue_identifier: string;
+          message: string;
+          resourceUrl: string;
         };
       };
       expect(body.success).toBe(true);
       expect(body.data.status).toBe('completed');
-      expect(body.data.resource_url).toBeDefined();
-      expect(body.data.issue_identifier).toBeDefined();
+      expect(body.data.message).toBeDefined();
+      expect(body.data.resourceUrl).toBeDefined();
     });
 
     it('returns 200 with failed status when extraction is invalid', async () => {
@@ -190,11 +190,11 @@ describe('Internal Routes', () => {
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body) as {
         success: boolean;
-        data: { status: string; error: string };
+        data: { status: string; message: string };
       };
       expect(body.success).toBe(true);
       expect(body.data.status).toBe('failed');
-      expect(body.data.error).toBe('Not a valid issue request');
+      expect(body.data.message).toBe('Not a valid issue request');
     });
 
     it('includes summary in payload when provided', async () => {
@@ -277,14 +277,14 @@ describe('Internal Routes', () => {
         success: boolean;
         data: {
           status: string;
-          resource_url: string;
-          issue_identifier: string;
+          message: string;
+          resourceUrl: string;
         };
       };
       expect(body.success).toBe(true);
       expect(body.data.status).toBe('completed');
-      expect(body.data.issue_identifier).toBe('ENG-99');
-      expect(body.data.resource_url).toBe('https://linear.app/team/issue/ENG-99');
+      expect(body.data.message).toContain('ENG-99');
+      expect(body.data.resourceUrl).toBe('https://linear.app/team/issue/ENG-99');
     });
 
     it('validates required action fields', async () => {
@@ -332,11 +332,11 @@ describe('Internal Routes', () => {
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body) as {
         success: boolean;
-        data: { status: string; error: string };
+        data: { status: string; message: string };
       };
       expect(body.success).toBe(true);
       expect(body.data.status).toBe('failed');
-      expect(body.data.error).toBe('LLM service unavailable');
+      expect(body.data.message).toBe('LLM service unavailable');
       expect(ctx.failedIssueRepository.count).toBe(1);
     });
   });

@@ -1,8 +1,10 @@
 import type { FastifyPluginCallback, FastifyRequest, FastifyReply } from 'fastify';
 import { validateInternalAuth, logIncomingRequest } from '@intexuraos/common-http';
+import type { ServiceFeedback } from '@intexuraos/common-core';
+import { ServiceErrorCodes } from '@intexuraos/common-core';
 import { getServices } from '../services.js';
 import { createTodo } from '../domain/usecases/createTodo.js';
-import type { Todo, TodoItem, TodoPriority, TodoStatus } from '../domain/models/todo.js';
+import type { TodoPriority, TodoStatus } from '../domain/models/todo.js';
 
 interface CreateTodoBody {
   userId: string;
@@ -19,7 +21,6 @@ interface CreateTodoBody {
 
 const todoPriorityEnum = ['low', 'medium', 'high', 'urgent'];
 const todoStatusEnum = ['draft', 'processing', 'pending', 'in_progress', 'completed', 'cancelled'];
-const todoItemStatusEnum = ['pending', 'completed'];
 
 const createTodoBodySchema = {
   type: 'object',
@@ -49,76 +50,6 @@ const createTodoBodySchema = {
   },
 } as const;
 
-const todoItemResponseSchema = {
-  type: 'object',
-  properties: {
-    id: { type: 'string' },
-    title: { type: 'string' },
-    status: { type: 'string', enum: todoItemStatusEnum },
-    priority: { type: ['string', 'null'], enum: [...todoPriorityEnum, null] },
-    dueDate: { type: ['string', 'null'], format: 'date-time' },
-    position: { type: 'number' },
-    completedAt: { type: ['string', 'null'], format: 'date-time' },
-    createdAt: { type: 'string', format: 'date-time' },
-    updatedAt: { type: 'string', format: 'date-time' },
-  },
-} as const;
-
-const todoResponseSchema = {
-  type: 'object',
-  properties: {
-    id: { type: 'string' },
-    userId: { type: 'string' },
-    title: { type: 'string' },
-    description: { type: ['string', 'null'] },
-    tags: { type: 'array', items: { type: 'string' } },
-    priority: { type: 'string', enum: todoPriorityEnum },
-    dueDate: { type: ['string', 'null'], format: 'date-time' },
-    source: { type: 'string' },
-    sourceId: { type: 'string' },
-    status: { type: 'string', enum: todoStatusEnum },
-    archived: { type: 'boolean' },
-    items: { type: 'array', items: todoItemResponseSchema },
-    completedAt: { type: ['string', 'null'], format: 'date-time' },
-    createdAt: { type: 'string', format: 'date-time' },
-    updatedAt: { type: 'string', format: 'date-time' },
-  },
-} as const;
-
-function formatTodoItem(item: TodoItem): object {
-  return {
-    id: item.id,
-    title: item.title,
-    status: item.status,
-    priority: item.priority,
-    dueDate: item.dueDate !== null ? item.dueDate.toISOString() : null,
-    position: item.position,
-    completedAt: item.completedAt !== null ? item.completedAt.toISOString() : null,
-    createdAt: item.createdAt.toISOString(),
-    updatedAt: item.updatedAt.toISOString(),
-  };
-}
-
-function formatTodo(todo: Todo): object {
-  return {
-    id: todo.id,
-    userId: todo.userId,
-    title: todo.title,
-    description: todo.description,
-    tags: todo.tags,
-    priority: todo.priority,
-    dueDate: todo.dueDate !== null ? todo.dueDate.toISOString() : null,
-    source: todo.source,
-    sourceId: todo.sourceId,
-    status: todo.status,
-    archived: todo.archived,
-    items: todo.items.map(formatTodoItem),
-    completedAt: todo.completedAt !== null ? todo.completedAt.toISOString() : null,
-    createdAt: todo.createdAt.toISOString(),
-    updatedAt: todo.updatedAt.toISOString(),
-  };
-}
-
 function parseDate(dateStr: string | null | undefined): Date | null {
   if (dateStr === null || dateStr === undefined) {
     return null;
@@ -141,15 +72,27 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             description: 'Created todo',
             type: 'object',
             properties: {
-              success: { type: 'boolean' },
+              success: { type: 'boolean', enum: [true] },
               data: {
                 type: 'object',
+                required: ['status', 'message'],
                 properties: {
-                  id: { type: 'string' },
-                  url: { type: 'string' },
-                  todo: todoResponseSchema,
+                  status: { type: 'string', enum: ['completed', 'failed'] },
+                  message: { type: 'string', description: 'Human-readable feedback message' },
+                  resourceUrl: { type: 'string', description: 'URL to created resource (success only)' },
+                  errorCode: { type: 'string', description: 'Error code for debugging (failure only)' },
                 },
               },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+          },
+          500: {
+            description: 'Internal Server Error',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
             },
           },
         },
@@ -189,12 +132,18 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       );
 
       if (!result.ok) {
-        return await reply.fail('INTERNAL_ERROR', result.error.message);
+        const feedback: ServiceFeedback = {
+          status: 'failed',
+          message: result.error.message,
+          errorCode: ServiceErrorCodes.EXTERNAL_API_ERROR,
+        };
+        void reply.status(500);
+        return await reply.ok(feedback);
       }
 
       const todo = result.value;
       const todoId = todo.id;
-      const url = `/#/todos/${todoId}`;
+      const resourceUrl = `/#/todos/${todoId}`;
 
       const publishResult = await todosProcessingPublisher.publishTodoCreated({
         todoId,
@@ -211,12 +160,14 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         request.log.info({ todoId }, 'Published todo processing event');
       }
 
+      const feedback: ServiceFeedback = {
+        status: 'completed',
+        message: `Todo "${todo.title}" created successfully`,
+        resourceUrl,
+      };
+
       void reply.status(201);
-      return await reply.ok({
-        id: todoId,
-        url,
-        todo: formatTodo(todo),
-      });
+      return await reply.ok(feedback);
     }
   );
 

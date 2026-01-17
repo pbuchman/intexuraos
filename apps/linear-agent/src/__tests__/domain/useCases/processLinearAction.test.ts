@@ -85,7 +85,7 @@ describe('processLinearAction', () => {
       if (result.ok) {
         expect(result.value.status).toBe('completed');
         expect(result.value.resourceUrl).toBeDefined();
-        expect(result.value.issueIdentifier).toMatch(/^ENG-\d+$/);
+        expect(result.value.message).toMatch(/Issue ENG-\d+ created successfully/);
       }
 
       // Verify no failed issues were created
@@ -177,7 +177,7 @@ describe('processLinearAction', () => {
       expect(result.ok).toBe(true);
       if (result.ok) {
         expect(result.value.status).toBe('failed');
-        expect(result.value.error).toBe('LLM service unavailable');
+        expect(result.value.message).toBe('LLM service unavailable');
       }
 
       // Verify failed issue was saved
@@ -216,7 +216,7 @@ describe('processLinearAction', () => {
       expect(result.ok).toBe(true);
       if (result.ok) {
         expect(result.value.status).toBe('failed');
-        expect(result.value.error).toBe('The input is too vague. Please provide more details.');
+        expect(result.value.message).toBe('The input is too vague. Please provide more details.');
       }
     });
 
@@ -259,7 +259,7 @@ describe('processLinearAction', () => {
         processedActionRepository: fakeProcessedActionRepo,
       });
 
-      expect(result.ok && result.value.error).toBe('Could not extract valid issue from message');
+      expect(result.ok && result.value.message).toBe('Could not extract valid issue from message');
     });
   });
 
@@ -293,7 +293,7 @@ describe('processLinearAction', () => {
       expect(result.ok).toBe(true);
       if (result.ok) {
         expect(result.value.status).toBe('failed');
-        expect(result.value.error).toBe('Linear API rate limit exceeded');
+        expect(result.value.message).toBe('Linear API rate limit exceeded');
       }
 
       // Verify failed issue was saved with extracted data
@@ -594,7 +594,7 @@ describe('processLinearAction', () => {
       expect(result.ok).toBe(true);
       if (result.ok) {
         expect(result.value.status).toBe('completed');
-        expect(result.value.issueIdentifier).toBe('ENG-42');
+        expect(result.value.message).toBe('Issue ENG-42 created successfully');
         expect(result.value.resourceUrl).toBe('https://linear.app/team/issue/ENG-42');
       }
 
@@ -617,7 +617,7 @@ describe('processLinearAction', () => {
       });
 
       expect(result1.ok && result1.value.status).toBe('completed');
-      const firstIdentifier = result1.ok ? result1.value.issueIdentifier : null;
+      const firstMessage = result1.ok ? result1.value.message : null;
 
       // Second request with same actionId should return existing result
       const result2 = await processLinearAction(defaultRequest, {
@@ -631,7 +631,7 @@ describe('processLinearAction', () => {
       expect(result2.ok).toBe(true);
       if (result2.ok) {
         expect(result2.value.status).toBe('completed');
-        expect(result2.value.issueIdentifier).toBe(firstIdentifier);
+        expect(result2.value.message).toBe(firstMessage);
       }
 
       // Only one issue should exist

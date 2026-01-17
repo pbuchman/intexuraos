@@ -19,7 +19,7 @@ describe('createTodosServiceHttpClient', () => {
   });
 
   describe('createTodo', () => {
-    it('returns todo on successful creation', async () => {
+    it('returns ActionFeedback on successful creation', async () => {
       nock(baseUrl)
         .post('/internal/todos')
         .matchHeader('X-Internal-Auth', internalAuthToken)
@@ -27,10 +27,9 @@ describe('createTodosServiceHttpClient', () => {
         .reply(200, {
           success: true,
           data: {
-            id: 'todo-123',
-            userId: 'user-456',
-            title: 'Buy groceries',
-            status: 'pending',
+            status: 'completed',
+            message: 'Todo created successfully',
+            resourceUrl: '/#/todos/todo-123',
           },
         });
 
@@ -46,10 +45,9 @@ describe('createTodosServiceHttpClient', () => {
 
       expect(isOk(result)).toBe(true);
       if (isOk(result)) {
-        expect(result.value.id).toBe('todo-123');
-        expect(result.value.userId).toBe('user-456');
-        expect(result.value.title).toBe('Buy groceries');
-        expect(result.value.status).toBe('pending');
+        expect(result.value.status).toBe('completed');
+        expect(result.value.message).toBe('Todo created successfully');
+        expect(result.value.resourceUrl).toBe('/#/todos/todo-123');
       }
     });
 
@@ -166,10 +164,9 @@ describe('createTodosServiceHttpClient', () => {
         .reply(200, {
           success: true,
           data: {
-            id: 'todo-new',
-            userId: 'user-456',
-            title: 'Buy groceries',
-            status: 'pending',
+            status: 'completed',
+            message: 'Todo created successfully',
+            resourceUrl: '/#/todos/todo-new',
           },
         });
 

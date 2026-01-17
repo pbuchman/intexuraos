@@ -3,10 +3,8 @@
  */
 
 import { ok, err, type Result, getErrorMessage } from '@intexuraos/common-core';
-import type {
-  LinearAgentClient,
-  ProcessLinearActionResponse,
-} from '../../domain/ports/linearAgentClient.js';
+import type { ServiceFeedback } from '@intexuraos/common-core';
+import type { LinearAgentClient } from '../../domain/ports/linearAgentClient.js';
 import pino, { type Logger } from 'pino';
 
 export interface LinearAgentHttpClientConfig {
@@ -24,9 +22,9 @@ interface ApiResponse {
   success: boolean;
   data?: {
     status: 'completed' | 'failed';
+    message: string;
     resourceUrl?: string;
-    issueIdentifier?: string;
-    error?: string;
+    errorCode?: string;
   };
   error?: { code: string; message: string };
 }
@@ -42,7 +40,7 @@ export function createLinearAgentHttpClient(
       userId: string,
       text: string,
       summary?: string
-    ): Promise<Result<ProcessLinearActionResponse>> {
+    ): Promise<Result<ServiceFeedback>> {
       const url = `${config.baseUrl}/internal/linear/process-action`;
       const timeoutMs = 60_000; // 60 second timeout
 
@@ -95,11 +93,11 @@ export function createLinearAgentHttpClient(
         return err(new Error(body.error?.message ?? 'Invalid response from linear-agent'));
       }
 
-      const result: ProcessLinearActionResponse = {
+      const result: ServiceFeedback = {
         status: body.data.status,
+        message: body.data.message,
         ...(body.data.resourceUrl !== undefined && { resourceUrl: body.data.resourceUrl }),
-        ...(body.data.issueIdentifier !== undefined && { issueIdentifier: body.data.issueIdentifier }),
-        ...(body.data.error !== undefined && { error: body.data.error }),
+        ...(body.data.errorCode !== undefined && { errorCode: body.data.errorCode }),
       };
 
       logger.info({ actionId, status: result.status }, 'Linear action processed');

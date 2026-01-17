@@ -1,8 +1,10 @@
 import type { FastifyPluginCallback, FastifyRequest, FastifyReply } from 'fastify';
 import { validateInternalAuth, logIncomingRequest } from '@intexuraos/common-http';
+import type { ServiceFeedback } from '@intexuraos/common-core';
+import { ServiceErrorCodes } from '@intexuraos/common-core';
 import { getServices } from '../services.js';
 import { createNote } from '../domain/usecases/createNote.js';
-import type { Note, NoteStatus } from '../domain/models/note.js';
+import type { NoteStatus } from '../domain/models/note.js';
 
 interface CreateNoteBody {
   userId: string;
@@ -30,37 +32,6 @@ const createNoteBodySchema = {
   },
 } as const;
 
-const noteResponseSchema = {
-  type: 'object',
-  properties: {
-    id: { type: 'string' },
-    userId: { type: 'string' },
-    title: { type: 'string' },
-    content: { type: 'string' },
-    tags: { type: 'array', items: { type: 'string' } },
-    status: { type: 'string', enum: noteStatusEnum },
-    source: { type: 'string' },
-    sourceId: { type: 'string' },
-    createdAt: { type: 'string', format: 'date-time' },
-    updatedAt: { type: 'string', format: 'date-time' },
-  },
-} as const;
-
-function formatNote(note: Note): object {
-  return {
-    id: note.id,
-    userId: note.userId,
-    title: note.title,
-    content: note.content,
-    tags: note.tags,
-    status: note.status,
-    source: note.source,
-    sourceId: note.sourceId,
-    createdAt: note.createdAt.toISOString(),
-    updatedAt: note.updatedAt.toISOString(),
-  };
-}
-
 export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   fastify.post<{ Body: CreateNoteBody }>(
     '/internal/notes',
@@ -76,15 +47,35 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             description: 'Created note',
             type: 'object',
             properties: {
-              success: { type: 'boolean' },
+              success: { type: 'boolean', enum: [true] },
               data: {
                 type: 'object',
+                required: ['status', 'message'],
                 properties: {
-                  id: { type: 'string' },
-                  url: { type: 'string' },
-                  note: noteResponseSchema,
+                  status: { type: 'string', enum: ['completed', 'failed'] },
+                  message: { type: 'string', description: 'Human-readable feedback message' },
+                  resourceUrl: { type: 'string', description: 'URL to created resource (success only)' },
+                  errorCode: { type: 'string', description: 'Error code for debugging (failure only)' },
                 },
               },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+          },
+          500: {
+            description: 'Internal Server Error',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [true] },
+              data: {
+                type: 'object',
+                required: ['status', 'message'],
+                properties: {
+                  status: { type: 'string', enum: ['failed'] },
+                  message: { type: 'string', description: 'Error message' },
+                  errorCode: { type: 'string', description: 'Error code for debugging' },
+                },
+              },
+              diagnostics: { $ref: 'Diagnostics#' },
             },
           },
         },
@@ -109,18 +100,27 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       });
 
       if (!result.ok) {
-        return await reply.fail('INTERNAL_ERROR', result.error.message);
+        const feedback: ServiceFeedback = {
+          status: 'failed',
+          message: result.error.message,
+          errorCode: ServiceErrorCodes.EXTERNAL_API_ERROR,
+        };
+        void reply.status(500);
+        return await reply.ok(feedback);
       }
 
-      const noteId = result.value.id;
-      const url = `/#/notes/${noteId}`;
+      const note = result.value;
+      const noteId = note.id;
+      const resourceUrl = `/#/notes/${noteId}`;
+
+      const feedback: ServiceFeedback = {
+        status: 'completed',
+        message: `Note "${note.title}" created successfully`,
+        resourceUrl,
+      };
 
       void reply.status(201);
-      return await reply.ok({
-        id: noteId,
-        url,
-        note: formatNote(result.value),
-      });
+      return await reply.ok(feedback);
     }
   );
 

@@ -3141,16 +3141,14 @@ describe('Internal Routes', () => {
       });
 
       expect(response.statusCode).toBe(200);
-      const body = JSON.parse(response.body) as { success: boolean; data: Research };
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: { status: string; message: string; resourceUrl?: string };
+      };
       expect(body.success).toBe(true);
-      expect(body.data.id).toBe('generated-id-123');
-      expect(body.data.userId).toBe(TEST_USER_ID);
-      expect(body.data.title).toBe('Test Draft Research');
-      expect(body.data.status).toBe('draft');
-      expect(body.data.selectedModels).toEqual([
-        LlmModels.Gemini25Pro,
-        LlmModels.O4MiniDeepResearch,
-      ]);
+      expect(body.data.status).toBe('completed');
+      expect(body.data.message).toBe('Research "Test Draft Research" created successfully');
+      expect(body.data.resourceUrl).toBe('/#/research/generated-id-123');
     });
 
     it('creates draft research with sourceActionId', async () => {
@@ -3168,9 +3166,13 @@ describe('Internal Routes', () => {
       });
 
       expect(response.statusCode).toBe(200);
-      const body = JSON.parse(response.body) as { success: boolean; data: Research };
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: { status: string; message: string; resourceUrl?: string };
+      };
       expect(body.success).toBe(true);
-      expect(body.data.sourceActionId).toBe('action-123');
+      expect(body.data.status).toBe('completed');
+      expect(body.data.resourceUrl).toBeDefined();
     });
 
     it('returns 401 when X-Internal-Auth header is missing', async () => {
@@ -3244,9 +3246,13 @@ describe('Internal Routes', () => {
       });
 
       expect(response.statusCode).toBe(500);
-      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
-      expect(body.success).toBe(false);
-      expect(body.error.code).toBe('INTERNAL_ERROR');
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: { status: string; message: string; errorCode?: string };
+      };
+      expect(body.success).toBe(true);
+      expect(body.data.status).toBe('failed');
+      expect(body.data.errorCode).toBe('EXTERNAL_API_ERROR');
     });
   });
 

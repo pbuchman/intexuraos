@@ -25,9 +25,9 @@ export interface ExecuteLinearActionDeps {
 
 export interface ExecuteLinearActionResult {
   status: 'completed' | 'failed';
+  message?: string;
   resourceUrl?: string;
-  issueIdentifier?: string;
-  error?: string;
+  errorCode?: string;
 }
 
 export type ExecuteLinearActionUseCase = (
@@ -55,14 +55,12 @@ export function createExecuteLinearActionUseCase(
 
     if (action.status === 'completed') {
       const resourceUrl = action.payload['resource_url'] as string | undefined;
-      const issueIdentifier = action.payload['issue_identifier'] as
-        | string
-        | undefined;
-      logger.info({ actionId, resourceUrl, issueIdentifier }, 'Action already completed, returning existing result');
+      const message = action.payload['message'] as string | undefined;
+      logger.info({ actionId, resourceUrl }, 'Action already completed, returning existing result');
       return ok({
         status: 'completed' as const,
+        ...(message !== undefined && { message }),
         ...(resourceUrl !== undefined && { resourceUrl }),
-        ...(issueIdentifier !== undefined && { issueIdentifier }),
       });
     }
 
@@ -110,7 +108,7 @@ export function createExecuteLinearActionUseCase(
         status: 'failed',
         payload: {
           ...action.payload,
-          error: result.error.message,
+          message: result.error.message,
         },
         updatedAt: new Date().toISOString(),
       };
@@ -118,41 +116,43 @@ export function createExecuteLinearActionUseCase(
       logger.info({ actionId, status: 'failed' }, 'Action marked as failed');
       return ok({
         status: 'failed',
-        error: result.error.message,
+        message: result.error.message,
       });
     }
 
     const response = result.value;
 
     if (response.status === 'failed') {
-      const errorMessage = response.error ?? 'Unknown error';
-      logger.info({ actionId, error: errorMessage }, 'Linear action failed');
+      const errorMessage = response.message;
+      logger.info({ actionId, message: errorMessage }, 'Linear action failed');
       const failedAction: Action = {
         ...action,
         status: 'failed',
         payload: {
           ...action.payload,
-          error: errorMessage,
+          message: errorMessage,
+          ...(response.errorCode !== undefined && { errorCode: response.errorCode }),
         },
         updatedAt: new Date().toISOString(),
       };
       await actionRepository.update(failedAction);
       return ok({
         status: 'failed',
-        error: errorMessage,
+        message: errorMessage,
+        ...(response.errorCode !== undefined && { errorCode: response.errorCode }),
       });
     }
 
-    const { resourceUrl, issueIdentifier } = response;
-    logger.info({ actionId, resourceUrl, issueIdentifier }, 'Linear action completed successfully');
+    const { resourceUrl, message } = response;
+    logger.info({ actionId, resourceUrl }, 'Linear action completed successfully');
 
     const completedAction: Action = {
       ...action,
       status: 'completed',
       payload: {
         ...action.payload,
+        message,
         ...(resourceUrl !== undefined && { resource_url: resourceUrl }),
-        ...(issueIdentifier !== undefined && { issue_identifier: issueIdentifier }),
       },
       updatedAt: new Date().toISOString(),
     };
@@ -161,14 +161,13 @@ export function createExecuteLinearActionUseCase(
     logger.info({ actionId, status: 'completed' }, 'Action marked as completed');
 
     if (resourceUrl !== undefined) {
-      const identifier = issueIdentifier !== undefined ? ` (${issueIdentifier})` : '';
-      const message = `Linear issue created: "${action.title}"${identifier}. View it here: ${resourceUrl}`;
+      const whatsappMessage = `${message} View it here: ${resourceUrl}`;
 
       logger.info({ actionId, userId: action.userId }, 'Sending WhatsApp completion notification');
 
       const publishResult = await whatsappPublisher.publishSendMessage({
         userId: action.userId,
-        message,
+        message: whatsappMessage,
         correlationId: `linear-complete-${actionId}`,
       });
 
@@ -183,14 +182,14 @@ export function createExecuteLinearActionUseCase(
     }
 
     logger.info(
-      { actionId, resourceUrl, issueIdentifier, status: 'completed' },
+      { actionId, resourceUrl, status: 'completed' },
       'Linear action execution completed successfully'
     );
 
     return ok({
       status: 'completed',
+      message,
       ...(resourceUrl !== undefined && { resourceUrl }),
-      ...(issueIdentifier !== undefined && { issueIdentifier }),
     });
   };
 }

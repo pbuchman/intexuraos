@@ -1,4 +1,4 @@
-import type { Result } from '@intexuraos/common-core';
+import type { Result, ServiceFeedback } from '@intexuraos/common-core';
 import type { ResearchModel } from '@intexuraos/llm-contract';
 
 export interface ResearchServiceClient {
@@ -8,5 +8,5 @@ export interface ResearchServiceClient {
     prompt: string;
     selectedModels: ResearchModel[];
     sourceActionId?: string;
-  }): Promise<Result<{ id: string }>>;
+  }): Promise<Result<ServiceFeedback>>;
 }

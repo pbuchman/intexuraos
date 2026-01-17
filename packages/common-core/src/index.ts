@@ -22,3 +22,15 @@ export {
   toDateOrNull,
   toISOStringOrNull,
 } from './nullability.js';
+
+// Service feedback contract (cross-service communication)
+export type { ServiceFeedback } from './serviceFeedback.js';
+export {
+  isSuccessFeedback,
+  isFailureFeedback,
+  successFeedback,
+  failureFeedback,
+} from './serviceFeedback.js';
+
+// Service error codes
+export { ServiceErrorCodes, type ServiceErrorCode } from './serviceErrorCodes.js';

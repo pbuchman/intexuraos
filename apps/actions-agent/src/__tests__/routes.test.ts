@@ -156,7 +156,11 @@ describe('Research Agent Routes', () => {
 
     describe('Pub/Sub OIDC authentication', () => {
       it('accepts Pub/Sub push with from: noreply@google.com header (no x-internal-auth)', async () => {
-        fakeResearchClient.setNextResearchId('research-123');
+        fakeResearchClient.setNextResponse({
+          status: 'completed',
+          message: 'Research draft created successfully',
+          resourceUrl: '/#/research/research-123',
+        });
         await fakeActionRepository.save({
           id: 'action-123',
           userId: 'user-456',
@@ -1466,12 +1470,12 @@ describe('Research Agent Routes', () => {
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body) as {
         success: boolean;
-        data: { actionId: string; status: string; resource_url: string };
+        data: { actionId: string; status: string; resourceUrl: string };
       };
       expect(body.success).toBe(true);
       expect(body.data.actionId).toBe('action-1');
       expect(body.data.status).toBe('completed');
-      expect(body.data.resource_url).toBeDefined();
+      expect(body.data.resourceUrl).toBeDefined();
     });
 
     it('returns 500 when execution fails', async () => {
@@ -1618,16 +1622,16 @@ describe('Research Agent Routes', () => {
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body) as {
         success: boolean;
-        data: { actionId: string; status: string; resource_url: string };
+        data: { actionId: string; status: string; resourceUrl: string };
       };
       expect(body.success).toBe(true);
       expect(body.data.status).toBe('completed');
-      expect(body.data.resource_url).toBe('/#/bookmarks/bookmark-456');
+      expect(body.data.resourceUrl).toBe('/#/bookmarks/bookmark-456');
 
       const updatedAction = await fakeActionRepository.getById('action-1');
       expect(updatedAction?.status).toBe('completed');
       expect(updatedAction?.payload['bookmarkId']).toBe('bookmark-456');
-      expect(updatedAction?.payload['resource_url']).toBe('/#/bookmarks/bookmark-456');
+      expect(updatedAction?.payload['resourceUrl']).toBe('/#/bookmarks/bookmark-456');
     });
 
     it('returns 400 when action has no existingBookmarkId', async () => {

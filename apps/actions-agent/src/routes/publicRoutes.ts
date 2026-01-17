@@ -444,7 +444,7 @@ export const publicRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                 properties: {
                   actionId: { type: 'string' },
                   status: { type: 'string', enum: ['completed', 'failed'] },
-                  resource_url: { type: 'string' },
+                  resourceUrl: { type: 'string' },
                   error: { type: 'string' },
                   existingBookmarkId: { type: 'string' },
                 },
@@ -568,7 +568,7 @@ export const publicRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                 properties: {
                   actionId: { type: 'string' },
                   status: { type: 'string', enum: ['rejected', 'completed'] },
-                  resource_url: { type: 'string' },
+                  resourceUrl: { type: 'string' },
                 },
                 required: ['actionId', 'status'],
               },
@@ -667,7 +667,7 @@ export const publicRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       action.payload = {
         ...action.payload,
         bookmarkId: existingBookmarkId,
-        resource_url: `/#/bookmarks/${existingBookmarkId}`,
+        resourceUrl: `/#/bookmarks/${existingBookmarkId}`,
       };
       action.updatedAt = new Date().toISOString();
       await services.actionRepository.update(action);
@@ -675,7 +675,7 @@ export const publicRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       return await reply.ok({
         actionId,
         status: 'completed',
-        resource_url: `/#/bookmarks/${existingBookmarkId}`,
+        resourceUrl: `/#/bookmarks/${existingBookmarkId}`,
       });
     }
   );

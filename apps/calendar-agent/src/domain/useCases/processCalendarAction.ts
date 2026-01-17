@@ -7,8 +7,8 @@
  * 3. Saving failed extractions for manual review
  */
 
-import { err, ok, type Result } from '@intexuraos/common-core';
-import type { Logger } from '@intexuraos/common-core';
+import { err, ok, type Result, ServiceErrorCodes } from '@intexuraos/common-core';
+import type { Logger, ServiceFeedback } from '@intexuraos/common-core';
 import type { CalendarError } from '../errors.js';
 import type { CreateEventInput } from '../models.js';
 import type {
@@ -35,11 +35,7 @@ export interface ProcessCalendarActionRequest {
   text: string;
 }
 
-export interface ProcessCalendarActionResponse {
-  status: 'completed' | 'failed';
-  resourceUrl?: string;
-  error?: string;
-}
+export type ProcessCalendarActionResponse = ServiceFeedback;
 
 function toCalendarError(error: ExtractionError): CalendarError {
   return {
@@ -116,6 +112,7 @@ export async function processCalendarAction(
     );
     return ok({
       status: 'completed',
+      message: 'Calendar event created successfully',
       resourceUrl: existing.resourceUrl,
     });
   }
@@ -170,7 +167,8 @@ export async function processCalendarAction(
 
     return ok({
       status: 'failed',
-      error: errorMessage,
+      message: errorMessage,
+      errorCode: ServiceErrorCodes.EXTRACTION_FAILED,
     });
   }
 
@@ -199,7 +197,8 @@ export async function processCalendarAction(
 
     return ok({
       status: 'failed',
-      error: 'Invalid date format',
+      message: 'Invalid date format',
+      errorCode: ServiceErrorCodes.VALIDATION_ERROR,
     });
   }
 
@@ -255,7 +254,8 @@ export async function processCalendarAction(
 
     return ok({
       status: 'failed',
-      error: createResult.error.message,
+      message: createResult.error.message,
+      errorCode: ServiceErrorCodes.EXTERNAL_API_ERROR,
     });
   }
 
@@ -283,6 +283,7 @@ export async function processCalendarAction(
 
   return ok({
     status: 'completed',
+    message: `Event "${createdEvent.summary}" created successfully`,
     resourceUrl,
   });
 }

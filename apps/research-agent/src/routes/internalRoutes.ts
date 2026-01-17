@@ -8,7 +8,8 @@
 
 import type { FastifyPluginCallback, FastifyReply, FastifyRequest } from 'fastify';
 import { validateInternalAuth, logIncomingRequest } from '@intexuraos/common-http';
-import { getErrorMessage } from '@intexuraos/common-core';
+import { getErrorMessage, ServiceErrorCodes } from '@intexuraos/common-core';
+import type { ServiceFeedback } from '@intexuraos/common-core';
 import type { Logger } from 'pino';
 import {
   checkLlmCompletion,
@@ -20,7 +21,7 @@ import {
 import { formatLlmError } from '../domain/research/formatLlmError.js';
 import { getProviderForModel, LlmModels } from '@intexuraos/llm-contract';
 import { getServices, type DecryptedApiKeys } from '../services.js';
-import { supportedModelSchema, researchSchema } from './schemas/index.js';
+import { supportedModelSchema } from './schemas/index.js';
 import { createSynthesisProviders } from './helpers/synthesisHelper.js';
 import { handleAllCompleted } from './helpers/completionHandlers.js';
 
@@ -102,8 +103,18 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             description: 'Draft research created',
             type: 'object',
             properties: {
-              success: { type: 'boolean' },
-              data: researchSchema,
+              success: { type: 'boolean', enum: [true] },
+              data: {
+                type: 'object',
+                required: ['status', 'message'],
+                properties: {
+                  status: { type: 'string', enum: ['completed', 'failed'] },
+                  message: { type: 'string', description: 'Human-readable feedback message' },
+                  resourceUrl: { type: 'string', description: 'URL to created resource (success only)' },
+                  errorCode: { type: 'string', description: 'Error code for debugging (failure only)' },
+                },
+              },
+              diagnostics: { $ref: 'Diagnostics#' },
             },
           },
           401: {
@@ -111,6 +122,23 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             type: 'object',
             properties: {
               error: { type: 'string' },
+            },
+          },
+          500: {
+            description: 'Internal Server Error',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [true] },
+              data: {
+                type: 'object',
+                required: ['status', 'message'],
+                properties: {
+                  status: { type: 'string', enum: ['failed'] },
+                  message: { type: 'string', description: 'Error message' },
+                  errorCode: { type: 'string', description: 'Error code for debugging' },
+                },
+              },
+              diagnostics: { $ref: 'Diagnostics#' },
             },
           },
         },
@@ -162,11 +190,24 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           { researchId, error: saveResult.error.message },
           '[1.2] Failed to save draft research'
         );
-        return await reply.fail('INTERNAL_ERROR', saveResult.error.message);
+        const feedback: ServiceFeedback = {
+          status: 'failed',
+          message: saveResult.error.message,
+          errorCode: ServiceErrorCodes.EXTERNAL_API_ERROR,
+        };
+        void reply.status(500);
+        return await reply.ok(feedback);
       }
 
+      const resourceUrl = `/#/research/${researchId}`;
+      const feedback: ServiceFeedback = {
+        status: 'completed',
+        message: `Research "${body.title}" created successfully`,
+        resourceUrl,
+      };
+
       request.log.info({ researchId }, '[1.3] Draft research created successfully');
-      return await reply.ok(saveResult.value);
+      return await reply.ok(feedback);
     }
   );
 
