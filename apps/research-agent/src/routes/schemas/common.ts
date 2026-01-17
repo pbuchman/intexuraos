@@ -91,6 +91,7 @@ export const researchSchema = {
     userId: { type: 'string' },
     title: { type: 'string' },
     prompt: { type: 'string' },
+    originalPrompt: { type: 'string', nullable: true },
     selectedModels: {
       type: 'array',
       items: supportedModelSchema,

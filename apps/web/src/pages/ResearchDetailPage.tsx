@@ -786,12 +786,25 @@ export function ResearchDetailPage(): React.JSX.Element {
         ) : null}
       </div>
 
-      <Card title="Original Prompt" className="mb-6">
+      <Card
+        title={research.originalPrompt !== undefined ? 'Improved Prompt' : 'Prompt'}
+        className="mb-6"
+      >
         <blockquote className="border-l-4 border-blue-400 bg-slate-50 py-3 pl-4 pr-3 italic">
           <p className="whitespace-pre-wrap text-slate-700">
             {renderPromptWithLinks(research.prompt)}
           </p>
         </blockquote>
+        {research.originalPrompt !== undefined ? (
+          <details className="mt-3">
+            <summary className="cursor-pointer text-sm text-slate-500 hover:text-slate-700">
+              Show original prompt
+            </summary>
+            <blockquote className="mt-2 border-l-4 border-slate-300 bg-slate-100 py-2 pl-4 pr-3 text-sm italic text-slate-500">
+              <p className="whitespace-pre-wrap">{research.originalPrompt}</p>
+            </blockquote>
+          </details>
+        ) : null}
       </Card>
 
       {/* Research Summary - show when we have usage data */}

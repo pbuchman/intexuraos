@@ -88,6 +88,8 @@ export interface Research {
   userId: string;
   title: string;
   prompt: string;
+  /** Original user prompt before improvement. Only set when user accepted an improved suggestion. */
+  originalPrompt?: string;
   selectedModels: ResearchModel[];
   synthesisModel: ResearchModel;
   status: ResearchStatus;
@@ -125,6 +127,7 @@ export function createResearch(params: {
   id: string;
   userId: string;
   prompt: string;
+  originalPrompt?: string;
   selectedModels: ResearchModel[];
   synthesisModel: ResearchModel;
   inputContexts?: { content: string; label?: string | undefined }[];
@@ -143,6 +146,10 @@ export function createResearch(params: {
     startedAt: now,
     favourite: false,
   };
+
+  if (params.originalPrompt !== undefined) {
+    research.originalPrompt = params.originalPrompt;
+  }
 
   if (params.inputContexts !== undefined && params.inputContexts.length > 0) {
     research.inputContexts = params.inputContexts.map((ctx, idx) => {
