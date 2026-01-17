@@ -410,6 +410,13 @@ resource "google_project_iam_member" "linear_agent_firestore" {
   member  = "serviceAccount:${google_service_account.linear_agent.email}"
 }
 
+# Calendar Agent: Firestore access
+resource "google_project_iam_member" "calendar_agent_firestore" {
+  project = var.project_id
+  role    = "roles/datastore.user"
+  member  = "serviceAccount:${google_service_account.calendar_agent.email}"
+}
+
 
 # All services: Cloud Logging (automatic for Cloud Run, but explicit)
 resource "google_project_iam_member" "user_service_logging" {
