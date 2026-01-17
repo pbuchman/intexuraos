@@ -1566,6 +1566,31 @@ describe('Research Routes - Authenticated', () => {
       expect(body.error.message).toContain('claude-opus-4-5');
     });
 
+    it('returns 503 when API key is missing for inherited synthesis model', async () => {
+      const token = await createToken(TEST_USER_ID);
+      const source = createCompletedResearch({
+        synthesisModel: LlmModels.ClaudeOpus45,
+      });
+      fakeRepo.addResearch(source);
+      fakeUserServiceClient.setApiKeys(TEST_USER_ID, { google: 'test-google-key' });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/research/${source.id}/enhance`,
+        headers: { authorization: `Bearer ${token}` },
+        payload: { additionalContexts: [{ content: 'New context' }] },
+      });
+
+      expect(response.statusCode).toBe(503);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string; message: string };
+      };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('MISCONFIGURED');
+      expect(body.error.message).toContain('claude-opus-4-5');
+    });
+
     it('returns 500 when API key fetch fails', async () => {
       const token = await createToken(TEST_USER_ID);
       const source = createCompletedResearch();
@@ -1577,6 +1602,23 @@ describe('Research Routes - Authenticated', () => {
         url: `/research/${source.id}/enhance`,
         headers: { authorization: `Bearer ${token}` },
         payload: { additionalModels: [LlmModels.ClaudeOpus45] },
+      });
+
+      expect(response.statusCode).toBe(500);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INTERNAL_ERROR');
+    });
+
+    it('returns 500 when source research fetch fails', async () => {
+      const token = await createToken(TEST_USER_ID);
+      fakeRepo.setFailNextFind(true);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/research/some-research-id/enhance',
+        headers: { authorization: `Bearer ${token}` },
+        payload: { additionalContexts: [{ content: 'New context' }] },
       });
 
       expect(response.statusCode).toBe(500);
