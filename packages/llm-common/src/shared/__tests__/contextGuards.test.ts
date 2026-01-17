@@ -7,6 +7,7 @@ import {
   isSafetyInfo,
   isStringArray,
   isObject,
+  isPrimitive,
 } from '../contextGuards.js';
 
 describe('DOMAINS constant', () => {
@@ -88,9 +89,50 @@ describe('isMode', () => {
   });
 });
 
+describe('isPrimitive', () => {
+  it('returns true for string values', () => {
+    expect(isPrimitive('hello')).toBe(true);
+    expect(isPrimitive('')).toBe(true);
+  });
+
+  it('returns true for number values', () => {
+    expect(isPrimitive(42)).toBe(true);
+    expect(isPrimitive(3.14)).toBe(true);
+    expect(isPrimitive(0)).toBe(true);
+    expect(isPrimitive(-1)).toBe(true);
+  });
+
+  it('returns true for boolean values', () => {
+    expect(isPrimitive(true)).toBe(true);
+    expect(isPrimitive(false)).toBe(true);
+  });
+
+  it('returns false for non-primitive values', () => {
+    expect(isPrimitive(null)).toBe(false);
+    expect(isPrimitive(undefined)).toBe(false);
+    expect(isPrimitive({})).toBe(false);
+    expect(isPrimitive([])).toBe(false);
+    expect(isPrimitive(() => undefined)).toBe(false);
+  });
+});
+
 describe('isDefaultApplied', () => {
-  it('returns true for valid default applied', () => {
+  it('returns true for valid default applied with string value', () => {
     expect(isDefaultApplied({ key: 'test', value: 'val', reason: 'why' })).toBe(true);
+  });
+
+  it('returns true for valid default applied with number value', () => {
+    expect(isDefaultApplied({ key: 'prefers_recent_years', value: 2, reason: 'recency' })).toBe(
+      true
+    );
+    expect(isDefaultApplied({ key: 'max_items', value: 10, reason: 'limit' })).toBe(true);
+  });
+
+  it('returns true for valid default applied with boolean value', () => {
+    expect(isDefaultApplied({ key: 'include_sources', value: true, reason: 'transparency' })).toBe(
+      true
+    );
+    expect(isDefaultApplied({ key: 'skip_cache', value: false, reason: 'performance' })).toBe(true);
   });
 
   it('returns false for invalid values', () => {
@@ -98,6 +140,12 @@ describe('isDefaultApplied', () => {
     expect(isDefaultApplied({})).toBe(false);
     expect(isDefaultApplied({ key: 'test' })).toBe(false);
     expect(isDefaultApplied('string')).toBe(false);
+  });
+
+  it('returns false when value is object or array', () => {
+    expect(isDefaultApplied({ key: 'test', value: {}, reason: 'why' })).toBe(false);
+    expect(isDefaultApplied({ key: 'test', value: [], reason: 'why' })).toBe(false);
+    expect(isDefaultApplied({ key: 'test', value: null, reason: 'why' })).toBe(false);
   });
 });
 
