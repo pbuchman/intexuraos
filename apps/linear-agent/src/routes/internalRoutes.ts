@@ -58,10 +58,17 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             description: 'Success',
             type: 'object',
             properties: {
-              status: { type: 'string', enum: ['completed', 'failed'] },
-              resource_url: { type: 'string', description: 'Frontend URL for created issue' },
-              issue_identifier: { type: 'string', description: 'Linear issue identifier (e.g., INT-123)' },
-              error: { type: 'string', description: 'Error message if failed' },
+              success: { type: 'boolean', enum: [true] },
+              data: {
+                type: 'object',
+                properties: {
+                  status: { type: 'string', enum: ['completed', 'failed'] },
+                  resource_url: { type: 'string', description: 'Frontend URL for created issue' },
+                  issue_identifier: { type: 'string', description: 'Linear issue identifier (e.g., INT-123)' },
+                  error: { type: 'string', description: 'Error message if failed' },
+                },
+              },
+              diagnostics: { $ref: 'Diagnostics#' },
             },
           },
           401: {
@@ -137,7 +144,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         'internal/processLinearAction: complete'
       );
 
-      return await reply.send({
+      return await reply.ok({
         status: result.value.status,
         resource_url: result.value.resourceUrl,
         issue_identifier: result.value.issueIdentifier,

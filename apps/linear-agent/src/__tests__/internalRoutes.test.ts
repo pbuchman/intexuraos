@@ -85,9 +85,13 @@ describe('Internal Routes', () => {
       });
 
       expect(response.statusCode).toBe(200);
-      const body = JSON.parse(response.body) as { status: string; error: string };
-      expect(body.status).toBe('failed');
-      expect(body.error).toBe('Linear service unavailable');
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: { status: string; error: string };
+      };
+      expect(body.success).toBe(true);
+      expect(body.data.status).toBe('failed');
+      expect(body.data.error).toBe('Linear service unavailable');
     });
 
     it('returns 502 when connection repository fails', async () => {
@@ -142,13 +146,17 @@ describe('Internal Routes', () => {
 
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body) as {
-        status: string;
-        resource_url: string;
-        issue_identifier: string;
+        success: boolean;
+        data: {
+          status: string;
+          resource_url: string;
+          issue_identifier: string;
+        };
       };
-      expect(body.status).toBe('completed');
-      expect(body.resource_url).toBeDefined();
-      expect(body.issue_identifier).toBeDefined();
+      expect(body.success).toBe(true);
+      expect(body.data.status).toBe('completed');
+      expect(body.data.resource_url).toBeDefined();
+      expect(body.data.issue_identifier).toBeDefined();
     });
 
     it('returns 200 with failed status when extraction is invalid', async () => {
@@ -180,9 +188,13 @@ describe('Internal Routes', () => {
       });
 
       expect(response.statusCode).toBe(200);
-      const body = JSON.parse(response.body) as { status: string; error: string };
-      expect(body.status).toBe('failed');
-      expect(body.error).toBe('Not a valid issue request');
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: { status: string; error: string };
+      };
+      expect(body.success).toBe(true);
+      expect(body.data.status).toBe('failed');
+      expect(body.data.error).toBe('Not a valid issue request');
     });
 
     it('includes summary in payload when provided', async () => {
@@ -223,8 +235,12 @@ describe('Internal Routes', () => {
       });
 
       expect(response.statusCode).toBe(200);
-      const body = JSON.parse(response.body) as { status: string };
-      expect(body.status).toBe('completed');
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: { status: string };
+      };
+      expect(body.success).toBe(true);
+      expect(body.data.status).toBe('completed');
     });
 
     it('returns existing result for already processed action (idempotency)', async () => {
@@ -258,13 +274,17 @@ describe('Internal Routes', () => {
 
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body) as {
-        status: string;
-        resource_url: string;
-        issue_identifier: string;
+        success: boolean;
+        data: {
+          status: string;
+          resource_url: string;
+          issue_identifier: string;
+        };
       };
-      expect(body.status).toBe('completed');
-      expect(body.issue_identifier).toBe('ENG-99');
-      expect(body.resource_url).toBe('https://linear.app/team/issue/ENG-99');
+      expect(body.success).toBe(true);
+      expect(body.data.status).toBe('completed');
+      expect(body.data.issue_identifier).toBe('ENG-99');
+      expect(body.data.resource_url).toBe('https://linear.app/team/issue/ENG-99');
     });
 
     it('validates required action fields', async () => {
@@ -310,9 +330,13 @@ describe('Internal Routes', () => {
       });
 
       expect(response.statusCode).toBe(200);
-      const body = JSON.parse(response.body) as { status: string; error: string };
-      expect(body.status).toBe('failed');
-      expect(body.error).toBe('LLM service unavailable');
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: { status: string; error: string };
+      };
+      expect(body.success).toBe(true);
+      expect(body.data.status).toBe('failed');
+      expect(body.data.error).toBe('LLM service unavailable');
       expect(ctx.failedIssueRepository.count).toBe(1);
     });
   });
