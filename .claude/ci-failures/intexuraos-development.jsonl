@@ -26,3 +26,5 @@
 {"ts":"2026-01-17T11:33:49.961Z","project":"intexuraos","branch":"development","workspace":"user-service","runNumber":26,"passed":true,"durationMs":38043,"failureCount":0,"failures":[]}
 {"ts":"2026-01-17T11:34:28.343Z","project":"intexuraos","branch":"development","workspace":"web-agent","runNumber":27,"passed":true,"durationMs":38094,"failureCount":0,"failures":[]}
 {"ts":"2026-01-17T11:35:13.574Z","project":"intexuraos","branch":"development","workspace":"whatsapp-service","runNumber":28,"passed":true,"durationMs":44945,"failureCount":0,"failures":[]}
+{"ts":"2026-01-17T16:57:17.302Z","project":"intexuraos","branch":"development","workspace":"--","runNumber":29,"passed":false,"durationMs":343,"failureCount":0,"failures":[]}
+{"ts":"2026-01-17T17:04:43.639Z","project":"intexuraos","branch":"development","runNumber":30,"passed":true,"durationMs":134045,"failureCount":0,"failures":[]}

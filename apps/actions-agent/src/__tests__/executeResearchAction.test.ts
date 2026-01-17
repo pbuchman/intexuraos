@@ -152,6 +152,37 @@ describe('executeResearchAction usecase', () => {
     expect(updatedAction?.status).toBe('failed');
   });
 
+  it('handles failed response status with error code', async () => {
+    const action = createAction({ status: 'awaiting_approval' });
+    await fakeActionRepo.save(action);
+    fakeResearchClient.setNextResponse({
+      status: 'failed',
+      message: 'Context inference failed',
+      errorCode: 'EXTRACTION_FAILED',
+    });
+
+    const usecase = createExecuteResearchActionUseCase({
+      actionRepository: fakeActionRepo,
+      researchServiceClient: fakeResearchClient,
+      whatsappPublisher: fakeWhatsappPublisher,
+      webAppUrl: 'https://app.test.com',
+      logger: silentLogger,
+    });
+
+    const result = await usecase('action-123');
+
+    expect(isOk(result)).toBe(true);
+    if (isOk(result)) {
+      expect(result.value.status).toBe('failed');
+      expect(result.value.message).toBe('Context inference failed');
+      expect(result.value.errorCode).toBe('EXTRACTION_FAILED');
+    }
+
+    const updatedAction = await fakeActionRepo.getById('action-123');
+    expect(updatedAction?.status).toBe('failed');
+    expect(updatedAction?.payload['errorCode']).toBe('EXTRACTION_FAILED');
+  });
+
   it('allows execution from failed status (retry)', async () => {
     const action = createAction({ status: 'failed' });
     await fakeActionRepo.save(action);

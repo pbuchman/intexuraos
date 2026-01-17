@@ -42,9 +42,9 @@ LinearIssuesPage.tsx
 async function mapIssuesWithBatchedStates(issues: Issue[]): Promise<LinearIssue[]> {
   const statePromises = issues.map(async (issue) => {
     const state = issue.state;
-    return state !== undefined ? await state : null;  // ← Each await = 1 GraphQL query
+    return state !== undefined ? await state : null; // ← Each await = 1 GraphQL query
   });
-  const states = await Promise.all(statePromises);  // ← Parallel, but still N queries
+  const states = await Promise.all(statePromises); // ← Parallel, but still N queries
   // ...
 }
 ```
@@ -55,49 +55,49 @@ async function mapIssuesWithBatchedStates(issues: Issue[]): Promise<LinearIssue[
 
 #### Per Dashboard Load
 
-| Operation                    | API Calls | Notes                                  |
-| ---------------------------- | --------- | -------------------------------------- |
-| List issues                  | 1         | `client.issues({ filter, first: 100 })` |
-| Fetch states                 | N         | One per issue returned                 |
-| **Total per load**           | **N + 1** |                                        |
+| Operation          | API Calls | Notes                                   |
+| ------------------ | --------- | --------------------------------------- |
+| List issues        | 1         | `client.issues({ filter, first: 100 })` |
+| Fetch states       | N         | One per issue returned                  |
+| **Total per load** | **N + 1** |                                         |
 
 #### For 30-Issue Dashboard (Scenario in Issue)
 
-| Metric                    | Value    | Calculation                 |
-| ------------------------- | -------- | --------------------------- |
-| Issues returned           | 30       | 10 open + 20 closed/3 days  |
-| API calls per load        | 31       | 1 (list) + 30 (states)      |
-| Loads per hour (polling)  | 60       | 1 per minute                |
-| API calls per hour        | 1,860    | 31 × 60                     |
-| API calls per 8-hour day  | 14,880   | 1,860 × 8                   |
+| Metric                   | Value  | Calculation                |
+| ------------------------ | ------ | -------------------------- |
+| Issues returned          | 30     | 10 open + 20 closed/3 days |
+| API calls per load       | 31     | 1 (list) + 30 (states)     |
+| Loads per hour (polling) | 60     | 1 per minute               |
+| API calls per hour       | 1,860  | 31 × 60                    |
+| API calls per 8-hour day | 14,880 | 1,860 × 8                  |
 
 #### For 100 Issues (Current `first: 100` Limit)
 
-| Metric                    | Value    | Calculation                 |
-| ------------------------- | -------- | --------------------------- |
-| API calls per load        | 101      | 1 (list) + 100 (states)     |
-| API calls per hour        | 6,060    | 101 × 60                    |
-| API calls per 8-hour day  | 48,480   | 6,060 × 8                   |
+| Metric                   | Value  | Calculation             |
+| ------------------------ | ------ | ----------------------- |
+| API calls per load       | 101    | 1 (list) + 100 (states) |
+| API calls per hour       | 6,060  | 101 × 60                |
+| API calls per 8-hour day | 48,480 | 6,060 × 8               |
 
 ### 4. Why Caching Doesn't Help
 
 The current caching implementation has two components:
 
-| Cache Type         | TTL       | Purpose                           | Effectiveness  |
-| ------------------ | --------- | --------------------------------- | -------------- |
-| Client cache       | 5 minutes | Reuse LinearClient instances      | ✅ Helps       |
-| Request dedup      | 10 seconds| Prevent duplicate in-flight calls | ❌ Not enough  |
+| Cache Type    | TTL        | Purpose                           | Effectiveness |
+| ------------- | ---------- | --------------------------------- | ------------- |
+| Client cache  | 5 minutes  | Reuse LinearClient instances      | ✅ Helps      |
+| Request dedup | 10 seconds | Prevent duplicate in-flight calls | ❌ Not enough |
 
 **Problem:** The 10-second dedup TTL is shorter than the 60-second polling interval. Each poll is a fresh request, triggering full N+1 queries again.
 
 ### 5. Other API Call Sources
 
-| Endpoint                      | API Calls | Frequency          |
-| ----------------------------- | --------- | ------------------ |
-| `/linear/connection`          | 0         | Firestore only     |
-| `/linear/connection/validate` | 2         | On connect         |
-| `/linear/failed-issues`       | 0         | Firestore only     |
-| `/linear/issues`              | N+1       | Every 60 seconds   |
+| Endpoint                      | API Calls | Frequency        |
+| ----------------------------- | --------- | ---------------- |
+| `/linear/connection`          | 0         | Firestore only   |
+| `/linear/connection/validate` | 2         | On connect       |
+| `/linear/failed-issues`       | 0         | Firestore only   |
+| `/linear/issues`              | N+1       | Every 60 seconds |
 
 ---
 
@@ -154,20 +154,21 @@ Reference: https://developers.linear.app/docs/graphql/working-with-the-graphql-a
 
 ## Files Analyzed
 
-| File                                                           | Purpose                    |
-| -------------------------------------------------------------- | -------------------------- |
-| `apps/linear-agent/src/infra/linear/linearApiClient.ts`        | Linear SDK wrapper         |
-| `apps/linear-agent/src/domain/useCases/listIssues.ts`          | Dashboard data use case    |
-| `apps/linear-agent/src/routes/linearRoutes.ts`                 | HTTP endpoints             |
-| `apps/web/src/pages/LinearIssuesPage.tsx`                      | Dashboard UI + polling     |
-| `apps/web/src/services/linearApi.ts`                           | Web API client             |
-| `apps/linear-agent/src/infra/firestore/linearConnectionRepository.ts` | Connection storage  |
+| File                                                                  | Purpose                 |
+| --------------------------------------------------------------------- | ----------------------- |
+| `apps/linear-agent/src/infra/linear/linearApiClient.ts`               | Linear SDK wrapper      |
+| `apps/linear-agent/src/domain/useCases/listIssues.ts`                 | Dashboard data use case |
+| `apps/linear-agent/src/routes/linearRoutes.ts`                        | HTTP endpoints          |
+| `apps/web/src/pages/LinearIssuesPage.tsx`                             | Dashboard UI + polling  |
+| `apps/web/src/services/linearApi.ts`                                  | Web API client          |
+| `apps/linear-agent/src/infra/firestore/linearConnectionRepository.ts` | Connection storage      |
 
 ---
 
 ## Conclusion
 
 The 5000+ API calls are caused by:
+
 1. **N+1 query pattern**: Each issue requires a separate state fetch
 2. **Aggressive polling**: 60-second intervals with no response caching
 3. **Ineffective dedup cache**: TTL too short to span polling intervals

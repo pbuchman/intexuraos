@@ -339,6 +339,76 @@ describe('processLinearAction', () => {
     });
   });
 
+  describe('processed action repository failures', () => {
+    beforeEach(() => {
+      setupConnectedUser();
+      fakeExtractionService.setResponse({
+        title: 'Test Issue',
+        priority: 2,
+        functionalRequirements: null,
+        technicalDetails: null,
+        valid: true,
+        error: null,
+        reasoning: 'Valid issue',
+      });
+    });
+
+    it('returns error when getByActionId fails', async () => {
+      class FailingProcessedActionRepo extends FakeProcessedActionRepository {
+        override async getByActionId(): ReturnType<
+          FakeProcessedActionRepository['getByActionId']
+        > {
+          return Promise.resolve(
+            err({ code: 'INTERNAL_ERROR', message: 'Failed to check idempotency' })
+          );
+        }
+      }
+
+      const failingRepo = new FailingProcessedActionRepo();
+
+      const result = await processLinearAction(defaultRequest, {
+        linearApiClient: fakeLinearClient,
+        connectionRepository: fakeConnectionRepo,
+        failedIssueRepository: fakeFailedIssueRepo,
+        extractionService: fakeExtractionService,
+        processedActionRepository: failingRepo,
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('INTERNAL_ERROR');
+        expect(result.error.message).toBe('Failed to check idempotency');
+      }
+    });
+
+    it('still succeeds when create fails after issue creation', async () => {
+      class FailingCreateRepo extends FakeProcessedActionRepository {
+        override async create(): ReturnType<FakeProcessedActionRepository['create']> {
+          return Promise.resolve(
+            err({ code: 'INTERNAL_ERROR', message: 'Failed to save processed action' })
+          );
+        }
+      }
+
+      const failingRepo = new FailingCreateRepo();
+
+      const result = await processLinearAction(defaultRequest, {
+        linearApiClient: fakeLinearClient,
+        connectionRepository: fakeConnectionRepo,
+        failedIssueRepository: fakeFailedIssueRepo,
+        extractionService: fakeExtractionService,
+        processedActionRepository: failingRepo,
+      });
+
+      // Should still succeed since the issue was created
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.status).toBe('completed');
+        expect(result.value.message).toMatch(/Issue ENG-\d+ created successfully/);
+      }
+    });
+  });
+
   describe('description builder', () => {
     beforeEach(() => {
       setupConnectedUser();

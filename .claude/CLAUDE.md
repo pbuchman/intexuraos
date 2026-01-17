@@ -229,6 +229,7 @@ terraform apply
 ```
 
 **Why service account over browser auth:**
+
 - Browser OAuth tokens expire and require re-authentication
 - Service accounts provide consistent, scriptable access
 - No interactive prompts that break automation
