@@ -240,6 +240,37 @@ git checkout -b fix/LIN-123 "$BASE_BRANCH"
 
 ---
 
+## Original User Instruction (MANDATORY)
+
+**RULE:** Every Linear issue created from `/linear <task description>` MUST include the original user instruction verbatim.
+
+### Format
+
+```markdown
+## Original User Instruction
+
+> <verbatim user input here>
+
+_This is the original user instruction, transcribed verbatim. May include typos but preserves original observations._
+```
+
+### Requirements
+
+1. **Preserve exactly** - Include typos, grammatical errors, raw phrasing
+2. **No corrections** - Do not fix spelling or grammar
+3. **Quote block** - Use `>` blockquote for the instruction
+4. **Disclaimer** - Include the italicized note about verbatim transcription
+5. **Position** - Place at the TOP of the issue description
+
+### Why This Matters
+
+- Preserves the original context and intent
+- Allows reviewers to understand the raw user need
+- Prevents loss of nuance through summarization
+- Creates audit trail of actual requests
+
+---
+
 ## Workflow: Create New Issue
 
 ### Trigger
@@ -258,7 +289,7 @@ User calls `/linear <task description>`
    - Format: `[bug] <short-description>` or `[feature] <short-description>`
    - Team: `pbuchman`
    - State: `Backlog`
-   - Description: Include task context
+   - Description: **MUST start with "Original User Instruction" section** (see above), then include task context
 
 5. **Offer to Start Working**
    - Ask: "Ready to start working on this issue?"
@@ -561,6 +592,29 @@ User explicitly says one of (INTERACTIVE mode only):
 3. Use present tense, imperative mood
 4. Be specific about location/context
 5. Avoid technical jargon in first 50 chars
+
+### Issue Description Template
+
+```markdown
+## Original User Instruction
+
+> <verbatim user input - preserve typos and raw phrasing>
+
+_This is the original user instruction, transcribed verbatim. May include typos but preserves original observations._
+
+## Summary
+
+<1-2 sentence summary of the task>
+
+## Requirements
+
+<Bulleted list of specific requirements>
+
+## Acceptance Criteria
+
+- [ ] <Criterion 1>
+- [ ] <Criterion 2>
+```
 
 ---
 
