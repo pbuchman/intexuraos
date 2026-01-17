@@ -400,7 +400,7 @@ describe('processLinearAction', () => {
       }
     });
 
-    it('joins both sections with double newline', async () => {
+    it('joins all sections with double newline', async () => {
       fakeExtractionService.setResponse({
         title: 'Complex issue',
         priority: 2,
@@ -421,11 +421,13 @@ describe('processLinearAction', () => {
 
       const issuesResult = await fakeLinearClient.listIssues('key', 'team-789');
       if (issuesResult.ok && issuesResult.value[0]?.description) {
-        expect(issuesResult.value[0].description).toContain('## Functional Requirements\n\nMust support OAuth2\n\n## Technical Details');
+        const desc = issuesResult.value[0].description;
+        expect(desc).toContain('## Functional Requirements\n\nMust support OAuth2\n\n## Technical Details');
+        expect(desc).toMatch(/## Original User Instruction\n\n>.*\n\n_.*_\n\n## Functional Requirements/s);
       }
     });
 
-    it('returns null description when both sections are null', async () => {
+    it('includes original user instruction even when both extracted sections are null', async () => {
       fakeExtractionService.setResponse({
         title: 'Simple',
         priority: 0,
@@ -445,12 +447,80 @@ describe('processLinearAction', () => {
       });
 
       const issuesResult = await fakeLinearClient.listIssues('key', 'team-789');
-      if (issuesResult.ok && issuesResult.value[0]) {
-        expect(issuesResult.value[0].description).toBeNull();
+      if (issuesResult.ok && issuesResult.value[0]?.description) {
+        const desc = issuesResult.value[0].description;
+        expect(desc).toContain('## Original User Instruction');
+        expect(desc).toContain('> Create a Linear issue for fixing the login bug');
       }
     });
 
-    it('prepends Key Points section when summary is provided', async () => {
+    it('includes original user instruction at the TOP of description', async () => {
+      fakeExtractionService.setResponse({
+        title: 'Full issue',
+        priority: 2,
+        functionalRequirements: 'Must support SSO',
+        technicalDetails: 'Use SAML 2.0',
+        valid: true,
+        error: null,
+        reasoning: 'Valid',
+      });
+
+      await processLinearAction(defaultRequest, {
+        linearApiClient: fakeLinearClient,
+        connectionRepository: fakeConnectionRepo,
+        failedIssueRepository: fakeFailedIssueRepo,
+        extractionService: fakeExtractionService,
+        processedActionRepository: fakeProcessedActionRepo,
+      });
+
+      const issuesResult = await fakeLinearClient.listIssues('key', 'team-789');
+      if (issuesResult.ok && issuesResult.value[0]?.description) {
+        const desc = issuesResult.value[0].description;
+        const originalInstructionIndex = desc.indexOf('## Original User Instruction');
+        const functionalIndex = desc.indexOf('## Functional Requirements');
+        const technicalIndex = desc.indexOf('## Technical Details');
+        expect(originalInstructionIndex).toBe(0);
+        expect(originalInstructionIndex).toBeLessThan(functionalIndex);
+        expect(originalInstructionIndex).toBeLessThan(technicalIndex);
+      }
+    });
+
+    it('uses blockquote format for original instruction with disclaimer', async () => {
+      const customRequest: ProcessLinearActionRequest = {
+        actionId: 'action-abc',
+        userId: 'user-456',
+        text: 'Fix teh login bugg plz',
+      };
+
+      fakeExtractionService.setResponse({
+        title: 'Fix login bug',
+        priority: 2,
+        functionalRequirements: null,
+        technicalDetails: null,
+        valid: true,
+        error: null,
+        reasoning: 'Valid',
+      });
+
+      await processLinearAction(customRequest, {
+        linearApiClient: fakeLinearClient,
+        connectionRepository: fakeConnectionRepo,
+        failedIssueRepository: fakeFailedIssueRepo,
+        extractionService: fakeExtractionService,
+        processedActionRepository: fakeProcessedActionRepo,
+      });
+
+      const issuesResult = await fakeLinearClient.listIssues('key', 'team-789');
+      if (issuesResult.ok && issuesResult.value[0]?.description) {
+        const desc = issuesResult.value[0].description;
+        expect(desc).toContain('> Fix teh login bugg plz');
+        expect(desc).toContain(
+          '_This is the original user instruction, transcribed verbatim. May include typos but preserves original observations._'
+        );
+      }
+    });
+
+    it('places Key Points after Original User Instruction but before Functional Requirements', async () => {
       fakeExtractionService.setResponse({
         title: 'Feature with summary',
         priority: 2,
@@ -480,8 +550,10 @@ describe('processLinearAction', () => {
         expect(desc).toContain('## Key Points');
         expect(desc).toContain('- Main requirement A\n- Main requirement B');
         expect(desc).toContain('## Functional Requirements');
+        const originalInstructionIndex = desc.indexOf('## Original User Instruction');
         const keyPointsIndex = desc.indexOf('## Key Points');
         const functionalIndex = desc.indexOf('## Functional Requirements');
+        expect(originalInstructionIndex).toBeLessThan(keyPointsIndex);
         expect(keyPointsIndex).toBeLessThan(functionalIndex);
       }
     });
