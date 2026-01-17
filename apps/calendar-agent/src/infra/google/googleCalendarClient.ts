@@ -177,6 +177,28 @@ function filterUndefined<T extends Record<string, unknown>>(obj: T): Partial<T> 
 }
 
 export class GoogleCalendarClientImpl implements GoogleCalendarClient {
+  async getCalendarTimezone(
+    accessToken: string,
+    calendarId: string,
+    logger: Logger
+  ): Promise<Result<string, CalendarError>> {
+    logger.debug({ calendarId }, 'GoogleCalendarClient.getCalendarTimezone: request');
+    try {
+      const oauth2Client = new google.auth.OAuth2();
+      oauth2Client.setCredentials({ access_token: accessToken });
+      const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
+
+      const response = await calendar.calendars.get({ calendarId });
+      const timeZone = response.data.timeZone ?? 'UTC';
+      logger.debug({ calendarId, timeZone }, 'GoogleCalendarClient.getCalendarTimezone: response');
+      return ok(timeZone);
+    } catch (error) {
+      const calendarError = mapErrorToCalendarError(error);
+      logger.error({ calendarId, error: calendarError }, 'GoogleCalendarClient.getCalendarTimezone: error');
+      return err(calendarError);
+    }
+  }
+
   async listEvents(
     accessToken: string,
     calendarId: string,

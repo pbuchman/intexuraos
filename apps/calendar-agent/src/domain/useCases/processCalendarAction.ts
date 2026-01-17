@@ -56,26 +56,30 @@ function isValidIsoDateTime(value: string | null): boolean {
 }
 
 function toEventDateTime(
-  isoString: string
+  isoString: string,
+  timeZone: string
 ): { dateTime?: string; date?: string; timeZone?: string } {
   const hasTime = isoString.includes('T');
   if (hasTime) {
-    return { dateTime: isoString };
+    return { dateTime: isoString, timeZone };
   }
   return { date: isoString };
 }
 
-function buildCreateEventInput(extracted: {
-  summary: string;
-  start: string;
-  end: string | null;
-  location: string | null;
-  description: string | null;
-}): CreateEventInput {
+function buildCreateEventInput(
+  extracted: {
+    summary: string;
+    start: string;
+    end: string | null;
+    location: string | null;
+    description: string | null;
+  },
+  timeZone: string
+): CreateEventInput {
   const input: CreateEventInput = {
     summary: extracted.summary,
-    start: toEventDateTime(extracted.start),
-    end: toEventDateTime(extracted.end ?? extracted.start),
+    start: toEventDateTime(extracted.start, timeZone),
+    end: toEventDateTime(extracted.end ?? extracted.start, timeZone),
   };
 
   if (extracted.description !== null) {
@@ -202,21 +206,36 @@ export async function processCalendarAction(
     });
   }
 
-  const createInput = buildCreateEventInput({
-    ...extracted,
-    start: extracted.start as string,
-  });
-
-  logger.info(
-    { userId, actionId, summary: createInput.summary },
-    'processCalendarAction: creating Google Calendar event'
-  );
-
   const tokenResult = await userServiceClient.getOAuthToken(userId);
   if (!tokenResult.ok) {
     logger.error({ userId, actionId, error: tokenResult.error }, 'processCalendarAction: failed to get OAuth token');
     return err(tokenResult.error);
   }
+
+  const timezoneResult = await googleCalendarClient.getCalendarTimezone(
+    tokenResult.value.accessToken,
+    'primary',
+    logger
+  );
+  if (!timezoneResult.ok) {
+    logger.error({ userId, actionId, error: timezoneResult.error }, 'processCalendarAction: failed to get calendar timezone');
+    return err(timezoneResult.error);
+  }
+
+  const timeZone = timezoneResult.value;
+
+  const createInput = buildCreateEventInput(
+    {
+      ...extracted,
+      start: extracted.start as string,
+    },
+    timeZone
+  );
+
+  logger.info(
+    { userId, actionId, summary: createInput.summary, timeZone },
+    'processCalendarAction: creating Google Calendar event'
+  );
 
   const createResult = await googleCalendarClient.createEvent(
     tokenResult.value.accessToken,

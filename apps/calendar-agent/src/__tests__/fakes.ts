@@ -59,6 +59,8 @@ export class FakeGoogleCalendarClient implements GoogleCalendarClient {
   private updateResult: Result<CalendarEvent, CalendarError> | null = null;
   private deleteResult: Result<void, CalendarError> | null = null;
   private freeBusyResult: Result<Map<string, FreeBusySlot[]>, CalendarError> | null = null;
+  private calendarTimezone = 'Europe/Warsaw';
+  private timezoneResult: Result<string, CalendarError> | null = null;
 
   addEvent(event: CalendarEvent): void {
     this.events.push(event);
@@ -86,6 +88,25 @@ export class FakeGoogleCalendarClient implements GoogleCalendarClient {
 
   setFreeBusyResult(result: Result<Map<string, FreeBusySlot[]>, CalendarError>): void {
     this.freeBusyResult = result;
+  }
+
+  setCalendarTimezone(timezone: string): void {
+    this.calendarTimezone = timezone;
+  }
+
+  setTimezoneResult(result: Result<string, CalendarError>): void {
+    this.timezoneResult = result;
+  }
+
+  async getCalendarTimezone(
+    _accessToken: string,
+    _calendarId: string,
+    _logger: unknown
+  ): Promise<Result<string, CalendarError>> {
+    if (this.timezoneResult !== null) {
+      return this.timezoneResult;
+    }
+    return ok(this.calendarTimezone);
   }
 
   async listEvents(
