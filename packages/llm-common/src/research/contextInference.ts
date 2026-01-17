@@ -2,7 +2,7 @@
  * Prompt builder for inferring research context from a user query.
  */
 
-import type { InferResearchContextOptions } from './types.js';
+import type { InferResearchContextOptions } from './contextTypes.js';
 
 function getDatePart(isoString: string): string {
   return isoString.split('T')[0] as string;

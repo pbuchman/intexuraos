@@ -3,7 +3,7 @@
  * Consolidates title generation used across research-agent and data-insights.
  */
 
-import type { PromptBuilder, PromptDeps } from '../types.js';
+import type { PromptBuilder, PromptDeps } from '../shared/types.js';
 
 export interface TitlePromptInput {
   /** The content to generate a title for (research prompt or data source content) */

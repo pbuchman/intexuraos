@@ -3,7 +3,7 @@
  * Used to generate 3-6 word labels summarizing content for UI display.
  */
 
-import type { PromptBuilder, PromptDeps } from '../types.js';
+import type { PromptBuilder, PromptDeps } from '../shared/types.js';
 
 export interface LabelPromptInput {
   /** The content to generate a label for */

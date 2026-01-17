@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { buildResearchPrompt } from '../researchPrompt.js';
-import type { ResearchContext } from '../context/types.js';
+import type { ResearchContext } from '../contextTypes.js';
 
 const createTestResearchContext = (overrides?: Partial<ResearchContext>): ResearchContext => ({
   language: 'en',

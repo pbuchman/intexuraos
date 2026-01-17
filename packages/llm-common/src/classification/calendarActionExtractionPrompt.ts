@@ -3,7 +3,7 @@
  * Used by calendar-agent to extract structured event data from user messages.
  */
 
-import type { PromptBuilder, PromptDeps } from '../types.js';
+import type { PromptBuilder, PromptDeps } from '../shared/types.js';
 
 export interface CalendarEventExtractionPromptInput {
   /** The user message to extract calendar event from */

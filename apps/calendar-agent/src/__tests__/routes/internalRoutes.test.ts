@@ -73,10 +73,6 @@ describe('Internal Routes', () => {
 
     it('returns 401 for TOKEN_ERROR from use case', async () => {
       fakeCalendarClient.setCreateResult(err({
-        code: 'INTERNAL_ERROR',
-        message: 'Calendar creation failed',
-      }));
-      fakeFailedEventRepository.setCreateResult(err({
         code: 'TOKEN_ERROR',
         message: 'OAuth token expired',
       }));
