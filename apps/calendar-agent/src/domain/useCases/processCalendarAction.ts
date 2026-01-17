@@ -249,6 +249,10 @@ export async function processCalendarAction(
       return err(failedResult.error);
     }
 
+    if (createResult.error.code === 'TOKEN_ERROR') {
+      return err(createResult.error);
+    }
+
     return ok({
       status: 'failed',
       error: createResult.error.message,
