@@ -19,6 +19,12 @@ import type {
 import type { CalendarError } from './errors.js';
 
 export interface GoogleCalendarClient {
+  getCalendarTimezone(
+    accessToken: string,
+    calendarId: string,
+    logger: Logger
+  ): Promise<Result<string, CalendarError>>;
+
   listEvents(
     accessToken: string,
     calendarId: string,

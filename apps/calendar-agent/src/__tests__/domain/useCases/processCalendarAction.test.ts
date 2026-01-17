@@ -639,6 +639,141 @@ describe('processCalendarAction', () => {
     });
   });
 
+  describe('timezone handling', () => {
+    it('fetches calendar timezone and includes it in event creation', async () => {
+      const mockEvent = {
+        id: 'event-with-timezone',
+        summary: 'Timezone Test',
+        start: { dateTime: '2025-01-20T14:00:00', timeZone: 'America/New_York' },
+        end: { dateTime: '2025-01-20T15:00:00', timeZone: 'America/New_York' },
+        htmlLink: 'https://calendar.google.com/event',
+      };
+
+      calendarActionExtractionService.extractEventResult = ok({
+        summary: 'Timezone Test',
+        start: '2025-01-20T14:00:00',
+        end: '2025-01-20T15:00:00',
+        location: null,
+        description: null,
+        valid: true,
+        error: null,
+        reasoning: 'Test with timezone',
+      });
+
+      googleCalendarClient.setCalendarTimezone('America/New_York');
+      googleCalendarClient.setCreateResult(ok(mockEvent));
+
+      const result = await processCalendarAction(
+        {
+          actionId: 'action-timezone',
+          userId: 'user-456',
+          text: 'Meeting at 2pm',
+        },
+        {
+          userServiceClient,
+          googleCalendarClient,
+          failedEventRepository,
+          calendarActionExtractionService,
+          processedActionRepository,
+          logger: mockLogger,
+        }
+      );
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.status).toBe('completed');
+      }
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        expect.objectContaining({ timeZone: 'America/New_York' }),
+        expect.stringContaining('creating Google Calendar event')
+      );
+    });
+
+    it('returns error when fetching calendar timezone fails', async () => {
+      calendarActionExtractionService.extractEventResult = ok({
+        summary: 'Timezone Fail Test',
+        start: '2025-01-20T14:00:00',
+        end: '2025-01-20T15:00:00',
+        location: null,
+        description: null,
+        valid: true,
+        error: null,
+        reasoning: 'Test timezone failure',
+      });
+
+      googleCalendarClient.setTimezoneResult(
+        err({ code: 'PERMISSION_DENIED', message: 'Cannot access calendar' })
+      );
+
+      const result = await processCalendarAction(
+        {
+          actionId: 'action-timezone-fail',
+          userId: 'user-456',
+          text: 'Meeting at 2pm',
+        },
+        {
+          userServiceClient,
+          googleCalendarClient,
+          failedEventRepository,
+          calendarActionExtractionService,
+          processedActionRepository,
+          logger: mockLogger,
+        }
+      );
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('PERMISSION_DENIED');
+        expect(result.error.message).toBe('Cannot access calendar');
+      }
+    });
+
+    it('does not include timezone for all-day events (date only)', async () => {
+      const mockEvent = {
+        id: 'event-all-day',
+        summary: 'All Day Event',
+        start: { date: '2025-01-20' },
+        end: { date: '2025-01-20' },
+        htmlLink: 'https://calendar.google.com/event',
+      };
+
+      calendarActionExtractionService.extractEventResult = ok({
+        summary: 'All Day Event',
+        start: '2025-01-20',
+        end: null,
+        location: null,
+        description: null,
+        valid: true,
+        error: null,
+        reasoning: 'All day event without time',
+      });
+
+      googleCalendarClient.setCalendarTimezone('Europe/London');
+      googleCalendarClient.setCreateResult(ok(mockEvent));
+
+      const result = await processCalendarAction(
+        {
+          actionId: 'action-all-day',
+          userId: 'user-456',
+          text: 'Holiday on Jan 20',
+        },
+        {
+          userServiceClient,
+          googleCalendarClient,
+          failedEventRepository,
+          calendarActionExtractionService,
+          processedActionRepository,
+          logger: mockLogger,
+        }
+      );
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.status).toBe('completed');
+      }
+    });
+  });
+
   describe('idempotency', () => {
     it('returns cached result when action was already processed', async () => {
       processedActionRepository.seedProcessedAction({
