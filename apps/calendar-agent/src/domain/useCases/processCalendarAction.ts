@@ -218,6 +218,16 @@ export async function processCalendarAction(
     logger
   );
   if (!timezoneResult.ok) {
+    if (timezoneResult.error.code === 'PERMISSION_DENIED') {
+      logger.warn(
+        { userId, actionId },
+        'processCalendarAction: calendar.readonly scope missing, user needs to reconnect'
+      );
+      return err({
+        code: 'TOKEN_ERROR',
+        message: 'Calendar permissions have been updated. Please reconnect your Google Calendar.',
+      });
+    }
     logger.error({ userId, actionId, error: timezoneResult.error }, 'processCalendarAction: failed to get calendar timezone');
     return err(timezoneResult.error);
   }

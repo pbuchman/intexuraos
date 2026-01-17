@@ -1,2 +1,4 @@
 {"ts":"2026-01-17T20:55:28.931Z","project":"intexuraos","branch":"fix/INT-141-calendar-timezone","workspace":"--","runNumber":1,"passed":false,"durationMs":346,"failureCount":0,"failures":[]}
 {"ts":"2026-01-17T20:56:27.759Z","project":"intexuraos","branch":"fix/INT-141-calendar-timezone","workspace":"calendar-agent","runNumber":2,"passed":true,"durationMs":52065,"failureCount":0,"failures":[]}
+{"ts":"2026-01-17T22:32:55.566Z","project":"intexuraos","branch":"fix/INT-141-calendar-timezone","workspace":"calendar-agent","runNumber":3,"passed":true,"durationMs":59406,"failureCount":0,"failures":[]}
+{"ts":"2026-01-17T22:33:45.869Z","project":"intexuraos","branch":"fix/INT-141-calendar-timezone","workspace":"user-service","runNumber":4,"passed":true,"durationMs":39298,"failureCount":0,"failures":[]}

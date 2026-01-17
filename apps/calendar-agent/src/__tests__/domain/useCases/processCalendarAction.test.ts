@@ -689,7 +689,46 @@ describe('processCalendarAction', () => {
       );
     });
 
-    it('returns error when fetching calendar timezone fails', async () => {
+    it('returns TOKEN_ERROR when timezone fetch fails with PERMISSION_DENIED', async () => {
+      calendarActionExtractionService.extractEventResult = ok({
+        summary: 'Reconnect Test',
+        start: '2025-01-20T14:00:00',
+        end: '2025-01-20T15:00:00',
+        location: null,
+        description: null,
+        valid: true,
+        error: null,
+        reasoning: 'Test scope missing',
+      });
+
+      googleCalendarClient.setTimezoneResult(
+        err({ code: 'PERMISSION_DENIED', message: 'Missing calendar.readonly scope' })
+      );
+
+      const result = await processCalendarAction(
+        {
+          actionId: 'action-reconnect',
+          userId: 'user-456',
+          text: 'Meeting at 2pm',
+        },
+        {
+          userServiceClient,
+          googleCalendarClient,
+          failedEventRepository,
+          calendarActionExtractionService,
+          processedActionRepository,
+          logger: mockLogger,
+        }
+      );
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('TOKEN_ERROR');
+        expect(result.error.message).toContain('reconnect');
+      }
+    });
+
+    it('returns error when fetching calendar timezone fails with other errors', async () => {
       calendarActionExtractionService.extractEventResult = ok({
         summary: 'Timezone Fail Test',
         start: '2025-01-20T14:00:00',
@@ -702,7 +741,7 @@ describe('processCalendarAction', () => {
       });
 
       googleCalendarClient.setTimezoneResult(
-        err({ code: 'PERMISSION_DENIED', message: 'Cannot access calendar' })
+        err({ code: 'INTERNAL_ERROR', message: 'API unavailable' })
       );
 
       const result = await processCalendarAction(
@@ -723,8 +762,8 @@ describe('processCalendarAction', () => {
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
-        expect(result.error.code).toBe('PERMISSION_DENIED');
-        expect(result.error.message).toBe('Cannot access calendar');
+        expect(result.error.code).toBe('INTERNAL_ERROR');
+        expect(result.error.message).toBe('API unavailable');
       }
     });
 
