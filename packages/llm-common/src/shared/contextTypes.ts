@@ -54,7 +54,7 @@ export type Mode = 'compact' | 'standard' | 'audit';
 
 export interface DefaultApplied {
   key: string;
-  value: string;
+  value: string | number | boolean;
   reason: string;
 }
 

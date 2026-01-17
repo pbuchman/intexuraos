@@ -47,11 +47,16 @@ export function isMode(value: unknown): value is Mode {
   return typeof value === 'string' && MODES.includes(value as Mode);
 }
 
+export function isPrimitive(value: unknown): value is string | number | boolean {
+  const type = typeof value;
+  return type === 'string' || type === 'number' || type === 'boolean';
+}
+
 export function isDefaultApplied(value: unknown): value is DefaultApplied {
   if (!isObject(value)) return false;
   return (
     typeof value['key'] === 'string' &&
-    typeof value['value'] === 'string' &&
+    isPrimitive(value['value']) &&
     typeof value['reason'] === 'string'
   );
 }
