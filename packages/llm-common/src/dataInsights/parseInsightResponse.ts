@@ -84,9 +84,10 @@ function parseInsightLine(line: string, lineNumber: number): ParsedDataInsight {
   }
 
   const sentenceCount = description.split(/[.!?]+/).filter((s) => s.trim().length > 0).length;
-  if (sentenceCount > 3) {
+  // Allow up to 6 sentences (2x the expected 3) since LLMs struggle with precise counting
+  if (sentenceCount > 6) {
     throw new Error(
-      `Line ${String(lineNumber)}: Description must be max 3 sentences, got ${String(sentenceCount)}`
+      `Line ${String(lineNumber)}: Description must be max 6 sentences, got ${String(sentenceCount)}`
     );
   }
 

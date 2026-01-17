@@ -100,10 +100,31 @@ EXTRA_LINE`;
   });
 
   it('throws on Description with too many sentences', () => {
+    // 7 sentences should fail - max is 6 (2x the expected 3)
     const response =
-      'INSIGHT_1: Title=Test; Description=Sentence one. Sentence two. Sentence three. Sentence four. And five.; Trackable=Test; ChartType=C1';
+      'INSIGHT_1: Title=Test; Description=One. Two. Three. Four. Five. Six. Seven.; Trackable=Test; ChartType=C1';
 
-    expect(() => parseInsightResponse(response)).toThrow('Description must be max 3 sentences');
+    expect(() => parseInsightResponse(response)).toThrow('Description must be max 6 sentences');
+  });
+
+  it('accepts Description with 6 sentences (relaxed 2x tolerance)', () => {
+    // 6 sentences should pass - allows 2x the expected 3 sentences
+    const response =
+      'INSIGHT_1: Title=Test; Description=One. Two. Three. Four. Five. Six.; Trackable=Test; ChartType=C1';
+
+    const result = parseInsightResponse(response);
+
+    expect(result.insights).toHaveLength(1);
+  });
+
+  it('accepts Description with 4-5 sentences (within tolerance)', () => {
+    // 5 sentences should pass - within the 2x tolerance
+    const response =
+      'INSIGHT_1: Title=Test; Description=One. Two. Three. Four. Five.; Trackable=Test; ChartType=C1';
+
+    const result = parseInsightResponse(response);
+
+    expect(result.insights).toHaveLength(1);
   });
 
   it('throws on empty Trackable metric', () => {
