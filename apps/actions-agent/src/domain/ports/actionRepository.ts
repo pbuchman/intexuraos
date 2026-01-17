@@ -23,13 +23,13 @@ export interface ActionRepository {
   listByStatus(status: ActionStatus, limit?: number): Promise<Action[]>;
 
   /**
-   * Atomically update action status only if current status matches expectedStatus.
+   * Atomically update action status only if current status matches one of the expectedStatuses.
    * Returns discriminated union with outcome to allow proper error handling.
    * Used to prevent race conditions in PubSub message handlers.
    */
   updateStatusIf(
     actionId: string,
     newStatus: ActionStatus,
-    expectedStatus: ActionStatus
+    expectedStatuses: ActionStatus | ActionStatus[]
   ): Promise<UpdateStatusIfResult>;
 }

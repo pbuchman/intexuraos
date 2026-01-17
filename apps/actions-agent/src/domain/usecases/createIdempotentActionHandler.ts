@@ -29,7 +29,7 @@ function createIdempotentActionHandler(
       const updateResult = await actionRepository.updateStatusIf(
         event.actionId,
         'awaiting_approval',
-        'pending'
+        ['pending', 'failed']
       );
 
       switch (updateResult.outcome) {
