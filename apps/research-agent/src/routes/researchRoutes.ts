@@ -15,7 +15,7 @@
  */
 
 import type { FastifyPluginCallback, FastifyReply, FastifyRequest } from 'fastify';
-import { logIncomingRequest, requireAuth } from '@intexuraos/common-http';
+import { logIncomingRequest, requireAuth, type AuthUser } from '@intexuraos/common-http';
 import type { Logger } from 'pino';
 import {
   createDraftResearch,
@@ -35,6 +35,7 @@ import {
   toggleResearchFavourite,
   unshareResearch,
   generateContextLabels,
+  type GeneratedByUserInfo,
 } from '../domain/research/index.js';
 import { getProviderForModel, LlmModels } from '@intexuraos/llm-contract';
 import { getServices } from '../services.js';
@@ -97,6 +98,22 @@ interface EnhanceResearchBody {
   additionalContexts?: { content: string; label?: string }[];
   synthesisModel?: ResearchModel;
   removeContextIds?: string[];
+}
+
+function extractGeneratedByInfo(user: AuthUser): GeneratedByUserInfo | undefined {
+  const name = typeof user.claims['name'] === 'string' ? user.claims['name'] : undefined;
+  const email = typeof user.claims['email'] === 'string' ? user.claims['email'] : undefined;
+  if (name === undefined && email === undefined) {
+    return undefined;
+  }
+  const info: GeneratedByUserInfo = {};
+  if (name !== undefined) {
+    info.name = name;
+  }
+  if (email !== undefined) {
+    info.email = email;
+  }
+  return info;
 }
 
 export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
@@ -849,6 +866,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             request.log
           );
 
+          const generatedBy = extractGeneratedByInfo(user);
           const synthesisResult = await runSynthesis(id, {
             researchRepo,
             synthesizer,
@@ -878,6 +896,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                 request.log.debug({ researchId: id, ...obj }, msg);
               },
             },
+            ...(generatedBy !== undefined && { generatedBy }),
           });
 
           if (synthesisResult.ok) {
@@ -998,6 +1017,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         request.log
       );
 
+      const generatedBy = extractGeneratedByInfo(user);
       const retryResult = await retryFromFailed(id, {
         researchRepo,
         llmCallPublisher,
@@ -1015,6 +1035,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           },
           imageApiKeys: apiKeysResult.value,
           logger: request.log,
+          ...(generatedBy !== undefined && { generatedBy }),
         },
       });
 
