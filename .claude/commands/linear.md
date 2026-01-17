@@ -101,7 +101,34 @@ Before ANY operation, verify all required tools are available.
 | ---------- | -------------------------------- | ---------------- |
 | Linear MCP | `mcp__linear-server__list_teams` | Issue management |
 | GitHub CLI | `gh auth status`                 | PR creation      |
-| GCloud     | `gcloud auth list`               | Firestore access |
+| GCloud     | See GCloud Verification below    | Firestore access |
+
+### GCloud Verification (MANDATORY)
+
+**RULE:** NEVER claim "gcloud is not authenticated" without first verifying service account credentials.
+
+**Service account key location:** `~/personal/gcloud-claude-code-dev.json`
+
+**Verification steps (in order):**
+
+1. Check if credentials file exists:
+
+   ```bash
+   ls -la ~/personal/gcloud-claude-code-dev.json
+   ```
+
+2. If `gcloud auth list` shows no active account, activate service account:
+
+   ```bash
+   gcloud auth activate-service-account --key-file=~/personal/gcloud-claude-code-dev.json
+   ```
+
+3. Verify authentication:
+   ```bash
+   gcloud auth list
+   ```
+
+**You are NEVER "unauthenticated" if the service account key file exists.** Activate it and proceed.
 
 ### Optional Tools
 
@@ -138,6 +165,15 @@ ERROR: /linear cannot proceed - Linear MCP unavailable
 
 Required for: Issue creation and state management
 Fix: Check MCP server configuration
+
+Aborting.
+```
+
+```
+ERROR: /linear cannot proceed - GCloud not authenticated
+
+Required for: Firestore access
+Fix: Run 'gcloud auth activate-service-account --key-file=~/personal/gcloud-claude-code-dev.json'
 
 Aborting.
 ```
