@@ -20,6 +20,7 @@ export function DataInsightsPage(): React.JSX.Element {
   const {
     chartDefinition,
     generating: chartGenerating,
+    error: chartDefinitionError,
     generateDefinition,
     clearDefinition,
   } = useChartDefinition(feedId ?? '');
@@ -116,6 +117,20 @@ export function DataInsightsPage(): React.JSX.Element {
                   />
                 ))}
               </div>
+
+              {chartDefinitionError !== null && selectedInsight !== null && (
+                <div className="mt-6 rounded-lg border border-red-200 bg-red-50 p-4">
+                  <div className="flex items-start gap-2">
+                    <AlertCircle className="mt-0.5 h-5 w-5 flex-shrink-0 text-red-500" />
+                    <div>
+                      <p className="font-medium text-red-700">
+                        Failed to generate chart for: {selectedInsight.title}
+                      </p>
+                      <p className="mt-1 text-sm text-red-600">{chartDefinitionError}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {chartDefinition !== null && selectedInsight !== null && (
                 <>
