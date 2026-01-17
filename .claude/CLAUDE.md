@@ -208,8 +208,32 @@ Before reporting any gcloud authentication issues, you MUST:
 - Firestore queries for investigation
 - Any `gcloud` commands requiring project access
 - Accessing production/dev data for debugging
+- **Terraform operations** (plan, apply, destroy)
 
 **You are NEVER "unauthenticated" if the service account key file exists.** Activate it and proceed.
+
+### Terraform with Service Account
+
+**RULE:** Always use the service account for Terraform operations. Never rely on browser-based authentication.
+
+```bash
+# Set credentials and clear emulator env vars
+GOOGLE_APPLICATION_CREDENTIALS=/Users/p.buchman/personal/gcloud-claude-code-dev.json \
+STORAGE_EMULATOR_HOST= FIRESTORE_EMULATOR_HOST= PUBSUB_EMULATOR_HOST= \
+terraform plan
+
+# Apply changes
+GOOGLE_APPLICATION_CREDENTIALS=/Users/p.buchman/personal/gcloud-claude-code-dev.json \
+STORAGE_EMULATOR_HOST= FIRESTORE_EMULATOR_HOST= PUBSUB_EMULATOR_HOST= \
+terraform apply
+```
+
+**Why service account over browser auth:**
+- Browser OAuth tokens expire and require re-authentication
+- Service accounts provide consistent, scriptable access
+- No interactive prompts that break automation
+
+The service account `claude-code-dev@intexuraos-dev-pbuchman.iam.gserviceaccount.com` has full admin permissions for all Terraform-managed resources.
 
 ---
 

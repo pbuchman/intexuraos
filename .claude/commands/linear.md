@@ -130,6 +130,22 @@ Before ANY operation, verify all required tools are available.
 
 **You are NEVER "unauthenticated" if the service account key file exists.** Activate it and proceed.
 
+### Terraform Operations
+
+When Terraform is needed (infrastructure changes), use the service account with `GOOGLE_APPLICATION_CREDENTIALS`:
+
+```bash
+GOOGLE_APPLICATION_CREDENTIALS=/Users/p.buchman/personal/gcloud-claude-code-dev.json \
+STORAGE_EMULATOR_HOST= FIRESTORE_EMULATOR_HOST= PUBSUB_EMULATOR_HOST= \
+terraform plan
+
+GOOGLE_APPLICATION_CREDENTIALS=/Users/p.buchman/personal/gcloud-claude-code-dev.json \
+STORAGE_EMULATOR_HOST= FIRESTORE_EMULATOR_HOST= PUBSUB_EMULATOR_HOST= \
+terraform apply
+```
+
+**Never use browser-based authentication for Terraform.** The service account has full admin permissions.
+
 ### Optional Tools
 
 | Tool       | Verification          | When Needed          |
