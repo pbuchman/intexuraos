@@ -34,6 +34,15 @@ export {
   type LinearIssueExtractionPromptInput,
   type LinearIssueExtractionPromptDeps,
   type ExtractedLinearIssue,
+  intelligentClassifierPrompt,
+  type ClassificationExample,
+  type ClassificationCorrection,
+  type IntelligentClassifierPromptInput,
+  type IntelligentClassifierPromptDeps,
+  type CommandExampleSource,
+  type TransitionSource,
+  toClassificationExample,
+  toClassificationCorrection,
 } from './classification/index.js';
 
 // Todo prompts (item extraction)
