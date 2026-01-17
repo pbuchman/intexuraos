@@ -105,6 +105,50 @@ grep -B2 "90\." /tmp/ci-output.txt | head -50
 
 ---
 
+## GCloud Authentication (MANDATORY)
+
+**RULE:** NEVER claim "gcloud is not authenticated" or "unauthenticated to gcloud" without first verifying service account credentials.
+
+### Service Account Credentials
+
+A service account key file is available at:
+
+```
+~/personal/gcloud-claude-code-dev.json
+```
+
+### Verification Before Claiming Auth Failure
+
+Before reporting any gcloud authentication issues, you MUST:
+
+1. **Check if credentials file exists:**
+
+   ```bash
+   ls -la ~/personal/gcloud-claude-code-dev.json
+   ```
+
+2. **Activate service account if needed:**
+
+   ```bash
+   gcloud auth activate-service-account --key-file=~/personal/gcloud-claude-code-dev.json
+   ```
+
+3. **Verify authentication:**
+
+   ```bash
+   gcloud auth list
+   ```
+
+### When to Use Service Account
+
+- Firestore queries for investigation
+- Any `gcloud` commands requiring project access
+- Accessing production/dev data for debugging
+
+**You are NEVER "unauthenticated" if the service account key file exists.** Activate it and proceed.
+
+---
+
 ## Architecture
 
 ```

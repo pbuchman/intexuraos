@@ -44,9 +44,18 @@ export interface ProcessLinearActionResponse {
 
 /**
  * Build structured markdown description from extracted data.
+ * Always includes the original user instruction at the top.
  */
-function buildDescription(extracted: ExtractedIssueData, summary?: string): string | null {
+function buildDescription(
+  extracted: ExtractedIssueData,
+  originalText: string,
+  summary?: string
+): string {
   const sections: string[] = [];
+
+  sections.push(
+    `## Original User Instruction\n\n> ${originalText}\n\n_This is the original user instruction, transcribed verbatim. May include typos but preserves original observations._`
+  );
 
   if (summary !== undefined) {
     sections.push(`## Key Points\n\n${summary}`);
@@ -58,10 +67,6 @@ function buildDescription(extracted: ExtractedIssueData, summary?: string): stri
 
   if (extracted.technicalDetails !== null) {
     sections.push(`## Technical Details\n\n${extracted.technicalDetails}`);
-  }
-
-  if (sections.length === 0) {
-    return null;
   }
 
   return sections.join('\n\n');
@@ -169,7 +174,7 @@ export async function processLinearAction(
   }
 
   // Build description from extracted sections (with Key Points from summary if available)
-  const description = buildDescription(extracted, summary);
+  const description = buildDescription(extracted, text, summary);
 
   // Create issue in Linear
   logger?.info({ userId, actionId, title: extracted.title }, 'Creating Linear issue');

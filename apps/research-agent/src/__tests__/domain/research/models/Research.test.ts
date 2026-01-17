@@ -2,6 +2,7 @@
  * Tests for Research model factory functions.
  */
 import { describe, expect, it } from 'vitest';
+import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
 import {
   createResearch,
   createDraftResearch,
@@ -16,8 +17,8 @@ describe('Research factory functions', () => {
         id: 'test-id',
         userId: 'user-123',
         prompt: 'Test prompt',
-        selectedModels: ['gemini-2.5-flash'],
-        synthesisModel: 'gemini-2.5-flash',
+        selectedModels: [LlmModels.Gemini25Flash],
+        synthesisModel: LlmModels.Gemini25Flash,
       });
 
       expect(research.favourite).toBe(false);
@@ -28,16 +29,16 @@ describe('Research factory functions', () => {
         id: 'test-id',
         userId: 'user-123',
         prompt: 'Test prompt',
-        selectedModels: ['gemini-2.5-flash', 'claude-sonnet-4-5-20250929'],
-        synthesisModel: 'claude-sonnet-4-5-20250929',
+        selectedModels: [LlmModels.Gemini25Flash, LlmModels.ClaudeSonnet45],
+        synthesisModel: LlmModels.ClaudeSonnet45,
       });
 
       expect(research.id).toBe('test-id');
       expect(research.userId).toBe('user-123');
       expect(research.prompt).toBe('Test prompt');
       expect(research.status).toBe('pending');
-      expect(research.selectedModels).toEqual(['gemini-2.5-flash', 'claude-sonnet-4-5-20250929']);
-      expect(research.synthesisModel).toBe('claude-sonnet-4-5-20250929');
+      expect(research.selectedModels).toEqual([LlmModels.Gemini25Flash, LlmModels.ClaudeSonnet45]);
+      expect(research.synthesisModel).toBe(LlmModels.ClaudeSonnet45);
       expect(research.llmResults).toHaveLength(2);
     });
   });
@@ -49,8 +50,8 @@ describe('Research factory functions', () => {
         userId: 'user-123',
         title: 'Draft Title',
         prompt: 'Test prompt',
-        selectedModels: ['gemini-2.5-flash'],
-        synthesisModel: 'gemini-2.5-flash',
+        selectedModels: [LlmModels.Gemini25Flash],
+        synthesisModel: LlmModels.Gemini25Flash,
       });
 
       expect(research.favourite).toBe(false);
@@ -62,8 +63,8 @@ describe('Research factory functions', () => {
         userId: 'user-123',
         title: 'Draft Title',
         prompt: 'Test prompt',
-        selectedModels: ['gemini-2.5-flash'],
-        synthesisModel: 'gemini-2.5-flash',
+        selectedModels: [LlmModels.Gemini25Flash],
+        synthesisModel: LlmModels.Gemini25Flash,
       });
 
       expect(research.status).toBe('draft');
@@ -77,13 +78,13 @@ describe('Research factory functions', () => {
       userId: 'user-123',
       title: 'Source Title',
       prompt: 'Original prompt',
-      selectedModels: ['gemini-2.5-flash'],
-      synthesisModel: 'gemini-2.5-flash',
+      selectedModels: [LlmModels.Gemini25Flash],
+      synthesisModel: LlmModels.Gemini25Flash,
       status: 'completed',
       llmResults: [
         {
-          provider: 'google',
-          model: 'gemini-2.5-flash',
+          provider: LlmProviders.Google,
+          model: LlmModels.Gemini25Flash,
           status: 'completed',
           result: 'Test result',
           costUsd: 0.05,
@@ -99,7 +100,7 @@ describe('Research factory functions', () => {
         id: 'enhanced-id',
         userId: 'user-123',
         sourceResearch,
-        additionalModels: ['claude-sonnet-4-5-20250929'],
+        additionalModels: [LlmModels.ClaudeSonnet45],
       });
 
       expect(enhanced.favourite).toBe(false);
@@ -110,7 +111,7 @@ describe('Research factory functions', () => {
         id: 'enhanced-id',
         userId: 'user-123',
         sourceResearch,
-        additionalModels: ['claude-sonnet-4-5-20250929'],
+        additionalModels: [LlmModels.ClaudeSonnet45],
       });
 
       expect(enhanced.sourceResearchId).toBe('source-id');
