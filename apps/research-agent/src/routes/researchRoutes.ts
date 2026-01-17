@@ -1106,6 +1106,16 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       }
       const apiKeys = apiKeysResult.value;
 
+      // Fetch source research to validate inherited synthesis model
+      const sourceResult = await researchRepo.findById(id);
+      if (!sourceResult.ok) {
+        return await reply.fail('INTERNAL_ERROR', 'Failed to fetch source research');
+      }
+      if (sourceResult.value === null) {
+        return await reply.fail('NOT_FOUND', 'Source research not found');
+      }
+      const sourceResearch = sourceResult.value;
+
       if (body.additionalModels !== undefined && body.additionalModels.length > 0) {
         const missingModels = body.additionalModels.filter((model) => {
           const provider = getProviderForModel(model);
@@ -1120,14 +1130,14 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         }
       }
 
-      if (body.synthesisModel !== undefined) {
-        const synthesisProvider = getProviderForModel(body.synthesisModel);
-        if (apiKeys[synthesisProvider] === undefined) {
-          return await reply.fail(
-            'MISCONFIGURED',
-            `API key required for synthesis with ${body.synthesisModel}`
-          );
-        }
+      // Validate synthesis model - use explicit or inherited from source
+      const effectiveSynthesisModel = body.synthesisModel ?? sourceResearch.synthesisModel;
+      const synthesisProvider = getProviderForModel(effectiveSynthesisModel);
+      if (apiKeys[synthesisProvider] === undefined) {
+        return await reply.fail(
+          'MISCONFIGURED',
+          `API key required for synthesis with ${effectiveSynthesisModel}`
+        );
       }
 
       const enhanceInput: Parameters<typeof enhanceResearch>[0] = {
