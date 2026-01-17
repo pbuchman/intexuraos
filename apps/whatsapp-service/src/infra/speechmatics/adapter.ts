@@ -113,7 +113,7 @@ const ADDITIONAL_VOCAB = [
   { content: 'LLM', sounds_like: ['el el em', 'l l m'] },
 
   // Platform tools and services
-  { content: 'Linear', sounds_like: ['line ear', 'linear app'] },
+  { content: 'Linear', sounds_like: ['line ear', 'linear app', 'lin ear', 'linear', 'leener'] },
   { content: 'Sentry', sounds_like: ['sentry', 'century'] },
   { content: 'Auth0', sounds_like: ['auth zero', 'oauth'] },
   { content: 'OAuth', sounds_like: ['oh auth', 'o auth'] },
