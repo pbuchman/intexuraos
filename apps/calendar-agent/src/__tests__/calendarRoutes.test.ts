@@ -870,7 +870,7 @@ describe('Calendar Routes', () => {
       expect(body.error.code).toBe('FORBIDDEN');
     });
 
-    it('returns failed status when Google Calendar returns TOKEN_ERROR', async () => {
+    it('returns 401 when Google Calendar returns TOKEN_ERROR', async () => {
       fakeCalendarActionExtractionService.extractEventResult = {
         ok: true,
         value: {
@@ -895,10 +895,10 @@ describe('Calendar Routes', () => {
         payload: validActionPayload,
       });
 
-      expect(response.statusCode).toBe(200);
+      expect(response.statusCode).toBe(401);
       const body = response.json();
-      expect(body.status).toBe('failed');
-      expect(body.error).toBe('Invalid access token');
+      expect(body.success).toBe(false);
+      expect(body.error.message).toBe('Invalid access token');
     });
 
     it('returns failed status when Google Calendar returns INTERNAL_ERROR', async () => {

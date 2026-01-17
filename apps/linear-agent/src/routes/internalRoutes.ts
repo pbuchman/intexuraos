@@ -31,6 +31,69 @@ async function handleLinearError(
 export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   fastify.post<{ Body: ProcessActionBody }>(
     '/internal/linear/process-action',
+    {
+      schema: {
+        operationId: 'processLinearAction',
+        summary: 'Process a Linear action from natural language',
+        description: 'Extracts Linear issue data from text and creates in Linear or saves as draft',
+        tags: ['internal'],
+        body: {
+          type: 'object',
+          required: ['action'],
+          properties: {
+            action: {
+              type: 'object',
+              required: ['id', 'userId', 'text'],
+              properties: {
+                id: { type: 'string', description: 'Action ID' },
+                userId: { type: 'string', description: 'User ID' },
+                text: { type: 'string', description: 'User message text' },
+                summary: { type: 'string', description: 'Optional summary' },
+              },
+            },
+          },
+        },
+        response: {
+          200: {
+            description: 'Success',
+            type: 'object',
+            properties: {
+              status: { type: 'string', enum: ['completed', 'failed'] },
+              resource_url: { type: 'string', description: 'Frontend URL for created issue' },
+              issue_identifier: { type: 'string', description: 'Linear issue identifier (e.g., INT-123)' },
+              error: { type: 'string', description: 'Error message if failed' },
+            },
+          },
+          401: {
+            description: 'Unauthorized',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+          },
+          403: {
+            description: 'Forbidden',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+          },
+          500: {
+            description: 'Internal Server Error',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+          },
+        },
+      },
+    },
     async (request: FastifyRequest<{ Body: ProcessActionBody }>, reply: FastifyReply) => {
       logIncomingRequest(request);
 

@@ -408,7 +408,7 @@ describe('processCalendarAction', () => {
   });
 
   describe('when Google Calendar creation fails', () => {
-    it('saves to failed events and returns failed status', async () => {
+    it('saves to failed events and propagates TOKEN_ERROR', async () => {
       calendarActionExtractionService.extractEventResult = ok({
         summary: 'Team Meeting',
         start: '2025-01-20T14:00:00',
@@ -440,10 +440,10 @@ describe('processCalendarAction', () => {
         }
       );
 
-      expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.value.status).toBe('failed');
-        expect(result.value.error).toBe('Invalid token');
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('TOKEN_ERROR');
+        expect(result.error.message).toBe('Invalid token');
       }
 
       const failedEvents = failedEventRepository.getEvents();
