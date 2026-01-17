@@ -53,7 +53,7 @@ describe('registerActionHandler', () => {
       expect(mockRepository.updateStatusIf).toHaveBeenCalledWith(
         'action-123',
         'awaiting_approval',
-        'pending'
+        ['pending', 'failed']
       );
       expect(mockHandler.execute).toHaveBeenCalledWith(event);
     });

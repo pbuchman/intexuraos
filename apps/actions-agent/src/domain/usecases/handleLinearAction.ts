@@ -54,7 +54,8 @@ export function createHandleLinearActionUseCase(
         return ok({ actionId: event.actionId });
       }
 
-      if (action.status !== 'pending') {
+      const retryableStatuses = ['pending', 'failed'];
+      if (!retryableStatuses.includes(action.status)) {
         logger.info(
           { actionId: event.actionId, currentStatus: action.status },
           'Action already processed, skipping (idempotent)'

@@ -369,7 +369,7 @@ describe('FirestoreActionRepository', () => {
         expect.objectContaining({
           actionId: action.id,
           newStatus: 'processing',
-          expectedStatus: 'pending',
+          expectedStatuses: 'pending',
           error: expect.any(Error),
         }),
         'Firestore transaction failed in updateStatusIf'

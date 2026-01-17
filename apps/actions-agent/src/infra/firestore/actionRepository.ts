@@ -119,10 +119,11 @@ export function createFirestoreActionRepository(deps?: CreateFirestoreActionRepo
     async updateStatusIf(
       actionId: string,
       newStatus: Action['status'],
-      expectedStatus: Action['status']
+      expectedStatuses: Action['status'] | Action['status'][]
     ): Promise<UpdateStatusIfResult> {
       const db = getFirestore();
       const docRef = db.collection(COLLECTION).doc(actionId);
+      const expectedArray = Array.isArray(expectedStatuses) ? expectedStatuses : [expectedStatuses];
 
       try {
         const result = await db.runTransaction(async (transaction) => {
@@ -134,7 +135,7 @@ export function createFirestoreActionRepository(deps?: CreateFirestoreActionRepo
 
           const currentStatus = snapshot.get('status') as string;
 
-          if (currentStatus !== expectedStatus) {
+          if (!expectedArray.includes(currentStatus as Action['status'])) {
             return { outcome: 'status_mismatch', currentStatus } as const;
           }
 
@@ -150,7 +151,7 @@ export function createFirestoreActionRepository(deps?: CreateFirestoreActionRepo
       } catch (error) {
         if (hasLogger) {
           logger.error(
-            { actionId, newStatus, expectedStatus, error },
+            { actionId, newStatus, expectedStatuses, error },
             'Firestore transaction failed in updateStatusIf'
           );
         }

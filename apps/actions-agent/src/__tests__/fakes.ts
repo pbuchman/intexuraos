@@ -264,7 +264,7 @@ export class FakeActionRepository implements ActionRepository {
   async updateStatusIf(
     actionId: string,
     newStatus: Action['status'],
-    expectedStatus: Action['status']
+    expectedStatuses: Action['status'] | Action['status'][]
   ): Promise<UpdateStatusIfResult> {
     if (this.failNext) {
       this.failNext = false;
@@ -283,11 +283,12 @@ export class FakeActionRepository implements ActionRepository {
       return result ?? { outcome: 'not_found' };
     }
 
+    const expectedArray = Array.isArray(expectedStatuses) ? expectedStatuses : [expectedStatuses];
     const action = this.actions.get(actionId);
     if (action === undefined) {
       return { outcome: 'not_found' };
     }
-    if (action.status !== expectedStatus) {
+    if (!expectedArray.includes(action.status)) {
       return { outcome: 'status_mismatch', currentStatus: action.status };
     }
     action.status = newStatus;
