@@ -189,7 +189,8 @@ INSIGHT_2: Title=Maximum Value; Description=The highest value reached was 30 on 
     });
 
     it('successfully repairs invalid LLM response', async () => {
-      const invalidResponse = `INSIGHT_1: Title=Test; Description=One sentence. Two sentences. Three sentences. Four sentences too many.; Trackable=Metric; ChartType=C1`;
+      // 7 sentences exceeds the max of 6 (2x tolerance of expected 3)
+      const invalidResponse = `INSIGHT_1: Title=Test; Description=One. Two. Three. Four. Five. Six. Seven sentences too many.; Trackable=Metric; ChartType=C1`;
       const validResponse = `INSIGHT_1: Title=Test; Description=One sentence. Two sentences. Three sentences.; Trackable=Metric; ChartType=C1`;
 
       mockGenerate
