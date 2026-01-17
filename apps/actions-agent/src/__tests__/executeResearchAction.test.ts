@@ -258,4 +258,30 @@ describe('executeResearchAction usecase', () => {
     const params = fakeResearchClient.getLastCreateDraftParams();
     expect(params?.prompt).toBe('Test Research');
   });
+
+  it('prepends Key Points section when summary is provided', async () => {
+    const action = createAction({
+      status: 'awaiting_approval',
+      payload: {
+        prompt: 'Full research question context...',
+        summary: '- Main topic A\n- Main topic B',
+      },
+    });
+    await fakeActionRepo.save(action);
+
+    const usecase = createExecuteResearchActionUseCase({
+      actionRepository: fakeActionRepo,
+      researchServiceClient: fakeResearchClient,
+      whatsappPublisher: fakeWhatsappPublisher,
+      webAppUrl: 'https://app.test.com',
+      logger: silentLogger,
+    });
+
+    await usecase('action-123');
+
+    const params = fakeResearchClient.getLastCreateDraftParams();
+    expect(params?.prompt).toBe(
+      '## Key Points\n\n- Main topic A\n- Main topic B\n\n---\n\nFull research question context...'
+    );
+  });
 });

@@ -26,7 +26,7 @@ describe('linearAgentHttpClient', () => {
     it('returns completed status with resourceUrl and issueIdentifier', async () => {
       const scope = nock(baseUrl)
         .post('/internal/linear/process-action', {
-          action: { id: 'action-123', userId: 'user-456', title: 'Fix bug' },
+          action: { id: 'action-123', userId: 'user-456', text: 'Fix bug' },
         })
         .matchHeader('X-Internal-Auth', internalAuthToken)
         .reply(200, {
@@ -352,7 +352,7 @@ describe('linearAgentHttpClient', () => {
     it('sends correct request body structure', async () => {
       const scope = nock(baseUrl)
         .post('/internal/linear/process-action', {
-          action: { id: 'action-abc', userId: 'user-xyz', title: 'Test issue title' },
+          action: { id: 'action-abc', userId: 'user-xyz', text: 'Test issue text' },
         })
         .matchHeader('X-Internal-Auth', internalAuthToken)
         .matchHeader('Content-Type', 'application/json')
@@ -362,7 +362,7 @@ describe('linearAgentHttpClient', () => {
         });
 
       const client = createClient();
-      await client.processAction('action-abc', 'user-xyz', 'Test issue title');
+      await client.processAction('action-abc', 'user-xyz', 'Test issue text');
 
       expect(scope.isDone()).toBe(true);
     });
@@ -389,11 +389,11 @@ describe('linearAgentHttpClient', () => {
   });
 
   describe('special characters in input', () => {
-    it('handles special characters in title', async () => {
+    it('handles special characters in text', async () => {
       const specialTitle = "Fix: API's \"broken\" feature <script>alert('xss')</script>";
       const scope = nock(baseUrl)
         .post('/internal/linear/process-action', {
-          action: { id: 'action-123', userId: 'user-456', title: specialTitle },
+          action: { id: 'action-123', userId: 'user-456', text: specialTitle },
         })
         .matchHeader('X-Internal-Auth', internalAuthToken)
         .reply(200, {
@@ -408,11 +408,11 @@ describe('linearAgentHttpClient', () => {
       expect(isOk(result)).toBe(true);
     });
 
-    it('handles unicode characters in title', async () => {
+    it('handles unicode characters in text', async () => {
       const unicodeTitle = '修复认证漏洞 🔒 Security fix';
       const scope = nock(baseUrl)
         .post('/internal/linear/process-action', {
-          action: { id: 'action-123', userId: 'user-456', title: unicodeTitle },
+          action: { id: 'action-123', userId: 'user-456', text: unicodeTitle },
         })
         .matchHeader('X-Internal-Auth', internalAuthToken)
         .reply(200, {
@@ -429,10 +429,10 @@ describe('linearAgentHttpClient', () => {
   });
 
   describe('edge cases', () => {
-    it('handles empty string title', async () => {
+    it('handles empty string text', async () => {
       const scope = nock(baseUrl)
         .post('/internal/linear/process-action', {
-          action: { id: 'action-123', userId: 'user-456', title: '' },
+          action: { id: 'action-123', userId: 'user-456', text: '' },
         })
         .matchHeader('X-Internal-Auth', internalAuthToken)
         .reply(200, {
@@ -451,7 +451,7 @@ describe('linearAgentHttpClient', () => {
       }
     });
 
-    it('handles very long title', async () => {
+    it('handles very long text', async () => {
       const longTitle = 'A'.repeat(1000);
       const scope = nock(baseUrl)
         .post('/internal/linear/process-action')

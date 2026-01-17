@@ -16,6 +16,7 @@ import type {
   FailedIssueRepository,
   LinearActionExtractionService,
   ExtractedIssueData,
+  ProcessedActionRepository,
 } from '../index.js';
 
 export interface ProcessLinearActionDeps {
@@ -23,6 +24,7 @@ export interface ProcessLinearActionDeps {
   connectionRepository: LinearConnectionRepository;
   failedIssueRepository: FailedIssueRepository;
   extractionService: LinearActionExtractionService;
+  processedActionRepository: ProcessedActionRepository;
   logger?: Logger;
 }
 
@@ -30,6 +32,7 @@ export interface ProcessLinearActionRequest {
   actionId: string;
   userId: string;
   text: string;
+  summary?: string;
 }
 
 export interface ProcessLinearActionResponse {
@@ -41,9 +44,22 @@ export interface ProcessLinearActionResponse {
 
 /**
  * Build structured markdown description from extracted data.
+ * Always includes the original user instruction at the top.
  */
-function buildDescription(extracted: ExtractedIssueData): string | null {
+function buildDescription(
+  extracted: ExtractedIssueData,
+  originalText: string,
+  summary?: string
+): string {
   const sections: string[] = [];
+
+  sections.push(
+    `## Original User Instruction\n\n> ${originalText}\n\n_This is the original user instruction, transcribed verbatim. May include typos but preserves original observations._`
+  );
+
+  if (summary !== undefined) {
+    sections.push(`## Key Points\n\n${summary}`);
+  }
 
   if (extracted.functionalRequirements !== null) {
     sections.push(`## Functional Requirements\n\n${extracted.functionalRequirements}`);
@@ -53,10 +69,6 @@ function buildDescription(extracted: ExtractedIssueData): string | null {
     sections.push(`## Technical Details\n\n${extracted.technicalDetails}`);
   }
 
-  if (sections.length === 0) {
-    return null;
-  }
-
   return sections.join('\n\n');
 }
 
@@ -64,16 +76,37 @@ export async function processLinearAction(
   request: ProcessLinearActionRequest,
   deps: ProcessLinearActionDeps
 ): Promise<Result<ProcessLinearActionResponse, LinearError>> {
-  const { actionId, userId, text } = request;
+  const { actionId, userId, text, summary } = request;
   const {
     linearApiClient,
     connectionRepository,
     failedIssueRepository,
     extractionService,
+    processedActionRepository,
     logger,
   } = deps;
 
   logger?.info({ userId, actionId, textLength: text.length }, 'processLinearAction: entry');
+
+  // Idempotency check: return existing result if action was already processed
+  const existingResult = await processedActionRepository.getByActionId(actionId);
+  if (!existingResult.ok) {
+    logger?.error({ actionId, error: existingResult.error }, 'Failed to check processed action');
+    return err(existingResult.error);
+  }
+
+  if (existingResult.value !== null) {
+    const existing = existingResult.value;
+    logger?.info(
+      { actionId, issueIdentifier: existing.issueIdentifier },
+      'Action already processed, returning existing result'
+    );
+    return ok({
+      status: 'completed',
+      resourceUrl: existing.resourceUrl,
+      issueIdentifier: existing.issueIdentifier,
+    });
+  }
 
   // Get user's connection
   const connectionResult = await connectionRepository.getFullConnection(userId);
@@ -140,8 +173,8 @@ export async function processLinearAction(
     });
   }
 
-  // Build description from extracted sections
-  const description = buildDescription(extracted);
+  // Build description from extracted sections (with Key Points from summary if available)
+  const description = buildDescription(extracted, text, summary);
 
   // Create issue in Linear
   logger?.info({ userId, actionId, title: extracted.title }, 'Creating Linear issue');
@@ -177,6 +210,22 @@ export async function processLinearAction(
     { userId, actionId, issueId: createdIssue.id, identifier: createdIssue.identifier },
     'Issue created successfully'
   );
+
+  // Save processed action for idempotency
+  const saveResult = await processedActionRepository.create({
+    actionId,
+    userId,
+    issueId: createdIssue.id,
+    issueIdentifier: createdIssue.identifier,
+    resourceUrl: createdIssue.url,
+  });
+
+  if (!saveResult.ok) {
+    logger?.warn(
+      { actionId, error: saveResult.error },
+      'Failed to save processed action (issue was created successfully)'
+    );
+  }
 
   return ok({
     status: 'completed',

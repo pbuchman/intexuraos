@@ -16,11 +16,16 @@ import type {
   ExtractedIssueData,
   FailedIssueRepository,
   FailedLinearIssue,
+  ProcessedActionRepository,
+  ProcessedAction,
 } from '../domain/index.js';
 
 export class FakeLinearConnectionRepository implements LinearConnectionRepository {
   private connections = new Map<string, LinearConnection>();
   private shouldFailGetFullConnection = false;
+  private shouldFailGetConnection = false;
+  private shouldFailSave = false;
+  private shouldFailDisconnect = false;
   private failError: LinearError = { code: 'INTERNAL_ERROR', message: 'Database error' };
 
   async save(
@@ -29,6 +34,8 @@ export class FakeLinearConnectionRepository implements LinearConnectionRepositor
     teamId: string,
     teamName: string
   ): Promise<Result<LinearConnectionPublic, LinearError>> {
+    if (this.shouldFailSave) return err(this.failError);
+
     const now = new Date().toISOString();
     const existing = this.connections.get(userId);
 
@@ -54,6 +61,8 @@ export class FakeLinearConnectionRepository implements LinearConnectionRepositor
   }
 
   async getConnection(userId: string): Promise<Result<LinearConnectionPublic | null, LinearError>> {
+    if (this.shouldFailGetConnection) return err(this.failError);
+
     const conn = this.connections.get(userId);
     if (!conn) return ok(null);
 
@@ -84,12 +93,29 @@ export class FakeLinearConnectionRepository implements LinearConnectionRepositor
     if (error) this.failError = error;
   }
 
+  setGetConnectionFailure(fail: boolean, error?: LinearError): void {
+    this.shouldFailGetConnection = fail;
+    if (error) this.failError = error;
+  }
+
+  setSaveFailure(fail: boolean, error?: LinearError): void {
+    this.shouldFailSave = fail;
+    if (error) this.failError = error;
+  }
+
+  setDisconnectFailure(fail: boolean, error?: LinearError): void {
+    this.shouldFailDisconnect = fail;
+    if (error) this.failError = error;
+  }
+
   async isConnected(userId: string): Promise<Result<boolean, LinearError>> {
     const conn = this.connections.get(userId);
     return ok(conn?.connected ?? false);
   }
 
   async disconnect(userId: string): Promise<Result<LinearConnectionPublic, LinearError>> {
+    if (this.shouldFailDisconnect) return err(this.failError);
+
     const conn = this.connections.get(userId);
     const now = new Date().toISOString();
 
@@ -110,6 +136,9 @@ export class FakeLinearConnectionRepository implements LinearConnectionRepositor
   reset(): void {
     this.connections.clear();
     this.shouldFailGetFullConnection = false;
+    this.shouldFailGetConnection = false;
+    this.shouldFailSave = false;
+    this.shouldFailDisconnect = false;
   }
 
   seedConnection(conn: LinearConnection): void {
@@ -239,6 +268,8 @@ export class FakeLinearActionExtractionService implements LinearActionExtraction
 export class FakeFailedIssueRepository implements FailedIssueRepository {
   private failedIssues: FailedLinearIssue[] = [];
   private counter = 1;
+  private shouldFailListByUser = false;
+  private failError: LinearError = { code: 'INTERNAL_ERROR', message: 'Database error' };
 
   async create(input: {
     userId: string;
@@ -265,8 +296,14 @@ export class FakeFailedIssueRepository implements FailedIssueRepository {
   }
 
   async listByUser(userId: string): Promise<Result<FailedLinearIssue[], LinearError>> {
+    if (this.shouldFailListByUser) return err(this.failError);
     const userIssues = this.failedIssues.filter((fi) => fi.userId === userId);
     return ok(userIssues);
+  }
+
+  setListByUserFailure(fail: boolean, error?: LinearError): void {
+    this.shouldFailListByUser = fail;
+    if (error) this.failError = error;
   }
 
   async delete(id: string): Promise<Result<void, LinearError>> {
@@ -277,9 +314,50 @@ export class FakeFailedIssueRepository implements FailedIssueRepository {
   reset(): void {
     this.failedIssues = [];
     this.counter = 1;
+    this.shouldFailListByUser = false;
   }
 
   get count(): number {
     return this.failedIssues.length;
+  }
+}
+
+export class FakeProcessedActionRepository implements ProcessedActionRepository {
+  private processedActions = new Map<string, ProcessedAction>();
+
+  async getByActionId(actionId: string): Promise<Result<ProcessedAction | null, LinearError>> {
+    const action = this.processedActions.get(actionId);
+    return ok(action ?? null);
+  }
+
+  async create(input: {
+    actionId: string;
+    userId: string;
+    issueId: string;
+    issueIdentifier: string;
+    resourceUrl: string;
+  }): Promise<Result<ProcessedAction, LinearError>> {
+    const processedAction: ProcessedAction = {
+      actionId: input.actionId,
+      userId: input.userId,
+      issueId: input.issueId,
+      issueIdentifier: input.issueIdentifier,
+      resourceUrl: input.resourceUrl,
+      createdAt: new Date().toISOString(),
+    };
+    this.processedActions.set(input.actionId, processedAction);
+    return ok(processedAction);
+  }
+
+  reset(): void {
+    this.processedActions.clear();
+  }
+
+  seedProcessedAction(action: ProcessedAction): void {
+    this.processedActions.set(action.actionId, action);
+  }
+
+  get count(): number {
+    return this.processedActions.size;
   }
 }

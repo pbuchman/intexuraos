@@ -3,7 +3,7 @@
  * Used by linear-agent to extract issue details from user messages.
  */
 
-import type { PromptBuilder, PromptDeps } from '../types.js';
+import type { PromptBuilder, PromptDeps } from '../shared/types.js';
 
 export interface LinearIssueExtractionPromptInput {
   /** The user message to extract issue from */

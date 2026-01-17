@@ -4,27 +4,34 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { renderHook, waitFor } from '@testing-library/react';
-import { useFailedLinearIssues } from '../useFailedLinearIssues';
+import { renderHook, waitFor, act } from '@testing-library/react';
 import type { FailedLinearIssue } from '@/types';
 
-// Mock modules
-vi.mock('../../context', () => ({
-  useAuth: vi.fn(() => ({
-    getAccessToken: vi.fn().mockResolvedValue('mock-token'),
-  })),
+// Use vi.hoisted to declare mocks before they're hoisted
+const { mockGetAccessToken, mockListFailedLinearIssues } = vi.hoisted(() => ({
+  mockGetAccessToken: vi.fn(),
+  mockListFailedLinearIssues: vi.fn(),
 }));
 
-vi.mock('../../services/linearApi', () => ({
-  listFailedLinearIssues: vi.fn(),
-}));
-
-vi.mock('@intexuraos/common-core/errors.js', () => ({
-  getErrorMessage: vi.fn((err, defaultMsg) => {
-    if (err instanceof Error) return err.message;
-    return defaultMsg;
+vi.mock('@/context', () => ({
+  useAuth: (): { getAccessToken: typeof mockGetAccessToken } => ({
+    getAccessToken: mockGetAccessToken,
   }),
 }));
+
+vi.mock('@/services/linearApi', () => ({
+  listFailedLinearIssues: mockListFailedLinearIssues,
+}));
+
+vi.mock('@intexuraos/common-core/errors', () => ({
+  getErrorMessage: (err: unknown, defaultMsg: string): string => {
+    if (err instanceof Error) return err.message;
+    return defaultMsg;
+  },
+}));
+
+// Import hook after mocks are set up
+import { useFailedLinearIssues } from '../useFailedLinearIssues';
 
 describe('useFailedLinearIssues', () => {
   const mockIssues: FailedLinearIssue[] = [
@@ -50,11 +57,11 @@ describe('useFailedLinearIssues', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockGetAccessToken.mockResolvedValue('mock-token');
   });
 
   it('loads issues on mount', async () => {
-    const { listFailedLinearIssues } = await import('../../services/linearApi');
-    vi.mocked(listFailedLinearIssues).mockResolvedValue(mockIssues);
+    mockListFailedLinearIssues.mockResolvedValue(mockIssues);
 
     const { result } = renderHook(() => useFailedLinearIssues());
 
@@ -71,8 +78,7 @@ describe('useFailedLinearIssues', () => {
   });
 
   it('handles load error', async () => {
-    const { listFailedLinearIssues } = await import('../../services/linearApi');
-    vi.mocked(listFailedLinearIssues).mockRejectedValue(new Error('Network error'));
+    mockListFailedLinearIssues.mockRejectedValue(new Error('Network error'));
 
     const { result } = renderHook(() => useFailedLinearIssues());
 
@@ -85,8 +91,7 @@ describe('useFailedLinearIssues', () => {
   });
 
   it('provides refresh function', async () => {
-    const { listFailedLinearIssues } = await import('../../services/linearApi');
-    vi.mocked(listFailedLinearIssues).mockResolvedValue(mockIssues);
+    mockListFailedLinearIssues.mockResolvedValue(mockIssues);
 
     const { result } = renderHook(() => useFailedLinearIssues());
 
@@ -96,8 +101,8 @@ describe('useFailedLinearIssues', () => {
 
     expect(result.current.issues).toEqual(mockIssues);
 
-    // Mock updated data
-    const updatedIssues = [...mockIssues, {
+    // Mock updated data for next call
+    const updatedIssues: FailedLinearIssue[] = [...mockIssues, {
       id: 'issue-3',
       userId: 'user-1',
       actionType: 'create_issue',
@@ -106,10 +111,12 @@ describe('useFailedLinearIssues', () => {
       createdAt: '2024-01-03T00:00:00Z',
       retryCount: 0,
     }];
-    vi.mocked(listFailedLinearIssues).mockResolvedValue(updatedIssues);
+    mockListFailedLinearIssues.mockResolvedValue(updatedIssues);
 
     // Call refresh
-    await result.current.refresh();
+    await act(async () => {
+      await result.current.refresh();
+    });
 
     await waitFor(() => {
       expect(result.current.loading).toBe(false);
@@ -119,10 +126,8 @@ describe('useFailedLinearIssues', () => {
   });
 
   it('clears error on successful refresh', async () => {
-    const { listFailedLinearIssues } = await import('../../services/linearApi');
-
     // First call fails
-    vi.mocked(listFailedLinearIssues).mockRejectedValue(new Error('Network error'));
+    mockListFailedLinearIssues.mockRejectedValue(new Error('Network error'));
 
     const { result } = renderHook(() => useFailedLinearIssues());
 
@@ -133,9 +138,11 @@ describe('useFailedLinearIssues', () => {
     expect(result.current.error).toBe('Network error');
 
     // Second call succeeds
-    vi.mocked(listFailedLinearIssues).mockResolvedValue(mockIssues);
+    mockListFailedLinearIssues.mockResolvedValue(mockIssues);
 
-    await result.current.refresh();
+    await act(async () => {
+      await result.current.refresh();
+    });
 
     await waitFor(() => {
       expect(result.current.loading).toBe(false);
@@ -146,21 +153,14 @@ describe('useFailedLinearIssues', () => {
   });
 
   it('uses auth token from context', async () => {
-    const { useAuth } = await import('../../context');
-    const { listFailedLinearIssues } = await import('../../services/linearApi');
-
-    const mockGetAccessToken = vi.fn().mockResolvedValue('test-token-123');
-    vi.mocked(useAuth).mockReturnValue({
-      getAccessToken: mockGetAccessToken,
-    } as ReturnType<typeof useAuth>);
-
-    vi.mocked(listFailedLinearIssues).mockResolvedValue(mockIssues);
+    mockGetAccessToken.mockResolvedValue('test-token-123');
+    mockListFailedLinearIssues.mockResolvedValue(mockIssues);
 
     renderHook(() => useFailedLinearIssues());
 
     await waitFor(() => {
       expect(mockGetAccessToken).toHaveBeenCalled();
-      expect(listFailedLinearIssues).toHaveBeenCalledWith('test-token-123');
+      expect(mockListFailedLinearIssues).toHaveBeenCalledWith('test-token-123');
     });
   });
 });

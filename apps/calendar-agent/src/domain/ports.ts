@@ -14,6 +14,7 @@ import type {
   FailedEvent,
   CreateFailedEventInput,
   FailedEventFilters,
+  ProcessedAction,
 } from './models.js';
 import type { CalendarError } from './errors.js';
 
@@ -108,4 +109,18 @@ export interface CalendarActionExtractionService {
     text: string,
     currentDate: string
   ): Promise<Result<ExtractedCalendarEvent, ExtractionError>>;
+}
+
+/** Repository for tracking successfully processed actions (idempotency) */
+export interface ProcessedActionRepository {
+  /** Get a processed action by actionId */
+  getByActionId(actionId: string): Promise<Result<ProcessedAction | null, CalendarError>>;
+
+  /** Save a successfully processed action */
+  create(input: {
+    actionId: string;
+    userId: string;
+    eventId: string;
+    resourceUrl: string;
+  }): Promise<Result<ProcessedAction, CalendarError>>;
 }

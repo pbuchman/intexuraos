@@ -14,6 +14,7 @@ import {
   FakeUserServiceClient,
   FakeFailedEventRepository,
   FakeCalendarActionExtractionService,
+  FakeProcessedActionRepository,
 } from './fakes.js';
 import type { CalendarEvent, FreeBusySlot } from '../domain/index.js';
 
@@ -32,6 +33,7 @@ describe('Calendar Routes', () => {
   let fakeCalendarClient: FakeGoogleCalendarClient;
   let fakeFailedEventRepository: FakeFailedEventRepository;
   let fakeCalendarActionExtractionService: FakeCalendarActionExtractionService;
+  let fakeProcessedActionRepository: FakeProcessedActionRepository;
 
   async function createJwt(userId: string): Promise<string> {
     return await new jose.SignJWT({ sub: userId })
@@ -79,12 +81,14 @@ describe('Calendar Routes', () => {
     fakeCalendarClient = new FakeGoogleCalendarClient();
     fakeFailedEventRepository = new FakeFailedEventRepository();
     fakeCalendarActionExtractionService = new FakeCalendarActionExtractionService();
+    fakeProcessedActionRepository = new FakeProcessedActionRepository();
 
     setServices({
       userServiceClient: fakeUserService,
       googleCalendarClient: fakeCalendarClient,
       failedEventRepository: fakeFailedEventRepository,
       calendarActionExtractionService: fakeCalendarActionExtractionService,
+      processedActionRepository: fakeProcessedActionRepository,
     });
 
     app = await buildServer();
@@ -754,6 +758,7 @@ describe('Calendar Routes', () => {
         googleCalendarClient: fakeCalendarClient,
         failedEventRepository: fakeFailedEventRepository,
         calendarActionExtractionService: fakeCalendarActionExtractionService,
+        processedActionRepository: fakeProcessedActionRepository,
       });
       app = await buildServer();
 
@@ -774,6 +779,7 @@ describe('Calendar Routes', () => {
         googleCalendarClient: fakeCalendarClient,
         failedEventRepository: fakeFailedEventRepository,
         calendarActionExtractionService: fakeCalendarActionExtractionService,
+        processedActionRepository: fakeProcessedActionRepository,
       });
       app = await buildServer();
     });
@@ -864,7 +870,7 @@ describe('Calendar Routes', () => {
       expect(body.error.code).toBe('FORBIDDEN');
     });
 
-    it('returns failed status when Google Calendar returns TOKEN_ERROR', async () => {
+    it('returns 401 when Google Calendar returns TOKEN_ERROR', async () => {
       fakeCalendarActionExtractionService.extractEventResult = {
         ok: true,
         value: {
@@ -889,10 +895,10 @@ describe('Calendar Routes', () => {
         payload: validActionPayload,
       });
 
-      expect(response.statusCode).toBe(200);
+      expect(response.statusCode).toBe(401);
       const body = response.json();
-      expect(body.status).toBe('failed');
-      expect(body.error).toBe('Invalid access token');
+      expect(body.success).toBe(false);
+      expect(body.error.message).toBe('Invalid access token');
     });
 
     it('returns failed status when Google Calendar returns INTERNAL_ERROR', async () => {
@@ -924,6 +930,65 @@ describe('Calendar Routes', () => {
       const body = response.json();
       expect(body.status).toBe('failed');
       expect(body.error).toBe('Calendar API error');
+    });
+  });
+
+  describe('GET /calendar/failed-events', () => {
+    it('returns 401 when not authenticated', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/calendar/failed-events',
+      });
+
+      expect(response.statusCode).toBe(401);
+    });
+
+    it('lists failed events for authenticated user', async () => {
+      const token = await createJwt('user-123');
+      fakeFailedEventRepository.clear();
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/calendar/failed-events',
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json() as { success: boolean; data: { failedEvents: unknown[] } };
+      expect(body.success).toBe(true);
+      expect(body.data.failedEvents).toEqual([]);
+    });
+
+    it('lists failed events with limit parameter', async () => {
+      const token = await createJwt('user-123');
+      fakeFailedEventRepository.clear();
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/calendar/failed-events?limit=5',
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json() as { success: boolean; data: { failedEvents: unknown[] } };
+      expect(body.success).toBe(true);
+      expect(body.data.failedEvents).toEqual([]);
+    });
+
+    it('returns 502 when repository fails', async () => {
+      const token = await createJwt('user-123');
+      fakeFailedEventRepository.setListResult(err({ code: 'INTERNAL_ERROR', message: 'DB error' }));
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/calendar/failed-events',
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(502);
+      const body = response.json() as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('DOWNSTREAM_ERROR');
     });
   });
 });

@@ -335,7 +335,6 @@ describe('createBookmarksServiceHttpClient', () => {
       nock(baseUrl)
         .post('/internal/bookmarks/bookmark-123/force-refresh')
         .matchHeader('X-Internal-Auth', internalAuthToken)
-        .matchHeader('Content-Type', 'application/json')
         .reply(200, {
           success: true,
           data: {
@@ -449,6 +448,34 @@ describe('createBookmarksServiceHttpClient', () => {
       if (isErr(result)) {
         expect(result.error.message).toContain('Failed to call bookmarks-agent');
       }
+    });
+
+    it('does not send Content-Type header when no body is provided', async () => {
+      const scope = nock(baseUrl)
+        .post('/internal/bookmarks/bookmark-no-content-type/force-refresh')
+        .matchHeader('X-Internal-Auth', internalAuthToken)
+        .reply(function () {
+          const contentType = this.req.headers['content-type'];
+          if (contentType !== undefined) {
+            return [400, { success: false, error: { code: 'BAD_REQUEST', message: 'Unexpected Content-Type header' } }];
+          }
+          return [200, {
+            success: true,
+            data: {
+              id: 'bookmark-no-content-type',
+              url: 'https://example.com/article',
+              status: 'active',
+              ogPreview: { title: 'Test' },
+              ogFetchStatus: 'processed',
+            },
+          }];
+        });
+
+      const client = createBookmarksServiceHttpClient({ baseUrl, internalAuthToken, logger: silentLogger });
+      const result = await client.forceRefreshBookmark('bookmark-no-content-type');
+
+      expect(scope.isDone()).toBe(true);
+      expect(isOk(result)).toBe(true);
     });
 
     it('returns bookmark with ogFetchStatus failed when fetch fails', async () => {

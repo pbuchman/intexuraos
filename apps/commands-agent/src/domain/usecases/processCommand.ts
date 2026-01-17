@@ -14,6 +14,7 @@ export interface ProcessCommandInput {
   sourceType: CommandSourceType;
   externalId: string;
   text: string;
+  summary?: string;
   timestamp: string;
 }
 
@@ -76,6 +77,7 @@ export function createProcessCommandUseCase(deps: {
         externalId: input.externalId,
         userId: input.userId,
         text: input.text,
+        ...(input.summary !== undefined && { summary: input.summary }),
         timestamp: input.timestamp,
       });
 
@@ -140,7 +142,10 @@ export function createProcessCommandUseCase(deps: {
           type: classification.type,
           confidence: classification.confidence,
           title: classification.title,
-          payload: { prompt: input.text },
+          payload: {
+            prompt: input.text,
+            ...(input.summary !== undefined && { summary: input.summary }),
+          },
         });
 
         if (!actionResult.ok) {
@@ -168,6 +173,9 @@ export function createProcessCommandUseCase(deps: {
           prompt: input.text,
           confidence: classification.confidence,
         };
+        if (input.summary !== undefined) {
+          eventPayload.summary = input.summary;
+        }
         if (classification.selectedModels !== undefined) {
           eventPayload.selectedModels = classification.selectedModels;
         }

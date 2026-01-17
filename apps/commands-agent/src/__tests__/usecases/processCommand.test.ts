@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { ok } from '@intexuraos/common-core';
 import type { Result } from '@intexuraos/common-core';
 import type { LlmGenerateClient, GenerateResult, LLMError } from '@intexuraos/llm-factory';
+import { LlmModels } from '@intexuraos/llm-contract';
 import { createProcessCommandUseCase } from '../../domain/usecases/processCommand.js';
 import {
   FakeCommandRepository,
@@ -214,6 +215,45 @@ describe('processCommand usecase', () => {
       expect(result.isNew).toBe(false);
       expect(result.command.id).toBe('whatsapp_text:msg-existing');
       expect(result.command.text).toBe('Existing command'); // Original text preserved
+    });
+
+    it('includes summary and selectedModels in event payload when provided', async () => {
+      const userId = 'user-test-optional-fields';
+      userServiceClient.setApiKeys(userId, { google: 'google-key' });
+
+      classifier.setResult({
+        type: 'research',
+        confidence: 0.95,
+        title: 'AI Research',
+        reasoning: 'Research task',
+        selectedModels: [LlmModels.Gemini25Pro, LlmModels.Sonar],
+      });
+
+      const usecase = createProcessCommandUseCase({
+        commandRepository,
+        actionsAgentClient,
+        classifierFactory: () => classifier,
+        userServiceClient,
+        eventPublisher,
+        logger,
+      });
+
+      const result = await usecase.execute({
+        userId,
+        sourceType: 'whatsapp_text',
+        externalId: 'msg-optional-fields',
+        text: 'Research AI trends',
+        summary: 'AI trends research request',
+        timestamp: '2025-01-01T12:00:00.000Z',
+      });
+
+      expect(result.isNew).toBe(true);
+      expect(result.command.status).toBe('classified');
+
+      const events = eventPublisher.getPublishedEvents();
+      expect(events).toHaveLength(1);
+      expect(events[0]?.payload?.summary).toBe('AI trends research request');
+      expect(events[0]?.payload?.selectedModels).toEqual([LlmModels.Gemini25Pro, LlmModels.Sonar]);
     });
 
     it('creates action for low-confidence note classification', async () => {

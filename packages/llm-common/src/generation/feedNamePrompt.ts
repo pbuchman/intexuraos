@@ -3,7 +3,7 @@
  * Used to generate descriptive names based on feed purpose and components.
  */
 
-import type { PromptBuilder, PromptDeps } from '../types.js';
+import type { PromptBuilder, PromptDeps } from '../shared/types.js';
 
 export interface FeedNamePromptInput {
   /** The purpose or description of the feed */

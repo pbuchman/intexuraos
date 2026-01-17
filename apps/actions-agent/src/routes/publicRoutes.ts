@@ -9,7 +9,7 @@ const actionSchema = {
     id: { type: 'string' },
     userId: { type: 'string' },
     commandId: { type: 'string' },
-    type: { type: 'string', enum: ['todo', 'research', 'note', 'link', 'calendar', 'reminder'] },
+    type: { type: 'string', enum: ['todo', 'research', 'note', 'link', 'calendar', 'reminder', 'linear'] },
     confidence: { type: 'number' },
     title: { type: 'string' },
     status: {
@@ -151,7 +151,7 @@ export const publicRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             status: { type: 'string', enum: ['processing', 'rejected', 'archived'] },
             type: {
               type: 'string',
-              enum: ['todo', 'research', 'note', 'link', 'calendar', 'reminder'],
+              enum: ['todo', 'research', 'note', 'link', 'calendar', 'reminder', 'linear'],
               description: 'New action type (only for pending/awaiting_approval actions)',
             },
           },

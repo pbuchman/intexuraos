@@ -141,6 +141,7 @@ export function createResearch(params: {
     status: 'pending',
     llmResults: createLlmResults(params.selectedModels),
     startedAt: now,
+    favourite: false,
   };
 
   if (params.inputContexts !== undefined && params.inputContexts.length > 0) {
@@ -185,6 +186,7 @@ export function createDraftResearch(params: {
     status: 'draft',
     llmResults: createLlmResults(params.selectedModels),
     startedAt: now,
+    favourite: false,
   };
 
   if (params.sourceActionId !== undefined) {
@@ -258,6 +260,7 @@ export function createEnhancedResearch(params: EnhanceResearchParams): Research 
     startedAt: now,
     sourceResearchId: source.id,
     sourceLlmCostUsd,
+    favourite: false,
   };
 
   if (allContexts.length > 0) {

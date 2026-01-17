@@ -264,7 +264,7 @@ export class FakeActionRepository implements ActionRepository {
   async updateStatusIf(
     actionId: string,
     newStatus: Action['status'],
-    expectedStatus: Action['status']
+    expectedStatuses: Action['status'] | Action['status'][]
   ): Promise<UpdateStatusIfResult> {
     if (this.failNext) {
       this.failNext = false;
@@ -283,11 +283,12 @@ export class FakeActionRepository implements ActionRepository {
       return result ?? { outcome: 'not_found' };
     }
 
+    const expectedArray = Array.isArray(expectedStatuses) ? expectedStatuses : [expectedStatuses];
     const action = this.actions.get(actionId);
     if (action === undefined) {
       return { outcome: 'not_found' };
     }
-    if (action.status !== expectedStatus) {
+    if (!expectedArray.includes(action.status)) {
       return { outcome: 'status_mismatch', currentStatus: action.status };
     }
     action.status = newStatus;
@@ -576,7 +577,8 @@ export class FakeLinearAgentClient implements LinearAgentClient {
   private processedActions: {
     actionId: string;
     userId: string;
-    title: string;
+    text: string;
+    summary?: string;
   }[] = [];
   private nextResponse: {
     status: 'completed' | 'failed';
@@ -612,7 +614,8 @@ export class FakeLinearAgentClient implements LinearAgentClient {
   async processAction(
     _actionId: string,
     _userId: string,
-    _title: string
+    _text: string,
+    _summary?: string
   ): Promise<
     Result<{
       status: 'completed' | 'failed';
@@ -625,7 +628,12 @@ export class FakeLinearAgentClient implements LinearAgentClient {
       this.failNext = false;
       return err(this.failError ?? new Error('Simulated failure'));
     }
-    this.processedActions.push({ actionId: _actionId, userId: _userId, title: _title });
+    this.processedActions.push({
+      actionId: _actionId,
+      userId: _userId,
+      text: _text,
+      ...((_summary !== undefined) && { summary: _summary }),
+    });
     return ok(this.nextResponse);
   }
 }
@@ -894,13 +902,15 @@ export function createFakeServices(deps: {
     }
   );
 
-  const handleLinearActionUseCase: HandleLinearActionUseCase =
-    createHandleLinearActionUseCase({
-      actionServiceClient: deps.actionServiceClient,
+  const handleLinearActionUseCase: HandleLinearActionUseCase = registerActionHandler(
+    createHandleLinearActionUseCase,
+    {
+      actionRepository,
       whatsappPublisher,
       webAppUrl: 'http://test.app',
       logger: silentLogger,
-    });
+    }
+  );
 
   const changeActionTypeUseCase: ChangeActionTypeUseCase =
     deps.changeActionTypeUseCase ??

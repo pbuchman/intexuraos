@@ -4,8 +4,8 @@
  * LLM-specific utilities for prompts, context inference, attribution, and redaction.
  */
 
-// Prompt builder types
-export { type PromptBuilder, type PromptDeps } from './types.js';
+// Prompt builder types (from shared)
+export { type PromptBuilder, type PromptDeps } from './shared/types.js';
 
 // Generation prompts (title, label, feed name)
 export {
@@ -65,54 +65,61 @@ export {
   buildImprovementRepairPrompt,
 } from './validation/index.js';
 
-// Research prompt builder
-export { buildResearchPrompt } from './researchPrompt.js';
+// Research prompt builder (from research domain)
+export { buildResearchPrompt } from './research/researchPrompt.js';
 
-// Synthesis prompt builder
+// Synthesis prompt builder (from research domain)
 export {
   buildSynthesisPrompt,
   type SynthesisReport,
   type AdditionalSource,
   /** @deprecated Use AdditionalSource instead */
   type ExternalReport,
-} from './synthesisPrompt.js';
+} from './research/synthesisPrompt.js';
 
-// Context inference module
+// Context inference - shared types (from shared)
 export {
-  // Types
   DOMAINS,
   type Domain,
   type Mode,
+  type DefaultApplied,
+  type SafetyInfo,
+} from './shared/contextTypes.js';
+
+// Context inference - LlmReport type (alias for SynthesisReport)
+export { type LlmReport } from './synthesis/contextTypes.js';
+
+// Context inference - research types and guards (from research)
+export {
   type AnswerStyle,
   type SourceType,
   type AvoidSourceType,
-  type SynthesisGoal,
-  type ConflictSeverity,
-  type DefaultApplied,
   type TimeScope,
   type LocaleScope,
   type ResearchPlan,
   type OutputFormat,
-  type SafetyInfo,
   type ResearchContext,
+  type InferResearchContextOptions,
+  isResearchContext,
+  buildInferResearchContextPrompt,
+  buildResearchContextRepairPrompt,
+} from './research/index.js';
+
+// Context inference - synthesis types and guards (from synthesis)
+export {
+  type SynthesisGoal,
+  type ConflictSeverity,
   type DetectedConflict,
   type SourcePreference,
   type SynthesisOutputFormat,
   type SynthesisContext,
-  type LlmReport,
-  type InferResearchContextOptions,
   type InferSynthesisContextParams,
-  // Guards
-  isResearchContext,
   isSynthesisContext,
-  // Prompt builders
-  buildInferResearchContextPrompt,
   buildInferSynthesisContextPrompt,
-  buildResearchContextRepairPrompt,
   buildSynthesisContextRepairPrompt,
-} from './context/index.js';
+} from './synthesis/index.js';
 
-// Attribution system
+// Attribution system (from research domain)
 export {
   type SourceId,
   type SourceMapItem,
@@ -126,19 +133,19 @@ export {
   validateSynthesisAttributions,
   generateBreakdown,
   stripAttributionLines,
-} from './attribution.js';
+} from './research/attribution.js';
 
-// Security utilities
-export { redactToken, redactObject, SENSITIVE_FIELDS } from './redaction.js';
+// Security utilities (from shared)
+export { redactToken, redactObject, SENSITIVE_FIELDS } from './shared/redaction.js';
 
-// LLM parse error utilities
+// LLM parse error utilities (from shared)
 export {
   createLlmParseError,
   logLlmParseError,
   withLlmParseErrorLogging,
   createDetailedParseErrorMessage,
   type LlmParseErrorDetails,
-} from './llm/parseError.js';
+} from './shared/parseError.js';
 
 // Data insights prompts and parsers
 export {

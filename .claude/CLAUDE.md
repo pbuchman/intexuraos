@@ -12,15 +12,79 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Ownership Mindset (MANDATORY)
 
-**RULE:** Any issue you find in the codebase is YOUR issue to fix. NEVER claim there were "pre-existing issues" or "pre-existing bugs."
+_Inspired by "Extreme Ownership" by Jocko Willink and Leif Babin_
 
-**RULE:** YOU MUST NOT USE WORDS "pre-existing", "unrelated", "not my fault", "not my responsibility". These are forbidden. Double-think before using them.
+### Core Principle
 
-- You see a problem → you own it → you fix it
-- No finger-pointing at "previous state" or "prior work"
-- Unless user EXPLICITLY tells you otherwise (e.g., "ignore X", "this is a known issue"), assume responsibility
+**There are no bad teams, only bad leaders.** In this context: there is no bad code, only unowned problems. From the moment you accept a task until CI passes successfully, YOU own everything that happens.
 
-**Corollary:** If you're unsure whether something is your responsibility, ASK — don't assume it's someone else's debt.
+### Ownership Scope
+
+**RULE:** Task ownership spans from assignment to successful CI completion.
+
+- **Start:** Task assigned or accepted
+- **End:** `pnpm run ci:tracked` passes AND PR is ready for review
+- **Everything in between:** YOUR responsibility
+
+If CI fails because of a "pre-existing" issue, that issue is now YOURS. The moment you encounter it, you own it.
+
+### Forbidden Language
+
+**RULE:** The following phrases are STRICTLY FORBIDDEN:
+
+| Forbidden Phrase          | Why It's Wrong                                  |
+| ------------------------- | ----------------------------------------------- |
+| "pre-existing issue"      | Discovery creates ownership                     |
+| "pre-existing bug"        | Same as above                                   |
+| "not my fault"            | Fault is irrelevant; fix is your responsibility |
+| "not my responsibility"   | If you see it, you own it                       |
+| "unrelated to my changes" | If it blocks CI, it's related                   |
+| "was already broken"      | Now it's yours to fix                           |
+| "someone else's code"     | All code in scope is your code                  |
+| "I didn't introduce this" | Irrelevant — you're fixing it now               |
+| "legacy issue"            | Legacy is just code waiting for an owner        |
+
+**Double-think before using any variation of these phrases.** If you catch yourself about to say them, stop and reframe: "How do I fix this?"
+
+### The Extreme Ownership Standard
+
+1. **No excuses.** When something goes wrong, own it completely
+2. **No blame.** Never point fingers at "previous state" or "prior work"
+3. **Proactive problem-solving.** Don't wait to be told — see problem, fix problem
+4. **Cover and move.** Help fix issues even outside your immediate scope if they block success
+5. **Prioritize and execute.** When overwhelmed with issues, fix the highest priority first, then move to the next
+
+### Practical Application
+
+```
+❌ "CI failed because of a pre-existing type error in services.ts"
+✅ "CI failed due to a type error in services.ts. Fixing it now."
+
+❌ "This test was already flaky before my changes"
+✅ "Found a flaky test. Stabilizing it as part of this PR."
+
+❌ "The linter rules are too strict, this isn't my fault"
+✅ "Lint error found. Updating code to comply."
+```
+
+### The Only Exception
+
+**RULE:** The ONLY time you may acknowledge pre-existing state is when the user EXPLICITLY instructs you to ignore it:
+
+- User says: "Ignore the type errors in legacy/, focus only on new code"
+- User says: "This is a known issue, skip it for now"
+- User says: "Leave that for a separate PR"
+
+Without explicit instruction, assume responsibility for everything you encounter.
+
+### Corollary
+
+If you're unsure whether something is your responsibility, ASK — but phrase the question assuming ownership:
+
+```
+❌ "Is this my responsibility to fix?"
+✅ "I found an issue in X. Should I fix it in this PR or create a separate issue?"
+```
 
 ---
 
@@ -102,6 +166,50 @@ grep -B2 "90\." /tmp/ci-output.txt | head -50
 ```
 
 **Why:** Each `test:coverage` run takes 2-5 minutes. Re-running 3-4 times just to grep different patterns wastes 10-15 minutes. `tee` saves output while displaying it—subsequent analysis is instantaneous.
+
+---
+
+## GCloud Authentication (MANDATORY)
+
+**RULE:** NEVER claim "gcloud is not authenticated" or "unauthenticated to gcloud" without first verifying service account credentials.
+
+### Service Account Credentials
+
+A service account key file is available at:
+
+```
+~/personal/gcloud-claude-code-dev.json
+```
+
+### Verification Before Claiming Auth Failure
+
+Before reporting any gcloud authentication issues, you MUST:
+
+1. **Check if credentials file exists:**
+
+   ```bash
+   ls -la ~/personal/gcloud-claude-code-dev.json
+   ```
+
+2. **Activate service account if needed:**
+
+   ```bash
+   gcloud auth activate-service-account --key-file=~/personal/gcloud-claude-code-dev.json
+   ```
+
+3. **Verify authentication:**
+
+   ```bash
+   gcloud auth list
+   ```
+
+### When to Use Service Account
+
+- Firestore queries for investigation
+- Any `gcloud` commands requiring project access
+- Accessing production/dev data for debugging
+
+**You are NEVER "unauthenticated" if the service account key file exists.** Activate it and proceed.
 
 ---
 

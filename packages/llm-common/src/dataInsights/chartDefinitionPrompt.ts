@@ -1,4 +1,4 @@
-import type { PromptBuilder } from '../types.js';
+import type { PromptBuilder } from '../shared/types.js';
 
 export interface ChartDefinitionPromptInput {
   jsonSchema: object;
