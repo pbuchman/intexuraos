@@ -6,6 +6,7 @@ import {
   type ListCalendarEventsFilters,
 } from '@/services/calendarApi';
 import type { CalendarEvent } from '@/types';
+import { getCurrentWeekRange } from '@/utils';
 
 interface UseCalendarEventsResult {
   events: CalendarEvent[];
@@ -18,17 +19,10 @@ interface UseCalendarEventsResult {
 }
 
 function getDefaultFilters(): ListCalendarEventsFilters {
-  const now = new Date();
-  const startOfWeek = new Date(now);
-  startOfWeek.setDate(now.getDate() - now.getDay());
-  startOfWeek.setHours(0, 0, 0, 0);
-
-  const endOfWeek = new Date(startOfWeek);
-  endOfWeek.setDate(startOfWeek.getDate() + 7);
-
+  const { start, end } = getCurrentWeekRange();
   return {
-    timeMin: startOfWeek.toISOString(),
-    timeMax: endOfWeek.toISOString(),
+    timeMin: start.toISOString(),
+    timeMax: end.toISOString(),
     maxResults: 50,
   };
 }
