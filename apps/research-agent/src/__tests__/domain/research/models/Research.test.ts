@@ -41,6 +41,32 @@ describe('Research factory functions', () => {
       expect(research.synthesisModel).toBe(LlmModels.ClaudeSonnet45);
       expect(research.llmResults).toHaveLength(2);
     });
+
+    it('stores originalPrompt when provided', () => {
+      const research = createResearch({
+        id: 'test-id',
+        userId: 'user-123',
+        prompt: 'Improved prompt with more context',
+        originalPrompt: 'Original poor prompt',
+        selectedModels: [LlmModels.Gemini25Flash],
+        synthesisModel: LlmModels.Gemini25Flash,
+      });
+
+      expect(research.prompt).toBe('Improved prompt with more context');
+      expect(research.originalPrompt).toBe('Original poor prompt');
+    });
+
+    it('does not set originalPrompt when not provided', () => {
+      const research = createResearch({
+        id: 'test-id',
+        userId: 'user-123',
+        prompt: 'Test prompt',
+        selectedModels: [LlmModels.Gemini25Flash],
+        synthesisModel: LlmModels.Gemini25Flash,
+      });
+
+      expect(research.originalPrompt).toBeUndefined();
+    });
   });
 
   describe('createDraftResearch', () => {

@@ -11,6 +11,8 @@ import type { RepositoryError, ResearchRepository } from '../ports/index.js';
 export interface SubmitResearchParams {
   userId: string;
   prompt: string;
+  /** Original user prompt before improvement. Set when user accepted an improved suggestion. */
+  originalPrompt?: string;
   selectedModels: ResearchModel[];
   synthesisModel: ResearchModel;
   inputContexts?: { content: string; label?: string | undefined }[];
@@ -36,6 +38,9 @@ export async function submitResearch(
     selectedModels: params.selectedModels,
     synthesisModel: params.synthesisModel,
   };
+  if (params.originalPrompt !== undefined) {
+    createParams.originalPrompt = params.originalPrompt;
+  }
   if (params.inputContexts !== undefined) {
     createParams.inputContexts = params.inputContexts;
   }

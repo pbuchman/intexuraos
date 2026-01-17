@@ -67,6 +67,7 @@ import {
 
 interface CreateResearchBody {
   prompt: string;
+  originalPrompt?: string;
   selectedModels: ResearchModel[];
   synthesisModel?: ResearchModel;
   inputContexts?: { content: string; label?: string }[];
@@ -188,6 +189,9 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         selectedModels: body.selectedModels,
         synthesisModel,
       };
+      if (body.originalPrompt !== undefined) {
+        submitParams.originalPrompt = body.originalPrompt;
+      }
       if (body.inputContexts !== undefined) {
         const contextsWithLabels = await generateContextLabels(
           body.inputContexts,

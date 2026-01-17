@@ -380,6 +380,28 @@ describe('Research Routes - Authenticated', () => {
       expect(body.data.inputContexts).toHaveLength(1);
     });
 
+    it('stores originalPrompt when user accepted an improved suggestion', async () => {
+      const token = await createToken(TEST_USER_ID);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/research',
+        headers: { authorization: `Bearer ${token}` },
+        payload: {
+          prompt: 'Improved prompt with more context and details',
+          originalPrompt: 'Original poor prompt',
+          selectedModels: [LlmModels.Gemini25Pro],
+          synthesisModel: LlmModels.Gemini25Pro,
+        },
+      });
+
+      expect(response.statusCode).toBe(201);
+      const body = JSON.parse(response.body) as { success: boolean; data: Research };
+      expect(body.success).toBe(true);
+      expect(body.data.prompt).toBe('Improved prompt with more context and details');
+      expect(body.data.originalPrompt).toBe('Original poor prompt');
+    });
+
     it('returns 500 on save failure', async () => {
       const token = await createToken(TEST_USER_ID);
       fakeRepo.setFailNextSave(true);

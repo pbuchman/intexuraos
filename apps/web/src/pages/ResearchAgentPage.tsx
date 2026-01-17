@@ -60,6 +60,9 @@ export function ResearchAgentPage(): React.JSX.Element {
   const [showImprovementModal, setShowImprovementModal] = useState(false);
   const [pendingImprovedPrompt, setPendingImprovedPrompt] = useState<string | null>(null);
   const [validationWarning, setValidationWarning] = useState<string | null>(null);
+  const [originalPromptBeforeImprovement, setOriginalPromptBeforeImprovement] = useState<
+    string | null
+  >(null);
 
   const autosaveTimerRef = useRef<NodeJS.Timeout | null>(null);
   const lastSavedPromptRef = useRef('');
@@ -316,9 +319,14 @@ export function ResearchAgentPage(): React.JSX.Element {
   const selectedModels = getSelectedModelsList(modelSelections);
   const isSingleModelNoContext = selectedModels.length === 1 && !hasValidContexts;
 
-  const executeSubmit = async (): Promise<void> => {
+  const executeSubmit = async (params?: {
+    improvedPrompt?: string;
+    originalPrompt?: string;
+  }): Promise<void> => {
     setSubmitting(true);
     setError(null);
+
+    const promptToSubmit = params?.improvedPrompt ?? prompt;
 
     try {
       const token = await getAccessToken();
@@ -328,7 +336,7 @@ export function ResearchAgentPage(): React.JSX.Element {
         const { updateDraft: updateDraftFn, approveResearch } =
           await import('@/services/researchAgentApi');
 
-        const draftRequest: SaveDraftRequest = { prompt };
+        const draftRequest: SaveDraftRequest = { prompt: promptToSubmit };
         if (selectedModels.length > 0) {
           draftRequest.selectedModels = selectedModels;
         }
@@ -348,10 +356,13 @@ export function ResearchAgentPage(): React.JSX.Element {
         }
         const { createResearch } = await import('@/services/researchAgentApi');
         const request: Parameters<typeof createResearch>[1] = {
-          prompt,
+          prompt: promptToSubmit,
           selectedModels,
           synthesisModel,
         };
+        if (params?.originalPrompt !== undefined) {
+          request.originalPrompt = params.originalPrompt;
+        }
         if (contextObjects.length > 0) {
           request.inputContexts = contextObjects;
         }
@@ -428,7 +439,11 @@ export function ResearchAgentPage(): React.JSX.Element {
 
   const handleConfirmProceed = (): void => {
     setShowSingleProviderConfirm(false);
-    void executeSubmit();
+    if (originalPromptBeforeImprovement !== null) {
+      void executeSubmit({ originalPrompt: originalPromptBeforeImprovement });
+    } else {
+      void executeSubmit();
+    }
   };
 
   const handleConfirmDiscard = (): void => {
@@ -442,6 +457,8 @@ export function ResearchAgentPage(): React.JSX.Element {
 
   const handleUseImprovedPrompt = (): void => {
     if (pendingImprovedPrompt !== null) {
+      const originalPrompt = prompt;
+      setOriginalPromptBeforeImprovement(originalPrompt);
       setPrompt(pendingImprovedPrompt);
       setPendingImprovedPrompt(null);
       setShowImprovementModal(false);
@@ -453,7 +470,7 @@ export function ResearchAgentPage(): React.JSX.Element {
         return;
       }
 
-      void executeSubmit();
+      void executeSubmit({ improvedPrompt: pendingImprovedPrompt, originalPrompt });
     }
   };
 
