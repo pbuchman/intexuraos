@@ -66,15 +66,34 @@ export function createCalendarServiceHttpClient(
         return err(new Error(`Failed to call calendar-agent: ${getErrorMessage(error)}`));
       }
 
-      if (!response.ok) {
-        logger.error(
-          { httpStatus: response.status, statusText: response.statusText },
-          'calendar-agent returned error'
-        );
-        return err(new Error(`HTTP ${String(response.status)}: ${response.statusText}`));
+      let body: ApiResponse;
+      try {
+        body = (await response.json()) as ApiResponse;
+      } catch {
+        if (!response.ok) {
+          logger.error(
+            { httpStatus: response.status, statusText: response.statusText },
+            'calendar-agent returned error (non-JSON response)'
+          );
+          return err(new Error(`HTTP ${String(response.status)}: ${response.statusText}`));
+        }
+        logger.error({ httpStatus: response.status }, 'Invalid JSON response from calendar-agent');
+        return err(new Error('Invalid response from calendar-agent'));
       }
 
-      const body = (await response.json()) as ApiResponse;
+      if (!response.ok) {
+        const errorCode = body.error?.code;
+        const errorMessage = body.error?.message ?? `HTTP ${String(response.status)}: ${response.statusText}`;
+        logger.error(
+          { httpStatus: response.status, statusText: response.statusText, errorCode, errorMessage },
+          'calendar-agent returned error'
+        );
+        return ok({
+          status: 'failed',
+          message: errorMessage,
+          ...(errorCode !== undefined && { errorCode }),
+        });
+      }
       if (!body.success || body.data === undefined) {
         logger.error({ body }, 'Invalid response from calendar-agent');
         return err(new Error(body.error?.message ?? 'Invalid response from calendar-agent'));

@@ -126,7 +126,7 @@ describe('linearAgentHttpClient', () => {
   });
 
   describe('HTTP error responses', () => {
-    it('returns error for 401 Unauthorized', async () => {
+    it('returns error for 401 Unauthorized (non-JSON)', async () => {
       const scope = nock(baseUrl)
         .post('/internal/linear/process-action')
         .matchHeader('X-Internal-Auth', internalAuthToken)
@@ -139,6 +139,47 @@ describe('linearAgentHttpClient', () => {
       expect(isErr(result)).toBe(true);
       if (isErr(result)) {
         expect(result.error.message).toContain('HTTP 401');
+      }
+    });
+
+    it('returns failed ServiceFeedback with errorCode on HTTP 401 with JSON body', async () => {
+      const scope = nock(baseUrl)
+        .post('/internal/linear/process-action')
+        .matchHeader('X-Internal-Auth', internalAuthToken)
+        .reply(401, {
+          success: false,
+          error: { code: 'TOKEN_ERROR', message: 'Token expired' },
+        });
+
+      const client = createClient();
+      const result = await client.processAction('action-123', 'user-456', 'Fix bug');
+
+      expect(scope.isDone()).toBe(true);
+      expect(isOk(result)).toBe(true);
+      if (isOk(result)) {
+        expect(result.value.status).toBe('failed');
+        expect(result.value.message).toBe('Token expired');
+        expect(result.value.errorCode).toBe('TOKEN_ERROR');
+      }
+    });
+
+    it('returns failed ServiceFeedback with default message on HTTP 401 with JSON body but no message', async () => {
+      const scope = nock(baseUrl)
+        .post('/internal/linear/process-action')
+        .matchHeader('X-Internal-Auth', internalAuthToken)
+        .reply(401, {
+          error: { code: 'AUTH_ERROR' },
+        });
+
+      const client = createClient();
+      const result = await client.processAction('action-123', 'user-456', 'Fix bug');
+
+      expect(scope.isDone()).toBe(true);
+      expect(isOk(result)).toBe(true);
+      if (isOk(result)) {
+        expect(result.value.status).toBe('failed');
+        expect(result.value.message).toContain('HTTP 401');
+        expect(result.value.errorCode).toBe('AUTH_ERROR');
       }
     });
 
@@ -224,6 +265,24 @@ describe('linearAgentHttpClient', () => {
   });
 
   describe('response validation errors', () => {
+    it('returns error on OK response with invalid JSON', async () => {
+      const scope = nock(baseUrl)
+        .post('/internal/linear/process-action')
+        .matchHeader('X-Internal-Auth', internalAuthToken)
+        .reply(200, 'not valid json', {
+          'Content-Type': 'text/plain',
+        });
+
+      const client = createClient();
+      const result = await client.processAction('action-123', 'user-456', 'Fix bug');
+
+      expect(scope.isDone()).toBe(true);
+      expect(isErr(result)).toBe(true);
+      if (isErr(result)) {
+        expect(result.error.message).toContain('Invalid response');
+      }
+    });
+
     it('returns error when success is false', async () => {
       const scope = nock(baseUrl)
         .post('/internal/linear/process-action')

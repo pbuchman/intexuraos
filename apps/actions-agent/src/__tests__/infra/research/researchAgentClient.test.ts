@@ -76,8 +76,8 @@ describe('createResearchAgentClient', () => {
       expect(scope.isDone()).toBe(true);
     });
 
-    it('returns error on non-ok HTTP response', async () => {
-      nock(baseUrl).post('/internal/research/draft').reply(500);
+    it('returns error on non-ok HTTP response with non-JSON body', async () => {
+      nock(baseUrl).post('/internal/research/draft').reply(500, 'Internal Server Error');
 
       const client = createResearchAgentClient({ baseUrl, internalAuthToken });
       const result = await client.createDraft({
@@ -90,6 +90,68 @@ describe('createResearchAgentClient', () => {
       expect(result.ok).toBe(false);
       if (!result.ok) {
         expect(result.error.message).toContain('500');
+      }
+    });
+
+    it('returns failed ServiceFeedback with errorCode on HTTP 401', async () => {
+      nock(baseUrl).post('/internal/research/draft').reply(401, {
+        success: false,
+        error: { code: 'TOKEN_ERROR', message: 'Token expired' },
+      });
+
+      const client = createResearchAgentClient({ baseUrl, internalAuthToken });
+      const result = await client.createDraft({
+        userId: 'user-123',
+        title: 'Test',
+        prompt: 'Test prompt',
+        selectedModels: [LlmModels.O4MiniDeepResearch],
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.status).toBe('failed');
+        expect(result.value.message).toBe('Token expired');
+        expect(result.value.errorCode).toBe('TOKEN_ERROR');
+      }
+    });
+
+    it('returns failed ServiceFeedback with default message on HTTP 401 without error body', async () => {
+      nock(baseUrl).post('/internal/research/draft').reply(401, {
+        error: { message: 'Unauthorized' },
+      });
+
+      const client = createResearchAgentClient({ baseUrl, internalAuthToken });
+      const result = await client.createDraft({
+        userId: 'user-123',
+        title: 'Test',
+        prompt: 'Test prompt',
+        selectedModels: [LlmModels.O4MiniDeepResearch],
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.status).toBe('failed');
+        expect(result.value.message).toBe('Unauthorized');
+        expect(result.value.errorCode).toBeUndefined();
+      }
+    });
+
+    it('returns error on OK response with invalid JSON', async () => {
+      nock(baseUrl).post('/internal/research/draft').reply(200, 'not valid json', {
+        'Content-Type': 'text/plain',
+      });
+
+      const client = createResearchAgentClient({ baseUrl, internalAuthToken });
+      const result = await client.createDraft({
+        userId: 'user-123',
+        title: 'Test',
+        prompt: 'Test prompt',
+        selectedModels: [LlmModels.O4MiniDeepResearch],
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.message).toContain('Invalid response');
       }
     });
 

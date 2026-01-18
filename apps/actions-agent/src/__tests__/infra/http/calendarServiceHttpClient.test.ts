@@ -130,7 +130,7 @@ describe('calendarServiceHttpClient', () => {
   });
 
   describe('HTTP error responses', () => {
-    it('returns error for 401 Unauthorized', async () => {
+    it('returns error for 401 Unauthorized (non-JSON)', async () => {
       const action = createTestAction();
       const scope = nock(baseUrl)
         .post('/internal/calendar/process-action')
@@ -144,6 +144,49 @@ describe('calendarServiceHttpClient', () => {
       expect(isErr(result)).toBe(true);
       if (isErr(result)) {
         expect(result.error.message).toContain('HTTP 401');
+      }
+    });
+
+    it('returns failed ServiceFeedback with errorCode on HTTP 401 with JSON body', async () => {
+      const action = createTestAction();
+      const scope = nock(baseUrl)
+        .post('/internal/calendar/process-action')
+        .matchHeader('X-Internal-Auth', internalAuthToken)
+        .reply(401, {
+          success: false,
+          error: { code: 'TOKEN_ERROR', message: 'Token expired' },
+        });
+
+      const client = createClient();
+      const result = await client.processAction({ action });
+
+      expect(scope.isDone()).toBe(true);
+      expect(isOk(result)).toBe(true);
+      if (isOk(result)) {
+        expect(result.value.status).toBe('failed');
+        expect(result.value.message).toBe('Token expired');
+        expect(result.value.errorCode).toBe('TOKEN_ERROR');
+      }
+    });
+
+    it('returns failed ServiceFeedback with default message on HTTP 401 with JSON body but no message', async () => {
+      const action = createTestAction();
+      const scope = nock(baseUrl)
+        .post('/internal/calendar/process-action')
+        .matchHeader('X-Internal-Auth', internalAuthToken)
+        .reply(401, {
+          error: { code: 'AUTH_ERROR' },
+        });
+
+      const client = createClient();
+      const result = await client.processAction({ action });
+
+      expect(scope.isDone()).toBe(true);
+      expect(isOk(result)).toBe(true);
+      if (isOk(result)) {
+        expect(result.value.status).toBe('failed');
+        expect(result.value.message).toContain('HTTP 401');
+        expect(result.value.errorCode).toBe('AUTH_ERROR');
       }
     });
 
@@ -234,6 +277,25 @@ describe('calendarServiceHttpClient', () => {
   });
 
   describe('response validation errors', () => {
+    it('returns error on OK response with invalid JSON', async () => {
+      const action = createTestAction();
+      const scope = nock(baseUrl)
+        .post('/internal/calendar/process-action')
+        .matchHeader('X-Internal-Auth', internalAuthToken)
+        .reply(200, 'not valid json', {
+          'Content-Type': 'text/plain',
+        });
+
+      const client = createClient();
+      const result = await client.processAction({ action });
+
+      expect(scope.isDone()).toBe(true);
+      expect(isErr(result)).toBe(true);
+      if (isErr(result)) {
+        expect(result.error.message).toContain('Invalid response');
+      }
+    });
+
     it('returns error when status is missing', async () => {
       const action = createTestAction();
       const scope = nock(baseUrl)

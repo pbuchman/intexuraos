@@ -70,8 +70,11 @@ describe('createNotesServiceHttpClient', () => {
       }
     });
 
-    it('returns error on HTTP 401', async () => {
-      nock(baseUrl).post('/internal/notes').reply(401, { error: 'Unauthorized' });
+    it('returns failed ServiceFeedback with errorCode on HTTP 401', async () => {
+      nock(baseUrl).post('/internal/notes').reply(401, {
+        success: false,
+        error: { code: 'TOKEN_ERROR', message: 'Token expired' },
+      });
 
       const client = createNotesServiceHttpClient({ baseUrl, internalAuthToken, logger: silentLogger });
       const result = await client.createNote({
@@ -83,9 +86,34 @@ describe('createNotesServiceHttpClient', () => {
         sourceId: 'action-123',
       });
 
-      expect(isErr(result)).toBe(true);
-      if (isErr(result)) {
-        expect(result.error.message).toContain('HTTP 401');
+      expect(isOk(result)).toBe(true);
+      if (isOk(result)) {
+        expect(result.value.status).toBe('failed');
+        expect(result.value.message).toBe('Token expired');
+        expect(result.value.errorCode).toBe('TOKEN_ERROR');
+      }
+    });
+
+    it('returns failed ServiceFeedback with default message on HTTP 401 without error body', async () => {
+      nock(baseUrl).post('/internal/notes').reply(401, {
+        error: { message: 'Unauthorized' },
+      });
+
+      const client = createNotesServiceHttpClient({ baseUrl, internalAuthToken, logger: silentLogger });
+      const result = await client.createNote({
+        userId: 'user-456',
+        title: 'Test',
+        content: '',
+        tags: [],
+        source: 'actions-agent',
+        sourceId: 'action-123',
+      });
+
+      expect(isOk(result)).toBe(true);
+      if (isOk(result)) {
+        expect(result.value.status).toBe('failed');
+        expect(result.value.message).toBe('Unauthorized');
+        expect(result.value.errorCode).toBeUndefined();
       }
     });
 
