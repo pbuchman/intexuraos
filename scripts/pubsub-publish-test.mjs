@@ -14,6 +14,7 @@
  *   - llm-analytics
  *   - llm-call
  *   - bookmark-enrich
+ *   - bookmark-summarize
  *   - todos-processing
  *   - all (publishes one of each)
  */
@@ -162,6 +163,14 @@ const EVENTS = {
       bookmarkId: 'bookmark-' + Date.now(),
       userId: 'test-user-303',
       url: 'https://example.com/article-' + Date.now(),
+    },
+  },
+  'bookmark-summarize': {
+    topic: 'bookmark-summarize',
+    data: {
+      type: 'bookmarks.summarize',
+      bookmarkId: 'bookmark-' + Date.now(),
+      userId: 'test-user-303',
     },
   },
   'todos-processing': {

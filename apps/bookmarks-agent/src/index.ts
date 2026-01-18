@@ -28,12 +28,15 @@ initSentry({
 
 async function main(): Promise<void> {
   const enrichTopic = process.env['INTEXURAOS_PUBSUB_BOOKMARK_ENRICH'];
+  const summarizeTopic = process.env['INTEXURAOS_PUBSUB_BOOKMARK_SUMMARIZE'];
+  const internalAuthToken = process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] ?? '';
 
   initServices({
     gcpProjectId: process.env['INTEXURAOS_GCP_PROJECT_ID'] ?? '',
     webAgentUrl: process.env['INTEXURAOS_WEB_AGENT_URL'] ?? '',
-    internalAuthToken: process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] ?? '',
+    internalAuthToken,
     bookmarkEnrichTopic: enrichTopic !== undefined && enrichTopic !== '' ? enrichTopic : null,
+    bookmarkSummarizeTopic: summarizeTopic !== undefined && summarizeTopic !== '' ? summarizeTopic : null,
   });
 
   const app = await buildServer();

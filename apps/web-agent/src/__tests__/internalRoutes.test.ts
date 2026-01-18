@@ -4,7 +4,7 @@ import nock from 'nock';
 import { err } from '@intexuraos/common-core';
 import { buildServer } from '../server.js';
 import { resetServices, setServices, type ServiceContainer } from '../services.js';
-import { FakeLinkPreviewFetcher } from './fakes.js';
+import { FakeLinkPreviewFetcher, FakePageSummaryService } from './fakes.js';
 
 const TEST_INTERNAL_TOKEN = 'test-internal-auth-token';
 
@@ -51,6 +51,7 @@ interface ErrorResponse {
 describe('Internal Routes', () => {
   let app: FastifyInstance;
   let fakeFetcher: FakeLinkPreviewFetcher;
+  let fakeSummaryService: FakePageSummaryService;
 
   beforeAll(() => {
     nock.disableNetConnect();
@@ -65,9 +66,11 @@ describe('Internal Routes', () => {
     process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = TEST_INTERNAL_TOKEN;
 
     fakeFetcher = new FakeLinkPreviewFetcher();
+    fakeSummaryService = new FakePageSummaryService();
 
     const services: ServiceContainer = {
       linkPreviewFetcher: fakeFetcher,
+      pageSummaryService: fakeSummaryService,
     };
 
     setServices(services);
@@ -380,6 +383,222 @@ describe('Internal Routes', () => {
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.payload) as LinkPreviewResponse;
       expect(body.data.results[0]?.status).toBe('success');
+    });
+  });
+
+  describe('POST /internal/page-summaries', () => {
+    interface PageSummaryResponse {
+      success: boolean;
+      data: {
+        result: {
+          url: string;
+          status: 'success' | 'failed';
+          summary?: {
+            url: string;
+            summary: string;
+            wordCount: number;
+            estimatedReadingMinutes: number;
+          };
+          error?: {
+            code: string;
+            message: string;
+          };
+        };
+        metadata: {
+          durationMs: number;
+        };
+      };
+    }
+
+    it('returns 401 when X-Internal-Auth header is missing', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/page-summaries',
+        payload: {
+          url: 'https://example.com',
+        },
+      });
+
+      expect(response.statusCode).toBe(401);
+      const body = JSON.parse(response.payload) as ErrorResponse;
+      expect(body.error).toBe('Unauthorized');
+    });
+
+    it('returns 401 when X-Internal-Auth header has wrong value', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/page-summaries',
+        headers: { 'x-internal-auth': 'wrong-token' },
+        payload: {
+          url: 'https://example.com',
+        },
+      });
+
+      expect(response.statusCode).toBe(401);
+    });
+
+    it('returns 400 when url is missing', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/page-summaries',
+        headers: { 'x-internal-auth': TEST_INTERNAL_TOKEN },
+        payload: {},
+      });
+
+      expect(response.statusCode).toBe(400);
+    });
+
+    it('returns 400 when url format is invalid', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/page-summaries',
+        headers: { 'x-internal-auth': TEST_INTERNAL_TOKEN },
+        payload: {
+          url: 'not-a-valid-url',
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+    });
+
+    it('summarizes page successfully', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/page-summaries',
+        headers: { 'x-internal-auth': TEST_INTERNAL_TOKEN },
+        payload: {
+          url: 'https://example.com/article',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.payload) as PageSummaryResponse;
+      expect(body.success).toBe(true);
+      expect(body.data.result.status).toBe('success');
+      expect(body.data.result.summary?.summary).toBe('Test summary of the page content.');
+      expect(body.data.result.summary?.wordCount).toBe(8);
+      expect(typeof body.data.metadata.durationMs).toBe('number');
+    });
+
+    it('accepts optional maxSentences parameter', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/page-summaries',
+        headers: { 'x-internal-auth': TEST_INTERNAL_TOKEN },
+        payload: {
+          url: 'https://example.com',
+          maxSentences: 10,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(fakeSummaryService.calls[0]?.options?.maxSentences).toBe(10);
+    });
+
+    it('accepts optional maxReadingMinutes parameter', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/page-summaries',
+        headers: { 'x-internal-auth': TEST_INTERNAL_TOKEN },
+        payload: {
+          url: 'https://example.com',
+          maxReadingMinutes: 5,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(fakeSummaryService.calls[0]?.options?.maxReadingMinutes).toBe(5);
+    });
+
+    it('handles INVALID_URL for non-HTTP protocols', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/page-summaries',
+        headers: { 'x-internal-auth': TEST_INTERNAL_TOKEN },
+        payload: {
+          url: 'ftp://example.com/file.txt',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.payload) as PageSummaryResponse;
+      expect(body.data.result.status).toBe('failed');
+      expect(body.data.result.error?.code).toBe('INVALID_URL');
+    });
+
+    it('handles NO_CONTENT error from summary service', async () => {
+      fakeSummaryService.setFailNext('NO_CONTENT', 'No extractable content');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/page-summaries',
+        headers: { 'x-internal-auth': TEST_INTERNAL_TOKEN },
+        payload: {
+          url: 'https://example.com/empty',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.payload) as PageSummaryResponse;
+      expect(body.data.result.status).toBe('failed');
+      expect(body.data.result.error?.code).toBe('NO_CONTENT');
+    });
+
+    it('handles API_ERROR from summary service', async () => {
+      fakeSummaryService.setFailNext('API_ERROR', 'External API failure');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/page-summaries',
+        headers: { 'x-internal-auth': TEST_INTERNAL_TOKEN },
+        payload: {
+          url: 'https://example.com/error',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.payload) as PageSummaryResponse;
+      expect(body.data.result.status).toBe('failed');
+      expect(body.data.result.error?.code).toBe('API_ERROR');
+    });
+
+    it('handles TIMEOUT error from summary service', async () => {
+      fakeSummaryService.setFailNext('TIMEOUT', 'Request timed out');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/page-summaries',
+        headers: { 'x-internal-auth': TEST_INTERNAL_TOKEN },
+        payload: {
+          url: 'https://example.com/slow',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.payload) as PageSummaryResponse;
+      expect(body.data.result.status).toBe('failed');
+      expect(body.data.result.error?.code).toBe('TIMEOUT');
+    });
+
+    it('returns 503 when page summary service is not configured', async () => {
+      const servicesWithoutSummary: ServiceContainer = {
+        linkPreviewFetcher: fakeFetcher,
+        pageSummaryService: null,
+      };
+      setServices(servicesWithoutSummary);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/page-summaries',
+        headers: { 'x-internal-auth': TEST_INTERNAL_TOKEN },
+        payload: {
+          url: 'https://example.com',
+        },
+      });
+
+      expect(response.statusCode).toBe(503);
+      const body = JSON.parse(response.payload) as ErrorResponse;
+      expect(body.error).toBe('Page summary service not available');
     });
   });
 

@@ -6,6 +6,8 @@ import { clearJwksCache } from '@intexuraos/common-http';
 import { FakeBookmarkRepository } from './fakeBookmarkRepository.js';
 import { FakeLinkPreviewFetcher } from './fakeLinkPreviewFetcher.js';
 import { FakeEnrichPublisher } from './fakeEnrichPublisher.js';
+import { FakeSummarizePublisher } from './fakeSummarizePublisher.js';
+import { FakeBookmarkSummaryService } from './fakeBookmarkSummaryService.js';
 import { resetServices, setServices } from '../services.js';
 
 export const issuer = 'https://test-issuer.example.com/';
@@ -70,6 +72,8 @@ export interface TestContext {
   bookmarkRepository: FakeBookmarkRepository;
   linkPreviewFetcher: FakeLinkPreviewFetcher;
   enrichPublisher: FakeEnrichPublisher;
+  summarizePublisher: FakeSummarizePublisher;
+  bookmarkSummaryService: FakeBookmarkSummaryService;
 }
 
 export function setupTestContext(): TestContext {
@@ -78,6 +82,8 @@ export function setupTestContext(): TestContext {
     bookmarkRepository: null as unknown as FakeBookmarkRepository,
     linkPreviewFetcher: null as unknown as FakeLinkPreviewFetcher,
     enrichPublisher: null as unknown as FakeEnrichPublisher,
+    summarizePublisher: null as unknown as FakeSummarizePublisher,
+    bookmarkSummaryService: null as unknown as FakeBookmarkSummaryService,
   };
 
   beforeAll(async () => {
@@ -93,10 +99,14 @@ export function setupTestContext(): TestContext {
     context.bookmarkRepository = new FakeBookmarkRepository();
     context.linkPreviewFetcher = new FakeLinkPreviewFetcher();
     context.enrichPublisher = new FakeEnrichPublisher();
+    context.summarizePublisher = new FakeSummarizePublisher();
+    context.bookmarkSummaryService = new FakeBookmarkSummaryService();
     setServices({
       bookmarkRepository: context.bookmarkRepository,
       linkPreviewFetcher: context.linkPreviewFetcher,
       enrichPublisher: context.enrichPublisher,
+      summarizePublisher: context.summarizePublisher,
+      bookmarkSummaryService: context.bookmarkSummaryService,
     });
     clearJwksCache();
     context.app = await buildServer();

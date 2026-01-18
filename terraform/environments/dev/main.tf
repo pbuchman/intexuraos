@@ -476,6 +476,8 @@ module "secret_manager" {
     # Sentry error monitoring
     "INTEXURAOS_SENTRY_DSN"     = "Sentry Data Source Name for error tracking (backend services)"
     "INTEXURAOS_SENTRY_DSN_WEB" = "Sentry Data Source Name for error tracking (web app)"
+    # Crawl4AI Cloud API
+    "INTEXURAOS_CRAWL4AI_API_KEY" = "Crawl4AI Cloud API key for web page content extraction"
   }
 
   depends_on = [google_project_service.apis]
@@ -1203,13 +1205,18 @@ module "bookmarks_agent" {
 
   secrets = local.common_service_secrets
   env_vars = merge(local.common_service_env_vars, {
-    INTEXURAOS_PUBSUB_BOOKMARK_ENRICH = "intexuraos-bookmark-enrich-${var.environment}"
+    INTEXURAOS_PUBSUB_BOOKMARK_ENRICH    = "intexuraos-bookmark-enrich-${var.environment}"
+    INTEXURAOS_PUBSUB_BOOKMARK_SUMMARIZE = "intexuraos-bookmark-summarize-${var.environment}"
+    INTEXURAOS_USER_SERVICE_URL          = module.user_service.service_url
+    INTEXURAOS_APP_SETTINGS_SERVICE_URL  = module.app_settings_service.service_url
   })
 
   depends_on = [
     module.artifact_registry,
     module.iam,
     module.secret_manager,
+    module.user_service,
+    module.app_settings_service,
   ]
 }
 
@@ -1226,6 +1233,31 @@ module "pubsub_bookmark_enrich" {
   push_service_account_email = module.iam.service_accounts["bookmarks_agent"]
   push_audience              = module.bookmarks_agent.service_url
   ack_deadline_seconds       = 60
+
+  publisher_service_accounts = {
+    bookmarks_agent = module.iam.service_accounts["bookmarks_agent"]
+  }
+
+  depends_on = [
+    google_project_service.apis,
+    module.iam,
+    module.bookmarks_agent,
+  ]
+}
+
+# Pub/Sub for bookmark summarization (AI summary generation)
+module "pubsub_bookmark_summarize" {
+  source = "../../modules/pubsub-push"
+
+  project_id     = var.project_id
+  project_number = local.project_number
+  topic_name     = "intexuraos-bookmark-summarize-${var.environment}"
+  labels         = local.common_labels
+
+  push_endpoint              = "${module.bookmarks_agent.service_url}/internal/bookmarks/pubsub/summarize"
+  push_service_account_email = module.iam.service_accounts["bookmarks_agent"]
+  push_audience              = module.bookmarks_agent.service_url
+  ack_deadline_seconds       = 120
 
   publisher_service_accounts = {
     bookmarks_agent = module.iam.service_accounts["bookmarks_agent"]
@@ -1357,7 +1389,9 @@ module "web_agent" {
 
   image = "${var.region}-docker.pkg.dev/${var.project_id}/${module.artifact_registry.repository_id}/web-agent:latest"
 
-  secrets  = local.common_service_secrets
+  secrets = merge(local.common_service_secrets, {
+    INTEXURAOS_CRAWL4AI_API_KEY = module.secret_manager.secret_ids["INTEXURAOS_CRAWL4AI_API_KEY"]
+  })
   env_vars = local.common_service_env_vars
 
   depends_on = [

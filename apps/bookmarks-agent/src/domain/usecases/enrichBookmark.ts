@@ -3,6 +3,7 @@ import { err } from '@intexuraos/common-core';
 import type { Bookmark, BookmarkError, OpenGraphPreview } from '../models/bookmark.js';
 import type { BookmarkRepository } from '../ports/bookmarkRepository.js';
 import type { LinkPreviewFetcherPort } from '../ports/linkPreviewFetcher.js';
+import type { SummarizePublisher } from '../ports/summarizePublisher.js';
 import { updateBookmarkInternal } from './updateBookmarkInternal.js';
 
 interface MinimalLogger {
@@ -14,6 +15,7 @@ interface MinimalLogger {
 export interface EnrichBookmarkDeps {
   bookmarkRepository: BookmarkRepository;
   linkPreviewFetcher: LinkPreviewFetcherPort;
+  summarizePublisher: SummarizePublisher;
   logger: MinimalLogger;
 }
 
@@ -76,9 +78,28 @@ export async function enrichBookmark(
 
   deps.logger.info({ bookmarkId }, 'Link preview fetched successfully');
 
-  return await updateBookmarkInternal(
+  const updateResult = await updateBookmarkInternal(
     { bookmarkRepository: deps.bookmarkRepository, logger: deps.logger },
     bookmarkId,
     { ogPreview, ogFetchStatus: 'processed' }
   );
+
+  if (updateResult.ok) {
+    const publishResult = await deps.summarizePublisher.publishSummarizeBookmark({
+      type: 'bookmarks.summarize',
+      bookmarkId,
+      userId,
+    });
+
+    if (!publishResult.ok) {
+      deps.logger.warn(
+        { bookmarkId, error: publishResult.error },
+        'Failed to publish summarize event'
+      );
+    } else {
+      deps.logger.info({ bookmarkId }, 'Summarize event published successfully');
+    }
+  }
+
+  return updateResult;
 }
