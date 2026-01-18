@@ -14,7 +14,6 @@ import {
   ListTodo,
   Loader2,
   MoreVertical,
-  RefreshCw,
   Search,
   X,
   XCircle,
@@ -191,19 +190,12 @@ export function ActionItem({
     }
   };
 
-  const handleRetry = (e: React.MouseEvent): void => {
-    e.stopPropagation();
-    setExecutionState(null);
-  };
-
   const showDismissButton = action.status === 'completed' || action.status === 'failed';
   const isSuccess = executionState?.type === 'success';
   const showReconnectLink =
-    executionState?.errorCode === 'TOKEN_ERROR' || executionState?.errorCode === 'NOT_CONNECTED';
-  const showRetry =
-    !isSuccess &&
-    executionState?.isDismissError !== true &&
-    executionState?.lastButton !== undefined;
+    executionState?.errorCode === 'TOKEN_ERROR' ||
+    executionState?.errorCode === 'NOT_CONNECTED' ||
+    executionState?.errorCode === 'UNAUTHORIZED';
   const actualDismissing = isDismissing || localDismissing;
 
   return (
@@ -389,19 +381,8 @@ export function ActionItem({
                   to="/settings"
                   className="mt-1 block text-sm font-medium text-red-700 underline hover:text-red-800"
                 >
-                  {executionState.errorCode === 'NOT_CONNECTED'
-                    ? 'Connect Calendar'
-                    : 'Reconnect Calendar'}
+                  {executionState.errorCode === 'NOT_CONNECTED' ? 'Connect Calendar' : 'Reconnect Calendar'}
                 </RouterLink>
-              )}
-              {showRetry && executionState.lastButton !== undefined && (
-                <button
-                  onClick={handleRetry}
-                  className="mt-2 inline-flex items-center gap-1 text-sm font-medium text-red-700 underline hover:text-red-800"
-                >
-                  <RefreshCw className="h-3 w-3" />
-                  Retry
-                </button>
               )}
             </div>
             <button

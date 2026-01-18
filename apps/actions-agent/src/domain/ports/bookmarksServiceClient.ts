@@ -17,6 +17,12 @@ export interface CreateBookmarkResponse {
   title: string | null;
 }
 
+export interface CreateBookmarkError {
+  message: string;
+  errorCode?: string;
+  existingBookmarkId?: string;
+}
+
 export interface ForceRefreshBookmarkResponse {
   id: string;
   url: string;
@@ -26,6 +32,6 @@ export interface ForceRefreshBookmarkResponse {
 }
 
 export interface BookmarksServiceClient {
-  createBookmark(request: CreateBookmarkRequest): Promise<Result<CreateBookmarkResponse>>;
+  createBookmark(request: CreateBookmarkRequest): Promise<Result<CreateBookmarkResponse, CreateBookmarkError>>;
   forceRefreshBookmark(bookmarkId: string): Promise<Result<ForceRefreshBookmarkResponse>>;
 }

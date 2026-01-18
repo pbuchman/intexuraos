@@ -30,6 +30,7 @@ import type {
   BookmarksServiceClient,
   CreateBookmarkRequest,
   CreateBookmarkResponse,
+  CreateBookmarkError,
   ForceRefreshBookmarkResponse,
 } from '../domain/ports/bookmarksServiceClient.js';
 import type { LinearAgentClient } from '../domain/ports/linearAgentClient.js';
@@ -484,7 +485,7 @@ export class FakeBookmarksServiceClient implements BookmarksServiceClient {
   private createdBookmarks: CreateBookmarkRequest[] = [];
   private nextBookmarkId = 'bookmark-123';
   private failNext = false;
-  private failError: Error | null = null;
+  private failError: CreateBookmarkError | null = null;
 
   getCreatedBookmarks(): CreateBookmarkRequest[] {
     return this.createdBookmarks;
@@ -494,15 +495,17 @@ export class FakeBookmarksServiceClient implements BookmarksServiceClient {
     this.nextBookmarkId = id;
   }
 
-  setFailNext(fail: boolean, error?: Error): void {
+  setFailNext(fail: boolean, error?: CreateBookmarkError): void {
     this.failNext = fail;
     this.failError = error ?? null;
   }
 
-  async createBookmark(request: CreateBookmarkRequest): Promise<Result<CreateBookmarkResponse>> {
+  async createBookmark(
+    request: CreateBookmarkRequest
+  ): Promise<Result<CreateBookmarkResponse, CreateBookmarkError>> {
     if (this.failNext) {
       this.failNext = false;
-      return err(this.failError ?? new Error('Simulated failure'));
+      return err(this.failError ?? { message: 'Simulated failure' });
     }
     this.createdBookmarks.push(request);
     return ok({
@@ -518,9 +521,9 @@ export class FakeBookmarksServiceClient implements BookmarksServiceClient {
   ): Promise<Result<ForceRefreshBookmarkResponse>> {
     if (this.failNext) {
       this.failNext = false;
-      return err(this.failError ?? new Error('Simulated failure'));
+      const message = this.failError?.message ?? 'Simulated failure';
+      return err(new Error(message));
     }
-    // For testing, return a successful refresh result
     return ok({
       id: _bookmarkId,
       url: 'https://example.com',
