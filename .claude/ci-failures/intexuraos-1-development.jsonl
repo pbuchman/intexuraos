@@ -15,5 +15,7 @@
 {"ts":"2026-01-16T02:01:31.063Z","project":"intexuraos-1","branch":"development","runNumber":15,"passed":false,"durationMs":414392,"failureCount":2,"failures":[{"type":"test","code":"TEST_FAIL","file":"apps/commands-agent/src/__tests__/infra/classifier.test.ts","line":0,"message":"GeminiClassifier > classify > returns note as fallback when LLM returns unknown type","snippet":null,"context":null},{"type":"verify","code":"VERIFY_FAIL","file":"unknown","line":0,"message":"FAILED","snippet":null,"context":null}]}
 {"ts":"2026-01-16T02:15:14.605Z","project":"intexuraos-1","branch":"development","runNumber":16,"passed":true,"durationMs":719644,"failureCount":0,"failures":[]}
 {"ts":"2026-01-16T02:28:35.996Z","project":"intexuraos-1","branch":"development","runNumber":17,"passed":true,"durationMs":476027,"failureCount":0,"failures":[]}
-{"ts":"2026-01-17T12:06:27.478Z","project":"intexuraos-1","branch":"development","workspace":"--","runNumber":18,"passed":false,"durationMs":343,"failureCount":0,"failures":[]}
-{"ts":"2026-01-17T12:10:13.984Z","project":"intexuraos-1","branch":"development","runNumber":19,"passed":true,"durationMs":140734,"failureCount":0,"failures":[]}
+{"ts":"2026-01-18T14:59:20.377Z","project":"intexuraos-1","branch":"development","workspace":"--","runNumber":18,"passed":false,"durationMs":451,"failureCount":0,"failures":[]}
+{"ts":"2026-01-18T14:59:23.114Z","project":"intexuraos-1","branch":"development","workspace":"--","runNumber":19,"passed":false,"durationMs":344,"failureCount":0,"failures":[]}
+{"ts":"2026-01-18T15:01:28.490Z","project":"intexuraos-1","branch":"development","workspace":"actions-agent","runNumber":20,"passed":true,"durationMs":118263,"failureCount":0,"failures":[]}
+{"ts":"2026-01-18T15:03:22.758Z","project":"intexuraos-1","branch":"development","workspace":"web","runNumber":21,"passed":true,"durationMs":112821,"failureCount":0,"failures":[]}

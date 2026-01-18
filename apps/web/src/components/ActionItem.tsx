@@ -233,69 +233,6 @@ export function ActionItem({
             <span>{String(Math.round(action.confidence * 100))}% confidence</span>
             <span>{formatDate(action.createdAt)}</span>
           </div>
-
-          {executionState !== null && (
-            <div
-              className={`mt-3 rounded-md border p-3 ${
-                isSuccess ? 'border-green-200 bg-green-50' : 'border-red-200 bg-red-50'
-              }`}
-              onClick={(e): void => {
-                e.stopPropagation();
-              }}
-            >
-              <div className="flex items-start gap-2">
-                {isSuccess ? (
-                  <CheckCircle className="mt-0.5 h-4 w-4 shrink-0 text-green-600" />
-                ) : (
-                  <XCircle className="mt-0.5 h-4 w-4 shrink-0 text-red-600" />
-                )}
-                <div className="min-w-0 flex-1">
-                  <p className={`text-sm ${isSuccess ? 'text-green-800' : 'text-red-800'}`}>
-                    {executionState.message}
-                  </p>
-                  {isSuccess && executionState.resourceUrl !== undefined && (
-                    <RouterLink
-                      to={executionState.resourceUrl}
-                      className="mt-1 inline-flex items-center gap-1 text-sm font-medium text-green-700 underline hover:text-green-800"
-                    >
-                      {executionState.linkLabel ?? 'View'}
-                      <ChevronRight className="h-3 w-3" />
-                    </RouterLink>
-                  )}
-                  {!isSuccess && showReconnectLink && (
-                    <RouterLink
-                      to="/settings"
-                      className="mt-1 block text-sm font-medium text-red-700 underline hover:text-red-800"
-                    >
-                      {executionState.errorCode === 'NOT_CONNECTED'
-                        ? 'Connect Calendar'
-                        : 'Reconnect Calendar'}
-                    </RouterLink>
-                  )}
-                  {showRetry && executionState.lastButton !== undefined && (
-                    <button
-                      onClick={handleRetry}
-                      className="mt-2 inline-flex items-center gap-1 text-sm font-medium text-red-700 underline hover:text-red-800"
-                    >
-                      <RefreshCw className="h-3 w-3" />
-                      Retry
-                    </button>
-                  )}
-                </div>
-                <button
-                  onClick={handleDismissPanel}
-                  className={`shrink-0 rounded p-1 transition-colors ${
-                    isSuccess
-                      ? 'text-green-600 hover:bg-green-100 hover:text-green-800'
-                      : 'text-red-600 hover:bg-red-100 hover:text-red-800'
-                  }`}
-                  aria-label="Close panel"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
-            </div>
-          )}
         </div>
         <div
           className="flex shrink-0 items-center gap-1"
@@ -313,6 +250,13 @@ export function ActionItem({
               onResult={(result, btn): void => {
                 handleResult(result, btn);
               }}
+              onError={(err): void => {
+                setExecutionState({
+                  type: 'error',
+                  message: err.message,
+                  lastButton: primaryButton,
+                });
+              }}
             />
           )}
 
@@ -326,6 +270,13 @@ export function ActionItem({
                 }}
                 onResult={(result, btn): void => {
                   handleResult(result, btn);
+                }}
+                onError={(err): void => {
+                  setExecutionState({
+                    type: 'error',
+                    message: err.message,
+                    lastButton: button,
+                  });
                 }}
               />
             ))}
@@ -371,6 +322,14 @@ export function ActionItem({
                           setIsDropdownOpen(false);
                         });
                       }}
+                      onError={(err): void => {
+                        setIsDropdownOpen(false);
+                        setExecutionState({
+                          type: 'error',
+                          message: err.message,
+                          lastButton: button,
+                        });
+                      }}
                     />
                   ))}
                   {showDismissButton && (
@@ -396,6 +355,69 @@ export function ActionItem({
           )}
         </div>
       </div>
+
+      {executionState !== null && (
+        <div
+          className={`mt-3 rounded-md border p-3 ${
+            isSuccess ? 'border-green-200 bg-green-50' : 'border-red-200 bg-red-50'
+          }`}
+          onClick={(e): void => {
+            e.stopPropagation();
+          }}
+        >
+          <div className="flex items-start gap-2">
+            {isSuccess ? (
+              <CheckCircle className="mt-0.5 h-4 w-4 shrink-0 text-green-600" />
+            ) : (
+              <XCircle className="mt-0.5 h-4 w-4 shrink-0 text-red-600" />
+            )}
+            <div className="min-w-0 flex-1">
+              <p className={`text-sm ${isSuccess ? 'text-green-800' : 'text-red-800'}`}>
+                {executionState.message}
+              </p>
+              {isSuccess && executionState.resourceUrl !== undefined && (
+                <RouterLink
+                  to={executionState.resourceUrl}
+                  className="mt-1 inline-flex items-center gap-1 text-sm font-medium text-green-700 underline hover:text-green-800"
+                >
+                  {executionState.linkLabel ?? 'View'}
+                  <ChevronRight className="h-3 w-3" />
+                </RouterLink>
+              )}
+              {!isSuccess && showReconnectLink && (
+                <RouterLink
+                  to="/settings"
+                  className="mt-1 block text-sm font-medium text-red-700 underline hover:text-red-800"
+                >
+                  {executionState.errorCode === 'NOT_CONNECTED'
+                    ? 'Connect Calendar'
+                    : 'Reconnect Calendar'}
+                </RouterLink>
+              )}
+              {showRetry && executionState.lastButton !== undefined && (
+                <button
+                  onClick={handleRetry}
+                  className="mt-2 inline-flex items-center gap-1 text-sm font-medium text-red-700 underline hover:text-red-800"
+                >
+                  <RefreshCw className="h-3 w-3" />
+                  Retry
+                </button>
+              )}
+            </div>
+            <button
+              onClick={handleDismissPanel}
+              className={`shrink-0 rounded p-1 transition-colors ${
+                isSuccess
+                  ? 'text-green-600 hover:bg-green-100 hover:text-green-800'
+                  : 'text-red-600 hover:bg-red-100 hover:text-red-800'
+              }`}
+              aria-label="Close panel"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
