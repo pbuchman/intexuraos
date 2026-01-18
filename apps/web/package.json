@@ -19,7 +19,9 @@
     "@auth0/auth0-react": "^2.2.4",
     "@intexuraos/common-core": "workspace:*",
     "@intexuraos/llm-contract": "workspace:*",
+    "@sentry/react": "^8.55.0",
     "@types/js-yaml": "^4.0.9",
+    "auth0-lock": "^14.2.3",
     "firebase": "^11.9.0",
     "highlight.js": "^11.11.1",
     "js-yaml": "^4.1.1",
@@ -35,8 +37,7 @@
     "vega-embed": "^6.25.0",
     "vega-lite": "^5.18.0",
     "vibe-kanban-web-companion": "^0.0.5",
-    "workbox-window": "^7.4.0",
-    "@sentry/react": "^8.55.0"
+    "workbox-window": "^7.4.0"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.1.8",
@@ -44,6 +45,7 @@
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.3.0",
     "@testing-library/user-event": "^14.6.1",
+    "@types/auth0-lock": "^11.27.9",
     "@types/node": "^22.14.0",
     "@types/react": "^19.1.5",
     "@types/react-dom": "^19.1.5",

@@ -1,4 +1,5 @@
 export { ActionDetailModal } from './ActionDetailModal.js';
+export { Auth0LockWidget } from './Auth0Lock.js';
 export { ActionItem } from './ActionItem.js';
 export type { ExecutionState } from './ActionItem.js';
 export { ChartDefinitionDisplay } from './ChartDefinitionDisplay.js';
