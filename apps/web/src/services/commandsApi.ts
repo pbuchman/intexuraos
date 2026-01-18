@@ -136,7 +136,7 @@ export async function resolveDuplicateAction(
   accessToken: string,
   actionId: string,
   choice: 'skip' | 'update'
-): Promise<{ actionId: string; status: 'rejected' | 'completed'; resource_url?: string }> {
+): Promise<{ actionId: string; status: 'rejected' | 'completed'; resourceUrl?: string }> {
   const response = await apiRequest<{
     actionId: string;
     status: 'rejected' | 'completed';
@@ -150,5 +150,9 @@ export async function resolveDuplicateAction(
       body: { action: choice },
     }
   );
-  return response;
+  return {
+    actionId: response.actionId,
+    status: response.status,
+    ...(response.resource_url !== undefined && { resourceUrl: response.resource_url }),
+  };
 }

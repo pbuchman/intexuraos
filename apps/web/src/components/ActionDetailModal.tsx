@@ -95,9 +95,10 @@ export function ActionDetailModal({
   const [executionResult, setExecutionResult] = useState<{
     actionId: string;
     status: 'completed' | 'failed' | 'rejected';
-    resource_url?: string;
+    resourceUrl?: string;
     message?: string;
     linkLabel?: string;
+    errorCode?: string;
   } | null>(null);
   const [selectedType, setSelectedType] = useState<CommandType>(action.type);
   const [isChangingType, setIsChangingType] = useState(false);
@@ -173,8 +174,9 @@ export function ActionDetailModal({
       return;
     }
 
-    if (result.resource_url !== undefined) {
-      const normalizedUrl = normalizeResourceUrl(result.resource_url);
+    // Handle success case (completed with resourceUrl)
+    if (result.status === 'completed' && result.resourceUrl !== undefined) {
+      const normalizedUrl = normalizeResourceUrl(result.resourceUrl);
       const message = button.onSuccess?.message ?? 'Action completed successfully';
       const linkLabel = button.onSuccess?.linkLabel ?? `Open ${action.type}`;
 
@@ -186,14 +188,24 @@ export function ActionDetailModal({
         linkLabel,
       });
 
-      const newResult: typeof executionResult = {
+      setExecutionResult({
         actionId: result.actionId,
         status: result.status,
-        resource_url: normalizedUrl,
+        resourceUrl: normalizedUrl,
         message,
         linkLabel,
-      };
-      setExecutionResult(newResult);
+      });
+      return;
+    }
+
+    // Handle failure case
+    if (result.status === 'failed') {
+      setExecutionResult({
+        actionId: result.actionId,
+        status: 'failed',
+        message: result.message ?? 'Action failed',
+        ...(result.errorCode !== undefined && { errorCode: result.errorCode }),
+      });
     }
   };
 
@@ -220,16 +232,16 @@ export function ActionDetailModal({
         status: result.status,
         payload: {
           ...action.payload,
-          resource_url: result.resource_url,
+          resource_url: result.resourceUrl,
         },
       });
       setConflictInfo(null);
       // Show success view
-      if (result.resource_url !== undefined) {
+      if (result.resourceUrl !== undefined) {
         setExecutionResult({
           actionId: result.actionId,
           status: result.status,
-          resource_url: normalizeResourceUrl(result.resource_url),
+          resourceUrl: normalizeResourceUrl(result.resourceUrl),
         });
       }
     } catch {
@@ -357,8 +369,8 @@ export function ActionDetailModal({
           </div>
         </div>
 
-        {/* Actions or Success View */}
-        {executionResult !== null ? (
+        {/* Actions, Success View, or Error View */}
+        {executionResult !== null && executionResult.status === 'completed' ? (
           <div className="shrink-0 border-t border-slate-200 p-4">
             <div className="rounded-lg border border-green-200 bg-green-50 p-4">
               <div className="flex items-start gap-3">
@@ -369,12 +381,38 @@ export function ActionDetailModal({
                   </h4>
                   <div className="mt-3 flex flex-wrap gap-2">
                     <RouterLink
-                      to={executionResult.resource_url ?? '#'}
+                      to={executionResult.resourceUrl ?? '#'}
                       className="inline-flex items-center gap-2 rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-green-700"
                     >
                       <ExternalLink className="h-4 w-4" />
                       {executionResult.linkLabel ?? `Open ${action.type}`}
                     </RouterLink>
+                    <Button variant="secondary" onClick={onClose}>
+                      Close
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : executionResult !== null && executionResult.status === 'failed' ? (
+          <div className="shrink-0 border-t border-slate-200 p-4">
+            <div className="rounded-lg border border-red-200 bg-red-50 p-4">
+              <div className="flex items-start gap-3">
+                <X className="mt-0.5 h-5 w-5 shrink-0 text-red-600" />
+                <div className="flex-1">
+                  <h4 className="font-medium text-red-800">
+                    {executionResult.message ?? 'Action failed'}
+                  </h4>
+                  {(executionResult.errorCode === 'TOKEN_ERROR' || executionResult.errorCode === 'NOT_CONNECTED') && (
+                    <RouterLink
+                      to="/settings"
+                      className="mt-2 block text-sm font-medium text-red-700 underline hover:text-red-800"
+                    >
+                      {executionResult.errorCode === 'NOT_CONNECTED' ? 'Connect Calendar' : 'Reconnect Calendar'}
+                    </RouterLink>
+                  )}
+                  <div className="mt-3">
                     <Button variant="secondary" onClick={onClose}>
                       Close
                     </Button>
@@ -403,8 +441,8 @@ export function ActionDetailModal({
                   }}
                   onResult={(result, btn): void => {
                     handleResult(result, btn);
-                    // Track if this result has resource_url (for onSuccess check)
-                    hasResourceUrlRef.current = result.resource_url !== undefined;
+                    // Keep modal open for results with resourceUrl or failed status
+                    hasResourceUrlRef.current = result.resourceUrl !== undefined || result.status === 'failed';
                   }}
                 />
               ))

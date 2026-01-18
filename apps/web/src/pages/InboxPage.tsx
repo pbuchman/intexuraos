@@ -50,28 +50,6 @@ import {
 
 type TabId = 'commands' | 'actions';
 
-interface SuccessNotification {
-  id: string;
-  message: string;
-  resourceUrl: string;
-  linkLabel: string;
-  timestamp: number;
-  isNew: boolean;
-}
-
-interface ActionItemProps {
-  action: Action;
-  onClick: () => void;
-  onActionSuccess: (button: ResolvedActionButton) => void;
-  onExecutionResult: (result: {
-    actionId: string;
-    resourceUrl: string;
-    message: string;
-    linkLabel: string;
-  }) => void;
-  isFadingOut?: boolean;
-}
-
 const ALL_ACTION_STATUSES: ActionStatus[] = [
   'pending',
   'awaiting_approval',
@@ -250,16 +228,19 @@ function CommandItem({
   );
 }
 
+interface ExecutionState {
+  type: 'success' | 'error';
+  message: string;
+  resourceUrl?: string;
+  linkLabel?: string;
+  errorCode?: string;
+}
+
 interface ActionItemProps {
   action: Action;
   onClick: () => void;
   onActionSuccess: (button: ResolvedActionButton) => void;
-  onExecutionResult: (result: {
-    actionId: string;
-    resourceUrl: string;
-    message: string;
-    linkLabel: string;
-  }) => void;
+  onActionExecuted: (actionId: string) => void;
   isFadingOut?: boolean;
 }
 
@@ -267,14 +248,14 @@ function ActionItem({
   action,
   onClick,
   onActionSuccess,
-  onExecutionResult,
+  onActionExecuted,
   isFadingOut = false,
 }: ActionItemProps): React.JSX.Element {
   const { buttons } = useActionConfig(action);
-  const [actionExecuted, setActionExecuted] = useState(false);
+  const [executionState, setExecutionState] = useState<ExecutionState | null>(null);
 
   /**
-   * Normalizes resource_url for HashRouter.
+   * Normalizes resourceUrl for HashRouter.
    * Backend returns URLs like "/#/research/..." but HashRouter's Link component
    * expects just "/research/..." (it handles the # prefix automatically).
    */
@@ -287,6 +268,74 @@ function ActionItem({
     }
     return url;
   };
+
+  const handleDismiss = (e: React.MouseEvent): void => {
+    e.stopPropagation();
+    setExecutionState(null);
+  };
+
+  // Show inline success/error panel when execution completes
+  if (executionState !== null) {
+    const isSuccess = executionState.type === 'success';
+    const showReconnectLink =
+      executionState.errorCode === 'TOKEN_ERROR' || executionState.errorCode === 'NOT_CONNECTED';
+
+    return (
+      <div
+        className={`rounded-lg border p-4 transition-all ${
+          isSuccess
+            ? 'border-green-200 bg-green-50'
+            : 'border-red-200 bg-red-50'
+        } ${isFadingOut ? 'opacity-0 scale-95' : 'opacity-100 scale-100'}`}
+      >
+        <div className="flex items-start gap-3">
+          {isSuccess ? (
+            <CheckCircle className="mt-0.5 h-5 w-5 shrink-0 text-green-600" />
+          ) : (
+            <XCircle className="mt-0.5 h-5 w-5 shrink-0 text-red-600" />
+          )}
+          <div className="min-w-0 flex-1">
+            <p className={`text-sm font-medium ${isSuccess ? 'text-green-800' : 'text-red-800'}`}>
+              {executionState.message}
+            </p>
+            {isSuccess && executionState.resourceUrl !== undefined && (
+              <RouterLink
+                to={executionState.resourceUrl}
+                className="mt-1 block text-sm font-medium text-green-700 underline hover:text-green-800"
+                onClick={(e): void => {
+                  e.stopPropagation();
+                }}
+              >
+                {executionState.linkLabel ?? 'View'}
+              </RouterLink>
+            )}
+            {!isSuccess && showReconnectLink && (
+              <RouterLink
+                to="/settings"
+                className="mt-1 block text-sm font-medium text-red-700 underline hover:text-red-800"
+                onClick={(e): void => {
+                  e.stopPropagation();
+                }}
+              >
+                {executionState.errorCode === 'NOT_CONNECTED' ? 'Connect Calendar' : 'Reconnect Calendar'}
+              </RouterLink>
+            )}
+          </div>
+          <button
+            onClick={handleDismiss}
+            className={`shrink-0 rounded p-1 transition-colors ${
+              isSuccess
+                ? 'text-green-600 hover:bg-green-100 hover:text-green-800'
+                : 'text-red-600 hover:bg-red-100 hover:text-red-800'
+            }`}
+            aria-label="Dismiss"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div
@@ -318,36 +367,42 @@ function ActionItem({
             <span>{formatDate(action.createdAt)}</span>
           </div>
         </div>
-        {/* Hide buttons after action with resource_url was executed */}
-        {!actionExecuted && (
-          <div
-            className="flex shrink-0 gap-1 flex-nowrap overflow-x-auto"
-            onClick={(e): void => {
-              e.stopPropagation();
-            }}
-          >
-            {buttons.map((button) => (
-              <ConfigurableActionButton
-                key={button.id}
-                button={button}
-                onSuccess={(): void => {
-                  onActionSuccess(button);
-                }}
-                onResult={(result, btn): void => {
-                  if (result.resource_url !== undefined && btn.onSuccess !== undefined) {
-                    onExecutionResult({
-                      actionId: action.id,
-                      resourceUrl: normalizeResourceUrl(result.resource_url),
-                      message: btn.onSuccess.message,
-                      linkLabel: btn.onSuccess.linkLabel,
-                    });
-                    setActionExecuted(true);
-                  }
-                }}
-              />
-            ))}
-          </div>
-        )}
+        <div
+          className="flex shrink-0 gap-1 flex-nowrap overflow-x-auto"
+          onClick={(e): void => {
+            e.stopPropagation();
+          }}
+        >
+          {buttons.map((button) => (
+            <ConfigurableActionButton
+              key={button.id}
+              button={button}
+              onSuccess={(): void => {
+                onActionSuccess(button);
+              }}
+              onResult={(result, btn): void => {
+                if (result.status === 'completed' && result.resourceUrl !== undefined) {
+                  // Success: show inline success panel and notify parent for fade-out
+                  const linkLabel = btn.onSuccess?.linkLabel;
+                  setExecutionState({
+                    type: 'success',
+                    message: btn.onSuccess?.message ?? 'Action completed!',
+                    resourceUrl: normalizeResourceUrl(result.resourceUrl),
+                    ...(linkLabel !== undefined && { linkLabel }),
+                  });
+                  onActionExecuted(action.id);
+                } else if (result.status === 'failed') {
+                  // Error: show inline error panel
+                  setExecutionState({
+                    type: 'error',
+                    message: result.message ?? 'Action failed',
+                    ...(result.errorCode !== undefined && { errorCode: result.errorCode }),
+                  });
+                }
+              }}
+            />
+          ))}
+        </div>
       </div>
     </div>
   );
@@ -359,48 +414,6 @@ const DEBOUNCE_DELAY_MS = 500;
 const BATCH_SIZE_LIMIT = 50;
 // Fade out duration for actions that no longer match filter
 const FADE_OUT_DURATION_MS = 5000;
-
-interface NotificationAreaProps {
-  notification: SuccessNotification | null;
-  onDismiss: () => void;
-}
-
-function NotificationArea({ notification, onDismiss }: NotificationAreaProps): React.JSX.Element | null {
-  if (notification === null) return null;
-
-  return (
-    <div
-      className={`mb-4 rounded-lg border px-4 py-3 transition-all sm:flex sm:items-center sm:justify-between ${
-        notification.isNew
-          ? 'border-green-300 bg-green-50 shadow-sm animate-in slide-in-from-top-2 fade-in-0 duration-300'
-          : 'border-green-200 bg-green-50'
-      }`}
-    >
-      <div className="flex items-start gap-3 sm:items-center">
-        <CheckCircle className="mt-0.5 h-5 w-5 shrink-0 text-green-600 sm:mt-0" />
-        <div className="min-w-0 flex-1">
-          <p className="text-sm font-medium text-green-800">{notification.message}</p>
-          <RouterLink
-            to={notification.resourceUrl}
-            className="mt-1 block text-sm font-medium text-green-700 underline hover:text-green-800 sm:mt-0 sm:inline"
-            onClick={(e): void => {
-              e.stopPropagation();
-            }}
-          >
-            {notification.linkLabel}
-          </RouterLink>
-        </div>
-      </div>
-      <button
-        onClick={onDismiss}
-        className="ml-auto mt-2 shrink-0 self-start rounded p-1 text-green-600 transition-colors hover:bg-green-100 hover:text-green-800 sm:ml-0 sm:mt-0"
-        aria-label="Dismiss notification"
-      >
-        <X className="h-4 w-4" />
-      </button>
-    </div>
-  );
-}
 
 export function InboxPage(): React.JSX.Element {
   const { getAccessToken } = useAuth();
@@ -420,7 +433,6 @@ export function InboxPage(): React.JSX.Element {
   const [archivingCommandId, setArchivingCommandId] = useState<string | null>(null);
   const [selectedAction, setSelectedAction] = useState<Action | null>(null);
   const [selectedCommand, setSelectedCommand] = useState<Command | null>(null);
-  const [successNotification, setSuccessNotification] = useState<SuccessNotification | null>(null);
   const [fadingOutActionIds, setFadingOutActionIds] = useState<Set<string>>(new Set());
   const [statusFilter, setStatusFilter] = useState<ActionStatus[]>(() => {
     const stored = localStorage.getItem('inbox-status-filter');
@@ -680,53 +692,25 @@ export function InboxPage(): React.JSX.Element {
     // Refresh data when switching tabs (but not on initial load)
     if (previousTabRef.current !== activeTab && !isLoadingRef.current) {
       void fetchData(true);
-      // Clear success notification when switching tabs
-      setSuccessNotification(null);
     }
     previousTabRef.current = activeTab;
   }, [activeTab, fetchData]);
 
-  // Handle execution result: show global notification and initiate fade-out
-  const handleExecutionResult = useCallback(
-    (result: {
-      actionId: string;
-      resourceUrl: string;
-      message: string;
-      linkLabel: string;
-    }): void => {
-      // Set new notification with isNew flag for visual highlight
-      const notificationId = `${result.actionId}-${String(Date.now())}`;
-      setSuccessNotification({
-        id: notificationId,
-        message: result.message,
-        resourceUrl: result.resourceUrl,
-        linkLabel: result.linkLabel,
-        timestamp: Date.now(),
-        isNew: true,
+  // Handle action executed: initiate fade-out for completed actions
+  const handleActionExecuted = useCallback((actionId: string): void => {
+    // Start fade-out for this action
+    setFadingOutActionIds((prev) => new Set(prev).add(actionId));
+
+    // Remove from list after fade-out duration
+    setTimeout(() => {
+      setActions((prev) => prev.filter((a) => a.id !== actionId));
+      setFadingOutActionIds((prevSet) => {
+        const newSet = new Set(prevSet);
+        newSet.delete(actionId);
+        return newSet;
       });
-
-      // Remove isNew flag after animation duration for future notifications
-      setTimeout(() => {
-        setSuccessNotification((prev) =>
-          prev?.id === notificationId ? { ...prev, isNew: false } : prev
-        );
-      }, 500);
-
-      // Start fade-out for this action
-      setFadingOutActionIds((prev) => new Set(prev).add(result.actionId));
-
-      // Remove from list after fade-out duration
-      setTimeout(() => {
-        setActions((prev) => prev.filter((a) => a.id !== result.actionId));
-        setFadingOutActionIds((prevSet) => {
-          const newSet = new Set(prevSet);
-          newSet.delete(result.actionId);
-          return newSet;
-        });
-      }, FADE_OUT_DURATION_MS);
-    },
-    []
-  );
+    }, FADE_OUT_DURATION_MS);
+  }, []);
 
   // Handle status filter changes: save to localStorage and refresh data
   const statusFilterRef = useRef<ActionStatus[]>(statusFilter);
@@ -881,14 +865,6 @@ export function InboxPage(): React.JSX.Element {
         </div>
       ) : null}
 
-      {/* Success notification area */}
-      <NotificationArea
-        notification={successNotification}
-        onDismiss={(): void => {
-          setSuccessNotification(null);
-        }}
-      />
-
       {/* Tabs */}
       <div className="mb-4 flex border-b border-slate-200">
         <button
@@ -1018,7 +994,7 @@ export function InboxPage(): React.JSX.Element {
                       void fetchData(true);
                     }
                   }}
-                  onExecutionResult={handleExecutionResult}
+                  onActionExecuted={handleActionExecuted}
                   isFadingOut={fadingOutActionIds.has(action.id)}
                 />
               ))
@@ -1090,7 +1066,10 @@ export function InboxPage(): React.JSX.Element {
             // Update selected action to reflect changes
             setSelectedAction(updatedAction);
           }}
-          onExecutionResult={handleExecutionResult}
+          onExecutionResult={(result): void => {
+            // Start fade-out for completed action (modal handles success display)
+            handleActionExecuted(result.actionId);
+          }}
         />
       )}
 
