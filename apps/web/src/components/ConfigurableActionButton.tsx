@@ -61,7 +61,7 @@ function getIcon(iconName: string): LucideIcon {
  */
 function getButtonClasses(variant: 'primary' | 'secondary' | 'danger' | 'success'): string {
   const baseClasses =
-    'inline-flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors disabled:opacity-50 whitespace-nowrap sm:w-[110px]';
+    'inline-flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors disabled:opacity-50 whitespace-nowrap lg:w-[110px]';
 
   switch (variant) {
     case 'primary':
