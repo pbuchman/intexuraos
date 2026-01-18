@@ -620,6 +620,16 @@ Use the same command: `pnpm run verify:workspace:tracked -- web` — adjusted be
 
 ---
 
+## User Communication
+
+**RULE: When asking clarifying questions, ask ONE question at a time.**
+
+Use the AskUserQuestion tool for each question separately. Do not batch multiple questions unless the user explicitly requests it (e.g., "ask me all questions at once").
+
+**Why:** One-by-one questioning allows focused responses and early course-correction.
+
+---
+
 ## Pull Request Workflow (DEFAULT)
 
 **When asked to create a PR, follow this default workflow:**

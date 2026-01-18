@@ -2,6 +2,8 @@
 
 Manage Linear issues, branches, and PRs with enforced workflow and cross-linking.
 
+**Project Key:** `INT-` (e.g., `INT-123`, `INT-144`). All issue references in this document use generic `LIN-XXX` placeholders, but for this project always use `INT-XXX`.
+
 ## Usage
 
 ```
@@ -37,7 +39,7 @@ Manage Linear issues, branches, and PRs with enforced workflow and cross-linking
 
 ```bash
 /linear Fix authentication token not refreshing
-/linear LIN-42
+/linear INT-42                                    # Use INT- prefix for this project
 /linear https://intexuraos-dev-pbuchman.sentry.io/issues/123/
 /linear
 ```
@@ -52,7 +54,7 @@ The command automatically detects intent from input:
 | ------------------------------- | -------------------------------- | ------------------------------------------------------------ |
 | `/linear` (no args)             | Random Backlog (NON-INTERACTIVE) | Pick from Backlog/Todo and start working WITHOUT asking user |
 | `/linear <task description>`    | Create New                       | Detect bug/feature, create issue, start working              |
-| `/linear LIN-<number>`          | Work Existing                    | Start working on specific issue                              |
+| `/linear INT-<number>`          | Work Existing                    | Start working on specific issue (use INT- for this project)  |
 | `/linear https://sentry.io/...` | Sentry Integration               | Create Linear issue from Sentry error                        |
 
 ---
