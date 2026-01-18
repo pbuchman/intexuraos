@@ -1,0 +1,2 @@
+{"ts":"2026-01-18T20:31:33.759Z","project":"intexuraos-1","branch":"feature/INT-149-auth0-lock-widget","workspace":"--","runNumber":1,"passed":false,"durationMs":690,"failureCount":0,"failures":[]}
+{"ts":"2026-01-18T20:32:34.185Z","project":"intexuraos-1","branch":"feature/INT-149-auth0-lock-widget","workspace":"web","runNumber":2,"passed":true,"durationMs":53118,"failureCount":0,"failures":[]}
