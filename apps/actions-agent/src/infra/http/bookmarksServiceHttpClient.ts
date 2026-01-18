@@ -1,9 +1,10 @@
 import type { Result } from '@intexuraos/common-core';
-import { ok, err, getErrorMessage } from '@intexuraos/common-core';
+import { ok, err, getErrorMessage, ServiceErrorCodes } from '@intexuraos/common-core';
 import type {
   BookmarksServiceClient,
   CreateBookmarkRequest,
   CreateBookmarkResponse,
+  CreateBookmarkError,
   ForceRefreshBookmarkResponse,
 } from '../../domain/ports/bookmarksServiceClient.js';
 import { type Logger } from 'pino';
@@ -26,7 +27,9 @@ export function createBookmarksServiceHttpClient(
   const { logger } = config;
 
   return {
-    async createBookmark(request: CreateBookmarkRequest): Promise<Result<CreateBookmarkResponse>> {
+    async createBookmark(
+      request: CreateBookmarkRequest
+    ): Promise<Result<CreateBookmarkResponse, CreateBookmarkError>> {
       const url = `${config.baseUrl}/internal/bookmarks`;
 
       logger.info({ url, userId: request.userId }, 'Creating bookmark via bookmarks-agent');
@@ -43,36 +46,43 @@ export function createBookmarksServiceHttpClient(
         });
       } catch (error) {
         logger.error({ error: getErrorMessage(error) }, 'Failed to call bookmarks-agent');
-        return err(new Error(`Failed to call bookmarks-agent: ${getErrorMessage(error)}`));
+        return err({
+          message: `Failed to call bookmarks-agent: ${getErrorMessage(error)}`,
+          errorCode: ServiceErrorCodes.SERVICE_UNAVAILABLE,
+        });
       }
 
       if (!response.ok) {
         let message: string;
+        let errorCode: string | undefined;
+        let existingBookmarkId: string | undefined;
         try {
           const body = (await response.json()) as ApiResponse;
-          const existingBookmarkId = body.error?.details?.existingBookmarkId;
+          errorCode = body.error?.code;
+          existingBookmarkId = body.error?.details?.existingBookmarkId;
           message = body.error?.message ?? `HTTP ${String(response.status)}: ${response.statusText}`;
-
-          // Include existingBookmarkId in error message so caller can extract it
-          if (existingBookmarkId !== undefined && existingBookmarkId !== '') {
-            message = `${message} (existingBookmarkId: ${existingBookmarkId})`;
-          }
         } catch {
-          // Response is not JSON, use status text
           message = `HTTP ${String(response.status)}: ${response.statusText}`;
         }
 
         logger.error(
-          { httpStatus: response.status, message },
+          { httpStatus: response.status, message, errorCode, existingBookmarkId },
           'bookmarks-agent returned error'
         );
-        return err(new Error(message));
+        return err({
+          message,
+          ...(errorCode !== undefined && { errorCode }),
+          ...(existingBookmarkId !== undefined && existingBookmarkId !== '' && { existingBookmarkId }),
+        });
       }
 
       const body = (await response.json()) as ApiResponse;
       if (!body.success || body.data === undefined) {
         logger.error({ body }, 'Invalid response from bookmarks-agent');
-        return err(new Error(body.error?.message ?? 'Invalid response from bookmarks-agent'));
+        return err({
+          message: body.error?.message ?? 'Invalid response from bookmarks-agent',
+          ...(body.error?.code !== undefined && { errorCode: body.error.code }),
+        });
       }
 
       const data = body.data as {
