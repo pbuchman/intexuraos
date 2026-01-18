@@ -103,6 +103,7 @@ export function ActionDetailModal({
   const [selectedType, setSelectedType] = useState<CommandType>(action.type);
   const [isChangingType, setIsChangingType] = useState(false);
   const [typeChangeError, setTypeChangeError] = useState<string | null>(null);
+  const [executionError, setExecutionError] = useState<string | null>(null);
   // Track if current action result has resource_url (used to prevent modal close)
   const hasResourceUrlRef = useRef(false);
   // Conflict modal state for duplicate bookmarks
@@ -422,7 +423,13 @@ export function ActionDetailModal({
             </div>
           </div>
         ) : (
-          <div className="flex shrink-0 flex-nowrap items-center justify-end gap-2 border-t border-slate-200 p-4">
+          <div className="shrink-0 border-t border-slate-200 p-4">
+            {executionError !== null && (
+              <div className="mb-3 rounded-lg border border-red-200 bg-red-50 p-3">
+                <p className="text-sm text-red-600">{executionError}</p>
+              </div>
+            )}
+            <div className="flex flex-nowrap items-center justify-end gap-2">
             {isLoading ? (
               <div className="text-sm text-slate-500">Loading actions...</div>
             ) : (
@@ -444,9 +451,13 @@ export function ActionDetailModal({
                     // Keep modal open for results with resourceUrl or failed status
                     hasResourceUrlRef.current = result.resourceUrl !== undefined || result.status === 'failed';
                   }}
+                  onError={(err): void => {
+                    setExecutionError(err.message);
+                  }}
                 />
               ))
             )}
+            </div>
           </div>
         )}
       </div>

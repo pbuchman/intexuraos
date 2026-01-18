@@ -67,11 +67,24 @@ export function createCalendarServiceHttpClient(
       }
 
       if (!response.ok) {
+        let errorMessage = `HTTP ${String(response.status)}: ${response.statusText}`;
+
+        try {
+          const errorBody = (await response.json()) as {
+            error?: { message?: string; code?: string };
+          };
+          if (errorBody.error?.message !== undefined) {
+            errorMessage = errorBody.error.message;
+          }
+        } catch {
+          // Failed to parse error body, use generic message
+        }
+
         logger.error(
-          { httpStatus: response.status, statusText: response.statusText },
+          { httpStatus: response.status, statusText: response.statusText, errorMessage },
           'calendar-agent returned error'
         );
-        return err(new Error(`HTTP ${String(response.status)}: ${response.statusText}`));
+        return err(new Error(errorMessage));
       }
 
       const body = (await response.json()) as ApiResponse;

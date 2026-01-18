@@ -400,6 +400,12 @@ function ActionItem({
                   });
                 }
               }}
+              onError={(err): void => {
+                setExecutionState({
+                  type: 'error',
+                  message: err.message,
+                });
+              }}
             />
           ))}
         </div>
