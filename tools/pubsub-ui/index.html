@@ -216,6 +216,9 @@
       .event.bookmark-enrich {
         border-left-color: #f97316;
       }
+      .event.bookmark-summarize {
+        border-left-color: #ec4899;
+      }
       .event.todos-processing-local {
         border-left-color: #ec4899;
       }
@@ -282,6 +285,10 @@
       }
       .bookmark-enrich .event-badge {
         background: #f97316;
+        color: white;
+      }
+      .bookmark-summarize .event-badge {
+        background: #ec4899;
         color: white;
       }
       .todos-processing-local .event-badge {
@@ -502,6 +509,7 @@
               <option value="llm-analytics">llm-analytics</option>
               <option value="llm-call">llm-call</option>
               <option value="bookmark-enrich">bookmark-enrich</option>
+              <option value="bookmark-summarize">bookmark-summarize</option>
               <option value="todos-processing-local">todos-processing-local</option>
             </select>
           </div>
@@ -609,6 +617,11 @@
           bookmarkId: 'bookmark-{timestamp}',
           userId: '{userId}',
           url: 'https://example.com',
+        },
+        'bookmark-summarize': {
+          type: 'bookmarks.summarize',
+          bookmarkId: 'bookmark-{timestamp}',
+          userId: '{userId}',
         },
         'todos-processing-local': {
           type: 'todos.processing.created',

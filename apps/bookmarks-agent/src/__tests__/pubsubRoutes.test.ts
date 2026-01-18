@@ -181,4 +181,182 @@ describe('pubsubRoutes', () => {
       expect(response.statusCode).toBe(200);
     });
   });
+
+  describe('POST /internal/bookmarks/pubsub/summarize', () => {
+    it('summarizes bookmark on valid event', async () => {
+      const createResult = await ctx.bookmarkRepository.create({
+        userId: 'user-1',
+        url: 'https://example.com/page',
+        source: 'test',
+        sourceId: 'test-1',
+        title: 'Test Page',
+        description: 'A test page description',
+      });
+
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) return;
+
+      const bookmarkId = createResult.value.id;
+
+      const event = {
+        type: 'bookmarks.summarize',
+        bookmarkId,
+        userId: 'user-1',
+      };
+
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/internal/bookmarks/pubsub/summarize',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+          'content-type': 'application/json',
+        },
+        payload: {
+          message: {
+            data: Buffer.from(JSON.stringify(event)).toString('base64'),
+            messageId: 'msg-1',
+            publishTime: new Date().toISOString(),
+          },
+          subscription: 'test-subscription',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({ success: true });
+
+      const findResult = await ctx.bookmarkRepository.findById(bookmarkId);
+      expect(findResult.ok).toBe(true);
+      if (findResult.ok && findResult.value !== null) {
+        expect(findResult.value.aiSummary).toBe('This is a test summary of the page content.');
+        expect(findResult.value.aiSummarizedAt).not.toBeNull();
+      }
+    });
+
+    it('returns 401 without auth header', async () => {
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/internal/bookmarks/pubsub/summarize',
+        headers: {
+          'content-type': 'application/json',
+        },
+        payload: {
+          message: {
+            data: Buffer.from('{}').toString('base64'),
+            messageId: 'msg-1',
+          },
+          subscription: 'test-subscription',
+        },
+      });
+
+      expect(response.statusCode).toBe(401);
+    });
+
+    it('returns success for invalid event type', async () => {
+      const event = { type: 'invalid.type' };
+
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/internal/bookmarks/pubsub/summarize',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+          'content-type': 'application/json',
+        },
+        payload: {
+          message: {
+            data: Buffer.from(JSON.stringify(event)).toString('base64'),
+            messageId: 'msg-1',
+          },
+          subscription: 'test-subscription',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({ success: true });
+    });
+
+    it('returns success even when bookmark not found', async () => {
+      const event = {
+        type: 'bookmarks.summarize',
+        bookmarkId: 'non-existent',
+        userId: 'user-1',
+      };
+
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/internal/bookmarks/pubsub/summarize',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+          'content-type': 'application/json',
+        },
+        payload: {
+          message: {
+            data: Buffer.from(JSON.stringify(event)).toString('base64'),
+            messageId: 'msg-1',
+          },
+          subscription: 'test-subscription',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({ success: true });
+    });
+
+    it('returns success for invalid JSON in message data', async () => {
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/internal/bookmarks/pubsub/summarize',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+          'content-type': 'application/json',
+        },
+        payload: {
+          message: {
+            data: Buffer.from('not valid json').toString('base64'),
+            messageId: 'msg-1',
+          },
+          subscription: 'test-subscription',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({ success: true });
+    });
+
+    it('accepts Pub/Sub push from Google', async () => {
+      const createResult = await ctx.bookmarkRepository.create({
+        userId: 'user-1',
+        url: 'https://example.com',
+        source: 'test',
+        sourceId: 'test-1',
+        title: 'Test Page',
+      });
+
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) return;
+
+      const event = {
+        type: 'bookmarks.summarize',
+        bookmarkId: createResult.value.id,
+        userId: 'user-1',
+      };
+
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/internal/bookmarks/pubsub/summarize',
+        headers: {
+          from: 'noreply@google.com',
+          'content-type': 'application/json',
+        },
+        payload: {
+          message: {
+            data: Buffer.from(JSON.stringify(event)).toString('base64'),
+            messageId: 'msg-1',
+          },
+          subscription: 'test-subscription',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+    });
+  });
 });

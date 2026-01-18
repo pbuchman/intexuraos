@@ -40,6 +40,7 @@ node scripts/pubsub-publish-test.mjs research-process
 node scripts/pubsub-publish-test.mjs llm-analytics
 node scripts/pubsub-publish-test.mjs llm-call
 node scripts/pubsub-publish-test.mjs bookmark-enrich
+node scripts/pubsub-publish-test.mjs bookmark-summarize
 node scripts/pubsub-publish-test.mjs todos-processing
 ```
 
@@ -57,6 +58,7 @@ node scripts/pubsub-publish-test.mjs todos-processing
 | `llm-analytics`            | Indigo       | LLM usage analytics         |
 | `llm-call`                 | Purple       | LLM API calls               |
 | `bookmark-enrich`          | Orange       | Bookmark metadata enriching |
+| `bookmark-summarize`       | Teal         | Bookmark AI summarization   |
 | `todos-processing-local`   | Pink         | Todo processing events      |
 
 ## Architecture
@@ -107,6 +109,7 @@ node scripts/pubsub-publish-test.mjs todos-processing
 - `llm-analytics` → `POST /internal/llm/pubsub/report-analytics` (:8116)
 - `llm-call` → `POST /internal/llm/pubsub/process-llm-call` (:8116)
 - `bookmark-enrich` → `POST /internal/bookmarks/pubsub/enrich` (:8124)
+- `bookmark-summarize` → `POST /internal/bookmarks/pubsub/summarize` (:8124)
 - `todos-processing-local` → `POST /internal/todos/pubsub/todos-processing` (:8123)
 
 ## Environment Variables
@@ -147,6 +150,7 @@ const TOPICS = [
   'llm-analytics',
   'llm-call',
   'bookmark-enrich',
+  'bookmark-summarize',
   'todos-processing-local',
   'your-new-topic', // Add here
 ];
