@@ -501,6 +501,18 @@ module "iam" {
 }
 
 # -----------------------------------------------------------------------------
+# Claude Code Dev Service Account (local development)
+# -----------------------------------------------------------------------------
+
+module "claude_code_dev" {
+  source = "../../modules/claude-code-dev"
+
+  project_id = var.project_id
+
+  depends_on = [google_project_service.apis]
+}
+
+# -----------------------------------------------------------------------------
 # Common Service Secrets (must be after secret_manager module)
 # -----------------------------------------------------------------------------
 
@@ -1813,4 +1825,9 @@ output "calendar_agent_url" {
 output "monitoring_dashboard_id" {
   description = "Monitoring dashboard ID"
   value       = module.monitoring.dashboard_id
+}
+
+output "claude_code_dev_service_account" {
+  description = "Claude Code dev service account email for local development"
+  value       = module.claude_code_dev.service_account_email
 }
