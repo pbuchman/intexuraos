@@ -252,42 +252,8 @@ export function ActionItem({
             />
           )}
 
-          <div className="hidden gap-1 sm:flex">
-            {secondaryButtons.map((button) => (
-              <ConfigurableActionButton
-                key={button.id}
-                button={button}
-                onSuccess={(): void => {
-                  onActionSuccess(button);
-                }}
-                onResult={(result, btn): void => {
-                  handleResult(result, btn);
-                }}
-                onError={(err): void => {
-                  setExecutionState({
-                    type: 'error',
-                    message: err.message,
-                    lastButton: button,
-                  });
-                }}
-              />
-            ))}
-            {showDismissButton && (
-              <button
-                onClick={(e): void => {
-                  void handleDismissAction(e);
-                }}
-                disabled={actualDismissing}
-                className="rounded px-3 py-1.5 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-800 disabled:opacity-50"
-                title="Archive action"
-              >
-                {actualDismissing ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Dismiss'}
-              </button>
-            )}
-          </div>
-
           {(secondaryButtons.length > 0 || showDismissButton) && (
-            <div className="relative sm:hidden" ref={dropdownRef}>
+            <div className="relative" ref={dropdownRef}>
               <button
                 onClick={(): void => {
                   setIsDropdownOpen((prev) => !prev);
