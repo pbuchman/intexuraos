@@ -1,13 +1,42 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth, useSyncQueue } from '@/context';
-import { ChevronDown, LogOut, User, RefreshCw } from 'lucide-react';
+import { usePWA } from '@/context/pwa-context';
+import { ChevronDown, LogOut, User, RefreshCw, RotateCcw } from 'lucide-react';
 
 export function Header(): React.JSX.Element {
   const { user, logout } = useAuth();
   const { pendingCount, isSyncing } = useSyncQueue();
+  const { isInstalled } = usePWA();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+
+  const handleForceRefresh = (): void => {
+    setIsRefreshing(true);
+    setIsMenuOpen(false);
+
+    // Clear service worker caches and reload
+    if ('caches' in window) {
+      void caches.keys().then((names) => {
+        for (const name of names) {
+          void caches.delete(name);
+        }
+      });
+    }
+
+    // Unregister service worker and reload
+    if ('serviceWorker' in navigator) {
+      void navigator.serviceWorker.getRegistrations().then((registrations) => {
+        for (const registration of registrations) {
+          void registration.unregister();
+        }
+        window.location.reload();
+      });
+    } else {
+      window.location.reload();
+    }
+  };
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent): void {
@@ -83,6 +112,16 @@ export function Header(): React.JSX.Element {
               <div className="border-b border-slate-100 px-4 py-2 sm:hidden">
                 <span className="text-sm text-slate-600">{userEmail}</span>
               </div>
+              {isInstalled && (
+                <button
+                  onClick={handleForceRefresh}
+                  disabled={isRefreshing}
+                  className="flex w-full items-center gap-2 px-4 py-2 text-sm text-slate-700 transition-colors hover:bg-slate-100 disabled:opacity-50"
+                >
+                  <RotateCcw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+                  {isRefreshing ? 'Refreshing...' : 'Force Refresh'}
+                </button>
+              )}
               <button
                 onClick={(): void => {
                   logout();
