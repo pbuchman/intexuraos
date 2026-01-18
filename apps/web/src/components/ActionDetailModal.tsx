@@ -409,7 +409,7 @@ export function ActionDetailModal({
                     executionResult.errorCode === 'NOT_CONNECTED' ||
                     executionResult.errorCode === 'UNAUTHORIZED') && (
                     <RouterLink
-                      to="/settings"
+                      to="/settings/calendar"
                       className="mt-2 block text-sm font-medium text-red-700 underline hover:text-red-800"
                     >
                       {executionResult.errorCode === 'NOT_CONNECTED' ? 'Connect Calendar' : 'Reconnect Calendar'}
