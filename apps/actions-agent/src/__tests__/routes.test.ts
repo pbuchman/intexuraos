@@ -1694,7 +1694,7 @@ describe('Research Agent Routes', () => {
 
     it('returns 500 when force refresh fails', async () => {
       const fakeBookmarksServiceClient = new FakeBookmarksServiceClient();
-      fakeBookmarksServiceClient.setFailNext(true, new Error('Refresh failed'));
+      fakeBookmarksServiceClient.setFailNext(true, { message: 'Refresh failed' });
 
       setServices(
         createFakeServices({

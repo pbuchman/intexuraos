@@ -1,5 +1,5 @@
 import type { Result } from '@intexuraos/common-core';
-import { ok, err, getErrorMessage } from '@intexuraos/common-core';
+import { ok, err } from '@intexuraos/common-core';
 import type { Action } from '../models/action.js';
 import type { ActionRepository } from '../ports/actionRepository.js';
 import type { BookmarksServiceClient } from '../ports/bookmarksServiceClient.js';
@@ -18,8 +18,9 @@ export interface ExecuteLinkActionDeps {
 
 export interface ExecuteLinkActionResult {
   status: 'completed' | 'failed';
-  resource_url?: string;
-  error?: string;
+  message?: string;
+  resourceUrl?: string;
+  errorCode?: string;
   existingBookmarkId?: string;
 }
 
@@ -38,13 +39,6 @@ function extractUrl(text: string): string | null {
   const match = URL_REGEX.exec(text);
   URL_REGEX.lastIndex = 0; // Reset for next use
   return match?.[0] ?? null;
-}
-
-function extractBookmarkIdFromError(error: Error): string | undefined {
-  // Error format: "message (existingBookmarkId: abc123)"
-  const regex = /\(existingBookmarkId: ([^)]+)\)/;
-  const match = regex.exec(error.message);
-  return match?.[1];
 }
 
 export function createExecuteLinkActionUseCase(
@@ -78,7 +72,7 @@ export function createExecuteLinkActionUseCase(
       logger.info({ actionId, resourceUrl }, 'Action already completed, returning existing result');
       return ok({
         status: 'completed' as const,
-        ...(resourceUrl !== undefined && { resource_url: resourceUrl }),
+        ...(resourceUrl !== undefined && { resourceUrl }),
       });
     }
 
@@ -123,7 +117,7 @@ export function createExecuteLinkActionUseCase(
       logger.info({ actionId, status: 'failed' }, 'Action marked as failed due to missing URL');
       return ok({
         status: 'failed',
-        error: 'No URL found in action',
+        message: 'No URL found in action',
       });
     }
 
@@ -153,26 +147,28 @@ export function createExecuteLinkActionUseCase(
     });
 
     if (!result.ok) {
+      const { message: errorMessage, errorCode, existingBookmarkId } = result.error;
       logger.error(
-        { actionId, error: getErrorMessage(result.error) },
+        { actionId, error: errorMessage, errorCode, existingBookmarkId },
         'Failed to create bookmark via bookmarks-agent'
       );
-      const existingBookmarkId = extractBookmarkIdFromError(result.error);
       const failedAction: Action = {
         ...action,
         status: 'failed',
         payload: {
           ...action.payload,
-          error: result.error.message,
+          error: errorMessage,
+          ...(errorCode !== undefined && { errorCode }),
           ...(existingBookmarkId !== undefined && { existingBookmarkId }),
         },
         updatedAt: new Date().toISOString(),
       };
       await actionRepository.update(failedAction);
-      logger.info({ actionId, status: 'failed', existingBookmarkId }, 'Action marked as failed');
+      logger.info({ actionId, status: 'failed', errorCode, existingBookmarkId }, 'Action marked as failed');
       return ok({
         status: 'failed',
-        error: result.error.message,
+        message: errorMessage,
+        ...(errorCode !== undefined && { errorCode }),
         ...(existingBookmarkId !== undefined && { existingBookmarkId }),
       });
     }
@@ -223,7 +219,7 @@ export function createExecuteLinkActionUseCase(
 
     return ok({
       status: 'completed',
-      resource_url: resourceUrl,
+      resourceUrl,
     });
   };
 }
