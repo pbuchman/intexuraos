@@ -23,6 +23,7 @@ interface ApiResponse {
     errorCode?: string;
   };
   error?: {
+    code?: string;
     message: string;
   };
 }
@@ -66,20 +67,49 @@ export function createResearchAgentClient(
           }),
         });
 
+        let data: ApiResponse;
+        try {
+          data = (await response.json()) as ApiResponse;
+        } catch {
+          if (!response.ok) {
+            logger.error(
+              {
+                userId: params.userId,
+                title: params.title,
+                httpStatus: response.status,
+                statusText: response.statusText,
+              },
+              'Failed to create research draft - HTTP error (non-JSON response)'
+            );
+            return err(new Error(`HTTP ${String(response.status)}: Failed to create research draft`));
+          }
+          logger.error(
+            { userId: params.userId, title: params.title },
+            'Invalid JSON response from research-agent'
+          );
+          return err(new Error('Invalid response from research-agent'));
+        }
+
         if (!response.ok) {
+          const errorCode = data.error?.code;
+          const errorMessage = data.error?.message ?? `HTTP ${String(response.status)}: Failed to create research draft`;
           logger.error(
             {
               userId: params.userId,
               title: params.title,
               httpStatus: response.status,
               statusText: response.statusText,
+              errorCode,
+              errorMessage,
             },
             'Failed to create research draft - HTTP error'
           );
-          return err(new Error(`HTTP ${String(response.status)}: Failed to create research draft`));
+          return ok({
+            status: 'failed',
+            message: errorMessage,
+            ...(errorCode !== undefined && { errorCode }),
+          });
         }
-
-        const data = (await response.json()) as ApiResponse;
 
         if (!data.success || data.data === undefined) {
           logger.error(

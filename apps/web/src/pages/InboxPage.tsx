@@ -1,17 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Link as RouterLink } from 'react-router-dom';
 import {
   ActionDetailModal,
+  ActionItem,
   CommandDetailModal,
   Button,
   Card,
   Layout,
-  ConfigurableActionButton,
 } from '@/components';
-import { X } from 'lucide-react';
 import { useAuth } from '@/context';
 import {
   ApiError,
+  archiveAction,
   archiveCommand,
   batchGetActions,
   deleteCommand,
@@ -20,7 +19,6 @@ import {
 } from '@/services';
 import type { Action, ActionStatus, Command, CommandType } from '@/types';
 import type { ResolvedActionButton } from '@/types/actionConfig';
-import { useActionConfig } from '@/hooks/useActionConfig';
 import { useActionChanges } from '@/hooks/useActionChanges';
 import { useCommandChanges } from '@/hooks/useCommandChanges';
 import {
@@ -228,198 +226,10 @@ function CommandItem({
   );
 }
 
-interface ExecutionState {
-  type: 'success' | 'error';
-  message: string;
-  resourceUrl?: string;
-  linkLabel?: string;
-  errorCode?: string;
-}
-
-interface ActionItemProps {
-  action: Action;
-  onClick: () => void;
-  onActionSuccess: (button: ResolvedActionButton) => void;
-  onActionExecuted: (actionId: string) => void;
-  isFadingOut?: boolean;
-}
-
-function ActionItem({
-  action,
-  onClick,
-  onActionSuccess,
-  onActionExecuted,
-  isFadingOut = false,
-}: ActionItemProps): React.JSX.Element {
-  const { buttons } = useActionConfig(action);
-  const [executionState, setExecutionState] = useState<ExecutionState | null>(null);
-
-  /**
-   * Normalizes resourceUrl for HashRouter.
-   * Backend returns URLs like "/#/research/..." but HashRouter's Link component
-   * expects just "/research/..." (it handles the # prefix automatically).
-   */
-  const normalizeResourceUrl = (url: string): string => {
-    if (url.startsWith('/#')) {
-      return url.slice(2);
-    }
-    if (url.startsWith('#')) {
-      return url.slice(1);
-    }
-    return url;
-  };
-
-  const handleDismiss = (e: React.MouseEvent): void => {
-    e.stopPropagation();
-    setExecutionState(null);
-  };
-
-  // Show inline success/error panel when execution completes
-  if (executionState !== null) {
-    const isSuccess = executionState.type === 'success';
-    const showReconnectLink =
-      executionState.errorCode === 'TOKEN_ERROR' || executionState.errorCode === 'NOT_CONNECTED';
-
-    return (
-      <div
-        className={`rounded-lg border p-4 transition-all ${
-          isSuccess
-            ? 'border-green-200 bg-green-50'
-            : 'border-red-200 bg-red-50'
-        } ${isFadingOut ? 'opacity-0 scale-95' : 'opacity-100 scale-100'}`}
-      >
-        <div className="flex items-start gap-3">
-          {isSuccess ? (
-            <CheckCircle className="mt-0.5 h-5 w-5 shrink-0 text-green-600" />
-          ) : (
-            <XCircle className="mt-0.5 h-5 w-5 shrink-0 text-red-600" />
-          )}
-          <div className="min-w-0 flex-1">
-            <p className={`text-sm font-medium ${isSuccess ? 'text-green-800' : 'text-red-800'}`}>
-              {executionState.message}
-            </p>
-            {isSuccess && executionState.resourceUrl !== undefined && (
-              <RouterLink
-                to={executionState.resourceUrl}
-                className="mt-1 block text-sm font-medium text-green-700 underline hover:text-green-800"
-                onClick={(e): void => {
-                  e.stopPropagation();
-                }}
-              >
-                {executionState.linkLabel ?? 'View'}
-              </RouterLink>
-            )}
-            {!isSuccess && showReconnectLink && (
-              <RouterLink
-                to="/settings"
-                className="mt-1 block text-sm font-medium text-red-700 underline hover:text-red-800"
-                onClick={(e): void => {
-                  e.stopPropagation();
-                }}
-              >
-                {executionState.errorCode === 'NOT_CONNECTED' ? 'Connect Calendar' : 'Reconnect Calendar'}
-              </RouterLink>
-            )}
-          </div>
-          <button
-            onClick={handleDismiss}
-            className={`shrink-0 rounded p-1 transition-colors ${
-              isSuccess
-                ? 'text-green-600 hover:bg-green-100 hover:text-green-800'
-                : 'text-red-600 hover:bg-red-100 hover:text-red-800'
-            }`}
-            aria-label="Dismiss"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div
-      className={`cursor-pointer rounded-lg border border-slate-200 bg-white p-4 transition-[opacity,transform] duration-500 ease-out hover:border-slate-300 hover:shadow-sm ${
-        isFadingOut ? 'opacity-0 scale-95' : 'opacity-100 scale-100'
-      }`}
-      onClick={onClick}
-      role="button"
-      tabIndex={0}
-      onKeyDown={(e): void => {
-        if (e.key === 'Enter' || e.key === ' ') {
-          onClick();
-        }
-      }}
-    >
-      <div className="flex items-start gap-3">
-        <div className="mt-0.5 shrink-0">{getTypeIcon(action.type)}</div>
-        <div className="min-w-0 flex-1">
-          <h3 className="break-words font-medium text-slate-800">{action.title}</h3>
-          <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-500">
-            <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 font-medium text-slate-700">
-              {getTypeLabel(action.type)}
-            </span>
-            <span className="inline-flex items-center gap-1">
-              {getStatusIcon(action.status)}
-              {action.status}
-            </span>
-            <span>{String(Math.round(action.confidence * 100))}% confidence</span>
-            <span>{formatDate(action.createdAt)}</span>
-          </div>
-        </div>
-        <div
-          className="flex shrink-0 gap-1 flex-nowrap overflow-x-auto"
-          onClick={(e): void => {
-            e.stopPropagation();
-          }}
-        >
-          {buttons.map((button) => (
-            <ConfigurableActionButton
-              key={button.id}
-              button={button}
-              onSuccess={(): void => {
-                onActionSuccess(button);
-              }}
-              onResult={(result, btn): void => {
-                if (result.status === 'completed' && result.resourceUrl !== undefined) {
-                  // Success: show inline success panel and notify parent for fade-out
-                  const linkLabel = btn.onSuccess?.linkLabel;
-                  setExecutionState({
-                    type: 'success',
-                    message: btn.onSuccess?.message ?? 'Action completed!',
-                    resourceUrl: normalizeResourceUrl(result.resourceUrl),
-                    ...(linkLabel !== undefined && { linkLabel }),
-                  });
-                  onActionExecuted(action.id);
-                } else if (result.status === 'failed') {
-                  // Error: show inline error panel
-                  setExecutionState({
-                    type: 'error',
-                    message: result.message ?? 'Action failed',
-                    ...(result.errorCode !== undefined && { errorCode: result.errorCode }),
-                  });
-                }
-              }}
-              onError={(err): void => {
-                setExecutionState({
-                  type: 'error',
-                  message: err.message,
-                });
-              }}
-            />
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
 // 💰 CostGuard: Debounce delay for batch fetching changed actions
 const DEBOUNCE_DELAY_MS = 500;
 // 💰 CostGuard: Max IDs per batch request (must match backend maxItems)
 const BATCH_SIZE_LIMIT = 50;
-// Fade out duration for actions that no longer match filter
-const FADE_OUT_DURATION_MS = 5000;
 
 export function InboxPage(): React.JSX.Element {
   const { getAccessToken } = useAuth();
@@ -439,7 +249,6 @@ export function InboxPage(): React.JSX.Element {
   const [archivingCommandId, setArchivingCommandId] = useState<string | null>(null);
   const [selectedAction, setSelectedAction] = useState<Action | null>(null);
   const [selectedCommand, setSelectedCommand] = useState<Command | null>(null);
-  const [fadingOutActionIds, setFadingOutActionIds] = useState<Set<string>>(new Set());
   const [statusFilter, setStatusFilter] = useState<ActionStatus[]>(() => {
     const stored = localStorage.getItem('inbox-status-filter');
     if (stored !== null) {
@@ -518,12 +327,12 @@ export function InboxPage(): React.JSX.Element {
               statusFilter.length === 0 || statusFilter.includes(changedAction.status);
 
             if (index >= 0) {
-              if (matchesFilter) {
-                updated[index] = changedAction;
-              } else {
-                updated.splice(index, 1);
-              }
+              // Manual acknowledgment model: always update the action in place
+              // even if it no longer matches the filter. User must explicitly
+              // dismiss (archive) to remove from list.
+              updated[index] = changedAction;
             } else if (matchesFilter) {
+              // Only add new actions that match the current filter
               updated.unshift(changedAction);
             }
           }
@@ -687,6 +496,12 @@ export function InboxPage(): React.JSX.Element {
     }
   };
 
+  const handleDismissAction = async (actionId: string): Promise<void> => {
+    const token = await getAccessToken();
+    await archiveAction(token, actionId);
+    setActions((prev) => prev.filter((a) => a.id !== actionId));
+  };
+
   useEffect(() => {
     void fetchData();
   }, [fetchData]);
@@ -701,22 +516,6 @@ export function InboxPage(): React.JSX.Element {
     }
     previousTabRef.current = activeTab;
   }, [activeTab, fetchData]);
-
-  // Handle action executed: initiate fade-out for completed actions
-  const handleActionExecuted = useCallback((actionId: string): void => {
-    // Start fade-out for this action
-    setFadingOutActionIds((prev) => new Set(prev).add(actionId));
-
-    // Remove from list after fade-out duration
-    setTimeout(() => {
-      setActions((prev) => prev.filter((a) => a.id !== actionId));
-      setFadingOutActionIds((prevSet) => {
-        const newSet = new Set(prevSet);
-        newSet.delete(actionId);
-        return newSet;
-      });
-    }, FADE_OUT_DURATION_MS);
-  }, []);
 
   // Handle status filter changes: save to localStorage and refresh data
   const statusFilterRef = useRef<ActionStatus[]>(statusFilter);
@@ -1000,8 +799,7 @@ export function InboxPage(): React.JSX.Element {
                       void fetchData(true);
                     }
                   }}
-                  onActionExecuted={handleActionExecuted}
-                  isFadingOut={fadingOutActionIds.has(action.id)}
+                  onDismiss={handleDismissAction}
                 />
               ))
             )}
@@ -1071,10 +869,6 @@ export function InboxPage(): React.JSX.Element {
             setActions((prev) => prev.map((a) => (a.id === updatedAction.id ? updatedAction : a)));
             // Update selected action to reflect changes
             setSelectedAction(updatedAction);
-          }}
-          onExecutionResult={(result): void => {
-            // Start fade-out for completed action (modal handles success display)
-            handleActionExecuted(result.actionId);
           }}
         />
       )}
