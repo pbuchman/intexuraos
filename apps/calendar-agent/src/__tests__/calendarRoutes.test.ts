@@ -821,7 +821,7 @@ describe('Calendar Routes', () => {
       const body = response.json();
       expect(body.success).toBe(true);
       expect(body.data.status).toBe('completed');
-      expect(body.data.resourceUrl).toMatch(/^\/#\/calendar\/event-\d+$/);
+      expect(body.data.resourceUrl).toBe('/#/calendar');
     });
 
     it('returns failed status when event extraction is invalid', async () => {

@@ -2,9 +2,15 @@ import { useEffect, useRef } from 'react';
 import Auth0Lock from 'auth0-lock';
 import { config } from '@/config';
 
+interface Auth0LockInstance {
+  show(): void;
+  hide(): void;
+  on(event: string, callback: () => void): void;
+}
+
 export function Auth0LockWidget(): React.JSX.Element {
   const containerRef = useRef<HTMLDivElement>(null);
-  const lockRef = useRef<Auth0LockStatic | null>(null);
+  const lockRef = useRef<Auth0LockInstance | null>(null);
 
   useEffect(() => {
     if (lockRef.current !== null) return;

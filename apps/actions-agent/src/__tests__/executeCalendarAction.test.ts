@@ -56,7 +56,7 @@ describe('executeCalendarAction usecase', () => {
   it('returns completed status for already completed action', async () => {
     const action = createAction({
       status: 'completed',
-      payload: { resource_url: '/#/calendar/existing-event' },
+      payload: { resource_url: '/#/calendar' },
     });
     await fakeActionRepo.save(action);
 
@@ -73,7 +73,7 @@ describe('executeCalendarAction usecase', () => {
     expect(isOk(result)).toBe(true);
     if (isOk(result)) {
       expect(result.value.status).toBe('completed');
-      expect(result.value.resourceUrl).toBe('/#/calendar/existing-event');
+      expect(result.value.resourceUrl).toBe('/#/calendar');
     }
   });
 
@@ -116,12 +116,12 @@ describe('executeCalendarAction usecase', () => {
     expect(isOk(result)).toBe(true);
     if (isOk(result)) {
       expect(result.value.status).toBe('completed');
-      expect(result.value.resourceUrl).toBe('/#/calendar/event-123');
+      expect(result.value.resourceUrl).toBe('/#/calendar');
     }
 
     const updatedAction = await fakeActionRepo.getById('action-123');
     expect(updatedAction?.status).toBe('completed');
-    expect(updatedAction?.payload['resource_url']).toBe('/#/calendar/event-123');
+    expect(updatedAction?.payload['resource_url']).toBe('/#/calendar');
   });
 
   it('updates action to failed when calendar service returns failed status', async () => {
@@ -246,7 +246,7 @@ describe('executeCalendarAction usecase', () => {
     expect(messages).toHaveLength(1);
     expect(messages[0]?.userId).toBe('user-456');
     expect(messages[0]?.message).toContain('Calendar event created');
-    expect(messages[0]?.message).toContain('https://app.test.com/#/calendar/event-123');
+    expect(messages[0]?.message).toContain('https://app.test.com/#/calendar');
   });
 
   it('succeeds even when WhatsApp notification fails (best-effort)', async () => {

@@ -99,23 +99,23 @@ gcloud iam service-accounts keys delete <key-id> \
 
 ## Permissions Granted
 
-| Role                                   | Purpose                               |
-| -------------------------------------- | ------------------------------------- |
-| `roles/artifactregistry.admin`         | Docker image repository management    |
-| `roles/cloudbuild.connectionAdmin`     | Cloud Build GitHub connections        |
-| `roles/cloudscheduler.admin`           | Scheduled job management              |
-| `roles/compute.admin`                  | Load balancer, SSL certs, networking  |
-| `roles/firebase.admin`                 | Firebase/Identity Platform            |
-| `roles/iam.serviceAccountAdmin`        | Service account CRUD                  |
-| `roles/iam.workloadIdentityPoolAdmin`  | Workload Identity Federation          |
-| `roles/logging.admin`                  | Cloud Logging configuration           |
-| `roles/monitoring.admin`               | Monitoring dashboards and alerts      |
-| `roles/pubsub.admin`                   | Pub/Sub topics and subscriptions      |
-| `roles/resourcemanager.projectIamAdmin`| Project IAM policy management         |
-| `roles/run.admin`                      | Cloud Run service deployment          |
-| `roles/secretmanager.admin`            | Secret creation and access            |
-| `roles/serviceusage.serviceUsageAdmin` | API enablement                        |
-| `roles/storage.objectAdmin`            | GCS bucket and object management      |
+| Role                                    | Purpose                              |
+| --------------------------------------- | ------------------------------------ |
+| `roles/artifactregistry.admin`          | Docker image repository management   |
+| `roles/cloudbuild.connectionAdmin`      | Cloud Build GitHub connections       |
+| `roles/cloudscheduler.admin`            | Scheduled job management             |
+| `roles/compute.admin`                   | Load balancer, SSL certs, networking |
+| `roles/firebase.admin`                  | Firebase/Identity Platform           |
+| `roles/iam.serviceAccountAdmin`         | Service account CRUD                 |
+| `roles/iam.workloadIdentityPoolAdmin`   | Workload Identity Federation         |
+| `roles/logging.admin`                   | Cloud Logging configuration          |
+| `roles/monitoring.admin`                | Monitoring dashboards and alerts     |
+| `roles/pubsub.admin`                    | Pub/Sub topics and subscriptions     |
+| `roles/resourcemanager.projectIamAdmin` | Project IAM policy management        |
+| `roles/run.admin`                       | Cloud Run service deployment         |
+| `roles/secretmanager.admin`             | Secret creation and access           |
+| `roles/serviceusage.serviceUsageAdmin`  | API enablement                       |
+| `roles/storage.objectAdmin`             | GCS bucket and object management     |
 
 ## Security Considerations
 
@@ -126,9 +126,9 @@ gcloud iam service-accounts keys delete <key-id> \
 
 ## Outputs
 
-| Output                  | Description                            |
-| ----------------------- | -------------------------------------- |
-| `service_account_email` | Full email for the service account     |
-| `service_account_id`    | Unique ID of the service account       |
-| `service_account_name`  | Resource name for IAM bindings         |
-| `granted_roles`         | List of IAM roles granted              |
+| Output                  | Description                        |
+| ----------------------- | ---------------------------------- |
+| `service_account_email` | Full email for the service account |
+| `service_account_id`    | Unique ID of the service account   |
+| `service_account_name`  | Resource name for IAM bindings     |
+| `granted_roles`         | List of IAM roles granted          |

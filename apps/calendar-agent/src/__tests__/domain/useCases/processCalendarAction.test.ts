@@ -544,7 +544,7 @@ describe('processCalendarAction', () => {
       if (result.ok) {
         expect(result.value.status).toBe('completed');
         expect(result.value.message).toBe('Event "Doctor Appointment" created successfully');
-        expect(result.value.resourceUrl).toBe('/#/calendar/event-abc-123');
+        expect(result.value.resourceUrl).toBe('/#/calendar');
       }
     });
 
@@ -590,7 +590,7 @@ describe('processCalendarAction', () => {
       if (result.ok) {
         expect(result.value.status).toBe('completed');
         expect(result.value.message).toBe('Event "Company Holiday" created successfully');
-        expect(result.value.resourceUrl).toBe('/#/calendar/event-holiday-123');
+        expect(result.value.resourceUrl).toBe('/#/calendar');
       }
     });
 
@@ -819,7 +819,7 @@ describe('processCalendarAction', () => {
         actionId: 'action-123',
         userId: 'user-456',
         eventId: 'existing-event-id',
-        resourceUrl: '/#/calendar/existing-event-id',
+        resourceUrl: '/#/calendar',
         createdAt: '2025-01-15T10:00:00Z',
       });
 
@@ -842,7 +842,7 @@ describe('processCalendarAction', () => {
       expect(result.ok).toBe(true);
       if (result.ok) {
         expect(result.value.status).toBe('completed');
-        expect(result.value.resourceUrl).toBe('/#/calendar/existing-event-id');
+        expect(result.value.resourceUrl).toBe('/#/calendar');
       }
     });
 

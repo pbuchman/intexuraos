@@ -539,7 +539,7 @@ export class FakeCalendarServiceClient implements CalendarServiceClient {
   private nextResponse: ServiceFeedback = {
     status: 'completed',
     message: 'Calendar event created successfully',
-    resourceUrl: '/#/calendar/event-123',
+    resourceUrl: '/#/calendar',
   };
   private failNext = false;
   private failError: Error | null = null;
@@ -730,7 +730,7 @@ export function createFakeExecuteCalendarActionUseCase(config?: {
       config?.returnResult ?? {
         status: 'completed',
         message: 'Calendar event created successfully',
-        resourceUrl: '/#/calendar/event-123',
+        resourceUrl: '/#/calendar',
       }
     );
   };
