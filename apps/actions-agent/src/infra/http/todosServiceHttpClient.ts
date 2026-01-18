@@ -49,15 +49,34 @@ export function createTodosServiceHttpClient(
         return err(new Error(`Failed to call todos-agent: ${getErrorMessage(error)}`));
       }
 
-      if (!response.ok) {
-        logger.error(
-          { httpStatus: response.status, statusText: response.statusText },
-          'todos-agent returned error'
-        );
-        return err(new Error(`HTTP ${String(response.status)}: ${response.statusText}`));
+      let body: ApiResponse;
+      try {
+        body = (await response.json()) as ApiResponse;
+      } catch {
+        if (!response.ok) {
+          logger.error(
+            { httpStatus: response.status, statusText: response.statusText },
+            'todos-agent returned error (non-JSON response)'
+          );
+          return err(new Error(`HTTP ${String(response.status)}: ${response.statusText}`));
+        }
+        logger.error({ httpStatus: response.status }, 'Invalid JSON response from todos-agent');
+        return err(new Error('Invalid response from todos-agent'));
       }
 
-      const body = (await response.json()) as ApiResponse;
+      if (!response.ok) {
+        const errorCode = body.error?.code;
+        const errorMessage = body.error?.message ?? `HTTP ${String(response.status)}: ${response.statusText}`;
+        logger.error(
+          { httpStatus: response.status, statusText: response.statusText, errorCode, errorMessage },
+          'todos-agent returned error'
+        );
+        return ok({
+          status: 'failed',
+          message: errorMessage,
+          ...(errorCode !== undefined && { errorCode }),
+        });
+      }
       if (!body.success || body.data === undefined) {
         logger.error({ body }, 'Invalid response from todos-agent');
         return err(new Error(body.error?.message ?? 'Invalid response from todos-agent'));

@@ -75,6 +75,19 @@ export async function deleteAction(accessToken: string, actionId: string): Promi
   );
 }
 
+export async function archiveAction(accessToken: string, actionId: string): Promise<Action> {
+  const response = await apiRequest<{ action: Action }>(
+    config.actionsAgentUrl,
+    `/actions/${actionId}`,
+    accessToken,
+    {
+      method: 'PATCH',
+      body: { status: 'archived' },
+    }
+  );
+  return response.action;
+}
+
 export async function deleteCommand(accessToken: string, commandId: string): Promise<void> {
   await apiRequest<Record<string, never>>(
     config.commandsAgentServiceUrl,
