@@ -2,10 +2,19 @@ import { useEffect, useRef } from 'react';
 import Auth0Lock from 'auth0-lock';
 import { config } from '@/config';
 
+interface AuthResult {
+  accessToken: string;
+  idToken: string;
+  idTokenPayload: Record<string, unknown>;
+  refreshToken?: string;
+  state?: string;
+}
+
 interface Auth0LockInstance {
   show(): void;
   hide(): void;
-  on(event: string, callback: () => void): void;
+  on(event: 'authenticated', callback: (authResult: AuthResult) => void): void;
+  on(event: 'authorization_error', callback: (error: Error) => void): void;
 }
 
 export function Auth0LockWidget(): React.JSX.Element {
@@ -46,11 +55,27 @@ export function Auth0LockWidget(): React.JSX.Element {
       rememberLastLogin: true,
     });
 
-    lock.on('authenticated', () => {
+    lock.on('authenticated', (authResult) => {
+      // Store tokens in localStorage for auth0-react SDK to pick up
+      // The SDK expects tokens in a specific cache format
+      const cacheKey = `@@auth0spajs@@::${config.auth0ClientId}::${config.authAudience}::openid profile email`;
+      const cacheEntry = {
+        body: {
+          access_token: authResult.accessToken,
+          id_token: authResult.idToken,
+          scope: 'openid profile email',
+          expires_in: 86400,
+          token_type: 'Bearer',
+        },
+        expiresAt: Math.floor(Date.now() / 1000) + 86400,
+      };
+      localStorage.setItem(cacheKey, JSON.stringify(cacheEntry));
+
+      // Redirect to let auth0-react pick up the session
       window.location.href = `${window.location.origin}/#/inbox`;
     });
 
-    lock.on('authorization_error', () => {
+    lock.on('authorization_error', (_error) => {
       // Auth0 Lock displays errors in its UI
     });
 
