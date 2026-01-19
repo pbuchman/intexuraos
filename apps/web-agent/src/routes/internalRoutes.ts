@@ -175,12 +175,6 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       const { pageSummaryService } = getServices();
 
-      if (pageSummaryService === null) {
-        request.log.error('Page summary service not configured (missing CRAWL4AI_API_KEY)');
-        reply.status(503);
-        return { error: 'Page summary service not available' };
-      }
-
       const options = {
         ...(maxSentences !== undefined && { maxSentences }),
         ...(maxReadingMinutes !== undefined && { maxReadingMinutes }),
