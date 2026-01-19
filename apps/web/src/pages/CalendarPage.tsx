@@ -16,6 +16,7 @@ import {
 import { Button, Card, Layout, RefreshIndicator } from '@/components';
 import { useCalendarEvents, useFailedCalendarEvents } from '@/hooks';
 import type { CalendarEvent, CalendarEventDateTime, FailedCalendarEvent } from '@/types';
+import { getCurrentWeekRange } from '@/utils';
 
 function formatTimeOnly(dt: CalendarEventDateTime): string {
   if (dt.dateTime !== undefined) {
@@ -43,7 +44,9 @@ function getEventDate(event: CalendarEvent): Date {
 
 function formatWeekRange(start: Date, end: Date): string {
   const startStr = start.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-  const endStr = end.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+  const lastDayOfWeek = new Date(end);
+  lastDayOfWeek.setDate(lastDayOfWeek.getDate() - 1);
+  const endStr = lastDayOfWeek.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
   return `${startStr} - ${endStr}`;
 }
 
@@ -322,18 +325,11 @@ export function CalendarPage(): React.JSX.Element {
   };
 
   const handleToday = (): void => {
-    const now = new Date();
-    const startOfWeek = new Date(now);
-    startOfWeek.setDate(now.getDate() - now.getDay());
-    startOfWeek.setHours(0, 0, 0, 0);
-
-    const endOfWeek = new Date(startOfWeek);
-    endOfWeek.setDate(startOfWeek.getDate() + 7);
-
+    const { start, end } = getCurrentWeekRange();
     setFilters({
       ...filters,
-      timeMin: startOfWeek.toISOString(),
-      timeMax: endOfWeek.toISOString(),
+      timeMin: start.toISOString(),
+      timeMax: end.toISOString(),
     });
   };
 

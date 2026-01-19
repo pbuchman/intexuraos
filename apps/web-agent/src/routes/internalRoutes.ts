@@ -2,12 +2,15 @@ import type { FastifyPluginCallback } from 'fastify';
 import { validateInternalAuth, logIncomingRequest } from '@intexuraos/common-http';
 import type { Logger } from 'pino';
 import { getServices } from '../services.js';
-import type { LinkPreviewResult } from '../domain/index.js';
+import type { LinkPreviewResult, PageSummaryResult } from '../domain/index.js';
 import { OpenGraphFetcher } from '../infra/index.js';
 import {
   fetchLinkPreviewsBodySchema,
   fetchLinkPreviewsResponseSchema,
   type FetchLinkPreviewsBody,
+  summarizePageBodySchema,
+  summarizePageResponseSchema,
+  type SummarizePageBody,
 } from './schemas/index.js';
 
 function isValidUrl(urlString: string): boolean {
@@ -122,6 +125,100 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           durationMs,
         },
       });
+    }
+  );
+
+  fastify.post<{ Body: SummarizePageBody }>(
+    '/internal/page-summaries',
+    {
+      schema: {
+        operationId: 'summarizePageInternal',
+        summary: 'Summarize a web page (internal)',
+        description:
+          'Internal endpoint for extracting and summarizing web page content using Crawl4AI.',
+        tags: ['internal'],
+        body: summarizePageBodySchema,
+        response: {
+          200: summarizePageResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      logIncomingRequest(request, {
+        message: 'Received request to POST /internal/page-summaries',
+      });
+
+      const authResult = validateInternalAuth(request);
+      if (!authResult.valid) {
+        request.log.warn({ reason: authResult.reason }, 'Internal auth failed for page summary');
+        reply.status(401);
+        return { error: 'Unauthorized' };
+      }
+
+      const { url, maxSentences, maxReadingMinutes } = request.body;
+      const startTime = Date.now();
+
+      request.log.info({ url, maxSentences, maxReadingMinutes }, 'Processing page summary request');
+
+      if (!isValidUrl(url)) {
+        const durationMs = Date.now() - startTime;
+        const result: PageSummaryResult = {
+          url,
+          status: 'failed',
+          error: {
+            code: 'INVALID_URL',
+            message: 'Invalid URL format or unsupported protocol',
+          },
+        };
+        return await reply.ok({ result, metadata: { durationMs } });
+      }
+
+      const { pageSummaryService } = getServices();
+
+      if (pageSummaryService === null) {
+        request.log.error('Page summary service not configured (missing CRAWL4AI_API_KEY)');
+        reply.status(503);
+        return { error: 'Page summary service not available' };
+      }
+
+      const options = {
+        ...(maxSentences !== undefined && { maxSentences }),
+        ...(maxReadingMinutes !== undefined && { maxReadingMinutes }),
+      };
+
+      const summaryResult = await pageSummaryService.summarizePage(url, options);
+
+      const durationMs = Date.now() - startTime;
+
+      let result: PageSummaryResult;
+      if (summaryResult.ok) {
+        result = {
+          url,
+          status: 'success',
+          summary: summaryResult.value,
+        };
+        request.log.info(
+          {
+            url,
+            wordCount: summaryResult.value.wordCount,
+            estimatedReadingMinutes: summaryResult.value.estimatedReadingMinutes,
+            durationMs,
+          },
+          'Page summary completed successfully'
+        );
+      } else {
+        result = {
+          url,
+          status: 'failed',
+          error: summaryResult.error,
+        };
+        request.log.warn(
+          { url, error: summaryResult.error, durationMs },
+          'Page summary failed'
+        );
+      }
+
+      return await reply.ok({ result, metadata: { durationMs } });
     }
   );
 

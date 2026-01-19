@@ -92,6 +92,8 @@ export interface Research {
   userId: string;
   title: string;
   prompt: string;
+  /** Original user prompt before improvement. Only set when user accepted an improved suggestion. */
+  originalPrompt?: string;
   selectedModels: SupportedModel[];
   synthesisModel: SupportedModel;
   status: ResearchStatus;
@@ -116,6 +118,8 @@ export interface Research {
  */
 export interface CreateResearchRequest {
   prompt: string;
+  /** Original user prompt before improvement. Set when user accepted an improved suggestion. */
+  originalPrompt?: string;
   selectedModels: SupportedModel[];
   synthesisModel: SupportedModel;
   inputContexts?: { content: string }[];

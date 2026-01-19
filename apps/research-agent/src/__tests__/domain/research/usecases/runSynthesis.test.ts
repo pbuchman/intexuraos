@@ -148,6 +148,28 @@ describe('runSynthesis', () => {
     expect(result).toEqual({ ok: false, error: 'Research not found' });
   });
 
+  it('returns success early when research is already synthesizing (race condition guard)', async () => {
+    const research = createTestResearch({ status: 'synthesizing' });
+    deps.mockRepo.findById.mockResolvedValue(ok(research));
+
+    const result = await runSynthesis('research-1', deps);
+
+    expect(result).toEqual({ ok: true });
+    expect(deps.mockSynthesizer.synthesize).not.toHaveBeenCalled();
+    expect(deps.mockRepo.update).not.toHaveBeenCalled();
+  });
+
+  it('returns success early when research is already completed (race condition guard)', async () => {
+    const research = createTestResearch({ status: 'completed' });
+    deps.mockRepo.findById.mockResolvedValue(ok(research));
+
+    const result = await runSynthesis('research-1', deps);
+
+    expect(result).toEqual({ ok: true });
+    expect(deps.mockSynthesizer.synthesize).not.toHaveBeenCalled();
+    expect(deps.mockRepo.update).not.toHaveBeenCalled();
+  });
+
   it('updates status to synthesizing before synthesis', async () => {
     const research = createTestResearch();
     deps.mockRepo.findById.mockResolvedValue(ok(research));
@@ -1487,11 +1509,9 @@ describe('runSynthesis', () => {
     };
 
     it('handles repair success with undefined costUsd (uses nullish coalescing)', async () => {
-      // Covers runSynthesis.ts line 220: additionalCostUsd += repairResult.value.usage.costUsd ?? 0
       const research = createTestResearch();
       deps.mockRepo.findById.mockResolvedValue(ok(research));
 
-      // Override the spy to return success with undefined costUsd
       repairAttributionSpy.mockResolvedValue(
         ok({
           content: 'Repaired content',
@@ -1506,8 +1526,74 @@ describe('runSynthesis', () => {
       });
 
       expect(result).toEqual({ ok: true });
-      // The undefined costUsd should be handled by the ?? 0 operator
       expect(deps.mockRepo.update).toHaveBeenCalled();
+    });
+
+    it('sets attributionStatus to complete when validation passes initially', async () => {
+      const research = createTestResearch();
+      deps.mockRepo.findById.mockResolvedValue(ok(research));
+
+      const validSynthesisContent = `## Overview
+Content here
+Attribution: Primary=S1; Secondary=S2; Constraints=; UNK=false
+
+## Details
+More content
+Attribution: Primary=S2; Secondary=; Constraints=; UNK=false`;
+
+      deps.mockSynthesizer.synthesize.mockResolvedValue(
+        ok({ content: validSynthesisContent, usage: { inputTokens: 500, outputTokens: 200, costUsd: 0.01 } })
+      );
+
+      const result = await runSynthesis('research-1', {
+        ...deps,
+        shareStorage: mockShareStorage,
+        shareConfig,
+      });
+
+      expect(result).toEqual({ ok: true });
+      const finalUpdate = deps.mockRepo.update.mock.calls.find(
+        (call) => call[1]?.attributionStatus !== undefined
+      );
+      expect(finalUpdate?.[1].attributionStatus).toBe('complete');
+      expect(repairAttributionSpy).not.toHaveBeenCalled();
+    });
+
+    it('sets attributionStatus to repaired when repair succeeds and revalidation passes', async () => {
+      const research = createTestResearch();
+      deps.mockRepo.findById.mockResolvedValue(ok(research));
+
+      deps.mockSynthesizer.synthesize.mockResolvedValue(
+        ok({
+          content: '## Section\nContent without attribution',
+          usage: { inputTokens: 500, outputTokens: 200, costUsd: 0.01 },
+        })
+      );
+
+      const repairedContent = `## Section
+Content
+Attribution: Primary=S1; Secondary=S2; Constraints=; UNK=false`;
+
+      repairAttributionSpy.mockResolvedValue(
+        ok({
+          content: repairedContent,
+          usage: { inputTokens: 100, outputTokens: 50, costUsd: 0.005 },
+        })
+      );
+
+      const result = await runSynthesis('research-1', {
+        ...deps,
+        shareStorage: mockShareStorage,
+        shareConfig,
+      });
+
+      expect(result).toEqual({ ok: true });
+      const finalUpdate = deps.mockRepo.update.mock.calls.find(
+        (call) => call[1]?.attributionStatus !== undefined
+      );
+      expect(finalUpdate?.[1].attributionStatus).toBe('repaired');
+      expect(finalUpdate?.[1].synthesizedResult).toContain(repairedContent);
+      expect(finalUpdate?.[1].totalCostUsd).toBeCloseTo(0.015, 6);
     });
   });
 });

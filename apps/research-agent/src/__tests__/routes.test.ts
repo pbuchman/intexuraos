@@ -229,6 +229,33 @@ describe('Research Routes - Unauthenticated', () => {
     expect(body.success).toBe(false);
     expect(body.error.code).toBe('UNAUTHORIZED');
   });
+
+  it('POST /research/:id/enhance returns 401 without auth', async () => {
+    const response = await app.inject({
+      method: 'POST',
+      url: '/research/test-id/enhance',
+      payload: {
+        additionalModels: [LlmModels.O4MiniDeepResearch],
+      },
+    });
+
+    expect(response.statusCode).toBe(401);
+    const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+    expect(body.success).toBe(false);
+    expect(body.error.code).toBe('UNAUTHORIZED');
+  });
+
+  it('DELETE /research/:id/share returns 401 without auth', async () => {
+    const response = await app.inject({
+      method: 'DELETE',
+      url: '/research/test-id/share',
+    });
+
+    expect(response.statusCode).toBe(401);
+    const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+    expect(body.success).toBe(false);
+    expect(body.error.code).toBe('UNAUTHORIZED');
+  });
 });
 
 describe('Research Routes - Authenticated', () => {
@@ -380,6 +407,28 @@ describe('Research Routes - Authenticated', () => {
       expect(body.data.inputContexts).toHaveLength(1);
     });
 
+    it('stores originalPrompt when user accepted an improved suggestion', async () => {
+      const token = await createToken(TEST_USER_ID);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/research',
+        headers: { authorization: `Bearer ${token}` },
+        payload: {
+          prompt: 'Improved prompt with more context and details',
+          originalPrompt: 'Original poor prompt',
+          selectedModels: [LlmModels.Gemini25Pro],
+          synthesisModel: LlmModels.Gemini25Pro,
+        },
+      });
+
+      expect(response.statusCode).toBe(201);
+      const body = JSON.parse(response.body) as { success: boolean; data: Research };
+      expect(body.success).toBe(true);
+      expect(body.data.prompt).toBe('Improved prompt with more context and details');
+      expect(body.data.originalPrompt).toBe('Original poor prompt');
+    });
+
     it('returns 500 on save failure', async () => {
       const token = await createToken(TEST_USER_ID);
       fakeRepo.setFailNextSave(true);
@@ -492,6 +541,7 @@ describe('Research Routes - Authenticated', () => {
       const body = JSON.parse(response.body) as { success: boolean; data: Research };
       expect(body.success).toBe(true);
     });
+
   });
 
   describe('POST /research/draft', () => {
@@ -1544,6 +1594,31 @@ describe('Research Routes - Authenticated', () => {
       expect(body.error.message).toContain('claude-opus-4-5');
     });
 
+    it('returns 503 when API key is missing for inherited synthesis model', async () => {
+      const token = await createToken(TEST_USER_ID);
+      const source = createCompletedResearch({
+        synthesisModel: LlmModels.ClaudeOpus45,
+      });
+      fakeRepo.addResearch(source);
+      fakeUserServiceClient.setApiKeys(TEST_USER_ID, { google: 'test-google-key' });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/research/${source.id}/enhance`,
+        headers: { authorization: `Bearer ${token}` },
+        payload: { additionalContexts: [{ content: 'New context' }] },
+      });
+
+      expect(response.statusCode).toBe(503);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string; message: string };
+      };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('MISCONFIGURED');
+      expect(body.error.message).toContain('claude-opus-4-5');
+    });
+
     it('returns 500 when API key fetch fails', async () => {
       const token = await createToken(TEST_USER_ID);
       const source = createCompletedResearch();
@@ -1555,6 +1630,23 @@ describe('Research Routes - Authenticated', () => {
         url: `/research/${source.id}/enhance`,
         headers: { authorization: `Bearer ${token}` },
         payload: { additionalModels: [LlmModels.ClaudeOpus45] },
+      });
+
+      expect(response.statusCode).toBe(500);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INTERNAL_ERROR');
+    });
+
+    it('returns 500 when source research fetch fails', async () => {
+      const token = await createToken(TEST_USER_ID);
+      fakeRepo.setFailNextFind(true);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/research/some-research-id/enhance',
+        headers: { authorization: `Bearer ${token}` },
+        payload: { additionalContexts: [{ content: 'New context' }] },
       });
 
       expect(response.statusCode).toBe(500);
@@ -3119,16 +3211,14 @@ describe('Internal Routes', () => {
       });
 
       expect(response.statusCode).toBe(200);
-      const body = JSON.parse(response.body) as { success: boolean; data: Research };
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: { status: string; message: string; resourceUrl?: string };
+      };
       expect(body.success).toBe(true);
-      expect(body.data.id).toBe('generated-id-123');
-      expect(body.data.userId).toBe(TEST_USER_ID);
-      expect(body.data.title).toBe('Test Draft Research');
-      expect(body.data.status).toBe('draft');
-      expect(body.data.selectedModels).toEqual([
-        LlmModels.Gemini25Pro,
-        LlmModels.O4MiniDeepResearch,
-      ]);
+      expect(body.data.status).toBe('completed');
+      expect(body.data.message).toBe('Research "Test Draft Research" created successfully');
+      expect(body.data.resourceUrl).toBe('/#/research/generated-id-123');
     });
 
     it('creates draft research with sourceActionId', async () => {
@@ -3146,9 +3236,13 @@ describe('Internal Routes', () => {
       });
 
       expect(response.statusCode).toBe(200);
-      const body = JSON.parse(response.body) as { success: boolean; data: Research };
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: { status: string; message: string; resourceUrl?: string };
+      };
       expect(body.success).toBe(true);
-      expect(body.data.sourceActionId).toBe('action-123');
+      expect(body.data.status).toBe('completed');
+      expect(body.data.resourceUrl).toBeDefined();
     });
 
     it('returns 401 when X-Internal-Auth header is missing', async () => {
@@ -3222,9 +3316,13 @@ describe('Internal Routes', () => {
       });
 
       expect(response.statusCode).toBe(500);
-      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
-      expect(body.success).toBe(false);
-      expect(body.error.code).toBe('INTERNAL_ERROR');
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: { status: string; message: string; errorCode?: string };
+      };
+      expect(body.success).toBe(true);
+      expect(body.data.status).toBe('failed');
+      expect(body.data.errorCode).toBe('EXTERNAL_API_ERROR');
     });
   });
 
@@ -5040,6 +5138,62 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
       expect(body.success).toBe(true);
       expect(body.data.message).toBe('Research is already completed');
     });
+
+    it('returns INTERNAL_ERROR when getResearch fails (line 988)', async () => {
+      const token = await createToken(TEST_USER_ID);
+      const research = createTestResearch({
+        id: 'research-123',
+        status: 'failed',
+        llmResults: [
+          {
+            provider: LlmProviders.Google,
+            model: LlmModels.Gemini25Pro,
+            status: 'failed',
+          },
+        ],
+      });
+      fakeRepo.addResearch(research);
+      fakeRepo.setFailNextFind(true);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/research/research-123/retry',
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(500);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INTERNAL_ERROR');
+    });
+
+    it('returns INTERNAL_ERROR when getApiKeys fails (line 1003)', async () => {
+      const token = await createToken(TEST_USER_ID);
+      const research = createTestResearch({
+        id: 'research-123',
+        status: 'failed',
+        llmResults: [
+          {
+            provider: LlmProviders.Google,
+            model: LlmModels.Gemini25Pro,
+            status: 'failed',
+          },
+        ],
+      });
+      fakeRepo.addResearch(research);
+      fakeUserServiceClient.setFailNextGetApiKeys(true);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/research/research-123/retry',
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(500);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INTERNAL_ERROR');
+    });
   });
 
   describe('POST /research/:id/enhance - Uncovered branches', () => {
@@ -5354,6 +5508,55 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
       const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
       expect(body.success).toBe(false);
       expect(body.error.code).toBe('INVALID_REQUEST');
+    });
+
+    it('returns MISCONFIGURED when synthesis API key is missing and skipSynthesis is not true (line 744)', async () => {
+      const token = await createToken(TEST_USER_ID);
+      const research = createTestResearch({
+        id: 'draft-123',
+        status: 'draft',
+        selectedModels: [LlmModels.Gemini25Pro],
+        synthesisModel: LlmModels.ClaudeSonnet45,
+        skipSynthesis: false,
+      });
+      fakeRepo.addResearch(research);
+      fakeUserServiceClient.setApiKeys(TEST_USER_ID, { google: 'test-key' });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/research/draft-123/approve',
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(503);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string; message: string };
+      };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('MISCONFIGURED');
+      expect(body.error.message).toContain('API key required for synthesis');
+    });
+  });
+
+  describe('POST /research/:id/enhance - Uncovered branches (additional)', () => {
+    it('returns NOT_FOUND when source research does not exist (line 1177)', async () => {
+      const token = await createToken(TEST_USER_ID);
+      fakeUserServiceClient.setApiKeys(TEST_USER_ID, { google: 'test-key' });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/research/nonexistent-123/enhance',
+        headers: { authorization: `Bearer ${token}` },
+        payload: {
+          additionalModels: [LlmModels.O4MiniDeepResearch],
+        },
+      });
+
+      expect(response.statusCode).toBe(404);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('NOT_FOUND');
     });
   });
 });

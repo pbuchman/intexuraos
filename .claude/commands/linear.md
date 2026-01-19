@@ -2,6 +2,8 @@
 
 Manage Linear issues, branches, and PRs with enforced workflow and cross-linking.
 
+**Project Key:** `INT-` (e.g., `INT-123`, `INT-144`). All issue references in this document use generic `LIN-XXX` placeholders, but for this project always use `INT-XXX`.
+
 ## Usage
 
 ```
@@ -37,7 +39,7 @@ Manage Linear issues, branches, and PRs with enforced workflow and cross-linking
 
 ```bash
 /linear Fix authentication token not refreshing
-/linear LIN-42
+/linear INT-42                                    # Use INT- prefix for this project
 /linear https://intexuraos-dev-pbuchman.sentry.io/issues/123/
 /linear
 ```
@@ -52,7 +54,7 @@ The command automatically detects intent from input:
 | ------------------------------- | -------------------------------- | ------------------------------------------------------------ |
 | `/linear` (no args)             | Random Backlog (NON-INTERACTIVE) | Pick from Backlog/Todo and start working WITHOUT asking user |
 | `/linear <task description>`    | Create New                       | Detect bug/feature, create issue, start working              |
-| `/linear LIN-<number>`          | Work Existing                    | Start working on specific issue                              |
+| `/linear INT-<number>`          | Work Existing                    | Start working on specific issue (use INT- for this project)  |
 | `/linear https://sentry.io/...` | Sentry Integration               | Create Linear issue from Sentry error                        |
 
 ---
@@ -101,7 +103,50 @@ Before ANY operation, verify all required tools are available.
 | ---------- | -------------------------------- | ---------------- |
 | Linear MCP | `mcp__linear-server__list_teams` | Issue management |
 | GitHub CLI | `gh auth status`                 | PR creation      |
-| GCloud     | `gcloud auth list`               | Firestore access |
+| GCloud     | See GCloud Verification below    | Firestore access |
+
+### GCloud Verification (MANDATORY)
+
+**RULE:** NEVER claim "gcloud is not authenticated" without first verifying service account credentials.
+
+**Service account key location:** `~/personal/gcloud-claude-code-dev.json`
+
+**Verification steps (in order):**
+
+1. Check if credentials file exists:
+
+   ```bash
+   ls -la ~/personal/gcloud-claude-code-dev.json
+   ```
+
+2. If `gcloud auth list` shows no active account, activate service account:
+
+   ```bash
+   gcloud auth activate-service-account --key-file=~/personal/gcloud-claude-code-dev.json
+   ```
+
+3. Verify authentication:
+   ```bash
+   gcloud auth list
+   ```
+
+**You are NEVER "unauthenticated" if the service account key file exists.** Activate it and proceed.
+
+### Terraform Operations
+
+When Terraform is needed (infrastructure changes), use the service account with `GOOGLE_APPLICATION_CREDENTIALS`:
+
+```bash
+GOOGLE_APPLICATION_CREDENTIALS=/Users/p.buchman/personal/gcloud-claude-code-dev.json \
+STORAGE_EMULATOR_HOST= FIRESTORE_EMULATOR_HOST= PUBSUB_EMULATOR_HOST= \
+terraform plan
+
+GOOGLE_APPLICATION_CREDENTIALS=/Users/p.buchman/personal/gcloud-claude-code-dev.json \
+STORAGE_EMULATOR_HOST= FIRESTORE_EMULATOR_HOST= PUBSUB_EMULATOR_HOST= \
+terraform apply
+```
+
+**Never use browser-based authentication for Terraform.** The service account has full admin permissions.
 
 ### Optional Tools
 
@@ -138,6 +183,15 @@ ERROR: /linear cannot proceed - Linear MCP unavailable
 
 Required for: Issue creation and state management
 Fix: Check MCP server configuration
+
+Aborting.
+```
+
+```
+ERROR: /linear cannot proceed - GCloud not authenticated
+
+Required for: Firestore access
+Fix: Run 'gcloud auth activate-service-account --key-file=~/personal/gcloud-claude-code-dev.json'
 
 Aborting.
 ```
@@ -240,6 +294,37 @@ git checkout -b fix/LIN-123 "$BASE_BRANCH"
 
 ---
 
+## Original User Instruction (MANDATORY)
+
+**RULE:** Every Linear issue created from `/linear <task description>` MUST include the original user instruction verbatim.
+
+### Format
+
+```markdown
+## Original User Instruction
+
+> <verbatim user input here>
+
+_This is the original user instruction, transcribed verbatim. May include typos but preserves original observations._
+```
+
+### Requirements
+
+1. **Preserve exactly** - Include typos, grammatical errors, raw phrasing
+2. **No corrections** - Do not fix spelling or grammar
+3. **Quote block** - Use `>` blockquote for the instruction
+4. **Disclaimer** - Include the italicized note about verbatim transcription
+5. **Position** - Place at the TOP of the issue description
+
+### Why This Matters
+
+- Preserves the original context and intent
+- Allows reviewers to understand the raw user need
+- Prevents loss of nuance through summarization
+- Creates audit trail of actual requests
+
+---
+
 ## Workflow: Create New Issue
 
 ### Trigger
@@ -258,7 +343,7 @@ User calls `/linear <task description>`
    - Format: `[bug] <short-description>` or `[feature] <short-description>`
    - Team: `pbuchman`
    - State: `Backlog`
-   - Description: Include task context
+   - Description: **MUST start with "Original User Instruction" section** (see above), then include task context
 
 5. **Offer to Start Working**
    - Ask: "Ready to start working on this issue?"
@@ -561,6 +646,29 @@ User explicitly says one of (INTERACTIVE mode only):
 3. Use present tense, imperative mood
 4. Be specific about location/context
 5. Avoid technical jargon in first 50 chars
+
+### Issue Description Template
+
+```markdown
+## Original User Instruction
+
+> <verbatim user input - preserve typos and raw phrasing>
+
+_This is the original user instruction, transcribed verbatim. May include typos but preserves original observations._
+
+## Summary
+
+<1-2 sentence summary of the task>
+
+## Requirements
+
+<Bulleted list of specific requirements>
+
+## Acceptance Criteria
+
+- [ ] <Criterion 1>
+- [ ] <Criterion 2>
+```
 
 ---
 

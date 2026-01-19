@@ -3,7 +3,7 @@
  * Analyzes composite feed data and generates up to 5 measurable, trackable insights.
  */
 
-import type { PromptBuilder } from '../types.js';
+import type { PromptBuilder } from '../shared/types.js';
 
 export interface ChartTypeInfo {
   id: string;

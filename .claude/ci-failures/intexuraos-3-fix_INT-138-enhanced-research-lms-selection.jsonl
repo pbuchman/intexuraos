@@ -1,0 +1,3 @@
+{"ts":"2026-01-17T18:15:46.337Z","project":"intexuraos-3","branch":"fix/INT-138-enhanced-research-lms-selection","workspace":"--","runNumber":1,"passed":false,"durationMs":1012,"failureCount":0,"failures":[]}
+{"ts":"2026-01-17T18:18:37.723Z","project":"intexuraos-3","branch":"fix/INT-138-enhanced-research-lms-selection","workspace":"research-agent","runNumber":2,"passed":true,"durationMs":164879,"failureCount":0,"failures":[]}
+{"ts":"2026-01-17T18:23:26.307Z","project":"intexuraos-3","branch":"fix/INT-138-enhanced-research-lms-selection","runNumber":3,"passed":true,"durationMs":218287,"failureCount":0,"failures":[]}

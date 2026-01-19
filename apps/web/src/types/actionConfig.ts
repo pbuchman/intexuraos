@@ -170,6 +170,7 @@ export interface UseActionConfigResult {
 /**
  * Result from executing an action.
  * Generic structure that supports any action type returning a resource URL.
+ * Matches the backend response from /actions/{actionId}/execute endpoint.
  */
 export interface ActionExecutionResult {
   /** Action ID that was executed */
@@ -177,9 +178,11 @@ export interface ActionExecutionResult {
   /** Execution status */
   status: 'completed' | 'failed';
   /** URL to the created/affected resource (e.g., research, todo, note) */
-  resource_url?: string;
-  /** Error message if status is 'failed' */
-  error?: string;
+  resourceUrl?: string;
+  /** Human-readable message (success or error) */
+  message?: string;
+  /** Error code for special handling (e.g., TOKEN_ERROR for OAuth reconnection) */
+  errorCode?: string;
   /** Existing bookmark ID (for duplicate link conflicts) */
   existingBookmarkId?: string;
 }

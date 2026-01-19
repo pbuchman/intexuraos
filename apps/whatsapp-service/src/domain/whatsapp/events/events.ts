@@ -185,6 +185,12 @@ export interface CommandIngestEvent {
   text: string;
 
   /**
+   * AI-generated summary (key points) from Speechmatics transcription.
+   * Only present for voice messages.
+   */
+  summary?: string;
+
+  /**
    * Event timestamp (ISO 8601).
    */
   timestamp: string;

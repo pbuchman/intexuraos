@@ -123,6 +123,59 @@ describe('GoogleCalendarClientImpl', () => {
     });
   });
 
+  describe('getCalendarTimezone', () => {
+    it('gets timezone successfully', async () => {
+      nock(GOOGLE_CALENDAR_API)
+        .get('/calendar/v3/calendars/primary')
+        .reply(200, {
+          id: 'primary',
+          summary: 'Primary Calendar',
+          timeZone: 'America/New_York',
+        });
+
+      const result = await client.getCalendarTimezone(TEST_ACCESS_TOKEN, TEST_CALENDAR_ID, mockLogger);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toBe('America/New_York');
+      }
+    });
+
+    it('defaults to UTC when timeZone is not present', async () => {
+      nock(GOOGLE_CALENDAR_API)
+        .get('/calendar/v3/calendars/primary')
+        .reply(200, {
+          id: 'primary',
+          summary: 'Primary Calendar',
+        });
+
+      const result = await client.getCalendarTimezone(TEST_ACCESS_TOKEN, TEST_CALENDAR_ID, mockLogger);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toBe('UTC');
+      }
+    });
+
+    it('returns error on API failure', async () => {
+      nock(GOOGLE_CALENDAR_API)
+        .get('/calendar/v3/calendars/primary')
+        .reply(401, {
+          error: {
+            code: 401,
+            message: 'Invalid credentials',
+          },
+        });
+
+      const result = await client.getCalendarTimezone(TEST_ACCESS_TOKEN, TEST_CALENDAR_ID, mockLogger);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('TOKEN_ERROR');
+      }
+    });
+  });
+
   describe('getEvent', () => {
     it('gets event successfully', async () => {
       nock(GOOGLE_CALENDAR_API)

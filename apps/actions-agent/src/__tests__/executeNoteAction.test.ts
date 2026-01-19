@@ -73,7 +73,7 @@ describe('executeNoteAction usecase', () => {
     expect(isOk(result)).toBe(true);
     if (isOk(result)) {
       expect(result.value.status).toBe('completed');
-      expect(result.value.resource_url).toBe('/#/notes/existing-note');
+      expect(result.value.resourceUrl).toBe('/#/notes/existing-note');
     }
   });
 
@@ -103,7 +103,11 @@ describe('executeNoteAction usecase', () => {
       payload: { prompt: 'Discussed quarterly goals' },
     });
     await fakeActionRepo.save(action);
-    fakeNotesClient.setNextNoteId('note-new-123');
+    fakeNotesClient.setNextResponse({
+      status: 'completed',
+      message: 'Note created successfully',
+      resourceUrl: '/#/notes/note-new-123',
+    });
 
     const usecase = createExecuteNoteActionUseCase({
       actionRepository: fakeActionRepo,
@@ -118,12 +122,12 @@ describe('executeNoteAction usecase', () => {
     expect(isOk(result)).toBe(true);
     if (isOk(result)) {
       expect(result.value.status).toBe('completed');
-      expect(result.value.resource_url).toBe('/#/notes/note-new-123');
+      expect(result.value.resourceUrl).toBe('/#/notes/note-new-123');
     }
 
     const updatedAction = await fakeActionRepo.getById('action-123');
     expect(updatedAction?.status).toBe('completed');
-    expect(updatedAction?.payload['noteId']).toBe('note-new-123');
+    expect(updatedAction?.payload['resource_url']).toBe('/#/notes/note-new-123');
   });
 
   it('updates action to failed when note creation fails', async () => {
@@ -144,17 +148,52 @@ describe('executeNoteAction usecase', () => {
     expect(isOk(result)).toBe(true);
     if (isOk(result)) {
       expect(result.value.status).toBe('failed');
-      expect(result.value.error).toBe('Notes service unavailable');
+      expect(result.value.message).toBe('Notes service unavailable');
     }
 
     const updatedAction = await fakeActionRepo.getById('action-123');
     expect(updatedAction?.status).toBe('failed');
   });
 
+  it('handles failed response status with error code', async () => {
+    const action = createAction({ status: 'awaiting_approval' });
+    await fakeActionRepo.save(action);
+    fakeNotesClient.setNextResponse({
+      status: 'failed',
+      message: 'Extraction failed',
+      errorCode: 'EXTRACTION_FAILED',
+    });
+
+    const usecase = createExecuteNoteActionUseCase({
+      actionRepository: fakeActionRepo,
+      notesServiceClient: fakeNotesClient,
+      whatsappPublisher: fakeWhatsappPublisher,
+      webAppUrl: 'https://app.test.com',
+      logger: silentLogger,
+    });
+
+    const result = await usecase('action-123');
+
+    expect(isOk(result)).toBe(true);
+    if (isOk(result)) {
+      expect(result.value.status).toBe('failed');
+      expect(result.value.message).toBe('Extraction failed');
+      expect(result.value.errorCode).toBe('EXTRACTION_FAILED');
+    }
+
+    const updatedAction = await fakeActionRepo.getById('action-123');
+    expect(updatedAction?.status).toBe('failed');
+    expect(updatedAction?.payload['errorCode']).toBe('EXTRACTION_FAILED');
+  });
+
   it('allows execution from failed status (retry)', async () => {
     const action = createAction({ status: 'failed' });
     await fakeActionRepo.save(action);
-    fakeNotesClient.setNextNoteId('retry-note-123');
+    fakeNotesClient.setNextResponse({
+      status: 'completed',
+      message: 'Note created successfully',
+      resourceUrl: '/#/notes/retry-note-123',
+    });
 
     const usecase = createExecuteNoteActionUseCase({
       actionRepository: fakeActionRepo,
@@ -175,7 +214,11 @@ describe('executeNoteAction usecase', () => {
   it('publishes WhatsApp notification on success', async () => {
     const action = createAction({ status: 'awaiting_approval' });
     await fakeActionRepo.save(action);
-    fakeNotesClient.setNextNoteId('notified-note-123');
+    fakeNotesClient.setNextResponse({
+      status: 'completed',
+      message: 'Note created successfully',
+      resourceUrl: '/#/notes/notified-note-123',
+    });
 
     const usecase = createExecuteNoteActionUseCase({
       actionRepository: fakeActionRepo,
@@ -267,5 +310,32 @@ describe('executeNoteAction usecase', () => {
     const createdNotes = fakeNotesClient.getCreatedNotes();
     expect(createdNotes).toHaveLength(1);
     expect(createdNotes[0]?.content).toBe('Meeting notes');
+  });
+
+  it('prepends Key Points section when summary is provided', async () => {
+    const action = createAction({
+      status: 'awaiting_approval',
+      payload: {
+        prompt: 'Full meeting transcript here...',
+        summary: '- Discussed Q4 goals\n- Action items assigned',
+      },
+    });
+    await fakeActionRepo.save(action);
+
+    const usecase = createExecuteNoteActionUseCase({
+      actionRepository: fakeActionRepo,
+      notesServiceClient: fakeNotesClient,
+      whatsappPublisher: fakeWhatsappPublisher,
+      webAppUrl: 'https://app.test.com',
+      logger: silentLogger,
+    });
+
+    await usecase('action-123');
+
+    const createdNotes = fakeNotesClient.getCreatedNotes();
+    expect(createdNotes).toHaveLength(1);
+    expect(createdNotes[0]?.content).toBe(
+      '## Key Points\n\n- Discussed Q4 goals\n- Action items assigned\n\n---\n\nFull meeting transcript here...'
+    );
   });
 });

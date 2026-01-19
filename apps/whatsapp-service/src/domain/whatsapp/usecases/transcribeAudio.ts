@@ -400,6 +400,7 @@ export class TranscribeAudioUseCase {
           sourceType: 'whatsapp_voice',
           externalId: originalWaMessageId,
           text: transcript,
+          ...(summary !== undefined && { summary }),
           timestamp: startedAt,
         });
 

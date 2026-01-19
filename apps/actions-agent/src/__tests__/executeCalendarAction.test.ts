@@ -56,7 +56,7 @@ describe('executeCalendarAction usecase', () => {
   it('returns completed status for already completed action', async () => {
     const action = createAction({
       status: 'completed',
-      payload: { resource_url: '/#/calendar/existing-event' },
+      payload: { resource_url: '/#/calendar' },
     });
     await fakeActionRepo.save(action);
 
@@ -73,7 +73,7 @@ describe('executeCalendarAction usecase', () => {
     expect(isOk(result)).toBe(true);
     if (isOk(result)) {
       expect(result.value.status).toBe('completed');
-      expect(result.value.resource_url).toBe('/#/calendar/existing-event');
+      expect(result.value.resourceUrl).toBe('/#/calendar');
     }
   });
 
@@ -116,12 +116,12 @@ describe('executeCalendarAction usecase', () => {
     expect(isOk(result)).toBe(true);
     if (isOk(result)) {
       expect(result.value.status).toBe('completed');
-      expect(result.value.resource_url).toBe('/#/calendar/event-123');
+      expect(result.value.resourceUrl).toBe('/#/calendar');
     }
 
     const updatedAction = await fakeActionRepo.getById('action-123');
     expect(updatedAction?.status).toBe('completed');
-    expect(updatedAction?.payload['resource_url']).toBe('/#/calendar/event-123');
+    expect(updatedAction?.payload['resource_url']).toBe('/#/calendar');
   });
 
   it('updates action to failed when calendar service returns failed status', async () => {
@@ -129,7 +129,8 @@ describe('executeCalendarAction usecase', () => {
     await fakeActionRepo.save(action);
     fakeCalendarClient.setNextResponse({
       status: 'failed',
-      error: 'Invalid date format',
+      message: 'Invalid date format',
+      errorCode: 'VALIDATION_ERROR',
     });
 
     const usecase = createExecuteCalendarActionUseCase({
@@ -145,20 +146,21 @@ describe('executeCalendarAction usecase', () => {
     expect(isOk(result)).toBe(true);
     if (isOk(result)) {
       expect(result.value.status).toBe('failed');
-      expect(result.value.error).toBe('Invalid date format');
+      expect(result.value.message).toBe('Invalid date format');
     }
 
     const updatedAction = await fakeActionRepo.getById('action-123');
     expect(updatedAction?.status).toBe('failed');
   });
 
-  it('updates action to failed with default error message when calendar service returns failed without error', async () => {
+  it('updates action to failed with default error message when calendar service returns failed without detailed message', async () => {
     const action = createAction({ status: 'awaiting_approval' });
     await fakeActionRepo.save(action);
-    // Omit error field to trigger ?? fallback (simulating calendar service not providing error details)
     fakeCalendarClient.setNextResponse({
       status: 'failed',
-    } as { status: 'failed'; error?: string });
+      message: 'Unknown error',
+      errorCode: 'UNKNOWN_ERROR',
+    });
 
     const usecase = createExecuteCalendarActionUseCase({
       actionRepository: fakeActionRepo,
@@ -173,12 +175,12 @@ describe('executeCalendarAction usecase', () => {
     expect(isOk(result)).toBe(true);
     if (isOk(result)) {
       expect(result.value.status).toBe('failed');
-      expect(result.value.error).toBe('Unknown error');
+      expect(result.value.message).toBe('Unknown error');
     }
 
     const updatedAction = await fakeActionRepo.getById('action-123');
     expect(updatedAction?.status).toBe('failed');
-    expect(updatedAction?.payload['error']).toBe('Unknown error');
+    expect(updatedAction?.payload['message']).toBe('Unknown error');
   });
 
   it('updates action to failed when calendar service call fails', async () => {
@@ -199,7 +201,7 @@ describe('executeCalendarAction usecase', () => {
     expect(isOk(result)).toBe(true);
     if (isOk(result)) {
       expect(result.value.status).toBe('failed');
-      expect(result.value.error).toBe('Calendar service unavailable');
+      expect(result.value.message).toBe('Calendar service unavailable');
     }
 
     const updatedAction = await fakeActionRepo.getById('action-123');
@@ -244,7 +246,7 @@ describe('executeCalendarAction usecase', () => {
     expect(messages).toHaveLength(1);
     expect(messages[0]?.userId).toBe('user-456');
     expect(messages[0]?.message).toContain('Calendar event created');
-    expect(messages[0]?.message).toContain('https://app.test.com/#/calendar/event-123');
+    expect(messages[0]?.message).toContain('https://app.test.com/#/calendar');
   });
 
   it('succeeds even when WhatsApp notification fails (best-effort)', async () => {
@@ -291,10 +293,13 @@ describe('executeCalendarAction usecase', () => {
     expect(processedActions[0]?.action.userId).toBe('user-456');
   });
 
-  it('does not send WhatsApp notification when resource_url is missing', async () => {
+  it('does not send WhatsApp notification when resourceUrl is missing', async () => {
     const action = createAction({ status: 'awaiting_approval' });
     await fakeActionRepo.save(action);
-    fakeCalendarClient.setNextResponse({ status: 'completed' }); // No resource_url
+    fakeCalendarClient.setNextResponse({
+      status: 'completed',
+      message: 'Calendar event created',
+    });
 
     const usecase = createExecuteCalendarActionUseCase({
       actionRepository: fakeActionRepo,

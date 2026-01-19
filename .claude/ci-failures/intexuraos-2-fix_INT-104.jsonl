@@ -1,0 +1,2 @@
+{"ts":"2026-01-17T11:04:55.273Z","project":"intexuraos-2","branch":"fix/INT-104","workspace":"--","runNumber":1,"passed":false,"durationMs":467,"failureCount":0,"failures":[]}
+{"ts":"2026-01-17T11:06:47.678Z","project":"intexuraos-2","branch":"fix/INT-104","workspace":"research-agent","runNumber":2,"passed":true,"durationMs":105530,"failureCount":0,"failures":[]}

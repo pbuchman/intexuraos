@@ -2,19 +2,13 @@
  * Port for Linear Agent service communication.
  */
 
-import type { Result } from '@intexuraos/common-core';
-
-export interface ProcessLinearActionResponse {
-  status: 'completed' | 'failed';
-  resourceUrl?: string;
-  issueIdentifier?: string;
-  error?: string;
-}
+import type { Result, ServiceFeedback } from '@intexuraos/common-core';
 
 export interface LinearAgentClient {
   processAction(
     actionId: string,
     userId: string,
-    title: string
-  ): Promise<Result<ProcessLinearActionResponse>>;
+    text: string,
+    summary?: string
+  ): Promise<Result<ServiceFeedback>>;
 }

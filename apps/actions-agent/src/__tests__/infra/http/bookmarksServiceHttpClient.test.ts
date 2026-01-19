@@ -215,7 +215,7 @@ describe('createBookmarksServiceHttpClient', () => {
       expect(scope.isDone()).toBe(true);
     });
 
-    it('includes existingBookmarkId in error message when provided by API', async () => {
+    it('includes existingBookmarkId and errorCode in typed error when provided by API', async () => {
       nock(baseUrl)
         .post('/internal/bookmarks')
         .reply(409, {
@@ -239,7 +239,9 @@ describe('createBookmarksServiceHttpClient', () => {
 
       expect(isErr(result)).toBe(true);
       if (isErr(result)) {
-        expect(result.error.message).toBe('Bookmark already exists (existingBookmarkId: bookmark-existing-123)');
+        expect(result.error.message).toBe('Bookmark already exists');
+        expect(result.error.errorCode).toBe('ALREADY_EXISTS');
+        expect(result.error.existingBookmarkId).toBe('bookmark-existing-123');
       }
     });
 
@@ -268,7 +270,8 @@ describe('createBookmarksServiceHttpClient', () => {
       expect(isErr(result)).toBe(true);
       if (isErr(result)) {
         expect(result.error.message).toBe('Bookmark already exists');
-        expect(result.error.message).not.toContain('existingBookmarkId');
+        expect(result.error.errorCode).toBe('ALREADY_EXISTS');
+        expect(result.error.existingBookmarkId).toBeUndefined();
       }
     });
 
@@ -297,7 +300,8 @@ describe('createBookmarksServiceHttpClient', () => {
       expect(isErr(result)).toBe(true);
       if (isErr(result)) {
         expect(result.error.message).toBe('Bookmark already exists');
-        expect(result.error.message).not.toContain('existingBookmarkId');
+        expect(result.error.errorCode).toBe('ALREADY_EXISTS');
+        expect(result.error.existingBookmarkId).toBeUndefined();
       }
     });
 
@@ -325,7 +329,53 @@ describe('createBookmarksServiceHttpClient', () => {
       expect(isErr(result)).toBe(true);
       if (isErr(result)) {
         expect(result.error.message).toBe('Bookmark already exists');
-        expect(result.error.message).not.toContain('existingBookmarkId');
+        expect(result.error.errorCode).toBe('ALREADY_EXISTS');
+        expect(result.error.existingBookmarkId).toBeUndefined();
+      }
+    });
+
+    it('includes errorCode in typed error from success=false response', async () => {
+      nock(baseUrl)
+        .post('/internal/bookmarks')
+        .reply(200, {
+          success: false,
+          error: { code: 'VALIDATION_ERROR', message: 'Invalid URL format' },
+        });
+
+      const client = createBookmarksServiceHttpClient({ baseUrl, internalAuthToken, logger: silentLogger });
+      const result = await client.createBookmark({
+        userId: 'user-456',
+        url: 'not-a-url',
+        title: 'Test',
+        tags: [],
+        source: 'actions-agent',
+        sourceId: 'action-123',
+      });
+
+      expect(isErr(result)).toBe(true);
+      if (isErr(result)) {
+        expect(result.error.message).toBe('Invalid URL format');
+        expect(result.error.errorCode).toBe('VALIDATION_ERROR');
+      }
+    });
+
+    it('includes SERVICE_UNAVAILABLE errorCode on network failure', async () => {
+      nock(baseUrl).post('/internal/bookmarks').replyWithError('Connection refused');
+
+      const client = createBookmarksServiceHttpClient({ baseUrl, internalAuthToken, logger: silentLogger });
+      const result = await client.createBookmark({
+        userId: 'user-456',
+        url: 'https://example.com',
+        title: 'Test',
+        tags: [],
+        source: 'actions-agent',
+        sourceId: 'action-123',
+      });
+
+      expect(isErr(result)).toBe(true);
+      if (isErr(result)) {
+        expect(result.error.message).toContain('Failed to call bookmarks-agent');
+        expect(result.error.errorCode).toBe('SERVICE_UNAVAILABLE');
       }
     });
   });
@@ -335,7 +385,6 @@ describe('createBookmarksServiceHttpClient', () => {
       nock(baseUrl)
         .post('/internal/bookmarks/bookmark-123/force-refresh')
         .matchHeader('X-Internal-Auth', internalAuthToken)
-        .matchHeader('Content-Type', 'application/json')
         .reply(200, {
           success: true,
           data: {
@@ -449,6 +498,34 @@ describe('createBookmarksServiceHttpClient', () => {
       if (isErr(result)) {
         expect(result.error.message).toContain('Failed to call bookmarks-agent');
       }
+    });
+
+    it('does not send Content-Type header when no body is provided', async () => {
+      const scope = nock(baseUrl)
+        .post('/internal/bookmarks/bookmark-no-content-type/force-refresh')
+        .matchHeader('X-Internal-Auth', internalAuthToken)
+        .reply(function () {
+          const contentType = this.req.headers['content-type'];
+          if (contentType !== undefined) {
+            return [400, { success: false, error: { code: 'BAD_REQUEST', message: 'Unexpected Content-Type header' } }];
+          }
+          return [200, {
+            success: true,
+            data: {
+              id: 'bookmark-no-content-type',
+              url: 'https://example.com/article',
+              status: 'active',
+              ogPreview: { title: 'Test' },
+              ogFetchStatus: 'processed',
+            },
+          }];
+        });
+
+      const client = createBookmarksServiceHttpClient({ baseUrl, internalAuthToken, logger: silentLogger });
+      const result = await client.forceRefreshBookmark('bookmark-no-content-type');
+
+      expect(scope.isDone()).toBe(true);
+      expect(isOk(result)).toBe(true);
     });
 
     it('returns bookmark with ogFetchStatus failed when fetch fails', async () => {

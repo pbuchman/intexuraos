@@ -1,0 +1,3 @@
+{"ts":"2026-01-17T18:08:46.008Z","project":"intexuraos","branch":"fix/INT-129-calendar-week-navigation","workspace":"--","runNumber":1,"passed":false,"durationMs":338,"failureCount":0,"failures":[]}
+{"ts":"2026-01-17T18:11:31.417Z","project":"intexuraos","branch":"fix/INT-129-calendar-week-navigation","workspace":"web","runNumber":2,"passed":true,"durationMs":159152,"failureCount":0,"failures":[]}
+{"ts":"2026-01-17T18:18:42.415Z","project":"intexuraos","branch":"fix/INT-129-calendar-week-navigation","runNumber":3,"passed":true,"durationMs":418194,"failureCount":0,"failures":[]}

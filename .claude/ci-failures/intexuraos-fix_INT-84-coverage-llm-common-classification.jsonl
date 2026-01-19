@@ -1,0 +1,2 @@
+{"ts":"2026-01-16T18:33:02.893Z","project":"intexuraos","branch":"fix/INT-84-coverage-llm-common-classification","workspace":"--","runNumber":1,"passed":false,"durationMs":446,"failureCount":0,"failures":[]}
+{"ts":"2026-01-16T18:37:34.438Z","project":"intexuraos","branch":"fix/INT-84-coverage-llm-common-classification","runNumber":2,"passed":true,"durationMs":231051,"failureCount":0,"failures":[]}

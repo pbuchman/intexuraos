@@ -75,6 +75,19 @@ export async function deleteAction(accessToken: string, actionId: string): Promi
   );
 }
 
+export async function archiveAction(accessToken: string, actionId: string): Promise<Action> {
+  const response = await apiRequest<{ action: Action }>(
+    config.actionsAgentUrl,
+    `/actions/${actionId}`,
+    accessToken,
+    {
+      method: 'PATCH',
+      body: { status: 'archived' },
+    }
+  );
+  return response.action;
+}
+
 export async function deleteCommand(accessToken: string, commandId: string): Promise<void> {
   await apiRequest<Record<string, never>>(
     config.commandsAgentServiceUrl,
@@ -136,7 +149,7 @@ export async function resolveDuplicateAction(
   accessToken: string,
   actionId: string,
   choice: 'skip' | 'update'
-): Promise<{ actionId: string; status: 'rejected' | 'completed'; resource_url?: string }> {
+): Promise<{ actionId: string; status: 'rejected' | 'completed'; resourceUrl?: string }> {
   const response = await apiRequest<{
     actionId: string;
     status: 'rejected' | 'completed';
@@ -150,5 +163,9 @@ export async function resolveDuplicateAction(
       body: { action: choice },
     }
   );
-  return response;
+  return {
+    actionId: response.actionId,
+    status: response.status,
+    ...(response.resource_url !== undefined && { resourceUrl: response.resource_url }),
+  };
 }

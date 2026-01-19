@@ -3,7 +3,7 @@
  * Converts article/post content into structured image generation prompts.
  */
 
-import type { PromptBuilder, PromptDeps } from '../types.js';
+import type { PromptBuilder, PromptDeps } from '../shared/types.js';
 
 export interface ThumbnailPromptInput {
   /** The text content to generate a thumbnail prompt for */

@@ -13,6 +13,11 @@ export const createResearchBodySchema = {
       minLength: 10,
       maxLength: 20000,
     },
+    originalPrompt: {
+      type: 'string',
+      maxLength: 20000,
+      description: 'Original user prompt before improvement. Set when user accepted an improved suggestion.',
+    },
     selectedModels: {
       type: 'array',
       items: supportedModelSchema,

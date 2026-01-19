@@ -60,9 +60,18 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             description: 'Success',
             type: 'object',
             properties: {
-              status: { type: 'string', enum: ['completed', 'failed'] },
-              resourceUrl: { type: 'string', description: 'Frontend URL for created event' },
-              error: { type: 'string', description: 'Error message if failed' },
+              success: { type: 'boolean', enum: [true] },
+              data: {
+                type: 'object',
+                required: ['status', 'message'],
+                properties: {
+                  status: { type: 'string', enum: ['completed', 'failed'] },
+                  message: { type: 'string', description: 'Human-readable feedback message' },
+                  resourceUrl: { type: 'string', description: 'URL to created resource (success only)' },
+                  errorCode: { type: 'string', description: 'Error code for debugging (failure only)' },
+                },
+              },
+              diagnostics: { $ref: 'Diagnostics#' },
             },
           },
           401: {
@@ -70,15 +79,35 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             type: 'object',
             properties: {
               success: { type: 'boolean', enum: [false] },
-              error: { type: 'string' },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
             },
           },
-          500: {
-            description: 'Server Error',
+          403: {
+            description: 'Forbidden',
             type: 'object',
             properties: {
               success: { type: 'boolean', enum: [false] },
-              error: { type: 'string' },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+          },
+          500: {
+            description: 'Internal Server Error',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+          },
+          502: {
+            description: 'Bad Gateway',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
             },
           },
         },
@@ -112,6 +141,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           googleCalendarClient: services.googleCalendarClient,
           failedEventRepository: services.failedEventRepository,
           calendarActionExtractionService: services.calendarActionExtractionService,
+          processedActionRepository: services.processedActionRepository,
           logger: request.log,
         }
       );
@@ -125,7 +155,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         'internal/processCalendarAction: complete'
       );
 
-      return await reply.send(result.value);
+      return await reply.ok(result.value);
     }
   );
 

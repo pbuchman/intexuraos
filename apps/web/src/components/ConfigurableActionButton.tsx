@@ -27,6 +27,8 @@ interface ConfigurableActionButtonProps {
   onError?: (error: Error) => void;
   /** Called with execution result when action completes (may include resource_url) */
   onResult?: (result: ActionExecutionResult, button: ResolvedActionButton) => void;
+  /** Display variant: default renders as button, dropdown renders as menu item */
+  variant?: 'default' | 'dropdown';
 }
 
 // Icon mapping for dynamic icon rendering
@@ -59,7 +61,7 @@ function getIcon(iconName: string): LucideIcon {
  */
 function getButtonClasses(variant: 'primary' | 'secondary' | 'danger' | 'success'): string {
   const baseClasses =
-    'inline-flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors disabled:opacity-50 whitespace-nowrap sm:w-[110px]';
+    'inline-flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors disabled:opacity-50 whitespace-nowrap lg:w-[110px]';
 
   switch (variant) {
     case 'primary':
@@ -82,6 +84,7 @@ export function ConfigurableActionButton({
   onSuccess,
   onError,
   onResult,
+  variant = 'default',
 }: ConfigurableActionButtonProps): React.JSX.Element {
   const [isExecuting, setIsExecuting] = useState(false);
   const { request } = useApiClient();
@@ -111,6 +114,27 @@ export function ConfigurableActionButton({
 
   const Icon = getIcon(button.icon);
 
+  // Dropdown variant: render as menu item
+  if (variant === 'dropdown') {
+    return (
+      <button
+        onClick={() => {
+          void handleClick();
+        }}
+        disabled={isExecuting}
+        className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-slate-700 transition-colors hover:bg-slate-100 disabled:opacity-50"
+      >
+        {isExecuting ? (
+          <Loader2 className="h-4 w-4 animate-spin" />
+        ) : (
+          <Icon className="h-4 w-4 shrink-0" />
+        )}
+        {button.label}
+      </button>
+    );
+  }
+
+  // Default variant: render as button
   return (
     <button
       onClick={() => {

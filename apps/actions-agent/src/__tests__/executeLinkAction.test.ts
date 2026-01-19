@@ -79,7 +79,7 @@ describe('executeLinkAction usecase', () => {
     expect(isOk(result)).toBe(true);
     if (isOk(result)) {
       expect(result.value.status).toBe('completed');
-      expect(result.value.resource_url).toBe('/#/bookmarks/existing-bookmark');
+      expect(result.value.resourceUrl).toBe('/#/bookmarks/existing-bookmark');
     }
   });
 
@@ -126,7 +126,7 @@ describe('executeLinkAction usecase', () => {
     expect(isOk(result)).toBe(true);
     if (isOk(result)) {
       expect(result.value.status).toBe('completed');
-      expect(result.value.resource_url).toBe('/#/bookmarks/bookmark-new-123');
+      expect(result.value.resourceUrl).toBe('/#/bookmarks/bookmark-new-123');
     }
 
     const updatedAction = await fakeActionRepo.getById('action-123');
@@ -189,7 +189,7 @@ describe('executeLinkAction usecase', () => {
     expect(isOk(result)).toBe(true);
     if (isOk(result)) {
       expect(result.value.status).toBe('completed');
-      expect(result.value.resource_url).toBe('/#/bookmarks/prompt-extracted-bookmark');
+      expect(result.value.resourceUrl).toBe('/#/bookmarks/prompt-extracted-bookmark');
     }
 
     const createdBookmarks = fakeBookmarksClient.getCreatedBookmarks();
@@ -218,7 +218,7 @@ describe('executeLinkAction usecase', () => {
     expect(isOk(result)).toBe(true);
     if (isOk(result)) {
       expect(result.value.status).toBe('failed');
-      expect(result.value.error).toContain('No URL found');
+      expect(result.value.message).toContain('No URL found');
     }
   });
 
@@ -228,7 +228,7 @@ describe('executeLinkAction usecase', () => {
       payload: { url: 'https://example.com/article' },
     });
     await fakeActionRepo.save(action);
-    fakeBookmarksClient.setFailNext(true, new Error('Bookmarks service unavailable'));
+    fakeBookmarksClient.setFailNext(true, { message: 'Bookmarks service unavailable' });
 
     const usecase = createExecuteLinkActionUseCase({
       actionRepository: fakeActionRepo,
@@ -244,7 +244,7 @@ describe('executeLinkAction usecase', () => {
     expect(isOk(result)).toBe(true);
     if (isOk(result)) {
       expect(result.value.status).toBe('failed');
-      expect(result.value.error).toBe('Bookmarks service unavailable');
+      expect(result.value.message).toBe('Bookmarks service unavailable');
     }
 
     const updatedAction = await fakeActionRepo.getById('action-123');
@@ -438,7 +438,7 @@ describe('executeLinkAction usecase', () => {
       payload: { url: 'https://example.com/article' },
     });
     await fakeActionRepo.save(action);
-    fakeBookmarksClient.setFailNext(true, new Error('Bookmarks service temporarily unavailable'));
+    fakeBookmarksClient.setFailNext(true, { message: 'Bookmarks service temporarily unavailable' });
 
     const usecase = createExecuteLinkActionUseCase({
       actionRepository: fakeActionRepo,
@@ -454,7 +454,7 @@ describe('executeLinkAction usecase', () => {
     expect(isOk(result)).toBe(true);
     if (isOk(result)) {
       expect(result.value.status).toBe('failed');
-      expect(result.value.error).toBe('Bookmarks service temporarily unavailable');
+      expect(result.value.message).toBe('Bookmarks service temporarily unavailable');
       expect(result.value.existingBookmarkId).toBeUndefined();
     }
 
@@ -469,10 +469,11 @@ describe('executeLinkAction usecase', () => {
       payload: { url: 'https://example.com/article' },
     });
     await fakeActionRepo.save(action);
-    fakeBookmarksClient.setFailNext(
-      true,
-      new Error('Bookmark already exists (existingBookmarkId: bookmark-existing-123)')
-    );
+    fakeBookmarksClient.setFailNext(true, {
+      message: 'Bookmark already exists',
+      errorCode: 'ALREADY_EXISTS',
+      existingBookmarkId: 'bookmark-existing-123',
+    });
 
     const usecase = createExecuteLinkActionUseCase({
       actionRepository: fakeActionRepo,
@@ -488,7 +489,8 @@ describe('executeLinkAction usecase', () => {
     expect(isOk(result)).toBe(true);
     if (isOk(result)) {
       expect(result.value.status).toBe('failed');
-      expect(result.value.error).toBe('Bookmark already exists (existingBookmarkId: bookmark-existing-123)');
+      expect(result.value.message).toBe('Bookmark already exists');
+      expect(result.value.errorCode).toBe('ALREADY_EXISTS');
       expect(result.value.existingBookmarkId).toBe('bookmark-existing-123');
     }
 

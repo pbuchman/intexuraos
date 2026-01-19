@@ -19,7 +19,7 @@ describe('createTodosServiceHttpClient', () => {
   });
 
   describe('createTodo', () => {
-    it('returns todo on successful creation', async () => {
+    it('returns ActionFeedback on successful creation', async () => {
       nock(baseUrl)
         .post('/internal/todos')
         .matchHeader('X-Internal-Auth', internalAuthToken)
@@ -27,10 +27,9 @@ describe('createTodosServiceHttpClient', () => {
         .reply(200, {
           success: true,
           data: {
-            id: 'todo-123',
-            userId: 'user-456',
-            title: 'Buy groceries',
-            status: 'pending',
+            status: 'completed',
+            message: 'Todo created successfully',
+            resourceUrl: '/#/todos/todo-123',
           },
         });
 
@@ -46,10 +45,9 @@ describe('createTodosServiceHttpClient', () => {
 
       expect(isOk(result)).toBe(true);
       if (isOk(result)) {
-        expect(result.value.id).toBe('todo-123');
-        expect(result.value.userId).toBe('user-456');
-        expect(result.value.title).toBe('Buy groceries');
-        expect(result.value.status).toBe('pending');
+        expect(result.value.status).toBe('completed');
+        expect(result.value.message).toBe('Todo created successfully');
+        expect(result.value.resourceUrl).toBe('/#/todos/todo-123');
       }
     });
 
@@ -72,8 +70,11 @@ describe('createTodosServiceHttpClient', () => {
       }
     });
 
-    it('returns error on HTTP 401', async () => {
-      nock(baseUrl).post('/internal/todos').reply(401, { error: 'Unauthorized' });
+    it('returns failed ServiceFeedback with errorCode on HTTP 401', async () => {
+      nock(baseUrl).post('/internal/todos').reply(401, {
+        success: false,
+        error: { code: 'TOKEN_ERROR', message: 'Token expired' },
+      });
 
       const client = createTodosServiceHttpClient({ baseUrl, internalAuthToken, logger: silentLogger });
       const result = await client.createTodo({
@@ -85,9 +86,34 @@ describe('createTodosServiceHttpClient', () => {
         sourceId: 'action-123',
       });
 
-      expect(isErr(result)).toBe(true);
-      if (isErr(result)) {
-        expect(result.error.message).toContain('HTTP 401');
+      expect(isOk(result)).toBe(true);
+      if (isOk(result)) {
+        expect(result.value.status).toBe('failed');
+        expect(result.value.message).toBe('Token expired');
+        expect(result.value.errorCode).toBe('TOKEN_ERROR');
+      }
+    });
+
+    it('returns failed ServiceFeedback with default message on HTTP 401 without error body', async () => {
+      nock(baseUrl).post('/internal/todos').reply(401, {
+        error: { message: 'Unauthorized' },
+      });
+
+      const client = createTodosServiceHttpClient({ baseUrl, internalAuthToken, logger: silentLogger });
+      const result = await client.createTodo({
+        userId: 'user-456',
+        title: 'Test',
+        description: '',
+        tags: [],
+        source: 'actions-agent',
+        sourceId: 'action-123',
+      });
+
+      expect(isOk(result)).toBe(true);
+      if (isOk(result)) {
+        expect(result.value.status).toBe('failed');
+        expect(result.value.message).toBe('Unauthorized');
+        expect(result.value.errorCode).toBeUndefined();
       }
     });
 
@@ -166,10 +192,9 @@ describe('createTodosServiceHttpClient', () => {
         .reply(200, {
           success: true,
           data: {
-            id: 'todo-new',
-            userId: 'user-456',
-            title: 'Buy groceries',
-            status: 'pending',
+            status: 'completed',
+            message: 'Todo created successfully',
+            resourceUrl: '/#/todos/todo-new',
           },
         });
 

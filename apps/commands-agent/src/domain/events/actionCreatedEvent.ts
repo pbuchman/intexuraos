@@ -11,6 +11,7 @@ export interface ActionCreatedEvent {
   payload: {
     prompt: string;
     confidence: number;
+    summary?: string;
     selectedModels?: ResearchModel[];
   };
   timestamp: string;

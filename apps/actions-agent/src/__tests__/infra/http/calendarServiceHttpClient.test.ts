@@ -39,7 +39,7 @@ describe('calendarServiceHttpClient', () => {
     });
 
   describe('successful responses', () => {
-    it('returns completed status with resource_url', async () => {
+    it('returns completed status with resourceUrl', async () => {
       const action = createTestAction({ title: 'Meeting at 3pm' });
       const scope = nock(baseUrl)
         .post('/internal/calendar/process-action', {
@@ -58,8 +58,12 @@ describe('calendarServiceHttpClient', () => {
         })
         .matchHeader('X-Internal-Auth', internalAuthToken)
         .reply(200, {
-          status: 'completed',
-          resourceUrl: 'https://calendar.google.com/event/abc123',
+          success: true,
+          data: {
+            status: 'completed',
+            message: 'Calendar event created successfully',
+            resourceUrl: 'https://calendar.google.com/event/abc123',
+          },
         });
 
       const client = createClient();
@@ -69,18 +73,23 @@ describe('calendarServiceHttpClient', () => {
       expect(isOk(result)).toBe(true);
       if (isOk(result)) {
         expect(result.value.status).toBe('completed');
-        expect(result.value.resource_url).toBe('https://calendar.google.com/event/abc123');
+        expect(result.value.message).toBe('Calendar event created successfully');
+        expect(result.value.resourceUrl).toBe('https://calendar.google.com/event/abc123');
       }
     });
 
-    it('returns failed status with error message', async () => {
+    it('returns failed status with error message and errorCode', async () => {
       const action = createTestAction();
       const scope = nock(baseUrl)
         .post('/internal/calendar/process-action')
         .matchHeader('X-Internal-Auth', internalAuthToken)
         .reply(200, {
-          status: 'failed',
-          error: 'Invalid calendar event format',
+          success: true,
+          data: {
+            status: 'failed',
+            message: 'Invalid calendar event format',
+            errorCode: 'VALIDATION_ERROR',
+          },
         });
 
       const client = createClient();
@@ -90,17 +99,22 @@ describe('calendarServiceHttpClient', () => {
       expect(isOk(result)).toBe(true);
       if (isOk(result)) {
         expect(result.value.status).toBe('failed');
-        expect(result.value.error).toBe('Invalid calendar event format');
+        expect(result.value.message).toBe('Invalid calendar event format');
+        expect(result.value.errorCode).toBe('VALIDATION_ERROR');
       }
     });
 
-    it('returns completed status without resource_url', async () => {
+    it('returns completed status without resourceUrl', async () => {
       const action = createTestAction();
       const scope = nock(baseUrl)
         .post('/internal/calendar/process-action')
         .matchHeader('X-Internal-Auth', internalAuthToken)
         .reply(200, {
-          status: 'completed',
+          success: true,
+          data: {
+            status: 'completed',
+            message: 'Calendar event created',
+          },
         });
 
       const client = createClient();
@@ -110,13 +124,13 @@ describe('calendarServiceHttpClient', () => {
       expect(isOk(result)).toBe(true);
       if (isOk(result)) {
         expect(result.value.status).toBe('completed');
-        expect(result.value.resource_url).toBeUndefined();
+        expect(result.value.resourceUrl).toBeUndefined();
       }
     });
   });
 
   describe('HTTP error responses', () => {
-    it('returns error for 401 Unauthorized', async () => {
+    it('returns error for 401 Unauthorized (non-JSON)', async () => {
       const action = createTestAction();
       const scope = nock(baseUrl)
         .post('/internal/calendar/process-action')
@@ -130,6 +144,49 @@ describe('calendarServiceHttpClient', () => {
       expect(isErr(result)).toBe(true);
       if (isErr(result)) {
         expect(result.error.message).toContain('HTTP 401');
+      }
+    });
+
+    it('returns failed ServiceFeedback with errorCode on HTTP 401 with JSON body', async () => {
+      const action = createTestAction();
+      const scope = nock(baseUrl)
+        .post('/internal/calendar/process-action')
+        .matchHeader('X-Internal-Auth', internalAuthToken)
+        .reply(401, {
+          success: false,
+          error: { code: 'TOKEN_ERROR', message: 'Token expired' },
+        });
+
+      const client = createClient();
+      const result = await client.processAction({ action });
+
+      expect(scope.isDone()).toBe(true);
+      expect(isOk(result)).toBe(true);
+      if (isOk(result)) {
+        expect(result.value.status).toBe('failed');
+        expect(result.value.message).toBe('Token expired');
+        expect(result.value.errorCode).toBe('TOKEN_ERROR');
+      }
+    });
+
+    it('returns failed ServiceFeedback with default message on HTTP 401 with JSON body but no message', async () => {
+      const action = createTestAction();
+      const scope = nock(baseUrl)
+        .post('/internal/calendar/process-action')
+        .matchHeader('X-Internal-Auth', internalAuthToken)
+        .reply(401, {
+          error: { code: 'AUTH_ERROR' },
+        });
+
+      const client = createClient();
+      const result = await client.processAction({ action });
+
+      expect(scope.isDone()).toBe(true);
+      expect(isOk(result)).toBe(true);
+      if (isOk(result)) {
+        expect(result.value.status).toBe('failed');
+        expect(result.value.message).toContain('HTTP 401');
+        expect(result.value.errorCode).toBe('AUTH_ERROR');
       }
     });
 
@@ -220,6 +277,25 @@ describe('calendarServiceHttpClient', () => {
   });
 
   describe('response validation errors', () => {
+    it('returns error on OK response with invalid JSON', async () => {
+      const action = createTestAction();
+      const scope = nock(baseUrl)
+        .post('/internal/calendar/process-action')
+        .matchHeader('X-Internal-Auth', internalAuthToken)
+        .reply(200, 'not valid json', {
+          'Content-Type': 'text/plain',
+        });
+
+      const client = createClient();
+      const result = await client.processAction({ action });
+
+      expect(scope.isDone()).toBe(true);
+      expect(isErr(result)).toBe(true);
+      if (isErr(result)) {
+        expect(result.error.message).toContain('Invalid response');
+      }
+    });
+
     it('returns error when status is missing', async () => {
       const action = createTestAction();
       const scope = nock(baseUrl)
@@ -358,8 +434,12 @@ describe('calendarServiceHttpClient', () => {
         .matchHeader('X-Internal-Auth', internalAuthToken)
         .matchHeader('Content-Type', 'application/json')
         .reply(200, {
-          status: 'completed',
-          resourceUrl: 'https://calendar.example.com/123',
+          success: true,
+          data: {
+            status: 'completed',
+            message: 'Calendar event created',
+            resourceUrl: 'https://calendar.example.com/123',
+          },
         });
 
       const client = createClient();
@@ -375,8 +455,12 @@ describe('calendarServiceHttpClient', () => {
         .post('/internal/calendar/process-action')
         .matchHeader('X-Internal-Auth', customToken)
         .reply(200, {
-          status: 'completed',
-          resourceUrl: 'https://calendar.example.com/123',
+          success: true,
+          data: {
+            status: 'completed',
+            message: 'Calendar event created',
+            resourceUrl: 'https://calendar.example.com/123',
+          },
         });
 
       const client = createCalendarServiceHttpClient({
@@ -398,8 +482,12 @@ describe('calendarServiceHttpClient', () => {
         .post('/internal/calendar/process-action')
         .matchHeader('X-Internal-Auth', internalAuthToken)
         .reply(200, {
-          status: 'completed',
-          resourceUrl: 'https://calendar.example.com/123',
+          success: true,
+          data: {
+            status: 'completed',
+            message: 'Calendar event created',
+            resourceUrl: 'https://calendar.example.com/123',
+          },
         });
 
       const client = createClient();
@@ -416,8 +504,12 @@ describe('calendarServiceHttpClient', () => {
         .post('/internal/calendar/process-action')
         .matchHeader('X-Internal-Auth', internalAuthToken)
         .reply(200, {
-          status: 'completed',
-          resourceUrl: 'https://calendar.example.com/123',
+          success: true,
+          data: {
+            status: 'completed',
+            message: 'Calendar event created',
+            resourceUrl: 'https://calendar.example.com/123',
+          },
         });
 
       const client = createClient();
@@ -435,8 +527,12 @@ describe('calendarServiceHttpClient', () => {
         .post('/internal/calendar/process-action')
         .matchHeader('X-Internal-Auth', internalAuthToken)
         .reply(200, {
-          status: 'failed',
-          error: 'Title is required',
+          success: true,
+          data: {
+            status: 'failed',
+            message: 'Title is required',
+            errorCode: 'VALIDATION_ERROR',
+          },
         });
 
       const client = createClient();
@@ -446,7 +542,7 @@ describe('calendarServiceHttpClient', () => {
       expect(isOk(result)).toBe(true);
       if (isOk(result)) {
         expect(result.value.status).toBe('failed');
-        expect(result.value.error).toBe('Title is required');
+        expect(result.value.message).toBe('Title is required');
       }
     });
 
@@ -457,8 +553,12 @@ describe('calendarServiceHttpClient', () => {
         .post('/internal/calendar/process-action')
         .matchHeader('X-Internal-Auth', internalAuthToken)
         .reply(200, {
-          status: 'completed',
-          resourceUrl: 'https://calendar.example.com/123',
+          success: true,
+          data: {
+            status: 'completed',
+            message: 'Calendar event created',
+            resourceUrl: 'https://calendar.example.com/123',
+          },
         });
 
       const client = createClient();
@@ -474,8 +574,12 @@ describe('calendarServiceHttpClient', () => {
         .post('/internal/calendar/process-action')
         .matchHeader('X-Internal-Auth', internalAuthToken)
         .reply(200, {
-          status: 'completed',
-          resourceUrl: 'https://calendar.example.com/123',
+          success: true,
+          data: {
+            status: 'completed',
+            message: 'Calendar event created',
+            resourceUrl: 'https://calendar.example.com/123',
+          },
         });
 
       const client = createCalendarServiceHttpClient({ baseUrl, internalAuthToken });

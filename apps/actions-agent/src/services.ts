@@ -301,8 +301,8 @@ export function initServices(config: ServiceConfig): void {
     }
   );
 
-  const handleLinearActionUseCase = createHandleLinearActionUseCase({
-    actionServiceClient,
+  const handleLinearActionUseCase = registerActionHandler(createHandleLinearActionUseCase, {
+    actionRepository,
     whatsappPublisher,
     webAppUrl: config.webAppUrl,
     logger: pino({ name: 'handleLinearAction' }),

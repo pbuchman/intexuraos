@@ -73,7 +73,7 @@ describe('executeTodoAction usecase', () => {
     expect(isOk(result)).toBe(true);
     if (isOk(result)) {
       expect(result.value.status).toBe('completed');
-      expect(result.value.resource_url).toBe('/#/todos/existing-todo');
+      expect(result.value.resourceUrl).toBe('/#/todos/existing-todo');
     }
   });
 
@@ -103,7 +103,11 @@ describe('executeTodoAction usecase', () => {
       payload: { prompt: 'Milk, eggs, bread' },
     });
     await fakeActionRepo.save(action);
-    fakeTodosClient.setNextTodoId('todo-new-123');
+    fakeTodosClient.setNextResponse({
+      status: 'completed',
+      message: 'Todo created successfully',
+      resourceUrl: '/#/todos/todo-new-123',
+    });
 
     const usecase = createExecuteTodoActionUseCase({
       actionRepository: fakeActionRepo,
@@ -118,12 +122,12 @@ describe('executeTodoAction usecase', () => {
     expect(isOk(result)).toBe(true);
     if (isOk(result)) {
       expect(result.value.status).toBe('completed');
-      expect(result.value.resource_url).toBe('/#/todos/todo-new-123');
+      expect(result.value.resourceUrl).toBe('/#/todos/todo-new-123');
     }
 
     const updatedAction = await fakeActionRepo.getById('action-123');
     expect(updatedAction?.status).toBe('completed');
-    expect(updatedAction?.payload['todoId']).toBe('todo-new-123');
+    expect(updatedAction?.payload['resource_url']).toBe('/#/todos/todo-new-123');
   });
 
   it('updates action to failed when todo creation fails', async () => {
@@ -144,17 +148,52 @@ describe('executeTodoAction usecase', () => {
     expect(isOk(result)).toBe(true);
     if (isOk(result)) {
       expect(result.value.status).toBe('failed');
-      expect(result.value.error).toBe('Todos service unavailable');
+      expect(result.value.message).toBe('Todos service unavailable');
     }
 
     const updatedAction = await fakeActionRepo.getById('action-123');
     expect(updatedAction?.status).toBe('failed');
   });
 
+  it('handles failed response status with error code', async () => {
+    const action = createAction({ status: 'awaiting_approval' });
+    await fakeActionRepo.save(action);
+    fakeTodosClient.setNextResponse({
+      status: 'failed',
+      message: 'Item extraction failed',
+      errorCode: 'EXTRACTION_FAILED',
+    });
+
+    const usecase = createExecuteTodoActionUseCase({
+      actionRepository: fakeActionRepo,
+      todosServiceClient: fakeTodosClient,
+      whatsappPublisher: fakeWhatsappPublisher,
+      webAppUrl: 'https://app.test.com',
+      logger: silentLogger,
+    });
+
+    const result = await usecase('action-123');
+
+    expect(isOk(result)).toBe(true);
+    if (isOk(result)) {
+      expect(result.value.status).toBe('failed');
+      expect(result.value.message).toBe('Item extraction failed');
+      expect(result.value.errorCode).toBe('EXTRACTION_FAILED');
+    }
+
+    const updatedAction = await fakeActionRepo.getById('action-123');
+    expect(updatedAction?.status).toBe('failed');
+    expect(updatedAction?.payload['errorCode']).toBe('EXTRACTION_FAILED');
+  });
+
   it('allows execution from failed status (retry)', async () => {
     const action = createAction({ status: 'failed' });
     await fakeActionRepo.save(action);
-    fakeTodosClient.setNextTodoId('retry-todo-123');
+    fakeTodosClient.setNextResponse({
+      status: 'completed',
+      message: 'Todo created successfully',
+      resourceUrl: '/#/todos/retry-todo-123',
+    });
 
     const usecase = createExecuteTodoActionUseCase({
       actionRepository: fakeActionRepo,
@@ -175,7 +214,11 @@ describe('executeTodoAction usecase', () => {
   it('publishes WhatsApp notification on success', async () => {
     const action = createAction({ status: 'awaiting_approval' });
     await fakeActionRepo.save(action);
-    fakeTodosClient.setNextTodoId('notified-todo-123');
+    fakeTodosClient.setNextResponse({
+      status: 'completed',
+      message: 'Todo created successfully',
+      resourceUrl: '/#/todos/notified-todo-123',
+    });
 
     const usecase = createExecuteTodoActionUseCase({
       actionRepository: fakeActionRepo,

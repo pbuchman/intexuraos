@@ -33,7 +33,7 @@ describe('services', () => {
   describe('setServices', () => {
     it('allows setting custom services for testing', () => {
       const fakeFetcher = new FakeLinkPreviewFetcher();
-      setServices({ linkPreviewFetcher: fakeFetcher });
+      setServices({ linkPreviewFetcher: fakeFetcher, pageSummaryService: null });
 
       const services = getServices();
 

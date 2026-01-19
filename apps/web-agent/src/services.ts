@@ -1,20 +1,30 @@
 import pino from 'pino';
 import { getLogLevel } from '@intexuraos/common-core';
-import type { LinkPreviewFetcherPort } from './domain/index.js';
-import { OpenGraphFetcher } from './infra/index.js';
+import type { LinkPreviewFetcherPort, PageSummaryServicePort } from './domain/index.js';
+import { OpenGraphFetcher, createCrawl4AIClient } from './infra/index.js';
 
 export interface ServiceContainer {
   linkPreviewFetcher: LinkPreviewFetcherPort;
+  pageSummaryService: PageSummaryServicePort | null;
 }
 
 let container: ServiceContainer | undefined;
 
 export function initServices(): void {
+  const crawl4aiApiKey = process.env['INTEXURAOS_CRAWL4AI_API_KEY'];
+
   container = {
     linkPreviewFetcher: new OpenGraphFetcher(
       {},
       pino({ name: 'openGraphFetcher', level: getLogLevel() })
     ),
+    pageSummaryService:
+      crawl4aiApiKey !== undefined && crawl4aiApiKey !== ''
+        ? createCrawl4AIClient(
+            { apiKey: crawl4aiApiKey },
+            pino({ name: 'crawl4aiClient', level: getLogLevel() })
+          )
+        : null,
   };
 }
 

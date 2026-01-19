@@ -73,7 +73,7 @@ describe('executeResearchAction usecase', () => {
     expect(isOk(result)).toBe(true);
     if (isOk(result)) {
       expect(result.value.status).toBe('completed');
-      expect(result.value.resource_url).toBe('/#/research/existing');
+      expect(result.value.resourceUrl).toBe('/#/research/existing');
     }
   });
 
@@ -100,7 +100,11 @@ describe('executeResearchAction usecase', () => {
   it('executes research and updates action to completed on success', async () => {
     const action = createAction({ status: 'awaiting_approval' });
     await fakeActionRepo.save(action);
-    fakeResearchClient.setNextResearchId('research-new-123');
+    fakeResearchClient.setNextResponse({
+      status: 'completed',
+      message: 'Research draft created successfully',
+      resourceUrl: '/#/research/research-new-123',
+    });
 
     const usecase = createExecuteResearchActionUseCase({
       actionRepository: fakeActionRepo,
@@ -115,12 +119,12 @@ describe('executeResearchAction usecase', () => {
     expect(isOk(result)).toBe(true);
     if (isOk(result)) {
       expect(result.value.status).toBe('completed');
-      expect(result.value.resource_url).toBe('/#/research/research-new-123');
+      expect(result.value.resourceUrl).toBe('/#/research/research-new-123');
     }
 
     const updatedAction = await fakeActionRepo.getById('action-123');
     expect(updatedAction?.status).toBe('completed');
-    expect(updatedAction?.payload['researchId']).toBe('research-new-123');
+    expect(updatedAction?.payload['resource_url']).toBe('/#/research/research-new-123');
   });
 
   it('updates action to failed when research creation fails', async () => {
@@ -141,17 +145,52 @@ describe('executeResearchAction usecase', () => {
     expect(isOk(result)).toBe(true);
     if (isOk(result)) {
       expect(result.value.status).toBe('failed');
-      expect(result.value.error).toBe('Research service unavailable');
+      expect(result.value.message).toBe('Research service unavailable');
     }
 
     const updatedAction = await fakeActionRepo.getById('action-123');
     expect(updatedAction?.status).toBe('failed');
   });
 
+  it('handles failed response status with error code', async () => {
+    const action = createAction({ status: 'awaiting_approval' });
+    await fakeActionRepo.save(action);
+    fakeResearchClient.setNextResponse({
+      status: 'failed',
+      message: 'Context inference failed',
+      errorCode: 'EXTRACTION_FAILED',
+    });
+
+    const usecase = createExecuteResearchActionUseCase({
+      actionRepository: fakeActionRepo,
+      researchServiceClient: fakeResearchClient,
+      whatsappPublisher: fakeWhatsappPublisher,
+      webAppUrl: 'https://app.test.com',
+      logger: silentLogger,
+    });
+
+    const result = await usecase('action-123');
+
+    expect(isOk(result)).toBe(true);
+    if (isOk(result)) {
+      expect(result.value.status).toBe('failed');
+      expect(result.value.message).toBe('Context inference failed');
+      expect(result.value.errorCode).toBe('EXTRACTION_FAILED');
+    }
+
+    const updatedAction = await fakeActionRepo.getById('action-123');
+    expect(updatedAction?.status).toBe('failed');
+    expect(updatedAction?.payload['errorCode']).toBe('EXTRACTION_FAILED');
+  });
+
   it('allows execution from failed status (retry)', async () => {
     const action = createAction({ status: 'failed' });
     await fakeActionRepo.save(action);
-    fakeResearchClient.setNextResearchId('retry-research-123');
+    fakeResearchClient.setNextResponse({
+      status: 'completed',
+      message: 'Research draft created successfully',
+      resourceUrl: '/#/research/retry-research-123',
+    });
 
     const usecase = createExecuteResearchActionUseCase({
       actionRepository: fakeActionRepo,
@@ -172,7 +211,11 @@ describe('executeResearchAction usecase', () => {
   it('publishes WhatsApp notification on success', async () => {
     const action = createAction({ status: 'awaiting_approval' });
     await fakeActionRepo.save(action);
-    fakeResearchClient.setNextResearchId('notified-research-123');
+    fakeResearchClient.setNextResponse({
+      status: 'completed',
+      message: 'Research draft created successfully',
+      resourceUrl: '/#/research/notified-research-123',
+    });
 
     const usecase = createExecuteResearchActionUseCase({
       actionRepository: fakeActionRepo,
@@ -187,7 +230,8 @@ describe('executeResearchAction usecase', () => {
     const messages = fakeWhatsappPublisher.getSentMessages();
     expect(messages).toHaveLength(1);
     expect(messages[0]?.userId).toBe('user-456');
-    expect(messages[0]?.message).toContain('research draft is ready');
+    expect(messages[0]?.message).toContain('Research draft created successfully');
+    expect(messages[0]?.message).toContain('View it here:');
     expect(messages[0]?.message).toContain('https://app.test.com/#/research/notified-research-123');
   });
 
@@ -257,5 +301,31 @@ describe('executeResearchAction usecase', () => {
 
     const params = fakeResearchClient.getLastCreateDraftParams();
     expect(params?.prompt).toBe('Test Research');
+  });
+
+  it('prepends Key Points section when summary is provided', async () => {
+    const action = createAction({
+      status: 'awaiting_approval',
+      payload: {
+        prompt: 'Full research question context...',
+        summary: '- Main topic A\n- Main topic B',
+      },
+    });
+    await fakeActionRepo.save(action);
+
+    const usecase = createExecuteResearchActionUseCase({
+      actionRepository: fakeActionRepo,
+      researchServiceClient: fakeResearchClient,
+      whatsappPublisher: fakeWhatsappPublisher,
+      webAppUrl: 'https://app.test.com',
+      logger: silentLogger,
+    });
+
+    await usecase('action-123');
+
+    const params = fakeResearchClient.getLastCreateDraftParams();
+    expect(params?.prompt).toBe(
+      '## Key Points\n\n- Main topic A\n- Main topic B\n\n---\n\nFull research question context...'
+    );
   });
 });

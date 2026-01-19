@@ -15,6 +15,7 @@ export type {
   FailedEvent,
   CreateFailedEventInput,
   FailedEventFilters,
+  ProcessedAction,
 } from './models.js';
 
 export type { CalendarError, CalendarErrorCode } from './errors.js';
@@ -27,6 +28,7 @@ export type {
   CalendarActionExtractionService,
   ExtractedCalendarEvent,
   ExtractionError,
+  ProcessedActionRepository,
 } from './ports.js';
 
 export {

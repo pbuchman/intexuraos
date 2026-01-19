@@ -33,7 +33,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             commandId: { type: 'string', description: 'Command ID that triggered this action' },
             type: {
               type: 'string',
-              enum: ['todo', 'research', 'note', 'link', 'calendar', 'reminder'],
+              enum: ['todo', 'research', 'note', 'link', 'calendar', 'reminder', 'linear'],
               description: 'Type of action',
             },
             title: { type: 'string', description: 'Action title' },

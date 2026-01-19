@@ -1,4 +1,4 @@
-import type { Result } from '@intexuraos/common-core';
+import type { Result, ServiceFeedback } from '@intexuraos/common-core';
 import { err, getErrorMessage, ok } from '@intexuraos/common-core';
 import type { ResearchModel } from '@intexuraos/llm-contract';
 import type { ResearchServiceClient } from '../../domain/ports/researchServiceClient.js';
@@ -14,12 +14,16 @@ export interface ResearchAgentClientConfig {
   internalAuthToken: string;
 }
 
-interface CreateDraftResponse {
+interface ApiResponse {
   success: boolean;
   data?: {
-    id: string;
+    status: 'completed' | 'failed';
+    message: string;
+    resourceUrl?: string;
+    errorCode?: string;
   };
   error?: {
+    code?: string;
     message: string;
   };
 }
@@ -34,7 +38,7 @@ export function createResearchAgentClient(
       prompt: string;
       selectedModels: ResearchModel[];
       sourceActionId?: string;
-    }): Promise<Result<{ id: string }>> {
+    }): Promise<Result<ServiceFeedback>> {
       try {
         logger.info(
           {
@@ -63,20 +67,49 @@ export function createResearchAgentClient(
           }),
         });
 
+        let data: ApiResponse;
+        try {
+          data = (await response.json()) as ApiResponse;
+        } catch {
+          if (!response.ok) {
+            logger.error(
+              {
+                userId: params.userId,
+                title: params.title,
+                httpStatus: response.status,
+                statusText: response.statusText,
+              },
+              'Failed to create research draft - HTTP error (non-JSON response)'
+            );
+            return err(new Error(`HTTP ${String(response.status)}: Failed to create research draft`));
+          }
+          logger.error(
+            { userId: params.userId, title: params.title },
+            'Invalid JSON response from research-agent'
+          );
+          return err(new Error('Invalid response from research-agent'));
+        }
+
         if (!response.ok) {
+          const errorCode = data.error?.code;
+          const errorMessage = data.error?.message ?? `HTTP ${String(response.status)}: Failed to create research draft`;
           logger.error(
             {
               userId: params.userId,
               title: params.title,
               httpStatus: response.status,
               statusText: response.statusText,
+              errorCode,
+              errorMessage,
             },
             'Failed to create research draft - HTTP error'
           );
-          return err(new Error(`HTTP ${String(response.status)}: Failed to create research draft`));
+          return ok({
+            status: 'failed',
+            message: errorMessage,
+            ...(errorCode !== undefined && { errorCode }),
+          });
         }
-
-        const data = (await response.json()) as CreateDraftResponse;
 
         if (!data.success || data.data === undefined) {
           logger.error(
@@ -90,16 +123,23 @@ export function createResearchAgentClient(
           return err(new Error(data.error?.message ?? 'Failed to create research draft'));
         }
 
+        const result: ServiceFeedback = {
+          status: data.data.status,
+          message: data.data.message,
+          ...(data.data.resourceUrl !== undefined && { resourceUrl: data.data.resourceUrl }),
+          ...(data.data.errorCode !== undefined && { errorCode: data.data.errorCode }),
+        };
+
         logger.info(
           {
             userId: params.userId,
-            researchId: data.data.id,
             title: params.title,
+            status: result.status,
           },
-          'Successfully created research draft'
+          'Research draft action processed'
         );
 
-        return ok({ id: data.data.id });
+        return ok(result);
       } catch (error) {
         logger.error(
           {

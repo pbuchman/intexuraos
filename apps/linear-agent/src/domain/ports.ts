@@ -12,6 +12,7 @@ import type {
   CreateIssueInput,
   FailedLinearIssue,
   ExtractedIssueData,
+  ProcessedAction,
 } from './models.js';
 import type { LinearError } from './errors.js';
 
@@ -87,4 +88,19 @@ export interface LinearApiClient {
 export interface LinearActionExtractionService {
   /** Extract issue data from user message */
   extractIssue(userId: string, text: string): Promise<Result<ExtractedIssueData, LinearError>>;
+}
+
+/** Repository for tracking successfully processed actions (idempotency) */
+export interface ProcessedActionRepository {
+  /** Get a processed action by actionId */
+  getByActionId(actionId: string): Promise<Result<ProcessedAction | null, LinearError>>;
+
+  /** Save a successfully processed action */
+  create(input: {
+    actionId: string;
+    userId: string;
+    issueId: string;
+    issueIdentifier: string;
+    resourceUrl: string;
+  }): Promise<Result<ProcessedAction, LinearError>>;
 }

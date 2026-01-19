@@ -1,6 +1,6 @@
 {
   "name": "@intexuraos/web",
-  "version": "0.0.5",
+  "version": "1.0.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -19,6 +19,7 @@
     "@auth0/auth0-react": "^2.2.4",
     "@intexuraos/common-core": "workspace:*",
     "@intexuraos/llm-contract": "workspace:*",
+    "@sentry/react": "^8.55.0",
     "@types/js-yaml": "^4.0.9",
     "firebase": "^11.9.0",
     "highlight.js": "^11.11.1",
@@ -35,8 +36,7 @@
     "vega-embed": "^6.25.0",
     "vega-lite": "^5.18.0",
     "vibe-kanban-web-companion": "^0.0.5",
-    "workbox-window": "^7.4.0",
-    "@sentry/react": "^8.55.0"
+    "workbox-window": "^7.4.0"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.1.8",

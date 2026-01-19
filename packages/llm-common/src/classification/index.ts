@@ -22,3 +22,15 @@ export {
   type LinearIssueExtractionPromptDeps,
   type ExtractedLinearIssue,
 } from './linearActionExtractionPrompt.js';
+
+export {
+  intelligentClassifierPrompt,
+  type ClassificationExample,
+  type ClassificationCorrection,
+  type IntelligentClassifierPromptInput,
+  type IntelligentClassifierPromptDeps,
+  type CommandExampleSource,
+  type TransitionSource,
+  toClassificationExample,
+  toClassificationCorrection,
+} from './intelligentPromptBuilder.js';

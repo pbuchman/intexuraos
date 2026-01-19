@@ -1,4 +1,4 @@
-import type { Result } from '@intexuraos/common-core';
+import type { Result, ServiceFeedback } from '@intexuraos/common-core';
 
 export interface CreateNoteRequest {
   userId: string;
@@ -9,12 +9,6 @@ export interface CreateNoteRequest {
   sourceId: string;
 }
 
-export interface CreateNoteResponse {
-  id: string;
-  userId: string;
-  title: string;
-}
-
 export interface NotesServiceClient {
-  createNote(request: CreateNoteRequest): Promise<Result<CreateNoteResponse>>;
+  createNote(request: CreateNoteRequest): Promise<Result<ServiceFeedback>>;
 }

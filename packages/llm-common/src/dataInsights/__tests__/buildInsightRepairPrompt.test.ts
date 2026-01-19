@@ -5,8 +5,8 @@ describe('buildInsightRepairPrompt', () => {
   it('builds repair prompt with all required sections', () => {
     const originalPrompt = 'Analyze this data and find insights';
     const invalidResponse =
-      'INSIGHT_1: Title=Bad; Description=Too many sentences. One. Two. Three. Four.';
-    const errorMessage = 'Line 1: Description must be max 3 sentences, got 4';
+      'INSIGHT_1: Title=Bad; Description=One. Two. Three. Four. Five. Six. Seven.';
+    const errorMessage = 'Line 1: Description must be max 6 sentences, got 7';
 
     const result = buildInsightRepairPrompt(originalPrompt, invalidResponse, errorMessage);
 
@@ -17,7 +17,7 @@ describe('buildInsightRepairPrompt', () => {
     expect(result).toContain('INVALID RESPONSE:');
     expect(result).toContain(invalidResponse);
     expect(result).toContain('REQUIREMENTS:');
-    expect(result).toContain('Description must be MAX 3 sentences');
+    expect(result).toContain('maximum 6 sentences allowed');
     expect(result).toContain('ChartType must be exactly one of: C1, C2, C3, C4, C5, C6');
   });
 
@@ -34,7 +34,7 @@ describe('buildInsightRepairPrompt', () => {
     const result = buildInsightRepairPrompt('prompt', 'response', 'error');
 
     expect(result).toContain('EXAMPLES OF INVALID OUTPUT:');
-    expect(result).toContain('Description with 4+ sentences');
+    expect(result).toContain('Description with 7+ sentences');
     expect(result).toContain('ChartType=Bar');
   });
 

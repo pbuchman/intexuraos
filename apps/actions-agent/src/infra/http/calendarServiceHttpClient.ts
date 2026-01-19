@@ -1,9 +1,8 @@
-import type { Result } from '@intexuraos/common-core';
+import type { Result, ServiceFeedback } from '@intexuraos/common-core';
 import { ok, err, getErrorMessage } from '@intexuraos/common-core';
 import type {
   CalendarServiceClient,
   ProcessCalendarRequest,
-  ProcessCalendarResponse,
 } from '../../domain/ports/calendarServiceClient.js';
 import pino, { type Logger } from 'pino';
 
@@ -19,15 +18,14 @@ const defaultLogger = pino({
 });
 
 interface ApiResponse {
-  status: 'completed' | 'failed';
-  resourceUrl?: string;
-  error?: string;
-}
-
-function isValidApiResponse(value: unknown): value is ApiResponse {
-  if (typeof value !== 'object' || value === null) return false;
-  const obj = value as Record<string, unknown>;
-  return obj['status'] === 'completed' || obj['status'] === 'failed';
+  success: boolean;
+  data?: {
+    status: 'completed' | 'failed';
+    message: string;
+    resourceUrl?: string;
+    errorCode?: string;
+  };
+  error?: { code: string; message: string };
 }
 
 export function createCalendarServiceHttpClient(
@@ -36,7 +34,7 @@ export function createCalendarServiceHttpClient(
   const logger = config.logger ?? defaultLogger;
 
   return {
-    async processAction(request: ProcessCalendarRequest): Promise<Result<ProcessCalendarResponse>> {
+    async processAction(request: ProcessCalendarRequest): Promise<Result<ServiceFeedback>> {
       const url = `${config.baseUrl}/internal/calendar/process-action`;
       const timeoutMs = 60_000; // 60 second timeout as specified
 
@@ -68,24 +66,44 @@ export function createCalendarServiceHttpClient(
         return err(new Error(`Failed to call calendar-agent: ${getErrorMessage(error)}`));
       }
 
+      let body: ApiResponse;
+      try {
+        body = (await response.json()) as ApiResponse;
+      } catch {
+        if (!response.ok) {
+          logger.error(
+            { httpStatus: response.status, statusText: response.statusText },
+            'calendar-agent returned error (non-JSON response)'
+          );
+          return err(new Error(`HTTP ${String(response.status)}: ${response.statusText}`));
+        }
+        logger.error({ httpStatus: response.status }, 'Invalid JSON response from calendar-agent');
+        return err(new Error('Invalid response from calendar-agent'));
+      }
+
       if (!response.ok) {
+        const errorCode = body.error?.code;
+        const errorMessage = body.error?.message ?? `HTTP ${String(response.status)}: ${response.statusText}`;
         logger.error(
-          { httpStatus: response.status, statusText: response.statusText },
+          { httpStatus: response.status, statusText: response.statusText, errorCode, errorMessage },
           'calendar-agent returned error'
         );
-        return err(new Error(`HTTP ${String(response.status)}: ${response.statusText}`));
+        return ok({
+          status: 'failed',
+          message: errorMessage,
+          ...(errorCode !== undefined && { errorCode }),
+        });
       }
-
-      const body: unknown = await response.json();
-      if (!isValidApiResponse(body)) {
+      if (!body.success || body.data === undefined) {
         logger.error({ body }, 'Invalid response from calendar-agent');
-        return err(new Error('Invalid response from calendar-agent: missing or invalid status'));
+        return err(new Error(body.error?.message ?? 'Invalid response from calendar-agent'));
       }
 
-      const result: ProcessCalendarResponse = {
-        status: body.status,
-        ...(body.resourceUrl !== undefined && { resource_url: body.resourceUrl }),
-        ...(body.error !== undefined && { error: body.error }),
+      const result: ServiceFeedback = {
+        status: body.data.status,
+        message: body.data.message,
+        ...(body.data.resourceUrl !== undefined && { resourceUrl: body.data.resourceUrl }),
+        ...(body.data.errorCode !== undefined && { errorCode: body.data.errorCode }),
       };
 
       logger.info({ actionId: request.action.id, status: result.status }, 'Calendar action processed');

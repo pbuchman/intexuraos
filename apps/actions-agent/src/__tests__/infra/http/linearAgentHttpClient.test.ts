@@ -23,18 +23,18 @@ describe('linearAgentHttpClient', () => {
     });
 
   describe('successful responses', () => {
-    it('returns completed status with resourceUrl and issueIdentifier', async () => {
+    it('returns completed status with resourceUrl and message', async () => {
       const scope = nock(baseUrl)
         .post('/internal/linear/process-action', {
-          action: { id: 'action-123', userId: 'user-456', title: 'Fix bug' },
+          action: { id: 'action-123', userId: 'user-456', text: 'Fix bug' },
         })
         .matchHeader('X-Internal-Auth', internalAuthToken)
         .reply(200, {
           success: true,
           data: {
             status: 'completed',
+            message: 'Linear issue created: TEST-123',
             resourceUrl: 'https://linear.app/issue/TEST-123',
-            issueIdentifier: 'TEST-123',
           },
         });
 
@@ -45,12 +45,12 @@ describe('linearAgentHttpClient', () => {
       expect(isOk(result)).toBe(true);
       if (isOk(result)) {
         expect(result.value.status).toBe('completed');
+        expect(result.value.message).toBe('Linear issue created: TEST-123');
         expect(result.value.resourceUrl).toBe('https://linear.app/issue/TEST-123');
-        expect(result.value.issueIdentifier).toBe('TEST-123');
       }
     });
 
-    it('returns completed status with only issueIdentifier when resourceUrl is missing', async () => {
+    it('returns completed status with message only when resourceUrl is missing', async () => {
       const scope = nock(baseUrl)
         .post('/internal/linear/process-action')
         .matchHeader('X-Internal-Auth', internalAuthToken)
@@ -58,7 +58,7 @@ describe('linearAgentHttpClient', () => {
           success: true,
           data: {
             status: 'completed',
-            issueIdentifier: 'TEST-456',
+            message: 'Linear issue created: TEST-456',
           },
         });
 
@@ -69,12 +69,12 @@ describe('linearAgentHttpClient', () => {
       expect(isOk(result)).toBe(true);
       if (isOk(result)) {
         expect(result.value.status).toBe('completed');
+        expect(result.value.message).toBe('Linear issue created: TEST-456');
         expect(result.value.resourceUrl).toBeUndefined();
-        expect(result.value.issueIdentifier).toBe('TEST-456');
       }
     });
 
-    it('returns failed status with error message', async () => {
+    it('returns failed status with error message and errorCode', async () => {
       const scope = nock(baseUrl)
         .post('/internal/linear/process-action')
         .matchHeader('X-Internal-Auth', internalAuthToken)
@@ -82,7 +82,8 @@ describe('linearAgentHttpClient', () => {
           success: true,
           data: {
             status: 'failed',
-            error: 'Invalid Linear issue format',
+            message: 'Invalid Linear issue format',
+            errorCode: 'VALIDATION_ERROR',
           },
         });
 
@@ -93,7 +94,8 @@ describe('linearAgentHttpClient', () => {
       expect(isOk(result)).toBe(true);
       if (isOk(result)) {
         expect(result.value.status).toBe('failed');
-        expect(result.value.error).toBe('Invalid Linear issue format');
+        expect(result.value.message).toBe('Invalid Linear issue format');
+        expect(result.value.errorCode).toBe('VALIDATION_ERROR');
       }
     });
 
@@ -105,9 +107,8 @@ describe('linearAgentHttpClient', () => {
           success: true,
           data: {
             status: 'completed',
+            message: 'Linear issue created: TEST-789',
             resourceUrl: 'https://linear.app/issue/TEST-789',
-            issueIdentifier: 'TEST-789',
-            // error field intentionally omitted (undefined)
           },
         });
 
@@ -117,15 +118,15 @@ describe('linearAgentHttpClient', () => {
       expect(scope.isDone()).toBe(true);
       expect(isOk(result)).toBe(true);
       if (isOk(result)) {
+        expect(result.value.message).toBe('Linear issue created: TEST-789');
         expect(result.value.resourceUrl).toBe('https://linear.app/issue/TEST-789');
-        expect(result.value.issueIdentifier).toBe('TEST-789');
-        expect(result.value.error).toBeUndefined();
+        expect(result.value.errorCode).toBeUndefined();
       }
     });
   });
 
   describe('HTTP error responses', () => {
-    it('returns error for 401 Unauthorized', async () => {
+    it('returns error for 401 Unauthorized (non-JSON)', async () => {
       const scope = nock(baseUrl)
         .post('/internal/linear/process-action')
         .matchHeader('X-Internal-Auth', internalAuthToken)
@@ -138,6 +139,47 @@ describe('linearAgentHttpClient', () => {
       expect(isErr(result)).toBe(true);
       if (isErr(result)) {
         expect(result.error.message).toContain('HTTP 401');
+      }
+    });
+
+    it('returns failed ServiceFeedback with errorCode on HTTP 401 with JSON body', async () => {
+      const scope = nock(baseUrl)
+        .post('/internal/linear/process-action')
+        .matchHeader('X-Internal-Auth', internalAuthToken)
+        .reply(401, {
+          success: false,
+          error: { code: 'TOKEN_ERROR', message: 'Token expired' },
+        });
+
+      const client = createClient();
+      const result = await client.processAction('action-123', 'user-456', 'Fix bug');
+
+      expect(scope.isDone()).toBe(true);
+      expect(isOk(result)).toBe(true);
+      if (isOk(result)) {
+        expect(result.value.status).toBe('failed');
+        expect(result.value.message).toBe('Token expired');
+        expect(result.value.errorCode).toBe('TOKEN_ERROR');
+      }
+    });
+
+    it('returns failed ServiceFeedback with default message on HTTP 401 with JSON body but no message', async () => {
+      const scope = nock(baseUrl)
+        .post('/internal/linear/process-action')
+        .matchHeader('X-Internal-Auth', internalAuthToken)
+        .reply(401, {
+          error: { code: 'AUTH_ERROR' },
+        });
+
+      const client = createClient();
+      const result = await client.processAction('action-123', 'user-456', 'Fix bug');
+
+      expect(scope.isDone()).toBe(true);
+      expect(isOk(result)).toBe(true);
+      if (isOk(result)) {
+        expect(result.value.status).toBe('failed');
+        expect(result.value.message).toContain('HTTP 401');
+        expect(result.value.errorCode).toBe('AUTH_ERROR');
       }
     });
 
@@ -223,6 +265,24 @@ describe('linearAgentHttpClient', () => {
   });
 
   describe('response validation errors', () => {
+    it('returns error on OK response with invalid JSON', async () => {
+      const scope = nock(baseUrl)
+        .post('/internal/linear/process-action')
+        .matchHeader('X-Internal-Auth', internalAuthToken)
+        .reply(200, 'not valid json', {
+          'Content-Type': 'text/plain',
+        });
+
+      const client = createClient();
+      const result = await client.processAction('action-123', 'user-456', 'Fix bug');
+
+      expect(scope.isDone()).toBe(true);
+      expect(isErr(result)).toBe(true);
+      if (isErr(result)) {
+        expect(result.error.message).toContain('Invalid response');
+      }
+    });
+
     it('returns error when success is false', async () => {
       const scope = nock(baseUrl)
         .post('/internal/linear/process-action')
@@ -352,17 +412,17 @@ describe('linearAgentHttpClient', () => {
     it('sends correct request body structure', async () => {
       const scope = nock(baseUrl)
         .post('/internal/linear/process-action', {
-          action: { id: 'action-abc', userId: 'user-xyz', title: 'Test issue title' },
+          action: { id: 'action-abc', userId: 'user-xyz', text: 'Test issue text' },
         })
         .matchHeader('X-Internal-Auth', internalAuthToken)
         .matchHeader('Content-Type', 'application/json')
         .reply(200, {
           success: true,
-          data: { status: 'completed', issueIdentifier: 'TEST-1' },
+          data: { status: 'completed', message: 'Linear issue created: TEST-1' },
         });
 
       const client = createClient();
-      await client.processAction('action-abc', 'user-xyz', 'Test issue title');
+      await client.processAction('action-abc', 'user-xyz', 'Test issue text');
 
       expect(scope.isDone()).toBe(true);
     });
@@ -374,7 +434,7 @@ describe('linearAgentHttpClient', () => {
         .matchHeader('X-Internal-Auth', customToken)
         .reply(200, {
           success: true,
-          data: { status: 'completed', issueIdentifier: 'TEST-1' },
+          data: { status: 'completed', message: 'Linear issue created: TEST-1' },
         });
 
       const client = createLinearAgentHttpClient({
@@ -389,16 +449,16 @@ describe('linearAgentHttpClient', () => {
   });
 
   describe('special characters in input', () => {
-    it('handles special characters in title', async () => {
+    it('handles special characters in text', async () => {
       const specialTitle = "Fix: API's \"broken\" feature <script>alert('xss')</script>";
       const scope = nock(baseUrl)
         .post('/internal/linear/process-action', {
-          action: { id: 'action-123', userId: 'user-456', title: specialTitle },
+          action: { id: 'action-123', userId: 'user-456', text: specialTitle },
         })
         .matchHeader('X-Internal-Auth', internalAuthToken)
         .reply(200, {
           success: true,
-          data: { status: 'completed', issueIdentifier: 'TEST-1' },
+          data: { status: 'completed', message: 'Linear issue created: TEST-1' },
         });
 
       const client = createClient();
@@ -408,16 +468,16 @@ describe('linearAgentHttpClient', () => {
       expect(isOk(result)).toBe(true);
     });
 
-    it('handles unicode characters in title', async () => {
+    it('handles unicode characters in text', async () => {
       const unicodeTitle = '修复认证漏洞 🔒 Security fix';
       const scope = nock(baseUrl)
         .post('/internal/linear/process-action', {
-          action: { id: 'action-123', userId: 'user-456', title: unicodeTitle },
+          action: { id: 'action-123', userId: 'user-456', text: unicodeTitle },
         })
         .matchHeader('X-Internal-Auth', internalAuthToken)
         .reply(200, {
           success: true,
-          data: { status: 'completed', issueIdentifier: 'TEST-1' },
+          data: { status: 'completed', message: 'Linear issue created: TEST-1' },
         });
 
       const client = createClient();
@@ -429,15 +489,15 @@ describe('linearAgentHttpClient', () => {
   });
 
   describe('edge cases', () => {
-    it('handles empty string title', async () => {
+    it('handles empty string text', async () => {
       const scope = nock(baseUrl)
         .post('/internal/linear/process-action', {
-          action: { id: 'action-123', userId: 'user-456', title: '' },
+          action: { id: 'action-123', userId: 'user-456', text: '' },
         })
         .matchHeader('X-Internal-Auth', internalAuthToken)
         .reply(200, {
           success: true,
-          data: { status: 'failed', error: 'Title is required' },
+          data: { status: 'failed', message: 'Title is required', errorCode: 'VALIDATION_ERROR' },
         });
 
       const client = createClient();
@@ -447,18 +507,18 @@ describe('linearAgentHttpClient', () => {
       expect(isOk(result)).toBe(true);
       if (isOk(result)) {
         expect(result.value.status).toBe('failed');
-        expect(result.value.error).toBe('Title is required');
+        expect(result.value.message).toBe('Title is required');
       }
     });
 
-    it('handles very long title', async () => {
+    it('handles very long text', async () => {
       const longTitle = 'A'.repeat(1000);
       const scope = nock(baseUrl)
         .post('/internal/linear/process-action')
         .matchHeader('X-Internal-Auth', internalAuthToken)
         .reply(200, {
           success: true,
-          data: { status: 'completed', issueIdentifier: 'TEST-1' },
+          data: { status: 'completed', message: 'Linear issue created: TEST-1' },
         });
 
       const client = createClient();
@@ -474,7 +534,7 @@ describe('linearAgentHttpClient', () => {
         .matchHeader('X-Internal-Auth', internalAuthToken)
         .reply(200, {
           success: true,
-          data: { status: 'completed', issueIdentifier: 'TEST-1' },
+          data: { status: 'completed', message: 'Linear issue created: TEST-1' },
         });
 
       // Create client without logger to test default logger path

@@ -6,10 +6,12 @@ import type { GoogleCalendarClient, UserServiceClient } from './domain/index.js'
 import type {
   FailedEventRepository,
   CalendarActionExtractionService,
+  ProcessedActionRepository,
 } from './domain/index.js';
 import { GoogleCalendarClientImpl } from './infra/google/googleCalendarClient.js';
 import { UserServiceClientImpl } from './infra/user/userServiceClient.js';
 import { createFailedEventRepository } from './infra/firestore/failedEventRepository.js';
+import { createProcessedActionRepository } from './infra/firestore/processedActionRepository.js';
 import { createCalendarActionExtractionService } from './infra/gemini/calendarActionExtractionService.js';
 import { createLlmUserServiceClient } from './infra/user/llmUserServiceClient.js';
 import type { IPricingContext } from '@intexuraos/llm-pricing';
@@ -27,6 +29,7 @@ export interface ServiceContainer {
   userServiceClient: UserServiceClient;
   failedEventRepository: FailedEventRepository;
   calendarActionExtractionService: CalendarActionExtractionService;
+  processedActionRepository: ProcessedActionRepository;
 }
 
 export interface ServiceConfig {
@@ -52,6 +55,7 @@ export function initServices(config: ServiceConfig): void {
     userServiceClient: new UserServiceClientImpl(config.userServiceUrl, config.internalAuthToken),
     failedEventRepository: createFailedEventRepository(),
     calendarActionExtractionService,
+    processedActionRepository: createProcessedActionRepository(),
   };
 }
 
