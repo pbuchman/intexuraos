@@ -224,6 +224,35 @@ describe('FirestoreActionRepository', () => {
 
       expect(result).toHaveLength(2);
     });
+
+    it('sorts by createdAt descending, not updatedAt', async () => {
+      const olderCreatedAt = '2026-01-01T10:00:00.000Z';
+      const newerCreatedAt = '2026-01-02T10:00:00.000Z';
+      const recentUpdatedAt = '2026-01-03T10:00:00.000Z';
+
+      await repository.save(
+        createTestAction({
+          id: 'action-older',
+          userId: 'user-123',
+          createdAt: olderCreatedAt,
+          updatedAt: recentUpdatedAt,
+        })
+      );
+      await repository.save(
+        createTestAction({
+          id: 'action-newer',
+          userId: 'user-123',
+          createdAt: newerCreatedAt,
+          updatedAt: newerCreatedAt,
+        })
+      );
+
+      const result = await repository.listByUserId('user-123');
+
+      expect(result).toHaveLength(2);
+      expect(result[0]?.id).toBe('action-newer');
+      expect(result[1]?.id).toBe('action-older');
+    });
   });
 
   describe('listByStatus', () => {

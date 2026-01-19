@@ -61,6 +61,7 @@ export const chartDefinitionResponseSchema = {
       properties: {
         vegaLiteConfig: {
           type: 'object',
+          additionalProperties: true,
           description: 'Vega-Lite chart configuration without data',
         },
         dataTransformInstructions: {
@@ -89,6 +90,7 @@ export const previewBodySchema = {
   properties: {
     chartConfig: {
       type: 'object',
+      additionalProperties: true,
       description: 'Vega-Lite chart configuration from chart definition endpoint',
     },
     transformInstructions: {

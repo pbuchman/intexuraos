@@ -78,6 +78,10 @@ Signals: how does, what is, why, find out, learn about, ?
 **link** — URL to save
 Signals: contains http://, https://, or "save this link"
 - "https://example.com interesting article" → link
+**Higher confidence (0.90+) for links when:**
+- Sharing context phrases present: "check this out", "look at this", "you should see this", "found this", "sharing", "see this"
+- Explicit recommendation: "this is great", "interesting", "nice item", "cool link"
+- App-generated share format (clean URL with optional brief text)
 
 **note** — Information to store
 Signals: notes, idea, remember that, jot down

@@ -3,7 +3,6 @@ import {
   ActionDetailModal,
   ActionItem,
   CommandDetailModal,
-  Button,
   Card,
   Layout,
 } from '@/components';
@@ -39,7 +38,6 @@ import {
   Loader2,
   MessageSquare,
   Mic,
-  Radio,
   RefreshCw,
   Search,
   Trash2,
@@ -277,7 +275,6 @@ export function InboxPage(): React.JSX.Element {
   const {
     changedActionIds,
     error: actionListenerError,
-    isListening: isActionsListening,
     clearChangedIds: clearActionChangedIds,
   } = useActionChanges(activeTab === 'actions');
 
@@ -285,12 +282,10 @@ export function InboxPage(): React.JSX.Element {
   const {
     changedCommandIds,
     error: commandListenerError,
-    isListening: isCommandsListening,
     clearChangedIds: clearCommandChangedIds,
   } = useCommandChanges(activeTab === 'commands');
 
   const listenerError = activeTab === 'actions' ? actionListenerError : commandListenerError;
-  const isListening = activeTab === 'actions' ? isActionsListening : isCommandsListening;
 
   // Ref for debounce timeout
   const actionsDebounceTimeoutRef = useRef<number | null>(null);
@@ -559,6 +554,10 @@ export function InboxPage(): React.JSX.Element {
       return;
     }
 
+    // Clean up URL immediately to prevent modal reappearing on refresh
+    const cleanHash = hash.split('?')[0] ?? '';
+    window.history.replaceState(null, '', cleanHash !== '' ? cleanHash : window.location.pathname);
+
     // First check if action is in current list (fast path)
     const actionInList = actions.find((a) => a.id === actionId);
     if (actionInList !== undefined) {
@@ -636,25 +635,16 @@ export function InboxPage(): React.JSX.Element {
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold text-slate-900">Inbox</h2>
-          <div className="flex items-center gap-2">
-            <p className="text-slate-600">Your commands and pending actions</p>
-            {isListening && (
-              <span className="inline-flex items-center gap-1 text-xs text-green-600">
-                <Radio className="h-3 w-3 animate-pulse" />
-                Live
-              </span>
-            )}
-          </div>
+          <p className="text-slate-600">Your commands and pending actions</p>
         </div>
-        <Button
-          variant="secondary"
+        <button
           onClick={handleRefresh}
-          isLoading={isRefreshing}
-          className="flex items-center gap-2"
+          disabled={isRefreshing}
+          className="rounded p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 disabled:opacity-50"
+          title="Refresh"
         >
-          <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
-          Refresh
-        </Button>
+          <RefreshCw className={`h-5 w-5 ${isRefreshing ? 'animate-spin' : ''}`} />
+        </button>
       </div>
 
       {/* Real-time listener error warning */}
