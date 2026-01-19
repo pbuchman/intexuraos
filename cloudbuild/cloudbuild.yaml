@@ -4,49 +4,54 @@
 #
 # ARCHITECTURE: Batched Build-Deploy Pipeline
 # ────────────────────────────────────────────
-# Services are organized into 4 frozen batches of 5. Each batch completes
-# all builds and deploys before the next batch starts. This reduces network
-# contention and prevents "unexpected EOF" / "ran out of retries" errors.
+# Services are organized into 6 batches of MAX 3 services each. Each batch
+# completes all builds and deploys before the next batch starts. This reduces
+# network contention and prevents "unexpected EOF" / "ran out of retries" errors.
 #
 # Pattern per batch:
-#   [build s1..s5 in parallel] → [deploy s1..s5 in parallel] → next batch
+#   [build s1..s3 in parallel] → [deploy s1..s3 in parallel] → next batch
 #
-# BATCH STRUCTURE (FROZEN - add new services to Batch 4 only):
+# BATCH STRUCTURE (max 3 per batch to reduce concurrent pushes):
 # ┌─────────────────────────────────────────────────────────────────────────┐
 # │ BATCH 1 - Foundation (DB migration + lightweight services)              │
 # │   1. deploy-firestore        (migration - runs first)                   │
-# │   2. promptvault-service     (no heavy DB usage)                        │
-# │   3. image-service           (no heavy DB usage)                        │
-# │   4. api-docs-hub            (no heavy DB usage)                        │
-# │   5. notion-service          (no heavy DB usage)                        │
+# │   2. promptvault-service                                                │
+# │   3. image-service                                                      │
+# │   4. api-docs-hub                                                       │
 # ├─────────────────────────────────────────────────────────────────────────┤
-# │ BATCH 2 - Core Services                                                 │
-# │   1. user-service                                                       │
-# │   2. whatsapp-service                                                   │
-# │   3. app-settings-service                                               │
-# │   4. mobile-notifications-service                                       │
-# │   5. research-agent                                                     │
+# │ BATCH 2 - Core Services A                                               │
+# │   1. notion-service                                                     │
+# │   2. user-service                                                       │
+# │   3. whatsapp-service                                                   │
 # ├─────────────────────────────────────────────────────────────────────────┤
-# │ BATCH 3 - Agents                                                        │
+# │ BATCH 3 - Core Services B                                               │
+# │   1. app-settings-service                                               │
+# │   2. mobile-notifications-service                                       │
+# │   3. research-agent                                                     │
+# ├─────────────────────────────────────────────────────────────────────────┤
+# │ BATCH 4 - Agents A                                                      │
 # │   1. commands-agent                                                     │
 # │   2. actions-agent                                                      │
 # │   3. data-insights-agent                                                │
-# │   4. notes-agent                                                        │
-# │   5. todos-agent                                                        │
 # ├─────────────────────────────────────────────────────────────────────────┤
-# │ BATCH 4 - Final + Web (add new services HERE)                           │
-# │   1. bookmarks-agent                                                    │
-# │   2. calendar-agent                                                     │
-# │   3. linear-agent                                                       │
-# │   4. web-agent                                                          │
-# │   5. web (frontend - runs in parallel with above)                       │
+# │ BATCH 5 - Agents B                                                      │
+# │   1. notes-agent                                                        │
+# │   2. todos-agent                                                        │
+# │   3. bookmarks-agent                                                    │
+# ├─────────────────────────────────────────────────────────────────────────┤
+# │ BATCH 6 - Final Services (add new services HERE)                        │
+# │   1. calendar-agent                                                     │
+# │   2. linear-agent                                                       │
+# │   3. web-agent                                                          │
+# ├─────────────────────────────────────────────────────────────────────────┤
+# │ BATCH 7 - Web Frontend                                                  │
+# │   1. web (frontend - after all services deployed)                       │
 # └─────────────────────────────────────────────────────────────────────────┘
 #
 # ADDING NEW SERVICES:
-#   1. Add build step to Batch 4 (before web frontend section)
-#   2. Add deploy step to Batch 4 (before fetch-web-config)
-#   3. If Batch 4 exceeds 5 services, create Batch 5 following same pattern
-#      (move web to new final batch)
+#   1. Add to Batch 6 if it has < 3 services
+#   2. If Batch 6 is full, create new batch before web frontend
+#   3. Update waitFor dependencies accordingly
 #
 # RETRY LOGIC:
 #   build-push-monitored.sh includes 3 retries with 10s delay for docker push
@@ -80,7 +85,7 @@ steps:
         pnpm install --frozen-lockfile
 
   # ===========================================================================
-  # BATCH 1 - Foundation (Firestore + lightweight services)
+  # BATCH 1 - Foundation (Firestore + 3 lightweight services)
   # ===========================================================================
 
   # --- Firestore Migration (runs alongside builds) ---
@@ -97,7 +102,7 @@ steps:
     env:
       - 'PROJECT_ID=$PROJECT_ID'
 
-  # --- Batch 1 Builds (parallel, start after pnpm-install) ---
+  # --- Batch 1 Builds (3 parallel) ---
   - name: 'gcr.io/cloud-builders/docker'
     id: 'build-push-promptvault-service'
     waitFor: ['pnpm-install']
@@ -142,22 +147,6 @@ steps:
       - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
       - 'COMMIT_SHA=$COMMIT_SHA'
 
-  - name: 'gcr.io/cloud-builders/docker'
-    id: 'build-push-notion-service'
-    waitFor: ['pnpm-install']
-    timeout: 900s
-    entrypoint: 'bash'
-    args:
-      [
-        'cloudbuild/scripts/build-push-monitored.sh',
-        'notion-service',
-        'apps/notion-service/Dockerfile',
-      ]
-    env:
-      - 'DOCKER_BUILDKIT=1'
-      - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
-      - 'COMMIT_SHA=$COMMIT_SHA'
-
   # --- Batch 1 Deploys (wait for builds + firestore) ---
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     id: 'deploy-promptvault-service'
@@ -192,31 +181,32 @@ steps:
       - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
       - 'ENVIRONMENT=${_ENVIRONMENT}'
 
-  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
-    id: 'deploy-notion-service'
-    waitFor: ['build-push-notion-service', 'deploy-firestore']
-    entrypoint: 'bash'
-    args: ['-c', 'bash cloudbuild/scripts/deploy-notion-service.sh']
-    env:
-      - 'COMMIT_SHA=$COMMIT_SHA'
-      - 'REGION=${_REGION}'
-      - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
-      - 'ENVIRONMENT=${_ENVIRONMENT}'
-
   # ===========================================================================
-  # BATCH 2 - Core Services
+  # BATCH 2 - Core Services A (3 services)
   # ===========================================================================
 
   # --- Batch 2 Builds (wait for Batch 1 deploys) ---
   - name: 'gcr.io/cloud-builders/docker'
+    id: 'build-push-notion-service'
+    waitFor:
+      ['deploy-promptvault-service', 'deploy-image-service', 'deploy-api-docs-hub']
+    timeout: 900s
+    entrypoint: 'bash'
+    args:
+      [
+        'cloudbuild/scripts/build-push-monitored.sh',
+        'notion-service',
+        'apps/notion-service/Dockerfile',
+      ]
+    env:
+      - 'DOCKER_BUILDKIT=1'
+      - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
+      - 'COMMIT_SHA=$COMMIT_SHA'
+
+  - name: 'gcr.io/cloud-builders/docker'
     id: 'build-push-user-service'
     waitFor:
-      [
-        'deploy-promptvault-service',
-        'deploy-image-service',
-        'deploy-api-docs-hub',
-        'deploy-notion-service',
-      ]
+      ['deploy-promptvault-service', 'deploy-image-service', 'deploy-api-docs-hub']
     timeout: 900s
     entrypoint: 'bash'
     args:
@@ -229,12 +219,7 @@ steps:
   - name: 'gcr.io/cloud-builders/docker'
     id: 'build-push-whatsapp-service'
     waitFor:
-      [
-        'deploy-promptvault-service',
-        'deploy-image-service',
-        'deploy-api-docs-hub',
-        'deploy-notion-service',
-      ]
+      ['deploy-promptvault-service', 'deploy-image-service', 'deploy-api-docs-hub']
     timeout: 900s
     entrypoint: 'bash'
     args:
@@ -248,73 +233,18 @@ steps:
       - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
       - 'COMMIT_SHA=$COMMIT_SHA'
 
-  - name: 'gcr.io/cloud-builders/docker'
-    id: 'build-push-app-settings-service'
-    waitFor:
-      [
-        'deploy-promptvault-service',
-        'deploy-image-service',
-        'deploy-api-docs-hub',
-        'deploy-notion-service',
-      ]
-    timeout: 900s
-    entrypoint: 'bash'
-    args:
-      [
-        'cloudbuild/scripts/build-push-monitored.sh',
-        'app-settings-service',
-        'apps/app-settings-service/Dockerfile',
-      ]
-    env:
-      - 'DOCKER_BUILDKIT=1'
-      - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
-      - 'COMMIT_SHA=$COMMIT_SHA'
-
-  - name: 'gcr.io/cloud-builders/docker'
-    id: 'build-push-mobile-notifications-service'
-    waitFor:
-      [
-        'deploy-promptvault-service',
-        'deploy-image-service',
-        'deploy-api-docs-hub',
-        'deploy-notion-service',
-      ]
-    timeout: 900s
-    entrypoint: 'bash'
-    args:
-      [
-        'cloudbuild/scripts/build-push-monitored.sh',
-        'mobile-notifications-service',
-        'apps/mobile-notifications-service/Dockerfile',
-      ]
-    env:
-      - 'DOCKER_BUILDKIT=1'
-      - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
-      - 'COMMIT_SHA=$COMMIT_SHA'
-
-  - name: 'gcr.io/cloud-builders/docker'
-    id: 'build-push-research-agent'
-    waitFor:
-      [
-        'deploy-promptvault-service',
-        'deploy-image-service',
-        'deploy-api-docs-hub',
-        'deploy-notion-service',
-      ]
-    timeout: 900s
-    entrypoint: 'bash'
-    args:
-      [
-        'cloudbuild/scripts/build-push-monitored.sh',
-        'research-agent',
-        'apps/research-agent/Dockerfile',
-      ]
-    env:
-      - 'DOCKER_BUILDKIT=1'
-      - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
-      - 'COMMIT_SHA=$COMMIT_SHA'
-
   # --- Batch 2 Deploys ---
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    id: 'deploy-notion-service'
+    waitFor: ['build-push-notion-service']
+    entrypoint: 'bash'
+    args: ['-c', 'bash cloudbuild/scripts/deploy-notion-service.sh']
+    env:
+      - 'COMMIT_SHA=$COMMIT_SHA'
+      - 'REGION=${_REGION}'
+      - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
+      - 'ENVIRONMENT=${_ENVIRONMENT}'
+
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     id: 'deploy-user-service'
     waitFor: ['build-push-user-service']
@@ -337,6 +267,63 @@ steps:
       - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
       - 'ENVIRONMENT=${_ENVIRONMENT}'
 
+  # ===========================================================================
+  # BATCH 3 - Core Services B (3 services)
+  # ===========================================================================
+
+  # --- Batch 3 Builds (wait for Batch 2 deploys) ---
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'build-push-app-settings-service'
+    waitFor:
+      ['deploy-notion-service', 'deploy-user-service', 'deploy-whatsapp-service']
+    timeout: 900s
+    entrypoint: 'bash'
+    args:
+      [
+        'cloudbuild/scripts/build-push-monitored.sh',
+        'app-settings-service',
+        'apps/app-settings-service/Dockerfile',
+      ]
+    env:
+      - 'DOCKER_BUILDKIT=1'
+      - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
+      - 'COMMIT_SHA=$COMMIT_SHA'
+
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'build-push-mobile-notifications-service'
+    waitFor:
+      ['deploy-notion-service', 'deploy-user-service', 'deploy-whatsapp-service']
+    timeout: 900s
+    entrypoint: 'bash'
+    args:
+      [
+        'cloudbuild/scripts/build-push-monitored.sh',
+        'mobile-notifications-service',
+        'apps/mobile-notifications-service/Dockerfile',
+      ]
+    env:
+      - 'DOCKER_BUILDKIT=1'
+      - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
+      - 'COMMIT_SHA=$COMMIT_SHA'
+
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'build-push-research-agent'
+    waitFor:
+      ['deploy-notion-service', 'deploy-user-service', 'deploy-whatsapp-service']
+    timeout: 900s
+    entrypoint: 'bash'
+    args:
+      [
+        'cloudbuild/scripts/build-push-monitored.sh',
+        'research-agent',
+        'apps/research-agent/Dockerfile',
+      ]
+    env:
+      - 'DOCKER_BUILDKIT=1'
+      - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
+      - 'COMMIT_SHA=$COMMIT_SHA'
+
+  # --- Batch 3 Deploys ---
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     id: 'deploy-app-settings-service'
     waitFor: ['build-push-app-settings-service']
@@ -371,16 +358,14 @@ steps:
       - 'ENVIRONMENT=${_ENVIRONMENT}'
 
   # ===========================================================================
-  # BATCH 3 - Agents
+  # BATCH 4 - Agents A (3 services)
   # ===========================================================================
 
-  # --- Batch 3 Builds (wait for Batch 2 deploys) ---
+  # --- Batch 4 Builds (wait for Batch 3 deploys) ---
   - name: 'gcr.io/cloud-builders/docker'
     id: 'build-push-commands-agent'
     waitFor:
       [
-        'deploy-user-service',
-        'deploy-whatsapp-service',
         'deploy-app-settings-service',
         'deploy-mobile-notifications-service',
         'deploy-research-agent',
@@ -402,8 +387,6 @@ steps:
     id: 'build-push-actions-agent'
     waitFor:
       [
-        'deploy-user-service',
-        'deploy-whatsapp-service',
         'deploy-app-settings-service',
         'deploy-mobile-notifications-service',
         'deploy-research-agent',
@@ -425,8 +408,6 @@ steps:
     id: 'build-push-data-insights-agent'
     waitFor:
       [
-        'deploy-user-service',
-        'deploy-whatsapp-service',
         'deploy-app-settings-service',
         'deploy-mobile-notifications-service',
         'deploy-research-agent',
@@ -444,45 +425,7 @@ steps:
       - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
       - 'COMMIT_SHA=$COMMIT_SHA'
 
-  - name: 'gcr.io/cloud-builders/docker'
-    id: 'build-push-notes-agent'
-    waitFor:
-      [
-        'deploy-user-service',
-        'deploy-whatsapp-service',
-        'deploy-app-settings-service',
-        'deploy-mobile-notifications-service',
-        'deploy-research-agent',
-      ]
-    timeout: 900s
-    entrypoint: 'bash'
-    args:
-      ['cloudbuild/scripts/build-push-monitored.sh', 'notes-agent', 'apps/notes-agent/Dockerfile']
-    env:
-      - 'DOCKER_BUILDKIT=1'
-      - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
-      - 'COMMIT_SHA=$COMMIT_SHA'
-
-  - name: 'gcr.io/cloud-builders/docker'
-    id: 'build-push-todos-agent'
-    waitFor:
-      [
-        'deploy-user-service',
-        'deploy-whatsapp-service',
-        'deploy-app-settings-service',
-        'deploy-mobile-notifications-service',
-        'deploy-research-agent',
-      ]
-    timeout: 900s
-    entrypoint: 'bash'
-    args:
-      ['cloudbuild/scripts/build-push-monitored.sh', 'todos-agent', 'apps/todos-agent/Dockerfile']
-    env:
-      - 'DOCKER_BUILDKIT=1'
-      - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
-      - 'COMMIT_SHA=$COMMIT_SHA'
-
-  # --- Batch 3 Deploys ---
+  # --- Batch 4 Deploys ---
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     id: 'deploy-commands-agent'
     waitFor: ['build-push-commands-agent']
@@ -516,6 +459,55 @@ steps:
       - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
       - 'ENVIRONMENT=${_ENVIRONMENT}'
 
+  # ===========================================================================
+  # BATCH 5 - Agents B (3 services)
+  # ===========================================================================
+
+  # --- Batch 5 Builds (wait for Batch 4 deploys) ---
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'build-push-notes-agent'
+    waitFor:
+      ['deploy-commands-agent', 'deploy-actions-agent', 'deploy-data-insights-agent']
+    timeout: 900s
+    entrypoint: 'bash'
+    args:
+      ['cloudbuild/scripts/build-push-monitored.sh', 'notes-agent', 'apps/notes-agent/Dockerfile']
+    env:
+      - 'DOCKER_BUILDKIT=1'
+      - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
+      - 'COMMIT_SHA=$COMMIT_SHA'
+
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'build-push-todos-agent'
+    waitFor:
+      ['deploy-commands-agent', 'deploy-actions-agent', 'deploy-data-insights-agent']
+    timeout: 900s
+    entrypoint: 'bash'
+    args:
+      ['cloudbuild/scripts/build-push-monitored.sh', 'todos-agent', 'apps/todos-agent/Dockerfile']
+    env:
+      - 'DOCKER_BUILDKIT=1'
+      - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
+      - 'COMMIT_SHA=$COMMIT_SHA'
+
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'build-push-bookmarks-agent'
+    waitFor:
+      ['deploy-commands-agent', 'deploy-actions-agent', 'deploy-data-insights-agent']
+    timeout: 900s
+    entrypoint: 'bash'
+    args:
+      [
+        'cloudbuild/scripts/build-push-monitored.sh',
+        'bookmarks-agent',
+        'apps/bookmarks-agent/Dockerfile',
+      ]
+    env:
+      - 'DOCKER_BUILDKIT=1'
+      - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
+      - 'COMMIT_SHA=$COMMIT_SHA'
+
+  # --- Batch 5 Deploys ---
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     id: 'deploy-notes-agent'
     waitFor: ['build-push-notes-agent']
@@ -538,44 +530,26 @@ steps:
       - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
       - 'ENVIRONMENT=${_ENVIRONMENT}'
 
-  # ===========================================================================
-  # BATCH 4 - Final + Web (ADD NEW SERVICES HERE)
-  # ===========================================================================
-
-  # --- Batch 4 Builds (wait for Batch 3 deploys) ---
-  - name: 'gcr.io/cloud-builders/docker'
-    id: 'build-push-bookmarks-agent'
-    waitFor:
-      [
-        'deploy-commands-agent',
-        'deploy-actions-agent',
-        'deploy-data-insights-agent',
-        'deploy-notes-agent',
-        'deploy-todos-agent',
-      ]
-    timeout: 900s
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    id: 'deploy-bookmarks-agent'
+    waitFor: ['build-push-bookmarks-agent']
     entrypoint: 'bash'
-    args:
-      [
-        'cloudbuild/scripts/build-push-monitored.sh',
-        'bookmarks-agent',
-        'apps/bookmarks-agent/Dockerfile',
-      ]
+    args: ['-c', 'bash cloudbuild/scripts/deploy-bookmarks-agent.sh']
     env:
-      - 'DOCKER_BUILDKIT=1'
-      - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
       - 'COMMIT_SHA=$COMMIT_SHA'
+      - 'REGION=${_REGION}'
+      - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
+      - 'ENVIRONMENT=${_ENVIRONMENT}'
 
+  # ===========================================================================
+  # BATCH 6 - Final Services (ADD NEW SERVICES HERE, max 3)
+  # ===========================================================================
+
+  # --- Batch 6 Builds (wait for Batch 5 deploys) ---
   - name: 'gcr.io/cloud-builders/docker'
     id: 'build-push-calendar-agent'
     waitFor:
-      [
-        'deploy-commands-agent',
-        'deploy-actions-agent',
-        'deploy-data-insights-agent',
-        'deploy-notes-agent',
-        'deploy-todos-agent',
-      ]
+      ['deploy-notes-agent', 'deploy-todos-agent', 'deploy-bookmarks-agent']
     timeout: 900s
     entrypoint: 'bash'
     args:
@@ -592,13 +566,7 @@ steps:
   - name: 'gcr.io/cloud-builders/docker'
     id: 'build-push-linear-agent'
     waitFor:
-      [
-        'deploy-commands-agent',
-        'deploy-actions-agent',
-        'deploy-data-insights-agent',
-        'deploy-notes-agent',
-        'deploy-todos-agent',
-      ]
+      ['deploy-notes-agent', 'deploy-todos-agent', 'deploy-bookmarks-agent']
     timeout: 900s
     entrypoint: 'bash'
     args:
@@ -611,33 +579,17 @@ steps:
   - name: 'gcr.io/cloud-builders/docker'
     id: 'build-push-web-agent'
     waitFor:
-      [
-        'deploy-commands-agent',
-        'deploy-actions-agent',
-        'deploy-data-insights-agent',
-        'deploy-notes-agent',
-        'deploy-todos-agent',
-      ]
+      ['deploy-notes-agent', 'deploy-todos-agent', 'deploy-bookmarks-agent']
     timeout: 900s
     entrypoint: 'bash'
-    args: ['cloudbuild/scripts/build-push-monitored.sh', 'web-agent', 'apps/web-agent/Dockerfile']
+    args:
+      ['cloudbuild/scripts/build-push-monitored.sh', 'web-agent', 'apps/web-agent/Dockerfile']
     env:
       - 'DOCKER_BUILDKIT=1'
       - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
       - 'COMMIT_SHA=$COMMIT_SHA'
 
-  # --- Batch 4 Deploys ---
-  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
-    id: 'deploy-bookmarks-agent'
-    waitFor: ['build-push-bookmarks-agent']
-    entrypoint: 'bash'
-    args: ['-c', 'bash cloudbuild/scripts/deploy-bookmarks-agent.sh']
-    env:
-      - 'COMMIT_SHA=$COMMIT_SHA'
-      - 'REGION=${_REGION}'
-      - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
-      - 'ENVIRONMENT=${_ENVIRONMENT}'
-
+  # --- Batch 6 Deploys ---
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     id: 'deploy-calendar-agent'
     waitFor: ['build-push-calendar-agent']
@@ -671,17 +623,14 @@ steps:
       - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
       - 'ENVIRONMENT=${_ENVIRONMENT}'
 
-  # --- Web Frontend (builds in parallel with Batch 4 services) ---
+  # ===========================================================================
+  # BATCH 7 - Web Frontend (after all services deployed)
+  # ===========================================================================
+
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     id: 'fetch-web-config'
     waitFor:
-      [
-        'deploy-commands-agent',
-        'deploy-actions-agent',
-        'deploy-data-insights-agent',
-        'deploy-notes-agent',
-        'deploy-todos-agent',
-      ]
+      ['deploy-calendar-agent', 'deploy-linear-agent', 'deploy-web-agent']
     entrypoint: 'bash'
     args:
       - '-c'
