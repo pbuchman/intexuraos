@@ -328,6 +328,47 @@ function ManifestoSection(): React.JSX.Element {
   );
 }
 
+function RecentUpdatesSection(): React.JSX.Element {
+  return (
+    <section className="border-b-4 border-black bg-purple-100 px-6 py-24">
+      <div className="mx-auto max-w-7xl">
+        <SectionHeading>Latest System Capabilities</SectionHeading>
+        <p className="mb-12 max-w-2xl text-lg font-medium text-neutral-700">
+          Continuous improvements to the command classification and action execution pipeline.
+        </p>
+        <div className="grid gap-6 md:grid-cols-3">
+          <BrutalistCard title="Linear Integration" icon={CheckSquare} className="bg-purple-50">
+            <p className="mb-3 text-neutral-700">
+              Create Linear issues via natural language commands through WhatsApp or the PWA.
+            </p>
+            <p className="font-mono text-sm italic text-neutral-500">
+              "Create a bug ticket for the login page timeout issue"
+            </p>
+          </BrutalistCard>
+          <BrutalistCard title="Smart Auto-Execute" icon={Zap} className="bg-yellow-50">
+            <p className="mb-3 text-neutral-700">
+              High-confidence link actions (≥90%) are auto-executed without manual approval,
+              reducing friction for common bookmarking workflows.
+            </p>
+            <p className="font-mono text-sm italic text-neutral-500">
+              Links are processed instantly when intent is clear.
+            </p>
+          </BrutalistCard>
+          <BrutalistCard title="Calendar Events" icon={Layers} className="bg-green-50">
+            <p className="mb-3 text-neutral-700">
+              Natural language calendar event creation. Mention a date in your command and the
+              CalendarAgent creates the event.
+            </p>
+            <p className="font-mono text-sm italic text-neutral-500">
+              "Schedule a review meeting for Friday at 2pm"
+            </p>
+          </BrutalistCard>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function Footer(): React.JSX.Element {
   return (
     <footer className="bg-white px-6 py-12">
@@ -372,6 +413,7 @@ export function HomePage(): React.JSX.Element {
       <DemoSection />
       <CouncilSection />
       <ManifestoSection />
+      <RecentUpdatesSection />
       <Footer />
     </div>
   );

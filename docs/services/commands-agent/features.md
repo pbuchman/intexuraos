@@ -29,7 +29,8 @@ Commands-agent is the intelligent entry point for all user commands:
 - `research` - Multi-LLM research queries
 - `note` - Note-taking
 - `link` - Bookmark/URL saving
-- `calendar` - Calendar events (future)
+- `calendar` - Calendar events
+- `linear` - Linear issue creation
 - `reminder` - Reminders (future)
 - `unclassified` - No actionable intent detected
 
@@ -85,7 +86,7 @@ Commands-agent is the intelligent entry point for all user commands:
 
 **Gemini dependency** - Classification requires Google API key configured
 
-**Action handlers required** - calendar and reminder handlers not yet implemented
+**Reminder handler missing** - Reminder action type not yet implemented in actions-agent
 
 **English optimization** - Classifier prompt optimized for English commands
 
