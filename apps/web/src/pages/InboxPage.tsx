@@ -554,6 +554,10 @@ export function InboxPage(): React.JSX.Element {
       return;
     }
 
+    // Clean up URL immediately to prevent modal reappearing on refresh
+    const cleanHash = hash.split('?')[0] ?? '';
+    window.history.replaceState(null, '', cleanHash !== '' ? cleanHash : window.location.pathname);
+
     // First check if action is in current list (fast path)
     const actionInList = actions.find((a) => a.id === actionId);
     if (actionInList !== undefined) {
