@@ -1,6 +1,6 @@
 {
   "name": "@intexuraos/infra-sentry",
-  "version": "0.0.5",
+  "version": "1.0.0",
   "private": true,
   "type": "module",
   "engines": {
