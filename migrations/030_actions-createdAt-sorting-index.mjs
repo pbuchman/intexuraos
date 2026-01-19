@@ -23,8 +23,8 @@ export const indexes = [
     collectionGroup: 'actions',
     queryScope: 'COLLECTION',
     fields: [
-      { fieldPath: 'status', order: 'ASCENDING' },
       { fieldPath: 'userId', order: 'ASCENDING' },
+      { fieldPath: 'status', order: 'ASCENDING' },
       { fieldPath: 'createdAt', order: 'DESCENDING' },
     ],
   },
