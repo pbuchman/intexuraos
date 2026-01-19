@@ -114,6 +114,15 @@ export function ActionDetailModal({
 
   const canChangeType = action.status === 'pending' || action.status === 'awaiting_approval';
 
+  const persistedError =
+    action.status === 'failed' && typeof action.payload['error'] === 'string'
+      ? action.payload['error']
+      : null;
+  const persistedErrorCode =
+    action.status === 'failed' && typeof action.payload['errorCode'] === 'string'
+      ? action.payload['errorCode']
+      : null;
+
   const handleTypeChange = useCallback(
     async (newType: CommandType): Promise<void> => {
       if (newType === selectedType) return;
@@ -368,6 +377,29 @@ export function ActionDetailModal({
               </span>
             </span>
           </div>
+
+          {/* Persisted failure reason */}
+          {persistedError !== null && executionResult === null && (
+            <div className="rounded-lg border border-red-200 bg-red-50 p-3">
+              <div className="flex items-start gap-2">
+                <X className="mt-0.5 h-4 w-4 shrink-0 text-red-600" />
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-red-800">Failure Reason</p>
+                  <p className="mt-1 text-sm text-red-700">{persistedError}</p>
+                  {(persistedErrorCode === 'TOKEN_ERROR' ||
+                    persistedErrorCode === 'NOT_CONNECTED' ||
+                    persistedErrorCode === 'UNAUTHORIZED') && (
+                    <RouterLink
+                      to="/settings/calendar"
+                      className="mt-2 block text-sm font-medium text-red-700 underline hover:text-red-800"
+                    >
+                      {persistedErrorCode === 'NOT_CONNECTED' ? 'Connect Calendar' : 'Reconnect Calendar'}
+                    </RouterLink>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Actions, Success View, or Error View */}
