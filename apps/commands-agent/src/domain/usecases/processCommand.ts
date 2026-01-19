@@ -115,7 +115,7 @@ export function createProcessCommandUseCase(deps: {
 
       try {
         const classifier = classifierFactory(llmClientResult.value);
-        const classification = await classifier.classify(input.text);
+        const classification = await classifier.classify(input.text, { sourceType: input.sourceType });
 
         logger.info(
           {

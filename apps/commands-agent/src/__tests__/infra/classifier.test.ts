@@ -308,6 +308,75 @@ describe('GeminiClassifier', () => {
       expect(classificationResult.selectedModels).toBeUndefined();
     });
   });
+
+  describe('PWA-shared source confidence boost', () => {
+    it('boosts link confidence by 0.1 for pwa-shared source', async () => {
+      mockGenerate.mockResolvedValue(
+        ok(generateResult(jsonResponse('link', 0.85, 'Interesting article')))
+      );
+
+      const classifier = createGeminiClassifier(mockLlmClient);
+      const classificationResult = await classifier.classify('https://example.com', {
+        sourceType: 'pwa-shared',
+      });
+
+      expect(classificationResult.type).toBe('link');
+      expect(classificationResult.confidence).toBe(0.95);
+      expect(classificationResult.reasoning).toContain('confidence boosted: PWA share source');
+    });
+
+    it('caps boosted confidence at 1.0', async () => {
+      mockGenerate.mockResolvedValue(
+        ok(generateResult(jsonResponse('link', 0.95, 'Cool link')))
+      );
+
+      const classifier = createGeminiClassifier(mockLlmClient);
+      const classificationResult = await classifier.classify('https://example.com', {
+        sourceType: 'pwa-shared',
+      });
+
+      expect(classificationResult.confidence).toBe(1.0);
+    });
+
+    it('does not boost confidence for non-link types with pwa-shared', async () => {
+      mockGenerate.mockResolvedValue(ok(generateResult(jsonResponse('note', 0.8, 'Some note'))));
+
+      const classifier = createGeminiClassifier(mockLlmClient);
+      const classificationResult = await classifier.classify('Just a note', {
+        sourceType: 'pwa-shared',
+      });
+
+      expect(classificationResult.type).toBe('note');
+      expect(classificationResult.confidence).toBe(0.8);
+      expect(classificationResult.reasoning).not.toContain('boosted');
+    });
+
+    it('does not boost confidence for links with whatsapp_text source', async () => {
+      mockGenerate.mockResolvedValue(
+        ok(generateResult(jsonResponse('link', 0.85, 'A link')))
+      );
+
+      const classifier = createGeminiClassifier(mockLlmClient);
+      const classificationResult = await classifier.classify('https://example.com', {
+        sourceType: 'whatsapp_text',
+      });
+
+      expect(classificationResult.type).toBe('link');
+      expect(classificationResult.confidence).toBe(0.85);
+      expect(classificationResult.reasoning).not.toContain('boosted');
+    });
+
+    it('does not boost confidence when no sourceType provided', async () => {
+      mockGenerate.mockResolvedValue(
+        ok(generateResult(jsonResponse('link', 0.85, 'A link')))
+      );
+
+      const classifier = createGeminiClassifier(mockLlmClient);
+      const classificationResult = await classifier.classify('https://example.com');
+
+      expect(classificationResult.confidence).toBe(0.85);
+    });
+  });
 });
 
 describe('extractSelectedModels', () => {
