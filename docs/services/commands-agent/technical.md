@@ -104,29 +104,30 @@ sequenceDiagram
 
 ### Command
 
-| Field            | Type                     | Description                                                    |
-| ---------------- | ------------------------ | -------------------------------------------------------------- | ------------------------------------ |
-| `id`             | string                   | `{sourceType}:{externalId}` composite key                      |
-| `userId`         | string                   | Owner user ID                                                  |
-| `sourceType`     | CommandSourceType        | whatsapp_text, whatsapp_voice, pwa-shared                      |
-| `externalId`     | string                   | Source system identifier (e.g., WhatsApp message ID)           |
-| `text`           | string                   | Original command text                                          |
-| `timestamp`      | string                   | ISO 8601 timestamp from source                                 |
-| `status`         | CommandStatus            | received, classified, pending_classification, failed, archived |
-| `classification` | CommandClassification \  | null                                                           | Classification result with reasoning |
-| `actionId`       | string \                 | null                                                           | Created action ID                    |
-| `failureReason`  | string \                 | null                                                           | Error details if failed              |
-| `createdAt`      | string                   | ISO 8601 creation time                                         |
-| `updatedAt`      | string                   | ISO 8601 last update                                           |
+| Field            | Type                    | Description                                                    |
+| ---------------- | ----------------------- | -------------------------------------------------------------- |
+| `id`             | string                  | `{sourceType}:{externalId}` composite key                      |
+| `userId`         | string                  | Owner user ID                                                  |
+| `sourceType`     | CommandSourceType       | whatsapp_text, whatsapp_voice, pwa-shared                      |
+| `externalId`     | string                  | Source system identifier (e.g., WhatsApp message ID)           |
+| `text`           | string                  | Original command text                                          |
+| `summary`        | string (optional)       | Summary for voice transcriptions                               |
+| `timestamp`      | string                  | ISO 8601 timestamp from source                                 |
+| `status`         | CommandStatus           | received, classified, pending_classification, failed, archived |
+| `classification` | CommandClassification   | Classification result with reasoning (null if not classified)  |
+| `actionId`       | string                  | Created action ID (null if no action)                          |
+| `failureReason`  | string                  | Error details if failed (null if no error)                     |
+| `createdAt`      | string                  | ISO 8601 creation time                                         |
+| `updatedAt`      | string                  | ISO 8601 last update                                           |
 
 ### CommandClassification
 
-| Field          | Type        | Description                                                  |
-| -------------- | ----------- | ------------------------------------------------------------ |
-| `type`         | CommandType | todo, research, note, link, calendar, reminder, unclassified |
-| `confidence`   | number      | 0-1 confidence score                                         |
-| `reasoning`    | string      | LLM explanation for classification                           |
-| `classifiedAt` | string      | ISO 8601 classification timestamp                            |
+| Field          | Type        | Description                                                          |
+| -------------- | ----------- | -------------------------------------------------------------------- |
+| `type`         | CommandType | todo, research, note, link, calendar, linear, reminder, unclassified |
+| `confidence`   | number      | 0-1 confidence score                                                 |
+| `reasoning`    | string      | LLM explanation for classification                                   |
+| `classifiedAt` | string      | ISO 8601 classification timestamp                                    |
 
 ### Action (forwarded type)
 

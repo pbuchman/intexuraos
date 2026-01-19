@@ -6,9 +6,9 @@ Turn natural language commands into structured actions that get executed across 
 
 You send commands to your AI assistant through WhatsApp, web, or other interfaces. The system needs to:
 
-1. **Understand what you want** - Classify your command into a specific action type (todo, research, note, link, calendar, reminder)
+1. **Understand what you want** - Classify your command into a specific action type (todo, research, note, link, calendar, linear, reminder)
 2. **Track the action lifecycle** - Move actions from pending to processing to completed
-3. **Route to the right service** - Send research actions to research-agent, todos to todos-agent, etc.
+3. **Route to the right service** - Send research actions to research-agent, todos to todos-agent, linear to linear-agent, etc.
 4. **Handle failures gracefully** - Retry stuck actions, allow manual correction
 
 ## How It Helps
@@ -46,6 +46,19 @@ Actions-agent is the **central coordinator** for all user-initiated actions in I
 - "Save this article: https://example.com/interesting-read"
 - "Bookmark this for later"
 - Action flows: pending -> processing -> completed (bookmark created, with OG metadata)
+- **Auto-executed** when confidence >= 90% (no manual approval needed)
+
+### Calendar Actions
+
+- "Schedule a meeting with John tomorrow at 3pm"
+- "Add event: Team standup every Monday 9am"
+- Action flows: pending -> awaiting_approval -> processing -> completed
+
+### Linear Actions
+
+- "Create a Linear issue for the login bug"
+- "Add task to Linear: implement dark mode"
+- Action flows: pending -> awaiting_approval -> processing -> completed (Linear issue created)
 
 ### User Correction Workflow
 
@@ -70,9 +83,9 @@ When classification is wrong:
 
 ## Limitations
 
-**No calendar/reminder handlers** - These action types are defined but handlers are not yet implemented (action stays in pending)
+**No reminder handler** - The reminder action type is defined but has no handler (action stays in pending)
 
-**Manual approval required** - All actions currently require user approval before execution (auto-execution based on confidence is planned but not yet implemented)
+**Link actions auto-execute** - Link actions with >= 90% confidence auto-execute immediately; all other action types require manual approval
 
 **WhatsApp-only notifications** - Success/failure notifications currently only sent via WhatsApp
 

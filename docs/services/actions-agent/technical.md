@@ -105,14 +105,15 @@ sequenceDiagram
 
 ### ActionType Enum
 
-| Value      | Handler                     |
-| ---------- | --------------------------- |
-| `todo`     | HandleTodoActionUseCase     |
-| `research` | HandleResearchActionUseCase |
-| `note`     | HandleNoteActionUseCase     |
-| `link`     | HandleLinkActionUseCase     |
-| `calendar` | Not implemented             |
-| `reminder` | Not implemented             |
+| Value      | Handler                      | Auto-Execute    |
+| ---------- | ---------------------------- | --------------- |
+| `todo`     | HandleTodoActionUseCase      | No              |
+| `research` | HandleResearchActionUseCase  | No              |
+| `note`     | HandleNoteActionUseCase      | No              |
+| `link`     | HandleLinkActionUseCase      | Yes (>= 90%)    |
+| `calendar` | HandleCalendarActionUseCase  | No              |
+| `linear`   | HandleLinearActionUseCase    | No              |
+| `reminder` | Not implemented              | N/A             |
 
 ### ActionStatus Enum
 
@@ -156,14 +157,16 @@ sequenceDiagram
 
 ### Internal Services
 
-| Service           | Purpose                              |
-| ----------------- | ------------------------------------ |
-| `commands-agent`  | Create new commands from transitions |
-| `research-agent`  | Execute research actions             |
-| `todos-agent`     | Execute todo actions                 |
-| `notes-agent`     | Execute note actions                 |
-| `bookmarks-agent` | Execute link actions                 |
-| `user-service`    | Fetch user API keys                  |
+| Service           | Purpose                                      |
+| ----------------- | -------------------------------------------- |
+| `commands-agent`  | Create new commands from transitions         |
+| `research-agent`  | Execute research actions                     |
+| `todos-agent`     | Execute todo actions                         |
+| `notes-agent`     | Execute note actions                         |
+| `bookmarks-agent` | Execute link actions                         |
+| `calendar-agent`  | Execute calendar actions                     |
+| `linear-agent`    | Execute Linear issue creation actions        |
+| `user-service`    | Fetch user API keys                          |
 
 ### Infrastructure
 
@@ -184,6 +187,8 @@ sequenceDiagram
 | `INTEXURAOS_TODOS_AGENT_URL`      | Yes      | Todos-agent base URL                       |
 | `INTEXURAOS_NOTES_AGENT_URL`      | Yes      | Notes-agent base URL                       |
 | `INTEXURAOS_BOOKMARKS_AGENT_URL`  | Yes      | Bookmarks-agent base URL                   |
+| `INTEXURAOS_CALENDAR_AGENT_URL`   | Yes      | Calendar-agent base URL                    |
+| `INTEXURAOS_LINEAR_AGENT_URL`     | Yes      | Linear-agent base URL                      |
 | `INTEXURAOS_INTERNAL_AUTH_TOKEN`  | Yes      | Shared secret for service-to-service calls |
 | `INTEXURAOS_GCP_PROJECT_ID`       | Yes      | Google Cloud project ID                    |
 | `INTEXURAOS_PUBSUB_ACTIONS_QUEUE` | Yes      | Unified actions queue topic name           |
@@ -206,11 +211,11 @@ training data.
 
 **Batch endpoint limit**: Maximum 50 action IDs per batch request to prevent abuse.
 
-**Calendar/reminder actions**: These types are defined in the enum but have no handlers. Actions of these types remain
+**Reminder actions**: The reminder type is defined in the enum but has no handler. Actions of this type remain
 in pending status indefinitely.
 
-**Manual approval required**: All actions currently require manual approval before execution. The `shouldAutoExecute()`
-function exists but is a stub implementation (always returns `false`) - this feature is planned but not yet implemented.
+**Auto-execution for links**: Link actions with confidence >= 90% are auto-executed immediately via `shouldAutoExecute()`.
+All other action types require manual approval before execution.
 
 ## File Structure
 
