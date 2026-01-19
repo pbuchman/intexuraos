@@ -1,189 +1,315 @@
-# IntexuraOS
+# IntexuraOS Platform Overview
 
-Autonomous AI agent platform for capturing, organizing, and acting on information across multiple sources.
+> **The AI-Native Personal Operating System** — An autonomous agent platform that transforms fragmented information into structured intelligence.
 
-## The Problem
+---
 
-Managing information across WhatsApp, web links, notes, tasks, and research queries is fragmented. Users switch between
-apps, lose context, and manually re-enter data.
+## Vision: Intelligence as Infrastructure
 
-## How IntexuraOS Helps
+IntexuraOS reimagines personal productivity as an **AI-first system**. Instead of building another app that uses AI as a feature, IntexuraOS builds AI agents that use apps as tools.
 
-IntexuraOS provides a unified platform with:
+**The Core Insight**: Your brain excels at creative thinking and decision-making. It struggles with remembering, scheduling, aggregating, and cross-referencing. IntexuraOS handles the cognitive load while you remain the commander.
 
-1. **Capture** - Ingest from WhatsApp, shared links, voice, and web
-2. **Organize** - Automatic classification into actions, research, notes, bookmarks, todos
-3. **Act** - Multi-LLM research, task management, calendar integration
-4. **Integrate** - Connect with Notion, Google Calendar, WhatsApp
+---
 
-## Core Services
+## The AI Stack
 
-### Action Orchestration
+### Multi-Model Intelligence Layer
 
-**[actions-agent](services/actions-agent/features.md)** - Central action lifecycle management
+IntexuraOS integrates with **5 AI providers** and **15 models**, treating them as a **council of experts** rather than a single oracle:
 
-- Unified queue for todos, research, notes, links
-- Status tracking and Pub/Sub distribution
-- Agent coordination
+| Provider   | Models                                    | Capabilities                       |
+| ---------- | ----------------------------------------- | ---------------------------------- |
+| Google     | Gemini 2.5 Pro, Flash, Flash-Image        | Reasoning, classification, images  |
+| OpenAI     | GPT-5.2, o4-mini-deep-research, DALL-E 3  | Deep research, synthesis, images   |
+| Anthropic  | Claude Opus 4.5, Sonnet 4.5, Haiku 3.5    | Analysis, research, validation     |
+| Perplexity | Sonar, Sonar Pro, Sonar Deep Research     | Web search, real-time information  |
+| Zai        | GLM-4.7                                   | Multilingual, alternative analysis |
 
-### AI & Research
+### Intelligent Routing
 
-**[research-agent](services/research-agent/features.md)** - Multi-LLM research synthesis
-
-- Parallel queries across Claude, GPT-5, Gemini, Perplexity
-- Public sharing via GCS-hosted reports
-- Cover image generation
-
-**[commands-agent](services/commands-agent/features.md)** - Command classification
-
-- Understands user intent from natural language
-- Routes to appropriate action type
-- Model preference detection
-
-**[data-insights-agent](services/data-insights-agent/features.md)** - Data analysis
-
-- Upload custom datasets
-- AI-generated insights and charts
-- Composite data feeds
-
-### Content Management
-
-**[bookmarks-agent](services/bookmarks-agent/features.md)** - Link saving
-
-- OpenGraph metadata extraction
-- AI summaries
-- Tag-based filtering
-
-**[todos-agent](services/todos-agent/features.md)** - Task management
-
-- AI item extraction from natural language
-- Priorities and due dates
-- Sub-items with ordering
-
-**[notes-agent](services/notes-agent/features.md)** - Note-taking
-
-- Simple CRUD interface
-- Tag support
-- Draft/active states
-
-**[promptvault-service](services/promptvault-service/features.md)** - Prompt templates
-
-- Notion database sync
-- Version tracking
-
-### Integrations
-
-**[user-service](services/user-service/features.md)** - Authentication & settings
-
-- Auth0 device code flow
-- API key management with AES-256-GCM encryption
-- Google OAuth token refresh
-
-**[whatsapp-service](services/whatsapp-service/features.md)** - WhatsApp Business
-
-- Message ingestion via webhooks
-- Media download and GCS storage
-- Audio transcription trigger
-
-**[calendar-agent](services/calendar-agent/features.md)** - Google Calendar
-
-- Event CRUD operations
-- Free/busy queries
-- Multi-calendar support
-
-**[notion-service](services/notion-service/features.md)** - Notion integration
-
-- Token validation and storage
-- Connection status monitoring
-
-### Infrastructure
-
-**[web-agent](services/web-agent/features.md)** - Web scraping
-
-- OpenGraph metadata extraction
-- Batch URL processing
-- 2MB size limit
-
-**[image-service](services/image-service/features.md)** - Image generation
-
-- DALL-E 3 and Imagen 3
-- GCS storage with thumbnails
-
-**[mobile-notifications-service](services/mobile-notifications-service/features.md)** - Push notifications
-
-- Signature-based device authentication
-- Notification filtering
-
-**[api-docs-hub](services/api-docs-hub/features.md)** - API documentation
-
-- Unified Swagger UI
-- Multi-spec aggregation
-
-**[app-settings-service](services/app-settings-service/features.md)** - Configuration
-
-- LLM pricing for all providers
-- Usage cost analytics
-
-## Service Architecture
+The **commands-agent** uses Gemini 2.5 Flash to classify natural language into action types:
 
 ```
-User Input
-    |
-    v
-[commands-agent] --classify--> [actions-agent]
-|  |  |
-|  |
-|  |  |
-    v                               v                      v
-[research-agent]              [todos-agent]          [bookmarks-agent]
-|  |  |
-|  |
-|  |
-                        v                                  v
-                [image-service]                      [web-agent]
-                        |
-                        v
-                [user-service] --keys--> [All LLM Services]
-                        |
-                        v
-                [calendar-agent]
-                        |
-                        v
-                [whatsapp-service] --notifications--> [mobile-notifications-service]
+"Schedule a call with the team for Tuesday at 3pm"
+    → calendar action (confidence: 0.94)
+
+"Remind me to review the quarterly report"
+    → todo action (confidence: 0.91)
+
+"What are the latest developments in quantum computing?"
+    → research action (confidence: 0.97)
 ```
 
-## Data Flow
+### Research Synthesis Protocol
 
-1. **Ingestion** - WhatsApp messages, shared links, voice transcriptions
-2. **Classification** - commands-agent categorizes intent
-3. **Routing** - actions-agent creates appropriate action
-4. **Processing** - Specialized agents execute actions
-5. **Notification** - Results pushed via mobile-notifications-service
+The **research-agent** implements a unique **parallel consensus** protocol:
 
-## Services Summary
+```mermaid
+graph TB
+    subgraph "Input Processing"
+        Q[User Query] --> V[Input Validator]
+        V --> |Quality Check| CI[Context Inferrer]
+        CI --> |Enhance Query| P[Parallel Dispatch]
+    end
 
-| Service                      | Purpose                | Category       |
-| ---------------------------- | ---------------------- | -------------- |
-| actions-agent                | Action orchestration   | Infrastructure |
-| research-agent               | Multi-LLM research     | AI & Research  |
-| user-service                 | Auth & settings        | Integrations   |
-| image-service                | Image generation       | Infrastructure |
-| bookmarks-agent              | Link management        | Content        |
-| notes-agent                  | Note-taking            | Content        |
-| todos-agent                  | Task management        | Content        |
-| whatsapp-service             | WhatsApp integration   | Integrations   |
-| commands-agent               | Command classification | AI & Research  |
-| web-agent                    | Web scraping           | Infrastructure |
-| calendar-agent               | Google Calendar        | Integrations   |
-| data-insights-agent          | Data analysis          | AI & Research  |
-| mobile-notifications-service | Push notifications     | Infrastructure |
-| api-docs-hub                 | API documentation      | Infrastructure |
-| app-settings-service         | App configuration      | Infrastructure |
-| notion-service               | Notion integration     | Integrations   |
-| promptvault-service          | Prompt templates       | Content        |
+    subgraph "Council of AI"
+        P --> G[Gemini 2.5 Pro]
+        P --> C[Claude Opus 4.5]
+        P --> GPT[GPT-5.2]
+        P --> S[Sonar Pro]
+        P --> Z[GLM-4.7]
+    end
 
-## Documentation
+    subgraph "Synthesis"
+        G --> SY[Synthesis Engine]
+        C --> SY
+        GPT --> SY
+        S --> SY
+        Z --> SY
+        SY --> |Attribution| R[Final Report]
+    end
 
-Complete documentation for all services is available in [services/](services/).
+    subgraph "Delivery"
+        R --> Share[Public Share URL]
+        R --> WA[WhatsApp Notification]
+        R --> UI[Web Dashboard]
+    end
+```
 
-**Last updated:** 2026-01-13
+---
+
+## Agent Architecture
+
+IntexuraOS deploys **18 specialized microservices**, each with a distinct AI-powered role:
+
+### AI Agents (Primary Intelligence)
+
+| Agent                   | AI Capabilities                                                        |
+| ----------------------- | ---------------------------------------------------------------------- |
+| **research-agent**      | Multi-model orchestration, parallel queries, synthesis, confidence scoring |
+| **commands-agent**      | Intent classification via Gemini, action routing, model detection       |
+| **data-insights-agent** | Data analysis, chart generation, trend detection via LLM               |
+| **bookmarks-agent**     | AI-powered link summarization, content extraction                      |
+| **todos-agent**         | Natural language task extraction, priority inference                   |
+| **calendar-agent**      | Date/time parsing, schedule optimization                               |
+| **linear-agent**        | Issue management, Linear API integration                               |
+| **notes-agent**         | Content structuring, tag inference                                     |
+| **web-agent**           | Web scraping, metadata extraction, AI summarization                    |
+
+### Infrastructure Services
+
+| Service                          | Purpose                                            |
+| -------------------------------- | -------------------------------------------------- |
+| **actions-agent**                | Central action orchestration, lifecycle management |
+| **image-service**                | DALL-E 3 & Imagen 3 image generation               |
+| **whatsapp-service**             | Voice transcription, message routing               |
+| **user-service**                 | API key management, AES-256-GCM encryption         |
+| **mobile-notifications-service** | Push notifications, device management              |
+| **notion-service**               | Notion integration, sync management                |
+| **promptvault-service**          | Prompt template versioning                         |
+| **app-settings-service**         | LLM pricing, usage analytics                       |
+| **api-docs-hub**                 | OpenAPI documentation aggregator                   |
+
+---
+
+## The Capture-to-Action Pipeline
+
+### Phase 1: Multi-Channel Ingestion
+
+```mermaid
+graph LR
+    subgraph "Input Channels"
+        WA[WhatsApp Voice] --> T[Speechmatics Transcription]
+        WM[WhatsApp Text] --> CMD
+        WL[Shared Links] --> CMD
+        UI[Web Dashboard] --> CMD
+    end
+
+    T --> CMD[commands-agent]
+    CMD --> |Classify Intent| AA[actions-agent]
+```
+
+- **WhatsApp Voice**: Audio transcribed via Speechmatics API
+- **WhatsApp Text**: Direct message parsing
+- **Shared Links**: OpenGraph extraction + AI summarization
+- **Web Dashboard**: Direct action creation
+
+### Phase 2: Intelligent Classification
+
+The **commands-agent** analyzes input to determine:
+
+1. **Action Type**: research, todo, note, link, calendar, linear
+2. **Confidence Score**: 0.0 - 1.0 (low confidence = draft for review)
+3. **Model Preference**: User's preferred LLM for this task type
+4. **Context Extraction**: Dates, priorities, entities
+
+### Phase 3: Specialized Execution
+
+Each agent type executes domain-specific logic:
+
+| Action Type | Agent          | AI Operations                                     |
+| ----------- | -------------- | ------------------------------------------------- |
+| Research    | research-agent | Parallel LLM queries, synthesis, cover generation |
+| Todo        | todos-agent    | Item extraction, priority inference               |
+| Note        | notes-agent    | Content structuring                               |
+| Link        | bookmarks-agent | Summarization, metadata extraction               |
+| Calendar    | calendar-agent | Date parsing, availability checking               |
+| Linear      | linear-agent   | Issue creation, project mapping                   |
+
+### Phase 4: Notification & Storage
+
+- Results persisted in Firestore (one collection per service)
+- WhatsApp notification sent via Pub/Sub
+- Web dashboard updated in real-time
+- Shareable URLs generated for research
+
+---
+
+## Event-Driven Architecture
+
+### Pub/Sub Topics
+
+All inter-service communication uses Cloud Pub/Sub:
+
+| Topic             | Publisher        | Subscriber(s)               |
+| ----------------- | ---------------- | --------------------------- |
+| `commands-ingest` | whatsapp-service | commands-agent              |
+| `action-created`  | actions-agent    | research-agent, todos-agent |
+| `research-process`| actions-agent    | research-agent              |
+| `whatsapp-send`   | All agents       | whatsapp-service            |
+| `llm-call`        | All LLM services | usage tracking              |
+| `bookmark-enrich` | bookmarks-agent  | web-agent                   |
+| `bookmark-summarize` | bookmarks-agent | web-agent                  |
+
+### Firestore Collections
+
+Each service owns its collections (enforced by CI):
+
+| Collection           | Owner               |
+| -------------------- | ------------------- |
+| `research`           | research-agent      |
+| `actions`            | actions-agent       |
+| `commands`           | commands-agent      |
+| `todos`, `todoItems` | todos-agent         |
+| `bookmarks`          | bookmarks-agent     |
+| `notes`              | notes-agent         |
+| `dataSources`        | data-insights-agent |
+| `users`              | user-service        |
+| `calendarEvents`     | calendar-agent      |
+
+---
+
+## Cost Intelligence
+
+### LLM Usage Tracking
+
+Every LLM call is tracked with:
+- Model used
+- Input/output tokens
+- Cost calculation (per-model pricing)
+- User attribution
+- Timestamp
+
+### Pricing Transparency
+
+The **app-settings-service** maintains real-time pricing for all 15 models, enabling:
+- Pre-execution cost estimates
+- Post-execution cost reporting
+- Monthly usage analytics
+- Per-model cost comparison
+
+---
+
+## Security & Privacy
+
+### API Key Management
+
+```
+User API Keys → AES-256-GCM Encryption → Firestore
+                      ↓
+            Decrypted at Runtime Only
+                      ↓
+            Never Logged, Never Stored Unencrypted
+```
+
+### Authentication Flow
+
+- **Auth0 Integration**: Device code flow for CLI/WhatsApp
+- **Google OAuth**: Calendar and Gmail access
+- **Internal Auth**: Service-to-service with `X-Internal-Auth` header
+- **Mobile**: Signature-based device authentication
+
+---
+
+## Technology Stack
+
+| Layer          | Technology                                 |
+| -------------- | ------------------------------------------ |
+| Runtime        | Node.js 22 on Cloud Run                    |
+| Framework      | Fastify with OpenAPI                       |
+| Database       | Firestore (NoSQL)                          |
+| Storage        | Google Cloud Storage                       |
+| Messaging      | Cloud Pub/Sub                              |
+| AI Providers   | Google, OpenAI, Anthropic, Perplexity, Zai |
+| Transcription  | Speechmatics                               |
+| Authentication | Auth0, Google OAuth                        |
+| Infrastructure | Terraform                                  |
+| Monorepo       | pnpm workspaces                            |
+| Language       | TypeScript 5.7 (strict mode)               |
+
+---
+
+## Services Quick Reference
+
+### By AI Capability
+
+**Multi-Model Orchestration**
+- [research-agent](services/research-agent/features.md) - Parallel LLM research with synthesis
+
+**Intent Classification**
+- [commands-agent](services/commands-agent/features.md) - Natural language to action routing
+
+**Data Analysis**
+- [data-insights-agent](services/data-insights-agent/features.md) - AI-powered data visualization
+
+**Image Generation**
+- [image-service](services/image-service/features.md) - DALL-E 3 and Imagen 3
+
+**Content Intelligence**
+- [bookmarks-agent](services/bookmarks-agent/features.md) - AI link summarization
+- [web-agent](services/web-agent/features.md) - Web scraping with AI
+
+**Task Intelligence**
+- [todos-agent](services/todos-agent/features.md) - Natural language task extraction
+
+### By Integration
+
+**External APIs**
+- [whatsapp-service](services/whatsapp-service/features.md) - WhatsApp Business API
+- [calendar-agent](services/calendar-agent/features.md) - Google Calendar
+- [notion-service](services/notion-service/features.md) - Notion API
+- [linear-agent](services/linear-agent/features.md) - Linear API
+
+**Infrastructure**
+- [actions-agent](services/actions-agent/features.md) - Action orchestration
+- [user-service](services/user-service/features.md) - Auth & settings
+- [mobile-notifications-service](services/mobile-notifications-service/features.md) - Push notifications
+- [api-docs-hub](services/api-docs-hub/features.md) - API documentation
+
+---
+
+## Documentation Index
+
+| Document                                              | Purpose                  |
+| ----------------------------------------------------- | ------------------------ |
+| [AI Architecture](architecture/ai-architecture.md)    | Deep dive into LLM integration |
+| [Services Catalog](services/index.md)                 | All 18 services documented |
+| [Architecture Patterns](architecture/)                | System design decisions  |
+| [Setup Guide](setup/01-gcp-project.md)                | Getting started          |
+| [API Contracts](architecture/api-contracts.md)        | HTTP API standards       |
+| [Pub/Sub Standards](architecture/pubsub-standards.md) | Event messaging patterns |
+
+---
+
+**Last updated:** 2026-01-19
