@@ -1,0 +1,3 @@
+{"ts":"2026-01-19T13:07:25.848Z","project":"intexuraos","branch":"feature/int-163-inbox-sorting-by-created","workspace":"--","runNumber":1,"passed":false,"durationMs":490,"failureCount":0,"failures":[]}
+{"ts":"2026-01-19T13:09:15.628Z","project":"intexuraos","branch":"feature/int-163-inbox-sorting-by-created","workspace":"actions-agent","runNumber":2,"passed":true,"durationMs":102564,"failureCount":0,"failures":[]}
+{"ts":"2026-01-19T13:11:41.472Z","project":"intexuraos","branch":"feature/int-163-inbox-sorting-by-created","runNumber":3,"passed":true,"durationMs":134218,"failureCount":0,"failures":[]}
