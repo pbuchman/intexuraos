@@ -116,6 +116,7 @@ export const commandsRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           properties: {
             text: { type: 'string', minLength: 1 },
             source: { type: 'string', enum: ['pwa-shared'] },
+            externalId: { type: 'string', minLength: 1 },
           },
           required: ['text', 'source'],
         },
@@ -168,10 +169,14 @@ export const commandsRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         return;
       }
 
-      const { text, source } = request.body as { text: string; source: 'pwa-shared' };
-      const timestamp = Date.now();
-      const randomSuffix = Math.random().toString(36).substring(2, 9);
-      const externalId = `${String(timestamp)}-${randomSuffix}`;
+      const { text, source, externalId: clientExternalId } = request.body as {
+        text: string;
+        source: 'pwa-shared';
+        externalId?: string;
+      };
+
+      const externalId =
+        clientExternalId ?? `${String(Date.now())}-${Math.random().toString(36).substring(2, 9)}`;
 
       const { processCommandUseCase } = getServices();
       const result = await processCommandUseCase.execute({

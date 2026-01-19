@@ -16,6 +16,7 @@ export interface ShareQueueItem {
   id: string;
   content: string;
   source: 'pwa-shared';
+  externalId: string;
   createdAt: string;
   retryCount: number;
   nextRetryAt: string;
@@ -34,6 +35,10 @@ export interface ShareHistoryItem {
 
 function generateId(): string {
   return `share_${String(Date.now())}_${Math.random().toString(36).slice(2, 9)}`;
+}
+
+function generateExternalId(): string {
+  return `${String(Date.now())}-${Math.random().toString(36).substring(2, 9)}`;
 }
 
 function truncateContent(content: string, maxLength = 100): string {
@@ -73,6 +78,7 @@ export function addToQueue(content: string): ShareQueueItem {
     id: generateId(),
     content,
     source: 'pwa-shared',
+    externalId: generateExternalId(),
     createdAt: new Date().toISOString(),
     retryCount: 0,
     nextRetryAt: new Date().toISOString(),
