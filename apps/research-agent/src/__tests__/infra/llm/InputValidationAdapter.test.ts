@@ -268,4 +268,268 @@ describe('InputValidationAdapter', () => {
       }
     });
   });
+
+  describe('improveInput - validation errors', () => {
+    it('returns error when improved prompt is empty after cleaning', async () => {
+      mockGenerate.mockResolvedValueOnce({
+        ok: true,
+        value: {
+          content: '   ',
+          usage: { inputTokens: 10, outputTokens: 5, costUsd: 0.001 },
+        },
+      });
+      mockGenerate.mockResolvedValueOnce({
+        ok: false,
+        error: { code: 'API_ERROR', message: 'Repair failed' },
+      });
+
+      const adapter = createAdapter();
+      const result = await adapter.improveInput('Original prompt');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.message).toContain('Response is empty after cleaning');
+      }
+    });
+
+    it('returns error when improved prompt is too long', async () => {
+      const longResponse = 'a'.repeat(501);
+      mockGenerate.mockResolvedValueOnce({
+        ok: true,
+        value: {
+          content: longResponse,
+          usage: { inputTokens: 10, outputTokens: 5, costUsd: 0.001 },
+        },
+      });
+      mockGenerate.mockResolvedValueOnce({
+        ok: false,
+        error: { code: 'API_ERROR', message: 'Repair failed' },
+      });
+
+      const adapter = createAdapter();
+      const result = await adapter.improveInput('Original prompt');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.message).toContain('Response is too long');
+      }
+    });
+
+    it('returns error when response starts with unwanted prefix "here is"', async () => {
+      mockGenerate.mockResolvedValueOnce({
+        ok: true,
+        value: {
+          content: 'here is the improved prompt for you',
+          usage: { inputTokens: 10, outputTokens: 5, costUsd: 0.001 },
+        },
+      });
+      mockGenerate.mockResolvedValueOnce({
+        ok: false,
+        error: { code: 'API_ERROR', message: 'Repair failed' },
+      });
+
+      const adapter = createAdapter();
+      const result = await adapter.improveInput('Original prompt');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.message).toContain('unwanted prefix');
+      }
+    });
+
+    it('returns error when response contains JSON format', async () => {
+      mockGenerate.mockResolvedValueOnce({
+        ok: true,
+        value: {
+          content: '{"improved": "prompt here"}',
+          usage: { inputTokens: 10, outputTokens: 5, costUsd: 0.001 },
+        },
+      });
+      mockGenerate.mockResolvedValueOnce({
+        ok: false,
+        error: { code: 'API_ERROR', message: 'Repair failed' },
+      });
+
+      const adapter = createAdapter();
+      const result = await adapter.improveInput('Original prompt');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.message).toContain('JSON format');
+      }
+    });
+
+    it('returns error when response includes explanatory text', async () => {
+      mockGenerate.mockResolvedValueOnce({
+        ok: true,
+        value: {
+          content: 'explanation: this is my analysis of the prompt',
+          usage: { inputTokens: 10, outputTokens: 5, costUsd: 0.001 },
+        },
+      });
+      mockGenerate.mockResolvedValueOnce({
+        ok: false,
+        error: { code: 'API_ERROR', message: 'Repair failed' },
+      });
+
+      const adapter = createAdapter();
+      const result = await adapter.improveInput('Original prompt');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.message).toContain('explanatory text');
+      }
+    });
+
+    it('cleans markdown code blocks from improved prompt', async () => {
+      mockGenerate.mockResolvedValueOnce({
+        ok: true,
+        value: {
+          content: '```\nClean improved prompt\n```',
+          usage: { inputTokens: 10, outputTokens: 5, costUsd: 0.001 },
+        },
+      });
+
+      const adapter = createAdapter();
+      const result = await adapter.improveInput('Original prompt');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.improvedPrompt).toBe('Clean improved prompt');
+      }
+    });
+
+    it('cleans json code block markers from improved prompt', async () => {
+      mockGenerate.mockResolvedValueOnce({
+        ok: true,
+        value: {
+          content: '```json\nClean improved prompt\n```',
+          usage: { inputTokens: 10, outputTokens: 5, costUsd: 0.001 },
+        },
+      });
+
+      const adapter = createAdapter();
+      const result = await adapter.improveInput('Original prompt');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.improvedPrompt).toBe('Clean improved prompt');
+      }
+    });
+
+    it('cleans "Improved:" prefix from improved prompt', async () => {
+      mockGenerate.mockResolvedValueOnce({
+        ok: true,
+        value: {
+          content: 'Improved: Clean improved prompt',
+          usage: { inputTokens: 10, outputTokens: 5, costUsd: 0.001 },
+        },
+      });
+
+      const adapter = createAdapter();
+      const result = await adapter.improveInput('Original prompt');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.improvedPrompt).toBe('Clean improved prompt');
+      }
+    });
+
+    it('cleans quotes from improved prompt', async () => {
+      mockGenerate.mockResolvedValueOnce({
+        ok: true,
+        value: {
+          content: '"Clean improved prompt"',
+          usage: { inputTokens: 10, outputTokens: 5, costUsd: 0.001 },
+        },
+      });
+
+      const adapter = createAdapter();
+      const result = await adapter.improveInput('Original prompt');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.improvedPrompt).toBe('Clean improved prompt');
+      }
+    });
+  });
+
+  describe('repair success paths', () => {
+    it('repairs validation response successfully on second attempt', async () => {
+      mockGenerate.mockResolvedValueOnce({
+        ok: true,
+        value: {
+          content: 'invalid json',
+          usage: { inputTokens: 10, outputTokens: 5, costUsd: 0.001 },
+        },
+      });
+      mockGenerate.mockResolvedValueOnce({
+        ok: true,
+        value: {
+          content: JSON.stringify({ quality: 2, reason: 'Repaired response' }),
+          usage: { inputTokens: 8, outputTokens: 4, costUsd: 0.0008 },
+        },
+      });
+
+      const adapter = createAdapter();
+      const result = await adapter.validateInput('Test prompt');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.quality).toBe(2);
+        expect(result.value.reason).toBe('Repaired response');
+      }
+    });
+
+    it('repairs improvement response successfully on second attempt', async () => {
+      mockGenerate.mockResolvedValueOnce({
+        ok: true,
+        value: {
+          content: 'here is the improved version',
+          usage: { inputTokens: 10, outputTokens: 5, costUsd: 0.001 },
+        },
+      });
+      mockGenerate.mockResolvedValueOnce({
+        ok: true,
+        value: {
+          content: 'Clean repaired prompt',
+          usage: { inputTokens: 8, outputTokens: 4, costUsd: 0.0008 },
+        },
+      });
+
+      const adapter = createAdapter();
+      const result = await adapter.improveInput('Original prompt');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.improvedPrompt).toBe('Clean repaired prompt');
+      }
+    });
+
+    it('fails improvement repair when repaired response also has validation error', async () => {
+      mockGenerate.mockResolvedValueOnce({
+        ok: true,
+        value: {
+          content: 'here is the improved version',
+          usage: { inputTokens: 10, outputTokens: 5, costUsd: 0.001 },
+        },
+      });
+      mockGenerate.mockResolvedValueOnce({
+        ok: true,
+        value: {
+          content: '{"still": "json"}',
+          usage: { inputTokens: 8, outputTokens: 4, costUsd: 0.0008 },
+        },
+      });
+
+      const adapter = createAdapter();
+      const result = await adapter.improveInput('Original prompt');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.message).toContain('Repair:');
+        expect(result.error.message).toContain('JSON format');
+      }
+    });
+  });
 });

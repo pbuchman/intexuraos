@@ -366,4 +366,29 @@ describe('handleAllCompleted', () => {
     );
     expect(wrappedErrorCall).toBeDefined();
   });
+
+  it('correctly handles warn and debug logger wrappers', async () => {
+    const warnLogs: { obj: object; msg: string | undefined }[] = [];
+    const debugLogs: { obj: object; msg: string | undefined }[] = [];
+    const testLogger = {
+      info: vi.fn(),
+      error: vi.fn(),
+      warn: vi.fn((obj: object, msg?: string) => {
+        warnLogs.push({ obj, msg });
+      }),
+      debug: vi.fn((obj: object, msg?: string) => {
+        debugLogs.push({ obj, msg });
+      }),
+    };
+    mockParams.logger = testLogger as unknown as AllCompletedHandlerParams['logger'];
+
+    const research = createTestResearch();
+    mockResearchRepo.findById.mockResolvedValue(ok(research));
+    mockResearchRepo.update.mockResolvedValue(ok(research));
+
+    await handleAllCompleted(mockParams);
+
+    expect(testLogger.warn).toBeDefined();
+    expect(testLogger.debug).toBeDefined();
+  });
 });

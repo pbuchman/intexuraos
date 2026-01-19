@@ -51,6 +51,12 @@ describe('formatLlmError', () => {
       const result = formatLlmError('429 anthropic api error');
       expect(result).toBe('Anthropic API rate limit reached');
     });
+
+    it('falls through when JSON has type:error but is not valid Anthropic error structure', () => {
+      const rawError = '{"type":"error","error":"string not object"}';
+      const result = formatLlmError(rawError);
+      expect(result).toBe('{"type":"error","error":"string not object"}');
+    });
   });
 
   describe('Google/Gemini errors', () => {
@@ -88,6 +94,54 @@ describe('formatLlmError', () => {
       });
       const result = formatLlmError(rawError);
       expect(result).toBe('API key does not exist');
+    });
+
+    it('uses fallback when API_KEY_INVALID has empty displayMessage', () => {
+      const rawError = JSON.stringify({
+        error: {
+          code: 400,
+          message: '',
+          status: 'INVALID_ARGUMENT',
+          details: [
+            {
+              '@type': 'type.googleapis.com/google.rpc.ErrorInfo',
+              reason: 'API_KEY_INVALID',
+            },
+          ],
+        },
+      });
+      const result = formatLlmError(rawError);
+      expect(result).toBe('The API key is invalid or has expired');
+    });
+
+    it('uses fallback when API_KEY_NOT_FOUND has empty displayMessage', () => {
+      const rawError = JSON.stringify({
+        error: {
+          code: 400,
+          message: '',
+          status: 'INVALID_ARGUMENT',
+          details: [
+            {
+              '@type': 'type.googleapis.com/google.rpc.ErrorInfo',
+              reason: 'API_KEY_NOT_FOUND',
+            },
+          ],
+        },
+      });
+      const result = formatLlmError(rawError);
+      expect(result).toBe('The API key does not exist');
+    });
+
+    it('uses fallback when PERMISSION_DENIED has empty displayMessage', () => {
+      const rawError = JSON.stringify({
+        error: {
+          code: 403,
+          message: '',
+          status: 'PERMISSION_DENIED',
+        },
+      });
+      const result = formatLlmError(rawError);
+      expect(result).toBe('The API key lacks required permissions');
     });
 
     it('handles PERMISSION_DENIED error with status', () => {
@@ -129,6 +183,24 @@ describe('formatLlmError', () => {
       });
       const result = formatLlmError(rawError);
       expect(result).toBe('Quota: 1000 tokens/min');
+    });
+
+    it('uses unknown fallback when quotaValue is missing', () => {
+      const rawError = JSON.stringify({
+        error: {
+          code: 429,
+          message: 'Quota exceeded',
+          status: 'RESOURCE_EXHAUSTED',
+          details: [
+            {
+              '@type': 'type.googleapis.com/google.rpc.QuotaFailure',
+              violations: [{}],
+            },
+          ],
+        },
+      });
+      const result = formatLlmError(rawError);
+      expect(result).toBe('Quota: unknown tokens/min');
     });
 
     it('handles quota exceeded without violation details', () => {
@@ -184,6 +256,21 @@ describe('formatLlmError', () => {
       });
       const result = formatLlmError(rawError);
       expect(result).toBe('An error occurred with the Gemini API');
+    });
+
+    it('falls through when JSON has error/message strings but parsed.error is undefined', () => {
+      // JSON passes string checks ("error" and "message" in string) but parsed.error === undefined
+      // This hits line 79 (return null) then falls through to generic error which returns raw string
+      const rawError = '{"data": {"error": "nested"}, "message": "test"}';
+      const result = formatLlmError(rawError);
+      expect(result).toBe(rawError);
+    });
+
+    it('handles malformed JSON that passes initial string checks', () => {
+      const rawError = '{"error": {"message": "incomplete json"';
+      const result = formatLlmError(rawError);
+      expect(result).toBeTruthy();
+      expect(result).toContain('incomplete json');
     });
   });
 

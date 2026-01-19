@@ -150,6 +150,21 @@ describe('intelligentClassifierPrompt', () => {
       expect(prompt).not.toContain('low confidence');
     });
 
+    it('handles sorting when both examples have undefined confidence', () => {
+      const examples: ClassificationExample[] = [
+        { text: 'first no confidence', type: 'todo' },
+        { text: 'second no confidence', type: 'todo' },
+      ];
+
+      const prompt = intelligentClassifierPrompt.build(
+        { message: 'test' },
+        { examples, maxExamplesPerCategory: 2 }
+      );
+
+      expect(prompt).toContain('first no confidence');
+      expect(prompt).toContain('second no confidence');
+    });
+
     it('handles all category types', () => {
       const examples: ClassificationExample[] = [
         { text: 'todo item', type: 'todo' },
