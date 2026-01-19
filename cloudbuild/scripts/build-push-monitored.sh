@@ -22,7 +22,7 @@ push_with_retry() {
 
   while [ $attempt -le $MAX_RETRIES ]; do
     echo "📤 [PUSH] Attempt $attempt/$MAX_RETRIES: $image"
-    if docker push --max-concurrent-uploads=2 "$image"; then
+    if docker push "$image"; then
       echo "✅ [PUSH] Success: $image"
       return 0
     fi
