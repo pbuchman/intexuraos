@@ -116,13 +116,16 @@ function HeroSection(): React.JSX.Element {
               <Mail className="h-4 w-4" /> Email
             </a>
           </div>
+          <p className="mb-4 font-mono text-sm font-bold uppercase tracking-widest text-neutral-700">
+            The AI-Native Personal Operating System
+          </p>
           <h1 className="mb-8 text-6xl font-black uppercase leading-[0.9] tracking-tighter text-black md:text-8xl lg:text-[7rem]">
             Your brain is for <span className="bg-white px-2 text-black">thinking</span>
             <br /> not remembering.
           </h1>
           <p className="mb-10 max-w-2xl text-xl font-medium leading-relaxed text-neutral-900 md:text-2xl">
-            IntexuraOS is the autonomous cognitive layer that sits between your chaotic inputs and
-            your structured life. Capture via WhatsApp. Reason via Multi-LLM. Execute via Agents.
+            IntexuraOS transforms fragmented information into structured intelligence. A council of
+            15 AI models across 5 providers works autonomously — you remain the commander.
           </p>
 
           <div className="flex flex-col gap-4 sm:flex-row">
@@ -166,12 +169,12 @@ function DemoSection(): React.JSX.Element {
           <SectionHeading>
             The Loop: <br />
             <span className="text-cyan-600">Capture</span> → <br />
-            <span className="text-purple-600">Synthesize</span> → <br />
+            <span className="text-purple-600">Classify</span> → <br />
             <span className="text-green-600">Execute</span>
           </SectionHeading>
           <p className="text-xl font-medium text-neutral-600">
-            You act as the Commander. IntexuraOS acts as your Staff. Speak your intent, and a fleet
-            of specialized AI agents executes it autonomously.
+            18 specialized microservices route your intent to the right agent. Voice note becomes
+            research report. Link becomes summarized bookmark. Date mention becomes calendar event.
           </p>
         </div>
 
@@ -243,23 +246,29 @@ function CouncilSection(): React.JSX.Element {
   return (
     <section className="border-b-4 border-black bg-neutral-950 px-6 py-24 text-white">
       <div className="mx-auto max-w-7xl text-center">
-        <h2 className="mb-16 font-mono text-3xl font-bold uppercase tracking-widest text-neutral-500">
-          Powered by The Council
+        <h2 className="mb-6 font-mono text-3xl font-bold uppercase tracking-widest text-neutral-500">
+          The Council of AI
         </h2>
+        <p className="mx-auto mb-16 max-w-2xl text-lg text-neutral-400">
+          15 models across 5 providers, treated as a council of experts rather than a single oracle.
+          Each query is dispatched to multiple models in parallel, then synthesized with confidence
+          scoring.
+        </p>
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-5">
           {[
-            { name: 'CLAUDE', role: 'Synthesis & Code' },
-            { name: 'GPT-5', role: 'Reasoning & Planning' },
-            { name: 'GEMINI', role: 'Multimodal Analysis' },
-            { name: 'PERPLEXITY', role: 'Deep Research' },
-            { name: 'GLM', role: 'Specialized Reasoning' },
-          ].map((model) => (
+            { name: 'ANTHROPIC', models: 'Opus 4.5, Sonnet 4.5', role: 'Analysis & Validation' },
+            { name: 'OPENAI', models: 'GPT-5.2, o4-mini', role: 'Deep Research & Images' },
+            { name: 'GOOGLE', models: 'Gemini 2.5 Pro/Flash', role: 'Classification & Routing' },
+            { name: 'PERPLEXITY', models: 'Sonar Pro/Deep', role: 'Real-time Web Search' },
+            { name: 'ZAI', models: 'GLM-4.7', role: 'Multilingual Analysis' },
+          ].map((provider) => (
             <div
-              key={model.name}
-              className="flex flex-col items-center justify-center border-2 border-neutral-800 p-8 transition-colors hover:border-white hover:bg-neutral-900"
+              key={provider.name}
+              className="flex flex-col items-center justify-center border-2 border-neutral-800 p-6 transition-colors hover:border-white hover:bg-neutral-900"
             >
-              <div className="mb-3 text-3xl font-black">{model.name}</div>
-              <div className="font-mono text-xs text-neutral-500">{model.role}</div>
+              <div className="mb-2 text-2xl font-black">{provider.name}</div>
+              <div className="mb-2 font-mono text-xs text-neutral-400">{provider.models}</div>
+              <div className="font-mono text-xs text-neutral-500">{provider.role}</div>
             </div>
           ))}
         </div>
@@ -274,15 +283,15 @@ function ManifestoSection(): React.JSX.Element {
       <div className="mx-auto max-w-7xl">
         <div className="grid gap-16 lg:grid-cols-2">
           <div>
-            <SectionHeading>The Architect's Manifesto</SectionHeading>
+            <SectionHeading>Intelligence as Infrastructure</SectionHeading>
             <p className="mb-8 text-xl font-bold leading-relaxed">
-              IntexuraOS is not just a personal operating system; it is a statement on software
-              craftsmanship.
+              IntexuraOS reimagines productivity as an AI-first system. Instead of building another
+              app that uses AI as a feature, we build AI agents that use apps as tools.
             </p>
             <p className="text-lg font-medium leading-relaxed">
-              We reject "move fast and break things" in favor of "move deliberately and fix the root
-              cause." It demonstrates that with the right abstractions, strict boundaries, and
-              autonomous agents, a single Staff Engineer can maintain an enterprise-scale monorepo.
+              Your brain excels at creative thinking and decision-making. It struggles with
+              remembering, scheduling, aggregating, and cross-referencing. IntexuraOS handles the
+              cognitive load while you remain the commander.
             </p>
           </div>
 
