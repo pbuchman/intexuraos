@@ -11,7 +11,11 @@ export interface ServiceContainer {
 let container: ServiceContainer | undefined;
 
 export function initServices(): void {
-  const crawl4aiApiKey = process.env['INTEXURAOS_CRAWL4AI_API_KEY'] ?? '';
+  // CRAWL4AI_API_KEY is validated by validateRequiredEnv() in index.ts
+  const crawl4aiApiKey = process.env['INTEXURAOS_CRAWL4AI_API_KEY'];
+  if (crawl4aiApiKey === undefined) {
+    throw new Error('INTEXURAOS_CRAWL4AI_API_KEY is required');
+  }
 
   container = {
     linkPreviewFetcher: new OpenGraphFetcher(

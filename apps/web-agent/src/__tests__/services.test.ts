@@ -1,10 +1,15 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getServices, initServices, resetServices, setServices } from '../services.js';
 import { FakeLinkPreviewFetcher, FakePageSummaryService } from './fakes.js';
 
 describe('services', () => {
+  beforeEach(() => {
+    vi.stubEnv('INTEXURAOS_CRAWL4AI_API_KEY', 'test-key');
+  });
+
   afterEach(() => {
     resetServices();
+    vi.unstubAllEnvs();
   });
 
   describe('initServices', () => {
@@ -17,6 +22,12 @@ describe('services', () => {
       expect(typeof services.linkPreviewFetcher.fetchPreview).toBe('function');
       expect(services.pageSummaryService).toBeDefined();
       expect(typeof services.pageSummaryService.summarizePage).toBe('function');
+    });
+
+    it('throws error when CRAWL4AI_API_KEY is missing', () => {
+      vi.unstubAllEnvs();
+
+      expect(() => initServices()).toThrow('INTEXURAOS_CRAWL4AI_API_KEY is required');
     });
   });
 
