@@ -25,6 +25,7 @@ locals {
     "roles/compute.admin",
     "roles/firebase.admin",
     "roles/iam.serviceAccountAdmin",
+    "roles/iam.serviceAccountUser",
     "roles/iam.workloadIdentityPoolAdmin",
     "roles/logging.admin",
     "roles/monitoring.admin",
