@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { getServices, initServices, resetServices, setServices } from '../services.js';
-import { FakeLinkPreviewFetcher } from './fakes.js';
+import { FakeLinkPreviewFetcher, FakePageSummaryService } from './fakes.js';
 
 describe('services', () => {
   afterEach(() => {
@@ -15,6 +15,8 @@ describe('services', () => {
 
       expect(services.linkPreviewFetcher).toBeDefined();
       expect(typeof services.linkPreviewFetcher.fetchPreview).toBe('function');
+      expect(services.pageSummaryService).toBeDefined();
+      expect(typeof services.pageSummaryService.summarizePage).toBe('function');
     });
   });
 
@@ -33,11 +35,13 @@ describe('services', () => {
   describe('setServices', () => {
     it('allows setting custom services for testing', () => {
       const fakeFetcher = new FakeLinkPreviewFetcher();
-      setServices({ linkPreviewFetcher: fakeFetcher, pageSummaryService: null });
+      const fakeSummary = new FakePageSummaryService();
+      setServices({ linkPreviewFetcher: fakeFetcher, pageSummaryService: fakeSummary });
 
       const services = getServices();
 
       expect(services.linkPreviewFetcher).toBe(fakeFetcher);
+      expect(services.pageSummaryService).toBe(fakeSummary);
     });
   });
 

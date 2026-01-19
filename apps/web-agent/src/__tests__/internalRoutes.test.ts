@@ -580,26 +580,6 @@ describe('Internal Routes', () => {
       expect(body.data.result.error?.code).toBe('TIMEOUT');
     });
 
-    it('returns 503 when page summary service is not configured', async () => {
-      const servicesWithoutSummary: ServiceContainer = {
-        linkPreviewFetcher: fakeFetcher,
-        pageSummaryService: null,
-      };
-      setServices(servicesWithoutSummary);
-
-      const response = await app.inject({
-        method: 'POST',
-        url: '/internal/page-summaries',
-        headers: { 'x-internal-auth': TEST_INTERNAL_TOKEN },
-        payload: {
-          url: 'https://example.com',
-        },
-      });
-
-      expect(response.statusCode).toBe(503);
-      const body = JSON.parse(response.payload) as ErrorResponse;
-      expect(body.error).toBe('Page summary service not available');
-    });
   });
 
   describe('GET /health', () => {

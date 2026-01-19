@@ -5,26 +5,23 @@ import { OpenGraphFetcher, createCrawl4AIClient } from './infra/index.js';
 
 export interface ServiceContainer {
   linkPreviewFetcher: LinkPreviewFetcherPort;
-  pageSummaryService: PageSummaryServicePort | null;
+  pageSummaryService: PageSummaryServicePort;
 }
 
 let container: ServiceContainer | undefined;
 
 export function initServices(): void {
-  const crawl4aiApiKey = process.env['INTEXURAOS_CRAWL4AI_API_KEY'];
+  const crawl4aiApiKey = process.env['INTEXURAOS_CRAWL4AI_API_KEY'] ?? '';
 
   container = {
     linkPreviewFetcher: new OpenGraphFetcher(
       {},
       pino({ name: 'openGraphFetcher', level: getLogLevel() })
     ),
-    pageSummaryService:
-      crawl4aiApiKey !== undefined && crawl4aiApiKey !== ''
-        ? createCrawl4AIClient(
-            { apiKey: crawl4aiApiKey },
-            pino({ name: 'crawl4aiClient', level: getLogLevel() })
-          )
-        : null,
+    pageSummaryService: createCrawl4AIClient(
+      { apiKey: crawl4aiApiKey },
+      pino({ name: 'crawl4aiClient', level: getLogLevel() })
+    ),
   };
 }
 
