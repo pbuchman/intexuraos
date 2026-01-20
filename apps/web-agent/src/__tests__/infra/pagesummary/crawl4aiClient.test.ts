@@ -25,7 +25,7 @@ describe('Crawl4AIClient', () => {
     it('returns summary on successful response', async () => {
       client = new Crawl4AIClient({ apiKey: TEST_API_KEY }, silentLogger);
 
-      nock('https://api.crawl4ai.com')
+      nock('https://www.crawl4ai-cloud.com')
         .post('/query')
         .reply(200, {
           success: true,
@@ -45,7 +45,7 @@ describe('Crawl4AIClient', () => {
     it('uses markdown if llm_extraction is not available', async () => {
       client = new Crawl4AIClient({ apiKey: TEST_API_KEY }, silentLogger);
 
-      nock('https://api.crawl4ai.com')
+      nock('https://www.crawl4ai-cloud.com')
         .post('/query')
         .reply(200, {
           success: true,
@@ -62,7 +62,7 @@ describe('Crawl4AIClient', () => {
     it('sends apikey in request body', async () => {
       client = new Crawl4AIClient({ apiKey: TEST_API_KEY }, silentLogger);
 
-      const scope = nock('https://api.crawl4ai.com')
+      const scope = nock('https://www.crawl4ai-cloud.com')
         .post('/query', (body) => {
           const payload = body as { apikey: string };
           return payload.apikey === TEST_API_KEY;
@@ -80,7 +80,7 @@ describe('Crawl4AIClient', () => {
     it('sends correct payload structure', async () => {
       client = new Crawl4AIClient({ apiKey: TEST_API_KEY }, silentLogger);
 
-      const scope = nock('https://api.crawl4ai.com')
+      const scope = nock('https://www.crawl4ai-cloud.com')
         .post('/query', (body) => {
           const payload = body as {
             url: string;
@@ -112,7 +112,7 @@ describe('Crawl4AIClient', () => {
     it('returns API_ERROR on non-200 response', async () => {
       client = new Crawl4AIClient({ apiKey: TEST_API_KEY }, silentLogger);
 
-      nock('https://api.crawl4ai.com').post('/query').reply(500, { error: 'Internal server error' });
+      nock('https://www.crawl4ai-cloud.com').post('/query').reply(500, { error: 'Internal server error' });
 
       const result = await client.summarizePage('https://example.com');
 
@@ -125,7 +125,7 @@ describe('Crawl4AIClient', () => {
     it('returns FETCH_FAILED when success is false', async () => {
       client = new Crawl4AIClient({ apiKey: TEST_API_KEY }, silentLogger);
 
-      nock('https://api.crawl4ai.com')
+      nock('https://www.crawl4ai-cloud.com')
         .post('/query')
         .reply(200, {
           success: false,
@@ -143,7 +143,7 @@ describe('Crawl4AIClient', () => {
     it('returns NO_CONTENT when llm_extraction is empty', async () => {
       client = new Crawl4AIClient({ apiKey: TEST_API_KEY }, silentLogger);
 
-      nock('https://api.crawl4ai.com')
+      nock('https://www.crawl4ai-cloud.com')
         .post('/query')
         .reply(200, {
           success: true,
@@ -160,7 +160,7 @@ describe('Crawl4AIClient', () => {
     it('returns NO_CONTENT when content is missing', async () => {
       client = new Crawl4AIClient({ apiKey: TEST_API_KEY }, silentLogger);
 
-      nock('https://api.crawl4ai.com')
+      nock('https://www.crawl4ai-cloud.com')
         .post('/query')
         .reply(200, {
           success: true,
@@ -176,7 +176,7 @@ describe('Crawl4AIClient', () => {
     it('returns FETCH_FAILED on network error', async () => {
       client = new Crawl4AIClient({ apiKey: TEST_API_KEY }, silentLogger);
 
-      nock('https://api.crawl4ai.com').post('/query').replyWithError('Network error');
+      nock('https://www.crawl4ai-cloud.com').post('/query').replyWithError('Network error');
 
       const result = await client.summarizePage('https://example.com');
 
@@ -209,7 +209,7 @@ describe('Crawl4AIClient', () => {
 
       const longSummary = Array.from({ length: 400 }, () => 'word').join(' ');
 
-      nock('https://api.crawl4ai.com')
+      nock('https://www.crawl4ai-cloud.com')
         .post('/query')
         .reply(200, {
           success: true,
@@ -227,7 +227,7 @@ describe('Crawl4AIClient', () => {
     it('passes maxSentences and maxReadingMinutes to llm_instruction', async () => {
       client = new Crawl4AIClient({ apiKey: TEST_API_KEY }, silentLogger);
 
-      const scope = nock('https://api.crawl4ai.com')
+      const scope = nock('https://www.crawl4ai-cloud.com')
         .post('/query', (body) => {
           const payload = body as { llm_instruction: string };
           return (
@@ -251,7 +251,7 @@ describe('Crawl4AIClient', () => {
     it('uses default maxSentences and maxReadingMinutes when not provided', async () => {
       client = new Crawl4AIClient({ apiKey: TEST_API_KEY }, silentLogger);
 
-      const scope = nock('https://api.crawl4ai.com')
+      const scope = nock('https://www.crawl4ai-cloud.com')
         .post('/query', (body) => {
           const payload = body as { llm_instruction: string };
           return (
@@ -272,7 +272,7 @@ describe('Crawl4AIClient', () => {
     it('trims whitespace from summary', async () => {
       client = new Crawl4AIClient({ apiKey: TEST_API_KEY }, silentLogger);
 
-      nock('https://api.crawl4ai.com')
+      nock('https://www.crawl4ai-cloud.com')
         .post('/query')
         .reply(200, {
           success: true,
@@ -289,7 +289,7 @@ describe('Crawl4AIClient', () => {
     it('uses nested result.llm_extraction if available', async () => {
       client = new Crawl4AIClient({ apiKey: TEST_API_KEY }, silentLogger);
 
-      nock('https://api.crawl4ai.com')
+      nock('https://www.crawl4ai-cloud.com')
         .post('/query')
         .reply(200, {
           success: true,
@@ -308,7 +308,7 @@ describe('Crawl4AIClient', () => {
     it('prefers extractions field over other fields', async () => {
       client = new Crawl4AIClient({ apiKey: TEST_API_KEY }, silentLogger);
 
-      nock('https://api.crawl4ai.com')
+      nock('https://www.crawl4ai-cloud.com')
         .post('/query')
         .reply(200, {
           success: true,
