@@ -761,15 +761,14 @@ export function WhatsAppNotesPage(): React.JSX.Element {
             <p className="text-slate-600">Your saved WhatsApp messages</p>
           )}
         </div>
-        <Button
-          variant="secondary"
+        <button
           onClick={handleRefresh}
-          isLoading={isRefreshing}
-          className="flex items-center gap-2"
+          disabled={isRefreshing}
+          className="rounded p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 disabled:opacity-50"
+          title="Refresh"
         >
-          <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
-          Refresh
-        </Button>
+          <RefreshCw className={`h-5 w-5 ${isRefreshing ? 'animate-spin' : ''}`} />
+        </button>
       </div>
 
       {error !== null && error !== '' ? (

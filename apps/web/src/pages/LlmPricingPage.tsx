@@ -2,7 +2,7 @@ import { LlmProviders } from '@intexuraos/llm-contract';
 import { useCallback, useEffect, useState } from 'react';
 import { DollarSign, RefreshCw } from 'lucide-react';
 import { getErrorMessage } from '@intexuraos/common-core/errors';
-import { Button, Card, Layout } from '@/components';
+import { Card, Layout } from '@/components';
 import { useAuth } from '@/context';
 import { getLlmPricing } from '@/services/settingsApi';
 import type { AllProvidersPricing, LlmProvider, ModelPricing, ProviderPricing } from '@/types';
@@ -165,17 +165,16 @@ export function LlmPricingPage(): React.JSX.Element {
           <h2 className="text-2xl font-bold text-slate-900">LLM Pricing</h2>
           <p className="text-slate-600">View current pricing for all LLM providers.</p>
         </div>
-        <Button
-          type="button"
-          variant="secondary"
+        <button
           onClick={(): void => {
             void fetchPricing();
           }}
           disabled={loading}
+          className="rounded p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 disabled:opacity-50"
+          title="Refresh"
         >
-          <RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-          Refresh
-        </Button>
+          <RefreshCw className={`h-5 w-5 ${loading ? 'animate-spin' : ''}`} />
+        </button>
       </div>
 
       {error !== null && error !== '' ? (
