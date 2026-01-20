@@ -25,7 +25,9 @@ interface Crawl4AIResponse {
     extracted_content?: string;
     llm_extraction?: string;
   };
-  // Cloud API may return these at top level
+  // Cloud API returns LLM results in 'extractions' field
+  extractions?: string;
+  // Cloud API may also return these at top level
   markdown?: string;
   extracted_content?: string;
   llm_extraction?: string;
@@ -125,14 +127,25 @@ export class Crawl4AIClient implements PageSummaryServicePort {
         });
       }
 
-      // Cloud API may return content at top level or nested in result
+      // Cloud API returns LLM summary in 'extractions', fallback to other fields
       const extractedContent =
+        data.extractions ??
         data.llm_extraction ??
         data.extracted_content ??
         data.markdown ??
         data.result?.llm_extraction ??
         data.result?.extracted_content ??
         data.result?.markdown;
+
+      this.logger.debug(
+        {
+          url,
+          hasExtractions: data.extractions !== undefined,
+          hasMarkdown: data.markdown !== undefined,
+          responseKeys: Object.keys(data),
+        },
+        'Crawl4AI response fields'
+      );
 
       if (extractedContent === undefined || extractedContent.trim() === '') {
         this.logger.warn({ url }, 'No content extracted from page');

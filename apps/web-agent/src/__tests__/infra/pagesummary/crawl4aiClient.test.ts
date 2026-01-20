@@ -304,5 +304,23 @@ describe('Crawl4AIClient', () => {
       if (!result.ok) return;
       expect(result.value.summary).toBe('Nested content from result.');
     });
+
+    it('prefers extractions field over other fields', async () => {
+      client = new Crawl4AIClient({ apiKey: TEST_API_KEY }, silentLogger);
+
+      nock('https://api.crawl4ai.com')
+        .post('/query')
+        .reply(200, {
+          success: true,
+          extractions: 'LLM summary from extractions field.',
+          markdown: 'Raw markdown content.',
+        });
+
+      const result = await client.summarizePage('https://example.com/extractions');
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.summary).toBe('LLM summary from extractions field.');
+    });
   });
 });
