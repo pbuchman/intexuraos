@@ -10,7 +10,7 @@ export interface Crawl4AIClientConfig {
 }
 
 const DEFAULT_CONFIG: Omit<Crawl4AIClientConfig, 'apiKey'> = {
-  baseUrl: 'https://api.crawl4ai.com',
+  baseUrl: 'https://www.crawl4ai-cloud.com',
   timeoutMs: 120000,
 };
 
