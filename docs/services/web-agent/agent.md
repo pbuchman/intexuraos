@@ -6,10 +6,10 @@
 
 ## Identity
 
-| Field | Value |
-| ----- | ----- |
-| **Name** | web-agent |
-| **Role** | Web Content Extraction Service |
+| Field    | Value                                                          |
+| -------- | -------------------------------------------------------------- |
+| **Name** | web-agent                                                      |
+| **Role** | Web Content Extraction Service                                 |
 | **Goal** | Extract OpenGraph metadata and generate AI summaries from URLs |
 
 ---
@@ -21,15 +21,10 @@
 ```typescript
 interface WebAgentTools {
   // Fetch OpenGraph metadata from URL
-  fetchOpenGraph(params: {
-    url: string;
-  }): Promise<OpenGraphResult>;
+  fetchOpenGraph(params: { url: string }): Promise<OpenGraphResult>;
 
   // Generate AI summary of web content
-  summarizeContent(params: {
-    url: string;
-    content?: string;
-  }): Promise<SummaryResult>;
+  summarizeContent(params: { url: string; content?: string }): Promise<SummaryResult>;
 }
 ```
 
@@ -63,12 +58,12 @@ interface SummaryResult {
 
 ## Constraints
 
-| Rule | Description |
-| ---- | ----------- |
-| **Size Limit** | Maximum 2MB content size |
-| **Timeout** | 30 second fetch timeout |
-| **Content Types** | HTML pages only for OG extraction |
-| **Google API Key** | Required for AI summarization |
+| Rule               | Description                       |
+| ------------------ | --------------------------------- |
+| **Size Limit**     | Maximum 2MB content size          |
+| **Timeout**        | 30 second fetch timeout           |
+| **Content Types**  | HTML pages only for OG extraction |
+| **Google API Key** | Required for AI summarization     |
 
 ---
 
@@ -96,21 +91,21 @@ const summary = await summarizeContent({
 
 ## Internal Endpoints
 
-| Method | Path | Purpose |
-| ------ | ---- | ------- |
-| POST | `/internal/og` | Fetch OG metadata (called by bookmarks-agent) |
-| POST | `/internal/summarize` | Generate summary (called by bookmarks-agent) |
+| Method | Path                  | Purpose                                       |
+| ------ | --------------------- | --------------------------------------------- |
+| POST   | `/internal/og`        | Fetch OG metadata (called by bookmarks-agent) |
+| POST   | `/internal/summarize` | Generate summary (called by bookmarks-agent)  |
 
 ---
 
 ## Error Handling
 
-| Error Code | Description |
-| ---------- | ----------- |
-| `FETCH_FAILED` | Unable to fetch URL |
-| `CONTENT_TOO_LARGE` | Content exceeds 2MB limit |
-| `TIMEOUT` | Fetch exceeded 30 seconds |
-| `NOT_HTML` | URL does not return HTML content |
+| Error Code          | Description                      |
+| ------------------- | -------------------------------- |
+| `FETCH_FAILED`      | Unable to fetch URL              |
+| `CONTENT_TOO_LARGE` | Content exceeds 2MB limit        |
+| `TIMEOUT`           | Fetch exceeded 30 seconds        |
+| `NOT_HTML`          | URL does not return HTML content |
 
 ---
 

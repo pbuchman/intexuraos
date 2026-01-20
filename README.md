@@ -69,13 +69,13 @@ graph LR
 
 Speak to WhatsApp. IntexuraOS understands.
 
-| You Say                                           | IntexuraOS Does                                  |
-| ------------------------------------------------- | ------------------------------------------------ |
-| "Schedule a sync with engineering Tuesday at 2"   | Creates calendar event, sends invites            |
-| "Remind me to review the Q4 report by Friday"     | Extracts task, sets priority and deadline        |
-| "Save this link about TypeScript 5.0"             | Extracts metadata, generates AI summary          |
-| "Research the latest in battery technology"       | Launches multi-model research, notifies when done |
-| "Note: Ideas for the product roadmap meeting"     | Structures your thoughts into a coherent note    |
+| You Say                                         | IntexuraOS Does                                   |
+| ----------------------------------------------- | ------------------------------------------------- |
+| "Schedule a sync with engineering Tuesday at 2" | Creates calendar event, sends invites             |
+| "Remind me to review the Q4 report by Friday"   | Extracts task, sets priority and deadline         |
+| "Save this link about TypeScript 5.0"           | Extracts metadata, generates AI summary           |
+| "Research the latest in battery technology"     | Launches multi-model research, notifies when done |
+| "Note: Ideas for the product roadmap meeting"   | Structures your thoughts into a coherent note     |
 
 ### Intelligent Classification
 
@@ -92,15 +92,15 @@ Analysis:
 
 ### Multi-Model Intelligence
 
-| Capability             | Models                                                    | What Happens                                     |
-| ---------------------- | --------------------------------------------------------- | ------------------------------------------------ |
-| **Deep Research**      | Claude Opus, GPT-5.2, Gemini Pro, Sonar, O4 Deep Research | Parallel queries, independent verification, synthesis |
-| **Intent Classification** | Gemini 2.5 Flash, GLM-4.7                              | Understand what you want from natural language   |
-| **Task Extraction**    | Gemini 2.5 Flash                                          | Parse "buy milk and call mom" into separate tasks |
-| **Event Parsing**      | Gemini 2.5 Flash                                          | "Meeting Tuesday 2pm" becomes calendar event     |
-| **Issue Creation**     | Gemini 2.5 Flash, GLM-4.7                                 | Voice to Linear issue with title, priority, description |
-| **Image Generation**   | DALL-E 3, Gemini Imagen                                   | Cover images for research reports                |
-| **Data Analysis**      | Gemini Analysis Suite                                     | Upload data, get AI-generated insights           |
+| Capability                | Models                                                    | What Happens                                            |
+| ------------------------- | --------------------------------------------------------- | ------------------------------------------------------- |
+| **Deep Research**         | Claude Opus, GPT-5.2, Gemini Pro, Sonar, O4 Deep Research | Parallel queries, independent verification, synthesis   |
+| **Intent Classification** | Gemini 2.5 Flash, GLM-4.7                                 | Understand what you want from natural language          |
+| **Task Extraction**       | Gemini 2.5 Flash                                          | Parse "buy milk and call mom" into separate tasks       |
+| **Event Parsing**         | Gemini 2.5 Flash                                          | "Meeting Tuesday 2pm" becomes calendar event            |
+| **Issue Creation**        | Gemini 2.5 Flash, GLM-4.7                                 | Voice to Linear issue with title, priority, description |
+| **Image Generation**      | DALL-E 3, Gemini Imagen                                   | Cover images for research reports                       |
+| **Data Analysis**         | Gemini Analysis Suite                                     | Upload data, get AI-generated insights                  |
 
 ### Why Multiple Models?
 
@@ -117,39 +117,39 @@ Single-model assistants hallucinate. IntexuraOS queries multiple AI experts simu
 
 ### 18 Specialized Microservices
 
-| Category           | Services                                                                                    |
-| ------------------ | ------------------------------------------------------------------------------------------- |
+| Category           | Services                                                                                                      |
+| ------------------ | ------------------------------------------------------------------------------------------------------------- |
 | **AI Agents**      | research-agent, commands-agent, data-insights-agent, todos-agent, calendar-agent, linear-agent, image-service |
-| **Content**        | bookmarks-agent, notes-agent, promptvault-service                                           |
-| **Integration**    | whatsapp-service, notion-service, user-service                                              |
-| **Infrastructure** | actions-agent, web-agent, mobile-notifications-service, api-docs-hub, app-settings-service  |
+| **Content**        | bookmarks-agent, notes-agent, promptvault-service                                                             |
+| **Integration**    | whatsapp-service, notion-service, user-service                                                                |
+| **Infrastructure** | actions-agent, web-agent, mobile-notifications-service, api-docs-hub, app-settings-service                    |
 
 ### AI Provider Integration
 
 IntexuraOS treats LLMs as a **council of experts**:
 
-| Provider      | Models                                           | Specialty                              |
-| ------------- | ------------------------------------------------ | -------------------------------------- |
-| **Google**    | Gemini 2.5 Pro, Flash, Flash-Image               | Fast classification, image generation  |
-| **OpenAI**    | GPT-5.2, o4-mini-deep-research, DALL-E 3         | Deep research, creative content        |
-| **Anthropic** | Claude Opus 4.5, Sonnet 4.5, Haiku 3.5           | Nuanced analysis, safety               |
-| **Perplexity**| Sonar, Sonar Pro, Sonar Deep Research            | Real-time web search                   |
-| **Zai**       | GLM-4.7                                          | Multilingual, alternative perspective  |
+| Provider       | Models                                   | Specialty                             |
+| -------------- | ---------------------------------------- | ------------------------------------- |
+| **Google**     | Gemini 2.5 Pro, Flash, Flash-Image       | Fast classification, image generation |
+| **OpenAI**     | GPT-5.2, o4-mini-deep-research, DALL-E 3 | Deep research, creative content       |
+| **Anthropic**  | Claude Opus 4.5, Sonnet 4.5, Haiku 3.5   | Nuanced analysis, safety              |
+| **Perplexity** | Sonar, Sonar Pro, Sonar Deep Research    | Real-time web search                  |
+| **Zai**        | GLM-4.7                                  | Multilingual, alternative perspective |
 
 **Total**: 15 models across 5 providers
 
 ### Technology Stack
 
-| Layer              | Technologies                                                           |
-| ------------------ | ---------------------------------------------------------------------- |
-| **Runtime**        | Node.js 22, TypeScript 5.7, pnpm workspaces                            |
-| **Framework**      | Fastify (HTTP), Hexagonal Architecture                                 |
-| **AI**             | Anthropic, OpenAI, Google AI, Perplexity, Zai (GLM)                    |
-| **Data**           | Firestore, Google Cloud Storage                                        |
-| **Messaging**      | Google Cloud Pub/Sub                                                   |
-| **Auth**           | Auth0, Google OAuth                                                    |
-| **Infrastructure** | Terraform, Cloud Run, Cloud Build                                      |
-| **Integrations**   | WhatsApp Business API, Linear, Google Calendar, Notion, Speechmatics   |
+| Layer              | Technologies                                                         |
+| ------------------ | -------------------------------------------------------------------- |
+| **Runtime**        | Node.js 22, TypeScript 5.7, pnpm workspaces                          |
+| **Framework**      | Fastify (HTTP), Hexagonal Architecture                               |
+| **AI**             | Anthropic, OpenAI, Google AI, Perplexity, Zai (GLM)                  |
+| **Data**           | Firestore, Google Cloud Storage                                      |
+| **Messaging**      | Google Cloud Pub/Sub                                                 |
+| **Auth**           | Auth0, Google OAuth                                                  |
+| **Infrastructure** | Terraform, Cloud Run, Cloud Build                                    |
+| **Integrations**   | WhatsApp Business API, Linear, Google Calendar, Notion, Speechmatics |
 
 ---
 
@@ -159,11 +159,11 @@ IntexuraOS treats LLMs as a **council of experts**:
 
 I don't just "use" AI tools. I define autonomous agents with explicit mandates:
 
-| Agent                    | Role                                                        |
-| ------------------------ | ----------------------------------------------------------- |
-| `service-scribe`         | Documentation specialist that infers "why" from git history |
-| `sentry-triage`          | Reliability engineer that refuses band-aid fixes            |
-| `coverage-orchestrator`  | QA lead where "94.9% is failure"                            |
+| Agent                   | Role                                                        |
+| ----------------------- | ----------------------------------------------------------- |
+| `service-scribe`        | Documentation specialist that infers "why" from git history |
+| `sentry-triage`         | Reliability engineer that refuses band-aid fixes            |
+| `coverage-orchestrator` | QA lead where "94.9% is failure"                            |
 
 ### No Dummy Success
 
@@ -210,12 +210,12 @@ For full setup: [Setup Guide](docs/setup/01-gcp-project.md)
 
 ### Getting Started
 
-| Document                                                | Description                    |
-| ------------------------------------------------------- | ------------------------------ |
-| [Platform Overview](docs/overview.md)                   | What IntexuraOS does and how   |
-| [AI Architecture](docs/architecture/ai-architecture.md) | Deep dive into 15 LLM models   |
-| [Services Catalog](docs/services/index.md)              | All 18 services documented     |
-| [Setup Guide](docs/setup/01-gcp-project.md)             | Step-by-step GCP setup         |
+| Document                                                | Description                  |
+| ------------------------------------------------------- | ---------------------------- |
+| [Platform Overview](docs/overview.md)                   | What IntexuraOS does and how |
+| [AI Architecture](docs/architecture/ai-architecture.md) | Deep dive into 15 LLM models |
+| [Services Catalog](docs/services/index.md)              | All 18 services documented   |
+| [Setup Guide](docs/setup/01-gcp-project.md)             | Step-by-step GCP setup       |
 
 ### Architecture
 
@@ -228,14 +228,14 @@ For full setup: [Setup Guide](docs/setup/01-gcp-project.md)
 
 ### Key Services
 
-| Service                                                    | Purpose                      | AI Models            |
-| ---------------------------------------------------------- | ---------------------------- | -------------------- |
-| [research-agent](docs/services/research-agent/features.md) | Multi-LLM research synthesis | 10 research models   |
-| [commands-agent](docs/services/commands-agent/features.md) | Intent classification        | Gemini Flash, GLM    |
-| [todos-agent](docs/services/todos-agent/features.md)       | Task extraction              | Gemini Flash         |
-| [calendar-agent](docs/services/calendar-agent/features.md) | Event parsing                | Gemini Flash         |
-| [linear-agent](docs/services/linear-agent/features.md)     | Issue creation               | Gemini Flash, GLM    |
-| [image-service](docs/services/image-service/features.md)   | Image generation             | DALL-E 3, Imagen     |
+| Service                                                    | Purpose                      | AI Models          |
+| ---------------------------------------------------------- | ---------------------------- | ------------------ |
+| [research-agent](docs/services/research-agent/features.md) | Multi-LLM research synthesis | 10 research models |
+| [commands-agent](docs/services/commands-agent/features.md) | Intent classification        | Gemini Flash, GLM  |
+| [todos-agent](docs/services/todos-agent/features.md)       | Task extraction              | Gemini Flash       |
+| [calendar-agent](docs/services/calendar-agent/features.md) | Event parsing                | Gemini Flash       |
+| [linear-agent](docs/services/linear-agent/features.md)     | Issue creation               | Gemini Flash, GLM  |
+| [image-service](docs/services/image-service/features.md)   | Image generation             | DALL-E 3, Imagen   |
 
 ---
 

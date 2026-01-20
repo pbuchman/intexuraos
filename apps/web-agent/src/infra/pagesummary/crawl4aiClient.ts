@@ -42,6 +42,12 @@ function calculateReadingMinutes(wordCount: number): number {
   return Math.ceil(wordCount / WORDS_PER_MINUTE);
 }
 
+/** Returns undefined for empty/whitespace-only strings, enabling ?? fallback */
+function nonEmpty(value: string | undefined): string | undefined {
+  if (value === undefined) return undefined;
+  return value.trim() !== '' ? value : undefined;
+}
+
 function buildSummaryPrompt(maxSentences: number, maxReadingMinutes: number): string {
   const maxWords = maxReadingMinutes * WORDS_PER_MINUTE;
   return `Summarize this web page content. Requirements:
@@ -128,14 +134,15 @@ export class Crawl4AIClient implements PageSummaryServicePort {
       }
 
       // Cloud API returns LLM summary in 'extractions', fallback to other fields
+      // Use nonEmpty() to also fallback on empty strings (not just null/undefined)
       const extractedContent =
-        data.extractions ??
-        data.llm_extraction ??
-        data.extracted_content ??
-        data.markdown ??
-        data.result?.llm_extraction ??
-        data.result?.extracted_content ??
-        data.result?.markdown;
+        nonEmpty(data.extractions) ??
+        nonEmpty(data.llm_extraction) ??
+        nonEmpty(data.extracted_content) ??
+        nonEmpty(data.markdown) ??
+        nonEmpty(data.result?.llm_extraction) ??
+        nonEmpty(data.result?.extracted_content) ??
+        nonEmpty(data.result?.markdown);
 
       this.logger.debug(
         {
