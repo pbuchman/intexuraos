@@ -98,20 +98,20 @@ sequenceDiagram
 
 ### Public Endpoints
 
-| Method | Path                        | Purpose                         | Auth     |
-| ------ | --------------------------- | ------------------------------- | -------- |
-| GET    | `/linear/connection`        | Get user's connection status    | Bearer   |
-| POST   | `/linear/connection/validate` | Validate API key, get teams   | None     |
-| POST   | `/linear/connection`        | Save connection configuration   | Bearer   |
-| DELETE | `/linear/connection`        | Disconnect from Linear          | Bearer   |
-| GET    | `/linear/issues`            | List issues grouped by status   | Bearer   |
-| GET    | `/linear/failed-issues`     | List failed extractions         | Bearer   |
+| Method | Path                          | Purpose                       | Auth   |
+| ------ | ----------------------------- | ----------------------------- | ------ |
+| GET    | `/linear/connection`          | Get user's connection status  | Bearer |
+| POST   | `/linear/connection/validate` | Validate API key, get teams   | None   |
+| POST   | `/linear/connection`          | Save connection configuration | Bearer |
+| DELETE | `/linear/connection`          | Disconnect from Linear        | Bearer |
+| GET    | `/linear/issues`              | List issues grouped by status | Bearer |
+| GET    | `/linear/failed-issues`       | List failed extractions       | Bearer |
 
 ### Internal Endpoints
 
-| Method | Path                              | Purpose                        | Auth       |
-| ------ | --------------------------------- | ------------------------------ | ---------- |
-| POST   | `/internal/linear/process-action` | Process action via AI          | X-Internal |
+| Method | Path                              | Purpose               | Auth       |
+| ------ | --------------------------------- | --------------------- | ---------- |
+| POST   | `/internal/linear/process-action` | Process action via AI | X-Internal |
 
 ## Domain Models
 
@@ -134,10 +134,10 @@ interface LinearConnection {
 ```typescript
 interface LinearIssue {
   id: string;
-  identifier: string;  // e.g., "INT-123"
+  identifier: string; // e.g., "INT-123"
   title: string;
   description: string | null;
-  priority: 0 | 1 | 2 | 3 | 4;  // 0=none, 1=urgent, 4=low
+  priority: 0 | 1 | 2 | 3 | 4; // 0=none, 1=urgent, 4=low
   state: {
     id: string;
     name: string;
@@ -181,11 +181,11 @@ interface FailedLinearIssue {
 
 ## Firestore Collections
 
-| Collection                      | Owner        | Purpose                        |
-| ------------------------------- | ------------ | ------------------------------ |
-| `linearConnections`             | linear-agent | User Linear connections        |
-| `failedLinearIssues`            | linear-agent | Failed extraction records      |
-| `processedLinearActions`        | linear-agent | Idempotency records            |
+| Collection               | Owner        | Purpose                   |
+| ------------------------ | ------------ | ------------------------- |
+| `linearConnections`      | linear-agent | User Linear connections   |
+| `failedLinearIssues`     | linear-agent | Failed extraction records |
+| `processedLinearActions` | linear-agent | Idempotency records       |
 
 ## AI Integration
 
@@ -194,6 +194,7 @@ interface FailedLinearIssue {
 The extraction service uses Gemini 2.5 Flash or GLM-4.7 to parse natural language into structured issue data.
 
 **Prompt Strategy:**
+
 1. Extract concise title (max 100 chars)
 2. Infer priority from urgency cues
 3. Generate Functional Requirements section
@@ -201,16 +202,17 @@ The extraction service uses Gemini 2.5 Flash or GLM-4.7 to parse natural languag
 5. Validate extraction completeness
 
 **Model Selection:**
+
 - Primary: Gemini 2.5 Flash (fast, cost-effective)
 - Fallback: GLM-4.7 (alternative provider)
 
 ## Configuration
 
-| Variable                           | Required | Description                   |
-| ---------------------------------- | -------- | ----------------------------- |
-| `INTEXURAOS_USER_SERVICE_URL`      | Yes      | User service for LLM keys     |
-| `INTEXURAOS_INTERNAL_AUTH_TOKEN`   | Yes      | Service-to-service auth       |
-| `INTEXURAOS_APP_SETTINGS_SERVICE_URL` | Yes   | Pricing context source        |
+| Variable                              | Required | Description               |
+| ------------------------------------- | -------- | ------------------------- |
+| `INTEXURAOS_USER_SERVICE_URL`         | Yes      | User service for LLM keys |
+| `INTEXURAOS_INTERNAL_AUTH_TOKEN`      | Yes      | Service-to-service auth   |
+| `INTEXURAOS_APP_SETTINGS_SERVICE_URL` | Yes      | Pricing context source    |
 
 ## Dependencies
 
@@ -228,12 +230,12 @@ The extraction service uses Gemini 2.5 Flash or GLM-4.7 to parse natural languag
 
 ## Error Handling
 
-| Error Code       | HTTP | Description                       |
-| ---------------- | ---- | --------------------------------- |
-| `NOT_CONNECTED`  | 403  | User has no Linear connection     |
-| `INVALID_API_KEY`| 401  | Linear API key is invalid         |
-| `RATE_LIMIT`     | 429  | Linear API rate limit exceeded    |
-| `EXTRACTION_FAILED` | 500 | LLM could not extract issue data |
+| Error Code          | HTTP | Description                      |
+| ------------------- | ---- | -------------------------------- |
+| `NOT_CONNECTED`     | 403  | User has no Linear connection    |
+| `INVALID_API_KEY`   | 401  | Linear API key is invalid        |
+| `RATE_LIMIT`        | 429  | Linear API rate limit exceeded   |
+| `EXTRACTION_FAILED` | 500  | LLM could not extract issue data |
 
 ## File Structure
 

@@ -19,11 +19,11 @@ Linear Agent bridges the gap between natural conversation and structured project
 
 ## AI Capabilities
 
-| Capability                      | Technology                  | Purpose                            |
-| ------------------------------- | --------------------------- | ---------------------------------- |
-| Issue Data Extraction           | Gemini 2.5 Flash / GLM-4.7  | Parse natural language to issue    |
-| Priority Classification         | LLM Inference               | Detect urgency from context        |
-| Requirements Structuring        | Prompt Engineering          | Generate FR/TD sections            |
+| Capability               | Technology                 | Purpose                         |
+| ------------------------ | -------------------------- | ------------------------------- |
+| Issue Data Extraction    | Gemini 2.5 Flash / GLM-4.7 | Parse natural language to issue |
+| Priority Classification  | LLM Inference              | Detect urgency from context     |
+| Requirements Structuring | Prompt Engineering         | Generate FR/TD sections         |
 
 ## Use Cases
 
@@ -32,6 +32,7 @@ Linear Agent bridges the gap between natural conversation and structured project
 Voice note: "I need to fix the login button on mobile, it's not responding to taps on iOS"
 
 Result:
+
 - Title: "Fix unresponsive login button on iOS mobile"
 - Priority: Normal (3)
 - Functional Requirements: "Login button must respond to tap events on iOS devices"
@@ -42,6 +43,7 @@ Result:
 Voice note: "URGENT - Production is down, the API gateway is returning 502 errors"
 
 Result:
+
 - Title: "Production API Gateway 502 Errors"
 - Priority: Urgent (1)
 - Description: Detailed incident context
@@ -51,18 +53,19 @@ Result:
 Voice note: "When you have time, it would be nice to have dark mode in the settings"
 
 Result:
+
 - Title: "Add dark mode toggle to settings"
 - Priority: Low (4)
 
 ## Key Benefits
 
-| Benefit                  | Description                                      |
-| ------------------------ | ------------------------------------------------ |
-| Zero-Context-Switch      | Create issues without leaving WhatsApp           |
-| Consistent Quality       | AI ensures every issue has proper structure      |
-| Priority Accuracy        | Natural language maps to Linear's 5-level scale  |
-| Idempotent Processing    | Duplicate messages won't create duplicate issues |
-| Failure Recovery         | Failed extractions saved for manual review       |
+| Benefit               | Description                                      |
+| --------------------- | ------------------------------------------------ |
+| Zero-Context-Switch   | Create issues without leaving WhatsApp           |
+| Consistent Quality    | AI ensures every issue has proper structure      |
+| Priority Accuracy     | Natural language maps to Linear's 5-level scale  |
+| Idempotent Processing | Duplicate messages won't create duplicate issues |
+| Failure Recovery      | Failed extractions saved for manual review       |
 
 ## Limitations
 

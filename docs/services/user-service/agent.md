@@ -31,10 +31,13 @@ interface UserServiceTools {
 
   // LLM API Keys
   getLlmApiKeys(userId: string): Promise<LlmKeysStatus>;
-  updateLlmApiKey(userId: string, params: {
-    provider: LlmProvider;
-    apiKey: string;
-  }): Promise<LlmKeyUpdateResult>;
+  updateLlmApiKey(
+    userId: string,
+    params: {
+      provider: LlmProvider;
+      apiKey: string;
+    }
+  ): Promise<LlmKeyUpdateResult>;
   testLlmApiKey(userId: string, provider: LlmProvider): Promise<LlmTestResult>;
   deleteLlmApiKey(userId: string, provider: LlmProvider): Promise<void>;
 
@@ -79,7 +82,7 @@ interface UserSettings {
 }
 
 interface LlmKeysStatus {
-  google: string | null;     // Masked key preview
+  google: string | null; // Masked key preview
   openai: string | null;
   anthropic: string | null;
   perplexity: string | null;
@@ -103,11 +106,11 @@ interface LlmKeyUpdateResult {
 
 ## Constraints
 
-| Rule                  | Description                                       |
-| --------------------- | ------------------------------------------------- |
-| **Self-Access Only**  | Users can only access their own settings          |
-| **Encrypted Storage** | API keys encrypted at rest with user-specific key |
-| **Key Validation**    | API keys validated with provider before storing   |
+| Rule                  | Description                                         |
+| --------------------- | --------------------------------------------------- |
+| **Self-Access Only**  | Users can only access their own settings            |
+| **Encrypted Storage** | API keys encrypted at rest with user-specific key   |
+| **Key Validation**    | API keys validated with provider before storing     |
 | **5 Providers**       | Supports Google, OpenAI, Anthropic, Perplexity, Zai |
 
 ---
@@ -160,10 +163,10 @@ const keys = await getLlmApiKeys(userId);
 
 ## Internal Endpoints
 
-| Method | Path                            | Purpose                                     |
-| ------ | ------------------------------- | ------------------------------------------- |
+| Method | Path                            | Purpose                                           |
+| ------ | ------------------------------- | ------------------------------------------------- |
 | GET    | `/internal/users/:uid/llm-keys` | Get decrypted LLM keys (called by research-agent) |
-| GET    | `/internal/users/:uid/oauth`    | Get OAuth tokens (called by calendar-agent) |
+| GET    | `/internal/users/:uid/oauth`    | Get OAuth tokens (called by calendar-agent)       |
 
 ---
 

@@ -18,13 +18,13 @@ IntexuraOS reimagines personal productivity as an **AI-first system**. Instead o
 
 IntexuraOS integrates with **5 AI providers** and **15 models**, treating them as a **council of experts** rather than a single oracle:
 
-| Provider   | Models                                    | Capabilities                       |
-| ---------- | ----------------------------------------- | ---------------------------------- |
-| Google     | Gemini 2.5 Pro, Flash, Flash-Image        | Reasoning, classification, images  |
-| OpenAI     | GPT-5.2, o4-mini-deep-research, DALL-E 3  | Deep research, synthesis, images   |
-| Anthropic  | Claude Opus 4.5, Sonnet 4.5, Haiku 3.5    | Analysis, research, validation     |
-| Perplexity | Sonar, Sonar Pro, Sonar Deep Research     | Web search, real-time information  |
-| Zai        | GLM-4.7                                   | Multilingual, alternative analysis |
+| Provider   | Models                                   | Capabilities                       |
+| ---------- | ---------------------------------------- | ---------------------------------- |
+| Google     | Gemini 2.5 Pro, Flash, Flash-Image       | Reasoning, classification, images  |
+| OpenAI     | GPT-5.2, o4-mini-deep-research, DALL-E 3 | Deep research, synthesis, images   |
+| Anthropic  | Claude Opus 4.5, Sonnet 4.5, Haiku 3.5   | Analysis, research, validation     |
+| Perplexity | Sonar, Sonar Pro, Sonar Deep Research    | Web search, real-time information  |
+| Zai        | GLM-4.7                                  | Multilingual, alternative analysis |
 
 ### Intelligent Routing
 
@@ -85,17 +85,17 @@ IntexuraOS deploys **18 specialized microservices**, each with a distinct AI-pow
 
 ### AI Agents (Primary Intelligence)
 
-| Agent                   | AI Capabilities                                                        |
-| ----------------------- | ---------------------------------------------------------------------- |
+| Agent                   | AI Capabilities                                                            |
+| ----------------------- | -------------------------------------------------------------------------- |
 | **research-agent**      | Multi-model orchestration, parallel queries, synthesis, confidence scoring |
-| **commands-agent**      | Intent classification via Gemini, action routing, model detection       |
-| **data-insights-agent** | Data analysis, chart generation, trend detection via LLM               |
-| **bookmarks-agent**     | AI-powered link summarization, content extraction                      |
-| **todos-agent**         | Natural language task extraction, priority inference                   |
-| **calendar-agent**      | Date/time parsing, schedule optimization                               |
-| **linear-agent**        | Issue management, Linear API integration                               |
-| **notes-agent**         | Content structuring, tag inference                                     |
-| **web-agent**           | Web scraping, metadata extraction, AI summarization                    |
+| **commands-agent**      | Intent classification via Gemini, action routing, model detection          |
+| **data-insights-agent** | Data analysis, chart generation, trend detection via LLM                   |
+| **bookmarks-agent**     | AI-powered link summarization, content extraction                          |
+| **todos-agent**         | Natural language task extraction, priority inference                       |
+| **calendar-agent**      | Date/time parsing, schedule optimization                                   |
+| **linear-agent**        | Issue management, Linear API integration                                   |
+| **notes-agent**         | Content structuring, tag inference                                         |
+| **web-agent**           | Web scraping, metadata extraction, AI summarization                        |
 
 ### Infrastructure Services
 
@@ -148,14 +148,14 @@ The **commands-agent** analyzes input to determine:
 
 Each agent type executes domain-specific logic:
 
-| Action Type | Agent          | AI Operations                                     |
-| ----------- | -------------- | ------------------------------------------------- |
-| Research    | research-agent | Parallel LLM queries, synthesis, cover generation |
-| Todo        | todos-agent    | Item extraction, priority inference               |
-| Note        | notes-agent    | Content structuring                               |
-| Link        | bookmarks-agent | Summarization, metadata extraction               |
-| Calendar    | calendar-agent | Date parsing, availability checking               |
-| Linear      | linear-agent   | Issue creation, project mapping                   |
+| Action Type | Agent           | AI Operations                                     |
+| ----------- | --------------- | ------------------------------------------------- |
+| Research    | research-agent  | Parallel LLM queries, synthesis, cover generation |
+| Todo        | todos-agent     | Item extraction, priority inference               |
+| Note        | notes-agent     | Content structuring                               |
+| Link        | bookmarks-agent | Summarization, metadata extraction                |
+| Calendar    | calendar-agent  | Date parsing, availability checking               |
+| Linear      | linear-agent    | Issue creation, project mapping                   |
 
 ### Phase 4: Notification & Storage
 
@@ -172,15 +172,15 @@ Each agent type executes domain-specific logic:
 
 All inter-service communication uses Cloud Pub/Sub:
 
-| Topic             | Publisher        | Subscriber(s)               |
-| ----------------- | ---------------- | --------------------------- |
-| `commands-ingest` | whatsapp-service | commands-agent              |
-| `action-created`  | actions-agent    | research-agent, todos-agent |
-| `research-process`| actions-agent    | research-agent              |
-| `whatsapp-send`   | All agents       | whatsapp-service            |
-| `llm-call`        | All LLM services | usage tracking              |
-| `bookmark-enrich` | bookmarks-agent  | web-agent                   |
-| `bookmark-summarize` | bookmarks-agent | web-agent                  |
+| Topic                | Publisher        | Subscriber(s)               |
+| -------------------- | ---------------- | --------------------------- |
+| `commands-ingest`    | whatsapp-service | commands-agent              |
+| `action-created`     | actions-agent    | research-agent, todos-agent |
+| `research-process`   | actions-agent    | research-agent              |
+| `whatsapp-send`      | All agents       | whatsapp-service            |
+| `llm-call`           | All LLM services | usage tracking              |
+| `bookmark-enrich`    | bookmarks-agent  | web-agent                   |
+| `bookmark-summarize` | bookmarks-agent  | web-agent                   |
 
 ### Firestore Collections
 
@@ -205,6 +205,7 @@ Each service owns its collections (enforced by CI):
 ### LLM Usage Tracking
 
 Every LLM call is tracked with:
+
 - Model used
 - Input/output tokens
 - Cost calculation (per-model pricing)
@@ -214,6 +215,7 @@ Every LLM call is tracked with:
 ### Pricing Transparency
 
 The **app-settings-service** maintains real-time pricing for all 15 models, enabling:
+
 - Pre-execution cost estimates
 - Post-execution cost reporting
 - Monthly usage analytics
@@ -265,33 +267,41 @@ User API Keys → AES-256-GCM Encryption → Firestore
 ### By AI Capability
 
 **Multi-Model Orchestration**
+
 - [research-agent](services/research-agent/features.md) - Parallel LLM research with synthesis
 
 **Intent Classification**
+
 - [commands-agent](services/commands-agent/features.md) - Natural language to action routing
 
 **Data Analysis**
+
 - [data-insights-agent](services/data-insights-agent/features.md) - AI-powered data visualization
 
 **Image Generation**
+
 - [image-service](services/image-service/features.md) - DALL-E 3 and Imagen 3
 
 **Content Intelligence**
+
 - [bookmarks-agent](services/bookmarks-agent/features.md) - AI link summarization
 - [web-agent](services/web-agent/features.md) - Web scraping with AI
 
 **Task Intelligence**
+
 - [todos-agent](services/todos-agent/features.md) - Natural language task extraction
 
 ### By Integration
 
 **External APIs**
+
 - [whatsapp-service](services/whatsapp-service/features.md) - WhatsApp Business API
 - [calendar-agent](services/calendar-agent/features.md) - Google Calendar
 - [notion-service](services/notion-service/features.md) - Notion API
 - [linear-agent](services/linear-agent/features.md) - Linear API
 
 **Infrastructure**
+
 - [actions-agent](services/actions-agent/features.md) - Action orchestration
 - [user-service](services/user-service/features.md) - Auth & settings
 - [mobile-notifications-service](services/mobile-notifications-service/features.md) - Push notifications
@@ -301,14 +311,14 @@ User API Keys → AES-256-GCM Encryption → Firestore
 
 ## Documentation Index
 
-| Document                                              | Purpose                  |
-| ----------------------------------------------------- | ------------------------ |
+| Document                                              | Purpose                        |
+| ----------------------------------------------------- | ------------------------------ |
 | [AI Architecture](architecture/ai-architecture.md)    | Deep dive into LLM integration |
-| [Services Catalog](services/index.md)                 | All 18 services documented |
-| [Architecture Patterns](architecture/)                | System design decisions  |
-| [Setup Guide](setup/01-gcp-project.md)                | Getting started          |
-| [API Contracts](architecture/api-contracts.md)        | HTTP API standards       |
-| [Pub/Sub Standards](architecture/pubsub-standards.md) | Event messaging patterns |
+| [Services Catalog](services/index.md)                 | All 18 services documented     |
+| [Architecture Patterns](architecture/)                | System design decisions        |
+| [Setup Guide](setup/01-gcp-project.md)                | Getting started                |
+| [API Contracts](architecture/api-contracts.md)        | HTTP API standards             |
+| [Pub/Sub Standards](architecture/pubsub-standards.md) | Event messaging patterns       |
 
 ---
 

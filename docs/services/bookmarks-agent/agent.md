@@ -6,10 +6,10 @@
 
 ## Identity
 
-| Field | Value |
-| ----- | ----- |
-| **Name** | bookmarks-agent |
-| **Role** | Link Intelligence Service |
+| Field    | Value                                                                         |
+| -------- | ----------------------------------------------------------------------------- |
+| **Name** | bookmarks-agent                                                               |
+| **Role** | Link Intelligence Service                                                     |
 | **Goal** | Save, enrich, and organize bookmarks with OpenGraph metadata and AI summaries |
 
 ---
@@ -41,12 +41,15 @@ interface BookmarksAgentTools {
   getBookmark(id: string): Promise<Bookmark>;
 
   // Update bookmark
-  updateBookmark(id: string, params: {
-    title?: string;
-    description?: string;
-    tags?: string[];
-    archived?: boolean;
-  }): Promise<Bookmark>;
+  updateBookmark(
+    id: string,
+    params: {
+      title?: string;
+      description?: string;
+      tags?: string[];
+      archived?: boolean;
+    }
+  ): Promise<Bookmark>;
 
   // Delete bookmark
   deleteBookmark(id: string): Promise<void>;
@@ -100,12 +103,12 @@ interface Bookmark {
 
 ## Constraints
 
-| Rule | Description |
-| ---- | ----------- |
+| Rule                    | Description                                    |
+| ----------------------- | ---------------------------------------------- |
 | **Duplicate Detection** | Returns 409 CONFLICT if URL already bookmarked |
-| **URL Format** | Must be valid HTTP/HTTPS URL |
-| **Ownership** | Users can only access their own bookmarks |
-| **Image Proxy** | Only HTTP/HTTPS images allowed, 10s timeout |
+| **URL Format**          | Must be valid HTTP/HTTPS URL                   |
+| **Ownership**           | Users can only access their own bookmarks      |
+| **Image Proxy**         | Only HTTP/HTTPS images allowed, 10s timeout    |
 
 ---
 
@@ -154,11 +157,11 @@ const techBookmarks = await listBookmarks({
 
 ## Internal Endpoints
 
-| Method | Path | Purpose |
-| ------ | ---- | ------- |
-| POST | `/internal/bookmarks` | Create bookmark from actions-agent |
-| POST | `/internal/bookmarks/:id/refresh` | Force refresh OG data |
-| GET | `/internal/bookmarks/:id` | Get bookmark for internal services |
+| Method | Path                              | Purpose                            |
+| ------ | --------------------------------- | ---------------------------------- |
+| POST   | `/internal/bookmarks`             | Create bookmark from actions-agent |
+| POST   | `/internal/bookmarks/:id/refresh` | Force refresh OG data              |
+| GET    | `/internal/bookmarks/:id`         | Get bookmark for internal services |
 
 ---
 
