@@ -131,7 +131,7 @@ export async function batchGetActions(accessToken: string, actionIds: string[]):
 
 export async function createCommand(
   accessToken: string,
-  params: { text: string; source: CommandSourceType }
+  params: { text: string; source: CommandSourceType; externalId?: string }
 ): Promise<Command> {
   const response = await apiRequest<{ command: Command }>(
     config.commandsAgentServiceUrl,

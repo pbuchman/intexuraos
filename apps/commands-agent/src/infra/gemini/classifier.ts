@@ -2,7 +2,11 @@ import { commandClassifierPrompt } from '@intexuraos/llm-common';
 import type { LlmGenerateClient } from '@intexuraos/llm-factory';
 import { LlmModels, type ResearchModel } from '@intexuraos/llm-contract';
 import type { CommandType } from '../../domain/models/command.js';
-import type { Classifier, ClassificationResult } from '../../domain/ports/classifier.js';
+import type {
+  Classifier,
+  ClassificationResult,
+  ClassifyOptions,
+} from '../../domain/ports/classifier.js';
 
 const VALID_TYPES: readonly CommandType[] = [
   'todo',
@@ -41,9 +45,11 @@ const ALL_LLMS_PATTERNS = [
   /\bwszystkie\s+(modele|llm)/i,
 ];
 
+const PWA_SHARED_LINK_CONFIDENCE_BOOST = 0.1;
+
 export function createGeminiClassifier(client: LlmGenerateClient): Classifier {
   return {
-    async classify(text: string): Promise<ClassificationResult> {
+    async classify(text: string, options?: ClassifyOptions): Promise<ClassificationResult> {
       const prompt = commandClassifierPrompt.build({ message: text });
 
       const result = await client.generate(prompt);
@@ -55,11 +61,19 @@ export function createGeminiClassifier(client: LlmGenerateClient): Classifier {
       const parsed = parseClassifyResponse(result.value.content, VALID_TYPES);
       const selectedModels = extractSelectedModels(text);
 
+      let adjustedConfidence = parsed.confidence;
+      let adjustedReasoning = parsed.reasoning;
+
+      if (parsed.type === 'link' && options?.sourceType === 'pwa-shared') {
+        adjustedConfidence = Math.min(1, parsed.confidence + PWA_SHARED_LINK_CONFIDENCE_BOOST);
+        adjustedReasoning = `${parsed.reasoning} (confidence boosted: PWA share source)`;
+      }
+
       const classificationResult: ClassificationResult = {
         type: parsed.type,
-        confidence: parsed.confidence,
+        confidence: adjustedConfidence,
         title: parsed.title,
-        reasoning: parsed.reasoning,
+        reasoning: adjustedReasoning,
       };
       if (selectedModels !== undefined) {
         classificationResult.selectedModels = selectedModels;

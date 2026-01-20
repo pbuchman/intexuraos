@@ -79,6 +79,7 @@ export function SyncQueueProvider({ children }: SyncQueueProviderProps): React.J
           const command = await createCommand(token, {
             text: item.content,
             source: item.source,
+            externalId: item.externalId,
           });
 
           markAsSynced(item.id, command.id);

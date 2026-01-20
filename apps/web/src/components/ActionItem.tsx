@@ -192,10 +192,25 @@ export function ActionItem({
 
   const showDismissButton = action.status === 'completed' || action.status === 'failed';
   const isSuccess = executionState?.type === 'success';
+
+  const persistedError =
+    action.status === 'failed' && typeof action.payload['error'] === 'string'
+      ? action.payload['error']
+      : null;
+  const persistedErrorCode =
+    action.status === 'failed' && typeof action.payload['errorCode'] === 'string'
+      ? action.payload['errorCode']
+      : null;
+
+  const displayError = executionState?.type === 'error' ? executionState : null;
+  const showPersistedError = persistedError !== null && displayError === null;
   const showReconnectLink =
-    executionState?.errorCode === 'TOKEN_ERROR' ||
-    executionState?.errorCode === 'NOT_CONNECTED' ||
-    executionState?.errorCode === 'UNAUTHORIZED';
+    displayError?.errorCode === 'TOKEN_ERROR' ||
+    displayError?.errorCode === 'NOT_CONNECTED' ||
+    displayError?.errorCode === 'UNAUTHORIZED' ||
+    persistedErrorCode === 'TOKEN_ERROR' ||
+    persistedErrorCode === 'NOT_CONNECTED' ||
+    persistedErrorCode === 'UNAUTHORIZED';
   const actualDismissing = isDismissing || localDismissing;
 
   return (
@@ -362,6 +377,30 @@ export function ActionItem({
             >
               <X className="h-4 w-4" />
             </button>
+          </div>
+        </div>
+      )}
+
+      {showPersistedError && (
+        <div
+          className="mt-3 rounded-md border border-red-200 bg-red-50 p-3"
+          onClick={(e): void => {
+            e.stopPropagation();
+          }}
+        >
+          <div className="flex items-start gap-2">
+            <XCircle className="mt-0.5 h-4 w-4 shrink-0 text-red-600" />
+            <div className="min-w-0 flex-1">
+              <p className="text-sm text-red-800">{persistedError}</p>
+              {showReconnectLink && (
+                <RouterLink
+                  to="/settings/calendar"
+                  className="mt-1 block text-sm font-medium text-red-700 underline hover:text-red-800"
+                >
+                  {persistedErrorCode === 'NOT_CONNECTED' ? 'Connect Calendar' : 'Reconnect Calendar'}
+                </RouterLink>
+              )}
+            </div>
           </div>
         </div>
       )}

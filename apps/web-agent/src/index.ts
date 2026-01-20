@@ -1,21 +1,26 @@
 import { initSentry } from '@intexuraos/infra-sentry';
+import { validateRequiredEnv } from '@intexuraos/http-server';
 import { getErrorMessage } from '@intexuraos/common-core';
 import { buildServer } from './server.js';
 import { initServices } from './services.js';
 
+const REQUIRED_ENV = [
+  'INTEXURAOS_INTERNAL_AUTH_TOKEN',
+  'INTEXURAOS_CRAWL4AI_API_KEY',
+];
+
+validateRequiredEnv(REQUIRED_ENV);
+
 const sentryDsn = process.env['INTEXURAOS_SENTRY_DSN'];
-initSentry(
-  sentryDsn === undefined
-    ? {
-        environment: process.env['INTEXURAOS_ENVIRONMENT'] ?? 'development',
-        serviceName: 'web-agent',
-      }
-    : {
-        dsn: sentryDsn,
-        environment: process.env['INTEXURAOS_ENVIRONMENT'] ?? 'development',
-        serviceName: 'web-agent',
-      }
-);
+if (sentryDsn === undefined || sentryDsn === '') {
+  throw new Error('INTEXURAOS_SENTRY_DSN is required');
+}
+
+initSentry({
+  dsn: sentryDsn,
+  environment: process.env['INTEXURAOS_ENVIRONMENT'] ?? 'development',
+  serviceName: 'web-agent',
+});
 
 const PORT = Number(process.env['PORT'] ?? 8080);
 const HOST = process.env['HOST'] ?? '0.0.0.0';
