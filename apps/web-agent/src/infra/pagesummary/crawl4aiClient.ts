@@ -11,7 +11,7 @@ export interface Crawl4AIClientConfig {
 
 const DEFAULT_CONFIG: Omit<Crawl4AIClientConfig, 'apiKey'> = {
   baseUrl: 'https://api.crawl4ai.com',
-  timeoutMs: 60000,
+  timeoutMs: 120000,
 };
 
 const DEFAULT_MAX_SENTENCES = 20;
@@ -23,7 +23,12 @@ interface Crawl4AIResponse {
   result?: {
     markdown?: string;
     extracted_content?: string;
+    llm_extraction?: string;
   };
+  // Cloud API may return these at top level
+  markdown?: string;
+  extracted_content?: string;
+  llm_extraction?: string;
   error?: string;
 }
 
@@ -74,31 +79,20 @@ export class Crawl4AIClient implements PageSummaryServicePort {
     try {
       const prompt = buildSummaryPrompt(maxSentences, maxReadingMinutes);
 
+      // Crawl4AI Cloud API uses /query endpoint with apikey in body
       const payload = {
-        urls: [url],
-        browser_config: {
-          type: 'BrowserConfig',
-          params: { headless: true },
-        },
-        crawler_config: {
-          type: 'CrawlerRunConfig',
-          params: {
-            cache_mode: 'bypass',
-            extraction_strategy: {
-              type: 'LLMExtractionStrategy',
-              params: {
-                instruction: prompt,
-              },
-            },
-          },
-        },
+        url,
+        apikey: this.config.apiKey,
+        output_format: 'markdown',
+        magic: true,
+        cache_mode: 'bypass',
+        llm_instruction: prompt,
       };
 
-      const response = await fetch(`${this.config.baseUrl}/crawl`, {
+      const response = await fetch(`${this.config.baseUrl}/query`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${this.config.apiKey}`,
         },
         body: JSON.stringify(payload),
         signal: controller.signal,
@@ -131,7 +125,14 @@ export class Crawl4AIClient implements PageSummaryServicePort {
         });
       }
 
-      const extractedContent = data.result?.extracted_content ?? data.result?.markdown;
+      // Cloud API may return content at top level or nested in result
+      const extractedContent =
+        data.llm_extraction ??
+        data.extracted_content ??
+        data.markdown ??
+        data.result?.llm_extraction ??
+        data.result?.extracted_content ??
+        data.result?.markdown;
 
       if (extractedContent === undefined || extractedContent.trim() === '') {
         this.logger.warn({ url }, 'No content extracted from page');

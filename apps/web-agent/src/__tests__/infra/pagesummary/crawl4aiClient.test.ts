@@ -26,12 +26,10 @@ describe('Crawl4AIClient', () => {
       client = new Crawl4AIClient({ apiKey: TEST_API_KEY }, silentLogger);
 
       nock('https://api.crawl4ai.com')
-        .post('/crawl')
+        .post('/query')
         .reply(200, {
           success: true,
-          result: {
-            extracted_content: 'This is a test summary of the web page content.',
-          },
+          llm_extraction: 'This is a test summary of the web page content.',
         });
 
       const result = await client.summarizePage('https://example.com/article');
@@ -44,16 +42,14 @@ describe('Crawl4AIClient', () => {
       expect(result.value.estimatedReadingMinutes).toBe(1);
     });
 
-    it('uses markdown if extracted_content is not available', async () => {
+    it('uses markdown if llm_extraction is not available', async () => {
       client = new Crawl4AIClient({ apiKey: TEST_API_KEY }, silentLogger);
 
       nock('https://api.crawl4ai.com')
-        .post('/crawl')
+        .post('/query')
         .reply(200, {
           success: true,
-          result: {
-            markdown: 'Markdown content from the page.',
-          },
+          markdown: 'Markdown content from the page.',
         });
 
       const result = await client.summarizePage('https://example.com/page');
@@ -63,17 +59,17 @@ describe('Crawl4AIClient', () => {
       expect(result.value.summary).toBe('Markdown content from the page.');
     });
 
-    it('sends correct authorization header', async () => {
+    it('sends apikey in request body', async () => {
       client = new Crawl4AIClient({ apiKey: TEST_API_KEY }, silentLogger);
 
       const scope = nock('https://api.crawl4ai.com')
-        .post('/crawl')
-        .matchHeader('Authorization', `Bearer ${TEST_API_KEY}`)
+        .post('/query', (body) => {
+          const payload = body as { apikey: string };
+          return payload.apikey === TEST_API_KEY;
+        })
         .reply(200, {
           success: true,
-          result: {
-            extracted_content: 'Summary content.',
-          },
+          llm_extraction: 'Summary content.',
         });
 
       await client.summarizePage('https://example.com');
@@ -85,23 +81,27 @@ describe('Crawl4AIClient', () => {
       client = new Crawl4AIClient({ apiKey: TEST_API_KEY }, silentLogger);
 
       const scope = nock('https://api.crawl4ai.com')
-        .post('/crawl', (body) => {
+        .post('/query', (body) => {
           const payload = body as {
-            urls: string[];
-            browser_config: { type: string };
-            crawler_config: { type: string; params: { extraction_strategy: { type: string } } };
+            url: string;
+            apikey: string;
+            output_format: string;
+            magic: boolean;
+            cache_mode: string;
+            llm_instruction: string;
           };
           return (
-            Array.isArray(payload.urls) &&
-            payload.urls[0] === 'https://example.com/test' &&
-            payload.browser_config.type === 'BrowserConfig' &&
-            payload.crawler_config.type === 'CrawlerRunConfig' &&
-            payload.crawler_config.params.extraction_strategy.type === 'LLMExtractionStrategy'
+            payload.url === 'https://example.com/test' &&
+            payload.apikey === TEST_API_KEY &&
+            payload.output_format === 'markdown' &&
+            payload.magic === true &&
+            payload.cache_mode === 'bypass' &&
+            typeof payload.llm_instruction === 'string'
           );
         })
         .reply(200, {
           success: true,
-          result: { extracted_content: 'Content.' },
+          llm_extraction: 'Content.',
         });
 
       await client.summarizePage('https://example.com/test');
@@ -112,7 +112,7 @@ describe('Crawl4AIClient', () => {
     it('returns API_ERROR on non-200 response', async () => {
       client = new Crawl4AIClient({ apiKey: TEST_API_KEY }, silentLogger);
 
-      nock('https://api.crawl4ai.com').post('/crawl').reply(500, { error: 'Internal server error' });
+      nock('https://api.crawl4ai.com').post('/query').reply(500, { error: 'Internal server error' });
 
       const result = await client.summarizePage('https://example.com');
 
@@ -126,7 +126,7 @@ describe('Crawl4AIClient', () => {
       client = new Crawl4AIClient({ apiKey: TEST_API_KEY }, silentLogger);
 
       nock('https://api.crawl4ai.com')
-        .post('/crawl')
+        .post('/query')
         .reply(200, {
           success: false,
           error: 'Could not fetch page',
@@ -140,16 +140,14 @@ describe('Crawl4AIClient', () => {
       expect(result.error.message).toBe('Could not fetch page');
     });
 
-    it('returns NO_CONTENT when extracted_content is empty', async () => {
+    it('returns NO_CONTENT when llm_extraction is empty', async () => {
       client = new Crawl4AIClient({ apiKey: TEST_API_KEY }, silentLogger);
 
       nock('https://api.crawl4ai.com')
-        .post('/crawl')
+        .post('/query')
         .reply(200, {
           success: true,
-          result: {
-            extracted_content: '',
-          },
+          llm_extraction: '',
         });
 
       const result = await client.summarizePage('https://example.com/empty');
@@ -159,11 +157,11 @@ describe('Crawl4AIClient', () => {
       expect(result.error.code).toBe('NO_CONTENT');
     });
 
-    it('returns NO_CONTENT when result is missing', async () => {
+    it('returns NO_CONTENT when content is missing', async () => {
       client = new Crawl4AIClient({ apiKey: TEST_API_KEY }, silentLogger);
 
       nock('https://api.crawl4ai.com')
-        .post('/crawl')
+        .post('/query')
         .reply(200, {
           success: true,
         });
@@ -178,7 +176,7 @@ describe('Crawl4AIClient', () => {
     it('returns FETCH_FAILED on network error', async () => {
       client = new Crawl4AIClient({ apiKey: TEST_API_KEY }, silentLogger);
 
-      nock('https://api.crawl4ai.com').post('/crawl').replyWithError('Network error');
+      nock('https://api.crawl4ai.com').post('/query').replyWithError('Network error');
 
       const result = await client.summarizePage('https://example.com');
 
@@ -194,10 +192,10 @@ describe('Crawl4AIClient', () => {
       );
 
       const scope = nock('https://custom-api.example.com')
-        .post('/crawl')
+        .post('/query')
         .reply(200, {
           success: true,
-          result: { extracted_content: 'Custom API response.' },
+          llm_extraction: 'Custom API response.',
         });
 
       const result = await client.summarizePage('https://example.com');
@@ -212,10 +210,10 @@ describe('Crawl4AIClient', () => {
       const longSummary = Array.from({ length: 400 }, () => 'word').join(' ');
 
       nock('https://api.crawl4ai.com')
-        .post('/crawl')
+        .post('/query')
         .reply(200, {
           success: true,
-          result: { extracted_content: longSummary },
+          llm_extraction: longSummary,
         });
 
       const result = await client.summarizePage('https://example.com/long');
@@ -226,24 +224,20 @@ describe('Crawl4AIClient', () => {
       expect(result.value.estimatedReadingMinutes).toBe(2);
     });
 
-    it('passes maxSentences and maxReadingMinutes to instruction', async () => {
+    it('passes maxSentences and maxReadingMinutes to llm_instruction', async () => {
       client = new Crawl4AIClient({ apiKey: TEST_API_KEY }, silentLogger);
 
       const scope = nock('https://api.crawl4ai.com')
-        .post('/crawl', (body) => {
-          const payload = body as {
-            crawler_config: {
-              params: {
-                extraction_strategy: { params: { instruction: string } };
-              };
-            };
-          };
-          const instruction = payload.crawler_config.params.extraction_strategy.params.instruction;
-          return instruction.includes('10 sentences') && instruction.includes('5 minutes');
+        .post('/query', (body) => {
+          const payload = body as { llm_instruction: string };
+          return (
+            payload.llm_instruction.includes('10 sentences') &&
+            payload.llm_instruction.includes('5 minutes')
+          );
         })
         .reply(200, {
           success: true,
-          result: { extracted_content: 'Content.' },
+          llm_extraction: 'Content.',
         });
 
       await client.summarizePage('https://example.com', {
@@ -258,20 +252,16 @@ describe('Crawl4AIClient', () => {
       client = new Crawl4AIClient({ apiKey: TEST_API_KEY }, silentLogger);
 
       const scope = nock('https://api.crawl4ai.com')
-        .post('/crawl', (body) => {
-          const payload = body as {
-            crawler_config: {
-              params: {
-                extraction_strategy: { params: { instruction: string } };
-              };
-            };
-          };
-          const instruction = payload.crawler_config.params.extraction_strategy.params.instruction;
-          return instruction.includes('20 sentences') && instruction.includes('3 minutes');
+        .post('/query', (body) => {
+          const payload = body as { llm_instruction: string };
+          return (
+            payload.llm_instruction.includes('20 sentences') &&
+            payload.llm_instruction.includes('3 minutes')
+          );
         })
         .reply(200, {
           success: true,
-          result: { extracted_content: 'Content.' },
+          llm_extraction: 'Content.',
         });
 
       await client.summarizePage('https://example.com');
@@ -283,10 +273,10 @@ describe('Crawl4AIClient', () => {
       client = new Crawl4AIClient({ apiKey: TEST_API_KEY }, silentLogger);
 
       nock('https://api.crawl4ai.com')
-        .post('/crawl')
+        .post('/query')
         .reply(200, {
           success: true,
-          result: { extracted_content: '  Content with whitespace.  ' },
+          llm_extraction: '  Content with whitespace.  ',
         });
 
       const result = await client.summarizePage('https://example.com');
@@ -294,6 +284,25 @@ describe('Crawl4AIClient', () => {
       expect(result.ok).toBe(true);
       if (!result.ok) return;
       expect(result.value.summary).toBe('Content with whitespace.');
+    });
+
+    it('uses nested result.llm_extraction if available', async () => {
+      client = new Crawl4AIClient({ apiKey: TEST_API_KEY }, silentLogger);
+
+      nock('https://api.crawl4ai.com')
+        .post('/query')
+        .reply(200, {
+          success: true,
+          result: {
+            llm_extraction: 'Nested content from result.',
+          },
+        });
+
+      const result = await client.summarizePage('https://example.com/nested');
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.summary).toBe('Nested content from result.');
     });
   });
 });
