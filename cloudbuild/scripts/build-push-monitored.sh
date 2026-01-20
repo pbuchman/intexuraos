@@ -39,11 +39,12 @@ push_with_retry() {
 echo "📥 [PULL] Warming cache for $SERVICE_NAME..."
 docker pull "${ARTIFACT_REGISTRY_URL}/${SERVICE_NAME}:latest" || echo "⚠️ Cache pull failed, starting fresh."
 
-# Build
+# Build (use COMMIT_SHA as cache buster to ensure source changes are picked up)
 echo "🔨 [BUILD] Building image..."
 docker build \
   --cache-from="${ARTIFACT_REGISTRY_URL}/${SERVICE_NAME}:latest" \
   --build-arg BUILDKIT_INLINE_CACHE=1 \
+  --build-arg CACHE_BUST="${COMMIT_SHA}" \
   -t "${ARTIFACT_REGISTRY_URL}/${SERVICE_NAME}:${COMMIT_SHA}" \
   -t "${ARTIFACT_REGISTRY_URL}/${SERVICE_NAME}:latest" \
   -f "$DOCKERFILE_PATH" .
