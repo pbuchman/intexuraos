@@ -10,7 +10,7 @@ export interface Crawl4AIClientConfig {
 }
 
 const DEFAULT_CONFIG: Omit<Crawl4AIClientConfig, 'apiKey'> = {
-  baseUrl: 'https://www.crawl4ai-cloud.com',
+  baseUrl: 'https://api.crawl4ai.com',
   timeoutMs: 120000,
 };
 
@@ -20,18 +20,17 @@ const WORDS_PER_MINUTE = 200;
 
 interface Crawl4AIResponse {
   success: boolean;
-  result?: {
-    markdown?: string;
-    extracted_content?: string;
-    llm_extraction?: string;
+  url?: string;
+  html?: string;
+  cleaned_html?: string;
+  markdown?: {
+    raw_markdown?: string;
   };
-  // Cloud API returns LLM results in 'extractions' field
-  extractions?: string;
-  // Cloud API may also return these at top level
-  markdown?: string;
   extracted_content?: string;
-  llm_extraction?: string;
-  error?: string;
+  error_message?: string;
+  status_code?: number;
+  duration_ms?: number;
+  crawl_strategy?: string;
 }
 
 function countWords(text: string): number {
@@ -87,20 +86,24 @@ export class Crawl4AIClient implements PageSummaryServicePort {
     try {
       const prompt = buildSummaryPrompt(maxSentences, maxReadingMinutes);
 
-      // Crawl4AI Cloud API uses /query endpoint with apikey in body
+      // Crawl4AI Cloud API v1 uses /v1/crawl endpoint with X-API-Key header
       const payload = {
         url,
-        apikey: this.config.apiKey,
-        output_format: 'markdown',
-        magic: true,
-        cache_mode: 'bypass',
-        llm_instruction: prompt,
+        strategy: 'browser',
+        crawler_config: {
+          extraction_strategy: {
+            type: 'llm',
+            instruction: prompt,
+          },
+        },
+        bypass_cache: true,
       };
 
-      const response = await fetch(`${this.config.baseUrl}/query`, {
+      const response = await fetch(`${this.config.baseUrl}/v1/crawl`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'X-API-Key': this.config.apiKey,
         },
         body: JSON.stringify(payload),
         signal: controller.signal,
@@ -126,29 +129,25 @@ export class Crawl4AIClient implements PageSummaryServicePort {
       const data = (await response.json()) as Crawl4AIResponse;
 
       if (!data.success) {
-        this.logger.warn({ url, error: data.error }, 'Crawl4AI extraction failed');
+        this.logger.warn({ url, error: data.error_message }, 'Crawl4AI extraction failed');
         return err({
           code: 'FETCH_FAILED',
-          message: data.error ?? 'Crawl4AI extraction failed',
+          message: data.error_message ?? 'Crawl4AI extraction failed',
         });
       }
 
-      // Cloud API returns LLM summary in 'extractions', fallback to other fields
+      // New API returns LLM extraction in 'extracted_content', fallback to markdown
       // Use nonEmpty() to also fallback on empty strings (not just null/undefined)
       const extractedContent =
-        nonEmpty(data.extractions) ??
-        nonEmpty(data.llm_extraction) ??
-        nonEmpty(data.extracted_content) ??
-        nonEmpty(data.markdown) ??
-        nonEmpty(data.result?.llm_extraction) ??
-        nonEmpty(data.result?.extracted_content) ??
-        nonEmpty(data.result?.markdown);
+        nonEmpty(data.extracted_content) ?? nonEmpty(data.markdown?.raw_markdown);
 
       this.logger.debug(
         {
           url,
-          hasExtractions: data.extractions !== undefined,
-          hasMarkdown: data.markdown !== undefined,
+          hasExtractedContent: data.extracted_content !== undefined,
+          hasMarkdown: data.markdown?.raw_markdown !== undefined,
+          crawlStrategy: data.crawl_strategy,
+          durationMs: data.duration_ms,
           responseKeys: Object.keys(data),
         },
         'Crawl4AI response fields'
