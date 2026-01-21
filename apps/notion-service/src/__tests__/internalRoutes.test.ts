@@ -150,5 +150,29 @@ describe('Internal Routes', () => {
       expect(body.connected).toBe(false);
       expect(body.token).toBe(null);
     });
+
+    it('returns connected=true with token=null when getToken fails', async (): Promise<void> => {
+      // Setup: user is connected but getToken fails
+      fakeRepo.setConnection('user789', {
+        connected: true,
+        createdAt: '2024-01-01T00:00:00.000Z',
+        updatedAt: '2024-01-02T00:00:00.000Z',
+      });
+      fakeRepo.setToken('user789', 'secret_token');
+      fakeRepo.setFailNextGetToken(true);
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/internal/notion/users/user789/context',
+        headers: {
+          'x-internal-auth': TEST_INTERNAL_TOKEN,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as { connected: boolean; token: string | null };
+      expect(body.connected).toBe(true);
+      expect(body.token).toBe(null);
+    });
   });
 });

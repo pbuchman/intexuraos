@@ -1,4 +1,4 @@
-import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import nock from 'nock';
 import pino from 'pino';
 import { Crawl4AIClient } from '../../../infra/pagesummary/crawl4aiClient.js';
@@ -318,6 +318,73 @@ describe('Crawl4AIClient', () => {
       expect(result.ok).toBe(true);
       if (!result.ok) return;
       expect(result.value.summary).toBe('LLM summary from extracted_content field.');
+    });
+
+    it('returns TIMEOUT when request times out', async () => {
+      vi.useFakeTimers();
+
+      const shortTimeoutClient = new Crawl4AIClient(
+        { apiKey: TEST_API_KEY, timeoutMs: 100 },
+        silentLogger
+      );
+
+      nock('https://api.crawl4ai.com').post('/v1/crawl').delay(200).reply(200, {
+        success: true,
+        extracted_content: 'Too late.',
+      });
+
+      const resultPromise = shortTimeoutClient.summarizePage('https://example.com/slow');
+
+      await vi.advanceTimersByTimeAsync(150);
+
+      const result = await resultPromise;
+
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error.code).toBe('TIMEOUT');
+      expect(result.error.message).toContain('100ms');
+
+      vi.useRealTimers();
+    });
+
+    it('returns FETCH_FAILED for unknown non-Error exceptions', async () => {
+      client = new Crawl4AIClient({ apiKey: TEST_API_KEY }, silentLogger);
+
+      const originalFetch = global.fetch;
+      global.fetch = (): never => {
+        throw 'string-error';
+      };
+
+      try {
+        const result = await client.summarizePage('https://example.com/error');
+
+        expect(result.ok).toBe(false);
+        if (result.ok) return;
+        expect(result.error.code).toBe('FETCH_FAILED');
+        expect(result.error.message).toBe('Unknown error');
+      } finally {
+        global.fetch = originalFetch;
+      }
+    });
+
+    it('falls back to markdown when extracted_content is whitespace-only', async () => {
+      client = new Crawl4AIClient({ apiKey: TEST_API_KEY }, silentLogger);
+
+      nock('https://api.crawl4ai.com')
+        .post('/v1/crawl')
+        .reply(200, {
+          success: true,
+          extracted_content: '   ',
+          markdown: {
+            raw_markdown: 'Fallback markdown content.',
+          },
+        });
+
+      const result = await client.summarizePage('https://example.com/whitespace');
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.summary).toBe('Fallback markdown content.');
     });
   });
 });
