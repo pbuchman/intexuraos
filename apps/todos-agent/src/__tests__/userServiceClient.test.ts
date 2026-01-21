@@ -217,5 +217,80 @@ describe('UserServiceClient', () => {
         expect(result.error.message).toContain('not-a-real-model');
       }
     });
+
+    it('returns an OpenAI client when user has gpt-4o-mini as default model', async () => {
+      nock(USER_SERVICE_URL)
+        .get('/internal/users/user-openai/settings')
+        .matchHeader('X-Internal-Auth', INTERNAL_AUTH_TOKEN)
+        .reply(200, {
+          llmPreferences: {
+            defaultModel: LlmModels.GPT4oMini,
+          },
+        });
+
+      nock(USER_SERVICE_URL)
+        .get('/internal/users/user-openai/llm-keys')
+        .matchHeader('X-Internal-Auth', INTERNAL_AUTH_TOKEN)
+        .reply(200, { openai: 'openai-api-key-123' });
+
+      const client = createClient();
+      const result = await client.getLlmClient('user-openai');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toBeDefined();
+        expect(typeof result.value.generate).toBe('function');
+      }
+    });
+
+    it('returns an Anthropic client when user has claude-3-5-haiku as default model', async () => {
+      nock(USER_SERVICE_URL)
+        .get('/internal/users/user-anthropic/settings')
+        .matchHeader('X-Internal-Auth', INTERNAL_AUTH_TOKEN)
+        .reply(200, {
+          llmPreferences: {
+            defaultModel: LlmModels.ClaudeHaiku35,
+          },
+        });
+
+      nock(USER_SERVICE_URL)
+        .get('/internal/users/user-anthropic/llm-keys')
+        .matchHeader('X-Internal-Auth', INTERNAL_AUTH_TOKEN)
+        .reply(200, { anthropic: 'anthropic-api-key-123' });
+
+      const client = createClient();
+      const result = await client.getLlmClient('user-anthropic');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toBeDefined();
+        expect(typeof result.value.generate).toBe('function');
+      }
+    });
+
+    it('returns a Perplexity client when user has sonar as default model', async () => {
+      nock(USER_SERVICE_URL)
+        .get('/internal/users/user-perplexity/settings')
+        .matchHeader('X-Internal-Auth', INTERNAL_AUTH_TOKEN)
+        .reply(200, {
+          llmPreferences: {
+            defaultModel: LlmModels.Sonar,
+          },
+        });
+
+      nock(USER_SERVICE_URL)
+        .get('/internal/users/user-perplexity/llm-keys')
+        .matchHeader('X-Internal-Auth', INTERNAL_AUTH_TOKEN)
+        .reply(200, { perplexity: 'perplexity-api-key-123' });
+
+      const client = createClient();
+      const result = await client.getLlmClient('user-perplexity');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toBeDefined();
+        expect(typeof result.value.generate).toBe('function');
+      }
+    });
   });
 });

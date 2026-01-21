@@ -267,5 +267,31 @@ describe('Internal Routes', () => {
       expect(body.data.status).toBe('completed');
       expect(body.data.message).toBe('Todo "Todo with nulls" created successfully');
     });
+
+    it('succeeds even when pubsub publish fails', async () => {
+      ctx.todosProcessingPublisher.simulateFailure({ code: 'PUBLISH_FAILED', message: 'Failed to publish' });
+
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/internal/todos',
+        headers: {
+          'x-internal-auth': TEST_INTERNAL_TOKEN,
+          'content-type': 'application/json',
+        },
+        payload: {
+          userId: 'user-1',
+          title: 'Todo despite publish failure',
+          tags: [],
+          source: 'actions-agent',
+          sourceId: 'action-publish-fail',
+        },
+      });
+
+      // Todo creation should still succeed even if publish fails
+      expect(response.statusCode).toBe(201);
+      const body = JSON.parse(response.body);
+      expect(body.data.status).toBe('completed');
+      expect(body.data.message).toBe('Todo "Todo despite publish failure" created successfully');
+    });
   });
 });
