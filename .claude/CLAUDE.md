@@ -670,6 +670,7 @@ gh pr create --base development  # or --base main
 ```
 
 **Why merge before PR?** This ensures:
+
 - Your branch is up-to-date with the target branch
 - Merge conflicts are resolved locally (easier to debug)
 - CI runs against the merged state (matches post-merge behavior)

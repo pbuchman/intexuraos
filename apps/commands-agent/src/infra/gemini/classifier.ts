@@ -29,6 +29,7 @@ const MODEL_KEYWORDS: Record<ResearchModel, string[]> = {
   [LlmModels.SonarPro]: ['sonar', 'sonar pro', 'pplx', 'perplexity'],
   [LlmModels.SonarDeepResearch]: ['sonar deep', 'perplexity deep', 'deep sonar'],
   [LlmModels.Glm47]: ['glm', 'glm-4', 'glm-4.7', 'zai'],
+  [LlmModels.Glm47Flash]: ['glm flash', 'glm-4.7-flash', 'glm-flash'],
 };
 
 const DEFAULT_MODELS: ResearchModel[] = [

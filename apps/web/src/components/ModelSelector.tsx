@@ -51,7 +51,10 @@ const PROVIDER_MODELS: ProviderConfig[] = [
   {
     id: LlmProviders.Zai,
     displayName: 'Zai',
-    models: [{ id: LlmModels.Glm47, name: 'GLM-4.7' }],
+    models: [
+      { id: LlmModels.Glm47, name: 'GLM-4.7' },
+      { id: LlmModels.Glm47Flash, name: 'GLM-4.7 Flash (Free)' },
+    ],
   },
 ];
 

@@ -121,6 +121,11 @@ describe('pricingClient', () => {
         outputPricePerMillion: 2.2,
         webSearchCostPerCall: 0.005,
       },
+      [LlmModels.Glm47Flash]: {
+        inputPricePerMillion: 0,
+        outputPricePerMillion: 0,
+        webSearchCostPerCall: 0,
+      },
     },
     updatedAt: '2026-01-05T12:00:00Z',
   };
@@ -298,7 +303,7 @@ describe('pricingClient', () => {
       const context = new PricingContext(completeAllPricing);
 
       const models = context.getModelsWithPricing();
-      expect(models).toHaveLength(15);
+      expect(models).toHaveLength(16);
       expect(models).toContain(LlmModels.Gemini25Pro);
       expect(models).toContain(LlmModels.GPT52);
     });
