@@ -317,5 +317,30 @@ describe('WhatsAppClient', () => {
         expect(result.error.message).toContain('Failed to mark message as read');
       }
     });
+
+    it('returns timeout error when request takes too long', async () => {
+      vi.useFakeTimers();
+
+      nock(GRAPH_API_BASE)
+        .post(`/v22.0/${PHONE_NUMBER_ID}/messages`)
+        .delay(15000)
+        .reply(200, { success: true });
+
+      const client = createWhatsAppClient(config);
+      const resultPromise = client.markAsRead(MESSAGE_ID);
+
+      await vi.advanceTimersByTimeAsync(11000);
+
+      const result = await resultPromise;
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('TIMEOUT');
+        expect(result.error.message).toContain('timed out');
+        expect(result.error.message).toContain('10000');
+      }
+
+      vi.useRealTimers();
+    });
   });
 });
