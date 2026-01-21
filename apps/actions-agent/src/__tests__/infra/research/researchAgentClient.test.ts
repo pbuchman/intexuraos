@@ -230,5 +230,56 @@ describe('createResearchAgentClient', () => {
         expect(result.error.message).toContain('Network error');
       }
     });
+
+    it('includes resourceUrl and errorCode from successful data response', async () => {
+      nock(baseUrl)
+        .post('/internal/research/draft')
+        .reply(200, {
+          success: true,
+          data: {
+            status: 'completed',
+            message: 'Draft created',
+            resourceUrl: '/#/research/draft-999',
+            errorCode: 'PARTIAL_SUCCESS',
+          },
+        });
+
+      const client = createResearchAgentClient({ baseUrl, internalAuthToken });
+      const result = await client.createDraft({
+        userId: 'user-123',
+        title: 'Test',
+        prompt: 'Test prompt',
+        originalMessage: 'Test prompt',
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.status).toBe('completed');
+        expect(result.value.message).toBe('Draft created');
+        expect(result.value.resourceUrl).toBe('/#/research/draft-999');
+        expect(result.value.errorCode).toBe('PARTIAL_SUCCESS');
+      }
+    });
+
+    it('returns failed ServiceFeedback with default message on HTTP error without error body message', async () => {
+      nock(baseUrl).post('/internal/research/draft').reply(403, {
+        success: false,
+        error: {},
+      });
+
+      const client = createResearchAgentClient({ baseUrl, internalAuthToken });
+      const result = await client.createDraft({
+        userId: 'user-123',
+        title: 'Test',
+        prompt: 'Test prompt',
+        originalMessage: 'Test prompt',
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.status).toBe('failed');
+        expect(result.value.message).toContain('HTTP 403');
+      }
+    });
   });
 });

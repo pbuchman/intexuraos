@@ -544,5 +544,52 @@ describe('linearAgentHttpClient', () => {
       expect(scope.isDone()).toBe(true);
       expect(isOk(result)).toBe(true);
     });
+
+    it('includes summary in request body when provided', async () => {
+      const scope = nock(baseUrl)
+        .post('/internal/linear/process-action', {
+          action: {
+            id: 'action-123',
+            userId: 'user-456',
+            text: 'Fix authentication bug',
+            summary: 'Key points about the bug',
+          },
+        })
+        .matchHeader('X-Internal-Auth', internalAuthToken)
+        .reply(200, {
+          success: true,
+          data: { status: 'completed', message: 'Linear issue created: TEST-1' },
+        });
+
+      const client = createClient();
+      const result = await client.processAction(
+        'action-123',
+        'user-456',
+        'Fix authentication bug',
+        'Key points about the bug'
+      );
+
+      expect(scope.isDone()).toBe(true);
+      expect(isOk(result)).toBe(true);
+    });
+
+    it('excludes summary from request body when undefined', async () => {
+      const scope = nock(baseUrl)
+        .post('/internal/linear/process-action', (body) => {
+          // Verify that summary is not present in the body
+          return body.action && !Object.prototype.hasOwnProperty.call(body.action, 'summary');
+        })
+        .matchHeader('X-Internal-Auth', internalAuthToken)
+        .reply(200, {
+          success: true,
+          data: { status: 'completed', message: 'Linear issue created: TEST-1' },
+        });
+
+      const client = createClient();
+      const result = await client.processAction('action-123', 'user-456', 'Fix bug');
+
+      expect(scope.isDone()).toBe(true);
+      expect(isOk(result)).toBe(true);
+    });
   });
 });
