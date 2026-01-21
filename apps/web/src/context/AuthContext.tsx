@@ -37,7 +37,7 @@ export function AuthProvider({ children }: AuthProviderProps): React.JSX.Element
       logout: (): void => {
         void auth0Logout({
           logoutParams: {
-            returnTo: window.location.origin,
+            returnTo: `${window.location.origin}/#/`,
           },
         });
       },
