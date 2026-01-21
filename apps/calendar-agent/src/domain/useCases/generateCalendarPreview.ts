@@ -64,6 +64,9 @@ function calculateDuration(start: string | null, end: string | null): string | n
 
     return `${String(hours)} hour${hours === 1 ? '' : 's'} ${String(minutes)} minute${minutes === 1 ? '' : 's'}`;
   } catch {
+    // Graceful degradation: if date parsing fails (unlikely since extraction validated),
+    // return null duration rather than failing the entire preview generation.
+    // This is a pure helper function without logger access - callers handle the null case.
     return null;
   }
 }

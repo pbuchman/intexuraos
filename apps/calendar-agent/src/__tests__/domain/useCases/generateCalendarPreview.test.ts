@@ -397,5 +397,75 @@ describe('generateCalendarPreview', () => {
         expect(result.value.preview.duration).toBe('1 minute');
       }
     });
+
+    it('handles negative duration (end before start) by returning null', async () => {
+      extractionService.extractEventResult = ok({
+        summary: 'Malformed event',
+        start: '2025-01-15T14:00:00',
+        end: '2025-01-15T10:00:00', // End is before start
+        location: null,
+        description: null,
+        valid: true,
+        error: null,
+        reasoning: 'LLM returned end before start',
+      });
+
+      const result = await generateCalendarPreview(
+        {
+          actionId: 'action-123',
+          userId: 'user-456',
+          text: 'Some event',
+          currentDate: '2025-01-14',
+        },
+        deps
+      );
+
+      expect(isOk(result)).toBe(true);
+      if (isOk(result)) {
+        // Duration should be null when end is before start (graceful degradation)
+        expect(result.value.preview.duration).toBeNull();
+      }
+    });
+  });
+
+  describe('update failure during invalid extraction', () => {
+    it('still returns failed preview when update fails for invalid extraction', async () => {
+      extractionService.extractEventResult = ok({
+        summary: 'Something',
+        start: null,
+        end: null,
+        location: null,
+        description: null,
+        valid: false,
+        error: 'Could not determine event date',
+        reasoning: 'No date information in text',
+      });
+
+      // Simulate update failure
+      previewRepository.setUpdateResult(err({
+        code: 'INTERNAL_ERROR',
+        message: 'Firestore update failed',
+      }));
+
+      const result = await generateCalendarPreview(
+        {
+          actionId: 'action-123',
+          userId: 'user-456',
+          text: 'Do something',
+          currentDate: '2025-01-14',
+        },
+        deps
+      );
+
+      // Should still succeed with failed preview (graceful degradation)
+      expect(isOk(result)).toBe(true);
+      if (isOk(result)) {
+        expect(result.value.preview.status).toBe('failed');
+        expect(result.value.preview.error).toBe('Could not determine event date');
+      }
+
+      // Verify logger.warn was called for the update failure
+      expect(logger.warn).toHaveBeenCalled();
+    });
   });
 });
