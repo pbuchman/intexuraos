@@ -85,6 +85,15 @@ function sleep(ms: number): Promise<void> {
 }
 
 /**
+ * Strip markdown headers (###) from text.
+ * Speechmatics summary may include markdown headers like "### Key Points"
+ * which don't render well in WhatsApp messages.
+ */
+function stripMarkdownHeaders(text: string): string {
+  return text.replace(/^#{1,6}\s*/gm, '');
+}
+
+/**
  * Use case for transcribing audio messages.
  */
 export class TranscribeAudioUseCase {
@@ -532,7 +541,9 @@ export class TranscribeAudioUseCase {
   ): Promise<void> {
     let message = `🎙️ *Transcription:*\n\n${transcript}`;
     if (summary !== undefined) {
-      message += `\n\n📝 *Summary:*\n\n${summary}`;
+      // Strip markdown headers from summary for cleaner WhatsApp display
+      const cleanSummary = stripMarkdownHeaders(summary);
+      message += `\n\n📝 *Summary:*\n\n${cleanSummary}`;
     }
     await whatsappCloudApi.sendMessage(
       phoneNumberId,

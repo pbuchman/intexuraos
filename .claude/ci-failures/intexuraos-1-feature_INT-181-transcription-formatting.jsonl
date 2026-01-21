@@ -1,0 +1,2 @@
+{"ts":"2026-01-21T13:48:14.410Z","project":"intexuraos-1","branch":"feature/INT-181-transcription-formatting","workspace":"--","runNumber":1,"passed":false,"durationMs":1651,"failureCount":0,"failures":[]}
+{"ts":"2026-01-21T13:52:10.572Z","project":"intexuraos-1","branch":"feature/INT-181-transcription-formatting","workspace":"whatsapp-service","runNumber":2,"passed":true,"durationMs":223878,"failureCount":0,"failures":[]}
