@@ -607,7 +607,7 @@ describe('TranscribeAudioUseCase', () => {
       expect(successMessage?.replyToMessageId).toBe('wamid.original123');
     });
 
-    it('sends success message with transcript and summary when available', async () => {
+    it('sends success message with transcript and summary with English intro phrase', async () => {
       await createTestMessage('test-message-id', 'test-user-id');
 
       const input = createTestInput();
@@ -621,7 +621,8 @@ describe('TranscribeAudioUseCase', () => {
         transcriptionService.setJobResult(
           jobId,
           'Create a todo for reviewing the PR',
-          '• User wants to create a new todo\n• Todo is for reviewing PR 445'
+          'User wants to create a new todo for reviewing PR 445',
+          'en'
         );
       }
 
@@ -632,8 +633,38 @@ describe('TranscribeAudioUseCase', () => {
       expect(successMessage).toBeDefined();
       expect(successMessage?.message).toContain('Create a todo for reviewing the PR');
       expect(successMessage?.message).toContain('📝 *Summary:*');
-      expect(successMessage?.message).toContain('• User wants to create a new todo');
-      expect(successMessage?.message).toContain('• Todo is for reviewing PR 445');
+      expect(successMessage?.message).toContain('Here is a summary of what you said:');
+      expect(successMessage?.message).toContain('User wants to create a new todo');
+    });
+
+    it('sends success message with Polish intro phrase when detected language is Polish', async () => {
+      await createTestMessage('test-message-id', 'test-user-id');
+
+      const input = createTestInput();
+      const executePromise = usecase.execute(input, logger);
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      const jobs = transcriptionService.getJobs();
+      const jobId = Array.from(jobs.keys())[0];
+      if (jobId !== undefined) {
+        transcriptionService.setJobResult(
+          jobId,
+          'Utwórz zadanie do przejrzenia PR',
+          'Użytkownik chce utworzyć nowe zadanie do przejrzenia PR 445',
+          'pl'
+        );
+      }
+
+      await executePromise;
+
+      const sentMessages = whatsappCloudApi.getSentMessages();
+      const successMessage = sentMessages.find((m) => m.message.includes('🎙️'));
+      expect(successMessage).toBeDefined();
+      expect(successMessage?.message).toContain('Utwórz zadanie do przejrzenia PR');
+      expect(successMessage?.message).toContain('📝 *Summary:*');
+      expect(successMessage?.message).toContain('Oto podsumowanie tego, co powiedziałeś:');
+      expect(successMessage?.message).toContain('Użytkownik chce utworzyć nowe zadanie');
     });
 
     it('sends success message without summary section when summary is not available', async () => {
