@@ -245,6 +245,29 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
     async (request: FastifyRequest<{ Body: PubSubBody }>, reply: FastifyReply) => {
       logIncomingRequest(request);
 
+      // Pub/Sub push requests use OIDC tokens (validated by Cloud Run automatically)
+      // Direct service calls use x-internal-auth header
+      // Detection: Pub/Sub requests have from: noreply@google.com header
+      const fromHeader = request.headers.from;
+      const isPubSubPush = typeof fromHeader === 'string' && fromHeader === 'noreply@google.com';
+
+      if (isPubSubPush) {
+        request.log.info(
+          { from: fromHeader, userAgent: request.headers['user-agent'] },
+          'Authenticated Pub/Sub push request (OIDC validated by Cloud Run)'
+        );
+      } else {
+        const authResult = validateInternalAuth(request);
+        if (!authResult.valid) {
+          request.log.warn(
+            { reason: authResult.reason },
+            'Internal auth failed for /internal/calendar/generate-preview'
+          );
+          reply.status(401);
+          return await reply.fail('UNAUTHORIZED', 'Unauthorized');
+        }
+      }
+
       const { message } = request.body;
 
       request.log.info(

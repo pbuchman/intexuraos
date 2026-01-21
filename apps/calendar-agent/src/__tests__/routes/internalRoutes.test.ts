@@ -148,6 +148,7 @@ describe('Internal Routes', () => {
       const response = await app.inject({
         method: 'POST',
         url: '/internal/calendar/generate-preview',
+        headers: { from: 'noreply@google.com' },
         payload,
       });
 
@@ -171,6 +172,7 @@ describe('Internal Routes', () => {
       const response = await app.inject({
         method: 'POST',
         url: '/internal/calendar/generate-preview',
+        headers: { from: 'noreply@google.com' },
         payload,
       });
 
@@ -193,6 +195,7 @@ describe('Internal Routes', () => {
       const response = await app.inject({
         method: 'POST',
         url: '/internal/calendar/generate-preview',
+        headers: { from: 'noreply@google.com' },
         payload,
       });
 
@@ -215,6 +218,7 @@ describe('Internal Routes', () => {
       const response = await app.inject({
         method: 'POST',
         url: '/internal/calendar/generate-preview',
+        headers: { from: 'noreply@google.com' },
         payload,
       });
 
@@ -222,6 +226,64 @@ describe('Internal Routes', () => {
       const body = JSON.parse(response.body) as { success: boolean; data: { previewId: string; status: string } };
       expect(body.success).toBe(true);
       expect(body.data.status).toBe('failed');
+    });
+
+    it('returns 401 without auth for direct service call', async () => {
+      const payload = createPubSubPayload({
+        actionId: 'action-123',
+        userId: 'user-456',
+        text: 'Meeting tomorrow',
+        currentDate: '2025-01-14',
+      });
+
+      // Direct call without Pub/Sub header or internal auth token
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/calendar/generate-preview',
+        payload,
+      });
+
+      expect(response.statusCode).toBe(401);
+    });
+
+    it('allows Pub/Sub push with from: noreply@google.com header', async () => {
+      const payload = createPubSubPayload({
+        actionId: 'action-123',
+        userId: 'user-456',
+        text: 'Lunch with Monika tomorrow at 2pm',
+        currentDate: '2025-01-14',
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/calendar/generate-preview',
+        headers: {
+          from: 'noreply@google.com',
+        },
+        payload,
+      });
+
+      expect(response.statusCode).toBe(200);
+    });
+
+    it('allows direct service call with internal auth token', async () => {
+      const payload = createPubSubPayload({
+        actionId: 'action-123',
+        userId: 'user-456',
+        text: 'Lunch with Monika tomorrow at 2pm',
+        currentDate: '2025-01-14',
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/calendar/generate-preview',
+        headers: {
+          'x-internal-auth': INTERNAL_AUTH_TOKEN,
+        },
+        payload,
+      });
+
+      expect(response.statusCode).toBe(200);
     });
   });
 
