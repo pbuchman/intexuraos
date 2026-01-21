@@ -16,7 +16,7 @@ IntexuraOS reimagines personal productivity as an **AI-first system**. Instead o
 
 ### Multi-Model Intelligence Layer
 
-IntexuraOS integrates with **5 AI providers** and **15 models**, treating them as a **council of experts** rather than a single oracle:
+IntexuraOS integrates with **5 AI providers** and **16 models**, treating them as a **council of experts** rather than a single oracle:
 
 | Provider   | Models                                    | Capabilities                       |
 | ---------- | ----------------------------------------- | ---------------------------------- |
@@ -24,7 +24,7 @@ IntexuraOS integrates with **5 AI providers** and **15 models**, treating them a
 | OpenAI     | GPT-5.2, o4-mini-deep-research, DALL-E 3  | Deep research, synthesis, images   |
 | Anthropic  | Claude Opus 4.5, Sonnet 4.5, Haiku 3.5    | Analysis, research, validation     |
 | Perplexity | Sonar, Sonar Pro, Sonar Deep Research     | Web search, real-time information  |
-| Zai        | GLM-4.7                                   | Multilingual, alternative analysis |
+| Zai        | GLM-4.7, GLM-4.7-Flash                    | Multilingual, alternative analysis |
 
 ### Intelligent Routing
 
@@ -213,7 +213,7 @@ Every LLM call is tracked with:
 
 ### Pricing Transparency
 
-The **app-settings-service** maintains real-time pricing for all 15 models, enabling:
+The **app-settings-service** maintains real-time pricing for all 16 models, enabling:
 - Pre-execution cost estimates
 - Post-execution cost reporting
 - Monthly usage analytics

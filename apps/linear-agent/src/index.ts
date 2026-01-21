@@ -22,6 +22,7 @@ const REQUIRED_MODELS: LLMModel[] = [
   LlmModels.Gemini25Flash,
   LlmModels.Gemini25Pro,
   LlmModels.Glm47,
+  LlmModels.Glm47Flash,
 ];
 
 validateRequiredEnv(REQUIRED_ENV);

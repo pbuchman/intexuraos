@@ -94,9 +94,22 @@ export const TEST_PERPLEXITY_PRICING: Record<string, ModelPricing> = {
   },
 };
 
+export const TEST_ZAI_PRICING: Record<string, ModelPricing> = {
+  'glm-4.7': {
+    inputPricePerMillion: 0.6,
+    outputPricePerMillion: 2.2,
+    webSearchCostPerCall: 0.005,
+  },
+  'glm-4.7-flash': {
+    inputPricePerMillion: 0,
+    outputPricePerMillion: 0,
+    webSearchCostPerCall: 0,
+  },
+};
+
 /** Helper to get pricing for a specific model */
 export function getTestPricing(
-  provider: 'google' | 'openai' | 'anthropic' | 'perplexity',
+  provider: 'google' | 'openai' | 'anthropic' | 'perplexity' | 'zai',
   model: string
 ): ModelPricing {
   const pricingMap = {
@@ -104,6 +117,7 @@ export function getTestPricing(
     openai: TEST_OPENAI_PRICING,
     anthropic: TEST_ANTHROPIC_PRICING,
     perplexity: TEST_PERPLEXITY_PRICING,
+    zai: TEST_ZAI_PRICING,
   };
   const pricing = pricingMap[provider][model];
   if (pricing === undefined) {

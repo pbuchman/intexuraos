@@ -41,6 +41,7 @@ export async function initServices(config: ServiceConfig): Promise<void> {
   const pricingContext = createPricingContext(pricingResult.value, [
     LlmModels.Gemini25Flash,
     LlmModels.Glm47,
+    LlmModels.Glm47Flash,
   ] as FastModel[]);
 
   const userServiceClient = createUserServiceClient({

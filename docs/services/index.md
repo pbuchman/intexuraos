@@ -6,7 +6,7 @@ Complete documentation for all IntexuraOS services, organized by AI capability.
 
 ## AI Capabilities Overview
 
-IntexuraOS integrates **5 AI providers** with **15 models** across **18 microservices**:
+IntexuraOS integrates **5 AI providers** with **16 models** across **18 microservices**:
 
 ```mermaid
 graph TB
@@ -128,7 +128,7 @@ Core platform services that support the AI agents.
 
 ## AI Models Used
 
-### Research Models (10)
+### Research Models (11)
 
 Used for deep research queries with parallel execution:
 
@@ -144,8 +144,9 @@ Used for deep research queries with parallel execution:
 | Sonar Pro           | Perplexity | Enhanced search      |
 | Sonar Deep Research | Perplexity | Comprehensive search |
 | GLM-4.7             | Zai        | Multilingual         |
+| GLM-4.7-Flash       | Zai        | Free, fast responses |
 
-### Classification Models (2)
+### Classification Models (3)
 
 Used for intent classification and fast tasks:
 
@@ -153,6 +154,7 @@ Used for intent classification and fast tasks:
 | ---------------- | -------- | ---------------------------------------- |
 | Gemini 2.5 Flash | Google   | Command classification, title generation |
 | GLM-4.7          | Zai      | Alternative classifier                   |
+| GLM-4.7-Flash    | Zai      | Free classification, cost-effective      |
 
 ### Image Models (2)
 
@@ -163,7 +165,7 @@ Used for image generation:
 | GPT-Image-1 (DALL-E 3) | OpenAI   | High-quality images   |
 | Gemini 2.5 Flash Image | Google   | Fast image generation |
 
-### Validation Models (5)
+### Validation Models (6)
 
 Used for API key validation (cheap, fast):
 
@@ -174,6 +176,7 @@ Used for API key validation (cheap, fast):
 | GPT-4o Mini      | OpenAI     |
 | Sonar            | Perplexity |
 | GLM-4.7          | Zai        |
+| GLM-4.7-Flash    | Zai        |
 
 ---
 
