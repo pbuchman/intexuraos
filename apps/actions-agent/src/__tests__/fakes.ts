@@ -37,7 +37,6 @@ import type { LinearAgentClient } from '../domain/ports/linearAgentClient.js';
 import type { Action } from '../domain/models/action.js';
 import type { ActionTransition } from '../domain/models/actionTransition.js';
 import type { ActionCreatedEvent } from '../domain/models/actionEvent.js';
-import type { ResearchModel } from '@intexuraos/llm-contract';
 import {
   createHandleResearchActionUseCase,
   type HandleResearchActionUseCase,
@@ -117,7 +116,7 @@ export class FakeResearchServiceClient implements ResearchServiceClient {
     userId: string;
     title: string;
     prompt: string;
-    selectedModels: ResearchModel[];
+    originalMessage: string;
     sourceActionId?: string;
   } | null = null;
   private nextResponse: ServiceFeedback = {
@@ -145,7 +144,7 @@ export class FakeResearchServiceClient implements ResearchServiceClient {
     userId: string;
     title: string;
     prompt: string;
-    selectedModels: ResearchModel[];
+    originalMessage: string;
     sourceActionId?: string;
   }): Promise<Result<ServiceFeedback>> {
     if (this.failNext) {

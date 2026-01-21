@@ -188,8 +188,7 @@ steps:
   # --- Batch 2 Builds (wait for Batch 1 deploys) ---
   - name: 'gcr.io/cloud-builders/docker'
     id: 'build-push-notion-service'
-    waitFor:
-      ['deploy-promptvault-service', 'deploy-image-service', 'deploy-api-docs-hub']
+    waitFor: ['deploy-promptvault-service', 'deploy-image-service', 'deploy-api-docs-hub']
     timeout: 900s
     entrypoint: 'bash'
     args:
@@ -205,8 +204,7 @@ steps:
 
   - name: 'gcr.io/cloud-builders/docker'
     id: 'build-push-user-service'
-    waitFor:
-      ['deploy-promptvault-service', 'deploy-image-service', 'deploy-api-docs-hub']
+    waitFor: ['deploy-promptvault-service', 'deploy-image-service', 'deploy-api-docs-hub']
     timeout: 900s
     entrypoint: 'bash'
     args:
@@ -218,8 +216,7 @@ steps:
 
   - name: 'gcr.io/cloud-builders/docker'
     id: 'build-push-whatsapp-service'
-    waitFor:
-      ['deploy-promptvault-service', 'deploy-image-service', 'deploy-api-docs-hub']
+    waitFor: ['deploy-promptvault-service', 'deploy-image-service', 'deploy-api-docs-hub']
     timeout: 900s
     entrypoint: 'bash'
     args:
@@ -274,8 +271,7 @@ steps:
   # --- Batch 3 Builds (wait for Batch 2 deploys) ---
   - name: 'gcr.io/cloud-builders/docker'
     id: 'build-push-app-settings-service'
-    waitFor:
-      ['deploy-notion-service', 'deploy-user-service', 'deploy-whatsapp-service']
+    waitFor: ['deploy-notion-service', 'deploy-user-service', 'deploy-whatsapp-service']
     timeout: 900s
     entrypoint: 'bash'
     args:
@@ -291,8 +287,7 @@ steps:
 
   - name: 'gcr.io/cloud-builders/docker'
     id: 'build-push-mobile-notifications-service'
-    waitFor:
-      ['deploy-notion-service', 'deploy-user-service', 'deploy-whatsapp-service']
+    waitFor: ['deploy-notion-service', 'deploy-user-service', 'deploy-whatsapp-service']
     timeout: 900s
     entrypoint: 'bash'
     args:
@@ -308,8 +303,7 @@ steps:
 
   - name: 'gcr.io/cloud-builders/docker'
     id: 'build-push-research-agent'
-    waitFor:
-      ['deploy-notion-service', 'deploy-user-service', 'deploy-whatsapp-service']
+    waitFor: ['deploy-notion-service', 'deploy-user-service', 'deploy-whatsapp-service']
     timeout: 900s
     entrypoint: 'bash'
     args:
@@ -466,8 +460,7 @@ steps:
   # --- Batch 5 Builds (wait for Batch 4 deploys) ---
   - name: 'gcr.io/cloud-builders/docker'
     id: 'build-push-notes-agent'
-    waitFor:
-      ['deploy-commands-agent', 'deploy-actions-agent', 'deploy-data-insights-agent']
+    waitFor: ['deploy-commands-agent', 'deploy-actions-agent', 'deploy-data-insights-agent']
     timeout: 900s
     entrypoint: 'bash'
     args:
@@ -479,8 +472,7 @@ steps:
 
   - name: 'gcr.io/cloud-builders/docker'
     id: 'build-push-todos-agent'
-    waitFor:
-      ['deploy-commands-agent', 'deploy-actions-agent', 'deploy-data-insights-agent']
+    waitFor: ['deploy-commands-agent', 'deploy-actions-agent', 'deploy-data-insights-agent']
     timeout: 900s
     entrypoint: 'bash'
     args:
@@ -492,8 +484,7 @@ steps:
 
   - name: 'gcr.io/cloud-builders/docker'
     id: 'build-push-bookmarks-agent'
-    waitFor:
-      ['deploy-commands-agent', 'deploy-actions-agent', 'deploy-data-insights-agent']
+    waitFor: ['deploy-commands-agent', 'deploy-actions-agent', 'deploy-data-insights-agent']
     timeout: 900s
     entrypoint: 'bash'
     args:
@@ -548,8 +539,7 @@ steps:
   # --- Batch 6 Builds (wait for Batch 5 deploys) ---
   - name: 'gcr.io/cloud-builders/docker'
     id: 'build-push-calendar-agent'
-    waitFor:
-      ['deploy-notes-agent', 'deploy-todos-agent', 'deploy-bookmarks-agent']
+    waitFor: ['deploy-notes-agent', 'deploy-todos-agent', 'deploy-bookmarks-agent']
     timeout: 900s
     entrypoint: 'bash'
     args:
@@ -565,8 +555,7 @@ steps:
 
   - name: 'gcr.io/cloud-builders/docker'
     id: 'build-push-linear-agent'
-    waitFor:
-      ['deploy-notes-agent', 'deploy-todos-agent', 'deploy-bookmarks-agent']
+    waitFor: ['deploy-notes-agent', 'deploy-todos-agent', 'deploy-bookmarks-agent']
     timeout: 900s
     entrypoint: 'bash'
     args:
@@ -578,12 +567,10 @@ steps:
 
   - name: 'gcr.io/cloud-builders/docker'
     id: 'build-push-web-agent'
-    waitFor:
-      ['deploy-notes-agent', 'deploy-todos-agent', 'deploy-bookmarks-agent']
+    waitFor: ['deploy-notes-agent', 'deploy-todos-agent', 'deploy-bookmarks-agent']
     timeout: 900s
     entrypoint: 'bash'
-    args:
-      ['cloudbuild/scripts/build-push-monitored.sh', 'web-agent', 'apps/web-agent/Dockerfile']
+    args: ['cloudbuild/scripts/build-push-monitored.sh', 'web-agent', 'apps/web-agent/Dockerfile']
     env:
       - 'DOCKER_BUILDKIT=1'
       - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
@@ -629,8 +616,7 @@ steps:
 
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     id: 'fetch-web-config'
-    waitFor:
-      ['deploy-calendar-agent', 'deploy-linear-agent', 'deploy-web-agent']
+    waitFor: ['deploy-calendar-agent', 'deploy-linear-agent', 'deploy-web-agent']
     entrypoint: 'bash'
     args:
       - '-c'

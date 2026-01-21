@@ -1,4 +1,3 @@
-import { LlmModels } from '@intexuraos/llm-contract';
 import { describe, it, expect, beforeEach } from 'vitest';
 import { ok, type Result } from '@intexuraos/common-core';
 import type { LlmGenerateClient } from '@intexuraos/llm-factory';
@@ -178,37 +177,6 @@ describe('retryPendingCommands usecase', () => {
 
     expect(result.failed).toBe(1);
     expect(result.processed).toBe(0);
-  });
-
-  it('includes selectedModels in event when present in classification', async () => {
-    const command = createCommand();
-    commandRepository.addCommand(command);
-    userServiceClient.setApiKeys('user-456', { google: 'google-key' });
-    classifier.setResult({
-      type: 'research',
-      confidence: 0.95,
-      title: 'AI Trends Research',
-      reasoning: 'Research task',
-      selectedModels: [LlmModels.Gemini25Flash, LlmModels.O4MiniDeepResearch],
-    });
-
-    const usecase = createRetryPendingCommandsUseCase({
-      commandRepository,
-      actionsAgentClient,
-      classifierFactory: () => classifier,
-      userServiceClient,
-      eventPublisher,
-      logger,
-    });
-
-    await usecase.execute();
-
-    const events = eventPublisher.getPublishedEvents();
-    expect(events).toHaveLength(1);
-    expect(events[0]?.payload.selectedModels).toEqual([
-      LlmModels.Gemini25Flash,
-      LlmModels.O4MiniDeepResearch,
-    ]);
   });
 
   it('creates action for low-confidence note classification', async () => {

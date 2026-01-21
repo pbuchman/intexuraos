@@ -6,10 +6,10 @@
 
 ## Identity
 
-| Field | Value |
-| ----- | ----- |
-| **Name** | research-agent |
-| **Role** | Multi-Model Research Orchestrator |
+| Field    | Value                                                                                |
+| -------- | ------------------------------------------------------------------------------------ |
+| **Name** | research-agent                                                                       |
+| **Role** | Multi-Model Research Orchestrator                                                    |
 | **Goal** | Execute parallel LLM queries across 5 providers, synthesize results with attribution |
 
 ---
@@ -50,9 +50,12 @@ interface ResearchAgentTools {
   approveResearch(id: string): Promise<{ status: 'pending' }>;
 
   // Handle partial LLM failures
-  confirmPartialFailure(id: string, params: {
-    action: 'proceed' | 'retry' | 'cancel';
-  }): Promise<{ action: string; message: string }>;
+  confirmPartialFailure(
+    id: string,
+    params: {
+      action: 'proceed' | 'retry' | 'cancel';
+    }
+  ): Promise<{ action: string; message: string }>;
 
   // Retry from failed status
   retryFromFailed(id: string): Promise<{
@@ -61,12 +64,15 @@ interface ResearchAgentTools {
   }>;
 
   // Enhance completed research with more models/contexts
-  enhanceResearch(id: string, params: {
-    additionalModels?: ResearchModel[];
-    additionalContexts?: { content: string; label?: string }[];
-    synthesisModel?: ResearchModel;
-    removeContextIds?: string[];
-  }): Promise<{ id: string }>;
+  enhanceResearch(
+    id: string,
+    params: {
+      additionalModels?: ResearchModel[];
+      additionalContexts?: { content: string; label?: string }[];
+      synthesisModel?: ResearchModel;
+      removeContextIds?: string[];
+    }
+  ): Promise<{ id: string }>;
 
   // Delete research
   deleteResearch(id: string): Promise<void>;
@@ -140,14 +146,14 @@ interface LlmResult {
 
 ## Constraints
 
-| Rule | Description |
-| ---- | ----------- |
-| **API Keys Required** | User must have API keys configured for selected models |
-| **At Least One Source** | Research requires either models or input contexts |
-| **Synthesis Model Key** | Synthesis model's provider API key must be available |
-| **Draft Before Approve** | Can only approve researches in 'draft' status |
-| **Retry Only Failed** | Can only retry from 'failed' or 'awaiting_confirmation' status |
-| **Enhance Only Completed** | Can only enhance 'completed' researches |
+| Rule                       | Description                                                    |
+| -------------------------- | -------------------------------------------------------------- |
+| **API Keys Required**      | User must have API keys configured for selected models         |
+| **At Least One Source**    | Research requires either models or input contexts              |
+| **Synthesis Model Key**    | Synthesis model's provider API key must be available           |
+| **Draft Before Approve**   | Can only approve researches in 'draft' status                  |
+| **Retry Only Failed**      | Can only retry from 'failed' or 'awaiting_confirmation' status |
+| **Enhance Only Completed** | Can only enhance 'completed' researches                        |
 
 ---
 
@@ -207,10 +213,10 @@ if (research.status === 'awaiting_confirmation') {
 
 ## Internal Endpoints
 
-| Method | Path | Purpose |
-| ------ | ---- | ------- |
-| POST | `/internal/research/:id/llm-result` | Receive LLM result from Pub/Sub worker |
-| GET | `/internal/research/:id` | Get research for internal services |
+| Method | Path                                | Purpose                                |
+| ------ | ----------------------------------- | -------------------------------------- |
+| POST   | `/internal/research/:id/llm-result` | Receive LLM result from Pub/Sub worker |
+| GET    | `/internal/research/:id`            | Get research for internal services     |
 
 ---
 

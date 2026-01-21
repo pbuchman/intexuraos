@@ -1,6 +1,5 @@
 import type { Result, ServiceFeedback } from '@intexuraos/common-core';
 import { err, getErrorMessage, ok } from '@intexuraos/common-core';
-import type { ResearchModel } from '@intexuraos/llm-contract';
 import type { ResearchServiceClient } from '../../domain/ports/researchServiceClient.js';
 import pino from 'pino';
 
@@ -36,7 +35,7 @@ export function createResearchAgentClient(
       userId: string;
       title: string;
       prompt: string;
-      selectedModels: ResearchModel[];
+      originalMessage: string;
       sourceActionId?: string;
     }): Promise<Result<ServiceFeedback>> {
       try {
@@ -44,8 +43,8 @@ export function createResearchAgentClient(
           {
             userId: params.userId,
             title: params.title,
-            selectedModels: params.selectedModels,
             promptLength: params.prompt.length,
+            originalMessageLength: params.originalMessage.length,
             sourceActionId: params.sourceActionId,
             endpoint: `${config.baseUrl}/internal/research/draft`,
           },
@@ -62,7 +61,7 @@ export function createResearchAgentClient(
             userId: params.userId,
             title: params.title,
             prompt: params.prompt,
-            selectedModels: params.selectedModels,
+            originalMessage: params.originalMessage,
             sourceActionId: params.sourceActionId,
           }),
         });

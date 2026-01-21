@@ -6,10 +6,10 @@
 
 ## Identity
 
-| Field | Value |
-| ----- | ----- |
-| **Name** | todos-agent |
-| **Role** | Task Management Service |
+| Field    | Value                                                         |
+| -------- | ------------------------------------------------------------- |
+| **Name** | todos-agent                                                   |
+| **Role** | Task Management Service                                       |
 | **Goal** | Manage todos with sub-items, priorities, and status workflows |
 
 ---
@@ -44,39 +44,52 @@ interface TodosAgentTools {
   getTodo(id: string): Promise<Todo>;
 
   // Update todo
-  updateTodo(id: string, params: {
-    title?: string;
-    description?: string;
-    tags?: string[];
-    priority?: TodoPriority;
-    dueDate?: string;
-  }): Promise<Todo>;
+  updateTodo(
+    id: string,
+    params: {
+      title?: string;
+      description?: string;
+      tags?: string[];
+      priority?: TodoPriority;
+      dueDate?: string;
+    }
+  ): Promise<Todo>;
 
   // Delete todo
   deleteTodo(id: string): Promise<void>;
 
   // Add item to todo
-  addTodoItem(todoId: string, params: {
-    title: string;
-    priority?: TodoPriority;
-    dueDate?: string;
-  }): Promise<Todo>;
+  addTodoItem(
+    todoId: string,
+    params: {
+      title: string;
+      priority?: TodoPriority;
+      dueDate?: string;
+    }
+  ): Promise<Todo>;
 
   // Update item in todo
-  updateTodoItem(todoId: string, itemId: string, params: {
-    title?: string;
-    status?: TodoItemStatus;
-    priority?: TodoPriority;
-    dueDate?: string;
-  }): Promise<Todo>;
+  updateTodoItem(
+    todoId: string,
+    itemId: string,
+    params: {
+      title?: string;
+      status?: TodoItemStatus;
+      priority?: TodoPriority;
+      dueDate?: string;
+    }
+  ): Promise<Todo>;
 
   // Delete item from todo
   deleteTodoItem(todoId: string, itemId: string): Promise<Todo>;
 
   // Reorder items
-  reorderTodoItems(todoId: string, params: {
-    itemIds: string[];
-  }): Promise<Todo>;
+  reorderTodoItems(
+    todoId: string,
+    params: {
+      itemIds: string[];
+    }
+  ): Promise<Todo>;
 
   // Archive completed/cancelled todo
   archiveTodo(id: string): Promise<Todo>;
@@ -92,13 +105,7 @@ interface TodosAgentTools {
 ### Types
 
 ```typescript
-type TodoStatus =
-  | 'draft'
-  | 'processing'
-  | 'pending'
-  | 'in_progress'
-  | 'completed'
-  | 'cancelled';
+type TodoStatus = 'draft' | 'processing' | 'pending' | 'in_progress' | 'completed' | 'cancelled';
 
 type TodoItemStatus = 'pending' | 'completed';
 
@@ -139,13 +146,13 @@ interface Todo {
 
 ## Constraints
 
-| Rule | Description |
-| ---- | ----------- |
+| Rule                    | Description                                   |
+| ----------------------- | --------------------------------------------- |
 | **Archive Restriction** | Can only archive completed or cancelled todos |
-| **Cancel Restriction** | Cannot cancel already completed todos |
-| **Item Completion** | Completing all items auto-completes the todo |
-| **Ownership** | Users can only access their own todos |
-| **Reorder** | Item IDs must match existing items exactly |
+| **Cancel Restriction**  | Cannot cancel already completed todos         |
+| **Item Completion**     | Completing all items auto-completes the todo  |
+| **Ownership**           | Users can only access their own todos         |
+| **Reorder**             | Item IDs must match existing items exactly    |
 
 ---
 
@@ -191,10 +198,10 @@ for (const todo of todos) {
 
 ## Internal Endpoints
 
-| Method | Path | Purpose |
-| ------ | ---- | ------- |
-| POST | `/internal/todos` | Create todo from actions-agent |
-| GET | `/internal/todos/:id` | Get todo for internal services |
+| Method | Path                  | Purpose                        |
+| ------ | --------------------- | ------------------------------ |
+| POST   | `/internal/todos`     | Create todo from actions-agent |
+| GET    | `/internal/todos/:id` | Get todo for internal services |
 
 ---
 

@@ -71,7 +71,7 @@ This changelog provides a comprehensive record of IntexuraOS development.
 **LLM Package Restructure**
 
 - Reorganized llm-common into domain directories (shared/, research/, synthesis/)
-- Migrated tests to co-located __tests__ directories
+- Migrated tests to co-located **tests** directories
 
 **ActionItem UX**
 

@@ -104,21 +104,21 @@ sequenceDiagram
 
 ### Command
 
-| Field            | Type                    | Description                                                    |
-| ---------------- | ----------------------- | -------------------------------------------------------------- |
-| `id`             | string                  | `{sourceType}:{externalId}` composite key                      |
-| `userId`         | string                  | Owner user ID                                                  |
-| `sourceType`     | CommandSourceType       | whatsapp_text, whatsapp_voice, pwa-shared                      |
-| `externalId`     | string                  | Source system identifier (e.g., WhatsApp message ID)           |
-| `text`           | string                  | Original command text                                          |
-| `summary`        | string (optional)       | Summary for voice transcriptions                               |
-| `timestamp`      | string                  | ISO 8601 timestamp from source                                 |
-| `status`         | CommandStatus           | received, classified, pending_classification, failed, archived |
-| `classification` | CommandClassification   | Classification result with reasoning (null if not classified)  |
-| `actionId`       | string                  | Created action ID (null if no action)                          |
-| `failureReason`  | string                  | Error details if failed (null if no error)                     |
-| `createdAt`      | string                  | ISO 8601 creation time                                         |
-| `updatedAt`      | string                  | ISO 8601 last update                                           |
+| Field            | Type                  | Description                                                    |
+| ---------------- | --------------------- | -------------------------------------------------------------- |
+| `id`             | string                | `{sourceType}:{externalId}` composite key                      |
+| `userId`         | string                | Owner user ID                                                  |
+| `sourceType`     | CommandSourceType     | whatsapp_text, whatsapp_voice, pwa-shared                      |
+| `externalId`     | string                | Source system identifier (e.g., WhatsApp message ID)           |
+| `text`           | string                | Original command text                                          |
+| `summary`        | string (optional)     | Summary for voice transcriptions                               |
+| `timestamp`      | string                | ISO 8601 timestamp from source                                 |
+| `status`         | CommandStatus         | received, classified, pending_classification, failed, archived |
+| `classification` | CommandClassification | Classification result with reasoning (null if not classified)  |
+| `actionId`       | string                | Created action ID (null if no action)                          |
+| `failureReason`  | string                | Error details if failed (null if no error)                     |
+| `createdAt`      | string                | ISO 8601 creation time                                         |
+| `updatedAt`      | string                | ISO 8601 last update                                           |
 
 ### CommandClassification
 

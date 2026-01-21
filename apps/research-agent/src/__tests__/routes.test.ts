@@ -3206,7 +3206,7 @@ describe('Internal Routes', () => {
           userId: TEST_USER_ID,
           title: 'Test Draft Research',
           prompt: 'Test prompt content',
-          selectedModels: [LlmModels.Gemini25Pro, LlmModels.O4MiniDeepResearch],
+          originalMessage: 'Research AI using gemini and o4',
         },
       });
 
@@ -3230,7 +3230,7 @@ describe('Internal Routes', () => {
           userId: TEST_USER_ID,
           title: 'Test Draft Research',
           prompt: 'Test prompt content',
-          selectedModels: [LlmModels.ClaudeOpus45],
+          originalMessage: 'Research AI using claude',
           sourceActionId: 'action-123',
         },
       });
@@ -3253,7 +3253,7 @@ describe('Internal Routes', () => {
           userId: TEST_USER_ID,
           title: 'Test Draft Research',
           prompt: 'Test prompt content',
-          selectedModels: [LlmModels.Gemini25Pro],
+          originalMessage: 'Research AI using gemini',
         },
       });
 
@@ -3271,7 +3271,7 @@ describe('Internal Routes', () => {
           userId: TEST_USER_ID,
           title: 'Test Draft Research',
           prompt: 'Test prompt content',
-          selectedModels: [LlmModels.Gemini25Pro],
+          originalMessage: 'Research AI using gemini',
         },
       });
 
@@ -3291,7 +3291,7 @@ describe('Internal Routes', () => {
           userId: TEST_USER_ID,
           title: 'Test Draft Research',
           prompt: 'Test prompt content',
-          selectedModels: [LlmModels.Gemini25Pro],
+          originalMessage: 'Research AI using gemini',
         },
       });
 
@@ -3311,7 +3311,7 @@ describe('Internal Routes', () => {
           userId: TEST_USER_ID,
           title: 'Test Draft Research',
           prompt: 'Test prompt content',
-          selectedModels: [LlmModels.Gemini25Pro],
+          originalMessage: 'Research AI using gemini',
         },
       });
 

@@ -6,10 +6,10 @@
 
 ## Identity
 
-| Field | Value |
-| ----- | ----- |
-| **Name** | actions-agent |
-| **Role** | Central Action Orchestrator |
+| Field    | Value                                                                      |
+| -------- | -------------------------------------------------------------------------- |
+| **Name** | actions-agent                                                              |
+| **Role** | Central Action Orchestrator                                                |
 | **Goal** | Manage action lifecycle, route to specialized agents, coordinate execution |
 
 ---
@@ -21,23 +21,22 @@
 ```typescript
 interface ActionsAgentTools {
   // List actions with optional status filter
-  listActions(params?: {
-    status?: ActionStatus | ActionStatus[];
-  }): Promise<{ actions: Action[] }>;
+  listActions(params?: { status?: ActionStatus | ActionStatus[] }): Promise<{ actions: Action[] }>;
 
   // Update action status or type
-  updateAction(actionId: string, params: {
-    status?: 'processing' | 'rejected' | 'archived';
-    type?: ActionType;
-  }): Promise<{ action: Action }>;
+  updateAction(
+    actionId: string,
+    params: {
+      status?: 'processing' | 'rejected' | 'archived';
+      type?: ActionType;
+    }
+  ): Promise<{ action: Action }>;
 
   // Delete action
   deleteAction(actionId: string): Promise<void>;
 
   // Batch fetch multiple actions by IDs (max 50)
-  batchGetActions(params: {
-    actionIds: string[];
-  }): Promise<{ actions: Action[] }>;
+  batchGetActions(params: { actionIds: string[] }): Promise<{ actions: Action[] }>;
 
   // Execute action synchronously
   executeAction(actionId: string): Promise<{
@@ -50,9 +49,12 @@ interface ActionsAgentTools {
   }>;
 
   // Resolve duplicate bookmark conflict
-  resolveDuplicateAction(actionId: string, params: {
-    action: 'skip' | 'update';
-  }): Promise<{
+  resolveDuplicateAction(
+    actionId: string,
+    params: {
+      action: 'skip' | 'update';
+    }
+  ): Promise<{
     actionId: string;
     status: 'rejected' | 'completed';
     resourceUrl?: string;
@@ -63,14 +65,7 @@ interface ActionsAgentTools {
 ### Types
 
 ```typescript
-type ActionType =
-  | 'todo'
-  | 'research'
-  | 'note'
-  | 'link'
-  | 'calendar'
-  | 'reminder'
-  | 'linear';
+type ActionType = 'todo' | 'research' | 'note' | 'link' | 'calendar' | 'reminder' | 'linear';
 
 type ActionStatus =
   | 'pending'
@@ -99,13 +94,13 @@ interface Action {
 
 ## Constraints
 
-| Rule | Description |
-| ---- | ----------- |
-| **Status Transitions** | Can only set status to 'processing', 'rejected', or 'archived' |
-| **Type Change Restriction** | Can only change type for 'pending' or 'awaiting_approval' actions |
-| **Batch Limit** | Maximum 50 action IDs per batch request |
-| **Ownership** | Users can only access their own actions |
-| **Supported Types** | Execute only supports: research, todo, note, link, linear, calendar |
+| Rule                        | Description                                                         |
+| --------------------------- | ------------------------------------------------------------------- |
+| **Status Transitions**      | Can only set status to 'processing', 'rejected', or 'archived'      |
+| **Type Change Restriction** | Can only change type for 'pending' or 'awaiting_approval' actions   |
+| **Batch Limit**             | Maximum 50 action IDs per batch request                             |
+| **Ownership**               | Users can only access their own actions                             |
+| **Supported Types**         | Execute only supports: research, todo, note, link, linear, calendar |
 
 ---
 
@@ -150,11 +145,11 @@ await updateAction(actionId, { status: 'processing' });
 
 ## Internal Endpoints
 
-| Method | Path | Purpose |
-| ------ | ---- | ------- |
-| POST | `/internal/actions` | Create action from commands-agent |
-| GET | `/internal/actions/:id` | Get action for execution agents |
-| PATCH | `/internal/actions/:id` | Update action status from execution agents |
+| Method | Path                    | Purpose                                    |
+| ------ | ----------------------- | ------------------------------------------ |
+| POST   | `/internal/actions`     | Create action from commands-agent          |
+| GET    | `/internal/actions/:id` | Get action for execution agents            |
+| PATCH  | `/internal/actions/:id` | Update action status from execution agents |
 
 ---
 
