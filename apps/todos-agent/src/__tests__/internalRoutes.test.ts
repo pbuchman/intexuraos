@@ -1,5 +1,4 @@
-import { describe, it, expect } from './testUtils.js';
-import { setupTestContext } from './testUtils.js';
+import { describe, it, expect, setupTestContext } from './testUtils.js';
 
 const TEST_INTERNAL_TOKEN = 'test-internal-token';
 
