@@ -273,6 +273,72 @@ describe('LinearActionExtractionService', () => {
       }
     });
 
+    it('validates functionalRequirements must be null or string (rejects number)', async () => {
+      fakeLlmUserService.setLlmResponse({
+        content: JSON.stringify({
+          ...validExtractedResponse,
+          functionalRequirements: 123 as unknown as string,
+        }),
+      });
+
+      const result = await service.extractIssue('user-123', 'Fix login bug');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('EXTRACTION_FAILED');
+        expect(result.error.message).toBe('Invalid LLM response format');
+      }
+    });
+
+    it('validates technicalDetails must be null or string (rejects number)', async () => {
+      fakeLlmUserService.setLlmResponse({
+        content: JSON.stringify({
+          ...validExtractedResponse,
+          technicalDetails: 456 as unknown as string,
+        }),
+      });
+
+      const result = await service.extractIssue('user-123', 'Fix login bug');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('EXTRACTION_FAILED');
+        expect(result.error.message).toBe('Invalid LLM response format');
+      }
+    });
+
+    it('validates reasoning must be string (rejects number)', async () => {
+      fakeLlmUserService.setLlmResponse({
+        content: JSON.stringify({
+          ...validExtractedResponse,
+          reasoning: 789 as unknown as string,
+        }),
+      });
+
+      const result = await service.extractIssue('user-123', 'Fix login bug');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('EXTRACTION_FAILED');
+        expect(result.error.message).toBe('Invalid LLM response format');
+      }
+    });
+
+    it('validates response must be an object (rejects null parsed value)', async () => {
+      // JSON.parse('null') returns null, which should fail validation
+      fakeLlmUserService.setLlmResponse({
+        content: 'null',
+      });
+
+      const result = await service.extractIssue('user-123', 'Fix login bug');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('EXTRACTION_FAILED');
+        expect(result.error.message).toBe('Invalid LLM response format');
+      }
+    });
+
     it('validates error must be null or string', async () => {
       fakeLlmUserService.setLlmResponse({
         content: JSON.stringify({
