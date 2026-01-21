@@ -31,3 +31,4 @@
 {"ts":"2026-01-21T14:04:50.532Z","project":"intexuraos-2","branch":"fix/INT-181-transcription-formatting","workspace":"research-agent","runNumber":25,"passed":true,"durationMs":163006,"failureCount":0,"failures":[]}
 {"ts":"2026-01-21T14:08:37.385Z","project":"intexuraos-2","branch":"fix/INT-181-transcription-formatting","runNumber":26,"passed":false,"durationMs":43149,"failureCount":1,"failures":[{"type":"verify","code":"VERIFY_FAIL","file":"unknown","line":0,"message":"FAILED","snippet":null,"context":null}]}
 {"ts":"2026-01-21T14:18:46.959Z","project":"intexuraos-2","branch":"fix/INT-181-transcription-formatting","runNumber":27,"passed":true,"durationMs":415855,"failureCount":0,"failures":[]}
+{"ts":"2026-01-21T14:47:46.230Z","project":"intexuraos-2","branch":"fix/INT-181-transcription-formatting","runNumber":28,"passed":true,"durationMs":990240,"failureCount":0,"failures":[]}
