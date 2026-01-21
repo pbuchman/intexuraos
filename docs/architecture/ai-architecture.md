@@ -81,7 +81,7 @@ graph TB
 | Fact Verification    | Perplexity Sonar      | Sonar Pro           | Real-time web grounding         |
 | Image Generation     | DALL-E 3              | Gemini Imagen       | High quality, diverse styles    |
 
-### Research Models (10)
+### Research Models (11)
 
 Models capable of complex reasoning, web search, and multi-step analysis.
 
@@ -97,15 +97,17 @@ Models capable of complex reasoning, web search, and multi-step analysis.
 | Sonar Pro             | Perplexity | Enhanced web search with more sources     |
 | Sonar Deep Research   | Perplexity | Multi-step agentic research               |
 | GLM-4.7               | Zai        | Alternative provider, good multilingual   |
+| GLM-4.7-Flash         | Zai        | Fast, free model for cost-sensitive tasks |
 
-### Fast Models (2)
+### Fast Models (4)
 
 Optimized for quick, low-cost operations like classification and extraction.
 
-| Model            | Provider | Use Cases                               |
-| ---------------- | -------- | --------------------------------------- |
-| Gemini 2.5 Flash | Google   | Intent classification, title generation |
-| Gemini 2.0 Flash | Google   | API key validation, quick inference     |
+| Model            | Provider | Use Cases                                 |
+| ---------------- | -------- | ----------------------------------------- |
+| Gemini 2.5 Flash | Google   | Intent classification, title generation   |
+| Gemini 2.0 Flash | Google   | API key validation, quick inference       |
+| GLM-4.7-Flash    | Zai      | Free classification, cost-effective tasks |
 
 ### Image Models (2)
 
@@ -116,7 +118,7 @@ Text-to-image generation for cover images and visualizations.
 | GPT Image 1 (DALL-E 3) | OpenAI   | Photorealistic, artistic styles         |
 | Gemini 2.5 Flash Image | Google   | Fast image generation, consistent style |
 
-### Validation Models (5)
+### Validation Models (6)
 
 Cheap, fast models for API key validation and simple tasks.
 
@@ -126,7 +128,8 @@ Cheap, fast models for API key validation and simple tasks.
 | Gemini 2.0 Flash | Google     | $0.075/M input |
 | GPT-4o Mini      | OpenAI     | $0.15/M input  |
 | Sonar            | Perplexity | $1.00/M input  |
-| GLM-4.7          | Zai        | Varies         |
+| GLM-4.7          | Zai        | $0.60/M input  |
+| GLM-4.7-Flash    | Zai        | Free           |
 
 ---
 

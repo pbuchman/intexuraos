@@ -31,6 +31,10 @@ resource "google_cloud_run_v2_service" "service" {
           cpu    = var.cpu
           memory = var.memory
         }
+        # CPU is only allocated during request processing (request-based billing)
+        # Setting cpu_idle = true enables CPU throttling, which is more cost-effective
+        # than instance-based billing where CPU is always allocated.
+        cpu_idle = true
       }
 
       # Environment variables from Secret Manager
@@ -97,7 +101,9 @@ resource "google_cloud_run_v2_service" "service" {
       template[0].containers[0].image,
       # Ignore drift from gcloud/GCP API
       template[0].annotations,
-      template[0].containers[0].resources[0].cpu_idle,
+      # NOTE: cpu_idle is NOT ignored - Terraform enforces cpu_idle = true
+      # (request-based billing) to prevent accidental instance-based billing.
+      # See INT-192 for context on billing impact.
       client,
       client_version,
     ]

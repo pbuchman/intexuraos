@@ -372,18 +372,16 @@ export function CalendarPage(): React.JSX.Element {
           <h2 className="text-2xl font-bold text-slate-900">Calendar</h2>
           <p className="text-slate-600">Events from your connected Google Calendar.</p>
         </div>
-        <Button
-          type="button"
-          variant="secondary"
+        <button
           onClick={(): void => {
             void handleRefresh();
           }}
           disabled={isManualRefreshing}
-          isLoading={isManualRefreshing}
+          className="rounded p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 disabled:opacity-50"
+          title="Refresh"
         >
-          <RefreshCw className="mr-2 h-4 w-4" />
-          Refresh
-        </Button>
+          <RefreshCw className={`h-5 w-5 ${isManualRefreshing ? 'animate-spin' : ''}`} />
+        </button>
       </div>
 
       <RefreshIndicator show={refreshing || isManualRefreshing} />

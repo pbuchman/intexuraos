@@ -12,7 +12,7 @@
     <a href="https://github.com/pbuchman/intexuraos/actions"><img src="https://img.shields.io/github/actions/workflow/status/pbuchman/intexuraos/ci.yml?branch=main&label=CI&style=flat-square&logo=github" alt="CI Status"></a>
     <img src="https://img.shields.io/badge/Coverage-95%25+-success?style=flat-square&logo=codecov" alt="Coverage">
     <img src="https://img.shields.io/badge/TypeScript-5.7-blue?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript">
-    <img src="https://img.shields.io/badge/AI_Models-15-purple?style=flat-square" alt="AI Models">
+    <img src="https://img.shields.io/badge/AI_Models-16-purple?style=flat-square" alt="AI Models">
     <img src="https://img.shields.io/badge/Services-18-orange?style=flat-square" alt="Services">
     <img src="https://img.shields.io/badge/Infrastructure-Terraform-623CE4?style=flat-square&logo=terraform&logoColor=white" alt="Terraform">
   </p>
@@ -134,9 +134,9 @@ IntexuraOS treats LLMs as a **council of experts**:
 | **OpenAI**     | GPT-5.2, o4-mini-deep-research, DALL-E 3 | Deep research, creative content       |
 | **Anthropic**  | Claude Opus 4.5, Sonnet 4.5, Haiku 3.5   | Nuanced analysis, safety              |
 | **Perplexity** | Sonar, Sonar Pro, Sonar Deep Research    | Real-time web search                  |
-| **Zai**        | GLM-4.7                                  | Multilingual, alternative perspective |
+| **Zai**        | GLM-4.7, GLM-4.7-Flash                   | Multilingual, alternative perspective |
 
-**Total**: 15 models across 5 providers
+**Total**: 16 models across 5 providers
 
 ### Technology Stack
 
@@ -213,7 +213,7 @@ For full setup: [Setup Guide](docs/setup/01-gcp-project.md)
 | Document                                                | Description                  |
 | ------------------------------------------------------- | ---------------------------- |
 | [Platform Overview](docs/overview.md)                   | What IntexuraOS does and how |
-| [AI Architecture](docs/architecture/ai-architecture.md) | Deep dive into 15 LLM models |
+| [AI Architecture](docs/architecture/ai-architecture.md) | Deep dive into 16 LLM models |
 | [Services Catalog](docs/services/index.md)              | All 18 services documented   |
 | [Setup Guide](docs/setup/01-gcp-project.md)             | Step-by-step GCP setup       |
 

@@ -266,8 +266,9 @@ User calls `/linear` with no arguments.
 4. Create branch from origin/development (or origin/main)
 5. Implement the task (investigate, code, test)
 6. Run CI gate: pnpm run ci:tracked
-7. Create PR with cross-links (or PR explaining blocker if task uncompletable)
-8. Update Linear state to "In Review"
+7. Merge latest base branch (resolve conflicts if any)
+8. Create PR with cross-links (or PR explaining blocker if task uncompletable)
+9. Update Linear state to "In Review"
 ```
 
 ### Branch Selection Logic
@@ -386,7 +387,20 @@ User calls `/linear LIN-123`
    - Run `pnpm run ci:tracked`
    - If fails: Report and ask to fix or explicitly override
 
-7. **Create PR** (CRITICAL: Title MUST include issue ID)
+7. **Update Branch with Latest Base** (MANDATORY)
+
+   Before creating a PR, merge the latest base branch to ensure no conflicts:
+
+   ```bash
+   git fetch origin
+   git merge origin/development  # or origin/main if using main as base
+   # If conflicts occur, resolve them and commit:
+   git add -A && git commit -m "Resolve merge conflicts with development"
+   ```
+
+   **Why:** This ensures CI runs against the merged state and reviewers see a clean diff.
+
+8. **Create PR** (CRITICAL: Title MUST include issue ID)
 
    ```bash
    git push -u origin fix/LIN-123
@@ -400,13 +414,13 @@ User calls `/linear LIN-123`
    - PR appears in `attachments` array (visible in UI), not just as comment
    - Branch name must also contain the issue ID (already enforced)
 
-8. **Update Linear**
+9. **Update Linear**
    - Set state to "In Review"
    - GitHub integration automatically attaches PR (verify in `attachments` array)
    - Only add comment if attachment is missing (fallback)
 
-9. **Cross-Link Summary**
-   - Show table of created artifacts
+10. **Cross-Link Summary**
+    - Show table of created artifacts
 
 ---
 
@@ -608,6 +622,8 @@ User explicitly says one of (INTERACTIVE mode only):
 
 - [ ] `pnpm run ci:tracked` passes OR user explicitly overridden
 - [ ] Branch created from correct base
+- [ ] **Latest base branch merged** (fetch origin, merge origin/development or origin/main)
+- [ ] **Merge conflicts resolved** (if any occurred during merge)
 - [ ] Branch name contains Linear issue ID (e.g., `fix/LIN-123`, `feature/PBU-44-add-tests`)
 - [ ] PR title contains Linear issue ID (e.g., `[LIN-123] Fix auth`, `PBU-44: Add tests`)
 - [ ] All commits made

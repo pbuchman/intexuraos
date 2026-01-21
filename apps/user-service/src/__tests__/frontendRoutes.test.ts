@@ -519,6 +519,60 @@ describe('Frontend Auth Routes', () => {
           resetServices();
         }
       );
+
+      it(
+        'returns hasRefreshToken as false when repository returns error result',
+        { timeout: 20000 },
+        async () => {
+          const { setServices, resetServices } = await import('../services.js');
+          const {
+            FakeAuthTokenRepository,
+            FakeOAuthConnectionRepository,
+            FakeUserSettingsRepository,
+          } = await import('./fakes.js');
+
+          const fakeTokenRepo = new FakeAuthTokenRepository();
+          fakeTokenRepo.setFailHasRefreshToken(true);
+          setServices({
+            authTokenRepository: fakeTokenRepo,
+            userSettingsRepository: new FakeUserSettingsRepository(),
+            auth0Client: null,
+            encryptor: null,
+            llmValidator: null,
+            oauthConnectionRepository: new FakeOAuthConnectionRepository(),
+            googleOAuthClient: null,
+          });
+
+          app = await buildServer();
+
+          const token = await createToken({
+            sub: 'auth0|user-error-result',
+          });
+
+          const response = await app.inject({
+            method: 'GET',
+            url: '/auth/me',
+            headers: {
+              authorization: `Bearer ${token}`,
+            },
+          });
+
+          expect(response.statusCode).toBe(200);
+          const body = JSON.parse(response.body) as {
+            success: boolean;
+            data: {
+              userId: string;
+              hasRefreshToken: boolean;
+            };
+          };
+          expect(body.success).toBe(true);
+          expect(body.data.userId).toBe('auth0|user-error-result');
+          // Should default to false when repository returns error (not ok)
+          expect(body.data.hasRefreshToken).toBe(false);
+
+          resetServices();
+        }
+      );
     });
   });
 });

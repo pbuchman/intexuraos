@@ -986,9 +986,11 @@ export class FakeWhatsAppCloudApiPort implements WhatsAppCloudApiPort {
     replyToMessageId?: string;
     messageId: string;
   }[] = [];
+  private markedAsReadMessages: { phoneNumberId: string; messageId: string }[] = [];
   private shouldFailGetMediaUrl = false;
   private shouldFailDownload = false;
   private shouldFailSendMessage = false;
+  private shouldFailMarkAsRead = false;
   private messageIdCounter = 0;
 
   setMediaUrl(mediaId: string, info: MediaUrlInfo): void {
@@ -1011,8 +1013,16 @@ export class FakeWhatsAppCloudApiPort implements WhatsAppCloudApiPort {
     this.shouldFailSendMessage = fail;
   }
 
+  setFailMarkAsRead(fail: boolean): void {
+    this.shouldFailMarkAsRead = fail;
+  }
+
   getSentMessages(): typeof this.sentMessages {
     return this.sentMessages;
+  }
+
+  getMarkedAsReadMessages(): typeof this.markedAsReadMessages {
+    return this.markedAsReadMessages;
   }
 
   getMediaUrl(mediaId: string): Promise<Result<MediaUrlInfo, WhatsAppError>> {
@@ -1074,13 +1084,26 @@ export class FakeWhatsAppCloudApiPort implements WhatsAppCloudApiPort {
     return Promise.resolve(ok({ messageId }));
   }
 
+  markAsRead(phoneNumberId: string, messageId: string): Promise<Result<void, WhatsAppError>> {
+    if (this.shouldFailMarkAsRead) {
+      return Promise.resolve(
+        err({ code: 'INTERNAL_ERROR', message: 'Simulated markAsRead failure' })
+      );
+    }
+
+    this.markedAsReadMessages.push({ phoneNumberId, messageId });
+    return Promise.resolve(ok(undefined));
+  }
+
   clear(): void {
     this.mediaUrls.clear();
     this.mediaContent.clear();
     this.sentMessages = [];
+    this.markedAsReadMessages = [];
     this.shouldFailGetMediaUrl = false;
     this.shouldFailDownload = false;
     this.shouldFailSendMessage = false;
+    this.shouldFailMarkAsRead = false;
     this.messageIdCounter = 0;
   }
 }

@@ -146,6 +146,50 @@ describe('SpeechmaticsTranscriptionAdapter', () => {
       );
     });
 
+    it('includes LLM/LLMs vocabulary to distinguish from LMS', async () => {
+      mockCreateTranscriptionJob.mockResolvedValue({
+        id: 'job-llm-test',
+      });
+
+      await adapter.submitJob({
+        audioUrl: 'https://storage.example.com/audio.ogg',
+        mimeType: 'audio/ogg',
+      });
+
+      const callArgs = mockCreateTranscriptionJob.mock.calls[0];
+      if (callArgs === undefined) {
+        throw new Error('mock was not called');
+      }
+      const vocab = callArgs[1].transcription_config.additional_vocab as {
+        content: string;
+        sounds_like: string[];
+      }[];
+
+      // Verify LLM entry exists with proper sounds_like patterns
+      const llmEntry = vocab.find((v) => v.content === 'LLM');
+      expect(llmEntry).toBeDefined();
+      expect(llmEntry?.sounds_like).toEqual(
+        expect.arrayContaining(['large language model', 'el el em'])
+      );
+
+      // Verify LLMs plural entry exists
+      const llmsEntry = vocab.find((v) => v.content === 'LLMs');
+      expect(llmsEntry).toBeDefined();
+      expect(llmsEntry?.sounds_like).toEqual(
+        expect.arrayContaining(['large language models', 'el el ems'])
+      );
+
+      // Verify "large language models" phrase exists
+      const largeLanguageModelsEntry = vocab.find((v) => v.content === 'large language models');
+      expect(largeLanguageModelsEntry).toBeDefined();
+
+      // Verify LMS doesn't have the confusing sounds_like patterns
+      const lmsEntry = vocab.find((v) => v.content === 'LMS');
+      expect(lmsEntry).toBeDefined();
+      expect(lmsEntry?.sounds_like).not.toContain('l l m');
+      expect(lmsEntry?.sounds_like).not.toContain('large language model');
+    });
+
     it('returns error when API call fails', async () => {
       mockCreateTranscriptionJob.mockRejectedValue(new Error('API rate limit exceeded'));
 

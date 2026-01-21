@@ -125,7 +125,7 @@ function HeroSection(): React.JSX.Element {
           </h1>
           <p className="mb-10 max-w-2xl text-xl font-medium leading-relaxed text-neutral-900 md:text-2xl">
             IntexuraOS transforms fragmented information into structured intelligence. A council of
-            15 AI models across 5 providers works autonomously — you remain the commander.
+            16 AI models across 5 providers works autonomously — you remain the commander.
           </p>
 
           <div className="flex flex-col gap-4 sm:flex-row">
@@ -250,7 +250,7 @@ function CouncilSection(): React.JSX.Element {
           The Council of AI
         </h2>
         <p className="mx-auto mb-16 max-w-2xl text-lg text-neutral-400">
-          15 models across 5 providers, treated as a council of experts rather than a single oracle.
+          16 models across 5 providers, treated as a council of experts rather than a single oracle.
           Each query is dispatched to multiple models in parallel, then synthesized with confidence
           scoring.
         </p>
@@ -260,7 +260,7 @@ function CouncilSection(): React.JSX.Element {
             { name: 'OPENAI', models: 'GPT-5.2, o4-mini', role: 'Deep Research & Images' },
             { name: 'GOOGLE', models: 'Gemini 2.5 Pro/Flash', role: 'Classification & Routing' },
             { name: 'PERPLEXITY', models: 'Sonar Pro/Deep', role: 'Real-time Web Search' },
-            { name: 'ZAI', models: 'GLM-4.7', role: 'Multilingual Analysis' },
+            { name: 'ZAI', models: 'GLM-4.7 / Flash', role: 'Multilingual Analysis' },
           ].map((provider) => (
             <div
               key={provider.name}
