@@ -16,6 +16,10 @@ export type {
   CreateFailedEventInput,
   FailedEventFilters,
   ProcessedAction,
+  CalendarPreview,
+  CalendarPreviewStatus,
+  CreateCalendarPreviewInput,
+  UpdateCalendarPreviewInput,
 } from './models.js';
 
 export type { CalendarError, CalendarErrorCode } from './errors.js';
@@ -29,6 +33,7 @@ export type {
   ExtractedCalendarEvent,
   ExtractionError,
   ProcessedActionRepository,
+  CalendarPreviewRepository,
 } from './ports.js';
 
 export {
@@ -67,3 +72,9 @@ export {
   type ProcessCalendarActionDeps,
   type ProcessCalendarActionResponse,
 } from './useCases/processCalendarAction.js';
+export {
+  generateCalendarPreview,
+  type GenerateCalendarPreviewRequest,
+  type GenerateCalendarPreviewDeps,
+  type GenerateCalendarPreviewResponse,
+} from './useCases/generateCalendarPreview.js';

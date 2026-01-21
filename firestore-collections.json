@@ -118,6 +118,10 @@
       "owner": "calendar-agent",
       "description": "Successfully processed calendar actions for idempotency"
     },
+    "calendar_previews": {
+      "owner": "calendar-agent",
+      "description": "Calendar event previews generated async before user approval"
+    },
     "linear_connections": {
       "owner": "linear-agent",
       "description": "Linear API key connections and team configuration"
