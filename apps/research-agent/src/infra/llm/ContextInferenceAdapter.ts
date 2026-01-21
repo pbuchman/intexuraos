@@ -100,7 +100,7 @@ export class ContextInferenceAdapter implements ContextInferenceProvider {
     );
 
     if (!parsed.ok) {
-      this.logger.info(
+      this.logger.debug(
         { errorMessage: parsed.error },
         'Schema validation failed, attempting repair'
       );
@@ -161,7 +161,7 @@ export class ContextInferenceAdapter implements ContextInferenceProvider {
     );
 
     if (!parsed.ok) {
-      this.logger.info(
+      this.logger.debug(
         { errorMessage: parsed.error },
         'Schema validation failed, attempting repair'
       );
@@ -236,7 +236,7 @@ export class ContextInferenceAdapter implements ContextInferenceProvider {
       return { ok: false, error: `Initial: ${errorMessage}. Repair: ${parsed.error}` };
     }
 
-    this.logger.info({}, 'Repair attempt succeeded');
+    this.logger.debug({}, 'Repair attempt succeeded');
     const { usage } = result.value;
     return {
       ok: true,
@@ -290,7 +290,7 @@ export class ContextInferenceAdapter implements ContextInferenceProvider {
       return { ok: false, error: `Initial: ${errorMessage}. Repair: ${parsed.error}` };
     }
 
-    this.logger.info({}, 'Repair attempt succeeded');
+    this.logger.debug({}, 'Repair attempt succeeded');
     const { usage } = result.value;
     return {
       ok: true,
@@ -303,6 +303,17 @@ export class ContextInferenceAdapter implements ContextInferenceProvider {
         },
       },
     };
+  }
+}
+
+/**
+ * Safely stringify a value for logging, handling circular references.
+ */
+function safeStringify(value: unknown): string {
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return '[Unable to stringify]';
   }
 }
 
@@ -323,12 +334,18 @@ function mapToLlmError(error: { code: string; message: string }): LlmError {
  * // Returns: "mode: expected 'compact' | 'standard' | 'audit', received 'deep'"
  * // Returns: "research_plan.preferred_source_types.0: expected 'official' | ..., received 'blog'"
  */
+const MAX_ZOD_ISSUES = 5;
+
 function formatZodErrors(error: ZodError): string {
   if (error.issues.length === 0) {
     return 'Unknown validation error (no issues reported)';
   }
 
-  return error.issues
+  const totalIssues = error.issues.length;
+  const issuesToReport = error.issues.slice(0, MAX_ZOD_ISSUES);
+  const truncatedCount = totalIssues - issuesToReport.length;
+
+  const formatted = issuesToReport
     .map((issue) => {
       const path = issue.path.join('.');
       const pathStr = path !== '' ? path : '(root)';
@@ -347,6 +364,11 @@ function formatZodErrors(error: ZodError): string {
       return `${pathStr}: ${issue.message}`;
     })
     .join('; ');
+
+  if (truncatedCount > 0) {
+    return `${formatted}; ... and ${String(truncatedCount)} more issue(s)`;
+  }
+  return formatted;
 }
 
 /**
@@ -411,7 +433,7 @@ function parseJsonWithZod<T>(
         llmResponse: raw,
         expectedSchema,
         responseLength: raw.length,
-        parsedJson: JSON.stringify(parsed),
+        parsedJson: safeStringify(parsed),
       },
       `LLM parse error in ${operation}: Schema validation failed`
     );
