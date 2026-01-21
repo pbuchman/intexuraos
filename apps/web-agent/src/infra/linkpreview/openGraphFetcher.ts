@@ -14,7 +14,7 @@ const DEFAULT_CONFIG: OpenGraphFetcherConfig = {
   timeoutMs: 5000,
   maxResponseSize: 2097152, // 2MB
   userAgent:
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36',
 };
 
 function extractFavicon($: cheerio.CheerioAPI, baseUrl: string): string | undefined {

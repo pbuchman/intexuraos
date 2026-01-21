@@ -55,18 +55,21 @@ Look for explicit command phrases that clearly indicate what the user wants to d
 These phrases OVERRIDE category signals from URL content or incidental keywords.
 
 **Explicit command phrases (confidence 0.90+):**
-- **link/bookmark**: "save bookmark", "save link", "bookmark this", "save this link", "zapisz link", "dodaj zakładkę"
+- **link/bookmark**: "save bookmark", "save link", "bookmark this", "save this link", "zapisz link", "dodaj zakładkę", "zapisz zakładkę"
 - **todo**: "create todo", "add todo", "add task", "make todo", "stwórz zadanie", "dodaj zadanie"
-- **research**: "perform research", "do research", "research this", "investigate", "zbadaj", "sprawdź"
+- **research**: "perform research", "do research", "research this", "investigate", "zbadaj", "sprawdź", "przeprowadź research"
 - **note**: "create note", "save note", "make note", "write note", "stwórz notatkę", "zapisz notatkę"
 - **reminder**: "set reminder", "remind me", "przypomnij mi"
 - **calendar**: "schedule", "add to calendar", "book appointment", "zaplanuj", "dodaj do kalendarza"
+- **linear**: "create issue", "add bug", "report issue", "zgłoś błąd", "stwórz issue", "dodaj do lineara"
 
 Examples:
 - "save bookmark https://research-world.com" → link (explicit "save bookmark" overrides "research" in URL)
 - "create todo to research competitors" → todo (explicit "create todo" overrides "research" keyword)
 - "perform research on todo apps" → research (explicit "perform research" overrides "todo" keyword)
 - "save note about the research meeting" → note (explicit "save note" is the command)
+- "research this https://example.com" → research (explicit "research this" overrides URL presence - STEP 2 > STEP 4)
+- "investigate https://competitor.io/pricing" → research (explicit "investigate" overrides URL)
 
 ## STEP 3: Linear Detection (if no explicit intent match)
 Classify as "linear" when message contains:
