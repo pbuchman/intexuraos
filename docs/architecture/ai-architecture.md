@@ -99,7 +99,7 @@ Models capable of complex reasoning, web search, and multi-step analysis.
 | GLM-4.7               | Zai        | Alternative provider, good multilingual   |
 | GLM-4.7-Flash         | Zai        | Fast, free model for cost-sensitive tasks |
 
-### Fast Models (3)
+### Fast Models (4)
 
 Optimized for quick, low-cost operations like classification and extraction.
 

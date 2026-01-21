@@ -35,16 +35,23 @@ const logger = pino({ name: 'speechmatics-adapter' });
  */
 interface JsonV2Result {
   type?: string;
-  alternatives?: { content?: string }[];
+  alternatives?: { content?: string; language?: string }[];
 }
 
 interface JsonV2Summary {
   content: string;
 }
 
+interface JsonV2Metadata {
+  language_pack_info?: {
+    language_description?: string;
+  };
+}
+
 interface JsonV2Response {
   summary?: JsonV2Summary;
   results: JsonV2Result[];
+  metadata?: JsonV2Metadata;
 }
 
 /**
@@ -348,7 +355,7 @@ export class SpeechmaticsTranscriptionAdapter implements SpeechTranscriptionPort
             },
           },
           summarization_config: {
-            summary_type: 'bullets',
+            summary_type: 'paragraphs',
             summary_length: 'brief',
             content_type: 'auto',
           },
@@ -523,6 +530,23 @@ export class SpeechmaticsTranscriptionAdapter implements SpeechTranscriptionPort
       // Extract summary from json-v2 response (optional field)
       const summary = result.summary?.content;
 
+      // Extract detected language from first word's alternatives or metadata
+      let detectedLanguage: string | undefined;
+      if (Array.isArray(result.results) && result.results.length > 0) {
+        const firstWord = result.results[0];
+        detectedLanguage = firstWord?.alternatives?.[0]?.language;
+      }
+      // Fallback to metadata language pack info if available
+      if (detectedLanguage === undefined && result.metadata?.language_pack_info?.language_description !== undefined) {
+        // Convert description like "Polish" to code like "pl"
+        const langDesc = result.metadata.language_pack_info.language_description.toLowerCase();
+        if (langDesc.includes('polish')) {
+          detectedLanguage = 'pl';
+        } else if (langDesc.includes('english')) {
+          detectedLanguage = 'en';
+        }
+      }
+
       // Reconstruct full text from results array
       // json-v2 returns flat array of words/punctuation with alternatives
       let text = '';
@@ -540,6 +564,7 @@ export class SpeechmaticsTranscriptionAdapter implements SpeechTranscriptionPort
         jobId,
         transcriptLength: text.length,
         hasSummary: summary !== undefined,
+        detectedLanguage,
       });
 
       logger.info(
@@ -548,6 +573,7 @@ export class SpeechmaticsTranscriptionAdapter implements SpeechTranscriptionPort
           jobId,
           transcriptLength: text.length,
           hasSummary: summary !== undefined,
+          detectedLanguage,
           durationMs,
         },
         'Transcription fetched successfully'
@@ -556,6 +582,7 @@ export class SpeechmaticsTranscriptionAdapter implements SpeechTranscriptionPort
       return ok({
         text,
         ...(summary !== undefined && { summary }),
+        ...(detectedLanguage !== undefined && { detectedLanguage }),
         apiCall,
       });
     } catch (error) {

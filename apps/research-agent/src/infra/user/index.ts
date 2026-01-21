@@ -9,3 +9,4 @@ export {
   type UserServiceError,
   type LlmProvider,
 } from './userServiceClient.js';
+export type { LlmGenerateClient, GenerateResult, LLMError } from '@intexuraos/llm-factory';

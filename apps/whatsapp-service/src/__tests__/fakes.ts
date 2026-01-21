@@ -728,6 +728,7 @@ export class FakeSpeechTranscriptionPort implements SpeechTranscriptionPort {
       status: 'running' | 'done' | 'rejected';
       transcript?: string;
       summary?: string;
+      detectedLanguage?: string;
       error?: string;
     }
   >();
@@ -772,13 +773,16 @@ export class FakeSpeechTranscriptionPort implements SpeechTranscriptionPort {
   /**
    * Set job completion result (for testing polling).
    */
-  setJobResult(jobId: string, transcript: string, summary?: string): void {
+  setJobResult(jobId: string, transcript: string, summary?: string, detectedLanguage?: string): void {
     const job = this.jobs.get(jobId);
     if (job !== undefined) {
       job.status = 'done';
       job.transcript = transcript;
       if (summary !== undefined) {
         job.summary = summary;
+      }
+      if (detectedLanguage !== undefined) {
+        job.detectedLanguage = detectedLanguage;
       }
     }
   }
@@ -927,6 +931,7 @@ export class FakeSpeechTranscriptionPort implements SpeechTranscriptionPort {
       ok({
         text: job.transcript,
         ...(job.summary !== undefined && { summary: job.summary }),
+        ...(job.detectedLanguage !== undefined && { detectedLanguage: job.detectedLanguage }),
         apiCall: {
           timestamp: new Date().toISOString(),
           operation: 'fetch_result',

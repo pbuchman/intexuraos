@@ -98,7 +98,7 @@ describe('SpeechmaticsTranscriptionAdapter', () => {
           additional_vocab: expect.any(Array),
         },
         summarization_config: {
-          summary_type: 'bullets',
+          summary_type: 'paragraphs',
           summary_length: 'brief',
           content_type: 'auto',
         },
@@ -375,13 +375,13 @@ describe('SpeechmaticsTranscriptionAdapter', () => {
   });
 
   describe('getTranscript', () => {
-    it('returns transcript text and summary when present', async () => {
-      // json-v2 returns a flat array of word/punctuation results
+    it('returns transcript text, summary, and detected language when present', async () => {
+      // json-v2 returns a flat array of word/punctuation results with language
       const mockJsonV2Response = {
         summary: { content: 'Summary of the audio' },
         results: [
-          { alternatives: [{ content: 'Hello', confidence: 0.95 }] },
-          { alternatives: [{ content: 'world', confidence: 0.92 }] },
+          { alternatives: [{ content: 'Hello', confidence: 0.95, language: 'en' }] },
+          { alternatives: [{ content: 'world', confidence: 0.92, language: 'en' }] },
         ],
       };
       mockGetJobResult.mockResolvedValue(mockJsonV2Response);
@@ -392,16 +392,42 @@ describe('SpeechmaticsTranscriptionAdapter', () => {
       if (result.ok) {
         expect(result.value.text).toBe('Hello world');
         expect(result.value.summary).toBe('Summary of the audio');
+        expect(result.value.detectedLanguage).toBe('en');
         expect(result.value.apiCall.operation).toBe('fetch_result');
         expect(result.value.apiCall.success).toBe(true);
         expect(result.value.apiCall.response).toEqual({
           jobId: 'job-123',
           transcriptLength: 11,
           hasSummary: true,
+          detectedLanguage: 'en',
         });
       }
 
       expect(mockGetJobResult).toHaveBeenCalledWith('job-123', 'json-v2');
+    });
+
+    it('extracts Polish language from metadata when not in alternatives', async () => {
+      const mockJsonV2Response = {
+        summary: { content: 'Podsumowanie audio' },
+        metadata: {
+          language_pack_info: {
+            language_description: 'Polish',
+          },
+        },
+        results: [
+          { alternatives: [{ content: 'Cześć', confidence: 0.95 }] },
+          { alternatives: [{ content: 'świat', confidence: 0.92 }] },
+        ],
+      };
+      mockGetJobResult.mockResolvedValue(mockJsonV2Response);
+
+      const result = await adapter.getTranscript('job-pl');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.text).toBe('Cześć świat');
+        expect(result.value.detectedLanguage).toBe('pl');
+      }
     });
 
     it('returns transcript without summary when summary missing', async () => {

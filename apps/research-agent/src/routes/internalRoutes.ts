@@ -14,14 +14,15 @@ import type { Logger } from 'pino';
 import {
   checkLlmCompletion,
   createDraftResearch,
+  extractModelPreferences,
   processResearch,
   runSynthesis,
   type ResearchModel,
+  type TextGenerationClient,
 } from '../domain/research/index.js';
 import { formatLlmError } from '../domain/research/formatLlmError.js';
 import { getProviderForModel, LlmModels } from '@intexuraos/llm-contract';
 import { getServices, type DecryptedApiKeys } from '../services.js';
-import { supportedModelSchema } from './schemas/index.js';
 import { createSynthesisProviders } from './helpers/synthesisHelper.js';
 import { handleAllCompleted } from './helpers/completionHandlers.js';
 
@@ -29,7 +30,7 @@ interface CreateDraftResearchBody {
   userId: string;
   title: string;
   prompt: string;
-  selectedModels: ResearchModel[];
+  originalMessage: string;
   sourceActionId?: string;
 }
 
@@ -84,16 +85,16 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         tags: ['internal'],
         body: {
           type: 'object',
-          required: ['userId', 'title', 'prompt', 'selectedModels'],
+          required: ['userId', 'title', 'prompt', 'originalMessage'],
           properties: {
             userId: { type: 'string', description: 'User ID' },
             title: { type: 'string', minLength: 1, maxLength: 200 },
             prompt: { type: 'string', minLength: 10, maxLength: 20000 },
-            selectedModels: {
-              type: 'array',
-              items: supportedModelSchema,
-              minItems: 0,
-              maxItems: 6,
+            originalMessage: {
+              type: 'string',
+              minLength: 1,
+              maxLength: 20000,
+              description: 'Original user message for extracting model preferences',
             },
             sourceActionId: { type: 'string', description: 'ID of the originating action' },
           },
@@ -161,11 +162,57 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       }
 
       const body = request.body as CreateDraftResearchBody;
-      const { researchRepo, generateId } = getServices();
+      const { researchRepo, generateId, userServiceClient } = getServices();
       const researchId = generateId();
 
+      // Extract model preferences from original message using LLM
       request.log.info(
-        { researchId, userId: body.userId, modelsCount: body.selectedModels.length },
+        { researchId, userId: body.userId, originalMessageLength: body.originalMessage.length },
+        '[1.0] Extracting model preferences from original message'
+      );
+
+      let selectedModels: ResearchModel[] = [];
+      let synthesisModel: ResearchModel | undefined;
+
+      // Get user's API keys to determine available models
+      const apiKeysResult = await userServiceClient.getApiKeys(body.userId);
+      if (apiKeysResult.ok) {
+        // Get user's LLM client for extraction
+        const llmClientResult = await userServiceClient.getLlmClient(body.userId);
+        if (llmClientResult.ok) {
+          // Cast to TextGenerationClient - structurally compatible with LlmGenerateClient
+          const llmClient = llmClientResult.value as TextGenerationClient;
+          const extractionResult = await extractModelPreferences(body.originalMessage, {
+            llmClient,
+            availableKeys: apiKeysResult.value,
+            logger: request.log,
+          });
+          selectedModels = extractionResult.selectedModels;
+          synthesisModel = extractionResult.synthesisModel;
+
+          request.log.info(
+            {
+              researchId,
+              selectedModels,
+              synthesisModel,
+            },
+            '[1.0] Model preferences extracted'
+          );
+        } else {
+          request.log.warn(
+            { researchId, error: llmClientResult.error.message },
+            '[1.0] Failed to get LLM client for extraction, using empty models'
+          );
+        }
+      } else {
+        request.log.warn(
+          { researchId, error: apiKeysResult.error.message },
+          '[1.0] Failed to get API keys for extraction, using empty models'
+        );
+      }
+
+      request.log.info(
+        { researchId, userId: body.userId, modelsCount: selectedModels.length },
         '[1.1] Creating draft research object'
       );
 
@@ -174,8 +221,8 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         userId: body.userId,
         title: body.title,
         prompt: body.prompt,
-        selectedModels: body.selectedModels,
-        synthesisModel: body.selectedModels[0] ?? LlmModels.Gemini25Pro,
+        selectedModels,
+        synthesisModel: synthesisModel ?? LlmModels.Gemini25Pro,
       };
       if (body.sourceActionId !== undefined) {
         createParams.sourceActionId = body.sourceActionId;

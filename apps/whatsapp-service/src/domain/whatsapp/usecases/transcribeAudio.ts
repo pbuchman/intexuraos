@@ -377,6 +377,7 @@ export class TranscribeAudioUseCase {
 
       const transcript = transcriptResult.value.text;
       const summary = transcriptResult.value.summary;
+      const detectedLanguage = transcriptResult.value.detectedLanguage;
 
       // Step 5: Update message with completed transcription
       const completedState: TranscriptionState = {
@@ -433,7 +434,8 @@ export class TranscribeAudioUseCase {
         userPhoneNumber,
         originalWaMessageId,
         transcript,
-        summary
+        summary,
+        detectedLanguage
       );
     } catch (error) {
       // Log raw error for debugging
@@ -529,6 +531,18 @@ export class TranscribeAudioUseCase {
   }
 
   /**
+   * Get introductory phrase for summary based on detected language.
+   * Uses Polish with fallback to English as per requirements.
+   */
+  private getSummaryIntroPhrase(detectedLanguage?: string): string {
+    if (detectedLanguage === 'pl') {
+      return 'Oto podsumowanie tego, co powiedziałeś:';
+    }
+    // Default to English for all other languages
+    return 'Here is a summary of what you said:';
+  }
+
+  /**
    * Send transcription success message to user.
    */
   private async sendSuccessMessage(
@@ -537,13 +551,15 @@ export class TranscribeAudioUseCase {
     userPhoneNumber: string,
     originalWaMessageId: string,
     transcript: string,
-    summary?: string
+    summary?: string,
+    detectedLanguage?: string
   ): Promise<void> {
     let message = `🎙️ *Transcription:*\n\n${transcript}`;
     if (summary !== undefined) {
+      const introPhrase = this.getSummaryIntroPhrase(detectedLanguage);
       // Strip markdown headers from summary for cleaner WhatsApp display
       const cleanSummary = stripMarkdownHeaders(summary);
-      message += `\n\n📝 *Summary:*\n\n${cleanSummary}`;
+      message += `\n\n📝 *Summary:*\n\n${introPhrase}\n\n${cleanSummary}`;
     }
     await whatsappCloudApi.sendMessage(
       phoneNumberId,

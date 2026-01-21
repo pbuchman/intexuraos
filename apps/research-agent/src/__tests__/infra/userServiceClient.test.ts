@@ -2,12 +2,28 @@
  * Tests for UserServiceClient.
  */
 
-import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import nock from 'nock';
-import { createUserServiceClient } from '../../infra/user/index.js';
+import { FakePricingContext } from '@intexuraos/llm-pricing';
+import { createUserServiceClient, type UserServiceConfig } from '../../infra/user/index.js';
 
 const INTEXURAOS_USER_SERVICE_URL = 'http://localhost:8081';
 const INTERNAL_AUTH_TOKEN = 'test-internal-token';
+
+const fakeLogger = {
+  info: vi.fn(),
+  warn: vi.fn(),
+  error: vi.fn(),
+  debug: vi.fn(),
+};
+
+const createConfig = (overrides?: Partial<UserServiceConfig>): UserServiceConfig => ({
+  baseUrl: INTEXURAOS_USER_SERVICE_URL,
+  internalAuthToken: INTERNAL_AUTH_TOKEN,
+  pricingContext: new FakePricingContext(),
+  logger: fakeLogger,
+  ...overrides,
+});
 
 describe('UserServiceClient', () => {
   beforeAll(() => {
@@ -16,6 +32,10 @@ describe('UserServiceClient', () => {
 
   afterAll(() => {
     nock.enableNetConnect();
+  });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
   });
 
   afterEach(() => {
@@ -33,10 +53,7 @@ describe('UserServiceClient', () => {
           anthropic: null,
         });
 
-      const client = createUserServiceClient({
-        baseUrl: INTEXURAOS_USER_SERVICE_URL,
-        internalAuthToken: INTERNAL_AUTH_TOKEN,
-      });
+      const client = createUserServiceClient(createConfig());
 
       const result = await client.getApiKeys('user-123');
 
@@ -56,10 +73,7 @@ describe('UserServiceClient', () => {
           zai: 'zai-api-key',
         });
 
-      const client = createUserServiceClient({
-        baseUrl: INTEXURAOS_USER_SERVICE_URL,
-        internalAuthToken: INTERNAL_AUTH_TOKEN,
-      });
+      const client = createUserServiceClient(createConfig());
 
       const result = await client.getApiKeys('user-123');
 
@@ -75,10 +89,7 @@ describe('UserServiceClient', () => {
         .matchHeader('X-Internal-Auth', INTERNAL_AUTH_TOKEN)
         .reply(200, {});
 
-      const client = createUserServiceClient({
-        baseUrl: INTEXURAOS_USER_SERVICE_URL,
-        internalAuthToken: INTERNAL_AUTH_TOKEN,
-      });
+      const client = createUserServiceClient(createConfig());
 
       const result = await client.getApiKeys('user-123');
 
@@ -93,10 +104,7 @@ describe('UserServiceClient', () => {
         .get('/internal/users/user-123/llm-keys')
         .reply(401, { error: 'Unauthorized' });
 
-      const client = createUserServiceClient({
-        baseUrl: INTEXURAOS_USER_SERVICE_URL,
-        internalAuthToken: INTERNAL_AUTH_TOKEN,
-      });
+      const client = createUserServiceClient(createConfig());
 
       const result = await client.getApiKeys('user-123');
 
@@ -112,10 +120,7 @@ describe('UserServiceClient', () => {
         .get('/internal/users/user-123/llm-keys')
         .reply(500, { error: 'Internal server error' });
 
-      const client = createUserServiceClient({
-        baseUrl: INTEXURAOS_USER_SERVICE_URL,
-        internalAuthToken: INTERNAL_AUTH_TOKEN,
-      });
+      const client = createUserServiceClient(createConfig());
 
       const result = await client.getApiKeys('user-123');
 
@@ -131,10 +136,7 @@ describe('UserServiceClient', () => {
         .get('/internal/users/user-123/llm-keys')
         .replyWithError('Connection refused');
 
-      const client = createUserServiceClient({
-        baseUrl: INTEXURAOS_USER_SERVICE_URL,
-        internalAuthToken: INTERNAL_AUTH_TOKEN,
-      });
+      const client = createUserServiceClient(createConfig());
 
       const result = await client.getApiKeys('user-123');
 

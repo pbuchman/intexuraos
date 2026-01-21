@@ -107,9 +107,6 @@ export function createRetryPendingCommandsUseCase(deps: {
             prompt: command.text,
             confidence: classification.confidence,
           };
-          if (classification.selectedModels !== undefined) {
-            eventPayload.selectedModels = classification.selectedModels;
-          }
 
           const event: ActionCreatedEvent = {
             type: 'action.created',

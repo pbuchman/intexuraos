@@ -190,6 +190,8 @@ export function initializeServices(pricingContext: IPricingContext): void {
   const userServiceClient = createUserServiceClient({
     baseUrl: process.env['INTEXURAOS_USER_SERVICE_URL'] ?? 'http://localhost:8081',
     internalAuthToken: process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] ?? '',
+    pricingContext,
+    logger: pino({ name: 'user-service-client' }),
   });
 
   const notificationSender = createNotificationSender();

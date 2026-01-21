@@ -21,3 +21,10 @@ export type {
 export type { NotificationError, NotificationSender } from './notification.js';
 
 export type { ShareStorageError, ShareStoragePort } from './shareStorage.js';
+
+export type {
+  ApiKeyStore,
+  TextGenerationClient,
+  TextGenerationError,
+  TextGenerationResult,
+} from './modelExtraction.js';

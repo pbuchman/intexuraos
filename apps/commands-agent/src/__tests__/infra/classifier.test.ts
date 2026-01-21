@@ -1,9 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ok, err } from '@intexuraos/common-core';
 import type { GenerateResult } from '@intexuraos/llm-contract';
-import { LlmModels } from '@intexuraos/llm-contract';
 import type { LlmGenerateClient } from '@intexuraos/llm-factory';
-import { extractSelectedModels } from '../../infra/gemini/classifier.js';
 
 vi.mock('@intexuraos/llm-pricing', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@intexuraos/llm-pricing')>();
@@ -286,27 +284,6 @@ describe('GeminiClassifier', () => {
       expect(classificationResult.confidence).toBe(0.5);
     });
 
-    it('extracts selectedModels from text', async () => {
-      mockGenerate.mockResolvedValue(
-        ok(generateResult(jsonResponse('research', 0.9, 'Research topic')))
-      );
-
-      const classifier = createGeminiClassifier(mockLlmClient);
-      const classificationResult = await classifier.classify('Research this using only gemini');
-
-      expect(classificationResult.selectedModels).toEqual([LlmModels.Gemini25Flash]);
-    });
-
-    it('returns undefined selectedModels when no model specified', async () => {
-      mockGenerate.mockResolvedValue(
-        ok(generateResult(jsonResponse('research', 0.9, 'Research topic')))
-      );
-
-      const classifier = createGeminiClassifier(mockLlmClient);
-      const classificationResult = await classifier.classify('Research this topic');
-
-      expect(classificationResult.selectedModels).toBeUndefined();
-    });
   });
 
   describe('PWA-shared source confidence boost', () => {
@@ -379,83 +356,3 @@ describe('GeminiClassifier', () => {
   });
 });
 
-describe('extractSelectedModels', () => {
-  describe('all models patterns', () => {
-    it('returns default models for "use all LLMs"', () => {
-      expect(extractSelectedModels('use all LLMs for this research')).toEqual([
-        LlmModels.Gemini25Pro,
-        LlmModels.ClaudeOpus45,
-        LlmModels.GPT52,
-        LlmModels.SonarPro,
-      ]);
-    });
-
-    it('returns default models for "use all models"', () => {
-      expect(extractSelectedModels('use all models')).toEqual([
-        LlmModels.Gemini25Pro,
-        LlmModels.ClaudeOpus45,
-        LlmModels.GPT52,
-        LlmModels.SonarPro,
-      ]);
-    });
-
-    it('returns default models for Polish "użyj wszystkich"', () => {
-      expect(extractSelectedModels('użyj wszystkich modeli')).toEqual([
-        LlmModels.Gemini25Pro,
-        LlmModels.ClaudeOpus45,
-        LlmModels.GPT52,
-        LlmModels.SonarPro,
-      ]);
-    });
-
-    it('returns default models for Polish "wszystkie modele"', () => {
-      expect(extractSelectedModels('chcę wszystkie modele')).toEqual([
-        LlmModels.Gemini25Pro,
-        LlmModels.ClaudeOpus45,
-        LlmModels.GPT52,
-        LlmModels.SonarPro,
-      ]);
-    });
-  });
-
-  describe('specific model keywords', () => {
-    it('extracts gemini-2.5-flash for "gemini"', () => {
-      expect(extractSelectedModels('use gemini for this')).toEqual([LlmModels.Gemini25Flash]);
-    });
-
-    it('extracts gpt-5.2 for "gpt"', () => {
-      expect(extractSelectedModels('ask gpt about this')).toEqual([LlmModels.GPT52]);
-    });
-
-    it('extracts gpt-5.2 for "chatgpt"', () => {
-      expect(extractSelectedModels('ask chatgpt about this')).toEqual([LlmModels.GPT52]);
-    });
-
-    it('extracts claude-sonnet model for "claude"', () => {
-      expect(extractSelectedModels('use claude for research')).toEqual([LlmModels.ClaudeSonnet45]);
-    });
-
-    it('extracts multiple models', () => {
-      const result = extractSelectedModels('use gpt and claude for this');
-      expect(result).toContain(LlmModels.GPT52);
-      expect(result).toContain(LlmModels.ClaudeSonnet45);
-    });
-
-    it('extracts multiple models when mentioned', () => {
-      const result = extractSelectedModels('compare gemini, gpt and claude');
-      expect(result).toContain(LlmModels.Gemini25Flash);
-      expect(result).toContain(LlmModels.GPT52);
-      expect(result).toContain(LlmModels.ClaudeSonnet45);
-    });
-  });
-
-  describe('no match', () => {
-    it('returns undefined when no model mentioned', () => {
-      expect(extractSelectedModels('research this topic')).toBeUndefined();
-    });
-
-    it('returns undefined for empty string', () => {
-      expect(extractSelectedModels('')).toBeUndefined();
-    });
-  });
-});

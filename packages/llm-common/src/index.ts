@@ -144,6 +144,19 @@ export {
   stripAttributionLines,
 } from './research/attribution.js';
 
+// Model extraction for research (from research domain)
+export {
+  buildModelExtractionPrompt,
+  parseModelExtractionResponse,
+  MODEL_KEYWORDS,
+  PROVIDER_DEFAULT_MODELS,
+  SYNTHESIS_MODELS,
+  DEFAULT_SYNTHESIS_MODEL,
+  type AvailableModelInfo,
+  type ModelExtractionPromptDeps,
+  type ModelExtractionResponse,
+} from './research/modelExtractionPrompt.js';
+
 // Security utilities (from shared)
 export { redactToken, redactObject, SENSITIVE_FIELDS } from './shared/redaction.js';
 
