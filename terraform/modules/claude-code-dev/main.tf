@@ -20,6 +20,7 @@ resource "google_service_account" "claude_code_dev" {
 locals {
   project_roles = [
     "roles/artifactregistry.admin",
+    "roles/cloudbuild.builds.builder",
     "roles/cloudbuild.connectionAdmin",
     "roles/cloudscheduler.admin",
     "roles/compute.admin",

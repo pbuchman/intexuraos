@@ -109,8 +109,37 @@ const ADDITIONAL_VOCAB = [
   { content: 'Anthropic', sounds_like: ['an throw pick', 'an throp ik'] },
   { content: 'Perplexity', sounds_like: ['per plex ity'] },
   { content: 'Perplexity Sonar', sounds_like: ['perplexity sonar'] },
-  { content: 'LMS', sounds_like: ['el em ess', 'l m s'] },
-  { content: 'LLM', sounds_like: ['el el em', 'l l m'] },
+  { content: 'LMS', sounds_like: ['el em ess', 'learning management system'] },
+  {
+    content: 'LLM',
+    sounds_like: [
+      'el el em',
+      'elle em',
+      'large language model',
+      'ell ell em',
+      'double l m',
+      'ell l m',
+    ],
+  },
+  {
+    content: 'LLMs',
+    sounds_like: [
+      'el el ems',
+      'elle ems',
+      'large language models',
+      'ell ell ems',
+      'double l ms',
+      'ell l ms',
+    ],
+  },
+  {
+    content: 'large language model',
+    sounds_like: ['large lang model', 'large language model', 'large lang models'],
+  },
+  {
+    content: 'large language models',
+    sounds_like: ['large lang models', 'large language models', 'large lang model'],
+  },
 
   // Platform tools and services
   { content: 'Linear', sounds_like: ['line ear', 'linear app', 'lin ear', 'linear', 'leener'] },

@@ -105,15 +105,15 @@ sequenceDiagram
 
 ### ActionType Enum
 
-| Value      | Handler                      | Auto-Execute    |
-| ---------- | ---------------------------- | --------------- |
-| `todo`     | HandleTodoActionUseCase      | No              |
-| `research` | HandleResearchActionUseCase  | No              |
-| `note`     | HandleNoteActionUseCase      | No              |
-| `link`     | HandleLinkActionUseCase      | Yes (>= 90%)    |
-| `calendar` | HandleCalendarActionUseCase  | No              |
-| `linear`   | HandleLinearActionUseCase    | No              |
-| `reminder` | Not implemented              | N/A             |
+| Value      | Handler                     | Auto-Execute |
+| ---------- | --------------------------- | ------------ |
+| `todo`     | HandleTodoActionUseCase     | No           |
+| `research` | HandleResearchActionUseCase | No           |
+| `note`     | HandleNoteActionUseCase     | No           |
+| `link`     | HandleLinkActionUseCase     | Yes (>= 90%) |
+| `calendar` | HandleCalendarActionUseCase | No           |
+| `linear`   | HandleLinearActionUseCase   | No           |
+| `reminder` | Not implemented             | N/A          |
 
 ### ActionStatus Enum
 
@@ -157,16 +157,16 @@ sequenceDiagram
 
 ### Internal Services
 
-| Service           | Purpose                                      |
-| ----------------- | -------------------------------------------- |
-| `commands-agent`  | Create new commands from transitions         |
-| `research-agent`  | Execute research actions                     |
-| `todos-agent`     | Execute todo actions                         |
-| `notes-agent`     | Execute note actions                         |
-| `bookmarks-agent` | Execute link actions                         |
-| `calendar-agent`  | Execute calendar actions                     |
-| `linear-agent`    | Execute Linear issue creation actions        |
-| `user-service`    | Fetch user API keys                          |
+| Service           | Purpose                               |
+| ----------------- | ------------------------------------- |
+| `commands-agent`  | Create new commands from transitions  |
+| `research-agent`  | Execute research actions              |
+| `todos-agent`     | Execute todo actions                  |
+| `notes-agent`     | Execute note actions                  |
+| `bookmarks-agent` | Execute link actions                  |
+| `calendar-agent`  | Execute calendar actions              |
+| `linear-agent`    | Execute Linear issue creation actions |
+| `user-service`    | Fetch user API keys                   |
 
 ### Infrastructure
 

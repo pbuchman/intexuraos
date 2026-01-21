@@ -73,49 +73,49 @@ graph TB
 
 ### Model Selection Strategy
 
-| Task Type            | Primary Model          | Fallback Model        | Rationale                       |
-| -------------------- | ---------------------- | --------------------- | ------------------------------- |
-| Research Synthesis   | Claude Opus 4.5        | GPT-5.2               | Nuanced reasoning, long context |
-| Quick Classification | Gemini 2.5 Flash       | GLM-4.7               | Fast, cost-effective            |
-| Deep Research        | O4 Mini Deep Research  | Sonar Deep Research   | Agentic web search              |
-| Fact Verification    | Perplexity Sonar       | Sonar Pro             | Real-time web grounding         |
-| Image Generation     | DALL-E 3               | Gemini Imagen         | High quality, diverse styles    |
+| Task Type            | Primary Model         | Fallback Model      | Rationale                       |
+| -------------------- | --------------------- | ------------------- | ------------------------------- |
+| Research Synthesis   | Claude Opus 4.5       | GPT-5.2             | Nuanced reasoning, long context |
+| Quick Classification | Gemini 2.5 Flash      | GLM-4.7             | Fast, cost-effective            |
+| Deep Research        | O4 Mini Deep Research | Sonar Deep Research | Agentic web search              |
+| Fact Verification    | Perplexity Sonar      | Sonar Pro           | Real-time web grounding         |
+| Image Generation     | DALL-E 3              | Gemini Imagen       | High quality, diverse styles    |
 
 ### Research Models (11)
 
 Models capable of complex reasoning, web search, and multi-step analysis.
 
-| Model                  | Provider   | Strengths                                 |
-| ---------------------- | ---------- | ----------------------------------------- |
-| Gemini 2.5 Pro         | Google     | Long context (1M tokens), grounded search |
-| Gemini 2.5 Flash       | Google     | Fast, cost-effective, good reasoning      |
-| GPT-5.2                | OpenAI     | Latest OpenAI flagship, strong reasoning  |
-| O4 Mini Deep Research  | OpenAI     | Agentic research with tool use            |
-| Claude Opus 4.5        | Anthropic  | Best reasoning, nuanced analysis          |
-| Claude Sonnet 4.5      | Anthropic  | Balanced performance/cost                 |
-| Sonar                  | Perplexity | Real-time web search                      |
-| Sonar Pro              | Perplexity | Enhanced web search with more sources     |
-| Sonar Deep Research    | Perplexity | Multi-step agentic research               |
-| GLM-4.7                | Zai        | Alternative provider, good multilingual   |
-| GLM-4.7-Flash          | Zai        | Fast, free model for cost-sensitive tasks |
+| Model                 | Provider   | Strengths                                 |
+| --------------------- | ---------- | ----------------------------------------- |
+| Gemini 2.5 Pro        | Google     | Long context (1M tokens), grounded search |
+| Gemini 2.5 Flash      | Google     | Fast, cost-effective, good reasoning      |
+| GPT-5.2               | OpenAI     | Latest OpenAI flagship, strong reasoning  |
+| O4 Mini Deep Research | OpenAI     | Agentic research with tool use            |
+| Claude Opus 4.5       | Anthropic  | Best reasoning, nuanced analysis          |
+| Claude Sonnet 4.5     | Anthropic  | Balanced performance/cost                 |
+| Sonar                 | Perplexity | Real-time web search                      |
+| Sonar Pro             | Perplexity | Enhanced web search with more sources     |
+| Sonar Deep Research   | Perplexity | Multi-step agentic research               |
+| GLM-4.7               | Zai        | Alternative provider, good multilingual   |
+| GLM-4.7-Flash         | Zai        | Fast, free model for cost-sensitive tasks |
 
 ### Fast Models (3)
 
 Optimized for quick, low-cost operations like classification and extraction.
 
-| Model            | Provider | Use Cases                                |
-| ---------------- | -------- | ---------------------------------------- |
-| Gemini 2.5 Flash | Google   | Intent classification, title generation  |
-| Gemini 2.0 Flash | Google   | API key validation, quick inference      |
+| Model            | Provider | Use Cases                                 |
+| ---------------- | -------- | ----------------------------------------- |
+| Gemini 2.5 Flash | Google   | Intent classification, title generation   |
+| Gemini 2.0 Flash | Google   | API key validation, quick inference       |
 | GLM-4.7-Flash    | Zai      | Free classification, cost-effective tasks |
 
 ### Image Models (2)
 
 Text-to-image generation for cover images and visualizations.
 
-| Model                  | Provider | Capabilities                         |
-| ---------------------- | -------- | ------------------------------------ |
-| GPT Image 1 (DALL-E 3) | OpenAI   | Photorealistic, artistic styles      |
+| Model                  | Provider | Capabilities                            |
+| ---------------------- | -------- | --------------------------------------- |
+| GPT Image 1 (DALL-E 3) | OpenAI   | Photorealistic, artistic styles         |
 | Gemini 2.5 Flash Image | Google   | Fast image generation, consistent style |
 
 ### Validation Models (6)
@@ -200,6 +200,7 @@ interface LlmResearchProvider {
 ```
 
 **Adapters**:
+
 - `GeminiAdapter` - Google AI integration
 - `GptAdapter` - OpenAI integration
 - `ClaudeAdapter` - Anthropic integration
@@ -302,6 +303,7 @@ graph TB
 **AI Models**: Gemini 2.5 Flash, GLM-4.7
 
 **Process**:
+
 1. Receive transcribed text or typed input
 2. Use structured output (JSON mode) for classification
 3. Detect action type: research, todo, note, link, calendar, linear
@@ -314,6 +316,7 @@ graph TB
 **AI Models**: All 10 research models
 
 **Process**:
+
 1. **Validation**: Check if query is a valid research question
 2. **Context Inference**: Detect implicit context and constraints
 3. **Parallel Research**: Query 3-5 models simultaneously
@@ -328,6 +331,7 @@ graph TB
 **AI Models**: Gemini 2.5 Flash, GLM-4.7
 
 **Extraction Capabilities**:
+
 - Task title from description
 - Due dates from relative expressions ("by Friday", "next week")
 - Priority from context ("urgent", "when you have time")
@@ -340,6 +344,7 @@ graph TB
 **AI Models**: Gemini 2.5 Flash
 
 **Extraction Capabilities**:
+
 - Event title
 - Start/end times from natural expressions
 - Location
@@ -353,6 +358,7 @@ graph TB
 **AI Models**: Gemini 2.5 Flash, GLM-4.7
 
 **Extraction Capabilities**:
+
 - Issue title
 - Priority (0-4 scale)
 - Functional requirements section
@@ -365,6 +371,7 @@ graph TB
 **AI Models**: Gemini (multiple services)
 
 **Capabilities**:
+
 - **Title Generation**: Descriptive names for datasets
 - **Data Analysis**: Trend detection, anomaly identification
 - **Chart Definition**: Suggest appropriate visualizations
@@ -377,6 +384,7 @@ graph TB
 **AI Models**: DALL-E 3, Gemini Imagen
 
 **Capabilities**:
+
 - Cover images for research reports
 - Custom thumbnails
 - Artistic style variations
@@ -407,13 +415,13 @@ const result = await client.generate({
 
 ### Provider Packages
 
-| Package                    | Provider   | Capabilities                      |
-| -------------------------- | ---------- | --------------------------------- |
-| `@intexuraos/infra-claude` | Anthropic  | Chat, streaming, tool use         |
-| `@intexuraos/infra-gemini` | Google     | Chat, grounding, image generation |
-| `@intexuraos/infra-gpt`    | OpenAI     | Chat, DALL-E, embeddings          |
-| `@intexuraos/infra-perplexity` | Perplexity | Web search, deep research     |
-| `@intexuraos/infra-glm`    | Zai        | Chat, structured output           |
+| Package                        | Provider   | Capabilities                      |
+| ------------------------------ | ---------- | --------------------------------- |
+| `@intexuraos/infra-claude`     | Anthropic  | Chat, streaming, tool use         |
+| `@intexuraos/infra-gemini`     | Google     | Chat, grounding, image generation |
+| `@intexuraos/infra-gpt`        | OpenAI     | Chat, DALL-E, embeddings          |
+| `@intexuraos/infra-perplexity` | Perplexity | Web search, deep research         |
+| `@intexuraos/infra-glm`        | Zai        | Chat, structured output           |
 
 ### Usage Tracking
 
@@ -549,13 +557,13 @@ graph TB
 
 ### Error Categories
 
-| Error Type         | Handling                           |
-| ------------------ | ---------------------------------- |
-| `NO_API_KEY`       | Prompt user to configure API key   |
-| `RATE_LIMITED`     | Retry with exponential backoff     |
-| `TIMEOUT`          | Continue with available responses  |
-| `INVALID_RESPONSE` | Attempt repair prompt              |
-| `PARSE_ERROR`      | Retry with repair prompt           |
+| Error Type         | Handling                          |
+| ------------------ | --------------------------------- |
+| `NO_API_KEY`       | Prompt user to configure API key  |
+| `RATE_LIMITED`     | Retry with exponential backoff    |
+| `TIMEOUT`          | Continue with available responses |
+| `INVALID_RESPONSE` | Attempt repair prompt             |
+| `PARSE_ERROR`      | Retry with repair prompt          |
 
 ---
 
@@ -600,18 +608,18 @@ const validationResult = await llmValidator.validateKey({
 
 ## Packages
 
-| Package                      | Purpose                      |
-| ---------------------------- | ---------------------------- |
-| `@intexuraos/llm-contract`   | Shared types and interfaces  |
-| `@intexuraos/llm-factory`    | Client creation factory      |
-| `@intexuraos/llm-pricing`    | Cost calculation             |
-| `@intexuraos/llm-common`     | Shared prompts and utilities |
-| `@intexuraos/llm-audit`      | Usage tracking               |
-| `@intexuraos/infra-gemini`   | Google AI adapter            |
-| `@intexuraos/infra-gpt`      | OpenAI adapter               |
-| `@intexuraos/infra-claude`   | Anthropic adapter            |
-| `@intexuraos/infra-perplexity` | Perplexity adapter         |
-| `@intexuraos/infra-glm`      | Zai adapter                  |
+| Package                        | Purpose                      |
+| ------------------------------ | ---------------------------- |
+| `@intexuraos/llm-contract`     | Shared types and interfaces  |
+| `@intexuraos/llm-factory`      | Client creation factory      |
+| `@intexuraos/llm-pricing`      | Cost calculation             |
+| `@intexuraos/llm-common`       | Shared prompts and utilities |
+| `@intexuraos/llm-audit`        | Usage tracking               |
+| `@intexuraos/infra-gemini`     | Google AI adapter            |
+| `@intexuraos/infra-gpt`        | OpenAI adapter               |
+| `@intexuraos/infra-claude`     | Anthropic adapter            |
+| `@intexuraos/infra-perplexity` | Perplexity adapter           |
+| `@intexuraos/infra-glm`        | Zai adapter                  |
 
 ---
 

@@ -199,6 +199,19 @@ describe('OpenGraphFetcher', () => {
       }
     });
 
+    it('returns ACCESS_DENIED on HTTP 403', async () => {
+      nock('https://example.com').get('/forbidden').reply(403, 'Forbidden');
+
+      const result = await fetcher.fetchPreview('https://example.com/forbidden');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('ACCESS_DENIED');
+        expect(result.error.message).toContain('Access denied');
+        expect(result.error.message).toContain('403');
+      }
+    });
+
     it('returns FETCH_FAILED on HTTP 500', async () => {
       nock('https://example.com').get('/error').reply(500, 'Server Error');
 
@@ -344,6 +357,24 @@ describe('OpenGraphFetcher', () => {
       await customFetcher.fetchPreview('https://example.com/');
 
       expect(capturedHeaders['user-agent']).toBe('CustomBot/1.0');
+    });
+
+    it('sends browser-like headers by default', async () => {
+      let capturedHeaders: Record<string, string> = {};
+
+      nock('https://example.com')
+        .get('/headers-test')
+        .reply(function () {
+          capturedHeaders = this.req.headers as unknown as Record<string, string>;
+          return [200, '<html lang="en"><title>Test</title></html>'];
+        });
+
+      await fetcher.fetchPreview('https://example.com/headers-test');
+
+      expect(capturedHeaders['accept-language']).toBe('en-US,en;q=0.9');
+      expect(capturedHeaders['sec-fetch-dest']).toBe('document');
+      expect(capturedHeaders['sec-fetch-mode']).toBe('navigate');
+      expect(capturedHeaders['upgrade-insecure-requests']).toBe('1');
     });
   });
 });

@@ -13,10 +13,10 @@ on:
 jobs:
   claude:
     if: |
-      (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@zai-claude')) ||
-      (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@zai-claude')) ||
-      (github.event_name == 'pull_request_review' && contains(github.event.review.body, '@zai-claude')) ||
-      (github.event_name == 'issues' && (contains(github.event.issue.body, '@zai-claude') || contains(github.event.issue.title, '@zai-claude')))
+      (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@zaiclaude')) ||
+      (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@zaiclaude')) ||
+      (github.event_name == 'pull_request_review' && contains(github.event.review.body, '@zaiclaude')) ||
+      (github.event_name == 'issues' && (contains(github.event.issue.body, '@zaiclaude') || contains(github.event.issue.title, '@zaiclaude')))
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -33,18 +33,9 @@ jobs:
       - name: Run Claude Code
         id: claude
         uses: anthropics/claude-code-action@v1
-        with:
-          anthropic_api_key: ${{ secrets.ZAI_API_KEY }}
         env:
           ANTHROPIC_BASE_URL: https://api.z.ai/api/anthropic
-          # This is an optional setting that allows Claude to read CI results on PRs
+        with:
+          anthropic_api_key: ${{ secrets.ZAI_API_KEY }}
           additional_permissions: |
             actions: read
-
-          # Optional: Give a custom prompt to Claude. If this is not specified, Claude will perform the instructions specified in the comment that tagged it.
-          # prompt: 'Update the pull request description to include a summary of changes.'
-
-          # Optional: Add claude_args to customize behavior and configuration
-          # See https://github.com/anthropics/claude-code-action/blob/main/docs/usage.md
-          # or https://code.claude.com/docs/en/cli-reference for available options
-          # claude_args: '--allowed-tools Bash(gh pr:*)'

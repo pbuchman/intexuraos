@@ -38,7 +38,7 @@ const linkPreviewErrorSchema = {
   properties: {
     code: {
       type: 'string',
-      enum: ['FETCH_FAILED', 'TIMEOUT', 'TOO_LARGE', 'INVALID_URL'],
+      enum: ['FETCH_FAILED', 'TIMEOUT', 'TOO_LARGE', 'INVALID_URL', 'ACCESS_DENIED'],
     },
     message: { type: 'string' },
   },
