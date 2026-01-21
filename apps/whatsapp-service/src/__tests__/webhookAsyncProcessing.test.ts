@@ -233,8 +233,8 @@ describe('Webhook async processing', () => {
     });
   });
 
-  describe('sendConfirmationMessage', () => {
-    it('sends confirmation message when webhook is successfully processed', async () => {
+  describe('markMessageAsRead', () => {
+    it('marks message as read when text webhook is successfully processed', async () => {
       // Setup user mapping
       const senderPhone = '15551234567';
       const userId = 'test-user-id';
@@ -257,7 +257,7 @@ describe('Webhook async processing', () => {
 
       expect(response.statusCode).toBe(200);
 
-      // Wait for async processing including confirmation message
+      // Wait for async processing including mark as read
       await triggerWebhookProcessing();
 
       // Verify event was processed
@@ -265,9 +265,9 @@ describe('Webhook async processing', () => {
       expect(events.length).toBe(1);
       expect(events[0]?.status).toBe('completed');
 
-      // Verify confirmation message was sent via whatsappCloudApi
-      const sentMessages = ctx.whatsappCloudApi.getSentMessages();
-      expect(sentMessages.length).toBeGreaterThan(0);
+      // Verify message was marked as read via whatsappCloudApi
+      const markedAsRead = ctx.whatsappCloudApi.getMarkedAsReadMessages();
+      expect(markedAsRead.length).toBeGreaterThan(0);
     });
 
     it('handles sendWhatsAppMessage failure gracefully', async () => {
@@ -515,7 +515,7 @@ describe('Webhook async processing', () => {
       expect(events[0]?.status).toBe('failed');
     });
 
-    it('sends confirmation message after successful image processing', async () => {
+    it('marks message as read after successful image processing', async () => {
       const senderPhone = '15551234567';
       const userId = 'test-user-id';
 
@@ -548,9 +548,9 @@ describe('Webhook async processing', () => {
 
       await triggerWebhookProcessing();
 
-      // Verify confirmation message was sent via whatsappCloudApi
-      const sentMessages = ctx.whatsappCloudApi.getSentMessages();
-      expect(sentMessages.length).toBeGreaterThan(0);
+      // Verify message was marked as read via whatsappCloudApi
+      const markedAsRead = ctx.whatsappCloudApi.getMarkedAsReadMessages();
+      expect(markedAsRead.length).toBeGreaterThan(0);
     });
   });
 
@@ -1457,7 +1457,7 @@ describe('Webhook async processing', () => {
       expect(events[0]?.ignoredReason?.message).toContain('unknown');
     });
 
-    it('handles confirmation message with null originalMessageId (uses undefined fallback)', async () => {
+    it('skips markAsRead when originalMessageId is null', async () => {
       const senderPhone = '15551234567';
       const userId = 'test-user-id';
 
@@ -1519,9 +1519,14 @@ describe('Webhook async processing', () => {
 
       await triggerWebhookProcessing();
 
-      // Confirmation message should be sent even without originalMessageId
-      const sentMessages = ctx.whatsappCloudApi.getSentMessages();
-      expect(sentMessages.length).toBeGreaterThan(0);
+      // Message should NOT be marked as read when originalMessageId is null
+      // (we can't mark a message as read without knowing its ID)
+      const markedAsRead = ctx.whatsappCloudApi.getMarkedAsReadMessages();
+      expect(markedAsRead.length).toBe(0);
+
+      // But the webhook should still process successfully
+      const events = ctx.webhookEventRepository.getAll();
+      expect(events[0]?.status).toBe('completed');
     });
   });
 });

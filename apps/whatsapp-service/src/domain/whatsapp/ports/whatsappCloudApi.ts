@@ -54,4 +54,11 @@ export interface WhatsAppCloudApiPort {
     message: string,
     replyToMessageId?: string
   ): Promise<Result<SendMessageResult, WhatsAppError>>;
+
+  /**
+   * Mark a message as read. This displays two blue check marks on the message.
+   * @param phoneNumberId - Business phone number ID
+   * @param messageId - The ID of the message to mark as read
+   */
+  markAsRead(phoneNumberId: string, messageId: string): Promise<Result<void, WhatsAppError>>;
 }

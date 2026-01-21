@@ -542,7 +542,7 @@ async function handleImageMessage(
   );
 
   if (result.ok) {
-    await sendConfirmationMessage(request, savedEvent, fromNumber, 'image');
+    await markMessageAsRead(request, savedEvent);
   }
 }
 
@@ -602,7 +602,7 @@ async function handleAudioMessage(
       });
     }
 
-    await sendConfirmationMessage(request, savedEvent, fromNumber, 'audio');
+    await sendAudioConfirmationMessage(request, savedEvent, fromNumber);
   }
 }
 
@@ -700,43 +700,54 @@ async function handleTextMessage(
     'Text message processing completed successfully'
   );
 
-  await sendConfirmationMessage(request, savedEvent, fromNumber, 'text');
+  await markMessageAsRead(request, savedEvent);
 }
 
 /**
- * Message types for confirmation messages.
+ * Mark the incoming message as read (displays two blue check marks).
+ * Used for text and image messages instead of sending a confirmation message.
  */
-type ConfirmationMessageType = 'text' | 'image' | 'audio';
+async function markMessageAsRead(
+  request: FastifyRequest<{ Body: WebhookPayload }>,
+  savedEvent: { id: string }
+): Promise<void> {
+  const originalMessageId = extractMessageId(request.body);
+  const phoneNumberId = extractPhoneNumberId(request.body);
 
-/**
- * Get confirmation message text based on message type.
- */
-function getConfirmationMessageText(messageType: ConfirmationMessageType): string {
-  switch (messageType) {
-    case 'audio':
-      return '✅ Voice message saved. Transcription in progress...';
-    case 'image':
-      return '✅ Image saved.';
-    case 'text':
-      return '✅ Message saved.';
+  if (phoneNumberId !== null && originalMessageId !== null) {
+    const { whatsappCloudApi } = getServices();
+
+    const markResult = await whatsappCloudApi.markAsRead(phoneNumberId, originalMessageId);
+
+    if (markResult.ok) {
+      request.log.info(
+        { eventId: savedEvent.id, messageId: originalMessageId },
+        'Marked message as read'
+      );
+    } else {
+      request.log.error(
+        { eventId: savedEvent.id, error: markResult.error, messageId: originalMessageId },
+        'Failed to mark message as read'
+      );
+    }
   }
 }
 
 /**
  * Send confirmation message back to the sender.
+ * Used only for audio messages to inform user about transcription progress.
  */
-async function sendConfirmationMessage(
+async function sendAudioConfirmationMessage(
   request: FastifyRequest<{ Body: WebhookPayload }>,
   savedEvent: { id: string },
-  fromNumber: string,
-  messageType: ConfirmationMessageType
+  fromNumber: string
 ): Promise<void> {
   const originalMessageId = extractMessageId(request.body);
   const phoneNumberId = extractPhoneNumberId(request.body);
 
   if (phoneNumberId !== null) {
     const { whatsappCloudApi } = getServices();
-    const confirmationText = getConfirmationMessageText(messageType);
+    const confirmationText = '✅ Voice message saved. Transcription in progress...';
 
     const sendResult = await whatsappCloudApi.sendMessage(
       phoneNumberId,
@@ -748,12 +759,12 @@ async function sendConfirmationMessage(
     if (sendResult.ok) {
       request.log.info(
         { eventId: savedEvent.id, messageId: sendResult.value.messageId, recipient: fromNumber },
-        'Sent confirmation message'
+        'Sent audio confirmation message'
       );
     } else {
       request.log.error(
         { eventId: savedEvent.id, error: sendResult.error, recipient: fromNumber },
-        'Failed to send confirmation message'
+        'Failed to send audio confirmation message'
       );
     }
   }
