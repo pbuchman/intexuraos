@@ -335,6 +335,7 @@ export class FakeWhatsAppMessageRepository implements WhatsAppMessageRepository 
   private shouldFailSave = false;
   private shouldFailGetMessage = false;
   private shouldFailDeleteMessage = false;
+  private shouldFailGetMessagesByUser = false;
   private shouldThrowOnGetMessage = false;
   private shouldThrowOnUpdateTranscription = false;
   private nextCursorToReturn: string | undefined = undefined;
@@ -349,6 +350,10 @@ export class FakeWhatsAppMessageRepository implements WhatsAppMessageRepository 
 
   setFailDeleteMessage(fail: boolean): void {
     this.shouldFailDeleteMessage = fail;
+  }
+
+  setFailGetMessagesByUser(fail: boolean): void {
+    this.shouldFailGetMessagesByUser = fail;
   }
 
   setThrowOnGetMessage(shouldThrow: boolean): void {
@@ -399,6 +404,11 @@ export class FakeWhatsAppMessageRepository implements WhatsAppMessageRepository 
     userId: string,
     options?: { limit?: number; cursor?: string }
   ): Promise<Result<{ messages: WhatsAppMessage[]; nextCursor?: string }, WhatsAppError>> {
+    if (this.shouldFailGetMessagesByUser) {
+      return Promise.resolve(
+        err({ code: 'INTERNAL_ERROR', message: 'Simulated getMessagesByUser failure' })
+      );
+    }
     const limit = options?.limit ?? 50;
     const userMessages = Array.from(this.messages.values())
       .filter((m) => m.userId === userId)
@@ -492,6 +502,7 @@ export class FakeWhatsAppMessageRepository implements WhatsAppMessageRepository 
     this.shouldFailSave = false;
     this.shouldFailGetMessage = false;
     this.shouldFailDeleteMessage = false;
+    this.shouldFailGetMessagesByUser = false;
     this.shouldThrowOnGetMessage = false;
     this.shouldThrowOnUpdateTranscription = false;
     this.nextCursorToReturn = undefined;

@@ -986,5 +986,124 @@ describe('Pub/Sub Routes', () => {
       const responseBody = JSON.parse(response.body) as { success: boolean };
       expect(responseBody.success).toBe(true);
     });
+
+    it('processes link preview extraction event', async () => {
+      const messageId = 'msg-link-preview';
+      const userId = 'user-link-preview';
+
+      // Pre-populate a message
+      messageRepository.setMessage({
+        id: messageId,
+        userId,
+        waMessageId: 'wamid.linkpreview',
+        fromNumber: '+1234567890',
+        toNumber: '+0987654321',
+        text: 'Check out https://example.com',
+        mediaType: 'text',
+        timestamp: Date.now().toString(),
+        receivedAt: new Date().toISOString(),
+        webhookEventId: 'event-lp',
+      });
+
+      const body = createPubSubBody({
+        type: 'whatsapp.linkpreview.extract',
+        messageId,
+        userId,
+        text: 'Check out https://example.com',
+        timestamp: new Date().toISOString(),
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/process-webhook',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: body,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const responseBody = JSON.parse(response.body) as { success: boolean };
+      expect(responseBody.success).toBe(true);
+
+      // Verify link preview was extracted
+      const message = messageRepository.getMessageSync(messageId);
+      expect(message?.linkPreview?.status).toBe('completed');
+      expect(message?.linkPreview?.previews?.[0]?.url).toBe('https://example.com');
+    });
+
+    it('handles link preview extraction failure gracefully', async () => {
+      const messageId = 'msg-link-preview-fail';
+      const userId = 'user-link-preview-fail';
+
+      // Pre-populate a message
+      messageRepository.setMessage({
+        id: messageId,
+        userId,
+        waMessageId: 'wamid.linkpreviewfail',
+        fromNumber: '+1234567890',
+        toNumber: '+0987654321',
+        text: 'Check out https://failing-site.com',
+        mediaType: 'text',
+        timestamp: Date.now().toString(),
+        receivedAt: new Date().toISOString(),
+        webhookEventId: 'event-lp-fail',
+      });
+
+      // Make the message repository throw during link preview update to simulate a failure
+      messageRepository.setThrowOnGetMessage(true);
+
+      const body = createPubSubBody({
+        type: 'whatsapp.linkpreview.extract',
+        messageId,
+        userId,
+        text: 'Check out https://failing-site.com',
+        timestamp: new Date().toISOString(),
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/process-webhook',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: body,
+      });
+
+      // Reset the flag
+      messageRepository.setThrowOnGetMessage(false);
+
+      // Should still return success (Pub/Sub ack pattern)
+      expect(response.statusCode).toBe(200);
+      const responseBody = JSON.parse(response.body) as { success: boolean };
+      expect(responseBody.success).toBe(true);
+    });
+  });
+
+  describe('maskPhoneNumber edge cases', () => {
+    it('logs masked phone number for short numbers (7 chars or less)', async () => {
+      // Create a mapping with a very short phone number
+      await userMappingRepository.saveMapping('user-short-phone', ['1234567']);
+
+      const body = createPubSubBody({
+        type: 'whatsapp.message.send',
+        userId: 'user-short-phone',
+        message: 'Hello short number',
+        correlationId: 'corr-short',
+        timestamp: new Date().toISOString(),
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/send-message',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: body,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const responseBody = JSON.parse(response.body) as { success: boolean };
+      expect(responseBody.success).toBe(true);
+
+      // The message should have been sent to the short phone number
+      const sentMessages = messageSender.getSentMessages();
+      expect(sentMessages).toHaveLength(1);
+      expect(sentMessages[0]?.phoneNumber).toBe('1234567');
+    });
   });
 });

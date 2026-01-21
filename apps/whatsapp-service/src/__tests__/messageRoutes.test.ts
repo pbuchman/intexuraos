@@ -316,6 +316,32 @@ describe('WhatsApp Message Routes', () => {
       const body = JSON.parse(response.body) as { success: boolean };
       expect(body.success).toBe(true);
     });
+
+    it('returns 502 when getMessagesByUser fails', async () => {
+      const userId = 'user-messages-fail';
+      const token = await createToken({ sub: userId });
+
+      // Configure fake to fail getMessagesByUser
+      ctx.messageRepository.setFailGetMessagesByUser(true);
+
+      const response = await ctx.app.inject({
+        method: 'GET',
+        url: '/whatsapp/messages',
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      // Reset failure flag
+      ctx.messageRepository.setFailGetMessagesByUser(false);
+
+      expect(response.statusCode).toBe(502);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string; message: string };
+      };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('DOWNSTREAM_ERROR');
+      expect(body.error.message).toBe('Simulated getMessagesByUser failure');
+    });
   });
 
   describe('GET /whatsapp/messages/:message_id/media', () => {
