@@ -328,4 +328,74 @@ describe('executeResearchAction usecase', () => {
       '## Key Points\n\n- Main topic A\n- Main topic B\n\n---\n\nFull research question context...'
     );
   });
+
+  it('returns completed status with message from payload for already completed action', async () => {
+    const action = createAction({
+      status: 'completed',
+      payload: {
+        resource_url: '/#/research/existing',
+        message: 'Previously created research',
+      },
+    });
+    await fakeActionRepo.save(action);
+
+    const usecase = createExecuteResearchActionUseCase({
+      actionRepository: fakeActionRepo,
+      researchServiceClient: fakeResearchClient,
+      whatsappPublisher: fakeWhatsappPublisher,
+      webAppUrl: 'https://app.test.com',
+      logger: silentLogger,
+    });
+
+    const result = await usecase('action-123');
+
+    expect(isOk(result)).toBe(true);
+    if (isOk(result)) {
+      expect(result.value.status).toBe('completed');
+      expect(result.value.message).toBe('Previously created research');
+      expect(result.value.resourceUrl).toBe('/#/research/existing');
+    }
+  });
+
+  it('returns error for action with pending status', async () => {
+    const action = createAction({ status: 'pending' });
+    await fakeActionRepo.save(action);
+
+    const usecase = createExecuteResearchActionUseCase({
+      actionRepository: fakeActionRepo,
+      researchServiceClient: fakeResearchClient,
+      whatsappPublisher: fakeWhatsappPublisher,
+      webAppUrl: 'https://app.test.com',
+      logger: silentLogger,
+    });
+
+    const result = await usecase('action-123');
+
+    expect(isErr(result)).toBe(true);
+    if (isErr(result)) {
+      expect(result.error.message).toContain('Cannot execute action with status: pending');
+    }
+  });
+
+  it('does not send WhatsApp notification when resourceUrl is missing', async () => {
+    const action = createAction({ status: 'awaiting_approval' });
+    await fakeActionRepo.save(action);
+    fakeResearchClient.setNextResponse({
+      status: 'completed',
+      message: 'Research draft created',
+    });
+
+    const usecase = createExecuteResearchActionUseCase({
+      actionRepository: fakeActionRepo,
+      researchServiceClient: fakeResearchClient,
+      whatsappPublisher: fakeWhatsappPublisher,
+      webAppUrl: 'https://app.test.com',
+      logger: silentLogger,
+    });
+
+    await usecase('action-123');
+
+    const messages = fakeWhatsappPublisher.getSentMessages();
+    expect(messages).toHaveLength(0);
+  });
 });

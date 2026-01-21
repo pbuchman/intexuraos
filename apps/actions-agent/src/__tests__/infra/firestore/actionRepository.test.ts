@@ -419,5 +419,37 @@ describe('FirestoreActionRepository', () => {
         expect(updateResult.error.message).toBe('string error');
       }
     });
+
+    it('accepts array of expected statuses', async () => {
+      const action = createTestAction({ status: 'pending' });
+      await repository.save(action);
+
+      const updateResult = await repository.updateStatusIf(
+        action.id,
+        'awaiting_approval',
+        ['pending', 'failed']
+      );
+
+      expect(updateResult.outcome).toBe('updated');
+
+      const result = await repository.getById(action.id);
+      expect(result?.status).toBe('awaiting_approval');
+    });
+
+    it('returns status_mismatch when current status not in expected array', async () => {
+      const action = createTestAction({ status: 'completed' });
+      await repository.save(action);
+
+      const updateResult = await repository.updateStatusIf(
+        action.id,
+        'processing',
+        ['pending', 'failed']
+      );
+
+      expect(updateResult.outcome).toBe('status_mismatch');
+      if (updateResult.outcome === 'status_mismatch') {
+        expect(updateResult.currentStatus).toBe('completed');
+      }
+    });
   });
 });
