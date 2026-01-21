@@ -16,7 +16,7 @@ import {
   type InferResearchContextOptions,
   type InferSynthesisContextParams,
 } from '@intexuraos/llm-common';
-import { type Result } from '@intexuraos/common-core';
+import { type Result, getErrorMessage } from '@intexuraos/common-core';
 import type { LlmError } from '../../domain/research/ports/llmProvider.js';
 import type {
   ContextInferenceProvider,
@@ -56,7 +56,7 @@ const SYNTHESIS_CONTEXT_SCHEMA = `{
   "mode": string,
   "synthesis_goals": string[],
   "missing_sections": string[],
-  "detected_conflicts": Array<{ description, severity }>,
+  "detected_conflicts": Array<{ topic, sources_involved, conflict_summary, severity }>,
   "source_preference": { prefer_official_over_aggregators, prefer_recent_when_time_sensitive },
   "defaults_applied": Array<{ key, value, reason }>,
   "assumptions": string[],
@@ -320,24 +320,28 @@ function mapToLlmError(error: { code: string; message: string }): LlmError {
  * Each error shows the exact field path and what went wrong.
  *
  * @example
- * // Returns: "mode: Invalid enum value. Expected 'compact' | 'standard' | 'audit', received 'deep'"
- * // Returns: "research_plan.preferred_source_types[0]: Invalid enum value. Expected 'official' | ..., received 'blog'"
+ * // Returns: "mode: expected 'compact' | 'standard' | 'audit', received 'deep'"
+ * // Returns: "research_plan.preferred_source_types.0: expected 'official' | ..., received 'blog'"
  */
 function formatZodErrors(error: ZodError): string {
+  if (error.issues.length === 0) {
+    return 'Unknown validation error (no issues reported)';
+  }
+
   return error.issues
     .map((issue) => {
       const path = issue.path.join('.');
       const pathStr = path !== '' ? path : '(root)';
 
-      if (issue.code === 'invalid_enum_value') {
-        const enumIssue = issue as { options: string[]; received: unknown };
-        const options = enumIssue.options.map((o) => `'${o}'`).join(' | ');
-        return `${pathStr}: expected ${options}, received '${String(enumIssue.received)}'`;
+      if (issue.code === 'invalid_enum_value' && 'options' in issue && 'received' in issue) {
+        const options = (issue.options as string[]).map((o) => `'${o}'`).join(' | ');
+        return `${pathStr}: expected ${options}, received '${String(issue.received)}'`;
       }
 
-      if (issue.code === 'invalid_type') {
-        const typeIssue = issue as { expected: string; received: string };
-        return `${pathStr}: expected ${typeIssue.expected}, received ${typeIssue.received}`;
+      if (issue.code === 'invalid_type' && 'expected' in issue && 'received' in issue) {
+        const expected = issue.expected as string;
+        const received = issue.received as string;
+        return `${pathStr}: expected ${expected}, received ${received}`;
       }
 
       return `${pathStr}: ${issue.message}`;
@@ -365,8 +369,9 @@ function parseJsonWithZod<T>(
   let parsed: unknown;
   try {
     parsed = JSON.parse(cleaned);
-  } catch {
-    const errorMessage = `JSON parse failed: Invalid JSON in response`;
+  } catch (e) {
+    const parseError = getErrorMessage(e, 'Unknown parse error');
+    const errorMessage = `JSON parse failed: ${parseError}`;
     const detailedError = createDetailedParseErrorMessage({
       errorMessage,
       llmResponse: raw,
@@ -377,6 +382,7 @@ function parseJsonWithZod<T>(
       {
         operation,
         errorMessage,
+        parseError,
         llmResponse: raw,
         expectedSchema,
         responseLength: raw.length,
