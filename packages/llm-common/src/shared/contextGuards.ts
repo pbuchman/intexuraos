@@ -29,11 +29,6 @@ export function isMode(value: unknown): value is Mode {
   return ModeSchema.safeParse(value).success;
 }
 
-export function isPrimitive(value: unknown): value is string | number | boolean {
-  const type = typeof value;
-  return type === 'string' || type === 'number' || type === 'boolean';
-}
-
 export function isDefaultApplied(value: unknown): value is DefaultApplied {
   return DefaultAppliedSchema.safeParse(value).success;
 }

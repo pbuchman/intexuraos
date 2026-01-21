@@ -89,6 +89,7 @@ export {
 // Context inference - shared types (from shared)
 export {
   DOMAINS,
+  MODES,
   type Domain,
   type Mode,
   type DefaultApplied,

@@ -7,6 +7,7 @@
 
 export {
   DOMAINS,
+  MODES,
   type Domain,
   type Mode,
   type DefaultApplied,
