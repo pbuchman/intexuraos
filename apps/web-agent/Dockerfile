@@ -19,6 +19,10 @@ COPY packages/ ./packages/
 # Install dependencies
 RUN pnpm install --frozen-lockfile
 
+# Cache buster to ensure source changes are picked up
+ARG CACHE_BUST
+RUN echo "Cache bust: ${CACHE_BUST:-none}"
+
 # Copy source files
 COPY tsconfig*.json ./
 COPY scripts/ ./scripts/

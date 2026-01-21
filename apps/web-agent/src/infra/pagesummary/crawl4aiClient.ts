@@ -11,7 +11,7 @@ export interface Crawl4AIClientConfig {
 
 const DEFAULT_CONFIG: Omit<Crawl4AIClientConfig, 'apiKey'> = {
   baseUrl: 'https://api.crawl4ai.com',
-  timeoutMs: 60000,
+  timeoutMs: 120000,
 };
 
 const DEFAULT_MAX_SENTENCES = 20;
@@ -20,11 +20,17 @@ const WORDS_PER_MINUTE = 200;
 
 interface Crawl4AIResponse {
   success: boolean;
-  result?: {
-    markdown?: string;
-    extracted_content?: string;
+  url?: string;
+  html?: string;
+  cleaned_html?: string;
+  markdown?: {
+    raw_markdown?: string;
   };
-  error?: string;
+  extracted_content?: string;
+  error_message?: string;
+  status_code?: number;
+  duration_ms?: number;
+  crawl_strategy?: string;
 }
 
 function countWords(text: string): number {
@@ -33,6 +39,12 @@ function countWords(text: string): number {
 
 function calculateReadingMinutes(wordCount: number): number {
   return Math.ceil(wordCount / WORDS_PER_MINUTE);
+}
+
+/** Returns undefined for empty/whitespace-only strings, enabling ?? fallback */
+function nonEmpty(value: string | undefined): string | undefined {
+  if (value === undefined) return undefined;
+  return value.trim() !== '' ? value : undefined;
 }
 
 function buildSummaryPrompt(maxSentences: number, maxReadingMinutes: number): string {
@@ -74,31 +86,24 @@ export class Crawl4AIClient implements PageSummaryServicePort {
     try {
       const prompt = buildSummaryPrompt(maxSentences, maxReadingMinutes);
 
+      // Crawl4AI Cloud API v1 uses /v1/crawl endpoint with X-API-Key header
       const payload = {
-        urls: [url],
-        browser_config: {
-          type: 'BrowserConfig',
-          params: { headless: true },
-        },
+        url,
+        strategy: 'browser',
         crawler_config: {
-          type: 'CrawlerRunConfig',
-          params: {
-            cache_mode: 'bypass',
-            extraction_strategy: {
-              type: 'LLMExtractionStrategy',
-              params: {
-                instruction: prompt,
-              },
-            },
+          extraction_strategy: {
+            type: 'llm',
+            instruction: prompt,
           },
         },
+        bypass_cache: true,
       };
 
-      const response = await fetch(`${this.config.baseUrl}/crawl`, {
+      const response = await fetch(`${this.config.baseUrl}/v1/crawl`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${this.config.apiKey}`,
+          'X-API-Key': this.config.apiKey,
         },
         body: JSON.stringify(payload),
         signal: controller.signal,
@@ -124,14 +129,29 @@ export class Crawl4AIClient implements PageSummaryServicePort {
       const data = (await response.json()) as Crawl4AIResponse;
 
       if (!data.success) {
-        this.logger.warn({ url, error: data.error }, 'Crawl4AI extraction failed');
+        this.logger.warn({ url, error: data.error_message }, 'Crawl4AI extraction failed');
         return err({
           code: 'FETCH_FAILED',
-          message: data.error ?? 'Crawl4AI extraction failed',
+          message: data.error_message ?? 'Crawl4AI extraction failed',
         });
       }
 
-      const extractedContent = data.result?.extracted_content ?? data.result?.markdown;
+      // New API returns LLM extraction in 'extracted_content', fallback to markdown
+      // Use nonEmpty() to also fallback on empty strings (not just null/undefined)
+      const extractedContent =
+        nonEmpty(data.extracted_content) ?? nonEmpty(data.markdown?.raw_markdown);
+
+      this.logger.debug(
+        {
+          url,
+          hasExtractedContent: data.extracted_content !== undefined,
+          hasMarkdown: data.markdown?.raw_markdown !== undefined,
+          crawlStrategy: data.crawl_strategy,
+          durationMs: data.duration_ms,
+          responseKeys: Object.keys(data),
+        },
+        'Crawl4AI response fields'
+      );
 
       if (extractedContent === undefined || extractedContent.trim() === '') {
         this.logger.warn({ url }, 'No content extracted from page');

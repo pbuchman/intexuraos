@@ -94,4 +94,25 @@ export class WhatsAppCloudApiAdapter implements WhatsAppCloudApiPort {
     logger.info({ phoneNumberId, recipientPhone, messageId: result.value.messageId }, 'Message sent successfully');
     return ok({ messageId: result.value.messageId });
   }
+
+  async markAsRead(phoneNumberId: string, messageId: string): Promise<Result<void, WhatsAppError>> {
+    logger.info({ phoneNumberId, messageId }, 'Marking message as read');
+    const client = createWhatsAppClient({
+      accessToken: this.accessToken,
+      phoneNumberId,
+    });
+
+    const result = await client.markAsRead(messageId);
+
+    if (!result.ok) {
+      logger.error({ phoneNumberId, messageId, code: result.error.code }, 'Failed to mark message as read');
+      return err({
+        code: 'INTERNAL_ERROR',
+        message: result.error.message,
+      });
+    }
+
+    logger.info({ phoneNumberId, messageId }, 'Message marked as read successfully');
+    return ok(undefined);
+  }
 }

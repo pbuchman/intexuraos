@@ -18,6 +18,11 @@ export interface WhatsAppClient {
   sendTextMessage(params: SendMessageParams): Promise<Result<SendMessageResult, WhatsAppError>>;
   getMediaUrl(mediaId: string): Promise<Result<MediaUrlInfo, WhatsAppError>>;
   downloadMedia(url: string): Promise<Result<Buffer, WhatsAppError>>;
+  /**
+   * Mark a message as read. This displays two blue check marks on the message.
+   * @param messageId - The ID of the message to mark as read
+   */
+  markAsRead(messageId: string): Promise<Result<void, WhatsAppError>>;
 }
 
 export function createWhatsAppClient(config: WhatsAppConfig): WhatsAppClient {
@@ -170,6 +175,43 @@ export function createWhatsAppClient(config: WhatsAppConfig): WhatsAppClient {
         return err({
           code: 'NETWORK_ERROR',
           message: `Failed to download media: ${getErrorMessage(error)}`,
+        });
+      }
+    },
+
+    async markAsRead(messageId: string): Promise<Result<void, WhatsAppError>> {
+      const url = `https://graph.facebook.com/${WHATSAPP_API_VERSION}/${config.phoneNumberId}/messages`;
+
+      const payload = {
+        messaging_product: 'whatsapp',
+        status: 'read',
+        message_id: messageId,
+      };
+
+      try {
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${config.accessToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(payload),
+        });
+
+        if (!response.ok) {
+          const errorBody = await response.text();
+          return err({
+            code: 'API_ERROR',
+            message: `WhatsApp API error: ${String(response.status)} - ${errorBody}`,
+            statusCode: response.status,
+          });
+        }
+
+        return ok(undefined);
+      } catch (error) {
+        return err({
+          code: 'NETWORK_ERROR',
+          message: `Failed to mark message as read: ${getErrorMessage(error)}`,
         });
       }
     },

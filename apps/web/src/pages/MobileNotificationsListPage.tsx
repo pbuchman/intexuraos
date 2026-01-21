@@ -567,10 +567,14 @@ export function MobileNotificationsListPage(): React.JSX.Element {
           <h2 className="text-2xl font-bold text-slate-900">Notifications</h2>
           <p className="text-slate-600">Notifications captured from your mobile device</p>
         </div>
-        <Button variant="secondary" onClick={handleRefresh} isLoading={isRefreshing}>
-          <RefreshCw className={`mr-2 h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
-          Refresh
-        </Button>
+        <button
+          onClick={handleRefresh}
+          disabled={isRefreshing}
+          className="rounded p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 disabled:opacity-50"
+          title="Refresh"
+        >
+          <RefreshCw className={`h-5 w-5 ${isRefreshing ? 'animate-spin' : ''}`} />
+        </button>
       </div>
 
       {error !== null && error !== '' ? (
