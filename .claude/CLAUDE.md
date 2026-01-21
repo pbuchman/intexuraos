@@ -632,22 +632,48 @@ Use the AskUserQuestion tool for each question separately. Do not batch multiple
 
 ## Pull Request Workflow (DEFAULT)
 
+**RULE:** Before creating a PR, you MUST update your branch with the latest base branch and resolve any conflicts.
+
 **When asked to create a PR, follow this default workflow:**
 
 1. **Commit all changes** in the current workspace
-2. **Fetch origin** and merge `origin/development` if it exists
-3. **Push** the branch
-4. **Create PR** targeting `development` (if it exists), otherwise `main`
+2. **Determine base branch** — use `development` if it exists, otherwise `main`
+3. **Fetch and merge base branch** — pull latest changes from the target branch into your feature branch
+4. **Resolve conflicts** — if merge conflicts occur, resolve them before proceeding
+5. **Push** the branch
+6. **Create PR** targeting the base branch
 
 **Commands:**
 
 ```bash
+# 1. Commit your changes
 git add -A && git commit -m "message"
+
+# 2. Fetch latest from origin
 git fetch origin
-git merge origin/development  # if exists, skip if not
+
+# 3. Determine base branch and merge it into your feature branch
+# If targeting development:
+git merge origin/development
+# If targeting main:
+git merge origin/main
+
+# 4. If conflicts occur, resolve them and commit:
+# (edit conflicting files)
+git add -A && git commit -m "Resolve merge conflicts with <base-branch>"
+
+# 5. Push your branch
 git push -u origin <branch>
-gh pr create --base development  # or --base main if development doesn't exist
+
+# 6. Create PR
+gh pr create --base development  # or --base main
 ```
+
+**Why merge before PR?** This ensures:
+- Your branch is up-to-date with the target branch
+- Merge conflicts are resolved locally (easier to debug)
+- CI runs against the merged state (matches post-merge behavior)
+- Reviewers see a clean diff without unrelated conflicts
 
 ---
 
