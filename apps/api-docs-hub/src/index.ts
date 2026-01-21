@@ -6,8 +6,9 @@ import { initSentry } from '@intexuraos/infra-sentry';
 import { buildServer } from './server.js';
 import { loadConfig } from './config.js';
 
+const sentryDsn = process.env['INTEXURAOS_SENTRY_DSN'];
 initSentry({
-  dsn: process.env['INTEXURAOS_SENTRY_DSN'],
+  ...(sentryDsn !== undefined && { dsn: sentryDsn }),
   environment: process.env['INTEXURAOS_ENVIRONMENT'] ?? 'development',
   serviceName: 'api-docs-hub',
 });
