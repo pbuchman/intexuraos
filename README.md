@@ -210,12 +210,12 @@ For full setup: [Setup Guide](docs/setup/01-gcp-project.md)
 
 ### Getting Started
 
-| Document                                                | Description                    |
-| ------------------------------------------------------- | ------------------------------ |
-| [Platform Overview](docs/overview.md)                   | What IntexuraOS does and how   |
-| [AI Architecture](docs/architecture/ai-architecture.md) | Deep dive into 16 LLM models   |
-| [Services Catalog](docs/services/index.md)              | All 18 services documented     |
-| [Setup Guide](docs/setup/01-gcp-project.md)             | Step-by-step GCP setup         |
+| Document                                                | Description                  |
+| ------------------------------------------------------- | ---------------------------- |
+| [Platform Overview](docs/overview.md)                   | What IntexuraOS does and how |
+| [AI Architecture](docs/architecture/ai-architecture.md) | Deep dive into 16 LLM models |
+| [Services Catalog](docs/services/index.md)              | All 18 services documented   |
+| [Setup Guide](docs/setup/01-gcp-project.md)             | Step-by-step GCP setup       |
 
 ### Architecture
 

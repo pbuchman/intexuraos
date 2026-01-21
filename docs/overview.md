@@ -215,6 +215,7 @@ Every LLM call is tracked with:
 ### Pricing Transparency
 
 The **app-settings-service** maintains real-time pricing for all 16 models, enabling:
+
 - Pre-execution cost estimates
 - Post-execution cost reporting
 - Monthly usage analytics

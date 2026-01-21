@@ -88,7 +88,13 @@ export type ResearchModel =
 /**
  * Models for API key validation (cheap, fast).
  */
-export type ValidationModel = ClaudeHaiku35 | Gemini20Flash | GPT4oMini | Sonar | Glm47 | Glm47Flash;
+export type ValidationModel =
+  | ClaudeHaiku35
+  | Gemini20Flash
+  | GPT4oMini
+  | Sonar
+  | Glm47
+  | Glm47Flash;
 
 /**
  * Fast models for quick tasks (classification, title generation).
