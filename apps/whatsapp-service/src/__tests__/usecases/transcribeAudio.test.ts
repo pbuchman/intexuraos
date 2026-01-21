@@ -736,6 +736,41 @@ describe('TranscribeAudioUseCase', () => {
       expect(events[0]?.text).toBe('Voice transcription result');
     });
 
+    it('publishes command ingest event with summary when transcription includes summary', async () => {
+      await createTestMessage('test-message-id', 'test-user-id');
+
+      const fakeEventPublisher = new FakeEventPublisher();
+      const depsWithPublisher: TranscribeAudioDeps = {
+        ...deps,
+        eventPublisher: fakeEventPublisher,
+      };
+      const usecaseWithPublisher = new TranscribeAudioUseCase(depsWithPublisher, fastPollingConfig);
+
+      const input = createTestInput();
+      const executePromise = usecaseWithPublisher.execute(input, logger);
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      const jobs = transcriptionService.getJobs();
+      const jobId = Array.from(jobs.keys())[0];
+      if (jobId !== undefined) {
+        transcriptionService.setJobResult(
+          jobId,
+          'Full transcript of the voice message',
+          '• Summary point 1\n• Summary point 2'
+        );
+      }
+
+      await executePromise;
+
+      const events = fakeEventPublisher.getCommandIngestEvents();
+      expect(events.length).toBe(1);
+      expect(events[0]?.type).toBe('command.ingest');
+      expect(events[0]?.sourceType).toBe('whatsapp_voice');
+      expect(events[0]?.text).toBe('Full transcript of the voice message');
+      expect(events[0]?.summary).toBe('• Summary point 1\n• Summary point 2');
+    });
+
     it('handles event publish failure gracefully', async () => {
       await createTestMessage('test-message-id', 'test-user-id');
 
