@@ -558,4 +558,196 @@ describe('SpeechmaticsTranscriptionAdapter', () => {
       }
     });
   });
+
+  describe('extractErrorContext', () => {
+    it('extracts response data from HTTP errors', async () => {
+      // Create an error object with response property (like axios errors)
+      const httpError = {
+        message: 'Request failed',
+        response: {
+          status: 401,
+          statusText: 'Unauthorized',
+          data: { error: 'Invalid API key' },
+        },
+      };
+      mockCreateTranscriptionJob.mockRejectedValue(httpError);
+
+      const result = await adapter.submitJob({
+        audioUrl: 'https://storage.example.com/audio.ogg',
+        mimeType: 'audio/ogg',
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('SPEECHMATICS_SUBMIT_ERROR');
+        // Verify the error context was captured
+        const apiCallResponse = result.error.apiCall?.response as Record<string, unknown>;
+        expect(apiCallResponse['errorContext']).toBeDefined();
+        const errorContext = apiCallResponse['errorContext'] as Record<string, unknown>;
+        expect(errorContext['responseStatus']).toBe(401);
+        expect(errorContext['responseStatusText']).toBe('Unauthorized');
+        expect(errorContext['responseData']).toEqual({ error: 'Invalid API key' });
+      }
+    });
+
+    it('extracts request info from errors with request property', async () => {
+      // Create an error object with request property (like axios errors)
+      const requestError = {
+        message: 'Network error',
+        request: {
+          url: 'https://api.speechmatics.com/v2/jobs',
+          method: 'POST',
+        },
+      };
+      mockCreateTranscriptionJob.mockRejectedValue(requestError);
+
+      const result = await adapter.submitJob({
+        audioUrl: 'https://storage.example.com/audio.ogg',
+        mimeType: 'audio/ogg',
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        const apiCallResponse = result.error.apiCall?.response as Record<string, unknown>;
+        expect(apiCallResponse['errorContext']).toBeDefined();
+        const errorContext = apiCallResponse['errorContext'] as Record<string, unknown>;
+        expect(errorContext['requestUrl']).toBe('https://api.speechmatics.com/v2/jobs');
+        expect(errorContext['requestMethod']).toBe('POST');
+      }
+    });
+
+    it('extracts cause from Error.cause property', async () => {
+      // Create an error with a cause (modern Error.cause)
+      const errorWithCause = {
+        message: 'High-level error',
+        cause: { message: 'Root cause error' },
+      };
+      mockCreateTranscriptionJob.mockRejectedValue(errorWithCause);
+
+      const result = await adapter.submitJob({
+        audioUrl: 'https://storage.example.com/audio.ogg',
+        mimeType: 'audio/ogg',
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        const apiCallResponse = result.error.apiCall?.response as Record<string, unknown>;
+        expect(apiCallResponse['errorContext']).toBeDefined();
+        const errorContext = apiCallResponse['errorContext'] as Record<string, unknown>;
+        expect(errorContext['cause']).toBe('Root cause error');
+      }
+    });
+
+    it('extracts cause when cause is a string', async () => {
+      const errorWithStringCause = {
+        message: 'High-level error',
+        cause: 'String cause message',
+      };
+      mockCreateTranscriptionJob.mockRejectedValue(errorWithStringCause);
+
+      const result = await adapter.submitJob({
+        audioUrl: 'https://storage.example.com/audio.ogg',
+        mimeType: 'audio/ogg',
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        const apiCallResponse = result.error.apiCall?.response as Record<string, unknown>;
+        const errorContext = apiCallResponse['errorContext'] as Record<string, unknown>;
+        expect(errorContext['cause']).toBe('String cause message');
+      }
+    });
+
+    it('extracts HTTP status properties from error objects', async () => {
+      // Error object with status and statusText properties (like fetch errors)
+      const httpError = {
+        message: 'HTTP Error',
+        status: 503,
+        statusText: 'Service Unavailable',
+      };
+      mockCreateTranscriptionJob.mockRejectedValue(httpError);
+
+      const result = await adapter.submitJob({
+        audioUrl: 'https://storage.example.com/audio.ogg',
+        mimeType: 'audio/ogg',
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        const apiCallResponse = result.error.apiCall?.response as Record<string, unknown>;
+        const errorContext = apiCallResponse['errorContext'] as Record<string, unknown>;
+        expect(errorContext['httpStatus']).toBe(503);
+        expect(errorContext['httpStatusText']).toBe('Service Unavailable');
+      }
+    });
+
+    it('extracts statusCode property from error objects', async () => {
+      // Error object with statusCode (common in Node.js HTTP errors)
+      const nodeHttpError = {
+        message: 'HTTP Error',
+        statusCode: 502,
+      };
+      mockCreateTranscriptionJob.mockRejectedValue(nodeHttpError);
+
+      const result = await adapter.submitJob({
+        audioUrl: 'https://storage.example.com/audio.ogg',
+        mimeType: 'audio/ogg',
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        const apiCallResponse = result.error.apiCall?.response as Record<string, unknown>;
+        const errorContext = apiCallResponse['errorContext'] as Record<string, unknown>;
+        expect(errorContext['httpStatusCode']).toBe(502);
+      }
+    });
+
+    it('extracts Speechmatics-specific error properties', async () => {
+      // Speechmatics error format with code, reason, detail, errors
+      const speechmaticsError = {
+        message: 'Speechmatics API Error',
+        code: 'transcription_failed',
+        reason: 'Audio file corrupted',
+        detail: 'Could not decode audio stream',
+        errors: [{ field: 'audio', message: 'Invalid format' }],
+      };
+      mockCreateTranscriptionJob.mockRejectedValue(speechmaticsError);
+
+      const result = await adapter.submitJob({
+        audioUrl: 'https://storage.example.com/audio.ogg',
+        mimeType: 'audio/ogg',
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        const apiCallResponse = result.error.apiCall?.response as Record<string, unknown>;
+        const errorContext = apiCallResponse['errorContext'] as Record<string, unknown>;
+        expect(errorContext['errorCode']).toBe('transcription_failed');
+        expect(errorContext['reason']).toBe('Audio file corrupted');
+        expect(errorContext['detail']).toBe('Could not decode audio stream');
+        expect(errorContext['errors']).toEqual([{ field: 'audio', message: 'Invalid format' }]);
+      }
+    });
+
+    it('extracts body property from error objects', async () => {
+      // Some HTTP clients put response in body property
+      const errorWithBody = {
+        message: 'HTTP Error',
+        body: { error: 'Bad Request', details: 'Missing required field' },
+      };
+      mockCreateTranscriptionJob.mockRejectedValue(errorWithBody);
+
+      const result = await adapter.submitJob({
+        audioUrl: 'https://storage.example.com/audio.ogg',
+        mimeType: 'audio/ogg',
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        const apiCallResponse = result.error.apiCall?.response as Record<string, unknown>;
+        const errorContext = apiCallResponse['errorContext'] as Record<string, unknown>;
+        expect(errorContext['body']).toEqual({ error: 'Bad Request', details: 'Missing required field' });
+      }
+    });
+  });
 });
