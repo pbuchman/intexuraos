@@ -29,6 +29,7 @@ gcloud run deploy "$CLOUD_RUN_SERVICE" \
   --image="$image" \
   --region="$REGION" \
   --platform=managed \
+  --cpu-throttling \
   --quiet
 
 log "Deployment complete for ${SERVICE}"
