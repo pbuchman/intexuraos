@@ -108,8 +108,8 @@ export function createUserServiceClient(config: UserServiceConfig): UserServiceC
             'X-Internal-Auth': config.internalAuthToken,
           },
         });
-      } catch {
-        /* Best effort - don't block on failure */
+      } catch /* v8 ignore next -- best effort, silent failure intentional */ {
+        // Best effort - don't block on failure
       }
     },
   };
