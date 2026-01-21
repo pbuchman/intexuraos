@@ -435,6 +435,29 @@ describe('GoogleCalendarClientImpl', () => {
       }
     });
 
+    it('handles calendar entry with undefined busy array', async () => {
+      nock(GOOGLE_CALENDAR_API)
+        .post('/calendar/v3/freeBusy')
+        .reply(200, {
+          calendars: {
+            primary: {
+              busy: undefined,
+            },
+          },
+        });
+
+      const result = await client.getFreeBusy(TEST_ACCESS_TOKEN, {
+        timeMin: '2025-01-08T00:00:00Z',
+        timeMax: '2025-01-09T00:00:00Z',
+      }, mockLogger);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        const slots = result.value.get('primary');
+        expect(slots).toEqual([]);
+      }
+    });
+
     it('returns error on API failure', async () => {
       nock(GOOGLE_CALENDAR_API)
         .post('/calendar/v3/freeBusy')
@@ -521,6 +544,38 @@ describe('GoogleCalendarClientImpl', () => {
       }
     });
 
+    it('handles attendee with null fields', async () => {
+      nock(GOOGLE_CALENDAR_API)
+        .get('/calendar/v3/calendars/primary/events/event-123')
+        .reply(200, {
+          id: 'event-123',
+          summary: 'Meeting',
+          start: { dateTime: '2025-01-08T10:00:00Z' },
+          end: { dateTime: '2025-01-08T11:00:00Z' },
+          attendees: [
+            {
+              email: null,
+              displayName: null,
+              self: null,
+              responseStatus: 'accepted',
+              optional: null,
+            },
+          ],
+        });
+
+      const result = await client.getEvent(TEST_ACCESS_TOKEN, TEST_CALENDAR_ID, 'event-123', mockLogger);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.attendees).toHaveLength(1);
+        expect(result.value.attendees?.[0]?.email).toBeUndefined();
+        expect(result.value.attendees?.[0]?.displayName).toBeUndefined();
+        expect(result.value.attendees?.[0]?.self).toBeUndefined();
+        expect(result.value.attendees?.[0]?.responseStatus).toBe('accepted');
+        expect(result.value.attendees?.[0]?.optional).toBeUndefined();
+      }
+    });
+
     it('handles event without organizer', async () => {
       nock(GOOGLE_CALENDAR_API)
         .get('/calendar/v3/calendars/primary/events/event-123')
@@ -562,6 +617,51 @@ describe('GoogleCalendarClientImpl', () => {
         expect(result.value.organizer?.email).toBe('organizer@example.com');
         expect(result.value.organizer?.displayName).toBe('John Doe');
         expect(result.value.organizer?.self).toBe(false);
+      }
+    });
+
+    it('handles event with organizer having null fields', async () => {
+      nock(GOOGLE_CALENDAR_API)
+        .get('/calendar/v3/calendars/primary/events/event-123')
+        .reply(200, {
+          id: 'event-123',
+          summary: 'Meeting',
+          start: { dateTime: '2025-01-08T10:00:00Z' },
+          end: { dateTime: '2025-01-08T11:00:00Z' },
+          organizer: {
+            email: null,
+            displayName: null,
+            self: null,
+          },
+        });
+
+      const result = await client.getEvent(TEST_ACCESS_TOKEN, TEST_CALENDAR_ID, 'event-123', mockLogger);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.organizer).toBeDefined();
+        expect(result.value.organizer?.email).toBeUndefined();
+        expect(result.value.organizer?.displayName).toBeUndefined();
+        expect(result.value.organizer?.self).toBeUndefined();
+      }
+    });
+
+    it('handles event with null id and summary', async () => {
+      nock(GOOGLE_CALENDAR_API)
+        .get('/calendar/v3/calendars/primary/events/event-123')
+        .reply(200, {
+          id: null,
+          summary: null,
+          start: { dateTime: '2025-01-08T10:00:00Z' },
+          end: { dateTime: '2025-01-08T11:00:00Z' },
+        });
+
+      const result = await client.getEvent(TEST_ACCESS_TOKEN, TEST_CALENDAR_ID, 'event-123', mockLogger);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.id).toBe('');
+        expect(result.value.summary).toBe('');
       }
     });
 
