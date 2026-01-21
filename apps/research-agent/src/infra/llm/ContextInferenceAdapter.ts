@@ -11,8 +11,8 @@ import {
   buildResearchContextRepairPrompt,
   buildSynthesisContextRepairPrompt,
   createDetailedParseErrorMessage,
-  isResearchContext,
-  isSynthesisContext,
+  ResearchContextSchema,
+  SynthesisContextSchema,
   type InferResearchContextOptions,
   type InferSynthesisContextParams,
 } from '@intexuraos/llm-common';
@@ -24,6 +24,7 @@ import type {
   SynthesisContextResult,
 } from '../../domain/research/ports/contextInference.js';
 import type { Logger } from '@intexuraos/common-core';
+import type { ZodSchema, ZodError } from 'zod';
 
 /**
  * Expected schema for research context response.
@@ -90,9 +91,9 @@ export class ContextInferenceAdapter implements ContextInferenceProvider {
       return { ok: false, error: mapToLlmError(result.error) };
     }
 
-    const parsed = parseJson(
+    const parsed = parseJsonWithZod(
       result.value.content,
-      isResearchContext,
+      ResearchContextSchema,
       'inferResearchContext',
       RESEARCH_CONTEXT_SCHEMA,
       this.logger
@@ -151,9 +152,9 @@ export class ContextInferenceAdapter implements ContextInferenceProvider {
       return { ok: false, error: mapToLlmError(result.error) };
     }
 
-    const parsed = parseJson(
+    const parsed = parseJsonWithZod(
       result.value.content,
-      isSynthesisContext,
+      SynthesisContextSchema,
       'inferSynthesisContext',
       SYNTHESIS_CONTEXT_SCHEMA,
       this.logger
@@ -219,9 +220,9 @@ export class ContextInferenceAdapter implements ContextInferenceProvider {
       return { ok: false, error: `${error.message} (repair attempt)` };
     }
 
-    const parsed = parseJson(
+    const parsed = parseJsonWithZod(
       result.value.content,
-      isResearchContext,
+      ResearchContextSchema,
       'inferResearchContext',
       RESEARCH_CONTEXT_SCHEMA,
       this.logger
@@ -273,9 +274,9 @@ export class ContextInferenceAdapter implements ContextInferenceProvider {
       return { ok: false, error: `${error.message} (repair attempt)` };
     }
 
-    const parsed = parseJson(
+    const parsed = parseJsonWithZod(
       result.value.content,
-      isSynthesisContext,
+      SynthesisContextSchema,
       'inferSynthesisContext',
       SYNTHESIS_CONTEXT_SCHEMA,
       this.logger
@@ -314,9 +315,43 @@ function mapToLlmError(error: { code: string; message: string }): LlmError {
   return { code, message: error.message };
 }
 
-function parseJson<T>(
+/**
+ * Formats Zod validation errors into a human-readable string with field paths.
+ * Each error shows the exact field path and what went wrong.
+ *
+ * @example
+ * // Returns: "mode: Invalid enum value. Expected 'compact' | 'standard' | 'audit', received 'deep'"
+ * // Returns: "research_plan.preferred_source_types[0]: Invalid enum value. Expected 'official' | ..., received 'blog'"
+ */
+function formatZodErrors(error: ZodError): string {
+  return error.issues
+    .map((issue) => {
+      const path = issue.path.join('.');
+      const pathStr = path !== '' ? path : '(root)';
+
+      if (issue.code === 'invalid_enum_value') {
+        const enumIssue = issue as { options: string[]; received: unknown };
+        const options = enumIssue.options.map((o) => `'${o}'`).join(' | ');
+        return `${pathStr}: expected ${options}, received '${String(enumIssue.received)}'`;
+      }
+
+      if (issue.code === 'invalid_type') {
+        const typeIssue = issue as { expected: string; received: string };
+        return `${pathStr}: expected ${typeIssue.expected}, received ${typeIssue.received}`;
+      }
+
+      return `${pathStr}: ${issue.message}`;
+    })
+    .join('; ');
+}
+
+/**
+ * Parse JSON string and validate against a Zod schema.
+ * Provides detailed error paths when validation fails.
+ */
+function parseJsonWithZod<T>(
   raw: string,
-  guard: (v: unknown) => v is T,
+  schema: ZodSchema<T>,
   operation: string,
   expectedSchema: string,
   logger: Logger
@@ -351,8 +386,11 @@ function parseJson<T>(
     return { ok: false, error: detailedError };
   }
 
-  if (!guard(parsed)) {
-    const errorMessage = 'Response does not match expected schema';
+  const result = schema.safeParse(parsed);
+
+  if (!result.success) {
+    const zodErrorDetails = formatZodErrors(result.error);
+    const errorMessage = `Schema validation failed: ${zodErrorDetails}`;
     const detailedError = createDetailedParseErrorMessage({
       errorMessage,
       llmResponse: raw,
@@ -363,6 +401,7 @@ function parseJson<T>(
       {
         operation,
         errorMessage,
+        zodErrors: result.error.issues,
         llmResponse: raw,
         expectedSchema,
         responseLength: raw.length,
@@ -373,5 +412,5 @@ function parseJson<T>(
     return { ok: false, error: detailedError };
   }
 
-  return { ok: true, value: parsed };
+  return { ok: true, value: result.data };
 }

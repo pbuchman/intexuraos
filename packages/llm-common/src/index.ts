@@ -95,6 +95,14 @@ export {
   type SafetyInfo,
 } from './shared/contextTypes.js';
 
+// Context inference - shared Zod schemas
+export {
+  DomainSchema,
+  ModeSchema,
+  DefaultAppliedSchema,
+  SafetyInfoSchema,
+} from './shared/contextSchemas.js';
+
 // Context inference - LlmReport type (alias for SynthesisReport)
 export { type LlmReport } from './synthesis/contextTypes.js';
 
@@ -112,6 +120,18 @@ export {
   isResearchContext,
   buildInferResearchContextPrompt,
   buildResearchContextRepairPrompt,
+  // Zod schemas
+  ANSWER_STYLES,
+  SOURCE_TYPES,
+  AVOID_SOURCE_TYPES,
+  AnswerStyleSchema,
+  SourceTypeSchema,
+  AvoidSourceTypeSchema,
+  TimeScopeSchema,
+  LocaleScopeSchema,
+  ResearchPlanSchema,
+  OutputFormatSchema,
+  ResearchContextSchema,
 } from './research/index.js';
 
 // Context inference - synthesis types and guards (from synthesis)
@@ -126,6 +146,15 @@ export {
   isSynthesisContext,
   buildInferSynthesisContextPrompt,
   buildSynthesisContextRepairPrompt,
+  // Zod schemas
+  SYNTHESIS_GOALS,
+  CONFLICT_SEVERITIES,
+  SynthesisGoalSchema,
+  ConflictSeveritySchema,
+  DetectedConflictSchema,
+  SourcePreferenceSchema,
+  SynthesisOutputFormatSchema,
+  SynthesisContextSchema,
 } from './synthesis/index.js';
 
 // Attribution system (from research domain)
