@@ -6,12 +6,15 @@ import type { ApprovalMessageRepository } from '../ports/approvalMessageReposito
 import type { ApprovalIntent } from '../ports/approvalIntentClassifier.js';
 import type { ApprovalIntentClassifierFactory } from '../ports/approvalIntentClassifierFactory.js';
 import type { WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
+import type { ActionEventPublisher } from '../ports/actionEventPublisher.js';
+import type { ActionCreatedEvent } from '../models/actionEvent.js';
 
 export interface HandleApprovalReplyDeps {
   actionRepository: ActionRepository;
   approvalMessageRepository: ApprovalMessageRepository;
   approvalIntentClassifierFactory: ApprovalIntentClassifierFactory;
   whatsappPublisher: WhatsAppSendPublisher;
+  actionEventPublisher: ActionEventPublisher;
   logger: Logger;
 }
 
@@ -49,6 +52,7 @@ export function createHandleApprovalReplyUseCase(
     approvalMessageRepository,
     approvalIntentClassifierFactory,
     whatsappPublisher,
+    actionEventPublisher,
     logger,
   } = deps;
 
@@ -202,6 +206,33 @@ export function createHandleApprovalReplyUseCase(
           updatedAt: new Date().toISOString(),
         };
         await actionRepository.update(updatedAction);
+
+        // Publish action.created event to trigger immediate processing
+        const event: ActionCreatedEvent = {
+          type: 'action.created',
+          actionId: action.id,
+          userId: action.userId,
+          commandId: action.commandId,
+          actionType: action.type,
+          title: action.title,
+          payload: {
+            prompt: action.title,
+            confidence: action.confidence,
+          },
+          timestamp: new Date().toISOString(),
+        };
+
+        const eventPublishResult = await actionEventPublisher.publishActionCreated(event);
+
+        if (!eventPublishResult.ok) {
+          logger.error(
+            { actionId: action.id, error: eventPublishResult.error.message },
+            'Failed to publish action.created event after approval'
+          );
+          // Continue anyway - action is already in pending status, will be picked up by retryPendingActions
+        } else {
+          logger.info({ actionId: action.id }, 'Published action.created event after approval');
+        }
 
         // Notify user first, then clean up (to avoid race condition)
         const approvePublishResult = await whatsappPublisher.publishSendMessage({

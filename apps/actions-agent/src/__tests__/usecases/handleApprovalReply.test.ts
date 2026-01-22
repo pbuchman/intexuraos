@@ -5,6 +5,7 @@ import {
   FakeActionRepository,
   FakeApprovalMessageRepository,
   FakeWhatsAppSendPublisher,
+  FakeActionEventPublisher,
 } from '../fakes.js';
 import type {
   ApprovalIntentClassifier,
@@ -71,6 +72,7 @@ describe('HandleApprovalReplyUseCase', () => {
   let approvalMessageRepository: FakeApprovalMessageRepository;
   let classifierFactory: FakeApprovalIntentClassifierFactory;
   let whatsappPublisher: FakeWhatsAppSendPublisher;
+  let actionEventPublisher: FakeActionEventPublisher;
   let useCase: HandleApprovalReplyUseCase;
 
   const testAction: Action = {
@@ -101,12 +103,14 @@ describe('HandleApprovalReplyUseCase', () => {
     approvalMessageRepository = new FakeApprovalMessageRepository();
     classifierFactory = new FakeApprovalIntentClassifierFactory();
     whatsappPublisher = new FakeWhatsAppSendPublisher();
+    actionEventPublisher = new FakeActionEventPublisher();
 
     useCase = createHandleApprovalReplyUseCase({
       actionRepository,
       approvalMessageRepository,
       approvalIntentClassifierFactory: classifierFactory,
       whatsappPublisher,
+      actionEventPublisher,
       logger: pino({ level: 'silent' }),
     });
   });
