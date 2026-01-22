@@ -50,12 +50,12 @@ Manage Linear issues, branches, and PRs with enforced workflow and cross-linking
 
 The command automatically detects intent from input:
 
-| Input Pattern                   | Type                             | Action                                                       |
-| ------------------------------- | -------------------------------- | ------------------------------------------------------------ |
-| `/linear` (no args)             | Random Todo (NON-INTERACTIVE)    | Pick from Todo state only and start working WITHOUT asking user |
-| `/linear <task description>`    | Create New                       | Detect bug/feature, create issue, start working              |
-| `/linear INT-<number>`          | Work Existing                    | Start working on specific issue (use INT- for this project)  |
-| `/linear https://sentry.io/...` | Sentry Integration               | Create Linear issue from Sentry error                        |
+| Input Pattern                   | Type                          | Action                                                          |
+| ------------------------------- | ----------------------------- | --------------------------------------------------------------- |
+| `/linear` (no args)             | Random Todo (NON-INTERACTIVE) | Pick from Todo state only and start working WITHOUT asking user |
+| `/linear <task description>`    | Create New                    | Detect bug/feature, create issue, start working                 |
+| `/linear INT-<number>`          | Work Existing                 | Start working on specific issue (use INT- for this project)     |
+| `/linear https://sentry.io/...` | Sentry Integration            | Create Linear issue from Sentry error                           |
 
 ---
 
@@ -230,7 +230,7 @@ For a PR to appear as an attachment in Linear's UI:
 
 ---
 
-## Workflow: Random Backlog (Cron Mode)
+## Workflow: Random Todo (Cron Mode)
 
 ### Trigger
 
@@ -272,6 +272,7 @@ User calls `/linear` with no arguments.
 ```
 
 **CRITICAL:** You MUST update the Linear issue state to "In Progress" in step 3 BEFORE:
+
 - Reading any code
 - Planning implementation
 - Investigating the issue
@@ -521,9 +522,9 @@ User calls `/linear https://<sentry-url>`
 | ------------------------------------------ | ------------ | ----------- | ----------------------------------- |
 | `/linear LIN-123` called                   | Backlog/Todo | In Progress | Create branch with issue ID in name |
 | `gh pr create` called (title has issue ID) | In Progress  | In Review   | GitHub integration auto-attaches PR |
-| PR approved                                | In Review    | Q&A QA      | Move to Q&A QA state for testing     |
+| PR approved                                | In Review    | Q&A QA      | Move to Q&A QA state for testing    |
 | PR has review changes                      | In Review    | In Progress | Update Linear state                 |
-| User explicitly requests "move to Done"   | Any          | Done        | Close Linear issue                  |
+| User explicitly requests "move to Done"    | Any          | Done        | Close Linear issue                  |
 
 **Note:** GitHub integration only works when BOTH branch name AND PR title contain the Linear issue ID (e.g., `LIN-123`, `PBU-44`).
 

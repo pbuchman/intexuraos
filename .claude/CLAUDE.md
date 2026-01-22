@@ -687,7 +687,7 @@ Use the `/linear` command for issue tracking and workflow management.
 **Usage:**
 
 ```bash
-/linear                    # Pick random backlog issue (cron mode)
+/linear                    # Pick random Todo issue (cron mode)
 /linear <task description> # Create new issue
 /linear LIN-123            # Work on existing issue
 /linear <sentry-url>       # Create from Sentry error
@@ -711,12 +711,13 @@ Use the `/linear` command for issue tracking and workflow management.
 
 **Cross-Linking Protocol:**
 
-| Direction       | Method                                          |
-| --------------- | ----------------------------------------------- |
-| Linear → GitHub | `Fixes LIN-XXX` in PR body                      |
-| GitHub → Linear | PR URL in issue comments                        |
-| Sentry → Linear | `[sentry] <title>` naming + link in description |
-| Linear → Sentry | Comment on Sentry issue                         |
+| Direction       | Method                                                             |
+| --------------- | ------------------------------------------------------------------ |
+| Linear → GitHub | PR title contains `LIN-XXX` (enables auto-attachment)              |
+| GitHub → Linear | GitHub integration attaches PR (when title + branch have issue ID) |
+| Linear → GitHub | `Fixes LIN-XXX` in PR body (for issue closing behavior)            |
+| Sentry → Linear | `[sentry] <title>` naming + link in description                    |
+| Linear → Sentry | Comment on Sentry issue                                            |
 
 **See:** `.claude/commands/linear.md` for complete workflow documentation.
 

@@ -28,8 +28,8 @@ assistant: "I'll create a corresponding Linear issue from this Sentry error."
 <example>
 Context: Cron automation or user wants to pick up random work.
 user: "/linear"
-assistant: "Fetching a random issue from Backlog/Todo to work on."
-<commentary>No arguments triggers random backlog selection.</commentary>
+assistant: "Fetching a random issue from Todo to work on."
+<commentary>No arguments triggers random Todo selection.</commentary>
 </example>
 model: opus
 color: purple
@@ -78,18 +78,18 @@ Parse user input to determine workflow:
 
 | Input Pattern                   | Type               | Next Phase |
 | ------------------------------- | ------------------ | ---------- |
-| `/linear` (no args)             | Random Backlog     | Phase 3A   |
+| `/linear` (no args)             | Random Todo        | Phase 3A   |
 | `/linear <task description>`    | Create New         | Phase 3B   |
 | `/linear LIN-<number>`          | Work Existing      | Phase 3C   |
 | `/linear https://sentry.io/...` | Sentry Integration | Phase 3D   |
 
-### Phase 3A: Random Backlog Selection (Cron Mode)
+### Phase 3A: Random Todo Selection (Cron Mode)
 
 **When**: User calls `/linear` with no arguments
 
 **Algorithm**:
 
-1. List issues where `state` is `"Backlog"` OR `"Todo"`
+1. List issues where `state` is `"Todo"` (NOT from Backlog)
 2. Filter to `team: "pbuchman"`
 3. Sort by `priority` (High → Low) then `createdAt` (newest first)
 4. Pick first result
@@ -98,7 +98,7 @@ Parse user input to determine workflow:
 
 ```
 1. Call mcp__linear-server__list_issues with filters
-2. If no items: "No items in Backlog or Todo state. Exiting."
+2. If no items: "No items in Todo state. Exiting."
 3. Fetch selected issue details
 4. Proceed to "Work on Existing Issue" flow (Phase 3C)
 ```
@@ -238,18 +238,20 @@ Enforce these automatic transitions:
 ```
 Backlog/Todo → In Progress  (when /linear LIN-123 called)
 In Progress → In Review     (when gh pr create called)
-In Review → Done            (when PR approved)
+In Review → Q&A QA          (when PR approved, default)
+In Review → Done            (when PR approved AND user explicitly requests)
 In Review → In Progress     (when PR has review changes)
 ```
 
 ## Cross-Linking Protocol
 
-| Direction       | Method                                   |
-| --------------- | ---------------------------------------- |
-| Linear → GitHub | `Fixes LIN-XXX` in PR body               |
-| GitHub → Linear | PR URL in issue comments                 |
-| Sentry → Linear | `[sentry] <title>` + link in description |
-| Linear → Sentry | Comment on Sentry issue                  |
+| Direction       | Method                                                             |
+| --------------- | ------------------------------------------------------------------ |
+| Linear → GitHub | PR title contains `LIN-XXX` (enables auto-attachment)              |
+| GitHub → Linear | GitHub integration attaches PR (when title + branch have issue ID) |
+| Linear → GitHub | `Fixes LIN-XXX` in PR body (for issue closing behavior)            |
+| Sentry → Linear | `[sentry] <title>` + link in description                           |
+| Linear → Sentry | Comment on Sentry issue                                            |
 
 ## PR Description Template
 
