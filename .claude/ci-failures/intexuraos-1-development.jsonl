@@ -49,3 +49,5 @@
 {"ts":"2026-01-19T01:36:38.578Z","project":"intexuraos-1","branch":"development","runNumber":49,"passed":true,"durationMs":123251,"failureCount":0,"failures":[]}
 {"ts":"2026-01-19T01:51:35.826Z","project":"intexuraos-1","branch":"development","runNumber":50,"passed":true,"durationMs":131727,"failureCount":0,"failures":[]}
 {"ts":"2026-01-19T01:58:30.670Z","project":"intexuraos-1","branch":"development","runNumber":51,"passed":true,"durationMs":111131,"failureCount":0,"failures":[]}
+{"ts":"2026-01-22T06:30:31.036Z","project":"intexuraos-1","branch":"development","runNumber":52,"passed":false,"durationMs":455845,"failureCount":2,"failures":[{"type":"test","code":"TEST_FAIL","file":"packages/infra-whatsapp/src/__tests__/client.test.ts","line":0,"message":"WhatsAppClient > markAsRead > returns timeout error when request takes too long","snippet":null,"context":null},{"type":"verify","code":"VERIFY_FAIL","file":"unknown","line":0,"message":"FAILED","snippet":null,"context":null}]}
+{"ts":"2026-01-22T06:36:55.255Z","project":"intexuraos-1","branch":"development","runNumber":53,"passed":true,"durationMs":302650,"failureCount":0,"failures":[]}

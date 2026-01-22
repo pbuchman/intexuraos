@@ -13,7 +13,7 @@ import type {
 
 const WHATSAPP_API_VERSION = 'v22.0';
 const MEDIA_DOWNLOAD_TIMEOUT_MS = 30000;
-const MARK_AS_READ_TIMEOUT_MS = 10000;
+const MARK_AS_READ_TIMEOUT_MS = 30000; // Increased to match media download timeout for slow networks
 
 export interface WhatsAppClient {
   sendTextMessage(params: SendMessageParams): Promise<Result<SendMessageResult, WhatsAppError>>;

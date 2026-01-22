@@ -19,11 +19,8 @@ COPY packages/ ./packages/
 # Install dependencies
 RUN pnpm install --frozen-lockfile
 
-# Cache buster to ensure source changes are picked up
-ARG CACHE_BUST
-RUN echo "Cache bust: ${CACHE_BUST:-none}"
-
 # Copy source files
+# Note: Docker automatically invalidates cache when COPY detects file changes
 COPY tsconfig*.json ./
 COPY scripts/ ./scripts/
 COPY packages/ ./packages/

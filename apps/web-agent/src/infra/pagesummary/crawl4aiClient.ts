@@ -153,7 +153,8 @@ export class Crawl4AIClient implements PageSummaryServicePort {
         'Crawl4AI response fields'
       );
 
-      if (extractedContent === undefined || extractedContent.trim() === '') {
+      // nonEmpty() guarantees non-empty strings, so only undefined check needed
+      if (extractedContent === undefined) {
         this.logger.warn({ url }, 'No content extracted from page');
         return err({
           code: 'NO_CONTENT',

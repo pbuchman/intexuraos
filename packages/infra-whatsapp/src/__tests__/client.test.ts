@@ -323,13 +323,13 @@ describe('WhatsAppClient', () => {
 
       nock(GRAPH_API_BASE)
         .post(`/v22.0/${PHONE_NUMBER_ID}/messages`)
-        .delay(15000)
+        .delay(35000)
         .reply(200, { success: true });
 
       const client = createWhatsAppClient(config);
       const resultPromise = client.markAsRead(MESSAGE_ID);
 
-      await vi.advanceTimersByTimeAsync(11000);
+      await vi.advanceTimersByTimeAsync(31000);
 
       const result = await resultPromise;
 
@@ -337,7 +337,7 @@ describe('WhatsAppClient', () => {
       if (!result.ok) {
         expect(result.error.code).toBe('TIMEOUT');
         expect(result.error.message).toContain('timed out');
-        expect(result.error.message).toContain('10000');
+        expect(result.error.message).toContain('30000');
       }
 
       vi.useRealTimers();

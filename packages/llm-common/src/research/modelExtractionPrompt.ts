@@ -158,6 +158,7 @@ export function parseModelExtractionResponse(
 
     return { selectedModels, synthesisModel };
   } catch {
+    // JSON parsing failed - LLM response was malformed or not valid JSON
     return null;
   }
 }
