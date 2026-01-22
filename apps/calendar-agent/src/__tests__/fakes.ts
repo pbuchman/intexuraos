@@ -19,6 +19,10 @@ import type {
   UserServiceClient,
   ProcessedAction,
   ProcessedActionRepository,
+  CalendarPreview,
+  CalendarPreviewRepository,
+  CreateCalendarPreviewInput,
+  UpdateCalendarPreviewInput,
 } from '../domain/index.js';
 import type { LlmGenerateClient } from '@intexuraos/llm-factory';
 import type { LLMError } from '@intexuraos/llm-contract';
@@ -434,5 +438,110 @@ export class FakeProcessedActionRepository implements ProcessedActionRepository 
     };
     this.processedActions.set(input.actionId, processedAction);
     return ok(processedAction);
+  }
+}
+
+export class FakeCalendarPreviewRepository implements CalendarPreviewRepository {
+  private previews = new Map<string, CalendarPreview>();
+  private getByActionIdResult: Result<CalendarPreview | null, CalendarError> | null = null;
+  private createResult: Result<CalendarPreview, CalendarError> | null = null;
+  private updateResult: Result<void, CalendarError> | null = null;
+
+  setGetByActionIdResult(result: Result<CalendarPreview | null, CalendarError>): void {
+    this.getByActionIdResult = result;
+  }
+
+  setCreateResult(result: Result<CalendarPreview, CalendarError>): void {
+    this.createResult = result;
+  }
+
+  setUpdateResult(result: Result<void, CalendarError>): void {
+    this.updateResult = result;
+  }
+
+  seedPreview(preview: CalendarPreview): void {
+    this.previews.set(preview.actionId, preview);
+  }
+
+  getPreview(actionId: string): CalendarPreview | undefined {
+    return this.previews.get(actionId);
+  }
+
+  reset(): void {
+    this.previews.clear();
+    this.getByActionIdResult = null;
+    this.createResult = null;
+    this.updateResult = null;
+  }
+
+  get count(): number {
+    return this.previews.size;
+  }
+
+  async getByActionId(actionId: string): Promise<Result<CalendarPreview | null, CalendarError>> {
+    if (this.getByActionIdResult !== null) {
+      return this.getByActionIdResult;
+    }
+    return ok(this.previews.get(actionId) ?? null);
+  }
+
+  async create(input: CreateCalendarPreviewInput): Promise<Result<CalendarPreview, CalendarError>> {
+    if (this.createResult !== null) {
+      return this.createResult;
+    }
+    const preview: CalendarPreview = {
+      actionId: input.actionId,
+      userId: input.userId,
+      status: input.status,
+      generatedAt: new Date().toISOString(),
+    };
+
+    // Only add optional fields if they are defined
+    if (input.summary !== undefined) {
+      preview.summary = input.summary;
+    }
+    if (input.start !== undefined) {
+      preview.start = input.start;
+    }
+    if (input.end !== undefined) {
+      preview.end = input.end;
+    }
+    if (input.location !== undefined) {
+      preview.location = input.location;
+    }
+    if (input.description !== undefined) {
+      preview.description = input.description;
+    }
+    if (input.duration !== undefined) {
+      preview.duration = input.duration;
+    }
+    if (input.isAllDay !== undefined) {
+      preview.isAllDay = input.isAllDay;
+    }
+    if (input.error !== undefined) {
+      preview.error = input.error;
+    }
+    if (input.reasoning !== undefined) {
+      preview.reasoning = input.reasoning;
+    }
+
+    this.previews.set(input.actionId, preview);
+    return ok(preview);
+  }
+
+  async update(actionId: string, updates: UpdateCalendarPreviewInput): Promise<Result<void, CalendarError>> {
+    if (this.updateResult !== null) {
+      return this.updateResult;
+    }
+    const existing = this.previews.get(actionId);
+    if (existing === undefined) {
+      return err({ code: 'NOT_FOUND', message: 'Preview not found' });
+    }
+    const updated: CalendarPreview = {
+      ...existing,
+      ...updates,
+    };
+    this.previews.set(actionId, updated);
+    return ok(undefined);
   }
 }

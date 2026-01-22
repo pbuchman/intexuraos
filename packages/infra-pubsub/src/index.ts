@@ -10,6 +10,8 @@ export type {
   WhatsAppSendPublisherConfig,
   TodoProcessingEvent,
   TodosProcessingPublisherConfig,
+  CalendarPreviewGenerateEvent,
+  CalendarPreviewPublisherConfig,
 } from './types.js';
 
 export {
@@ -27,3 +29,8 @@ export {
   type TodosProcessingPublisher,
   createTodosProcessingPublisher,
 } from './todosProcessingPublisher.js';
+
+export {
+  type CalendarPreviewPublisher,
+  createCalendarPreviewPublisher,
+} from './calendarPreviewPublisher.js';

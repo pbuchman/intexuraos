@@ -997,3 +997,27 @@ export interface ListIssuesResponse {
   issues: GroupedIssues;
   teamName: string;
 }
+
+/**
+ * Calendar preview status
+ */
+export type CalendarPreviewStatus = 'pending' | 'ready' | 'failed';
+
+/**
+ * Calendar preview from calendar-agent
+ */
+export interface CalendarPreview {
+  actionId: string;
+  userId: string;
+  status: CalendarPreviewStatus;
+  summary?: string;
+  start?: string;
+  end?: string | null;
+  location?: string | null;
+  description?: string | null;
+  duration?: string | null;
+  isAllDay?: boolean;
+  error?: string;
+  reasoning?: string;
+  generatedAt: string;
+}

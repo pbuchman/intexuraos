@@ -15,6 +15,7 @@ import {
   FakeFailedEventRepository,
   FakeCalendarActionExtractionService,
   FakeProcessedActionRepository,
+  FakeCalendarPreviewRepository,
 } from './fakes.js';
 import type { CalendarEvent, FreeBusySlot } from '../domain/index.js';
 
@@ -89,6 +90,7 @@ describe('Calendar Routes', () => {
       failedEventRepository: fakeFailedEventRepository,
       calendarActionExtractionService: fakeCalendarActionExtractionService,
       processedActionRepository: fakeProcessedActionRepository,
+      calendarPreviewRepository: new FakeCalendarPreviewRepository(),
     });
 
     app = await buildServer();
@@ -759,6 +761,7 @@ describe('Calendar Routes', () => {
         failedEventRepository: fakeFailedEventRepository,
         calendarActionExtractionService: fakeCalendarActionExtractionService,
         processedActionRepository: fakeProcessedActionRepository,
+        calendarPreviewRepository: new FakeCalendarPreviewRepository(),
       });
       app = await buildServer();
 
@@ -780,6 +783,7 @@ describe('Calendar Routes', () => {
         failedEventRepository: fakeFailedEventRepository,
         calendarActionExtractionService: fakeCalendarActionExtractionService,
         processedActionRepository: fakeProcessedActionRepository,
+        calendarPreviewRepository: new FakeCalendarPreviewRepository(),
       });
       app = await buildServer();
     });

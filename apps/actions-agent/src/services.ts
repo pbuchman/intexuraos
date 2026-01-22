@@ -79,7 +79,12 @@ import { createBookmarksServiceHttpClient } from './infra/http/bookmarksServiceH
 import { createCalendarServiceHttpClient } from './infra/http/calendarServiceHttpClient.js';
 import { createLinearAgentHttpClient } from './infra/http/linearAgentHttpClient.js';
 import { createActionEventPublisher, type ActionEventPublisher } from './infra/pubsub/index.js';
-import { createWhatsAppSendPublisher, type WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
+import {
+  createWhatsAppSendPublisher,
+  type WhatsAppSendPublisher,
+  createCalendarPreviewPublisher,
+  type CalendarPreviewPublisher,
+} from '@intexuraos/infra-pubsub';
 
 export interface Services {
   actionServiceClient: ActionServiceClient;
@@ -95,6 +100,7 @@ export interface Services {
   linearAgentClient: LinearAgentClient;
   actionEventPublisher: ActionEventPublisher;
   whatsappPublisher: WhatsAppSendPublisher;
+  calendarPreviewPublisher: CalendarPreviewPublisher;
   handleResearchActionUseCase: HandleResearchActionUseCase;
   handleTodoActionUseCase: HandleTodoActionUseCase;
   handleNoteActionUseCase: HandleNoteActionUseCase;
@@ -130,6 +136,7 @@ export interface ServiceConfig {
   internalAuthToken: string;
   gcpProjectId: string;
   whatsappSendTopic: string;
+  calendarPreviewTopic: string;
   webAppUrl: string;
 }
 
@@ -167,6 +174,12 @@ export function initServices(config: ServiceConfig): void {
     projectId: config.gcpProjectId,
     topicName: config.whatsappSendTopic,
     logger: pino({ name: 'whatsapp-publisher' }),
+  });
+
+  const calendarPreviewPublisher = createCalendarPreviewPublisher({
+    projectId: config.gcpProjectId,
+    topicName: config.calendarPreviewTopic,
+    logger: pino({ name: 'calendar-preview-publisher' }),
   });
 
   const todosServiceClient = createTodosServiceHttpClient({
@@ -296,6 +309,7 @@ export function initServices(config: ServiceConfig): void {
     {
       actionRepository,
       whatsappPublisher,
+      calendarPreviewPublisher,
       webAppUrl: config.webAppUrl,
       logger: pino({ name: 'handleCalendarAction' }),
     }
@@ -343,6 +357,7 @@ export function initServices(config: ServiceConfig): void {
     linearAgentClient,
     actionEventPublisher,
     whatsappPublisher,
+    calendarPreviewPublisher,
     handleResearchActionUseCase,
     handleTodoActionUseCase,
     handleNoteActionUseCase,

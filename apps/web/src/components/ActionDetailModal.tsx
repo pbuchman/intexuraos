@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
-import type { Action, Command, CommandType } from '@/types';
+import type { Action, CalendarPreview, Command, CommandType } from '@/types';
 import type { ResolvedActionButton, ActionExecutionResult } from '@/types/actionConfig';
 import {
   Bell,
@@ -18,9 +18,10 @@ import {
 } from 'lucide-react';
 import { useActionConfig } from '@/hooks/useActionConfig';
 import { ConfigurableActionButton } from './ConfigurableActionButton';
+import { CalendarPreviewCard } from './CalendarPreviewCard';
 import { Button } from './ui/Button';
 import { useAuth } from '@/context/AuthContext';
-import { updateAction, resolveDuplicateAction } from '@/services/commandsApi';
+import { updateAction, resolveDuplicateAction, getActionPreview } from '@/services/commandsApi';
 import { BookmarkConflictModal } from './BookmarkConflictModal';
 
 interface ActionDetailModalProps {
@@ -111,6 +112,10 @@ export function ActionDetailModal({
     url: string;
     existingBookmarkId: string;
   } | null>(null);
+  // Calendar preview state
+  const [calendarPreview, setCalendarPreview] = useState<CalendarPreview | null>(null);
+  const [isLoadingPreview, setIsLoadingPreview] = useState(false);
+  const [previewError, setPreviewError] = useState<string | null>(null);
 
   const canChangeType = action.status === 'pending' || action.status === 'awaiting_approval';
 
@@ -156,6 +161,40 @@ export function ActionDetailModal({
       window.removeEventListener('keydown', handleEscape);
     };
   }, [onClose]);
+
+  // Fetch calendar preview for calendar actions
+  useEffect(() => {
+    if (action.type !== 'calendar') return;
+    if (action.status === 'completed' || action.status === 'rejected') return;
+
+    let cancelled = false;
+
+    const fetchPreview = async (): Promise<void> => {
+      setIsLoadingPreview(true);
+      setPreviewError(null);
+      try {
+        const token = await getAccessToken();
+        const preview = await getActionPreview(token, action.id);
+        if (!cancelled) {
+          setCalendarPreview(preview);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setPreviewError(error instanceof Error ? error.message : 'Failed to load preview');
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoadingPreview(false);
+        }
+      }
+    };
+
+    void fetchPreview();
+
+    return (): void => {
+      cancelled = true;
+    };
+  }, [action.id, action.type, action.status, getAccessToken]);
 
   /**
    * Normalizes resource_url for HashRouter.
@@ -344,6 +383,22 @@ export function ActionDetailModal({
               </div>
             </div>
           )}
+
+          {/* Calendar preview */}
+          {action.type === 'calendar' &&
+            action.status !== 'completed' &&
+            action.status !== 'rejected' && (
+              <div>
+                <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-500">
+                  Event Preview
+                </h3>
+                <CalendarPreviewCard
+                  preview={calendarPreview}
+                  isLoading={isLoadingPreview}
+                  error={previewError}
+                />
+              </div>
+            )}
 
           {/* Timestamps */}
           <div className="flex items-center gap-4 text-xs text-slate-500">
