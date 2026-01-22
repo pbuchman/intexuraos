@@ -776,7 +776,6 @@ module "pubsub_approval_reply" {
   depends_on = [
     google_project_service.apis,
     module.iam,
-    module.whatsapp_service,
     module.actions_agent,
   ]
 }
