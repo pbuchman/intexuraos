@@ -247,7 +247,7 @@ export function createHandleApprovalReplyUseCase(
         // Notify user first, then clean up (to avoid race condition)
         const rejectPublishResult = await whatsappPublisher.publishSendMessage({
           userId,
-          message: `Got it. Cancelled the ${action.type}: "${action.title}"`,
+          message: `Got it. Rejected the ${action.type}: "${action.title}"`,
           correlationId: `approval-rejected-${action.id}`,
         });
 

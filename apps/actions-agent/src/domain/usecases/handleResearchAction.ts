@@ -55,7 +55,7 @@ export function createHandleResearchActionUseCase(
 
       // Idempotency check and status update handled by registerActionHandler decorator
       const actionLink = `${webAppUrl}/#/inbox?action=${event.actionId}`;
-      const message = `Your research request is ready for approval. Review it here: ${actionLink}`;
+      const message = `New research request ready for approval. Review here: ${actionLink} or reply to approve/reject.`;
 
       logger.info(
         { actionId: event.actionId, userId: event.userId },

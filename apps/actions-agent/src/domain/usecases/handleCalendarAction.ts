@@ -68,7 +68,7 @@ export function createHandleCalendarActionUseCase(
 
       // Idempotency check and status update handled by registerActionHandler decorator
       const actionLink = `${webAppUrl}/#/inbox?action=${event.actionId}`;
-      const message = `New calendar event ready for approval: "${event.title}". Review it here: ${actionLink}`;
+      const message = `New calendar event ready for approval: "${event.title}". Review here: ${actionLink} or reply to approve/reject.`;
 
       logger.info(
         { actionId: event.actionId, userId: event.userId },

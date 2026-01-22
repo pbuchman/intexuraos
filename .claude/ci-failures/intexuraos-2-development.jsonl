@@ -1,1 +1,4 @@
 {"ts":"2026-01-17T14:14:07.475Z","project":"intexuraos-2","branch":"development","runNumber":1,"passed":true,"durationMs":140299,"failureCount":0,"failures":[]}
+{"ts":"2026-01-22T10:40:04.900Z","project":"intexuraos-2","branch":"development","workspace":"--","runNumber":2,"passed":false,"durationMs":762,"failureCount":0,"failures":[]}
+{"ts":"2026-01-22T10:41:28.407Z","project":"intexuraos-2","branch":"development","workspace":"actions-agent","runNumber":3,"passed":true,"durationMs":77402,"failureCount":0,"failures":[]}
+{"ts":"2026-01-22T10:45:05.136Z","project":"intexuraos-2","branch":"development","workspace":"actions-agent","runNumber":4,"passed":true,"durationMs":73191,"failureCount":0,"failures":[]}
