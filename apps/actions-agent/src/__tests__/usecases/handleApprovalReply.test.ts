@@ -457,7 +457,7 @@ describe('HandleApprovalReplyUseCase', () => {
       // Confirmation message should be sent
       const messages = whatsappPublisher.getSentMessages();
       expect(messages).toHaveLength(1);
-      expect(messages[0]?.message).toContain('Cancelled');
+      expect(messages[0]?.message).toContain('Rejected');
       expect(messages[0]?.message).toContain('todo');
     });
 
