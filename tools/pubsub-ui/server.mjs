@@ -24,6 +24,7 @@ const TOPICS = [
   'bookmark-enrich',
   'bookmark-summarize',
   'todos-processing-local',
+  'calendar-preview',
 ];
 
 const TOPIC_ENDPOINTS = {
@@ -43,6 +44,7 @@ const TOPIC_ENDPOINTS = {
   'bookmark-summarize': 'http://host.docker.internal:8124/internal/bookmarks/pubsub/summarize',
   'todos-processing-local':
     'http://host.docker.internal:8123/internal/todos/pubsub/todos-processing',
+  'calendar-preview': 'http://host.docker.internal:8125/internal/calendar/generate-preview',
 };
 
 const app = express();

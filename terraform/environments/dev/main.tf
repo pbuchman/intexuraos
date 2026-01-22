@@ -1064,9 +1064,10 @@ module "actions_agent" {
   secrets = local.common_service_secrets
 
   env_vars = merge(local.common_service_env_vars, {
-    INTEXURAOS_PUBSUB_ACTIONS_QUEUE       = "intexuraos-actions-queue-${var.environment}"
-    INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC = "intexuraos-whatsapp-send-${var.environment}"
-    INTEXURAOS_WEB_APP_URL                = "https://${var.web_app_domain}"
+    INTEXURAOS_PUBSUB_ACTIONS_QUEUE          = "intexuraos-actions-queue-${var.environment}"
+    INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC    = "intexuraos-whatsapp-send-${var.environment}"
+    INTEXURAOS_PUBSUB_CALENDAR_PREVIEW_TOPIC = "intexuraos-calendar-preview-${var.environment}"
+    INTEXURAOS_WEB_APP_URL                   = "https://${var.web_app_domain}"
   })
 
   depends_on = [
@@ -1292,6 +1293,31 @@ module "pubsub_todos_processing" {
     google_project_service.apis,
     module.iam,
     module.todos_agent,
+  ]
+}
+
+# Topic for calendar preview generation (actions-agent -> calendar-agent)
+module "pubsub_calendar_preview" {
+  source = "../../modules/pubsub-push"
+
+  project_id     = var.project_id
+  project_number = local.project_number
+  topic_name     = "intexuraos-calendar-preview-${var.environment}"
+  labels         = local.common_labels
+
+  push_endpoint              = "${module.calendar_agent.service_url}/internal/calendar/generate-preview"
+  push_service_account_email = module.iam.service_accounts["calendar_agent"]
+  push_audience              = module.calendar_agent.service_url
+  ack_deadline_seconds       = 120
+
+  publisher_service_accounts = {
+    actions_agent = module.iam.service_accounts["actions_agent"]
+  }
+
+  depends_on = [
+    google_project_service.apis,
+    module.iam,
+    module.calendar_agent,
   ]
 }
 

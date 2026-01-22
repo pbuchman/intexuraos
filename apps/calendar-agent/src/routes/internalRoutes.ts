@@ -162,6 +162,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           failedEventRepository: services.failedEventRepository,
           calendarActionExtractionService: services.calendarActionExtractionService,
           processedActionRepository: services.processedActionRepository,
+          calendarPreviewRepository: services.calendarPreviewRepository,
           logger: request.log,
         }
       );

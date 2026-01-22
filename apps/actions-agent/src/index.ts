@@ -19,6 +19,7 @@ const REQUIRED_ENV = [
   'INTEXURAOS_INTERNAL_AUTH_TOKEN',
   'INTEXURAOS_PUBSUB_ACTIONS_QUEUE',
   'INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC',
+  'INTEXURAOS_PUBSUB_CALENDAR_PREVIEW_TOPIC',
   'INTEXURAOS_WEB_APP_URL',
 ];
 
@@ -44,6 +45,7 @@ async function main(): Promise<void> {
     internalAuthToken: process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] as string,
     gcpProjectId: process.env['INTEXURAOS_GCP_PROJECT_ID'] as string,
     whatsappSendTopic: process.env['INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC'] as string,
+    calendarPreviewTopic: process.env['INTEXURAOS_PUBSUB_CALENDAR_PREVIEW_TOPIC'] as string,
     webAppUrl: process.env['INTEXURAOS_WEB_APP_URL'] as string,
   });
 

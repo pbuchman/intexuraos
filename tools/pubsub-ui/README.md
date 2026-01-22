@@ -42,6 +42,7 @@ node scripts/pubsub-publish-test.mjs llm-call
 node scripts/pubsub-publish-test.mjs bookmark-enrich
 node scripts/pubsub-publish-test.mjs bookmark-summarize
 node scripts/pubsub-publish-test.mjs todos-processing
+node scripts/pubsub-publish-test.mjs calendar-preview
 ```
 
 ## Monitored Topics
@@ -60,6 +61,7 @@ node scripts/pubsub-publish-test.mjs todos-processing
 | `bookmark-enrich`          | Orange       | Bookmark metadata enriching |
 | `bookmark-summarize`       | Teal         | Bookmark AI summarization   |
 | `todos-processing-local`   | Pink         | Todo processing events      |
+| `calendar-preview`         | Teal         | Calendar preview generation |
 
 ## Architecture
 
@@ -111,6 +113,7 @@ node scripts/pubsub-publish-test.mjs todos-processing
 - `bookmark-enrich` → `POST /internal/bookmarks/pubsub/enrich` (:8124)
 - `bookmark-summarize` → `POST /internal/bookmarks/pubsub/summarize` (:8124)
 - `todos-processing-local` → `POST /internal/todos/pubsub/todos-processing` (:8123)
+- `calendar-preview` → `POST /internal/calendar/generate-preview` (:8125)
 
 ## Environment Variables
 
@@ -152,6 +155,7 @@ const TOPICS = [
   'bookmark-enrich',
   'bookmark-summarize',
   'todos-processing-local',
+  'calendar-preview',
   'your-new-topic', // Add here
 ];
 ```

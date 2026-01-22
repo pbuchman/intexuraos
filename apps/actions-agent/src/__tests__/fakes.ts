@@ -5,6 +5,7 @@ import type { ActionServiceClient } from '../domain/ports/actionServiceClient.js
 import type {
   CalendarServiceClient,
   ProcessCalendarRequest,
+  CalendarPreview,
 } from '../domain/ports/calendarServiceClient.js';
 import type { ResearchServiceClient } from '../domain/ports/researchServiceClient.js';
 import type { NotificationSender } from '../domain/ports/notificationSender.js';
@@ -46,7 +47,11 @@ import {
   type ChangeActionTypeUseCase,
 } from '../domain/usecases/changeActionType.js';
 import type { Services } from '../services.js';
-import type { PublishError, WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
+import type {
+  PublishError,
+  WhatsAppSendPublisher,
+  CalendarPreviewPublisher,
+} from '@intexuraos/infra-pubsub';
 import type { ActionEventPublisher } from '../infra/pubsub/index.js';
 import pino from 'pino';
 
@@ -360,6 +365,48 @@ export class FakeWhatsAppSendPublisher implements WhatsAppSendPublisher {
   }
 }
 
+export class FakeCalendarPreviewPublisher implements CalendarPreviewPublisher {
+  private publishedRequests: {
+    actionId: string;
+    userId: string;
+    text: string;
+    currentDate: string;
+    correlationId: string;
+  }[] = [];
+  private failNext = false;
+  private failError: PublishError | null = null;
+
+  getPublishedRequests(): typeof this.publishedRequests {
+    return this.publishedRequests;
+  }
+
+  setFailNext(fail: boolean, error?: PublishError): void {
+    this.failNext = fail;
+    this.failError = error ?? null;
+  }
+
+  async publishGeneratePreview(params: {
+    actionId: string;
+    userId: string;
+    text: string;
+    currentDate: string;
+    correlationId?: string;
+  }): Promise<Result<void, PublishError>> {
+    if (this.failNext) {
+      this.failNext = false;
+      return err(this.failError ?? { code: 'PUBLISH_FAILED', message: 'Simulated failure' });
+    }
+    this.publishedRequests.push({
+      actionId: params.actionId,
+      userId: params.userId,
+      text: params.text,
+      currentDate: params.currentDate,
+      correlationId: params.correlationId ?? '',
+    });
+    return ok(undefined);
+  }
+}
+
 export class FakeActionTransitionRepository implements ActionTransitionRepository {
   private transitions: ActionTransition[] = [];
   private failNext = false;
@@ -535,6 +582,7 @@ export class FakeBookmarksServiceClient implements BookmarksServiceClient {
 
 export class FakeCalendarServiceClient implements CalendarServiceClient {
   private processedActions: ProcessCalendarRequest[] = [];
+  private previews = new Map<string, CalendarPreview>();
   private nextResponse: ServiceFeedback = {
     status: 'completed',
     message: 'Calendar event created successfully',
@@ -556,6 +604,10 @@ export class FakeCalendarServiceClient implements CalendarServiceClient {
     this.failError = error ?? null;
   }
 
+  setPreview(actionId: string, preview: CalendarPreview): void {
+    this.previews.set(actionId, preview);
+  }
+
   async processAction(request: ProcessCalendarRequest): Promise<Result<ServiceFeedback>> {
     if (this.failNext) {
       this.failNext = false;
@@ -563,6 +615,14 @@ export class FakeCalendarServiceClient implements CalendarServiceClient {
     }
     this.processedActions.push(request);
     return ok(this.nextResponse);
+  }
+
+  async getPreview(actionId: string): Promise<Result<CalendarPreview | null>> {
+    if (this.failNext) {
+      this.failNext = false;
+      return err(this.failError ?? new Error('Simulated failure'));
+    }
+    return ok(this.previews.get(actionId) ?? null);
   }
 }
 
@@ -810,6 +870,7 @@ export function createFakeServices(deps: {
   linearAgentClient?: FakeLinearAgentClient;
   actionEventPublisher?: FakeActionEventPublisher;
   whatsappPublisher?: FakeWhatsAppSendPublisher;
+  calendarPreviewPublisher?: FakeCalendarPreviewPublisher;
   executeResearchActionUseCase?: FakeExecuteResearchActionUseCase;
   executeTodoActionUseCase?: FakeExecuteTodoActionUseCase;
   executeNoteActionUseCase?: FakeExecuteNoteActionUseCase;
@@ -820,6 +881,8 @@ export function createFakeServices(deps: {
   changeActionTypeUseCase?: ChangeActionTypeUseCase;
 }): Services {
   const whatsappPublisher = deps.whatsappPublisher ?? new FakeWhatsAppSendPublisher();
+  const calendarPreviewPublisher =
+    deps.calendarPreviewPublisher ?? new FakeCalendarPreviewPublisher();
   const actionRepository = deps.actionRepository ?? new FakeActionRepository();
   const actionTransitionRepository =
     deps.actionTransitionRepository ?? new FakeActionTransitionRepository();
@@ -875,9 +938,9 @@ export function createFakeServices(deps: {
   const handleCalendarActionUseCase: HandleCalendarActionUseCase = registerActionHandler(
     createHandleCalendarActionUseCase,
     {
-      actionServiceClient: deps.actionServiceClient,
       actionRepository,
       whatsappPublisher,
+      calendarPreviewPublisher,
       webAppUrl: 'http://test.app',
       logger: silentLogger,
     }
@@ -916,6 +979,7 @@ export function createFakeServices(deps: {
     linearAgentClient,
     actionEventPublisher: deps.actionEventPublisher ?? new FakeActionEventPublisher(),
     whatsappPublisher,
+    calendarPreviewPublisher,
     handleResearchActionUseCase,
     handleTodoActionUseCase,
     handleNoteActionUseCase,
