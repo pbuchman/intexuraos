@@ -446,6 +446,7 @@ export class FakeCalendarPreviewRepository implements CalendarPreviewRepository 
   private getByActionIdResult: Result<CalendarPreview | null, CalendarError> | null = null;
   private createResult: Result<CalendarPreview, CalendarError> | null = null;
   private updateResult: Result<void, CalendarError> | null = null;
+  private deleteResult: Result<void, CalendarError> | null = null;
 
   setGetByActionIdResult(result: Result<CalendarPreview | null, CalendarError>): void {
     this.getByActionIdResult = result;
@@ -457,6 +458,10 @@ export class FakeCalendarPreviewRepository implements CalendarPreviewRepository 
 
   setUpdateResult(result: Result<void, CalendarError>): void {
     this.updateResult = result;
+  }
+
+  setDeleteResult(result: Result<void, CalendarError>): void {
+    this.deleteResult = result;
   }
 
   seedPreview(preview: CalendarPreview): void {
@@ -472,6 +477,7 @@ export class FakeCalendarPreviewRepository implements CalendarPreviewRepository 
     this.getByActionIdResult = null;
     this.createResult = null;
     this.updateResult = null;
+    this.deleteResult = null;
   }
 
   get count(): number {
@@ -542,6 +548,17 @@ export class FakeCalendarPreviewRepository implements CalendarPreviewRepository 
       ...updates,
     };
     this.previews.set(actionId, updated);
+    return ok(undefined);
+  }
+
+  async delete(actionId: string): Promise<Result<void, CalendarError>> {
+    if (this.deleteResult !== null) {
+      return this.deleteResult;
+    }
+    const deleted = this.previews.delete(actionId);
+    if (!deleted) {
+      return err({ code: 'NOT_FOUND', message: 'Calendar preview not found' });
+    }
     return ok(undefined);
   }
 }
