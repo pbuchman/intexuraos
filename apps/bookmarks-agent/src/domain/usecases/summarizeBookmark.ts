@@ -3,6 +3,7 @@ import { err } from '@intexuraos/common-core';
 import type { Bookmark, BookmarkError } from '../models/bookmark.js';
 import type { BookmarkRepository } from '../ports/bookmarkRepository.js';
 import type { BookmarkSummaryService } from '../ports/bookmarkSummaryService.js';
+import type { WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
 import { updateBookmarkInternal } from './updateBookmarkInternal.js';
 
 interface MinimalLogger {
@@ -14,6 +15,7 @@ interface MinimalLogger {
 export interface SummarizeBookmarkDeps {
   bookmarkRepository: BookmarkRepository;
   bookmarkSummaryService: BookmarkSummaryService;
+  whatsAppSendPublisher?: WhatsAppSendPublisher;
   logger: MinimalLogger;
 }
 
@@ -77,9 +79,39 @@ export async function summarizeBookmark(
 
   deps.logger.info({ bookmarkId }, 'Bookmark summary generated successfully');
 
-  return await updateBookmarkInternal(
+  const updateResult = await updateBookmarkInternal(
     { bookmarkRepository: deps.bookmarkRepository, logger: deps.logger },
     bookmarkId,
     { aiSummary: summaryResult.value }
   );
+
+  if (!updateResult.ok) {
+    return updateResult;
+  }
+
+  // Send WhatsApp message with summary
+  if (deps.whatsAppSendPublisher !== undefined) {
+    const title = updateResult.value.ogPreview?.title ?? updateResult.value.title;
+    const titleLine = title !== null && title !== ''
+      ? `*${title}*\n\n`
+      : '';
+    const message = `📑 *Bookmark Summary*\n\n${titleLine}${summaryResult.value}\n\n🔗 ${updateResult.value.url}`;
+
+    const publishResult = await deps.whatsAppSendPublisher.publishSendMessage({
+      userId,
+      message,
+      correlationId: `bookmark-${bookmarkId}`,
+    });
+
+    if (!publishResult.ok) {
+      deps.logger.warn(
+        { bookmarkId, error: publishResult.error },
+        'Failed to send WhatsApp message'
+      );
+    } else {
+      deps.logger.info({ bookmarkId }, 'Sent bookmark summary via WhatsApp');
+    }
+  }
+
+  return updateResult;
 }

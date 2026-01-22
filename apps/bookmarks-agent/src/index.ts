@@ -29,6 +29,7 @@ initSentry({
 async function main(): Promise<void> {
   const enrichTopic = process.env['INTEXURAOS_PUBSUB_BOOKMARK_ENRICH'];
   const summarizeTopic = process.env['INTEXURAOS_PUBSUB_BOOKMARK_SUMMARIZE'];
+  const whatsappSendMessageTopic = process.env['INTEXURAOS_PUBSUB_WHATSAPP_SEND_MESSAGE'];
   const internalAuthToken = process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] ?? '';
 
   initServices({
@@ -37,6 +38,7 @@ async function main(): Promise<void> {
     internalAuthToken,
     bookmarkEnrichTopic: enrichTopic !== undefined && enrichTopic !== '' ? enrichTopic : null,
     bookmarkSummarizeTopic: summarizeTopic !== undefined && summarizeTopic !== '' ? summarizeTopic : null,
+    whatsappSendMessageTopic: whatsappSendMessageTopic !== undefined && whatsappSendMessageTopic !== '' ? whatsappSendMessageTopic : null,
   });
 
   const app = await buildServer();

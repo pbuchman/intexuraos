@@ -12,6 +12,10 @@ import {
   createSummarizePublisher,
   type SummarizePublisher,
 } from './infra/pubsub/summarizePublisher.js';
+import {
+  createWhatsAppSendPublisher,
+  type WhatsAppSendPublisher,
+} from '@intexuraos/infra-pubsub';
 import { createWebAgentSummaryClient } from './infra/summary/webAgentSummaryClient.js';
 
 export interface ServiceContainer {
@@ -19,6 +23,7 @@ export interface ServiceContainer {
   linkPreviewFetcher: LinkPreviewFetcherPort;
   enrichPublisher: EnrichPublisher;
   summarizePublisher: SummarizePublisher;
+  whatsAppSendPublisher?: WhatsAppSendPublisher;
   bookmarkSummaryService: BookmarkSummaryService;
 }
 
@@ -28,6 +33,7 @@ export interface ServiceConfig {
   internalAuthToken: string;
   bookmarkEnrichTopic: string | null;
   bookmarkSummarizeTopic: string | null;
+  whatsappSendMessageTopic: string | null;
 }
 
 let container: ServiceContainer | null = null;
@@ -49,6 +55,13 @@ export function initServices(config: ServiceConfig): void {
       projectId: config.gcpProjectId,
       topicName: config.bookmarkSummarizeTopic,
       logger: pino({ name: 'bookmark-summarize-publisher' }),
+    }),
+    ...(config.whatsappSendMessageTopic !== null && {
+      whatsAppSendPublisher: createWhatsAppSendPublisher({
+        projectId: config.gcpProjectId,
+        topicName: config.whatsappSendMessageTopic,
+        logger: pino({ name: 'bookmark-whatsapp-send-publisher' }),
+      }),
     }),
     bookmarkSummaryService: createWebAgentSummaryClient({
       baseUrl: config.webAgentUrl,
