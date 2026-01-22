@@ -7,7 +7,6 @@ import {
   isSafetyInfo,
   isStringArray,
   isObject,
-  isPrimitive,
 } from '../contextGuards.js';
 
 describe('DOMAINS constant', () => {
@@ -86,33 +85,6 @@ describe('isMode', () => {
   it('returns false for invalid values', () => {
     expect(isMode('invalid')).toBe(false);
     expect(isMode(123)).toBe(false);
-  });
-});
-
-describe('isPrimitive', () => {
-  it('returns true for string values', () => {
-    expect(isPrimitive('hello')).toBe(true);
-    expect(isPrimitive('')).toBe(true);
-  });
-
-  it('returns true for number values', () => {
-    expect(isPrimitive(42)).toBe(true);
-    expect(isPrimitive(3.14)).toBe(true);
-    expect(isPrimitive(0)).toBe(true);
-    expect(isPrimitive(-1)).toBe(true);
-  });
-
-  it('returns true for boolean values', () => {
-    expect(isPrimitive(true)).toBe(true);
-    expect(isPrimitive(false)).toBe(true);
-  });
-
-  it('returns false for non-primitive values', () => {
-    expect(isPrimitive(null)).toBe(false);
-    expect(isPrimitive(undefined)).toBe(false);
-    expect(isPrimitive({})).toBe(false);
-    expect(isPrimitive([])).toBe(false);
-    expect(isPrimitive(() => undefined)).toBe(false);
   });
 });
 

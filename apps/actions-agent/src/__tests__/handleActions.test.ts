@@ -6,9 +6,9 @@ import { registerActionHandler } from '../domain/usecases/createIdempotentAction
 import type { ActionCreatedEvent } from '../domain/models/actionEvent.js';
 import type { Action } from '../domain/models/action.js';
 import {
-  FakeActionServiceClient,
   FakeActionRepository,
   FakeWhatsAppSendPublisher,
+  FakeCalendarPreviewPublisher,
 } from './fakes.js';
 import pino from 'pino';
 
@@ -44,14 +44,14 @@ const createEvent = (overrides: Partial<ActionCreatedEvent> = {}): ActionCreated
 });
 
 describe('handleCalendarAction usecase', () => {
-  let fakeActionServiceClient: FakeActionServiceClient;
   let fakeActionRepository: FakeActionRepository;
   let fakeWhatsappPublisher: FakeWhatsAppSendPublisher;
+  let fakeCalendarPreviewPublisher: FakeCalendarPreviewPublisher;
 
   beforeEach(() => {
-    fakeActionServiceClient = new FakeActionServiceClient();
     fakeActionRepository = new FakeActionRepository();
     fakeWhatsappPublisher = new FakeWhatsAppSendPublisher();
+    fakeCalendarPreviewPublisher = new FakeCalendarPreviewPublisher();
   });
 
   it('returns ok when action lookup returns null (idempotent)', async () => {
@@ -61,9 +61,9 @@ describe('handleCalendarAction usecase', () => {
     const usecase = registerActionHandler(
       createHandleCalendarActionUseCase,
       {
-        actionServiceClient: fakeActionServiceClient,
         actionRepository: fakeActionRepository,
         whatsappPublisher: fakeWhatsappPublisher,
+        calendarPreviewPublisher: fakeCalendarPreviewPublisher,
         webAppUrl: 'https://app.test.com',
         logger: silentLogger,
       }
@@ -79,14 +79,14 @@ describe('handleCalendarAction usecase', () => {
 
   it('returns ok when getAction fails (action deleted)', async () => {
     const event = createEvent();
-    fakeActionServiceClient.setFailOn('getAction', new Error('Action not found'));
+    // fakeActionRepository has no action set - getById will return null
 
     const usecase = registerActionHandler(
       createHandleCalendarActionUseCase,
       {
-        actionServiceClient: fakeActionServiceClient,
         actionRepository: fakeActionRepository,
         whatsappPublisher: fakeWhatsappPublisher,
+        calendarPreviewPublisher: fakeCalendarPreviewPublisher,
         webAppUrl: 'https://app.test.com',
         logger: silentLogger,
       }
@@ -104,9 +104,9 @@ describe('handleCalendarAction usecase', () => {
     const usecase = registerActionHandler(
       createHandleCalendarActionUseCase,
       {
-        actionServiceClient: fakeActionServiceClient,
         actionRepository: fakeActionRepository,
         whatsappPublisher: fakeWhatsappPublisher,
+        calendarPreviewPublisher: fakeCalendarPreviewPublisher,
         webAppUrl: 'https://app.test.com',
         logger: silentLogger,
       }
@@ -120,14 +120,14 @@ describe('handleCalendarAction usecase', () => {
   it('returns ok when action status is not pending (idempotent)', async () => {
     const event = createEvent();
     const action = createAction({ status: 'awaiting_approval' });
-    fakeActionServiceClient.setAction(action);
+    fakeActionRepository.save(action);
 
     const usecase = registerActionHandler(
       createHandleCalendarActionUseCase,
       {
-        actionServiceClient: fakeActionServiceClient,
         actionRepository: fakeActionRepository,
         whatsappPublisher: fakeWhatsappPublisher,
+        calendarPreviewPublisher: fakeCalendarPreviewPublisher,
         webAppUrl: 'https://app.test.com',
         logger: silentLogger,
       }
@@ -141,15 +141,14 @@ describe('handleCalendarAction usecase', () => {
   it('updates action status to awaiting_approval for pending action', async () => {
     const event = createEvent();
     const action = createAction({ status: 'pending' });
-    fakeActionServiceClient.setAction(action);
     fakeActionRepository.save(action); // registerActionHandler uses repository for status updates
 
     const usecase = registerActionHandler(
       createHandleCalendarActionUseCase,
       {
-        actionServiceClient: fakeActionServiceClient,
         actionRepository: fakeActionRepository,
         whatsappPublisher: fakeWhatsappPublisher,
+        calendarPreviewPublisher: fakeCalendarPreviewPublisher,
         webAppUrl: 'https://app.test.com',
         logger: silentLogger,
       }
@@ -167,15 +166,14 @@ describe('handleCalendarAction usecase', () => {
   it('publishes WhatsApp approval notification', async () => {
     const event = createEvent();
     const action = createAction({ status: 'pending' });
-    fakeActionServiceClient.setAction(action);
     fakeActionRepository.save(action); // registerActionHandler requires action in repository
 
     const usecase = registerActionHandler(
       createHandleCalendarActionUseCase,
       {
-        actionServiceClient: fakeActionServiceClient,
         actionRepository: fakeActionRepository,
         whatsappPublisher: fakeWhatsappPublisher,
+        calendarPreviewPublisher: fakeCalendarPreviewPublisher,
         webAppUrl: 'https://app.test.com',
         logger: silentLogger,
       }
@@ -195,16 +193,15 @@ describe('handleCalendarAction usecase', () => {
   it('returns error when updateActionStatus fails', async () => {
     const event = createEvent();
     const action = createAction({ status: 'pending' });
-    fakeActionServiceClient.setAction(action);
     fakeActionRepository.save(action); // registerActionHandler uses repository for status updates
     fakeActionRepository.setFailNext(true, new Error('Database error'));
 
     const usecase = registerActionHandler(
       createHandleCalendarActionUseCase,
       {
-        actionServiceClient: fakeActionServiceClient,
         actionRepository: fakeActionRepository,
         whatsappPublisher: fakeWhatsappPublisher,
+        calendarPreviewPublisher: fakeCalendarPreviewPublisher,
         webAppUrl: 'https://app.test.com',
         logger: silentLogger,
       }
@@ -221,7 +218,6 @@ describe('handleCalendarAction usecase', () => {
   it('succeeds even when WhatsApp publish fails (non-fatal)', async () => {
     const event = createEvent();
     const action = createAction({ status: 'pending' });
-    fakeActionServiceClient.setAction(action);
     fakeActionRepository.save(action); // registerActionHandler uses repository for status updates
     fakeWhatsappPublisher.setFailNext(true, {
       code: 'PUBLISH_FAILED',
@@ -231,9 +227,9 @@ describe('handleCalendarAction usecase', () => {
     const usecase = registerActionHandler(
       createHandleCalendarActionUseCase,
       {
-        actionServiceClient: fakeActionServiceClient,
         actionRepository: fakeActionRepository,
         whatsappPublisher: fakeWhatsappPublisher,
+        calendarPreviewPublisher: fakeCalendarPreviewPublisher,
         webAppUrl: 'https://app.test.com',
         logger: silentLogger,
       }

@@ -565,6 +565,25 @@ graph TB
 | `INVALID_RESPONSE` | Attempt repair prompt             |
 | `PARSE_ERROR`      | Retry with repair prompt          |
 
+### Response Validation
+
+LLM responses are validated using three approaches depending on the response type:
+
+| Approach               | Use Case                        | Features                                        |
+| ---------------------- | ------------------------------- | ----------------------------------------------- |
+| **Zod Schemas**        | Structured JSON (context, etc.) | Field-level errors, type inference, auto-repair |
+| **Manual Type Guards** | Simple JSON extraction          | Custom validation, defensive coercion           |
+| **No Validation**      | Unstructured text (research)    | Raw content pass-through                        |
+
+**Zod validation** (used in `ContextInferenceAdapter`) provides detailed error messages with field paths:
+
+```
+Before: "Response does not match expected schema"
+After:  "mode: expected 'compact' | 'standard' | 'audit', received 'deep'"
+```
+
+See [LLM Response Validation Pattern](../patterns/llm-response-validation.md) for complete implementation details and inventory.
+
 ---
 
 ## Security

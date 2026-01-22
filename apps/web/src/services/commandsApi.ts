@@ -4,6 +4,7 @@ import type {
   Action,
   ActionsResponse,
   ActionStatus,
+  CalendarPreview,
   Command,
   CommandSourceType,
   CommandsResponse,
@@ -168,4 +169,16 @@ export async function resolveDuplicateAction(
     status: response.status,
     ...(response.resource_url !== undefined && { resourceUrl: response.resource_url }),
   };
+}
+
+export async function getActionPreview(
+  accessToken: string,
+  actionId: string
+): Promise<CalendarPreview | null> {
+  const response = await apiRequest<{ preview: CalendarPreview | null }>(
+    config.actionsAgentUrl,
+    `/actions/${actionId}/preview`,
+    accessToken
+  );
+  return response.preview;
 }

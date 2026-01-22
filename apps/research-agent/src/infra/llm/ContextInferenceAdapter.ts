@@ -11,12 +11,12 @@ import {
   buildResearchContextRepairPrompt,
   buildSynthesisContextRepairPrompt,
   createDetailedParseErrorMessage,
-  isResearchContext,
-  isSynthesisContext,
+  ResearchContextSchema,
+  SynthesisContextSchema,
   type InferResearchContextOptions,
   type InferSynthesisContextParams,
 } from '@intexuraos/llm-common';
-import { type Result } from '@intexuraos/common-core';
+import { type Result, getErrorMessage } from '@intexuraos/common-core';
 import type { LlmError } from '../../domain/research/ports/llmProvider.js';
 import type {
   ContextInferenceProvider,
@@ -24,6 +24,7 @@ import type {
   SynthesisContextResult,
 } from '../../domain/research/ports/contextInference.js';
 import type { Logger } from '@intexuraos/common-core';
+import type { ZodSchema, ZodError } from 'zod';
 
 /**
  * Expected schema for research context response.
@@ -55,7 +56,7 @@ const SYNTHESIS_CONTEXT_SCHEMA = `{
   "mode": string,
   "synthesis_goals": string[],
   "missing_sections": string[],
-  "detected_conflicts": Array<{ description, severity }>,
+  "detected_conflicts": Array<{ topic, sources_involved, conflict_summary, severity }>,
   "source_preference": { prefer_official_over_aggregators, prefer_recent_when_time_sensitive },
   "defaults_applied": Array<{ key, value, reason }>,
   "assumptions": string[],
@@ -90,16 +91,16 @@ export class ContextInferenceAdapter implements ContextInferenceProvider {
       return { ok: false, error: mapToLlmError(result.error) };
     }
 
-    const parsed = parseJson(
+    const parsed = parseJsonWithZod(
       result.value.content,
-      isResearchContext,
+      ResearchContextSchema,
       'inferResearchContext',
       RESEARCH_CONTEXT_SCHEMA,
       this.logger
     );
 
     if (!parsed.ok) {
-      this.logger.info(
+      this.logger.debug(
         { errorMessage: parsed.error },
         'Schema validation failed, attempting repair'
       );
@@ -151,16 +152,16 @@ export class ContextInferenceAdapter implements ContextInferenceProvider {
       return { ok: false, error: mapToLlmError(result.error) };
     }
 
-    const parsed = parseJson(
+    const parsed = parseJsonWithZod(
       result.value.content,
-      isSynthesisContext,
+      SynthesisContextSchema,
       'inferSynthesisContext',
       SYNTHESIS_CONTEXT_SCHEMA,
       this.logger
     );
 
     if (!parsed.ok) {
-      this.logger.info(
+      this.logger.debug(
         { errorMessage: parsed.error },
         'Schema validation failed, attempting repair'
       );
@@ -219,9 +220,9 @@ export class ContextInferenceAdapter implements ContextInferenceProvider {
       return { ok: false, error: `${error.message} (repair attempt)` };
     }
 
-    const parsed = parseJson(
+    const parsed = parseJsonWithZod(
       result.value.content,
-      isResearchContext,
+      ResearchContextSchema,
       'inferResearchContext',
       RESEARCH_CONTEXT_SCHEMA,
       this.logger
@@ -235,7 +236,7 @@ export class ContextInferenceAdapter implements ContextInferenceProvider {
       return { ok: false, error: `Initial: ${errorMessage}. Repair: ${parsed.error}` };
     }
 
-    this.logger.info({}, 'Repair attempt succeeded');
+    this.logger.debug({}, 'Repair attempt succeeded');
     const { usage } = result.value;
     return {
       ok: true,
@@ -273,9 +274,9 @@ export class ContextInferenceAdapter implements ContextInferenceProvider {
       return { ok: false, error: `${error.message} (repair attempt)` };
     }
 
-    const parsed = parseJson(
+    const parsed = parseJsonWithZod(
       result.value.content,
-      isSynthesisContext,
+      SynthesisContextSchema,
       'inferSynthesisContext',
       SYNTHESIS_CONTEXT_SCHEMA,
       this.logger
@@ -289,7 +290,7 @@ export class ContextInferenceAdapter implements ContextInferenceProvider {
       return { ok: false, error: `Initial: ${errorMessage}. Repair: ${parsed.error}` };
     }
 
-    this.logger.info({}, 'Repair attempt succeeded');
+    this.logger.debug({}, 'Repair attempt succeeded');
     const { usage } = result.value;
     return {
       ok: true,
@@ -305,6 +306,17 @@ export class ContextInferenceAdapter implements ContextInferenceProvider {
   }
 }
 
+/**
+ * Safely stringify a value for logging, handling circular references.
+ */
+function safeStringify(value: unknown): string {
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return '[Unable to stringify]';
+  }
+}
+
 function mapToLlmError(error: { code: string; message: string }): LlmError {
   const validCodes = ['API_ERROR', 'TIMEOUT', 'INVALID_KEY', 'RATE_LIMITED'] as const;
   const code = validCodes.includes(error.code as (typeof validCodes)[number])
@@ -314,9 +326,58 @@ function mapToLlmError(error: { code: string; message: string }): LlmError {
   return { code, message: error.message };
 }
 
-function parseJson<T>(
+/**
+ * Formats Zod validation errors into a human-readable string with field paths.
+ * Each error shows the exact field path and what went wrong.
+ *
+ * @example
+ * // Returns: "mode: expected 'compact' | 'standard' | 'audit', received 'deep'"
+ * // Returns: "research_plan.preferred_source_types.0: expected 'official' | ..., received 'blog'"
+ */
+const MAX_ZOD_ISSUES = 5;
+
+function formatZodErrors(error: ZodError): string {
+  if (error.issues.length === 0) {
+    return 'Unknown validation error (no issues reported)';
+  }
+
+  const totalIssues = error.issues.length;
+  const issuesToReport = error.issues.slice(0, MAX_ZOD_ISSUES);
+  const truncatedCount = totalIssues - issuesToReport.length;
+
+  const formatted = issuesToReport
+    .map((issue) => {
+      const path = issue.path.join('.');
+      const pathStr = path !== '' ? path : '(root)';
+
+      if (issue.code === 'invalid_enum_value' && 'options' in issue && 'received' in issue) {
+        const options = (issue.options as string[]).map((o) => `'${o}'`).join(' | ');
+        return `${pathStr}: expected ${options}, received '${String(issue.received)}'`;
+      }
+
+      if (issue.code === 'invalid_type' && 'expected' in issue && 'received' in issue) {
+        const expected = issue.expected as string;
+        const received = issue.received as string;
+        return `${pathStr}: expected ${expected}, received ${received}`;
+      }
+
+      return `${pathStr}: ${issue.message}`;
+    })
+    .join('; ');
+
+  if (truncatedCount > 0) {
+    return `${formatted}; ... and ${String(truncatedCount)} more issue(s)`;
+  }
+  return formatted;
+}
+
+/**
+ * Parse JSON string and validate against a Zod schema.
+ * Provides detailed error paths when validation fails.
+ */
+function parseJsonWithZod<T>(
   raw: string,
-  guard: (v: unknown) => v is T,
+  schema: ZodSchema<T>,
   operation: string,
   expectedSchema: string,
   logger: Logger
@@ -330,8 +391,9 @@ function parseJson<T>(
   let parsed: unknown;
   try {
     parsed = JSON.parse(cleaned);
-  } catch {
-    const errorMessage = `JSON parse failed: Invalid JSON in response`;
+  } catch (e) {
+    const parseError = getErrorMessage(e, 'Unknown parse error');
+    const errorMessage = `JSON parse failed: ${parseError}`;
     const detailedError = createDetailedParseErrorMessage({
       errorMessage,
       llmResponse: raw,
@@ -342,6 +404,7 @@ function parseJson<T>(
       {
         operation,
         errorMessage,
+        parseError,
         llmResponse: raw,
         expectedSchema,
         responseLength: raw.length,
@@ -351,8 +414,11 @@ function parseJson<T>(
     return { ok: false, error: detailedError };
   }
 
-  if (!guard(parsed)) {
-    const errorMessage = 'Response does not match expected schema';
+  const result = schema.safeParse(parsed);
+
+  if (!result.success) {
+    const zodErrorDetails = formatZodErrors(result.error);
+    const errorMessage = `Schema validation failed: ${zodErrorDetails}`;
     const detailedError = createDetailedParseErrorMessage({
       errorMessage,
       llmResponse: raw,
@@ -363,15 +429,16 @@ function parseJson<T>(
       {
         operation,
         errorMessage,
+        zodErrors: result.error.issues,
         llmResponse: raw,
         expectedSchema,
         responseLength: raw.length,
-        parsedJson: JSON.stringify(parsed),
+        parsedJson: safeStringify(parsed),
       },
       `LLM parse error in ${operation}: Schema validation failed`
     );
     return { ok: false, error: detailedError };
   }
 
-  return { ok: true, value: parsed };
+  return { ok: true, value: result.data };
 }

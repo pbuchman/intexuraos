@@ -27,7 +27,7 @@ export class WhatsAppCloudApiSender implements WhatsAppMessageSender {
   async sendTextMessage(
     phoneNumber: string,
     message: string
-  ): Promise<Result<void, WhatsAppError>> {
+  ): Promise<Result<{ wamid: string }, WhatsAppError>> {
     logger.info({ phoneNumber, messageLength: message.length }, 'Sending WhatsApp text message');
     const controller = new AbortController();
     const timeoutId = setTimeout(() => {
@@ -71,8 +71,14 @@ export class WhatsAppCloudApiSender implements WhatsAppMessageSender {
         });
       }
 
-      logger.info({ phoneNumber, normalizedPhone }, 'Message sent successfully');
-      return ok(undefined);
+      // Parse response to get wamid
+      const responseBody = (await response.json()) as {
+        messages?: { id?: string }[];
+      };
+      const wamid = responseBody.messages?.[0]?.id ?? `unknown-${String(Date.now())}`;
+
+      logger.info({ phoneNumber, normalizedPhone, wamid }, 'Message sent successfully');
+      return ok({ wamid });
     } catch (error) {
       clearTimeout(timeoutId);
 

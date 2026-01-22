@@ -7,6 +7,7 @@ import {
   FakeCalendarActionExtractionService,
   FakeUserServiceClient,
   FakeProcessedActionRepository,
+  FakeCalendarPreviewRepository,
 } from '../../fakes.js';
 import type { Logger } from '@intexuraos/common-core';
 
@@ -23,6 +24,7 @@ describe('processCalendarAction', () => {
   let failedEventRepository: FakeFailedEventRepository;
   let calendarActionExtractionService: FakeCalendarActionExtractionService;
   let processedActionRepository: FakeProcessedActionRepository;
+  let calendarPreviewRepository: FakeCalendarPreviewRepository;
 
   beforeEach(() => {
     userServiceClient = new FakeUserServiceClient();
@@ -30,6 +32,7 @@ describe('processCalendarAction', () => {
     failedEventRepository = new FakeFailedEventRepository();
     calendarActionExtractionService = new FakeCalendarActionExtractionService();
     processedActionRepository = new FakeProcessedActionRepository();
+    calendarPreviewRepository = new FakeCalendarPreviewRepository();
     vi.clearAllMocks();
   });
 
@@ -52,6 +55,7 @@ describe('processCalendarAction', () => {
           failedEventRepository,
           calendarActionExtractionService,
           processedActionRepository,
+          calendarPreviewRepository,
           logger: mockLogger,
         }
       );
@@ -83,6 +87,7 @@ describe('processCalendarAction', () => {
           failedEventRepository,
           calendarActionExtractionService,
           processedActionRepository,
+          calendarPreviewRepository,
           logger: mockLogger,
         }
       );
@@ -120,6 +125,7 @@ describe('processCalendarAction', () => {
           failedEventRepository,
           calendarActionExtractionService,
           processedActionRepository,
+          calendarPreviewRepository,
           logger: mockLogger,
         }
       );
@@ -160,6 +166,7 @@ describe('processCalendarAction', () => {
           failedEventRepository,
           calendarActionExtractionService,
           processedActionRepository,
+          calendarPreviewRepository,
           logger: mockLogger,
         }
       );
@@ -200,6 +207,7 @@ describe('processCalendarAction', () => {
           failedEventRepository,
           calendarActionExtractionService,
           processedActionRepository,
+          calendarPreviewRepository,
           logger: mockLogger,
         }
       );
@@ -237,6 +245,7 @@ describe('processCalendarAction', () => {
           failedEventRepository,
           calendarActionExtractionService,
           processedActionRepository,
+          calendarPreviewRepository,
           logger: mockLogger,
         }
       );
@@ -279,6 +288,7 @@ describe('processCalendarAction', () => {
           failedEventRepository,
           calendarActionExtractionService,
           processedActionRepository,
+          calendarPreviewRepository,
           logger: mockLogger,
         }
       );
@@ -323,6 +333,7 @@ describe('processCalendarAction', () => {
           failedEventRepository,
           calendarActionExtractionService,
           processedActionRepository,
+          calendarPreviewRepository,
           logger: mockLogger,
         }
       );
@@ -362,6 +373,7 @@ describe('processCalendarAction', () => {
           failedEventRepository,
           calendarActionExtractionService,
           processedActionRepository,
+          calendarPreviewRepository,
           logger: mockLogger,
         }
       );
@@ -399,6 +411,7 @@ describe('processCalendarAction', () => {
           failedEventRepository,
           calendarActionExtractionService,
           processedActionRepository,
+          calendarPreviewRepository,
           logger: mockLogger,
         }
       );
@@ -440,6 +453,7 @@ describe('processCalendarAction', () => {
           failedEventRepository,
           calendarActionExtractionService,
           processedActionRepository,
+          calendarPreviewRepository,
           logger: mockLogger,
         }
       );
@@ -487,6 +501,7 @@ describe('processCalendarAction', () => {
           failedEventRepository,
           calendarActionExtractionService,
           processedActionRepository,
+          calendarPreviewRepository,
           logger: mockLogger,
         }
       );
@@ -536,6 +551,7 @@ describe('processCalendarAction', () => {
           failedEventRepository,
           calendarActionExtractionService,
           processedActionRepository,
+          calendarPreviewRepository,
           logger: mockLogger,
         }
       );
@@ -582,6 +598,7 @@ describe('processCalendarAction', () => {
           failedEventRepository,
           calendarActionExtractionService,
           processedActionRepository,
+          calendarPreviewRepository,
           logger: mockLogger,
         }
       );
@@ -628,6 +645,7 @@ describe('processCalendarAction', () => {
           failedEventRepository,
           calendarActionExtractionService,
           processedActionRepository,
+          calendarPreviewRepository,
           logger: mockLogger,
         }
       );
@@ -675,6 +693,7 @@ describe('processCalendarAction', () => {
           failedEventRepository,
           calendarActionExtractionService,
           processedActionRepository,
+          calendarPreviewRepository,
           logger: mockLogger,
         }
       );
@@ -717,6 +736,7 @@ describe('processCalendarAction', () => {
           failedEventRepository,
           calendarActionExtractionService,
           processedActionRepository,
+          calendarPreviewRepository,
           logger: mockLogger,
         }
       );
@@ -756,6 +776,7 @@ describe('processCalendarAction', () => {
           failedEventRepository,
           calendarActionExtractionService,
           processedActionRepository,
+          calendarPreviewRepository,
           logger: mockLogger,
         }
       );
@@ -802,6 +823,7 @@ describe('processCalendarAction', () => {
           failedEventRepository,
           calendarActionExtractionService,
           processedActionRepository,
+          calendarPreviewRepository,
           logger: mockLogger,
         }
       );
@@ -835,6 +857,7 @@ describe('processCalendarAction', () => {
           failedEventRepository,
           calendarActionExtractionService,
           processedActionRepository,
+          calendarPreviewRepository,
           logger: mockLogger,
         }
       );
@@ -880,6 +903,7 @@ describe('processCalendarAction', () => {
           failedEventRepository,
           calendarActionExtractionService,
           processedActionRepository,
+          calendarPreviewRepository,
           logger: mockLogger,
         }
       );
@@ -905,6 +929,7 @@ describe('processCalendarAction', () => {
           failedEventRepository,
           calendarActionExtractionService,
           processedActionRepository,
+          calendarPreviewRepository,
           logger: mockLogger,
         }
       );
@@ -954,6 +979,7 @@ describe('processCalendarAction', () => {
           failedEventRepository,
           calendarActionExtractionService,
           processedActionRepository,
+          calendarPreviewRepository,
           logger: mockLogger,
         }
       );
@@ -992,6 +1018,7 @@ describe('processCalendarAction', () => {
           failedEventRepository,
           calendarActionExtractionService,
           processedActionRepository,
+          calendarPreviewRepository,
           logger: mockLogger,
         }
       );
@@ -1006,6 +1033,192 @@ describe('processCalendarAction', () => {
         expect.objectContaining({ actionId: 'action-null-times', start: null }),
         expect.stringContaining('invalid start date format')
       );
+    });
+  });
+
+  describe('preview integration', () => {
+    it('uses existing ready preview instead of LLM extraction', async () => {
+      const mockEvent = {
+        id: 'event-from-preview',
+        summary: 'Preview Meeting',
+        start: { dateTime: '2025-01-20T14:00:00' },
+        end: { dateTime: '2025-01-20T15:00:00' },
+        htmlLink: 'https://calendar.google.com/event',
+      };
+
+      // Seed a ready preview
+      calendarPreviewRepository.seedPreview({
+        actionId: 'action-with-preview',
+        userId: 'user-456',
+        status: 'ready',
+        summary: 'Preview Meeting',
+        start: '2025-01-20T14:00:00',
+        end: '2025-01-20T15:00:00',
+        location: 'Preview Room',
+        description: 'Preview description',
+        reasoning: 'Pre-generated preview',
+        generatedAt: '2025-01-15T10:00:00Z',
+      });
+
+      googleCalendarClient.setCreateResult(ok(mockEvent));
+
+      const result = await processCalendarAction(
+        {
+          actionId: 'action-with-preview',
+          userId: 'user-456',
+          text: 'Original text',
+        },
+        {
+          userServiceClient,
+          googleCalendarClient,
+          failedEventRepository,
+          calendarActionExtractionService,
+          processedActionRepository,
+          calendarPreviewRepository,
+          logger: mockLogger,
+        }
+      );
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.status).toBe('completed');
+        expect(result.value.message).toBe('Event "Preview Meeting" created successfully');
+      }
+
+      // Verify we used the preview and not the extraction service
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        expect.objectContaining({ summary: 'Preview Meeting' }),
+        expect.stringContaining('using existing preview data')
+      );
+    });
+
+    it('falls back to LLM extraction when preview is pending', async () => {
+      const mockEvent = {
+        id: 'event-fallback',
+        summary: 'Test Event',
+        start: { dateTime: '2025-01-15T10:00:00' },
+        end: { dateTime: '2025-01-15T11:00:00' },
+        htmlLink: 'https://calendar.google.com/event',
+      };
+
+      calendarPreviewRepository.seedPreview({
+        actionId: 'action-pending-preview',
+        userId: 'user-456',
+        status: 'pending',
+        generatedAt: '2025-01-15T10:00:00Z',
+      });
+
+      googleCalendarClient.setCreateResult(ok(mockEvent));
+
+      const result = await processCalendarAction(
+        {
+          actionId: 'action-pending-preview',
+          userId: 'user-456',
+          text: 'Meeting tomorrow',
+        },
+        {
+          userServiceClient,
+          googleCalendarClient,
+          failedEventRepository,
+          calendarActionExtractionService,
+          processedActionRepository,
+          calendarPreviewRepository,
+          logger: mockLogger,
+        }
+      );
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.status).toBe('completed');
+      }
+
+      // Verify we fell back to extraction
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        expect.objectContaining({ previewStatus: 'pending' }),
+        expect.stringContaining('falling back to LLM extraction')
+      );
+    });
+
+    it('falls back to LLM extraction when preview is failed', async () => {
+      const mockEvent = {
+        id: 'event-fallback-failed',
+        summary: 'Test Event',
+        start: { dateTime: '2025-01-15T10:00:00' },
+        end: { dateTime: '2025-01-15T11:00:00' },
+        htmlLink: 'https://calendar.google.com/event',
+      };
+
+      calendarPreviewRepository.seedPreview({
+        actionId: 'action-failed-preview',
+        userId: 'user-456',
+        status: 'failed',
+        error: 'Preview generation failed',
+        generatedAt: '2025-01-15T10:00:00Z',
+      });
+
+      googleCalendarClient.setCreateResult(ok(mockEvent));
+
+      const result = await processCalendarAction(
+        {
+          actionId: 'action-failed-preview',
+          userId: 'user-456',
+          text: 'Meeting tomorrow',
+        },
+        {
+          userServiceClient,
+          googleCalendarClient,
+          failedEventRepository,
+          calendarActionExtractionService,
+          processedActionRepository,
+          calendarPreviewRepository,
+          logger: mockLogger,
+        }
+      );
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.status).toBe('completed');
+      }
+
+      // Verify we fell back to extraction
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        expect.objectContaining({ previewStatus: 'failed' }),
+        expect.stringContaining('falling back to LLM extraction')
+      );
+    });
+
+    it('falls back to LLM extraction when no preview exists', async () => {
+      const mockEvent = {
+        id: 'event-no-preview',
+        summary: 'Test Event',
+        start: { dateTime: '2025-01-15T10:00:00' },
+        end: { dateTime: '2025-01-15T11:00:00' },
+        htmlLink: 'https://calendar.google.com/event',
+      };
+
+      googleCalendarClient.setCreateResult(ok(mockEvent));
+
+      const result = await processCalendarAction(
+        {
+          actionId: 'action-no-preview',
+          userId: 'user-456',
+          text: 'Meeting tomorrow',
+        },
+        {
+          userServiceClient,
+          googleCalendarClient,
+          failedEventRepository,
+          calendarActionExtractionService,
+          processedActionRepository,
+          calendarPreviewRepository,
+          logger: mockLogger,
+        }
+      );
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.status).toBe('completed');
+      }
     });
   });
 });
