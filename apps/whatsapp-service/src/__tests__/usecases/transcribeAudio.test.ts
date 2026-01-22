@@ -705,6 +705,124 @@ describe('TranscribeAudioUseCase', () => {
     });
   });
 
+  describe('markdown header stripping in summary', () => {
+    it('strips single # header from summary', async () => {
+      await createTestMessage('test-message-id', 'test-user-id');
+
+      const input = createTestInput();
+      const executePromise = usecase.execute(input, logger);
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      const jobs = transcriptionService.getJobs();
+      const jobId = Array.from(jobs.keys())[0];
+      if (jobId !== undefined) {
+        transcriptionService.setJobResult(
+          jobId,
+          'Transcription text',
+          '# Title\nSome content'
+        );
+      }
+
+      await executePromise;
+
+      const sentMessages = whatsappCloudApi.getSentMessages();
+      const successMessage = sentMessages.find((m) => m.message.includes('🎙️'));
+      expect(successMessage).toBeDefined();
+      // Header marker should be stripped, content should remain
+      expect(successMessage?.message).toContain('Title');
+      expect(successMessage?.message).not.toContain('# Title');
+      expect(successMessage?.message).toContain('Some content');
+    });
+
+    it('strips ### header from summary', async () => {
+      await createTestMessage('test-message-id', 'test-user-id');
+
+      const input = createTestInput();
+      const executePromise = usecase.execute(input, logger);
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      const jobs = transcriptionService.getJobs();
+      const jobId = Array.from(jobs.keys())[0];
+      if (jobId !== undefined) {
+        transcriptionService.setJobResult(
+          jobId,
+          'Transcription text',
+          '### Key Points\n- Point 1\n- Point 2'
+        );
+      }
+
+      await executePromise;
+
+      const sentMessages = whatsappCloudApi.getSentMessages();
+      const successMessage = sentMessages.find((m) => m.message.includes('🎙️'));
+      expect(successMessage).toBeDefined();
+      // Header marker should be stripped
+      expect(successMessage?.message).toContain('Key Points');
+      expect(successMessage?.message).not.toContain('### Key Points');
+      expect(successMessage?.message).toContain('- Point 1');
+    });
+
+    it('strips multiple headers from multiline summary', async () => {
+      await createTestMessage('test-message-id', 'test-user-id');
+
+      const input = createTestInput();
+      const executePromise = usecase.execute(input, logger);
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      const jobs = transcriptionService.getJobs();
+      const jobId = Array.from(jobs.keys())[0];
+      if (jobId !== undefined) {
+        transcriptionService.setJobResult(
+          jobId,
+          'Transcription text',
+          'Intro\n### Section\nContent\n## Another Section\nMore content'
+        );
+      }
+
+      await executePromise;
+
+      const sentMessages = whatsappCloudApi.getSentMessages();
+      const successMessage = sentMessages.find((m) => m.message.includes('🎙️'));
+      expect(successMessage).toBeDefined();
+      expect(successMessage?.message).toContain('Intro');
+      expect(successMessage?.message).toContain('Section');
+      expect(successMessage?.message).toContain('Content');
+      expect(successMessage?.message).toContain('Another Section');
+      expect(successMessage?.message).not.toContain('### Section');
+      expect(successMessage?.message).not.toContain('## Another');
+    });
+
+    it('preserves bold and italic markdown (only strips headers)', async () => {
+      await createTestMessage('test-message-id', 'test-user-id');
+
+      const input = createTestInput();
+      const executePromise = usecase.execute(input, logger);
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      const jobs = transcriptionService.getJobs();
+      const jobId = Array.from(jobs.keys())[0];
+      if (jobId !== undefined) {
+        transcriptionService.setJobResult(
+          jobId,
+          'Transcription text',
+          '**bold** and *italic* text'
+        );
+      }
+
+      await executePromise;
+
+      const sentMessages = whatsappCloudApi.getSentMessages();
+      const successMessage = sentMessages.find((m) => m.message.includes('🎙️'));
+      expect(successMessage).toBeDefined();
+      // Bold and italic markers should be preserved
+      expect(successMessage?.message).toContain('**bold** and *italic* text');
+    });
+  });
+
   describe('event publishing', () => {
     it('publishes command ingest event after successful transcription', async () => {
       await createTestMessage('test-message-id', 'test-user-id');

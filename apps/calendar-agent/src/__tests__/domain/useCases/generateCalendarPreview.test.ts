@@ -426,6 +426,180 @@ describe('generateCalendarPreview', () => {
         expect(result.value.preview.duration).toBeNull();
       }
     });
+
+    it('handles null start time by returning null duration', async () => {
+      extractionService.extractEventResult = ok({
+        summary: 'Event with no start',
+        start: null,
+        end: '2025-01-15T15:00:00',
+        location: null,
+        description: null,
+        valid: true,
+        error: null,
+        reasoning: 'No start time provided',
+      });
+
+      const result = await generateCalendarPreview(
+        {
+          actionId: 'action-123',
+          userId: 'user-456',
+          text: 'Some event ending at 3pm',
+          currentDate: '2025-01-14',
+        },
+        deps
+      );
+
+      expect(isOk(result)).toBe(true);
+      if (isOk(result)) {
+        expect(result.value.preview.duration).toBeNull();
+      }
+    });
+
+    it('handles zero duration (start equals end) by returning null', async () => {
+      extractionService.extractEventResult = ok({
+        summary: 'Instant event',
+        start: '2025-01-15T14:00:00',
+        end: '2025-01-15T14:00:00', // Same as start
+        location: null,
+        description: null,
+        valid: true,
+        error: null,
+        reasoning: 'Start and end are the same',
+      });
+
+      const result = await generateCalendarPreview(
+        {
+          actionId: 'action-123',
+          userId: 'user-456',
+          text: 'Zero duration event',
+          currentDate: '2025-01-14',
+        },
+        deps
+      );
+
+      expect(isOk(result)).toBe(true);
+      if (isOk(result)) {
+        expect(result.value.preview.duration).toBeNull();
+      }
+    });
+
+    it('handles invalid date strings gracefully by returning null duration', async () => {
+      extractionService.extractEventResult = ok({
+        summary: 'Event with bad dates',
+        start: 'not-a-valid-date',
+        end: 'also-invalid',
+        location: null,
+        description: null,
+        valid: true,
+        error: null,
+        reasoning: 'LLM returned invalid date formats',
+      });
+
+      const result = await generateCalendarPreview(
+        {
+          actionId: 'action-123',
+          userId: 'user-456',
+          text: 'Event with invalid dates',
+          currentDate: '2025-01-14',
+        },
+        deps
+      );
+
+      expect(isOk(result)).toBe(true);
+      if (isOk(result)) {
+        // Duration should be null due to date parsing failure (try-catch path)
+        expect(result.value.preview.duration).toBeNull();
+        // But the preview should still be generated as ready
+        expect(result.value.preview.status).toBe('ready');
+      }
+    });
+  });
+
+  describe('isAllDayEvent detection edge cases', () => {
+    it('does NOT detect partial date format as all-day (2025-1-1)', async () => {
+      extractionService.extractEventResult = ok({
+        summary: 'Partial date event',
+        start: '2025-1-1', // Partial format (not YYYY-MM-DD)
+        end: null,
+        location: null,
+        description: null,
+        valid: true,
+        error: null,
+        reasoning: 'Partial date format from LLM',
+      });
+
+      const result = await generateCalendarPreview(
+        {
+          actionId: 'action-123',
+          userId: 'user-456',
+          text: 'Event on Jan 1st',
+          currentDate: '2025-01-14',
+        },
+        deps
+      );
+
+      expect(isOk(result)).toBe(true);
+      if (isOk(result)) {
+        // Should NOT be detected as all-day since format is not YYYY-MM-DD
+        expect(result.value.preview.isAllDay).toBe(false);
+      }
+    });
+
+    it('detects proper YYYY-MM-DD format as all-day event', async () => {
+      extractionService.extractEventResult = ok({
+        summary: 'Full date event',
+        start: '2025-01-15', // Proper YYYY-MM-DD format
+        end: null,
+        location: null,
+        description: null,
+        valid: true,
+        error: null,
+        reasoning: 'Full date format',
+      });
+
+      const result = await generateCalendarPreview(
+        {
+          actionId: 'action-123',
+          userId: 'user-456',
+          text: 'Event on Jan 15th',
+          currentDate: '2025-01-14',
+        },
+        deps
+      );
+
+      expect(isOk(result)).toBe(true);
+      if (isOk(result)) {
+        expect(result.value.preview.isAllDay).toBe(true);
+      }
+    });
+
+    it('does NOT detect null start as all-day', async () => {
+      extractionService.extractEventResult = ok({
+        summary: 'No start event',
+        start: null,
+        end: '2025-01-15',
+        location: null,
+        description: null,
+        valid: true,
+        error: null,
+        reasoning: 'No start time provided',
+      });
+
+      const result = await generateCalendarPreview(
+        {
+          actionId: 'action-123',
+          userId: 'user-456',
+          text: 'Event ending Jan 15th',
+          currentDate: '2025-01-14',
+        },
+        deps
+      );
+
+      expect(isOk(result)).toBe(true);
+      if (isOk(result)) {
+        expect(result.value.preview.isAllDay).toBe(false);
+      }
+    });
   });
 
   describe('update failure during invalid extraction', () => {

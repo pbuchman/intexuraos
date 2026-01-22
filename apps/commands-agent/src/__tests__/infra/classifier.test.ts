@@ -354,5 +354,81 @@ describe('GeminiClassifier', () => {
       expect(classificationResult.confidence).toBe(0.85);
     });
   });
+
+  describe('URL keyword isolation', () => {
+    it('classifies URL with "research" keyword as link when LLM follows prompt correctly', async () => {
+      mockGenerate.mockResolvedValue(
+        ok(generateResult(jsonResponse('link', 0.92, 'Research World', 'URL present, keyword in URL ignored')))
+      );
+
+      const classifier = createGeminiClassifier(mockLlmClient);
+      const classificationResult = await classifier.classify('https://research-world.com');
+
+      expect(classificationResult.type).toBe('link');
+      expect(classificationResult.confidence).toBeGreaterThanOrEqual(0.9);
+    });
+
+    it('classifies URL with "todo" keyword as link when LLM follows prompt correctly', async () => {
+      mockGenerate.mockResolvedValue(
+        ok(generateResult(jsonResponse('link', 0.90, 'Todo App', 'URL present, keyword in URL ignored')))
+      );
+
+      const classifier = createGeminiClassifier(mockLlmClient);
+      const classificationResult = await classifier.classify('https://todo-app.io/notes');
+
+      expect(classificationResult.type).toBe('link');
+      expect(classificationResult.confidence).toBeGreaterThanOrEqual(0.9);
+    });
+
+    it('classifies explicit "research this" intent with URL as research (STEP 2 > STEP 4)', async () => {
+      mockGenerate.mockResolvedValue(
+        ok(generateResult(jsonResponse('research', 0.92, 'Example Research', 'Explicit research intent overrides URL')))
+      );
+
+      const classifier = createGeminiClassifier(mockLlmClient);
+      const classificationResult = await classifier.classify('research this https://example.com');
+
+      expect(classificationResult.type).toBe('research');
+      expect(classificationResult.confidence).toBeGreaterThanOrEqual(0.9);
+    });
+
+    it('classifies URL with multiple keywords as link when LLM follows prompt correctly', async () => {
+      mockGenerate.mockResolvedValue(
+        ok(generateResult(jsonResponse('link', 0.91, 'Research Todo Notes', 'URL present, keywords in URL ignored')))
+      );
+
+      const classifier = createGeminiClassifier(mockLlmClient);
+      const classificationResult = await classifier.classify('https://research-todo-notes.com');
+
+      expect(classificationResult.type).toBe('link');
+      expect(classificationResult.confidence).toBeGreaterThanOrEqual(0.9);
+    });
+
+    it('passes URL to LLM for classification', async () => {
+      mockGenerate.mockResolvedValue(
+        ok(generateResult(jsonResponse('link', 0.9, 'Test Link')))
+      );
+
+      const classifier = createGeminiClassifier(mockLlmClient);
+      await classifier.classify('check this https://research-world.com');
+
+      expect(mockGenerate).toHaveBeenCalledWith(
+        expect.stringContaining('https://research-world.com')
+      );
+    });
+
+    it('includes URL keyword isolation instruction in prompt', async () => {
+      mockGenerate.mockResolvedValue(
+        ok(generateResult(jsonResponse('link', 0.9, 'Test')))
+      );
+
+      const classifier = createGeminiClassifier(mockLlmClient);
+      await classifier.classify('https://example.com');
+
+      expect(mockGenerate).toHaveBeenCalledWith(
+        expect.stringContaining('Keywords inside URLs must be IGNORED')
+      );
+    });
+  });
 });
 

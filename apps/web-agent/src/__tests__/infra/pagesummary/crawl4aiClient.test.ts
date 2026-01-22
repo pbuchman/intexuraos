@@ -431,5 +431,20 @@ describe('Crawl4AIClient', () => {
       if (!result.ok) return;
       expect(result.value.summary).toBe('Fallback markdown content.');
     });
+
+    it('returns API_ERROR when response body is not valid JSON', async () => {
+      client = new Crawl4AIClient({ apiKey: TEST_API_KEY }, silentLogger);
+
+      nock('https://api.crawl4ai.com')
+        .post('/v1/crawl')
+        .reply(200, 'not-valid-json', { 'Content-Type': 'text/plain' });
+
+      const result = await client.summarizePage('https://example.com/malformed');
+
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error.code).toBe('API_ERROR');
+      expect(result.error.message).toBe('Crawl4AI returned invalid JSON response');
+    });
   });
 });

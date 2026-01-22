@@ -1,4 +1,4 @@
-import { err, ok, type Result } from '@intexuraos/common-core';
+import { err, ok, type Result, getErrorMessage } from '@intexuraos/common-core';
 import type { PageSummaryServicePort, SummarizeOptions } from '../../domain/pagesummary/ports/pageSummaryService.js';
 import type { PageSummary, PageSummaryError } from '../../domain/pagesummary/models/PageSummary.js';
 import type { Logger } from 'pino';
@@ -126,7 +126,16 @@ export class Crawl4AIClient implements PageSummaryServicePort {
         });
       }
 
-      const data = (await response.json()) as Crawl4AIResponse;
+      let data: Crawl4AIResponse;
+      try {
+        data = (await response.json()) as Crawl4AIResponse;
+      } catch (jsonError) {
+        this.logger.error({ url, error: getErrorMessage(jsonError) }, 'Invalid JSON response from Crawl4AI');
+        return err({
+          code: 'API_ERROR',
+          message: 'Crawl4AI returned invalid JSON response',
+        });
+      }
 
       if (!data.success) {
         this.logger.warn({ url, error: data.error_message }, 'Crawl4AI extraction failed');

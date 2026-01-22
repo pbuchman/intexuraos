@@ -41,9 +41,6 @@ export type HandleApprovalReplyUseCase = (
   input: ApprovalReplyInput
 ) => Promise<Result<ApprovalReplyResult>>;
 
-// Coverage for this use case is provided by integration tests via the routes.
-// The function is invoked through the Pub/Sub handler in internalRoutes.ts.
-/* v8 ignore start */
 export function createHandleApprovalReplyUseCase(
   deps: HandleApprovalReplyDeps
 ): HandleApprovalReplyUseCase {
@@ -303,4 +300,3 @@ export function createHandleApprovalReplyUseCase(
     });
   };
 }
-/* v8 ignore stop */

@@ -45,7 +45,8 @@ function calculateDuration(start: string | null, end: string | null): string | n
     const endDate = new Date(end);
     const diffMs = endDate.getTime() - startDate.getTime();
 
-    if (diffMs <= 0) {
+    // Handle invalid dates (NaN) and non-positive durations
+    if (Number.isNaN(diffMs) || diffMs <= 0) {
       return null;
     }
 
