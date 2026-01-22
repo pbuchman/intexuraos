@@ -30,6 +30,10 @@ apps/*/.env
 .envrc
 .envrc.local
 
+# Claude Code local settings
+.claude/settings.local.json
+.claude/settings.local.*.json
+
 # GCP Service Account Keys
 *service-account*.json
 gcp-*.json
