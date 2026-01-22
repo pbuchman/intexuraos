@@ -28,6 +28,7 @@ import {
   extractMessageTimestamp,
   extractMessageType,
   extractPhoneNumberId,
+  extractReplyContext,
   extractSenderName,
   extractSenderPhoneNumber,
   extractWabaId,
@@ -671,8 +672,79 @@ async function handleTextMessage(
 
   await webhookEventRepository.updateEventStatus(savedEvent.id, 'completed', {});
 
-  // Publish command ingest event for text message
   const services = getServices();
+
+  // Check if this is a reply to another message (potential approval response)
+  const replyContext = extractReplyContext(request.body);
+
+  if (replyContext !== null) {
+    // This message is a reply - look up the original message to get correlationId
+    request.log.info(
+      {
+        eventId: savedEvent.id,
+        userId,
+        replyToWamid: replyContext.replyToWamid,
+      },
+      'Message is a reply, looking up outbound message'
+    );
+
+    // Try to find the original outbound message to extract actionId
+    let actionId: string | undefined;
+    const outboundResult =
+      await services.outboundMessageRepository.findByWamid(replyContext.replyToWamid);
+
+    if (outboundResult.ok && outboundResult.value !== null) {
+      const correlationId = outboundResult.value.correlationId;
+      // Extract actionId from correlationId (format: action-{type}-approval-{actionId})
+      const match = /action-[^-]+-approval-(.+)$/.exec(correlationId);
+      if (match !== null) {
+        actionId = match[1];
+        request.log.info(
+          { correlationId, actionId },
+          'Extracted actionId from correlationId'
+        );
+      }
+    } else if (outboundResult.ok) {
+      request.log.info(
+        { replyToWamid: replyContext.replyToWamid },
+        'No outbound message found for this wamid (may not be an approval message)'
+      );
+    } else {
+      request.log.warn(
+        { replyToWamid: replyContext.replyToWamid, error: outboundResult.error.message },
+        'Failed to look up outbound message'
+      );
+    }
+
+    // Publish approval reply event
+    const approvalReplyEvent: Parameters<typeof services.eventPublisher.publishApprovalReply>[0] = {
+      type: 'action.approval.reply',
+      replyToWamid: replyContext.replyToWamid,
+      replyText: messageText,
+      userId,
+      timestamp: new Date().toISOString(),
+    };
+
+    if (actionId !== undefined) {
+      approvalReplyEvent.actionId = actionId;
+    }
+
+    await services.eventPublisher.publishApprovalReply(approvalReplyEvent);
+
+    request.log.info(
+      {
+        eventId: savedEvent.id,
+        userId,
+        replyToWamid: replyContext.replyToWamid,
+        actionId,
+      },
+      'Published approval reply event'
+    );
+  }
+
+  // Always publish command ingest event for text message
+  // If this was an approval reply, it will be handled by actions-agent
+  // If not, commands-agent will classify it as usual
   request.log.info(
     { eventId: savedEvent.id, userId, messageId: savedMessage.id },
     'Publishing command.ingest event'

@@ -189,3 +189,12 @@ export {
   parseTransformedData,
   buildInsightRepairPrompt,
 } from './dataInsights/index.js';
+
+// Approval intent prompts (for WhatsApp approval replies)
+export {
+  approvalIntentPrompt,
+  parseApprovalIntentResponse,
+  type ApprovalIntentPromptInput,
+  type ApprovalIntentPromptDeps,
+  type ApprovalIntentResponse,
+} from './approvals/index.js';

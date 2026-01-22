@@ -45,6 +45,15 @@ import {
   createChangeActionTypeUseCase,
   type ChangeActionTypeUseCase,
 } from '../domain/usecases/changeActionType.js';
+import type {
+  HandleApprovalReplyUseCase,
+  ApprovalReplyInput,
+  ApprovalReplyResult,
+} from '../domain/usecases/handleApprovalReply.js';
+import type { ApprovalMessageRepository } from '../domain/ports/approvalMessageRepository.js';
+import type { ApprovalMessage } from '../domain/models/approvalMessage.js';
+import type { UserServiceClient, UserServiceError } from '../infra/user/userServiceClient.js';
+import type { LlmGenerateClient } from '@intexuraos/llm-factory';
 import type { Services } from '../services.js';
 import type { PublishError, WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
 import type { ActionEventPublisher } from '../infra/pubsub/index.js';
@@ -775,6 +784,94 @@ export function createFakeRetryPendingActionsUseCase(config?: {
   };
 }
 
+// Fake ApprovalMessageRepository
+export class FakeApprovalMessageRepository implements ApprovalMessageRepository {
+  private messages = new Map<string, ApprovalMessage>();
+  private messagesByAction = new Map<string, ApprovalMessage>();
+
+  async save(message: ApprovalMessage): Promise<void> {
+    this.messages.set(message.wamid, message);
+    this.messagesByAction.set(message.actionId, message);
+  }
+
+  async findByWamid(wamid: string): Promise<ApprovalMessage | null> {
+    return this.messages.get(wamid) ?? null;
+  }
+
+  async findByActionId(actionId: string): Promise<ApprovalMessage | null> {
+    return this.messagesByAction.get(actionId) ?? null;
+  }
+
+  async deleteByActionId(actionId: string): Promise<void> {
+    const message = this.messagesByAction.get(actionId);
+    if (message !== undefined) {
+      this.messages.delete(message.wamid);
+      this.messagesByAction.delete(actionId);
+    }
+  }
+
+  // Test helpers
+  setMessage(message: ApprovalMessage): void {
+    this.messages.set(message.wamid, message);
+    this.messagesByAction.set(message.actionId, message);
+  }
+
+  getMessages(): ApprovalMessage[] {
+    return Array.from(this.messages.values());
+  }
+
+  clear(): void {
+    this.messages.clear();
+    this.messagesByAction.clear();
+  }
+}
+
+// Fake UserServiceClient
+export class FakeUserServiceClient implements UserServiceClient {
+  private llmClient: LlmGenerateClient | null = null;
+  private error: UserServiceError | null = null;
+
+  setLlmClient(client: LlmGenerateClient): void {
+    this.llmClient = client;
+    this.error = null;
+  }
+
+  setError(error: UserServiceError): void {
+    this.error = error;
+    this.llmClient = null;
+  }
+
+  async getLlmClient(_userId: string): Promise<Result<LlmGenerateClient, UserServiceError>> {
+    if (this.error !== null) {
+      return err(this.error);
+    }
+    if (this.llmClient === null) {
+      return err({
+        code: 'NO_API_KEY',
+        message: 'No LLM client configured in fake',
+      });
+    }
+    return ok(this.llmClient);
+  }
+}
+
+// Fake HandleApprovalReplyUseCase
+export function createFakeHandleApprovalReplyUseCase(config?: {
+  failWithError?: Error;
+  returnResult?: ApprovalReplyResult;
+}): HandleApprovalReplyUseCase {
+  return async (_input: ApprovalReplyInput): Promise<Result<ApprovalReplyResult>> => {
+    if (config?.failWithError !== undefined) {
+      return err(config.failWithError);
+    }
+    return ok(
+      config?.returnResult ?? {
+        matched: false,
+      }
+    );
+  };
+}
+
 import {
   createHandleTodoActionUseCase,
   type HandleTodoActionUseCase,
@@ -818,6 +915,9 @@ export function createFakeServices(deps: {
   executeLinearActionUseCase?: FakeExecuteLinearActionUseCase;
   retryPendingActionsUseCase?: RetryPendingActionsUseCase;
   changeActionTypeUseCase?: ChangeActionTypeUseCase;
+  approvalMessageRepository?: FakeApprovalMessageRepository;
+  userServiceClient?: FakeUserServiceClient;
+  handleApprovalReplyUseCase?: HandleApprovalReplyUseCase;
 }): Services {
   const whatsappPublisher = deps.whatsappPublisher ?? new FakeWhatsAppSendPublisher();
   const actionRepository = deps.actionRepository ?? new FakeActionRepository();
@@ -829,6 +929,9 @@ export function createFakeServices(deps: {
   const bookmarksServiceClient = deps.bookmarksServiceClient ?? new FakeBookmarksServiceClient();
   const calendarServiceClient = deps.calendarServiceClient ?? new FakeCalendarServiceClient();
   const linearAgentClient = deps.linearAgentClient ?? new FakeLinearAgentClient();
+  const approvalMessageRepository =
+    deps.approvalMessageRepository ?? new FakeApprovalMessageRepository();
+  const userServiceClient = deps.userServiceClient ?? new FakeUserServiceClient();
 
   const silentLogger = pino({ level: 'silent' });
 
@@ -934,6 +1037,10 @@ export function createFakeServices(deps: {
     retryPendingActionsUseCase:
       deps.retryPendingActionsUseCase ?? createFakeRetryPendingActionsUseCase(),
     changeActionTypeUseCase,
+    approvalMessageRepository,
+    userServiceClient,
+    handleApprovalReplyUseCase:
+      deps.handleApprovalReplyUseCase ?? createFakeHandleApprovalReplyUseCase(),
     research: handleResearchActionUseCase,
     todo: handleTodoActionUseCase,
     note: handleNoteActionUseCase,

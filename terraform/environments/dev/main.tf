@@ -756,6 +756,31 @@ module "pubsub_whatsapp_send" {
   ]
 }
 
+# Topic for approval reply events (whatsapp-service -> actions-agent)
+module "pubsub_approval_reply" {
+  source = "../../modules/pubsub-push"
+
+  project_id     = var.project_id
+  project_number = local.project_number
+  topic_name     = "intexuraos-approval-reply-${var.environment}"
+  labels         = local.common_labels
+
+  push_endpoint              = "${module.actions_agent.service_url}/internal/actions/approval-reply"
+  push_service_account_email = module.iam.service_accounts["actions_agent"]
+  push_audience              = module.actions_agent.service_url
+
+  publisher_service_accounts = {
+    whatsapp_service = module.iam.service_accounts["whatsapp_service"]
+  }
+
+  depends_on = [
+    google_project_service.apis,
+    module.iam,
+    module.whatsapp_service,
+    module.actions_agent,
+  ]
+}
+
 
 # -----------------------------------------------------------------------------
 # Cloud Run Services
@@ -883,6 +908,7 @@ module "whatsapp_service" {
     INTEXURAOS_PUBSUB_COMMANDS_INGEST_TOPIC      = module.pubsub_commands_ingest.topic_name
     INTEXURAOS_PUBSUB_WEBHOOK_PROCESS_TOPIC      = module.pubsub_whatsapp_webhook_process.topic_name
     INTEXURAOS_PUBSUB_TRANSCRIPTION_TOPIC        = module.pubsub_whatsapp_transcription.topic_name
+    INTEXURAOS_PUBSUB_APPROVAL_REPLY_TOPIC       = module.pubsub_approval_reply.topic_name
   })
 
   depends_on = [

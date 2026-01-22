@@ -783,6 +783,7 @@ describe('TranscribeAudioUseCase', () => {
         publishWebhookProcess: vi.fn().mockResolvedValue({ ok: true }),
         publishTranscribeAudio: vi.fn().mockResolvedValue({ ok: true }),
         publishExtractLinkPreviews: vi.fn().mockResolvedValue({ ok: true }),
+        publishApprovalReply: vi.fn().mockResolvedValue({ ok: true }),
       };
       const depsWithPublisher: TranscribeAudioDeps = {
         ...deps,

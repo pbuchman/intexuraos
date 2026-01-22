@@ -11,6 +11,7 @@ import {
   FakeLinkPreviewFetcherPort,
   FakeMediaStorage,
   FakeMessageSender,
+  FakeOutboundMessageRepository,
   FakeSpeechTranscriptionPort,
   FakeThumbnailGeneratorPort,
   FakeWhatsAppCloudApiPort,
@@ -89,6 +90,7 @@ describe('Pub/Sub Routes', () => {
       whatsappCloudApi: new FakeWhatsAppCloudApiPort(),
       thumbnailGenerator: new FakeThumbnailGeneratorPort(),
       linkPreviewFetcher: new FakeLinkPreviewFetcherPort(),
+      outboundMessageRepository: new FakeOutboundMessageRepository(),
     });
 
     process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = INTERNAL_AUTH_TOKEN;
@@ -279,6 +281,7 @@ describe('Pub/Sub Routes', () => {
         payload: body,
       });
 
+      expect(response.body).toContain('success');
       expect(response.statusCode).toBe(200);
       const responseBody = JSON.parse(response.body) as { success: boolean };
       expect(responseBody.success).toBe(true);

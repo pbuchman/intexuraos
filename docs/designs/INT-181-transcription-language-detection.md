@@ -7,6 +7,7 @@
 ## Context
 
 INT-181 requires improving transcription composition:
+
 - Remove markdown formatting from summaries (implemented: strip `###` headers)
 - Add introductory phrase in detected language ("Here is a summary of what you said")
 - Support Polish with fallback to English
@@ -152,12 +153,12 @@ For broader translation needs, consider:
 
 ### Translation Scope Analysis
 
-| Service | User-Facing Strings | Priority |
-|---------|---------------------|----------|
-| whatsapp-service | Transcription messages, error messages | High |
-| web app | All UI text | Medium |
-| commands-agent | Classification feedback | Low |
-| Other agents | Mostly internal | Low |
+| Service          | User-Facing Strings                    | Priority |
+| ---------------- | -------------------------------------- | -------- |
+| whatsapp-service | Transcription messages, error messages | High     |
+| web app          | All UI text                            | Medium   |
+| commands-agent   | Classification feedback                | Low      |
+| Other agents     | Mostly internal                        | Low      |
 
 ### Recommended Phased Approach
 
@@ -211,6 +212,7 @@ For broader translation needs, consider:
 ### Q2: Full Transcript Language vs Summary Language
 
 Should the intro phrase match:
+
 - A) Language of the full transcript
 - B) Always use detected language from Speechmatics
 - C) User preference setting

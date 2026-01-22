@@ -18,6 +18,7 @@ import type {
   EventPublisherPort,
   LinkPreviewFetcherPort,
   MediaStoragePort,
+  OutboundMessageRepository,
   SpeechTranscriptionPort,
   ThumbnailGeneratorPort,
   WhatsAppCloudApiPort,
@@ -26,6 +27,7 @@ import type {
   WhatsAppUserMappingRepository,
   WhatsAppWebhookEventRepository,
 } from './domain/whatsapp/index.js';
+import { createOutboundMessageRepository } from './infra/firestore/outboundMessageRepository.js';
 
 /**
  * Configuration for service initialization.
@@ -37,6 +39,7 @@ export interface ServiceConfig {
   commandsIngestTopic?: string;
   webhookProcessTopic?: string;
   transcriptionTopic?: string;
+  approvalReplyTopic?: string;
   whatsappAccessToken: string;
   whatsappPhoneNumberId: string;
   speechmaticsApiKey: string;
@@ -59,6 +62,9 @@ function buildPubSubConfig(config: ServiceConfig): GcpPubSubPublisherConfig {
   if (config.transcriptionTopic !== undefined) {
     pubsubConfig.transcriptionTopic = config.transcriptionTopic;
   }
+  if (config.approvalReplyTopic !== undefined) {
+    pubsubConfig.approvalReplyTopic = config.approvalReplyTopic;
+  }
   return pubsubConfig;
 }
 
@@ -70,6 +76,7 @@ export interface ServiceContainer {
   webhookEventRepository: WhatsAppWebhookEventRepository;
   userMappingRepository: WhatsAppUserMappingRepository;
   messageRepository: WhatsAppMessageRepository;
+  outboundMessageRepository: OutboundMessageRepository;
   mediaStorage: MediaStoragePort;
   eventPublisher: EventPublisherPort;
   messageSender: WhatsAppMessageSender;
@@ -107,6 +114,7 @@ export function getServices(): ServiceContainer {
     webhookEventRepository: new WebhookEventRepositoryAdapter(),
     userMappingRepository: new UserMappingRepositoryAdapter(),
     messageRepository: new MessageRepositoryAdapter(),
+    outboundMessageRepository: createOutboundMessageRepository(),
     mediaStorage: new GcsMediaStorageAdapter(serviceConfig.mediaBucket),
     eventPublisher: new GcpPubSubPublisher(buildPubSubConfig(serviceConfig)),
     messageSender: new WhatsAppCloudApiSender(
