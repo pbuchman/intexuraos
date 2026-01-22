@@ -28,6 +28,7 @@ import {
   extractMessageTimestamp,
   extractMessageType,
   extractPhoneNumberId,
+  extractReactionData,
   extractReplyContext,
   extractSenderName,
   extractSenderPhoneNumber,
@@ -327,6 +328,7 @@ export async function processWebhookEvent(
     const messageType = extractMessageType(request.body);
     const imageMedia = extractImageMedia(request.body);
     const audioMedia = extractAudioMedia(request.body);
+    const reactionData = extractReactionData(request.body);
 
     request.log.info(
       {
@@ -336,12 +338,14 @@ export async function processWebhookEvent(
         hasText: messageText !== null,
         hasImage: imageMedia !== null,
         hasAudio: audioMedia !== null,
+        hasReaction: reactionData !== null,
+        reactionEmoji: reactionData?.emoji,
       },
       'Extracted message details from webhook payload'
     );
 
     // Validate message type
-    const supportedTypes = ['text', 'image', 'audio'];
+    const supportedTypes = ['text', 'image', 'audio', 'reaction'];
     if (messageType === null || !supportedTypes.includes(messageType)) {
       request.log.info(
         { eventId: savedEvent.id, messageType },
@@ -350,7 +354,7 @@ export async function processWebhookEvent(
       await webhookEventRepository.updateEventStatus(savedEvent.id, 'ignored', {
         ignoredReason: {
           code: 'UNSUPPORTED_MESSAGE_TYPE',
-          message: `Only text, image, and audio messages are supported. Received: ${messageType ?? 'unknown'}`,
+          message: `Only text, image, audio, and reaction messages are supported. Received: ${messageType ?? 'unknown'}`,
           details: { messageType },
         },
       });
@@ -386,6 +390,17 @@ export async function processWebhookEvent(
         ignoredReason: {
           code: 'NO_AUDIO_MEDIA',
           message: 'Audio message has no media info',
+        },
+      });
+      return;
+    }
+
+    if (messageType === 'reaction' && reactionData === null) {
+      request.log.info({ eventId: savedEvent.id }, 'Ignoring reaction message without data');
+      await webhookEventRepository.updateEventStatus(savedEvent.id, 'ignored', {
+        ignoredReason: {
+          code: 'NO_REACTION_DATA',
+          message: 'Reaction message has no data',
         },
       });
       return;
@@ -495,6 +510,11 @@ export async function processWebhookEvent(
         phoneNumberId,
         audioMedia
       );
+      return;
+    }
+
+    if (messageType === 'reaction' && reactionData !== null) {
+      await handleReactionMessage(request, savedEvent, services, userId, reactionData);
       return;
     }
 
@@ -635,6 +655,156 @@ async function handleAudioMessage(
 
     await sendAudioConfirmationMessage(request, savedEvent, fromNumber);
   }
+}
+
+/**
+ * Handle reaction message for action approval/rejection.
+ *
+ * Reactions are used for quick approval responses:
+ * - 👍 (thumbs up) → approve
+ * - 👎 (thumbs down) → reject
+ * - Other emojis → ignored
+ */
+async function handleReactionMessage(
+  request: FastifyRequest<{ Body: WebhookPayload }>,
+  savedEvent: { id: string },
+  services: ReturnType<typeof getServices>,
+  userId: string,
+  reactionData: { emoji: string; messageId: string }
+): Promise<void> {
+  const { webhookEventRepository, outboundMessageRepository, eventPublisher } = services;
+
+  request.log.info(
+    {
+      eventId: savedEvent.id,
+      userId,
+      reactionEmoji: reactionData.emoji,
+      messageId: reactionData.messageId,
+    },
+    'Processing reaction message'
+  );
+
+  // Map emoji to intent
+  let intent: 'approve' | 'reject' | null = null;
+  if (reactionData.emoji === '👍') {
+    intent = 'approve';
+  } else if (reactionData.emoji === '👎') {
+    intent = 'reject';
+  }
+
+  if (intent === null) {
+    request.log.info(
+      { eventId: savedEvent.id, emoji: reactionData.emoji },
+      'Ignoring unsupported reaction emoji'
+    );
+    await webhookEventRepository.updateEventStatus(savedEvent.id, 'ignored', {
+      ignoredReason: {
+        code: 'UNSUPPORTED_REACTION',
+        message: `Only 👍 and 👎 reactions are supported. Received: ${reactionData.emoji}`,
+        details: { emoji: reactionData.emoji },
+      },
+    });
+    return;
+  }
+
+  // Look up the original message being reacted to
+  const outboundResult = await outboundMessageRepository.findByWamid(reactionData.messageId);
+
+  if (!outboundResult.ok) {
+    request.log.error(
+      { eventId: savedEvent.id, messageId: reactionData.messageId, error: outboundResult.error },
+      'Failed to look up outbound message'
+    );
+    await webhookEventRepository.updateEventStatus(savedEvent.id, 'failed', {
+      failureDetails: `Failed to look up outbound message: ${outboundResult.error.message}`,
+    });
+    return;
+  }
+
+  if (outboundResult.value === null) {
+    request.log.info(
+      { eventId: savedEvent.id, messageId: reactionData.messageId },
+      'No outbound message found for reaction (may not be an approval message)'
+    );
+    await webhookEventRepository.updateEventStatus(savedEvent.id, 'ignored', {
+      ignoredReason: {
+        code: 'NO_OUTBOUND_MESSAGE',
+        message: 'No outbound message found for this reaction',
+        details: { messageId: reactionData.messageId },
+      },
+    });
+    return;
+  }
+
+  const correlationId = outboundResult.value.correlationId;
+  // Extract actionId from correlationId (format: action-{type}-approval-{actionId})
+  const match = /action-[^-]+-approval-(.+)$/.exec(correlationId);
+
+  if (match === null) {
+    request.log.info(
+      { eventId: savedEvent.id, correlationId },
+      'Reaction is not for an approval message, ignoring'
+    );
+    await webhookEventRepository.updateEventStatus(savedEvent.id, 'ignored', {
+      ignoredReason: {
+        code: 'NOT_APPROVAL_MESSAGE',
+        message: 'Reaction is not for an approval message',
+        details: { correlationId },
+      },
+    });
+    return;
+  }
+
+  const actionId = match[1] ?? '';
+  request.log.info(
+    { eventId: savedEvent.id, correlationId, actionId, intent },
+    'Reaction is for approval message, publishing reply event'
+  );
+
+  // Publish approval reply event with the intent from the reaction
+  const replyText = intent === 'approve' ? 'yes' : 'no';
+  const approvalReplyEvent: Parameters<typeof eventPublisher.publishApprovalReply>[0] = {
+    type: 'action.approval.reply',
+    replyToWamid: reactionData.messageId,
+    replyText,
+    userId,
+    timestamp: new Date().toISOString(),
+  };
+
+  // Only include actionId if it was extracted from the correlationId
+  if (match[1] !== undefined) {
+    approvalReplyEvent.actionId = match[1];
+  }
+
+  const approvalPublishResult = await eventPublisher.publishApprovalReply(approvalReplyEvent);
+
+  if (!approvalPublishResult.ok) {
+    request.log.error(
+      {
+        eventId: savedEvent.id,
+        error: approvalPublishResult.error,
+        replyToWamid: reactionData.messageId,
+      },
+      'Failed to publish approval reply event'
+    );
+    await webhookEventRepository.updateEventStatus(savedEvent.id, 'failed', {
+      failureDetails: `Failed to publish approval reply: ${approvalPublishResult.error.message}`,
+    });
+    return;
+  }
+
+  request.log.info(
+    {
+      eventId: savedEvent.id,
+      userId,
+      replyToWamid: reactionData.messageId,
+      actionId,
+      intent,
+    },
+    'Published approval reply event from reaction'
+  );
+
+  await webhookEventRepository.updateEventStatus(savedEvent.id, 'completed', {});
 }
 
 /**

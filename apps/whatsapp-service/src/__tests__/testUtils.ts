@@ -335,6 +335,61 @@ export function createAudioWebhookPayload(options?: { mediaId?: string }): objec
   };
 }
 
+/**
+ * Create a WhatsApp reaction webhook payload.
+ * Used to test reaction-based approval/rejection handling.
+ */
+export function createReactionWebhookPayload(options: {
+  emoji: string;
+  messageId: string; // The wamid being reacted to
+  reactionMessageId?: string; // The ID of the reaction message itself
+}): object {
+  const reactionMessageId =
+    options.reactionMessageId ??
+    'wamid.reaction.HBgNMTU1NTEyMzQ1Njc4FQIAEhgUM0VCMDRBNzYwREQ0RjMwMjYzMDcA';
+
+  return {
+    object: 'whatsapp_business_account',
+    entry: [
+      {
+        id: '102290129340398',
+        changes: [
+          {
+            field: 'messages',
+            value: {
+              messaging_product: 'whatsapp',
+              metadata: {
+                display_phone_number: '15551234567',
+                phone_number_id: '123456789012345',
+              },
+              contacts: [
+                {
+                  wa_id: '15551234567',
+                  profile: {
+                    name: 'Test User',
+                  },
+                },
+              ],
+              messages: [
+                {
+                  from: '15551234567',
+                  id: reactionMessageId,
+                  timestamp: '1234567890',
+                  type: 'reaction',
+                  reaction: {
+                    emoji: options.emoji,
+                    message_id: options.messageId,
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    ],
+  };
+}
+
 export interface TestContext {
   app: FastifyInstance;
   webhookEventRepository: FakeWhatsAppWebhookEventRepository;

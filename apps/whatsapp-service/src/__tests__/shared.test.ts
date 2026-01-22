@@ -11,6 +11,7 @@ import {
   extractMessageTimestamp,
   extractMessageType,
   extractPhoneNumberId,
+  extractReactionData,
   extractSenderName,
   extractSenderPhoneNumber,
   extractWabaId,
@@ -837,6 +838,189 @@ describe('shared utilities', () => {
         entry: [{ changes: [{ value: { messages: [] } }] }],
       };
       expect(extractAudioMedia(payload)).toBeNull();
+    });
+  });
+
+  describe('extractReactionData', () => {
+    it('extracts reaction data from valid webhook payload', () => {
+      const payload = {
+        entry: [
+          {
+            changes: [
+              {
+                value: {
+                  messages: [
+                    {
+                      type: 'reaction',
+                      reaction: {
+                        message_id: 'wamid.original-message-id',
+                        emoji: '👍',
+                      },
+                    },
+                  ],
+                },
+              },
+            ],
+          },
+        ],
+      };
+      const result = extractReactionData(payload);
+      expect(result).toEqual({
+        emoji: '👍',
+        messageId: 'wamid.original-message-id',
+      });
+    });
+
+    it('extracts thumbs down reaction', () => {
+      const payload = {
+        entry: [
+          {
+            changes: [
+              {
+                value: {
+                  messages: [
+                    {
+                      type: 'reaction',
+                      reaction: {
+                        message_id: 'wamid.message-123',
+                        emoji: '👎',
+                      },
+                    },
+                  ],
+                },
+              },
+            ],
+          },
+        ],
+      };
+      const result = extractReactionData(payload);
+      expect(result).toEqual({
+        emoji: '👎',
+        messageId: 'wamid.message-123',
+      });
+    });
+
+    it('returns null for null payload', () => {
+      expect(extractReactionData(null)).toBeNull();
+    });
+
+    it('returns null for payload without entry', () => {
+      expect(extractReactionData({})).toBeNull();
+    });
+
+    it('returns null for payload with empty entry array', () => {
+      expect(extractReactionData({ entry: [] })).toBeNull();
+    });
+
+    it('returns null when entry has no changes', () => {
+      expect(extractReactionData({ entry: [{}] })).toBeNull();
+    });
+
+    it('returns null when changes is empty', () => {
+      expect(extractReactionData({ entry: [{ changes: [] }] })).toBeNull();
+    });
+
+    it('returns null when change has no value', () => {
+      expect(extractReactionData({ entry: [{ changes: [{}] }] })).toBeNull();
+    });
+
+    it('returns null when value is null', () => {
+      expect(extractReactionData({ entry: [{ changes: [{ value: null }] }] })).toBeNull();
+    });
+
+    it('returns null when value has no messages', () => {
+      expect(extractReactionData({ entry: [{ changes: [{ value: {} }] }] })).toBeNull();
+    });
+
+    it('returns null when messages array is empty', () => {
+      const payload = {
+        entry: [{ changes: [{ value: { messages: [] } }] }],
+      };
+      expect(extractReactionData(payload)).toBeNull();
+    });
+
+    it('returns null when message has no reaction field', () => {
+      const payload = {
+        entry: [{ changes: [{ value: { messages: [{ type: 'text' }] } }] }],
+      };
+      expect(extractReactionData(payload)).toBeNull();
+    });
+
+    it('returns null when reaction.message_id is missing', () => {
+      const payload = {
+        entry: [
+          {
+            changes: [
+              {
+                value: {
+                  messages: [{ type: 'reaction', reaction: { emoji: '👍' } }],
+                },
+              },
+            ],
+          },
+        ],
+      };
+      expect(extractReactionData(payload)).toBeNull();
+    });
+
+    it('returns null when reaction.emoji is missing', () => {
+      const payload = {
+        entry: [
+          {
+            changes: [
+              {
+                value: {
+                  messages: [
+                    { type: 'reaction', reaction: { message_id: 'wamid.123' } },
+                  ],
+                },
+              },
+            ],
+          },
+        ],
+      };
+      expect(extractReactionData(payload)).toBeNull();
+    });
+
+    it('returns null when message_id is not a string', () => {
+      const payload = {
+        entry: [
+          {
+            changes: [
+              {
+                value: {
+                  messages: [
+                    { type: 'reaction', reaction: { message_id: 123, emoji: '👍' } },
+                  ],
+                },
+              },
+            ],
+          },
+        ],
+      };
+      expect(extractReactionData(payload)).toBeNull();
+    });
+
+    it('returns null when emoji is not a string', () => {
+      const payload = {
+        entry: [
+          {
+            changes: [
+              {
+                value: {
+                  messages: [
+                    {
+                      type: 'reaction',
+                      reaction: { message_id: 'wamid.123', emoji: 123 },
+                    },
+                  ],
+                },
+              },
+            ],
+          },
+        ],
+      };
+      expect(extractReactionData(payload)).toBeNull();
     });
   });
 });
