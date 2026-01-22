@@ -983,9 +983,11 @@ export interface LinearConnectionStatus {
  * Grouped issues by dashboard column
  */
 export interface GroupedIssues {
+  todo: LinearIssue[];
   backlog: LinearIssue[];
   in_progress: LinearIssue[];
   in_review: LinearIssue[];
+  to_test: LinearIssue[];
   done: LinearIssue[];
   archive: LinearIssue[];
 }
