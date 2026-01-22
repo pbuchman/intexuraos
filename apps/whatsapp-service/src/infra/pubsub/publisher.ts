@@ -6,6 +6,7 @@ import type { Logger } from 'pino';
 import { err, ok, type Result } from '@intexuraos/common-core';
 import { BasePubSubPublisher, type PublishError } from '@intexuraos/infra-pubsub';
 import type {
+  ApprovalReplyEvent,
   CommandIngestEvent,
   EventPublisherPort,
   ExtractLinkPreviewsEvent,
@@ -21,6 +22,7 @@ export interface GcpPubSubPublisherConfig {
   commandsIngestTopic?: string;
   webhookProcessTopic?: string;
   transcriptionTopic?: string;
+  approvalReplyTopic?: string;
   logger: Logger;
 }
 
@@ -32,6 +34,7 @@ export class GcpPubSubPublisher extends BasePubSubPublisher implements EventPubl
   private readonly commandsIngestTopic: string | null;
   private readonly webhookProcessTopic: string | null;
   private readonly transcriptionTopic: string | null;
+  private readonly approvalReplyTopic: string | null;
 
   constructor(config: GcpPubSubPublisherConfig) {
     super({ projectId: config.projectId, logger: config.logger });
@@ -39,6 +42,7 @@ export class GcpPubSubPublisher extends BasePubSubPublisher implements EventPubl
     this.commandsIngestTopic = config.commandsIngestTopic ?? null;
     this.webhookProcessTopic = config.webhookProcessTopic ?? null;
     this.transcriptionTopic = config.transcriptionTopic ?? null;
+    this.approvalReplyTopic = config.approvalReplyTopic ?? null;
   }
 
   async publishMediaCleanup(event: MediaCleanupEvent): Promise<Result<void, WhatsAppError>> {
@@ -89,6 +93,16 @@ export class GcpPubSubPublisher extends BasePubSubPublisher implements EventPubl
       event,
       { messageId: event.messageId },
       'extract link previews'
+    );
+    return this.mapToWhatsAppError(result);
+  }
+
+  async publishApprovalReply(event: ApprovalReplyEvent): Promise<Result<void, WhatsAppError>> {
+    const result = await this.publishToTopic(
+      this.approvalReplyTopic,
+      event,
+      { replyToWamid: event.replyToWamid },
+      'approval reply'
     );
     return this.mapToWhatsAppError(result);
   }

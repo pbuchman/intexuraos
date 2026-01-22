@@ -125,6 +125,10 @@ export async function buildServer(config: Config): Promise<FastifyInstance> {
     (serviceConfig as { transcriptionTopic?: string }).transcriptionTopic =
       config.transcriptionTopic;
   }
+  if (config.approvalReplyTopic !== undefined) {
+    (serviceConfig as { approvalReplyTopic?: string }).approvalReplyTopic =
+      config.approvalReplyTopic;
+  }
   initServices(serviceConfig);
 
   const app = Fastify({

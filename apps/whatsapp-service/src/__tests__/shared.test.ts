@@ -201,7 +201,8 @@ describe('shared utilities', () => {
         const result = validatePhoneNumber('+abc');
         expect(result.valid).toBe(false);
         expect(result.normalized).toBe(''); // Only digits remain after normalization
-        if (!result.valid) expect(result.error).toContain('Invalid');
+        // Uses specific error message from libphonenumber-js
+        if (!result.valid) expect(result.error).toBe('NOT_A_NUMBER');
       });
     });
   });

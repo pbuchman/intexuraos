@@ -10,6 +10,7 @@
  *   - transcription
  *   - commands-ingest
  *   - actions-queue
+ *   - approval-reply
  *   - research-process
  *   - llm-analytics
  *   - llm-call
@@ -122,6 +123,17 @@ const EVENTS = {
         confidence: 0.95,
         selectedLlms: ['google', 'anthropic'],
       },
+      timestamp: new Date().toISOString(),
+    },
+  },
+  'approval-reply': {
+    topic: 'approval-reply',
+    data: {
+      type: 'action.approval.reply',
+      replyToWamid: 'wamid.test-' + Date.now(),
+      replyText: 'yes',
+      userId: 'test-user-101',
+      actionId: 'action-' + Date.now(),
       timestamp: new Date().toISOString(),
     },
   },

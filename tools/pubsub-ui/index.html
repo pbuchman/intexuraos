@@ -204,6 +204,9 @@
       .event.actions-queue {
         border-left-color: #06b6d4;
       }
+      .event.approval-reply {
+        border-left-color: #14b8a6;
+      }
       .event.research-process {
         border-left-color: #3b82f6;
       }
@@ -272,6 +275,10 @@
       }
       .actions-queue .event-badge {
         background: #06b6d4;
+        color: white;
+      }
+      .approval-reply .event-badge {
+        background: #14b8a6;
         color: white;
       }
       .research-process .event-badge {
@@ -512,6 +519,7 @@
               <option value="whatsapp-transcription">whatsapp-transcription</option>
               <option value="commands-ingest">commands-ingest</option>
               <option value="actions-queue">actions-queue</option>
+              <option value="approval-reply">approval-reply</option>
               <option value="research-process">research-process</option>
               <option value="llm-analytics">llm-analytics</option>
               <option value="llm-call">llm-call</option>
@@ -595,6 +603,14 @@
             confidence: 0.95,
             selectedLlms: ['google', 'anthropic'],
           },
+          timestamp: '{timestamp}',
+        },
+        'approval-reply': {
+          type: 'action.approval.reply',
+          replyToWamid: 'wamid.test-{timestamp}',
+          replyText: 'yes',
+          userId: '{userId}',
+          actionId: 'action-{timestamp}',
           timestamp: '{timestamp}',
         },
         'research-process': {

@@ -14,11 +14,11 @@ LLM responses require validation to ensure they match expected schemas before pr
 
 ### Summary
 
-| Approach               | Count | When to Use                              | Key Feature                    |
-| ----------------------  | -----  | ----------------------------------------  | ------------------------------  |
-| **Zod Schemas**        | 2     | Complex JSON with nested types           | Field-level error paths        |
-| **Manual Type Guards** | 8     | Simple JSON with known fields            | Custom validation logic        |
-| **No Validation**      | 6     | Unstructured text (prose, markdown)      | Raw content pass-through       |
+| Approach               | Count | When to Use                         | Key Feature              |
+| ---------------------- | ----- | ----------------------------------- | ------------------------ |
+| **Zod Schemas**        | 2     | Complex JSON with nested types      | Field-level error paths  |
+| **Manual Type Guards** | 8     | Simple JSON with known fields       | Custom validation logic  |
+| **No Validation**      | 6     | Unstructured text (prose, markdown) | Raw content pass-through |
 
 ---
 
@@ -53,10 +53,7 @@ export const ResearchContextSchema = z.object({
 export type ResearchContext = z.infer<typeof ResearchContextSchema>;
 
 // Validate with safeParse
-function parseJsonWithZod<T>(
-  raw: string,
-  schema: z.ZodSchema<T>
-): Result<T, string> {
+function parseJsonWithZod<T>(raw: string, schema: z.ZodSchema<T>): Result<T, string> {
   const parsed = JSON.parse(raw);
   const result = schema.safeParse(parsed);
 
@@ -87,10 +84,10 @@ function formatZodErrors(error: ZodError): string {
 
 ### Current Usage
 
-| Service        | File                         | Method                    | Schema                    |
-| --------------  | ----------------------------  | -------------------------  | -------------------------  |
-| research-agent | `ContextInferenceAdapter.ts` | `inferResearchContext()`  | `ResearchContextSchema`   |
-| research-agent | `ContextInferenceAdapter.ts` | `inferSynthesisContext()` | `SynthesisContextSchema`  |
+| Service        | File                         | Method                    | Schema                   |
+| -------------- | ---------------------------- | ------------------------- | ------------------------ |
+| research-agent | `ContextInferenceAdapter.ts` | `inferResearchContext()`  | `ResearchContextSchema`  |
+| research-agent | `ContextInferenceAdapter.ts` | `inferSynthesisContext()` | `SynthesisContextSchema` |
 
 ### Schema Locations
 
@@ -123,7 +120,8 @@ function isValidExtractionResponse(value: unknown): value is ExtractionResponse 
   return (
     typeof obj.title === 'string' &&
     typeof obj.priority === 'number' &&
-    obj.priority >= 0 && obj.priority <= 4 &&
+    obj.priority >= 0 &&
+    obj.priority <= 4 &&
     typeof obj.valid === 'boolean' &&
     typeof obj.reasoning === 'string'
   );
@@ -132,16 +130,16 @@ function isValidExtractionResponse(value: unknown): value is ExtractionResponse 
 
 ### Current Usage
 
-| Service              | File                                 | Guard Function                |
-| --------------------  | ------------------------------------  | -----------------------------  |
-| research-agent       | `InputValidationAdapter.ts`          | `isInputQualityResult()`      |
-| todos-agent          | `todoItemExtractionService.ts`       | `isValidExtractionResponse()` |
-| linear-agent         | `linearActionExtractionService.ts`   | `isValidExtractionResponse()` |
-| calendar-agent       | `calendarActionExtractionService.ts` | `isValidExtractionResponse()` |
-| commands-agent       | `classifier.ts`                      | Inline regex + type checks    |
-| data-insights-agent  | `chartDefinitionService.ts`          | `parseChartDefinition()`      |
-| data-insights-agent  | `dataAnalysisService.ts`             | `parseInsightResponse()`      |
-| data-insights-agent  | `dataTransformService.ts`            | `parseTransformedData()`      |
+| Service             | File                                 | Guard Function                |
+| ------------------- | ------------------------------------ | ----------------------------- |
+| research-agent      | `InputValidationAdapter.ts`          | `isInputQualityResult()`      |
+| todos-agent         | `todoItemExtractionService.ts`       | `isValidExtractionResponse()` |
+| linear-agent        | `linearActionExtractionService.ts`   | `isValidExtractionResponse()` |
+| calendar-agent      | `calendarActionExtractionService.ts` | `isValidExtractionResponse()` |
+| commands-agent      | `classifier.ts`                      | Inline regex + type checks    |
+| data-insights-agent | `chartDefinitionService.ts`          | `parseChartDefinition()`      |
+| data-insights-agent | `dataAnalysisService.ts`             | `parseInsightResponse()`      |
+| data-insights-agent | `dataTransformService.ts`            | `parseTransformedData()`      |
 
 ---
 
@@ -155,14 +153,14 @@ Research and synthesis outputs are free-form markdown prose. Validation would re
 
 ### Current Usage
 
-| Service        | File                   | Methods                              |
-| --------------  | ----------------------  | ------------------------------------  |
-| research-agent | `GeminiAdapter.ts`     | `research()`, `synthesize()`         |
-| research-agent | `GptAdapter.ts`        | `research()`, `synthesize()`         |
-| research-agent | `ClaudeAdapter.ts`     | `research()`                         |
-| research-agent | `GlmAdapter.ts`        | `research()`, `synthesize()`         |
-| research-agent | `PerplexityAdapter.ts` | `research()`, `synthesize()`         |
-| user-service   | `LlmValidatorImpl.ts`  | `validateKey()`, `testRequest()`     |
+| Service        | File                   | Methods                          |
+| -------------- | ---------------------- | -------------------------------- |
+| research-agent | `GeminiAdapter.ts`     | `research()`, `synthesize()`     |
+| research-agent | `GptAdapter.ts`        | `research()`, `synthesize()`     |
+| research-agent | `ClaudeAdapter.ts`     | `research()`                     |
+| research-agent | `GlmAdapter.ts`        | `research()`, `synthesize()`     |
+| research-agent | `PerplexityAdapter.ts` | `research()`, `synthesize()`     |
+| user-service   | `LlmValidatorImpl.ts`  | `validateKey()`, `testRequest()` |
 
 ---
 
@@ -252,16 +250,17 @@ export function isResearchContext(value: unknown): value is ResearchContext {
 
 Services with manual guards that would benefit from Zod:
 
-| Service              | Current Approach              | Migration Benefit                     |
-| --------------------  | -----------------------------  | -------------------------------------  |
-| todos-agent          | `isValidExtractionResponse()` | Better errors for malformed tasks     |
-| linear-agent         | `isValidExtractionResponse()` | Field-level validation for issues     |
-| calendar-agent       | `isValidExtractionResponse()` | Date/time format validation           |
-| data-insights-agent  | `parse*()` functions          | Schema-based chart config validation  |
+| Service             | Current Approach              | Migration Benefit                    |
+| ------------------- | ----------------------------- | ------------------------------------ |
+| todos-agent         | `isValidExtractionResponse()` | Better errors for malformed tasks    |
+| linear-agent        | `isValidExtractionResponse()` | Field-level validation for issues    |
+| calendar-agent      | `isValidExtractionResponse()` | Date/time format validation          |
+| data-insights-agent | `parse*()` functions          | Schema-based chart config validation |
 
 ---
 
 **Related:**
+
 - [AI Architecture](../architecture/ai-architecture.md) - Error handling overview
 - [INT-86](https://linear.app/pbuchman/issue/INT-86) - Zod migration implementation
 

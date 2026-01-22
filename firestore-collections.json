@@ -26,6 +26,10 @@
       "owner": "whatsapp-service",
       "description": "Raw WhatsApp webhook events for audit and debugging"
     },
+    "whatsapp_outbound_messages": {
+      "owner": "whatsapp-service",
+      "description": "Tracking of outbound WhatsApp messages with wamid and correlationId for reply matching"
+    },
     "mobile_notifications": {
       "owner": "mobile-notifications-service",
       "description": "Mobile push notifications received from user devices"
@@ -73,6 +77,10 @@
     "actions_transitions": {
       "owner": "actions-agent",
       "description": "Logs of user corrections to action types for ML training"
+    },
+    "approval_messages": {
+      "owner": "actions-agent",
+      "description": "Tracks outgoing approval request WhatsApp messages for reply matching"
     },
     "custom_data_sources": {
       "owner": "data-insights-agent",

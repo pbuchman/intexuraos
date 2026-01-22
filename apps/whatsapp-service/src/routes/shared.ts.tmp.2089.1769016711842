@@ -4,7 +4,6 @@ import {
   getCountryCallingCode,
   parsePhoneNumberWithError,
 } from 'libphonenumber-js';
-import { getErrorMessage } from '@intexuraos/common-core';
 import { normalizePhoneNumber } from '../domain/whatsapp/index.js';
 
 // Re-export for backwards compatibility with existing imports
@@ -99,12 +98,11 @@ export function validatePhoneNumber(
     }
 
     return result;
-  } catch (error) {
-    // Use specific error message from ParseError if available
+  } catch {
     return {
       valid: false,
       normalized: normalizePhoneNumber(trimmed),
-      error: getErrorMessage(error, 'Invalid phone number format'),
+      error: 'Invalid phone number format',
     };
   }
 }
@@ -418,24 +416,24 @@ export function extractAudioMedia(payload: unknown): AudioMediaInfo | null {
 
 /**
  * Reply context info from webhook payload.
- * Present when a message is a reply to another message.
+ * Present when a message is sent as a reply to another message.
  */
-export interface ReplyContext {
-  /** The wamid of the message being replied to */
+export interface ReplyContextInfo {
+  /** WhatsApp message ID of the message being replied to */
   replyToWamid: string;
-  /** The phone number of the original sender (our business number for outgoing messages) */
+  /** Phone number of the original message sender (if available) */
   from?: string;
 }
 
 /**
  * Extract reply context from webhook payload.
- * Returns the context if this message is a reply to another message.
+ * Returns the message ID being replied to if this message is a reply.
  *
  * Path: entry[0].changes[0].value.messages[0].context
  *
  * @see https://developers.facebook.com/docs/whatsapp/cloud-api/webhooks/components#messages-object
  */
-export function extractReplyContext(payload: unknown): ReplyContext | null {
+export function extractReplyContext(payload: unknown): ReplyContextInfo | null {
   const value = extractFirstValue(payload);
   const message = value?.messages?.[0];
   if (message === undefined) return null;
@@ -443,7 +441,7 @@ export function extractReplyContext(payload: unknown): ReplyContext | null {
   if (context === undefined) return null;
   if (typeof context.id !== 'string') return null;
 
-  const result: ReplyContext = {
+  const result: ReplyContextInfo = {
     replyToWamid: context.id,
   };
 

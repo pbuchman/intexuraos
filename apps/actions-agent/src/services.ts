@@ -9,6 +9,7 @@ import type { NotesServiceClient } from './domain/ports/notesServiceClient.js';
 import type { BookmarksServiceClient } from './domain/ports/bookmarksServiceClient.js';
 import type { CalendarServiceClient } from './domain/ports/calendarServiceClient.js';
 import type { LinearAgentClient } from './domain/ports/linearAgentClient.js';
+import type { ApprovalMessageRepository } from './domain/ports/approvalMessageRepository.js';
 import {
   createHandleResearchActionUseCase,
   type HandleResearchActionUseCase,
@@ -65,11 +66,16 @@ import {
   createChangeActionTypeUseCase,
   type ChangeActionTypeUseCase,
 } from './domain/usecases/changeActionType.js';
+import {
+  createHandleApprovalReplyUseCase,
+  type HandleApprovalReplyUseCase,
+} from './domain/usecases/handleApprovalReply.js';
 import pino from 'pino';
 import { createLocalActionServiceClient } from './infra/action/localActionServiceClient.js';
 import { createResearchAgentClient } from './infra/research/researchAgentClient.js';
 import { createWhatsappNotificationSender } from './infra/notification/whatsappNotificationSender.js';
 import { createFirestoreActionRepository } from './infra/firestore/actionRepository.js';
+import { createFirestoreApprovalMessageRepository } from './infra/firestore/approvalMessageRepository.js';
 import { registerActionHandler } from './domain/usecases/createIdempotentActionHandler.js';
 import { createFirestoreActionTransitionRepository } from './infra/firestore/actionTransitionRepository.js';
 import { createCommandsAgentHttpClient } from './infra/http/commandsAgentHttpClient.js';
@@ -85,6 +91,10 @@ import {
   createCalendarPreviewPublisher,
   type CalendarPreviewPublisher,
 } from '@intexuraos/infra-pubsub';
+import { createUserServiceClient, type UserServiceClient } from './infra/user/userServiceClient.js';
+import { createApprovalIntentClassifierFactory } from './infra/llm/approvalIntentClassifierFactory.js';
+import { fetchAllPricing, createPricingContext } from '@intexuraos/llm-pricing';
+import { LlmModels } from '@intexuraos/llm-contract';
 
 export interface Services {
   actionServiceClient: ActionServiceClient;
@@ -101,6 +111,8 @@ export interface Services {
   actionEventPublisher: ActionEventPublisher;
   whatsappPublisher: WhatsAppSendPublisher;
   calendarPreviewPublisher: CalendarPreviewPublisher;
+  approvalMessageRepository: ApprovalMessageRepository;
+  userServiceClient: UserServiceClient;
   handleResearchActionUseCase: HandleResearchActionUseCase;
   handleTodoActionUseCase: HandleTodoActionUseCase;
   handleNoteActionUseCase: HandleNoteActionUseCase;
@@ -115,6 +127,7 @@ export interface Services {
   executeLinearActionUseCase: ExecuteLinearActionUseCase;
   retryPendingActionsUseCase: RetryPendingActionsUseCase;
   changeActionTypeUseCase: ChangeActionTypeUseCase;
+  handleApprovalReplyUseCase: HandleApprovalReplyUseCase;
   // Action handler registry (for dynamic routing)
   research: HandleResearchActionUseCase;
   todo: HandleTodoActionUseCase;
@@ -133,6 +146,7 @@ export interface ServiceConfig {
   bookmarksAgentUrl: string;
   calendarAgentUrl: string;
   linearAgentUrl: string;
+  appSettingsServiceUrl: string;
   internalAuthToken: string;
   gcpProjectId: string;
   whatsappSendTopic: string;
@@ -142,12 +156,45 @@ export interface ServiceConfig {
 
 let container: Services | null = null;
 
-export function initServices(config: ServiceConfig): void {
+export async function initServices(config: ServiceConfig): Promise<void> {
+  // Fetch pricing from app-settings-service
+  const pricingResult = await fetchAllPricing(
+    config.appSettingsServiceUrl,
+    config.internalAuthToken
+  );
+
+  if (!pricingResult.ok) {
+    throw new Error(`Failed to fetch pricing: ${pricingResult.error.message}`);
+  }
+
+  // Support common models for approval intent classification
+  const pricingContext = createPricingContext(pricingResult.value, [
+    LlmModels.Gemini25Flash,
+    LlmModels.Gemini25Pro,
+    LlmModels.ClaudeSonnet45,
+    LlmModels.GPT52,
+    LlmModels.Glm47,
+    LlmModels.Glm47Flash,
+    LlmModels.SonarPro,
+  ]);
+
   const actionRepository = createFirestoreActionRepository({
     logger: pino({ name: 'actionRepository' }),
   });
   const actionTransitionRepository = createFirestoreActionTransitionRepository();
+  const approvalMessageRepository = createFirestoreApprovalMessageRepository();
   const actionServiceClient = createLocalActionServiceClient(actionRepository);
+
+  const userServiceClient = createUserServiceClient({
+    baseUrl: config.userServiceUrl,
+    internalAuthToken: config.internalAuthToken,
+    pricingContext,
+    logger: pino({ name: 'userServiceClient' }),
+  });
+
+  const approvalIntentClassifierFactory = createApprovalIntentClassifierFactory({
+    userServiceClient,
+  });
 
   const commandsAgentClient = createCommandsAgentHttpClient({
     baseUrl: config.commandsAgentUrl,
@@ -343,6 +390,14 @@ export function initServices(config: ServiceConfig): void {
     logger: pino({ name: 'changeActionType' }),
   });
 
+  const handleApprovalReplyUseCase = createHandleApprovalReplyUseCase({
+    actionRepository,
+    approvalMessageRepository,
+    approvalIntentClassifierFactory,
+    whatsappPublisher,
+    logger: pino({ name: 'handleApprovalReply' }),
+  });
+
   container = {
     actionServiceClient,
     researchServiceClient,
@@ -358,6 +413,8 @@ export function initServices(config: ServiceConfig): void {
     actionEventPublisher,
     whatsappPublisher,
     calendarPreviewPublisher,
+    approvalMessageRepository,
+    userServiceClient,
     handleResearchActionUseCase,
     handleTodoActionUseCase,
     handleNoteActionUseCase,
@@ -372,6 +429,7 @@ export function initServices(config: ServiceConfig): void {
     executeLinearActionUseCase,
     retryPendingActionsUseCase,
     changeActionTypeUseCase,
+    handleApprovalReplyUseCase,
     // Action handler registry (for dynamic routing)
     research: handleResearchActionUseCase,
     todo: handleTodoActionUseCase,
