@@ -212,7 +212,7 @@ For a PR to appear as an attachment in Linear's UI:
 ### What Happens When Conditions Are Met
 
 - PR automatically appears in Linear issue's `attachments` array
-- Issue state transitions automatically: `In Progress` → `In Review` → `Done`
+- Issue state transitions automatically: `In Progress` → `In Review` → `Q&A QA` (unless explicitly instructed to move to Done)
 - Bidirectional link established (click PR from Linear, see issue from GitHub)
 
 ### What Happens When Conditions Are NOT Met
@@ -453,6 +453,8 @@ User calls `/linear https://<sentry-url>`
 
 5. **Create Linear Issue**
    - Format: `[sentry] <short-error-message>`
+   - Team: `pbuchman`
+   - State: `Backlog`
    - Description includes:
      - Sentry issue link
      - Error context summary
@@ -487,13 +489,15 @@ User calls `/linear https://<sentry-url>`
                                 |
                 +---------------+---------------+
                 |                               |
-        PR approved                     PR changes requested
+        PR approved (→ Q&A QA)         PR changes requested
                 |                               |
                 v                               v
     +-------------------+             +-------------------+
-    |        Done       |             |      In Progress  |  (Back to work)
+    |       Q&A QA      |             |      In Progress  |  (Back to work)
     +-------------------+             +-------------------+
 ```
+
+**Note:** Default transition after PR approval is to **Q&A QA** state (for testing). Only move to **Done** when explicitly instructed by user.
 
 ### State Transition Triggers
 
@@ -501,8 +505,9 @@ User calls `/linear https://<sentry-url>`
 | ------------------------------------------ | ------------ | ----------- | ----------------------------------- |
 | `/linear LIN-123` called                   | Backlog/Todo | In Progress | Create branch with issue ID in name |
 | `gh pr create` called (title has issue ID) | In Progress  | In Review   | GitHub integration auto-attaches PR |
-| PR approved                                | In Review    | Done        | Close Linear issue                  |
+| PR approved                                | In Review    | Q&A QA      | Move to Q&A QA state for testing     |
 | PR has review changes                      | In Review    | In Progress | Update Linear state                 |
+| User explicitly requests "move to Done"   | Any          | Done        | Close Linear issue                  |
 
 **Note:** GitHub integration only works when BOTH branch name AND PR title contain the Linear issue ID (e.g., `LIN-123`, `PBU-44`).
 
@@ -523,7 +528,7 @@ When both conditions are met:
 
 - GitHub integration **automatically attaches PR** to Linear issue
 - PR appears in `attachments` array (visible in Linear UI under "Pull requests" section)
-- Issue state automatically updates: `In Progress` → `In Review` → `Done`
+- Issue state automatically updates: `In Progress` → `In Review` → `Q&A QA` (unless user explicitly requests Done)
 - **No manual comment needed** - attachment is the canonical link
 
 **Verification:** After creating PR, check Linear issue has PR in `attachments` array. If missing, the title or branch name didn't contain the issue ID.
