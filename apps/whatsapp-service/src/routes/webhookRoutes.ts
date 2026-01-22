@@ -247,19 +247,38 @@ export function createWebhookRoutes(config: Config): FastifyPluginCallback {
 
         if (!saveResult.ok) {
           request.log.error({ error: saveResult.error }, 'Failed to persist webhook event');
-          return await reply.ok({ received: true });
+          // Return 500 so WhatsApp retries the webhook delivery
+          reply.status(500);
+          return await reply.send({ success: false, error: 'Failed to persist webhook event' });
         }
 
         const savedEvent = saveResult.value;
 
         // Publish to Pub/Sub for async processing
-        await eventPublisher.publishWebhookProcess({
+        const publishResult = await eventPublisher.publishWebhookProcess({
           type: 'whatsapp.webhook.process',
           eventId: savedEvent.id,
           payload: JSON.stringify(request.body),
           phoneNumberId,
           receivedAt,
         });
+
+        if (!publishResult.ok) {
+          request.log.error(
+            { error: publishResult.error, eventId: savedEvent.id },
+            'Failed to publish webhook for processing'
+          );
+          // Update event status to failed since it won't be processed
+          await webhookEventRepository.updateEventStatus(savedEvent.id, 'failed', {
+            failureDetails: `Pub/Sub publish failed: ${publishResult.error.message}`,
+          });
+          // Return 500 so WhatsApp retries
+          reply.status(500);
+          return await reply.send({
+            success: false,
+            error: 'Failed to queue webhook for processing',
+          });
+        }
 
         return await reply.ok({ received: true });
       }
@@ -500,6 +519,11 @@ export async function processWebhookEvent(
       },
       'Unexpected error during asynchronous webhook processing'
     );
+    // Update event status so it's not stuck in 'pending' forever
+    const { webhookEventRepository } = getServices();
+    await webhookEventRepository.updateEventStatus(savedEvent.id, 'failed', {
+      failureDetails: `Unexpected error: ${getErrorMessage(error)}`,
+    });
   }
 }
 
@@ -591,7 +615,7 @@ async function handleAudioMessage(
     // Publish transcription event to Pub/Sub for async processing
     const transcriptionPhoneNumberId = config.allowedPhoneNumberIds[0];
     if (transcriptionPhoneNumberId !== undefined) {
-      await services.eventPublisher.publishTranscribeAudio({
+      const publishResult = await services.eventPublisher.publishTranscribeAudio({
         type: 'whatsapp.audio.transcribe',
         messageId: result.value.messageId,
         userId,
@@ -601,6 +625,12 @@ async function handleAudioMessage(
         originalWaMessageId: waMessageId,
         phoneNumberId: transcriptionPhoneNumberId,
       });
+      if (!publishResult.ok) {
+        request.log.error(
+          { error: publishResult.error, messageId: result.value.messageId },
+          'Failed to publish audio transcription event'
+        );
+      }
     }
 
     await sendAudioConfirmationMessage(request, savedEvent, fromNumber);
@@ -622,7 +652,9 @@ async function handleTextMessage(
   phoneNumberId: string | null,
   messageText: string
 ): Promise<void> {
-  const { webhookEventRepository, messageRepository } = getServices();
+  const services = getServices();
+  const { webhookEventRepository, messageRepository, outboundMessageRepository, eventPublisher } =
+    services;
 
   // Build text message object
   const messageToSave: Parameters<typeof messageRepository.saveMessage>[0] = {
@@ -672,8 +704,6 @@ async function handleTextMessage(
 
   await webhookEventRepository.updateEventStatus(savedEvent.id, 'completed', {});
 
-  const services = getServices();
-
   // Check if this is a reply to another message (potential approval response)
   const replyContext = extractReplyContext(request.body);
 
@@ -690,8 +720,7 @@ async function handleTextMessage(
 
     // Try to find the original outbound message to extract actionId
     let actionId: string | undefined;
-    const outboundResult =
-      await services.outboundMessageRepository.findByWamid(replyContext.replyToWamid);
+    const outboundResult = await outboundMessageRepository.findByWamid(replyContext.replyToWamid);
 
     if (outboundResult.ok && outboundResult.value !== null) {
       const correlationId = outboundResult.value.correlationId;
@@ -717,7 +746,7 @@ async function handleTextMessage(
     }
 
     // Publish approval reply event
-    const approvalReplyEvent: Parameters<typeof services.eventPublisher.publishApprovalReply>[0] = {
+    const approvalReplyEvent: Parameters<typeof eventPublisher.publishApprovalReply>[0] = {
       type: 'action.approval.reply',
       replyToWamid: replyContext.replyToWamid,
       replyText: messageText,
@@ -729,17 +758,28 @@ async function handleTextMessage(
       approvalReplyEvent.actionId = actionId;
     }
 
-    await services.eventPublisher.publishApprovalReply(approvalReplyEvent);
+    const approvalPublishResult = await eventPublisher.publishApprovalReply(approvalReplyEvent);
 
-    request.log.info(
-      {
-        eventId: savedEvent.id,
-        userId,
-        replyToWamid: replyContext.replyToWamid,
-        actionId,
-      },
-      'Published approval reply event'
-    );
+    if (!approvalPublishResult.ok) {
+      request.log.error(
+        {
+          eventId: savedEvent.id,
+          error: approvalPublishResult.error,
+          replyToWamid: replyContext.replyToWamid,
+        },
+        'Failed to publish approval reply event'
+      );
+    } else {
+      request.log.info(
+        {
+          eventId: savedEvent.id,
+          userId,
+          replyToWamid: replyContext.replyToWamid,
+          actionId,
+        },
+        'Published approval reply event'
+      );
+    }
   }
 
   // Always publish command ingest event for text message
@@ -750,7 +790,7 @@ async function handleTextMessage(
     'Publishing command.ingest event'
   );
 
-  await services.eventPublisher.publishCommandIngest({
+  const commandPublishResult = await eventPublisher.publishCommandIngest({
     type: 'command.ingest',
     userId,
     sourceType: 'whatsapp_text',
@@ -759,13 +799,27 @@ async function handleTextMessage(
     timestamp,
   });
 
+  if (!commandPublishResult.ok) {
+    request.log.error(
+      { eventId: savedEvent.id, error: commandPublishResult.error },
+      'Failed to publish command ingest event'
+    );
+  }
+
   // Publish link preview extraction event to Pub/Sub
-  await services.eventPublisher.publishExtractLinkPreviews({
+  const linkPreviewPublishResult = await eventPublisher.publishExtractLinkPreviews({
     type: 'whatsapp.linkpreview.extract',
     messageId: savedMessage.id,
     userId,
     text: messageText,
   });
+
+  if (!linkPreviewPublishResult.ok) {
+    request.log.error(
+      { eventId: savedEvent.id, error: linkPreviewPublishResult.error },
+      'Failed to publish link preview extraction event'
+    );
+  }
 
   request.log.info(
     { eventId: savedEvent.id, userId, messageId: savedMessage.id },

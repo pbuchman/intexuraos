@@ -308,7 +308,7 @@ describe('Webhook async processing', () => {
   });
 
   describe('repository error handling', () => {
-    it('returns 200 when saveEvent fails', async () => {
+    it('returns 500 when saveEvent fails to trigger WhatsApp retry', async () => {
       // Configure the fake repository to fail
       ctx.webhookEventRepository.setFailNextSave(true);
 
@@ -326,14 +326,14 @@ describe('Webhook async processing', () => {
         payload: payloadString,
       });
 
-      // Should still return 200 even when save fails
-      expect(response.statusCode).toBe(200);
+      // Should return 500 when save fails so WhatsApp retries the webhook
+      expect(response.statusCode).toBe(500);
       const body = JSON.parse(response.body) as {
         success: boolean;
-        data: { received: boolean };
+        error: string;
       };
-      expect(body.success).toBe(true);
-      expect(body.data.received).toBe(true);
+      expect(body.success).toBe(false);
+      expect(body.error).toBe('Failed to persist webhook event');
 
       // No events should be persisted since save failed
       const events = ctx.webhookEventRepository.getAll();
@@ -803,9 +803,8 @@ describe('Webhook async processing', () => {
       // Event should be persisted (save happens before the error)
       const events = ctx.webhookEventRepository.getAll();
       expect(events.length).toBe(1);
-      // Status remains PENDING because the error occurs before status update
-      // The catch block just logs the error
-      expect(events[0]?.status).toBe('pending');
+      // Status is now FAILED - the catch block updates status to prevent stuck events
+      expect(events[0]?.status).toBe('failed');
     });
   });
 

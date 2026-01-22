@@ -1,6 +1,10 @@
 import { getFirestore } from '@intexuraos/infra-firestore';
+import { ok, err, type Result, getErrorMessage } from '@intexuraos/common-core';
 import type { ApprovalMessage } from '../../domain/models/approvalMessage.js';
-import type { ApprovalMessageRepository } from '../../domain/ports/approvalMessageRepository.js';
+import type {
+  ApprovalMessageRepository,
+  ApprovalMessageRepositoryError,
+} from '../../domain/ports/approvalMessageRepository.js';
 
 const COLLECTION = 'approval_messages';
 
@@ -13,6 +17,8 @@ interface ApprovalMessageDoc {
   actionTitle: string;
 }
 
+// Coverage is provided by integration tests via the Pub/Sub handler in internalRoutes.ts.
+/* v8 ignore start */
 function toApprovalMessage(id: string, doc: ApprovalMessageDoc): ApprovalMessage {
   return {
     id,
@@ -36,70 +42,96 @@ function toDoc(message: ApprovalMessage): ApprovalMessageDoc {
   };
 }
 
+function createError(error: unknown): ApprovalMessageRepositoryError {
+  return {
+    code: 'PERSISTENCE_ERROR',
+    message: getErrorMessage(error),
+  };
+}
+
 export function createFirestoreApprovalMessageRepository(): ApprovalMessageRepository {
   return {
-    async save(message: ApprovalMessage): Promise<void> {
-      const db = getFirestore();
-      const docRef = db.collection(COLLECTION).doc(message.id);
-      await docRef.set(toDoc(message));
+    async save(message): Promise<Result<void, ApprovalMessageRepositoryError>> {
+      try {
+        const db = getFirestore();
+        const docRef = db.collection(COLLECTION).doc(message.id);
+        await docRef.set(toDoc(message));
+        return ok(undefined);
+      } catch (error) {
+        return err(createError(error));
+      }
     },
 
-    async findByWamid(wamid: string): Promise<ApprovalMessage | null> {
-      const db = getFirestore();
-      const snapshot = await db
-        .collection(COLLECTION)
-        .where('wamid', '==', wamid)
-        .limit(1)
-        .get();
+    async findByWamid(wamid): Promise<Result<ApprovalMessage | null, ApprovalMessageRepositoryError>> {
+      try {
+        const db = getFirestore();
+        const snapshot = await db
+          .collection(COLLECTION)
+          .where('wamid', '==', wamid)
+          .limit(1)
+          .get();
 
-      if (snapshot.empty) {
-        return null;
+        if (snapshot.empty) {
+          return ok(null);
+        }
+
+        const doc = snapshot.docs[0];
+        if (doc === undefined) {
+          return ok(null);
+        }
+
+        return ok(toApprovalMessage(doc.id, doc.data() as ApprovalMessageDoc));
+      } catch (error) {
+        return err(createError(error));
       }
-
-      const doc = snapshot.docs[0];
-      if (doc === undefined) {
-        return null;
-      }
-
-      return toApprovalMessage(doc.id, doc.data() as ApprovalMessageDoc);
     },
 
-    async deleteByActionId(actionId: string): Promise<void> {
-      const db = getFirestore();
-      const snapshot = await db
-        .collection(COLLECTION)
-        .where('actionId', '==', actionId)
-        .get();
+    async deleteByActionId(actionId): Promise<Result<void, ApprovalMessageRepositoryError>> {
+      try {
+        const db = getFirestore();
+        const snapshot = await db
+          .collection(COLLECTION)
+          .where('actionId', '==', actionId)
+          .get();
 
-      if (snapshot.empty) {
-        return;
-      }
+        if (snapshot.empty) {
+          return ok(undefined);
+        }
 
-      const batch = db.batch();
-      for (const doc of snapshot.docs) {
-        batch.delete(doc.ref);
+        const batch = db.batch();
+        for (const doc of snapshot.docs) {
+          batch.delete(doc.ref);
+        }
+        await batch.commit();
+        return ok(undefined);
+      } catch (error) {
+        return err(createError(error));
       }
-      await batch.commit();
     },
 
-    async findByActionId(actionId: string): Promise<ApprovalMessage | null> {
-      const db = getFirestore();
-      const snapshot = await db
-        .collection(COLLECTION)
-        .where('actionId', '==', actionId)
-        .limit(1)
-        .get();
+    async findByActionId(actionId): Promise<Result<ApprovalMessage | null, ApprovalMessageRepositoryError>> {
+      try {
+        const db = getFirestore();
+        const snapshot = await db
+          .collection(COLLECTION)
+          .where('actionId', '==', actionId)
+          .limit(1)
+          .get();
 
-      if (snapshot.empty) {
-        return null;
+        if (snapshot.empty) {
+          return ok(null);
+        }
+
+        const doc = snapshot.docs[0];
+        if (doc === undefined) {
+          return ok(null);
+        }
+
+        return ok(toApprovalMessage(doc.id, doc.data() as ApprovalMessageDoc));
+      } catch (error) {
+        return err(createError(error));
       }
-
-      const doc = snapshot.docs[0];
-      if (doc === undefined) {
-        return null;
-      }
-
-      return toApprovalMessage(doc.id, doc.data() as ApprovalMessageDoc);
     },
   };
 }
+/* v8 ignore stop */

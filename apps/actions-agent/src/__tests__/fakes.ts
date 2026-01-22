@@ -50,7 +50,10 @@ import type {
   ApprovalReplyInput,
   ApprovalReplyResult,
 } from '../domain/usecases/handleApprovalReply.js';
-import type { ApprovalMessageRepository } from '../domain/ports/approvalMessageRepository.js';
+import type {
+  ApprovalMessageRepository,
+  ApprovalMessageRepositoryError,
+} from '../domain/ports/approvalMessageRepository.js';
 import type { ApprovalMessage } from '../domain/models/approvalMessage.js';
 import type { UserServiceClient, UserServiceError } from '../infra/user/userServiceClient.js';
 import type { LlmGenerateClient } from '@intexuraos/llm-factory';
@@ -788,26 +791,51 @@ export function createFakeRetryPendingActionsUseCase(config?: {
 export class FakeApprovalMessageRepository implements ApprovalMessageRepository {
   private messages = new Map<string, ApprovalMessage>();
   private messagesByAction = new Map<string, ApprovalMessage>();
+  private failNext = false;
+  private failError: ApprovalMessageRepositoryError | null = null;
 
-  async save(message: ApprovalMessage): Promise<void> {
+  setFailNext(fail: boolean, error?: ApprovalMessageRepositoryError): void {
+    this.failNext = fail;
+    this.failError = error ?? null;
+  }
+
+  async save(message: ApprovalMessage): Promise<Result<void, ApprovalMessageRepositoryError>> {
+    if (this.failNext) {
+      this.failNext = false;
+      return err(this.failError ?? { code: 'PERSISTENCE_ERROR', message: 'Simulated failure' });
+    }
     this.messages.set(message.wamid, message);
     this.messagesByAction.set(message.actionId, message);
+    return ok(undefined);
   }
 
-  async findByWamid(wamid: string): Promise<ApprovalMessage | null> {
-    return this.messages.get(wamid) ?? null;
+  async findByWamid(wamid: string): Promise<Result<ApprovalMessage | null, ApprovalMessageRepositoryError>> {
+    if (this.failNext) {
+      this.failNext = false;
+      return err(this.failError ?? { code: 'PERSISTENCE_ERROR', message: 'Simulated failure' });
+    }
+    return ok(this.messages.get(wamid) ?? null);
   }
 
-  async findByActionId(actionId: string): Promise<ApprovalMessage | null> {
-    return this.messagesByAction.get(actionId) ?? null;
+  async findByActionId(actionId: string): Promise<Result<ApprovalMessage | null, ApprovalMessageRepositoryError>> {
+    if (this.failNext) {
+      this.failNext = false;
+      return err(this.failError ?? { code: 'PERSISTENCE_ERROR', message: 'Simulated failure' });
+    }
+    return ok(this.messagesByAction.get(actionId) ?? null);
   }
 
-  async deleteByActionId(actionId: string): Promise<void> {
+  async deleteByActionId(actionId: string): Promise<Result<void, ApprovalMessageRepositoryError>> {
+    if (this.failNext) {
+      this.failNext = false;
+      return err(this.failError ?? { code: 'PERSISTENCE_ERROR', message: 'Simulated failure' });
+    }
     const message = this.messagesByAction.get(actionId);
     if (message !== undefined) {
       this.messages.delete(message.wamid);
       this.messagesByAction.delete(actionId);
     }
+    return ok(undefined);
   }
 
   // Test helpers

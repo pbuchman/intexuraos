@@ -4,6 +4,7 @@ import {
   getCountryCallingCode,
   parsePhoneNumberWithError,
 } from 'libphonenumber-js';
+import { getErrorMessage } from '@intexuraos/common-core';
 import { normalizePhoneNumber } from '../domain/whatsapp/index.js';
 
 // Re-export for backwards compatibility with existing imports
@@ -98,11 +99,12 @@ export function validatePhoneNumber(
     }
 
     return result;
-  } catch {
+  } catch (error) {
+    // Use specific error message from ParseError if available
     return {
       valid: false,
       normalized: normalizePhoneNumber(trimmed),
-      error: 'Invalid phone number format',
+      error: getErrorMessage(error, 'Invalid phone number format'),
     };
   }
 }

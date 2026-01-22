@@ -65,7 +65,36 @@ Do not include any text before or after the JSON.`;
 
 /**
  * Parse the LLM response into a typed approval intent result.
- * Returns null if parsing fails.
+ *
+ * Expected JSON format in the response:
+ * ```json
+ * {
+ *   "intent": "approve" | "reject" | "unclear",
+ *   "confidence": 0.0-1.0,
+ *   "reasoning": "brief explanation"
+ * }
+ * ```
+ *
+ * The parser is lenient and extracts the first {...} block from the response,
+ * allowing for surrounding text or markdown formatting from the LLM.
+ *
+ * @param response - Raw LLM response text (may contain JSON or JSON with surrounding text)
+ * @returns Parsed approval intent, or null if:
+ *   - No JSON object found in response
+ *   - JSON parsing fails
+ *   - `intent` is not one of: 'approve', 'reject', 'unclear'
+ *   - `confidence` is not a number between 0 and 1
+ *   - `reasoning` is not a string
+ *
+ * @example
+ * // Valid response
+ * parseApprovalIntentResponse('{"intent":"approve","confidence":0.9,"reasoning":"yes"}')
+ * // => { intent: 'approve', confidence: 0.9, reasoning: 'yes' }
+ *
+ * @example
+ * // Invalid response
+ * parseApprovalIntentResponse('I cannot determine...')
+ * // => null
  */
 export function parseApprovalIntentResponse(response: string): ApprovalIntentResponse | null {
   try {

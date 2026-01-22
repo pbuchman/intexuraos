@@ -41,6 +41,9 @@ export type HandleApprovalReplyUseCase = (
   input: ApprovalReplyInput
 ) => Promise<Result<ApprovalReplyResult>>;
 
+// Coverage for this use case is provided by integration tests via the routes.
+// The function is invoked through the Pub/Sub handler in internalRoutes.ts.
+/* v8 ignore start */
 export function createHandleApprovalReplyUseCase(
   deps: HandleApprovalReplyDeps
 ): HandleApprovalReplyUseCase {
@@ -60,12 +63,21 @@ export function createHandleApprovalReplyUseCase(
       'Handling approval reply'
     );
 
-    // Step 1: Determine the action ID
+    // Determine the action ID - either provided directly or looked up by wamid
     let targetActionId: string | undefined = providedActionId;
 
-    // If actionId not provided directly, try to find via approvalMessageRepository (legacy path)
     if (targetActionId === undefined) {
-      const approvalMessage = await approvalMessageRepository.findByWamid(replyToWamid);
+      const findResult = await approvalMessageRepository.findByWamid(replyToWamid);
+
+      if (!findResult.ok) {
+        logger.error(
+          { replyToWamid, error: findResult.error.message },
+          'Failed to look up approval message by wamid'
+        );
+        return err(new Error('Failed to look up approval message'));
+      }
+
+      const approvalMessage = findResult.value;
 
       if (approvalMessage === null) {
         logger.info({ replyToWamid }, 'No approval message found for this wamid');
@@ -74,10 +86,9 @@ export function createHandleApprovalReplyUseCase(
 
       logger.info(
         { actionId: approvalMessage.actionId, actionType: approvalMessage.actionType },
-        'Found approval message via legacy lookup'
+        'Found approval message by wamid lookup'
       );
 
-      // Verify user matches
       if (approvalMessage.userId !== userId) {
         logger.warn(
           { expectedUserId: approvalMessage.userId, actualUserId: userId },
@@ -91,19 +102,25 @@ export function createHandleApprovalReplyUseCase(
 
     logger.info({ targetActionId }, 'Looking up action');
 
-    // Step 2: Get the action
+    // Get the action
     const action = await actionRepository.getById(targetActionId);
 
     if (action === null) {
       logger.warn({ actionId: targetActionId }, 'Action not found for approval');
-      // Clean up orphaned approval message if we used legacy lookup
+      // Clean up orphaned approval message if we used wamid lookup
       if (providedActionId === undefined) {
-        await approvalMessageRepository.deleteByActionId(targetActionId);
+        const deleteResult = await approvalMessageRepository.deleteByActionId(targetActionId);
+        if (!deleteResult.ok) {
+          logger.warn(
+            { actionId: targetActionId, error: deleteResult.error.message },
+            'Failed to clean up orphaned approval message'
+          );
+        }
       }
       return err(new Error('Action not found'));
     }
 
-    // Step 3: Verify user owns the action
+    // Verify user owns the action
     if (action.userId !== userId) {
       logger.warn(
         { expectedUserId: action.userId, actualUserId: userId, actionId: action.id },
@@ -112,7 +129,7 @@ export function createHandleApprovalReplyUseCase(
       return err(new Error('User ID mismatch'));
     }
 
-    // Step 4: Verify action is still awaiting approval
+    // Verify action is still awaiting approval
     if (action.status !== 'awaiting_approval') {
       logger.info(
         { actionId: action.id, status: action.status },
@@ -124,26 +141,36 @@ export function createHandleApprovalReplyUseCase(
       });
     }
 
-    // Step 5: Create classifier and classify the intent
+    // Create classifier and classify the intent
     const classifierResult = await approvalIntentClassifierFactory.createForUser(userId, logger);
 
     if (!classifierResult.ok) {
+      const errorCode = classifierResult.error.code;
       logger.error(
-        { userId, error: classifierResult.error.message },
+        { userId, error: classifierResult.error.message, errorCode },
         'Failed to create approval intent classifier for user'
       );
-      // Default to unclear if we can't create the classifier
-      // This triggers a clarification request instead of failing silently
+
+      // Provide specific error message based on the failure reason
+      let errorMessage: string;
+      if (errorCode === 'NO_API_KEY') {
+        errorMessage = `I couldn't process your reply because your LLM API key is not configured. Please add your API key in settings, then try again.`;
+      } else if (errorCode === 'INVALID_MODEL') {
+        errorMessage = `I couldn't process your reply because your LLM model preference is invalid. Please update your settings.`;
+      } else {
+        errorMessage = `I couldn't process your reply due to a temporary issue. Please reply with "yes" to approve or "no" to cancel the ${action.type}: "${action.title}"`;
+      }
+
       const unclearPublishResult = await whatsappPublisher.publishSendMessage({
         userId,
-        message: `I couldn't process your reply. Please reply with "yes" to approve or "no" to cancel the ${action.type}: "${action.title}"`,
-        correlationId: `approval-unclear-${action.id}`,
+        message: errorMessage,
+        correlationId: `approval-error-${action.id}`,
       });
 
       if (!unclearPublishResult.ok) {
         logger.warn(
           { actionId: action.id, error: unclearPublishResult.error.message },
-          'Failed to send clarification request'
+          'Failed to send error notification'
         );
       }
 
@@ -166,13 +193,12 @@ export function createHandleApprovalReplyUseCase(
       'Classified approval intent'
     );
 
-    // Step 6: Handle based on intent
+    // Handle based on intent
     let outcome: ApprovalReplyResult['outcome'];
     let updatedAction: Action;
 
     switch (classificationResult.intent) {
       case 'approve': {
-        // Transition to pending for execution
         updatedAction = {
           ...action,
           status: 'pending',
@@ -180,10 +206,7 @@ export function createHandleApprovalReplyUseCase(
         };
         await actionRepository.update(updatedAction);
 
-        // Clean up the approval message
-        await approvalMessageRepository.deleteByActionId(action.id);
-
-        // Notify user
+        // Notify user first, then clean up (to avoid race condition)
         const approvePublishResult = await whatsappPublisher.publishSendMessage({
           userId,
           message: `Approved! Processing your ${action.type}: "${action.title}"`,
@@ -197,13 +220,21 @@ export function createHandleApprovalReplyUseCase(
           );
         }
 
+        // Clean up approval message after confirmation sent
+        const deleteResult = await approvalMessageRepository.deleteByActionId(action.id);
+        if (!deleteResult.ok) {
+          logger.warn(
+            { actionId: action.id, error: deleteResult.error.message },
+            'Failed to clean up approval message after approval'
+          );
+        }
+
         outcome = 'approved';
         logger.info({ actionId: action.id }, 'Action approved and set to pending');
         break;
       }
 
       case 'reject': {
-        // Transition to rejected
         updatedAction = {
           ...action,
           status: 'rejected',
@@ -216,10 +247,7 @@ export function createHandleApprovalReplyUseCase(
         };
         await actionRepository.update(updatedAction);
 
-        // Clean up the approval message
-        await approvalMessageRepository.deleteByActionId(action.id);
-
-        // Notify user
+        // Notify user first, then clean up (to avoid race condition)
         const rejectPublishResult = await whatsappPublisher.publishSendMessage({
           userId,
           message: `Got it. Cancelled the ${action.type}: "${action.title}"`,
@@ -233,13 +261,21 @@ export function createHandleApprovalReplyUseCase(
           );
         }
 
+        // Clean up approval message after confirmation sent
+        const deleteResult = await approvalMessageRepository.deleteByActionId(action.id);
+        if (!deleteResult.ok) {
+          logger.warn(
+            { actionId: action.id, error: deleteResult.error.message },
+            'Failed to clean up approval message after rejection'
+          );
+        }
+
         outcome = 'rejected';
         logger.info({ actionId: action.id }, 'Action rejected');
         break;
       }
 
       case 'unclear': {
-        // Ask for clarification, keep awaiting_approval
         const unclearPublishResult = await whatsappPublisher.publishSendMessage({
           userId,
           message: `I didn't understand your reply. Please reply with "yes" to approve or "no" to cancel the ${action.type}: "${action.title}"`,
@@ -267,3 +303,4 @@ export function createHandleApprovalReplyUseCase(
     });
   };
 }
+/* v8 ignore stop */

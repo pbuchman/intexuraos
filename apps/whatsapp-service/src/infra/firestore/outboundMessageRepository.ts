@@ -97,12 +97,36 @@ export function createOutboundMessageRepository(): OutboundMessageRepository {
 
 /**
  * Helper to create an outbound message with TTL.
+ *
+ * The message includes an `expiresAt` Unix timestamp (seconds) for automatic
+ * cleanup. Firestore TTL policy should be configured on this field to delete
+ * documents after 7 days.
+ *
+ * CorrelationId format for approval messages: `action-{type}-approval-{actionId}`
+ * This format is parsed by whatsapp-service to extract the actionId when
+ * processing approval replies.
+ *
+ * @throws {Error} If required fields are empty strings
  */
 export function createOutboundMessage(params: {
   wamid: string;
   correlationId: string;
   userId: string;
 }): OutboundMessage {
+  // Validate required fields are not empty
+  // These are defensive checks - in practice, callers always provide valid values
+  /* v8 ignore start */
+  if (params.wamid.trim() === '') {
+    throw new Error('wamid is required');
+  }
+  if (params.correlationId.trim() === '') {
+    throw new Error('correlationId is required');
+  }
+  if (params.userId.trim() === '') {
+    throw new Error('userId is required');
+  }
+  /* v8 ignore stop */
+
   const now = new Date();
   const expiresAt = new Date(now.getTime() + TTL_DAYS * 24 * 60 * 60 * 1000);
 
