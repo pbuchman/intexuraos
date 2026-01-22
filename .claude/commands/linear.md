@@ -262,7 +262,7 @@ User calls `/linear` with no arguments.
 ```
 1. Verify tools (Linear, GitHub, GCloud) - fail fast if unavailable
 2. Fetch selected issue details
-3. Update Linear state to "In Progress"
+3. Update Linear state to "In Progress" (CRITICAL: DO THIS FIRST - before any planning or investigation)
 4. Create branch from origin/development (or origin/main)
 5. Implement the task (investigate, code, test)
 6. Run CI gate: pnpm run ci:tracked
@@ -270,6 +270,14 @@ User calls `/linear` with no arguments.
 8. Create PR with cross-links (or PR explaining blocker if task uncompletable)
 9. Update Linear state to "In Review"
 ```
+
+**CRITICAL:** You MUST update the Linear issue state to "In Progress" in step 3 BEFORE:
+- Reading any code
+- Planning implementation
+- Investigating the issue
+- Running any commands
+
+This signals that work has begun and prevents duplicate work.
 
 ### Branch Selection Logic
 
@@ -370,7 +378,15 @@ User calls `/linear LIN-123`
    - Get issue from Linear
    - Parse title, description, state, assignee
 
-3. **Update State** - Set to "In Progress"
+3. **Update State** - Set to "In Progress" **(DO THIS FIRST - before any planning or investigation)**
+
+   **CRITICAL:** You MUST update the Linear issue state to "In Progress" BEFORE:
+   - Reading any code
+   - Planning implementation
+   - Investigating the issue
+   - Running any commands
+
+   This signals that work has begun and prevents duplicate work.
 
 4. **Create Branch**
 
