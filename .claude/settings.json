@@ -9,5 +9,10 @@
       "type": "http",
       "url": "https://mcp.sentry.dev/mcp"
     }
+  },
+  "statusLine": {
+    "type": "command",
+    "command": ".claude/statusline.sh",
+    "padding": 0
   }
 }
