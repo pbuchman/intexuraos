@@ -209,10 +209,33 @@ export async function updateCalendarPreview(
   }
 }
 
+export async function deleteCalendarPreview(
+  actionId: string
+): Promise<Result<void, CalendarError>> {
+  try {
+    const db = getFirestore();
+    const docRef = db.collection(COLLECTION).doc(actionId);
+    const doc = await docRef.get();
+
+    if (!doc.exists) {
+      return { ok: false, error: { code: 'NOT_FOUND', message: 'Calendar preview not found' } };
+    }
+
+    await docRef.delete();
+    return { ok: true, value: undefined };
+  } catch (error) {
+    return {
+      ok: false,
+      error: toCalendarError(error, 'Failed to delete calendar preview'),
+    };
+  }
+}
+
 export function createCalendarPreviewRepository(): CalendarPreviewRepository {
   return {
     getByActionId: getCalendarPreviewByActionId,
     create: createCalendarPreview,
     update: updateCalendarPreview,
+    delete: deleteCalendarPreview,
   };
 }

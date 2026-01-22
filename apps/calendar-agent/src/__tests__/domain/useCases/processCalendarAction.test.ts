@@ -1220,5 +1220,54 @@ describe('processCalendarAction', () => {
         expect(result.value.status).toBe('completed');
       }
     });
+
+    it('deletes preview after successful event creation', async () => {
+      const mockEvent = {
+        id: 'event-with-preview-cleanup',
+        summary: 'Preview Cleanup Test',
+        start: { dateTime: '2025-01-20T14:00:00' },
+        end: { dateTime: '2025-01-20T15:00:00' },
+        htmlLink: 'https://calendar.google.com/event',
+      };
+
+      // Seed a ready preview
+      calendarPreviewRepository.seedPreview({
+        actionId: 'action-with-cleanup',
+        userId: 'user-456',
+        status: 'ready',
+        summary: 'Preview Cleanup Test',
+        start: '2025-01-20T14:00:00',
+        end: '2025-01-20T15:00:00',
+        reasoning: 'Test preview cleanup',
+        generatedAt: '2025-01-15T10:00:00Z',
+      });
+
+      googleCalendarClient.setCreateResult(ok(mockEvent));
+
+      const result = await processCalendarAction(
+        {
+          actionId: 'action-with-cleanup',
+          userId: 'user-456',
+          text: 'Test',
+        },
+        {
+          userServiceClient,
+          googleCalendarClient,
+          failedEventRepository,
+          calendarActionExtractionService,
+          processedActionRepository,
+          calendarPreviewRepository,
+          logger: mockLogger,
+        }
+      );
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.status).toBe('completed');
+      }
+
+      // Verify preview was deleted
+      expect(calendarPreviewRepository.getPreview('action-with-cleanup')).toBeUndefined();
+    });
   });
 });

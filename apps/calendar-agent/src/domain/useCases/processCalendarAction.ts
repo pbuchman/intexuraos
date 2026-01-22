@@ -353,6 +353,17 @@ export async function processCalendarAction(
     );
   }
 
+  // Clean up preview after successful processing
+  if (previewResult.ok && previewResult.value !== null) {
+    const deleteResult = await calendarPreviewRepository.delete(actionId);
+    if (!deleteResult.ok) {
+      logger.warn(
+        { actionId, error: deleteResult.error },
+        'processCalendarAction: failed to delete calendar preview after successful event creation'
+      );
+    }
+  }
+
   return ok({
     status: 'completed',
     message: `Event "${createdEvent.summary}" created successfully`,
