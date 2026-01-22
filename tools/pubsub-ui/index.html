@@ -225,6 +225,9 @@
       .event.todos-processing-local {
         border-left-color: #ec4899;
       }
+      .event.calendar-preview {
+        border-left-color: #14b8a6;
+      }
 
       .event-header {
         display: flex;
@@ -300,6 +303,10 @@
       }
       .todos-processing-local .event-badge {
         background: #ec4899;
+        color: white;
+      }
+      .calendar-preview .event-badge {
+        background: #14b8a6;
         color: white;
       }
 
@@ -519,6 +526,7 @@
               <option value="bookmark-enrich">bookmark-enrich</option>
               <option value="bookmark-summarize">bookmark-summarize</option>
               <option value="todos-processing-local">todos-processing-local</option>
+              <option value="calendar-preview">calendar-preview</option>
             </select>
           </div>
 
@@ -643,6 +651,15 @@
           type: 'todos.processing.created',
           todoId: 'todo-{timestamp}',
           userId: '{userId}',
+          correlationId: 'ui-{timestamp}',
+          timestamp: '{timestamp}',
+        },
+        'calendar-preview': {
+          type: 'calendar.preview.generate',
+          actionId: 'action-{timestamp}',
+          userId: '{userId}',
+          text: 'Create meeting with John tomorrow at 2pm',
+          currentDate: new Date().toISOString().split('T')[0],
           correlationId: 'ui-{timestamp}',
           timestamp: '{timestamp}',
         },

@@ -164,6 +164,7 @@ export async function disconnectLinear(
       connected: false,
       teamId: null,
       teamName: null,
+      /* istanbul ignore next -- @preserve Defensive fallback for legacy docs without createdAt field */
       createdAt: existingData?.createdAt ?? now,
       updatedAt: now,
     });

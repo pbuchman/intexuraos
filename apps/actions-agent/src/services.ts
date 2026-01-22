@@ -85,7 +85,12 @@ import { createBookmarksServiceHttpClient } from './infra/http/bookmarksServiceH
 import { createCalendarServiceHttpClient } from './infra/http/calendarServiceHttpClient.js';
 import { createLinearAgentHttpClient } from './infra/http/linearAgentHttpClient.js';
 import { createActionEventPublisher, type ActionEventPublisher } from './infra/pubsub/index.js';
-import { createWhatsAppSendPublisher, type WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
+import {
+  createWhatsAppSendPublisher,
+  type WhatsAppSendPublisher,
+  createCalendarPreviewPublisher,
+  type CalendarPreviewPublisher,
+} from '@intexuraos/infra-pubsub';
 import { createUserServiceClient, type UserServiceClient } from './infra/user/userServiceClient.js';
 import { createApprovalIntentClassifierFactory } from './infra/llm/approvalIntentClassifierFactory.js';
 import { fetchAllPricing, createPricingContext } from '@intexuraos/llm-pricing';
@@ -105,6 +110,7 @@ export interface Services {
   linearAgentClient: LinearAgentClient;
   actionEventPublisher: ActionEventPublisher;
   whatsappPublisher: WhatsAppSendPublisher;
+  calendarPreviewPublisher: CalendarPreviewPublisher;
   approvalMessageRepository: ApprovalMessageRepository;
   userServiceClient: UserServiceClient;
   handleResearchActionUseCase: HandleResearchActionUseCase;
@@ -144,6 +150,7 @@ export interface ServiceConfig {
   internalAuthToken: string;
   gcpProjectId: string;
   whatsappSendTopic: string;
+  calendarPreviewTopic: string;
   webAppUrl: string;
 }
 
@@ -214,6 +221,12 @@ export async function initServices(config: ServiceConfig): Promise<void> {
     projectId: config.gcpProjectId,
     topicName: config.whatsappSendTopic,
     logger: pino({ name: 'whatsapp-publisher' }),
+  });
+
+  const calendarPreviewPublisher = createCalendarPreviewPublisher({
+    projectId: config.gcpProjectId,
+    topicName: config.calendarPreviewTopic,
+    logger: pino({ name: 'calendar-preview-publisher' }),
   });
 
   const todosServiceClient = createTodosServiceHttpClient({
@@ -343,6 +356,7 @@ export async function initServices(config: ServiceConfig): Promise<void> {
     {
       actionRepository,
       whatsappPublisher,
+      calendarPreviewPublisher,
       webAppUrl: config.webAppUrl,
       logger: pino({ name: 'handleCalendarAction' }),
     }
@@ -398,6 +412,7 @@ export async function initServices(config: ServiceConfig): Promise<void> {
     linearAgentClient,
     actionEventPublisher,
     whatsappPublisher,
+    calendarPreviewPublisher,
     approvalMessageRepository,
     userServiceClient,
     handleResearchActionUseCase,

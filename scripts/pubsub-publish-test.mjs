@@ -17,6 +17,7 @@
  *   - bookmark-enrich
  *   - bookmark-summarize
  *   - todos-processing
+ *   - calendar-preview
  *   - all (publishes one of each)
  */
 import { PubSub } from '@google-cloud/pubsub';
@@ -191,6 +192,18 @@ const EVENTS = {
       type: 'todos.processing.created',
       todoId: 'todo-' + Date.now(),
       userId: 'test-user-202',
+      correlationId: 'corr-' + Date.now(),
+      timestamp: new Date().toISOString(),
+    },
+  },
+  'calendar-preview': {
+    topic: 'calendar-preview',
+    data: {
+      type: 'calendar.preview.generate',
+      actionId: 'action-' + Date.now(),
+      userId: 'test-user-404',
+      text: 'Create meeting with John tomorrow at 2pm',
+      currentDate: new Date().toISOString().split('T')[0],
       correlationId: 'corr-' + Date.now(),
       timestamp: new Date().toISOString(),
     },

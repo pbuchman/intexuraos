@@ -47,6 +47,20 @@ export {
   isOutputFormat,
   isResearchContext,
 } from './contextGuards.js';
+// Zod schemas for direct use
+export {
+  ANSWER_STYLES,
+  SOURCE_TYPES,
+  AVOID_SOURCE_TYPES,
+  AnswerStyleSchema,
+  SourceTypeSchema,
+  AvoidSourceTypeSchema,
+  TimeScopeSchema,
+  LocaleScopeSchema,
+  ResearchPlanSchema,
+  OutputFormatSchema,
+  ResearchContextSchema,
+} from './contextSchemas.js';
 export { buildInferResearchContextPrompt } from './contextInference.js';
 export { buildResearchContextRepairPrompt } from './repairPrompt.js';
 export {

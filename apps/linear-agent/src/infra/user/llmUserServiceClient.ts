@@ -16,6 +16,7 @@ import type { IPricingContext } from '@intexuraos/llm-pricing';
 import pino from 'pino';
 import type { Logger } from 'pino';
 
+/* istanbul ignore next -- @preserve Module-level logger creation runs at import time, env var branch untestable */
 const defaultLogger = pino({
   level: process.env['LOG_LEVEL'] ?? 'info',
   name: 'llmUserServiceClient',

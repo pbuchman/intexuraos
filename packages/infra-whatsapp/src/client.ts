@@ -13,6 +13,7 @@ import type {
 
 const WHATSAPP_API_VERSION = 'v22.0';
 const MEDIA_DOWNLOAD_TIMEOUT_MS = 30000;
+const MARK_AS_READ_TIMEOUT_MS = 10000;
 
 export interface WhatsAppClient {
   sendTextMessage(params: SendMessageParams): Promise<Result<SendMessageResult, WhatsAppError>>;
@@ -188,6 +189,11 @@ export function createWhatsAppClient(config: WhatsAppConfig): WhatsAppClient {
         message_id: messageId,
       };
 
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => {
+        controller.abort();
+      }, MARK_AS_READ_TIMEOUT_MS);
+
       try {
         const response = await fetch(url, {
           method: 'POST',
@@ -196,7 +202,10 @@ export function createWhatsAppClient(config: WhatsAppConfig): WhatsAppClient {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify(payload),
+          signal: controller.signal,
         });
+
+        clearTimeout(timeoutId);
 
         if (!response.ok) {
           const errorBody = await response.text();
@@ -209,6 +218,15 @@ export function createWhatsAppClient(config: WhatsAppConfig): WhatsAppClient {
 
         return ok(undefined);
       } catch (error) {
+        clearTimeout(timeoutId);
+
+        if (error instanceof Error && error.name === 'AbortError') {
+          return err({
+            code: 'TIMEOUT',
+            message: `Mark as read timed out after ${String(MARK_AS_READ_TIMEOUT_MS)}ms`,
+          });
+        }
+
         return err({
           code: 'NETWORK_ERROR',
           message: `Failed to mark message as read: ${getErrorMessage(error)}`,

@@ -124,6 +124,51 @@ describe('Crawl4AIClient', () => {
       expect(result.error.message).toContain('HTTP 500');
     });
 
+    it('returns API_ERROR on HTTP 401 unauthorized (invalid API key)', async () => {
+      client = new Crawl4AIClient({ apiKey: 'invalid-key' }, silentLogger);
+
+      nock('https://api.crawl4ai.com')
+        .post('/v1/crawl')
+        .reply(401, { error_message: 'Invalid API key' });
+
+      const result = await client.summarizePage('https://example.com');
+
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error.code).toBe('API_ERROR');
+      expect(result.error.message).toContain('HTTP 401');
+    });
+
+    it('returns API_ERROR on HTTP 403 forbidden', async () => {
+      client = new Crawl4AIClient({ apiKey: TEST_API_KEY }, silentLogger);
+
+      nock('https://api.crawl4ai.com')
+        .post('/v1/crawl')
+        .reply(403, { error_message: 'Access denied' });
+
+      const result = await client.summarizePage('https://example.com');
+
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error.code).toBe('API_ERROR');
+      expect(result.error.message).toContain('HTTP 403');
+    });
+
+    it('returns API_ERROR on HTTP 429 rate limited', async () => {
+      client = new Crawl4AIClient({ apiKey: TEST_API_KEY }, silentLogger);
+
+      nock('https://api.crawl4ai.com')
+        .post('/v1/crawl')
+        .reply(429, { error_message: 'Rate limit exceeded' });
+
+      const result = await client.summarizePage('https://example.com');
+
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error.code).toBe('API_ERROR');
+      expect(result.error.message).toContain('HTTP 429');
+    });
+
     it('returns FETCH_FAILED when success is false', async () => {
       client = new Crawl4AIClient({ apiKey: TEST_API_KEY }, silentLogger);
 

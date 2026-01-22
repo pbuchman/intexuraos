@@ -37,5 +37,6 @@ jobs:
           ANTHROPIC_BASE_URL: https://api.z.ai/api/anthropic
         with:
           anthropic_api_key: ${{ secrets.ZAI_API_KEY }}
+          trigger_phrase: '@zaiclaude'
           additional_permissions: |
             actions: read
