@@ -36,12 +36,14 @@ const PRIORITY_LABELS: Record<number, string> = {
   4: 'Low',
 };
 
-type TabType = 'backlog' | 'in_progress' | 'in_review' | 'done' | 'archive';
+type TabType = 'todo' | 'backlog' | 'in_progress' | 'in_review' | 'to_test' | 'done' | 'archive';
 
 const TABS: { id: TabType; label: string; icon: React.ReactNode }[] = [
+  { id: 'todo', label: 'Todo', icon: <Circle className="h-4 w-4" /> },
   { id: 'backlog', label: 'Backlog', icon: <Circle className="h-4 w-4" /> },
   { id: 'in_progress', label: 'In Progress', icon: <Clock className="h-4 w-4" /> },
   { id: 'in_review', label: 'In Review', icon: <Eye className="h-4 w-4" /> },
+  { id: 'to_test', label: 'To Test', icon: <CheckCircle2 className="h-4 w-4" /> },
   { id: 'done', label: 'Done', icon: <CheckCircle2 className="h-4 w-4" /> },
   { id: 'archive', label: 'Archive', icon: <ChevronDown className="h-4 w-4" /> },
 ];
@@ -110,6 +112,82 @@ function IssueColumn({
         ) : (
           issues.map((issue) => <IssueCard key={issue.id} issue={issue} />)
         )}
+      </div>
+    </div>
+  );
+}
+
+interface StackedSectionProps {
+  title: string;
+  icon: React.ReactNode;
+  issues: LinearIssue[];
+  colorClass?: string;
+}
+
+function StackedSection({
+  title,
+  icon,
+  issues,
+  colorClass = 'bg-white',
+}: StackedSectionProps): React.JSX.Element | null {
+  if (issues.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className={`mb-4 rounded-lg ${colorClass} p-3 last:mb-0`}>
+      <div className="mb-3 flex items-center gap-2">
+        {icon}
+        <h4 className="text-sm font-semibold text-slate-700">{title}</h4>
+        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-500">
+          {issues.length}
+        </span>
+      </div>
+
+      <div className="space-y-2">
+        {issues.map((issue) => <IssueCard key={issue.id} issue={issue} />)}
+      </div>
+    </div>
+  );
+}
+
+interface StackedColumnProps {
+  title: string;
+  sections: {
+    title: string;
+    icon: React.ReactNode;
+    issues: LinearIssue[];
+    colorClass?: string;
+  }[];
+  colorClass?: string;
+}
+
+function StackedColumn({
+  title,
+  sections,
+  colorClass = 'bg-slate-50',
+}: StackedColumnProps): React.JSX.Element {
+  const totalIssues = sections.reduce((sum, section) => sum + section.issues.length, 0);
+
+  return (
+    <div className={`flex flex-col rounded-lg ${colorClass} p-4`}>
+      <div className="mb-4 flex items-center gap-2">
+        <h3 className="font-semibold text-slate-700">{title}</h3>
+        <span className="rounded-full bg-slate-200 px-2 py-0.5 text-xs font-medium text-slate-600">
+          {totalIssues}
+        </span>
+      </div>
+
+      <div className="flex-1 space-y-3 overflow-y-auto">
+        {sections.map((section) => (
+          <StackedSection
+            key={section.title}
+            title={section.title}
+            icon={section.icon}
+            issues={section.issues}
+            colorClass={section.colorClass ?? 'bg-white'}
+          />
+        ))}
       </div>
     </div>
   );
@@ -316,9 +394,11 @@ export function LinearIssuesPage(): React.JSX.Element {
   }
 
   const columnIssues = {
+    todo: data?.issues.todo ?? [],
     backlog: data?.issues.backlog ?? [],
     in_progress: data?.issues.in_progress ?? [],
     in_review: data?.issues.in_review ?? [],
+    to_test: data?.issues.to_test ?? [],
     done: data?.issues.done ?? [],
     archive: data?.issues.archive ?? [],
   };
@@ -405,28 +485,57 @@ export function LinearIssuesPage(): React.JSX.Element {
         )}
       </div>
 
-      {/* Desktop: Grid of columns */}
-      <div className="hidden md:grid md:grid-cols-4 md:gap-4">
-        <IssueColumn
-          title="Backlog"
-          icon={<Circle className="h-4 w-4 text-slate-400" />}
-          issues={columnIssues.backlog}
+      {/* Desktop: 3-column layout with stacked sections */}
+      <div className="hidden md:grid md:grid-cols-3 md:gap-4">
+        {/* Column 1: Todo + Backlog (stacked) */}
+        <StackedColumn
+          title="Planning"
+          sections={[
+            {
+              title: 'Todo',
+              icon: <Circle className="h-3 w-3 text-blue-400" />,
+              issues: columnIssues.todo,
+              colorClass: 'bg-blue-50',
+            },
+            {
+              title: 'Backlog',
+              icon: <Circle className="h-3 w-3 text-slate-400" />,
+              issues: columnIssues.backlog,
+              colorClass: 'bg-slate-50',
+            },
+          ]}
           colorClass="bg-slate-50"
         />
-        <IssueColumn
+
+        {/* Column 2: In Progress → In Review → To Test (stacked) */}
+        <StackedColumn
           title="In Progress"
-          icon={<Clock className="h-4 w-4 text-blue-500" />}
-          issues={columnIssues.in_progress}
+          sections={[
+            {
+              title: 'In Progress',
+              icon: <Clock className="h-3 w-3 text-blue-500" />,
+              issues: columnIssues.in_progress,
+              colorClass: 'bg-blue-50',
+            },
+            {
+              title: 'In Review',
+              icon: <Eye className="h-3 w-3 text-purple-500" />,
+              issues: columnIssues.in_review,
+              colorClass: 'bg-purple-50',
+            },
+            {
+              title: 'To Test',
+              icon: <CheckCircle2 className="h-3 w-3 text-amber-500" />,
+              issues: columnIssues.to_test,
+              colorClass: 'bg-amber-50',
+            },
+          ]}
           colorClass="bg-blue-50"
         />
+
+        {/* Column 3: Recently Closed */}
         <IssueColumn
-          title="In Review"
-          icon={<Eye className="h-4 w-4 text-purple-500" />}
-          issues={columnIssues.in_review}
-          colorClass="bg-purple-50"
-        />
-        <IssueColumn
-          title="Done (This Week)"
+          title="Recently Closed"
           icon={<CheckCircle2 className="h-4 w-4 text-green-500" />}
           issues={columnIssues.done}
           colorClass="bg-green-50"
