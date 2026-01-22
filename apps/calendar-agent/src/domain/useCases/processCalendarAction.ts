@@ -130,6 +130,14 @@ export async function processCalendarAction(
   const previewResult = await calendarPreviewRepository.getByActionId(actionId);
   let extracted: ExtractedCalendarEvent;
 
+  if (!previewResult.ok) {
+    // Log preview lookup failure but continue with fallback (non-fatal)
+    logger.warn(
+      { userId, actionId, error: previewResult.error },
+      'processCalendarAction: failed to fetch preview, falling back to LLM extraction'
+    );
+  }
+
   if (previewResult.ok && previewResult.value !== null && previewResult.value.status === 'ready') {
     const preview = previewResult.value;
     logger.info(

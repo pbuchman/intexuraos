@@ -589,4 +589,285 @@ describe('calendarServiceHttpClient', () => {
       expect(isOk(result)).toBe(true);
     });
   });
+
+  describe('getPreview', () => {
+    describe('successful responses', () => {
+      it('returns preview when found', async () => {
+        const actionId = 'action-123';
+        const scope = nock(baseUrl)
+          .get(`/internal/calendar/preview/${actionId}`)
+          .matchHeader('X-Internal-Auth', internalAuthToken)
+          .reply(200, {
+            success: true,
+            data: {
+              preview: {
+                actionId: 'action-123',
+                userId: 'user-456',
+                status: 'ready',
+                summary: 'Team Meeting',
+                start: '2025-01-15T14:00:00',
+                end: '2025-01-15T15:00:00',
+                location: 'Conference Room A',
+                description: 'Weekly sync',
+                duration: '1 hour',
+                isAllDay: false,
+                reasoning: 'Extracted from prompt',
+                generatedAt: '2025-01-15T10:00:00Z',
+              },
+            },
+          });
+
+        const client = createClient();
+        const result = await client.getPreview(actionId);
+
+        expect(scope.isDone()).toBe(true);
+        expect(isOk(result)).toBe(true);
+        if (isOk(result)) {
+          expect(result.value).not.toBeNull();
+          expect(result.value?.actionId).toBe('action-123');
+          expect(result.value?.status).toBe('ready');
+          expect(result.value?.summary).toBe('Team Meeting');
+          expect(result.value?.start).toBe('2025-01-15T14:00:00');
+          expect(result.value?.end).toBe('2025-01-15T15:00:00');
+          expect(result.value?.location).toBe('Conference Room A');
+        }
+      });
+
+      it('returns null when preview not found', async () => {
+        const actionId = 'action-nonexistent';
+        const scope = nock(baseUrl)
+          .get(`/internal/calendar/preview/${actionId}`)
+          .matchHeader('X-Internal-Auth', internalAuthToken)
+          .reply(200, {
+            success: true,
+            data: {
+              preview: null,
+            },
+          });
+
+        const client = createClient();
+        const result = await client.getPreview(actionId);
+
+        expect(scope.isDone()).toBe(true);
+        expect(isOk(result)).toBe(true);
+        if (isOk(result)) {
+          expect(result.value).toBeNull();
+        }
+      });
+
+      it('returns preview with pending status', async () => {
+        const actionId = 'action-pending';
+        const scope = nock(baseUrl)
+          .get(`/internal/calendar/preview/${actionId}`)
+          .matchHeader('X-Internal-Auth', internalAuthToken)
+          .reply(200, {
+            success: true,
+            data: {
+              preview: {
+                actionId: 'action-pending',
+                userId: 'user-456',
+                status: 'pending',
+                generatedAt: '2025-01-15T10:00:00Z',
+              },
+            },
+          });
+
+        const client = createClient();
+        const result = await client.getPreview(actionId);
+
+        expect(scope.isDone()).toBe(true);
+        expect(isOk(result)).toBe(true);
+        if (isOk(result)) {
+          expect(result.value?.status).toBe('pending');
+        }
+      });
+
+      it('returns preview with failed status and error', async () => {
+        const actionId = 'action-failed';
+        const scope = nock(baseUrl)
+          .get(`/internal/calendar/preview/${actionId}`)
+          .matchHeader('X-Internal-Auth', internalAuthToken)
+          .reply(200, {
+            success: true,
+            data: {
+              preview: {
+                actionId: 'action-failed',
+                userId: 'user-456',
+                status: 'failed',
+                error: 'Could not parse date from prompt',
+                generatedAt: '2025-01-15T10:00:00Z',
+              },
+            },
+          });
+
+        const client = createClient();
+        const result = await client.getPreview(actionId);
+
+        expect(scope.isDone()).toBe(true);
+        expect(isOk(result)).toBe(true);
+        if (isOk(result)) {
+          expect(result.value?.status).toBe('failed');
+          expect(result.value?.error).toBe('Could not parse date from prompt');
+        }
+      });
+    });
+
+    describe('HTTP error responses', () => {
+      it('returns error for 401 Unauthorized', async () => {
+        const actionId = 'action-123';
+        const scope = nock(baseUrl)
+          .get(`/internal/calendar/preview/${actionId}`)
+          .matchHeader('X-Internal-Auth', internalAuthToken)
+          .reply(401, 'Unauthorized');
+
+        const client = createClient();
+        const result = await client.getPreview(actionId);
+
+        expect(scope.isDone()).toBe(true);
+        expect(isErr(result)).toBe(true);
+        if (isErr(result)) {
+          expect(result.error.message).toContain('HTTP 401');
+        }
+      });
+
+      it('returns error for 500 Internal Server Error', async () => {
+        const actionId = 'action-123';
+        const scope = nock(baseUrl)
+          .get(`/internal/calendar/preview/${actionId}`)
+          .matchHeader('X-Internal-Auth', internalAuthToken)
+          .reply(500, 'Internal Server Error');
+
+        const client = createClient();
+        const result = await client.getPreview(actionId);
+
+        expect(scope.isDone()).toBe(true);
+        expect(isErr(result)).toBe(true);
+        if (isErr(result)) {
+          expect(result.error.message).toContain('HTTP 500');
+        }
+      });
+
+      it('returns error with message from JSON error response', async () => {
+        const actionId = 'action-123';
+        const scope = nock(baseUrl)
+          .get(`/internal/calendar/preview/${actionId}`)
+          .matchHeader('X-Internal-Auth', internalAuthToken)
+          .reply(500, {
+            success: false,
+            error: { code: 'DATABASE_ERROR', message: 'Database connection failed' },
+          });
+
+        const client = createClient();
+        const result = await client.getPreview(actionId);
+
+        expect(scope.isDone()).toBe(true);
+        expect(isErr(result)).toBe(true);
+        if (isErr(result)) {
+          expect(result.error.message).toBe('Database connection failed');
+        }
+      });
+    });
+
+    describe('response validation errors', () => {
+      it('returns error on OK response with invalid JSON', async () => {
+        const actionId = 'action-123';
+        const scope = nock(baseUrl)
+          .get(`/internal/calendar/preview/${actionId}`)
+          .matchHeader('X-Internal-Auth', internalAuthToken)
+          .reply(200, 'not valid json', {
+            'Content-Type': 'text/plain',
+          });
+
+        const client = createClient();
+        const result = await client.getPreview(actionId);
+
+        expect(scope.isDone()).toBe(true);
+        expect(isErr(result)).toBe(true);
+        if (isErr(result)) {
+          expect(result.error.message).toContain('Invalid response');
+        }
+      });
+
+      it('returns error when success is false', async () => {
+        const actionId = 'action-123';
+        const scope = nock(baseUrl)
+          .get(`/internal/calendar/preview/${actionId}`)
+          .matchHeader('X-Internal-Auth', internalAuthToken)
+          .reply(200, {
+            success: false,
+            error: { code: 'NOT_FOUND', message: 'Preview not found' },
+          });
+
+        const client = createClient();
+        const result = await client.getPreview(actionId);
+
+        expect(scope.isDone()).toBe(true);
+        expect(isErr(result)).toBe(true);
+        if (isErr(result)) {
+          expect(result.error.message).toBe('Preview not found');
+        }
+      });
+
+      it('returns error when data is missing', async () => {
+        const actionId = 'action-123';
+        const scope = nock(baseUrl)
+          .get(`/internal/calendar/preview/${actionId}`)
+          .matchHeader('X-Internal-Auth', internalAuthToken)
+          .reply(200, {
+            success: true,
+          });
+
+        const client = createClient();
+        const result = await client.getPreview(actionId);
+
+        expect(scope.isDone()).toBe(true);
+        expect(isErr(result)).toBe(true);
+        if (isErr(result)) {
+          expect(result.error.message).toContain('Invalid response');
+        }
+      });
+    });
+
+    describe('network failures', () => {
+      it('returns error on network connection failure', async () => {
+        const actionId = 'action-123';
+        nock(baseUrl)
+          .get(`/internal/calendar/preview/${actionId}`)
+          .matchHeader('X-Internal-Auth', internalAuthToken)
+          .replyWithError({ code: 'ECONNREFUSED', message: 'Connection refused' });
+
+        const client = createClient();
+        const result = await client.getPreview(actionId);
+
+        expect(isErr(result)).toBe(true);
+        if (isErr(result)) {
+          expect(result.error.message).toContain('Failed to fetch calendar preview');
+          expect(result.error.message).toContain('Connection refused');
+        }
+      });
+    });
+
+    describe('request structure', () => {
+      it('sends correct request headers', async () => {
+        const actionId = 'action-xyz';
+        const customToken = 'custom-preview-token';
+        const scope = nock(baseUrl)
+          .get(`/internal/calendar/preview/${actionId}`)
+          .matchHeader('X-Internal-Auth', customToken)
+          .reply(200, {
+            success: true,
+            data: { preview: null },
+          });
+
+        const client = createCalendarServiceHttpClient({
+          baseUrl,
+          internalAuthToken: customToken,
+          logger: silentLogger,
+        });
+        await client.getPreview(actionId);
+
+        expect(scope.isDone()).toBe(true);
+      });
+    });
+  });
 });
