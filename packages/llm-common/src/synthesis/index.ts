@@ -23,5 +23,16 @@ export {
   isSynthesisOutputFormat,
   isSynthesisContext,
 } from './contextGuards.js';
+// Zod schemas for direct use
+export {
+  SYNTHESIS_GOALS,
+  CONFLICT_SEVERITIES,
+  SynthesisGoalSchema,
+  ConflictSeveritySchema,
+  DetectedConflictSchema,
+  SourcePreferenceSchema,
+  SynthesisOutputFormatSchema,
+  SynthesisContextSchema,
+} from './contextSchemas.js';
 export { buildInferSynthesisContextPrompt } from './contextInference.js';
 export { buildSynthesisContextRepairPrompt } from './repairPrompt.js';
