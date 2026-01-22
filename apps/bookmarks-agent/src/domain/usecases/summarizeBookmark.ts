@@ -104,7 +104,7 @@ export async function summarizeBookmark(
     });
 
     if (!publishResult.ok) {
-      deps.logger.warn(
+      deps.logger.error(
         { bookmarkId, error: publishResult.error },
         'Failed to send WhatsApp message'
       );
