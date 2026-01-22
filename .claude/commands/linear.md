@@ -7,7 +7,7 @@ Manage Linear issues, branches, and PRs with enforced workflow and cross-linking
 ## Usage
 
 ```
-/linear                           # NON-INTERACTIVE: Pick random Backlog issue, work on it WITHOUT asking
+/linear                           # NON-INTERACTIVE: Pick random Todo issue, work on it WITHOUT asking
 /linear <task description>        # Create new issue
 /linear LIN-123                   # Work on existing issue
 /linear <sentry-url>              # Create issue from Sentry error
@@ -16,8 +16,8 @@ Manage Linear issues, branches, and PRs with enforced workflow and cross-linking
 **CRITICAL:** When `/linear` is called WITHOUT arguments, it operates in **NON-INTERACTIVE MODE**:
 
 - NEVER ask the user for confirmation or what to do
-- Automatically pick a random task from Backlog/Todo
-- If no tasks available, state "No items in Backlog or Todo state." and exit
+- Automatically pick a random task from **Todo** state only (NOT from Backlog)
+- If no tasks available, state "No items in Todo state." and exit
 - If task cannot be completed (auth failure, missing info), create a PR explaining the blocker and proceed
 
 ---
@@ -29,8 +29,8 @@ Manage Linear issues, branches, and PRs with enforced workflow and cross-linking
 | Rule             | Description                                                                                       |
 | ---------------- | ------------------------------------------------------------------------------------------------- |
 | **NO PROMPTS**   | Never ask "what should I do?", "which task?", or "ready to start?"                                |
-| **AUTO-PROCEED** | Always proceed with the selected Backlog/Todo item automatically                                  |
-| **NO TASKS**     | If Backlog/Todo is empty, print message and exit gracefully                                       |
+| **AUTO-PROCEED** | Always proceed with the selected Todo item automatically                                          |
+| **NO TASKS**     | If Todo state is empty, print message and exit gracefully                                         |
 | **BLOCKER PR**   | If task cannot be completed (auth, missing info), create PR with explanation and consider it done |
 
 **The command is designed for automated/cron usage. It MUST NOT block on user input.**
@@ -52,7 +52,7 @@ The command automatically detects intent from input:
 
 | Input Pattern                   | Type                             | Action                                                       |
 | ------------------------------- | -------------------------------- | ------------------------------------------------------------ |
-| `/linear` (no args)             | Random Backlog (NON-INTERACTIVE) | Pick from Backlog/Todo and start working WITHOUT asking user |
+| `/linear` (no args)             | Random Todo (NON-INTERACTIVE)    | Pick from Todo state only and start working WITHOUT asking user |
 | `/linear <task description>`    | Create New                       | Detect bug/feature, create issue, start working              |
 | `/linear INT-<number>`          | Work Existing                    | Start working on specific issue (use INT- for this project)  |
 | `/linear https://sentry.io/...` | Sentry Integration               | Create Linear issue from Sentry error                        |
@@ -78,9 +78,9 @@ The command automatically detects intent from input:
 
 **MANDATORY:** When `/linear` is called WITHOUT arguments (e.g., `claude --dangerously-skip-permissions linear`):
 
-1. **NEVER ask the user what to do** - proceed automatically with random Backlog task
+1. **NEVER ask the user what to do** - proceed automatically with random Todo task
 2. **NEVER ask for confirmation** - no "Ready to start?" or "Continue?" prompts
-3. If no Backlog/Todo items exist: state "No items in Backlog or Todo state." and exit
+3. If no Todo items exist: state "No items in Todo state." and exit
 4. If task cannot be completed (auth failure, missing info, blockers):
    - Create a PR with explanation of the blocker
    - The PR with reasoning is considered sufficient deliverable
@@ -251,11 +251,11 @@ User calls `/linear` with no arguments.
 
 ### Selection Algorithm
 
-1. List issues where `state` is `"Backlog"` OR `"Todo"`
+1. List issues where `state` is `"Todo"` (NOT from Backlog)
 2. Filter to `team: "pbuchman"`
 3. Sort by `priority` (High → Low) then `createdAt` (newest first)
 4. Pick first result
-5. **If no items found:** Print "No items in Backlog or Todo state." and exit
+5. **If no items found:** Print "No items in Todo state." and exit
 
 ### Execution
 
@@ -285,12 +285,13 @@ fi
 git checkout -b fix/LIN-123 "$BASE_BRANCH"
 ```
 
-### When No Backlog Items
+### When No Todo Items
 
-**NON-INTERACTIVE:** Exit gracefully with message: "No items in Backlog or Todo state."
+**NON-INTERACTIVE:** Exit gracefully with message: "No items in Todo state."
 
 - Do NOT ask to create a new issue
 - Do NOT ask what to do instead
+- Do NOT pick from Backlog state
 - Simply print the message and exit
 
 ---
