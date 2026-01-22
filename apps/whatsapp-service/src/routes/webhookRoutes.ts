@@ -877,6 +877,10 @@ async function handleTextMessage(
   // Check if this is a reply to another message (potential approval response)
   const replyContext = extractReplyContext(request.body);
 
+  // Declare actionId outside the if block so it's accessible later
+  // If actionId is defined, this is a confirmed approval reply and we should skip command.ingest
+  let actionId: string | undefined;
+
   if (replyContext !== null) {
     // This message is a reply - look up the original message to get correlationId
     request.log.info(
@@ -889,7 +893,6 @@ async function handleTextMessage(
     );
 
     // Try to find the original outbound message to extract actionId
-    let actionId: string | undefined;
     const outboundResult = await outboundMessageRepository.findByWamid(replyContext.replyToWamid);
 
     if (outboundResult.ok && outboundResult.value !== null) {
@@ -952,28 +955,34 @@ async function handleTextMessage(
     }
   }
 
-  // Always publish command ingest event for text message
-  // If this was an approval reply, it will be handled by actions-agent
-  // If not, commands-agent will classify it as usual
-  request.log.info(
-    { eventId: savedEvent.id, userId, messageId: savedMessage.id },
-    'Publishing command.ingest event'
-  );
-
-  const commandPublishResult = await eventPublisher.publishCommandIngest({
-    type: 'command.ingest',
-    userId,
-    sourceType: 'whatsapp_text',
-    externalId: waMessageId,
-    text: messageText,
-    timestamp,
-  });
-
-  if (!commandPublishResult.ok) {
-    request.log.error(
-      { eventId: savedEvent.id, error: commandPublishResult.error },
-      'Failed to publish command ingest event'
+  // Only publish command.ingest if this is NOT a confirmed approval reply
+  // If actionId is defined, we've already handled this via approval reply event
+  if (actionId !== undefined) {
+    request.log.info(
+      { eventId: savedEvent.id, actionId, userId },
+      'Skipping command.ingest for approval reply with known actionId'
     );
+  } else {
+    request.log.info(
+      { eventId: savedEvent.id, userId, messageId: savedMessage.id },
+      'Publishing command.ingest event'
+    );
+
+    const commandPublishResult = await eventPublisher.publishCommandIngest({
+      type: 'command.ingest',
+      userId,
+      sourceType: 'whatsapp_text',
+      externalId: waMessageId,
+      text: messageText,
+      timestamp,
+    });
+
+    if (!commandPublishResult.ok) {
+      request.log.error(
+        { eventId: savedEvent.id, error: commandPublishResult.error },
+        'Failed to publish command ingest event'
+      );
+    }
   }
 
   // Publish link preview extraction event to Pub/Sub
