@@ -169,7 +169,7 @@ Download or list event attachments.
 ```
 Parameters:
   - organizationSlug: "intexuraos-dev-pbuchman"
-  - projectSlug: "intexuraox-development"
+  - projectSlug: "intexuraos-development"
   - eventId: "c49541c747cb4d8aa3efb70ca5aba243"
   - attachmentId: (optional) specific attachment
 
