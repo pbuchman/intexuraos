@@ -155,32 +155,119 @@ IntexuraOS treats LLMs as a **council of experts**:
 
 ## Engineering Philosophy
 
-### AI as Team Members
+### AI-Native Development
 
-I don't just "use" AI tools. I define specialized skills and agents with explicit mandates:
+This isn't a codebase that "uses" AI. It's a codebase **built with AI as first-class team members**. Every workflow, from issue creation to production deployment, has AI assistance baked in.
 
-**Skills** (directory-based, invoked via `/command` or auto-trigger):
+#### The Three-Tier Extension System
 
-| Skill               | Role                                                         |
-| ------------------- | ------------------------------------------------------------ |
-| `/linear`           | Issue management with auto-splitting and cross-linking       |
-| `/sentry`           | Sentry triage with AI analysis (Seer) and Linear integration |
-| `/document-service` | Service documentation (interactive or autonomous modes)      |
+```
+.claude/
+├── skills/           # Complex, multi-mode capabilities
+│   ├── linear/       # Issue management + auto-splitting
+│   ├── sentry/       # Error triage + AI analysis
+│   └── document-service/  # Documentation generation
+├── agents/           # Autonomous task executors
+│   ├── coverage-orchestrator.md
+│   ├── service-scribe.md
+│   └── ...
+└── commands/         # Simple interactive utilities
+```
 
-**Agents** (task-spawned, autonomous execution):
+| Layer      | Structure                    | Invocation                | Use Case                           |
+| ---------- | ---------------------------- | ------------------------- | ---------------------------------- |
+| **Skills** | Directory with workflows     | `/skill` or auto-trigger  | Complex multi-step capabilities    |
+| **Agents** | Single markdown file         | Task tool → subagent_type | Autonomous background work         |
+| **Commands** | Single markdown file       | `/command`                | Simple interactive utilities       |
 
-| Agent                   | Role                                                     |
-| ----------------------- | -------------------------------------------------------- |
-| `coverage-orchestrator` | QA enforcer — 100% branch coverage or explicit exemption |
-| `llm-manager`           | LLM cost auditor — pricing verification and updates      |
-| `service-creator`       | Service scaffolding with best practices                  |
-| `whatsapp-sender`       | WhatsApp notification dispatcher                         |
+#### Integrated Workflows
 
-See `.claude/CLAUDE.md` for complete taxonomy.
+**Issue → Code → PR → Deploy** — fully AI-assisted:
+
+```mermaid
+graph LR
+    subgraph "Issue Tracking"
+        L["/linear"] -->|Creates| Issue[Linear Issue]
+        Issue -->|Auto-splits| Children[Child Issues]
+    end
+
+    subgraph "Development"
+        Children -->|Branch| Code[Write Code]
+        Code -->|Verify| CI["pnpm run ci:tracked"]
+    end
+
+    subgraph "Error Handling"
+        Sentry[Sentry Error] -->|"/sentry"| Triage[AI Triage]
+        Triage -->|Creates| Issue
+    end
+
+    subgraph "Documentation"
+        Code -->|"/document-service"| Docs[Auto-Generated Docs]
+    end
+
+    CI -->|Pass| PR[Pull Request]
+    PR -->|Cross-linked| Issue
+```
+
+#### Skills in Action
+
+| Skill               | Capabilities                                                              |
+| ------------------- | ------------------------------------------------------------------------- |
+| `/linear`           | Create issues from description, auto-split complex plans into child tasks, cross-link with GitHub PRs, state machine transitions |
+| `/sentry`           | AI-powered root cause analysis (Seer), auto-create Linear issues, batch triage unresolved errors |
+| `/document-service` | Generate 5 doc files per service, interactive (asks questions) or autonomous (infers from code), updates website content |
+
+#### Autonomous Agents
+
+| Agent                   | Trigger                              | What It Does                                      |
+| ----------------------- | ------------------------------------ | ------------------------------------------------- |
+| `coverage-orchestrator` | Coverage gaps detected               | Enforces 100% branch coverage or explicit exemption, creates Linear issues for gaps |
+| `service-scribe`        | `Task tool → service-scribe`         | Documents all services autonomously, infers "why" from git history |
+| `llm-manager`           | Monthly audit                        | Verifies LLM pricing against official sources, updates cost tracking |
+| `service-creator`       | `/create-service`                    | Scaffolds new service with best practices, Terraform, Cloud Build |
+
+#### Cross-Linking Protocol
+
+Every artifact connects to every other artifact:
+
+| From     | To       | Method                                           |
+| -------- | -------- | ------------------------------------------------ |
+| Linear   | GitHub   | PR title contains `INT-XXX`, auto-attaches       |
+| GitHub   | Linear   | `Fixes INT-XXX` in PR body                       |
+| Sentry   | Linear   | `[sentry] <title>` prefix + link in description  |
+| Linear   | Sentry   | Comment on Sentry issue with Linear link         |
+| Docs     | Code     | Generated from actual code analysis              |
+
+### Extreme Ownership
+
+Inspired by Jocko Willink: **there are no bad teams, only bad leaders**. In this codebase: there is no bad code, only unowned problems.
+
+**Forbidden phrases:**
+- "pre-existing issue" → Discovery creates ownership
+- "not my fault" → Fault is irrelevant; fix is your responsibility
+- "unrelated to my changes" → If it blocks CI, it's related
+
+**The rule:** From task acceptance until `pnpm run ci:tracked` passes, YOU own everything.
+
+### Verification Gates
+
+No code ships without passing the gauntlet:
+
+```bash
+# Per-workspace verification
+pnpm run verify:workspace:tracked -- <service-name>
+# → TypeCheck (source + tests) → Lint → Tests + 95% Coverage
+
+# Full CI (must pass before any PR)
+pnpm run ci:tracked
+# → All workspaces → Build → Integration tests
+```
+
+**Coverage is not a target, it's a gate.** 94.9% is failure.
 
 ### No Dummy Success
 
-Every operation returns `Result<T, E>`. Errors are domain concepts, not exceptions. No silent failures.
+Every operation returns `Result<T, E>`. Errors are domain concepts, not exceptions:
 
 ```typescript
 const result = await researchAgent.query(prompt);
@@ -192,10 +279,13 @@ if (!result.ok) {
 
 ### Sleep-at-Night Reliability
 
-- **95%+ test coverage**: Not a target, a gate
+- **95%+ test coverage**: Enforced by CI, no exceptions
 - **Strict TypeScript**: `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`
-- **Hexagonal architecture**: Domain logic is pure and testable
-- **Infrastructure as Code**: Everything in Terraform
+- **Hexagonal architecture**: Domain logic is pure, testable, framework-agnostic
+- **Infrastructure as Code**: Everything in Terraform, reproducible environments
+- **Test-first development**: Write failing test → implement → verify
+
+See `.claude/CLAUDE.md` for the complete AI development playbook.
 
 ---
 
