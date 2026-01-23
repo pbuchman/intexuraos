@@ -680,16 +680,18 @@ gh pr create --base development  # or --base main
 
 ## Linear Issue Workflow
 
-Use the `/linear` command for issue tracking and workflow management.
+Use the `/linear` skill for issue tracking and workflow management.
 
-**When "linear" appears in context**, the agent should reference `/linear` for issue creation and workflow.
+**Skill Location:** `.claude/skills/linear/SKILL.md`
+
+**When "linear" appears in context**, the skill is automatically invoked for issue creation and workflow.
 
 **Usage:**
 
 ```bash
 /linear                    # Pick random Todo issue (cron mode)
-/linear <task description> # Create new issue
-/linear LIN-123            # Work on existing issue
+/linear <task description> # Create new issue (auto-splits if complex)
+/linear INT-123            # Work on existing issue
 /linear <sentry-url>       # Create from Sentry error
 ```
 
@@ -697,14 +699,14 @@ Use the `/linear` command for issue tracking and workflow management.
 
 ```bash
 /linear Fix authentication token not refreshing
-/linear LIN-42
+/linear INT-42
 /linear https://intexuraos-dev-pbuchman.sentry.io/issues/123/
 ```
 
 **Mandatory Requirements:**
 
 1. All bugs/features must have corresponding Linear issues
-2. PR descriptions must link to Linear issues (`Fixes LIN-XXX`)
+2. PR descriptions must link to Linear issues (`Fixes INT-XXX`)
 3. Reasoning belongs in PR descriptions, not code comments
 4. State transitions happen automatically: Backlog → In Progress → In Review → Q&A QA (Done state requires explicit user instruction)
 5. `pnpm run ci:tracked` MUST pass before PR creation (unless explicitly overridden)
@@ -713,19 +715,32 @@ Use the `/linear` command for issue tracking and workflow management.
 
 | Direction       | Method                                                             |
 | --------------- | ------------------------------------------------------------------ |
-| Linear → GitHub | PR title contains `LIN-XXX` (enables auto-attachment)              |
+| Linear → GitHub | PR title contains `INT-XXX` (enables auto-attachment)              |
 | GitHub → Linear | GitHub integration attaches PR (when title + branch have issue ID) |
-| Linear → GitHub | `Fixes LIN-XXX` in PR body (for issue closing behavior)            |
+| Linear → GitHub | `Fixes INT-XXX` in PR body (for issue closing behavior)            |
 | Sentry → Linear | `[sentry] <title>` naming + link in description                    |
 | Linear → Sentry | Comment on Sentry issue                                            |
 
-**See:** `.claude/commands/linear.md` for complete workflow documentation.
+**Auto-Splitting:** For complex multi-step tasks, the skill automatically detects and offers to split into tiered child issues. See [Linear-Based Continuity Pattern](../docs/patterns/linear-continuity.md).
+
+**Full Documentation:** `.claude/skills/linear/`
 
 ---
 
-## Complex Tasks — Continuity Workflow
+## Complex Tasks — Linear Continuity
 
-For multi-step features, use numbered directories in `continuity/`. See [continuity/README.md](../continuity/README.md).
+For multi-step features, use the Linear-based continuity pattern with parent-child issues.
+
+**See:** [docs/patterns/linear-continuity.md](../docs/patterns/linear-continuity.md)
+
+**Quick Start:**
+1. Create top-level Linear issue for overall feature
+2. Use `/linear` with complex description to auto-split into child issues
+3. Parent issue serves as ledger (goal, decisions, state tracking)
+4. Execute child issues sequentially by tier
+5. Mark all as Done when complete
+
+**Note:** The file-based `continuity/NNN-task-name/` workflow is deprecated. See `continuity/README.md` for migration details.
 
 ---
 

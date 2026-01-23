@@ -1,5 +1,11 @@
 # Linear Issue Management
 
+> **DEPRECATED:** This file has been superseded by the Linear skill at `.claude/skills/linear/SKILL.md`.
+> This file is kept for reference but should not be modified. Use the skill instead.
+> See: [Linear-Based Continuity Pattern](../../docs/patterns/linear-continuity.md)
+
+---
+
 Manage Linear issues, branches, and PRs with enforced workflow and cross-linking.
 
 **Project Key:** `INT-` (e.g., `INT-123`, `INT-144`). All issue references in this document use generic `LIN-XXX` placeholders, but for this project always use `INT-XXX`.

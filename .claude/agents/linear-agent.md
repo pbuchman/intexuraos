@@ -1,6 +1,9 @@
 ---
 name: linear-agent
-description: Use this agent when the user invokes the /linear command or needs to work with Linear issues. This agent handles Linear issue creation, workflow management, state transitions, and cross-linking between Sentry, Linear, and GitHub.
+description: |
+  DEPRECATED: This agent has been superseded by the Linear skill at `.claude/skills/linear/SKILL.md`.
+  Use the skill instead. This agent file is kept for reference only.
+  See: docs/patterns/linear-continuity.md
 
 Examples:
 
