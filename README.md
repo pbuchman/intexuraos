@@ -159,10 +159,10 @@ IntexuraOS treats LLMs as a **council of experts**:
 
 I don't just "use" AI tools. I define autonomous agents with explicit mandates:
 
-| Agent                   | Role                                                        |
+| Agent/Skill             | Role                                                        |
 | ----------------------- | ----------------------------------------------------------- |
 | `service-scribe`        | Documentation specialist that infers "why" from git history |
-| `sentry-triage`         | Reliability engineer that refuses band-aid fixes            |
+| `/sentry`               | Sentry triage skill with AI analysis and cross-linking      |
 | `coverage-orchestrator` | QA lead where "94.9% is failure"                            |
 
 ### No Dummy Success

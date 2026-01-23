@@ -239,7 +239,7 @@ curl -X DELETE https://calendar-agent.intexuraos.com/calendar/events/event123 \
 ## Troubleshooting
 
 | Issue            | Symptom             | Solution                                |
-| ---------------- | ------------------- | --------------------------------------- |
+| ----------------  | -------------------  | ---------------------------------------  |
 | NOT_CONNECTED    | 403 on all requests | Connect Google account via user-service |
 | Invalid time     | 400 error           | Use ISO 8601 format with timezone       |
 | Event not found  | 404                 | Verify eventId and calendarId           |

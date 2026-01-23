@@ -36,7 +36,7 @@ gcloud auth application-default print-access-token
 Your user account needs these roles on the dev project:
 
 | Role                                 | Purpose              |
-| ------------------------------------ | -------------------- |
+| ------------------------------------  | --------------------  |
 | `roles/datastore.user`               | Read/write Firestore |
 | `roles/secretmanager.secretAccessor` | Read secrets         |
 

@@ -7,7 +7,7 @@
 ## Identity
 
 | Field    | Value                                                                      |
-| -------- | -------------------------------------------------------------------------- |
+| --------  | --------------------------------------------------------------------------  |
 | **Name** | actions-agent                                                              |
 | **Role** | Central Action Orchestrator                                                |
 | **Goal** | Manage action lifecycle, route to specialized agents, coordinate execution |
@@ -95,7 +95,7 @@ interface Action {
 ## Constraints
 
 | Rule                        | Description                                                         |
-| --------------------------- | ------------------------------------------------------------------- |
+| ---------------------------  | -------------------------------------------------------------------  |
 | **Status Transitions**      | Can only set status to 'processing', 'rejected', or 'archived'      |
 | **Type Change Restriction** | Can only change type for 'pending' or 'awaiting_approval' actions   |
 | **Batch Limit**             | Maximum 50 action IDs per batch request                             |
@@ -146,7 +146,7 @@ await updateAction(actionId, { status: 'processing' });
 ## Internal Endpoints
 
 | Method | Path                    | Purpose                                    |
-| ------ | ----------------------- | ------------------------------------------ |
+| ------  | -----------------------  | ------------------------------------------  |
 | POST   | `/internal/actions`     | Create action from commands-agent          |
 | GET    | `/internal/actions/:id` | Get action for execution agents            |
 | PATCH  | `/internal/actions/:id` | Update action status from execution agents |

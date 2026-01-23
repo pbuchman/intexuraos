@@ -27,6 +27,6 @@ curl -X GET "https://app-settings.intexuraos.com/settings/usage-costs?days=30" \
 ## Troubleshooting
 
 | Error      | Cause                | Solution      |
-| ---------- | -------------------- | ------------- |
+| ----------  | --------------------  | -------------  |
 | days > 365 | Invalid range        | Use 1-365     |
 | 500        | Missing pricing data | Contact admin |

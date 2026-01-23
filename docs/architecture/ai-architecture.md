@@ -74,7 +74,7 @@ graph TB
 ### Model Selection Strategy
 
 | Task Type            | Primary Model         | Fallback Model      | Rationale                       |
-| -------------------- | --------------------- | ------------------- | ------------------------------- |
+| --------------------  | ---------------------  | -------------------  | -------------------------------  |
 | Research Synthesis   | Claude Opus 4.5       | GPT-5.2             | Nuanced reasoning, long context |
 | Quick Classification | Gemini 2.5 Flash      | GLM-4.7             | Fast, cost-effective            |
 | Deep Research        | O4 Mini Deep Research | Sonar Deep Research | Agentic web search              |
@@ -86,7 +86,7 @@ graph TB
 Models capable of complex reasoning, web search, and multi-step analysis.
 
 | Model                 | Provider   | Strengths                                 |
-| --------------------- | ---------- | ----------------------------------------- |
+| ---------------------  | ----------  | -----------------------------------------  |
 | Gemini 2.5 Pro        | Google     | Long context (1M tokens), grounded search |
 | Gemini 2.5 Flash      | Google     | Fast, cost-effective, good reasoning      |
 | GPT-5.2               | OpenAI     | Latest OpenAI flagship, strong reasoning  |
@@ -104,7 +104,7 @@ Models capable of complex reasoning, web search, and multi-step analysis.
 Optimized for quick, low-cost operations like classification and extraction.
 
 | Model            | Provider | Use Cases                                 |
-| ---------------- | -------- | ----------------------------------------- |
+| ----------------  | --------  | -----------------------------------------  |
 | Gemini 2.5 Flash | Google   | Intent classification, title generation   |
 | Gemini 2.0 Flash | Google   | API key validation, quick inference       |
 | GLM-4.7-Flash    | Zai      | Free classification, cost-effective tasks |
@@ -114,7 +114,7 @@ Optimized for quick, low-cost operations like classification and extraction.
 Text-to-image generation for cover images and visualizations.
 
 | Model                  | Provider | Capabilities                            |
-| ---------------------- | -------- | --------------------------------------- |
+| ----------------------  | --------  | ---------------------------------------  |
 | GPT Image 1 (DALL-E 3) | OpenAI   | Photorealistic, artistic styles         |
 | Gemini 2.5 Flash Image | Google   | Fast image generation, consistent style |
 
@@ -123,7 +123,7 @@ Text-to-image generation for cover images and visualizations.
 Cheap, fast models for API key validation and simple tasks.
 
 | Model            | Provider   | Token Cost     |
-| ---------------- | ---------- | -------------- |
+| ----------------  | ----------  | --------------  |
 | Claude Haiku 3.5 | Anthropic  | $0.80/M input  |
 | Gemini 2.0 Flash | Google     | $0.075/M input |
 | GPT-4o Mini      | OpenAI     | $0.15/M input  |
@@ -416,7 +416,7 @@ const result = await client.generate({
 ### Provider Packages
 
 | Package                        | Provider   | Capabilities                      |
-| ------------------------------ | ---------- | --------------------------------- |
+| ------------------------------  | ----------  | ---------------------------------  |
 | `@intexuraos/infra-claude`     | Anthropic  | Chat, streaming, tool use         |
 | `@intexuraos/infra-gemini`     | Google     | Chat, grounding, image generation |
 | `@intexuraos/infra-gpt`        | OpenAI     | Chat, DALL-E, embeddings          |
@@ -503,7 +503,7 @@ const cost = pricingContext.calculateCost({
 ### Model Tiering
 
 | Tier     | Use Case                   | Cost/1M Tokens | Example Models            |
-| -------- | -------------------------- | -------------- | ------------------------- |
+| --------  | --------------------------  | --------------  | -------------------------  |
 | Premium  | Deep research, synthesis   | $15-75         | Claude Opus, GPT-5.2      |
 | Standard | General queries            | $3-10          | Claude Sonnet, Gemini Pro |
 | Economy  | Classification, extraction | $0.08-1        | Gemini Flash, Haiku       |
@@ -558,7 +558,7 @@ graph TB
 ### Error Categories
 
 | Error Type         | Handling                          |
-| ------------------ | --------------------------------- |
+| ------------------  | ---------------------------------  |
 | `NO_API_KEY`       | Prompt user to configure API key  |
 | `RATE_LIMITED`     | Retry with exponential backoff    |
 | `TIMEOUT`          | Continue with available responses |
@@ -570,7 +570,7 @@ graph TB
 LLM responses are validated using three approaches depending on the response type:
 
 | Approach               | Use Case                        | Features                                        |
-| ---------------------- | ------------------------------- | ----------------------------------------------- |
+| ----------------------  | -------------------------------  | -----------------------------------------------  |
 | **Zod Schemas**        | Structured JSON (context, etc.) | Field-level errors, type inference, auto-repair |
 | **Manual Type Guards** | Simple JSON extraction          | Custom validation, defensive coercion           |
 | **No Validation**      | Unstructured text (research)    | Raw content pass-through                        |
@@ -628,7 +628,7 @@ const validationResult = await llmValidator.validateKey({
 ## Packages
 
 | Package                        | Purpose                      |
-| ------------------------------ | ---------------------------- |
+| ------------------------------  | ----------------------------  |
 | `@intexuraos/llm-contract`     | Shared types and interfaces  |
 | `@intexuraos/llm-factory`      | Client creation factory      |
 | `@intexuraos/llm-pricing`      | Cost calculation             |

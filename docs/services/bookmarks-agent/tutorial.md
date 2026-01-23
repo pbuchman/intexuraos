@@ -135,7 +135,7 @@ curl "https://bookmarks-agent.intexuraos.com/images/proxy?url=https://example.co
 ## Troubleshooting
 
 | Issue                 | Symptom                 | Solution                    |
-| --------------------- | ----------------------- | --------------------------- |
+| ---------------------  | -----------------------  | ---------------------------  |
 | Auth failed           | 401 Unauthorized        | Check token validity        |
 | Bookmark not found    | 404 error               | Verify bookmark ID          |
 | Invalid URL           | 400 error               | Ensure URL is valid         |

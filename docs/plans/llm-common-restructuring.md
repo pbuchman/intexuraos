@@ -40,7 +40,7 @@ packages/llm-common/src/
 ### 1.2 Current Exports by Category
 
 | Module               | Exports                                                                                          |
-| -------------------- | ------------------------------------------------------------------------------------------------ |
+| --------------------  | ------------------------------------------------------------------------------------------------  |
 | `types.ts`           | `PromptBuilder`, `PromptDeps`                                                                    |
 | `generation/`        | `titlePrompt`, `labelPrompt`, `feedNamePrompt` + types                                           |
 | `classification/`    | `commandClassifierPrompt`, `calendarActionExtractionPrompt`, `linearActionExtractionPrompt`      |
@@ -58,7 +58,7 @@ packages/llm-common/src/
 ### 1.3 Consumer Mapping
 
 | Consumer App/Package    | Imports                                                                                                                  |
-| ----------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| -----------------------  | ------------------------------------------------------------------------------------------------------------------------  |
 | **research-agent**      | `buildSynthesisPrompt`, `titlePrompt`, `SynthesisContext`, `ResearchContext`, context inference, attribution, validation |
 | **data-insights-agent** | `dataAnalysisPrompt`, `chartDefinitionPrompt`, `dataTransformPrompt`, `titlePrompt`, `feedNamePrompt`, parsers           |
 | **commands-agent**      | `commandClassifierPrompt`                                                                                                |
@@ -139,7 +139,7 @@ packages/llm-common/src/
 ### 2.2 Key Decisions
 
 | Decision                                    | Rationale                                                       |
-| ------------------------------------------- | --------------------------------------------------------------- |
+| -------------------------------------------  | ---------------------------------------------------------------  |
 | Create `research/` domain                   | Groups research-specific prompts and attribution together       |
 | Create `synthesis/` as separate domain      | Synthesis has its own context inference, distinct from research |
 | Create `shared/` for cross-cutting concerns | `redaction.ts` is used by `common-http`, not research-specific  |
@@ -171,7 +171,7 @@ packages/llm-common/src/
 ### 3.1 Files to Move
 
 | Current Location                   | New Location                                        |
-| ---------------------------------- | --------------------------------------------------- |
+| ----------------------------------  | ---------------------------------------------------  |
 | `researchPrompt.ts`                | `research/buildResearchPrompt.ts`                   |
 | `synthesisPrompt.ts`               | `research/buildSynthesisPrompt.ts`                  |
 | `attribution.ts`                   | `research/attribution.ts`                           |
@@ -187,7 +187,7 @@ packages/llm-common/src/
 ### 3.2 Files to Keep in Place
 
 | File/Directory    | Reason                   |
-| ----------------- | ------------------------ |
+| -----------------  | ------------------------  |
 | `classification/` | Already domain-organized |
 | `generation/`     | Already domain-organized |
 | `dataInsights/`   | Already domain-organized |
@@ -198,7 +198,7 @@ packages/llm-common/src/
 ### 3.3 Directories to Remove
 
 | Directory  | Reason                                               |
-| ---------- | ---------------------------------------------------- |
+| ----------  | ----------------------------------------------------  |
 | `context/` | Contents distributed to `research/` and `synthesis/` |
 | `llm/`     | Contents moved to `shared/`                          |
 
@@ -234,7 +234,7 @@ Each domain will have its own `index.ts` that exports only domain-relevant items
 ## 5. Risk Assessment
 
 | Risk                   | Likelihood | Impact | Mitigation                                    |
-| ---------------------- | ---------- | ------ | --------------------------------------------- |
+| ----------------------  | ----------  | ------  | ---------------------------------------------  |
 | Import path breakage   | Low        | High   | Maintain all existing exports in root index   |
 | Circular dependencies  | Medium     | Medium | Careful ordering of imports; lint enforcement |
 | Test path breakage     | Medium     | Low    | Update test imports alongside source files    |
@@ -277,7 +277,7 @@ Phase 1 maintains backward compatibility — consumers don't need to change. Pha
 ### 8.1 research-agent
 
 | Current Import                                                                    | New Import                                                                                 |
-| --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| ---------------------------------------------------------------------------------  | ------------------------------------------------------------------------------------------  |
 | `import { buildSynthesisPrompt, SynthesisContext } from '@intexuraos/llm-common'` | `import { buildSynthesisPrompt, SynthesisContext } from '@intexuraos/llm-common/research'` |
 | `import { ResearchContext } from '@intexuraos/llm-common'`                        | `import { ResearchContext } from '@intexuraos/llm-common/research'`                        |
 | `import { titlePrompt } from '@intexuraos/llm-common'`                            | `import { titlePrompt } from '@intexuraos/llm-common/generation'`                          |
@@ -290,7 +290,7 @@ Phase 1 maintains backward compatibility — consumers don't need to change. Pha
 ### 8.2 data-insights-agent
 
 | Current Import                                                     | New Import                                                                      |
-| ------------------------------------------------------------------ | ------------------------------------------------------------------------------- |
+| ------------------------------------------------------------------  | -------------------------------------------------------------------------------  |
 | `import { dataAnalysisPrompt, ... } from '@intexuraos/llm-common'` | `import { dataAnalysisPrompt, ... } from '@intexuraos/llm-common/dataInsights'` |
 | `import { titlePrompt } from '@intexuraos/llm-common'`             | `import { titlePrompt } from '@intexuraos/llm-common/generation'`               |
 | `import { feedNamePrompt } from '@intexuraos/llm-common'`          | `import { feedNamePrompt } from '@intexuraos/llm-common/generation'`            |
@@ -300,7 +300,7 @@ Phase 1 maintains backward compatibility — consumers don't need to change. Pha
 ### 8.3 commands-agent
 
 | Current Import                                                     | New Import                                                                        |
-| ------------------------------------------------------------------ | --------------------------------------------------------------------------------- |
+| ------------------------------------------------------------------  | ---------------------------------------------------------------------------------  |
 | `import { commandClassifierPrompt } from '@intexuraos/llm-common'` | `import { commandClassifierPrompt } from '@intexuraos/llm-common/classification'` |
 
 **Files to update:** 1 file (`apps/commands-agent/src/infra/gemini/classifier.ts`)
@@ -308,7 +308,7 @@ Phase 1 maintains backward compatibility — consumers don't need to change. Pha
 ### 8.4 calendar-agent
 
 | Current Import                                                            | New Import                                                                               |
-| ------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| -------------------------------------------------------------------------  | ----------------------------------------------------------------------------------------  |
 | `import { calendarActionExtractionPrompt } from '@intexuraos/llm-common'` | `import { calendarActionExtractionPrompt } from '@intexuraos/llm-common/classification'` |
 
 **Files to update:** 1 file (`apps/calendar-agent/src/infra/gemini/calendarActionExtractionService.ts`)
@@ -316,7 +316,7 @@ Phase 1 maintains backward compatibility — consumers don't need to change. Pha
 ### 8.5 linear-agent
 
 | Current Import                                                          | New Import                                                                             |
-| ----------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| -----------------------------------------------------------------------  | --------------------------------------------------------------------------------------  |
 | `import { linearActionExtractionPrompt } from '@intexuraos/llm-common'` | `import { linearActionExtractionPrompt } from '@intexuraos/llm-common/classification'` |
 
 **Files to update:** 1 file (`apps/linear-agent/src/infra/llm/linearActionExtractionService.ts`)
@@ -324,7 +324,7 @@ Phase 1 maintains backward compatibility — consumers don't need to change. Pha
 ### 8.6 todos-agent
 
 | Current Import                                                  | New Import                                                            |
-| --------------------------------------------------------------- | --------------------------------------------------------------------- |
+| ---------------------------------------------------------------  | ---------------------------------------------------------------------  |
 | `import { itemExtractionPrompt } from '@intexuraos/llm-common'` | `import { itemExtractionPrompt } from '@intexuraos/llm-common/todos'` |
 
 **Files to update:** 1 file (`apps/todos-agent/src/infra/gemini/todoItemExtractionService.ts`)
@@ -332,7 +332,7 @@ Phase 1 maintains backward compatibility — consumers don't need to change. Pha
 ### 8.7 infra-\* packages (gemini, gpt, claude, glm, perplexity)
 
 | Current Import                                                 | New Import                                                              |
-| -------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| --------------------------------------------------------------  | -----------------------------------------------------------------------  |
 | `import { buildResearchPrompt } from '@intexuraos/llm-common'` | `import { buildResearchPrompt } from '@intexuraos/llm-common/research'` |
 
 **Files to update:** 5 files (one per infra package)
@@ -340,7 +340,7 @@ Phase 1 maintains backward compatibility — consumers don't need to change. Pha
 ### 8.8 common-http
 
 | Current Import                                                                         | New Import                                                                                    |
-| -------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| --------------------------------------------------------------------------------------  | ---------------------------------------------------------------------------------------------  |
 | `import { redactToken, redactObject, SENSITIVE_FIELDS } from '@intexuraos/llm-common'` | `import { redactToken, redactObject, SENSITIVE_FIELDS } from '@intexuraos/llm-common/shared'` |
 
 **Files to update:** 2 files (`packages/common-http/src/index.ts`, `packages/common-http/src/http/logger.ts`)
@@ -348,7 +348,7 @@ Phase 1 maintains backward compatibility — consumers don't need to change. Pha
 ### 8.9 llm-contract
 
 | Current Import                                             | New Import                                                       |
-| ---------------------------------------------------------- | ---------------------------------------------------------------- |
+| ----------------------------------------------------------  | ----------------------------------------------------------------  |
 | `import { thumbnailPrompt } from '@intexuraos/llm-common'` | `import { thumbnailPrompt } from '@intexuraos/llm-common/image'` |
 
 **Files to update:** 1 file (`packages/llm-contract/src/helpers.ts`)
@@ -356,7 +356,7 @@ Phase 1 maintains backward compatibility — consumers don't need to change. Pha
 ### 8.10 Summary
 
 | Consumer              | Files to Update | Complexity |
-| --------------------- | --------------- | ---------- |
+| ---------------------  | ---------------  | ----------  |
 | research-agent        | 9               | Medium     |
 | data-insights-agent   | 6               | Low        |
 | commands-agent        | 1               | Trivial    |

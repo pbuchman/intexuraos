@@ -99,7 +99,7 @@ sequenceDiagram
 ### Public Endpoints
 
 | Method | Path                          | Purpose                       | Auth   |
-| ------ | ----------------------------- | ----------------------------- | ------ |
+| ------  | -----------------------------  | -----------------------------  | ------  |
 | GET    | `/linear/connection`          | Get user's connection status  | Bearer |
 | POST   | `/linear/connection/validate` | Validate API key, get teams   | None   |
 | POST   | `/linear/connection`          | Save connection configuration | Bearer |
@@ -110,7 +110,7 @@ sequenceDiagram
 ### Internal Endpoints
 
 | Method | Path                              | Purpose               | Auth       |
-| ------ | --------------------------------- | --------------------- | ---------- |
+| ------  | ---------------------------------  | ---------------------  | ----------  |
 | POST   | `/internal/linear/process-action` | Process action via AI | X-Internal |
 
 ## Domain Models
@@ -182,7 +182,7 @@ interface FailedLinearIssue {
 ## Firestore Collections
 
 | Collection               | Owner        | Purpose                   |
-| ------------------------ | ------------ | ------------------------- |
+| ------------------------  | ------------  | -------------------------  |
 | `linearConnections`      | linear-agent | User Linear connections   |
 | `failedLinearIssues`     | linear-agent | Failed extraction records |
 | `processedLinearActions` | linear-agent | Idempotency records       |
@@ -209,7 +209,7 @@ The extraction service uses Gemini 2.5 Flash or GLM-4.7 to parse natural languag
 ## Configuration
 
 | Variable                              | Required | Description               |
-| ------------------------------------- | -------- | ------------------------- |
+| -------------------------------------  | --------  | -------------------------  |
 | `INTEXURAOS_USER_SERVICE_URL`         | Yes      | User service for LLM keys |
 | `INTEXURAOS_INTERNAL_AUTH_TOKEN`      | Yes      | Service-to-service auth   |
 | `INTEXURAOS_APP_SETTINGS_SERVICE_URL` | Yes      | Pricing context source    |
@@ -231,7 +231,7 @@ The extraction service uses Gemini 2.5 Flash or GLM-4.7 to parse natural languag
 ## Error Handling
 
 | Error Code          | HTTP | Description                      |
-| ------------------- | ---- | -------------------------------- |
+| -------------------  | ----  | --------------------------------  |
 | `NOT_CONNECTED`     | 403  | User has no Linear connection    |
 | `INVALID_API_KEY`   | 401  | Linear API key is invalid        |
 | `RATE_LIMIT`        | 429  | Linear API rate limit exceeded   |

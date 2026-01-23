@@ -86,7 +86,7 @@ sequenceDiagram
 ### Public Endpoints
 
 | Method | Path                   | Description                                   | Auth         |
-| ------ | ---------------------- | --------------------------------------------- | ------------ |
+| ------  | ----------------------  | ---------------------------------------------  | ------------  |
 | GET    | `/commands`            | List user's commands                          | Bearer token |
 | POST   | `/commands`            | Create command from web app                   | Bearer token |
 | DELETE | `/commands/:commandId` | Delete command (received/pending/failed only) | Bearer token |
@@ -95,7 +95,7 @@ sequenceDiagram
 ### Internal Endpoints
 
 | Method | Path                            | Description                   | Auth                           |
-| ------ | ------------------------------- | ----------------------------- | ------------------------------ |
+| ------  | -------------------------------  | -----------------------------  | ------------------------------  |
 | POST   | `/internal/commands`            | Ingest command from Pub/Sub   | Pub/Sub OIDC or internal token |
 | POST   | `/internal/retry-pending`       | Retry pending classifications | OIDC or internal token         |
 | GET    | `/internal/commands/:commandId` | Get command by ID             | Internal token                 |
@@ -105,7 +105,7 @@ sequenceDiagram
 ### Command
 
 | Field            | Type                  | Description                                                    |
-| ---------------- | --------------------- | -------------------------------------------------------------- |
+| ----------------  | ---------------------  | --------------------------------------------------------------  |
 | `id`             | string                | `{sourceType}:{externalId}` composite key                      |
 | `userId`         | string                | Owner user ID                                                  |
 | `sourceType`     | CommandSourceType     | whatsapp_text, whatsapp_voice, pwa-shared                      |
@@ -123,7 +123,7 @@ sequenceDiagram
 ### CommandClassification
 
 | Field          | Type        | Description                                                          |
-| -------------- | ----------- | -------------------------------------------------------------------- |
+| --------------  | -----------  | --------------------------------------------------------------------  |
 | `type`         | CommandType | todo, research, note, link, calendar, linear, reminder, unclassified |
 | `confidence`   | number      | 0-1 confidence score                                                 |
 | `reasoning`    | string      | LLM explanation for classification                                   |
@@ -132,7 +132,7 @@ sequenceDiagram
 ### Action (forwarded type)
 
 | Field        | Type                    | Description                                                                   |
-| ------------ | ----------------------- | ----------------------------------------------------------------------------- |
+| ------------  | -----------------------  | -----------------------------------------------------------------------------  |
 | `id`         | string                  | UUID                                                                          |
 | `userId`     | string                  | Owner user ID                                                                 |
 | `commandId`  | string                  | Source command ID                                                             |
@@ -169,13 +169,13 @@ sequenceDiagram
 ### Subscribed
 
 | Event Type       | Topic            | Handler                 |
-| ---------------- | ---------------- | ----------------------- |
+| ----------------  | ----------------  | -----------------------  |
 | `command.ingest` | `command-ingest` | POST /internal/commands |
 
 ### Published
 
 | Event Type       | Topic     | Purpose                 |
-| ---------------- | --------- | ----------------------- |
+| ----------------  | ---------  | -----------------------  |
 | `action.created` | `actions` | Triggers action handler |
 
 ## Model Detection
@@ -183,7 +183,7 @@ sequenceDiagram
 The classifier detects LLM preferences from command text:
 
 | Pattern                       | Models Selected                                            |
-| ----------------------------- | ---------------------------------------------------------- |
+| -----------------------------  | ----------------------------------------------------------  |
 | "all LLMs", "every model"     | DEFAULT_MODELS (Gemini Pro, Claude Opus, GPT-5, Sonar Pro) |
 | "claude", "anthropic", "opus" | Claude Opus 4.5                                            |
 | "sonar", "perplexity", "pplx" | Sonar Pro                                                  |
@@ -196,14 +196,14 @@ The classifier detects LLM preferences from command text:
 ### Internal Services
 
 | Service         | Purpose                                 |
-| --------------- | --------------------------------------- |
+| ---------------  | ---------------------------------------  |
 | `user-service`  | Fetch Google API key for classification |
 | `actions-agent` | Create actions from classified commands |
 
 ### Infrastructure
 
 | Component                         | Purpose                  |
-| --------------------------------- | ------------------------ |
+| ---------------------------------  | ------------------------  |
 | Firestore (`commands` collection) | Command persistence      |
 | Pub/Sub (`command-ingest` topic)  | Command ingestion events |
 | Pub/Sub (`actions` topic)         | Action creation events   |
@@ -211,13 +211,13 @@ The classifier detects LLM preferences from command text:
 ### External APIs
 
 | Service          | Purpose                |
-| ---------------- | ---------------------- |
+| ----------------  | ----------------------  |
 | Gemini 2.5 Flash | Command classification |
 
 ## Configuration
 
 | Environment Variable             | Required | Description                     |
-| -------------------------------- | -------- | ------------------------------- |
+| --------------------------------  | --------  | -------------------------------  |
 | `INTEXURAOS_USER_SERVICE_URL`    | Yes      | user-service base URL           |
 | `INTEXURAOS_ACTIONS_AGENT_URL`   | Yes      | actions-agent base URL          |
 | `INTEXURAOS_INTERNAL_AUTH_TOKEN` | Yes      | Shared secret for internal auth |

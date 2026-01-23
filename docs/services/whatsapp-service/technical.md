@@ -29,14 +29,14 @@ graph TB
 ### Webhook Endpoints
 
 | Method | Path                 | Description                                  | Auth           |
-| ------ | -------------------- | -------------------------------------------- | -------------- |
+| ------  | --------------------  | --------------------------------------------  | --------------  |
 | GET    | `/whatsapp/webhooks` | Webhook verification (returns hub.challenge) | None           |
 | POST   | `/whatsapp/webhooks` | Receive webhook events                       | HMAC signature |
 
 ### Public Endpoints
 
 | Method | Path                                       | Description                      | Auth         |
-| ------ | ------------------------------------------ | -------------------------------- | ------------ |
+| ------  | ------------------------------------------  | --------------------------------  | ------------  |
 | GET    | `/whatsapp/messages`                       | List user's messages (paginated) | Bearer token |
 | GET    | `/whatsapp/messages/:message_id/media`     | Get signed URL for media         | Bearer token |
 | GET    | `/whatsapp/messages/:message_id/thumbnail` | Get signed URL for thumbnail     | Bearer token |
@@ -48,7 +48,7 @@ graph TB
 ### Internal Endpoints
 
 | Method | Path                                         | Description                  | Auth         |
-| ------ | -------------------------------------------- | ---------------------------- | ------------ |
+| ------  | --------------------------------------------  | ----------------------------  | ------------  |
 | POST   | `/internal/whatsapp/pubsub/process-webhook`  | Process webhook from Pub/Sub | Pub/Sub OIDC |
 | POST   | `/internal/whatsapp/pubsub/transcribe-audio` | Process audio transcription  | Pub/Sub OIDC |
 | POST   | `/internal/whatsapp/pubsub/send-message`     | Send WhatsApp message        | Pub/Sub OIDC |
@@ -59,19 +59,19 @@ graph TB
 ### Message
 
 | Field              | Type             | Description                   |
-| ------------------ | ---------------- | ----------------------------- | -------------------------- | ------------ |
+| ------------------  | ----------------  | -----------------------------  |   |   |
 | `id`               | string           | Unique message identifier     |
 | `userId`           | string           | User who received the message |
 | `waMessageId`      | string           | WhatsApp message ID           |
 | `fromNumber`       | string           | Sender's phone number         |
 | `toNumber`         | string           | Recipient phone number        |
 | `text`             | string           | Message text (text messages)  |
-| `mediaType`        | 'text' \         | 'image' \                     | 'audio'                    | Message type |
+| `mediaType`        | 'text' \         | 'image' \                     | 'audio' | Message type |
 | `gcsPath`          | string           | GCS path to media file        |
 | `thumbnailGcsPath` | string           | GCS path to thumbnail         |
-| `caption`          | string \         | null                          | Media caption              |
+| `caption`          | string \         | null                          | Media caption |
 | `transcription`    | Transcription \  | null                          | Audio transcription result |
-| `linkPreview`      | LinkPreview \    | null                          | Extracted link metadata    |
+| `linkPreview`      | LinkPreview \    | null                          | Extracted link metadata |
 | `timestamp`        | string           | WhatsApp timestamp            |
 | `receivedAt`       | string           | ISO 8601 receive time         |
 | `webhookEventId`   | string           | Associated webhook event      |
@@ -79,34 +79,34 @@ graph TB
 ### Transcription
 
 | Field    | Type         | Description     |
-| -------- | ------------ | --------------- | ----------------------- | -------- |
-| `status` | 'pending' \  | 'processing' \  | 'completed' \           | 'failed' |
-| `text`   | string \     | null            | Transcribed text        |
+| --------  | ------------  | ---------------  |   |   |
+| `status` | 'pending' \  | 'processing' \  | 'completed' \ | 'failed' |
+| `text`   | string \     | null            | Transcribed text |
 | `error`  | object \     | null            | Error details if failed |
 
 ### LinkPreview
 
 | Field      | Type          | Description        |
-| ---------- | ------------- | ------------------ | ----------------------- |
-| `status`   | 'pending' \   | 'completed' \      | 'failed'                |
+| ----------  | -------------  | ------------------  |   |
+| `status`   | 'pending' \   | 'completed' \      | 'failed' |
 | `previews` | PreviewItem[] | Extracted previews |
 | `error`    | object \      | null               | Error details if failed |
 
 ### WebhookEvent
 
 | Field            | Type         | Description                   |
-| ---------------- | ------------ | ----------------------------- | -------------- | ----------- | ------------ | --------------- |
+| ----------------  | ------------  | -----------------------------  |   |   |   |   |
 | `id`             | string       | Unique event ID               |
 | `payload`        | object       | Raw webhook payload           |
 | `signatureValid` | boolean      | Signature verification result |
 | `receivedAt`     | string       | ISO 8601 timestamp            |
 | `phoneNumberId`  | string       | WhatsApp phone number ID      |
-| `status`         | 'pending' \  | 'processing' \                | 'completed' \  | 'failed' \  | 'ignored' \  | 'user_unmapped' |
+| `status`         | 'pending' \  | 'processing' \                | 'completed' \ | 'failed' \ | 'ignored' \ | 'user_unmapped' |
 
 ### UserMapping
 
 | Field          | Type     | Description              |
-| -------------- | -------- | ------------------------ |
+| --------------  | --------  | ------------------------  |
 | `id`           | string   | Unique mapping ID        |
 | `userId`       | string   | User ID                  |
 | `phoneNumbers` | string[] | Associated phone numbers |
@@ -117,7 +117,7 @@ graph TB
 ### Published
 
 | Event Type                     | Topic                       | Purpose                     |
-| ------------------------------ | --------------------------- | --------------------------- |
+| ------------------------------  | ---------------------------  | ---------------------------  |
 | `whatsapp.webhook.process`     | `whatsapp-webhook-process`  | Async webhook processing    |
 | `whatsapp.media.cleanup`       | `whatsapp-media-cleanup`    | Media deletion              |
 | `whatsapp.audio.transcribe`    | `whatsapp-audio-transcribe` | Audio transcription trigger |
@@ -127,7 +127,7 @@ graph TB
 ### Subscribed
 
 | Event Type                  | Handler                                      |
-| --------------------------- | -------------------------------------------- |
+| ---------------------------  | --------------------------------------------  |
 | `whatsapp.webhook.process`  | `/internal/whatsapp/pubsub/process-webhook`  |
 | `whatsapp.audio.transcribe` | `/internal/whatsapp/pubsub/transcribe-audio` |
 | `whatsapp.message.send`     | `/internal/whatsapp/pubsub/send-message`     |
@@ -138,7 +138,7 @@ graph TB
 ### Infrastructure
 
 | Component                               | Purpose               |
-| --------------------------------------- | --------------------- |
+| ---------------------------------------  | ---------------------  |
 | Firestore (`messages` collection)       | Message persistence   |
 | Firestore (`webhook_events` collection) | Webhook event log     |
 | Firestore (`user_mappings` collection)  | Phone number mappings |
@@ -148,13 +148,13 @@ graph TB
 ### External APIs
 
 | Service            | Purpose                       |
-| ------------------ | ----------------------------- |
+| ------------------  | -----------------------------  |
 | WhatsApp Cloud API | Media download, send messages |
 
 ## Configuration
 
 | Environment Variable                          | Required | Description                                  |
-| --------------------------------------------- | -------- | -------------------------------------------- |
+| ---------------------------------------------  | --------  | --------------------------------------------  |
 | `INTEXURAOS_APP_SECRET`                       | Yes      | WhatsApp app secret for signature validation |
 | `INTEXURAOS_VERIFY_TOKEN`                     | Yes      | Webhook verification token                   |
 | `INTEXURAOS_ALLOWED_WABA_IDS`                 | Yes      | Comma-separated WABA IDs                     |
