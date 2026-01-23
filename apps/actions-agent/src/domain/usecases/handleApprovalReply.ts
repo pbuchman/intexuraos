@@ -130,11 +130,13 @@ export function createHandleApprovalReplyUseCase(
       return err(new Error('User ID mismatch'));
     }
 
-    // Verify action is still awaiting approval
-    if (action.status !== 'awaiting_approval') {
+    // Check if action is in a terminal state (already fully processed)
+    // These states indicate the action cannot be modified by approval reply
+    const terminalStatuses = ['completed', 'rejected'];
+    if (terminalStatuses.includes(action.status)) {
       logger.info(
         { actionId: action.id, status: action.status },
-        'Action is no longer awaiting approval'
+        'Action is in terminal state, ignoring approval reply'
       );
       return ok({
         matched: true,
@@ -196,16 +198,41 @@ export function createHandleApprovalReplyUseCase(
 
     // Handle based on intent
     let outcome: ApprovalReplyResult['outcome'];
-    let updatedAction: Action;
 
     switch (classificationResult.intent) {
       case 'approve': {
-        updatedAction = {
-          ...action,
-          status: 'pending',
-          updatedAt: new Date().toISOString(),
-        };
-        await actionRepository.update(updatedAction);
+        // Atomically update status to prevent race condition with concurrent approval replies
+        const updateResult = await actionRepository.updateStatusIf(
+          action.id,
+          'pending',
+          'awaiting_approval'
+        );
+
+        if (updateResult.outcome === 'status_mismatch') {
+          logger.info(
+            { actionId: action.id, currentStatus: updateResult.currentStatus },
+            'Action already processed by another approval reply (race condition prevented)'
+          );
+          return ok({
+            matched: true,
+            actionId: action.id,
+          });
+        }
+
+        if (updateResult.outcome === 'not_found') {
+          logger.warn({ actionId: action.id }, 'Action not found during approval update');
+          return err(new Error('Action not found'));
+        }
+
+        if (updateResult.outcome === 'error') {
+          logger.error(
+            { actionId: action.id, error: updateResult.error.message },
+            'Failed to update action status during approval'
+          );
+          return err(new Error('Failed to update action status'));
+        }
+
+        // Status successfully updated to 'pending'
 
         // Publish action.created event to trigger immediate processing
         const event: ActionCreatedEvent = {
@@ -263,7 +290,39 @@ export function createHandleApprovalReplyUseCase(
       }
 
       case 'reject': {
-        updatedAction = {
+        // Atomically update status to prevent race condition with concurrent approval replies
+        const updateResult = await actionRepository.updateStatusIf(
+          action.id,
+          'rejected',
+          'awaiting_approval'
+        );
+
+        if (updateResult.outcome === 'status_mismatch') {
+          logger.info(
+            { actionId: action.id, currentStatus: updateResult.currentStatus },
+            'Action already processed by another approval reply (race condition prevented)'
+          );
+          return ok({
+            matched: true,
+            actionId: action.id,
+          });
+        }
+
+        if (updateResult.outcome === 'not_found') {
+          logger.warn({ actionId: action.id }, 'Action not found during rejection update');
+          return err(new Error('Action not found'));
+        }
+
+        if (updateResult.outcome === 'error') {
+          logger.error(
+            { actionId: action.id, error: updateResult.error.message },
+            'Failed to update action status during rejection'
+          );
+          return err(new Error('Failed to update action status'));
+        }
+
+        // Status successfully updated to 'rejected', now add rejection metadata
+        const rejectedAction: Action = {
           ...action,
           status: 'rejected',
           payload: {
@@ -273,7 +332,7 @@ export function createHandleApprovalReplyUseCase(
           },
           updatedAt: new Date().toISOString(),
         };
-        await actionRepository.update(updatedAction);
+        await actionRepository.update(rejectedAction);
 
         // Notify user first, then clean up (to avoid race condition)
         const rejectPublishResult = await whatsappPublisher.publishSendMessage({
