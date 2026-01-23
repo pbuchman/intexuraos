@@ -905,6 +905,11 @@ async function handleTextMessage(
           { correlationId, actionId },
           'Extracted actionId from correlationId'
         );
+      } else {
+        request.log.info(
+          { correlationId, replyToWamid: replyContext.replyToWamid },
+          'Outbound message found but correlationId does not match approval pattern'
+        );
       }
     } else if (outboundResult.ok) {
       request.log.info(
