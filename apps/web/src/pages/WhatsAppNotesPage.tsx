@@ -475,8 +475,13 @@ function MessageItem({
               {message.transcriptionStatus === 'pending' ||
               message.transcriptionStatus === 'processing' ? (
                 <div className="mt-2 flex items-center gap-2 text-sm text-slate-500">
-                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-slate-300 border-t-slate-600" />
-                  <span>Transcription in progress...</span>
+                  {/* WhatsApp-style typing indicator */}
+                  <div className="flex items-center gap-1">
+                    <div className="h-2 w-2 animate-bounce rounded-full bg-slate-400 [animation-delay:0ms]" />
+                    <div className="h-2 w-2 animate-bounce rounded-full bg-slate-400 [animation-delay:150ms]" />
+                    <div className="h-2 w-2 animate-bounce rounded-full bg-slate-400 [animation-delay:300ms]" />
+                  </div>
+                  <span className="text-xs text-slate-400">Transcribing...</span>
                 </div>
               ) : message.transcriptionStatus === 'completed' &&
                 message.transcription !== undefined &&
