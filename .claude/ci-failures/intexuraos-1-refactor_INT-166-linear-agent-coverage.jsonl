@@ -1,4 +1,0 @@
-{"ts":"2026-01-21T14:31:17.951Z","project":"intexuraos-1","branch":"refactor/INT-166-linear-agent-coverage","workspace":"--","runNumber":1,"passed":false,"durationMs":1018,"failureCount":0,"failures":[]}
-{"ts":"2026-01-21T15:00:05.940Z","project":"intexuraos-1","branch":"refactor/INT-166-linear-agent-coverage","runNumber":2,"passed":true,"durationMs":1063946,"failureCount":0,"failures":[]}
-{"ts":"2026-01-21T15:11:27.305Z","project":"intexuraos-1","branch":"refactor/INT-166-linear-agent-coverage","runNumber":2,"passed":true,"durationMs":1079784,"failureCount":0,"failures":[]}
-{"ts":"2026-01-21T15:19:11.341Z","project":"intexuraos-1","branch":"refactor/INT-166-linear-agent-coverage","workspace":"linear-agent","runNumber":3,"passed":true,"durationMs":431594,"failureCount":0,"failures":[]}

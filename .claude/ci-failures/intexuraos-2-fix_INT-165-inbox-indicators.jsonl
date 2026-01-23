@@ -1,3 +1,0 @@
-{"ts":"2026-01-19T13:05:07.785Z","project":"intexuraos-2","branch":"fix/INT-165-inbox-indicators","workspace":"--","runNumber":1,"passed":false,"durationMs":422,"failureCount":0,"failures":[]}
-{"ts":"2026-01-19T13:06:19.065Z","project":"intexuraos-2","branch":"fix/INT-165-inbox-indicators","workspace":"web","runNumber":2,"passed":true,"durationMs":64770,"failureCount":0,"failures":[]}
-{"ts":"2026-01-19T13:09:16.091Z","project":"intexuraos-2","branch":"fix/INT-165-inbox-indicators","runNumber":3,"passed":true,"durationMs":165814,"failureCount":0,"failures":[]}

@@ -411,6 +411,66 @@ Strict mode enabled: `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`, `
 
 ---
 
+## Pre-Flight Checks (MANDATORY)
+
+**RULE:** Read types BEFORE writing code. Most CI failures happen because code is written from memory instead of from actual type definitions.
+
+### Before Writing Test Mocks
+
+**ALWAYS** read the dependency interface before creating mock objects:
+
+```typescript
+// ❌ Writing mock from memory — misses new required fields
+const deps = { repo: fakeRepo, logger: fakeLogger };
+
+// ✅ Read the Deps type first, then create mock with ALL fields
+// 1. Read: apps/<service>/src/domain/usecases/<usecase>.ts → find XxxDeps type
+// 2. Create mock matching ALL required fields
+```
+
+**Checklist:**
+
+1. Open the use case file and find the `*Deps` type definition
+2. List all required fields
+3. Create mock with ALL fields — don't guess
+
+### Before Modifying ServiceContainer
+
+When adding/removing services from `services.ts`:
+
+1. **Read** `services.ts` to see current `ServiceContainer` interface
+2. **Search** for `setServices(` across all test files: `grep -r "setServices(" apps/<service>/src/__tests__/`
+3. **Update ALL** test files with the new field
+
+### Before Importing from Packages
+
+Cross-package imports require built packages:
+
+```bash
+# At session start, build all packages once
+pnpm build
+
+# If you see "Cannot find module '@intexuraos/...'" — rebuild
+pnpm build
+```
+
+### Before Accessing Discriminated Unions
+
+Result types (`Result<T, E>`) and other discriminated unions require narrowing:
+
+```typescript
+// ❌ Accessing without narrowing — TS2339: Property 'value' does not exist
+const result = await repo.find(id);
+return result.value;
+
+// ✅ Narrow first, then access
+const result = await repo.find(id);
+if (!result.ok) return result;  // Narrows to Success<T>
+return result.value;            // Now safe
+```
+
+---
+
 ## Common LLM Mistakes (LEARN FROM HISTORY)
 
 These patterns cause 80% of CI failures. Internalize them.
