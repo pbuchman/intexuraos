@@ -8,8 +8,8 @@
       }
     },
     "sentry": {
-      "type": "http",
-      "url": "https://mcp.sentry.dev/mcp"
+      "command": "npx",
+      "args": ["@sentry/mcp-server@latest", "--access-token", "${SENTRY_AUTH_TOKEN}"]
     }
   }
 }
