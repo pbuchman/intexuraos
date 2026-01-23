@@ -71,7 +71,8 @@ If yes: Transition to [work-existing.md](work-existing.md) flow
 If task appears complex (multiple phases, many checkboxes), ask:
 "This appears to be a multi-step task. Split into child issues?"
 
-If yes: Proceed to [plan-splitting.md](plan-splitting.md)
+If yes: Proceed to [plan-splitting.md](plan-splitting.md) **with the issue created in step 4**.
+The existing issue becomes the parent (ledger) — do NOT create a new parent issue.
 
 ## Issue Naming Conventions
 

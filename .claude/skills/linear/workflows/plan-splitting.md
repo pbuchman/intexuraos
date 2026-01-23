@@ -36,7 +36,7 @@ Tasks are classified into tiers based on dependency and execution order:
 ```
 1. PARSE plan → extract phases, tasks, dependencies
 2. CLASSIFY tasks into tiers (0/1/2/3+)
-3. CREATE parent issue (ledger) via mcp__linear__create_issue
+3. REUSE existing issue as parent (ledger) OR create new if none exists
 4. CREATE child issues with parentId parameter
 5. SET dependencies via blockedBy arrays
 6. UPDATE parent with child issues table
@@ -60,12 +60,25 @@ For each extracted task:
 3. Assign tier number (0 = setup, 1 = independent, 2+ = dependent)
 4. Group tasks by tier
 
-#### Step 3: Create Parent Issue (Ledger)
+#### Step 3: Use Existing Issue as Parent (Ledger)
 
-Use [ledger-template.md](../templates/ledger-template.md) format:
+**IMPORTANT:** If an issue was already created in `create-issue.md`, REUSE it as the parent.
+Do NOT create a new parent issue — this would orphan the original.
 
 ```
-Title: [feature] <original plan title>
+IF issue already exists (from create-issue.md step 4):
+  - Use that issue as the parent
+  - UPDATE its description to ledger format
+  - UPDATE its state to "In Progress"
+
+ELSE (direct invocation without existing issue):
+  - CREATE new parent issue via mcp__linear__create_issue
+```
+
+Use [ledger-template.md](../templates/ledger-template.md) format for the description:
+
+```
+Title: [feature] <original plan title>  (update if needed)
 State: In Progress
 Team: pbuchman
 Description: Full ledger format (see template)
