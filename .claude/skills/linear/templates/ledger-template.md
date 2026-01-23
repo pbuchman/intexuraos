@@ -110,5 +110,5 @@ Update the Status column as work progresses:
 | Todo        | Ready to start                   |
 | In Progress | Currently being worked on        |
 | In Review   | PR created, awaiting review      |
-| Q&A QA      | Testing/verification in progress |
+| QA      | Testing/verification in progress |
 | Done        | Complete                         |

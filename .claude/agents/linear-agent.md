@@ -241,7 +241,7 @@ Enforce these automatic transitions:
 ```
 Backlog/Todo → In Progress  (when /linear LIN-123 called)
 In Progress → In Review     (when gh pr create called)
-In Review → Q&A QA          (when PR approved, default)
+In Review → QA          (when PR approved, default)
 In Review → Done            (when PR approved AND user explicitly requests)
 In Review → In Progress     (when PR has review changes)
 ```

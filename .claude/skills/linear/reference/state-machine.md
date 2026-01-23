@@ -25,11 +25,11 @@ Automatic state transitions enforced by the Linear skill.
                                 |
                 +---------------+---------------+
                 |                               |
-        PR approved (→ Q&A QA)         PR changes requested
+        PR approved (→ QA)         PR changes requested
                 |                               |
                 v                               v
     +-------------------+             +-------------------+
-    |       Q&A QA      |             |      In Progress  |  (Back to work)
+    |       QA      |             |      In Progress  |  (Back to work)
     +-------------------+             +-------------------+
                 |
         User explicitly
@@ -47,7 +47,7 @@ Automatic state transitions enforced by the Linear skill.
 | ------------------------------------------ | ------------ | ----------- | ----------------------------------- |
 | `/linear INT-123` called                   | Backlog/Todo | In Progress | Create branch with issue ID in name |
 | `gh pr create` called (title has issue ID) | In Progress  | In Review   | GitHub integration auto-attaches PR |
-| PR approved                                | In Review    | Q&A QA      | Move to Q&A QA state for testing    |
+| PR approved                                | In Review    | QA      | Move to QA state for testing    |
 | PR has review changes                      | In Review    | In Progress | Update Linear state                 |
 | User explicitly requests "move to Done"    | Any          | Done        | Close Linear issue                  |
 
@@ -55,7 +55,7 @@ Automatic state transitions enforced by the Linear skill.
 
 ### Default Post-Approval State
 
-When a PR is approved, the default transition is to **Q&A QA** (not Done). This allows for:
+When a PR is approved, the default transition is to **QA** (not Done). This allows for:
 - Manual testing verification
 - QA review
 - Final sign-off
@@ -72,7 +72,7 @@ Without both conditions, the PR won't appear in Linear's attachments array.
 
 ## State Descriptions
 
-**Note:** "Q&A QA" is a custom state configured for this project. Standard Linear installations use only: Backlog, Todo, In Progress, In Review, Done.
+**Note:** "QA" is a custom state configured for this project. Standard Linear installations use only: Backlog, Todo, In Progress, In Review, Done.
 
 | State       | Description                                      |
 | ----------- | ------------------------------------------------ |
@@ -80,7 +80,7 @@ Without both conditions, the PR won't appear in Linear's attachments array.
 | Todo        | Prioritized, ready to work on                    |
 | In Progress | Actively being worked on, branch created         |
 | In Review   | PR created, awaiting code review                 |
-| Q&A QA      | PR approved, awaiting testing/verification       |
+| QA      | PR approved, awaiting testing/verification       |
 | Done        | Complete, issue closed                           |
 
 ## Automated Transitions

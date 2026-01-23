@@ -708,7 +708,7 @@ Use the `/linear` skill for issue tracking and workflow management.
 1. All bugs/features must have corresponding Linear issues
 2. PR descriptions must link to Linear issues (`Fixes INT-XXX`)
 3. Reasoning belongs in PR descriptions, not code comments
-4. State transitions happen automatically: Backlog → In Progress → In Review → Q&A QA (Done state requires explicit user instruction)
+4. State transitions happen automatically: Backlog → In Progress → In Review → QA (Done state requires explicit user instruction)
 5. `pnpm run ci:tracked` MUST pass before PR creation (unless explicitly overridden)
 
 **Cross-Linking Protocol:**

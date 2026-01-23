@@ -34,7 +34,7 @@ Before processing any issues, verify access to all required tools:
 
 **Note:** For full Linear workflow integration, the `/linear` command handles:
 
-- Automatic state transitions (Backlog → In Progress → In Review → Q&A QA, Done requires explicit user instruction)
+- Automatic state transitions (Backlog → In Progress → In Review → QA, Done requires explicit user instruction)
 - Branch naming with issue ID (fix/LIN-123 or fix/sentry-XXX)
 - PR template with cross-references
 - Comment synchronization between systems

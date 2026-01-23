@@ -31,7 +31,7 @@ All issues must be linked between systems for full traceability.
 ### What Happens When Conditions Are Met
 
 - PR automatically appears in Linear issue's `attachments` array
-- Issue state transitions automatically: `In Progress` → `In Review` → `Q&A QA`
+- Issue state transitions automatically: `In Progress` → `In Review` → `QA`
 - Bidirectional link established (click PR from Linear, see issue from GitHub)
 - **No manual comment needed** — attachment is the canonical link
 
