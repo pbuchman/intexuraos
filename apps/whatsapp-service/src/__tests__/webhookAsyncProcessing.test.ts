@@ -1582,7 +1582,7 @@ describe('Webhook async processing', () => {
       expect(approvalReplyEvents[0]?.actionId).toBe('action-123-456');
     });
 
-    it('publishes approval reply event without actionId when no outbound message exists', async () => {
+    it('does not publish approval reply event when no outbound message exists', async () => {
       // Set up user mapping so the webhook processing reaches handleTextMessage
       await ctx.userMappingRepository.saveMapping(testUserId, [senderPhone]);
 
@@ -1609,15 +1609,16 @@ describe('Webhook async processing', () => {
       // Trigger async processing
       await triggerWebhookProcessing();
 
-      // Check that approval reply event was published without actionId
+      // No approval reply event should be published (no actionId found)
       const approvalReplyEvents = ctx.eventPublisher.getApprovalReplyEvents();
-      expect(approvalReplyEvents.length).toBe(1);
-      expect(approvalReplyEvents[0]?.type).toBe('action.approval.reply');
-      expect(approvalReplyEvents[0]?.replyToWamid).toBe('wamid.unknown.message');
-      expect(approvalReplyEvents[0]?.actionId).toBeUndefined();
+      expect(approvalReplyEvents.length).toBe(0);
+
+      // But command.ingest should still be published
+      const commandEvents = ctx.eventPublisher.getCommandIngestEvents();
+      expect(commandEvents.length).toBeGreaterThanOrEqual(1);
     });
 
-    it('publishes approval reply event without actionId when correlationId does not match pattern', async () => {
+    it('does not publish approval reply event when correlationId does not match pattern', async () => {
       // Set up user mapping so the webhook processing reaches handleTextMessage
       await ctx.userMappingRepository.saveMapping(testUserId, [senderPhone]);
 
@@ -1653,12 +1654,16 @@ describe('Webhook async processing', () => {
       // Trigger async processing
       await triggerWebhookProcessing();
 
+      // No approval reply event should be published (correlationId doesn't match approval pattern)
       const approvalReplyEvents = ctx.eventPublisher.getApprovalReplyEvents();
-      expect(approvalReplyEvents.length).toBe(1);
-      expect(approvalReplyEvents[0]?.actionId).toBeUndefined();
+      expect(approvalReplyEvents.length).toBe(0);
+
+      // But command.ingest should still be published
+      const commandEvents = ctx.eventPublisher.getCommandIngestEvents();
+      expect(commandEvents.length).toBeGreaterThanOrEqual(1);
     });
 
-    it('publishes approval reply event without actionId when repository lookup fails', async () => {
+    it('does not publish approval reply event when repository lookup fails', async () => {
       // Set up user mapping so the webhook processing reaches handleTextMessage
       await ctx.userMappingRepository.saveMapping(testUserId, [senderPhone]);
 
@@ -1690,10 +1695,13 @@ describe('Webhook async processing', () => {
       // Trigger async processing
       await triggerWebhookProcessing();
 
+      // No approval reply event should be published (lookup failed, no actionId)
       const approvalReplyEvents = ctx.eventPublisher.getApprovalReplyEvents();
-      expect(approvalReplyEvents.length).toBe(1);
-      expect(approvalReplyEvents[0]?.actionId).toBeUndefined();
-      expect(approvalReplyEvents[0]?.replyText).toBe('No');
+      expect(approvalReplyEvents.length).toBe(0);
+
+      // But command.ingest should still be published
+      const commandEvents = ctx.eventPublisher.getCommandIngestEvents();
+      expect(commandEvents.length).toBeGreaterThanOrEqual(1);
     });
 
     it('does not publish approval reply event for non-reply messages', async () => {
@@ -1830,19 +1838,9 @@ describe('Webhook async processing', () => {
       // Trigger async processing
       await triggerWebhookProcessing();
 
-      // Verify: Approval reply event was published (without actionId)
+      // Verify: No approval reply event published (no actionId found)
       const approvalEvents = ctx.eventPublisher.getApprovalReplyEvents();
-      expect(approvalEvents.length).toBeGreaterThanOrEqual(1);
-      const latestApprovalEvent = approvalEvents[approvalEvents.length - 1];
-      if (latestApprovalEvent === undefined) {
-        throw new Error('Expected approval event to be defined');
-      }
-      expect(latestApprovalEvent).toMatchObject({
-        type: 'action.approval.reply',
-        replyText: 'Create a note to buy milk',
-      });
-      // Verify that actionId is not set (or is undefined)
-      expect(latestApprovalEvent.actionId).toBeUndefined();
+      expect(approvalEvents.length).toBe(0);
 
       // Verify: Command ingest event WAS published (because no actionId)
       const commandEvents = ctx.eventPublisher.getCommandIngestEvents();
