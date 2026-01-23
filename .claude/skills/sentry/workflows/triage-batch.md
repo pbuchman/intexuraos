@@ -54,7 +54,7 @@ Parameters:
 ```
 
 Projects to query:
-1. `intexuraox-development`
+1. `intexuraos-development`
 2. `intexuraos-web-development`
 
 ### Phase 3: Sequential Processing (The Loop)

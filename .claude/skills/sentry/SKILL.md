@@ -17,7 +17,7 @@ triggers:
 config:
   organization: "intexuraos-dev-pbuchman"
   projects:
-    - "intexuraox-development"
+    - "intexuraos-development"
     - "intexuraos-web-development"
 ---
 
@@ -95,7 +95,7 @@ Aborting.
 
 Issues are fetched from these Sentry projects:
 
-1. `intexuraox-development` (backend services)
+1. `intexuraos-development` (backend services)
 2. `intexuraos-web-development` (web app)
 
 ## Cross-Linking Protocol (Critical)
