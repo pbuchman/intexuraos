@@ -727,6 +727,53 @@ Use the `/linear` skill for issue tracking and workflow management.
 
 ---
 
+## Sentry Issue Workflow
+
+Use the `/sentry` skill for error triage, investigation, and resolution.
+
+**Skill Location:** `.claude/skills/sentry/SKILL.md`
+
+**When Sentry URLs or error triage appears in context**, the skill is automatically invoked.
+
+**Usage:**
+
+```bash
+/sentry                           # Batch triage unresolved issues
+/sentry <sentry-url>              # Investigate specific issue
+/sentry analyze <sentry-url>      # AI-powered root cause analysis (Seer)
+/sentry linear <sentry-url>       # Create Linear issue from Sentry error
+/sentry triage --limit 5          # Batch triage with limit
+```
+
+**Examples:**
+
+```bash
+/sentry https://intexuraos-dev-pbuchman.sentry.io/issues/123/
+/sentry analyze https://intexuraos-dev-pbuchman.sentry.io/issues/456/
+/sentry triage --limit 3
+```
+
+**Mandatory Requirements:**
+
+1. Every Sentry issue MUST be linked to a Linear issue (use `[sentry] <title>` prefix)
+2. Every fix PR MUST link both Sentry and Linear issues
+3. No band-aid fixes — investigate root cause before implementing
+4. `pnpm run ci:tracked` MUST pass before PR creation
+
+**Cross-Linking Protocol:**
+
+| Direction        | Method                                         |
+| ---------------- | ---------------------------------------------- |
+| Sentry → Linear  | Comment on Sentry with Linear issue link       |
+| Linear → Sentry  | `[sentry] <title>` naming + link in description |
+| Linear → GitHub  | PR title contains `INT-XXX`                    |
+| GitHub → Linear  | `Fixes INT-XXX` in PR body                     |
+| GitHub → Sentry  | Sentry link in PR description                  |
+
+**Full Documentation:** `.claude/skills/sentry/`
+
+---
+
 ## Complex Tasks — Linear Continuity
 
 For multi-step features, use the Linear-based continuity pattern with parent-child issues.

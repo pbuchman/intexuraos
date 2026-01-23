@@ -2,7 +2,24 @@
 
 **Trigger:** User calls `/linear https://<sentry-url>`
 
-## Steps
+> **Note:** For comprehensive Sentry triage, AI analysis, and batch processing, use the dedicated `/sentry` skill. This workflow focuses specifically on creating Linear issues from Sentry errors.
+
+## Delegation to Sentry Skill
+
+For advanced operations, delegate to the Sentry skill:
+
+| Operation                  | Use                                      |
+| -------------------------- | ---------------------------------------- |
+| Single issue investigation | `/sentry <sentry-url>`                   |
+| AI root cause analysis     | `/sentry analyze <sentry-url>`           |
+| Batch triage               | `/sentry` or `/sentry triage --limit N`  |
+| Create Linear issue only   | This workflow (below)                    |
+
+**Full Sentry documentation:** `.claude/skills/sentry/`
+
+---
+
+## Steps (Create Linear Issue)
 
 ### 1. Parse Sentry URL
 
