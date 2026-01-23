@@ -905,6 +905,11 @@ async function handleTextMessage(
           { correlationId, actionId },
           'Extracted actionId from correlationId'
         );
+      } else {
+        request.log.info(
+          { correlationId, replyToWamid: replyContext.replyToWamid },
+          'Outbound message found but correlationId does not match approval pattern'
+        );
       }
     } else if (outboundResult.ok) {
       request.log.info(
@@ -918,40 +923,40 @@ async function handleTextMessage(
       );
     }
 
-    // Publish approval reply event
-    const approvalReplyEvent: Parameters<typeof eventPublisher.publishApprovalReply>[0] = {
-      type: 'action.approval.reply',
-      replyToWamid: replyContext.replyToWamid,
-      replyText: messageText,
-      userId,
-      timestamp: new Date().toISOString(),
-    };
-
+    // Only publish approval reply event if we found an actionId
+    // If no actionId was extracted, this is not a reply to an approval message
     if (actionId !== undefined) {
-      approvalReplyEvent.actionId = actionId;
-    }
+      const approvalReplyEvent: Parameters<typeof eventPublisher.publishApprovalReply>[0] = {
+        type: 'action.approval.reply',
+        replyToWamid: replyContext.replyToWamid,
+        replyText: messageText,
+        userId,
+        actionId,
+        timestamp: new Date().toISOString(),
+      };
 
-    const approvalPublishResult = await eventPublisher.publishApprovalReply(approvalReplyEvent);
+      const approvalPublishResult = await eventPublisher.publishApprovalReply(approvalReplyEvent);
 
-    if (!approvalPublishResult.ok) {
-      request.log.error(
-        {
-          eventId: savedEvent.id,
-          error: approvalPublishResult.error,
-          replyToWamid: replyContext.replyToWamid,
-        },
-        'Failed to publish approval reply event'
-      );
-    } else {
-      request.log.info(
-        {
-          eventId: savedEvent.id,
-          userId,
-          replyToWamid: replyContext.replyToWamid,
-          actionId,
-        },
-        'Published approval reply event'
-      );
+      if (!approvalPublishResult.ok) {
+        request.log.error(
+          {
+            eventId: savedEvent.id,
+            error: approvalPublishResult.error,
+            replyToWamid: replyContext.replyToWamid,
+          },
+          'Failed to publish approval reply event'
+        );
+      } else {
+        request.log.info(
+          {
+            eventId: savedEvent.id,
+            userId,
+            replyToWamid: replyContext.replyToWamid,
+            actionId,
+          },
+          'Published approval reply event'
+        );
+      }
     }
   }
 
