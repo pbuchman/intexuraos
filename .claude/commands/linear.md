@@ -7,7 +7,7 @@ Manage Linear issues, branches, and PRs with enforced workflow and cross-linking
 ## Usage
 
 ```
-/linear                           # NON-INTERACTIVE: Pick random Backlog issue, work on it WITHOUT asking
+/linear                           # NON-INTERACTIVE: Pick random Todo issue, work on it WITHOUT asking
 /linear <task description>        # Create new issue
 /linear LIN-123                   # Work on existing issue
 /linear <sentry-url>              # Create issue from Sentry error
@@ -16,8 +16,8 @@ Manage Linear issues, branches, and PRs with enforced workflow and cross-linking
 **CRITICAL:** When `/linear` is called WITHOUT arguments, it operates in **NON-INTERACTIVE MODE**:
 
 - NEVER ask the user for confirmation or what to do
-- Automatically pick a random task from Backlog/Todo
-- If no tasks available, state "No items in Backlog or Todo state." and exit
+- Automatically pick a random task from **Todo** state only (NOT from Backlog)
+- If no tasks available, state "No items in Todo state." and exit
 - If task cannot be completed (auth failure, missing info), create a PR explaining the blocker and proceed
 
 ---
@@ -29,8 +29,8 @@ Manage Linear issues, branches, and PRs with enforced workflow and cross-linking
 | Rule             | Description                                                                                       |
 | ---------------- | ------------------------------------------------------------------------------------------------- |
 | **NO PROMPTS**   | Never ask "what should I do?", "which task?", or "ready to start?"                                |
-| **AUTO-PROCEED** | Always proceed with the selected Backlog/Todo item automatically                                  |
-| **NO TASKS**     | If Backlog/Todo is empty, print message and exit gracefully                                       |
+| **AUTO-PROCEED** | Always proceed with the selected Todo item automatically                                          |
+| **NO TASKS**     | If Todo state is empty, print message and exit gracefully                                         |
 | **BLOCKER PR**   | If task cannot be completed (auth, missing info), create PR with explanation and consider it done |
 
 **The command is designed for automated/cron usage. It MUST NOT block on user input.**
@@ -50,12 +50,12 @@ Manage Linear issues, branches, and PRs with enforced workflow and cross-linking
 
 The command automatically detects intent from input:
 
-| Input Pattern                   | Type                             | Action                                                       |
-| ------------------------------- | -------------------------------- | ------------------------------------------------------------ |
-| `/linear` (no args)             | Random Backlog (NON-INTERACTIVE) | Pick from Backlog/Todo and start working WITHOUT asking user |
-| `/linear <task description>`    | Create New                       | Detect bug/feature, create issue, start working              |
-| `/linear INT-<number>`          | Work Existing                    | Start working on specific issue (use INT- for this project)  |
-| `/linear https://sentry.io/...` | Sentry Integration               | Create Linear issue from Sentry error                        |
+| Input Pattern                   | Type                          | Action                                                          |
+| ------------------------------- | ----------------------------- | --------------------------------------------------------------- |
+| `/linear` (no args)             | Random Todo (NON-INTERACTIVE) | Pick from Todo state only and start working WITHOUT asking user |
+| `/linear <task description>`    | Create New                    | Detect bug/feature, create issue, start working                 |
+| `/linear INT-<number>`          | Work Existing                 | Start working on specific issue (use INT- for this project)     |
+| `/linear https://sentry.io/...` | Sentry Integration            | Create Linear issue from Sentry error                           |
 
 ---
 
@@ -78,9 +78,9 @@ The command automatically detects intent from input:
 
 **MANDATORY:** When `/linear` is called WITHOUT arguments (e.g., `claude --dangerously-skip-permissions linear`):
 
-1. **NEVER ask the user what to do** - proceed automatically with random Backlog task
+1. **NEVER ask the user what to do** - proceed automatically with random Todo task
 2. **NEVER ask for confirmation** - no "Ready to start?" or "Continue?" prompts
-3. If no Backlog/Todo items exist: state "No items in Backlog or Todo state." and exit
+3. If no Todo items exist: state "No items in Todo state." and exit
 4. If task cannot be completed (auth failure, missing info, blockers):
    - Create a PR with explanation of the blocker
    - The PR with reasoning is considered sufficient deliverable
@@ -212,7 +212,7 @@ For a PR to appear as an attachment in Linear's UI:
 ### What Happens When Conditions Are Met
 
 - PR automatically appears in Linear issue's `attachments` array
-- Issue state transitions automatically: `In Progress` → `In Review` → `Done`
+- Issue state transitions automatically: `In Progress` → `In Review` → `Q&A QA` (unless explicitly instructed to move to Done)
 - Bidirectional link established (click PR from Linear, see issue from GitHub)
 
 ### What Happens When Conditions Are NOT Met
@@ -230,7 +230,7 @@ For a PR to appear as an attachment in Linear's UI:
 
 ---
 
-## Workflow: Random Backlog (Cron Mode)
+## Workflow: Random Todo (Cron Mode)
 
 ### Trigger
 
@@ -251,18 +251,18 @@ User calls `/linear` with no arguments.
 
 ### Selection Algorithm
 
-1. List issues where `state` is `"Backlog"` OR `"Todo"`
+1. List issues where `state` is `"Todo"` (NOT from Backlog)
 2. Filter to `team: "pbuchman"`
 3. Sort by `priority` (High → Low) then `createdAt` (newest first)
 4. Pick first result
-5. **If no items found:** Print "No items in Backlog or Todo state." and exit
+5. **If no items found:** Print "No items in Todo state." and exit
 
 ### Execution
 
 ```
 1. Verify tools (Linear, GitHub, GCloud) - fail fast if unavailable
 2. Fetch selected issue details
-3. Update Linear state to "In Progress"
+3. Update Linear state to "In Progress" (CRITICAL: DO THIS FIRST - before any planning or investigation)
 4. Create branch from origin/development (or origin/main)
 5. Implement the task (investigate, code, test)
 6. Run CI gate: pnpm run ci:tracked
@@ -270,6 +270,15 @@ User calls `/linear` with no arguments.
 8. Create PR with cross-links (or PR explaining blocker if task uncompletable)
 9. Update Linear state to "In Review"
 ```
+
+**CRITICAL:** You MUST update the Linear issue state to "In Progress" in step 3 BEFORE:
+
+- Reading any code
+- Planning implementation
+- Investigating the issue
+- Running any commands
+
+This signals that work has begun and prevents duplicate work.
 
 ### Branch Selection Logic
 
@@ -285,12 +294,13 @@ fi
 git checkout -b fix/LIN-123 "$BASE_BRANCH"
 ```
 
-### When No Backlog Items
+### When No Todo Items
 
-**NON-INTERACTIVE:** Exit gracefully with message: "No items in Backlog or Todo state."
+**NON-INTERACTIVE:** Exit gracefully with message: "No items in Todo state."
 
 - Do NOT ask to create a new issue
 - Do NOT ask what to do instead
+- Do NOT pick from Backlog state
 - Simply print the message and exit
 
 ---
@@ -369,7 +379,15 @@ User calls `/linear LIN-123`
    - Get issue from Linear
    - Parse title, description, state, assignee
 
-3. **Update State** - Set to "In Progress"
+3. **Update State** - Set to "In Progress" **(DO THIS FIRST - before any planning or investigation)**
+
+   **CRITICAL:** You MUST update the Linear issue state to "In Progress" BEFORE:
+   - Reading any code
+   - Planning implementation
+   - Investigating the issue
+   - Running any commands
+
+   This signals that work has begun and prevents duplicate work.
 
 4. **Create Branch**
 
@@ -452,6 +470,8 @@ User calls `/linear https://<sentry-url>`
 
 5. **Create Linear Issue**
    - Format: `[sentry] <short-error-message>`
+   - Team: `pbuchman`
+   - State: `Backlog`
    - Description includes:
      - Sentry issue link
      - Error context summary
@@ -486,13 +506,15 @@ User calls `/linear https://<sentry-url>`
                                 |
                 +---------------+---------------+
                 |                               |
-        PR approved                     PR changes requested
+        PR approved (→ Q&A QA)         PR changes requested
                 |                               |
                 v                               v
     +-------------------+             +-------------------+
-    |        Done       |             |      In Progress  |  (Back to work)
+    |       Q&A QA      |             |      In Progress  |  (Back to work)
     +-------------------+             +-------------------+
 ```
+
+**Note:** Default transition after PR approval is to **Q&A QA** state (for testing). Only move to **Done** when explicitly instructed by user.
 
 ### State Transition Triggers
 
@@ -500,8 +522,9 @@ User calls `/linear https://<sentry-url>`
 | ------------------------------------------ | ------------ | ----------- | ----------------------------------- |
 | `/linear LIN-123` called                   | Backlog/Todo | In Progress | Create branch with issue ID in name |
 | `gh pr create` called (title has issue ID) | In Progress  | In Review   | GitHub integration auto-attaches PR |
-| PR approved                                | In Review    | Done        | Close Linear issue                  |
+| PR approved                                | In Review    | Q&A QA      | Move to Q&A QA state for testing    |
 | PR has review changes                      | In Review    | In Progress | Update Linear state                 |
+| User explicitly requests "move to Done"    | Any          | Done        | Close Linear issue                  |
 
 **Note:** GitHub integration only works when BOTH branch name AND PR title contain the Linear issue ID (e.g., `LIN-123`, `PBU-44`).
 
@@ -522,7 +545,7 @@ When both conditions are met:
 
 - GitHub integration **automatically attaches PR** to Linear issue
 - PR appears in `attachments` array (visible in Linear UI under "Pull requests" section)
-- Issue state automatically updates: `In Progress` → `In Review` → `Done`
+- Issue state automatically updates: `In Progress` → `In Review` → `Q&A QA` (unless user explicitly requests Done)
 - **No manual comment needed** - attachment is the canonical link
 
 **Verification:** After creating PR, check Linear issue has PR in `attachments` array. If missing, the title or branch name didn't contain the issue ID.

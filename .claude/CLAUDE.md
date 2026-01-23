@@ -687,7 +687,7 @@ Use the `/linear` command for issue tracking and workflow management.
 **Usage:**
 
 ```bash
-/linear                    # Pick random backlog issue (cron mode)
+/linear                    # Pick random Todo issue (cron mode)
 /linear <task description> # Create new issue
 /linear LIN-123            # Work on existing issue
 /linear <sentry-url>       # Create from Sentry error
@@ -706,17 +706,18 @@ Use the `/linear` command for issue tracking and workflow management.
 1. All bugs/features must have corresponding Linear issues
 2. PR descriptions must link to Linear issues (`Fixes LIN-XXX`)
 3. Reasoning belongs in PR descriptions, not code comments
-4. State transitions happen automatically: Backlog → In Progress → In Review → Done
+4. State transitions happen automatically: Backlog → In Progress → In Review → Q&A QA (Done state requires explicit user instruction)
 5. `pnpm run ci:tracked` MUST pass before PR creation (unless explicitly overridden)
 
 **Cross-Linking Protocol:**
 
-| Direction       | Method                                          |
-| --------------- | ----------------------------------------------- |
-| Linear → GitHub | `Fixes LIN-XXX` in PR body                      |
-| GitHub → Linear | PR URL in issue comments                        |
-| Sentry → Linear | `[sentry] <title>` naming + link in description |
-| Linear → Sentry | Comment on Sentry issue                         |
+| Direction       | Method                                                             |
+| --------------- | ------------------------------------------------------------------ |
+| Linear → GitHub | PR title contains `LIN-XXX` (enables auto-attachment)              |
+| GitHub → Linear | GitHub integration attaches PR (when title + branch have issue ID) |
+| Linear → GitHub | `Fixes LIN-XXX` in PR body (for issue closing behavior)            |
+| Sentry → Linear | `[sentry] <title>` naming + link in description                    |
+| Linear → Sentry | Comment on Sentry issue                                            |
 
 **See:** `.claude/commands/linear.md` for complete workflow documentation.
 
