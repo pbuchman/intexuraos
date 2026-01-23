@@ -1,2 +1,6 @@
 {"ts":"2026-01-22T20:41:26.117Z","project":"intexuraos-1","branch":"feature/INT-206","runNumber":1,"passed":true,"durationMs":336782,"failureCount":0,"failures":[]}
 {"ts":"2026-01-22T21:38:58.966Z","project":"intexuraos-1","branch":"feature/INT-206","runNumber":2,"passed":true,"durationMs":509713,"failureCount":0,"failures":[]}
+{"ts":"2026-01-23T08:35:42.266Z","project":"intexuraos-1","branch":"feature/INT-206","workspace":"--","runNumber":3,"passed":false,"durationMs":1137,"failureCount":0,"failures":[]}
+{"ts":"2026-01-23T08:35:46.022Z","project":"intexuraos-1","branch":"feature/INT-206","workspace":"--","runNumber":4,"passed":false,"durationMs":475,"failureCount":0,"failures":[]}
+{"ts":"2026-01-23T08:45:00.829Z","project":"intexuraos-1","branch":"feature/INT-206","workspace":"--","runNumber":5,"passed":false,"durationMs":504,"failureCount":0,"failures":[]}
+{"ts":"2026-01-23T08:50:16.286Z","project":"intexuraos-1","branch":"feature/INT-206","runNumber":6,"passed":true,"durationMs":254223,"failureCount":0,"failures":[]}

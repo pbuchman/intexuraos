@@ -306,7 +306,7 @@ export function LinearIssuesPage(): React.JSX.Element {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<TabType>('backlog');
+  const [activeTab, setActiveTab] = useState<TabType>('todo');
   const [archiveExpanded, setArchiveExpanded] = useState(false);
   const [dismissedFailedIssueIds, setDismissedFailedIssueIds] = useState<Set<string>>(new Set());
 

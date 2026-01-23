@@ -755,6 +755,10 @@ async function handleReactionMessage(
     return;
   }
 
+  // match[1] is guaranteed to exist and be non-empty because:
+  // 1. We returned early if match === null
+  // 2. The regex uses (.+) which requires at least one character
+  // TypeScript doesn't know this, so we need the fallback for type safety
   const actionId = match[1] ?? '';
   request.log.info(
     { eventId: savedEvent.id, correlationId, actionId, intent },
@@ -769,12 +773,8 @@ async function handleReactionMessage(
     replyText,
     userId,
     timestamp: new Date().toISOString(),
+    actionId,
   };
-
-  // Only include actionId if it was extracted from the correlationId
-  if (match[1] !== undefined) {
-    approvalReplyEvent.actionId = match[1];
-  }
 
   const approvalPublishResult = await eventPublisher.publishApprovalReply(approvalReplyEvent);
 
