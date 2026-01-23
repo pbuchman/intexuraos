@@ -1,5 +1,5 @@
 import type { Result, Logger } from '@intexuraos/common-core';
-import { ok, err } from '@intexuraos/common-core';
+import { ok, err, getErrorMessage } from '@intexuraos/common-core';
 import type { Action } from '../models/action.js';
 import type { ActionRepository } from '../ports/actionRepository.js';
 import type { ApprovalMessageRepository } from '../ports/approvalMessageRepository.js';
@@ -322,6 +322,7 @@ export function createHandleApprovalReplyUseCase(
         }
 
         // Status successfully updated to 'rejected', now add rejection metadata
+        // This is a non-critical operation - if it fails, the status is already rejected
         const rejectedAction: Action = {
           ...action,
           status: 'rejected',
@@ -332,7 +333,18 @@ export function createHandleApprovalReplyUseCase(
           },
           updatedAt: new Date().toISOString(),
         };
-        await actionRepository.update(rejectedAction);
+        try {
+          await actionRepository.update(rejectedAction);
+        } catch (metadataError) {
+          // Log but continue - status is already rejected, metadata is nice-to-have
+          logger.warn(
+            {
+              actionId: action.id,
+              error: getErrorMessage(metadataError, 'Unknown error'),
+            },
+            'Failed to add rejection metadata, continuing with notification'
+          );
+        }
 
         // Notify user first, then clean up (to avoid race condition)
         const rejectPublishResult = await whatsappPublisher.publishSendMessage({
