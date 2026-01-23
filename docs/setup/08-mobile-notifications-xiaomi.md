@@ -117,9 +117,9 @@ To prevent WhatsApp updates from being treated as duplicates, the `notification_
 **Variables:**
 
 | Variable     | Description                                 |
-| ------------ | ------------------------------------------- | ------------------ | -------- |
+| ------------  | -------------------------------------------  |   |   |
 | `%TIMES`     | Current Unix timestamp (seconds)            |
-| `%ankey`     | Unique notification key (e.g., `0\          | com.whatsapp.w4b\  | 101...`) |
+| `%ankey`     | Unique notification key (e.g., `0\          | com.whatsapp.w4b\ | 101...`) |
 | `%anpackage` | App package name (e.g., `com.whatsapp.w4b`) |
 | `%antitle`   | Notification title (sanitized)              |
 | `%antext`    | Notification text content (sanitized)       |
@@ -135,7 +135,7 @@ The notification "No active profiles (1 of 1 enabled)" is **normal**. Event trig
 ### 5.2. Analyzing Log Errors
 
 | Response Code | Meaning                                             |
-| ------------- | --------------------------------------------------- |
+| -------------  | ---------------------------------------------------  |
 | `200`         | Success - notification was received by the server   |
 | `401`         | Unauthorized - check your signature header          |
 | `400`         | Bad request - verify JSON payload structure         |
@@ -171,7 +171,7 @@ To ensure the service remains alive on HyperOS:
 ## 7. Troubleshooting
 
 | Issue                            | Solution                                                       |
-| -------------------------------- | -------------------------------------------------------------- |
+| --------------------------------  | --------------------------------------------------------------  |
 | Notifications not being captured | Check AutoNotification has Notification Access permission      |
 | 401 Unauthorized errors          | Verify your signature is correct and hasn't been regenerated   |
 | Tasker killed in background      | Enable autostart and disable battery optimization              |

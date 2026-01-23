@@ -7,7 +7,7 @@ Notion-service manages the lifecycle of Notion integrations - connection validat
 ## API Endpoints
 
 | Method | Path                 | Description                | Auth         |
-| ------ | -------------------- | -------------------------- | ------------ |
+| ------  | --------------------  | --------------------------  | ------------  |
 | POST   | `/notion/connect`    | Connect Notion integration | Bearer token |
 | GET    | `/notion/status`     | Get integration status     | Bearer token |
 | DELETE | `/notion/disconnect` | Disconnect integration     | Bearer token |
@@ -53,7 +53,7 @@ Notion-service manages the lifecycle of Notion integrations - connection validat
 ## Error Codes
 
 | Code               | HTTP Status | Description              |
-| ------------------ | ----------- | ------------------------ |
+| ------------------  | -----------  | ------------------------  |
 | `VALIDATION_ERROR` | 400         | Invalid token format     |
 | `INVALID_TOKEN`    | 401         | Token rejected by Notion |
 | `DOWNSTREAM_ERROR` | 502         | Notion API error         |
@@ -71,7 +71,7 @@ Notion-service manages the lifecycle of Notion integrations - connection validat
 ## Configuration
 
 | Environment Variable             | Required | Description                     |
-| -------------------------------- | -------- | ------------------------------- |
+| --------------------------------  | --------  | -------------------------------  |
 | `INTEXURAOS_INTERNAL_AUTH_TOKEN` | Yes      | Shared secret for internal auth |
 
 ## Gotchas

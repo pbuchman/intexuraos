@@ -7,7 +7,7 @@
 ## Identity
 
 | Field    | Value                                                           |
-| -------- | --------------------------------------------------------------- |
+| --------  | ---------------------------------------------------------------  |
 | **Name** | promptvault-service                                             |
 | **Role** | Prompt Management Service                                       |
 | **Goal** | Store, organize, and retrieve AI prompts via Notion integration |
@@ -85,7 +85,7 @@ interface NotionBlock {
 ## Constraints
 
 | Rule                   | Description                                        |
-| ---------------------- | -------------------------------------------------- |
+| ----------------------  | --------------------------------------------------  |
 | **Notion Connected**   | Requires notion-service integration configured     |
 | **Page ID Configured** | PromptVault Notion page ID must be set in settings |
 | **Ownership**          | Users can only access their own prompts            |
@@ -152,7 +152,7 @@ Before using PromptVault:
 ## Error Handling
 
 | Error Code         | Description                             |
-| ------------------ | --------------------------------------- |
+| ------------------  | ---------------------------------------  |
 | `MISCONFIGURED`    | Notion not connected or page ID not set |
 | `NOT_FOUND`        | Prompt not found or not accessible      |
 | `DOWNSTREAM_ERROR` | Notion API communication failed         |

@@ -7,7 +7,7 @@
 ## Identity
 
 | Field    | Value                                               |
-| -------- | --------------------------------------------------- |
+| --------  | ---------------------------------------------------  |
 | **Name** | notes-agent                                         |
 | **Role** | Note-Taking Service                                 |
 | **Goal** | Quick note capture with tagging and source tracking |
@@ -75,7 +75,7 @@ interface Note {
 ## Constraints
 
 | Rule                 | Description                           |
-| -------------------- | ------------------------------------- |
+| --------------------  | -------------------------------------  |
 | **Ownership**        | Users can only access their own notes |
 | **Title Required**   | Title must be non-empty               |
 | **Content Required** | Content must be non-empty             |
@@ -116,7 +116,7 @@ const meetingNotes = await listNotes({
 ## Internal Endpoints
 
 | Method | Path                  | Purpose                        |
-| ------ | --------------------- | ------------------------------ |
+| ------  | ---------------------  | ------------------------------  |
 | POST   | `/internal/notes`     | Create note from actions-agent |
 | GET    | `/internal/notes/:id` | Get note for internal services |
 

@@ -7,7 +7,7 @@
 ## Identity
 
 | Field    | Value                                                       |
-| -------- | ----------------------------------------------------------- |
+| --------  | -----------------------------------------------------------  |
 | **Name** | linear-agent                                                |
 | **Role** | Linear Issue Management Service                             |
 | **Goal** | Create and manage Linear issues from natural language input |
@@ -88,7 +88,7 @@ interface LinearIssue {
 ## Constraints
 
 | Rule                        | Description                                                |
-| --------------------------- | ---------------------------------------------------------- |
+| ---------------------------  | ----------------------------------------------------------  |
 | **Linear API Key Required** | User must have Linear API key configured                   |
 | **Team Scope**              | Issues created in user's default team                      |
 | **Priority Scale**          | 0 = No priority, 1 = Urgent, 2 = High, 3 = Medium, 4 = Low |
@@ -121,7 +121,7 @@ await updateIssue(issueId, {
 ## Internal Endpoints
 
 | Method | Path                   | Purpose                         |
-| ------ | ---------------------- | ------------------------------- |
+| ------  | ----------------------  | -------------------------------  |
 | POST   | `/internal/issues`     | Create issue from actions-agent |
 | GET    | `/internal/issues/:id` | Get issue for internal services |
 

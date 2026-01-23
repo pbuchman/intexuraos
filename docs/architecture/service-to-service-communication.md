@@ -23,7 +23,7 @@ All internal endpoints follow the pattern:
 ### Service Prefixes
 
 | Service               | Prefix        | Description                     |
-| --------------------- | ------------- | ------------------------------- |
+| ---------------------  | -------------  | -------------------------------  |
 | `notion-service`      | `notion`      | Notion integration operations   |
 | `user-service`        | `user`        | User management and settings    |
 | `promptvault-service` | `promptvault` | PromptVault operations (future) |

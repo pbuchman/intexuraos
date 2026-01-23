@@ -20,7 +20,7 @@ Linear Agent bridges the gap between natural conversation and structured project
 ## AI Capabilities
 
 | Capability               | Technology                 | Purpose                         |
-| ------------------------ | -------------------------- | ------------------------------- |
+| ------------------------  | --------------------------  | -------------------------------  |
 | Issue Data Extraction    | Gemini 2.5 Flash / GLM-4.7 | Parse natural language to issue |
 | Priority Classification  | LLM Inference              | Detect urgency from context     |
 | Requirements Structuring | Prompt Engineering         | Generate FR/TD sections         |
@@ -60,7 +60,7 @@ Result:
 ## Key Benefits
 
 | Benefit               | Description                                      |
-| --------------------- | ------------------------------------------------ |
+| ---------------------  | ------------------------------------------------  |
 | Zero-Context-Switch   | Create issues without leaving WhatsApp           |
 | Consistent Quality    | AI ensures every issue has proper structure      |
 | Priority Accuracy     | Natural language maps to Linear's 5-level scale  |

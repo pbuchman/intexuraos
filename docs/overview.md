@@ -19,7 +19,7 @@ IntexuraOS reimagines personal productivity as an **AI-first system**. Instead o
 IntexuraOS integrates with **5 AI providers** and **16 models**, treating them as a **council of experts** rather than a single oracle:
 
 | Provider   | Models                                   | Capabilities                       |
-| ---------- | ---------------------------------------- | ---------------------------------- |
+| ----------  | ----------------------------------------  | ----------------------------------  |
 | Google     | Gemini 2.5 Pro, Flash, Flash-Image       | Reasoning, classification, images  |
 | OpenAI     | GPT-5.2, o4-mini-deep-research, DALL-E 3 | Deep research, synthesis, images   |
 | Anthropic  | Claude Opus 4.5, Sonnet 4.5, Haiku 3.5   | Analysis, research, validation     |
@@ -86,7 +86,7 @@ IntexuraOS deploys **18 specialized microservices**, each with a distinct AI-pow
 ### AI Agents (Primary Intelligence)
 
 | Agent                   | AI Capabilities                                                            |
-| ----------------------- | -------------------------------------------------------------------------- |
+| -----------------------  | --------------------------------------------------------------------------  |
 | **research-agent**      | Multi-model orchestration, parallel queries, synthesis, confidence scoring |
 | **commands-agent**      | Intent classification via Gemini, action routing, model detection          |
 | **data-insights-agent** | Data analysis, chart generation, trend detection via LLM                   |
@@ -100,7 +100,7 @@ IntexuraOS deploys **18 specialized microservices**, each with a distinct AI-pow
 ### Infrastructure Services
 
 | Service                          | Purpose                                            |
-| -------------------------------- | -------------------------------------------------- |
+| --------------------------------  | --------------------------------------------------  |
 | **actions-agent**                | Central action orchestration, lifecycle management |
 | **image-service**                | DALL-E 3 & Imagen 3 image generation               |
 | **whatsapp-service**             | Voice transcription, message routing               |
@@ -149,7 +149,7 @@ The **commands-agent** analyzes input to determine:
 Each agent type executes domain-specific logic:
 
 | Action Type | Agent           | AI Operations                                     |
-| ----------- | --------------- | ------------------------------------------------- |
+| -----------  | ---------------  | -------------------------------------------------  |
 | Research    | research-agent  | Parallel LLM queries, synthesis, cover generation |
 | Todo        | todos-agent     | Item extraction, priority inference               |
 | Note        | notes-agent     | Content structuring                               |
@@ -173,7 +173,7 @@ Each agent type executes domain-specific logic:
 All inter-service communication uses Cloud Pub/Sub:
 
 | Topic                | Publisher        | Subscriber(s)               |
-| -------------------- | ---------------- | --------------------------- |
+| --------------------  | ----------------  | ---------------------------  |
 | `commands-ingest`    | whatsapp-service | commands-agent              |
 | `action-created`     | actions-agent    | research-agent, todos-agent |
 | `research-process`   | actions-agent    | research-agent              |
@@ -187,7 +187,7 @@ All inter-service communication uses Cloud Pub/Sub:
 Each service owns its collections (enforced by CI):
 
 | Collection           | Owner               |
-| -------------------- | ------------------- |
+| --------------------  | -------------------  |
 | `research`           | research-agent      |
 | `actions`            | actions-agent       |
 | `commands`           | commands-agent      |
@@ -247,7 +247,7 @@ User API Keys → AES-256-GCM Encryption → Firestore
 ## Technology Stack
 
 | Layer          | Technology                                 |
-| -------------- | ------------------------------------------ |
+| --------------  | ------------------------------------------  |
 | Runtime        | Node.js 22 on Cloud Run                    |
 | Framework      | Fastify with OpenAPI                       |
 | Database       | Firestore (NoSQL)                          |
@@ -312,7 +312,7 @@ User API Keys → AES-256-GCM Encryption → Firestore
 ## Documentation Index
 
 | Document                                              | Purpose                        |
-| ----------------------------------------------------- | ------------------------------ |
+| -----------------------------------------------------  | ------------------------------  |
 | [AI Architecture](architecture/ai-architecture.md)    | Deep dive into LLM integration |
 | [Services Catalog](services/index.md)                 | All 18 services documented     |
 | [Architecture Patterns](architecture/)                | System design decisions        |

@@ -7,7 +7,7 @@
 ## Identity
 
 | Field    | Value                                                         |
-| -------- | ------------------------------------------------------------- |
+| --------  | -------------------------------------------------------------  |
 | **Name** | todos-agent                                                   |
 | **Role** | Task Management Service                                       |
 | **Goal** | Manage todos with sub-items, priorities, and status workflows |
@@ -147,7 +147,7 @@ interface Todo {
 ## Constraints
 
 | Rule                    | Description                                   |
-| ----------------------- | --------------------------------------------- |
+| -----------------------  | ---------------------------------------------  |
 | **Archive Restriction** | Can only archive completed or cancelled todos |
 | **Cancel Restriction**  | Cannot cancel already completed todos         |
 | **Item Completion**     | Completing all items auto-completes the todo  |
@@ -199,7 +199,7 @@ for (const todo of todos) {
 ## Internal Endpoints
 
 | Method | Path                  | Purpose                        |
-| ------ | --------------------- | ------------------------------ |
+| ------  | ---------------------  | ------------------------------  |
 | POST   | `/internal/todos`     | Create todo from actions-agent |
 | GET    | `/internal/todos/:id` | Get todo for internal services |
 

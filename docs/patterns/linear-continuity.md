@@ -9,7 +9,7 @@ Instead of creating `continuity/NNN-task-name/` directories with markdown files,
 ### What Changed
 
 | Aspect        | Old (File-Based)                          | New (Linear-Based)                      |
-| ------------- | ----------------------------------------- | --------------------------------------- |
+| -------------  | -----------------------------------------  | ---------------------------------------  |
 | Ledger        | `CONTINUITY.md` file                      | Parent Linear issue description         |
 | Subtasks      | `X-Y-title.md` files                      | Child Linear issues with `parentId`     |
 | State         | Manual markdown updates                   | Linear state machine                    |
@@ -69,7 +69,7 @@ The skill automatically:
 ### 3. Tier Classification
 
 | Tier | Name          | Purpose                                    |
-| ---- | ------------- | ------------------------------------------ |
+| ----  | -------------  | ------------------------------------------  |
 | 0    | Setup         | Prerequisites, scaffolding, config         |
 | 1    | Independent   | Can run in parallel, no interdependencies  |
 | 2    | Integration   | Connects components, depends on Tier 1     |
@@ -113,7 +113,7 @@ This ensures uninterrupted execution through the task series.
 ## Key Decisions
 
 | Timestamp  | Decision       | Rationale           |
-| ---------- | -------------- | ------------------- |
+| ----------  | --------------  | -------------------  |
 | YYYY-MM-DD | <decision>     | <why>               |
 
 ## State Tracking
@@ -130,7 +130,7 @@ This ensures uninterrupted execution through the task series.
 ## Child Issues
 
 | Tier | Issue   | Title              | Status      |
-| ---- | ------- | ------------------ | ----------- |
+| ----  | -------  | ------------------  | -----------  |
 | 0    | INT-XXX | Setup              | Done        |
 | 1    | INT-XXX | Implement feature  | In Progress |
 | 2    | INT-XXX | Wire up routes     | Backlog     |
@@ -186,7 +186,7 @@ State: In Progress
 ### Child Issues
 
 | Tier | Issue   | Title                                     | Dependencies |
-| ---- | ------- | ----------------------------------------- | ------------ |
+| ----  | -------  | -----------------------------------------  | ------------  |
 | 0    | INT-157 | [tier-0] Create skill directory structure | None         |
 | 1    | INT-158 | [tier-1] Migrate workflow content         | INT-157      |
 | 1    | INT-159 | [tier-1] Create templates                 | INT-157      |

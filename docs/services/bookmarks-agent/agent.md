@@ -7,7 +7,7 @@
 ## Identity
 
 | Field    | Value                                                                         |
-| -------- | ----------------------------------------------------------------------------- |
+| --------  | -----------------------------------------------------------------------------  |
 | **Name** | bookmarks-agent                                                               |
 | **Role** | Link Intelligence Service                                                     |
 | **Goal** | Save, enrich, and organize bookmarks with OpenGraph metadata and AI summaries |
@@ -104,7 +104,7 @@ interface Bookmark {
 ## Constraints
 
 | Rule                    | Description                                    |
-| ----------------------- | ---------------------------------------------- |
+| -----------------------  | ----------------------------------------------  |
 | **Duplicate Detection** | Returns 409 CONFLICT if URL already bookmarked |
 | **URL Format**          | Must be valid HTTP/HTTPS URL                   |
 | **Ownership**           | Users can only access their own bookmarks      |
@@ -158,7 +158,7 @@ const techBookmarks = await listBookmarks({
 ## Internal Endpoints
 
 | Method | Path                              | Purpose                            |
-| ------ | --------------------------------- | ---------------------------------- |
+| ------  | ---------------------------------  | ----------------------------------  |
 | POST   | `/internal/bookmarks`             | Create bookmark from actions-agent |
 | POST   | `/internal/bookmarks/:id/refresh` | Force refresh OG data              |
 | GET    | `/internal/bookmarks/:id`         | Get bookmark for internal services |

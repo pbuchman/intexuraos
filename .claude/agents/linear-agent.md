@@ -3,7 +3,7 @@ name: linear-agent
 description: |
   DEPRECATED: This agent has been superseded by the Linear skill at `.claude/skills/linear/SKILL.md`.
   Use the skill instead. This agent file is kept for reference only.
-  See: docs/patterns/linear-continuity.md
+  See: ../../docs/patterns/linear-continuity.md
 
 Examples:
 
@@ -56,7 +56,7 @@ Before ANY operation, verify all required tools:
 
 ```bash
 # Required tools
-mcp__linear-server__list_teams    # Linear MCP
+mcp__linear__list_teams           # Linear MCP
 gh auth status                     # GitHub CLI
 gcloud auth list                   # GCloud (for most tasks)
 

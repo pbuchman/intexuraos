@@ -72,6 +72,8 @@ Without both conditions, the PR won't appear in Linear's attachments array.
 
 ## State Descriptions
 
+**Note:** "Q&A QA" is a custom state configured for this project. Standard Linear installations use only: Backlog, Todo, In Progress, In Review, Done.
+
 | State       | Description                                      |
 | ----------- | ------------------------------------------------ |
 | Backlog     | New issues, not yet prioritized                  |

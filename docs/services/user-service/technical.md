@@ -65,7 +65,7 @@ sequenceDiagram
 ### Authentication Endpoints
 
 | Method | Path                    | Description                             | Auth         |
-| ------ | ----------------------- | --------------------------------------- | ------------ |
+| ------  | -----------------------  | ---------------------------------------  | ------------  |
 | POST   | `/auth/device/start`    | Start device code flow                  | None         |
 | POST   | `/auth/device/poll`     | Poll for authentication token           | None         |
 | POST   | `/auth/refresh`         | Refresh access token                    | None         |
@@ -80,7 +80,7 @@ sequenceDiagram
 ### User Settings Endpoints
 
 | Method | Path                                     | Description               | Auth         |
-| ------ | ---------------------------------------- | ------------------------- | ------------ |
+| ------  | ----------------------------------------  | -------------------------  | ------------  |
 | GET    | `/users/:uid/settings`                   | Get user settings         | Bearer token |
 | PATCH  | `/users/:uid/settings`                   | Update user settings      | Bearer token |
 | PATCH  | `/users/:uid/llm-keys`                   | Update LLM API keys       | Bearer token |
@@ -92,7 +92,7 @@ sequenceDiagram
 ### Internal Endpoints
 
 | Method | Path                                                | Description                  | Auth            |
-| ------ | --------------------------------------------------- | ---------------------------- | --------------- |
+| ------  | ---------------------------------------------------  | ----------------------------  | ---------------  |
 | GET    | `/internal/users/:uid/llm-keys`                     | Get decrypted LLM API keys   | Internal header |
 | POST   | `/internal/users/:uid/llm-keys/:provider/last-used` | Update last used timestamp   | Internal header |
 | GET    | `/internal/users/:uid/oauth/google/token`           | Get valid Google OAuth token | Internal header |
@@ -102,7 +102,7 @@ sequenceDiagram
 ### AuthToken
 
 | Field          | Type   | Description                |
-| -------------- | ------ | -------------------------- |
+| --------------  | ------  | --------------------------  |
 | `userId`       | string | User identifier            |
 | `accessToken`  | string | Auth0 access token         |
 | `refreshToken` | string | Auth0 refresh token        |
@@ -114,7 +114,7 @@ sequenceDiagram
 ### UserSettings
 
 | Field            | Type                              | Description                   |
-| ---------------- | --------------------------------- | ----------------------------- |
+| ----------------  | ---------------------------------  | -----------------------------  |
 | `userId`         | string                            | User identifier               |
 | `llmApiKeys`     | Record\<LlmProvider, string\>     | AES-256 encrypted API keys    |
 | `llmTestResults` | Record\<LlmProvider, TestResult\> | Last test result per provider |
@@ -124,15 +124,15 @@ sequenceDiagram
 ### TestResult
 
 | Field          | Type       | Description              |
-| -------------- | ---------- | ------------------------ | ------------ | ------- |
-| `status`       | 'valid' \  | 'invalid' \              | 'pending' \  | 'error' |
+| --------------  | ----------  | ------------------------  |   |   |
+| `status`       | 'valid' \  | 'invalid' \              | 'pending' \ | 'error' |
 | `testedAt`     | string     | ISO 8601 timestamp       |
 | `errorMessage` | string     | Error details if invalid |
 
 ### OAuthConnection
 
 | Field          | Type        | Description                |
-| -------------- | ----------- | -------------------------- |
+| --------------  | -----------  | --------------------------  |
 | `id`           | string      | Connection ID              |
 | `userId`       | string      | User identifier            |
 | `provider`     | 'google' \  | 'microsoft'                |
@@ -146,7 +146,7 @@ sequenceDiagram
 ## LLM Providers
 
 | Provider     | Key Name                    |
-| ------------ | --------------------------- |
+| ------------  | ---------------------------  |
 | `google`     | Google AI API key (Gemini)  |
 | `openai`     | OpenAI API key (GPT models) |
 | `anthropic`  | Anthropic API key (Claude)  |
@@ -161,14 +161,14 @@ None - user-service does not publish or subscribe to Pub/Sub events.
 ### External Services
 
 | Service      | Purpose                             |
-| ------------ | ----------------------------------- |
+| ------------  | -----------------------------------  |
 | Auth0        | Identity management, authentication |
 | Google OAuth | OAuth token management              |
 
 ### Infrastructure
 
 | Component                                  | Purpose                   |
-| ------------------------------------------ | ------------------------- |
+| ------------------------------------------  | -------------------------  |
 | Firestore (`users` collection)             | User settings storage     |
 | Firestore (`auth_tokens` collection)       | Auth0 token cache         |
 | Firestore (`oauth_connections` collection) | OAuth token storage       |
@@ -177,7 +177,7 @@ None - user-service does not publish or subscribe to Pub/Sub events.
 ## Configuration
 
 | Environment Variable                    | Required | Description                           |
-| --------------------------------------- | -------- | ------------------------------------- |
+| ---------------------------------------  | --------  | -------------------------------------  |
 | `INTEXURAOS_AUTH0_DOMAIN`               | Yes      | Auth0 tenant domain                   |
 | `INTEXURAOS_AUTH0_CLIENT_ID`            | Yes      | Auth0 application client ID           |
 | `INTEXURAOS_AUTH0_CLIENT_SECRET`        | Yes      | Auth0 application client secret       |

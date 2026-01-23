@@ -134,7 +134,7 @@ curl -X POST http://localhost:3000/internal/linear/process-action \
 The extraction service uses Gemini 2.5 Flash or GLM-4.7 to parse:
 
 | Field                       | Description                         | Example                               |
-| --------------------------- | ----------------------------------- | ------------------------------------- |
+| ---------------------------  | -----------------------------------  | -------------------------------------  |
 | **Title**                   | Concise issue title                 | "Implement OAuth login"               |
 | **Priority**                | 0-4 scale (0=none, 1=urgent, 4=low) | 2 (high)                              |
 | **Functional Requirements** | What the feature should do          | "Support Google and GitHub providers" |
@@ -221,7 +221,7 @@ curl http://localhost:3000/linear/failed-issues \
 ## Troubleshooting
 
 | Symptom                       | Likely Cause                 | Solution                                   |
-| ----------------------------- | ---------------------------- | ------------------------------------------ |
+| -----------------------------  | ----------------------------  | ------------------------------------------  |
 | "Linear not connected"        | No saved connection for user | POST `/linear/connection` with credentials |
 | "Invalid API key"             | Expired or revoked key       | Generate new key in Linear settings        |
 | Issue created with wrong team | Wrong teamId in connection   | DELETE then POST new connection            |

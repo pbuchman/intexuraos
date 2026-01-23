@@ -28,7 +28,7 @@ graph TB
 ### Internal Endpoints
 
 | Method | Path                      | Description                       | Auth           |
-| ------ | ------------------------- | --------------------------------- | -------------- |
+| ------  | -------------------------  | ---------------------------------  | --------------  |
 | POST   | `/internal/link-previews` | Fetch OpenGraph metadata for URLs | Internal token |
 
 **Request Body:**
@@ -59,20 +59,20 @@ graph TB
 ### LinkPreview
 
 | Field         | Type      | Description  |
-| ------------- | --------- | ------------ | ---------------------------------- |
+| -------------  | ---------  | ------------  |   |
 | `url`         | string    | Original URL |
-| `title`       | string \  | undefined    | og:title or HTML title             |
+| `title`       | string \  | undefined    | og:title or HTML title |
 | `description` | string \  | undefined    | og:description or meta description |
-| `image`       | string \  | undefined    | Resolved absolute og:image URL     |
-| `favicon`     | string \  | undefined    | Favicon URL                        |
-| `siteName`    | string \  | undefined    | og:site_name                       |
+| `image`       | string \  | undefined    | Resolved absolute og:image URL |
+| `favicon`     | string \  | undefined    | Favicon URL |
+| `siteName`    | string \  | undefined    | og:site_name |
 
 ### LinkPreviewResult (discriminated union)
 
 **Success:**
 
 | Field     | Type        | Description        |
-| --------- | ----------- | ------------------ |
+| ---------  | -----------  | ------------------  |
 | `url`     | string      | Original URL       |
 | `status`  | 'success'   | Result status      |
 | `preview` | LinkPreview | Extracted metadata |
@@ -80,7 +80,7 @@ graph TB
 **Failed:**
 
 | Field    | Type             | Description   |
-| -------- | ---------------- | ------------- |
+| --------  | ----------------  | -------------  |
 | `url`    | string           | Original URL  |
 | `status` | 'failed'         | Result status |
 | `error`  | LinkPreviewError | Error details |
@@ -88,14 +88,14 @@ graph TB
 ### LinkPreviewError
 
 | Field     | Type                 | Description                                   |
-| --------- | -------------------- | --------------------------------------------- |
+| ---------  | --------------------  | ---------------------------------------------  |
 | `code`    | LinkPreviewErrorCode | FETCH_FAILED, TIMEOUT, TOO_LARGE, INVALID_URL |
 | `message` | string               | Human-readable error message                  |
 
 ## OpenGraph Tag Extraction
 
 | Tag         | Property           | Fallback                    |
-| ----------- | ------------------ | --------------------------- |
+| -----------  | ------------------  | ---------------------------  |
 | Title       | `og:title`         | `<title>` text              |
 | Description | `og:description`   | `<meta name="description">` |
 | Image       | `og:image`         | None                        |
@@ -113,7 +113,7 @@ graph TB
 ## Configuration
 
 | Setting           | Default        | Description                     |
-| ----------------- | -------------- | ------------------------------- |
+| -----------------  | --------------  | -------------------------------  |
 | `timeoutMs`       | 5000           | Request timeout in milliseconds |
 | `maxResponseSize` | 2097152 (2MB)  | Maximum response body size      |
 | `userAgent`       | Mozilla/5.0... | User agent string               |

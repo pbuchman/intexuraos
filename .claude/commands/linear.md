@@ -107,7 +107,7 @@ Before ANY operation, verify all required tools are available.
 
 | Tool       | Verification Command             | Purpose          |
 | ---------- | -------------------------------- | ---------------- |
-| Linear MCP | `mcp__linear-server__list_teams` | Issue management |
+| Linear MCP | `mcp__linear__list_teams`        | Issue management |
 | GitHub CLI | `gh auth status`                 | PR creation      |
 | GCloud     | See GCloud Verification below    | Firestore access |
 
