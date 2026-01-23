@@ -157,13 +157,26 @@ IntexuraOS treats LLMs as a **council of experts**:
 
 ### AI as Team Members
 
-I don't just "use" AI tools. I define autonomous agents with explicit mandates:
+I don't just "use" AI tools. I define specialized skills and agents with explicit mandates:
 
-| Agent/Skill             | Role                                                        |
-| ----------------------- | ----------------------------------------------------------- |
-| `service-scribe`        | Documentation specialist that infers "why" from git history |
-| `/sentry`               | Sentry triage skill with AI analysis and cross-linking      |
-| `coverage-orchestrator` | QA lead where "94.9% is failure"                            |
+**Skills** (directory-based, invoked via `/command` or auto-trigger):
+
+| Skill               | Role                                                         |
+| ------------------- | ------------------------------------------------------------ |
+| `/linear`           | Issue management with auto-splitting and cross-linking       |
+| `/sentry`           | Sentry triage with AI analysis (Seer) and Linear integration |
+| `/document-service` | Service documentation (interactive or autonomous modes)      |
+
+**Agents** (task-spawned, autonomous execution):
+
+| Agent                   | Role                                                     |
+| ----------------------- | -------------------------------------------------------- |
+| `coverage-orchestrator` | QA enforcer — 100% branch coverage or explicit exemption |
+| `llm-manager`           | LLM cost auditor — pricing verification and updates      |
+| `service-creator`       | Service scaffolding with best practices                  |
+| `whatsapp-sender`       | WhatsApp notification dispatcher                         |
+
+See `.claude/CLAUDE.md` for complete taxonomy.
 
 ### No Dummy Success
 

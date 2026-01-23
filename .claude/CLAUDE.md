@@ -774,6 +774,75 @@ Use the `/sentry` skill for error triage, investigation, and resolution.
 
 ---
 
+## Document-Service Skill
+
+Use the `/document-service` skill to generate comprehensive service documentation.
+
+**Skill Location:** `.claude/skills/document-service/SKILL.md`
+
+**Modes:**
+
+| Mode        | Invocation                              | Behavior                        |
+| ----------- | --------------------------------------- | ------------------------------- |
+| Discovery   | `/document-service` (no args)           | Lists services + doc status     |
+| Interactive | `/document-service <service-name>`      | Asks 3 questions (Q1, Q5, Q8)   |
+| Autonomous  | Task tool → `service-scribe` subagent   | Infers all answers from code    |
+
+**Output:** 5 files per service + website content updates
+
+**Full Documentation:** `.claude/skills/document-service/`
+
+---
+
+## Claude Extensions Taxonomy
+
+This project uses three types of Claude extensions:
+
+### Skills (Directory-Based)
+
+**Location:** `.claude/skills/<skill-name>/`
+**Structure:** SKILL.md + workflows/ + templates/ + reference/
+**Invocation:** `/skill-name` (user) or auto-trigger (model)
+
+| Skill               | Purpose                                            |
+| ------------------- | -------------------------------------------------- |
+| `/linear`           | Linear issue management with auto-splitting        |
+| `/sentry`           | Sentry triage with AI analysis and cross-linking   |
+| `/document-service` | Service documentation (interactive + autonomous)   |
+
+### Agents (Task-Spawned)
+
+**Location:** `.claude/agents/<agent-name>.md`
+**Invocation:** Task tool with `subagent_type: <agent-name>`
+**Mode:** Autonomous, no user interaction during execution
+
+| Agent                   | Purpose                                        |
+| ----------------------- | ---------------------------------------------- |
+| `coverage-orchestrator` | 100% branch coverage enforcement               |
+| `llm-manager`           | LLM usage audit and pricing verification       |
+| `service-creator`       | New service scaffolding                        |
+| `whatsapp-sender`       | WhatsApp notification specialist               |
+
+### Commands (Single-File)
+
+**Location:** `.claude/commands/<command-name>.md`
+**Invocation:** `/<command-name>`
+**Mode:** Interactive, typically requires user input
+
+| Command               | Purpose                           |
+| --------------------- | --------------------------------- |
+| `/analyze-ci-failures`| Analyze CI failure patterns       |
+| `/analyze-logs`       | Production log analysis           |
+| `/coverage`           | Coverage improvement suggestions  |
+| `/create-service`     | New service creation wizard       |
+| `/refactoring`        | Code smell detection and fixes    |
+| `/semver-release`     | Semantic versioning release       |
+| `/verify-deployment`  | Deployment verification           |
+| `/teach-me-something` | Educational content generation    |
+| `/continuity`         | (Deprecated) → Use Linear skill   |
+
+---
+
 ## Complex Tasks — Linear Continuity
 
 For multi-step features, use the Linear-based continuity pattern with parent-child issues.
