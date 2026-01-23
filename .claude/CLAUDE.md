@@ -821,6 +821,7 @@ This project uses three types of Claude extensions:
 | `coverage-orchestrator` | 100% branch coverage enforcement               |
 | `llm-manager`           | LLM usage audit and pricing verification       |
 | `service-creator`       | New service scaffolding                        |
+| `service-scribe`        | Autonomous documentation (delegates to skill)  |
 | `whatsapp-sender`       | WhatsApp notification specialist               |
 
 ### Commands (Single-File)
