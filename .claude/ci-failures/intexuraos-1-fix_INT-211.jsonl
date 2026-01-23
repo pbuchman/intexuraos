@@ -1,0 +1,2 @@
+{"ts":"2026-01-23T09:32:00.940Z","project":"intexuraos-1","branch":"fix/INT-211","workspace":"--","runNumber":1,"passed":false,"durationMs":512,"failureCount":0,"failures":[]}
+{"ts":"2026-01-23T09:42:33.552Z","project":"intexuraos-1","branch":"fix/INT-211","runNumber":2,"passed":true,"durationMs":239356,"failureCount":0,"failures":[]}

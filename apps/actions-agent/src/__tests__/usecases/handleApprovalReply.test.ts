@@ -272,10 +272,10 @@ describe('HandleApprovalReplyUseCase', () => {
   });
 
   describe('action status check', () => {
-    it('returns early when action is no longer awaiting_approval', async () => {
+    it('returns early when action is in completed terminal state', async () => {
       await actionRepository.save({
         ...testAction,
-        status: 'pending', // Already moved past awaiting_approval
+        status: 'completed',
       });
 
       const result = await useCase({
@@ -291,6 +291,225 @@ describe('HandleApprovalReplyUseCase', () => {
         expect(result.value.actionId).toBe('action-1');
         expect(result.value.intent).toBeUndefined();
         expect(result.value.outcome).toBeUndefined();
+      }
+    });
+
+    it('returns early when action is in rejected terminal state', async () => {
+      await actionRepository.save({
+        ...testAction,
+        status: 'rejected',
+      });
+
+      const result = await useCase({
+        replyToWamid: 'wamid-123',
+        replyText: 'yes',
+        userId: 'user-1',
+        actionId: 'action-1',
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.matched).toBe(true);
+        expect(result.value.actionId).toBe('action-1');
+        expect(result.value.intent).toBeUndefined();
+        expect(result.value.outcome).toBeUndefined();
+      }
+    });
+
+    it('proceeds with classification when action is pending (not terminal)', async () => {
+      await actionRepository.save({
+        ...testAction,
+        status: 'pending',
+      });
+      classifierFactory.getClassifier().setResult({
+        intent: 'approve',
+        confidence: 0.95,
+        reasoning: 'User approved',
+      });
+
+      const result = await useCase({
+        replyToWamid: 'wamid-123',
+        replyText: 'yes',
+        userId: 'user-1',
+        actionId: 'action-1',
+      });
+
+      // Should proceed to classification but status_mismatch on update
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.matched).toBe(true);
+        expect(result.value.actionId).toBe('action-1');
+        // No intent/outcome because updateStatusIf returns status_mismatch
+        expect(result.value.intent).toBeUndefined();
+      }
+    });
+  });
+
+  describe('race condition prevention (atomic status updates)', () => {
+    beforeEach(async () => {
+      await actionRepository.save(testAction);
+    });
+
+    it('prevents duplicate approval when status already changed (race condition)', async () => {
+      classifierFactory.getClassifier().setResult({
+        intent: 'approve',
+        confidence: 0.95,
+        reasoning: 'User approved',
+      });
+
+      // Simulate race condition: status changed between read and update
+      actionRepository.setUpdateStatusIfResult('action-1', {
+        outcome: 'status_mismatch',
+        currentStatus: 'pending',
+      });
+
+      const result = await useCase({
+        replyToWamid: 'wamid-123',
+        replyText: 'yes',
+        userId: 'user-1',
+        actionId: 'action-1',
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.matched).toBe(true);
+        expect(result.value.actionId).toBe('action-1');
+        // No intent/outcome because race condition was detected
+        expect(result.value.intent).toBeUndefined();
+        expect(result.value.outcome).toBeUndefined();
+      }
+
+      // No WhatsApp messages sent (we bailed early)
+      expect(whatsappPublisher.getSentMessages()).toHaveLength(0);
+    });
+
+    it('prevents duplicate rejection when status already changed (race condition)', async () => {
+      classifierFactory.getClassifier().setResult({
+        intent: 'reject',
+        confidence: 0.9,
+        reasoning: 'User rejected',
+      });
+
+      // Simulate race condition: status changed between read and update
+      actionRepository.setUpdateStatusIfResult('action-1', {
+        outcome: 'status_mismatch',
+        currentStatus: 'pending',
+      });
+
+      const result = await useCase({
+        replyToWamid: 'wamid-123',
+        replyText: 'no',
+        userId: 'user-1',
+        actionId: 'action-1',
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.matched).toBe(true);
+        expect(result.value.actionId).toBe('action-1');
+        expect(result.value.intent).toBeUndefined();
+        expect(result.value.outcome).toBeUndefined();
+      }
+
+      // No WhatsApp messages sent
+      expect(whatsappPublisher.getSentMessages()).toHaveLength(0);
+    });
+
+    it('returns error when action not found during approval update', async () => {
+      classifierFactory.getClassifier().setResult({
+        intent: 'approve',
+        confidence: 0.95,
+        reasoning: 'User approved',
+      });
+
+      actionRepository.setUpdateStatusIfResult('action-1', {
+        outcome: 'not_found',
+      });
+
+      const result = await useCase({
+        replyToWamid: 'wamid-123',
+        replyText: 'yes',
+        userId: 'user-1',
+        actionId: 'action-1',
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.message).toBe('Action not found');
+      }
+    });
+
+    it('returns error when action not found during rejection update', async () => {
+      classifierFactory.getClassifier().setResult({
+        intent: 'reject',
+        confidence: 0.9,
+        reasoning: 'User rejected',
+      });
+
+      actionRepository.setUpdateStatusIfResult('action-1', {
+        outcome: 'not_found',
+      });
+
+      const result = await useCase({
+        replyToWamid: 'wamid-123',
+        replyText: 'no',
+        userId: 'user-1',
+        actionId: 'action-1',
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.message).toBe('Action not found');
+      }
+    });
+
+    it('returns error when update fails during approval', async () => {
+      classifierFactory.getClassifier().setResult({
+        intent: 'approve',
+        confidence: 0.95,
+        reasoning: 'User approved',
+      });
+
+      actionRepository.setUpdateStatusIfResult('action-1', {
+        outcome: 'error',
+        error: new Error('Firestore transaction failed'),
+      });
+
+      const result = await useCase({
+        replyToWamid: 'wamid-123',
+        replyText: 'yes',
+        userId: 'user-1',
+        actionId: 'action-1',
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.message).toBe('Failed to update action status');
+      }
+    });
+
+    it('returns error when update fails during rejection', async () => {
+      classifierFactory.getClassifier().setResult({
+        intent: 'reject',
+        confidence: 0.9,
+        reasoning: 'User rejected',
+      });
+
+      actionRepository.setUpdateStatusIfResult('action-1', {
+        outcome: 'error',
+        error: new Error('Firestore transaction failed'),
+      });
+
+      const result = await useCase({
+        replyToWamid: 'wamid-123',
+        replyText: 'no',
+        userId: 'user-1',
+        actionId: 'action-1',
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.message).toBe('Failed to update action status');
       }
     });
   });
