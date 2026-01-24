@@ -1,27 +1,29 @@
-import { vi } from 'vitest';
-import pino from 'pino';
-import type { Firestore } from '@google-cloud/firestore';
-import type { ServiceContainer } from '../../services.js';
+/**
+ * Test services mock for code-agent tests.
+ */
 
-export function createMockServices(): ServiceContainer {
-  return {
-    firestore: {
-      collection: vi.fn(),
-      doc: vi.fn(),
-      batch: vi.fn(),
-      runTransaction: vi.fn(),
-    } as unknown as Firestore,
-    logger: createMockLogger(),
+import { setServices, type ServiceContainer } from '../../services.js';
+import { createFakeFirestore } from '@intexuraos/infra-firestore';
+import type { Firestore } from '@google-cloud/firestore';
+import pino from 'pino';
+import { createFirestoreCodeTaskRepository } from '../../infra/repositories/firestoreCodeTaskRepository.js';
+
+export function setupTestServices(): void {
+  const fakeFirestore = createFakeFirestore() as unknown as Firestore;
+  const logger = pino({ name: 'test' });
+
+  const container: ServiceContainer = {
+    firestore: fakeFirestore,
+    logger,
+    codeTaskRepo: createFirestoreCodeTaskRepository({
+      firestore: fakeFirestore,
+      logger,
+    }),
   };
+
+  setServices(container);
 }
 
-export function createMockLogger(): pino.Logger {
-  return {
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-    debug: vi.fn(),
-    level: 'info',
-    isLevelEnabled: () => true,
-  } as unknown as pino.Logger;
+export function resetTestServices(): void {
+  // No-op - will be handled by resetServices()
 }

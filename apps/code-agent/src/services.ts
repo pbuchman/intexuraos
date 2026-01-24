@@ -7,11 +7,13 @@ import pino from 'pino';
 import type { Firestore } from '@google-cloud/firestore';
 import { getFirestore } from '@intexuraos/infra-firestore';
 import type { CodeWorkersConfig } from './config.js';
+import type { CodeTaskRepository } from './domain/repositories/codeTaskRepository.js';
+import { createFirestoreCodeTaskRepository } from './infra/repositories/firestoreCodeTaskRepository.js';
 
 export interface ServiceContainer {
   firestore: Firestore;
   logger: pino.Logger;
-  // Add more services as needed
+  codeTaskRepo: CodeTaskRepository;
 }
 
 // Configuration required to initialize services
@@ -35,10 +37,13 @@ let container: ServiceContainer | null = null;
  * MUST be called before getServices().
  */
 export function initServices(_config: ServiceConfig): void {
+  const firestore = getFirestore();
+  const logger = pino({ name: 'code-agent' });
+
   container = {
-    firestore: getFirestore(),
-    logger: pino({ name: 'code-agent' }),
-    // Add more service initializations as needed
+    firestore,
+    logger,
+    codeTaskRepo: createFirestoreCodeTaskRepository({ firestore, logger }),
   };
 }
 
