@@ -6,7 +6,7 @@ coverage/
 .tsbuildinfo
 *.tsbuildinfo
 .DS_Store
-.eslintcache
+*eslint*cache*
 scripts/test-results/
 .tsconfig.tests-workspace.json
 

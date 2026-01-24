@@ -18,13 +18,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 When the user asks a question, they want an **answer** — not code changes, not implementations, not "let me fix that for you."
 
-| User Says                                    | User Wants              | Claude Does                          |
-| -------------------------------------------- | ----------------------- | ------------------------------------ |
-| "What went wrong?"                           | Analysis                | Explain the issue, wait for decision |
-| "What can be improved?"                      | Suggestions             | List options, wait for selection     |
-| "Look at X — what do you think?"             | Opinion/assessment      | Provide assessment, wait             |
-| "Why did this fail?"                         | Diagnosis               | Diagnose, wait for next instruction  |
-| "Implement X" / "Fix X" / "Do X"             | Action                  | Execute the task                     |
+| User Says                        | User Wants         | Claude Does                          |
+| -------------------------------- | ------------------ | ------------------------------------ |
+| "What went wrong?"               | Analysis           | Explain the issue, wait for decision |
+| "What can be improved?"          | Suggestions        | List options, wait for selection     |
+| "Look at X — what do you think?" | Opinion/assessment | Provide assessment, wait             |
+| "Why did this fail?"             | Diagnosis          | Diagnose, wait for next instruction  |
+| "Implement X" / "Fix X" / "Do X" | Action             | Execute the task                     |
 
 ### Forbidden Auto-Actions
 
@@ -161,13 +161,13 @@ grep -E "(error|Error|ERROR|FAIL)" /tmp/ci-output.txt
 
 ### Step 2: Fix or Ask (No Skipping)
 
-| Failure Location         | Action                                                                 |
-| ------------------------ | ---------------------------------------------------------------------- |
-| Workspace I touched      | Fix immediately                                                        |
-| OTHER workspace          | Fix immediately OR ask: "Found X errors in Y. Fix here or separate issue?" |
-| Flaky test               | Stabilize it                                                           |
-| Type error               | Fix it                                                                 |
-| Lint error               | Fix it                                                                 |
+| Failure Location    | Action                                                                     |
+| ------------------- | -------------------------------------------------------------------------- |
+| Workspace I touched | Fix immediately                                                            |
+| OTHER workspace     | Fix immediately OR ask: "Found X errors in Y. Fix here or separate issue?" |
+| Flaky test          | Stabilize it                                                               |
+| Type error          | Fix it                                                                     |
+| Lint error          | Fix it                                                                     |
 
 ### Forbidden Responses
 
@@ -487,11 +487,13 @@ pnpm build
 **Why:** Apps depend on packages. Without built `dist/` directories, apps fail typecheck with misleading errors.
 
 **Signs you forgot:**
+
 - 50+ `no-unsafe-*` lint errors in apps
 - `Cannot find module '@intexuraos/...'`
 - Errors only in `apps/` not `packages/`
 
 **When to run:**
+
 - Fresh clone
 - Switched branches
 - After pulling changes that touched `packages/`
@@ -804,16 +806,16 @@ This project uses three types of Claude extensions:
 **Location:** `.claude/commands/<command-name>.md`
 **Invocation:** `/<command-name>`
 
-| Command                | Purpose                           |
-| ---------------------- | --------------------------------- |
-| `/analyze-ci-failures` | Analyze CI failure patterns       |
-| `/analyze-logs`        | Production log analysis           |
-| `/coverage`            | Coverage improvement suggestions  |
-| `/create-service`      | New service creation wizard       |
-| `/refactoring`         | Code smell detection and fixes    |
-| `/semver-release`      | Semantic versioning release       |
-| `/teach-me-something`  | Learn and persist tech insights   |
-| `/verify-deployment`   | Deployment verification           |
+| Command                | Purpose                          |
+| ---------------------- | -------------------------------- |
+| `/analyze-ci-failures` | Analyze CI failure patterns      |
+| `/analyze-logs`        | Production log analysis          |
+| `/coverage`            | Coverage improvement suggestions |
+| `/create-service`      | New service creation wizard      |
+| `/refactoring`         | Code smell detection and fixes   |
+| `/semver-release`      | Semantic versioning release      |
+| `/teach-me-something`  | Learn and persist tech insights  |
+| `/verify-deployment`   | Deployment verification          |
 
 ---
 

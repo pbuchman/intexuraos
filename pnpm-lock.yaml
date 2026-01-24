@@ -1458,6 +1458,33 @@ importers:
         specifier: workspace:*
         version: link:../llm-contract
 
+  packages/llm-prompts:
+    dependencies:
+      '@intexuraos/common-core':
+        specifier: workspace:*
+        version: link:../common-core
+      '@intexuraos/llm-contract':
+        specifier: workspace:*
+        version: link:../llm-contract
+      '@intexuraos/llm-utils':
+        specifier: workspace:*
+        version: link:../llm-utils
+      pino:
+        specifier: ^10.1.0
+        version: 10.1.1
+      zod:
+        specifier: ^3.24.1
+        version: 3.25.76
+
+  packages/llm-utils:
+    dependencies:
+      '@intexuraos/common-core':
+        specifier: workspace:*
+        version: link:../common-core
+      pino:
+        specifier: ^10.1.0
+        version: 10.1.1
+
 packages:
   '@adobe/css-tools@4.4.4':
     resolution:

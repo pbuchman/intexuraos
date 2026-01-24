@@ -123,6 +123,7 @@ After creating child issues with `parentId`:
 3. **Linear handles linking automatically** via `parentId` — no manual ID maintenance
 
 **Why no Child Issues table?**
+
 - Sequential ID assignment makes pre-listing impossible
 - When parent is created before children, placeholder IDs like `INT-XXX-1` never match real IDs
 - Linear's parent-child hierarchy is the source of truth
@@ -147,13 +148,13 @@ When creating subtasks, the level of detail determines LLM agent success rate.
 
 ### Required Detail by Task Type
 
-| Task Type           | Code Snippets | Line Numbers | Edge Cases | Staleness Warning |
-| ------------------- | ------------- | ------------ | ---------- | ----------------- |
-| Migration/Refactor  | ✓ Required    | ✓ Required   | ✓ Required | ✓ Required        |
-| Bug Fix             | ✓ Required    | ✓ Required   | Optional   | ✓ Required        |
-| New Feature         | Recommended   | Recommended  | ✓ Required | If provided       |
-| Documentation       | Optional      | N/A          | N/A        | N/A               |
-| Configuration       | Optional      | Optional     | Optional   | If provided       |
+| Task Type          | Code Snippets | Line Numbers | Edge Cases | Staleness Warning |
+| ------------------ | ------------- | ------------ | ---------- | ----------------- |
+| Migration/Refactor | ✓ Required    | ✓ Required   | ✓ Required | ✓ Required        |
+| Bug Fix            | ✓ Required    | ✓ Required   | Optional   | ✓ Required        |
+| New Feature        | Recommended   | Recommended  | ✓ Required | If provided       |
+| Documentation      | Optional      | N/A          | N/A        | N/A               |
+| Configuration      | Optional      | Optional     | Optional   | If provided       |
 
 ### Code Snippet Freshness Warning
 

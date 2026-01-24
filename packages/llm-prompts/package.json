@@ -1,0 +1,23 @@
+{
+  "name": "@intexuraos/llm-prompts",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "exports": {
+    ".": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@intexuraos/llm-contract": "workspace:*",
+    "@intexuraos/common-core": "workspace:*",
+    "@intexuraos/llm-utils": "workspace:*",
+    "pino": "^10.1.0",
+    "zod": "^3.24.1"
+  }
+}
