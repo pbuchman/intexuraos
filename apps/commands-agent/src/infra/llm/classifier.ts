@@ -15,6 +15,7 @@ const VALID_TYPES: readonly CommandType[] = [
   'calendar',
   'reminder',
   'linear',
+  'code',
 ] as const;
 
 const PWA_SHARED_LINK_CONFIDENCE_BOOST = 0.1;

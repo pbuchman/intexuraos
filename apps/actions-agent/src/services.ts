@@ -9,6 +9,7 @@ import type { NotesServiceClient } from './domain/ports/notesServiceClient.js';
 import type { BookmarksServiceClient } from './domain/ports/bookmarksServiceClient.js';
 import type { CalendarServiceClient } from './domain/ports/calendarServiceClient.js';
 import type { LinearAgentClient } from './domain/ports/linearAgentClient.js';
+import type { CodeAgentClient } from './domain/ports/codeAgentClient.js';
 import type { ApprovalMessageRepository } from './domain/ports/approvalMessageRepository.js';
 import {
   createHandleResearchActionUseCase,
@@ -59,6 +60,14 @@ import {
   type ExecuteLinearActionUseCase,
 } from './domain/usecases/executeLinearAction.js';
 import {
+  createHandleCodeActionUseCase,
+  type HandleCodeActionUseCase,
+} from './domain/usecases/handleCodeAction.js';
+import {
+  createExecuteCodeActionUseCase,
+  type ExecuteCodeActionUseCase,
+} from './domain/usecases/executeCodeAction.js';
+import {
   createRetryPendingActionsUseCase,
   type RetryPendingActionsUseCase,
 } from './domain/usecases/retryPendingActions.js';
@@ -84,6 +93,7 @@ import { createNotesServiceHttpClient } from './infra/http/notesServiceHttpClien
 import { createBookmarksServiceHttpClient } from './infra/http/bookmarksServiceHttpClient.js';
 import { createCalendarServiceHttpClient } from './infra/http/calendarServiceHttpClient.js';
 import { createLinearAgentHttpClient } from './infra/http/linearAgentHttpClient.js';
+import { createCodeAgentHttpClient } from './infra/http/codeAgentHttpClient.js';
 import { createActionEventPublisher, type ActionEventPublisher } from './infra/pubsub/index.js';
 import {
   createWhatsAppSendPublisher,
@@ -108,6 +118,7 @@ export interface Services {
   bookmarksServiceClient: BookmarksServiceClient;
   calendarServiceClient: CalendarServiceClient;
   linearAgentClient: LinearAgentClient;
+  codeAgentClient: CodeAgentClient;
   actionEventPublisher: ActionEventPublisher;
   whatsappPublisher: WhatsAppSendPublisher;
   calendarPreviewPublisher: CalendarPreviewPublisher;
@@ -119,12 +130,14 @@ export interface Services {
   handleLinkActionUseCase: HandleLinkActionUseCase;
   handleCalendarActionUseCase: HandleCalendarActionUseCase;
   handleLinearActionUseCase: HandleLinearActionUseCase;
+  handleCodeActionUseCase: HandleCodeActionUseCase;
   executeResearchActionUseCase: ExecuteResearchActionUseCase;
   executeTodoActionUseCase: ExecuteTodoActionUseCase;
   executeNoteActionUseCase: ExecuteNoteActionUseCase;
   executeLinkActionUseCase: ExecuteLinkActionUseCase;
   executeCalendarActionUseCase: ExecuteCalendarActionUseCase;
   executeLinearActionUseCase: ExecuteLinearActionUseCase;
+  executeCodeActionUseCase: ExecuteCodeActionUseCase;
   retryPendingActionsUseCase: RetryPendingActionsUseCase;
   changeActionTypeUseCase: ChangeActionTypeUseCase;
   handleApprovalReplyUseCase: HandleApprovalReplyUseCase;
@@ -135,6 +148,7 @@ export interface Services {
   link: HandleLinkActionUseCase;
   calendar: HandleCalendarActionUseCase;
   linear: HandleLinearActionUseCase;
+  code: HandleCodeActionUseCase;
 }
 
 export interface ServiceConfig {
@@ -146,6 +160,7 @@ export interface ServiceConfig {
   bookmarksAgentUrl: string;
   calendarAgentUrl: string;
   linearAgentUrl: string;
+  codeAgentUrl: string;
   appSettingsServiceUrl: string;
   internalAuthToken: string;
   gcpProjectId: string;
@@ -259,6 +274,12 @@ export async function initServices(config: ServiceConfig): Promise<void> {
     logger: pino({ name: 'linearAgentClient' }),
   });
 
+  const codeAgentClient = createCodeAgentHttpClient({
+    baseUrl: config.codeAgentUrl,
+    internalAuthToken: config.internalAuthToken,
+    logger: pino({ name: 'codeAgentClient' }),
+  });
+
   const executeResearchActionUseCase = createExecuteResearchActionUseCase({
     actionRepository,
     researchServiceClient,
@@ -305,6 +326,14 @@ export async function initServices(config: ServiceConfig): Promise<void> {
     linearAgentClient,
     whatsappPublisher,
     logger: pino({ name: 'executeLinearAction' }),
+  });
+
+  const executeCodeActionUseCase = createExecuteCodeActionUseCase({
+    actionRepository,
+    codeAgentClient,
+    whatsappPublisher,
+    webAppUrl: config.webAppUrl,
+    logger: pino({ name: 'executeCodeAction' }),
   });
 
   const handleResearchActionUseCase = registerActionHandler(
@@ -369,6 +398,14 @@ export async function initServices(config: ServiceConfig): Promise<void> {
     logger: pino({ name: 'handleLinearAction' }),
   });
 
+  const handleCodeActionUseCase = registerActionHandler(createHandleCodeActionUseCase, {
+    actionRepository,
+    whatsappPublisher,
+    webAppUrl: config.webAppUrl,
+    logger: pino({ name: 'handleCodeAction' }),
+    executeCodeAction: executeCodeActionUseCase,
+  });
+
   const retryPendingActionsUseCase = createRetryPendingActionsUseCase({
     actionRepository,
     actionEventPublisher,
@@ -379,6 +416,7 @@ export async function initServices(config: ServiceConfig): Promise<void> {
       link: handleLinkActionUseCase,
       calendar: handleCalendarActionUseCase,
       linear: handleLinearActionUseCase,
+      code: handleCodeActionUseCase,
     },
     logger: pino({ name: 'retryPendingActions' }),
   });
@@ -403,6 +441,7 @@ export async function initServices(config: ServiceConfig): Promise<void> {
     executeLinkAction: executeLinkActionUseCase,
     executeCalendarAction: executeCalendarActionUseCase,
     executeLinearAction: executeLinearActionUseCase,
+    executeCodeAction: executeCodeActionUseCase,
   });
 
   container = {
@@ -417,6 +456,7 @@ export async function initServices(config: ServiceConfig): Promise<void> {
     bookmarksServiceClient,
     calendarServiceClient,
     linearAgentClient,
+    codeAgentClient,
     actionEventPublisher,
     whatsappPublisher,
     calendarPreviewPublisher,
@@ -428,12 +468,14 @@ export async function initServices(config: ServiceConfig): Promise<void> {
     handleLinkActionUseCase,
     handleCalendarActionUseCase,
     handleLinearActionUseCase,
+    handleCodeActionUseCase,
     executeResearchActionUseCase,
     executeTodoActionUseCase,
     executeNoteActionUseCase,
     executeLinkActionUseCase,
     executeCalendarActionUseCase,
     executeLinearActionUseCase,
+    executeCodeActionUseCase,
     retryPendingActionsUseCase,
     changeActionTypeUseCase,
     handleApprovalReplyUseCase,
@@ -444,6 +486,7 @@ export async function initServices(config: ServiceConfig): Promise<void> {
     link: handleLinkActionUseCase,
     calendar: handleCalendarActionUseCase,
     linear: handleLinearActionUseCase,
+    code: handleCodeActionUseCase,
   };
 }
 

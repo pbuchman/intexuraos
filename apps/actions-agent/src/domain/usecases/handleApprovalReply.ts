@@ -14,6 +14,7 @@ import type { ExecuteResearchActionUseCase } from './executeResearchAction.js';
 import type { ExecuteLinkActionUseCase } from './executeLinkAction.js';
 import type { ExecuteCalendarActionUseCase } from './executeCalendarAction.js';
 import type { ExecuteLinearActionUseCase } from './executeLinearAction.js';
+import type { ExecuteCodeActionUseCase } from './executeCodeAction.js';
 
 export interface HandleApprovalReplyDeps {
   actionRepository: ActionRepository;
@@ -34,6 +35,8 @@ export interface HandleApprovalReplyDeps {
   executeCalendarAction?: ExecuteCalendarActionUseCase;
   /** Optional: If provided, linear actions will be executed directly (skipping event publishing). */
   executeLinearAction?: ExecuteLinearActionUseCase;
+  /** Optional: If provided, code actions will be executed directly (skipping event publishing). */
+  executeCodeAction?: ExecuteCodeActionUseCase;
 }
 
 export interface ApprovalReplyInput {
@@ -372,6 +375,21 @@ export function createHandleApprovalReplyUseCase(
                   );
                 } else {
                   logger.info({ actionId: action.id }, 'Linear action executed successfully after approval');
+                }
+                return;
+              }
+              break;
+            case 'code':
+              if (executeCodeAction !== undefined) {
+                logger.info({ actionId: action.id }, 'Executing code action directly after approval');
+                const result = await executeCodeAction(action.id);
+                if (!result.ok) {
+                  logger.error(
+                    { actionId: action.id, error: getErrorMessage(result.error) },
+                    'Failed to execute code action after approval'
+                  );
+                } else {
+                  logger.info({ actionId: action.id }, 'Code action executed successfully after approval');
                 }
                 return;
               }
