@@ -35,6 +35,7 @@ import type {
   ForceRefreshBookmarkResponse,
 } from '../domain/ports/bookmarksServiceClient.js';
 import type { LinearAgentClient } from '../domain/ports/linearAgentClient.js';
+import type { CodeAgentClient } from '../domain/ports/codeAgentClient.js';
 import type { Action } from '../domain/models/action.js';
 import type { ActionTransition } from '../domain/models/actionTransition.js';
 import type { ActionCreatedEvent } from '../domain/models/actionEvent.js';
@@ -688,12 +689,98 @@ export class FakeLinearAgentClient implements LinearAgentClient {
   }
 }
 
+export class FakeCodeAgentClient implements CodeAgentClient {
+  private submittedTasks: {
+    actionId: string;
+    approvalEventId: string;
+    payload: {
+      prompt: string;
+      workerType: 'opus' | 'auto' | 'glm';
+      linearIssueId?: string;
+      linearIssueTitle?: string;
+    };
+  }[] = [];
+  private nextResponse = {
+    codeTaskId: 'code-task-123',
+    resourceUrl: 'https://app.intexuraos.com/code-tasks/123',
+  };
+  private nextError: {
+    code: 'WORKER_UNAVAILABLE' | 'DUPLICATE' | 'NETWORK_ERROR' | 'UNKNOWN';
+    message: string;
+    existingTaskId?: string;
+  } | null = null;
+  private failNext = false;
+
+  getSubmittedTasks(): typeof this.submittedTasks {
+    return this.submittedTasks;
+  }
+
+  setNextResponse(response: { codeTaskId: string; resourceUrl: string }): void {
+    this.nextResponse = response;
+    this.nextError = null;
+  }
+
+  setNextError(error: {
+    code: 'WORKER_UNAVAILABLE' | 'DUPLICATE' | 'NETWORK_ERROR' | 'UNKNOWN';
+    message: string;
+    existingTaskId?: string;
+  }): void {
+    this.nextError = error;
+  }
+
+  setFailNext(fail: boolean): void {
+    this.failNext = fail;
+  }
+
+  async submitTask(input: {
+    actionId: string;
+    approvalEventId: string;
+    payload: {
+      prompt: string;
+      workerType: 'opus' | 'auto' | 'glm';
+      linearIssueId?: string;
+      linearIssueTitle?: string;
+    };
+  }): Promise<
+    ReturnType<
+      typeof import('../infra/http/codeAgentHttpClient.js').createCodeAgentHttpClient
+    > extends infer C ? C : never
+    >['submitTask']
+  > {
+    if (this.failNext) {
+      this.failNext = false;
+      return {
+        ok: false as const,
+        error: {
+          code: 'NETWORK_ERROR' as const,
+          message: 'Simulated network failure',
+        },
+      } as const;
+    }
+
+    this.submittedTasks.push(input);
+
+    if (this.nextError !== null) {
+      return {
+        ok: false as const,
+        error: this.nextError,
+      } as const;
+    }
+
+    return {
+      ok: true as const,
+      value: this.nextResponse,
+    } as const;
+  }
+}
+
 import type { ExecuteResearchActionResult } from '../domain/usecases/executeResearchAction.js';
 import type { ExecuteTodoActionResult } from '../domain/usecases/executeTodoAction.js';
 import type { ExecuteNoteActionResult } from '../domain/usecases/executeNoteAction.js';
 import type { ExecuteLinkActionResult } from '../domain/usecases/executeLinkAction.js';
 import type { ExecuteCalendarActionResult } from '../domain/usecases/executeCalendarAction.js';
 import type { ExecuteLinearActionResult } from '../domain/usecases/executeLinearAction.js';
+import type { ExecuteCodeActionResult } from '../domain/usecases/executeCodeAction.js';
 import type {
   RetryResult,
   RetryPendingActionsUseCase,
@@ -826,6 +913,28 @@ export function createFakeExecuteLinearActionUseCase(config?: {
         status: 'completed',
         message: 'Linear issue created: TEST-123',
         resourceUrl: 'https://linear.app/issue/TEST-123',
+      }
+    );
+  };
+}
+
+export type FakeExecuteCodeActionUseCase = (
+  actionId: string
+) => Promise<Result<ExecuteCodeActionResult, Error>>;
+
+export function createFakeExecuteCodeActionUseCase(config?: {
+  failWithError?: Error;
+  returnResult?: ExecuteCodeActionResult;
+}): FakeExecuteCodeActionUseCase {
+  return async (_actionId: string): Promise<Result<ExecuteCodeActionResult, Error>> => {
+    if (config?.failWithError !== undefined) {
+      return err(config.failWithError);
+    }
+    return ok(
+      config?.returnResult ?? {
+        status: 'completed',
+        message: 'Code task created: code-task-123',
+        resourceUrl: 'https://app.intexuraos.com/code-tasks/123',
       }
     );
   };
