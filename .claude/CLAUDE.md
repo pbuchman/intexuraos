@@ -255,7 +255,18 @@ Always state the verification result explicitly:
 
 **NEVER modify `vitest.config.ts` coverage exclusions or thresholds. Write tests instead.**
 
-**ALWAYS commit `.claude/ci-failures/*` files with your changes.**
+### CI Failure Tracking (MANDATORY)
+
+**RULE:** ALWAYS commit `.claude/ci-failures/*` files with your changes.
+
+These files are auto-generated during `pnpm run ci:tracked` and record failure patterns for analysis. They enable the `/analyze-ci-failures` skill to identify recurring issues and improve documentation.
+
+```
+❌ WRONG: See .claude/ci-failures/ in git status → Ignore → Commit only "real" changes
+✅ RIGHT: See .claude/ci-failures/ in git status → Stage → Commit with your changes
+```
+
+**Why this matters:** Without these files, CI failure patterns are invisible. We can't improve instructions for problems we can't measure.
 
 ### Coverage Verification Efficiency
 
