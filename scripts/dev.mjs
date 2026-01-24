@@ -61,6 +61,7 @@ const SERVICES = [
   { name: 'bookmarks-agent', port: 8124, color: '\x1b[38;5;141m' },
   { name: 'calendar-agent', port: 8125, color: '\x1b[38;5;220m' },
   { name: 'linear-agent', port: 8126, color: '\x1b[95m' },
+  { name: 'code-agent', port: 8095, color: '\x1b[38;5;214m' },
 
   // these services depend on app-settings-service, so start them after
   { name: 'user-service', port: 8110, color: '\x1b[36m' },
@@ -433,6 +434,7 @@ const COMMON_SERVICE_URLS = {
   INTEXURAOS_BOOKMARKS_AGENT_URL: 'http://localhost:8124',
   INTEXURAOS_CALENDAR_AGENT_URL: 'http://localhost:8125',
   INTEXURAOS_WEB_AGENT_URL: 'http://localhost:8126',
+  INTEXURAOS_CODE_AGENT_URL: 'http://localhost:8095',
 };
 
 // Service-specific env vars (Pub/Sub topics, non-URL config)
@@ -459,6 +461,16 @@ const SERVICE_ENV_MAPPINGS = {
     INTEXURAOS_PUBSUB_CALENDAR_PREVIEW_TOPIC:
       process.env.INTEXURAOS_PUBSUB_CALENDAR_PREVIEW_TOPIC ?? 'calendar-preview',
     INTEXURAOS_WEB_APP_URL: process.env.INTEXURAOS_WEB_APP_URL ?? 'http://localhost:3000',
+  },
+  'code-agent': {
+    INTEXURAOS_CODE_WORKERS: JSON.stringify({
+      mac: { url: 'http://localhost:8100', priority: 1 },
+      vm: { url: 'http://localhost:8101', priority: 2 },
+    }),
+    INTEXURAOS_DISPATCH_SECRET: 'dev-dispatch-secret',
+    INTEXURAOS_WEBHOOK_VERIFY_SECRET: 'dev-webhook-secret',
+    INTEXURAOS_CF_ACCESS_CLIENT_ID: 'dev-cf-client-id',
+    INTEXURAOS_CF_ACCESS_CLIENT_SECRET: 'dev-cf-client-secret',
   },
 };
 
