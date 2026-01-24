@@ -148,25 +148,27 @@ pnpm run ci:report -- --json       # JSON output
 **Data analyzed:** 646 CI runs across 74 branch files
 
 **Top errors identified:**
-| Error                             | Count | Category  |
+| Error | Count | Category |
 | --------------------------------- | ----- | --------- |
-| no-unsafe-member-access           |   737 | lint      |
-| no-unsafe-call                    |   720 | lint      |
-| no-unsafe-assignment              |   499 | lint      |
-| TS2307 (module not found)         |   183 | typecheck |
-| TEST_FAIL                         |   119 | test      |
-| strict-boolean-expressions        |    95 | lint      |
-| TS7006 (implicit any)             |    66 | typecheck |
-| TS2345 (missing mock fields)      |    37 | typecheck |
-| TS2339 (property doesn't exist)   |    36 | typecheck |
-| TS2353 (excess properties)        |    24 | typecheck |
+| no-unsafe-member-access | 737 | lint |
+| no-unsafe-call | 720 | lint |
+| no-unsafe-assignment | 499 | lint |
+| TS2307 (module not found) | 183 | typecheck |
+| TEST_FAIL | 119 | test |
+| strict-boolean-expressions | 95 | lint |
+| TS7006 (implicit any) | 66 | typecheck |
+| TS2345 (missing mock fields) | 37 | typecheck |
+| TS2339 (property doesn't exist) | 36 | typecheck |
+| TS2353 (excess properties) | 24 | typecheck |
 
 **Root cause analysis:**
+
 - 76% of failures are lint errors from unresolved types
 - Existing documentation covers these patterns but they still occur
 - Problem: rules are reactive (fix after error) not preventive (prevent before code)
 
 **Actions taken:**
+
 1. Added new "Pre-Flight Checks (MANDATORY)" section to CLAUDE.md
    - Read types BEFORE writing code
    - Checklist for test mocks, ServiceContainer, package imports

@@ -238,6 +238,29 @@ export function createHandleApprovalReplyUseCase(
 
         // Status successfully updated to 'pending'
 
+        // Send approval confirmation FIRST (before execution) so user sees correct order
+        const approvePublishResult = await whatsappPublisher.publishSendMessage({
+          userId,
+          message: `Approved! Processing your ${action.type}: "${action.title}"`,
+          correlationId: `approval-approved-${action.id}`,
+        });
+
+        if (!approvePublishResult.ok) {
+          logger.warn(
+            { actionId: action.id, error: approvePublishResult.error.message },
+            'Failed to send approval confirmation'
+          );
+        }
+
+        // Clean up approval message after confirmation sent
+        const deleteResult = await approvalMessageRepository.deleteByActionId(action.id);
+        if (!deleteResult.ok) {
+          logger.warn(
+            { actionId: action.id, error: deleteResult.error.message },
+            'Failed to clean up approval message after approval'
+          );
+        }
+
         // For note actions with executeNoteAction provided, execute directly to avoid
         // duplicate notification (publishing action.created would trigger handleNoteAction
         // which sends "New note ready for approval" message again).
@@ -279,29 +302,6 @@ export function createHandleApprovalReplyUseCase(
           } else {
             logger.info({ actionId: action.id }, 'Published action.created event after approval');
           }
-        }
-
-        // Notify user first, then clean up (to avoid race condition)
-        const approvePublishResult = await whatsappPublisher.publishSendMessage({
-          userId,
-          message: `Approved! Processing your ${action.type}: "${action.title}"`,
-          correlationId: `approval-approved-${action.id}`,
-        });
-
-        if (!approvePublishResult.ok) {
-          logger.warn(
-            { actionId: action.id, error: approvePublishResult.error.message },
-            'Failed to send approval confirmation'
-          );
-        }
-
-        // Clean up approval message after confirmation sent
-        const deleteResult = await approvalMessageRepository.deleteByActionId(action.id);
-        if (!deleteResult.ok) {
-          logger.warn(
-            { actionId: action.id, error: deleteResult.error.message },
-            'Failed to clean up approval message after approval'
-          );
         }
 
         outcome = 'approved';
