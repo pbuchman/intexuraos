@@ -640,9 +640,28 @@ tf plan
 - `"commit"` → local only, no push
 - `"commit and push"` → push once
 
+**RULE: NEVER commit without `pnpm run ci:tracked` passing first.**
+
+This is non-negotiable. Running only package-level tests (`vitest`, `tsc`) is NOT sufficient.
+
+```
+❌ WRONG: Fix code → Run vitest → Commit → Push → Check GitHub Actions
+✅ RIGHT: Fix code → Run pnpm run ci:tracked → Passes → Commit → Push
+```
+
+| Shortcut Taken                        | Why It Fails                                      |
+| ------------------------------------- | ------------------------------------------------- |
+| `npx vitest run` only                 | Misses other workspaces, lint, type-check         |
+| `pnpm run test` in one package        | Misses cross-package type errors                  |
+| `tsc --noEmit` only                   | Misses lint errors, test failures                 |
+| "I'll check GitHub Actions"           | Wastes CI resources, delays feedback, breaks main |
+
+**The only acceptable verification is `pnpm run ci:tracked` passing locally.**
+
 **RULE:** Before creating a PR, merge latest base branch and resolve conflicts.
 
 ```bash
+pnpm run ci:tracked              # MUST pass first
 git add -A && git commit -m "message"
 git fetch origin && git merge origin/development
 git push -u origin <branch>
