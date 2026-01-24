@@ -50,6 +50,7 @@ git log v<last-version>..origin/development --no-merges --format="%H %s" | \
 ```
 
 For each direct commit:
+
 1. Use the commit message as the description
 2. Extract Linear issue ID if present (INT-XXX pattern)
 3. Categorize based on commit message prefix (feat:, fix:, chore:, etc.)
@@ -68,6 +69,7 @@ gh pr view <pr-number> --json title,body,labels,mergedAt
 ```
 
 For Linear issues, use the `mcp__linear__get_issue` tool:
+
 - Extract issue ID from PR (e.g., `INT-123` → `INT-123`)
 - Fetch issue details: title, description, labels, state
 
@@ -83,13 +85,13 @@ For Linear issues, use the `mcp__linear__get_issue` tool:
 
 **Label to Category Mapping:**
 
-| Label/Prefix               | Category             | Semver Impact |
-| -------------------------- | -------------------- | ------------- |
-| `breaking-change`, `BREAKING` | Breaking Changes     | MAJOR         |
-| `feature`, `feat:`, `enhancement` | New Features     | MINOR         |
-| `bug`, `fix:`, `[sentry]`  | Bug Fixes            | PATCH         |
-| `chore`, `refactor`, `docs` | Technical/Maintenance | PATCH        |
-| `infra`, `terraform`       | Infrastructure       | PATCH         |
+| Label/Prefix                      | Category              | Semver Impact |
+| --------------------------------- | --------------------- | ------------- |
+| `breaking-change`, `BREAKING`     | Breaking Changes      | MAJOR         |
+| `feature`, `feat:`, `enhancement` | New Features          | MINOR         |
+| `bug`, `fix:`, `[sentry]`         | Bug Fixes             | PATCH         |
+| `chore`, `refactor`, `docs`       | Technical/Maintenance | PATCH         |
+| `infra`, `terraform`              | Infrastructure        | PATCH         |
 
 ### 6. Determine Semver Version Bump
 
@@ -132,6 +134,7 @@ ELSE:
 ### 7. Build the Changelog Entry
 
 **Sources for changelog entries:**
+
 1. **PR descriptions** — Use the Summary section from PR body
 2. **Linear issue titles** — Describe the feature/fix in user terms
 3. **Direct commit messages** — For non-PR work

@@ -5,6 +5,7 @@
  */
 
 export * from './generation/index.js';
+export * from './linear/index.js';
 export * from './classification/index.js';
 export * from './todos/index.js';
 export * from './image/index.js';
