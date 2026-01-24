@@ -14,4 +14,5 @@ export * from './research/index.js';
 export * from './synthesis/index.js';
 export * from './dataInsights/index.js';
 export * from './approvals/index.js';
+export * from './calendar/index.js';
 export * from './shared/index.js';

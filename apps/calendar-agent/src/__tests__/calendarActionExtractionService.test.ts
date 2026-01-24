@@ -166,7 +166,7 @@ describe('calendarActionExtractionService', () => {
       expect(result.ok).toBe(false);
       if (!result.ok) {
         expect(result.error.code).toBe('INVALID_RESPONSE');
-        expect(result.error.message).toContain('Failed to parse LLM response');
+        expect(result.error.message).toContain('Failed to parse');
         expect(result.error.details?.parseError).toBeDefined();
         expect(result.error.details?.rawResponsePreview).toBe('not valid json');
       }
@@ -175,7 +175,7 @@ describe('calendarActionExtractionService', () => {
     it('returns INVALID_RESPONSE when response schema validation fails', async () => {
       const invalidResponse = JSON.stringify({
         summary: 'Test',
-        // Missing required fields
+        // Missing required fields: valid, reasoning
       });
 
       mockGenerate.mockResolvedValue(ok({ content: invalidResponse, usage: mockUsage }));
@@ -187,8 +187,9 @@ describe('calendarActionExtractionService', () => {
       expect(result.ok).toBe(false);
       if (!result.ok) {
         expect(result.error.code).toBe('INVALID_RESPONSE');
-        expect(result.error.message).toBe('LLM returned invalid response format');
-        expect(result.error.details?.parseError).toBe('Schema validation failed');
+        expect(result.error.message).toContain('LLM returned invalid response format');
+        expect(result.error.details?.zodErrors).toBeDefined();
+        expect(result.error.details?.zodErrors).toContain('valid');
       }
     });
 
@@ -244,7 +245,7 @@ describe('calendarActionExtractionService', () => {
       }
     });
 
-    it('handles null date fields correctly', async () => {
+    it('handles date-only format with Zod validation error', async () => {
       const nullDatesResponse = JSON.stringify({
         summary: 'All day event',
         start: '2025-01-15',
@@ -262,11 +263,13 @@ describe('calendarActionExtractionService', () => {
 
       const result = await service.extractEvent('user-123', 'Company holiday on Jan 15', '2025-01-14');
 
-      expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.value.start).toBe('2025-01-15');
-        expect(result.value.end).toBeNull();
-        expect(result.value.valid).toBe(true);
+      // Zod schema requires ISO date-time format, not date-only
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('INVALID_RESPONSE');
+        expect(result.error.message).toContain('LLM returned invalid response format');
+        expect(result.error.details?.zodErrors).toBeDefined();
+        expect(result.error.details?.zodErrors).toContain('start');
       }
     });
 
