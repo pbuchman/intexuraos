@@ -2,6 +2,10 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+**Reference Documentation:** Detailed reference material is available in:
+- `.claude/reference/common-mistakes.md` — Common LLM mistakes and code smells
+- `.claude/reference/infrastructure.md` — GCloud, Terraform, and Cloud Build
+
 ---
 
 # IntexuraOS — Claude Instructions
@@ -169,75 +173,6 @@ grep -B2 "90\." /tmp/ci-output.txt | head -50
 
 ---
 
-## GCloud Authentication (MANDATORY)
-
-**RULE:** NEVER claim "gcloud is not authenticated" or "unauthenticated to gcloud" without first verifying service account credentials.
-
-### Service Account Credentials
-
-A service account key file is available at:
-
-```
-~/personal/gcloud-claude-code-dev.json
-```
-
-### Verification Before Claiming Auth Failure
-
-Before reporting any gcloud authentication issues, you MUST:
-
-1. **Check if credentials file exists:**
-
-   ```bash
-   ls -la ~/personal/gcloud-claude-code-dev.json
-   ```
-
-2. **Activate service account if needed:**
-
-   ```bash
-   gcloud auth activate-service-account --key-file=~/personal/gcloud-claude-code-dev.json
-   ```
-
-3. **Verify authentication:**
-
-   ```bash
-   gcloud auth list
-   ```
-
-### When to Use Service Account
-
-- Firestore queries for investigation
-- Any `gcloud` commands requiring project access
-- Accessing production/dev data for debugging
-- **Terraform operations** (plan, apply, destroy)
-
-**You are NEVER "unauthenticated" if the service account key file exists.** Activate it and proceed.
-
-### Terraform with Service Account
-
-**RULE:** Always use the service account for Terraform operations. Never rely on browser-based authentication.
-
-```bash
-# Set credentials and clear emulator env vars
-GOOGLE_APPLICATION_CREDENTIALS=/Users/p.buchman/personal/gcloud-claude-code-dev.json \
-STORAGE_EMULATOR_HOST= FIRESTORE_EMULATOR_HOST= PUBSUB_EMULATOR_HOST= \
-terraform plan
-
-# Apply changes
-GOOGLE_APPLICATION_CREDENTIALS=/Users/p.buchman/personal/gcloud-claude-code-dev.json \
-STORAGE_EMULATOR_HOST= FIRESTORE_EMULATOR_HOST= PUBSUB_EMULATOR_HOST= \
-terraform apply
-```
-
-**Why service account over browser auth:**
-
-- Browser OAuth tokens expire and require re-authentication
-- Service accounts provide consistent, scriptable access
-- No interactive prompts that break automation
-
-The service account `claude-code-dev@intexuraos-dev-pbuchman.iam.gserviceaccount.com` has full admin permissions for all Terraform-managed resources.
-
----
-
 ## Architecture
 
 ```
@@ -345,58 +280,6 @@ Verification: `pnpm run verify:pubsub`. Docs: [docs/architecture/pubsub-standard
 
 ---
 
-## Terraform (`terraform/**`)
-
-**Gotchas:**
-
-- Cloud Run images managed by Cloud Build, not Terraform (uses `ignore_changes`)
-- "Image not found": run `./scripts/push-missing-images.sh` for new services
-- Web app: backend buckets need URL rewrite for `/` → `/index.html`
-
----
-
-## Cloud Build & Deployment
-
-### Build Pipeline Architecture
-
-**CI:** `.github/workflows/ci.yml` runs `pnpm run ci` on all branches (lint, typecheck, test, build)
-
-**Deploy:** `.github/workflows/deploy.yml` triggers on push to `development` branch only:
-
-1. Runs `.github/scripts/smart-dispatch.mjs` to analyze changes
-2. Triggers Cloud Build based on strategy:
-   - **MONOLITH** — Rebuild all (>3 affected OR global change) → `intexuraos-dev-deploy` trigger
-   - **INDIVIDUAL** — Rebuild affected only (≤3) → `<service>` triggers in parallel
-   - **NONE** — No deployable changes, skip
-
-**Manual override:** `workflow_dispatch` with `force_strategy: monolith` to rebuild all
-
-**Global Triggers** (force MONOLITH): `terraform/`, `cloudbuild/cloudbuild.yaml`, `cloudbuild/scripts/`, `pnpm-lock.yaml`, `tsconfig.base.json`
-
-### File Locations
-
-| Purpose                  | File                                     |
-| ------------------------ | ---------------------------------------- |
-| CI workflow              | `.github/workflows/ci.yml`               |
-| Deploy workflow          | `.github/workflows/deploy.yml`           |
-| Smart dispatch           | `.github/scripts/smart-dispatch.mjs`     |
-| Main pipeline (all)      | `cloudbuild/cloudbuild.yaml`             |
-| Per-service pipeline     | `apps/<service>/cloudbuild.yaml`         |
-| Deploy scripts           | `cloudbuild/scripts/deploy-<service>.sh` |
-| Trigger definitions (TF) | `terraform/modules/cloud-build/main.tf`  |
-
-### Adding a New Service to Cloud Build
-
-1. Add build+deploy steps to `cloudbuild/cloudbuild.yaml`
-2. Create `apps/<service>/cloudbuild.yaml`
-3. Create `cloudbuild/scripts/deploy-<service>.sh`
-4. Add to `docker_services` in `terraform/modules/cloud-build/main.tf`
-5. Add to `SERVICES` array in `.github/scripts/smart-dispatch.mjs`
-
-**First deployment:** Service must exist in Terraform before Cloud Build can deploy. Run `./scripts/push-missing-images.sh` for new services.
-
----
-
 ## Web App (`apps/web/**`)
 
 **CRITICAL:** Hash routing only (`/#/path`) — backend buckets don't support SPA fallback.
@@ -409,138 +292,7 @@ Verification: `pnpm run verify:pubsub`. Docs: [docs/architecture/pubsub-standard
 
 Strict mode enabled: `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`, `strictBooleanExpressions`. Compiler errors guide fixes — use `arr[0] ?? fallback`, explicit `=== true` checks, `String()` for template numbers.
 
----
-
-## Common LLM Mistakes (LEARN FROM HISTORY)
-
-These patterns cause 80% of CI failures. Internalize them.
-
-### 1. ESM Imports — Always use `.js` extension
-
-```typescript
-// ❌ import { foo } from '../services/bar';
-// ✅ import { foo } from '../services/bar.js';
-```
-
-### 2. ServiceContainer — Check existing tests before adding services
-
-When modifying `ServiceContainer`, **read existing test files first** to see all required fields.
-New fields break ALL tests that use `setServices()`.
-
-```typescript
-// ❌ Adding new service without updating tests
-setServices({ existingRepo: fakeRepo }); // Missing new required field!
-
-// ✅ Check services.ts interface, update ALL test files
-setServices({ existingRepo: fakeRepo, newService: fakeNewService });
-```
-
-### 3. exactOptionalPropertyTypes — Use `?:` not `| undefined`
-
-```typescript
-// ❌ type Deps = { logger: Logger | undefined };
-// ✅ type Deps = { logger?: Logger };
-```
-
-### 4. Template Literals — Wrap non-strings with `String()`
-
-```typescript
-// ❌ `Status: ${response.status}` // status is number
-// ✅ `Status: ${String(response.status)}`
-```
-
-### 5. Unsafe Type Operations — Resolve types before accessing
-
-ESLint's `no-unsafe-*` rules fire when TypeScript can't resolve a type. Common causes:
-
-```typescript
-// ❌ Accessing Result without narrowing
-const result = await repo.findById(id);
-console.log(result.value); // no-unsafe-member-access: .value unresolved
-
-// ✅ Narrow first, then access
-const result = await repo.findById(id);
-if (!result.ok) return result;
-console.log(result.value); // TypeScript knows it's Success<T>
-
-// ❌ Using enum from unresolved import
-import { ModelId } from '@intexuraos/llm-factory';
-const model = ModelId.Gemini25Flash; // no-unsafe-member-access
-
-// ✅ Ensure package is built, or use string literal
-const model = 'gemini-2.5-flash' as const;
-```
-
-**Root cause:** If `no-unsafe-*` errors appear, the type isn't resolving — check imports, run `pnpm build`, or add explicit type annotations.
-
-### 6. Mock Logger — Include ALL required methods
-
-The `Logger` interface requires `info`, `warn`, `error`, AND `debug`. Missing any causes TS2345.
-
-```typescript
-// ❌ Missing debug method
-const logger = {
-  info: vi.fn(),
-  warn: vi.fn(),
-  error: vi.fn(),
-}; // TS2345: not assignable to Logger
-
-// ✅ Include all four methods
-const logger: Logger = {
-  info: vi.fn(),
-  warn: vi.fn(),
-  error: vi.fn(),
-  debug: vi.fn(),
-};
-
-// ✅ Or use FakeLogger class if available in the service
-import { FakeLogger } from './fakes.js';
-const logger = new FakeLogger();
-```
-
-### 7. Empty Functions in Mocks — Use arrow functions
-
-ESLint's `no-empty-function` forbids `() => {}`. Use explicit return or vi.fn().
-
-```typescript
-// ❌ Empty function body
-const mock = { process: () => {} }; // no-empty-function
-
-// ✅ Return undefined explicitly, or use vi.fn()
-const mock = { process: (): undefined => undefined };
-const mock = { process: vi.fn() };
-```
-
-### 8. Async Template Expressions — Await or wrap in `String()`
-
-```typescript
-// ❌ `Result: ${asyncFunction()}` // Promise<string> in template
-// ✅ `Result: ${await asyncFunction()}`
-// OR: `Result: ${String(asyncFunction())}`
-```
-
----
-
-## Code Smells (Fix & Document)
-
-**RULE:** When fixing a new smell, add it here.
-
-| Smell                      | ❌ Wrong                       | ✅ Fix                    |
-| -------------------------- | ------------------------------ | ------------------------- |
-| Silent catch               | `catch {}`                     | `catch { /* reason */ }`  |
-| Inline error               | `error instanceof Error ? ...` | `getErrorMessage(error)`  |
-| Throw in try               | `try { if (x) throw } catch`   | Separate blocks           |
-| Re-export from services.ts | `export * from './infra/...'`  | Only export DI functions  |
-| Module-level state         | `let logger: Logger`           | Pass to factory functions |
-| Test fallback in prod      | `container ?? { fake }`        | Throw if not init         |
-| Domain in infra            | `maskApiKey()` in infra        | Move to common-core       |
-| Infra re-exports domain    | `export type from domain`      | Import where needed       |
-| Manual header redaction    | Inline `[REDACTED]`            | `logIncomingRequest()`    |
-| Redundant variable         | `const r = f(); return r`      | `return f()`              |
-| Redundant check            | Check after type guard         | Trust narrowing           |
-| Console logging            | `console.info()` in infra      | Accept `logger?` param    |
-
-**Known debt:** OpenAPI schemas duplicated per server.ts (Fastify types limitation).
+**Common Mistakes & Code Smells:** See `.claude/reference/common-mistakes.md` for detailed patterns that cause 80% of CI failures.
 
 ---
 
@@ -584,7 +336,7 @@ When adding new functionality:
 
 **No external deps.** In-memory fakes, `nock` for HTTP. Just `pnpm run test`.
 
-- TypeScript: `pnpm run typecheck:tests` (uses `tsconfig.tests-check.json`)
+- TypeScript: `pnpm run typecheck:tests` (uses `tsconfig.tests-check.json` for test files only)
 - Pattern: `setServices({fakes})` in `beforeEach`, `resetServices()` in `afterEach`
 - Routes: integration via `app.inject()`. Domain: unit tests. Infra: tested via routes.
 - **Coverage: 95%. NEVER modify thresholds — write tests.**
@@ -689,7 +441,7 @@ Use the `/linear` command for issue tracking and workflow management.
 | Linear → GitHub | `Fixes LIN-XXX` in PR body                      |
 | GitHub → Linear | PR URL in issue comments                        |
 | Sentry → Linear | `[sentry] <title>` naming + link in description |
-| Linear → Sentry | Comment on Sentry issue                         |
+| Linear → Sentry | Comment on Sentry issue with Linear link        |
 
 **See:** `.claude/commands/linear.md` for complete workflow documentation.
 
