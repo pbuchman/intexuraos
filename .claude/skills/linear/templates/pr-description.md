@@ -43,16 +43,16 @@ Co-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>
 
 ## Required Sections
 
-| Section              | Required | Purpose                                   |
-| -------------------- | -------- | ----------------------------------------- |
-| Context              | Yes      | Links to Linear issue                     |
-| What Changed         | Yes      | Brief summary of changes                  |
-| Reasoning            | Yes      | Explains the "why" behind decisions       |
-| Investigation        | If any   | Data collected during investigation       |
-| Key Decisions        | If any   | Important choices made                    |
-| Testing              | Yes      | Verification checklist                    |
-| Cross-References     | Yes      | Links to all related systems              |
-| Co-Authored-By       | Yes      | Attribution for AI assistance             |
+| Section          | Required | Purpose                             |
+| ---------------- | -------- | ----------------------------------- |
+| Context          | Yes      | Links to Linear issue               |
+| What Changed     | Yes      | Brief summary of changes            |
+| Reasoning        | Yes      | Explains the "why" behind decisions |
+| Investigation    | If any   | Data collected during investigation |
+| Key Decisions    | If any   | Important choices made              |
+| Testing          | Yes      | Verification checklist              |
+| Cross-References | Yes      | Links to all related systems        |
+| Co-Authored-By   | Yes      | Attribution for AI assistance       |
 
 ## Heredoc Usage
 

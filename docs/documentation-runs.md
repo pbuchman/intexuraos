@@ -209,7 +209,7 @@ Previous session completed missing tutorial.md and technical-debt.md files for t
 **Inferred Insights:**
 
 | Service                      | Why Exists                                       | Killer Feature                                       | Future Plans                           |
-| ----------------------------  | ------------------------------------------------  | ----------------------------------------------------  | --------------------------------------  |
+| ---------------------------- | ------------------------------------------------ | ---------------------------------------------------- | -------------------------------------- |
 | actions-agent                | Central orchestration point for all user actions | Pub/Sub distribution to specialized agents           | Action type registry expansion         |
 | research-agent               | Multi-LLM synthesis for comprehensive research   | Parallel queries across 4 providers with aggregation | More LLM providers, custom prompts     |
 | user-service                 | Unified auth and API key management              | AES-256-GCM encryption for API keys                  | More OAuth providers                   |
@@ -233,7 +233,7 @@ Previous session completed missing tutorial.md and technical-debt.md files for t
 **Technical Debt Summary:**
 
 | Service                      | TODOs | Code Smells | Test Gaps | Type Issues |
-| ----------------------------  | -----  | -----------  | ---------  | -----------  |
+| ---------------------------- | ----- | ----------- | --------- | ----------- |
 | actions-agent                | 0     | 2           | 0         | 0           |
 | research-agent               | 0     | 1           | 0         | 0           |
 | user-service                 | 0     | 0           | 0         | 0           |

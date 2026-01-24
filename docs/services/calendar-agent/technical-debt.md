@@ -3,7 +3,7 @@
 ## Summary
 
 | Category       | Count | Severity |
-| --------------  | -----  | --------  |
+| -------------- | ----- | -------- |
 | TODO/FIXME     | 0     | -        |
 | Code Smells    | 1     | Low      |
 | Test Coverage  | 0     | -        |

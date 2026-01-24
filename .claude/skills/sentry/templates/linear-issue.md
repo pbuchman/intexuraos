@@ -13,9 +13,10 @@ Use this template when creating Linear issues from Sentry errors.
 **Users Affected:** {{user_count}}
 
 ## Stack Trace
-
 ```
+
 {{stacktrace_excerpt}}
+
 ```
 
 ## Environment
@@ -31,17 +32,17 @@ Use this template when creating Linear issues from Sentry errors.
 
 ## Field Descriptions
 
-| Field               | Source                              | Example                          |
-| ------------------- | ----------------------------------- | -------------------------------- |
-| `sentry_issue_id`   | Issue ID from Sentry                | `INTEXURAOS-DEVELOPMENT-42`      |
-| `sentry_url`        | Full Sentry issue URL               | `https://...sentry.io/issues/42` |
-| `first_seen`        | `firstSeen` from issue details      | `2026-01-15T10:30:00Z`           |
-| `event_count`       | `count` from issue details          | `127`                            |
-| `user_count`        | `userCount` from issue details      | `23`                             |
-| `stacktrace_excerpt`| Top 3-5 relevant stack frames       | (see example below)              |
-| `release`           | Release version from context        | `1.2.3`                          |
-| `environment`       | Environment tag                     | `production`                     |
-| `top_browser`       | Most affected browser from tags     | `Chrome 120`                     |
+| Field                | Source                          | Example                          |
+| -------------------- | ------------------------------- | -------------------------------- |
+| `sentry_issue_id`    | Issue ID from Sentry            | `INTEXURAOS-DEVELOPMENT-42`      |
+| `sentry_url`         | Full Sentry issue URL           | `https://...sentry.io/issues/42` |
+| `first_seen`         | `firstSeen` from issue details  | `2026-01-15T10:30:00Z`           |
+| `event_count`        | `count` from issue details      | `127`                            |
+| `user_count`         | `userCount` from issue details  | `23`                             |
+| `stacktrace_excerpt` | Top 3-5 relevant stack frames   | (see example below)              |
+| `release`            | Release version from context    | `1.2.3`                          |
+| `environment`        | Environment tag                 | `production`                     |
+| `top_browser`        | Most affected browser from tags | `Chrome 120`                     |
 
 ## Stack Trace Excerpt Guidelines
 

@@ -4,7 +4,7 @@ Template for child issues created during plan splitting.
 
 ## Template
 
-```markdown
+````markdown
 ## Context
 
 Part of: [Parent Title](PARENT_ISSUE_URL)
@@ -28,9 +28,11 @@ Tier: X | Sequence: Y
 ## Dependencies
 
 **Blocked By:**
+
 - [INT-XXX](url) - <dependency description>
 
 **Blocks:**
+
 - [INT-XXX](url) - <what this enables>
 
 ## Verification Commands
@@ -38,6 +40,7 @@ Tier: X | Sequence: Y
 ```bash
 <commands to verify this task is complete>
 ```
+````
 
 ## Notes
 
@@ -48,7 +51,8 @@ Tier: X | Sequence: Y
 ## Continuation
 
 **DO NOT STOP.** After completing this task and committing, immediately proceed to the next unblocked task without waiting for user input.
-```
+
+````
 
 ## Mandatory Sections
 
@@ -68,9 +72,10 @@ Always include tier and sequence in context section:
 
 ```markdown
 Tier: 0 | Sequence: 1
-```
+````
 
 This helps quickly identify:
+
 - **Tier 0**: Setup/prerequisite work
 - **Tier 1**: Independent deliverables
 - **Tier 2**: Integration work

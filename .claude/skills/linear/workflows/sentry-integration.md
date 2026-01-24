@@ -8,12 +8,12 @@
 
 For advanced operations, delegate to the Sentry skill:
 
-| Operation                  | Use                                      |
-| -------------------------- | ---------------------------------------- |
-| Single issue investigation | `/sentry <sentry-url>`                   |
-| AI root cause analysis     | `/sentry analyze <sentry-url>`           |
-| Batch triage               | `/sentry` or `/sentry triage --limit N`  |
-| Create Linear issue only   | This workflow (below)                    |
+| Operation                  | Use                                     |
+| -------------------------- | --------------------------------------- |
+| Single issue investigation | `/sentry <sentry-url>`                  |
+| AI root cause analysis     | `/sentry analyze <sentry-url>`          |
+| Batch triage               | `/sentry` or `/sentry triage --limit N` |
+| Create Linear issue only   | This workflow (below)                   |
 
 **Full Sentry documentation:** `.claude/skills/sentry/`
 
@@ -29,6 +29,7 @@ For advanced operations, delegate to the Sentry skill:
 ### 2. Verify Tools
 
 Required tools:
+
 - Linear MCP
 - GitHub CLI
 - Sentry MCP (`mcp__sentry__whoami`)
@@ -83,8 +84,8 @@ If yes: Proceed with [work-existing.md](work-existing.md)
 <short description of the error>
 
 ### Stacktrace
-
 ```
+
 <relevant stacktrace excerpt>
 ```
 
@@ -103,8 +104,8 @@ If yes: Proceed with [work-existing.md](work-existing.md)
 
 Always use `[sentry]` prefix regardless of error type:
 
-| Example                                           |
-| ------------------------------------------------- |
-| `[sentry] TypeError: null is not an object`       |
-| `[sentry] ReferenceError: x is not defined`       |
-| `[sentry] Network request failed in AuthService`  |
+| Example                                          |
+| ------------------------------------------------ |
+| `[sentry] TypeError: null is not an object`      |
+| `[sentry] ReferenceError: x is not defined`      |
+| `[sentry] Network request failed in AuthService` |

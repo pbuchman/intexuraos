@@ -12,18 +12,18 @@ Machine-readable interface definition for other AI agents to understand and inte
 
 ## Template
 
-```markdown
+````markdown
 # <Service Name> — Agent Interface
 
 > **Machine-readable specification for AI agent integration**
 
 ## Identity
 
-| Attribute | Value                                      |
-| --------- | ------------------------------------------ |
-| Name      | <service-name>                             |
-| Role      | <One sentence describing what it does>     |
-| Goal      | <Primary outcome the service achieves>     |
+| Attribute | Value                                  |
+| --------- | -------------------------------------- |
+| Name      | <service-name>                         |
+| Role      | <One sentence describing what it does> |
+| Goal      | <Primary outcome the service achieves> |
 
 ## Capabilities
 
@@ -34,6 +34,7 @@ Machine-readable interface definition for other AI agents to understand and inte
 **When to use:** <Conditions that make this the right choice>
 
 **Input Schema:**
+
 ```typescript
 interface Input {
   field1: string;
@@ -41,8 +42,10 @@ interface Input {
   optional?: boolean;
 }
 ```
+````
 
 **Output Schema:**
+
 ```typescript
 interface Output {
   id: string;
@@ -52,6 +55,7 @@ interface Output {
 ```
 
 **Example:**
+
 ```json
 // Request
 {
@@ -74,11 +78,13 @@ interface Output {
 ## Constraints
 
 **Do NOT:**
+
 - <Constraint 1 — what the service cannot do>
 - <Constraint 2>
 - <Constraint 3>
 
 **Requires:**
+
 - <Prerequisite 1 — what must happen before calling>
 - <Prerequisite 2>
 
@@ -100,35 +106,36 @@ interface Output {
 
 ## Error Handling
 
-| Error Code | Meaning                | Recovery Action        |
-| ---------- | ---------------------- | ---------------------- |
-| 400        | Invalid input          | Fix request payload    |
-| 401        | Unauthorized           | Refresh token          |
-| 404        | Resource not found     | Verify ID exists       |
-| 429        | Rate limited           | Wait and retry         |
-| 500        | Server error           | Retry with backoff     |
+| Error Code | Meaning            | Recovery Action     |
+| ---------- | ------------------ | ------------------- |
+| 400        | Invalid input      | Fix request payload |
+| 401        | Unauthorized       | Refresh token       |
+| 404        | Resource not found | Verify ID exists    |
+| 429        | Rate limited       | Wait and retry      |
+| 500        | Server error       | Retry with backoff  |
 
 ## Rate Limits
 
-| Endpoint      | Limit           | Window  |
-| ------------- | --------------- | ------- |
-| POST /create  | 100 requests    | 1 hour  |
-| GET /list     | 1000 requests   | 1 hour  |
+| Endpoint     | Limit         | Window |
+| ------------ | ------------- | ------ |
+| POST /create | 100 requests  | 1 hour |
+| GET /list    | 1000 requests | 1 hour |
 
 ## Events Published
 
-| Event            | When                    | Payload Schema        |
-| ---------------- | ----------------------- | --------------------- |
-| `resource.created` | After successful create | `{ id, userId, ... }` |
+| Event              | When                    | Payload Schema         |
+| ------------------ | ----------------------- | ---------------------- |
+| `resource.created` | After successful create | `{ id, userId, ... }`  |
 | `resource.updated` | After successful update | `{ id, changes, ... }` |
 
 ## Dependencies
 
-| Service      | Why Needed                    | Failure Behavior      |
-| ------------ | ----------------------------- | --------------------- |
-| user-service | Validate user ownership       | Reject request        |
-| pubsub       | Publish events                | Queue for retry       |
-```
+| Service      | Why Needed              | Failure Behavior |
+| ------------ | ----------------------- | ---------------- |
+| user-service | Validate user ownership | Reject request   |
+| pubsub       | Publish events          | Queue for retry  |
+
+````
 
 ---
 
@@ -184,9 +191,10 @@ interface SendMessageInput {
   message: string;
   templateId?: string;
 }
-```
+````
 
 **Output Schema:**
+
 ```typescript
 interface SendMessageOutput {
   messageId: string;
@@ -196,6 +204,7 @@ interface SendMessageOutput {
 ```
 
 **Example:**
+
 ```json
 // Request
 {
@@ -214,11 +223,13 @@ interface SendMessageOutput {
 ## Constraints
 
 **Do NOT:**
+
 - Send messages without user consent
 - Send more than 10 messages per minute per user
 - Use for marketing without explicit opt-in
 
 **Requires:**
+
 - User must have verified phone number
 - User must have active session
 
@@ -232,4 +243,7 @@ interface SendMessageOutput {
 3. If WhatsApp enabled, call POST /internal/messages/send
 4. Log delivery status
 ```
+
+```
+
 ```

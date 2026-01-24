@@ -8,17 +8,17 @@ description: |
 invocation: both
 
 triggers:
-  - "/sentry"
-  - "sentry.*issue"
-  - "sentry.*error"
+  - '/sentry'
+  - 'sentry.*issue'
+  - 'sentry.*error'
   - "https?://.*sentry\\.io"
-  - "triage.*sentry"
+  - 'triage.*sentry'
 
 config:
-  organization: "intexuraos-dev-pbuchman"
+  organization: 'intexuraos-dev-pbuchman'
   projects:
-    - "intexuraos-development"
-    - "intexuraos-web-development"
+    - 'intexuraos-development'
+    - 'intexuraos-web-development'
 ---
 
 # Sentry Issue Management
@@ -49,24 +49,24 @@ Triage, investigate, and resolve Sentry issues with enforced cross-linking to Li
 
 The skill automatically detects intent from input:
 
-| Input Pattern                       | Type           | Workflow                                          |
-| ----------------------------------- | -------------- | ------------------------------------------------- |
-| `/sentry` (no args)                 | Batch Triage   | [triage-batch.md](workflows/triage-batch.md)      |
-| `/sentry <sentry-url>`              | Single Issue   | [triage-issue.md](workflows/triage-issue.md)      |
-| `/sentry analyze <url>`             | Seer Analysis  | [analyze-with-seer.md](workflows/analyze-with-seer.md) |
-| `/sentry linear <sentry-url>`       | Create Linear  | [create-linear-issue.md](workflows/create-linear-issue.md) |
-| `/sentry triage --limit N`          | Limited Batch  | [triage-batch.md](workflows/triage-batch.md)      |
+| Input Pattern                 | Type          | Workflow                                                   |
+| ----------------------------- | ------------- | ---------------------------------------------------------- |
+| `/sentry` (no args)           | Batch Triage  | [triage-batch.md](workflows/triage-batch.md)               |
+| `/sentry <sentry-url>`        | Single Issue  | [triage-issue.md](workflows/triage-issue.md)               |
+| `/sentry analyze <url>`       | Seer Analysis | [analyze-with-seer.md](workflows/analyze-with-seer.md)     |
+| `/sentry linear <sentry-url>` | Create Linear | [create-linear-issue.md](workflows/create-linear-issue.md) |
+| `/sentry triage --limit N`    | Limited Batch | [triage-batch.md](workflows/triage-batch.md)               |
 
 ## Tool Verification (Fail Fast)
 
 Before ANY operation, verify all required tools:
 
-| Tool       | Verification Command         | Purpose              |
-| ---------- | ---------------------------- | -------------------- |
-| Sentry MCP | `mcp__sentry__whoami`        | Issue management     |
-| Linear MCP | `mcp__linear__list_teams`    | Issue tracking       |
-| GitHub CLI | `gh auth status`             | PR creation          |
-| GCloud     | Service account verification | Firestore access     |
+| Tool       | Verification Command         | Purpose          |
+| ---------- | ---------------------------- | ---------------- |
+| Sentry MCP | `mcp__sentry__whoami`        | Issue management |
+| Linear MCP | `mcp__linear__list_teams`    | Issue tracking   |
+| GitHub CLI | `gh auth status`             | PR creation      |
+| GCloud     | Service account verification | Firestore access |
 
 ### GCloud Verification
 
@@ -102,13 +102,13 @@ Issues are fetched from these Sentry projects:
 
 Every Sentry issue must be traceable across all systems:
 
-| Direction        | Method                                         |
-| ---------------- | ---------------------------------------------- |
-| Sentry → Linear  | Comment on Sentry with Linear issue link       |
-| Linear → Sentry  | `[sentry] <title>` naming + link in description |
-| Linear → GitHub  | PR title contains `INT-XXX`                    |
-| GitHub → Linear  | `Fixes INT-XXX` in PR body                     |
-| GitHub → Sentry  | Sentry link in PR description                  |
+| Direction       | Method                                          |
+| --------------- | ----------------------------------------------- |
+| Sentry → Linear | Comment on Sentry with Linear issue link        |
+| Linear → Sentry | `[sentry] <title>` naming + link in description |
+| Linear → GitHub | PR title contains `INT-XXX`                     |
+| GitHub → Linear | `Fixes INT-XXX` in PR body                      |
+| GitHub → Sentry | Sentry link in PR description                   |
 
 ## References
 

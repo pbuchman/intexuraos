@@ -134,6 +134,7 @@ Never re-run tests just to grep different patterns — each run takes 2-5 minute
 **Full reference:** `.claude/reference/infrastructure.md` (GCloud auth, Terraform, Cloud Build, Pub/Sub)
 
 **Quick commands:**
+
 - Activate: `gcloud auth activate-service-account --key-file=~/personal/gcloud-claude-code-dev.json`
 - Terraform: Use `tf` alias (clears emulator vars)
 - New service image: `./scripts/push-missing-images.sh`
@@ -187,13 +188,15 @@ Pattern: `/internal/{resource-name}` with `X-Internal-Auth` header. Use `validat
 
 ## Apps & Packages
 
-**Apps (`apps/**`):**
+**Apps (`apps/**`):\*\*
+
 - Use `getServices()` for deps, `getFirestore()` singleton for DB
 - Env vars: `INTEXURAOS_*` prefix (except `NODE_ENV`, `PORT`, emulators)
 - Fail-fast: `validateRequiredEnv()` at startup
 - New service: Use `/create-service` command
 
-**Packages (`packages/**`):**
+**Packages (`packages/**`):\*\*
+
 - `common-*` are leaf packages (no deps)
 - `infra-*` wrap external services
 - No domain logic in packages
@@ -272,8 +275,8 @@ return result.value;
 
 // ✅ Narrow first, then access
 const result = await repo.find(id);
-if (!result.ok) return result;  // Narrows to Success<T>
-return result.value;            // Now safe
+if (!result.ok) return result; // Narrows to Success<T>
+return result.value; // Now safe
 ```
 
 ---
@@ -283,6 +286,7 @@ return result.value;            // Now safe
 **Full reference:** `.claude/reference/common-mistakes.md`
 
 **Key patterns (80% of CI failures):**
+
 - ESM imports need `.js` extension
 - Use `?:` not `| undefined` for optional props
 - Wrap non-strings in `String()` for templates
@@ -365,13 +369,13 @@ Use the AskUserQuestion tool for each question separately. Do not batch multiple
 
 All artifacts must be connected:
 
-| From    | To      | Method                                          |
-| ------- | ------- | ----------------------------------------------- |
-| Linear  | GitHub  | PR title contains `INT-XXX`                     |
-| GitHub  | Linear  | `Fixes INT-XXX` in PR body                      |
-| Sentry  | Linear  | `[sentry] <title>` prefix + link in description |
-| Linear  | Sentry  | Comment on Sentry issue with Linear link        |
-| PR      | Sentry  | Sentry link in PR description                   |
+| From   | To     | Method                                          |
+| ------ | ------ | ----------------------------------------------- |
+| Linear | GitHub | PR title contains `INT-XXX`                     |
+| GitHub | Linear | `Fixes INT-XXX` in PR body                      |
+| Sentry | Linear | `[sentry] <title>` prefix + link in description |
+| Linear | Sentry | Comment on Sentry issue with Linear link        |
+| PR     | Sentry | Sentry link in PR description                   |
 
 ---
 
@@ -438,11 +442,11 @@ Use the `/document-service` skill to generate comprehensive service documentatio
 
 **Modes:**
 
-| Mode        | Invocation                              | Behavior                        |
-| ----------- | --------------------------------------- | ------------------------------- |
-| Discovery   | `/document-service` (no args)           | Lists services + doc status     |
-| Interactive | `/document-service <service-name>`      | Asks 3 questions (Q1, Q5, Q8)   |
-| Autonomous  | Task tool → `service-scribe` subagent   | Infers all answers from code    |
+| Mode        | Invocation                            | Behavior                      |
+| ----------- | ------------------------------------- | ----------------------------- |
+| Discovery   | `/document-service` (no args)         | Lists services + doc status   |
+| Interactive | `/document-service <service-name>`    | Asks 3 questions (Q1, Q5, Q8) |
+| Autonomous  | Task tool → `service-scribe` subagent | Infers all answers from code  |
 
 **Output:** 5 files per service + website content updates
 
@@ -459,39 +463,39 @@ This project uses three types of Claude extensions:
 **Location:** `.claude/skills/<skill-name>/`
 **Invocation:** `/skill-name` (user) or auto-trigger (model)
 
-| Skill               | Purpose                                            |
-| ------------------- | -------------------------------------------------- |
-| `/linear`           | Linear issue management with auto-splitting        |
-| `/sentry`           | Sentry triage with AI analysis and cross-linking   |
-| `/document-service` | Service documentation (interactive + autonomous)   |
+| Skill               | Purpose                                          |
+| ------------------- | ------------------------------------------------ |
+| `/linear`           | Linear issue management with auto-splitting      |
+| `/sentry`           | Sentry triage with AI analysis and cross-linking |
+| `/document-service` | Service documentation (interactive + autonomous) |
 
 ### Agents (Task-Spawned)
 
 **Location:** `.claude/agents/<agent-name>.md`
 **Invocation:** Task tool with `subagent_type: <agent-name>`
 
-| Agent                   | Purpose                                        |
-| ----------------------- | ---------------------------------------------- |
-| `coverage-orchestrator` | 100% branch coverage enforcement               |
-| `llm-manager`           | LLM usage audit and pricing verification       |
-| `service-creator`       | New service scaffolding                        |
-| `service-scribe`        | Autonomous documentation (delegates to skill)  |
-| `whatsapp-sender`       | WhatsApp notification specialist               |
+| Agent                   | Purpose                                       |
+| ----------------------- | --------------------------------------------- |
+| `coverage-orchestrator` | 100% branch coverage enforcement              |
+| `llm-manager`           | LLM usage audit and pricing verification      |
+| `service-creator`       | New service scaffolding                       |
+| `service-scribe`        | Autonomous documentation (delegates to skill) |
+| `whatsapp-sender`       | WhatsApp notification specialist              |
 
 ### Commands (Single-File)
 
 **Location:** `.claude/commands/<command-name>.md`
 **Invocation:** `/<command-name>`
 
-| Command               | Purpose                           |
-| --------------------- | --------------------------------- |
-| `/analyze-ci-failures`| Analyze CI failure patterns       |
-| `/analyze-logs`       | Production log analysis           |
-| `/coverage`           | Coverage improvement suggestions  |
-| `/create-service`     | New service creation wizard       |
-| `/refactoring`        | Code smell detection and fixes    |
-| `/semver-release`     | Semantic versioning release       |
-| `/verify-deployment`  | Deployment verification           |
+| Command                | Purpose                          |
+| ---------------------- | -------------------------------- |
+| `/analyze-ci-failures` | Analyze CI failure patterns      |
+| `/analyze-logs`        | Production log analysis          |
+| `/coverage`            | Coverage improvement suggestions |
+| `/create-service`      | New service creation wizard      |
+| `/refactoring`         | Code smell detection and fixes   |
+| `/semver-release`      | Semantic versioning release      |
+| `/verify-deployment`   | Deployment verification          |
 
 ---
 
@@ -502,6 +506,7 @@ For multi-step features, use the Linear-based continuity pattern with parent-chi
 **See:** [docs/patterns/linear-continuity.md](../docs/patterns/linear-continuity.md)
 
 **Quick Start:**
+
 1. Create top-level Linear issue for overall feature
 2. Use `/linear` with complex description to auto-split into child issues
 3. Parent issue serves as ledger (goal, decisions, state tracking)

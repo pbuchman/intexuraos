@@ -8,14 +8,14 @@ Instead of creating `continuity/NNN-task-name/` directories with markdown files,
 
 ### What Changed
 
-| Aspect        | Old (File-Based)                          | New (Linear-Based)                      |
-| -------------  | -----------------------------------------  | ---------------------------------------  |
-| Ledger        | `CONTINUITY.md` file                      | Parent Linear issue description         |
-| Subtasks      | `X-Y-title.md` files                      | Child Linear issues with `parentId`     |
-| State         | Manual markdown updates                   | Linear state machine                    |
-| Visibility    | Local filesystem only                     | Full team visibility in Linear UI       |
-| History       | Git history                               | Linear activity feed                    |
-| Dependencies  | Manual tracking                           | `blockedBy` relationships               |
+| Aspect       | Old (File-Based)        | New (Linear-Based)                  |
+| ------------ | ----------------------- | ----------------------------------- |
+| Ledger       | `CONTINUITY.md` file    | Parent Linear issue description     |
+| Subtasks     | `X-Y-title.md` files    | Child Linear issues with `parentId` |
+| State        | Manual markdown updates | Linear state machine                |
+| Visibility   | Local filesystem only   | Full team visibility in Linear UI   |
+| History      | Git history             | Linear activity feed                |
+| Dependencies | Manual tracking         | `blockedBy` relationships           |
 
 ### Why Linear
 
@@ -60,6 +60,7 @@ If the task is complex (multiple phases, many checkboxes), the skill detects thi
 ### 2. Plan Splitting
 
 The skill automatically:
+
 1. Parses the plan into phases/tasks
 2. Classifies tasks into tiers
 3. Creates parent issue with ledger format
@@ -68,12 +69,12 @@ The skill automatically:
 
 ### 3. Tier Classification
 
-| Tier | Name          | Purpose                                    |
-| ----  | -------------  | ------------------------------------------  |
-| 0    | Setup         | Prerequisites, scaffolding, config         |
-| 1    | Independent   | Can run in parallel, no interdependencies  |
-| 2    | Integration   | Connects components, depends on Tier 1     |
-| 3+   | Verification  | Testing, coverage, finalization            |
+| Tier | Name         | Purpose                                   |
+| ---- | ------------ | ----------------------------------------- |
+| 0    | Setup        | Prerequisites, scaffolding, config        |
+| 1    | Independent  | Can run in parallel, no interdependencies |
+| 2    | Integration  | Connects components, depends on Tier 1    |
+| 3+   | Verification | Testing, coverage, finalization           |
 
 ### 4. Execution
 
@@ -90,6 +91,7 @@ Each child issue (except final) includes:
 
 ```markdown
 ---
+
 ## Continuation
 
 **DO NOT STOP.** After completing this task and committing,
@@ -112,28 +114,31 @@ This ensures uninterrupted execution through the task series.
 
 ## Key Decisions
 
-| Timestamp  | Decision       | Rationale           |
-| ----------  | --------------  | -------------------  |
-| YYYY-MM-DD | <decision>     | <why>               |
+| Timestamp  | Decision   | Rationale |
+| ---------- | ---------- | --------- |
+| YYYY-MM-DD | <decision> | <why>     |
 
 ## State Tracking
 
 ### Done
+
 - [x] Completed task
 
 ### Now
+
 - [ ] Current task
 
 ### Next
+
 - [ ] Upcoming task
 
 ## Child Issues
 
-| Tier | Issue   | Title              | Status      |
-| ----  | -------  | ------------------  | -----------  |
-| 0    | INT-XXX | Setup              | Done        |
-| 1    | INT-XXX | Implement feature  | In Progress |
-| 2    | INT-XXX | Wire up routes     | Backlog     |
+| Tier | Issue   | Title             | Status      |
+| ---- | ------- | ----------------- | ----------- |
+| 0    | INT-XXX | Setup             | Done        |
+| 1    | INT-XXX | Implement feature | In Progress |
+| 2    | INT-XXX | Wire up routes    | Backlog     |
 
 ## Progress Notes
 
@@ -186,7 +191,7 @@ State: In Progress
 ### Child Issues
 
 | Tier | Issue   | Title                                     | Dependencies |
-| ----  | -------  | -----------------------------------------  | ------------  |
+| ---- | ------- | ----------------------------------------- | ------------ |
 | 0    | INT-157 | [tier-0] Create skill directory structure | None         |
 | 1    | INT-158 | [tier-1] Migrate workflow content         | INT-157      |
 | 1    | INT-159 | [tier-1] Create templates                 | INT-157      |

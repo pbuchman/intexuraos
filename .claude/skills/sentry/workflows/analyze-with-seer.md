@@ -23,6 +23,7 @@ Seer is Sentry's AI analysis feature that provides:
 ### 1. Parse Input
 
 Extract from URL:
+
 - Organization slug (or use default: `intexuraos-dev-pbuchman`)
 - Issue ID
 
@@ -53,10 +54,10 @@ Parameters:
 
 Output format:
 
-```markdown
+````markdown
 ## Seer Analysis: <issue-title>
 
-**Sentry Issue:** [<issue-id>](<sentry-url>)
+**Sentry Issue:** [<issue-id>](sentry-url)
 
 ### Root Cause
 
@@ -70,6 +71,7 @@ Output format:
 ```<language>
 <code snippet from Seer>
 ```
+````
 
 ### Recommended Fix
 
@@ -102,23 +104,25 @@ Would you like to:
 **Option 1:** Run [create-linear-issue.md](create-linear-issue.md) workflow
 
 **Option 2:**
+
 ```bash
 git fetch origin
 git checkout -b fix/sentry-<short-id> origin/development
 ```
+
 Then implement Seer's recommended fix.
 
 **Option 3:** Output complete and done.
 
 ## When to Use Seer vs Manual Investigation
 
-| Use Seer                                     | Use Manual Investigation                    |
-| -------------------------------------------- | ------------------------------------------- |
-| Clear error with stack trace                 | Data corruption issues                      |
-| TypeErrors, ReferenceErrors                  | Intermittent failures                       |
-| API response handling errors                 | Race conditions                             |
-| Validation failures                          | Issues requiring Firestore inspection       |
-| Third-party integration errors               | Complex business logic bugs                 |
+| Use Seer                       | Use Manual Investigation              |
+| ------------------------------ | ------------------------------------- |
+| Clear error with stack trace   | Data corruption issues                |
+| TypeErrors, ReferenceErrors    | Intermittent failures                 |
+| API response handling errors   | Race conditions                       |
+| Validation failures            | Issues requiring Firestore inspection |
+| Third-party integration errors | Complex business logic bugs           |
 
 ## Seer Limitations
 

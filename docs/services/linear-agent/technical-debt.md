@@ -3,7 +3,7 @@
 ## Summary
 
 | Category           | Count | Severity |
-| ------------------  | -----  | --------  |
+| ------------------ | ----- | -------- |
 | TODOs/FIXMEs       | 0     | -        |
 | Test Coverage Gaps | 1     | Medium   |
 | TypeScript Issues  | 0     | -        |

@@ -15,7 +15,7 @@ LLM responses require validation to ensure they match expected schemas before pr
 ### Summary
 
 | Approach               | Count | When to Use                         | Key Feature              |
-| ----------------------  | -----  | -----------------------------------  | ------------------------  |
+| ---------------------- | ----- | ----------------------------------- | ------------------------ |
 | **Zod Schemas**        | 2     | Complex JSON with nested types      | Field-level error paths  |
 | **Manual Type Guards** | 8     | Simple JSON with known fields       | Custom validation logic  |
 | **No Validation**      | 6     | Unstructured text (prose, markdown) | Raw content pass-through |
@@ -85,7 +85,7 @@ function formatZodErrors(error: ZodError): string {
 ### Current Usage
 
 | Service        | File                         | Method                    | Schema                   |
-| --------------  | ----------------------------  | -------------------------  | ------------------------  |
+| -------------- | ---------------------------- | ------------------------- | ------------------------ |
 | research-agent | `ContextInferenceAdapter.ts` | `inferResearchContext()`  | `ResearchContextSchema`  |
 | research-agent | `ContextInferenceAdapter.ts` | `inferSynthesisContext()` | `SynthesisContextSchema` |
 
@@ -131,7 +131,7 @@ function isValidExtractionResponse(value: unknown): value is ExtractionResponse 
 ### Current Usage
 
 | Service             | File                                 | Guard Function                |
-| -------------------  | ------------------------------------  | -----------------------------  |
+| ------------------- | ------------------------------------ | ----------------------------- |
 | research-agent      | `InputValidationAdapter.ts`          | `isInputQualityResult()`      |
 | todos-agent         | `todoItemExtractionService.ts`       | `isValidExtractionResponse()` |
 | linear-agent        | `linearActionExtractionService.ts`   | `isValidExtractionResponse()` |
@@ -154,7 +154,7 @@ Research and synthesis outputs are free-form markdown prose. Validation would re
 ### Current Usage
 
 | Service        | File                   | Methods                          |
-| --------------  | ----------------------  | --------------------------------  |
+| -------------- | ---------------------- | -------------------------------- |
 | research-agent | `GeminiAdapter.ts`     | `research()`, `synthesize()`     |
 | research-agent | `GptAdapter.ts`        | `research()`, `synthesize()`     |
 | research-agent | `ClaudeAdapter.ts`     | `research()`                     |
@@ -251,7 +251,7 @@ export function isResearchContext(value: unknown): value is ResearchContext {
 Services with manual guards that would benefit from Zod:
 
 | Service             | Current Approach              | Migration Benefit                    |
-| -------------------  | -----------------------------  | ------------------------------------  |
+| ------------------- | ----------------------------- | ------------------------------------ |
 | todos-agent         | `isValidExtractionResponse()` | Better errors for malformed tasks    |
 | linear-agent        | `isValidExtractionResponse()` | Field-level validation for issues    |
 | calendar-agent      | `isValidExtractionResponse()` | Date/time format validation          |

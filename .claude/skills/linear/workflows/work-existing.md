@@ -18,6 +18,7 @@ Verify Linear, GitHub, GCloud available.
 ### 3. Update State to In Progress (FIRST!)
 
 **CRITICAL:** You MUST update the Linear issue state to "In Progress" BEFORE:
+
 - Reading any code
 - Planning implementation
 - Investigating the issue

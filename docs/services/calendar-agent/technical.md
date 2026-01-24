@@ -22,7 +22,7 @@ graph TB
 ## API Endpoints
 
 | Method | Path                        | Description              | Auth         |
-| ------  | ---------------------------  | ------------------------  | ------------  |
+| ------ | --------------------------- | ------------------------ | ------------ |
 | GET    | `/calendar/events`          | List events with filters | Bearer token |
 | GET    | `/calendar/events/:eventId` | Get specific event       | Bearer token |
 | POST   | `/calendar/events`          | Create event             | Bearer token |
@@ -33,67 +33,67 @@ graph TB
 ## Query Parameters
 
 **listEvents:**
-| Parameter    | Type     | Description                      |
-| ------------  | --------  | --------------------------------  |
-| `calendarId` | string   | Calendar ID (default: primary)   |
-| `timeMin`    | datetime | Lower bound for event start time |
-| `timeMax`    | datetime | Upper bound for event start time |
-| `maxResults` | integer  | Max events (1-2500)              |
-| `q`          | string   | Free text search                 |
+| Parameter | Type | Description |
+| ------------ | -------- | -------------------------------- |
+| `calendarId` | string | Calendar ID (default: primary) |
+| `timeMin` | datetime | Lower bound for event start time |
+| `timeMax` | datetime | Upper bound for event start time |
+| `maxResults` | integer | Max events (1-2500) |
+| `q` | string | Free text search |
 
 ## Domain Models
 
 ### CalendarEvent
 
-| Field         | Type               | Description                     |
-| -------------  | ------------------  | -------------------------------  |   |
-| `id`          | string             | Google event ID                 |
-| `summary`     | string             | Event title                     |
-| `description` | string \           | undefined                       | Event description |
-| `location`    | string \           | undefined                       | Event location |
-| `start`       | EventDateTime      | Start time                      |
-| `end`         | EventDateTime      | End time                        |
-| `status`      | EventStatus        | confirmed, tentative, cancelled |
-| `htmlLink`    | string \           | undefined                       | Google Calendar web link |
-| `created`     | string \           | undefined                       | Creation timestamp |
-| `updated`     | string \           | undefined                       | Last update timestamp |
-| `organizer`   | EventPerson \      | undefined                       | Event organizer |
-| `attendees`   | EventAttendee[] \  | undefined                       | Event attendees |
+| Field | Type | Description |
+| ------------- | ------------------ | ------------------------------- | |
+| `id` | string | Google event ID |
+| `summary` | string | Event title |
+| `description` | string \ | undefined | Event description |
+| `location` | string \ | undefined | Event location |
+| `start` | EventDateTime | Start time |
+| `end` | EventDateTime | End time |
+| `status` | EventStatus | confirmed, tentative, cancelled |
+| `htmlLink` | string \ | undefined | Google Calendar web link |
+| `created` | string \ | undefined | Creation timestamp |
+| `updated` | string \ | undefined | Last update timestamp |
+| `organizer` | EventPerson \ | undefined | Event organizer |
+| `attendees` | EventAttendee[] \ | undefined | Event attendees |
 
 ### EventDateTime
 
-| Field      | Type      | Description |
-| ----------  | ---------  | -----------  |   |
-| `dateTime` | string \  | undefined   | ISO 8601 datetime (timed events) |
-| `date`     | string \  | undefined   | ISO 8601 date (all-day events) |
-| `timeZone` | string \  | undefined   | Timezone (e.g., "America/New_York") |
+| Field | Type | Description |
+| ---------- | --------- | ----------- | |
+| `dateTime` | string \ | undefined | ISO 8601 datetime (timed events) |
+| `date` | string \ | undefined | ISO 8601 date (all-day events) |
+| `timeZone` | string \ | undefined | Timezone (e.g., "America/New_York") |
 
 ### EventPerson
 
-| Field         | Type       | Description |
-| -------------  | ----------  | -----------  |   |
-| `email`       | string \   | undefined   | Email address |
-| `displayName` | string \   | undefined   | Display name |
-| `self`        | boolean \  | undefined   | True if current user |
+| Field | Type | Description |
+| ------------- | ---------- | ----------- | |
+| `email` | string \ | undefined | Email address |
+| `displayName` | string \ | undefined | Display name |
+| `self` | boolean \ | undefined | True if current user |
 
 ### EventAttendee (extends EventPerson)
 
-| Field            | Type              | Description |
-| ----------------  | -----------------  | -----------  |   |
-| `responseStatus` | ResponseStatus \  | undefined   | needsAction, declined, tentative, accepted |
-| `optional`       | boolean \         | undefined   | Optional attendee flag |
+| Field | Type | Description |
+| ---------------- | ----------------- | ----------- | |
+| `responseStatus` | ResponseStatus \ | undefined | needsAction, declined, tentative, accepted |
+| `optional` | boolean \ | undefined | Optional attendee flag |
 
 ### FreeBusySlot
 
 | Field   | Type   | Description             |
-| -------  | ------  | -----------------------  |
+| ------- | ------ | ----------------------- |
 | `start` | string | ISO 8601 start datetime |
 | `end`   | string | ISO 8601 end datetime   |
 
 ## Error Codes
 
 | Code                | HTTP Status | Description                          |
-| -------------------  | -----------  | ------------------------------------  |
+| ------------------- | ----------- | ------------------------------------ |
 | `NOT_CONNECTED`     | 403         | User hasn't connected Google account |
 | `TOKEN_ERROR`       | 401         | OAuth token invalid/expired          |
 | `NOT_FOUND`         | 404         | Event/calendar not found             |
@@ -107,20 +107,20 @@ graph TB
 ### Internal Services
 
 | Service        | Purpose                         |
-| --------------  | -------------------------------  |
+| -------------- | ------------------------------- |
 | `user-service` | Fetch Google OAuth access token |
 
 ### External APIs
 
 | Service                | Purpose                          |
-| ----------------------  | --------------------------------  |
+| ---------------------- | -------------------------------- |
 | Google Calendar API v3 | Event CRUD and free/busy queries |
 | googleapis npm package | API client library               |
 
 ## Configuration
 
 | Environment Variable             | Required | Description                     |
-| --------------------------------  | --------  | -------------------------------  |
+| -------------------------------- | -------- | ------------------------------- |
 | `INTEXURAOS_USER_SERVICE_URL`    | Yes      | user-service base URL           |
 | `INTEXURAOS_INTERNAL_AUTH_TOKEN` | Yes      | Shared secret for internal auth |
 

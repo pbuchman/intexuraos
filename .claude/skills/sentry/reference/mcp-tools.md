@@ -90,6 +90,7 @@ Returns: distribution of tag values with counts
 ```
 
 Common tag keys:
+
 - `url` - Request URLs affected
 - `browser` - Browser types and versions
 - `browser.name` - Browser names only
@@ -115,6 +116,7 @@ Returns: list of issues matching query
 ```
 
 Common queries:
+
 - `is:unresolved` - Open issues only
 - `is:unassigned` - Unassigned issues
 - `level:error` - Error level only

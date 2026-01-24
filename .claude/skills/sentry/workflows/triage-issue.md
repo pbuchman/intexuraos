@@ -12,6 +12,7 @@
 ### 1. Parse Input
 
 Extract from URL or ID:
+
 - Organization slug
 - Issue ID
 - Project slug (if available)
@@ -51,6 +52,7 @@ Parameters:
 ```
 
 This reveals:
+
 - Which endpoints are affected
 - Browser-specific issues
 - Production vs staging scope
@@ -80,6 +82,7 @@ Parameters:
 ```
 
 If match found:
+
 - Display existing Linear issue
 - Ask: "Use existing issue or create new?"
 

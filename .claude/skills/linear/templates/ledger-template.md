@@ -4,7 +4,7 @@ Template for parent issues that serve as ledgers during plan splitting.
 
 ## Template
 
-```markdown
+````markdown
 ## Goal
 
 <Overall objective of this multi-step task>
@@ -17,33 +17,36 @@ Template for parent issues that serve as ledgers during plan splitting.
 
 ## Key Decisions
 
-| Timestamp  | Decision                          | Rationale                               |
-| ---------- | --------------------------------- | --------------------------------------- |
-| YYYY-MM-DD | <decision made>                   | <why this was chosen>                   |
-| YYYY-MM-DD | <another decision>                | <reasoning>                             |
+| Timestamp  | Decision           | Rationale             |
+| ---------- | ------------------ | --------------------- |
+| YYYY-MM-DD | <decision made>    | <why this was chosen> |
+| YYYY-MM-DD | <another decision> | <reasoning>           |
 
 ## State Tracking
 
 ### Done
+
 - [x] <Completed task 1>
 - [x] <Completed task 2>
 
 ### Now
+
 - [ ] <Currently in progress>
 
 ### Next
+
 - [ ] <Upcoming task 1>
 - [ ] <Upcoming task 2>
 
 ## Child Issues
 
-| Tier | Issue       | Title                        | Status      |
-| ---- | ----------- | ---------------------------- | ----------- |
-| 0    | INT-XXX     | Setup infrastructure         | Done        |
-| 1    | INT-XXX     | Implement domain model       | In Progress |
-| 1    | INT-XXX     | Create adapter               | Backlog     |
-| 2    | INT-XXX     | Wire up routes               | Backlog     |
-| 3    | INT-XXX     | Add test coverage            | Backlog     |
+| Tier | Issue   | Title                  | Status      |
+| ---- | ------- | ---------------------- | ----------- |
+| 0    | INT-XXX | Setup infrastructure   | Done        |
+| 1    | INT-XXX | Implement domain model | In Progress |
+| 1    | INT-XXX | Create adapter         | Backlog     |
+| 2    | INT-XXX | Wire up routes         | Backlog     |
+| 3    | INT-XXX | Add test coverage      | Backlog     |
 
 ## Constraints / Assumptions
 
@@ -58,13 +61,16 @@ Template for parent issues that serve as ledgers during plan splitting.
 ## Working Set
 
 **Files:**
+
 - `path/to/file1.ts`
 - `path/to/file2.ts`
 
 **Commands:**
+
 ```bash
 <frequently used commands>
 ```
+````
 
 ## Progress Notes
 
@@ -79,17 +85,17 @@ Template for parent issues that serve as ledgers during plan splitting.
 
 ## Mandatory Sections
 
-| Section           | Required | Purpose                                    |
-| ----------------- | -------- | ------------------------------------------ |
-| Goal              | Yes      | What we're trying to achieve               |
-| Success Criteria  | Yes      | How we know we're done                     |
-| Key Decisions     | Yes      | Audit trail of choices made                |
-| State Tracking    | Yes      | Done/Now/Next status                       |
-| Child Issues      | Yes      | Table of all subtasks                      |
-| Constraints       | Optional | Boundaries and assumptions                 |
-| Open Questions    | Optional | Unresolved items                           |
-| Working Set       | Optional | Active files and commands                  |
-| Progress Notes    | Optional | Timestamped updates                        |
+| Section          | Required | Purpose                      |
+| ---------------- | -------- | ---------------------------- |
+| Goal             | Yes      | What we're trying to achieve |
+| Success Criteria | Yes      | How we know we're done       |
+| Key Decisions    | Yes      | Audit trail of choices made  |
+| State Tracking   | Yes      | Done/Now/Next status         |
+| Child Issues     | Yes      | Table of all subtasks        |
+| Constraints      | Optional | Boundaries and assumptions   |
+| Open Questions   | Optional | Unresolved items             |
+| Working Set      | Optional | Active files and commands    |
+| Progress Notes   | Optional | Timestamped updates          |
 
 ## Ledger Principles
 
@@ -110,5 +116,5 @@ Update the Status column as work progresses:
 | Todo        | Ready to start                   |
 | In Progress | Currently being worked on        |
 | In Review   | PR created, awaiting review      |
-| QA      | Testing/verification in progress |
+| QA          | Testing/verification in progress |
 | Done        | Complete                         |

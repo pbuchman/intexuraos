@@ -16,13 +16,13 @@ Auto-splitting is triggered when ANY of:
 
 Tasks are classified into tiers based on dependency and execution order:
 
-| Tier | Name          | Keywords & Patterns                                      |
-| ---- | ------------- | -------------------------------------------------------- |
-| 0    | Setup         | setup, scaffold, terraform, config, prerequisite, init   |
-| 1    | Independent   | domain, model, adapter, implement, create, add           |
-| 2    | Integration   | integrate, webhook, route, wire, connect, link           |
-| 3    | Verification  | test, coverage, verify, UI, e2e                          |
-| 4+   | Finalization  | documentation, deploy, cleanup, polish                   |
+| Tier | Name         | Keywords & Patterns                                    |
+| ---- | ------------ | ------------------------------------------------------ |
+| 0    | Setup        | setup, scaffold, terraform, config, prerequisite, init |
+| 1    | Independent  | domain, model, adapter, implement, create, add         |
+| 2    | Integration  | integrate, webhook, route, wire, connect, link         |
+| 3    | Verification | test, coverage, verify, UI, e2e                        |
+| 4+   | Finalization | documentation, deploy, cleanup, polish                 |
 
 ### Tier Rules
 
@@ -47,6 +47,7 @@ Tasks are classified into tiers based on dependency and execution order:
 #### Step 1: Parse Plan
 
 Extract from plan/description:
+
 - Numbered sections (Phase 1, Phase 2...)
 - Checkbox items (- [ ] ...)
 - Headings (## ..., ### ...)
@@ -55,6 +56,7 @@ Extract from plan/description:
 #### Step 2: Classify Tasks
 
 For each extracted task:
+
 1. Scan for tier keywords (see table above)
 2. Check explicit dependencies mentioned
 3. Assign tier number (0 = setup, 1 = independent, 2+ = dependent)
@@ -119,27 +121,27 @@ Add child issues table to parent:
 ```markdown
 ## Child Issues
 
-| Tier | Issue       | Title                        | Status  |
-| ---- | ----------- | ---------------------------- | ------- |
-| 0    | INT-XXX     | Setup infrastructure         | Backlog |
-| 1    | INT-XXX     | Implement domain model       | Backlog |
-| 1    | INT-XXX     | Create adapter               | Backlog |
-| 2    | INT-XXX     | Wire up routes               | Backlog |
-| 3    | INT-XXX     | Add test coverage            | Backlog |
+| Tier | Issue   | Title                  | Status  |
+| ---- | ------- | ---------------------- | ------- |
+| 0    | INT-XXX | Setup infrastructure   | Backlog |
+| 1    | INT-XXX | Implement domain model | Backlog |
+| 1    | INT-XXX | Create adapter         | Backlog |
+| 2    | INT-XXX | Wire up routes         | Backlog |
+| 3    | INT-XXX | Add test coverage      | Backlog |
 ```
 
 ## Naming Convention for Child Issues
 
 Format: `[tier-X] <action> <subject>`
 
-| Tier | Example Title                                     |
-| ---- | ------------------------------------------------- |
-| 0    | `[tier-0] Setup skill directory structure`        |
-| 1    | `[tier-1] Implement auto-splitting detection`     |
-| 1    | `[tier-1] Create ledger template`                 |
-| 2    | `[tier-2] Wire up skill to command system`        |
-| 3    | `[tier-3] Add tests for plan parsing`             |
-| 4    | `[tier-4] Update documentation`                   |
+| Tier | Example Title                                 |
+| ---- | --------------------------------------------- |
+| 0    | `[tier-0] Setup skill directory structure`    |
+| 1    | `[tier-1] Implement auto-splitting detection` |
+| 1    | `[tier-1] Create ledger template`             |
+| 2    | `[tier-2] Wire up skill to command system`    |
+| 3    | `[tier-3] Add tests for plan parsing`         |
+| 4    | `[tier-4] Update documentation`               |
 
 ## Execution Protocol
 
@@ -158,6 +160,7 @@ Each child issue (except the final one) includes:
 
 ```markdown
 ---
+
 ## Continuation
 
 **DO NOT STOP.** After completing this task and committing, immediately proceed to the next unblocked task without waiting for user input.
@@ -171,30 +174,34 @@ Given a plan like:
 
 ```markdown
 # Phase 1: Create Skill Directory Structure
+
 - Create .claude/skills/linear/
 - Create SKILL.md
 
 # Phase 2: Migrate Existing Content
+
 - Move workflows from commands/
 - Create templates/
 
 # Phase 3: Implement Auto-Splitting
+
 - Add detection heuristics
 - Create tier classification
 
 # Phase 4: Update Documentation
+
 - Add deprecation notices
 - Create pattern docs
 ```
 
 Results in:
 
-| Tier | Issue   | Title                                   |
-| ---- | ------- | --------------------------------------- |
+| Tier | Issue   | Title                                     |
+| ---- | ------- | ----------------------------------------- |
 | 0    | INT-157 | [tier-0] Create skill directory structure |
-| 1    | INT-158 | [tier-1] Migrate workflow content       |
-| 1    | INT-159 | [tier-1] Create templates               |
-| 2    | INT-160 | [tier-2] Implement auto-splitting       |
-| 3    | INT-161 | [tier-3] Update documentation           |
+| 1    | INT-158 | [tier-1] Migrate workflow content         |
+| 1    | INT-159 | [tier-1] Create templates                 |
+| 2    | INT-160 | [tier-2] Implement auto-splitting         |
+| 3    | INT-161 | [tier-3] Update documentation             |
 
 Parent INT-156 serves as the ledger tracking overall progress.

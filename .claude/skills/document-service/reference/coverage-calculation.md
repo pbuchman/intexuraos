@@ -11,20 +11,17 @@ const useCaseCoverage = (documentedUseCases / totalUseCases) * 100;
 const configCoverage = (documentedEnvVars / totalEnvVars) * 100;
 
 const overallCoverage =
-  endpointCoverage * 0.4 +
-  modelCoverage * 0.3 +
-  useCaseCoverage * 0.2 +
-  configCoverage * 0.1;
+  endpointCoverage * 0.4 + modelCoverage * 0.3 + useCaseCoverage * 0.2 + configCoverage * 0.1;
 ```
 
 ## Weights
 
-| Component     | Weight | Rationale                              |
-| ------------- | ------ | -------------------------------------- |
-| Endpoints     | 40%    | Primary interface, most important      |
-| Models        | 30%    | Core data structures                   |
-| Use Cases     | 20%    | Business logic documentation           |
-| Configuration | 10%    | Setup documentation                    |
+| Component     | Weight | Rationale                         |
+| ------------- | ------ | --------------------------------- |
+| Endpoints     | 40%    | Primary interface, most important |
+| Models        | 30%    | Core data structures              |
+| Use Cases     | 20%    | Business logic documentation      |
+| Configuration | 10%    | Setup documentation               |
 
 ## What Counts as "Documented"
 
@@ -37,6 +34,7 @@ An endpoint is documented if it has:
 - Response schema documented
 
 **Check method:**
+
 ```bash
 # Look for @summary annotations in route files
 grep -r "@summary" apps/<service-name>/src/routes/
@@ -50,6 +48,7 @@ A model is documented if it has:
 - Each field has `@description` or inline comment
 
 **Check method:**
+
 ```bash
 # Look for documented interfaces in models/
 grep -B1 "interface\|type" apps/<service-name>/src/domain/models/
@@ -64,6 +63,7 @@ A use case is documented if it has:
 - Dependencies listed
 
 **Check method:**
+
 ```bash
 # Look for documented use cases
 grep -r "export.*function\|export.*const" apps/<service-name>/src/domain/usecases/
@@ -78,6 +78,7 @@ An environment variable is documented if it has:
 - Default value noted (if applicable)
 
 **Check method:**
+
 ```bash
 # Look for env var usage
 grep -r "INTEXURAOS_" apps/<service-name>/src/
@@ -102,9 +103,9 @@ Missing:
 
 ## Thresholds
 
-| Coverage | Status       | Action                       |
-| -------- | ------------ | ---------------------------- |
-| 90%+     | Excellent    | Maintenance mode             |
-| 70-90%   | Good         | Document on change           |
-| 50-70%   | Needs Work   | Prioritize documentation     |
-| <50%     | Critical     | Block features until improved |
+| Coverage | Status     | Action                        |
+| -------- | ---------- | ----------------------------- |
+| 90%+     | Excellent  | Maintenance mode              |
+| 70-90%   | Good       | Document on change            |
+| 50-70%   | Needs Work | Prioritize documentation      |
+| <50%     | Critical   | Block features until improved |

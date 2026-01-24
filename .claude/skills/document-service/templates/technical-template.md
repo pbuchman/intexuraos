@@ -74,19 +74,19 @@ sequenceDiagram
 
 <From git history — summarize last 10-15 commits>
 
-| Commit  | Description                | Date       |
-| ------- | -------------------------- | ---------- |
-| `abc123`| Added voice transcription  | 2025-01-10 |
-| `def456`| Fixed rate limiting bug    | 2025-01-08 |
+| Commit   | Description               | Date       |
+| -------- | ------------------------- | ---------- |
+| `abc123` | Added voice transcription | 2025-01-10 |
+| `def456` | Fixed rate limiting bug   | 2025-01-08 |
 
 ## API Endpoints
 
 ### Public Endpoints
 
-| Method | Path        | Purpose         | Auth     |
-| ------ | ----------- | --------------- | -------- |
-| GET    | `/resource` | List resources  | Bearer   |
-| POST   | `/resource` | Create resource | Bearer   |
+| Method | Path        | Purpose         | Auth   |
+| ------ | ----------- | --------------- | ------ |
+| GET    | `/resource` | List resources  | Bearer |
+| POST   | `/resource` | Create resource | Bearer |
 
 ### Internal Endpoints
 
@@ -224,17 +224,17 @@ WhatsApp Service receives messages via Meta's Cloud API webhooks, processes them
 
 ### Public Endpoints
 
-| Method | Path         | Purpose                   | Auth      |
-| ------ | ------------ | ------------------------- | --------- |
-| GET    | `/webhook`   | Meta verification         | Query sig |
-| POST   | `/webhook`   | Receive messages          | Meta sig  |
+| Method | Path       | Purpose           | Auth      |
+| ------ | ---------- | ----------------- | --------- |
+| GET    | `/webhook` | Meta verification | Query sig |
+| POST   | `/webhook` | Receive messages  | Meta sig  |
 
 ### Internal Endpoints
 
-| Method | Path                           | Purpose            | Caller         |
-| ------ | ------------------------------ | ------------------ | -------------- |
-| POST   | `/internal/messages/send`      | Send message       | actions-agent  |
-| POST   | `/internal/pubsub/message`     | Pub/Sub push       | Cloud Pub/Sub  |
+| Method | Path                       | Purpose      | Caller        |
+| ------ | -------------------------- | ------------ | ------------- |
+| POST   | `/internal/messages/send`  | Send message | actions-agent |
+| POST   | `/internal/pubsub/message` | Pub/Sub push | Cloud Pub/Sub |
 
 ## Gotchas
 

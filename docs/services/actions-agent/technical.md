@@ -69,7 +69,7 @@ sequenceDiagram
 ### Public Endpoints
 
 | Method | Path                                   | Description                            | Auth         |
-| ------  | --------------------------------------  | --------------------------------------  | ------------  |
+| ------ | -------------------------------------- | -------------------------------------- | ------------ |
 | GET    | `/actions`                             | List actions for authenticated user    | Bearer token |
 | PATCH  | `/actions/:actionId`                   | Update action status or type           | Bearer token |
 | DELETE | `/actions/:actionId`                   | Delete an action                       | Bearer token |
@@ -80,7 +80,7 @@ sequenceDiagram
 ### Internal Endpoints
 
 | Method | Path                              | Description                                      | Auth                    |
-| ------  | ---------------------------------  | ------------------------------------------------  | -----------------------  |
+| ------ | --------------------------------- | ------------------------------------------------ | ----------------------- |
 | POST   | `/internal/actions`               | Create new action from classification            | Internal header or OIDC |
 | POST   | `/internal/actions/:actionType`   | Process action from Pub/Sub (type-specific)      | Pub/Sub OIDC            |
 | POST   | `/internal/actions/process`       | Process action from Pub/Sub (unified)            | Pub/Sub OIDC            |
@@ -91,7 +91,7 @@ sequenceDiagram
 ### Action
 
 | Field        | Type                    | Description                             |
-| ------------  | -----------------------  | ---------------------------------------  |
+| ------------ | ----------------------- | --------------------------------------- |
 | `id`         | string (UUID)           | Unique action identifier                |
 | `userId`     | string                  | User who owns the action                |
 | `commandId`  | string                  | Original command ID from commands-agent |
@@ -106,7 +106,7 @@ sequenceDiagram
 ### ActionType Enum
 
 | Value      | Handler                     | Auto-Execute |
-| ----------  | ---------------------------  | ------------  |
+| ---------- | --------------------------- | ------------ |
 | `todo`     | HandleTodoActionUseCase     | No           |
 | `research` | HandleResearchActionUseCase | No           |
 | `note`     | HandleNoteActionUseCase     | No           |
@@ -118,7 +118,7 @@ sequenceDiagram
 ### ActionStatus Enum
 
 | Value               | Description                            |
-| -------------------  | --------------------------------------  |
+| ------------------- | -------------------------------------- |
 | `pending`           | Initial state, awaiting processing     |
 | `awaiting_approval` | Low confidence, requires user approval |
 | `processing`        | Handler is executing                   |
@@ -130,7 +130,7 @@ sequenceDiagram
 ### ActionTransition
 
 | Field       | Type              | Description              |
-| -----------  | -----------------  | ------------------------  |
+| ----------- | ----------------- | ------------------------ |
 | `id`        | string            | Unique transition ID     |
 | `actionId`  | string            | Reference to action      |
 | `fromType`  | ActionType        | Original type            |
@@ -143,13 +143,13 @@ sequenceDiagram
 ### Published
 
 | Event Type       | Topic           | Payload              |
-| ----------------  | ---------------  | --------------------  |
+| ---------------- | --------------- | -------------------- |
 | `action.created` | `actions` queue | `ActionCreatedEvent` |
 
 ### Subscribed
 
 | Subscription                | Handler                         |
-| ---------------------------  | -------------------------------  |
+| --------------------------- | ------------------------------- |
 | `actions-{type}` (per-type) | `/internal/actions/:actionType` |
 | `actions-queue` (unified)   | `/internal/actions/process`     |
 
@@ -158,7 +158,7 @@ sequenceDiagram
 ### Internal Services
 
 | Service           | Purpose                               |
-| -----------------  | -------------------------------------  |
+| ----------------- | ------------------------------------- |
 | `commands-agent`  | Create new commands from transitions  |
 | `research-agent`  | Execute research actions              |
 | `todos-agent`     | Execute todo actions                  |
@@ -171,7 +171,7 @@ sequenceDiagram
 ### Infrastructure
 
 | Component                                    | Purpose                  |
-| --------------------------------------------  | ------------------------  |
+| -------------------------------------------- | ------------------------ |
 | Firestore (`actions` collection)             | Action persistence       |
 | Firestore (`actions_transitions` collection) | Type correction tracking |
 | Pub/Sub (`actions` queue)                    | Event distribution       |
@@ -180,7 +180,7 @@ sequenceDiagram
 ## Configuration
 
 | Environment Variable              | Required | Description                                |
-| ---------------------------------  | --------  | ------------------------------------------  |
+| --------------------------------- | -------- | ------------------------------------------ |
 | `INTEXURAOS_RESEARCH_AGENT_URL`   | Yes      | Research-agent base URL                    |
 | `INTEXURAOS_USER_SERVICE_URL`     | Yes      | User-service base URL                      |
 | `INTEXURAOS_COMMANDS_AGENT_URL`   | Yes      | Commands-agent base URL                    |

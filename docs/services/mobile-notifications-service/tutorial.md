@@ -48,6 +48,6 @@ curl -X PATCH https://mobile-notifications.intexuraos.com/mobile-notifications/f
 ## Troubleshooting
 
 | Issue          | Solution                                   |
-| --------------  | ------------------------------------------  |
+| -------------- | ------------------------------------------ |
 | Lost signature | Reconnect device (new signature generated) |
 | Not receiving  | Check filter settings                      |

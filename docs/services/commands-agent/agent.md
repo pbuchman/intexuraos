@@ -7,7 +7,7 @@
 ## Identity
 
 | Field    | Value                                                              |
-| --------  | ------------------------------------------------------------------  |
+| -------- | ------------------------------------------------------------------ |
 | **Name** | commands-agent                                                     |
 | **Role** | AI Intent Classifier                                               |
 | **Goal** | Classify natural language input into action types using Gemini LLM |
@@ -82,7 +82,7 @@ interface Command {
 ## Constraints
 
 | Rule                    | Description                                                                       |
-| -----------------------  | ---------------------------------------------------------------------------------  |
+| ----------------------- | --------------------------------------------------------------------------------- |
 | **Delete Restriction**  | Can only delete commands with status: received, pending_classification, or failed |
 | **Archive Restriction** | Can only archive commands with status: classified                                 |
 | **Source Types**        | Create endpoint only supports 'pwa-shared' source                                 |
@@ -138,7 +138,7 @@ When a command is classified, the LLM returns:
 ## Internal Endpoints
 
 | Method | Path                     | Purpose                              |
-| ------  | ------------------------  | ------------------------------------  |
+| ------ | ------------------------ | ------------------------------------ |
 | POST   | `/internal/commands`     | Create command from whatsapp-service |
 | GET    | `/internal/commands/:id` | Get command for internal processing  |
 

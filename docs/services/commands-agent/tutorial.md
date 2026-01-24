@@ -171,7 +171,7 @@ async function handleWhatsAppMessage(message: WhatsAppMessage) {
 ## Troubleshooting
 
 | Issue                  | Symptom                         | Solution                                   |
-| ----------------------  | -------------------------------  | ------------------------------------------  |
+| ---------------------- | ------------------------------- | ------------------------------------------ |
 | No API key             | Status `pending_classification` | Configure Google API key in user-service   |
 | Low confidence         | Type `unclassified`             | Refine command text with more context      |
 | Duplicate command      | `isNew: false`                  | Normal - same externalId already processed |

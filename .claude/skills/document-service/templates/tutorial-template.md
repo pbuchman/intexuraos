@@ -10,7 +10,7 @@ Getting-started guide that enables new developers to integrate with the service 
 
 ## Template
 
-```markdown
+````markdown
 # <Service Name> — Tutorial
 
 > **Time:** 15-30 minutes
@@ -22,6 +22,7 @@ Getting-started guide that enables new developers to integrate with the service 
 ## What You'll Build
 
 A working integration that:
+
 - <Outcome 1>
 - <Outcome 2>
 - <Outcome 3>
@@ -31,6 +32,7 @@ A working integration that:
 ## Prerequisites
 
 Before starting, ensure you have:
+
 - [ ] Access to the IntexuraOS project
 - [ ] Service account with appropriate permissions
 - [ ] Basic understanding of TypeScript/Node.js
@@ -47,8 +49,10 @@ Let's start with the simplest possible interaction.
 curl -X GET https://api.intexuraos.com/<endpoint> \
   -H "Authorization: Bearer $TOKEN"
 ```
+````
 
 **Expected response:**
+
 ```json
 {
   "status": "healthy",
@@ -70,7 +74,7 @@ Now let's create something meaningful.
 
 ```typescript
 const resource = {
-  name: "My First Item",
+  name: 'My First Item',
   // ... fields
 };
 ```
@@ -102,6 +106,7 @@ curl https://api.intexuraos.com/<endpoint>/$ID \
 ### Common Error: Validation Failed
 
 **Error message:**
+
 ```json
 {
   "code": "VALIDATION_ERROR",
@@ -114,6 +119,7 @@ curl https://api.intexuraos.com/<endpoint>/$ID \
 ### Common Error: Unauthorized
 
 **Error message:**
+
 ```json
 {
   "code": "UNAUTHORIZED",
@@ -157,18 +163,19 @@ Let's put it all together in a practical workflow.
 
 ## Troubleshooting
 
-| Problem               | Solution                                    |
-| --------------------- | ------------------------------------------- |
-| "401 Unauthorized"    | Check your token is valid and not expired   |
-| "404 Not Found"       | Verify the endpoint path is correct         |
-| "429 Rate Limited"    | Wait a few seconds and retry                |
-| "500 Server Error"    | Check service status, retry with backoff    |
+| Problem            | Solution                                  |
+| ------------------ | ----------------------------------------- |
+| "401 Unauthorized" | Check your token is valid and not expired |
+| "404 Not Found"    | Verify the endpoint path is correct       |
+| "429 Rate Limited" | Wait a few seconds and retry              |
+| "500 Server Error" | Check service status, retry with backoff  |
 
 ---
 
 ## Next Steps
 
 Now that you understand the basics:
+
 1. Explore <advanced feature>
 2. Read the [Technical Reference](technical.md) for full API details
 3. Check out <related service> for more capabilities

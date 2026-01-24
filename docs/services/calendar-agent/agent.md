@@ -7,7 +7,7 @@
 ## Identity
 
 | Field    | Value                                                                           |
-| --------  | -------------------------------------------------------------------------------  |
+| -------- | ------------------------------------------------------------------------------- |
 | **Name** | calendar-agent                                                                  |
 | **Role** | Google Calendar Integration Service                                             |
 | **Goal** | Manage calendar events with intelligent date parsing and multi-calendar support |
@@ -116,7 +116,7 @@ interface FreeBusyResponse {
 ## Constraints
 
 | Rule                      | Description                           |
-| -------------------------  | -------------------------------------  |
+| ------------------------- | ------------------------------------- |
 | **Google OAuth Required** | User must have Google OAuth connected |
 | **Calendar Access**       | Default calendarId is 'primary'       |
 | **Time Format**           | All times in ISO 8601 format          |
@@ -164,7 +164,7 @@ const busySlots = freeBusy.calendars['primary'].busy;
 ## Internal Endpoints
 
 | Method | Path                   | Purpose                         |
-| ------  | ----------------------  | -------------------------------  |
+| ------ | ---------------------- | ------------------------------- |
 | POST   | `/internal/events`     | Create event from actions-agent |
 | GET    | `/internal/events/:id` | Get event for internal services |
 

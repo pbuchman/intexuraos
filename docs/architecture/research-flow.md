@@ -83,7 +83,7 @@ User fills form  ──►  POST /research/draft  ──►  status: draft
 ```
 
 | Field             | Source                                          |
-| -----------------  | -----------------------------------------------  |
+| ----------------- | ----------------------------------------------- |
 | `title`           | Auto-generated from prompt (Gemini) or fallback |
 | `prompt`          | User input                                      |
 | `selectedLlms`    | User selection (default: all available)         |
@@ -139,7 +139,7 @@ User clicks Start  ──►  POST /research  ──►  status: processing
 ### 2.2 LLM Result States
 
 | Status       | Meaning                   |
-| ------------  | -------------------------  |
+| ------------ | ------------------------- |
 | `pending`    | Waiting to be processed   |
 | `processing` | Currently calling LLM API |
 | `completed`  | Success, result stored    |
@@ -167,11 +167,11 @@ function checkLlmCompletion(researchId): CompletionAction {
 ### 3.2 Decision Matrix
 
 | Completed | Failed | Pending | Action                                       |
-| :-------: | :----: | :-----: | --------------------------------------------  |
-| 0         | > 0    | 0       | Mark `failed`, error: "All LLM calls failed" |
-| > 0       | 0      | 0       | Run synthesis (or skip)                      |
-| > 0       | > 0    | 0       | Set `awaiting_confirmation`                  |
-| any       | any    | > 0     | Wait (no action)                             |
+| :-------: | :----: | :-----: | -------------------------------------------- |
+|     0     |  > 0   |    0    | Mark `failed`, error: "All LLM calls failed" |
+|    > 0    |   0    |    0    | Run synthesis (or skip)                      |
+|    > 0    |  > 0   |    0    | Set `awaiting_confirmation`                  |
+|    any    |  any   |   > 0   | Wait (no action)                             |
 
 ---
 
@@ -187,12 +187,12 @@ const shouldSkipSynthesis = successfulResults.length <= 1 && externalReportsCoun
 ```
 
 | Successful LLMs | External Reports | Action                             |
-| :-------------: | :--------------: | ----------------------------------  |
-| 0               | 0                | Error: "No successful LLM results" |
-| 0               | > 0              | Run synthesis (external only)      |
-| 1               | 0                | Skip synthesis, mark completed     |
-| 1               | > 0              | Run synthesis                      |
-| > 1             | any              | Run synthesis                      |
+| :-------------: | :--------------: | ---------------------------------- |
+|        0        |        0         | Error: "No successful LLM results" |
+|        0        |       > 0        | Run synthesis (external only)      |
+|        1        |        0         | Skip synthesis, mark completed     |
+|        1        |       > 0        | Run synthesis                      |
+|       > 1       |       any        | Run synthesis                      |
 
 ### 4.2 Synthesis Flow
 
@@ -260,7 +260,7 @@ const shouldSkipSynthesis = successfulResults.length <= 1 && externalReportsCoun
 **Endpoint:** `POST /research/:id/confirm`
 
 | Action    | Effect                                     |
-| ---------  | ------------------------------------------  |
+| --------- | ------------------------------------------ |
 | `proceed` | Run synthesis with successful results only |
 | `retry`   | Re-run failed LLMs (max 2 retries)         |
 | `cancel`  | Mark as `failed` with "Cancelled by user"  |
@@ -359,7 +359,7 @@ research.status === 'failed';
 **Endpoint:** `POST /research/:id/retry`
 
 | Current Status              | Action           | Result                   |
-| ---------------------------  | ----------------  | ------------------------  |
+| --------------------------- | ---------------- | ------------------------ |
 | `failed` + failed LLMs      | Retry LLMs       | `retrying` → processing  |
 | `failed` + synthesis error  | Re-run synthesis | `completed` or `failed`  |
 | `failed` + nothing to retry | No-op            | `completed` (idempotent) |
@@ -372,7 +372,7 @@ research.status === 'failed';
 ### Status → UI Mapping
 
 | Status                       | Card Display                                  |
-| ----------------------------  | ---------------------------------------------  |
+| ---------------------------- | --------------------------------------------- |
 | `draft`                      | Edit form                                     |
 | `processing`                 | Progress indicator per LLM                    |
 | `synthesizing`               | "Synthesizing results..."                     |
@@ -399,7 +399,7 @@ const showSynthesisNotAvailable =
 ### Error Handling Summary
 
 | Error Type           | Status   | User Action            |
-| --------------------  | --------  | ----------------------  |
+| -------------------- | -------- | ---------------------- |
 | All LLMs failed      | `failed` | Retry                  |
 | Synthesis failed     | `failed` | Retry                  |
 | Max retries exceeded | `failed` | Create new research    |
@@ -409,14 +409,14 @@ const showSynthesisNotAvailable =
 ### Pub/Sub Topics
 
 | Topic             | Publisher        | Subscriber       | Purpose                   |
-| -----------------  | ----------------  | ----------------  | -------------------------  |
+| ----------------- | ---------------- | ---------------- | ------------------------- |
 | `llm-call`        | llm-orchestrator | llm-orchestrator | Trigger LLM API call      |
 | `research-events` | llm-orchestrator | actions-agent    | Research lifecycle events |
 
 ### Key Files
 
 | File                             | Purpose                     |
-| --------------------------------  | ---------------------------  |
+| -------------------------------- | --------------------------- |
 | `routes/researchRoutes.ts`       | All research HTTP endpoints |
 | `usecases/runSynthesis.ts`       | Synthesis execution         |
 | `usecases/checkLlmCompletion.ts` | Completion detection        |

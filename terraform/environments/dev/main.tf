@@ -745,8 +745,9 @@ module "pubsub_whatsapp_send" {
   push_audience              = module.whatsapp_service.service_url
 
   publisher_service_accounts = {
-    actions_agent  = module.iam.service_accounts["actions_agent"]
-    research_agent = module.iam.service_accounts["research_agent"]
+    actions_agent   = module.iam.service_accounts["actions_agent"]
+    research_agent  = module.iam.service_accounts["research_agent"]
+    bookmarks_agent = module.iam.service_accounts["bookmarks_agent"]
   }
 
   depends_on = [
@@ -1231,10 +1232,11 @@ module "bookmarks_agent" {
 
   secrets = local.common_service_secrets
   env_vars = merge(local.common_service_env_vars, {
-    INTEXURAOS_PUBSUB_BOOKMARK_ENRICH    = "intexuraos-bookmark-enrich-${var.environment}"
-    INTEXURAOS_PUBSUB_BOOKMARK_SUMMARIZE = "intexuraos-bookmark-summarize-${var.environment}"
-    INTEXURAOS_USER_SERVICE_URL          = module.user_service.service_url
-    INTEXURAOS_APP_SETTINGS_SERVICE_URL  = module.app_settings_service.service_url
+    INTEXURAOS_PUBSUB_BOOKMARK_ENRICH      = "intexuraos-bookmark-enrich-${var.environment}"
+    INTEXURAOS_PUBSUB_BOOKMARK_SUMMARIZE   = "intexuraos-bookmark-summarize-${var.environment}"
+    INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC  = "intexuraos-whatsapp-send-${var.environment}"
+    INTEXURAOS_USER_SERVICE_URL            = module.user_service.service_url
+    INTEXURAOS_APP_SETTINGS_SERVICE_URL    = module.app_settings_service.service_url
   })
 
   depends_on = [
