@@ -983,9 +983,11 @@ export interface LinearConnectionStatus {
  * Grouped issues by dashboard column
  */
 export interface GroupedIssues {
+  todo: LinearIssue[];
   backlog: LinearIssue[];
   in_progress: LinearIssue[];
   in_review: LinearIssue[];
+  to_test: LinearIssue[];
   done: LinearIssue[];
   archive: LinearIssue[];
 }
@@ -996,4 +998,28 @@ export interface GroupedIssues {
 export interface ListIssuesResponse {
   issues: GroupedIssues;
   teamName: string;
+}
+
+/**
+ * Calendar preview status
+ */
+export type CalendarPreviewStatus = 'pending' | 'ready' | 'failed';
+
+/**
+ * Calendar preview from calendar-agent
+ */
+export interface CalendarPreview {
+  actionId: string;
+  userId: string;
+  status: CalendarPreviewStatus;
+  summary?: string;
+  start?: string;
+  end?: string | null;
+  location?: string | null;
+  description?: string | null;
+  duration?: string | null;
+  isAllDay?: boolean;
+  error?: string;
+  reasoning?: string;
+  generatedAt: string;
 }

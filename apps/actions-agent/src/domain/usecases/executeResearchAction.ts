@@ -1,6 +1,5 @@
 import type { Result } from '@intexuraos/common-core';
 import { ok, err, getErrorMessage } from '@intexuraos/common-core';
-import { type ResearchModel } from '@intexuraos/llm-contract';
 import type { Action } from '../models/action.js';
 import type { ActionRepository } from '../ports/actionRepository.js';
 import type { ResearchServiceClient } from '../ports/researchServiceClient.js';
@@ -72,18 +71,18 @@ export function createExecuteResearchActionUseCase(
     };
     await actionRepository.update(updatedAction);
 
-    // No default models - user must select before approving the research draft
-    const selectedModels: ResearchModel[] = [];
-    const prompt =
+    // Get the original message (before any modifications like key points)
+    const originalMessage =
       typeof action.payload['prompt'] === 'string' ? action.payload['prompt'] : action.title;
     const summary =
       typeof action.payload['summary'] === 'string' ? action.payload['summary'] : undefined;
 
+    // Create the modified prompt with key points prepended
     const promptWithKeyPoints =
-      summary !== undefined ? `## Key Points\n\n${summary}\n\n---\n\n${prompt}` : prompt;
+      summary !== undefined ? `## Key Points\n\n${summary}\n\n---\n\n${originalMessage}` : originalMessage;
 
     logger.info(
-      { actionId, userId: action.userId, title: action.title, models: selectedModels },
+      { actionId, userId: action.userId, title: action.title },
       'Creating research draft via research-agent'
     );
 
@@ -91,7 +90,7 @@ export function createExecuteResearchActionUseCase(
       userId: action.userId,
       title: action.title,
       prompt: promptWithKeyPoints,
-      selectedModels,
+      originalMessage,
       sourceActionId: action.id,
     });
 

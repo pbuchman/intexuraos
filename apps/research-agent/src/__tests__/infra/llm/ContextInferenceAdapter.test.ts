@@ -4,7 +4,7 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Logger } from '@intexuraos/common-core';
-import type { ResearchContext, SynthesisContext } from '@intexuraos/llm-common';
+import type { ResearchContext, SynthesisContext } from '@intexuraos/llm-prompts';
 import { type ModelPricing, LlmModels } from '@intexuraos/llm-contract';
 
 const mockGenerate = vi.fn();
@@ -195,11 +195,11 @@ describe('ContextInferenceAdapter', () => {
         expect(result.value.context.domain).toBe('technical');
       }
       expect(mockGenerate).toHaveBeenCalledTimes(2);
-      expect(mockLogger.info).toHaveBeenCalledWith(
+      expect(mockLogger.debug).toHaveBeenCalledWith(
         { errorMessage: expect.any(String) },
         'Schema validation failed, attempting repair'
       );
-      expect(mockLogger.info).toHaveBeenCalledWith({}, 'Repair attempt succeeded');
+      expect(mockLogger.debug).toHaveBeenCalledWith({}, 'Repair attempt succeeded');
     });
 
     it('attempts repair on JSON parse failure and succeeds', async () => {

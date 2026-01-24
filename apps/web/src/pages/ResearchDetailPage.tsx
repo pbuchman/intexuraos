@@ -588,8 +588,8 @@ export function ResearchDetailPage(): React.JSX.Element {
                 window.open(research.shareInfo?.shareUrl, '_blank', 'noopener,noreferrer');
               }}
             >
-              <ExternalLink className="mr-2 h-4 w-4" />
-              Open
+              <ExternalLink className="h-4 w-4 sm:mr-2" />
+              <span className="hidden sm:inline">Open</span>
             </Button>
             <Button
               variant="secondary"
@@ -597,8 +597,8 @@ export function ResearchDetailPage(): React.JSX.Element {
                 void handleCopyShareUrl();
               }}
             >
-              <Copy className="mr-2 h-4 w-4" />
-              Copy
+              <Copy className="h-4 w-4 sm:mr-2" />
+              <span className="hidden sm:inline">Copy</span>
             </Button>
             <Button
               variant="secondary"
@@ -606,8 +606,8 @@ export function ResearchDetailPage(): React.JSX.Element {
                 void handleShare();
               }}
             >
-              <Share2 className="mr-2 h-4 w-4" />
-              Share
+              <Share2 className="h-4 w-4 sm:mr-2" />
+              <span className="hidden sm:inline">Share</span>
             </Button>
             {showUnshareConfirm ? (
               <>
@@ -619,7 +619,8 @@ export function ResearchDetailPage(): React.JSX.Element {
                   disabled={unsharing}
                   isLoading={unsharing}
                 >
-                  Confirm
+                  <span className="hidden sm:inline">Confirm</span>
+                  <CheckCircle className="h-4 w-4 sm:hidden" />
                 </Button>
                 <Button
                   variant="secondary"
@@ -628,7 +629,8 @@ export function ResearchDetailPage(): React.JSX.Element {
                   }}
                   disabled={unsharing}
                 >
-                  Cancel
+                  <span className="hidden sm:inline">Cancel</span>
+                  <XCircle className="h-4 w-4 sm:hidden" />
                 </Button>
               </>
             ) : (
@@ -638,8 +640,8 @@ export function ResearchDetailPage(): React.JSX.Element {
                   setShowUnshareConfirm(true);
                 }}
               >
-                <Link2Off className="mr-2 h-4 w-4" />
-                Unshare
+                <Link2Off className="h-4 w-4 sm:mr-2" />
+                <span className="hidden sm:inline">Unshare</span>
               </Button>
             )}
           </div>
@@ -660,8 +662,8 @@ export function ResearchDetailPage(): React.JSX.Element {
               disabled={approving || deleting}
               isLoading={approving}
             >
-              <Play className="mr-2 h-4 w-4" />
-              Start Research
+              <Play className="h-4 w-4 sm:mr-2" />
+              <span className="hidden sm:inline">Start Research</span>
             </Button>
             <Button
               variant="secondary"
@@ -670,7 +672,8 @@ export function ResearchDetailPage(): React.JSX.Element {
               }}
               disabled={deleting}
             >
-              Edit Draft
+              <FileText className="h-4 w-4 sm:mr-2" />
+              <span className="hidden sm:inline">Edit Draft</span>
             </Button>
             {showDeleteConfirm ? (
               <>
@@ -682,7 +685,8 @@ export function ResearchDetailPage(): React.JSX.Element {
                   disabled={deleting}
                   isLoading={deleting}
                 >
-                  Confirm Discard
+                  <CheckCircle className="h-4 w-4 sm:mr-2" />
+                  <span className="hidden sm:inline">Confirm Discard</span>
                 </Button>
                 <Button
                   variant="secondary"
@@ -691,7 +695,8 @@ export function ResearchDetailPage(): React.JSX.Element {
                   }}
                   disabled={deleting}
                 >
-                  Cancel
+                  <XCircle className="h-4 w-4 sm:mr-2" />
+                  <span className="hidden sm:inline">Cancel</span>
                 </Button>
               </>
             ) : (
@@ -702,7 +707,8 @@ export function ResearchDetailPage(): React.JSX.Element {
                 }}
                 disabled={deleting}
               >
-                Discard
+                <Trash2 className="h-4 w-4 sm:mr-2" />
+                <span className="hidden sm:inline">Discard</span>
               </Button>
             )}
           </div>
@@ -716,8 +722,8 @@ export function ResearchDetailPage(): React.JSX.Element {
                 disabled={retrying || deleting}
                 isLoading={retrying}
               >
-                <RefreshCw className="mr-2 h-4 w-4" />
-                Retry Research
+                <RefreshCw className="h-4 w-4 sm:mr-2" />
+                <span className="hidden sm:inline">Retry Research</span>
               </Button>
             ) : null}
             {research.status === 'completed' ? (
@@ -727,8 +733,8 @@ export function ResearchDetailPage(): React.JSX.Element {
                 }}
                 disabled={deleting}
               >
-                <Plus className="mr-2 h-4 w-4" />
-                Enhance
+                <Plus className="h-4 w-4 sm:mr-2" />
+                <span className="hidden sm:inline">Enhance</span>
               </Button>
             ) : null}
             {showDeleteConfirm ? (
@@ -741,7 +747,8 @@ export function ResearchDetailPage(): React.JSX.Element {
                   disabled={deleting}
                   isLoading={deleting}
                 >
-                  Confirm Delete
+                  <CheckCircle className="h-4 w-4 sm:mr-2" />
+                  <span className="hidden sm:inline">Confirm Delete</span>
                 </Button>
                 <Button
                   variant="secondary"
@@ -750,7 +757,8 @@ export function ResearchDetailPage(): React.JSX.Element {
                   }}
                   disabled={deleting}
                 >
-                  Cancel
+                  <XCircle className="h-4 w-4 sm:mr-2" />
+                  <span className="hidden sm:inline">Cancel</span>
                 </Button>
               </>
             ) : (
@@ -761,7 +769,8 @@ export function ResearchDetailPage(): React.JSX.Element {
                 }}
                 disabled={deleting || retrying}
               >
-                Delete
+                <Trash2 className="h-4 w-4 sm:mr-2" />
+                <span className="hidden sm:inline">Delete</span>
               </Button>
             )}
           </div>
@@ -910,7 +919,10 @@ export function ResearchDetailPage(): React.JSX.Element {
                     void copyToClipboard(research.synthesizedResult ?? '', 'synthesis');
                   }}
                 >
-                  {copiedSection === 'synthesis' ? 'Copied!' : 'Copy'}
+                  <Copy className="h-4 w-4 sm:mr-2" />
+                  <span className="hidden sm:inline">
+                    {copiedSection === 'synthesis' ? 'Copied!' : 'Copy'}
+                  </span>
                 </Button>
               </div>
               <div className="rounded-lg bg-slate-50 p-4">
@@ -954,7 +966,10 @@ export function ResearchDetailPage(): React.JSX.Element {
                     void copyToClipboard(singleResult.result ?? '', 'main-report');
                   }}
                 >
-                  {copiedSection === 'main-report' ? 'Copied!' : 'Copy'}
+                  <Copy className="h-4 w-4 sm:mr-2" />
+                  <span className="hidden sm:inline">
+                    {copiedSection === 'main-report' ? 'Copied!' : 'Copy'}
+                  </span>
                 </Button>
               </div>
               <div className="rounded-lg bg-slate-50 p-4">
@@ -1232,7 +1247,8 @@ export function ResearchDetailPage(): React.JSX.Element {
 
             <div className="flex justify-end gap-3">
               <Button variant="secondary" onClick={resetEnhanceModal} disabled={enhancing}>
-                Cancel
+                <XCircle className="h-4 w-4 sm:mr-2" />
+                <span className="hidden sm:inline">Cancel</span>
               </Button>
               <Button
                 onClick={(): void => {
@@ -1248,8 +1264,8 @@ export function ResearchDetailPage(): React.JSX.Element {
                 }
                 isLoading={enhancing}
               >
-                <Plus className="mr-2 h-4 w-4" />
-                Enhance
+                <Plus className="h-4 w-4 sm:mr-2" />
+                <span className="hidden sm:inline">Enhance</span>
               </Button>
             </div>
           </div>
@@ -1474,7 +1490,8 @@ function LlmResultCard({ result, onCopy, copied }: LlmResultCardProps): React.JS
                 onCopy(result.result ?? '');
               }}
             >
-              {copied ? 'Copied!' : 'Copy'}
+              <Copy className="h-4 w-4 sm:mr-2" />
+              <span className="hidden sm:inline">{copied ? 'Copied!' : 'Copy'}</span>
             </Button>
           </div>
           <div className="rounded-lg bg-slate-50 p-4 text-sm">
@@ -1560,8 +1577,8 @@ function PartialFailureConfirmation({
               disabled={confirming}
               isLoading={confirming}
             >
-              <CheckCircle className="mr-2 h-4 w-4" />
-              Proceed with Available
+              <CheckCircle className="h-4 w-4 sm:mr-2" />
+              <span className="hidden sm:inline">Proceed with Available</span>
             </Button>
 
             {canRetry ? (
@@ -1572,10 +1589,12 @@ function PartialFailureConfirmation({
                 }}
                 disabled={confirming}
               >
-                <RefreshCw className="mr-2 h-4 w-4" />
-                {failedProvidersText !== ''
-                  ? `Retry Failed (${failedProvidersText})`
-                  : 'Retry Failed'}
+                <RefreshCw className="h-4 w-4 sm:mr-2" />
+                <span className="hidden sm:inline">
+                  {failedProvidersText !== ''
+                    ? `Retry Failed (${failedProvidersText})`
+                    : 'Retry Failed'}
+                </span>
               </Button>
             ) : null}
 
@@ -1586,8 +1605,8 @@ function PartialFailureConfirmation({
               }}
               disabled={confirming}
             >
-              <XCircle className="mr-2 h-4 w-4" />
-              Cancel Research
+              <XCircle className="h-4 w-4 sm:mr-2" />
+              <span className="hidden sm:inline">Cancel Research</span>
             </Button>
           </div>
 

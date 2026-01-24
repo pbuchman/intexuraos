@@ -9,7 +9,7 @@ import {
   chartDefinitionPrompt,
   parseChartDefinition,
   type ParsedChartDefinition,
-} from '@intexuraos/llm-common';
+} from '@intexuraos/llm-prompts';
 import type { UserServiceClient } from '../user/userServiceClient.js';
 import type {
   ChartDefinitionService,

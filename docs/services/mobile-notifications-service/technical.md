@@ -43,25 +43,25 @@ Mobile-notifications-service manages device connections, filters, and notificati
 
 ### SignatureConnection
 
-| Field           | Type      | Description            |
-| --------------- | --------- | ---------------------- | ------------------- |
-| `id`            | string    | Connection ID          |
-| `userId`        | string    | Owner user ID          |
-| `signatureHash` | string    | Hashed signature token |
-| `deviceLabel`   | string \  | undefined              | User-provided label |
-| `createdAt`     | string    | ISO 8601 timestamp     |
+| Field | Type | Description |
+| --------------- | --------- | ---------------------- | |
+| `id` | string | Connection ID |
+| `userId` | string | Owner user ID |
+| `signatureHash` | string | Hashed signature token |
+| `deviceLabel` | string \ | undefined | User-provided label |
+| `createdAt` | string | ISO 8601 timestamp |
 
 ### Notification
 
-| Field       | Type      | Description        |
-| ----------- | --------- | ------------------ | --------------- |
-| `id`        | string    | Notification ID    |
-| `userId`    | string    | Target user ID     |
-| `title`     | string    | Notification title |
-| `body`      | string    | Notification body  |
-| `source`    | string    | Source identifier  |
-| `data`      | object \  | undefined          | Additional data |
-| `createdAt` | string    | ISO 8601 timestamp |
+| Field | Type | Description |
+| ----------- | --------- | ------------------ | |
+| `id` | string | Notification ID |
+| `userId` | string | Target user ID |
+| `title` | string | Notification title |
+| `body` | string | Notification body |
+| `source` | string | Source identifier |
+| `data` | object \ | undefined | Additional data |
+| `createdAt` | string | ISO 8601 timestamp |
 
 ### NotificationFilter
 

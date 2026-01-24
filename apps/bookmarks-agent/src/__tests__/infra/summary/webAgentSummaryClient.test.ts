@@ -106,6 +106,7 @@ describe('webAgentSummaryClient', () => {
       const scope = nock(TEST_BASE_URL)
         .post('/internal/page-summaries', {
           url: 'https://example.com/page',
+          userId: 'user-456',
           maxSentences: 20,
           maxReadingMinutes: 3,
         })
@@ -307,6 +308,99 @@ describe('webAgentSummaryClient', () => {
       expect(result.ok).toBe(false);
       if (result.ok) return;
       expect(result.error.code).toBe('GENERATION_ERROR');
+    });
+
+    it('returns default error message when body.error is undefined', async () => {
+      const client = createWebAgentSummaryClient({
+        baseUrl: TEST_BASE_URL,
+        internalAuthToken: TEST_INTERNAL_TOKEN,
+        logger: silentLogger,
+      });
+
+      nock(TEST_BASE_URL).post('/internal/page-summaries').reply(200, {
+        success: false,
+        // Note: no error field provided
+      });
+
+      const result = await client.generateSummary('user-123', {
+        url: 'https://example.com',
+        title: 'Title',
+        description: null,
+      });
+
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error.code).toBe('GENERATION_ERROR');
+      expect(result.error.message).toBe('Invalid response from web-agent');
+    });
+
+    it('uses default error code and message when result.error is missing', async () => {
+      const client = createWebAgentSummaryClient({
+        baseUrl: TEST_BASE_URL,
+        internalAuthToken: TEST_INTERNAL_TOKEN,
+        logger: silentLogger,
+      });
+
+      nock(TEST_BASE_URL)
+        .post('/internal/page-summaries')
+        .reply(200, {
+          success: true,
+          data: {
+            result: {
+              url: 'https://example.com/failed',
+              status: 'failed',
+              // Note: no error object provided
+            },
+            metadata: { durationMs: 100 },
+          },
+        });
+
+      const result = await client.generateSummary('user-123', {
+        url: 'https://example.com/failed',
+        title: 'Failed Page',
+        description: null,
+      });
+
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error.code).toBe('GENERATION_ERROR');
+      expect(result.error.message).toBe('Unknown error');
+    });
+
+    it('uses default message when result.error.message is missing', async () => {
+      const client = createWebAgentSummaryClient({
+        baseUrl: TEST_BASE_URL,
+        internalAuthToken: TEST_INTERNAL_TOKEN,
+        logger: silentLogger,
+      });
+
+      nock(TEST_BASE_URL)
+        .post('/internal/page-summaries')
+        .reply(200, {
+          success: true,
+          data: {
+            result: {
+              url: 'https://example.com/partial-error',
+              status: 'failed',
+              error: {
+                code: 'NO_CONTENT',
+                // Note: no message field
+              },
+            },
+            metadata: { durationMs: 100 },
+          },
+        });
+
+      const result = await client.generateSummary('user-123', {
+        url: 'https://example.com/partial-error',
+        title: 'Partial Error',
+        description: null,
+      });
+
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error.code).toBe('NO_CONTENT');
+      expect(result.error.message).toBe('Unknown error');
     });
 
     it('returns GENERATION_ERROR when summary is missing in successful result', async () => {

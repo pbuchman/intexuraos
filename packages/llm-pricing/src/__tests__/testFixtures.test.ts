@@ -70,11 +70,11 @@ describe('testFixtures', () => {
       expect(() => context.validateAllModels()).not.toThrow();
     });
 
-    it('getModelsWithPricing returns all 14 models', () => {
+    it('getModelsWithPricing returns all 16 models', () => {
       const context = new FakePricingContext();
 
       const models = context.getModelsWithPricing();
-      expect(models).toHaveLength(14);
+      expect(models).toHaveLength(16);
       expect(models).toContain(LlmModels.Gemini25Pro);
       expect(models).toContain(LlmModels.GPTImage1);
       expect(models).toContain(LlmModels.ClaudeOpus45);

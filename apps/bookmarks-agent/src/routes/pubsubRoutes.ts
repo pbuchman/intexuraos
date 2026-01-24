@@ -217,10 +217,15 @@ export const pubsubRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         'Processing bookmark summarization event'
       );
 
-      const { bookmarkRepository, bookmarkSummaryService } = getServices();
+      const { bookmarkRepository, bookmarkSummaryService, whatsAppSendPublisher } = getServices();
 
       const result = await summarizeBookmark(
-        { bookmarkRepository, bookmarkSummaryService, logger: request.log },
+        {
+          bookmarkRepository,
+          bookmarkSummaryService,
+          whatsAppSendPublisher,
+          logger: request.log,
+        },
         { bookmarkId: eventData.bookmarkId, userId: eventData.userId }
       );
 

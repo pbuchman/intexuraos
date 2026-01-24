@@ -1,2 +1,0 @@
-{"ts":"2026-01-17T10:31:22.172Z","project":"intexuraos-2","branch":"fix/INT-101-retry-action-bug","workspace":"--","runNumber":1,"passed":false,"durationMs":337,"failureCount":0,"failures":[]}
-{"ts":"2026-01-17T10:32:20.282Z","project":"intexuraos-2","branch":"fix/INT-101-retry-action-bug","workspace":"actions-agent","runNumber":2,"passed":true,"durationMs":51941,"failureCount":0,"failures":[]}

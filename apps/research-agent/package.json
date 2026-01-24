@@ -1,6 +1,6 @@
 {
   "name": "@intexuraos/research-agent",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "private": true,
   "type": "module",
   "engines": {
@@ -29,8 +29,10 @@
     "@intexuraos/infra-perplexity": "workspace:*",
     "@intexuraos/infra-pubsub": "workspace:*",
     "@intexuraos/infra-sentry": "workspace:*",
-    "@intexuraos/llm-common": "workspace:*",
+    "@intexuraos/llm-prompts": "workspace:*",
+    "@intexuraos/llm-utils": "workspace:*",
     "@intexuraos/llm-contract": "workspace:*",
+    "@intexuraos/llm-factory": "workspace:*",
     "@intexuraos/llm-pricing": "workspace:*",
     "fastify": "^5.1.0",
     "marked": "^15.0.6",

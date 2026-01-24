@@ -1,0 +1,453 @@
+import {
+  type CountryCode,
+  getCountries,
+  getCountryCallingCode,
+  parsePhoneNumberWithError,
+} from 'libphonenumber-js';
+import { normalizePhoneNumber } from '../domain/whatsapp/index.js';
+
+// Re-export for backwards compatibility with existing imports
+export { normalizePhoneNumber };
+
+/**
+ * Get list of all supported countries with their calling codes.
+ * Returns array sorted with PL and US first, then alphabetically by country code.
+ */
+export function getSupportedCountries(): { country: CountryCode; callingCode: string }[] {
+  const countries = getCountries();
+  const priorityCountries: CountryCode[] = ['PL', 'US'];
+
+  const priority = countries
+    .filter((c) => priorityCountries.includes(c))
+    .sort((a, b) => priorityCountries.indexOf(a) - priorityCountries.indexOf(b))
+    .map((country) => ({
+      country,
+      callingCode: getCountryCallingCode(country),
+    }));
+
+  const rest = countries
+    .filter((c) => !priorityCountries.includes(c))
+    .sort()
+    .map((country) => ({
+      country,
+      callingCode: getCountryCallingCode(country),
+    }));
+
+  return [...priority, ...rest];
+}
+
+/**
+ * Validation result for phone number.
+ * Uses discriminated union to ensure error is required when valid is false.
+ */
+export type PhoneValidationResult =
+  | {
+      valid: true;
+      normalized: string;
+      country?: CountryCode;
+    }
+  | {
+      valid: false;
+      normalized: string;
+      error: string;
+    };
+
+/**
+ * Validate phone number format using libphonenumber-js.
+ * Supports all countries. Returns normalized number (E.164 without +) if valid.
+ *
+ * @param phoneNumber - Phone number in any format (with or without +, spaces, dashes)
+ * @param defaultCountry - Optional default country code for numbers without country prefix
+ */
+export function validatePhoneNumber(
+  phoneNumber: string,
+  defaultCountry?: CountryCode
+): PhoneValidationResult {
+  const trimmed = phoneNumber.trim();
+
+  if (trimmed.length === 0) {
+    return { valid: false, normalized: '', error: 'Phone number is required' };
+  }
+
+  try {
+    // Add + prefix if not present and no default country provided
+    // This helps parse numbers that include country code but lack +
+    const numberToParse =
+      !trimmed.startsWith('+') && defaultCountry === undefined ? `+${trimmed}` : trimmed;
+
+    const parsed = parsePhoneNumberWithError(numberToParse, defaultCountry);
+
+    if (!parsed.isValid()) {
+      return {
+        valid: false,
+        normalized: normalizePhoneNumber(trimmed),
+        error: 'Invalid phone number format',
+      };
+    }
+
+    // E.164 format without + prefix for storage consistency
+    const normalized = parsed.number.replace('+', '');
+
+    const result: PhoneValidationResult = {
+      valid: true,
+      normalized,
+    };
+
+    if (parsed.country !== undefined) {
+      result.country = parsed.country;
+    }
+
+    return result;
+  } catch {
+    return {
+      valid: false,
+      normalized: normalizePhoneNumber(trimmed),
+      error: 'Invalid phone number format',
+    };
+  }
+}
+
+/**
+ * WhatsApp webhook payload structure (partial, for extraction).
+ *
+ * Based on official Meta documentation:
+ * https://developers.facebook.com/docs/whatsapp/cloud-api/webhooks/components
+ *
+ * Example payload structure:
+ * {
+ *   "object": "whatsapp_business_account",
+ *   "entry": [{
+ *     "id": "<WHATSAPP_BUSINESS_ACCOUNT_ID>",  // WABA ID
+ *     "changes": [{
+ *       "value": {
+ *         "messaging_product": "whatsapp",
+ *         "metadata": {
+ *           "display_phone_number": "<BUSINESS_DISPLAY_PHONE_NUMBER>",  // e.g. "15550783881"
+ *           "phone_number_id": "<BUSINESS_PHONE_NUMBER_ID>"             // e.g. "106540352242922"
+ *         },
+ *         "messages": [{
+ *           "from": "<WHATSAPP_USER_PHONE_NUMBER>",  // e.g. "16505551234"
+ *           "id": "<WHATSAPP_MESSAGE_ID>",
+ *           ...
+ *         }]
+ *       },
+ *       "field": "messages"
+ *     }]
+ *   }]
+ * }
+ */
+interface WebhookValue {
+  metadata?: {
+    phone_number_id?: string;
+    display_phone_number?: string;
+  };
+  messages?: {
+    from?: string;
+    id?: string;
+    timestamp?: string;
+    type?: string;
+    text?: {
+      body?: string;
+    };
+    image?: {
+      id?: string;
+      mime_type?: string;
+      sha256?: string;
+      caption?: string;
+    };
+    audio?: {
+      id?: string;
+      mime_type?: string;
+      sha256?: string;
+    };
+    context?: {
+      from?: string;
+      id?: string;
+    };
+  }[];
+  contacts?: {
+    profile?: {
+      name?: string;
+    };
+  }[];
+}
+
+interface WebhookChange {
+  value?: WebhookValue;
+}
+
+interface WebhookEntry {
+  id?: string;
+  changes?: WebhookChange[];
+}
+
+interface WebhookPayloadShape {
+  entry?: WebhookEntry[];
+}
+
+/**
+ * Safely extract the first webhook entry from payload.
+ */
+function extractFirstEntry(payload: unknown): WebhookEntry | null {
+  if (typeof payload !== 'object' || payload === null) return null;
+
+  const p = payload as WebhookPayloadShape;
+  const entry = p.entry?.[0];
+  return entry ?? null;
+}
+
+/**
+ * Safely extract the first webhook value from payload.
+ */
+function extractFirstValue(payload: unknown): WebhookValue | null {
+  const entry = extractFirstEntry(payload);
+  if (entry === null) return null;
+
+  const change = entry.changes?.[0];
+  if (change === undefined) return null;
+
+  return change.value ?? null;
+}
+
+/**
+ * Extract WhatsApp Business Account ID (WABA ID) from webhook payload.
+ *
+ * Path: entry[0].id
+ *
+ * @see https://developers.facebook.com/docs/whatsapp/cloud-api/webhooks/components
+ */
+export function extractWabaId(payload: unknown): string | null {
+  const entry = extractFirstEntry(payload);
+  return typeof entry?.id === 'string' ? entry.id : null;
+}
+
+/**
+ * Extract phone number ID from webhook payload.
+ * This is the Meta-assigned ID for the WhatsApp Business phone number receiving the message.
+ *
+ * Path: entry[0].changes[0].value.metadata.phone_number_id
+ *
+ * @see https://developers.facebook.com/docs/whatsapp/cloud-api/webhooks/components
+ */
+export function extractPhoneNumberId(payload: unknown): string | null {
+  const value = extractFirstValue(payload);
+  return value?.metadata?.phone_number_id ?? null;
+}
+
+/**
+ * Extract display phone number from webhook payload.
+ * This is the business phone number in international format WITHOUT leading "+".
+ *
+ * Example: "15550783881" (not "+15550783881")
+ *
+ * Path: entry[0].changes[0].value.metadata.display_phone_number
+ *
+ * @see https://developers.facebook.com/docs/whatsapp/cloud-api/webhooks/components
+ */
+export function extractDisplayPhoneNumber(payload: unknown): string | null {
+  const value = extractFirstValue(payload);
+  return value?.metadata?.display_phone_number ?? null;
+}
+
+/**
+ * Extract sender phone number from webhook payload.
+ * This is the WhatsApp user who sent the message.
+ *
+ * Format: International format, typically WITHOUT leading "+".
+ * Examples from Meta docs show "16505551234" (no "+").
+ *
+ * Path: entry[0].changes[0].value.messages[0].from
+ *
+ * @see https://developers.facebook.com/docs/whatsapp/cloud-api/webhooks/components#text-messages
+ */
+export function extractSenderPhoneNumber(payload: unknown): string | null {
+  const value = extractFirstValue(payload);
+  const message = value?.messages?.[0];
+  if (message === undefined) return null;
+  return typeof message.from === 'string' ? message.from : null;
+}
+
+/**
+ * Extract message ID from webhook payload.
+ * Used for creating message replies (context).
+ *
+ * Path: entry[0].changes[0].value.messages[0].id
+ *
+ * @see https://developers.facebook.com/docs/whatsapp/cloud-api/webhooks/components#text-messages
+ */
+export function extractMessageId(payload: unknown): string | null {
+  const value = extractFirstValue(payload);
+  const message = value?.messages?.[0];
+  if (message === undefined) return null;
+  return typeof message.id === 'string' ? message.id : null;
+}
+
+/**
+ * Extract message text content from webhook payload.
+ *
+ * Path: entry[0].changes[0].value.messages[0].text.body
+ *
+ * @see https://developers.facebook.com/docs/whatsapp/cloud-api/webhooks/components#text-messages
+ */
+export function extractMessageText(payload: unknown): string | null {
+  const value = extractFirstValue(payload);
+  const message = value?.messages?.[0];
+  if (message === undefined) return null;
+  return typeof message.text?.body === 'string' ? message.text.body : null;
+}
+
+/**
+ * Extract message timestamp from webhook payload.
+ *
+ * Path: entry[0].changes[0].value.messages[0].timestamp
+ *
+ * @see https://developers.facebook.com/docs/whatsapp/cloud-api/webhooks/components#text-messages
+ */
+export function extractMessageTimestamp(payload: unknown): string | null {
+  const value = extractFirstValue(payload);
+  const message = value?.messages?.[0];
+  if (message === undefined) return null;
+  return typeof message.timestamp === 'string' ? message.timestamp : null;
+}
+
+/**
+ * Extract sender profile name from webhook payload.
+ *
+ * Path: entry[0].changes[0].value.contacts[0].profile.name
+ *
+ * @see https://developers.facebook.com/docs/whatsapp/cloud-api/webhooks/components#contacts-object
+ */
+export function extractSenderName(payload: unknown): string | null {
+  const value = extractFirstValue(payload);
+  const contact = value?.contacts?.[0];
+  if (contact === undefined) return null;
+  return typeof contact.profile?.name === 'string' ? contact.profile.name : null;
+}
+
+/**
+ * Extract message type from webhook payload.
+ *
+ * Path: entry[0].changes[0].value.messages[0].type
+ *
+ * @see https://developers.facebook.com/docs/whatsapp/cloud-api/webhooks/components#text-messages
+ */
+export function extractMessageType(payload: unknown): string | null {
+  const value = extractFirstValue(payload);
+  const message = value?.messages?.[0];
+  if (message === undefined) return null;
+  return typeof message.type === 'string' ? message.type : null;
+}
+
+/**
+ * Image media info from webhook payload.
+ */
+export interface ImageMediaInfo {
+  id: string;
+  mimeType: string;
+  sha256?: string;
+  caption?: string;
+}
+
+/**
+ * Audio media info from webhook payload.
+ */
+export interface AudioMediaInfo {
+  id: string;
+  mimeType: string;
+  sha256?: string;
+}
+
+/**
+ * Extract image media info from webhook payload.
+ *
+ * Path: entry[0].changes[0].value.messages[0].image
+ *
+ * @see https://developers.facebook.com/docs/whatsapp/cloud-api/webhooks/components#media-messages
+ */
+export function extractImageMedia(payload: unknown): ImageMediaInfo | null {
+  const value = extractFirstValue(payload);
+  const message = value?.messages?.[0];
+  if (message === undefined) return null;
+  const image = message.image;
+  if (image === undefined) return null;
+  if (typeof image.id !== 'string' || typeof image.mime_type !== 'string') return null;
+
+  const result: ImageMediaInfo = {
+    id: image.id,
+    mimeType: image.mime_type,
+  };
+
+  if (typeof image.sha256 === 'string') {
+    result.sha256 = image.sha256;
+  }
+  if (typeof image.caption === 'string') {
+    result.caption = image.caption;
+  }
+
+  return result;
+}
+
+/**
+ * Extract audio media info from webhook payload.
+ *
+ * Path: entry[0].changes[0].value.messages[0].audio
+ *
+ * @see https://developers.facebook.com/docs/whatsapp/cloud-api/webhooks/components#media-messages
+ */
+export function extractAudioMedia(payload: unknown): AudioMediaInfo | null {
+  const value = extractFirstValue(payload);
+  const message = value?.messages?.[0];
+  if (message === undefined) return null;
+  const audio = message.audio;
+  if (audio === undefined) return null;
+  if (typeof audio.id !== 'string' || typeof audio.mime_type !== 'string') return null;
+
+  const result: AudioMediaInfo = {
+    id: audio.id,
+    mimeType: audio.mime_type,
+  };
+
+  if (typeof audio.sha256 === 'string') {
+    result.sha256 = audio.sha256;
+  }
+
+  return result;
+}
+
+/**
+ * Reply context info from webhook payload.
+ * Present when a message is sent as a reply to another message.
+ */
+export interface ReplyContextInfo {
+  /** WhatsApp message ID of the message being replied to */
+  replyToWamid: string;
+  /** Phone number of the original message sender (if available) */
+  from?: string;
+}
+
+/**
+ * Extract reply context from webhook payload.
+ * Returns the message ID being replied to if this message is a reply.
+ *
+ * Path: entry[0].changes[0].value.messages[0].context
+ *
+ * @see https://developers.facebook.com/docs/whatsapp/cloud-api/webhooks/components#messages-object
+ */
+export function extractReplyContext(payload: unknown): ReplyContextInfo | null {
+  const value = extractFirstValue(payload);
+  const message = value?.messages?.[0];
+  if (message === undefined) return null;
+  const context = message.context;
+  if (context === undefined) return null;
+  if (typeof context.id !== 'string') return null;
+
+  const result: ReplyContextInfo = {
+    replyToWamid: context.id,
+  };
+
+  if (typeof context.from === 'string') {
+    result.from = context.from;
+  }
+
+  return result;
+}

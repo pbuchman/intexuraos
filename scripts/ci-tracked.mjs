@@ -259,6 +259,11 @@ function parseAllFailures(output) {
 }
 
 function saveFailures(project, branch, runNumber, passed, durationMs, failures) {
+  // Only track failed runs - passed runs don't provide learning value
+  if (passed) {
+    return null;
+  }
+
   if (!existsSync(failuresDir)) {
     mkdirSync(failuresDir, { recursive: true });
   }
@@ -323,10 +328,10 @@ async function runCI() {
 
   const filePath = saveFailures(project, branch, runNumber, passed, durationMs, failures);
 
-  if (!passed && failures.length > 0) {
+  if (!passed && failures.length > 0 && filePath) {
     console.log(`\n📊 Tracked ${failures.length} failure(s) → ${filePath}`);
     console.log(`   Run 'pnpm run ci:report' to see aggregated failure stats\n`);
-  } else if (!passed) {
+  } else if (!passed && filePath) {
     console.log(`\n📊 CI failed but no parseable errors found → ${filePath}\n`);
   }
 

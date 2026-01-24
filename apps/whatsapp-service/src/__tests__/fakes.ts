@@ -11,6 +11,7 @@ import type { Result } from '@intexuraos/common-core';
 import { err, ok } from '@intexuraos/common-core';
 import { normalizePhoneNumber } from '../routes/shared.js';
 import type {
+  ApprovalReplyEvent,
   CommandIngestEvent,
   EventPublisherPort,
   ExtractLinkPreviewsEvent,
@@ -23,8 +24,11 @@ import type {
   MediaCleanupEvent,
   MediaStoragePort,
   MediaUrlInfo,
+  OutboundMessage,
+  OutboundMessageRepository,
   SendMessageResult,
   SpeechTranscriptionPort,
+  TextMessageSendResult,
   ThumbnailGeneratorPort,
   ThumbnailResult,
   TranscribeAudioEvent,
@@ -335,6 +339,7 @@ export class FakeWhatsAppMessageRepository implements WhatsAppMessageRepository 
   private shouldFailSave = false;
   private shouldFailGetMessage = false;
   private shouldFailDeleteMessage = false;
+  private shouldFailGetMessagesByUser = false;
   private shouldThrowOnGetMessage = false;
   private shouldThrowOnUpdateTranscription = false;
   private nextCursorToReturn: string | undefined = undefined;
@@ -349,6 +354,10 @@ export class FakeWhatsAppMessageRepository implements WhatsAppMessageRepository 
 
   setFailDeleteMessage(fail: boolean): void {
     this.shouldFailDeleteMessage = fail;
+  }
+
+  setFailGetMessagesByUser(fail: boolean): void {
+    this.shouldFailGetMessagesByUser = fail;
   }
 
   setThrowOnGetMessage(shouldThrow: boolean): void {
@@ -399,6 +408,11 @@ export class FakeWhatsAppMessageRepository implements WhatsAppMessageRepository 
     userId: string,
     options?: { limit?: number; cursor?: string }
   ): Promise<Result<{ messages: WhatsAppMessage[]; nextCursor?: string }, WhatsAppError>> {
+    if (this.shouldFailGetMessagesByUser) {
+      return Promise.resolve(
+        err({ code: 'INTERNAL_ERROR', message: 'Simulated getMessagesByUser failure' })
+      );
+    }
     const limit = options?.limit ?? 50;
     const userMessages = Array.from(this.messages.values())
       .filter((m) => m.userId === userId)
@@ -492,6 +506,7 @@ export class FakeWhatsAppMessageRepository implements WhatsAppMessageRepository 
     this.shouldFailSave = false;
     this.shouldFailGetMessage = false;
     this.shouldFailDeleteMessage = false;
+    this.shouldFailGetMessagesByUser = false;
     this.shouldThrowOnGetMessage = false;
     this.shouldThrowOnUpdateTranscription = false;
     this.nextCursorToReturn = undefined;
@@ -618,6 +633,7 @@ export class FakeEventPublisher implements EventPublisherPort {
   private webhookProcessEvents: WebhookProcessEvent[] = [];
   private transcribeAudioEvents: TranscribeAudioEvent[] = [];
   private extractLinkPreviewsEvents: ExtractLinkPreviewsEvent[] = [];
+  private approvalReplyEvents: ApprovalReplyEvent[] = [];
 
   publishMediaCleanup(event: MediaCleanupEvent): Promise<Result<void, WhatsAppError>> {
     this.mediaCleanupEvents.push(event);
@@ -646,6 +662,11 @@ export class FakeEventPublisher implements EventPublisherPort {
     return Promise.resolve(ok(undefined));
   }
 
+  publishApprovalReply(event: ApprovalReplyEvent): Promise<Result<void, WhatsAppError>> {
+    this.approvalReplyEvents.push(event);
+    return Promise.resolve(ok(undefined));
+  }
+
   getMediaCleanupEvents(): MediaCleanupEvent[] {
     return [...this.mediaCleanupEvents];
   }
@@ -666,12 +687,17 @@ export class FakeEventPublisher implements EventPublisherPort {
     return [...this.extractLinkPreviewsEvents];
   }
 
+  getApprovalReplyEvents(): ApprovalReplyEvent[] {
+    return [...this.approvalReplyEvents];
+  }
+
   clear(): void {
     this.mediaCleanupEvents = [];
     this.commandIngestEvents = [];
     this.webhookProcessEvents = [];
     this.transcribeAudioEvents = [];
     this.extractLinkPreviewsEvents = [];
+    this.approvalReplyEvents = [];
   }
 }
 
@@ -695,7 +721,10 @@ export class FakeMessageSender implements WhatsAppMessageSender {
     this.shouldThrow = shouldThrow;
   }
 
-  sendTextMessage(phoneNumber: string, message: string): Promise<Result<void, WhatsAppError>> {
+  sendTextMessage(
+    phoneNumber: string,
+    message: string
+  ): Promise<Result<TextMessageSendResult, WhatsAppError>> {
     if (this.shouldThrow) {
       throw new Error('Unexpected send error');
     }
@@ -703,7 +732,8 @@ export class FakeMessageSender implements WhatsAppMessageSender {
       return Promise.resolve(err(this.failError));
     }
     this.sentMessages.push({ phoneNumber, message });
-    return Promise.resolve(ok(undefined));
+    const wamid = `fake-wamid-${String(Date.now())}-${randomUUID().slice(0, 8)}`;
+    return Promise.resolve(ok({ wamid }));
   }
 
   getSentMessages(): { phoneNumber: string; message: string }[] {
@@ -728,6 +758,7 @@ export class FakeSpeechTranscriptionPort implements SpeechTranscriptionPort {
       status: 'running' | 'done' | 'rejected';
       transcript?: string;
       summary?: string;
+      detectedLanguage?: string;
       error?: string;
     }
   >();
@@ -772,13 +803,16 @@ export class FakeSpeechTranscriptionPort implements SpeechTranscriptionPort {
   /**
    * Set job completion result (for testing polling).
    */
-  setJobResult(jobId: string, transcript: string, summary?: string): void {
+  setJobResult(jobId: string, transcript: string, summary?: string, detectedLanguage?: string): void {
     const job = this.jobs.get(jobId);
     if (job !== undefined) {
       job.status = 'done';
       job.transcript = transcript;
       if (summary !== undefined) {
         job.summary = summary;
+      }
+      if (detectedLanguage !== undefined) {
+        job.detectedLanguage = detectedLanguage;
       }
     }
   }
@@ -927,6 +961,7 @@ export class FakeSpeechTranscriptionPort implements SpeechTranscriptionPort {
       ok({
         text: job.transcript,
         ...(job.summary !== undefined && { summary: job.summary }),
+        ...(job.detectedLanguage !== undefined && { detectedLanguage: job.detectedLanguage }),
         apiCall: {
           timestamp: new Date().toISOString(),
           operation: 'fetch_result',
@@ -981,9 +1016,12 @@ export class FakeWhatsAppCloudApiPort implements WhatsAppCloudApiPort {
     replyToMessageId?: string;
     messageId: string;
   }[] = [];
+  private markedAsReadMessages: { phoneNumberId: string; messageId: string }[] = [];
+  private markedAsReadWithTypingMessages: { phoneNumberId: string; messageId: string }[] = [];
   private shouldFailGetMediaUrl = false;
   private shouldFailDownload = false;
   private shouldFailSendMessage = false;
+  private shouldFailMarkAsRead = false;
   private messageIdCounter = 0;
 
   setMediaUrl(mediaId: string, info: MediaUrlInfo): void {
@@ -1006,8 +1044,20 @@ export class FakeWhatsAppCloudApiPort implements WhatsAppCloudApiPort {
     this.shouldFailSendMessage = fail;
   }
 
+  setFailMarkAsRead(fail: boolean): void {
+    this.shouldFailMarkAsRead = fail;
+  }
+
   getSentMessages(): typeof this.sentMessages {
     return this.sentMessages;
+  }
+
+  getMarkedAsReadMessages(): typeof this.markedAsReadMessages {
+    return this.markedAsReadMessages;
+  }
+
+  getMarkedAsReadWithTypingMessages(): typeof this.markedAsReadWithTypingMessages {
+    return this.markedAsReadWithTypingMessages;
   }
 
   getMediaUrl(mediaId: string): Promise<Result<MediaUrlInfo, WhatsAppError>> {
@@ -1069,13 +1119,41 @@ export class FakeWhatsAppCloudApiPort implements WhatsAppCloudApiPort {
     return Promise.resolve(ok({ messageId }));
   }
 
+  markAsRead(phoneNumberId: string, messageId: string): Promise<Result<void, WhatsAppError>> {
+    if (this.shouldFailMarkAsRead) {
+      return Promise.resolve(
+        err({ code: 'INTERNAL_ERROR', message: 'Simulated markAsRead failure' })
+      );
+    }
+
+    this.markedAsReadMessages.push({ phoneNumberId, messageId });
+    return Promise.resolve(ok(undefined));
+  }
+
+  markAsReadWithTyping(
+    phoneNumberId: string,
+    messageId: string
+  ): Promise<Result<void, WhatsAppError>> {
+    if (this.shouldFailMarkAsRead) {
+      return Promise.resolve(
+        err({ code: 'INTERNAL_ERROR', message: 'Simulated markAsReadWithTyping failure' })
+      );
+    }
+
+    this.markedAsReadWithTypingMessages.push({ phoneNumberId, messageId });
+    return Promise.resolve(ok(undefined));
+  }
+
   clear(): void {
     this.mediaUrls.clear();
     this.mediaContent.clear();
     this.sentMessages = [];
+    this.markedAsReadMessages = [];
+    this.markedAsReadWithTypingMessages = [];
     this.shouldFailGetMediaUrl = false;
     this.shouldFailDownload = false;
     this.shouldFailSendMessage = false;
+    this.shouldFailMarkAsRead = false;
     this.messageIdCounter = 0;
   }
 }
@@ -1173,5 +1251,66 @@ export class FakeLinkPreviewFetcherPort implements LinkPreviewFetcherPort {
     this.previews.clear();
     this.shouldFail = false;
     this.failureError = { code: 'FETCH_FAILED', message: 'Simulated failure' };
+  }
+}
+
+/**
+ * Fake OutboundMessageRepository for testing.
+ */
+export class FakeOutboundMessageRepository implements OutboundMessageRepository {
+  private messages = new Map<string, OutboundMessage>();
+  private shouldFail = false;
+  private failureError: WhatsAppError = {
+    code: 'PERSISTENCE_ERROR',
+    message: 'Simulated failure',
+  };
+
+  /**
+   * Configure the fake to fail all requests.
+   */
+  setFail(fail: boolean, error?: WhatsAppError): void {
+    this.shouldFail = fail;
+    if (error !== undefined) {
+      this.failureError = error;
+    }
+  }
+
+  async save(message: OutboundMessage): Promise<Result<void, WhatsAppError>> {
+    if (this.shouldFail) {
+      return err(this.failureError);
+    }
+    this.messages.set(message.wamid, message);
+    return ok(undefined);
+  }
+
+  async findByWamid(wamid: string): Promise<Result<OutboundMessage | null, WhatsAppError>> {
+    if (this.shouldFail) {
+      return err(this.failureError);
+    }
+    return ok(this.messages.get(wamid) ?? null);
+  }
+
+  async deleteByWamid(wamid: string): Promise<Result<void, WhatsAppError>> {
+    if (this.shouldFail) {
+      return err(this.failureError);
+    }
+    this.messages.delete(wamid);
+    return ok(undefined);
+  }
+
+  /**
+   * Get all stored messages (for test assertions).
+   */
+  getMessages(): OutboundMessage[] {
+    return Array.from(this.messages.values());
+  }
+
+  /**
+   * Clear all stored messages.
+   */
+  clear(): void {
+    this.messages.clear();
+    this.shouldFail = false;
+    this.failureError = { code: 'PERSISTENCE_ERROR', message: 'Simulated failure' };
   }
 }

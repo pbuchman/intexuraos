@@ -52,6 +52,15 @@ describe('formatLlmError', () => {
       expect(result).toBe('Anthropic API rate limit reached');
     });
 
+    it('detects credit_balance error inside parsed JSON message', () => {
+      // This tests the branch at line 167-168: message.includes('credit_balance')
+      // The message itself contains credit_balance, triggering the inner check
+      const rawError =
+        '400 {"type":"error","error":{"type":"billing_error","message":"Your credit_balance is insufficient"}}';
+      const result = formatLlmError(rawError);
+      expect(result).toBe('Insufficient Anthropic API credits. Please add funds at console.anthropic.com');
+    });
+
     it('falls through when JSON has type:error but is not valid Anthropic error structure', () => {
       const rawError = '{"type":"error","error":"string not object"}';
       const result = formatLlmError(rawError);
@@ -300,6 +309,26 @@ describe('formatLlmError', () => {
   });
 
   describe('Generic errors', () => {
+    it('handles generic 429 rate limit errors', () => {
+      const result = formatLlmError('429 Too Many Requests');
+      expect(result).toBe('Rate limit exceeded. Please try again later.');
+    });
+
+    it('handles rate limit text in error message', () => {
+      const result = formatLlmError('Error: rate limit exceeded');
+      expect(result).toBe('Rate limit exceeded. Please try again later.');
+    });
+
+    it('handles quota exceeded generic error', () => {
+      const result = formatLlmError('quota exceeded for this request');
+      expect(result).toBe('Rate limit exceeded. Please try again later.');
+    });
+
+    it('prioritizes rate limit over API key when both patterns present', () => {
+      const result = formatLlmError('429 API rate limit exceeded');
+      expect(result).toBe('Rate limit exceeded. Please try again later.');
+    });
+
     it('handles API key errors', () => {
       const result = formatLlmError('invalid api_key provided');
       expect(result).toBe('The API key for this provider is invalid or expired');

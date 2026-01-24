@@ -1,6 +1,6 @@
 # Research Agent
 
-The AI-powered research orchestration engine that queries multiple LLM providers simultaneously and synthesizes comprehensive answers.
+The AI-powered research orchestration engine that queries multiple LLM providers simultaneously and synthesizes comprehensive answers with intelligent model selection.
 
 ## The Problem
 
@@ -10,26 +10,35 @@ Getting comprehensive information from AI models today is fragmented:
 2. **Manual aggregation** - Users must query multiple sources and combine results themselves
 3. **Missing attribution** - AI responses often lack source citations
 4. **Cost uncertainty** - Token usage and costs are unclear until after the fact
-5. **No sharing** - Research results can't be easily shared with others
+5. **No sharing** - Research results cannot be easily shared with others
+6. **Manual model selection** - Users must know which models to use for different topics
 
 ## How It Helps
 
 Research-agent automates multi-model AI research:
 
-1. **Parallel queries** - Sends your prompt to multiple LLMs simultaneously (Claude, GPT-4, Gemini, Perplexity)
+1. **Parallel queries** - Sends your prompt to multiple LLMs simultaneously (Claude, GPT, Gemini, Perplexity, GLM)
 2. **Smart synthesis** - Combines all responses into a comprehensive, attributed summary
 3. **Cost tracking** - Shows token usage and cost for each model in real-time
 4. **Public sharing** - Generates shareable URLs with AI-generated cover images
 5. **Context enhancement** - Add your own articles, notes, or previous research as context
+6. **Intelligent model selection** - LLM-powered extraction of model preferences from natural language (v2.0.0)
 
 ## Use Cases
 
 ### Multi-Model Research
 
 - "What are the latest developments in quantum computing?"
-- Research-agent queries Claude, GPT-4, Gemini, and Perplexity in parallel
+- Research-agent queries Claude, GPT, Gemini, and Perplexity in parallel
 - Each model provides its unique perspective and sources
 - Results are synthesized into a comprehensive answer
+
+### Natural Language Model Selection (v2.0.0)
+
+- "Use Claude and Gemini to research sustainable energy" automatically selects those models
+- "Research quantum computing with deep research models" selects deep research variants
+- Model preferences are extracted from natural language using LLM-based inference
+- Users no longer need to manually configure models for every research
 
 ### Enhanced Research with Context
 
@@ -61,9 +70,35 @@ Research-agent automates multi-model AI research:
 
 **Idempotent processing** - Safe retry of failed LLM calls without duplication
 
-**Smart failure handling** - Partial failures don't block completion; users decide how to proceed
+**Smart failure handling** - Partial failures do not block completion; users decide how to proceed
 
 **Public sharing** - Share research results with clean, attributed URLs
+
+**Type-safe validation** - Zod schema validation for all LLM responses ensures data integrity (v2.0.0)
+
+**Self-healing responses** - Parser + repair pattern automatically fixes malformed LLM JSON (v2.0.0)
+
+## Recent Changes (v2.0.0)
+
+### INT-178: LLM Model Selection
+
+- Natural language model preferences extraction during draft creation
+- Users can specify models in conversational form ("use Claude and Gemini")
+- Automatic filtering based on user's configured API keys
+- One model per provider constraint enforced automatically
+
+### INT-86: Zod Schema Migration
+
+- Context inference guards migrated from manual type guards to Zod schemas
+- ResearchContext and SynthesisContext validated with type-safe schemas
+- Parser + repair pattern for resilient LLM response handling
+- Detailed error messages for validation failures
+
+### INT-167: Test Coverage Improvements
+
+- Comprehensive test coverage for extractModelPreferences use case
+- ContextInferenceAdapter tests with repair scenarios
+- Route-level integration tests for model extraction flow
 
 ## Limitations
 
@@ -77,6 +112,8 @@ Research-agent automates multi-model AI research:
 
 **Perplexity special handling** - Perplexity requires online search and has longer response times
 
-**Zai API limitations** - Zai (formerly智谱) has specific rate limits and model availability
+**Zai API limitations** - Zai (GLM-4.7) has specific rate limits and regional availability
 
 **No editing** - Once research is completed, it cannot be edited (only enhanced or deleted)
+
+**One model per provider** - Model selection enforces maximum one model from each provider

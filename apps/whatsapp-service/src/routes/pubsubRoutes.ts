@@ -201,7 +201,7 @@ export function createPubsubRoutes(config: Config): FastifyPluginCallback {
           'Found phone number for user'
         );
 
-        const { messageSender } = getServices();
+        const { messageSender, outboundMessageRepository } = getServices();
         const result = await messageSender.sendTextMessage(phoneNumber, eventData.message);
 
         if (!result.ok) {
@@ -218,14 +218,48 @@ export function createPubsubRoutes(config: Config): FastifyPluginCallback {
           return { error: result.error.message };
         }
 
+        const { wamid } = result.value;
+
         request.log.info(
           {
             messageId: body.message.messageId,
+            wamid,
             userId: eventData.userId,
             correlationId: eventData.correlationId,
           },
           'Successfully sent WhatsApp message'
         );
+
+        // Store outbound message for reply correlation (best-effort, don't fail on error)
+        const now = new Date();
+        const TTL_DAYS = 7;
+        const expiresAt = Math.floor(
+          (now.getTime() + TTL_DAYS * 24 * 60 * 60 * 1000) / 1000
+        );
+
+        const saveResult = await outboundMessageRepository.save({
+          wamid,
+          correlationId: eventData.correlationId,
+          userId: eventData.userId,
+          sentAt: now.toISOString(),
+          expiresAt,
+        });
+
+        if (!saveResult.ok) {
+          request.log.warn(
+            {
+              wamid,
+              correlationId: eventData.correlationId,
+              error: saveResult.error.message,
+            },
+            'Failed to save outbound message for reply correlation (non-fatal)'
+          );
+        } else {
+          request.log.info(
+            { wamid, correlationId: eventData.correlationId },
+            'Saved outbound message for reply correlation'
+          );
+        }
 
         return { success: true };
       }

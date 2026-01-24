@@ -176,9 +176,6 @@ export function createProcessCommandUseCase(deps: {
         if (input.summary !== undefined) {
           eventPayload.summary = input.summary;
         }
-        if (classification.selectedModels !== undefined) {
-          eventPayload.selectedModels = classification.selectedModels;
-        }
 
         const event: ActionCreatedEvent = {
           type: 'action.created',

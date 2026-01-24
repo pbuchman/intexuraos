@@ -43,7 +43,7 @@ You've generated an optimized prompt for image generation. The LLM has transform
 
 ## Part 2: Generate an Image
 
-Create an actual image using DALL-E 3 or Imagen 3.
+Create an actual image using GPT Image 1 or Gemini Flash Image.
 
 ### Step 1: Generate with OpenAI
 
@@ -198,13 +198,13 @@ curl -X DELETE https://image-service.intexuraos.com/internal/images/img_xyz789 \
 ### Easy
 
 1. Generate a prompt from simple text
-2. Generate a 1:1 square image with DALL-E 3
+2. Generate a 1:1 square image with GPT Image 1
 3. Delete a generated image
 
 ### Medium
 
 1. Generate a prompt then use it to create an image
-2. Compare results between OpenAI and Google Imagen
+2. Compare results between GPT Image 1 and Gemini Flash Image
 3. Implement retry logic for rate-limited requests
 
 ### Hard

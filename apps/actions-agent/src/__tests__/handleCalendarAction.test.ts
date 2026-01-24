@@ -3,7 +3,11 @@ import { isOk, isErr } from '@intexuraos/common-core';
 import { createHandleCalendarActionUseCase } from '../domain/usecases/handleCalendarAction.js';
 import { registerActionHandler } from '../domain/usecases/createIdempotentActionHandler.js';
 import type { ActionCreatedEvent } from '../domain/models/actionEvent.js';
-import { FakeActionRepository, FakeWhatsAppSendPublisher } from './fakes.js';
+import {
+  FakeActionRepository,
+  FakeWhatsAppSendPublisher,
+  FakeCalendarPreviewPublisher,
+} from './fakes.js';
 import pino from 'pino';
 
 const silentLogger = pino({ level: 'silent' });
@@ -11,6 +15,7 @@ const silentLogger = pino({ level: 'silent' });
 describe('handleCalendarAction usecase', () => {
   let fakeActionRepository: FakeActionRepository;
   let fakeWhatsappPublisher: FakeWhatsAppSendPublisher;
+  let fakeCalendarPreviewPublisher: FakeCalendarPreviewPublisher;
 
   const createEvent = (overrides: Partial<ActionCreatedEvent> = {}): ActionCreatedEvent => ({
     type: 'action.created',
@@ -54,6 +59,7 @@ describe('handleCalendarAction usecase', () => {
   beforeEach(() => {
     fakeActionRepository = new FakeActionRepository();
     fakeWhatsappPublisher = new FakeWhatsAppSendPublisher();
+    fakeCalendarPreviewPublisher = new FakeCalendarPreviewPublisher();
   });
 
   it('sets action to awaiting_approval and publishes WhatsApp notification', async () => {
@@ -62,6 +68,7 @@ describe('handleCalendarAction usecase', () => {
     const usecase = registerActionHandler(createHandleCalendarActionUseCase, {
       actionRepository: fakeActionRepository,
       whatsappPublisher: fakeWhatsappPublisher,
+      calendarPreviewPublisher: fakeCalendarPreviewPublisher,
       webAppUrl: 'https://app.intexuraos.com',
       logger: silentLogger,
     });
@@ -82,6 +89,41 @@ describe('handleCalendarAction usecase', () => {
     expect(messages[0]?.userId).toBe('user-456');
     expect(messages[0]?.message).toContain('New calendar event ready for approval');
     expect(messages[0]?.message).toContain('https://app.intexuraos.com/#/inbox?action=action-123');
+
+    // Verify preview generation was triggered
+    const previewRequests = fakeCalendarPreviewPublisher.getPublishedRequests();
+    expect(previewRequests).toHaveLength(1);
+    expect(previewRequests[0]?.actionId).toBe('action-123');
+    expect(previewRequests[0]?.userId).toBe('user-456');
+    expect(previewRequests[0]?.text).toBe('Schedule team standup for tomorrow at 10am');
+  });
+
+  it('succeeds even when preview generation fails (non-fatal)', async () => {
+    await fakeActionRepository.save(createAction());
+
+    fakeCalendarPreviewPublisher.setFailNext(true, {
+      code: 'PUBLISH_FAILED',
+      message: 'Preview generation unavailable',
+    });
+
+    const usecase = registerActionHandler(createHandleCalendarActionUseCase, {
+      actionRepository: fakeActionRepository,
+      whatsappPublisher: fakeWhatsappPublisher,
+      calendarPreviewPublisher: fakeCalendarPreviewPublisher,
+      webAppUrl: 'https://app.intexuraos.com',
+      logger: silentLogger,
+    });
+
+    const event = createEvent();
+    const result = await usecase.execute(event);
+
+    expect(isOk(result)).toBe(true);
+    if (isOk(result)) {
+      expect(result.value.actionId).toBe('action-123');
+    }
+
+    const action = await fakeActionRepository.getById('action-123');
+    expect(action?.status).toBe('awaiting_approval');
   });
 
   it('fails when marking action as awaiting_approval fails', async () => {
@@ -92,6 +134,7 @@ describe('handleCalendarAction usecase', () => {
     const usecase = registerActionHandler(createHandleCalendarActionUseCase, {
       actionRepository: fakeActionRepository,
       whatsappPublisher: fakeWhatsappPublisher,
+      calendarPreviewPublisher: fakeCalendarPreviewPublisher,
       webAppUrl: 'https://app.intexuraos.com',
       logger: silentLogger,
     });
@@ -111,6 +154,7 @@ describe('handleCalendarAction usecase', () => {
     const usecase = registerActionHandler(createHandleCalendarActionUseCase, {
       actionRepository: fakeActionRepository,
       whatsappPublisher: fakeWhatsappPublisher,
+      calendarPreviewPublisher: fakeCalendarPreviewPublisher,
       webAppUrl: 'https://app.intexuraos.com',
       logger: silentLogger,
     });
@@ -136,6 +180,7 @@ describe('handleCalendarAction usecase', () => {
     const usecase = registerActionHandler(createHandleCalendarActionUseCase, {
       actionRepository: fakeActionRepository,
       whatsappPublisher: fakeWhatsappPublisher,
+      calendarPreviewPublisher: fakeCalendarPreviewPublisher,
       webAppUrl: 'https://app.intexuraos.com',
       logger: silentLogger,
     });
@@ -160,6 +205,7 @@ describe('handleCalendarAction usecase', () => {
     const usecase = registerActionHandler(createHandleCalendarActionUseCase, {
       actionRepository: fakeActionRepository,
       whatsappPublisher: fakeWhatsappPublisher,
+      calendarPreviewPublisher: fakeCalendarPreviewPublisher,
       webAppUrl: 'https://app.intexuraos.com',
       logger: silentLogger,
     });
@@ -184,6 +230,7 @@ describe('handleCalendarAction usecase', () => {
     const usecase = registerActionHandler(createHandleCalendarActionUseCase, {
       actionRepository: fakeActionRepository,
       whatsappPublisher: fakeWhatsappPublisher,
+      calendarPreviewPublisher: fakeCalendarPreviewPublisher,
       webAppUrl: 'https://app.intexuraos.com',
       logger: silentLogger,
     });

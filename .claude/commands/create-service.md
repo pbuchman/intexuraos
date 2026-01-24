@@ -482,7 +482,7 @@ steps:
 
 options:
   logging: CLOUD_LOGGING_ONLY
-  machineType: E2_HIGHCPU_8
+  machineType: E2_MEDIUM
 
 timeout: '600s'
 ```
@@ -573,6 +573,7 @@ gcloud run deploy "$CLOUD_RUN_SERVICE" \
   --image="$image" \
   --region="$REGION" \
   --platform=managed \
+  --cpu-throttling \
   --quiet
 
 log "Deployment complete for ${SERVICE}"
@@ -582,6 +583,7 @@ log "Deployment complete for ${SERVICE}"
 
 - **Service existence check:** Prevents creating misconfigured services if Terraform hasn't run
 - **No `--allow-unauthenticated` flag:** Auth settings are managed by Terraform, not deployment scripts
+- **`--cpu-throttling` flag:** Ensures request-based billing (cpu_idle=true), preventing instance-based billing charges
 - **Fail-fast:** Exits immediately with clear error if service doesn't exist
 
 **WRONG PATTERN (DO NOT USE):**
@@ -589,6 +591,7 @@ log "Deployment complete for ${SERVICE}"
 ```bash
 # ❌ Missing service existence check
 # ❌ Sets --allow-unauthenticated (should be Terraform-managed)
+# ❌ Missing --cpu-throttling (causes instance-based billing)
 gcloud run deploy "$CLOUD_RUN_SERVICE" \
   --image="$image" \
   --region="$REGION" \

@@ -1,5 +1,4 @@
 import type { CommandType, CommandSourceType } from '../models/command.js';
-import type { ResearchModel } from '@intexuraos/llm-contract';
 import type { LlmGenerateClient } from '@intexuraos/llm-factory';
 
 export interface ClassificationResult {
@@ -7,7 +6,6 @@ export interface ClassificationResult {
   confidence: number;
   title: string;
   reasoning: string;
-  selectedModels?: ResearchModel[];
 }
 
 export interface ClassifyOptions {

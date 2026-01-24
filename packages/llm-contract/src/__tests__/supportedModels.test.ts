@@ -15,8 +15,8 @@ import {
 
 describe('supportedModels', () => {
   describe('ALL_LLM_MODELS', () => {
-    it('contains all 15 expected models', () => {
-      expect(ALL_LLM_MODELS).toHaveLength(15);
+    it('contains all 16 expected models', () => {
+      expect(ALL_LLM_MODELS).toHaveLength(16);
     });
 
     it('contains all Google models', () => {
@@ -47,6 +47,7 @@ describe('supportedModels', () => {
 
     it('contains all Zai models', () => {
       expect(ALL_LLM_MODELS).toContain('glm-4.7');
+      expect(ALL_LLM_MODELS).toContain('glm-4.7-flash');
     });
   });
 
@@ -87,6 +88,7 @@ describe('supportedModels', () => {
 
     it('maps Zai models correctly', () => {
       expect(MODEL_PROVIDER_MAP['glm-4.7']).toBe('zai');
+      expect(MODEL_PROVIDER_MAP['glm-4.7-flash']).toBe('zai');
     });
   });
 
@@ -98,6 +100,7 @@ describe('supportedModels', () => {
       expect(LlmModels.ClaudeOpus45).toBe('claude-opus-4-5-20251101');
       expect(LlmModels.SonarPro).toBe('sonar-pro');
       expect(LlmModels.Glm47).toBe('glm-4.7');
+      expect(LlmModels.Glm47Flash).toBe('glm-4.7-flash');
     });
   });
 
@@ -118,6 +121,7 @@ describe('supportedModels', () => {
       expect(getProviderForModel('gpt-5.2')).toBe('openai');
       expect(getProviderForModel('sonar-pro')).toBe('perplexity');
       expect(getProviderForModel('glm-4.7')).toBe('zai');
+      expect(getProviderForModel('glm-4.7-flash')).toBe('zai');
     });
   });
 
@@ -129,6 +133,7 @@ describe('supportedModels', () => {
       expect(isValidModel('sonar-pro')).toBe(true);
       expect(isValidModel('gpt-image-1')).toBe(true);
       expect(isValidModel('glm-4.7')).toBe(true);
+      expect(isValidModel('glm-4.7-flash')).toBe(true);
     });
 
     it('returns false for invalid models', () => {
@@ -161,6 +166,12 @@ describe('supportedModels', () => {
       const fastModel: FastModel = 'gemini-2.5-flash';
       const llmModel: LLMModel = fastModel;
       expect(llmModel).toBe('gemini-2.5-flash');
+    });
+
+    it('allows Glm47Flash as FastModel', () => {
+      const fastModel: FastModel = 'glm-4.7-flash';
+      const llmModel: LLMModel = fastModel;
+      expect(llmModel).toBe('glm-4.7-flash');
     });
   });
 });

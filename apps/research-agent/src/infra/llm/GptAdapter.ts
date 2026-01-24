@@ -6,7 +6,7 @@
 import { createGptClient, type GptClient } from '@intexuraos/infra-gpt';
 import type { Logger, Result } from '@intexuraos/common-core';
 import type { ModelPricing } from '@intexuraos/llm-contract';
-import { buildSynthesisPrompt, titlePrompt, type SynthesisContext } from '@intexuraos/llm-common';
+import { buildSynthesisPrompt, titlePrompt, type SynthesisContext } from '@intexuraos/llm-prompts';
 import type {
   LlmError,
   LlmResearchProvider,

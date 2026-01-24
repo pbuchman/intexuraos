@@ -1,17 +1,158 @@
 # IntexuraOS Changelog
 
-**Current Version:** 1.0.0
+**Current Version:** 2.0.0
 
 This changelog provides a comprehensive record of IntexuraOS development.
 
 **Version Coverage:**
 
-- This changelog includes all changes from initial commit (December 28, 2025) through version 1.0.0 (January 19, 2026)
-- Total commits analyzed: 1,021
+- This changelog includes all changes from initial commit (December 28, 2025) through version 2.0.0 (January 24, 2026)
+- Total commits analyzed: 1,309
 - Total files: 8,500+
 - Services/Apps: 18
-- Shared packages: 18
+- Shared packages: 21
 - Test files: 1,000+
+
+---
+
+## 2026-01-24
+
+### Breaking Changes
+
+**LLM Package Restructuring (INT-228, INT-229, INT-241, INT-242)**
+
+- Deleted `packages/llm-common/` package entirely (130+ files removed)
+- Migrated to three specialized packages with clear separation of concerns:
+  - `packages/llm-factory/` - Provider creation and configuration
+  - `packages/llm-prompts/` - All prompt templates and builders
+  - `packages/llm-utils/` - Shared utilities (validation, redaction, context guards)
+- Updated all 18 consuming services with new import paths
+- Fixed package exports to use source files for proper TypeScript type resolution
+- **Migration impact:** Any external code importing from `@intexuraos/llm-common` must update imports to the new packages
+
+### Added
+
+**WhatsApp Approval Enhancements (INT-161, INT-203)**
+
+- Users can now respond to approval requests via WhatsApp text replies with LLM-based intent classification (approve/reject/unclear)
+- WhatsApp reactions support: 👍 for approve, 👎 for reject on approval notification messages
+- OutboundMessage tracking to correlate replies with original approval messages
+
+**Calendar Preview Generation (INT-189)**
+
+- Preview generation for calendar events before approval
+- Users can see exactly what will be created (title, time, duration, all-day detection)
+- New `/internal/calendar/generate-preview` and `/internal/calendar/preview/:actionId` endpoints
+
+**GLM-4.7-Flash Support (INT-187)**
+
+- Added GLM-4.7-Flash as a free Zai AI model for cost savings and fallback
+- 200K context window, 128K max output tokens
+- Available for research, synthesis, and validation tasks
+
+**LLM Model Selection in Research (INT-178)**
+
+- Users can specify LLM models in WhatsApp messages (e.g., "research AI using gemini and claude")
+- LLM-based model extraction replacing keyword-based approach
+- Support for exclusions ("all models except perplexity") and synthesis model selection
+
+**WhatsApp Bookmark Summary Delivery (INT-210)**
+
+- AI-generated bookmark summaries automatically delivered via WhatsApp
+- Decoupled architecture using existing `SendMessageEvent` pattern
+- Summaries written in the same language as the source content
+
+**Claude Code Skills**
+
+- `/linear` skill with auto-splitting for complex multi-step tasks (INT-209)
+- `/sentry` skill for error triage, investigation, and cross-linking
+- `/document-service` skill unifying service documentation (INT-214)
+- Parent-child issue structure with tier-based dependencies
+
+**Linear Board Redesign (INT-208)**
+
+- New 3-column layout: Planning (Todo + Backlog) → In Progress (In Progress → In Review → To Test) → Recently Closed
+- Added Todo and To Test categories with color-coded sections
+- Mobile view enhanced with 7 granular tabs
+
+**Zod Schema Migration (INT-86)**
+
+- Migrated context inference guards from manual type guards to Zod schemas
+- Field-level validation errors for LLM response debugging
+- Parser + repair pattern for automatic response correction
+
+### Changed
+
+**Linear Command Adjustments (INT-206, INT-207)**
+
+- Random selection now picks from Todo state only (not Backlog)
+- After PR approval, issues transition to Q&A QA state instead of Done
+- Issues only move to Done when explicitly requested
+
+**WhatsApp Voice Transcription UI (INT-205)**
+
+- Replaced spinner with WhatsApp-style typing indicator (three bouncing dots)
+- Simplified status text from "Transcription in progress..." to "Transcribing..."
+
+**Command Classification Accuracy (INT-177)**
+
+- URL keywords are now isolated and ignored for classification
+- Explicit intent detection takes priority (e.g., "save bookmark" overrides URL keywords)
+- Added Polish language support for command phrases
+
+**AI Summary Fix (INT-213)**
+
+- Separated Crawl4AI crawling from LLM summarization
+- Uses user's own LLM for prose summaries instead of Crawl4AI's extraction
+- Language preservation in summaries
+
+**@zaiclaude Trigger (INT-179)**
+
+- Changed Z.ai GitHub workflow trigger from `@zai-claude` to `@zaiclaude`
+
+### Fixed
+
+**Race Condition in Approval Replies (INT-211)**
+
+- Fixed concurrent approval replies both passing status check before update
+- Implemented atomic check-and-update using Firestore transactions
+
+**Duplicate Actions from Approval Replies (INT-201)**
+
+- Approval replies no longer create duplicate actions via commands-agent
+- Skip command.ingest when actionId is extracted from approval correlationId
+
+**Calendar Preview Cleanup (INT-200)**
+
+- Calendar preview documents now deleted after successful event creation
+- Non-blocking cleanup with warning logs on failure
+
+**OpenGraph Link Preview Errors (INT-191)**
+
+- Added browser-like headers to improve website compatibility
+- New `ACCESS_DENIED` error code for HTTP 403 responses
+- Clearer error messages for blocked requests
+
+**Rate Limit Error Messages (INT-199)**
+
+- Fixed misleading "API key invalid/expired" error for 429 rate limit responses
+- Rate limit detection now takes precedence over API key pattern matching
+
+**Approval Event Publishing (INT-202, INT-212)**
+
+- Publish `action.created` event after WhatsApp approval
+- Only publish approval reply events when actionId is found
+
+### Technical
+
+- Migrated from `@zai-claude` to `@zaiclaude` trigger in GitHub workflows
+- Added `--cpu-throttling` option to prevent billing drift (INT-194)
+- Applied E2_MEDIUM machine type project-wide for Cloud Build (INT-243)
+- Test coverage improvements across 12 services (INT-153, INT-155, INT-166, INT-167, INT-168, INT-169, INT-170, INT-171, INT-172, INT-173)
+- Mobile-only icons for research view buttons
+- Processing status added to default inbox filters
+- Redirect to home page after logout (INT-176)
+- Strip markdown headers from transcription summaries
 
 ---
 
@@ -71,7 +212,7 @@ This changelog provides a comprehensive record of IntexuraOS development.
 **LLM Package Restructure**
 
 - Reorganized llm-common into domain directories (shared/, research/, synthesis/)
-- Migrated tests to co-located __tests__ directories
+- Migrated tests to co-located **tests** directories
 
 **ActionItem UX**
 

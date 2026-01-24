@@ -11,7 +11,7 @@ import {
   titlePrompt,
   labelPrompt,
   type SynthesisContext,
-} from '@intexuraos/llm-common';
+} from '@intexuraos/llm-prompts';
 import type {
   LlmError,
   LlmResearchProvider,

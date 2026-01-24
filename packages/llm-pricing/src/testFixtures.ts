@@ -78,6 +78,8 @@ export class FakePricingContext implements IPricingContext {
       LlmModels.Sonar,
       LlmModels.SonarPro,
       LlmModels.SonarDeepResearch,
+      LlmModels.Glm47,
+      LlmModels.Glm47Flash,
     ];
   }
 }

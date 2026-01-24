@@ -83,7 +83,7 @@ function sanitizeHeaders(
 
 ---
 
-## `packages/llm-common/src/attribution.ts`
+## `packages/llm-prompts/src/research/attribution.ts`
 
 ### Lines 140, 147: `return title !== undefined ? { level: N, title } : null`
 
@@ -163,7 +163,7 @@ for (let i = endLine; i >= startLine; i--) {
 
 ---
 
-## `packages/llm-common/src/dataInsights/parseInsightResponse.ts`
+## `packages/llm-prompts/src/dataInsights/parseInsightResponse.ts`
 
 ### Line 28: `if (content === undefined)`
 
@@ -1101,31 +1101,31 @@ if (typeof value !== 'string') { return fallback; }
 
 ## Summary
 
-| File                                                           | Unreachable Branches | Root Cause                                                                 |
-| -------------------------------------------------------------- | -------------------- | -------------------------------------------------------------------------- |
-| `infra-perplexity/src/client.ts`                               | 1                    | setTimeout callback (network timeout)                                      |
-| `infra-sentry/src/fastify.ts`                                  | 1                    | Fastify header normalization (arrays converted to strings)                |
-| `llm-common/src/attribution.ts`                                | 6                    | TypeScript noUncheckedIndexedAccess + regex guarantees                    |
-| `llm-common/src/dataInsights/parseInsightResponse.ts`          | 9                    | TypeScript noUncheckedIndexedAccess + regex guarantees + prior validation |
-| `linear-agent/src/infra/linear/linearApiClient.ts`             | 65                   | ES module mocking limitations with @linear/sdk                            |
-| `research-agent/src/routes/researchRoutes.ts`                  | 26                   | JWT claim extraction + inline logger callbacks + defensive error handling |
-| `research-agent/src/routes/internalRoutes.ts`                  | 17                   | PubSub event type extraction + optional deps + inline logger callbacks    |
-| `research-agent/src/routes/helpers/completionHandlers.ts`      | 4                    | Inline logger callbacks (warn/debug)                                      |
-| `research-agent/src/domain/research/usecases/runSynthesis.ts`  | 6                    | Optional dependency spreads + context result fallbacks                    |
-| `research-agent/src/infra/research/FirestoreResearchRepository.ts` | 5                | Optional Firestore field checks + legacy data compatibility               |
-| `research-agent/src/domain/research/formatLlmError.ts`         | 4                    | Regex capture groups (noUncheckedIndexedAccess)                           |
-| `user-service/src/domain/settings/formatLlmError.ts`           | 5                    | Regex capture groups + credit balance double-check                        |
-| `whatsapp-service/src/infra/speechmatics/adapter.ts`           | 11                   | Error context extraction for debugging (SDK returns specific formats)     |
-| `whatsapp-service/src/routes/webhookRoutes.ts`                 | 6                    | Optional message properties + audio transcription fields                  |
-| `calendar-agent/src/infra/google/googleCalendarClient.ts`      | 7                    | Google API nullable field handling + fallback defaults                    |
-| `todos-agent/src/routes/todoRoutes.ts`                         | 7                    | Authentication null checks (tests always authenticated)                   |
-| `promptvault-service/src/infra/notion/promptApi.ts`            | 5                    | Notion API nested optional structures + sync state checks                 |
-| HTTP Service Clients (14 files)                                | 24                   | Error response fallbacks (`?? 'Unknown error'`)                           |
-| Firestore Repositories (12 files)                              | 13                   | Optional field checks for schema flexibility                              |
-| Use Case Error Handling (12 files)                             | 24                   | Error type spreads and fallbacks                                          |
-| LLM/AI Service Adapters (5 files)                              | 8                    | Optional token/cost fields                                                |
-| Route Handlers (12 files)                                      | 17                   | Optional query parameters                                                 |
-| Utility Functions (7 files)                                    | 10                   | Defensive type checks                                                     |
+| File                                                               | Unreachable Branches | Root Cause                                                                 |
+| ------------------------------------------------------------------  | --------------------  | --------------------------------------------------------------------------  |
+| `infra-perplexity/src/client.ts`                                   | 1                    | setTimeout callback (network timeout)                                      |
+| `infra-sentry/src/fastify.ts`                                      | 1                    | Fastify header normalization (arrays converted to strings)                 |
+| `llm-prompts/src/research/attribution.ts`                          | 6                    | TypeScript noUncheckedIndexedAccess + regex guarantees                     |
+| `llm-prompts/src/dataInsights/parseInsightResponse.ts`             | 9                    | TypeScript noUncheckedIndexedAccess + regex guarantees + prior validation  |
+| `linear-agent/src/infra/linear/linearApiClient.ts`                 | 65                   | ES module mocking limitations with @linear/sdk                             |
+| `research-agent/src/routes/researchRoutes.ts`                      | 26                   | JWT claim extraction + inline logger callbacks + defensive error handling  |
+| `research-agent/src/routes/internalRoutes.ts`                      | 17                   | PubSub event type extraction + optional deps + inline logger callbacks     |
+| `research-agent/src/routes/helpers/completionHandlers.ts`          | 4                    | Inline logger callbacks (warn/debug)                                       |
+| `research-agent/src/domain/research/usecases/runSynthesis.ts`      | 6                    | Optional dependency spreads + context result fallbacks                     |
+| `research-agent/src/infra/research/FirestoreResearchRepository.ts` | 5                    | Optional Firestore field checks + legacy data compatibility                |
+| `research-agent/src/domain/research/formatLlmError.ts`             | 4                    | Regex capture groups (noUncheckedIndexedAccess)                            |
+| `user-service/src/domain/settings/formatLlmError.ts`               | 5                    | Regex capture groups + credit balance double-check                         |
+| `whatsapp-service/src/infra/speechmatics/adapter.ts`               | 11                   | Error context extraction for debugging (SDK returns specific formats)      |
+| `whatsapp-service/src/routes/webhookRoutes.ts`                     | 6                    | Optional message properties + audio transcription fields                   |
+| `calendar-agent/src/infra/google/googleCalendarClient.ts`          | 7                    | Google API nullable field handling + fallback defaults                     |
+| `todos-agent/src/routes/todoRoutes.ts`                             | 7                    | Authentication null checks (tests always authenticated)                    |
+| `promptvault-service/src/infra/notion/promptApi.ts`                | 5                    | Notion API nested optional structures + sync state checks                  |
+| HTTP Service Clients (14 files)                                    | 24                   | Error response fallbacks (`?? 'Unknown error'`)                            |
+| Firestore Repositories (12 files)                                  | 13                   | Optional field checks for schema flexibility                               |
+| Use Case Error Handling (12 files)                                 | 24                   | Error type spreads and fallbacks                                           |
+| LLM/AI Service Adapters (5 files)                                  | 8                    | Optional token/cost fields                                                 |
+| Route Handlers (12 files)                                          | 17                   | Optional query parameters                                                  |
+| Utility Functions (7 files)                                        | 10                   | Defensive type checks                                                      |
 
 **Total Exempted Branches:** 284
 

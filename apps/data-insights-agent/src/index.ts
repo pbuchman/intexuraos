@@ -36,7 +36,7 @@ initSentry({
 });
 
 /** Models used by this service */
-const REQUIRED_MODELS: LLMModel[] = [LlmModels.Gemini25Flash, LlmModels.Glm47];
+const REQUIRED_MODELS: LLMModel[] = [LlmModels.Gemini25Flash, LlmModels.Glm47, LlmModels.Glm47Flash];
 
 async function main(): Promise<void> {
   const config = loadConfig();

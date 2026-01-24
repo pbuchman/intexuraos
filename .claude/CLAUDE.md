@@ -10,6 +10,66 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ---
 
+## User Control (MANDATORY)
+
+**RULE: The user controls, Claude executes. Never assume permission to act.**
+
+### Questions Get Answers, Not Implementations
+
+When the user asks a question, they want an **answer** — not code changes, not implementations, not "let me fix that for you."
+
+| User Says                        | User Wants         | Claude Does                          |
+| -------------------------------- | ------------------ | ------------------------------------ |
+| "What went wrong?"               | Analysis           | Explain the issue, wait for decision |
+| "What can be improved?"          | Suggestions        | List options, wait for selection     |
+| "Look at X — what do you think?" | Opinion/assessment | Provide assessment, wait             |
+| "Why did this fail?"             | Diagnosis          | Diagnose, wait for next instruction  |
+| "Implement X" / "Fix X" / "Do X" | Action             | Execute the task                     |
+
+### Forbidden Auto-Actions
+
+**NEVER** do the following without explicit instruction:
+
+- Start implementing after analyzing (ask first: "Should I implement this?")
+- Create branches or commits after reviewing
+- Fix issues discovered during investigation
+- "While I'm here, let me also..."
+- Assume a plan approval means "start coding now"
+
+### The Checkpoint Pattern
+
+After completing any analysis, investigation, or review phase:
+
+```
+1. Present findings
+2. STOP
+3. Wait for explicit instruction: "proceed", "implement", "fix it", etc.
+```
+
+**Exception:** Only proceed automatically if the user said "analyze AND fix" or similar compound instruction upfront.
+
+### Practical Examples
+
+```
+❌ User: "What went wrong with INT-218?"
+   Claude: "The issue is X. Let me fix it..." [starts coding]
+
+✅ User: "What went wrong with INT-218?"
+   Claude: "The issue is X because Y. Here are options: A, B, C."
+   User: "Do option B"
+   Claude: [now implements option B]
+```
+
+```
+❌ User: "Review this code"
+   Claude: "Found 3 issues. Fixing them now..." [edits files]
+
+✅ User: "Review this code"
+   Claude: "Found 3 issues: [list]. Should I fix them?"
+```
+
+---
+
 ## Ownership Mindset (MANDATORY)
 
 _Inspired by "Extreme Ownership" by Jocko Willink and Leif Babin_
@@ -88,153 +148,198 @@ If you're unsure whether something is your responsibility, ASK — but phrase th
 
 ---
 
+## CI Failure Protocol (MANDATORY)
+
+**RULE:** When `pnpm run ci:tracked` fails, follow this protocol. No rationalizing.
+
+### Step 1: Capture and Categorize
+
+```bash
+pnpm run ci:tracked 2>&1 | tee /tmp/ci-output.txt
+grep -E "(error|Error|ERROR|FAIL)" /tmp/ci-output.txt
+```
+
+### Step 2: Fix or Ask (No Skipping)
+
+| Failure Location    | Action                                                                     |
+| ------------------- | -------------------------------------------------------------------------- |
+| Workspace I touched | Fix immediately                                                            |
+| OTHER workspace     | Fix immediately OR ask: "Found X errors in Y. Fix here or separate issue?" |
+| Flaky test          | Stabilize it                                                               |
+| Type error          | Fix it                                                                     |
+| Lint error          | Fix it                                                                     |
+
+### Forbidden Responses
+
+These responses are **NEVER acceptable** when CI fails:
+
+- ❌ "These errors are unrelated to my changes"
+- ❌ "The lint errors are in a different workspace"
+- ❌ "This was already broken before I started"
+- ❌ "I'll ignore these for now"
+- ❌ "Someone else should fix these"
+
+### Required Responses
+
+Always respond with ownership:
+
+- ✅ "CI failed with X errors. Fixing them now."
+- ✅ "CI failed with X errors in `<workspace>`. Should I fix here or create separate issue?"
+
+### The Anti-Pattern to Avoid
+
+```
+❌ WRONG: CI fails → "Not my code" → Skip → Claim done
+✅ RIGHT: CI fails → Own it → Fix or ask → Verify passes → Done
+```
+
+---
+
 ## Verification (MANDATORY)
 
 ### Step 1: Targeted Verification (per workspace)
-
-When modifying a specific app, first verify that workspace passes all checks:
 
 ```bash
 pnpm run verify:workspace:tracked -- <app-name>   # e.g. research-agent
 ```
 
-This runs (in order):
+Runs: TypeCheck (source + tests) → Lint → Tests + Coverage (95% threshold)
 
-1. TypeCheck (source) — workspace-specific
-2. TypeCheck (tests) — workspace-specific
-3. Lint — workspace-specific
-4. Tests + Coverage — 95% threshold per workspace
+### Step 2: Verify Packages Built (Safety Net)
 
-### Step 2: Full CI
+Before running CI, verify packages have `dist/` directories:
 
 ```bash
-pnpm run ci:tracked            # MUST pass before task completion (auto-tracks failures)
-tf fmt -check -recursive      # If terraform changed (from /terraform)
-tf validate                   # If terraform changed
+# Quick check - if this shows missing dist/, run pnpm build
+ls packages/*/dist/ >/dev/null 2>&1 || echo "WARNING: Some packages not built. Run 'pnpm build' first."
 ```
 
-Failure data is stored in `.claude/ci-failures/` for learning. Run `pnpm run ci:report` to see patterns.
+**If packages aren't built:** You'll see 50+ lint errors in apps that look like type errors but are actually missing dependencies.
 
-**IMPORTANT:** Use `tf` command instead of `terraform`. This alias clears emulator env vars that break Terraform:
+### Step 3: Full CI
 
 ```bash
-alias tf='STORAGE_EMULATOR_HOST= FIRESTORE_EMULATOR_HOST= PUBSUB_EMULATOR_HOST= terraform'
+pnpm run ci:tracked            # MUST pass before task completion
 ```
 
-Note: The alias may not be available in spawned subshells - if `tf` is not found, the user should run commands manually.
+### Step 4: Terraform Verification (ALWAYS CHECK)
+
+**RULE:** Never assume terraform didn't change. Always verify explicitly.
+
+```bash
+# 1. Check if terraform files changed (ALWAYS RUN THIS)
+git diff --name-only HEAD~1 | grep -E "^terraform/" && echo "TERRAFORM CHANGED" || echo "No terraform changes"
+
+# 2. IF terraform changed, run validation:
+tf fmt -check -recursive
+tf validate
+```
+
+**IMPORTANT:** Use `tf` alias instead of `terraform` — clears emulator env vars. See `.claude/reference/infrastructure.md`.
+
+### Step 5: Document Verification Result
+
+Always state the verification result explicitly:
+
+- ✅ "Verified: No terraform files changed"
+- ✅ "Terraform changed. Ran `tf fmt` and `tf validate` — both passed"
+
+**The Error Pattern to Avoid:**
+
+```
+❌ WRONG: Assume "probably didn't change" → Skip checks → Hope
+✅ RIGHT: Verify with git diff → Run checks if needed → Document result
+```
 
 **Do not claim complete until verification passes.**
 
 **NEVER modify `vitest.config.ts` coverage exclusions or thresholds. Write tests instead.**
 
-**ALWAYS commit `.claude/ci-failures/*` files with your changes.** These track verification failures for learning and pattern analysis.
+### CI Failure Tracking (MANDATORY)
 
-### Coverage Verification Efficiency (MANDATORY)
+**RULE:** ALWAYS commit `.claude/ci-failures/*` files with your changes.
 
-**RULE:** When verifying coverage, NEVER run tests repeatedly just to grep different patterns from the output.
+These files are auto-generated during `pnpm run ci:tracked` and record failure patterns for analysis. They enable the `/analyze-ci-failures` skill to identify recurring issues and improve documentation.
 
-**❌ WRONG — Re-runs tests multiple times (each run = minutes wasted):**
-
-```bash
-# Run 1: Initial CI check
-pnpm run ci:tracked
-
-# Run 2: Check error message
-pnpm run test:coverage 2>&1 | grep -E "(Coverage for|ERROR:|Branch coverage|% Coverage)"
-# → ERROR: Coverage for branches (94.93%) does not meet global threshold (95%)
-
-# Run 3: Find low-coverage files
-pnpm run test:coverage 2>&1 | grep -E "(\s+)(\d+\.?\d*)(\s+)(\d+\.?\d*)(\s+)(\d+\.?\d*)" | awk -v threshold=95 '{if ($5+0 < threshold) print $0}'
-
-# Run 4: Try another grep pattern...
-pnpm run test:coverage 2>&1 | grep -B2 "90\." | head -50
+```
+❌ WRONG: See .claude/ci-failures/ in git status → Ignore → Commit only "real" changes
+✅ RIGHT: See .claude/ci-failures/ in git status → Stage → Commit with your changes
 ```
 
-**✅ RIGHT — Capture once, analyze many times:**
+**Why this matters:** Without these files, CI failure patterns are invisible. We can't improve instructions for problems we can't measure.
+
+### Coverage Verification Efficiency
+
+**RULE:** Capture CI output once, analyze many times:
 
 ```bash
-# Run once, save output (2-3 minutes total)
 pnpm run ci:tracked 2>&1 | tee /tmp/ci-output.txt
-
-# Now analyze the saved output instantly (seconds)
-grep -E "(Coverage for|ERROR:|Branch coverage|% Coverage)" /tmp/ci-output.txt
-# → ERROR: Coverage for branches (94.93%) does not meet global threshold (95%)
-
-grep -E "(\s+)(\d+\.?\d*)(\s+)(\d+\.?\d*)(\s+)(\d+\.?\d*)" /tmp/ci-output.txt | awk -v threshold=95 '{if ($5+0 < threshold) print $0}'
-
-grep -B2 "90\." /tmp/ci-output.txt | head -50
+grep -E "(Coverage for|ERROR:)" /tmp/ci-output.txt
 ```
 
-**Why:** Each `test:coverage` run takes 2-5 minutes. Re-running 3-4 times just to grep different patterns wastes 10-15 minutes. `tee` saves output while displaying it—subsequent analysis is instantaneous.
+Never re-run tests just to grep different patterns — each run takes 2-5 minutes.
+
+### Verification Ownership
+
+**RULE:** ALL verification failures are YOUR responsibility, regardless of source.
+
+When `./scripts/verify-deployment.sh`, `pnpm run ci:tracked`, or any verification command fails:
+
+| Response                                            | Correct?     |
+| --------------------------------------------------- | ------------ |
+| "Terraform failed, but not related to my changes"   | ❌ FORBIDDEN |
+| "Tests failed in another workspace, not my problem" | ❌ FORBIDDEN |
+| "Terraform failed. Investigating and fixing."       | ✅ CORRECT   |
+| "Tests failed in X. Fix here or separate issue?"    | ✅ CORRECT   |
+
+**The discovery-ownership rule applies to ALL verification:** seeing a failure = owning the fix.
+
+This is NOT optional. The phrases "unrelated to my changes", "pre-existing", and "not my problem" are explicitly forbidden in the Ownership Mindset section — they apply equally to verification failures.
 
 ---
 
-## GCloud Authentication (MANDATORY)
+## Infrastructure (MANDATORY)
 
-**RULE:** NEVER claim "gcloud is not authenticated" or "unauthenticated to gcloud" without first verifying service account credentials.
+**Service account:** `$HOME/personal/gcloud-claude-code-dev.json`
 
-### Service Account Credentials
+**Full reference:** `.claude/reference/infrastructure.md` (GCloud auth, Terraform, Cloud Build, Pub/Sub)
 
-A service account key file is available at:
+**Quick commands:**
+
+- GCloud CLI: `gcloud auth activate-service-account --key-file=$HOME/personal/gcloud-claude-code-dev.json`
+- Terraform: Use `tf` alias (sets credentials + clears emulator vars)
+- New service image: `./scripts/push-missing-images.sh`
+
+### Terraform-Only Resource Creation
+
+**RULE: ALL persistent infrastructure MUST be created via Terraform. Direct CLI resource creation is FORBIDDEN.**
+
+The following commands are **STRICTLY FORBIDDEN**:
+
+| Command                          | What It Creates        | Use Terraform Instead                 |
+| -------------------------------- | ---------------------- | ------------------------------------- |
+| `gsutil mb`                      | GCS buckets            | `google_storage_bucket`               |
+| `gcloud pubsub topics create`    | Pub/Sub topics         | `google_pubsub_topic`                 |
+| `gcloud pubsub subscriptions`    | Pub/Sub subscriptions  | `google_pubsub_subscription`          |
+| `gcloud run deploy`              | Cloud Run services     | `google_cloud_run_service`            |
+| `gcloud secrets create`          | Secret Manager secrets | `google_secret_manager_secret`        |
+| `gcloud sql instances create`    | Cloud SQL instances    | `google_sql_database_instance`        |
+| `gcloud compute instances`       | Compute Engine VMs     | `google_compute_instance`             |
+| `gcloud iam service-accounts`    | Service accounts       | `google_service_account`              |
+| `gcloud projects add-iam-policy` | IAM bindings           | `google_*_iam_*`                      |
+
+**Why:** Terraform tracks state, enables reproducibility, version control, drift detection, and cost visibility. CLI commands create "orphan" resources invisible to IaC.
+
+**Correct pattern:**
 
 ```
-~/personal/gcloud-claude-code-dev.json
+❌ WRONG: Need a bucket → gsutil mb gs://my-bucket → Done
+✅ RIGHT: Need a bucket → Add to terraform/ → tf plan → tf apply → PR
 ```
 
-### Verification Before Claiming Auth Failure
+**Exception:** Truly ephemeral resources for debugging (temp files in existing buckets, inspect commands). Never new named resources.
 
-Before reporting any gcloud authentication issues, you MUST:
-
-1. **Check if credentials file exists:**
-
-   ```bash
-   ls -la ~/personal/gcloud-claude-code-dev.json
-   ```
-
-2. **Activate service account if needed:**
-
-   ```bash
-   gcloud auth activate-service-account --key-file=~/personal/gcloud-claude-code-dev.json
-   ```
-
-3. **Verify authentication:**
-
-   ```bash
-   gcloud auth list
-   ```
-
-### When to Use Service Account
-
-- Firestore queries for investigation
-- Any `gcloud` commands requiring project access
-- Accessing production/dev data for debugging
-- **Terraform operations** (plan, apply, destroy)
-
-**You are NEVER "unauthenticated" if the service account key file exists.** Activate it and proceed.
-
-### Terraform with Service Account
-
-**RULE:** Always use the service account for Terraform operations. Never rely on browser-based authentication.
-
-```bash
-# Set credentials and clear emulator env vars
-GOOGLE_APPLICATION_CREDENTIALS=/Users/p.buchman/personal/gcloud-claude-code-dev.json \
-STORAGE_EMULATOR_HOST= FIRESTORE_EMULATOR_HOST= PUBSUB_EMULATOR_HOST= \
-terraform plan
-
-# Apply changes
-GOOGLE_APPLICATION_CREDENTIALS=/Users/p.buchman/personal/gcloud-claude-code-dev.json \
-STORAGE_EMULATOR_HOST= FIRESTORE_EMULATOR_HOST= PUBSUB_EMULATOR_HOST= \
-terraform apply
-```
-
-**Why service account over browser auth:**
-
-- Browser OAuth tokens expire and require re-authentication
-- Service accounts provide consistent, scriptable access
-- No interactive prompts that break automation
-
-The service account `claude-code-dev@intexuraos-dev-pbuchman.iam.gserviceaccount.com` has full admin permissions for all Terraform-managed resources.
+**Recovery:** If orphan resources exist, import into Terraform or delete them.
 
 ---
 
@@ -261,139 +366,130 @@ docs/         → Documentation
 
 Pattern: `/internal/{resource-name}` with `X-Internal-Auth` header. Use `validateInternalAuth()` server-side.
 
-Docs: [docs/architecture/service-to-service-communication.md](../docs/architecture/service-to-service-communication.md)
-
 ### Route Naming Convention
 
 - **Public routes:** `/{resource-name}` (e.g., `/todos`, `/bookmarks/:id`)
-- **Internal routes:** `/internal/{resource-name}` (e.g., `/internal/todos`, `/internal/bookmarks/:id`)
+- **Internal routes:** `/internal/{resource-name}` (e.g., `/internal/todos`)
 - **HTTP methods:** Use `PATCH` for partial updates, `PUT` for full replacement
 
-Avoid redundant paths like `/internal/todos/todos` — use simple `/internal/todos`.
+### Key Rules
 
-### Endpoint Logging
+**RULE:** ALL endpoints (`/internal/*`, webhooks, Pub/Sub) MUST use `logIncomingRequest()` at entry.
 
-**RULE:** ALL endpoints (`/internal/*`, webhooks, Pub/Sub) MUST use `logIncomingRequest()` at entry BEFORE auth/validation.
+**RULE:** Never use pull subscriptions — Cloud Run scales to zero. Use HTTP push only.
 
-- Headers auto-redacted via `SENSITIVE_FIELDS`
-- Include `messageId` for Pub/Sub, `eventId` for webhooks
-- Reference: `apps/actions-agent/src/routes/internalRoutes.ts`, `apps/whatsapp-service/src/routes/webhookRoutes.ts`
+**RULE:** Use cases MUST accept `logger: Logger` as dependency.
 
-### Pub/Sub Subscriptions
+**RULE:** Each Firestore collection owned by exactly ONE service. Cross-service access via HTTP only. Registry: `firestore-collections.json`. Verify: `pnpm run verify:firestore`.
 
-**RULE:** Never use pull subscriptions — Cloud Run scales to zero. Use HTTP push endpoints only.
+**RULE:** Multi-field queries require composite indexes. Define in `migrations/*.mjs` using `indexes` export. Queries fail in production without them.
 
-### Use Case Logging
-
-**RULE:** Use cases MUST accept `logger: Logger` as dependency. See [docs/patterns/use-case-logging.md](../docs/patterns/use-case-logging.md).
-
-### Firestore Collections
-
-**RULE:** Each collection owned by exactly ONE service. Cross-service access via HTTP only.
-
-- Registry: `firestore-collections.json`
-- Verification: `pnpm run verify:firestore`
-- Docs: [docs/architecture/firestore-ownership.md](../docs/architecture/firestore-ownership.md)
-
-### Firestore Composite Indexes
-
-**RULE:** Multi-field queries require composite indexes. Define them in migrations (`migrations/*.mjs`) using `indexes` export. Queries fail in production without them.
-
-### Migrations
-
-**RULE:** Migrations are IMMUTABLE. Never modify or delete existing migration files. Only create new migrations with the next sequential number. If a migration has a bug, create a new migration to fix it.
+**RULE:** Migrations are IMMUTABLE. Never modify or delete existing files. Create new migrations to fix bugs.
 
 ---
 
-## Apps (`apps/**`)
+## Apps & Packages
+
+**Apps (`apps/**`):\*\*
 
 - Use `getServices()` for deps, `getFirestore()` singleton for DB
 - Env vars: `INTEXURAOS_*` prefix (except `NODE_ENV`, `PORT`, emulators)
-- Fail-fast: `validateRequiredEnv()` at startup, must match Terraform config
+- Fail-fast: `validateRequiredEnv()` at startup
 - New service: Use `/create-service` command
 
----
+**Packages (`packages/**`):\*\*
 
-## Packages (`packages/**`)
+- `common-*` are leaf packages (no deps)
+- `infra-*` wrap external services
+- No domain logic in packages
 
-`common-*` are leaf packages (no deps). `infra-*` wrap external services. No domain logic in packages.
+**Pub/Sub Publishers:**
 
----
-
-## Pub/Sub Publishers (`packages/infra-pubsub`)
-
-**RULE:** All publishers MUST extend `BasePubSubPublisher`. Topic names from env vars only (no hardcoding).
-
-Verification: `pnpm run verify:pubsub`. Docs: [docs/architecture/pubsub-standards.md](../docs/architecture/pubsub-standards.md)
-
-### New Topic Registration (MANDATORY)
-
-**RULE:** When adding a NEW Pub/Sub topic, you MUST update THREE locations:
-
-1. **Terraform:** `terraform/environments/dev/main.tf` — Add `module "pubsub_<topic-name>"` declaration
-2. **Pub/Sub UI:** `tools/pubsub-ui/server.mjs` — Add to `TOPICS` array and `TOPIC_ENDPOINTS` mapping
-3. **Test Script:** `scripts/pubsub-publish-test.mjs` — Add event template to `EVENTS` object
-
-**Why:** The Pub/Sub UI auto-creates topics on emulator startup and provides manual testing interface. Missing registration breaks local development workflow.
-
-**Files to update:**
-
-- `tools/pubsub-ui/server.mjs` — TOPICS array + TOPIC_ENDPOINTS object
-- `tools/pubsub-ui/index.html` — CSS styles, dropdown option, EVENT_TEMPLATES
-- `tools/pubsub-ui/README.md` — Documentation tables
-- `scripts/pubsub-publish-test.mjs` — Event type + usage docs
+**RULE:** All publishers MUST extend `BasePubSubPublisher`. Topic names from env vars only (no hardcoding). Verification: `pnpm run verify:pubsub`.
 
 ---
 
-## Terraform (`terraform/**`)
+## Environment Variables (MANDATORY)
 
-**Gotchas:**
+**RULE:** Adding a new environment variable requires updating THREE locations:
 
-- Cloud Run images managed by Cloud Build, not Terraform (uses `ignore_changes`)
-- "Image not found": run `./scripts/push-missing-images.sh` for new services
-- Web app: backend buckets need URL rewrite for `/` → `/index.html`
+| Step | Location                             | What to Update                                                                |
+| ---- | ------------------------------------ | ----------------------------------------------------------------------------- |
+| 1    | `apps/<service>/src/index.ts`        | Add to `REQUIRED_ENV` array                                                   |
+| 2    | `terraform/environments/dev/main.tf` | Add to service's `env_vars` or `secrets`                                      |
+| 3    | `scripts/dev.mjs`                    | Add to `COMMON_SERVICE_ENV`, `COMMON_SERVICE_URLS`, or `SERVICE_ENV_MAPPINGS` |
 
----
+**Failure to update all three causes:**
 
-## Cloud Build & Deployment
+- Missing in Terraform → **Startup probe failure** (22% of build failures)
+- Missing in dev.mjs → Local development broken
+- Missing in REQUIRED_ENV → Runtime crash when var accessed
 
-### Build Pipeline Architecture
+### Terraform Patterns
 
-**CI:** `.github/workflows/ci.yml` runs `pnpm run ci` on all branches (lint, typecheck, test, build)
+**Common env var (all services):**
 
-**Deploy:** `.github/workflows/deploy.yml` triggers on push to `development` branch only:
+```hcl
+# terraform/environments/dev/main.tf - local.common_service_env_vars
+locals {
+  common_service_env_vars = {
+    INTEXURAOS_NEW_VAR = "value"
+  }
+}
+```
 
-1. Runs `.github/scripts/smart-dispatch.mjs` to analyze changes
-2. Triggers Cloud Build based on strategy:
-   - **MONOLITH** — Rebuild all (>3 affected OR global change) → `intexuraos-dev-deploy` trigger
-   - **INDIVIDUAL** — Rebuild affected only (≤3) → `<service>` triggers in parallel
-   - **NONE** — No deployable changes, skip
+**Service-specific env var:**
 
-**Manual override:** `workflow_dispatch` with `force_strategy: monolith` to rebuild all
+```hcl
+# terraform/environments/dev/main.tf - service module
+module "my_service" {
+  env_vars = merge(local.common_service_env_vars, {
+    INTEXURAOS_SERVICE_SPECIFIC_VAR = "value"
+  })
+}
+```
 
-**Global Triggers** (force MONOLITH): `terraform/`, `cloudbuild/cloudbuild.yaml`, `cloudbuild/scripts/`, `pnpm-lock.yaml`, `tsconfig.base.json`
+**Secret (from Secret Manager):**
 
-### File Locations
+```hcl
+# terraform/environments/dev/main.tf - service module
+module "my_service" {
+  secrets = merge(local.common_service_secrets, {
+    INTEXURAOS_MY_SECRET = module.secret_manager.secret_ids["INTEXURAOS_MY_SECRET"]
+  })
+}
+```
 
-| Purpose                  | File                                     |
-| ------------------------ | ---------------------------------------- |
-| CI workflow              | `.github/workflows/ci.yml`               |
-| Deploy workflow          | `.github/workflows/deploy.yml`           |
-| Smart dispatch           | `.github/scripts/smart-dispatch.mjs`     |
-| Main pipeline (all)      | `cloudbuild/cloudbuild.yaml`             |
-| Per-service pipeline     | `apps/<service>/cloudbuild.yaml`         |
-| Deploy scripts           | `cloudbuild/scripts/deploy-<service>.sh` |
-| Trigger definitions (TF) | `terraform/modules/cloud-build/main.tf`  |
+### dev.mjs Patterns
 
-### Adding a New Service to Cloud Build
+**Common URL:**
 
-1. Add build+deploy steps to `cloudbuild/cloudbuild.yaml`
-2. Create `apps/<service>/cloudbuild.yaml`
-3. Create `cloudbuild/scripts/deploy-<service>.sh`
-4. Add to `docker_services` in `terraform/modules/cloud-build/main.tf`
-5. Add to `SERVICES` array in `.github/scripts/smart-dispatch.mjs`
+```javascript
+// scripts/dev.mjs - COMMON_SERVICE_URLS
+const COMMON_SERVICE_URLS = {
+  INTEXURAOS_NEW_SERVICE_URL: 'http://localhost:8XXX',
+};
+```
 
-**First deployment:** Service must exist in Terraform before Cloud Build can deploy. Run `./scripts/push-missing-images.sh` for new services.
+**Common secret (from .envrc.local):**
+
+```javascript
+// scripts/dev.mjs - COMMON_SERVICE_ENV
+const COMMON_SERVICE_ENV = {
+  INTEXURAOS_NEW_SECRET: process.env.INTEXURAOS_NEW_SECRET,
+};
+```
+
+**Service-specific:**
+
+```javascript
+// scripts/dev.mjs - SERVICE_ENV_MAPPINGS
+const SERVICE_ENV_MAPPINGS = {
+  'my-service': {
+    INTEXURAOS_MY_SERVICE_TOPIC: 'my-topic',
+  },
+};
+```
 
 ---
 
@@ -411,140 +507,124 @@ Strict mode enabled: `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`, `
 
 ---
 
-## Common LLM Mistakes (LEARN FROM HISTORY)
+## Session Start Protocol (MANDATORY)
 
-These patterns cause 80% of CI failures. Internalize them.
+**RULE:** At the start of every fresh session, build all packages:
 
-### 1. ESM Imports — Always use `.js` extension
-
-```typescript
-// ❌ import { foo } from '../services/bar';
-// ✅ import { foo } from '../services/bar.js';
+```bash
+pnpm build
 ```
 
-### 2. ServiceContainer — Check existing tests before adding services
+**Why:** Apps depend on packages. Without built `dist/` directories, apps fail typecheck with misleading errors.
 
-When modifying `ServiceContainer`, **read existing test files first** to see all required fields.
-New fields break ALL tests that use `setServices()`.
+**Signs you forgot:**
+
+- 50+ `no-unsafe-*` lint errors in apps
+- `Cannot find module '@intexuraos/...'`
+- Errors only in `apps/` not `packages/`
+
+**When to run:**
+
+- Fresh clone
+- Switched branches
+- After pulling changes that touched `packages/`
+- When you see the signs above
+
+---
+
+## Pre-Flight Checks (MANDATORY)
+
+**RULE:** Read types BEFORE writing code. Most CI failures happen because code is written from memory instead of from actual type definitions.
+
+### Before Writing Test Mocks
+
+**ALWAYS** read the dependency interface before creating mock objects:
 
 ```typescript
-// ❌ Adding new service without updating tests
-setServices({ existingRepo: fakeRepo }); // Missing new required field!
+// ❌ Writing mock from memory — misses new required fields
+const deps = { repo: fakeRepo, logger: fakeLogger };
 
-// ✅ Check services.ts interface, update ALL test files
-setServices({ existingRepo: fakeRepo, newService: fakeNewService });
+// ✅ Read the Deps type first, then create mock with ALL fields
+// 1. Read: apps/<service>/src/domain/usecases/<usecase>.ts → find XxxDeps type
+// 2. Create mock matching ALL required fields
 ```
 
-### 3. exactOptionalPropertyTypes — Use `?:` not `| undefined`
+**Checklist:**
 
-```typescript
-// ❌ type Deps = { logger: Logger | undefined };
-// ✅ type Deps = { logger?: Logger };
+1. Open the use case file and find the `*Deps` type definition
+2. List all required fields
+3. Create mock with ALL fields — don't guess
+
+### Before Modifying ServiceContainer
+
+When adding/removing services from `services.ts`:
+
+1. **Read** `services.ts` to see current `ServiceContainer` interface
+2. **Search** for `setServices(` across all test files: `grep -r "setServices(" apps/<service>/src/__tests__/`
+3. **Update ALL** test files with the new field
+
+### Before Importing from Packages
+
+Cross-package imports require built packages:
+
+```bash
+# At session start, build all packages once
+pnpm build
+
+# If you see "Cannot find module '@intexuraos/...'" — rebuild
+pnpm build
 ```
 
-### 4. Template Literals — Wrap non-strings with `String()`
+### Before Accessing Discriminated Unions
+
+Result types (`Result<T, E>`) and other discriminated unions require narrowing:
 
 ```typescript
-// ❌ `Status: ${response.status}` // status is number
-// ✅ `Status: ${String(response.status)}`
-```
-
-### 5. Unsafe Type Operations — Resolve types before accessing
-
-ESLint's `no-unsafe-*` rules fire when TypeScript can't resolve a type. Common causes:
-
-```typescript
-// ❌ Accessing Result without narrowing
-const result = await repo.findById(id);
-console.log(result.value); // no-unsafe-member-access: .value unresolved
+// ❌ Accessing without narrowing — TS2339: Property 'value' does not exist
+const result = await repo.find(id);
+return result.value;
 
 // ✅ Narrow first, then access
-const result = await repo.findById(id);
-if (!result.ok) return result;
-console.log(result.value); // TypeScript knows it's Success<T>
-
-// ❌ Using enum from unresolved import
-import { ModelId } from '@intexuraos/llm-factory';
-const model = ModelId.Gemini25Flash; // no-unsafe-member-access
-
-// ✅ Ensure package is built, or use string literal
-const model = 'gemini-2.5-flash' as const;
+const result = await repo.find(id);
+if (!result.ok) return result; // Narrows to Success<T>
+return result.value; // Now safe
 ```
 
-**Root cause:** If `no-unsafe-*` errors appear, the type isn't resolving — check imports, run `pnpm build`, or add explicit type annotations.
+### Before Running Terraform
 
-### 6. Mock Logger — Include ALL required methods
+**ALWAYS** use the `tf` alias, not `terraform`:
 
-The `Logger` interface requires `info`, `warn`, `error`, AND `debug`. Missing any causes TS2345.
+```bash
+# ❌ WRONG - will fail without credentials or with emulator env vars
+terraform init
+terraform plan
 
-```typescript
-// ❌ Missing debug method
-const logger = {
-  info: vi.fn(),
-  warn: vi.fn(),
-  error: vi.fn(),
-}; // TS2345: not assignable to Logger
-
-// ✅ Include all four methods
-const logger: Logger = {
-  info: vi.fn(),
-  warn: vi.fn(),
-  error: vi.fn(),
-  debug: vi.fn(),
-};
-
-// ✅ Or use FakeLogger class if available in the service
-import { FakeLogger } from './fakes.js';
-const logger = new FakeLogger();
+# ✅ RIGHT - sets credentials and clears emulator vars
+tf init
+tf plan
 ```
 
-### 7. Empty Functions in Mocks — Use arrow functions
+**Why:** The `tf` alias (defined in shell config) sets `GOOGLE_APPLICATION_CREDENTIALS` and clears `FIRESTORE_EMULATOR_HOST`, `PUBSUB_EMULATOR_HOST`, etc. Without this, terraform commands will fail with permission errors or try to use emulators.
 
-ESLint's `no-empty-function` forbids `() => {}`. Use explicit return or vi.fn().
-
-```typescript
-// ❌ Empty function body
-const mock = { process: () => {} }; // no-empty-function
-
-// ✅ Return undefined explicitly, or use vi.fn()
-const mock = { process: (): undefined => undefined };
-const mock = { process: vi.fn() };
-```
-
-### 8. Async Template Expressions — Await or wrap in `String()`
-
-```typescript
-// ❌ `Result: ${asyncFunction()}` // Promise<string> in template
-// ✅ `Result: ${await asyncFunction()}`
-// OR: `Result: ${String(asyncFunction())}`
-```
+**Full reference:** `.claude/reference/infrastructure.md`
 
 ---
 
-## Code Smells (Fix & Document)
+## Common LLM Mistakes
 
-**RULE:** When fixing a new smell, add it here.
+**Full reference:** `.claude/reference/common-mistakes.md`
 
-| Smell                      | ❌ Wrong                       | ✅ Fix                    |
-| -------------------------- | ------------------------------ | ------------------------- |
-| Silent catch               | `catch {}`                     | `catch { /* reason */ }`  |
-| Inline error               | `error instanceof Error ? ...` | `getErrorMessage(error)`  |
-| Throw in try               | `try { if (x) throw } catch`   | Separate blocks           |
-| Re-export from services.ts | `export * from './infra/...'`  | Only export DI functions  |
-| Module-level state         | `let logger: Logger`           | Pass to factory functions |
-| Test fallback in prod      | `container ?? { fake }`        | Throw if not init         |
-| Domain in infra            | `maskApiKey()` in infra        | Move to common-core       |
-| Infra re-exports domain    | `export type from domain`      | Import where needed       |
-| Manual header redaction    | Inline `[REDACTED]`            | `logIncomingRequest()`    |
-| Redundant variable         | `const r = f(); return r`      | `return f()`              |
-| Redundant check            | Check after type guard         | Trust narrowing           |
-| Console logging            | `console.info()` in infra      | Accept `logger?` param    |
+**Key patterns (80% of CI failures):**
 
-**Known debt:** OpenAPI schemas duplicated per server.ts (Fastify types limitation).
+- ESM imports need `.js` extension
+- Use `?:` not `| undefined` for optional props
+- Wrap non-strings in `String()` for templates
+- Narrow Result types before accessing `.value`
+- Mock Logger needs all 4 methods: `info`, `warn`, `error`, `debug`
 
 ---
 
-## Code Auditing & Consistency
+## Code Auditing
 
 **RULE:** When fixing a pattern in one service, audit ALL other services for the same issue before committing.
 
@@ -556,25 +636,15 @@ const mock = { process: vi.fn() };
 
 **RULE: Always write tests BEFORE implementation code.**
 
-When adding new functionality:
-
-1. **Write failing test first** — Define expected behavior in test file
-2. **Run test to confirm it fails** — Validates test is actually testing something
-3. **Implement minimal code** — Only enough to make the test pass
-4. **Refactor if needed** — Clean up while keeping tests green
-
-### Workflow Example
+1. **Write failing test first** — Define expected behavior
+2. **Run test to confirm it fails** — Validates test works
+3. **Implement minimal code** — Only enough to pass
+4. **Refactor if needed** — Keep tests green
 
 ```
 ❌ WRONG: Write usecase → Write test → Fix coverage
 ✅ RIGHT: Write test (fails) → Write usecase (passes) → Verify coverage
 ```
-
-### What This Means
-
-- **New use case?** First create `__tests__/usecases.test.ts` with test cases
-- **New route?** First add test in `__tests__/<routes>.test.ts`
-- **New domain model?** First write validation tests
 
 **Exception:** Pure refactoring of existing tested code doesn't require new tests first.
 
@@ -584,39 +654,54 @@ When adding new functionality:
 
 **No external deps.** In-memory fakes, `nock` for HTTP. Just `pnpm run test`.
 
-- TypeScript: `pnpm run typecheck:tests` (uses `tsconfig.tests-check.json`)
 - Pattern: `setServices({fakes})` in `beforeEach`, `resetServices()` in `afterEach`
-- Routes: integration via `app.inject()`. Domain: unit tests. Infra: tested via routes.
+- Routes: integration via `app.inject()`. Domain: unit tests.
 - **Coverage: 95%. NEVER modify thresholds — write tests.**
 
 ### Web App Exception
 
-The `web` workspace has adjusted verification (planned complete refactoring):
-
-- Tests run but **coverage threshold is not enforced**
-- Test typecheck step skipped (Vite-specific patterns incompatible with strict tsconfig)
-- Tests remain in nested `__tests__` directories within feature folders
-
-**Tests are OPTIONAL for UI components** (pages, layout, styling).
-
-**Tests are REQUIRED for:**
-
-- Helper functions (`utils/`)
-- Services with logic (`services/`)
-- Hooks with business logic (`hooks/`)
-- Calculations, parsers, evaluators
-
-Use the same command: `pnpm run verify:workspace:tracked -- web` — adjusted behavior is automatic.
+- Coverage threshold not enforced (planned refactoring)
+- Tests OPTIONAL for UI components
+- Tests REQUIRED for: `utils/`, `services/`, `hooks/`, calculations
 
 ---
 
-## Git Push Policy
+## Git & PR Workflow
 
 **RULE: NEVER push without explicit instruction.**
 
 - `"commit"` → local only, no push
 - `"commit and push"` → push once
-- Multiple commits → ask before pushing
+
+**RULE: NEVER commit without `pnpm run ci:tracked` passing first.**
+
+This is non-negotiable. Running only package-level tests (`vitest`, `tsc`) is NOT sufficient.
+
+```
+❌ WRONG: Fix code → Run vitest → Commit → Push → Check GitHub Actions
+✅ RIGHT: Fix code → Run pnpm run ci:tracked → Passes → Commit → Push
+```
+
+| Shortcut Taken                 | Why It Fails                                      |
+| ------------------------------ | ------------------------------------------------- |
+| `npx vitest run` only          | Misses other workspaces, lint, type-check         |
+| `pnpm run test` in one package | Misses cross-package type errors                  |
+| `tsc --noEmit` only            | Misses lint errors, test failures                 |
+| "I'll check GitHub Actions"    | Wastes CI resources, delays feedback, breaks main |
+
+**The only acceptable verification is `pnpm run ci:tracked` passing locally.**
+
+**RULE:** Before creating a PR, merge latest base branch and resolve conflicts.
+
+```bash
+pnpm run ci:tracked              # MUST pass first
+git add -A && git commit -m "message"
+git fetch origin && git merge origin/development
+git push -u origin <branch>
+gh pr create --base development
+```
+
+**Why merge before PR?** Ensures CI runs against merged state and reviewers see clean diff.
 
 ---
 
@@ -624,111 +709,166 @@ Use the same command: `pnpm run verify:workspace:tracked -- web` — adjusted be
 
 **RULE: When asking clarifying questions, ask ONE question at a time.**
 
-Use the AskUserQuestion tool for each question separately. Do not batch multiple questions unless the user explicitly requests it (e.g., "ask me all questions at once").
-
-**Why:** One-by-one questioning allows focused responses and early course-correction.
+Use the AskUserQuestion tool for each question separately. Do not batch multiple questions unless explicitly requested.
 
 ---
 
-## Pull Request Workflow (DEFAULT)
+## Cross-Linking Protocol
 
-**When asked to create a PR, follow this default workflow:**
+All artifacts must be connected:
 
-1. **Commit all changes** in the current workspace
-2. **Fetch origin** and merge `origin/development` if it exists
-3. **Push** the branch
-4. **Create PR** targeting `development` (if it exists), otherwise `main`
-
-**Commands:**
-
-```bash
-git add -A && git commit -m "message"
-git fetch origin
-git merge origin/development  # if exists, skip if not
-git push -u origin <branch>
-gh pr create --base development  # or --base main if development doesn't exist
-```
+| From   | To     | Method                                          |
+| ------ | ------ | ----------------------------------------------- |
+| Linear | GitHub | PR title contains `INT-XXX`                     |
+| GitHub | Linear | `Fixes INT-XXX` in PR body                      |
+| Sentry | Linear | `[sentry] <title>` prefix + link in description |
+| Linear | Sentry | Comment on Sentry issue with Linear link        |
+| PR     | Sentry | Sentry link in PR description                   |
 
 ---
 
 ## Linear Issue Workflow
 
-Use the `/linear` command for issue tracking and workflow management.
+Use the `/linear` skill for issue tracking and workflow management.
 
-**When "linear" appears in context**, the agent should reference `/linear` for issue creation and workflow.
+**Skill Location:** `.claude/skills/linear/SKILL.md`
 
 **Usage:**
 
 ```bash
-/linear                    # Pick random backlog issue (cron mode)
-/linear <task description> # Create new issue
-/linear LIN-123            # Work on existing issue
+/linear                    # Pick random Todo issue (cron mode)
+/linear <task description> # Create new issue (auto-splits if complex)
+/linear INT-123            # Work on existing issue
 /linear <sentry-url>       # Create from Sentry error
-```
-
-**Examples:**
-
-```bash
-/linear Fix authentication token not refreshing
-/linear LIN-42
-/linear https://intexuraos-dev-pbuchman.sentry.io/issues/123/
 ```
 
 **Mandatory Requirements:**
 
 1. All bugs/features must have corresponding Linear issues
-2. PR descriptions must link to Linear issues (`Fixes LIN-XXX`)
+2. PR descriptions must link to Linear issues (`Fixes INT-XXX`)
 3. Reasoning belongs in PR descriptions, not code comments
-4. State transitions happen automatically: Backlog → In Progress → In Review → Done
-5. `pnpm run ci:tracked` MUST pass before PR creation (unless explicitly overridden)
+4. State transitions: Backlog → In Progress → In Review → QA (Done requires explicit instruction)
+5. `pnpm run ci:tracked` MUST pass before PR creation
 
-**Cross-Linking Protocol:**
+**Auto-Splitting:** For complex multi-step tasks, the skill automatically detects and offers to split into tiered child issues. See [Linear-Based Continuity Pattern](../docs/patterns/linear-continuity.md).
 
-| Direction       | Method                                          |
-| --------------- | ----------------------------------------------- |
-| Linear → GitHub | `Fixes LIN-XXX` in PR body                      |
-| GitHub → Linear | PR URL in issue comments                        |
-| Sentry → Linear | `[sentry] <title>` naming + link in description |
-| Linear → Sentry | Comment on Sentry issue                         |
-
-**See:** `.claude/commands/linear.md` for complete workflow documentation.
+**Full Documentation:** `.claude/skills/linear/`
 
 ---
 
-## Complex Tasks — Continuity Workflow
+## Sentry Issue Workflow
 
-For multi-step features, use numbered directories in `continuity/`. See [continuity/README.md](../continuity/README.md).
+Use the `/sentry` skill for error triage, investigation, and resolution.
+
+**Skill Location:** `.claude/skills/sentry/SKILL.md`
+
+**Usage:**
+
+```bash
+/sentry                           # NON-INTERACTIVE: Batch triage unresolved issues
+/sentry <sentry-url>              # Investigate specific issue
+/sentry INT-123                   # Find Sentry issues linked to Linear issue
+/sentry triage --limit 5          # Batch triage with limit
+/sentry analyze <sentry-url>      # AI-powered root cause analysis (Seer)
+/sentry linear <sentry-url>       # Create Linear issue from Sentry error
+```
+
+**Mandatory Requirements:**
+
+1. Every Sentry issue MUST be linked to a Linear issue (use `[sentry] <title>` prefix)
+2. Every fix PR MUST link both Sentry and Linear issues
+3. No band-aid fixes — investigate root cause before implementing
+4. `pnpm run ci:tracked` MUST pass before PR creation
+
+**Full Documentation:** `.claude/skills/sentry/`
+
+---
+
+## Document-Service Skill
+
+Use the `/document-service` skill to generate comprehensive service documentation.
+
+**Skill Location:** `.claude/skills/document-service/SKILL.md`
+
+**Modes:**
+
+| Mode        | Invocation                            | Behavior                      |
+| ----------- | ------------------------------------- | ----------------------------- |
+| Discovery   | `/document-service` (no args)         | Lists services + doc status   |
+| Interactive | `/document-service <service-name>`    | Asks 3 questions (Q1, Q5, Q8) |
+| Autonomous  | Task tool → `service-scribe` subagent | Infers all answers from code  |
+
+**Output:** 5 files per service + website content updates
+
+**Full Documentation:** `.claude/skills/document-service/`
+
+---
+
+## Claude Extensions Taxonomy
+
+This project uses three types of Claude extensions:
+
+### Skills (Directory-Based)
+
+**Location:** `.claude/skills/<skill-name>/`
+**Invocation:** `/skill-name` (user) or auto-trigger (model)
+
+| Skill               | Purpose                                          |
+| ------------------- | ------------------------------------------------ |
+| `/linear`           | Linear issue management with auto-splitting      |
+| `/sentry`           | Sentry triage with AI analysis and cross-linking |
+| `/document-service` | Service documentation (interactive + autonomous) |
+
+### Agents (Task-Spawned)
+
+**Location:** `.claude/agents/<agent-name>.md`
+**Invocation:** Task tool with `subagent_type: <agent-name>`
+
+| Agent                   | Purpose                                       |
+| ----------------------- | --------------------------------------------- |
+| `coverage-orchestrator` | 100% branch coverage enforcement              |
+| `llm-manager`           | LLM usage audit and pricing verification      |
+| `service-creator`       | New service scaffolding                       |
+| `service-scribe`        | Autonomous documentation (delegates to skill) |
+| `whatsapp-sender`       | WhatsApp notification specialist              |
+
+### Commands (Single-File)
+
+**Location:** `.claude/commands/<command-name>.md`
+**Invocation:** `/<command-name>`
+
+| Command                | Purpose                          |
+| ---------------------- | -------------------------------- |
+| `/analyze-ci-failures` | Analyze CI failure patterns      |
+| `/analyze-logs`        | Production log analysis          |
+| `/coverage`            | Coverage improvement suggestions |
+| `/create-service`      | New service creation wizard      |
+| `/refactoring`         | Code smell detection and fixes   |
+| `/semver-release`      | Semantic versioning release      |
+| `/teach-me-something`  | Learn and persist tech insights  |
+| `/verify-deployment`   | Deployment verification          |
+
+---
+
+## Complex Tasks — Linear Continuity
+
+For multi-step features, use the Linear-based continuity pattern with parent-child issues.
+
+**See:** [docs/patterns/linear-continuity.md](../docs/patterns/linear-continuity.md)
+
+**Quick Start:**
+
+1. Create top-level Linear issue for overall feature
+2. Use `/linear` with complex description to auto-split into child issues
+3. Parent issue serves as ledger (goal, decisions, state tracking)
+4. Execute child issues sequentially by tier
+5. Mark all as Done when complete
 
 ---
 
 ## Documentation
 
-When creating markdown documentation in `docs/`, follow these formatting standards:
-
-### Tables
-
 **RULE:** All tables MUST have proper column alignment for readability.
-
-```markdown
-# ❌ Wrong — no alignment
-
-| Method | Path    | Description | Auth |
-| ------ | ------- | ----------- | ---- |
-| GET    | `/docs` | Swagger UI  | None |
-
-# ✅ Right — padded columns
-
-| Method | Path    | Description | Auth |
-| ------ | ------- | ----------- | ---- |
-| GET    | `/docs` | Swagger UI  | None |
-```
-
-**Requirements:**
-
-- Header cells padded to column width
-- Separator row (`|---|`) also padded
-- Data cells padded to match column max width
-- Alignment markers allowed: `:---` (left), `:---:` (center), `---:` (right)
 
 **Enforcement:** Run `pnpm run format:docs-tables` to fix all tables in `docs/`.
 
@@ -741,11 +881,3 @@ Plans involving HTTP endpoints MUST include an "Endpoint Changes" section with t
 | Service          | Method | Path                         | Change               |
 | ---------------- | ------ | ---------------------------- | -------------------- |
 | whatsapp-service | POST   | `/internal/.../send-message` | Remove `phoneNumber` |
-
-<claude-mem-context>
-# Recent Activity
-
-<!-- This section is auto-generated by claude-mem. Edit content outside the tags. -->
-
-_No recent activity_
-</claude-mem-context>

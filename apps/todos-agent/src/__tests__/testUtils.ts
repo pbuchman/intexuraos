@@ -4,29 +4,43 @@ import * as jose from 'jose';
 import { buildServer } from '../server.js';
 import { clearJwksCache } from '@intexuraos/common-http';
 import type { Result } from '@intexuraos/common-core';
-import { ok } from '@intexuraos/common-core';
+import { ok, err } from '@intexuraos/common-core';
 import { FakeTodoRepository } from './fakeTodoRepository.js';
 import { resetServices, setServices } from '../services.js';
-import type { TodosProcessingPublisher } from '@intexuraos/infra-pubsub';
+import type { TodosProcessingPublisher, PublishError } from '@intexuraos/infra-pubsub';
 import type { UserServiceClient } from '../infra/user/userServiceClient.js';
 import type { TodoItemExtractionService, ExtractedItem, ExtractionError } from '../infra/gemini/todoItemExtractionService.js';
 import type { LlmGenerateClient } from '@intexuraos/llm-factory';
 
 export class FakeTodosProcessingPublisher implements TodosProcessingPublisher {
   public publishedEvents: { todoId: string; userId: string; title: string; correlationId?: string }[] = [];
+  public shouldFail = false;
+  public failureError: PublishError = { code: 'PUBLISH_FAILED', message: 'Failed to publish' };
 
   async publishTodoCreated(params: {
     todoId: string;
     userId: string;
     title: string;
     correlationId?: string;
-  }): Promise<{ readonly ok: true; readonly value: undefined }> {
+  }): Promise<Result<void, PublishError>> {
+    if (this.shouldFail) {
+      return err(this.failureError);
+    }
     this.publishedEvents.push(params);
-    return { ok: true, value: undefined };
+    return ok(undefined);
+  }
+
+  simulateFailure(error?: PublishError): void {
+    this.shouldFail = true;
+    if (error) {
+      this.failureError = error;
+    }
   }
 
   reset(): void {
     this.publishedEvents = [];
+    this.shouldFail = false;
+    this.failureError = { code: 'PUBLISH_FAILED', message: 'Failed to publish' };
   }
 }
 

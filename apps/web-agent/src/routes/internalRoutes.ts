@@ -135,7 +135,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         operationId: 'summarizePageInternal',
         summary: 'Summarize a web page (internal)',
         description:
-          'Internal endpoint for extracting and summarizing web page content using Crawl4AI.',
+          'Internal endpoint for extracting and summarizing web page content using Crawl4AI and user\'s LLM.',
         tags: ['internal'],
         body: summarizePageBodySchema,
         response: {
@@ -155,10 +155,10 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         return { error: 'Unauthorized' };
       }
 
-      const { url, maxSentences, maxReadingMinutes } = request.body;
+      const { url, userId, maxSentences, maxReadingMinutes } = request.body;
       const startTime = Date.now();
 
-      request.log.info({ url, maxSentences, maxReadingMinutes }, 'Processing page summary request');
+      request.log.info({ url, userId, maxSentences, maxReadingMinutes }, 'Processing page summary request');
 
       if (!isValidUrl(url)) {
         const durationMs = Date.now() - startTime;
@@ -173,14 +173,52 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         return await reply.ok({ result, metadata: { durationMs } });
       }
 
-      const { pageSummaryService } = getServices();
+      const { pageContentFetcher, llmSummarizer, userServiceClient } = getServices();
 
-      const options = {
-        ...(maxSentences !== undefined && { maxSentences }),
-        ...(maxReadingMinutes !== undefined && { maxReadingMinutes }),
-      };
+      // Step 1: Fetch page content via Crawl4AI
+      const contentResult = await pageContentFetcher.fetchPageContent(url);
+      if (!contentResult.ok) {
+        const durationMs = Date.now() - startTime;
+        const result: PageSummaryResult = {
+          url,
+          status: 'failed',
+          error: {
+            code: contentResult.error.code,
+            message: contentResult.error.message,
+          },
+        };
+        return await reply.ok({ result, metadata: { durationMs } });
+      }
 
-      const summaryResult = await pageSummaryService.summarizePage(url, options);
+      // Step 2: Get user's LLM client
+      const llmClientResult = await userServiceClient.getLlmClient(userId);
+      if (!llmClientResult.ok) {
+        const durationMs = Date.now() - startTime;
+        const result: PageSummaryResult = {
+          url,
+          status: 'failed',
+          error: {
+            code: 'API_ERROR',
+            message: llmClientResult.error.message,
+          },
+        };
+        request.log.warn(
+          { userId, error: llmClientResult.error.message },
+          'Failed to get user LLM client'
+        );
+        return await reply.ok({ result, metadata: { durationMs } });
+      }
+
+      // Step 3: Summarize with user's LLM
+      const summaryResult = await llmSummarizer.summarize(
+        contentResult.value,
+        {
+          url,
+          ...(maxSentences !== undefined && { maxSentences }),
+          ...(maxReadingMinutes !== undefined && { maxReadingMinutes }),
+        },
+        llmClientResult.value
+      );
 
       const durationMs = Date.now() - startTime;
 
@@ -204,7 +242,10 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         result = {
           url,
           status: 'failed',
-          error: summaryResult.error,
+          error: {
+            code: 'API_ERROR',
+            message: summaryResult.error.message,
+          },
         };
         request.log.warn(
           { url, error: summaryResult.error, durationMs },

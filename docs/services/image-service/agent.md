@@ -6,11 +6,11 @@
 
 ## Identity
 
-| Field | Value |
-| ----- | ----- |
-| **Name** | image-service |
-| **Role** | AI Image Generation Service |
-| **Goal** | Generate cover images using DALL-E 3 and Imagen 3 |
+| Field    | Value                                                          |
+| -------- | -------------------------------------------------------------- |
+| **Name** | image-service                                                  |
+| **Role** | AI Image Generation Service                                    |
+| **Goal** | Generate cover images using GPT Image 1 and Gemini Flash Image |
 
 ---
 
@@ -35,7 +35,7 @@ interface ImageServiceTools {
 ### Types
 
 ```typescript
-type ImageModel = 'dall-e-3' | 'imagen-3';
+type ImageModel = 'gpt-image-1' | 'gemini-2.5-flash-image';
 
 interface GeneratedImage {
   id: string;
@@ -66,12 +66,12 @@ interface ImageMetadata {
 
 ## Constraints
 
-| Rule | Description |
-| ---- | ----------- |
-| **API Key Required** | OpenAI key for DALL-E, Google key for Imagen |
-| **Research Link** | Images must be linked to a research ID |
-| **Storage** | Images stored in Google Cloud Storage |
-| **Thumbnail** | Auto-generated 400px thumbnail |
+| Rule                 | Description                                                   |
+| -------------------- | ------------------------------------------------------------- |
+| **API Key Required** | OpenAI key for GPT Image 1, Google key for Gemini Flash Image |
+| **Research Link**    | Images must be linked to a research ID                        |
+| **Storage**          | Images stored in Google Cloud Storage                         |
+| **Thumbnail**        | Auto-generated 400px thumbnail                                |
 
 ---
 
@@ -83,7 +83,7 @@ interface ImageMetadata {
 const image = await generateCoverImage({
   researchId: 'research_123',
   prompt: 'Quantum computing implications on cryptography',
-  model: 'dall-e-3',
+  model: 'gpt-image-1',
 });
 // image.url contains the full-size image
 // image.thumbnailUrl contains the 400px thumbnail
@@ -104,10 +104,10 @@ art style, 16:9 aspect ratio"
 
 ## Internal Endpoints
 
-| Method | Path | Purpose |
-| ------ | ---- | ------- |
-| POST | `/internal/images/generate` | Generate image (called by research-agent) |
-| DELETE | `/internal/images/:id` | Delete image when research unshared |
+| Method | Path                        | Purpose                                   |
+| ------ | --------------------------- | ----------------------------------------- |
+| POST   | `/internal/images/generate` | Generate image (called by research-agent) |
+| DELETE | `/internal/images/:id`      | Delete image when research unshared       |
 
 ---
 

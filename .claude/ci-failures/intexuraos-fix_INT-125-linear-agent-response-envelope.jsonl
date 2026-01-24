@@ -1,3 +1,0 @@
-{"ts":"2026-01-17T13:12:47.708Z","project":"intexuraos","branch":"fix/INT-125-linear-agent-response-envelope","workspace":"--","runNumber":1,"passed":false,"durationMs":350,"failureCount":0,"failures":[]}
-{"ts":"2026-01-17T13:13:34.139Z","project":"intexuraos","branch":"fix/INT-125-linear-agent-response-envelope","workspace":"linear-agent","runNumber":2,"passed":true,"durationMs":41069,"failureCount":0,"failures":[]}
-{"ts":"2026-01-17T13:15:53.417Z","project":"intexuraos","branch":"fix/INT-125-linear-agent-response-envelope","runNumber":3,"passed":true,"durationMs":127230,"failureCount":0,"failures":[]}

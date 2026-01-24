@@ -338,4 +338,79 @@ describe('executeNoteAction usecase', () => {
       '## Key Points\n\n- Discussed Q4 goals\n- Action items assigned\n\n---\n\nFull meeting transcript here...'
     );
   });
+
+  it('returns completed status with message from payload for already completed action', async () => {
+    const action = createAction({
+      status: 'completed',
+      payload: {
+        resource_url: '/#/notes/existing-note',
+        message: 'Previously created note',
+      },
+    });
+    await fakeActionRepo.save(action);
+
+    const usecase = createExecuteNoteActionUseCase({
+      actionRepository: fakeActionRepo,
+      notesServiceClient: fakeNotesClient,
+      whatsappPublisher: fakeWhatsappPublisher,
+      webAppUrl: 'https://app.test.com',
+      logger: silentLogger,
+    });
+
+    const result = await usecase('action-123');
+
+    expect(isOk(result)).toBe(true);
+    if (isOk(result)) {
+      expect(result.value.status).toBe('completed');
+      expect(result.value.message).toBe('Previously created note');
+      expect(result.value.resourceUrl).toBe('/#/notes/existing-note');
+    }
+  });
+
+  it('allows execution from pending status', async () => {
+    const action = createAction({ status: 'pending' });
+    await fakeActionRepo.save(action);
+    fakeNotesClient.setNextResponse({
+      status: 'completed',
+      message: 'Note created successfully',
+      resourceUrl: '/#/notes/pending-note-123',
+    });
+
+    const usecase = createExecuteNoteActionUseCase({
+      actionRepository: fakeActionRepo,
+      notesServiceClient: fakeNotesClient,
+      whatsappPublisher: fakeWhatsappPublisher,
+      webAppUrl: 'https://app.test.com',
+      logger: silentLogger,
+    });
+
+    const result = await usecase('action-123');
+
+    expect(isOk(result)).toBe(true);
+    if (isOk(result)) {
+      expect(result.value.status).toBe('completed');
+    }
+  });
+
+  it('does not send WhatsApp notification when resourceUrl is missing', async () => {
+    const action = createAction({ status: 'awaiting_approval' });
+    await fakeActionRepo.save(action);
+    fakeNotesClient.setNextResponse({
+      status: 'completed',
+      message: 'Note created',
+    });
+
+    const usecase = createExecuteNoteActionUseCase({
+      actionRepository: fakeActionRepo,
+      notesServiceClient: fakeNotesClient,
+      whatsappPublisher: fakeWhatsappPublisher,
+      webAppUrl: 'https://app.test.com',
+      logger: silentLogger,
+    });
+
+    await usecase('action-123');
+
+    const messages = fakeWhatsappPublisher.getSentMessages();
+    expect(messages).toHaveLength(0);
+  });
 });

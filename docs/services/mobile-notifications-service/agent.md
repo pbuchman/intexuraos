@@ -6,11 +6,11 @@
 
 ## Identity
 
-| Field    | Value                                                                |
-| -------- | -------------------------------------------------------------------- |
-| **Name** | mobile-notifications-service                                         |
-| **Role** | Mobile Notification Capture Service                                  |
-| **Goal** | Capture, store, and provide access to mobile device notifications    |
+| Field    | Value                                                             |
+| -------- | ----------------------------------------------------------------- |
+| **Name** | mobile-notifications-service                                      |
+| **Role** | Mobile Notification Capture Service                               |
+| **Goal** | Capture, store, and provide access to mobile device notifications |
 
 ---
 
@@ -24,9 +24,9 @@ interface MobileNotificationsServiceTools {
   listNotifications(params?: {
     limit?: number;
     cursor?: string;
-    source?: string;    // Comma-separated
-    app?: string;       // Comma-separated
-    title?: string;     // Partial match
+    source?: string; // Comma-separated
+    app?: string; // Comma-separated
+    title?: string; // Partial match
   }): Promise<NotificationsListResult>;
 
   // Delete a notification
@@ -71,9 +71,9 @@ interface NotificationsListResult {
 interface FiltersData {
   userId: string;
   options: {
-    app: string[];      // Available app package names
-    device: string[];   // Available device identifiers
-    source: string[];   // Available sources
+    app: string[]; // Available app package names
+    device: string[]; // Available device identifiers
+    source: string[]; // Available sources
   };
   savedFilters: SavedFilter[];
   createdAt: string;
@@ -95,11 +95,11 @@ interface SavedFilter {
 
 ## Constraints
 
-| Rule               | Description                                     |
-| ------------------ | ----------------------------------------------- |
-| **Ownership**      | Users can only access their own notifications   |
-| **Pagination**     | Maximum 100 notifications per request           |
-| **Device Linked**  | Requires Tasker/Automate integration on Android |
+| Rule               | Description                                       |
+| ------------------ | ------------------------------------------------- |
+| **Ownership**      | Users can only access their own notifications     |
+| **Pagination**     | Maximum 100 notifications per request             |
+| **Device Linked**  | Requires Tasker/Automate integration on Android   |
 | **Filter Options** | Populated dynamically from received notifications |
 
 ---
@@ -118,7 +118,7 @@ const result = await listNotifications({ limit: 50 });
 
 ```typescript
 const result = await listNotifications({
-  app: 'com.whatsapp,com.telegram',  // Comma-separated
+  app: 'com.whatsapp,com.telegram', // Comma-separated
 });
 ```
 
@@ -161,10 +161,10 @@ const filters = await getFilters();
 
 ## Internal Endpoints
 
-| Method | Path                          | Purpose                                          |
-| ------ | ----------------------------- | ------------------------------------------------ |
-| GET    | `/internal/notifications`     | Query notifications (called by data-insights-agent) |
-| POST   | `/connect`                    | Receive notifications from device                |
+| Method | Path                      | Purpose                                             |
+| ------ | ------------------------- | --------------------------------------------------- |
+| GET    | `/internal/notifications` | Query notifications (called by data-insights-agent) |
+| POST   | `/connect`                | Receive notifications from device                   |
 
 ---
 

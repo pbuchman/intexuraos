@@ -20,6 +20,7 @@ COPY packages/ ./packages/
 RUN pnpm install --frozen-lockfile
 
 # Copy source files
+# Note: Docker automatically invalidates cache when COPY detects file changes
 COPY tsconfig*.json ./
 COPY scripts/ ./scripts/
 COPY packages/ ./packages/

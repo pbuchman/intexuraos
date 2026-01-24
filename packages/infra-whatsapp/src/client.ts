@@ -13,11 +13,24 @@ import type {
 
 const WHATSAPP_API_VERSION = 'v22.0';
 const MEDIA_DOWNLOAD_TIMEOUT_MS = 30000;
+const MARK_AS_READ_TIMEOUT_MS = 30000; // Increased to match media download timeout for slow networks
 
 export interface WhatsAppClient {
   sendTextMessage(params: SendMessageParams): Promise<Result<SendMessageResult, WhatsAppError>>;
   getMediaUrl(mediaId: string): Promise<Result<MediaUrlInfo, WhatsAppError>>;
   downloadMedia(url: string): Promise<Result<Buffer, WhatsAppError>>;
+  /**
+   * Mark a message as read. This displays two blue check marks on the message.
+   * @param messageId - The ID of the message to mark as read
+   */
+  markAsRead(messageId: string): Promise<Result<void, WhatsAppError>>;
+  /**
+   * Mark a message as read and show typing indicator.
+   * Combines mark-as-read with a typing indicator that shows for up to 25 seconds
+   * or until a message is sent.
+   * @param messageId - The ID of the message to mark as read
+   */
+  markAsReadWithTyping(messageId: string): Promise<Result<void, WhatsAppError>>;
 }
 
 export function createWhatsAppClient(config: WhatsAppConfig): WhatsAppClient {
@@ -170,6 +183,117 @@ export function createWhatsAppClient(config: WhatsAppConfig): WhatsAppClient {
         return err({
           code: 'NETWORK_ERROR',
           message: `Failed to download media: ${getErrorMessage(error)}`,
+        });
+      }
+    },
+
+    async markAsRead(messageId: string): Promise<Result<void, WhatsAppError>> {
+      const url = `https://graph.facebook.com/${WHATSAPP_API_VERSION}/${config.phoneNumberId}/messages`;
+
+      const payload = {
+        messaging_product: 'whatsapp',
+        status: 'read',
+        message_id: messageId,
+      };
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => {
+        controller.abort();
+      }, MARK_AS_READ_TIMEOUT_MS);
+
+      try {
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${config.accessToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(payload),
+          signal: controller.signal,
+        });
+
+        clearTimeout(timeoutId);
+
+        if (!response.ok) {
+          const errorBody = await response.text();
+          return err({
+            code: 'API_ERROR',
+            message: `WhatsApp API error: ${String(response.status)} - ${errorBody}`,
+            statusCode: response.status,
+          });
+        }
+
+        return ok(undefined);
+      } catch (error) {
+        clearTimeout(timeoutId);
+
+        if (error instanceof Error && error.name === 'AbortError') {
+          return err({
+            code: 'TIMEOUT',
+            message: `Mark as read timed out after ${String(MARK_AS_READ_TIMEOUT_MS)}ms`,
+          });
+        }
+
+        return err({
+          code: 'NETWORK_ERROR',
+          message: `Failed to mark message as read: ${getErrorMessage(error)}`,
+        });
+      }
+    },
+
+    async markAsReadWithTyping(messageId: string): Promise<Result<void, WhatsAppError>> {
+      const url = `https://graph.facebook.com/${WHATSAPP_API_VERSION}/${config.phoneNumberId}/messages`;
+
+      const payload = {
+        messaging_product: 'whatsapp',
+        status: 'read',
+        message_id: messageId,
+        typing_indicator: {
+          type: 'text',
+        },
+      };
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => {
+        controller.abort();
+      }, MARK_AS_READ_TIMEOUT_MS);
+
+      try {
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${config.accessToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(payload),
+          signal: controller.signal,
+        });
+
+        clearTimeout(timeoutId);
+
+        if (!response.ok) {
+          const errorBody = await response.text();
+          return err({
+            code: 'API_ERROR',
+            message: `WhatsApp API error: ${String(response.status)} - ${errorBody}`,
+            statusCode: response.status,
+          });
+        }
+
+        return ok(undefined);
+      } catch (error) {
+        clearTimeout(timeoutId);
+
+        if (error instanceof Error && error.name === 'AbortError') {
+          return err({
+            code: 'TIMEOUT',
+            message: `Mark as read with typing timed out after ${String(MARK_AS_READ_TIMEOUT_MS)}ms`,
+          });
+        }
+
+        return err({
+          code: 'NETWORK_ERROR',
+          message: `Failed to mark message as read with typing: ${getErrorMessage(error)}`,
         });
       }
     },

@@ -6,10 +6,10 @@
 
 ## Identity
 
-| Field    | Value                                                          |
-| -------- | -------------------------------------------------------------- |
-| **Name** | notion-service                                                 |
-| **Role** | Notion Integration Service                                     |
+| Field    | Value                                                            |
+| -------- | ---------------------------------------------------------------- |
+| **Name** | notion-service                                                   |
+| **Role** | Notion Integration Service                                       |
 | **Goal** | Connect and manage Notion workspaces for prompt and data storage |
 
 ---
@@ -21,9 +21,7 @@
 ```typescript
 interface NotionServiceTools {
   // Connect Notion integration
-  connectNotion(params: {
-    notionToken: string;
-  }): Promise<ConnectResult>;
+  connectNotion(params: { notionToken: string }): Promise<ConnectResult>;
 
   // Get integration status
   getNotionStatus(): Promise<StatusResult>;
@@ -58,11 +56,11 @@ interface DisconnectResult {
 
 ## Constraints
 
-| Rule                     | Description                                    |
-| ------------------------ | ---------------------------------------------- |
+| Rule                      | Description                                      |
+| ------------------------- | ------------------------------------------------ |
 | **Notion Token Required** | User must provide valid Notion integration token |
-| **Single Workspace**     | One Notion workspace per user                  |
-| **Token Validation**     | Token validated with Notion API before storing |
+| **Single Workspace**      | One Notion workspace per user                    |
+| **Token Validation**      | Token validated with Notion API before storing   |
 
 ---
 
@@ -116,10 +114,10 @@ await disconnectNotion();
 
 ## Internal Endpoints
 
-| Method | Path                           | Purpose                                           |
-| ------ | ------------------------------ | ------------------------------------------------- |
-| GET    | `/internal/notion/token`       | Get Notion token (called by promptvault-service)  |
-| POST   | `/webhook`                     | Handle Notion webhook events                      |
+| Method | Path                     | Purpose                                          |
+| ------ | ------------------------ | ------------------------------------------------ |
+| GET    | `/internal/notion/token` | Get Notion token (called by promptvault-service) |
+| POST   | `/webhook`               | Handle Notion webhook events                     |
 
 ---
 

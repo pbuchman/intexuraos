@@ -35,16 +35,23 @@ const logger = pino({ name: 'speechmatics-adapter' });
  */
 interface JsonV2Result {
   type?: string;
-  alternatives?: { content?: string }[];
+  alternatives?: { content?: string; language?: string }[];
 }
 
 interface JsonV2Summary {
   content: string;
 }
 
+interface JsonV2Metadata {
+  language_pack_info?: {
+    language_description?: string;
+  };
+}
+
 interface JsonV2Response {
   summary?: JsonV2Summary;
   results: JsonV2Result[];
+  metadata?: JsonV2Metadata;
 }
 
 /**
@@ -80,7 +87,6 @@ const ADDITIONAL_VOCAB = [
 
   // Service agents
   { content: 'service-scribe', sounds_like: ['service scribe'] },
-  { content: 'sentry-triage', sounds_like: ['sentry tree ahj', 'sentry try age'] },
   { content: 'coverage-orchestrator', sounds_like: ['coverage orchestrator'] },
   { content: 'promptvault', sounds_like: ['prompt vault'] },
   { content: 'promptvault-service', sounds_like: ['prompt vault service'] },
@@ -109,8 +115,37 @@ const ADDITIONAL_VOCAB = [
   { content: 'Anthropic', sounds_like: ['an throw pick', 'an throp ik'] },
   { content: 'Perplexity', sounds_like: ['per plex ity'] },
   { content: 'Perplexity Sonar', sounds_like: ['perplexity sonar'] },
-  { content: 'LMS', sounds_like: ['el em ess', 'l m s'] },
-  { content: 'LLM', sounds_like: ['el el em', 'l l m'] },
+  { content: 'LMS', sounds_like: ['el em ess', 'learning management system'] },
+  {
+    content: 'LLM',
+    sounds_like: [
+      'el el em',
+      'elle em',
+      'large language model',
+      'ell ell em',
+      'double l m',
+      'ell l m',
+    ],
+  },
+  {
+    content: 'LLMs',
+    sounds_like: [
+      'el el ems',
+      'elle ems',
+      'large language models',
+      'ell ell ems',
+      'double l ms',
+      'ell l ms',
+    ],
+  },
+  {
+    content: 'large language model',
+    sounds_like: ['large lang model', 'large language model', 'large lang models'],
+  },
+  {
+    content: 'large language models',
+    sounds_like: ['large lang models', 'large language models', 'large lang model'],
+  },
 
   // Platform tools and services
   { content: 'Linear', sounds_like: ['line ear', 'linear app', 'lin ear', 'linear', 'leener'] },
@@ -319,7 +354,7 @@ export class SpeechmaticsTranscriptionAdapter implements SpeechTranscriptionPort
             },
           },
           summarization_config: {
-            summary_type: 'bullets',
+            summary_type: 'paragraphs',
             summary_length: 'brief',
             content_type: 'auto',
           },
@@ -494,6 +529,23 @@ export class SpeechmaticsTranscriptionAdapter implements SpeechTranscriptionPort
       // Extract summary from json-v2 response (optional field)
       const summary = result.summary?.content;
 
+      // Extract detected language from first word's alternatives or metadata
+      let detectedLanguage: string | undefined;
+      if (Array.isArray(result.results) && result.results.length > 0) {
+        const firstWord = result.results[0];
+        detectedLanguage = firstWord?.alternatives?.[0]?.language;
+      }
+      // Fallback to metadata language pack info if available
+      if (detectedLanguage === undefined && result.metadata?.language_pack_info?.language_description !== undefined) {
+        // Convert description like "Polish" to code like "pl"
+        const langDesc = result.metadata.language_pack_info.language_description.toLowerCase();
+        if (langDesc.includes('polish')) {
+          detectedLanguage = 'pl';
+        } else if (langDesc.includes('english')) {
+          detectedLanguage = 'en';
+        }
+      }
+
       // Reconstruct full text from results array
       // json-v2 returns flat array of words/punctuation with alternatives
       let text = '';
@@ -511,6 +563,7 @@ export class SpeechmaticsTranscriptionAdapter implements SpeechTranscriptionPort
         jobId,
         transcriptLength: text.length,
         hasSummary: summary !== undefined,
+        detectedLanguage,
       });
 
       logger.info(
@@ -519,6 +572,7 @@ export class SpeechmaticsTranscriptionAdapter implements SpeechTranscriptionPort
           jobId,
           transcriptLength: text.length,
           hasSummary: summary !== undefined,
+          detectedLanguage,
           durationMs,
         },
         'Transcription fetched successfully'
@@ -527,6 +581,7 @@ export class SpeechmaticsTranscriptionAdapter implements SpeechTranscriptionPort
       return ok({
         text,
         ...(summary !== undefined && { summary }),
+        ...(detectedLanguage !== undefined && { detectedLanguage }),
         apiCall,
       });
     } catch (error) {

@@ -45,6 +45,7 @@ export function useCommandChanges(enabled = true): UseCommandChangesResult {
   const isVisibleRef = useRef(true);
   const firebaseAuthenticatedRef = useRef(false);
   const isSettingUpRef = useRef(false);
+  const isInitialSnapshotRef = useRef(true);
 
   const clearChangedIds = useCallback((): void => {
     setChangedCommandIds([]);
@@ -87,9 +88,19 @@ export function useCommandChanges(enabled = true): UseCommandChangesResult {
         limit(MAX_QUERY_LIMIT)
       );
 
+      // Reset initial snapshot flag when starting new listener
+      isInitialSnapshotRef.current = true;
+
       unsubscribeRef.current = onSnapshot(
         q,
         (snapshot) => {
+          // Skip the initial snapshot - it reports all documents as 'added'
+          // which would override the data from fetchData()
+          if (isInitialSnapshotRef.current) {
+            isInitialSnapshotRef.current = false;
+            return;
+          }
+
           const changed: string[] = [];
 
           snapshot.docChanges().forEach((change) => {

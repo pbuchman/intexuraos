@@ -1,8 +1,8 @@
 # Release
 
-Generate a new release by analyzing actual code changes since the last release.
+Generate a new release by analyzing merged pull requests and their associated Linear issues since the last release.
 
-**Important:** Ignore commit messages. They are often misleading. Analyze the actual diff of each commit to understand what really changed.
+**Important:** Use PR descriptions and Linear issues as the primary source of truth. They contain human-written context about what changed and why.
 
 ## Steps
 
@@ -22,114 +22,105 @@ head -50 CHANGELOG.md
 # Check for version tags
 git tag -l "v*" --sort=-v:refname | head -5
 
-# If no tag, find commit that set current version in CHANGELOG
-git log --oneline --all -- CHANGELOG.md | head -10
+# Get the date of the last release tag
+git log -1 --format="%ci" v<last-version>
 ```
 
-### 3. Get List of Commits to Analyze
+### 3. Get Merged PRs Since Last Release
 
 ```bash
-# Get commit hashes since last release (oldest first)
-git log <last-release-commit>..HEAD --reverse --format="%H"
+# List PRs merged since last release date
+gh pr list --state merged --base main --json number,title,body,mergedAt,author --limit 100 | \
+  jq --arg date "<last-release-date>" '[.[] | select(.mergedAt > $date)]'
 ```
 
-### 4. Analyze Each Commit's ACTUAL Changes
+### 3.5. Get Direct Commits Without PRs
 
-For EACH commit, run:
+Some commits are pushed directly to development without going through a PR. Capture these separately:
 
 ```bash
-git show <commit-hash> --stat        # See which files changed
-git show <commit-hash>               # See actual diff
+# Get commits on development since last release that aren't from merge commits
+git log v<last-version>..origin/development --no-merges --format="%H %s" | \
+  while read hash msg; do
+    # Check if commit is part of any merged PR
+    if ! gh pr list --state merged --search "$hash" --json number | jq -e 'length > 0' > /dev/null 2>&1; then
+      echo "$hash $msg"
+    fi
+  done
 ```
 
-**DO NOT trust the commit message.** Read the diff and determine:
+For each direct commit:
+1. Use the commit message as the description
+2. Extract Linear issue ID if present (INT-XXX pattern)
+3. Categorize based on commit message prefix (feat:, fix:, chore:, etc.)
 
-- What files were added/modified/deleted?
-- What functions/classes/routes were added?
-- What behavior changed?
-- What infrastructure was modified?
+### 4. For Each PR: Extract Information
 
-### 5. Categorize Based on File Paths and Content
+For EACH merged PR:
 
-#### Functional Changes (User-Facing)
+1. **Read the PR description** - Contains summary, test plan, and context
+2. **Extract Linear issue IDs** - Look for `INT-XXX` patterns in title or body
+3. **Fetch Linear issue details** - Use MCP tools to get issue title, description, and labels
 
-| Path Pattern                        | Category                                          |
-| ----------------------------------- | ------------------------------------------------- |
-| `apps/*/src/routes/*.ts`            | API Endpoints - read the route to see method/path |
-| `apps/*/src/domain/*/models/*.ts`   | Domain Models - note new types/interfaces         |
-| `apps/*/src/domain/*/usecases/*.ts` | Use Cases - describe the business logic           |
-| `apps/web/src/components/*.tsx`     | Web UI Components                                 |
-| `apps/web/src/pages/*.tsx`          | Web UI Pages                                      |
-| `packages/infra-*`                  | Integration Features (if adding new provider)     |
+```bash
+# Get full PR details including body
+gh pr view <pr-number> --json title,body,labels,mergedAt
+```
 
-#### Technical Changes (Infrastructure)
+For Linear issues, use the `mcp__linear__get_issue` tool:
+- Extract issue ID from PR (e.g., `INT-123` → `INT-123`)
+- Fetch issue details: title, description, labels, state
 
-| Path Pattern                             | Category                   |
-| ---------------------------------------- | -------------------------- |
-| `apps/*/` (new directory)                | Services Created           |
-| `packages/*/` (new directory)            | Packages Created           |
-| `terraform/**`                           | Infrastructure (Terraform) |
-| `**/Dockerfile`                          | Docker Configuration       |
-| `.github/workflows/*`                    | CI/CD Pipeline             |
-| `migrations/*.mjs`                       | Database Migrations        |
-| `**/vitest.config.ts`, `**/__tests__/**` | Testing Infrastructure     |
-| `scripts/*`                              | Development Tools          |
+### 5. Categorize Based on PR and Linear Context
+
+**Categorization sources (in priority order):**
+
+1. **Linear issue labels** - `feature`, `bug`, `chore`, `breaking-change`
+2. **PR labels** - Similar categorization
+3. **Linear issue title prefix** - `[sentry]`, `[feature]`, etc.
+4. **PR title prefix** - Convention-based (e.g., `feat:`, `fix:`, `chore:`)
+5. **PR description content** - Look for explicit mentions of breaking changes
+
+**Label to Category Mapping:**
+
+| Label/Prefix               | Category             | Semver Impact |
+| -------------------------- | -------------------- | ------------- |
+| `breaking-change`, `BREAKING` | Breaking Changes     | MAJOR         |
+| `feature`, `feat:`, `enhancement` | New Features     | MINOR         |
+| `bug`, `fix:`, `[sentry]`  | Bug Fixes            | PATCH         |
+| `chore`, `refactor`, `docs` | Technical/Maintenance | PATCH        |
+| `infra`, `terraform`       | Infrastructure       | PATCH         |
 
 ### 6. Determine Semver Version Bump
 
-Based on the categorized changes, determine the release type using this decision tree:
+Based on the categorized changes from PRs, Linear issues, and direct commits:
 
 **Decision Table:**
 
-| Change Type                              | Release Level | Example                            |
-| ---------------------------------------- | ------------- | ---------------------------------- |
-| **Breaking Changes**                     |               |                                    |
-| Deleted routes/endpoints                 | **MAJOR**     | Removed `POST /todos`              |
-| Deleted domain models/use cases          | **MAJOR**     | Removed `Todo` entity              |
-| Modified API signatures (removed params) | **MAJOR**     | Removed `userId` from request      |
-| Required previously optional params      | **MAJOR**     | `title?: string` → `title: string` |
-| Deleted Firestore collections            | **MAJOR**     | Dropped `todos` collection         |
-| Terraform resource deletion              | **MAJOR**     | Removed Cloud Run service          |
-| **New Features**                         |               |                                    |
-| New API endpoints                        | **MINOR**     | Added `GET /bookmarks`             |
-| New domain models/use cases              | **MINOR**     | Added `Bookmark` entity            |
-| New UI pages/components                  | **MINOR**     | Added settings page                |
-| New services/packages                    | **MINOR**     | Added `image-service`              |
-| New integrations/providers               | **MINOR**     | Added OpenAI provider              |
-| **Bug Fixes & Improvements**             |               |                                    |
-| Bug fixes (backward compatible)          | **PATCH**     | Fixed null pointer in todos        |
-| Refactoring (no behavior change)         | **PATCH**     | Extracted helper function          |
-| Testing infrastructure                   | **PATCH**     | Added tests for bookmarks          |
-| CI/CD improvements                       | **PATCH**     | Updated GitHub workflow            |
-| Documentation                            | **PATCH**     | Updated README                     |
-| Performance improvements                 | **PATCH**     | Optimized query                    |
+| Change Type                 | Release Level | How to Detect                                       |
+| --------------------------- | ------------- | --------------------------------------------------- |
+| **Breaking Changes**        | **MAJOR**     |                                                     |
+| API breaking change         | MAJOR         | PR mentions "breaking", Linear has `breaking` label |
+| Removed endpoint/feature    | MAJOR         | PR describes removal, deprecation notice            |
+| Schema migration required   | MAJOR         | PR mentions migration, DB changes                   |
+| **New Features**            | **MINOR**     |                                                     |
+| New feature                 | MINOR         | Linear `feature` label, PR title `feat:`            |
+| New service/integration     | MINOR         | PR describes new service, Linear mentions new       |
+| **Bug Fixes & Maintenance** | **PATCH**     |                                                     |
+| Bug fix                     | PATCH         | Linear `bug` label, PR title `fix:`, `[sentry]`     |
+| Refactoring                 | PATCH         | PR title `refactor:`, Linear `chore` label          |
+| Documentation               | PATCH         | PR title `docs:`, docs-only changes                 |
+| CI/Infrastructure           | PATCH         | PR mentions infra, terraform, CI                    |
 
 **Algorithm:**
 
 ```
-IF any breaking_changes_found:
+IF any PR/issue indicates breaking changes:
     RETURN "major"
-ELSE IF any new_features_found:
+ELSE IF any PR/issue indicates new features:
     RETURN "minor"
 ELSE:
     RETURN "patch"
-```
-
-**Examples:**
-
-```
-# Breaking change detected
-- Removed `GET /internal/todos` endpoint → MAJOR (0.0.5 → 1.0.0)
-
-# New feature only
-- Added `POST /bookmarks` endpoint → MINOR (0.0.5 → 0.1.0)
-
-# Bug fixes only
-- Fixed todo pagination bug → PATCH (0.0.5 → 0.0.6)
-
-# Mixed (new feature + bug fixes)
-- Added `POST /bookmarks` + fixed pagination → MINOR (0.0.5 → 0.1.0)
-  (new features take precedence over patches)
 ```
 
 **Note for Early Development (0.0.X):**
@@ -140,6 +131,11 @@ ELSE:
 
 ### 7. Build the Changelog Entry
 
+**Sources for changelog entries:**
+1. **PR descriptions** — Use the Summary section from PR body
+2. **Linear issue titles** — Describe the feature/fix in user terms
+3. **Direct commit messages** — For non-PR work
+
 **Format:** Unnumbered version headers with date only.
 
 ```markdown
@@ -147,29 +143,31 @@ ELSE:
 
 ### Added
 
-- [Describe new features based on actual code added]
+- [Feature from PR summary or Linear issue title]
 
 ### Changed
 
-- [Describe modifications based on actual diff]
+- [Modification described in PR or Linear]
 
 ### Fixed
 
-- [Describe bug fixes based on what the code now does differently]
+- [Bug fix from PR, often linked to Sentry via [sentry] prefix]
 
 ### Technical
 
-- [Infrastructure/architecture changes]
+- [Infrastructure/architecture from PR or direct commits]
 
 ---
 ```
 
-**Changelog Rules:**
+**Writing Guidelines:**
 
+- Summarize PR descriptions, don't copy verbatim
+- Use user-facing language, not internal jargon
+- Group related changes from multiple PRs
+- Link to Linear issues where helpful: `(INT-XXX)`
 - Use date as header, not version number
 - No numbered lists within sections — use bullet points
-- Keep descriptions concise but meaningful
-- Group related changes together
 - Most recent release at the top
 
 ### 8. Update All Package Versions
@@ -214,34 +212,49 @@ git commit -m "Release vNEW_VERSION"
 
 ---
 
-## Analysis Approach
-
-When reading a diff:
-
-1. **New file added** → What does it do? Read the code.
-2. **Function added** → What's its purpose? Read the implementation.
-3. **Route added** → What endpoint? What does it handle?
-4. **Component added** → What UI does it render?
-5. **Test added** → What feature does it cover? (usually indicates the feature)
-6. **Config changed** → What setting was modified and why?
-
 ## What to Skip
 
-- Pure refactoring with no behavior change
-- Formatting/linting changes
-- Comment-only changes
-- Test-only changes (unless they reveal a new feature)
-- Dependency updates (unless significant)
+- PRs that only update dependencies (unless security-related)
+- PRs that only modify CI/tooling configs
+- PRs with `skip-changelog` label
+- Revert PRs (mention original in changelog if significant)
+- Direct commits that are merge conflict resolutions
+- PRs that only add/update tests without user-facing changes
 
 ## What to Highlight
 
-- New API endpoints (method, path, purpose)
-- New UI pages or significant components
-- New integrations or providers
-- Bug fixes (describe what was broken, now works)
-- Performance improvements
-- Security enhancements
-- Breaking changes (MUST be noted)
+- PRs with `feature` or `enhancement` labels on Linear
+- PRs fixing customer-reported issues (often have Sentry links)
+- PRs with `breaking-change` label (MUST be prominently noted)
+- PRs that add new services or integrations
+- Security fixes (even if PATCH, call out explicitly)
+- Performance improvements mentioned in PR description
+
+## Using Linear MCP Tools
+
+To fetch Linear issue details for a PR:
+
+1. **Extract issue ID** from PR title/body (pattern: `INT-XXX`)
+2. **Fetch issue details:**
+   ```
+   Use mcp__linear__get_issue with the issue ID
+   ```
+3. **Extract useful fields:**
+   - `title` — User-facing description
+   - `description` — Full context
+   - `labels` — Categorization (feature, bug, chore, etc.)
+   - `state` — Verify issue was completed
+
+**Label Interpretation:**
+
+| Linear Label      | Changelog Category | Semver Impact |
+| ----------------- | ------------------ | ------------- |
+| `feature`         | Added              | MINOR         |
+| `enhancement`     | Changed            | MINOR         |
+| `bug`             | Fixed              | PATCH         |
+| `breaking-change` | Breaking           | MAJOR         |
+| `chore`           | Technical          | PATCH         |
+| `documentation`   | Technical          | PATCH         |
 
 ## Version Strategy
 

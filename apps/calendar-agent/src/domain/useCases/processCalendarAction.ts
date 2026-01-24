@@ -16,8 +16,10 @@ import type {
   FailedEventRepository,
   CalendarActionExtractionService,
   ExtractionError,
+  ExtractedCalendarEvent,
   UserServiceClient,
   ProcessedActionRepository,
+  CalendarPreviewRepository,
 } from '../ports.js';
 
 export interface ProcessCalendarActionDeps {
@@ -26,6 +28,7 @@ export interface ProcessCalendarActionDeps {
   failedEventRepository: FailedEventRepository;
   calendarActionExtractionService: CalendarActionExtractionService;
   processedActionRepository: ProcessedActionRepository;
+  calendarPreviewRepository: CalendarPreviewRepository;
   logger: Logger;
 }
 
@@ -97,7 +100,7 @@ export async function processCalendarAction(
   deps: ProcessCalendarActionDeps
 ): Promise<Result<ProcessCalendarActionResponse, CalendarError>> {
   const { actionId, userId, text } = request;
-  const { userServiceClient, googleCalendarClient, failedEventRepository, calendarActionExtractionService, processedActionRepository, logger } =
+  const { userServiceClient, googleCalendarClient, failedEventRepository, calendarActionExtractionService, processedActionRepository, calendarPreviewRepository, logger } =
     deps;
 
   logger.info({ userId, actionId, textLength: text.length }, 'processCalendarAction: entry');
@@ -123,17 +126,57 @@ export async function processCalendarAction(
 
   const currentDate = new Date().toISOString().substring(0, 10);
 
-  const extractResult = await calendarActionExtractionService.extractEvent(userId, text, currentDate);
+  // Check for existing preview - if ready, use its data instead of LLM extraction
+  const previewResult = await calendarPreviewRepository.getByActionId(actionId);
+  let extracted: ExtractedCalendarEvent;
 
-  if (!extractResult.ok) {
-    logger.error(
-      { userId, actionId, error: extractResult.error },
-      'processCalendarAction: extraction failed'
+  if (!previewResult.ok) {
+    // Log preview lookup failure but continue with fallback (non-fatal)
+    logger.warn(
+      { userId, actionId, error: previewResult.error },
+      'processCalendarAction: failed to fetch preview, falling back to LLM extraction'
     );
-    return err(toCalendarError(extractResult.error));
   }
 
-  const extracted = extractResult.value;
+  if (previewResult.ok && previewResult.value !== null && previewResult.value.status === 'ready') {
+    const preview = previewResult.value;
+    logger.info(
+      { userId, actionId, summary: preview.summary },
+      'processCalendarAction: using existing preview data (skipping LLM extraction)'
+    );
+
+    // Convert preview to ExtractedCalendarEvent format
+    extracted = {
+      summary: preview.summary ?? '',
+      start: preview.start ?? null,
+      end: preview.end ?? null,
+      location: preview.location ?? null,
+      description: preview.description ?? null,
+      valid: preview.summary !== undefined && preview.start !== undefined,
+      error: null,
+      reasoning: preview.reasoning ?? 'Used pre-generated preview data',
+    };
+  } else {
+    // Fallback: LLM extraction (original behavior)
+    if (previewResult.ok && previewResult.value !== null) {
+      logger.info(
+        { userId, actionId, previewStatus: previewResult.value.status },
+        'processCalendarAction: preview exists but not ready, falling back to LLM extraction'
+      );
+    }
+
+    const extractResult = await calendarActionExtractionService.extractEvent(userId, text, currentDate);
+
+    if (!extractResult.ok) {
+      logger.error(
+        { userId, actionId, error: extractResult.error },
+        'processCalendarAction: extraction failed'
+      );
+      return err(toCalendarError(extractResult.error));
+    }
+
+    extracted = extractResult.value;
+  }
 
   logger.info(
     { userId, actionId, summary: extracted.summary, valid: extracted.valid },
@@ -308,6 +351,17 @@ export async function processCalendarAction(
       { actionId, error: saveResult.error },
       'processCalendarAction: failed to save processed action (event was created successfully)'
     );
+  }
+
+  // Clean up preview after successful processing
+  if (previewResult.ok && previewResult.value !== null) {
+    const deleteResult = await calendarPreviewRepository.delete(actionId);
+    if (!deleteResult.ok) {
+      logger.warn(
+        { actionId, error: deleteResult.error },
+        'processCalendarAction: failed to delete calendar preview after successful event creation'
+      );
+    }
   }
 
   return ok({

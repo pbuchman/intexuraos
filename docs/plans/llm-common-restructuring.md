@@ -1,5 +1,12 @@
 # llm-common Restructuring Plan
 
+> **SUPERSEDED** by [2026-01-24-llm-prompts-extraction.md](./2026-01-24-llm-prompts-extraction.md)
+>
+> The `llm-common` package has been replaced by `llm-prompts` and `llm-utils`.
+> See [LLM Packages Reference](../architecture/llm-packages.md) for current architecture.
+
+---
+
 **Linear Issue:** [INT-69](https://linear.app/pbuchman/issue/INT-69/refactor-restructure-llm-common-with-per-package-directories)
 **Sub-task:** [INT-70](https://linear.app/pbuchman/issue/INT-70/pbu-69-plan-llm-common-restructuring-approach)
 **Date:** 2026-01-16

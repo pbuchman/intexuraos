@@ -607,7 +607,7 @@ describe('TranscribeAudioUseCase', () => {
       expect(successMessage?.replyToMessageId).toBe('wamid.original123');
     });
 
-    it('sends success message with transcript and summary when available', async () => {
+    it('sends success message with transcript and summary with English intro phrase', async () => {
       await createTestMessage('test-message-id', 'test-user-id');
 
       const input = createTestInput();
@@ -621,7 +621,8 @@ describe('TranscribeAudioUseCase', () => {
         transcriptionService.setJobResult(
           jobId,
           'Create a todo for reviewing the PR',
-          '• User wants to create a new todo\n• Todo is for reviewing PR 445'
+          'User wants to create a new todo for reviewing PR 445',
+          'en'
         );
       }
 
@@ -632,8 +633,38 @@ describe('TranscribeAudioUseCase', () => {
       expect(successMessage).toBeDefined();
       expect(successMessage?.message).toContain('Create a todo for reviewing the PR');
       expect(successMessage?.message).toContain('📝 *Summary:*');
-      expect(successMessage?.message).toContain('• User wants to create a new todo');
-      expect(successMessage?.message).toContain('• Todo is for reviewing PR 445');
+      expect(successMessage?.message).toContain('Here is a summary of what you said:');
+      expect(successMessage?.message).toContain('User wants to create a new todo');
+    });
+
+    it('sends success message with Polish intro phrase when detected language is Polish', async () => {
+      await createTestMessage('test-message-id', 'test-user-id');
+
+      const input = createTestInput();
+      const executePromise = usecase.execute(input, logger);
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      const jobs = transcriptionService.getJobs();
+      const jobId = Array.from(jobs.keys())[0];
+      if (jobId !== undefined) {
+        transcriptionService.setJobResult(
+          jobId,
+          'Utwórz zadanie do przejrzenia PR',
+          'Użytkownik chce utworzyć nowe zadanie do przejrzenia PR 445',
+          'pl'
+        );
+      }
+
+      await executePromise;
+
+      const sentMessages = whatsappCloudApi.getSentMessages();
+      const successMessage = sentMessages.find((m) => m.message.includes('🎙️'));
+      expect(successMessage).toBeDefined();
+      expect(successMessage?.message).toContain('Utwórz zadanie do przejrzenia PR');
+      expect(successMessage?.message).toContain('📝 *Summary:*');
+      expect(successMessage?.message).toContain('Oto podsumowanie tego, co powiedziałeś:');
+      expect(successMessage?.message).toContain('Użytkownik chce utworzyć nowe zadanie');
     });
 
     it('sends success message without summary section when summary is not available', async () => {
@@ -674,6 +705,124 @@ describe('TranscribeAudioUseCase', () => {
     });
   });
 
+  describe('markdown header stripping in summary', () => {
+    it('strips single # header from summary', async () => {
+      await createTestMessage('test-message-id', 'test-user-id');
+
+      const input = createTestInput();
+      const executePromise = usecase.execute(input, logger);
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      const jobs = transcriptionService.getJobs();
+      const jobId = Array.from(jobs.keys())[0];
+      if (jobId !== undefined) {
+        transcriptionService.setJobResult(
+          jobId,
+          'Transcription text',
+          '# Title\nSome content'
+        );
+      }
+
+      await executePromise;
+
+      const sentMessages = whatsappCloudApi.getSentMessages();
+      const successMessage = sentMessages.find((m) => m.message.includes('🎙️'));
+      expect(successMessage).toBeDefined();
+      // Header marker should be stripped, content should remain
+      expect(successMessage?.message).toContain('Title');
+      expect(successMessage?.message).not.toContain('# Title');
+      expect(successMessage?.message).toContain('Some content');
+    });
+
+    it('strips ### header from summary', async () => {
+      await createTestMessage('test-message-id', 'test-user-id');
+
+      const input = createTestInput();
+      const executePromise = usecase.execute(input, logger);
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      const jobs = transcriptionService.getJobs();
+      const jobId = Array.from(jobs.keys())[0];
+      if (jobId !== undefined) {
+        transcriptionService.setJobResult(
+          jobId,
+          'Transcription text',
+          '### Key Points\n- Point 1\n- Point 2'
+        );
+      }
+
+      await executePromise;
+
+      const sentMessages = whatsappCloudApi.getSentMessages();
+      const successMessage = sentMessages.find((m) => m.message.includes('🎙️'));
+      expect(successMessage).toBeDefined();
+      // Header marker should be stripped
+      expect(successMessage?.message).toContain('Key Points');
+      expect(successMessage?.message).not.toContain('### Key Points');
+      expect(successMessage?.message).toContain('- Point 1');
+    });
+
+    it('strips multiple headers from multiline summary', async () => {
+      await createTestMessage('test-message-id', 'test-user-id');
+
+      const input = createTestInput();
+      const executePromise = usecase.execute(input, logger);
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      const jobs = transcriptionService.getJobs();
+      const jobId = Array.from(jobs.keys())[0];
+      if (jobId !== undefined) {
+        transcriptionService.setJobResult(
+          jobId,
+          'Transcription text',
+          'Intro\n### Section\nContent\n## Another Section\nMore content'
+        );
+      }
+
+      await executePromise;
+
+      const sentMessages = whatsappCloudApi.getSentMessages();
+      const successMessage = sentMessages.find((m) => m.message.includes('🎙️'));
+      expect(successMessage).toBeDefined();
+      expect(successMessage?.message).toContain('Intro');
+      expect(successMessage?.message).toContain('Section');
+      expect(successMessage?.message).toContain('Content');
+      expect(successMessage?.message).toContain('Another Section');
+      expect(successMessage?.message).not.toContain('### Section');
+      expect(successMessage?.message).not.toContain('## Another');
+    });
+
+    it('preserves bold and italic markdown (only strips headers)', async () => {
+      await createTestMessage('test-message-id', 'test-user-id');
+
+      const input = createTestInput();
+      const executePromise = usecase.execute(input, logger);
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      const jobs = transcriptionService.getJobs();
+      const jobId = Array.from(jobs.keys())[0];
+      if (jobId !== undefined) {
+        transcriptionService.setJobResult(
+          jobId,
+          'Transcription text',
+          '**bold** and *italic* text'
+        );
+      }
+
+      await executePromise;
+
+      const sentMessages = whatsappCloudApi.getSentMessages();
+      const successMessage = sentMessages.find((m) => m.message.includes('🎙️'));
+      expect(successMessage).toBeDefined();
+      // Bold and italic markers should be preserved
+      expect(successMessage?.message).toContain('**bold** and *italic* text');
+    });
+  });
+
   describe('event publishing', () => {
     it('publishes command ingest event after successful transcription', async () => {
       await createTestMessage('test-message-id', 'test-user-id');
@@ -705,6 +854,41 @@ describe('TranscribeAudioUseCase', () => {
       expect(events[0]?.text).toBe('Voice transcription result');
     });
 
+    it('publishes command ingest event with summary when transcription includes summary', async () => {
+      await createTestMessage('test-message-id', 'test-user-id');
+
+      const fakeEventPublisher = new FakeEventPublisher();
+      const depsWithPublisher: TranscribeAudioDeps = {
+        ...deps,
+        eventPublisher: fakeEventPublisher,
+      };
+      const usecaseWithPublisher = new TranscribeAudioUseCase(depsWithPublisher, fastPollingConfig);
+
+      const input = createTestInput();
+      const executePromise = usecaseWithPublisher.execute(input, logger);
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      const jobs = transcriptionService.getJobs();
+      const jobId = Array.from(jobs.keys())[0];
+      if (jobId !== undefined) {
+        transcriptionService.setJobResult(
+          jobId,
+          'Full transcript of the voice message',
+          '• Summary point 1\n• Summary point 2'
+        );
+      }
+
+      await executePromise;
+
+      const events = fakeEventPublisher.getCommandIngestEvents();
+      expect(events.length).toBe(1);
+      expect(events[0]?.type).toBe('command.ingest');
+      expect(events[0]?.sourceType).toBe('whatsapp_voice');
+      expect(events[0]?.text).toBe('Full transcript of the voice message');
+      expect(events[0]?.summary).toBe('• Summary point 1\n• Summary point 2');
+    });
+
     it('handles event publish failure gracefully', async () => {
       await createTestMessage('test-message-id', 'test-user-id');
 
@@ -717,6 +901,7 @@ describe('TranscribeAudioUseCase', () => {
         publishWebhookProcess: vi.fn().mockResolvedValue({ ok: true }),
         publishTranscribeAudio: vi.fn().mockResolvedValue({ ok: true }),
         publishExtractLinkPreviews: vi.fn().mockResolvedValue({ ok: true }),
+        publishApprovalReply: vi.fn().mockResolvedValue({ ok: true }),
       };
       const depsWithPublisher: TranscribeAudioDeps = {
         ...deps,

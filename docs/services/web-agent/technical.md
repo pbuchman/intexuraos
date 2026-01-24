@@ -2,55 +2,161 @@
 
 ## Overview
 
-Web-agent is an internal-only service that fetches OpenGraph metadata from URLs. It uses Cheerio for HTML parsing and native fetch with AbortController for timeout handling.
+Web-agent extracts web content and generates AI summaries. It uses Crawl4AI for headless browser crawling, Cheerio for OpenGraph parsing, and the user's configured LLM for summarization with automatic response repair.
+
+Runs on Cloud Run with auto-scaling (0-1 instances).
 
 ## Architecture
 
 ```mermaid
 graph TB
-    Client[Caller Service] -->|POST /internal/link-previews| WA[Web Agent]
+    subgraph "Callers"
+        RA[research-agent]
+        BA[bookmarks-agent]
+    end
 
-    WA -->|fetch| Internet[Target URLs]
+    subgraph "web-agent"
+        Routes[Fastify Routes]
+        PCF[PageContentFetcher]
+        LLM[LlmSummarizer]
+        OGF[OpenGraphFetcher]
+        Parser[parseSummaryResponse]
+        Repair[summaryRepairPrompt]
+    end
 
-    WA -->|parse HTML| Cheerio[Cheerio Parser]
+    subgraph "External"
+        C4AI[Crawl4AI API]
+        UserLLM[User's LLM Provider]
+        Target[Target URLs]
+    end
 
-    Cheerio -->|extract| OG[OpenGraph Tags]
-    Cheerio -->|fallback| HTML[HTML Meta Tags]
-    Cheerio -->|resolve| Images[Image URLs]
+    subgraph "Internal Services"
+        US[user-service]
+    end
 
-    OG -->|LinkPreview| Client
-    HTML -->|LinkPreview| Client
-    Images -->|LinkPreview| Client
+    RA -->|POST /internal/page-summaries| Routes
+    BA -->|POST /internal/link-previews| Routes
+
+    Routes --> PCF
+    Routes --> OGF
+
+    PCF -->|crawl| C4AI
+    C4AI -->|fetch| Target
+
+    Routes --> LLM
+    LLM -->|get user keys| US
+    LLM -->|generate| UserLLM
+    LLM --> Parser
+    Parser -->|invalid| Repair
+    Repair -->|retry| LLM
+
+    OGF -->|fetch HTML| Target
+    OGF -->|parse| Cheerio[Cheerio]
+
+    classDef service fill:#e1f5ff
+    classDef external fill:#f0f0f0
+    classDef internal fill:#fff4e6
+
+    class Routes,PCF,LLM,OGF,Parser,Repair service
+    class C4AI,UserLLM,Target external
+    class US internal
 ```
+
+## Data Flow - Page Summarization
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Caller
+    participant WebAgent as web-agent
+    participant Crawl4AI
+    participant UserService as user-service
+    participant LLM as User's LLM
+
+    Caller->>+WebAgent: POST /internal/page-summaries<br/>{url, userId}
+    WebAgent->>Crawl4AI: Crawl URL (browser strategy)
+    Crawl4AI-->>WebAgent: markdown content
+    WebAgent->>UserService: GET /internal/users/{id}/settings
+    UserService-->>WebAgent: {llmPreferences: {defaultModel}}
+    WebAgent->>UserService: GET /internal/users/{id}/llm-keys
+    UserService-->>WebAgent: {google: "key", openai: "key"}
+    WebAgent->>LLM: Generate summary
+    LLM-->>WebAgent: "Here is the summary: {...}"
+    WebAgent->>WebAgent: parseSummaryResponse()
+    alt Response is JSON
+        WebAgent->>LLM: Repair prompt
+        LLM-->>WebAgent: Clean prose
+    end
+    WebAgent-->>-Caller: {summary, wordCount, estimatedReadingMinutes}
+```
+
+## Recent Changes
+
+| Commit     | Description                                            | Date       |
+| ---------- | ------------------------------------------------------ | ---------- |
+| `4cc3276f` | INT-213 Fix AI summary returning raw JSON              | 2025-01-24 |
+| `31dbd6d0` | Handle 403 errors on OpenGraph link preview fetching   | 2025-01-21 |
+| `8e006901` | INT-193 Migrate Crawl4AI client to api.crawl4ai.com/v1 | 2025-01-20 |
+| `5b589289` | INT-128 Add page summarization via Crawl4AI            | 2025-01-18 |
 
 ## API Endpoints
 
 ### Internal Endpoints
 
-| Method | Path                      | Description                       | Auth           |
-| ------ | ------------------------- | --------------------------------- | -------------- |
-| POST   | `/internal/link-previews` | Fetch OpenGraph metadata for URLs | Internal token |
+| Method | Path                       | Description                                  | Auth           |
+| ------ | -------------------------- | -------------------------------------------- | -------------- |
+| POST   | `/internal/link-previews`  | Fetch OpenGraph metadata for URLs            | Internal token |
+| POST   | `/internal/page-summaries` | Crawl and summarize a web page with user LLM | Internal token |
 
-**Request Body:**
+### Link Previews Request
 
 ```typescript
-{
-  urls: string[],          // URLs to fetch
-  timeoutMs?: number       // Optional timeout override (default 5000)
+interface FetchLinkPreviewsBody {
+  urls: string[]; // 1-10 URLs
+  timeoutMs?: number; // 1000-30000ms (default: 5000)
 }
 ```
 
-**Response:**
+### Link Previews Response
 
 ```typescript
-{
-  results: LinkPreviewResult[],  // Individual result per URL
+interface FetchLinkPreviewsResponse {
+  results: LinkPreviewResult[];
   metadata: {
-    requestedCount: number,
-    successCount: number,
-    failedCount: number,
-    durationMs: number
-  }
+    requestedCount: number;
+    successCount: number;
+    failedCount: number;
+    durationMs: number;
+  };
+}
+```
+
+### Page Summaries Request
+
+```typescript
+interface SummarizePageBody {
+  url: string; // URL to summarize
+  userId: string; // User ID for LLM key lookup
+  maxSentences?: number; // 1-50 (default: 20)
+  maxReadingMinutes?: number; // 1-10 (default: 3)
+}
+```
+
+### Page Summaries Response
+
+```typescript
+interface SummarizePageResponse {
+  result: PageSummaryResult;
+  metadata: {
+    durationMs: number;
+  };
+}
+
+interface PageSummary {
+  url: string;
+  summary: string;
+  wordCount: number;
+  estimatedReadingMinutes: number;
 }
 ```
 
@@ -58,96 +164,148 @@ graph TB
 
 ### LinkPreview
 
-| Field         | Type      | Description  |
-| ------------- | --------- | ------------ | ---------------------------------- |
-| `url`         | string    | Original URL |
-| `title`       | string \  | undefined    | og:title or HTML title             |
-| `description` | string \  | undefined    | og:description or meta description |
-| `image`       | string \  | undefined    | Resolved absolute og:image URL     |
-| `favicon`     | string \  | undefined    | Favicon URL                        |
-| `siteName`    | string \  | undefined    | og:site_name                       |
-
-### LinkPreviewResult (discriminated union)
-
-**Success:**
-
-| Field     | Type        | Description        |
-| --------- | ----------- | ------------------ |
-| `url`     | string      | Original URL       |
-| `status`  | 'success'   | Result status      |
-| `preview` | LinkPreview | Extracted metadata |
-
-**Failed:**
-
-| Field    | Type             | Description   |
-| -------- | ---------------- | ------------- |
-| `url`    | string           | Original URL  |
-| `status` | 'failed'         | Result status |
-| `error`  | LinkPreviewError | Error details |
+| Field         | Type                  | Description                 |
+| ------------- | --------------------- | --------------------------- |
+| `url`         | `string`              | Original URL                |
+| `title`       | `string \| undefined` | og:title or HTML title      |
+| `description` | `string \| undefined` | og:description or meta desc |
+| `image`       | `string \| undefined` | Resolved absolute og:image  |
+| `favicon`     | `string \| undefined` | Favicon URL                 |
+| `siteName`    | `string \| undefined` | og:site_name                |
 
 ### LinkPreviewError
 
-| Field     | Type                 | Description                                   |
-| --------- | -------------------- | --------------------------------------------- |
-| `code`    | LinkPreviewErrorCode | FETCH_FAILED, TIMEOUT, TOO_LARGE, INVALID_URL |
-| `message` | string               | Human-readable error message                  |
+| Code            | Meaning                                |
+| --------------- | -------------------------------------- |
+| `FETCH_FAILED`  | HTTP errors or network issues          |
+| `TIMEOUT`       | Request exceeded timeout               |
+| `TOO_LARGE`     | Response over 2MB                      |
+| `INVALID_URL`   | Malformed URL or unsupported protocol  |
+| `ACCESS_DENIED` | HTTP 403 - website blocked the request |
 
-## OpenGraph Tag Extraction
+### PageSummaryError
 
-| Tag         | Property           | Fallback                    |
-| ----------- | ------------------ | --------------------------- |
-| Title       | `og:title`         | `<title>` text              |
-| Description | `og:description`   | `<meta name="description">` |
-| Image       | `og:image`         | None                        |
-| Site Name   | `og:site_name`     | None                        |
-| Favicon     | `link[rel="icon"]` | `/favicon.ico`              |
+| Code           | Meaning                               |
+| -------------- | ------------------------------------- |
+| `FETCH_FAILED` | Crawl4AI failed to fetch page         |
+| `TIMEOUT`      | Crawl exceeded 60s timeout            |
+| `NO_CONTENT`   | No markdown extracted from page       |
+| `API_ERROR`    | LLM API error or user service error   |
+| `INVALID_URL`  | Malformed URL or unsupported protocol |
 
-**Favicon selectors in order:**
+## Key Components
 
-1. `link[rel="icon"]`
-2. `link[rel="shortcut icon"]`
-3. `link[rel="apple-touch-icon"]`
-4. `link[rel="apple-touch-icon-precomposed"]`
-5. `{origin}/favicon.ico`
+### PageContentFetcher
 
-## Configuration
+Crawls pages via Crawl4AI Cloud API without LLM extraction.
 
-| Setting           | Default        | Description                     |
-| ----------------- | -------------- | ------------------------------- |
-| `timeoutMs`       | 5000           | Request timeout in milliseconds |
-| `maxResponseSize` | 2097152 (2MB)  | Maximum response body size      |
-| `userAgent`       | Mozilla/5.0... | User agent string               |
+**Configuration:**
+
+| Setting     | Default                    | Description             |
+| ----------- | -------------------------- | ----------------------- |
+| `baseUrl`   | `https://api.crawl4ai.com` | Crawl4AI Cloud endpoint |
+| `timeoutMs` | 60000                      | Crawl timeout           |
+| `apiKey`    | (required)                 | Crawl4AI API key        |
+
+**Strategy:** Uses `browser` strategy for JavaScript rendering.
+
+### LlmSummarizer
+
+Generates prose summaries with automatic repair on parse failures.
+
+**Flow:**
+
+1. Build prompt with language preservation instruction
+2. Send to user's LLM via `llm-factory`
+3. Parse response with `parseSummaryResponse()`
+4. If JSON detected, send repair prompt and retry once
+5. Return `PageSummary` or error
+
+**Key feature:** Prompt includes "Write in SAME LANGUAGE as original content" instruction.
+
+### parseSummaryResponse
+
+Validates LLM output is clean prose.
+
+**Checks:**
+
+- Not empty after cleaning
+- Not JSON format (objects/arrays)
+- Strips unwanted prefixes ("Here is", "Summary:", etc.)
+- Strips markdown code blocks
+
+**Returns:** `{ summary: string, wordCount: number }` or `ParseError`
+
+### OpenGraphFetcher
+
+Fetches and parses OpenGraph metadata.
+
+**Browser-like headers:**
+
+```typescript
+{
+  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36',
+  'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+  'Accept-Language': 'en-US,en;q=0.9',
+  'Sec-Fetch-Dest': 'document',
+  'Sec-Fetch-Mode': 'navigate',
+  'Sec-Fetch-Site': 'none',
+  'Sec-Fetch-User': '?1',
+}
+```
+
+**Configuration:**
+
+| Setting           | Default       | Description           |
+| ----------------- | ------------- | --------------------- |
+| `timeoutMs`       | 5000          | Request timeout       |
+| `maxResponseSize` | 2097152 (2MB) | Maximum response size |
 
 ## Dependencies
 
-**Packages:**
+### External Services
 
-- `cheerio` - HTML parsing
-- Native `fetch` - HTTP requests
-- `AbortController` - Timeout handling
+| Service    | Purpose            | Failure Mode        |
+| ---------- | ------------------ | ------------------- |
+| Crawl4AI   | Web page crawling  | Return FETCH_FAILED |
+| User's LLM | Summary generation | Return API_ERROR    |
 
-**No external service dependencies.**
-**No database dependencies.**
+### Internal Services
+
+| Service      | Endpoint                        | Purpose               |
+| ------------ | ------------------------------- | --------------------- |
+| user-service | `/internal/users/{id}/settings` | Get default LLM model |
+| user-service | `/internal/users/{id}/llm-keys` | Get LLM API keys      |
+
+## Configuration
+
+| Variable                              | Purpose                | Required |
+| ------------------------------------- | ---------------------- | -------- |
+| `INTEXURAOS_INTERNAL_AUTH_TOKEN`      | Internal service auth  | Yes      |
+| `INTEXURAOS_CRAWL4AI_API_KEY`         | Crawl4AI Cloud API key | Yes      |
+| `INTEXURAOS_SENTRY_DSN`               | Error tracking         | Yes      |
+| `INTEXURAOS_USER_SERVICE_URL`         | User service base URL  | No\*     |
+| `INTEXURAOS_APP_SETTINGS_SERVICE_URL` | Pricing lookup         | No\*     |
+
+\*Has localhost defaults for development
 
 ## Gotchas
 
-**Relative URL resolution** - Image paths resolved relative to target URL, not web-agent. `new URL(imagePath, targetUrl)` handles this.
+**Crawl vs Summary separation** - PageContentFetcher only crawls; LlmSummarizer handles AI. This allows using user's LLM keys rather than shared infrastructure.
 
-**Content-Length check** - If header present, checked before download. If absent, streams with 2MB cap.
+**Repair mechanism** - If LLM returns JSON, parser detects it and triggers repair prompt automatically. Only retries once.
 
-**Stream chunking** - Response read in chunks to enforce size limit mid-download.
+**Language preservation** - Summary prompt explicitly instructs "Write in SAME LANGUAGE as original content" to prevent English summaries of non-English articles.
 
-**Promise.all** - All URLs fetched in parallel. One timeout doesn't affect others.
+**403 handling** - Returns `ACCESS_DENIED` error code specifically for 403 responses, distinct from general `FETCH_FAILED`.
 
-**Empty values omitted** - Missing title/description not included in response (undefined, not empty string).
+**Browser-like headers** - OpenGraphFetcher sends Chrome-like headers including Sec-Fetch-\* to bypass basic bot detection.
 
-**User-Agent** - Custom IntexuraOSBot UA for identification and potential blocking.
+**User LLM client** - Summaries use user's API key from user-service, not a shared key. Pricing tracked per-user.
 
-**Redirect following** - `redirect: 'follow'` automatically follows redirects (max 20 by spec).
+**Empty response handling** - `nonEmpty()` helper treats empty strings same as undefined for fallback logic.
 
-**TextDecoder** - Uses UTF-8 default. May fail on non-UTF8 pages (returns FETCH_FAILED).
-
-**Concurrent requests** - No internal rate limiting. Caller must implement throttling.
+**Concurrent link previews** - All URLs fetched in parallel via Promise.all. One timeout doesn't affect others.
 
 ## File Structure
 
@@ -156,39 +314,30 @@ apps/web-agent/src/
   domain/
     linkpreview/
       models/
-        LinkPreview.ts       # Domain models
+        LinkPreview.ts           # LinkPreview, LinkPreviewError types
       ports/
-        linkPreviewFetcher.ts # Fetcher interface
+        linkPreviewFetcher.ts    # Fetcher interface
+    pagesummary/
+      models/
+        PageSummary.ts           # PageSummary, PageSummaryError types
+      ports/
+        pageSummaryService.ts    # Service interface
   infra/
     linkpreview/
-      openGraphFetcher.ts    # Cheerio implementation
+      openGraphFetcher.ts        # Cheerio-based OG extraction
+    pagesummary/
+      pageContentFetcher.ts      # Crawl4AI client (crawl only)
+      llmSummarizer.ts           # User's LLM summarization
+      crawl4aiClient.ts          # Legacy combined client (deprecated)
+      parseSummaryResponse.ts    # Response validation
+      buildSummaryRepairPrompt.ts # Prompt builders
+    user/
+      userServiceClient.ts       # User service client
   routes/
-    internalRoutes.ts        # POST /internal/link-previews
+    internalRoutes.ts            # /internal/* endpoints
     schemas/
-      linkPreviewSchemas.ts  # Zod validation schemas
-  services.ts                # DI container
-  server.ts                  # Fastify server
-```
-
-## HTTP Flow
-
-```mermaid
-sequenceDiagram
-    participant Caller
-    participant WebAgent
-    participant Target
-
-    Caller->>WebAgent: POST /internal/link-previews<br/>{urls: [...], timeoutMs: 10000}
-    WebAgent->>WebAgent: Validate URLs
-    par Parallel fetch
-        WebAgent->>Target1: GET URL1
-        Target1-->>WebAgent: HTML 200
-        WebAgent->>Target2: GET URL2
-        Target2-->>WebAgent: 404 Not Found
-        WebAgent->>Target3: GET URL3
-        Target3-->>WebAgent: timeout
-    end
-    WebAgent->>WebAgent: Parse with Cheerio
-    WebAgent->>WebAgent: Extract OpenGraph
-    WebAgent-->>Caller: {results: [...], metadata: {...}}
+      linkPreviewSchemas.ts      # Zod schemas for link previews
+      pageSummarySchemas.ts      # Zod schemas for page summaries
+  services.ts                    # DI container
+  server.ts                      # Fastify server
 ```

@@ -1,6 +1,6 @@
 {
   "name": "@intexuraos/llm-factory",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "private": true,
   "type": "module",
   "engines": {
@@ -16,7 +16,6 @@
     "@intexuraos/common-core": "workspace:*",
     "@intexuraos/infra-gemini": "workspace:*",
     "@intexuraos/infra-glm": "workspace:*",
-    "@intexuraos/llm-common": "workspace:*",
     "@intexuraos/llm-contract": "workspace:*",
     "@intexuraos/llm-pricing": "workspace:*"
   }

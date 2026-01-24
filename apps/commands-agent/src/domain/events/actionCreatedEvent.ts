@@ -1,5 +1,4 @@
 import type { ActionType } from '../models/action.js';
-import type { ResearchModel } from '@intexuraos/llm-contract';
 
 export interface ActionCreatedEvent {
   type: 'action.created';
@@ -12,7 +11,6 @@ export interface ActionCreatedEvent {
     prompt: string;
     confidence: number;
     summary?: string;
-    selectedModels?: ResearchModel[];
   };
   timestamp: string;
 }

@@ -9,6 +9,8 @@ const mockClient = {
   getMediaUrl: vi.fn(),
   downloadMedia: vi.fn(),
   sendTextMessage: vi.fn(),
+  markAsRead: vi.fn(),
+  markAsReadWithTyping: vi.fn(),
 };
 
 vi.mock('@intexuraos/infra-whatsapp', () => ({
@@ -154,6 +156,62 @@ describe('WhatsAppCloudApiAdapter', () => {
       if (!result.ok) {
         expect(result.error.code).toBe('INTERNAL_ERROR');
         expect(result.error.message).toBe('Send failed');
+      }
+    });
+  });
+
+  describe('markAsRead', () => {
+    it('marks message as read successfully', async () => {
+      mockClient.markAsRead.mockResolvedValue(ok(undefined));
+
+      const result = await adapter.markAsRead('phone-123', 'wamid.original');
+
+      expect(result.ok).toBe(true);
+      expect(mockClient.markAsRead).toHaveBeenCalledWith('wamid.original');
+    });
+
+    it('returns error when markAsRead fails', async () => {
+      mockClient.markAsRead.mockResolvedValue(
+        err({
+          code: 'API_ERROR',
+          message: 'Mark as read failed',
+        })
+      );
+
+      const result = await adapter.markAsRead('phone-123', 'wamid.original');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('INTERNAL_ERROR');
+        expect(result.error.message).toBe('Mark as read failed');
+      }
+    });
+  });
+
+  describe('markAsReadWithTyping', () => {
+    it('marks message as read with typing indicator successfully', async () => {
+      mockClient.markAsReadWithTyping.mockResolvedValue(ok(undefined));
+
+      const result = await adapter.markAsReadWithTyping('phone-123', 'wamid.original');
+
+      expect(result.ok).toBe(true);
+      expect(mockClient.markAsReadWithTyping).toHaveBeenCalledWith('wamid.original');
+    });
+
+    it('returns error when markAsReadWithTyping fails', async () => {
+      mockClient.markAsReadWithTyping.mockResolvedValue(
+        err({
+          code: 'API_ERROR',
+          message: 'Mark as read with typing failed',
+        })
+      );
+
+      const result = await adapter.markAsReadWithTyping('phone-123', 'wamid.original');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('INTERNAL_ERROR');
+        expect(result.error.message).toBe('Mark as read with typing failed');
       }
     });
   });

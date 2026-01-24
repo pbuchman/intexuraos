@@ -1,6 +1,6 @@
 import type { Result, Logger } from '@intexuraos/common-core';
 import { err, getErrorMessage, ok } from '@intexuraos/common-core';
-import { itemExtractionPrompt } from '@intexuraos/llm-common';
+import { itemExtractionPrompt } from '@intexuraos/llm-prompts';
 import type { LlmGenerateClient } from '@intexuraos/llm-factory';
 import type { UserServiceClient } from '../user/userServiceClient.js';
 import type {

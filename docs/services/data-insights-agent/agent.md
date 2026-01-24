@@ -6,10 +6,10 @@
 
 ## Identity
 
-| Field    | Value                                                                    |
-| -------- | ------------------------------------------------------------------------ |
-| **Name** | data-insights-agent                                                      |
-| **Role** | Data Analytics and Visualization Service                                 |
+| Field    | Value                                                                     |
+| -------- | ------------------------------------------------------------------------- |
+| **Name** | data-insights-agent                                                       |
+| **Role** | Data Analytics and Visualization Service                                  |
 | **Goal** | Analyze composite data feeds and generate AI-powered insights with charts |
 
 ---
@@ -21,16 +21,16 @@
 ```typescript
 interface DataInsightsAgentTools {
   // Data Sources
-  createDataSource(params: {
-    title: string;
-    content: string;
-  }): Promise<DataSource>;
+  createDataSource(params: { title: string; content: string }): Promise<DataSource>;
   listDataSources(): Promise<DataSource[]>;
   getDataSource(id: string): Promise<DataSource>;
-  updateDataSource(id: string, params: {
-    title?: string;
-    content?: string;
-  }): Promise<DataSource>;
+  updateDataSource(
+    id: string,
+    params: {
+      title?: string;
+      content?: string;
+    }
+  ): Promise<DataSource>;
   deleteDataSource(id: string): Promise<void>;
   generateTitle(params: { content: string }): Promise<{ title: string }>;
 
@@ -42,26 +42,35 @@ interface DataInsightsAgentTools {
   }): Promise<CompositeFeed>;
   listCompositeFeeds(): Promise<CompositeFeed[]>;
   getCompositeFeed(id: string): Promise<CompositeFeed>;
-  updateCompositeFeed(id: string, params: {
-    purpose?: string;
-    staticSourceIds?: string[];
-    notificationFilters?: NotificationFilter[];
-  }): Promise<CompositeFeed>;
+  updateCompositeFeed(
+    id: string,
+    params: {
+      purpose?: string;
+      staticSourceIds?: string[];
+      notificationFilters?: NotificationFilter[];
+    }
+  ): Promise<CompositeFeed>;
   deleteCompositeFeed(id: string): Promise<void>;
   getCompositeFeedSchema(id: string): Promise<JSONSchema>;
   getCompositeFeedData(id: string): Promise<FeedData>;
-  getCompositeFeedSnapshot(id: string, params?: {
-    refresh?: boolean;
-  }): Promise<Snapshot>;
+  getCompositeFeedSnapshot(
+    id: string,
+    params?: {
+      refresh?: boolean;
+    }
+  ): Promise<Snapshot>;
 
   // Data Insights
   analyzeCompositeFeed(feedId: string): Promise<AnalysisResult>;
   generateChartDefinition(feedId: string, insightId: string): Promise<ChartDefinition>;
-  previewChart(feedId: string, params: {
-    chartConfig: object;
-    transformInstructions: string;
-    insightId: string;
-  }): Promise<ChartData>;
+  previewChart(
+    feedId: string,
+    params: {
+      chartConfig: object;
+      transformInstructions: string;
+      insightId: string;
+    }
+  ): Promise<ChartData>;
 }
 ```
 
@@ -121,12 +130,12 @@ interface AnalysisResult {
 }
 
 interface ChartDefinition {
-  vegaLiteConfig: object;              // Vega-Lite spec without data
-  dataTransformInstructions: string;   // How to transform snapshot data
+  vegaLiteConfig: object; // Vega-Lite spec without data
+  dataTransformInstructions: string; // How to transform snapshot data
 }
 
 interface ChartData {
-  values: Record<string, unknown>[];   // Transformed data for chart
+  values: Record<string, unknown>[]; // Transformed data for chart
 }
 ```
 
@@ -134,13 +143,13 @@ interface ChartData {
 
 ## Constraints
 
-| Rule                    | Description                                         |
-| ----------------------- | --------------------------------------------------- |
-| **Ownership**           | Users can only access their own data                |
-| **LLM Keys Required**   | Analysis requires configured Google API key         |
-| **Max Insights**        | Analyze returns up to 5 insights per feed           |
-| **Snapshot Expiration** | Snapshots cached for 24 hours before refresh        |
-| **Source Protection**   | Cannot delete source used by composite feeds        |
+| Rule                    | Description                                  |
+| ----------------------- | -------------------------------------------- |
+| **Ownership**           | Users can only access their own data         |
+| **LLM Keys Required**   | Analysis requires configured Google API key  |
+| **Max Insights**        | Analyze returns up to 5 insights per feed    |
+| **Snapshot Expiration** | Snapshots cached for 24 hours before refresh |
+| **Source Protection**   | Cannot delete source used by composite feeds |
 
 ---
 
@@ -161,11 +170,13 @@ const source = await createDataSource({
 const feed = await createCompositeFeed({
   purpose: 'Track daily sales and inventory alerts',
   staticSourceIds: [salesDataId, inventoryDataId],
-  notificationFilters: [{
-    id: 'alerts',
-    name: 'Inventory Alerts',
-    app: ['com.inventory.app'],
-  }],
+  notificationFilters: [
+    {
+      id: 'alerts',
+      name: 'Inventory Alerts',
+      app: ['com.inventory.app'],
+    },
+  ],
 });
 // Feed name auto-generated by AI based on purpose
 ```
@@ -222,22 +233,22 @@ const chartData = await previewChart(feedId, {
 
 ## Internal Endpoints
 
-| Method | Path                              | Purpose                                    |
-| ------ | --------------------------------- | ------------------------------------------ |
-| GET    | `/internal/feeds/:id/snapshot`    | Get snapshot for internal services         |
+| Method | Path                           | Purpose                            |
+| ------ | ------------------------------ | ---------------------------------- |
+| GET    | `/internal/feeds/:id/snapshot` | Get snapshot for internal services |
 
 ---
 
 ## Error Handling
 
-| Error Code            | Description                                    |
-| --------------------- | ---------------------------------------------- |
-| `NOT_FOUND`           | Feed, source, or snapshot not found            |
-| `CONFLICT`            | Cannot delete source used by feeds             |
-| `MISCONFIGURED`       | LLM API key not configured                     |
-| `ANALYSIS_ERROR`      | AI analysis failed                             |
-| `GENERATION_ERROR`    | Chart generation failed                        |
-| `TRANSFORMATION_ERROR`| Data transformation for preview failed         |
+| Error Code             | Description                            |
+| ---------------------- | -------------------------------------- |
+| `NOT_FOUND`            | Feed, source, or snapshot not found    |
+| `CONFLICT`             | Cannot delete source used by feeds     |
+| `MISCONFIGURED`        | LLM API key not configured             |
+| `ANALYSIS_ERROR`       | AI analysis failed                     |
+| `GENERATION_ERROR`     | Chart generation failed                |
+| `TRANSFORMATION_ERROR` | Data transformation for preview failed |
 
 ---
 

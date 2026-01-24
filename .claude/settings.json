@@ -1,13 +1,16 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-settings.json",
-  "mcpServers": {
-    "linear": {
-      "type": "http",
-      "url": "https://mcp.linear.app/mcp"
-    },
-    "sentry": {
-      "type": "http",
-      "url": "https://mcp.sentry.dev/mcp"
-    }
+  "enabledPlugins": {
+    "superpowers@superpowers-marketplace": true,
+    "context7@claude-plugins-official": true,
+    "commit-commands@claude-plugins-official": true,
+    "pr-review-toolkit@claude-code-plugins": true,
+    "playwright@claude-plugins-official": true,
+    "frontend-design@claude-plugins-official": true
+  },
+  "statusLine": {
+    "type": "command",
+    "command": ".claude/statusline.sh",
+    "padding": 0
   }
 }

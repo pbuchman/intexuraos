@@ -9,7 +9,7 @@ import type {
   InferSynthesisContextParams,
   ResearchContext,
   SynthesisContext,
-} from '@intexuraos/llm-common';
+} from '@intexuraos/llm-prompts';
 import type { LlmError, LlmUsage } from './llmProvider.js';
 
 export interface ResearchContextResult {

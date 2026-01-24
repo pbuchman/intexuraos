@@ -129,3 +129,70 @@ export interface ProcessedAction {
   resourceUrl: string;
   createdAt: string;
 }
+
+/** Calendar event preview status */
+export type CalendarPreviewStatus = 'pending' | 'ready' | 'failed';
+
+/**
+ * Preview of a calendar event before execution.
+ * Generated asynchronously after action creation to show users
+ * what event will be created before they approve.
+ */
+export interface CalendarPreview {
+  /** Action ID this preview belongs to */
+  actionId: string;
+  /** User ID who owns the action */
+  userId: string;
+  /** Preview generation status */
+  status: CalendarPreviewStatus;
+  /** Event title/summary */
+  summary?: string;
+  /** Event start time in ISO format */
+  start?: string;
+  /** Event end time in ISO format (null for open-ended) */
+  end?: string | null;
+  /** Event location (null if not specified) */
+  location?: string | null;
+  /** Event description (null if not specified) */
+  description?: string | null;
+  /** Duration string (e.g., "1 hour", "30 minutes") */
+  duration?: string | null;
+  /** Whether this is an all-day event */
+  isAllDay?: boolean;
+  /** Error message if generation failed */
+  error?: string;
+  /** LLM reasoning for extraction decisions */
+  reasoning?: string;
+  /** When the preview was generated */
+  generatedAt: string;
+}
+
+/** Input for creating a new calendar preview */
+export interface CreateCalendarPreviewInput {
+  actionId: string;
+  userId: string;
+  status: CalendarPreviewStatus;
+  summary?: string;
+  start?: string;
+  end?: string | null;
+  location?: string | null;
+  description?: string | null;
+  duration?: string | null;
+  isAllDay?: boolean;
+  error?: string;
+  reasoning?: string;
+}
+
+/** Input for updating an existing calendar preview */
+export interface UpdateCalendarPreviewInput {
+  status?: CalendarPreviewStatus;
+  summary?: string;
+  start?: string;
+  end?: string | null;
+  location?: string | null;
+  description?: string | null;
+  duration?: string | null;
+  isAllDay?: boolean;
+  error?: string;
+  reasoning?: string;
+}

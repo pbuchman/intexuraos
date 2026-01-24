@@ -586,5 +586,18 @@ describe('todoItemExtractionService', () => {
         expect(result.error.code).toBe('INVALID_RESPONSE');
       }
     });
+
+    it('returns INVALID_RESPONSE when JSON root is null', async () => {
+      mockGenerate.mockResolvedValue(ok({ content: 'null', usage: mockUsage }));
+      mockUserServiceClient = createMockUserServiceClient('ok');
+      const service = createTodoItemExtractionService(mockUserServiceClient, mockLogger);
+
+      const result = await service.extractItems('user-123', 'Test');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('INVALID_RESPONSE');
+      }
+    });
   });
 });

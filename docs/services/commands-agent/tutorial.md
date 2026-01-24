@@ -1,23 +1,23 @@
 # Commands Agent - Tutorial
 
-This tutorial shows how to integrate with commands-agent for intelligent command classification.
+This tutorial demonstrates command classification with the v2.0.0 improvements: URL keyword isolation, explicit intent detection, and Polish language support.
 
 ## Prerequisites
 
-- Auth0 access token for authenticated requests
-- Google API key configured in user-service (for classification)
-- Familiarity with HTTP APIs and JSON
+- Auth0 access token
+- Google API key or Zai API key configured in user-service
+- `curl` or HTTP client
 
-## Part 1: Hello World - Simple Command
+## Part 1: Basic Classification
 
-Create your first command via the public API:
+Create a simple todo command:
 
 ```bash
 curl -X POST https://commands-agent.intexuraos.com/commands \
   -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
-    "text": "Remember to buy milk",
+    "text": "Buy groceries",
     "source": "pwa-shared"
   }'
 ```
@@ -29,72 +29,186 @@ curl -X POST https://commands-agent.intexuraos.com/commands \
   "success": true,
   "data": {
     "command": {
-      "id": "pwa-shared:1234567890-abc123",
-      "userId": "user_123",
-      "sourceType": "pwa-shared",
-      "externalId": "1234567890-abc123",
-      "text": "Remember to buy milk",
-      "timestamp": "2026-01-13T12:00:00.000Z",
+      "id": "pwa-shared:1706097600000-abc123",
       "status": "classified",
       "classification": {
         "type": "todo",
-        "confidence": 0.95,
-        "reasoning": "User wants to remember a task, which maps to a todo item",
-        "classifiedAt": "2026-01-13T12:00:01.000Z"
+        "confidence": 0.92,
+        "reasoning": "Clear actionable task with no time specification",
+        "classifiedAt": "2026-01-24T12:00:01.000Z"
       },
-      "actionId": "uuid-here",
-      "createdAt": "2026-01-13T12:00:00.000Z",
-      "updatedAt": "2026-01-13T12:00:01.000Z"
+      "actionId": "uuid-here"
     }
   }
 }
 ```
 
-**What happened:**
+**Checkpoint:** Status is `classified`, type is `todo`, confidence is high (0.90+).
 
-1. Command received and saved to Firestore
-2. Gemini classified as "todo" with 95% confidence
-3. Action created via actions-agent
-4. `action.created` event published to Pub/Sub
-5. Command marked as "classified"
+## Part 2: URL Keyword Isolation (v2.0.0)
 
-**Checkpoint:** You should see the command status as `classified` with an `actionId`.
-
-## Part 2: Create Commands from Webhook
-
-For services like whatsapp-service, publish a Pub/Sub event:
-
-```bash
-gcloud pubsub topics publish command-ingest \
-  --message='{
-    "type": "command.ingest",
-    "userId": "user_123",
-    "sourceType": "whatsapp_text",
-    "externalId": "wamid.xxx",
-    "text": "Research the latest AI trends",
-    "timestamp": "2026-01-13T12:00:00.000Z"
-  }'
-```
-
-**Expected:** Commands-agent receives via push subscription, processes asynchronously.
-
-## Part 3: Handle Errors
-
-### Error: No API Key Configured
-
-**Request:**
+Test that keywords in URLs don't trigger incorrect classification:
 
 ```bash
 curl -X POST https://commands-agent.intexuraos.com/commands \
   -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
-    "text": "Test command",
+    "text": "https://research-world.com/article",
     "source": "pwa-shared"
   }'
 ```
 
-**Response (when no Google API key):**
+**Expected Response:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "command": {
+      "classification": {
+        "type": "link",
+        "confidence": 0.95,
+        "reasoning": "URL present, keyword 'research' in URL ignored per isolation rules"
+      }
+    }
+  }
+}
+```
+
+**Key Point:** Despite "research" in the URL, classification is `link` because Step 4 (URL presence) triggers before keyword matching, and the prompt's URL keyword isolation rule prevents the LLM from being misled.
+
+## Part 3: Explicit Intent Override (v2.0.0)
+
+Test that explicit command phrases override URL presence:
+
+```bash
+curl -X POST https://commands-agent.intexuraos.com/commands \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "text": "research this https://example.com/competitor",
+    "source": "pwa-shared"
+  }'
+```
+
+**Expected Response:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "command": {
+      "classification": {
+        "type": "research",
+        "confidence": 0.92,
+        "reasoning": "Explicit 'research this' intent detected, overrides URL presence"
+      }
+    }
+  }
+}
+```
+
+**Key Point:** Step 2 (explicit intent "research this") executes before Step 4 (URL presence), so the command is queued for research rather than saved as a bookmark.
+
+## Part 4: Polish Language Support (v2.0.0)
+
+Test native Polish command phrases:
+
+```bash
+curl -X POST https://commands-agent.intexuraos.com/commands \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "text": "zapisz link https://example.com",
+    "source": "pwa-shared"
+  }'
+```
+
+**Expected Response:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "command": {
+      "classification": {
+        "type": "link",
+        "confidence": 0.92,
+        "reasoning": "Polish explicit intent 'zapisz link' (save link) detected"
+      }
+    }
+  }
+}
+```
+
+More Polish examples:
+
+```bash
+# Create todo in Polish
+curl -X POST https://commands-agent.intexuraos.com/commands \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"text": "stwórz zadanie: kupić mleko", "source": "pwa-shared"}'
+# → type: todo, confidence: 0.90+
+
+# Research in Polish
+curl -X POST https://commands-agent.intexuraos.com/commands \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"text": "zbadaj najnowsze trendy AI", "source": "pwa-shared"}'
+# → type: research, confidence: 0.90+
+```
+
+## Part 5: Explicit Prefix Override
+
+Override classification with explicit prefix:
+
+```bash
+curl -X POST https://commands-agent.intexuraos.com/commands \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "text": "linear: buy groceries",
+    "source": "pwa-shared"
+  }'
+```
+
+**Expected Response:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "command": {
+      "classification": {
+        "type": "linear",
+        "confidence": 0.95,
+        "reasoning": "Explicit 'linear:' prefix detected, user override"
+      }
+    }
+  }
+}
+```
+
+**Key Point:** Step 1 (explicit prefix) takes absolute priority. Even though "buy groceries" would normally be a todo, the prefix forces Linear classification.
+
+## Part 6: Graceful Degradation
+
+When no API key is configured, commands enter pending state:
+
+```bash
+# Assuming user has no Google/Zai API key configured
+curl -X POST https://commands-agent.intexuraos.com/commands \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "text": "Test command without API key",
+    "source": "pwa-shared"
+  }'
+```
+
+**Response:**
 
 ```json
 {
@@ -108,91 +222,68 @@ curl -X POST https://commands-agent.intexuraos.com/commands \
 }
 ```
 
-**Solution:** User must configure Google API key via user-service. Cloud Scheduler will retry pending commands.
+**Solution:** Configure API key in user-service. Cloud Scheduler calls `/internal/retry-pending` every 5 minutes to process pending commands.
 
-### Error: Cannot Delete Classified Command
+## Part 7: Command Lifecycle Management
+
+### List commands
+
+```bash
+curl https://commands-agent.intexuraos.com/commands \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
+```
+
+### Delete unclassified command
 
 ```bash
 curl -X DELETE https://commands-agent.intexuraos.com/commands/pwa-shared:123 \
   -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
 ```
 
-**Response:**
+Only works for status: `received`, `pending_classification`, or `failed`.
 
-```json
-{
-  "success": false,
-  "error": {
-    "code": "INVALID_REQUEST",
-    "message": "Cannot delete classified command. Use archive instead."
-  }
-}
-```
-
-**Solution:** Use PATCH to archive instead:
+### Archive classified command
 
 ```bash
-curl -X PATCH https://commands-agent.intexuraos.com/commands/pwa-shared:123 \
+curl -X PATCH https://commands-agent.intexuraos.com/commands/pwa-shared:456 \
   -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"status": "archived"}'
 ```
 
-## Part 4: Real-World Scenario
-
-Build a WhatsApp integration that creates commands:
-
-```typescript
-// WhatsApp webhook handler
-async function handleWhatsAppMessage(message: WhatsAppMessage) {
-  const userId = await getUserByPhoneNumber(message.from);
-
-  // Publish to commands-agent
-  await pubsubClient.topic('command-ingest').publishMessage({
-    data: Buffer.from(
-      JSON.stringify({
-        type: 'command.ingest',
-        userId,
-        sourceType: 'whatsapp_text',
-        externalId: message.id,
-        text: message.text.body,
-        timestamp: message.timestamp,
-      })
-    ),
-  });
-
-  // Quick response
-  await sendWhatsAppMessage(message.from, 'Processing your command...');
-}
-```
-
-**Idempotency:** If WhatsApp delivers the same message twice (same `message.id`), commands-agent returns the existing command.
+Only works for status: `classified`.
 
 ## Troubleshooting
 
-| Issue                  | Symptom                         | Solution                                   |
-| ---------------------- | ------------------------------- | ------------------------------------------ |
-| No API key             | Status `pending_classification` | Configure Google API key in user-service   |
-| Low confidence         | Type `unclassified`             | Refine command text with more context      |
-| Duplicate command      | `isNew: false`                  | Normal - same externalId already processed |
-| Action creation failed | Status `failed`                 | Check actions-agent logs                   |
+| Symptom                            | Cause                       | Solution                                    |
+| ---------------------------------- | --------------------------- | ------------------------------------------- |
+| Status `pending_classification`    | No LLM API key              | Configure Google or Zai key in user-service |
+| URL classified as `research`       | Old prompt version          | Ensure v2.0.0 prompt deployed               |
+| Polish phrases not recognized      | Old prompt version          | Ensure v2.0.0 prompt deployed               |
+| "Cannot delete classified command" | Wrong operation             | Use PATCH to archive instead                |
+| Status `failed`                    | LLM error or actions-agent  | Check logs, delete and retry                |
+| Duplicate command (isNew: false)   | Same externalId reprocessed | Normal idempotency behavior                 |
 
 ## Exercises
 
 ### Easy
 
-1. Create a command with source `pwa-shared`
-2. List your commands and verify status
+1. Create commands for each type: todo, research, note, link
+2. Verify confidence scores match the semantics table
 3. Archive a classified command
 
 ### Medium
 
-1. Send a command mentioning specific models ("Use Claude for research")
-2. Verify the action was created with selectedModels in payload
-3. Delete a pending_classification command
+1. Test URL keyword isolation with various misleading URLs
+2. Test Polish commands for all supported categories
+3. Simulate pending_classification and wait for retry
 
 ### Hard
 
-1. Simulate a Pub/Sub push to `/internal/commands`
-2. Handle the case where command already exists (idempotency)
+1. Publish a `command.ingest` event via Pub/Sub
+2. Test idempotency by sending the same externalId twice
 3. Build a retry loop for failed commands
+
+---
+
+**Last updated:** 2026-01-24

@@ -2,7 +2,7 @@
 
 ## Overview
 
-Image-service generates AI images using OpenAI DALL-E 3 and Google Imagen 3, with LLM-powered prompt enhancement. Images are stored in GCS with automatic thumbnail generation.
+Image-service generates AI images using OpenAI GPT Image 1 and Google Gemini Flash Image, with LLM-powered prompt enhancement. Images are stored in GCS with automatic thumbnail generation.
 
 ## Architecture
 
@@ -71,10 +71,10 @@ graph TB
 
 ### Image Generation Models
 
-| Model                    | Provider | Description |
-| ------------------------ | -------- | ----------- |
-| `gpt-image-1`            | OpenAI   | DALL-E 3    |
-| `gemini-2.5-flash-image` | Google   | Imagen 3    |
+| Model                    | Provider | Description                                 |
+| ------------------------ | -------- | ------------------------------------------- |
+| `gpt-image-1`            | OpenAI   | GPT Image 1 (image generation model)        |
+| `gemini-2.5-flash-image` | Google   | Gemini Flash Image (image generation model) |
 
 ### Prompt Generation Models
 
@@ -93,10 +93,10 @@ graph TB
 
 ### External Services
 
-| Service           | Purpose                   |
-| ----------------- | ------------------------- |
-| OpenAI API        | DALL-E 3 image generation |
-| Google Imagen API | Imagen 3 image generation |
+| Service           | Purpose                       |
+| ----------------- | ----------------------------- |
+| OpenAI API        | GPT Image 1 image generation  |
+| Google Imagen API | Gemini Flash Image generation |
 
 ### Infrastructure
 
@@ -156,8 +156,8 @@ apps/image-service/src/
     firestore/
       GeneratedImageFirestoreRepository.ts
     image/
-      OpenAIImageGenerator.ts     # DALL-E 3 integration
-      GoogleImageGenerator.ts     # Imagen 3 integration
+      OpenAIImageGenerator.ts     # GPT Image 1 integration
+      GoogleImageGenerator.ts     # Gemini Flash Image integration
       FakeImageGenerator.ts       # Testing
     llm/
       GptPromptAdapter.ts         # OpenAI prompt generation

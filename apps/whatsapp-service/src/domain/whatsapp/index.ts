@@ -63,8 +63,16 @@ export type {
 
 export type { LinkPreviewFetcherPort } from './ports/linkPreviewFetcher.js';
 
+export type {
+  OutboundMessage,
+  OutboundMessageRepository,
+} from './ports/outboundMessageRepository.js';
+
+export type { TextMessageSendResult } from './ports/messageSender.js';
+
 // Events
 export type {
+  ApprovalReplyEvent,
   AudioStoredEvent,
   CommandIngestEvent,
   ExtractLinkPreviewsEvent,
