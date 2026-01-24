@@ -537,5 +537,121 @@ export const codeTasksRoutes: FastifyPluginCallback = (fastify, _opts, done) => 
     }
   );
 
+  fastify.get<{
+    Querystring: {
+      userId: string;
+      status?: 'dispatched' | 'running' | 'completed' | 'failed' | 'interrupted' | 'cancelled';
+      limit?: number;
+      cursor?: string;
+    };
+  }>(
+    '/internal/code-tasks',
+    {
+      schema: {
+        operationId: 'listCodeTasks',
+        summary: 'List code tasks',
+        description: 'Internal endpoint for listing code tasks with optional status filter and pagination.',
+        tags: ['internal'],
+        querystring: {
+          type: 'object',
+          properties: {
+            userId: { type: 'string' },
+            status: {
+              type: 'string',
+              enum: ['dispatched', 'running', 'completed', 'failed', 'interrupted', 'cancelled'],
+            },
+            limit: { type: 'number', minimum: 1, maximum: 100 },
+            cursor: { type: 'string' },
+          },
+          required: ['userId'],
+        },
+        response: {
+          200: {
+            description: 'List of tasks',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [true] },
+              data: {
+                type: 'object',
+                properties: {
+                  tasks: {
+                    type: 'array',
+                    items: codeTaskSchema,
+                  },
+                  nextCursor: { type: 'string', nullable: true },
+                },
+                required: ['tasks'],
+              },
+            },
+            required: ['success', 'data'],
+          },
+          401: {
+            description: 'Unauthorized',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: {
+                type: 'object',
+                properties: {
+                  code: { type: 'string' },
+                  message: { type: 'string' },
+                },
+                required: ['code', 'message'],
+              },
+            },
+            required: ['success', 'error'],
+          },
+        },
+      },
+    },
+    async (request: FastifyRequest<{ Querystring: { userId: string; status?: 'dispatched' | 'running' | 'completed' | 'failed' | 'interrupted' | 'cancelled'; limit?: number; cursor?: string } }>, reply: FastifyReply) => {
+      logIncomingRequest(request, {
+        message: 'Received request to GET /internal/code-tasks',
+      });
+
+      // Validate internal auth
+      const authResult = validateInternalAuth(request);
+      if (!authResult.valid) {
+        request.log.warn({ reason: authResult.reason }, 'Internal auth failed for code tasks');
+        reply.status(401);
+        return { success: false, error: { code: 'UNAUTHORIZED', message: 'Unauthorized' } };
+      }
+
+      const { codeTaskRepo } = getServices();
+      const { userId, status, limit, cursor } = request.query;
+
+      request.log.info({ userId, status, limit, cursor }, 'Listing code tasks');
+
+      const result = await codeTaskRepo.list({
+        userId,
+        ...(status !== undefined && { status }),
+        ...(limit !== undefined && { limit }),
+        ...(cursor !== undefined && { cursor }),
+      });
+
+      if (!result.ok) {
+        request.log.error({ userId, error: result.error }, 'Failed to list code tasks');
+        reply.status(500);
+        return {
+          success: false,
+          error: {
+            code: result.error.code,
+            message: result.error.message,
+          },
+        };
+      }
+
+      request.log.info({ userId, count: result.value.tasks.length }, 'Code tasks listed successfully');
+
+      return await reply.send({
+        success: true,
+        data: {
+          tasks: result.value.tasks.map(taskToApiResponse),
+          ...(result.value.nextCursor !== undefined && { nextCursor: result.value.nextCursor }),
+        },
+      });
+    }
+  );
+
   done();
 };
