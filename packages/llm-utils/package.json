@@ -1,0 +1,19 @@
+{
+  "name": "@intexuraos/llm-utils",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@intexuraos/common-core": "workspace:*",
+    "pino": "^10.1.0"
+  }
+}

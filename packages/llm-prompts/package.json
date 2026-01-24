@@ -1,0 +1,21 @@
+{
+  "name": "@intexuraos/llm-prompts",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@intexuraos/llm-contract": "workspace:*",
+    "@intexuraos/common-core": "workspace:*",
+    "pino": "^10.1.0",
+    "zod": "^3.24.1"
+  }
+}
