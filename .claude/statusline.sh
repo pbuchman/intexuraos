@@ -21,10 +21,11 @@ RST() { if [ "$use_color" -eq 1 ]; then printf '\033[0m'; fi; }
 
 # ---- modern sleek colors ----
 dir_color() { if [ "$use_color" -eq 1 ]; then printf '\033[38;5;117m'; fi; }    # sky blue
-model_color() { if [ "$use_color" -eq 1 ]; then printf '\033[38;5;147m'; fi; }  # light purple  
+model_color() { if [ "$use_color" -eq 1 ]; then printf '\033[38;5;147m'; fi; }  # light purple
 version_color() { if [ "$use_color" -eq 1 ]; then printf '\033[38;5;180m'; fi; } # soft yellow
 cc_version_color() { if [ "$use_color" -eq 1 ]; then printf '\033[38;5;249m'; fi; } # light gray
 style_color() { if [ "$use_color" -eq 1 ]; then printf '\033[38;5;245m'; fi; } # gray
+api_color() { if [ "$use_color" -eq 1 ]; then printf '\033[38;5;222m'; fi; }   # warm gold
 rst() { if [ "$use_color" -eq 1 ]; then printf '\033[0m'; fi; }
 
 # ---- time helpers ----
@@ -121,6 +122,32 @@ else
   output_style=$(echo "$input" | grep -o '"output_style"[[:space:]]*:[[:space:]]*{[^}]*"name"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/')
 fi
 
+# ---- API endpoint detection ----
+api_endpoint=""
+
+# Try to extract from JSON input first (if Claude Code provides it)
+if [ "$HAS_JQ" -eq 1 ]; then
+  api_endpoint=$(echo "$input" | jq -r '.api_base_url // .apiBaseUrl // .api_endpoint // ""' 2>/dev/null)
+else
+  api_endpoint=$(echo "$input" | grep -o '"api_base_url"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"api_base_url"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/')
+  [ -z "$api_endpoint" ] && api_endpoint=$(echo "$input" | grep -o '"apiBaseUrl"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"apiBaseUrl"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/')
+fi
+
+# Fall back to environment variables
+if [ -z "$api_endpoint" ] || [ "$api_endpoint" = "null" ]; then
+  api_endpoint="${ANTHROPIC_BASE_URL:-${ANTHROPIC_API_BASE:-}}"
+fi
+
+# Parse the endpoint to show a friendly name
+api_display=""
+if [ -n "$api_endpoint" ] && [ "$api_endpoint" != "null" ]; then
+  # Extract host from URL for display (remove protocol and path)
+  api_host=$(echo "$api_endpoint" | sed -E 's|^https?://||' | cut -d'/' -f1)
+  api_display="$api_host"
+else
+  api_display="api.anthropic.com"
+fi
+
 # ---- git colors ----
 git_color() { if [ "$use_color" -eq 1 ]; then printf '\033[38;5;150m'; fi; }  # soft green
 rst() { if [ "$use_color" -eq 1 ]; then printf '\033[0m'; fi; }
@@ -182,6 +209,9 @@ if [ -n "$cc_version" ] && [ "$cc_version" != "null" ]; then
 fi
 if [ -n "$output_style" ] && [ "$output_style" != "null" ]; then
   printf '  🎨 %s%s%s' "$(style_color)" "$output_style" "$(rst)"
+fi
+if [ -n "$api_display" ]; then
+  printf '  🌐 %s%s%s' "$(api_color)" "$api_display" "$(rst)"
 fi
 
 # Line 2: Context and session time
