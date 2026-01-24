@@ -8,6 +8,7 @@ import type { ApprovalIntentClassifierFactory } from '../ports/approvalIntentCla
 import type { WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
 import type { ActionEventPublisher } from '../ports/actionEventPublisher.js';
 import type { ActionCreatedEvent } from '../models/actionEvent.js';
+import type { ExecuteNoteActionUseCase } from './executeNoteAction.js';
 
 export interface HandleApprovalReplyDeps {
   actionRepository: ActionRepository;
@@ -16,6 +17,8 @@ export interface HandleApprovalReplyDeps {
   whatsappPublisher: WhatsAppSendPublisher;
   actionEventPublisher: ActionEventPublisher;
   logger: Logger;
+  /** Optional: If provided, note actions will be executed directly (skipping event publishing). */
+  executeNoteAction?: ExecuteNoteActionUseCase;
 }
 
 export interface ApprovalReplyInput {
@@ -54,6 +57,7 @@ export function createHandleApprovalReplyUseCase(
     whatsappPublisher,
     actionEventPublisher,
     logger,
+    executeNoteAction,
   } = deps;
 
   return async (input: ApprovalReplyInput): Promise<Result<ApprovalReplyResult>> => {
@@ -234,31 +238,47 @@ export function createHandleApprovalReplyUseCase(
 
         // Status successfully updated to 'pending'
 
-        // Publish action.created event to trigger immediate processing
-        const event: ActionCreatedEvent = {
-          type: 'action.created',
-          actionId: action.id,
-          userId: action.userId,
-          commandId: action.commandId,
-          actionType: action.type,
-          title: action.title,
-          payload: {
-            prompt: action.title,
-            confidence: action.confidence,
-          },
-          timestamp: new Date().toISOString(),
-        };
-
-        const eventPublishResult = await actionEventPublisher.publishActionCreated(event);
-
-        if (!eventPublishResult.ok) {
-          logger.error(
-            { actionId: action.id, error: eventPublishResult.error.message },
-            'Failed to publish action.created event after approval'
-          );
-          // Continue anyway - action is already in pending status, will be picked up by retryPendingActions
+        // For note actions with executeNoteAction provided, execute directly to avoid
+        // duplicate notification (publishing action.created would trigger handleNoteAction
+        // which sends "New note ready for approval" message again).
+        if (action.type === 'note' && executeNoteAction !== undefined) {
+          logger.info({ actionId: action.id }, 'Executing note action directly after approval');
+          const executeResult = await executeNoteAction(action.id);
+          if (!executeResult.ok) {
+            logger.error(
+              { actionId: action.id, error: getErrorMessage(executeResult.error) },
+              'Failed to execute note action after approval'
+            );
+          } else {
+            logger.info({ actionId: action.id }, 'Note action executed successfully after approval');
+          }
         } else {
-          logger.info({ actionId: action.id }, 'Published action.created event after approval');
+          // For non-note actions or when executeNoteAction not available, publish event
+          const event: ActionCreatedEvent = {
+            type: 'action.created',
+            actionId: action.id,
+            userId: action.userId,
+            commandId: action.commandId,
+            actionType: action.type,
+            title: action.title,
+            payload: {
+              prompt: action.title,
+              confidence: action.confidence,
+            },
+            timestamp: new Date().toISOString(),
+          };
+
+          const eventPublishResult = await actionEventPublisher.publishActionCreated(event);
+
+          if (!eventPublishResult.ok) {
+            logger.error(
+              { actionId: action.id, error: eventPublishResult.error.message },
+              'Failed to publish action.created event after approval'
+            );
+            // Continue anyway - action is already in pending status, will be picked up by retryPendingActions
+          } else {
+            logger.info({ actionId: action.id }, 'Published action.created event after approval');
+          }
         }
 
         // Notify user first, then clean up (to avoid race condition)

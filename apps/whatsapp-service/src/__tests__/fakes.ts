@@ -1017,6 +1017,7 @@ export class FakeWhatsAppCloudApiPort implements WhatsAppCloudApiPort {
     messageId: string;
   }[] = [];
   private markedAsReadMessages: { phoneNumberId: string; messageId: string }[] = [];
+  private markedAsReadWithTypingMessages: { phoneNumberId: string; messageId: string }[] = [];
   private shouldFailGetMediaUrl = false;
   private shouldFailDownload = false;
   private shouldFailSendMessage = false;
@@ -1053,6 +1054,10 @@ export class FakeWhatsAppCloudApiPort implements WhatsAppCloudApiPort {
 
   getMarkedAsReadMessages(): typeof this.markedAsReadMessages {
     return this.markedAsReadMessages;
+  }
+
+  getMarkedAsReadWithTypingMessages(): typeof this.markedAsReadWithTypingMessages {
+    return this.markedAsReadWithTypingMessages;
   }
 
   getMediaUrl(mediaId: string): Promise<Result<MediaUrlInfo, WhatsAppError>> {
@@ -1125,11 +1130,26 @@ export class FakeWhatsAppCloudApiPort implements WhatsAppCloudApiPort {
     return Promise.resolve(ok(undefined));
   }
 
+  markAsReadWithTyping(
+    phoneNumberId: string,
+    messageId: string
+  ): Promise<Result<void, WhatsAppError>> {
+    if (this.shouldFailMarkAsRead) {
+      return Promise.resolve(
+        err({ code: 'INTERNAL_ERROR', message: 'Simulated markAsReadWithTyping failure' })
+      );
+    }
+
+    this.markedAsReadWithTypingMessages.push({ phoneNumberId, messageId });
+    return Promise.resolve(ok(undefined));
+  }
+
   clear(): void {
     this.mediaUrls.clear();
     this.mediaContent.clear();
     this.sentMessages = [];
     this.markedAsReadMessages = [];
+    this.markedAsReadWithTypingMessages = [];
     this.shouldFailGetMediaUrl = false;
     this.shouldFailDownload = false;
     this.shouldFailSendMessage = false;

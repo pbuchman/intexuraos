@@ -18,6 +18,7 @@ import type { Config } from '../config.js';
 import {
   ProcessAudioMessageUseCase,
   ProcessImageMessageUseCase,
+  type WhatsAppCloudApiPort,
 } from '../domain/whatsapp/index.js';
 import {
   extractAudioMedia,
@@ -653,7 +654,8 @@ async function handleAudioMessage(
       }
     }
 
-    await sendAudioConfirmationMessage(request, savedEvent, fromNumber);
+    // Mark as read with typing indicator (shows user something is happening)
+    await markAudioAsReadWithTyping(request, savedEvent, services.whatsappCloudApi);
   }
 }
 
@@ -1044,37 +1046,30 @@ async function markMessageAsRead(
 }
 
 /**
- * Send confirmation message back to the sender.
- * Used only for audio messages to inform user about transcription progress.
+ * Mark audio message as read with typing indicator.
+ * This shows the user something is happening (typing indicator shows for up to 25s
+ * or until the next message is sent).
  */
-async function sendAudioConfirmationMessage(
+async function markAudioAsReadWithTyping(
   request: FastifyRequest<{ Body: WebhookPayload }>,
   savedEvent: { id: string },
-  fromNumber: string
+  whatsappCloudApi: WhatsAppCloudApiPort
 ): Promise<void> {
   const originalMessageId = extractMessageId(request.body);
   const phoneNumberId = extractPhoneNumberId(request.body);
 
-  if (phoneNumberId !== null) {
-    const { whatsappCloudApi } = getServices();
-    const confirmationText = '✅ Voice message saved. Transcription in progress...';
+  if (phoneNumberId !== null && originalMessageId !== null) {
+    const result = await whatsappCloudApi.markAsReadWithTyping(phoneNumberId, originalMessageId);
 
-    const sendResult = await whatsappCloudApi.sendMessage(
-      phoneNumberId,
-      fromNumber,
-      confirmationText,
-      originalMessageId ?? undefined
-    );
-
-    if (sendResult.ok) {
+    if (result.ok) {
       request.log.info(
-        { eventId: savedEvent.id, messageId: sendResult.value.messageId, recipient: fromNumber },
-        'Sent audio confirmation message'
+        { eventId: savedEvent.id, messageId: originalMessageId },
+        'Marked audio message as read with typing indicator'
       );
     } else {
       request.log.error(
-        { eventId: savedEvent.id, error: sendResult.error, recipient: fromNumber },
-        'Failed to send audio confirmation message'
+        { eventId: savedEvent.id, error: result.error, messageId: originalMessageId },
+        'Failed to mark audio message as read with typing indicator'
       );
     }
   }
