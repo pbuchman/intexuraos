@@ -309,10 +309,22 @@ function ManifestoSection(): React.JSX.Element {
                 The core logic is pure.
               </p>
             </BrutalistCard>
-            <BrutalistCard title="Continuity Ledger" icon={FileText}>
+            <BrutalistCard title="Council Consensus" icon={Brain}>
               <p className="text-neutral-700">
-                Complex reasoning is persisted. We treat the process of solving a problem as valuable
-                data, logged in immutable markdown ledgers.
+                Five AI models debate independently. When they agree, you get certainty. When they
+                disagree, you see the confidence scores.
+              </p>
+            </BrutalistCard>
+            <BrutalistCard title="Source Attribution" icon={FileText}>
+              <p className="text-neutral-700">
+                Every claim links to which model said it. No black-box answers — trace any statement
+                back to its origin.
+              </p>
+            </BrutalistCard>
+            <BrutalistCard title="Cost Transparency" icon={Database}>
+              <p className="text-neutral-700">
+                Every LLM call tracked: model, tokens, cost. Know exactly what you're spending before
+                and after each query.
               </p>
             </BrutalistCard>
             <BrutalistCard title="Sleep-at-Night Reliability" icon={Zap}>
