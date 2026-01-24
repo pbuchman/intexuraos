@@ -1,0 +1,2 @@
+{"ts":"2026-01-24T10:28:05.080Z","project":"intexuraos-2","branch":"fix/INT-199-rate-limit-error-message","workspace":"--","runNumber":1,"passed":false,"durationMs":330,"failureCount":0,"failures":[]}
+{"ts":"2026-01-24T10:28:52.035Z","project":"intexuraos-2","branch":"fix/INT-199-rate-limit-error-message","workspace":"research-agent","runNumber":2,"passed":true,"durationMs":41625,"failureCount":0,"failures":[]}
