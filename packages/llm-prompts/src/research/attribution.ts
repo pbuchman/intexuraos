@@ -240,7 +240,7 @@ function extractAttributionFromLines(
  */
 export function buildSourceMap(
   reports: readonly ({ model: string } | undefined)[],
-  additionalSources?: readonly { label?: string }[]
+  additionalSources?: readonly ({ label?: string } | undefined)[]
 ): SourceMapItem[] {
   const sourceMap: SourceMapItem[] = [];
 

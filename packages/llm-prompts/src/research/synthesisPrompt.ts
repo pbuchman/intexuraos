@@ -74,7 +74,7 @@ Note these gaps in your synthesis.`;
 
 function buildSourceIdMapSection(
   reports: readonly (SynthesisReport | undefined)[],
-  additionalSources?: readonly AdditionalSource[]
+  additionalSources?: readonly (AdditionalSource | undefined)[]
 ): string {
   const rows: string[] = [];
   rows.push('SOURCE ID MAP (for Attribution)');
@@ -125,18 +125,20 @@ function buildContextualSynthesisPrompt(
   originalPrompt: string,
   reports: (SynthesisReport | undefined)[],
   ctx: SynthesisContext,
-  additionalSources?: AdditionalSource[]
+  additionalSources?: (AdditionalSource | undefined)[]
 ): string {
   const validReports = reports.filter((r): r is SynthesisReport => r !== undefined);
   const formattedReports = validReports
     .map((r, idx) => `### S${String(idx + 1)} (LLM report; model: ${r.model})\n\n${r.content}`)
     .join('\n\n---\n\n');
 
+  const validAdditionalSources =
+    additionalSources !== undefined
+      ? additionalSources.filter((s): s is AdditionalSource => s !== undefined)
+      : [];
+
   let additionalSourcesSection = '';
-  if (additionalSources !== undefined && additionalSources.length > 0) {
-    const validAdditionalSources = additionalSources.filter(
-      (s): s is AdditionalSource => s !== undefined
-    );
+  if (validAdditionalSources.length > 0) {
     const formattedSources = validAdditionalSources
       .map((source, idx) => {
         const sourceLabel = source.label ?? `Source ${String(idx + 1)}`;
@@ -154,14 +156,10 @@ ${formattedSources}
 `;
   }
 
-  const validAdditionalSourcesForList =
-    additionalSources !== undefined
-      ? additionalSources.filter((s): s is AdditionalSource => s !== undefined)
-      : [];
-  const hasAdditionalSources = validAdditionalSourcesForList.length > 0;
+  const hasAdditionalSources = validAdditionalSources.length > 0;
   const modelsList = validReports.map((r) => r.model).join(', ');
   const additionalSourcesList = hasAdditionalSources
-    ? validAdditionalSourcesForList.map((s, i) => s.label ?? `Source ${String(i + 1)}`).join(', ')
+    ? validAdditionalSources.map((s, i) => s.label ?? `Source ${String(i + 1)}`).join(', ')
     : '';
 
   const sourcesInfo = hasAdditionalSources
@@ -256,8 +254,8 @@ Write the ENTIRE synthesis in ${ctx.language.toUpperCase()}. This is the languag
 export function buildSynthesisPrompt(
   originalPrompt: string,
   reports: (SynthesisReport | undefined)[],
-  ctxOrAdditionalSources?: SynthesisContext | AdditionalSource[],
-  additionalSources?: AdditionalSource[]
+  ctxOrAdditionalSources?: SynthesisContext | (AdditionalSource | undefined)[],
+  additionalSources?: (AdditionalSource | undefined)[]
 ): string {
   if (
     ctxOrAdditionalSources !== undefined &&
@@ -272,23 +270,22 @@ export function buildSynthesisPrompt(
     );
   }
 
-  const legacyAdditionalSources = Array.isArray(ctxOrAdditionalSources)
+  const legacyAdditionalSourcesRaw = Array.isArray(ctxOrAdditionalSources)
     ? ctxOrAdditionalSources
     : undefined;
+  const legacyAdditionalSources =
+    legacyAdditionalSourcesRaw !== undefined
+      ? legacyAdditionalSourcesRaw.filter((s): s is AdditionalSource => s !== undefined)
+      : [];
 
   const validReports = reports.filter((r): r is SynthesisReport => r !== undefined);
   const formattedReports = validReports
     .map((r, idx) => `### S${String(idx + 1)} (LLM report; model: ${r.model})\n\n${r.content}`)
     .join('\n\n---\n\n');
 
-  const validLegacyAdditionalSources =
-    legacyAdditionalSources !== undefined
-      ? legacyAdditionalSources.filter((s): s is AdditionalSource => s !== undefined)
-      : [];
-
   let additionalSourcesSection = '';
-  if (validLegacyAdditionalSources.length > 0) {
-    const formattedSources = validLegacyAdditionalSources
+  if (legacyAdditionalSources.length > 0) {
+    const formattedSources = legacyAdditionalSources
       .map((source, idx) => {
         const sourceLabel = source.label ?? `Source ${String(idx + 1)}`;
         return `### U${String(idx + 1)} (Additional source; label: ${sourceLabel})\n\n${source.content}`;
@@ -305,7 +302,7 @@ ${formattedSources}
 `;
   }
 
-  const hasAdditionalSources = validLegacyAdditionalSources.length > 0;
+  const hasAdditionalSources = legacyAdditionalSources.length > 0;
   const conflictGuidelines = hasAdditionalSources
     ? `
 ## Conflict Resolution Guidelines
@@ -320,7 +317,7 @@ When information conflicts between any sources:
 
   const modelsList = validReports.map((r) => r.model).join(', ');
   const additionalSourcesList = hasAdditionalSources
-    ? validLegacyAdditionalSources.map((s, i) => s.label ?? `Source ${String(i + 1)}`).join(', ')
+    ? legacyAdditionalSources.map((s, i) => s.label ?? `Source ${String(i + 1)}`).join(', ')
     : '';
 
   const sourcesInfo = hasAdditionalSources
