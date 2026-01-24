@@ -6,6 +6,8 @@
  */
 
 import { LlmModels, type ResearchModel } from '@intexuraos/llm-contract';
+import type { Logger } from 'pino';
+import { withLlmParseErrorLogging } from '@intexuraos/llm-utils';
 
 /**
  * Model information for building the extraction prompt.
@@ -157,10 +159,35 @@ export function parseModelExtractionResponse(
     }
 
     return { selectedModels, synthesisModel };
-  } catch {
-    // JSON parsing failed - LLM response was malformed or not valid JSON
+  } catch (error) {
+    // Silently return null for lenient parsing
+    // TODO: Add logging version for production debugging
     return null;
   }
+}
+
+/**
+ * Parse model extraction response with error logging.
+ *
+ * This version logs parsing failures for debugging and monitoring.
+ * Use this in production to track LLM response quality issues.
+ *
+ * @param response - Raw LLM response string
+ * @param validModels - Array of valid model names to filter against
+ * @param logger - Pino logger instance for error logging
+ * @returns Parsed model extraction response or null if parsing fails
+ */
+export function parseModelExtractionResponseWithLogging(
+  response: string,
+  validModels: ResearchModel[],
+  logger: Logger
+): ModelExtractionResponse | null {
+  return withLlmParseErrorLogging({
+    logger,
+    operation: 'parseModelExtractionResponse',
+    expectedSchema: '{"selectedModels":["model1",...],"synthesisModel":"model"}',
+    parser: (resp: string) => parseModelExtractionResponse(resp, validModels),
+  })(response);
 }
 
 /**

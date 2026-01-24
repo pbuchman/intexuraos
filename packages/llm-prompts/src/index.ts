@@ -4,7 +4,6 @@
  * Centralized package for all LLM prompts used across IntexuraOS.
  */
 
-export * from './types.js';
 export * from './generation/index.js';
 export * from './classification/index.js';
 export * from './todos/index.js';

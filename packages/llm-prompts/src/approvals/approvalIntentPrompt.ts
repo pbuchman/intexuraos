@@ -5,6 +5,9 @@
  * to an approval request indicates approval, rejection, or is unclear.
  */
 
+import type { Logger } from 'pino';
+import { withLlmParseErrorLogging } from '@intexuraos/llm-utils';
+
 /**
  * Input for building the approval intent prompt.
  */
@@ -135,7 +138,38 @@ export function parseApprovalIntentResponse(response: string): ApprovalIntentRes
     }
 
     return { intent, confidence, reasoning };
-  } catch {
+  } catch (error) {
+    // Silently return null for lenient parsing
+    // TODO: Add logging version for production debugging
     return null;
   }
+}
+
+/**
+ * Parse approval intent response with error logging.
+ *
+ * This version logs parsing failures for debugging and monitoring.
+ * Use this in production to track LLM response quality issues.
+ *
+ * @param response - Raw LLM response string
+ * @param logger - Pino logger instance for error logging
+ * @returns Parsed approval intent or null if parsing fails
+ *
+ * @example
+ * const result = parseApprovalIntentResponseWithLogging(llmResponse, logger);
+ * if (result === null) {
+ *   // Error already logged to Sentry/logging system
+ * }
+ */
+export function parseApprovalIntentResponseWithLogging(
+  response: string,
+  logger: Logger
+): ApprovalIntentResponse | null {
+  return withLlmParseErrorLogging({
+    logger,
+    operation: 'parseApprovalIntentResponse',
+    expectedSchema:
+      '{"intent":"approve"|"reject"|"unclear","confidence":0.0-1.0,"reasoning":"string"}',
+    parser: parseApprovalIntentResponse,
+  })(response);
 }

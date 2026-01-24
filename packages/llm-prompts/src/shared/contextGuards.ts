@@ -12,6 +12,7 @@ import {
   ModeSchema,
   SafetyInfoSchema,
 } from './contextSchemas.js';
+import type { Logger } from 'pino';
 
 export function isStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((item) => typeof item === 'string');
@@ -35,4 +36,41 @@ export function isDefaultApplied(value: unknown): value is DefaultApplied {
 
 export function isSafetyInfo(value: unknown): value is SafetyInfo {
   return SafetyInfoSchema.safeParse(value).success;
+}
+
+/**
+ * Validation guards with error logging.
+ *
+ * These functions validate values and log detailed error messages when validation fails.
+ * Use these in production to track LLM response quality issues.
+ */
+
+export function validateDomain(value: unknown, logger: Logger): value is Domain {
+  const result = DomainSchema.safeParse(value);
+  if (!result.success) {
+    logger.warn(
+      {
+        received: value,
+        error: result.error.format(),
+      },
+      'Domain validation failed - expected one of: academicy, technical, creative, casual'
+    );
+    return false;
+  }
+  return true;
+}
+
+export function validateMode(value: unknown, logger: Logger): value is Mode {
+  const result = ModeSchema.safeParse(value);
+  if (!result.success) {
+    logger.warn(
+      {
+        received: value,
+        error: result.error.format(),
+      },
+      'Mode validation failed - expected one of: balanced, quality, speed, custom'
+    );
+    return false;
+  }
+  return true;
 }
