@@ -8,12 +8,11 @@ import type { ModelPricing } from '@intexuraos/llm-contract';
 import {
   buildImprovementRepairPrompt,
   buildValidationRepairPrompt,
-  createLlmParseError,
   inputImprovementPrompt,
   inputQualityPrompt,
   isInputQualityResult,
-  logLlmParseError,
-} from '@intexuraos/llm-common';
+} from '@intexuraos/llm-prompts';
+import { createLlmParseError, logLlmParseError } from '@intexuraos/llm-utils';
 import { getErrorMessage, type Logger, type Result } from '@intexuraos/common-core';
 import type { LlmError } from '../../domain/research/ports/llmProvider.js';
 

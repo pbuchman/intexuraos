@@ -106,3 +106,28 @@ These require explicit user instruction:
 
 1. **Done**: Only when user explicitly says "move to Done" or "mark as complete"
 2. **Backlog → Todo**: Requires prioritization decision
+
+## Authority Boundaries
+
+### Agent Authority (Claude CAN do)
+
+- ✅ Backlog → In Progress (when starting work)
+- ✅ In Progress → In Review (when PR created)
+- ✅ In Review → QA (when PR approved)
+
+### User-Only Authority (Claude CANNOT do)
+
+- 🛑 ANY → Done (terminal state, user-controlled)
+- 🛑 Done → ANY (reopening is user-controlled)
+- 🛑 Batch state updates (must be one-at-a-time with verification)
+
+**CRITICAL:** Agent stops at QA. Never mark issues as Done.
+
+### Enforcement Rules
+
+| Scenario                   | Agent Response                                        |
+| -------------------------- | ----------------------------------------------------- |
+| Single issue completed     | Move to In Review or QA, STOP, report to user         |
+| Multiple issues to process | Complete ONE, checkpoint, wait for user instruction   |
+| User says "mark as Done"   | Then and only then move to Done                       |
+| Temptation to batch update | STOP — each issue requires separate verification gate |

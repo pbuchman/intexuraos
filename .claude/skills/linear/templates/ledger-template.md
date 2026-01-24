@@ -41,6 +41,7 @@ Template for parent issues that serve as ledgers during plan splitting.
 ## Scope
 
 This epic covers:
+
 - <component/service 1>: <what's being done>
 - <component/service 2>: <what's being done>
 - <component/service 3>: <what's being done>
@@ -84,17 +85,17 @@ _Child issues are linked automatically via Linear's parent-child hierarchy._
 
 ## Mandatory Sections
 
-| Section          | Required | Purpose                                   |
-| ---------------- | -------- | ----------------------------------------- |
-| Goal             | Yes      | What we're trying to achieve              |
-| Success Criteria | Yes      | How we know we're done                    |
-| Key Decisions    | Yes      | Audit trail of choices made               |
-| State Tracking   | Yes      | Done/Now/Next status                      |
-| Scope            | Yes      | What components/services are covered      |
-| Constraints      | Optional | Boundaries and assumptions                |
-| Open Questions   | Optional | Unresolved items                          |
-| Working Set      | Optional | Active files and commands                 |
-| Progress Notes   | Optional | Timestamped updates                       |
+| Section          | Required | Purpose                              |
+| ---------------- | -------- | ------------------------------------ |
+| Goal             | Yes      | What we're trying to achieve         |
+| Success Criteria | Yes      | How we know we're done               |
+| Key Decisions    | Yes      | Audit trail of choices made          |
+| State Tracking   | Yes      | Done/Now/Next status                 |
+| Scope            | Yes      | What components/services are covered |
+| Constraints      | Optional | Boundaries and assumptions           |
+| Open Questions   | Optional | Unresolved items                     |
+| Working Set      | Optional | Active files and commands            |
+| Progress Notes   | Optional | Timestamped updates                  |
 
 ## Ledger Principles
 
@@ -104,4 +105,3 @@ _Child issues are linked automatically via Linear's parent-child hierarchy._
 4. **Minor actions**: Batch into single log entry
 5. **Always read the ledger before resuming a session**
 6. **Update after every subtask or change in plan**
-

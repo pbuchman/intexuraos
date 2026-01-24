@@ -8,10 +8,10 @@ import {
   type LlmProvider,
   type ResearchModel,
 } from '@intexuraos/llm-contract';
-import type { ResearchContext } from '@intexuraos/llm-common';
+import type { ResearchContext } from '@intexuraos/llm-prompts';
 
 export type { LlmProvider, ResearchModel } from '@intexuraos/llm-contract';
-export type { ResearchContext } from '@intexuraos/llm-common';
+export type { ResearchContext } from '@intexuraos/llm-prompts';
 
 export type ResearchStatus =
   | 'draft'

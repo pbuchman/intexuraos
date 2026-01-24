@@ -5,7 +5,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { err, ok } from '@intexuraos/common-core';
-import type { ResearchContext } from '@intexuraos/llm-common';
+import type { ResearchContext } from '@intexuraos/llm-prompts';
 import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
 import {
   processResearch,

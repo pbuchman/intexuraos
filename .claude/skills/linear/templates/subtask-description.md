@@ -76,7 +76,9 @@ Before implementing, confirm:
 ```typescript
 // Example test structure
 describe('featureName', () => {
-  it('should handle valid input', () => { /* ... */ });
+  it('should handle valid input', () => {
+    /* ... */
+  });
 });
 ```
 

@@ -83,7 +83,7 @@ function sanitizeHeaders(
 
 ---
 
-## `packages/llm-common/src/attribution.ts`
+## `packages/llm-prompts/src/research/attribution.ts`
 
 ### Lines 140, 147: `return title !== undefined ? { level: N, title } : null`
 
@@ -163,7 +163,7 @@ for (let i = endLine; i >= startLine; i--) {
 
 ---
 
-## `packages/llm-common/src/dataInsights/parseInsightResponse.ts`
+## `packages/llm-prompts/src/dataInsights/parseInsightResponse.ts`
 
 ### Line 28: `if (content === undefined)`
 
@@ -1105,8 +1105,8 @@ if (typeof value !== 'string') { return fallback; }
 | ------------------------------------------------------------------  | --------------------  | --------------------------------------------------------------------------  |
 | `infra-perplexity/src/client.ts`                                   | 1                    | setTimeout callback (network timeout)                                      |
 | `infra-sentry/src/fastify.ts`                                      | 1                    | Fastify header normalization (arrays converted to strings)                 |
-| `llm-common/src/attribution.ts`                                    | 6                    | TypeScript noUncheckedIndexedAccess + regex guarantees                     |
-| `llm-common/src/dataInsights/parseInsightResponse.ts`              | 9                    | TypeScript noUncheckedIndexedAccess + regex guarantees + prior validation  |
+| `llm-prompts/src/research/attribution.ts`                          | 6                    | TypeScript noUncheckedIndexedAccess + regex guarantees                     |
+| `llm-prompts/src/dataInsights/parseInsightResponse.ts`             | 9                    | TypeScript noUncheckedIndexedAccess + regex guarantees + prior validation  |
 | `linear-agent/src/infra/linear/linearApiClient.ts`                 | 65                   | ES module mocking limitations with @linear/sdk                             |
 | `research-agent/src/routes/researchRoutes.ts`                      | 26                   | JWT claim extraction + inline logger callbacks + defensive error handling  |
 | `research-agent/src/routes/internalRoutes.ts`                      | 17                   | PubSub event type extraction + optional deps + inline logger callbacks     |

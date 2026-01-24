@@ -18,13 +18,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 When the user asks a question, they want an **answer** — not code changes, not implementations, not "let me fix that for you."
 
-| User Says                                    | User Wants              | Claude Does                          |
-| -------------------------------------------- | ----------------------- | ------------------------------------ |
-| "What went wrong?"                           | Analysis                | Explain the issue, wait for decision |
-| "What can be improved?"                      | Suggestions             | List options, wait for selection     |
-| "Look at X — what do you think?"             | Opinion/assessment      | Provide assessment, wait             |
-| "Why did this fail?"                         | Diagnosis               | Diagnose, wait for next instruction  |
-| "Implement X" / "Fix X" / "Do X"             | Action                  | Execute the task                     |
+| User Says                        | User Wants         | Claude Does                          |
+| -------------------------------- | ------------------ | ------------------------------------ |
+| "What went wrong?"               | Analysis           | Explain the issue, wait for decision |
+| "What can be improved?"          | Suggestions        | List options, wait for selection     |
+| "Look at X — what do you think?" | Opinion/assessment | Provide assessment, wait             |
+| "Why did this fail?"             | Diagnosis          | Diagnose, wait for next instruction  |
+| "Implement X" / "Fix X" / "Do X" | Action             | Execute the task                     |
 
 ### Forbidden Auto-Actions
 
@@ -161,13 +161,13 @@ grep -E "(error|Error|ERROR|FAIL)" /tmp/ci-output.txt
 
 ### Step 2: Fix or Ask (No Skipping)
 
-| Failure Location         | Action                                                                 |
-| ------------------------ | ---------------------------------------------------------------------- |
-| Workspace I touched      | Fix immediately                                                        |
-| OTHER workspace          | Fix immediately OR ask: "Found X errors in Y. Fix here or separate issue?" |
-| Flaky test               | Stabilize it                                                           |
-| Type error               | Fix it                                                                 |
-| Lint error               | Fix it                                                                 |
+| Failure Location    | Action                                                                     |
+| ------------------- | -------------------------------------------------------------------------- |
+| Workspace I touched | Fix immediately                                                            |
+| OTHER workspace     | Fix immediately OR ask: "Found X errors in Y. Fix here or separate issue?" |
+| Flaky test          | Stabilize it                                                               |
+| Type error          | Fix it                                                                     |
+| Lint error          | Fix it                                                                     |
 
 ### Forbidden Responses
 
@@ -255,7 +255,18 @@ Always state the verification result explicitly:
 
 **NEVER modify `vitest.config.ts` coverage exclusions or thresholds. Write tests instead.**
 
-**ALWAYS commit `.claude/ci-failures/*` files with your changes.**
+### CI Failure Tracking (MANDATORY)
+
+**RULE:** ALWAYS commit `.claude/ci-failures/*` files with your changes.
+
+These files are auto-generated during `pnpm run ci:tracked` and record failure patterns for analysis. They enable the `/analyze-ci-failures` skill to identify recurring issues and improve documentation.
+
+```
+❌ WRONG: See .claude/ci-failures/ in git status → Ignore → Commit only "real" changes
+✅ RIGHT: See .claude/ci-failures/ in git status → Stage → Commit with your changes
+```
+
+**Why this matters:** Without these files, CI failure patterns are invisible. We can't improve instructions for problems we can't measure.
 
 ### Coverage Verification Efficiency
 
@@ -268,9 +279,26 @@ grep -E "(Coverage for|ERROR:)" /tmp/ci-output.txt
 
 Never re-run tests just to grep different patterns — each run takes 2-5 minutes.
 
+### Verification Ownership
+
+**RULE:** ALL verification failures are YOUR responsibility, regardless of source.
+
+When `./scripts/verify-deployment.sh`, `pnpm run ci:tracked`, or any verification command fails:
+
+| Response                                            | Correct?     |
+| --------------------------------------------------- | ------------ |
+| "Terraform failed, but not related to my changes"   | ❌ FORBIDDEN |
+| "Tests failed in another workspace, not my problem" | ❌ FORBIDDEN |
+| "Terraform failed. Investigating and fixing."       | ✅ CORRECT   |
+| "Tests failed in X. Fix here or separate issue?"    | ✅ CORRECT   |
+
+**The discovery-ownership rule applies to ALL verification:** seeing a failure = owning the fix.
+
+This is NOT optional. The phrases "unrelated to my changes", "pre-existing", and "not my problem" are explicitly forbidden in the Ownership Mindset section — they apply equally to verification failures.
+
 ---
 
-## Infrastructure
+## Infrastructure (MANDATORY)
 
 **Service account:** `$HOME/personal/gcloud-claude-code-dev.json`
 
@@ -281,6 +309,37 @@ Never re-run tests just to grep different patterns — each run takes 2-5 minute
 - GCloud CLI: `gcloud auth activate-service-account --key-file=$HOME/personal/gcloud-claude-code-dev.json`
 - Terraform: Use `tf` alias (sets credentials + clears emulator vars)
 - New service image: `./scripts/push-missing-images.sh`
+
+### Terraform-Only Resource Creation
+
+**RULE: ALL persistent infrastructure MUST be created via Terraform. Direct CLI resource creation is FORBIDDEN.**
+
+The following commands are **STRICTLY FORBIDDEN**:
+
+| Command                          | What It Creates        | Use Terraform Instead                 |
+| -------------------------------- | ---------------------- | ------------------------------------- |
+| `gsutil mb`                      | GCS buckets            | `google_storage_bucket`               |
+| `gcloud pubsub topics create`    | Pub/Sub topics         | `google_pubsub_topic`                 |
+| `gcloud pubsub subscriptions`    | Pub/Sub subscriptions  | `google_pubsub_subscription`          |
+| `gcloud run deploy`              | Cloud Run services     | `google_cloud_run_service`            |
+| `gcloud secrets create`          | Secret Manager secrets | `google_secret_manager_secret`        |
+| `gcloud sql instances create`    | Cloud SQL instances    | `google_sql_database_instance`        |
+| `gcloud compute instances`       | Compute Engine VMs     | `google_compute_instance`             |
+| `gcloud iam service-accounts`    | Service accounts       | `google_service_account`              |
+| `gcloud projects add-iam-policy` | IAM bindings           | `google_*_iam_*`                      |
+
+**Why:** Terraform tracks state, enables reproducibility, version control, drift detection, and cost visibility. CLI commands create "orphan" resources invisible to IaC.
+
+**Correct pattern:**
+
+```
+❌ WRONG: Need a bucket → gsutil mb gs://my-bucket → Done
+✅ RIGHT: Need a bucket → Add to terraform/ → tf plan → tf apply → PR
+```
+
+**Exception:** Truly ephemeral resources for debugging (temp files in existing buckets, inspect commands). Never new named resources.
+
+**Recovery:** If orphan resources exist, import into Terraform or delete them.
 
 ---
 
@@ -350,6 +409,90 @@ Pattern: `/internal/{resource-name}` with `X-Internal-Auth` header. Use `validat
 
 ---
 
+## Environment Variables (MANDATORY)
+
+**RULE:** Adding a new environment variable requires updating THREE locations:
+
+| Step | Location                             | What to Update                                                                |
+| ---- | ------------------------------------ | ----------------------------------------------------------------------------- |
+| 1    | `apps/<service>/src/index.ts`        | Add to `REQUIRED_ENV` array                                                   |
+| 2    | `terraform/environments/dev/main.tf` | Add to service's `env_vars` or `secrets`                                      |
+| 3    | `scripts/dev.mjs`                    | Add to `COMMON_SERVICE_ENV`, `COMMON_SERVICE_URLS`, or `SERVICE_ENV_MAPPINGS` |
+
+**Failure to update all three causes:**
+
+- Missing in Terraform → **Startup probe failure** (22% of build failures)
+- Missing in dev.mjs → Local development broken
+- Missing in REQUIRED_ENV → Runtime crash when var accessed
+
+### Terraform Patterns
+
+**Common env var (all services):**
+
+```hcl
+# terraform/environments/dev/main.tf - local.common_service_env_vars
+locals {
+  common_service_env_vars = {
+    INTEXURAOS_NEW_VAR = "value"
+  }
+}
+```
+
+**Service-specific env var:**
+
+```hcl
+# terraform/environments/dev/main.tf - service module
+module "my_service" {
+  env_vars = merge(local.common_service_env_vars, {
+    INTEXURAOS_SERVICE_SPECIFIC_VAR = "value"
+  })
+}
+```
+
+**Secret (from Secret Manager):**
+
+```hcl
+# terraform/environments/dev/main.tf - service module
+module "my_service" {
+  secrets = merge(local.common_service_secrets, {
+    INTEXURAOS_MY_SECRET = module.secret_manager.secret_ids["INTEXURAOS_MY_SECRET"]
+  })
+}
+```
+
+### dev.mjs Patterns
+
+**Common URL:**
+
+```javascript
+// scripts/dev.mjs - COMMON_SERVICE_URLS
+const COMMON_SERVICE_URLS = {
+  INTEXURAOS_NEW_SERVICE_URL: 'http://localhost:8XXX',
+};
+```
+
+**Common secret (from .envrc.local):**
+
+```javascript
+// scripts/dev.mjs - COMMON_SERVICE_ENV
+const COMMON_SERVICE_ENV = {
+  INTEXURAOS_NEW_SECRET: process.env.INTEXURAOS_NEW_SECRET,
+};
+```
+
+**Service-specific:**
+
+```javascript
+// scripts/dev.mjs - SERVICE_ENV_MAPPINGS
+const SERVICE_ENV_MAPPINGS = {
+  'my-service': {
+    INTEXURAOS_MY_SERVICE_TOPIC: 'my-topic',
+  },
+};
+```
+
+---
+
 ## Web App (`apps/web/**`)
 
 **CRITICAL:** Hash routing only (`/#/path`) — backend buckets don't support SPA fallback.
@@ -375,11 +518,13 @@ pnpm build
 **Why:** Apps depend on packages. Without built `dist/` directories, apps fail typecheck with misleading errors.
 
 **Signs you forgot:**
+
 - 50+ `no-unsafe-*` lint errors in apps
 - `Cannot find module '@intexuraos/...'`
 - Errors only in `apps/` not `packages/`
 
 **When to run:**
+
 - Fresh clone
 - Switched branches
 - After pulling changes that touched `packages/`
@@ -444,6 +589,24 @@ const result = await repo.find(id);
 if (!result.ok) return result; // Narrows to Success<T>
 return result.value; // Now safe
 ```
+
+### Before Running Terraform
+
+**ALWAYS** use the `tf` alias, not `terraform`:
+
+```bash
+# ❌ WRONG - will fail without credentials or with emulator env vars
+terraform init
+terraform plan
+
+# ✅ RIGHT - sets credentials and clears emulator vars
+tf init
+tf plan
+```
+
+**Why:** The `tf` alias (defined in shell config) sets `GOOGLE_APPLICATION_CREDENTIALS` and clears `FIRESTORE_EMULATOR_HOST`, `PUBSUB_EMULATOR_HOST`, etc. Without this, terraform commands will fail with permission errors or try to use emulators.
+
+**Full reference:** `.claude/reference/infrastructure.md`
 
 ---
 
@@ -510,9 +673,28 @@ return result.value; // Now safe
 - `"commit"` → local only, no push
 - `"commit and push"` → push once
 
+**RULE: NEVER commit without `pnpm run ci:tracked` passing first.**
+
+This is non-negotiable. Running only package-level tests (`vitest`, `tsc`) is NOT sufficient.
+
+```
+❌ WRONG: Fix code → Run vitest → Commit → Push → Check GitHub Actions
+✅ RIGHT: Fix code → Run pnpm run ci:tracked → Passes → Commit → Push
+```
+
+| Shortcut Taken                 | Why It Fails                                      |
+| ------------------------------ | ------------------------------------------------- |
+| `npx vitest run` only          | Misses other workspaces, lint, type-check         |
+| `pnpm run test` in one package | Misses cross-package type errors                  |
+| `tsc --noEmit` only            | Misses lint errors, test failures                 |
+| "I'll check GitHub Actions"    | Wastes CI resources, delays feedback, breaks main |
+
+**The only acceptable verification is `pnpm run ci:tracked` passing locally.**
+
 **RULE:** Before creating a PR, merge latest base branch and resolve conflicts.
 
 ```bash
+pnpm run ci:tracked              # MUST pass first
 git add -A && git commit -m "message"
 git fetch origin && git merge origin/development
 git push -u origin <branch>
@@ -655,16 +837,16 @@ This project uses three types of Claude extensions:
 **Location:** `.claude/commands/<command-name>.md`
 **Invocation:** `/<command-name>`
 
-| Command                | Purpose                           |
-| ---------------------- | --------------------------------- |
-| `/analyze-ci-failures` | Analyze CI failure patterns       |
-| `/analyze-logs`        | Production log analysis           |
-| `/coverage`            | Coverage improvement suggestions  |
-| `/create-service`      | New service creation wizard       |
-| `/refactoring`         | Code smell detection and fixes    |
-| `/semver-release`      | Semantic versioning release       |
-| `/teach-me-something`  | Learn and persist tech insights   |
-| `/verify-deployment`   | Deployment verification           |
+| Command                | Purpose                          |
+| ---------------------- | -------------------------------- |
+| `/analyze-ci-failures` | Analyze CI failure patterns      |
+| `/analyze-logs`        | Production log analysis          |
+| `/coverage`            | Coverage improvement suggestions |
+| `/create-service`      | New service creation wizard      |
+| `/refactoring`         | Code smell detection and fixes   |
+| `/semver-release`      | Semantic versioning release      |
+| `/teach-me-something`  | Learn and persist tech insights  |
+| `/verify-deployment`   | Deployment verification          |
 
 ---
 

@@ -1,4 +1,4 @@
-import { commandClassifierPrompt } from '@intexuraos/llm-common';
+import { commandClassifierPrompt } from '@intexuraos/llm-prompts';
 import type { LlmGenerateClient } from '@intexuraos/llm-factory';
 import type { CommandType } from '../../domain/models/command.js';
 import type {

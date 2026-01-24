@@ -5,7 +5,7 @@
 
 import type { Result } from '@intexuraos/common-core';
 import { err, getErrorMessage, ok } from '@intexuraos/common-core';
-import { dataTransformPrompt, parseTransformedData } from '@intexuraos/llm-common';
+import { dataTransformPrompt, parseTransformedData } from '@intexuraos/llm-prompts';
 import type { UserServiceClient } from '../user/userServiceClient.js';
 import type {
   DataTransformService,

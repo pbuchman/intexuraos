@@ -151,15 +151,15 @@ export function mapTeam(team: Team): LinearTeam {
 export function mapLinearError(error: unknown): LinearError {
   const message = getErrorMessage(error, 'Unknown Linear API error');
 
+  if (message.includes('429') || message.includes('rate limit')) {
+    return { code: 'RATE_LIMIT', message: 'Linear API rate limit exceeded' };
+  }
   if (
     message.includes('401') ||
     message.includes('Unauthorized') ||
     message.includes('Invalid API key')
   ) {
     return { code: 'INVALID_API_KEY', message: 'Invalid Linear API key' };
-  }
-  if (message.includes('429') || message.includes('rate limit')) {
-    return { code: 'RATE_LIMIT', message: 'Linear API rate limit exceeded' };
   }
   if (message.includes('404') || message.includes('not found')) {
     return { code: 'TEAM_NOT_FOUND', message };

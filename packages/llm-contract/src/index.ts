@@ -57,13 +57,4 @@ export type {
   Perplexity,
 } from './supportedModels.js';
 
-export { generateThumbnailPrompt } from './helpers.js';
-export type {
-  ThumbnailPrompt,
-  ThumbnailPromptParameters,
-  ThumbnailPromptError,
-  ThumbnailPromptResult,
-  RealismStyle,
-} from './helpers.js';
-
 export type { ImageSize, ModelPricing, ProviderPricing, CostCalculator } from './pricing.js';

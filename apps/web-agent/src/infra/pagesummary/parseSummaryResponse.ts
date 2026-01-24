@@ -5,7 +5,7 @@
 
 import type { Result, Logger } from '@intexuraos/common-core';
 import { err, ok, getErrorMessage } from '@intexuraos/common-core';
-import { createDetailedParseErrorMessage } from '@intexuraos/llm-common';
+import { createDetailedParseErrorMessage } from '@intexuraos/llm-utils';
 
 /**
  * Parsed and validated summary.
