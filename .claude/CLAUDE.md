@@ -171,14 +171,17 @@ Pattern: `/internal/{resource-name}` with `X-Internal-Auth` header. Use `validat
 
 ### Key Rules
 
-| Rule | Summary |
-| ---- | ------- |
-| Endpoint Logging | ALL endpoints MUST use `logIncomingRequest()` at entry |
-| Pub/Sub | HTTP push only — Cloud Run scales to zero |
-| Use Case Logging | Use cases MUST accept `logger: Logger` as dependency |
-| Firestore | Each collection owned by ONE service. Cross-service via HTTP only |
-| Composite Indexes | Multi-field queries require indexes in migrations |
-| Migrations | IMMUTABLE — never modify, only create new ones |
+**RULE:** ALL endpoints (`/internal/*`, webhooks, Pub/Sub) MUST use `logIncomingRequest()` at entry.
+
+**RULE:** Never use pull subscriptions — Cloud Run scales to zero. Use HTTP push only.
+
+**RULE:** Use cases MUST accept `logger: Logger` as dependency.
+
+**RULE:** Each Firestore collection owned by exactly ONE service. Cross-service access via HTTP only. Registry: `firestore-collections.json`. Verify: `pnpm run verify:firestore`.
+
+**RULE:** Multi-field queries require composite indexes. Define in `migrations/*.mjs` using `indexes` export. Queries fail in production without them.
+
+**RULE:** Migrations are IMMUTABLE. Never modify or delete existing files. Create new migrations to fix bugs.
 
 ---
 
@@ -196,9 +199,8 @@ Pattern: `/internal/{resource-name}` with `X-Internal-Auth` header. Use `validat
 - No domain logic in packages
 
 **Pub/Sub Publishers:**
-- All publishers MUST extend `BasePubSubPublisher`
-- Topic names from env vars only (no hardcoding)
-- Verification: `pnpm run verify:pubsub`
+
+**RULE:** All publishers MUST extend `BasePubSubPublisher`. Topic names from env vars only (no hardcoding). Verification: `pnpm run verify:pubsub`.
 
 ---
 
