@@ -153,23 +153,32 @@ export function parseApprovalIntentResponse(response: string): ApprovalIntentRes
  *
  * @param response - Raw LLM response string
  * @param logger - Pino logger instance for error logging
- * @returns Parsed approval intent or null if parsing fails
+ * @returns Parsed approval intent
+ * @throws {Error} When parsing fails (error is logged before throwing)
  *
  * @example
- * const result = parseApprovalIntentResponseWithLogging(llmResponse, logger);
- * if (result === null) {
+ * try {
+ *   const result = parseApprovalIntentResponseWithLogging(llmResponse, logger);
+ *   // Use result
+ * } catch {
  *   // Error already logged to Sentry/logging system
  * }
  */
 export function parseApprovalIntentResponseWithLogging(
   response: string,
   logger: Logger
-): ApprovalIntentResponse | null {
+): ApprovalIntentResponse {
   return withLlmParseErrorLogging({
     logger,
     operation: 'parseApprovalIntentResponse',
     expectedSchema:
       '{"intent":"approve"|"reject"|"unclear","confidence":0.0-1.0,"reasoning":"string"}',
-    parser: parseApprovalIntentResponse,
+    parser: (resp: string): ApprovalIntentResponse => {
+      const result = parseApprovalIntentResponse(resp);
+      if (result === null) {
+        throw new Error('Failed to parse approval intent: response does not match expected schema');
+      }
+      return result;
+    },
   })(response);
 }

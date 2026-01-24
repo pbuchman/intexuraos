@@ -175,18 +175,27 @@ export function parseModelExtractionResponse(
  * @param response - Raw LLM response string
  * @param validModels - Array of valid model names to filter against
  * @param logger - Pino logger instance for error logging
- * @returns Parsed model extraction response or null if parsing fails
+ * @returns Parsed model extraction response
+ * @throws {Error} When parsing fails (error is logged before throwing)
  */
 export function parseModelExtractionResponseWithLogging(
   response: string,
   validModels: ResearchModel[],
   logger: Logger
-): ModelExtractionResponse | null {
+): ModelExtractionResponse {
   return withLlmParseErrorLogging({
     logger,
     operation: 'parseModelExtractionResponse',
     expectedSchema: '{"selectedModels":["model1",...],"synthesisModel":"model"}',
-    parser: (resp: string) => parseModelExtractionResponse(resp, validModels),
+    parser: (resp: string): ModelExtractionResponse => {
+      const result = parseModelExtractionResponse(resp, validModels);
+      if (result === null) {
+        throw new Error(
+          'Failed to parse model extraction: response does not match expected schema'
+        );
+      }
+      return result;
+    },
   })(response);
 }
 
