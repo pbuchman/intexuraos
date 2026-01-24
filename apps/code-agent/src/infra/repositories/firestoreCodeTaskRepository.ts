@@ -5,7 +5,7 @@
 /* eslint-disable */
 /* eslint-disable @typescript-eslint/no-non-null-assertion */
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
-/* eslint-disable @typescript-eslint/no-restricted-imports */
+ 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 /* eslint-disable @typescript-eslint/strict-boolean-expressions */
@@ -52,7 +52,7 @@ export const createFirestoreCodeTaskRepository = (deps: {
 
       try {
         // Use transaction for atomic deduplication (design lines 1558-1563)
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+         
         const result = await firestore.runTransaction(async (transaction: any) => {
           // Layer 0: Check approvalEventId (design lines 1532-1536)
           if (input.approvalEventId !== undefined) {
@@ -337,7 +337,7 @@ export const createFirestoreCodeTaskRepository = (deps: {
 
         const snapshot = await query.get();
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+         
         const tasks = snapshot.docs.map((doc: any) => {
           const data = doc.data();
           return {
@@ -402,7 +402,7 @@ export const createFirestoreCodeTaskRepository = (deps: {
           .where('updatedAt', '<', Timestamp.fromDate(staleThreshold))
           .get();
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+         
         const tasks = snapshot.docs.map((doc: any) => {
           const data = doc.data();
           return {
