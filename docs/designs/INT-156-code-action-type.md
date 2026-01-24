@@ -616,11 +616,32 @@ Secrets stored in GCP Secret Manager:
 | `zai-api-key`                 | GLM worker type    |
 | `github-app-private-key`      | GitHub App for PRs |
 
-Startup script fetches secrets:
+**VM service account IAM permissions:**
+
+```hcl
+# terraform/modules/code-worker-vm/iam.tf
+resource "google_project_iam_member" "vm_secret_accessor" {
+  project = var.project_id
+  role    = "roles/secretmanager.secretAccessor"
+  member  = "serviceAccount:${google_service_account.vm.email}"
+}
+```
+
+**Startup script fetches secrets:**
 
 ```bash
+# Fetch secrets from Secret Manager
 LINEAR_API_KEY=$(gcloud secrets versions access latest --secret="linear-api-key")
-echo "export LINEAR_API_KEY='$LINEAR_API_KEY'" >> ~/.zshrc
+GITHUB_APP_KEY=$(gcloud secrets versions access latest --secret="github-app-private-key")
+CF_TUNNEL_TOKEN=$(gcloud secrets versions access latest --secret="cloudflare-tunnel-token-vm")
+
+# Export to environment
+echo "export LINEAR_API_KEY='$LINEAR_API_KEY'" >> ~/.orchestrator-env
+echo "export GITHUB_APP_KEY='$GITHUB_APP_KEY'" >> ~/.orchestrator-env
+echo "export CF_TUNNEL_TOKEN='$CF_TUNNEL_TOKEN'" >> ~/.orchestrator-env
+
+# Source in orchestrator startup
+source ~/.orchestrator-env
 ```
 
 ### Secret Rotation Strategy
@@ -694,6 +715,21 @@ One-time manual setup (free tier):
 2. Create tunnel: `cc-mac` and `cc-vm`
 3. Copy tunnel tokens
 4. Store in GCP Secret Manager
+5. Create Access Application:
+   - Application name: `code-orchestrator`
+   - Application domain: `cc-mac.intexuraos.cloud`, `cc-vm.intexuraos.cloud`
+   - Policy: Service Auth (service token required)
+6. Create Service Token for code-agent:
+   - Token name: `code-agent-service-token`
+   - Store Client ID and Secret in code-agent secrets
+
+**Access policy:**
+
+| Setting | Value |
+|---------|-------|
+| Policy type | Service Auth |
+| Required headers | `CF-Access-Client-Id`, `CF-Access-Client-Secret` |
+| Token scope | Access to orchestrator endpoints only |
 
 Startup script installs cloudflared:
 
@@ -797,10 +833,10 @@ export ZAI_API_KEY="..."                 # Required for glm worker type
 ```json
 {
   "tasks": {
-    "task-123": {
+    "cc-task-123": {
       "status": "running",
       "tmuxSession": "cc-task-123",
-      "worktreePath": "/Users/user/claude-workers/worktrees/task-123",
+      "worktreePath": "/Users/user/claude-workers/worktrees/cc-task-123",
       "startedAt": "2026-01-24T10:00:00Z",
       "webhookUrl": "https://code-agent.../internal/webhooks/task-complete",
       "webhookSecret": "whsec_...",
