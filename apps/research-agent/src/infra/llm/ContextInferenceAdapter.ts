@@ -10,12 +10,12 @@ import {
   buildInferSynthesisContextPrompt,
   buildResearchContextRepairPrompt,
   buildSynthesisContextRepairPrompt,
-  createDetailedParseErrorMessage,
   ResearchContextSchema,
   SynthesisContextSchema,
   type InferResearchContextOptions,
   type InferSynthesisContextParams,
-} from '@intexuraos/llm-common';
+} from '@intexuraos/llm-prompts';
+import { createDetailedParseErrorMessage } from '@intexuraos/llm-utils';
 import { type Result, getErrorMessage } from '@intexuraos/common-core';
 import type { LlmError } from '../../domain/research/ports/llmProvider.js';
 import type {

@@ -11,7 +11,7 @@ import {
   validateSynthesisAttributions,
   parseSections,
   generateBreakdown,
-} from '@intexuraos/llm-common';
+} from '@intexuraos/llm-prompts';
 import type {
   LlmSynthesisProvider,
   NotificationSender,
@@ -148,7 +148,7 @@ export async function runSynthesis(
     const contextResult = await contextInferrer.inferSynthesisContext({
       originalPrompt: research.prompt,
       reports: reports.map((r) => ({ model: r.model, content: r.content })),
-      additionalSources,
+      ...(additionalSources !== undefined && { additionalSources }),
     });
     if (contextResult.ok) {
       synthesisContext = contextResult.value.context;

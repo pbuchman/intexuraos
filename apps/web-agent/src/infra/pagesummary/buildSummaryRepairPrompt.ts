@@ -3,7 +3,7 @@
  * Uses PromptBuilder pattern for consistency with llm-common.
  */
 
-import type { PromptBuilder, PromptDeps } from '@intexuraos/llm-common';
+import type { PromptBuilder, PromptDeps } from '@intexuraos/llm-prompts';
 
 /**
  * Input for the initial summary prompt.

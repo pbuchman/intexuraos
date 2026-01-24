@@ -2,7 +2,7 @@
  * Generate branded HTML from research markdown content.
  */
 import { marked, Renderer } from 'marked';
-import { stripAttributionLines } from '@intexuraos/llm-common';
+import { stripAttributionLines } from '@intexuraos/llm-prompts';
 
 export interface LlmResultInput {
   provider: string;

@@ -15,7 +15,7 @@ import {
   SYNTHESIS_MODELS,
   DEFAULT_SYNTHESIS_MODEL,
   type AvailableModelInfo,
-} from '@intexuraos/llm-common';
+} from '@intexuraos/llm-prompts';
 import type { ApiKeyStore, TextGenerationClient } from '../ports/index.js';
 
 /**

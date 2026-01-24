@@ -5,7 +5,7 @@
 
 import type { Result } from '@intexuraos/common-core';
 import { err, getErrorMessage, ok } from '@intexuraos/common-core';
-import { linearActionExtractionPrompt } from '@intexuraos/llm-common';
+import { linearActionExtractionPrompt } from '@intexuraos/llm-prompts';
 import type { LlmGenerateClient } from '@intexuraos/llm-factory';
 import type { LlmUserServiceClient } from '../user/llmUserServiceClient.js';
 import type { ExtractedIssueData, LinearError } from '../../domain/index.js';

@@ -10,7 +10,7 @@ import {
   dataAnalysisPrompt,
   parseInsightResponse,
   type ChartTypeInfo,
-} from '@intexuraos/llm-common';
+} from '@intexuraos/llm-prompts';
 import type { LlmGenerateClient } from '@intexuraos/llm-factory';
 import type { UserServiceClient } from '../user/userServiceClient.js';
 import type {

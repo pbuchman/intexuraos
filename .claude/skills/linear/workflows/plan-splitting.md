@@ -243,12 +243,12 @@ It does NOT apply to:
 
 ### Distinguishing Auto-Split vs Independent Issues
 
-| Scenario                           | Continuation Applies? | Reason                                    |
-| ---------------------------------- | --------------------- | ----------------------------------------- |
-| `/linear` creates parent + 5 kids  | ✅ Yes                | Same session, auto-split, shared context  |
-| User manually creates epic + kids  | ❌ No                 | Each is independent work unit             |
-| `/linear INT-XXX` on random issue  | ❌ No                 | Standalone issue, not part of split       |
-| Working through Todo queue         | ❌ No                 | Each issue is separate task               |
+| Scenario                          | Continuation Applies? | Reason                                   |
+| --------------------------------- | --------------------- | ---------------------------------------- |
+| `/linear` creates parent + 5 kids | ✅ Yes                | Same session, auto-split, shared context |
+| User manually creates epic + kids | ❌ No                 | Each is independent work unit            |
+| `/linear INT-XXX` on random issue | ❌ No                 | Standalone issue, not part of split      |
+| Working through Todo queue        | ❌ No                 | Each issue is separate task              |
 
 ## Example: INT-156 Style Plan
 

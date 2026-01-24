@@ -285,12 +285,12 @@ Never re-run tests just to grep different patterns — each run takes 2-5 minute
 
 When `./scripts/verify-deployment.sh`, `pnpm run ci:tracked`, or any verification command fails:
 
-| Response                                             | Correct? |
-| ---------------------------------------------------- | -------- |
-| "Terraform failed, but not related to my changes"    | ❌ FORBIDDEN |
-| "Tests failed in another workspace, not my problem"  | ❌ FORBIDDEN |
-| "Terraform failed. Investigating and fixing."        | ✅ CORRECT |
-| "Tests failed in X. Fix here or separate issue?"     | ✅ CORRECT |
+| Response                                            | Correct?     |
+| --------------------------------------------------- | ------------ |
+| "Terraform failed, but not related to my changes"   | ❌ FORBIDDEN |
+| "Tests failed in another workspace, not my problem" | ❌ FORBIDDEN |
+| "Terraform failed. Investigating and fixing."       | ✅ CORRECT   |
+| "Tests failed in X. Fix here or separate issue?"    | ✅ CORRECT   |
 
 **The discovery-ownership rule applies to ALL verification:** seeing a failure = owning the fix.
 
@@ -382,11 +382,11 @@ Pattern: `/internal/{resource-name}` with `X-Internal-Auth` header. Use `validat
 
 **RULE:** Adding a new environment variable requires updating THREE locations:
 
-| Step | Location                        | What to Update                                                          |
-| ---- | ------------------------------- | ----------------------------------------------------------------------- |
-| 1    | `apps/<service>/src/index.ts`   | Add to `REQUIRED_ENV` array                                             |
-| 2    | `terraform/environments/dev/main.tf` | Add to service's `env_vars` or `secrets`                           |
-| 3    | `scripts/dev.mjs`               | Add to `COMMON_SERVICE_ENV`, `COMMON_SERVICE_URLS`, or `SERVICE_ENV_MAPPINGS` |
+| Step | Location                             | What to Update                                                                |
+| ---- | ------------------------------------ | ----------------------------------------------------------------------------- |
+| 1    | `apps/<service>/src/index.ts`        | Add to `REQUIRED_ENV` array                                                   |
+| 2    | `terraform/environments/dev/main.tf` | Add to service's `env_vars` or `secrets`                                      |
+| 3    | `scripts/dev.mjs`                    | Add to `COMMON_SERVICE_ENV`, `COMMON_SERVICE_URLS`, or `SERVICE_ENV_MAPPINGS` |
 
 **Failure to update all three causes:**
 
@@ -651,12 +651,12 @@ This is non-negotiable. Running only package-level tests (`vitest`, `tsc`) is NO
 ✅ RIGHT: Fix code → Run pnpm run ci:tracked → Passes → Commit → Push
 ```
 
-| Shortcut Taken                        | Why It Fails                                      |
-| ------------------------------------- | ------------------------------------------------- |
-| `npx vitest run` only                 | Misses other workspaces, lint, type-check         |
-| `pnpm run test` in one package        | Misses cross-package type errors                  |
-| `tsc --noEmit` only                   | Misses lint errors, test failures                 |
-| "I'll check GitHub Actions"           | Wastes CI resources, delays feedback, breaks main |
+| Shortcut Taken                 | Why It Fails                                      |
+| ------------------------------ | ------------------------------------------------- |
+| `npx vitest run` only          | Misses other workspaces, lint, type-check         |
+| `pnpm run test` in one package | Misses cross-package type errors                  |
+| `tsc --noEmit` only            | Misses lint errors, test failures                 |
+| "I'll check GitHub Actions"    | Wastes CI resources, delays feedback, breaks main |
 
 **The only acceptable verification is `pnpm run ci:tracked` passing locally.**
 

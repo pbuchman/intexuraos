@@ -168,12 +168,12 @@ When working on multiple related issues (e.g., epic children), follow these rule
 
 ### Forbidden Patterns
 
-| Pattern                            | Why It's Wrong                          |
-| ---------------------------------- | --------------------------------------- |
-| Parallel `update_issue` calls      | No verification between issues          |
-| Marking Done without user          | Done is user-controlled terminal state  |
-| Continuing without checkpoint      | User loses control of workflow          |
-| "I'll mark these as Done"          | Only user marks Done                    |
+| Pattern                       | Why It's Wrong                         |
+| ----------------------------- | -------------------------------------- |
+| Parallel `update_issue` calls | No verification between issues         |
+| Marking Done without user     | Done is user-controlled terminal state |
+| Continuing without checkpoint | User loses control of workflow         |
+| "I'll mark these as Done"     | Only user marks Done                   |
 
 ### Verification Between Issues
 

@@ -1,6 +1,6 @@
 import type { Result } from '@intexuraos/common-core';
 import { err, getErrorMessage, ok } from '@intexuraos/common-core';
-import { calendarActionExtractionPrompt } from '@intexuraos/llm-common';
+import { calendarActionExtractionPrompt } from '@intexuraos/llm-prompts';
 import type { LlmGenerateClient } from '@intexuraos/llm-factory';
 import type { LlmUserServiceClient } from '../user/llmUserServiceClient.js';
 import type {

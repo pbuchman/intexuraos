@@ -111,9 +111,6 @@ importers:
       '@intexuraos/infra-sentry':
         specifier: workspace:*
         version: link:../../packages/infra-sentry
-      '@intexuraos/llm-common':
-        specifier: workspace:*
-        version: link:../../packages/llm-common
       '@intexuraos/llm-contract':
         specifier: workspace:*
         version: link:../../packages/llm-contract
@@ -123,6 +120,9 @@ importers:
       '@intexuraos/llm-pricing':
         specifier: workspace:*
         version: link:../../packages/llm-pricing
+      '@intexuraos/llm-prompts':
+        specifier: workspace:*
+        version: link:../../packages/llm-prompts
       fastify:
         specifier: ^5.1.0
         version: 5.6.2
@@ -290,9 +290,6 @@ importers:
       '@intexuraos/infra-sentry':
         specifier: workspace:*
         version: link:../../packages/infra-sentry
-      '@intexuraos/llm-common':
-        specifier: workspace:*
-        version: link:../../packages/llm-common
       '@intexuraos/llm-contract':
         specifier: workspace:*
         version: link:../../packages/llm-contract
@@ -302,6 +299,9 @@ importers:
       '@intexuraos/llm-pricing':
         specifier: workspace:*
         version: link:../../packages/llm-pricing
+      '@intexuraos/llm-prompts':
+        specifier: workspace:*
+        version: link:../../packages/llm-prompts
       fastify:
         specifier: ^5.1.0
         version: 5.6.2
@@ -353,9 +353,6 @@ importers:
       '@intexuraos/infra-sentry':
         specifier: workspace:*
         version: link:../../packages/infra-sentry
-      '@intexuraos/llm-common':
-        specifier: workspace:*
-        version: link:../../packages/llm-common
       '@intexuraos/llm-contract':
         specifier: workspace:*
         version: link:../../packages/llm-contract
@@ -365,6 +362,9 @@ importers:
       '@intexuraos/llm-pricing':
         specifier: workspace:*
         version: link:../../packages/llm-pricing
+      '@intexuraos/llm-prompts':
+        specifier: workspace:*
+        version: link:../../packages/llm-prompts
       fastify:
         specifier: ^5.1.0
         version: 5.6.2
@@ -410,9 +410,6 @@ importers:
       '@intexuraos/infra-sentry':
         specifier: workspace:*
         version: link:../../packages/infra-sentry
-      '@intexuraos/llm-common':
-        specifier: workspace:*
-        version: link:../../packages/llm-common
       '@intexuraos/llm-contract':
         specifier: workspace:*
         version: link:../../packages/llm-contract
@@ -422,6 +419,9 @@ importers:
       '@intexuraos/llm-pricing':
         specifier: workspace:*
         version: link:../../packages/llm-pricing
+      '@intexuraos/llm-prompts':
+        specifier: workspace:*
+        version: link:../../packages/llm-prompts
       fastify:
         specifier: ^5.1.0
         version: 5.6.2
@@ -535,9 +535,6 @@ importers:
       '@intexuraos/infra-sentry':
         specifier: workspace:*
         version: link:../../packages/infra-sentry
-      '@intexuraos/llm-common':
-        specifier: workspace:*
-        version: link:../../packages/llm-common
       '@intexuraos/llm-contract':
         specifier: workspace:*
         version: link:../../packages/llm-contract
@@ -547,6 +544,9 @@ importers:
       '@intexuraos/llm-pricing':
         specifier: workspace:*
         version: link:../../packages/llm-pricing
+      '@intexuraos/llm-prompts':
+        specifier: workspace:*
+        version: link:../../packages/llm-prompts
       '@linear/sdk':
         specifier: ^29.0.0
         version: 29.0.0(encoding@0.1.13)
@@ -790,9 +790,6 @@ importers:
       '@intexuraos/infra-sentry':
         specifier: workspace:*
         version: link:../../packages/infra-sentry
-      '@intexuraos/llm-common':
-        specifier: workspace:*
-        version: link:../../packages/llm-common
       '@intexuraos/llm-contract':
         specifier: workspace:*
         version: link:../../packages/llm-contract
@@ -802,6 +799,12 @@ importers:
       '@intexuraos/llm-pricing':
         specifier: workspace:*
         version: link:../../packages/llm-pricing
+      '@intexuraos/llm-prompts':
+        specifier: workspace:*
+        version: link:../../packages/llm-prompts
+      '@intexuraos/llm-utils':
+        specifier: workspace:*
+        version: link:../../packages/llm-utils
       fastify:
         specifier: ^5.1.0
         version: 5.6.2
@@ -857,9 +860,6 @@ importers:
       '@intexuraos/infra-sentry':
         specifier: workspace:*
         version: link:../../packages/infra-sentry
-      '@intexuraos/llm-common':
-        specifier: workspace:*
-        version: link:../../packages/llm-common
       '@intexuraos/llm-contract':
         specifier: workspace:*
         version: link:../../packages/llm-contract
@@ -869,6 +869,9 @@ importers:
       '@intexuraos/llm-pricing':
         specifier: workspace:*
         version: link:../../packages/llm-pricing
+      '@intexuraos/llm-prompts':
+        specifier: workspace:*
+        version: link:../../packages/llm-prompts
       fastify:
         specifier: ^5.1.0
         version: 5.6.2
@@ -1103,9 +1106,6 @@ importers:
       '@intexuraos/infra-sentry':
         specifier: workspace:*
         version: link:../../packages/infra-sentry
-      '@intexuraos/llm-common':
-        specifier: workspace:*
-        version: link:../../packages/llm-common
       '@intexuraos/llm-contract':
         specifier: workspace:*
         version: link:../../packages/llm-contract
@@ -1115,6 +1115,12 @@ importers:
       '@intexuraos/llm-pricing':
         specifier: workspace:*
         version: link:../../packages/llm-pricing
+      '@intexuraos/llm-prompts':
+        specifier: workspace:*
+        version: link:../../packages/llm-prompts
+      '@intexuraos/llm-utils':
+        specifier: workspace:*
+        version: link:../../packages/llm-utils
       cheerio:
         specifier: ^1.0.0
         version: 1.1.2
@@ -1202,9 +1208,9 @@ importers:
       '@intexuraos/common-core':
         specifier: workspace:*
         version: link:../common-core
-      '@intexuraos/llm-common':
+      '@intexuraos/llm-utils':
         specifier: workspace:*
-        version: link:../llm-common
+        version: link:../llm-utils
       fastify:
         specifier: ^5.1.0
         version: 5.6.2
@@ -1246,15 +1252,15 @@ importers:
       '@intexuraos/llm-audit':
         specifier: workspace:*
         version: link:../llm-audit
-      '@intexuraos/llm-common':
-        specifier: workspace:*
-        version: link:../llm-common
       '@intexuraos/llm-contract':
         specifier: workspace:*
         version: link:../llm-contract
       '@intexuraos/llm-pricing':
         specifier: workspace:*
         version: link:../llm-pricing
+      '@intexuraos/llm-prompts':
+        specifier: workspace:*
+        version: link:../llm-prompts
 
   packages/infra-firestore:
     dependencies:
@@ -1276,15 +1282,15 @@ importers:
       '@intexuraos/llm-audit':
         specifier: workspace:*
         version: link:../llm-audit
-      '@intexuraos/llm-common':
-        specifier: workspace:*
-        version: link:../llm-common
       '@intexuraos/llm-contract':
         specifier: workspace:*
         version: link:../llm-contract
       '@intexuraos/llm-pricing':
         specifier: workspace:*
         version: link:../llm-pricing
+      '@intexuraos/llm-prompts':
+        specifier: workspace:*
+        version: link:../llm-prompts
 
   packages/infra-glm:
     dependencies:
@@ -1294,15 +1300,15 @@ importers:
       '@intexuraos/llm-audit':
         specifier: workspace:*
         version: link:../llm-audit
-      '@intexuraos/llm-common':
-        specifier: workspace:*
-        version: link:../llm-common
       '@intexuraos/llm-contract':
         specifier: workspace:*
         version: link:../llm-contract
       '@intexuraos/llm-pricing':
         specifier: workspace:*
         version: link:../llm-pricing
+      '@intexuraos/llm-prompts':
+        specifier: workspace:*
+        version: link:../llm-prompts
       openai:
         specifier: ^6.15.0
         version: 6.16.0(ws@8.19.0)(zod@3.25.76)
@@ -1315,15 +1321,15 @@ importers:
       '@intexuraos/llm-audit':
         specifier: workspace:*
         version: link:../llm-audit
-      '@intexuraos/llm-common':
-        specifier: workspace:*
-        version: link:../llm-common
       '@intexuraos/llm-contract':
         specifier: workspace:*
         version: link:../llm-contract
       '@intexuraos/llm-pricing':
         specifier: workspace:*
         version: link:../llm-pricing
+      '@intexuraos/llm-prompts':
+        specifier: workspace:*
+        version: link:../llm-prompts
       openai:
         specifier: ^6.15.0
         version: 6.16.0(ws@8.19.0)(zod@3.25.76)
@@ -1345,15 +1351,15 @@ importers:
       '@intexuraos/llm-audit':
         specifier: workspace:*
         version: link:../llm-audit
-      '@intexuraos/llm-common':
-        specifier: workspace:*
-        version: link:../llm-common
       '@intexuraos/llm-contract':
         specifier: workspace:*
         version: link:../llm-contract
       '@intexuraos/llm-pricing':
         specifier: workspace:*
         version: link:../llm-pricing
+      '@intexuraos/llm-prompts':
+        specifier: workspace:*
+        version: link:../llm-prompts
     devDependencies:
       nock:
         specifier: ^14.0.0
@@ -1404,21 +1410,6 @@ importers:
         specifier: workspace:*
         version: link:../llm-contract
 
-  packages/llm-common:
-    dependencies:
-      '@intexuraos/common-core':
-        specifier: workspace:*
-        version: link:../common-core
-      '@intexuraos/llm-contract':
-        specifier: workspace:*
-        version: link:../llm-contract
-      pino:
-        specifier: ^10.1.0
-        version: 10.1.1
-      zod:
-        specifier: ^3.24.1
-        version: 3.25.76
-
   packages/llm-contract:
     dependencies:
       '@intexuraos/common-core':
@@ -1436,9 +1427,6 @@ importers:
       '@intexuraos/infra-glm':
         specifier: workspace:*
         version: link:../infra-glm
-      '@intexuraos/llm-common':
-        specifier: workspace:*
-        version: link:../llm-common
       '@intexuraos/llm-contract':
         specifier: workspace:*
         version: link:../llm-contract

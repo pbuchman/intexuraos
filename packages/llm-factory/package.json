@@ -16,7 +16,6 @@
     "@intexuraos/common-core": "workspace:*",
     "@intexuraos/infra-gemini": "workspace:*",
     "@intexuraos/infra-glm": "workspace:*",
-    "@intexuraos/llm-common": "workspace:*",
     "@intexuraos/llm-contract": "workspace:*",
     "@intexuraos/llm-pricing": "workspace:*"
   }
