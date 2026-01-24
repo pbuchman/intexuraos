@@ -63,12 +63,12 @@ Note: The alias may not be available in spawned subshells - if `tf` is not found
 
 ```bash
 # Set credentials and clear emulator env vars
-GOOGLE_APPLICATION_CREDENTIALS=/Users/p.buchman/personal/gcloud-claude-code-dev.json \
+GOOGLE_APPLICATION_CREDENTIALS=~/personal/gcloud-claude-code-dev.json \
 STORAGE_EMULATOR_HOST= FIRESTORE_EMULATOR_HOST= PUBSUB_EMULATOR_HOST= \
 terraform plan
 
 # Apply changes
-GOOGLE_APPLICATION_CREDENTIALS=/Users/p.buchman/personal/gcloud-claude-code-dev.json \
+GOOGLE_APPLICATION_CREDENTIALS=~/personal/gcloud-claude-code-dev.json \
 STORAGE_EMULATOR_HOST= FIRESTORE_EMULATOR_HOST= PUBSUB_EMULATOR_HOST= \
 terraform apply
 ```
