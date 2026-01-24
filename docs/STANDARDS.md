@@ -30,7 +30,7 @@
 Every service MUST have these documentation files in `docs/services/<service>/`:
 
 | File                | Purpose                             | Required       |
-| ------------------- | ----------------------------------- | -------------- |
+| -------------------  | -----------------------------------  | --------------  |
 | `features.md`       | User-facing features and use cases  | Yes            |
 | `technical.md`      | API endpoints, models, architecture | Yes            |
 | `tutorial.md`       | Getting started guide               | Yes            |
@@ -49,13 +49,13 @@ Every service MUST have these documentation files in `docs/services/<service>/`:
 ## ❌ WRONG - Inventing endpoints
 
 | Method | Path              | Description   |
-| ------ | ----------------- | ------------- |
+| ------  | -----------------  | -------------  |
 | POST   | /todos/:id/cancel | Cancel a todo |
 
 ## ✅ RIGHT - From actual code
 
 | Method | Path       | Description                                 |
-| ------ | ---------- | ------------------------------------------- |
+| ------  | ----------  | -------------------------------------------  |
 | PATCH  | /todos/:id | Update todo (see schema for allowed fields) |
 ```
 
@@ -191,7 +191,7 @@ Documentation changes require the same review process as code changes:
 ## Common Mistakes (LEARN FROM AUDIT)
 
 | Mistake                      | Example                            | Fix                           |
-| ---------------------------- | ---------------------------------- | ----------------------------- |
+| ----------------------------  | ----------------------------------  | -----------------------------  |
 | Documenting planned features | Auto-execution based on confidence | Mark as "Planned" or remove   |
 | Wrong field names            | `name` instead of `purpose`        | Verify from model file        |
 | Wrong HTTP methods           | `PUT` instead of `PATCH`           | Check route definition        |
@@ -215,7 +215,7 @@ See `docs/services/_templates/` for starting points:
 ## Audit History
 
 | Date       | Services Audited | Avg Accuracy | Issues Found    |
-| ---------- | ---------------- | ------------ | --------------- |
+| ----------  | ----------------  | ------------  | ---------------  |
 | 2026-01-13 | 17 services      | 87%          | 38 major issues |
 
 **Full audit log:** `.claude/doc-audit-log.md`

@@ -45,6 +45,7 @@ let container: Services | null = null;
 const CLASSIFIER_MODELS = [
   LlmModels.Gemini25Flash,
   LlmModels.Glm47,
+  LlmModels.Glm47Flash,
 ] as const;
 
 export async function initServices(config: ServiceConfig): Promise<void> {

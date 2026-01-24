@@ -72,7 +72,7 @@ async publishMyEvent(event: MyEvent): Promise<Result<void, MyDomainError>> {
 The shared `PublishError` type has three codes:
 
 | Code                | Description                       |
-| ------------------- | --------------------------------- |
+| -------------------  | ---------------------------------  |
 | `PUBLISH_FAILED`    | Generic publish failure           |
 | `TOPIC_NOT_FOUND`   | Topic doesn't exist               |
 | `PERMISSION_DENIED` | Service account lacks permissions |
@@ -92,7 +92,7 @@ Examples:
 All topic configuration uses `INTEXURAOS_PUBSUB_*` prefix:
 
 | Variable                                   | Service          | Description              |
-| ------------------------------------------ | ---------------- | ------------------------ |
+| ------------------------------------------  | ----------------  | ------------------------  |
 | `INTEXURAOS_PUBSUB_MEDIA_CLEANUP_TOPIC`    | whatsapp-service | Media cleanup events     |
 | `INTEXURAOS_PUBSUB_COMMANDS_INGEST_TOPIC`  | whatsapp-service | Command ingestion        |
 | `INTEXURAOS_PUBSUB_WEBHOOK_PROCESS_TOPIC`  | whatsapp-service | Webhook async processing |

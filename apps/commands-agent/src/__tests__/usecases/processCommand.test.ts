@@ -2,7 +2,6 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { ok } from '@intexuraos/common-core';
 import type { Result } from '@intexuraos/common-core';
 import type { LlmGenerateClient, GenerateResult, LLMError } from '@intexuraos/llm-factory';
-import { LlmModels } from '@intexuraos/llm-contract';
 import { createProcessCommandUseCase } from '../../domain/usecases/processCommand.js';
 import {
   FakeCommandRepository,
@@ -217,7 +216,7 @@ describe('processCommand usecase', () => {
       expect(result.command.text).toBe('Existing command'); // Original text preserved
     });
 
-    it('includes summary and selectedModels in event payload when provided', async () => {
+    it('includes summary in event payload when provided', async () => {
       const userId = 'user-test-optional-fields';
       userServiceClient.setApiKeys(userId, { google: 'google-key' });
 
@@ -226,7 +225,6 @@ describe('processCommand usecase', () => {
         confidence: 0.95,
         title: 'AI Research',
         reasoning: 'Research task',
-        selectedModels: [LlmModels.Gemini25Pro, LlmModels.Sonar],
       });
 
       const usecase = createProcessCommandUseCase({
@@ -253,7 +251,6 @@ describe('processCommand usecase', () => {
       const events = eventPublisher.getPublishedEvents();
       expect(events).toHaveLength(1);
       expect(events[0]?.payload?.summary).toBe('AI trends research request');
-      expect(events[0]?.payload?.selectedModels).toEqual([LlmModels.Gemini25Pro, LlmModels.Sonar]);
     });
 
     it('creates action for low-confidence note classification', async () => {

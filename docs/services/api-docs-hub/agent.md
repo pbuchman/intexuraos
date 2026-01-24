@@ -6,11 +6,11 @@
 
 ## Identity
 
-| Field    | Value                                                          |
-| -------- | -------------------------------------------------------------- |
-| **Name** | api-docs-hub                                                   |
-| **Role** | API Documentation Aggregator                                   |
-| **Goal** | Provide unified Swagger UI for all IntexuraOS service APIs     |
+| Field    | Value                                                      |
+| --------  | ----------------------------------------------------------  |
+| **Name** | api-docs-hub                                               |
+| **Role** | API Documentation Aggregator                               |
+| **Goal** | Provide unified Swagger UI for all IntexuraOS service APIs |
 
 ---
 
@@ -55,11 +55,11 @@ interface HealthCheck {
 
 ## Constraints
 
-| Rule                 | Description                                      |
-| -------------------- | ------------------------------------------------ |
-| **Read Only**        | No data modification - documentation only        |
-| **Public Access**    | Swagger UI accessible without authentication     |
-| **Source Config**    | OpenAPI sources configured at deployment         |
+| Rule              | Description                                  |
+| -----------------  | --------------------------------------------  |
+| **Read Only**     | No data modification - documentation only    |
+| **Public Access** | Swagger UI accessible without authentication |
+| **Source Config** | OpenAPI sources configured at deployment     |
 
 ---
 
@@ -120,8 +120,8 @@ The hub aggregates specs from configured sources:
 
 ```typescript
 interface OpenApiSource {
-  name: string;   // Display name in dropdown
-  url: string;    // URL to service's OpenAPI JSON
+  name: string; // Display name in dropdown
+  url: string; // URL to service's OpenAPI JSON
 }
 
 // Example configuration
@@ -137,7 +137,7 @@ const sources: OpenApiSource[] = [
 ## Health Endpoint
 
 | Method | Path      | Purpose              |
-| ------ | --------- | -------------------- |
+| ------  | ---------  | --------------------  |
 | GET    | `/health` | Service health check |
 
 ---

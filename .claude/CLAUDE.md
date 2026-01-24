@@ -216,6 +216,66 @@ Strict mode enabled: `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`, `
 
 ---
 
+## Pre-Flight Checks (MANDATORY)
+
+**RULE:** Read types BEFORE writing code. Most CI failures happen because code is written from memory instead of from actual type definitions.
+
+### Before Writing Test Mocks
+
+**ALWAYS** read the dependency interface before creating mock objects:
+
+```typescript
+// ❌ Writing mock from memory — misses new required fields
+const deps = { repo: fakeRepo, logger: fakeLogger };
+
+// ✅ Read the Deps type first, then create mock with ALL fields
+// 1. Read: apps/<service>/src/domain/usecases/<usecase>.ts → find XxxDeps type
+// 2. Create mock matching ALL required fields
+```
+
+**Checklist:**
+
+1. Open the use case file and find the `*Deps` type definition
+2. List all required fields
+3. Create mock with ALL fields — don't guess
+
+### Before Modifying ServiceContainer
+
+When adding/removing services from `services.ts`:
+
+1. **Read** `services.ts` to see current `ServiceContainer` interface
+2. **Search** for `setServices(` across all test files: `grep -r "setServices(" apps/<service>/src/__tests__/`
+3. **Update ALL** test files with the new field
+
+### Before Importing from Packages
+
+Cross-package imports require built packages:
+
+```bash
+# At session start, build all packages once
+pnpm build
+
+# If you see "Cannot find module '@intexuraos/...'" — rebuild
+pnpm build
+```
+
+### Before Accessing Discriminated Unions
+
+Result types (`Result<T, E>`) and other discriminated unions require narrowing:
+
+```typescript
+// ❌ Accessing without narrowing — TS2339: Property 'value' does not exist
+const result = await repo.find(id);
+return result.value;
+
+// ✅ Narrow first, then access
+const result = await repo.find(id);
+if (!result.ok) return result;  // Narrows to Success<T>
+return result.value;            // Now safe
+```
+
+---
+
 ## Common LLM Mistakes
 
 **Full reference:** `.claude/reference/common-mistakes.md`
@@ -278,7 +338,7 @@ Strict mode enabled: `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`, `
 - `"commit"` → local only, no push
 - `"commit and push"` → push once
 
-**PR Workflow:**
+**RULE:** Before creating a PR, merge latest base branch and resolve conflicts.
 
 ```bash
 git add -A && git commit -m "message"
@@ -286,6 +346,8 @@ git fetch origin && git merge origin/development
 git push -u origin <branch>
 gh pr create --base development
 ```
+
+**Why merge before PR?** Ensures CI runs against merged state and reviewers see clean diff.
 
 ---
 
@@ -312,13 +374,15 @@ All artifacts must be connected:
 
 ## Linear Issue Workflow
 
-Use the `/linear` command for issue tracking and workflow management.
+Use the `/linear` skill for issue tracking and workflow management.
+
+**Skill Location:** `.claude/skills/linear/SKILL.md`
 
 **Usage:**
 
 ```bash
-/linear                    # Pick random backlog issue (cron mode)
-/linear <task description> # Create new issue
+/linear                    # Pick random Todo issue (cron mode)
+/linear <task description> # Create new issue (auto-splits if complex)
 /linear INT-123            # Work on existing issue
 /linear <sentry-url>       # Create from Sentry error
 ```
@@ -328,16 +392,118 @@ Use the `/linear` command for issue tracking and workflow management.
 1. All bugs/features must have corresponding Linear issues
 2. PR descriptions must link to Linear issues (`Fixes INT-XXX`)
 3. Reasoning belongs in PR descriptions, not code comments
-4. State transitions: Backlog → In Progress → In Review → Done
+4. State transitions: Backlog → In Progress → In Review → QA (Done requires explicit instruction)
 5. `pnpm run ci:tracked` MUST pass before PR creation
 
-**See:** `.claude/commands/linear.md` for complete workflow documentation.
+**Auto-Splitting:** For complex multi-step tasks, the skill automatically detects and offers to split into tiered child issues. See [Linear-Based Continuity Pattern](../docs/patterns/linear-continuity.md).
+
+**Full Documentation:** `.claude/skills/linear/`
 
 ---
 
-## Complex Tasks — Continuity Workflow
+## Sentry Issue Workflow
 
-For multi-step features, use numbered directories in `continuity/`. See [continuity/README.md](../continuity/README.md).
+Use the `/sentry` skill for error triage, investigation, and resolution.
+
+**Skill Location:** `.claude/skills/sentry/SKILL.md`
+
+**Usage:**
+
+```bash
+/sentry                           # Batch triage unresolved issues
+/sentry <sentry-url>              # Investigate specific issue
+/sentry analyze <sentry-url>      # AI-powered root cause analysis (Seer)
+/sentry linear <sentry-url>       # Create Linear issue from Sentry error
+```
+
+**Mandatory Requirements:**
+
+1. Every Sentry issue MUST be linked to a Linear issue (use `[sentry] <title>` prefix)
+2. Every fix PR MUST link both Sentry and Linear issues
+3. No band-aid fixes — investigate root cause before implementing
+4. `pnpm run ci:tracked` MUST pass before PR creation
+
+**Full Documentation:** `.claude/skills/sentry/`
+
+---
+
+## Document-Service Skill
+
+Use the `/document-service` skill to generate comprehensive service documentation.
+
+**Skill Location:** `.claude/skills/document-service/SKILL.md`
+
+**Modes:**
+
+| Mode        | Invocation                              | Behavior                        |
+| ----------- | --------------------------------------- | ------------------------------- |
+| Discovery   | `/document-service` (no args)           | Lists services + doc status     |
+| Interactive | `/document-service <service-name>`      | Asks 3 questions (Q1, Q5, Q8)   |
+| Autonomous  | Task tool → `service-scribe` subagent   | Infers all answers from code    |
+
+**Output:** 5 files per service + website content updates
+
+**Full Documentation:** `.claude/skills/document-service/`
+
+---
+
+## Claude Extensions Taxonomy
+
+This project uses three types of Claude extensions:
+
+### Skills (Directory-Based)
+
+**Location:** `.claude/skills/<skill-name>/`
+**Invocation:** `/skill-name` (user) or auto-trigger (model)
+
+| Skill               | Purpose                                            |
+| ------------------- | -------------------------------------------------- |
+| `/linear`           | Linear issue management with auto-splitting        |
+| `/sentry`           | Sentry triage with AI analysis and cross-linking   |
+| `/document-service` | Service documentation (interactive + autonomous)   |
+
+### Agents (Task-Spawned)
+
+**Location:** `.claude/agents/<agent-name>.md`
+**Invocation:** Task tool with `subagent_type: <agent-name>`
+
+| Agent                   | Purpose                                        |
+| ----------------------- | ---------------------------------------------- |
+| `coverage-orchestrator` | 100% branch coverage enforcement               |
+| `llm-manager`           | LLM usage audit and pricing verification       |
+| `service-creator`       | New service scaffolding                        |
+| `service-scribe`        | Autonomous documentation (delegates to skill)  |
+| `whatsapp-sender`       | WhatsApp notification specialist               |
+
+### Commands (Single-File)
+
+**Location:** `.claude/commands/<command-name>.md`
+**Invocation:** `/<command-name>`
+
+| Command               | Purpose                           |
+| --------------------- | --------------------------------- |
+| `/analyze-ci-failures`| Analyze CI failure patterns       |
+| `/analyze-logs`       | Production log analysis           |
+| `/coverage`           | Coverage improvement suggestions  |
+| `/create-service`     | New service creation wizard       |
+| `/refactoring`        | Code smell detection and fixes    |
+| `/semver-release`     | Semantic versioning release       |
+| `/verify-deployment`  | Deployment verification           |
+
+---
+
+## Complex Tasks — Linear Continuity
+
+For multi-step features, use the Linear-based continuity pattern with parent-child issues.
+
+**See:** [docs/patterns/linear-continuity.md](../docs/patterns/linear-continuity.md)
+
+**Quick Start:**
+1. Create top-level Linear issue for overall feature
+2. Use `/linear` with complex description to auto-split into child issues
+3. Parent issue serves as ledger (goal, decisions, state tracking)
+4. Execute child issues sequentially by tier
+5. Mark all as Done when complete
 
 ---
 
@@ -356,11 +522,3 @@ Plans involving HTTP endpoints MUST include an "Endpoint Changes" section with t
 | Service          | Method | Path                         | Change               |
 | ---------------- | ------ | ---------------------------- | -------------------- |
 | whatsapp-service | POST   | `/internal/.../send-message` | Remove `phoneNumber` |
-
-<claude-mem-context>
-# Recent Activity
-
-<!-- This section is auto-generated by claude-mem. Edit content outside the tags. -->
-
-_No recent activity_
-</claude-mem-context>

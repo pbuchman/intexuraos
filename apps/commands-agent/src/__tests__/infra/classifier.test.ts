@@ -1,9 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ok, err } from '@intexuraos/common-core';
 import type { GenerateResult } from '@intexuraos/llm-contract';
-import { LlmModels } from '@intexuraos/llm-contract';
 import type { LlmGenerateClient } from '@intexuraos/llm-factory';
-import { extractSelectedModels } from '../../infra/gemini/classifier.js';
 
 vi.mock('@intexuraos/llm-pricing', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@intexuraos/llm-pricing')>();
@@ -286,27 +284,6 @@ describe('GeminiClassifier', () => {
       expect(classificationResult.confidence).toBe(0.5);
     });
 
-    it('extracts selectedModels from text', async () => {
-      mockGenerate.mockResolvedValue(
-        ok(generateResult(jsonResponse('research', 0.9, 'Research topic')))
-      );
-
-      const classifier = createGeminiClassifier(mockLlmClient);
-      const classificationResult = await classifier.classify('Research this using only gemini');
-
-      expect(classificationResult.selectedModels).toEqual([LlmModels.Gemini25Flash]);
-    });
-
-    it('returns undefined selectedModels when no model specified', async () => {
-      mockGenerate.mockResolvedValue(
-        ok(generateResult(jsonResponse('research', 0.9, 'Research topic')))
-      );
-
-      const classifier = createGeminiClassifier(mockLlmClient);
-      const classificationResult = await classifier.classify('Research this topic');
-
-      expect(classificationResult.selectedModels).toBeUndefined();
-    });
   });
 
   describe('PWA-shared source confidence boost', () => {
@@ -377,85 +354,81 @@ describe('GeminiClassifier', () => {
       expect(classificationResult.confidence).toBe(0.85);
     });
   });
-});
 
-describe('extractSelectedModels', () => {
-  describe('all models patterns', () => {
-    it('returns default models for "use all LLMs"', () => {
-      expect(extractSelectedModels('use all LLMs for this research')).toEqual([
-        LlmModels.Gemini25Pro,
-        LlmModels.ClaudeOpus45,
-        LlmModels.GPT52,
-        LlmModels.SonarPro,
-      ]);
+  describe('URL keyword isolation', () => {
+    it('classifies URL with "research" keyword as link when LLM follows prompt correctly', async () => {
+      mockGenerate.mockResolvedValue(
+        ok(generateResult(jsonResponse('link', 0.92, 'Research World', 'URL present, keyword in URL ignored')))
+      );
+
+      const classifier = createGeminiClassifier(mockLlmClient);
+      const classificationResult = await classifier.classify('https://research-world.com');
+
+      expect(classificationResult.type).toBe('link');
+      expect(classificationResult.confidence).toBeGreaterThanOrEqual(0.9);
     });
 
-    it('returns default models for "use all models"', () => {
-      expect(extractSelectedModels('use all models')).toEqual([
-        LlmModels.Gemini25Pro,
-        LlmModels.ClaudeOpus45,
-        LlmModels.GPT52,
-        LlmModels.SonarPro,
-      ]);
+    it('classifies URL with "todo" keyword as link when LLM follows prompt correctly', async () => {
+      mockGenerate.mockResolvedValue(
+        ok(generateResult(jsonResponse('link', 0.90, 'Todo App', 'URL present, keyword in URL ignored')))
+      );
+
+      const classifier = createGeminiClassifier(mockLlmClient);
+      const classificationResult = await classifier.classify('https://todo-app.io/notes');
+
+      expect(classificationResult.type).toBe('link');
+      expect(classificationResult.confidence).toBeGreaterThanOrEqual(0.9);
     });
 
-    it('returns default models for Polish "użyj wszystkich"', () => {
-      expect(extractSelectedModels('użyj wszystkich modeli')).toEqual([
-        LlmModels.Gemini25Pro,
-        LlmModels.ClaudeOpus45,
-        LlmModels.GPT52,
-        LlmModels.SonarPro,
-      ]);
+    it('classifies explicit "research this" intent with URL as research (STEP 2 > STEP 4)', async () => {
+      mockGenerate.mockResolvedValue(
+        ok(generateResult(jsonResponse('research', 0.92, 'Example Research', 'Explicit research intent overrides URL')))
+      );
+
+      const classifier = createGeminiClassifier(mockLlmClient);
+      const classificationResult = await classifier.classify('research this https://example.com');
+
+      expect(classificationResult.type).toBe('research');
+      expect(classificationResult.confidence).toBeGreaterThanOrEqual(0.9);
     });
 
-    it('returns default models for Polish "wszystkie modele"', () => {
-      expect(extractSelectedModels('chcę wszystkie modele')).toEqual([
-        LlmModels.Gemini25Pro,
-        LlmModels.ClaudeOpus45,
-        LlmModels.GPT52,
-        LlmModels.SonarPro,
-      ]);
-    });
-  });
+    it('classifies URL with multiple keywords as link when LLM follows prompt correctly', async () => {
+      mockGenerate.mockResolvedValue(
+        ok(generateResult(jsonResponse('link', 0.91, 'Research Todo Notes', 'URL present, keywords in URL ignored')))
+      );
 
-  describe('specific model keywords', () => {
-    it('extracts gemini-2.5-flash for "gemini"', () => {
-      expect(extractSelectedModels('use gemini for this')).toEqual([LlmModels.Gemini25Flash]);
+      const classifier = createGeminiClassifier(mockLlmClient);
+      const classificationResult = await classifier.classify('https://research-todo-notes.com');
+
+      expect(classificationResult.type).toBe('link');
+      expect(classificationResult.confidence).toBeGreaterThanOrEqual(0.9);
     });
 
-    it('extracts gpt-5.2 for "gpt"', () => {
-      expect(extractSelectedModels('ask gpt about this')).toEqual([LlmModels.GPT52]);
+    it('passes URL to LLM for classification', async () => {
+      mockGenerate.mockResolvedValue(
+        ok(generateResult(jsonResponse('link', 0.9, 'Test Link')))
+      );
+
+      const classifier = createGeminiClassifier(mockLlmClient);
+      await classifier.classify('check this https://research-world.com');
+
+      expect(mockGenerate).toHaveBeenCalledWith(
+        expect.stringContaining('https://research-world.com')
+      );
     });
 
-    it('extracts gpt-5.2 for "chatgpt"', () => {
-      expect(extractSelectedModels('ask chatgpt about this')).toEqual([LlmModels.GPT52]);
-    });
+    it('includes URL keyword isolation instruction in prompt', async () => {
+      mockGenerate.mockResolvedValue(
+        ok(generateResult(jsonResponse('link', 0.9, 'Test')))
+      );
 
-    it('extracts claude-sonnet model for "claude"', () => {
-      expect(extractSelectedModels('use claude for research')).toEqual([LlmModels.ClaudeSonnet45]);
-    });
+      const classifier = createGeminiClassifier(mockLlmClient);
+      await classifier.classify('https://example.com');
 
-    it('extracts multiple models', () => {
-      const result = extractSelectedModels('use gpt and claude for this');
-      expect(result).toContain(LlmModels.GPT52);
-      expect(result).toContain(LlmModels.ClaudeSonnet45);
-    });
-
-    it('extracts multiple models when mentioned', () => {
-      const result = extractSelectedModels('compare gemini, gpt and claude');
-      expect(result).toContain(LlmModels.Gemini25Flash);
-      expect(result).toContain(LlmModels.GPT52);
-      expect(result).toContain(LlmModels.ClaudeSonnet45);
-    });
-  });
-
-  describe('no match', () => {
-    it('returns undefined when no model mentioned', () => {
-      expect(extractSelectedModels('research this topic')).toBeUndefined();
-    });
-
-    it('returns undefined for empty string', () => {
-      expect(extractSelectedModels('')).toBeUndefined();
+      expect(mockGenerate).toHaveBeenCalledWith(
+        expect.stringContaining('Keywords inside URLs must be IGNORED')
+      );
     });
   });
 });
+

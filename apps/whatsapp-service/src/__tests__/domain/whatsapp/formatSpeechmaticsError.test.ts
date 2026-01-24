@@ -73,6 +73,17 @@ describe('formatSpeechmaticsError', () => {
       );
     });
 
+    it('returns raw error when Language identification is followed immediately by period', () => {
+      // This edge case tests when the regex match returns null
+      // because [^.]+ requires at least one non-period character after "Language identification"
+      const rawError = 'Language identification. Some other error.';
+
+      const result = formatSpeechmaticsError(rawError);
+
+      // Since the regex doesn't match, it falls through to the default return
+      expect(result).toBe(rawError);
+    });
+
     it('formats insufficient audio error', () => {
       const rawError = 'Error: insufficient audio data for transcription';
 

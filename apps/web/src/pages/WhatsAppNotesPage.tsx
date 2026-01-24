@@ -475,8 +475,13 @@ function MessageItem({
               {message.transcriptionStatus === 'pending' ||
               message.transcriptionStatus === 'processing' ? (
                 <div className="mt-2 flex items-center gap-2 text-sm text-slate-500">
-                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-slate-300 border-t-slate-600" />
-                  <span>Transcription in progress...</span>
+                  {/* WhatsApp-style typing indicator */}
+                  <div className="flex items-center gap-1">
+                    <div className="h-2 w-2 animate-bounce rounded-full bg-slate-400 [animation-delay:0ms]" />
+                    <div className="h-2 w-2 animate-bounce rounded-full bg-slate-400 [animation-delay:150ms]" />
+                    <div className="h-2 w-2 animate-bounce rounded-full bg-slate-400 [animation-delay:300ms]" />
+                  </div>
+                  <span className="text-xs text-slate-400">Transcribing...</span>
                 </div>
               ) : message.transcriptionStatus === 'completed' &&
                 message.transcription !== undefined &&
@@ -761,15 +766,14 @@ export function WhatsAppNotesPage(): React.JSX.Element {
             <p className="text-slate-600">Your saved WhatsApp messages</p>
           )}
         </div>
-        <Button
-          variant="secondary"
+        <button
           onClick={handleRefresh}
-          isLoading={isRefreshing}
-          className="flex items-center gap-2"
+          disabled={isRefreshing}
+          className="rounded p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 disabled:opacity-50"
+          title="Refresh"
         >
-          <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
-          Refresh
-        </Button>
+          <RefreshCw className={`h-5 w-5 ${isRefreshing ? 'animate-spin' : ''}`} />
+        </button>
       </div>
 
       {error !== null && error !== '' ? (

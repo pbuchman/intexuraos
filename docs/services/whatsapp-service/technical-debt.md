@@ -3,7 +3,7 @@
 ## Summary
 
 | Category            | Count | Severity |
-| ------------------- | ----- | -------- |
+| -------------------  | -----  | --------  |
 | TODO/FIXME Comments | 1     | Low      |
 | Test Coverage Gaps  | 0     | -        |
 | TypeScript Issues   | 0     | -        |
@@ -34,7 +34,7 @@ Features that are planned but not yet implemented:
 ### Low Priority
 
 | File                          | Issue        | Impact                          |
-| ----------------------------- | ------------ | ------------------------------- |
+| -----------------------------  | ------------  | -------------------------------  |
 | `routes/webhookRoutes.ts:276` | TODO comment | Architectural improvement noted |
 
 **Details:** The `processWebhookEvent` function is exported for Pub/Sub processing but still uses FastifyRequest. The TODO suggests refactoring to accept raw payload for cleaner integration.

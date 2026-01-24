@@ -314,4 +314,52 @@ describe('executeCalendarAction usecase', () => {
     const messages = fakeWhatsappPublisher.getSentMessages();
     expect(messages).toHaveLength(0);
   });
+
+  it('returns completed status with message from payload for already completed action', async () => {
+    const action = createAction({
+      status: 'completed',
+      payload: {
+        resource_url: '/#/calendar',
+        message: 'Previously created calendar event',
+      },
+    });
+    await fakeActionRepo.save(action);
+
+    const usecase = createExecuteCalendarActionUseCase({
+      actionRepository: fakeActionRepo,
+      calendarServiceClient: fakeCalendarClient,
+      whatsappPublisher: fakeWhatsappPublisher,
+      webAppUrl: 'https://app.test.com',
+      logger: silentLogger,
+    });
+
+    const result = await usecase('action-123');
+
+    expect(isOk(result)).toBe(true);
+    if (isOk(result)) {
+      expect(result.value.status).toBe('completed');
+      expect(result.value.message).toBe('Previously created calendar event');
+      expect(result.value.resourceUrl).toBe('/#/calendar');
+    }
+  });
+
+  it('allows execution from pending status', async () => {
+    const action = createAction({ status: 'pending' });
+    await fakeActionRepo.save(action);
+
+    const usecase = createExecuteCalendarActionUseCase({
+      actionRepository: fakeActionRepo,
+      calendarServiceClient: fakeCalendarClient,
+      whatsappPublisher: fakeWhatsappPublisher,
+      webAppUrl: 'https://app.test.com',
+      logger: silentLogger,
+    });
+
+    const result = await usecase('action-123');
+
+    expect(isOk(result)).toBe(true);
+    if (isOk(result)) {
+      expect(result.value.status).toBe('completed');
+    }
+  });
 });

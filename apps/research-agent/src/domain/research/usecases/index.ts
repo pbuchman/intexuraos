@@ -45,3 +45,8 @@ export {
   type ToggleResearchFavouriteDeps,
   type ToggleResearchFavouriteError,
 } from './toggleResearchFavourite.js';
+export {
+  extractModelPreferences,
+  type ExtractModelPreferencesResult,
+  type ExtractModelPreferencesDeps,
+} from './extractModelPreferences.js';

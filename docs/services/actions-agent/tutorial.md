@@ -200,7 +200,7 @@ curl -X POST https://actions-agent.intexuraos.com/actions/ACTION_ID/resolve-dupl
 ## Troubleshooting
 
 | Issue                           | Symptom                            | Solution                                                                 |
-| ------------------------------- | ---------------------------------- | ------------------------------------------------------------------------ |
+| -------------------------------  | ----------------------------------  | ------------------------------------------------------------------------  |
 | Actions stuck in pending        | No handler processes action        | Check if handler is registered; calendar/reminder types have no handlers |
 | Pub/Sub delivery failures       | Actions not processed              | Verify topic name matches `INTEXURAOS_PUBSUB_ACTIONS_QUEUE`              |
 | Type correction not working     | Action stays same type after PATCH | Ensure action is in `pending` or `awaiting_approval` status              |

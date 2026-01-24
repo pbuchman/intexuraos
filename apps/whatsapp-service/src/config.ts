@@ -94,6 +94,12 @@ const configSchema = z.object({
   transcriptionTopic: z.string().optional(),
 
   /**
+   * Pub/Sub topic for approval reply events.
+   * Triggers actions-agent to process approval/rejection.
+   */
+  approvalReplyTopic: z.string().optional(),
+
+  /**
    * Speechmatics API key for audio transcription.
    */
   speechmaticsApiKey: z.string().min(1, 'INTEXURAOS_SPEECHMATICS_API_KEY is required'),
@@ -148,6 +154,7 @@ export function loadConfig(): Config {
     sendMessageTopic: process.env['INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC'],
     webhookProcessTopic: process.env['INTEXURAOS_PUBSUB_WEBHOOK_PROCESS_TOPIC'],
     transcriptionTopic: process.env['INTEXURAOS_PUBSUB_TRANSCRIPTION_TOPIC'],
+    approvalReplyTopic: process.env['INTEXURAOS_PUBSUB_APPROVAL_REPLY_TOPIC'],
     port: process.env['PORT'],
     host: process.env['HOST'],
   });

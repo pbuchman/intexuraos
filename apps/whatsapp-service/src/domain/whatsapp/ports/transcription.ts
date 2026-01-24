@@ -91,6 +91,12 @@ export interface TranscriptionTextResult {
   summary?: string;
 
   /**
+   * Detected language code (e.g., 'pl', 'en').
+   * Only available when using automatic language detection.
+   */
+  detectedLanguage?: string;
+
+  /**
    * API call details for tracking.
    */
   apiCall: TranscriptionApiCall;

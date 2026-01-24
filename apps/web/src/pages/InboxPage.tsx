@@ -259,15 +259,16 @@ export function InboxPage(): React.JSX.Element {
               s === 'approved' ||
               s === 'rejected' ||
               s === 'completed' ||
-              s === 'failed'
+              s === 'failed' ||
+              s === 'processing'
           );
         }
       } catch {
         // Invalid JSON, use defaults
       }
     }
-    // Default: show awaiting_approval and failed
-    return ['awaiting_approval', 'failed'];
+    // Default: show awaiting_approval, failed, and processing
+    return ['awaiting_approval', 'failed', 'processing'];
   });
   const [isFilterExpanded, setIsFilterExpanded] = useState(false);
 

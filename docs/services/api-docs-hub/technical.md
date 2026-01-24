@@ -20,7 +20,7 @@ graph LR
 ## API Endpoints
 
 | Method | Path      | Description  | Auth |
-| ------ | --------- | ------------ | ---- |
+| ------  | ---------  | ------------  | ----  |
 | GET    | `/docs`   | Swagger UI   | None |
 | GET    | `/health` | Health check | None |
 

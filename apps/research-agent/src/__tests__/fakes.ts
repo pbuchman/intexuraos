@@ -40,6 +40,7 @@ import type {
   ImprovementResult,
 } from '../infra/llm/InputValidationAdapter.js';
 import type { DecryptedApiKeys, UserServiceClient, UserServiceError } from '../infra/user/index.js';
+import type { LlmGenerateClient, GenerateResult, LLMError } from '@intexuraos/llm-factory';
 import type { ResearchEventPublisher, ResearchProcessEvent } from '../infra/pubsub/index.js';
 import type { NotificationSender } from '../domain/research/index.js';
 
@@ -191,12 +192,37 @@ export class FakeResearchRepository implements ResearchRepository {
 }
 
 /**
+ * Fake implementation of LlmGenerateClient for testing.
+ */
+export class FakeLlmGenerateClient implements LlmGenerateClient {
+  private response = '{"selectedModels": [], "synthesisModel": null}';
+
+  async generate(_prompt: string): Promise<Result<GenerateResult, LLMError>> {
+    return ok({
+      content: this.response,
+      usage: {
+        inputTokens: 100,
+        outputTokens: 50,
+        totalTokens: 150,
+        costUsd: 0.001,
+      },
+    });
+  }
+
+  setResponse(response: string): void {
+    this.response = response;
+  }
+}
+
+/**
  * Fake implementation of UserServiceClient for testing.
  */
 export class FakeUserServiceClient implements UserServiceClient {
   private apiKeys = new Map<string, DecryptedApiKeys>();
   private failNextGetApiKeys = false;
   private failNextReportLlmSuccess = false;
+  private failNextGetLlmClient = false;
+  private llmClient: LlmGenerateClient = new FakeLlmGenerateClient();
 
   async getApiKeys(userId: string): Promise<Result<DecryptedApiKeys, UserServiceError>> {
     if (this.failNextGetApiKeys) {
@@ -214,9 +240,25 @@ export class FakeUserServiceClient implements UserServiceClient {
     }
   }
 
+  async getLlmClient(_userId: string): Promise<Result<LlmGenerateClient, UserServiceError>> {
+    if (this.failNextGetLlmClient) {
+      this.failNextGetLlmClient = false;
+      return err({ code: 'API_ERROR', message: 'Test getLlmClient failure' });
+    }
+    return ok(this.llmClient);
+  }
+
   // Test helpers
   setApiKeys(userId: string, keys: DecryptedApiKeys): void {
     this.apiKeys.set(userId, keys);
+  }
+
+  setLlmClient(client: LlmGenerateClient): void {
+    this.llmClient = client;
+  }
+
+  setFailNextGetLlmClient(fail: boolean): void {
+    this.failNextGetLlmClient = fail;
   }
 
   setFailNextGetApiKeys(fail: boolean): void {

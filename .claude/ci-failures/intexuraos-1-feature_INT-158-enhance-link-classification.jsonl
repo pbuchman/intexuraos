@@ -1,3 +1,0 @@
-{"ts":"2026-01-19T14:15:55.689Z","project":"intexuraos-1","branch":"feature/INT-158-enhance-link-classification","workspace":"--","runNumber":1,"passed":false,"durationMs":951,"failureCount":0,"failures":[]}
-{"ts":"2026-01-19T14:17:02.404Z","project":"intexuraos-1","branch":"feature/INT-158-enhance-link-classification","workspace":"commands-agent","runNumber":2,"passed":true,"durationMs":61710,"failureCount":0,"failures":[]}
-{"ts":"2026-01-19T14:21:30.385Z","project":"intexuraos-1","branch":"feature/INT-158-enhance-link-classification","runNumber":3,"passed":true,"durationMs":249709,"failureCount":0,"failures":[]}

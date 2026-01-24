@@ -234,6 +234,24 @@ export interface ExtractLinkPreviewsEvent {
 }
 
 /**
+ * Event published when a user replies to an approval request message.
+ * Triggers actions-agent to process the approval/rejection.
+ */
+export interface ApprovalReplyEvent {
+  type: 'action.approval.reply';
+  /** The wamid of the original approval message being replied to */
+  replyToWamid: string;
+  /** The user's reply text */
+  replyText: string;
+  /** The user ID */
+  userId: string;
+  /** Event timestamp (ISO 8601) */
+  timestamp: string;
+  /** Optional action ID extracted from correlation ID (e.g., action-todo-approval-{actionId}) */
+  actionId?: string;
+}
+
+/**
  * Union of all event types for type safety.
  */
 export type WhatsAppEvent =
@@ -244,4 +262,5 @@ export type WhatsAppEvent =
   | SendMessageEvent
   | WebhookProcessEvent
   | TranscribeAudioEvent
-  | ExtractLinkPreviewsEvent;
+  | ExtractLinkPreviewsEvent
+  | ApprovalReplyEvent;

@@ -3,7 +3,7 @@
  *
  * Single source of truth for model names via TypeScript union types.
  * Models are categorized by their primary use case.
- * All 14 models from migration 012 are defined here.
+ * All 16 models from migrations 012+ are defined here.
  */
 
 // =============================================================================
@@ -58,6 +58,7 @@ export type SonarDeepResearch = 'sonar-deep-research';
 // =============================================================================
 
 export type Glm47 = 'glm-4.7';
+export type Glm47Flash = 'glm-4.7-flash';
 
 // =============================================================================
 // Model Category Types (composed from individual types)
@@ -81,17 +82,24 @@ export type ResearchModel =
   | Sonar
   | SonarPro
   | SonarDeepResearch
-  | Glm47;
+  | Glm47
+  | Glm47Flash;
 
 /**
  * Models for API key validation (cheap, fast).
  */
-export type ValidationModel = ClaudeHaiku35 | Gemini20Flash | GPT4oMini | Sonar | Glm47;
+export type ValidationModel =
+  | ClaudeHaiku35
+  | Gemini20Flash
+  | GPT4oMini
+  | Sonar
+  | Glm47
+  | Glm47Flash;
 
 /**
  * Fast models for quick tasks (classification, title generation).
  */
-export type FastModel = Gemini25Flash | Gemini20Flash;
+export type FastModel = Gemini25Flash | Gemini20Flash | Glm47Flash;
 
 /**
  * General-purpose models.
@@ -121,8 +129,9 @@ export type LLMModel =
   | Sonar
   | SonarPro
   | SonarDeepResearch
-  // Zai (1 model)
-  | Glm47;
+  // Zai (2 models)
+  | Glm47
+  | Glm47Flash;
 
 // =============================================================================
 // Provider Constants Object
@@ -169,6 +178,7 @@ export const LlmModels = {
   SonarDeepResearch: 'sonar-deep-research' as SonarDeepResearch,
   // Zai
   Glm47: 'glm-4.7' as Glm47,
+  Glm47Flash: 'glm-4.7-flash' as Glm47Flash,
 } as const;
 
 // =============================================================================
@@ -200,6 +210,7 @@ export const ALL_LLM_MODELS: LLMModel[] = [
   LlmModels.SonarDeepResearch,
   // Zai
   LlmModels.Glm47,
+  LlmModels.Glm47Flash,
 ] as const;
 
 // =============================================================================
@@ -230,6 +241,7 @@ export const MODEL_PROVIDER_MAP: Record<LLMModel, LlmProvider> = {
   [LlmModels.SonarDeepResearch]: LlmProviders.Perplexity,
   // Zai
   [LlmModels.Glm47]: LlmProviders.Zai,
+  [LlmModels.Glm47Flash]: LlmProviders.Zai,
 } as const;
 
 /**

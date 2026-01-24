@@ -1,0 +1,229 @@
+/**
+ * Tests for approval intent prompt and response parsing.
+ */
+import { describe, it, expect } from 'vitest';
+import { approvalIntentPrompt, parseApprovalIntentResponse } from '../approvalIntentPrompt.js';
+
+describe('approvalIntentPrompt', () => {
+  it('builds prompt with user reply', () => {
+    const prompt = approvalIntentPrompt({ input: { userReply: 'yes please' } });
+
+    expect(prompt).toContain('yes please');
+    expect(prompt).toContain('User replied:');
+  });
+
+  it('includes approve intent examples', () => {
+    const prompt = approvalIntentPrompt({ input: { userReply: 'test' } });
+
+    expect(prompt).toContain('"approve"');
+    expect(prompt).toContain('yes');
+    expect(prompt).toContain('ok');
+    expect(prompt).toContain('go ahead');
+  });
+
+  it('includes reject intent examples', () => {
+    const prompt = approvalIntentPrompt({ input: { userReply: 'test' } });
+
+    expect(prompt).toContain('"reject"');
+    expect(prompt).toContain('no');
+    expect(prompt).toContain('cancel');
+    expect(prompt).toContain('stop');
+  });
+
+  it('includes unclear intent examples', () => {
+    const prompt = approvalIntentPrompt({ input: { userReply: 'test' } });
+
+    expect(prompt).toContain('"unclear"');
+    expect(prompt).toContain('ambiguous');
+  });
+
+  it('includes emoji guidance', () => {
+    const prompt = approvalIntentPrompt({ input: { userReply: 'test' } });
+
+    expect(prompt).toContain('Emojis count');
+  });
+
+  it('includes JSON format instructions', () => {
+    const prompt = approvalIntentPrompt({ input: { userReply: 'test' } });
+
+    expect(prompt).toContain('Respond with ONLY valid JSON');
+    expect(prompt).toContain('"intent"');
+    expect(prompt).toContain('"confidence"');
+    expect(prompt).toContain('"reasoning"');
+  });
+});
+
+describe('parseApprovalIntentResponse', () => {
+  it('parses valid approve response', () => {
+    const response = '{"intent": "approve", "confidence": 0.95, "reasoning": "User said yes"}';
+    const result = parseApprovalIntentResponse(response);
+
+    expect(result).toEqual({
+      intent: 'approve',
+      confidence: 0.95,
+      reasoning: 'User said yes',
+    });
+  });
+
+  it('parses valid reject response', () => {
+    const response = '{"intent": "reject", "confidence": 0.8, "reasoning": "User said no"}';
+    const result = parseApprovalIntentResponse(response);
+
+    expect(result).toEqual({
+      intent: 'reject',
+      confidence: 0.8,
+      reasoning: 'User said no',
+    });
+  });
+
+  it('parses valid unclear response', () => {
+    const response = '{"intent": "unclear", "confidence": 0.5, "reasoning": "Ambiguous reply"}';
+    const result = parseApprovalIntentResponse(response);
+
+    expect(result).toEqual({
+      intent: 'unclear',
+      confidence: 0.5,
+      reasoning: 'Ambiguous reply',
+    });
+  });
+
+  it('extracts JSON from response with surrounding text', () => {
+    const response = `Here is my analysis:
+{"intent": "approve", "confidence": 0.9, "reasoning": "Clear yes"}
+That's my classification.`;
+    const result = parseApprovalIntentResponse(response);
+
+    expect(result).toEqual({
+      intent: 'approve',
+      confidence: 0.9,
+      reasoning: 'Clear yes',
+    });
+  });
+
+  it('returns null for no JSON in response', () => {
+    const response = 'This is just text without any JSON';
+    const result = parseApprovalIntentResponse(response);
+
+    expect(result).toBeNull();
+  });
+
+  it('returns null for invalid JSON', () => {
+    const response = '{"intent": "approve", "confidence": }';
+    const result = parseApprovalIntentResponse(response);
+
+    expect(result).toBeNull();
+  });
+
+  it('returns null for invalid intent value', () => {
+    const response = '{"intent": "maybe", "confidence": 0.5, "reasoning": "test"}';
+    const result = parseApprovalIntentResponse(response);
+
+    expect(result).toBeNull();
+  });
+
+  it('returns null for confidence out of range (negative)', () => {
+    const response = '{"intent": "approve", "confidence": -0.1, "reasoning": "test"}';
+    const result = parseApprovalIntentResponse(response);
+
+    expect(result).toBeNull();
+  });
+
+  it('returns null for confidence out of range (greater than 1)', () => {
+    const response = '{"intent": "approve", "confidence": 1.5, "reasoning": "test"}';
+    const result = parseApprovalIntentResponse(response);
+
+    expect(result).toBeNull();
+  });
+
+  it('returns null for non-number confidence', () => {
+    const response = '{"intent": "approve", "confidence": "high", "reasoning": "test"}';
+    const result = parseApprovalIntentResponse(response);
+
+    expect(result).toBeNull();
+  });
+
+  it('returns null for non-string reasoning', () => {
+    const response = '{"intent": "approve", "confidence": 0.5, "reasoning": 123}';
+    const result = parseApprovalIntentResponse(response);
+
+    expect(result).toBeNull();
+  });
+
+  it('returns null for missing intent field', () => {
+    const response = '{"confidence": 0.5, "reasoning": "test"}';
+    const result = parseApprovalIntentResponse(response);
+
+    expect(result).toBeNull();
+  });
+
+  it('returns null for missing confidence field', () => {
+    const response = '{"intent": "approve", "reasoning": "test"}';
+    const result = parseApprovalIntentResponse(response);
+
+    expect(result).toBeNull();
+  });
+
+  it('returns null for missing reasoning field', () => {
+    const response = '{"intent": "approve", "confidence": 0.5}';
+    const result = parseApprovalIntentResponse(response);
+
+    expect(result).toBeNull();
+  });
+
+  it('returns null for null parsed value', () => {
+    const response = 'null';
+    const result = parseApprovalIntentResponse(response);
+
+    expect(result).toBeNull();
+  });
+
+  it('returns null for string primitive parsed value', () => {
+    const response = '"just a string"';
+    const result = parseApprovalIntentResponse(response);
+
+    expect(result).toBeNull();
+  });
+
+  it('returns null for number primitive parsed value', () => {
+    const response = '42';
+    const result = parseApprovalIntentResponse(response);
+
+    expect(result).toBeNull();
+  });
+
+  it('returns null for boolean primitive parsed value', () => {
+    const response = 'true';
+    const result = parseApprovalIntentResponse(response);
+
+    expect(result).toBeNull();
+  });
+
+  it('returns null for array parsed value', () => {
+    const response = '[1, 2, 3]';
+    const result = parseApprovalIntentResponse(response);
+
+    expect(result).toBeNull();
+  });
+
+  it('handles edge case of confidence exactly 0', () => {
+    const response = '{"intent": "unclear", "confidence": 0, "reasoning": "no idea"}';
+    const result = parseApprovalIntentResponse(response);
+
+    expect(result).toEqual({
+      intent: 'unclear',
+      confidence: 0,
+      reasoning: 'no idea',
+    });
+  });
+
+  it('handles edge case of confidence exactly 1', () => {
+    const response = '{"intent": "approve", "confidence": 1, "reasoning": "definitely yes"}';
+    const result = parseApprovalIntentResponse(response);
+
+    expect(result).toEqual({
+      intent: 'approve',
+      confidence: 1,
+      reasoning: 'definitely yes',
+    });
+  });
+});

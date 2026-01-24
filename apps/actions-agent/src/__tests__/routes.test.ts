@@ -1522,6 +1522,131 @@ describe('Research Agent Routes', () => {
     });
   });
 
+  describe('GET /actions/:actionId/preview', () => {
+    beforeEach(() => {
+      process.env['INTEXURAOS_AUTH_JWKS_URL'] = 'https://example.auth.com/.well-known/jwks.json';
+      process.env['INTEXURAOS_AUTH_ISSUER'] = 'https://example.auth.com/';
+      process.env['INTEXURAOS_AUTH_AUDIENCE'] = 'test-audience';
+    });
+
+    it('returns 401 when no auth token', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/actions/action-1/preview',
+      });
+
+      expect(response.statusCode).toBe(401);
+    });
+
+    it('returns 404 when action not found', async () => {
+      const mockToken =
+        'eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyLTEyMyIsImF1ZCI6InRlc3QtYXVkaWVuY2UiLCJpc3MiOiJodHRwczovL2V4YW1wbGUuYXV0aC5jb20vIiwiaWF0IjoxNzA5MjE3NjAwfQ.mock';
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/actions/nonexistent/preview',
+        headers: {
+          authorization: `Bearer ${mockToken}`,
+        },
+      });
+
+      expect(response.statusCode).toBe(404);
+    });
+
+    it('returns 400 when action is not a calendar type', async () => {
+      fakeActionRepository.save({
+        id: 'action-1',
+        userId: 'user-123',
+        commandId: 'cmd-1',
+        type: 'research',
+        confidence: 0.95,
+        title: 'Test Research',
+        status: 'awaiting_approval',
+        payload: {},
+        createdAt: '2025-01-01T00:00:00.000Z',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      });
+
+      const mockToken =
+        'eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyLTEyMyIsImF1ZCI6InRlc3QtYXVkaWVuY2UiLCJpc3MiOiJodHRwczovL2V4YW1wbGUuYXV0aC5jb20vIiwiaWF0IjoxNzA5MjE3NjAwfQ.mock';
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/actions/action-1/preview',
+        headers: {
+          authorization: `Bearer ${mockToken}`,
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.body) as { error: { message: string } };
+      expect(body.error.message).toContain('only available for calendar actions');
+    });
+
+    it('returns preview for calendar action', async () => {
+      fakeActionRepository.save({
+        id: 'action-1',
+        userId: 'user-123',
+        commandId: 'cmd-1',
+        type: 'calendar',
+        confidence: 0.95,
+        title: 'Meeting at 2pm',
+        status: 'awaiting_approval',
+        payload: { prompt: 'Meeting at 2pm tomorrow' },
+        createdAt: '2025-01-01T00:00:00.000Z',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      });
+
+      const mockToken =
+        'eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyLTEyMyIsImF1ZCI6InRlc3QtYXVkaWVuY2UiLCJpc3MiOiJodHRwczovL2V4YW1wbGUuYXV0aC5jb20vIiwiaWF0IjoxNzA5MjE3NjAwfQ.mock';
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/actions/action-1/preview',
+        headers: {
+          authorization: `Bearer ${mockToken}`,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: { preview: { actionId: string; status: string } | null };
+      };
+      expect(body.success).toBe(true);
+      // FakeCalendarServiceClient returns null by default
+      expect(body.data.preview).toBeNull();
+    });
+
+    it('returns 404 when action belongs to different user', async () => {
+      fakeActionRepository.save({
+        id: 'action-1',
+        userId: 'other-user',
+        commandId: 'cmd-1',
+        type: 'calendar',
+        confidence: 0.95,
+        title: 'Meeting at 2pm',
+        status: 'awaiting_approval',
+        payload: {},
+        createdAt: '2025-01-01T00:00:00.000Z',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      });
+
+      const mockToken =
+        'eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyLTEyMyIsImF1ZCI6InRlc3QtYXVkaWVuY2UiLCJpc3MiOiJodHRwczovL2V4YW1wbGUuYXV0aC5jb20vIiwiaWF0IjoxNzA5MjE3NjAwfQ.mock';
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/actions/action-1/preview',
+        headers: {
+          authorization: `Bearer ${mockToken}`,
+        },
+      });
+
+      expect(response.statusCode).toBe(404);
+    });
+  });
+
   describe('POST /actions/:actionId/resolve-duplicate', () => {
     beforeEach(() => {
       process.env['INTEXURAOS_AUTH_JWKS_URL'] = 'https://example.auth.com/.well-known/jwks.json';

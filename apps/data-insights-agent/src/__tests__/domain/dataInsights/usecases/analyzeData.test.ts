@@ -165,6 +165,43 @@ describe('analyzeData', () => {
         expect(result.value.noInsightsReason).toBe('Data is too static and lacks variance for meaningful analysis');
       }
     });
+
+    it('returns success with empty insights without noInsightsReason when not provided', async () => {
+      const feedResult = await fakeCompositeFeedRepo.create('user-123', 'Test Feed', {
+        purpose: 'Test purpose',
+        staticSourceIds: [],
+        notificationFilters: [],
+      });
+      expect(feedResult.ok).toBe(true);
+
+      const feed = feedResult.ok ? feedResult.value : null;
+      await fakeSnapshotRepo.upsert(feed?.id ?? '', 'user-123', 'Test Feed', {
+        feedId: feed?.id ?? '',
+        feedName: 'Test Feed',
+        purpose: 'Test purpose',
+        generatedAt: new Date().toISOString(),
+        staticSources: [],
+        notifications: [],
+      });
+
+      // Don't set noInsightsReason - tests the `if (noInsightsReason !== undefined)` else branch
+      fakeDataAnalysisService.setResult({
+        insights: [],
+      });
+
+      const result = await analyzeData(feed?.id ?? '', 'user-123', {
+        compositeFeedRepository: fakeCompositeFeedRepo,
+        snapshotRepository: fakeSnapshotRepo,
+        dataAnalysisService: fakeDataAnalysisService,
+        logger: fakeLogger,
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.insights).toHaveLength(0);
+        expect(result.value.noInsightsReason).toBeUndefined();
+      }
+    });
   });
 
   describe('error paths', () => {

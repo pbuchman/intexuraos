@@ -6,11 +6,11 @@
 
 ## Identity
 
-| Field    | Value                                                           |
-| -------- | --------------------------------------------------------------- |
-| **Name** | app-settings-service                                            |
-| **Role** | Application Configuration Service                               |
-| **Goal** | Manage LLM pricing configuration and usage cost tracking        |
+| Field    | Value                                                    |
+| --------  | --------------------------------------------------------  |
+| **Name** | app-settings-service                                     |
+| **Role** | Application Configuration Service                        |
+| **Goal** | Manage LLM pricing configuration and usage cost tracking |
 
 ---
 
@@ -25,7 +25,7 @@ interface AppSettingsServiceTools {
 
   // Get user's LLM usage costs
   getUsageCosts(params?: {
-    days?: number;  // Default: 90, max: 365
+    days?: number; // Default: 90, max: 365
   }): Promise<AggregatedCosts>;
 }
 ```
@@ -41,8 +41,8 @@ interface ProviderPricing {
 }
 
 interface ModelPricing {
-  inputPricePer1k: number;   // USD per 1K input tokens
-  outputPricePer1k: number;  // USD per 1K output tokens
+  inputPricePer1k: number; // USD per 1K input tokens
+  outputPricePer1k: number; // USD per 1K output tokens
 }
 
 interface AllProvidersPricing {
@@ -62,7 +62,7 @@ interface AggregatedCosts {
 }
 
 interface MonthlyBreakdown {
-  month: string;          // "2026-01"
+  month: string; // "2026-01"
   costUsd: number;
   calls: number;
 }
@@ -77,7 +77,7 @@ interface ModelCosts {
 }
 
 interface CallTypeCosts {
-  callType: string;       // "research", "classification", etc.
+  callType: string; // "research", "classification", etc.
   costUsd: number;
   calls: number;
 }
@@ -87,12 +87,12 @@ interface CallTypeCosts {
 
 ## Constraints
 
-| Rule               | Description                                        |
-| ------------------ | -------------------------------------------------- |
-| **Authentication** | All endpoints require valid Bearer token           |
-| **Days Range**     | Usage costs: 1-365 days, default 90                |
-| **5 Providers**    | Pricing available for all supported LLM providers  |
-| **User Scoped**    | Usage costs scoped to authenticated user only      |
+| Rule               | Description                                       |
+| ------------------  | -------------------------------------------------  |
+| **Authentication** | All endpoints require valid Bearer token          |
+| **Days Range**     | Usage costs: 1-365 days, default 90               |
+| **5 Providers**    | Pricing available for all supported LLM providers |
+| **User Scoped**    | Usage costs scoped to authenticated user only     |
 
 ---
 
@@ -121,30 +121,29 @@ const costs = await getUsageCosts({ days: 30 });
 const pricing = await getPricing();
 const model = pricing.google.models['gemini-2.5-flash'];
 const estimatedCost =
-  (inputTokens / 1000) * model.inputPricePer1k +
-  (outputTokens / 1000) * model.outputPricePer1k;
+  (inputTokens / 1000) * model.inputPricePer1k + (outputTokens / 1000) * model.outputPricePer1k;
 ```
 
 ---
 
 ## Internal Endpoints
 
-| Method | Path                          | Purpose                                        |
-| ------ | ----------------------------- | ---------------------------------------------- |
-| POST   | `/internal/usage/record`      | Record LLM usage (called by research-agent)    |
-| GET    | `/internal/pricing/:provider` | Get pricing for specific provider              |
+| Method | Path                          | Purpose                                     |
+| ------  | -----------------------------  | -------------------------------------------  |
+| POST   | `/internal/usage/record`      | Record LLM usage (called by research-agent) |
+| GET    | `/internal/pricing/:provider` | Get pricing for specific provider           |
 
 ---
 
 ## Provider Coverage
 
-| Provider    | Models Tracked                                    |
-| ----------- | ------------------------------------------------- |
-| Google      | gemini-2.5-flash, gemini-2.0-flash, gemini-1.5-pro |
-| OpenAI      | gpt-4o, gpt-4o-mini, o1-mini                      |
-| Anthropic   | claude-sonnet-4-20250514                          |
-| Perplexity  | sonar, sonar-pro                                  |
-| Zai         | glm-4-flash                                       |
+| Provider   | Models Tracked                                     |
+| ----------  | --------------------------------------------------  |
+| Google     | gemini-2.5-flash, gemini-2.0-flash, gemini-1.5-pro |
+| OpenAI     | gpt-4o, gpt-4o-mini, o1-mini                       |
+| Anthropic  | claude-sonnet-4-20250514                           |
+| Perplexity | sonar, sonar-pro                                   |
+| Zai        | glm-4-flash                                        |
 
 ---
 

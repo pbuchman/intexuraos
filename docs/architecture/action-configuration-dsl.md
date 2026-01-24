@@ -34,7 +34,7 @@ types:
 ### Top-Level Keys
 
 | Key       | Type   | Required | Description                                     |
-| --------- | ------ | -------- | ----------------------------------------------- |
+| ---------  | ------  | --------  | -----------------------------------------------  |
 | `actions` | Object | Yes      | Global action definitions (button behavior)     |
 | `types`   | Object | Yes      | Mappings from action types to available actions |
 
@@ -67,7 +67,7 @@ actions:
 Defines the HTTP request to execute.
 
 | Field    | Type   | Required | Description                                           |
-| -------- | ------ | -------- | ----------------------------------------------------- |
+| --------  | ------  | --------  | -----------------------------------------------------  |
 | `path`   | String | Yes      | API endpoint path (supports `{actionId}` placeholder) |
 | `method` | String | Yes      | HTTP method (`GET`, `POST`, `PATCH`, `DELETE`)        |
 | `body`   | Object | No       | Request body (supports variable interpolation)        |
@@ -91,7 +91,7 @@ endpoint:
 Defines the button appearance.
 
 | Field     | Type   | Required | Description                                          |
-| --------- | ------ | -------- | ---------------------------------------------------- |
+| ---------  | ------  | --------  | ----------------------------------------------------  |
 | `label`   | String | Yes      | Button text displayed to user                        |
 | `variant` | String | Yes      | Button styling (`primary`, `secondary`, `danger`)    |
 | `icon`    | String | Yes      | Lucide icon name (e.g., `Play`, `Trash2`, `XCircle`) |
@@ -128,7 +128,7 @@ body:
 ### Available Variables
 
 | Variable                | Type   | Description                                   |
-| ----------------------- | ------ | --------------------------------------------- |
+| -----------------------  | ------  | ---------------------------------------------  |
 | `{{action.id}}`         | String | Action ID                                     |
 | `{{action.userId}}`     | String | User ID                                       |
 | `{{action.commandId}}`  | String | Command ID                                    |
@@ -196,7 +196,7 @@ types:
 ### Fields
 
 | Field    | Type          | Required | Description                                   |
-| -------- | ------------- | -------- | --------------------------------------------- |
+| --------  | -------------  | --------  | ---------------------------------------------  |
 | `action` | String        | Yes      | Reference to action ID from `actions` section |
 | `when`   | ConditionTree | No       | Logical condition (if omitted, always true)   |
 
@@ -246,7 +246,7 @@ when:
 #### Fields
 
 | Field   | Type   | Required | Description                                               |
-| ------- | ------ | -------- | --------------------------------------------------------- |
+| -------  | ------  | --------  | ---------------------------------------------------------  |
 | `field` | String | Yes      | Dot-notation path to action field                         |
 | `op`    | String | Yes      | Comparison operator (see below)                           |
 | `value` | Any    | No\*     | Value to compare against (\*required except for `exists`) |
@@ -254,7 +254,7 @@ when:
 #### Operators
 
 | Operator | Description                       | Example                                | Value Type         |
-| -------- | --------------------------------- | -------------------------------------- | ------------------ |
+| --------  | ---------------------------------  | --------------------------------------  | ------------------  |
 | `eq`     | Equality (`===`)                  | `status == 'pending'`                  | Any                |
 | `neq`    | Not equal (`!==`)                 | `status != 'completed'`                | Any                |
 | `gt`     | Greater than                      | `confidence > 0.8`                     | Number             |

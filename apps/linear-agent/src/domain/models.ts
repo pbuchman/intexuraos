@@ -112,28 +112,42 @@ export interface ProcessedAction {
 }
 
 /** Dashboard filter for issue states */
-export type DashboardColumn = 'backlog' | 'in_progress' | 'in_review' | 'done';
+export type DashboardColumn = 'todo' | 'backlog' | 'in_progress' | 'in_review' | 'to_test' | 'done';
 
 /** Map Linear state types to dashboard columns */
 export function mapStateToDashboardColumn(
   stateType: IssueStateCategory,
   stateName: string
 ): DashboardColumn {
+  const lowerName = stateName.toLowerCase();
+
   // In Review detection (Linear uses "started" type for these)
-  if (stateName.toLowerCase().includes('review')) {
+  if (lowerName.includes('review')) {
     return 'in_review';
+  }
+
+  // To Test / QA detection
+  if (lowerName.includes('test') || lowerName.includes('qa') || lowerName.includes('quality')) {
+    return 'to_test';
+  }
+
+  // Todo detection (unstarted issues that are explicitly "Todo")
+  if (lowerName === 'todo') {
+    return 'todo';
   }
 
   switch (stateType) {
     case 'backlog':
-    case 'unstarted':
       return 'backlog';
+    case 'unstarted':
+      // Default unstarted to Todo unless it's specifically "Backlog"
+      return lowerName === 'backlog' ? 'backlog' : 'todo';
     case 'started':
       return 'in_progress';
     case 'completed':
     case 'cancelled':
       return 'done';
     default:
-      return 'backlog';
+      return 'todo';
   }
 }

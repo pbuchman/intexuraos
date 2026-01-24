@@ -179,6 +179,57 @@ describe('createTodosServiceHttpClient', () => {
       }
     });
 
+    it('returns error on OK response with invalid JSON', async () => {
+      nock(baseUrl).post('/internal/todos').reply(200, 'not valid json', {
+        'Content-Type': 'text/plain',
+      });
+
+      const client = createTodosServiceHttpClient({ baseUrl, internalAuthToken, logger: silentLogger });
+      const result = await client.createTodo({
+        userId: 'user-456',
+        title: 'Test',
+        description: '',
+        tags: [],
+        source: 'actions-agent',
+        sourceId: 'action-123',
+      });
+
+      expect(isErr(result)).toBe(true);
+      if (isErr(result)) {
+        expect(result.error.message).toContain('Invalid response from todos-agent');
+      }
+    });
+
+    it('returns ServiceFeedback with errorCode from successful data response', async () => {
+      nock(baseUrl)
+        .post('/internal/todos')
+        .reply(200, {
+          success: true,
+          data: {
+            status: 'failed',
+            message: 'Processing failed',
+            errorCode: 'PROCESSING_ERROR',
+          },
+        });
+
+      const client = createTodosServiceHttpClient({ baseUrl, internalAuthToken, logger: silentLogger });
+      const result = await client.createTodo({
+        userId: 'user-456',
+        title: 'Test',
+        description: '',
+        tags: [],
+        source: 'actions-agent',
+        sourceId: 'action-123',
+      });
+
+      expect(isOk(result)).toBe(true);
+      if (isOk(result)) {
+        expect(result.value.status).toBe('failed');
+        expect(result.value.message).toBe('Processing failed');
+        expect(result.value.errorCode).toBe('PROCESSING_ERROR');
+      }
+    });
+
     it('sends correct request body', async () => {
       const scope = nock(baseUrl)
         .post('/internal/todos', {

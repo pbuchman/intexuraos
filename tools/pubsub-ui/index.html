@@ -204,6 +204,9 @@
       .event.actions-queue {
         border-left-color: #06b6d4;
       }
+      .event.approval-reply {
+        border-left-color: #14b8a6;
+      }
       .event.research-process {
         border-left-color: #3b82f6;
       }
@@ -221,6 +224,9 @@
       }
       .event.todos-processing-local {
         border-left-color: #ec4899;
+      }
+      .event.calendar-preview {
+        border-left-color: #14b8a6;
       }
 
       .event-header {
@@ -271,6 +277,10 @@
         background: #06b6d4;
         color: white;
       }
+      .approval-reply .event-badge {
+        background: #14b8a6;
+        color: white;
+      }
       .research-process .event-badge {
         background: #3b82f6;
         color: white;
@@ -293,6 +303,10 @@
       }
       .todos-processing-local .event-badge {
         background: #ec4899;
+        color: white;
+      }
+      .calendar-preview .event-badge {
+        background: #14b8a6;
         color: white;
       }
 
@@ -505,12 +519,14 @@
               <option value="whatsapp-transcription">whatsapp-transcription</option>
               <option value="commands-ingest">commands-ingest</option>
               <option value="actions-queue">actions-queue</option>
+              <option value="approval-reply">approval-reply</option>
               <option value="research-process">research-process</option>
               <option value="llm-analytics">llm-analytics</option>
               <option value="llm-call">llm-call</option>
               <option value="bookmark-enrich">bookmark-enrich</option>
               <option value="bookmark-summarize">bookmark-summarize</option>
               <option value="todos-processing-local">todos-processing-local</option>
+              <option value="calendar-preview">calendar-preview</option>
             </select>
           </div>
 
@@ -589,6 +605,14 @@
           },
           timestamp: '{timestamp}',
         },
+        'approval-reply': {
+          type: 'action.approval.reply',
+          replyToWamid: 'wamid.test-{timestamp}',
+          replyText: 'yes',
+          userId: '{userId}',
+          actionId: 'action-{timestamp}',
+          timestamp: '{timestamp}',
+        },
         'research-process': {
           type: 'research.process',
           researchId: 'research-{timestamp}',
@@ -627,6 +651,15 @@
           type: 'todos.processing.created',
           todoId: 'todo-{timestamp}',
           userId: '{userId}',
+          correlationId: 'ui-{timestamp}',
+          timestamp: '{timestamp}',
+        },
+        'calendar-preview': {
+          type: 'calendar.preview.generate',
+          actionId: 'action-{timestamp}',
+          userId: '{userId}',
+          text: 'Create meeting with John tomorrow at 2pm',
+          currentDate: new Date().toISOString().split('T')[0],
           correlationId: 'ui-{timestamp}',
           timestamp: '{timestamp}',
         },

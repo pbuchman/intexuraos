@@ -8,7 +8,7 @@ import {
 import { createUserServiceClient, type UserServiceClient } from './infra/user/userServiceClient.js';
 import { createTodoItemExtractionService, type TodoItemExtractionService } from './infra/gemini/todoItemExtractionService.js';
 import { fetchAllPricing, createPricingContext } from '@intexuraos/llm-pricing';
-import { LlmModels, type FastModel } from '@intexuraos/llm-contract';
+import { LlmModels } from '@intexuraos/llm-contract';
 
 export interface ServiceContainer {
   todoRepository: TodoRepository;
@@ -41,7 +41,8 @@ export async function initServices(config: ServiceConfig): Promise<void> {
   const pricingContext = createPricingContext(pricingResult.value, [
     LlmModels.Gemini25Flash,
     LlmModels.Glm47,
-  ] as FastModel[]);
+    LlmModels.Glm47Flash,
+  ]);
 
   const userServiceClient = createUserServiceClient({
     baseUrl: config.userServiceUrl,

@@ -6,10 +6,10 @@
 
 ## Identity
 
-| Field | Value |
-| ----- | ----- |
-| **Name** | calendar-agent |
-| **Role** | Google Calendar Integration Service |
+| Field    | Value                                                                           |
+| --------  | -------------------------------------------------------------------------------  |
+| **Name** | calendar-agent                                                                  |
+| **Role** | Google Calendar Integration Service                                             |
 | **Goal** | Manage calendar events with intelligent date parsing and multi-calendar support |
 
 ---
@@ -40,25 +40,34 @@ interface CalendarAgentTools {
   }): Promise<CalendarEvent>;
 
   // Get single event
-  getEvent(eventId: string, params?: {
-    calendarId?: string;
-  }): Promise<CalendarEvent>;
+  getEvent(
+    eventId: string,
+    params?: {
+      calendarId?: string;
+    }
+  ): Promise<CalendarEvent>;
 
   // Update event
-  updateEvent(eventId: string, params: {
-    calendarId?: string;
-    summary?: string;
-    description?: string;
-    start?: EventDateTime;
-    end?: EventDateTime;
-    attendees?: { email: string }[];
-    location?: string;
-  }): Promise<CalendarEvent>;
+  updateEvent(
+    eventId: string,
+    params: {
+      calendarId?: string;
+      summary?: string;
+      description?: string;
+      start?: EventDateTime;
+      end?: EventDateTime;
+      attendees?: { email: string }[];
+      location?: string;
+    }
+  ): Promise<CalendarEvent>;
 
   // Delete event
-  deleteEvent(eventId: string, params?: {
-    calendarId?: string;
-  }): Promise<void>;
+  deleteEvent(
+    eventId: string,
+    params?: {
+      calendarId?: string;
+    }
+  ): Promise<void>;
 
   // Query free/busy time
   queryFreeBusy(params: {
@@ -73,8 +82,8 @@ interface CalendarAgentTools {
 
 ```typescript
 interface EventDateTime {
-  dateTime?: string;  // ISO 8601 for timed events
-  date?: string;      // YYYY-MM-DD for all-day events
+  dateTime?: string; // ISO 8601 for timed events
+  date?: string; // YYYY-MM-DD for all-day events
   timeZone?: string;
 }
 
@@ -93,9 +102,12 @@ interface CalendarEvent {
 }
 
 interface FreeBusyResponse {
-  calendars: Record<string, {
-    busy: { start: string; end: string }[];
-  }>;
+  calendars: Record<
+    string,
+    {
+      busy: { start: string; end: string }[];
+    }
+  >;
 }
 ```
 
@@ -103,12 +115,12 @@ interface FreeBusyResponse {
 
 ## Constraints
 
-| Rule | Description |
-| ---- | ----------- |
+| Rule                      | Description                           |
+| -------------------------  | -------------------------------------  |
 | **Google OAuth Required** | User must have Google OAuth connected |
-| **Calendar Access** | Default calendarId is 'primary' |
-| **Time Format** | All times in ISO 8601 format |
-| **Date Range** | timeMin must be before timeMax |
+| **Calendar Access**       | Default calendarId is 'primary'       |
+| **Time Format**           | All times in ISO 8601 format          |
+| **Date Range**            | timeMin must be before timeMax        |
 
 ---
 
@@ -122,9 +134,7 @@ const event = await createEvent({
   description: 'Weekly team synchronization meeting',
   start: { dateTime: '2026-01-20T14:00:00Z', timeZone: 'Europe/Berlin' },
   end: { dateTime: '2026-01-20T15:00:00Z', timeZone: 'Europe/Berlin' },
-  attendees: [
-    { email: 'team@example.com' },
-  ],
+  attendees: [{ email: 'team@example.com' }],
 });
 ```
 
@@ -153,10 +163,10 @@ const busySlots = freeBusy.calendars['primary'].busy;
 
 ## Internal Endpoints
 
-| Method | Path | Purpose |
-| ------ | ---- | ------- |
-| POST | `/internal/events` | Create event from actions-agent |
-| GET | `/internal/events/:id` | Get event for internal services |
+| Method | Path                   | Purpose                         |
+| ------  | ----------------------  | -------------------------------  |
+| POST   | `/internal/events`     | Create event from actions-agent |
+| GET    | `/internal/events/:id` | Get event for internal services |
 
 ---
 

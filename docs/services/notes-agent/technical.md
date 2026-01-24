@@ -9,7 +9,7 @@ Notes-agent provides simple CRUD operations for text notes with tag-based filter
 ### Public Endpoints
 
 | Method | Path         | Description       | Auth         |
-| ------ | ------------ | ----------------- | ------------ |
+| ------  | ------------  | -----------------  | ------------  |
 | GET    | `/notes`     | List user's notes | Bearer token |
 | POST   | `/notes`     | Create new note   | Bearer token |
 | GET    | `/notes/:id` | Get specific note | Bearer token |
@@ -19,7 +19,7 @@ Notes-agent provides simple CRUD operations for text notes with tag-based filter
 ### Internal Endpoints
 
 | Method | Path              | Description                      | Auth            |
-| ------ | ----------------- | -------------------------------- | --------------- |
+| ------  | -----------------  | --------------------------------  | ---------------  |
 | POST   | `/internal/notes` | Create note from internal source | Internal header |
 
 **Response includes:** `id`, `url` (web app path), and `note` object.
@@ -29,7 +29,7 @@ Notes-agent provides simple CRUD operations for text notes with tag-based filter
 ### Note
 
 | Field       | Type       | Description            |
-| ----------- | ---------- | ---------------------- | --------------- |
+| -----------  | ----------  | ----------------------  |   |
 | `id`        | string     | Unique note identifier |
 | `userId`    | string     | Owner user ID          |
 | `title`     | string     | Note title             |
@@ -44,7 +44,7 @@ Notes-agent provides simple CRUD operations for text notes with tag-based filter
 ### CreateNoteInput
 
 | Field      | Type       | Required |
-| ---------- | ---------- | -------- | -------------------- |
+| ----------  | ----------  | --------  |   |
 | `userId`   | string     | Yes      |
 | `title`    | string     | Yes      |
 | `content`  | string     | Yes      |
@@ -58,7 +58,7 @@ Notes-agent provides simple CRUD operations for text notes with tag-based filter
 ### Infrastructure
 
 | Component                      | Purpose          |
-| ------------------------------ | ---------------- |
+| ------------------------------  | ----------------  |
 | Firestore (`notes` collection) | Note persistence |
 
 ## Configuration

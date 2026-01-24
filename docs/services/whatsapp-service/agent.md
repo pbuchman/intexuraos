@@ -6,11 +6,11 @@
 
 ## Identity
 
-| Field    | Value                                                                         |
-| -------- | ----------------------------------------------------------------------------- |
-| **Name** | whatsapp-service                                                              |
-| **Role** | WhatsApp Integration Service                                                  |
-| **Goal** | Receive WhatsApp messages, process media, and extract link previews           |
+| Field    | Value                                                               |
+| --------  | -------------------------------------------------------------------  |
+| **Name** | whatsapp-service                                                    |
+| **Role** | WhatsApp Integration Service                                        |
+| **Goal** | Receive WhatsApp messages, process media, and extract link previews |
 
 ---
 
@@ -21,10 +21,7 @@
 ```typescript
 interface WhatsAppServiceTools {
   // List user's WhatsApp messages
-  listMessages(params?: {
-    limit?: number;
-    cursor?: string;
-  }): Promise<MessagesListResult>;
+  listMessages(params?: { limit?: number; cursor?: string }): Promise<MessagesListResult>;
 
   // Get signed URL for message media
   getMessageMedia(messageId: string): Promise<SignedUrlResult>;
@@ -94,12 +91,12 @@ interface SignedUrlResult {
 
 ## Constraints
 
-| Rule                    | Description                                            |
-| ----------------------- | ------------------------------------------------------ |
-| **Phone Number Mapped** | User must have WhatsApp number registered              |
-| **Media Expiration**    | Signed URLs expire after 15 minutes                    |
-| **Ownership**           | Users can only access their own messages               |
-| **Pagination**          | Maximum 100 messages per request                       |
+| Rule                    | Description                               |
+| -----------------------  | -----------------------------------------  |
+| **Phone Number Mapped** | User must have WhatsApp number registered |
+| **Media Expiration**    | Signed URLs expire after 15 minutes       |
+| **Ownership**           | Users can only access their own messages  |
+| **Pagination**          | Maximum 100 messages per request          |
 
 ---
 
@@ -145,18 +142,18 @@ WhatsApp messages trigger automatic processing:
 
 ## Internal Endpoints
 
-| Method | Path                          | Purpose                                      |
-| ------ | ----------------------------- | -------------------------------------------- |
-| POST   | `/internal/send-message`      | Send WhatsApp message (called by actions-agent) |
-| POST   | `/webhook`                    | Receive WhatsApp webhook events              |
+| Method | Path                     | Purpose                                         |
+| ------  | ------------------------  | -----------------------------------------------  |
+| POST   | `/internal/send-message` | Send WhatsApp message (called by actions-agent) |
+| POST   | `/webhook`               | Receive WhatsApp webhook events                 |
 
 ---
 
 ## Error Handling
 
-| Error Code       | Description                                    |
-| ---------------- | ---------------------------------------------- |
-| `NOT_FOUND`      | Message not found or not owned by user         |
+| Error Code         | Description                                    |
+| ------------------  | ----------------------------------------------  |
+| `NOT_FOUND`        | Message not found or not owned by user         |
 | `DOWNSTREAM_ERROR` | Failed to communicate with storage or WhatsApp |
 
 ---

@@ -244,4 +244,47 @@ EXTRA_LINE`;
 
     expect(result.insights).toHaveLength(5);
   });
+
+  it('handles response with only whitespace lines', () => {
+    const response = '   \n   \n   ';
+
+    expect(() => parseInsightResponse(response)).toThrow('Empty response from LLM');
+  });
+
+  it('handles response with mixed valid and invalid whitespace', () => {
+    const response = `
+INSIGHT_1: Title=Test; Description=Test; Trackable=Test; ChartType=C1
+   `;
+
+    const result = parseInsightResponse(response);
+
+    expect(result.insights).toHaveLength(1);
+  });
+
+  it('handles ChartType without alphanumeric value', () => {
+    const response = 'INSIGHT_1: Title=Test; Description=Test; Trackable=Test; ChartType=';
+
+    expect(() => parseInsightResponse(response)).toThrow('ChartType field missing or malformed');
+  });
+
+  it('handles ChartType with lowercase value', () => {
+    const response = 'INSIGHT_1: Title=Test; Description=Test; Trackable=Test; ChartType=c1';
+
+    expect(() => parseInsightResponse(response)).toThrow('ChartType field missing or malformed');
+  });
+
+  it('handles INSIGHT with extra semicolons', () => {
+    const response = 'INSIGHT_1: Title=Test; Description=Test; Trackable=Test; ChartType=C1;;';
+
+    // Extra semicolons create empty parts which changes count
+    expect(() => parseInsightResponse(response)).toThrow('Expected 4 parts');
+  });
+
+  it('parses NO_INSIGHTS with leading whitespace in reason', () => {
+    const response = 'NO_INSIGHTS: Reason=  Data insufficient for analysis';
+
+    const result = parseInsightResponse(response);
+
+    expect(result.noInsightsReason).toBe('Data insufficient for analysis');
+  });
 });

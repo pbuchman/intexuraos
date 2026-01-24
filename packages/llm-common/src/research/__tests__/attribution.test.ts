@@ -125,6 +125,35 @@ describe('parseAttributionLine', () => {
     expect(result?.unk).toBe(false);
     expect(result?.primary).toEqual([]);
   });
+
+  it('returns null for ID with invalid prefix letter', () => {
+    const result = parseAttributionLine(
+      'Attribution: Primary=A1; Secondary=; Constraints=; UNK=false'
+    );
+    expect(result).toBe(null);
+  });
+
+  it('returns null for ID with zero', () => {
+    const result = parseAttributionLine(
+      'Attribution: Primary=S0; Secondary=; Constraints=; UNK=false'
+    );
+    // S0 is actually valid (matches /^[SU]\d+$/)
+    expect(result).not.toBe(null);
+  });
+
+  it('returns null when secondary contains invalid ID', () => {
+    const result = parseAttributionLine(
+      'Attribution: Primary=S1; Secondary=InvalidId; Constraints=; UNK=false'
+    );
+    expect(result).toBe(null);
+  });
+
+  it('returns null when constraints contains invalid ID', () => {
+    const result = parseAttributionLine(
+      'Attribution: Primary=S1; Secondary=; Constraints=BadId; UNK=false'
+    );
+    expect(result).toBe(null);
+  });
 });
 
 describe('parseSections', () => {
@@ -725,5 +754,66 @@ More discussion about attribution`;
     expect(result).toBe(`This is about attribution systems
 Content here
 More discussion about attribution`);
+  });
+
+  it('handles single newline markdown', () => {
+    const result = stripAttributionLines('\n');
+    expect(result).toBe('\n');
+  });
+});
+
+describe('parseSections - additional edge cases', () => {
+  it('handles markdown with only h2 heading and no content', () => {
+    const markdown = '## Just a heading';
+
+    const sections = parseSections(markdown);
+    expect(sections).toHaveLength(1);
+    expect(sections[0]?.title).toBe('Just a heading');
+    expect(sections[0]?.attribution).toBe(null);
+  });
+
+  it('handles markdown with h3 headings only and trailing whitespace', () => {
+    const markdown = `### Section A
+Content
+Attribution: Primary=S1; Secondary=; Constraints=; UNK=false
+   `;
+
+    const sections = parseSections(markdown);
+    expect(sections).toHaveLength(1);
+    expect(sections[0]?.level).toBe(3);
+  });
+
+  it('handles empty markdown string', () => {
+    const sections = parseSections('');
+    expect(sections).toHaveLength(1);
+    expect(sections[0]?.title).toBe('Synthesis');
+    expect(sections[0]?.attribution).toBe(null);
+  });
+
+  it('handles markdown with only newlines', () => {
+    const sections = parseSections('\n\n\n');
+    expect(sections).toHaveLength(1);
+    expect(sections[0]?.title).toBe('Synthesis');
+  });
+
+  it('handles multiple consecutive ## headings', () => {
+    const markdown = `## First
+## Second
+## Third`;
+
+    const sections = parseSections(markdown);
+    expect(sections).toHaveLength(3);
+  });
+
+  it('handles h2 and h3 mixed - uses only h2', () => {
+    const markdown = `## H2 Section
+### H3 Subsection 1
+### H3 Subsection 2
+## Another H2`;
+
+    const sections = parseSections(markdown);
+    expect(sections).toHaveLength(2);
+    expect(sections[0]?.title).toBe('H2 Section');
+    expect(sections[1]?.title).toBe('Another H2');
   });
 });

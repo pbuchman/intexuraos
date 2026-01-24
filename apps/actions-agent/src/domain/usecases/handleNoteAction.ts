@@ -53,7 +53,7 @@ export function createHandleNoteActionUseCase(deps: HandleNoteActionDeps): Handl
 
       // Idempotency check and status update handled by registerActionHandler decorator
       const actionLink = `${webAppUrl}/#/inbox?action=${event.actionId}`;
-      const message = `New note ready for approval: "${event.title}". Review it here: ${actionLink}`;
+      const message = `New note ready for approval: "${event.title}". Review here: ${actionLink} or reply to approve/reject.`;
 
       logger.info(
         { actionId: event.actionId, userId: event.userId },

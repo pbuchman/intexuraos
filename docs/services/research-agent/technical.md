@@ -90,7 +90,7 @@ sequenceDiagram
 ### Public Endpoints
 
 | Method | Path                         | Description                             | Auth                 |
-| ------ | ---------------------------- | --------------------------------------- | -------------------- |
+| ------  | ----------------------------  | ---------------------------------------  | --------------------  |
 | POST   | `/research`                  | Create new research (starts processing) | Bearer token         |
 | GET    | `/research`                  | List researches for user                | Bearer token         |
 | GET    | `/research/:id`              | Get research by ID                      | Bearer token         |
@@ -106,7 +106,7 @@ sequenceDiagram
 ### Internal Endpoints
 
 | Method | Path                                    | Description                            | Auth            |
-| ------ | --------------------------------------- | -------------------------------------- | --------------- |
+| ------  | ---------------------------------------  | --------------------------------------  | ---------------  |
 | POST   | `/internal/research/draft`              | Create draft research                  | Internal header |
 | POST   | `/internal/llm/pubsub/process-research` | Process research from Pub/Sub          | Pub/Sub OIDC    |
 | POST   | `/internal/llm/pubsub/process-llm-call` | Process individual LLM call            | Pub/Sub OIDC    |
@@ -118,7 +118,7 @@ sequenceDiagram
 ### Research
 
 | Field               | Type              | Description                          |
-| ------------------- | ----------------- | ------------------------------------ |
+| -------------------  | -----------------  | ------------------------------------  |
 | `id`                | string (UUID)     | Unique research identifier           |
 | `userId`            | string            | User who owns the research           |
 | `title`             | string            | AI-generated title (empty initially) |
@@ -150,7 +150,7 @@ sequenceDiagram
 ### ResearchStatus Enum
 
 | Value                   | Description                             |
-| ----------------------- | --------------------------------------- |
+| -----------------------  | ---------------------------------------  |
 | `draft`                 | Awaiting user approval                  |
 | `pending`               | Approved, awaiting processing           |
 | `processing`            | LLMs are being queried                  |
@@ -163,7 +163,7 @@ sequenceDiagram
 ### LlmResult
 
 | Field          | Type            | Description                            |
-| -------------- | --------------- | -------------------------------------- |
+| --------------  | ---------------  | --------------------------------------  |
 | `provider`     | LlmProvider     | claude, openai, google, perplexity     |
 | `model`        | string          | Model name                             |
 | `status`       | LlmResultStatus | pending, processing, completed, failed |
@@ -180,7 +180,7 @@ sequenceDiagram
 ### InputContext
 
 | Field     | Type   | Description                  |
-| --------- | ------ | ---------------------------- |
+| ---------  | ------  | ----------------------------  |
 | `id`      | string | Context ID                   |
 | `content` | string | Context text (max 60k chars) |
 | `label`   | string | Optional label               |
@@ -189,7 +189,7 @@ sequenceDiagram
 ### ShareInfo
 
 | Field          | Type   | Description              |
-| -------------- | ------ | ------------------------ |
+| --------------  | ------  | ------------------------  |
 | `shareToken`   | string | Random token for URL     |
 | `slug`         | string | URL-friendly identifier  |
 | `shareUrl`     | string | Full public URL          |
@@ -202,7 +202,7 @@ sequenceDiagram
 ### Published
 
 | Event Type          | Topic               | Purpose                          |
-| ------------------- | ------------------- | -------------------------------- |
+| -------------------  | -------------------  | --------------------------------  |
 | `research.process`  | `llm-process-queue` | Trigger research processing      |
 | `llm.call`          | `llm-call-queue`    | Execute individual LLM call      |
 | `llm.report`        | `llm-analytics`     | Report LLM success for analytics |
@@ -212,7 +212,7 @@ sequenceDiagram
 ### Subscribed
 
 | Subscription        | Handler                                 |
-| ------------------- | --------------------------------------- |
+| -------------------  | ---------------------------------------  |
 | `llm-process-queue` | `/internal/llm/pubsub/process-research` |
 | `llm-call-queue`    | `/internal/llm/pubsub/process-llm-call` |
 | `llm-analytics`     | `/internal/llm/pubsub/report-analytics` |
@@ -222,14 +222,14 @@ sequenceDiagram
 ### Internal Services
 
 | Service         | Purpose                       |
-| --------------- | ----------------------------- |
+| ---------------  | -----------------------------  |
 | `user-service`  | API keys, LLM usage reporting |
 | `image-service` | Cover image generation        |
 
 ### Infrastructure
 
 | Component                             | Purpose                      |
-| ------------------------------------- | ---------------------------- |
+| -------------------------------------  | ----------------------------  |
 | Firestore (`researches` collection)   | Research persistence         |
 | Firestore (`app_settings` collection) | LLM pricing configuration    |
 | Firestore (`llm_api_logs` collection) | API call audit               |
@@ -241,7 +241,7 @@ sequenceDiagram
 ### LLM Providers
 
 | Provider   | Models                               |
-| ---------- | ------------------------------------ |
+| ----------  | ------------------------------------  |
 | Claude     | `claude-3-5-sonnet-20241022`         |
 | OpenAI     | `gpt-4o`, `gpt-4o-mini`              |
 | Google     | `gemini-2.5-pro`, `gemini-2.5-flash` |
@@ -251,7 +251,7 @@ sequenceDiagram
 ## Configuration
 
 | Environment Variable                  | Required | Description                          |
-| ------------------------------------- | -------- | ------------------------------------ |
+| -------------------------------------  | --------  | ------------------------------------  |
 | `INTEXURAOS_USER_SERVICE_URL`         | Yes      | User-service base URL                |
 | `INTEXURAOS_IMAGE_SERVICE_URL`        | Yes      | Image-service base URL               |
 | `INTEXURAOS_INTERNAL_AUTH_TOKEN`      | Yes      | Shared secret for service-to-service |

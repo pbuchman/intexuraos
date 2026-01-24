@@ -60,12 +60,17 @@ function splitTextIntoChunks(text: string): string[] {
     remaining = remaining.substring(splitPoint).trimStart();
   }
 
-  return chunks.length > 0 ? chunks : [''];
+  /* v8 ignore start - Defensive: loop always adds at least one chunk */
+  if (chunks.length === 0) return [''];
+  /* v8 ignore stop */
+  return chunks;
 }
 
 function joinTextChunks(chunks: string[]): string {
   if (chunks.length === 0) return '';
+  /* v8 ignore start - Defensive: chunks[0] always exists when length === 1 */
   if (chunks.length === 1) return chunks[0] ?? '';
+  /* v8 ignore stop */
   return chunks
     .map((c) => c.trim())
     .filter((c) => c.length > 0)
@@ -355,7 +360,9 @@ export async function updatePrompt(
       // Update or delete existing blocks
       for (let i = 0; i < codeBlockIds.length; i++) {
         const blockId = codeBlockIds[i];
+        /* v8 ignore start - Defensive: array index within bounds always exists */
         if (blockId === undefined) continue;
+        /* v8 ignore stop */
 
         if (i >= newChunks.length) {
           await client.blocks.delete({ block_id: blockId });
@@ -363,6 +370,7 @@ export async function updatePrompt(
           await client.blocks.update({
             block_id: blockId,
             code: {
+              /* v8 ignore next - Defensive: newChunks[i] always exists within loop bounds */
               rich_text: [{ type: 'text', text: { content: newChunks[i] ?? '' } }],
               language: 'markdown',
             },
@@ -379,6 +387,7 @@ export async function updatePrompt(
               object: 'block',
               type: 'code',
               code: {
+                /* v8 ignore next - Defensive: newChunks[i] always exists within loop bounds */
                 rich_text: [{ type: 'text', text: { content: newChunks[i] ?? '' } }],
                 language: 'markdown',
               },

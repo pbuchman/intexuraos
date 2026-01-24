@@ -3,7 +3,6 @@ import type { FastifyInstance } from 'fastify';
 import Fastify from 'fastify';
 import * as jose from 'jose';
 import { clearJwksCache } from '@intexuraos/common-http';
-import { LlmModels } from '@intexuraos/llm-contract';
 import { buildServer } from '../server.js';
 import { resetServices, setServices } from '../services.js';
 import {
@@ -839,43 +838,6 @@ describe('Commands Agent Routes', () => {
       expect(publishedEvents[0]?.actionType).toBe('note');
     });
 
-    it('includes selectedModels in event payload', async () => {
-      app = await buildServer();
-
-      fakeClassifier.setResult({
-        type: 'research',
-        confidence: 0.95,
-        title: 'Research topic',
-        reasoning: 'Research query with model selection',
-        selectedModels: [LlmModels.Gemini25Flash, LlmModels.ClaudeSonnet45],
-      });
-
-      const event = {
-        type: 'command.ingest',
-        userId: 'user-event-3',
-        sourceType: 'whatsapp_text',
-        externalId: 'wamid.event3',
-        text: 'Research this with gemini and claude',
-        timestamp: '2025-01-01T12:00:00.000Z',
-      };
-      const messageData = Buffer.from(JSON.stringify(event)).toString('base64');
-
-      fakeUserServiceClient.setApiKeys('user-event-3', { google: 'test-key' });
-
-      await app.inject({
-        method: 'POST',
-        url: '/internal/commands',
-        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
-        payload: { message: { data: messageData, messageId: 'pubsub-event3' } },
-      });
-
-      const publishedEvents = fakeEventPublisher.getPublishedEvents();
-      expect(publishedEvents).toHaveLength(1);
-      expect(publishedEvents[0]?.payload.selectedModels).toEqual([
-        LlmModels.Gemini25Flash,
-        LlmModels.ClaudeSonnet45,
-      ]);
-    });
   });
 
   describe('POST /internal/retry-pending', () => {
@@ -1143,7 +1105,6 @@ describe('Commands Agent Routes', () => {
         confidence: 0.95,
         title: 'AI Trends Research',
         reasoning: 'Research query about AI trends',
-        selectedModels: [LlmModels.Gemini25Flash, LlmModels.ClaudeSonnet45],
       });
 
       await app.inject({
@@ -1157,10 +1118,6 @@ describe('Commands Agent Routes', () => {
       expect(publishedEvents[0]?.type).toBe('action.created');
       expect(publishedEvents[0]?.actionType).toBe('research');
       expect(publishedEvents[0]?.payload.prompt).toBe('Research AI trends');
-      expect(publishedEvents[0]?.payload.selectedModels).toEqual([
-        LlmModels.Gemini25Flash,
-        LlmModels.ClaudeSonnet45,
-      ]);
     });
   });
 
