@@ -1,25 +1,7 @@
 ---
 name: document-service
-description: |
-  Generate professional documentation for IntexuraOS services.
-  Produces 5 doc files per service plus updates aggregated site content.
-  Supports interactive mode (asks questions) and autonomous mode (infers from code).
-
-invocation: both
-
-triggers:
-  - '/document-service'
-  - 'document.*service'
-  - 'generate.*documentation'
-  - 'update.*docs.*for'
-
-modes:
-  interactive:
-    description: Asks 3 open questions (Q1, Q5, Q8), infers the rest from code
-    invocation: '/document-service <service-name>'
-  autonomous:
-    description: Infers ALL answers from code analysis and git history
-    invocation: 'Task tool with subagent_type: service-scribe'
+description: Generate professional documentation for IntexuraOS services. Produces 5 doc files per service plus updates aggregated site content. Supports interactive mode (asks questions) and autonomous mode (infers from code). Use when documenting services, generating docs, or updating service documentation.
+argument-hint: '[service-name]'
 ---
 
 # Document Service

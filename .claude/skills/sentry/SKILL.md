@@ -1,24 +1,7 @@
 ---
 name: sentry
-description: |
-  Sentry issue triage and investigation with automatic cross-linking.
-  Handles issue investigation, AI analysis via Seer, and integration
-  with Linear for tracking fixes.
-
-invocation: both
-
-triggers:
-  - '/sentry'
-  - 'sentry.*issue'
-  - 'sentry.*error'
-  - "https?://.*sentry\\.io"
-  - 'triage.*sentry'
-
-config:
-  organization: 'intexuraos-dev-pbuchman'
-  projects:
-    - 'intexuraos-development'
-    - 'intexuraos-web-development'
+description: Sentry issue triage and investigation with automatic cross-linking. Handles issue investigation, AI analysis via Seer, and integration with Linear for tracking fixes. Use when triaging Sentry errors, investigating sentry.io URLs, or creating Linear issues from Sentry.
+argument-hint: '[sentry-url | analyze <url> | linear <url> | triage --limit N]'
 ---
 
 # Sentry Issue Management

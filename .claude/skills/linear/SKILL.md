@@ -1,23 +1,7 @@
 ---
 name: linear
-description: |
-  Linear issue management with automatic workflow orchestration.
-  Handles issue creation, state transitions, and automatic splitting
-  of large plans into tiered child issues.
-
-invocation: both
-
-triggers:
-  - '/linear'
-  - "INT-\\d+"
-  - 'create.*issue'
-  - 'track.*task'
-  - 'linear.*issue'
-
-config:
-  team: 'IntexuraOS'
-  project_key: 'INT'
-  base_branch: 'development'
+description: Linear issue management with automatic workflow orchestration. Handles issue creation, state transitions, and automatic splitting of large plans into tiered child issues. Use when creating issues, tracking tasks, working on INT-XXX issues, or managing Linear workflow.
+argument-hint: '[INT-XXX | task description | sentry-url]'
 ---
 
 # Linear Issue Management
