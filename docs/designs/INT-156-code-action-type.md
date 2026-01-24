@@ -1937,14 +1937,17 @@ View details: {link to /code-tasks/{taskId}}
 ```typescript
 interface CodeTask {
   id: string;
+  traceId: string;           // Correlation ID across services
   actionId?: string;
   approvalEventId?: string;  // Unique ID per approval event (prevents approval replays)
-  retriedFrom?: string; // Original taskId if this is a retry
+  retriedFrom?: string;      // Original taskId if this is a retry
   userId: string;
   workerType: 'opus' | 'auto' | 'glm';
   workerLocation: 'mac' | 'vm';
   status: 'dispatched' | 'running' | 'completed' | 'failed' | 'interrupted' | 'cancelled';
   prompt: string;
+  sanitizedPrompt: string;   // Prompt after sanitization (for audit)
+  systemPromptHash: string;  // SHA256 of full system prompt (for audit/debugging)
   repository: string;
   baseBranch: string;
   linearIssueId?: string;
@@ -1956,7 +1959,7 @@ interface CodeTask {
   dispatchedAt?: Timestamp;
   completedAt?: Timestamp;
   callbackReceived: boolean;
-  logChunksDropped?: number;  // Count of log chunks that failed to upload (indicates gaps)
+  logChunksDropped?: number; // Count of log chunks that failed to upload (indicates gaps)
 }
 ```
 
@@ -1971,6 +1974,44 @@ interface LogChunk {
   size: number;
 }
 ```
+
+**Log retention policy:**
+
+| Data | Retention | Cleanup Method |
+|------|-----------|----------------|
+| Log chunks (subcollection) | 90 days | Scheduled Cloud Function |
+| Task record (parent doc) | Indefinite | Manual cleanup only |
+| Local log files (worker) | 7 days | Cron job on worker |
+
+**Cleanup implementation:**
+
+```typescript
+// Cloud Function: runs daily
+async function cleanupOldLogs(): Promise<void> {
+  const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
+
+  const oldTasks = await firestore
+    .collection('code_tasks')
+    .where('completedAt', '<', ninetyDaysAgo)
+    .select()  // Only get IDs
+    .get();
+
+  for (const task of oldTasks.docs) {
+    const logs = await task.ref.collection('logs').get();
+    const batch = firestore.batch();
+    logs.docs.forEach(log => batch.delete(log.ref));
+    await batch.commit();
+
+    // Keep summary in parent doc
+    await task.ref.update({
+      logsArchived: true,
+      logsSummary: 'Logs archived after 90 days',
+    });
+  }
+}
+```
+
+**Post-archival UX:** Task details show "Logs archived (task completed >90 days ago)" instead of log viewer.
 
 ### Firestore Security Rules
 
