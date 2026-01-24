@@ -143,7 +143,7 @@ describe('ActionsAgentClient', () => {
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
-        expect(result.error.message).toBe('Network error');
+        expect(result.error.message).toBe('Failed to create action: Network error');
       }
     });
 
@@ -154,7 +154,7 @@ describe('ActionsAgentClient', () => {
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
-        expect(result.error.message).toContain('String error');
+        expect(result.error.message).toBe('Failed to create action: Unknown error');
       }
     });
 
