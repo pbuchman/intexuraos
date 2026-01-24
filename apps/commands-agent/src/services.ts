@@ -14,7 +14,7 @@ import {
   type RetryPendingCommandsUseCase,
 } from './domain/usecases/retryPendingCommands.js';
 import { createFirestoreCommandRepository } from './infra/firestore/commandRepository.js';
-import { createGeminiClassifier } from './infra/gemini/classifier.js';
+import { createGeminiClassifier } from './infra/llm/classifier.js';
 import { createActionEventPublisher } from './infra/pubsub/index.js';
 import { createUserServiceClient, type UserServiceClient } from './infra/user/index.js';
 import { createActionsAgentClient, type ActionsAgentClient } from './infra/actionsAgent/client.js';
