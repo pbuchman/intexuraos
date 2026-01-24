@@ -1,33 +1,40 @@
 # Calendar Agent
 
-Google Calendar integration - create, read, update, and delete events, plus check availability across calendars.
+Google Calendar integration with intelligent event preview and natural language scheduling.
 
 ## The Problem
 
 Users need calendar management without leaving IntexuraOS:
 
-1. **Event creation** - Schedule meetings and appointments
-2. **Availability checking** - Find free slots for scheduling
-3. **Calendar sync** - Access Google Calendar data
-4. **Multi-calendar support** - Work with multiple calendars
+1. **Event creation** - Schedule meetings and appointments from natural language
+2. **Preview before commit** - See what will be created before approving
+3. **Availability checking** - Find free slots for scheduling
+4. **Multi-calendar support** - Work with primary and secondary calendars
 
 ## How It Helps
 
-Calendar-agent provides full Google Calendar API access:
+### Natural Language Event Creation
 
-1. **CRUD operations** - Create, read, update, delete events
-2. **Free/busy queries** - Check availability across calendars
-3. **Search** - Full-text search across events
-4. **Attendee management** - Add attendees with response tracking
-5. **Multi-calendar** - Support for primary and secondary calendars
-6. **All-day events** - Support for both timed and all-day events
+Transform casual messages into calendar events with AI extraction.
 
-## Key Features
+**Example:** User says "Dentist appointment next Tuesday at 2pm for 1 hour" via WhatsApp. The system extracts event details, generates a preview, and waits for approval before creating the Google Calendar event.
 
-**Event Types:**
+### Event Preview Generation
 
-- Timed events (with dateTime and timeZone)
-- All-day events (with date only)
+See exactly what will be created before committing. The preview includes:
+
+- Event summary (title)
+- Start and end times
+- Duration calculation (e.g., "1 hour 30 minutes")
+- All-day event detection
+- Location and description
+- LLM reasoning for transparency
+
+**Example:** Before creating "Team standup tomorrow 10am", you see: Summary: "Team standup", Start: "2026-01-25T10:00:00", Duration: "30 minutes", reasoning explaining how it interpreted "tomorrow".
+
+### Full CRUD Operations
+
+Complete control over calendar events with standard REST operations.
 
 **Operations:**
 
@@ -36,32 +43,35 @@ Calendar-agent provides full Google Calendar API access:
 - `createEvent` - Create new event
 - `updateEvent` - Patch existing event
 - `deleteEvent` - Remove event
-- `getFreeBusy` - Check availability
+- `getFreeBusy` - Check availability across calendars
 
-**Search & Filter:**
+### Failed Event Recovery
 
-- Time range (timeMin, timeMax)
-- Full-text search (q parameter)
-- Max results pagination
-- Order by start time or updated time
+When extraction fails (ambiguous dates, missing info), events are saved for manual review rather than lost.
+
+**Example:** "Meeting sometime next week" is too vague for automatic creation. The failed event is stored with the LLM's reasoning, allowing you to manually complete the details later.
 
 ## Use Cases
 
-### Schedule meeting flow
+### Voice-to-Calendar Flow (v2.0.0)
 
-1. User says "Schedule team standup tomorrow at 10am"
-2. commands-agent classifies as `calendar`
-3. calendar-agent creates event via createEvent
-4. Attendees receive Google Calendar invitations
+1. User sends "Schedule dentist Tuesday 3pm" via WhatsApp
+2. commands-agent classifies as `calendar` action
+3. actions-agent creates action and publishes to `calendar-preview` topic
+4. calendar-agent generates preview asynchronously (pending -> ready)
+5. UI polls preview status and displays when ready
+6. User approves preview
+7. calendar-agent creates Google Calendar event using preview data (skips LLM)
+8. Preview is cleaned up after successful creation
 
-### Check availability flow
+### Check Availability Flow
 
 1. User asks "When is everyone free next week?"
 2. Frontend calls getFreeBusy with team calendars
 3. Returns busy slots for each calendar
 4. UI shows available time windows
 
-### List upcoming events flow
+### List Upcoming Events Flow
 
 1. Dashboard loads user's calendar
 2. Calls listEvents with timeMin=now
@@ -69,17 +79,17 @@ Calendar-agent provides full Google Calendar API access:
 
 ## Key Benefits
 
-**Native Google Calendar** - Works directly with user's existing calendar
+**Preview before commit** - See exactly what will be created with duration and all-day detection
 
-**Attendee tracking** - Response status (accepted, declined, tentative, needsAction)
+**Natural language** - No need for structured input, AI extracts event details
+
+**Failed event recovery** - Vague requests aren't lost, saved for manual completion
+
+**Native Google Calendar** - Works directly with user's existing calendar
 
 **Multi-calendar** - Access to primary, secondary, and shared calendars
 
-**Search** - Full-text search across event titles and descriptions
-
-**All-day support** - Proper handling of date-only events
-
-**OAuth integration** - Uses user-service for token management
+**Non-blocking cleanup** - Preview deletion doesn't block event creation response
 
 ## Limitations
 
@@ -89,10 +99,14 @@ Calendar-agent provides full Google Calendar API access:
 
 **Rate limits** - Subject to Google Calendar API quotas
 
-**No reminders** - Reminder management not exposed
-
 **No recurring events** - Recurring event expansion not supported
+
+**No reminders** - Reminder management not exposed
 
 **No colors** - Event color customization not available
 
 **No attachments** - File attachments not supported
+
+---
+
+_Part of [IntexuraOS](../overview.md) - Schedule events with natural language._

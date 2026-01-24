@@ -2,7 +2,7 @@
 
 ## Overview
 
-User-service provides authentication, user settings management, and secure API key storage for IntexuraOS. It integrates with Auth0 for identity management and uses AES-256-GCM encryption for sensitive data.
+User-service provides authentication, user settings management, LLM API key storage with encryption, and OAuth token management. It integrates with Auth0 for identity management and uses AES-256-GCM encryption for all sensitive data.
 
 ## Architecture
 
@@ -17,11 +17,20 @@ graph TB
         US --> FB[Firebase Admin SDK]
     end
 
+    subgraph "LLM Key Management"
+        WebUI[Web UI] -->|API Key| US
+        US -->|Validate| LLM[LLM Providers]
+        US -->|Encrypt| KMS[AES-256-GCM]
+        KMS -->|Store| FS
+    end
+
     subgraph "Service-to-Service"
         RA[Research Agent] -->|Internal Auth| US
         IA[Image Service] -->|Internal Auth| US
+        CA[Calendar Agent] -->|Internal Auth| US
         US -->|Decrypted Keys| RA
         US -->|Decrypted Keys| IA
+        US -->|OAuth Token| CA
     end
 
     subgraph "OAuth Flow"
@@ -37,27 +46,41 @@ graph TB
 sequenceDiagram
     participant User
     participant Web
-    participant Auth0
     participant UserSvc
+    participant LLMProvider
     participant Firestore
 
-    Note over User,Firestore: Device Code Flow
-    User->>Web: Login command
-    Web->>UserSvc: POST /auth/device/start
-    UserSvc->>Auth0: Request device code
-    Auth0-->>UserSvc: device_code, verification_uri
-    UserSvc-->>Web: Display code and URL
-    User->>Auth0: Visit URL, enter code
-    Web->>UserSvc: POST /auth/device/poll
-    UserSvc->>Auth0: Poll for token
-    Auth0-->>UserSvc: access_token, refresh_token
-    UserSvc->>Firestore: Store auth_tokens
-
-    Note over User,Firestore: API Key Storage
+    Note over User,Firestore: LLM API Key Storage Flow
     User->>Web: Add API key
-    Web->>UserSvc: PATCH /users/:uid/settings
-    UserSvc->>UserSvc: Encrypt with AES-256-GCM
-    UserSvc->>Firestore: Store encrypted key
+    Web->>UserSvc: PATCH /users/:uid/settings/llm-keys
+    UserSvc->>LLMProvider: Validate key (cheap model call)
+    alt Key invalid
+        LLMProvider-->>UserSvc: Error response
+        UserSvc->>UserSvc: formatLlmError(rawError)
+        UserSvc-->>Web: 400 + formatted message
+    else Key valid
+        LLMProvider-->>UserSvc: Success
+        UserSvc->>UserSvc: Encrypt with AES-256-GCM
+        UserSvc->>Firestore: Store encrypted key
+        UserSvc-->>Web: 200 + masked preview
+    end
+
+    Note over User,Firestore: LLM Key Test Flow
+    User->>Web: Test API key
+    Web->>UserSvc: POST /users/:uid/settings/llm-keys/:provider/test
+    UserSvc->>Firestore: Get encrypted key
+    UserSvc->>UserSvc: Decrypt key
+    UserSvc->>LLMProvider: Test request
+    alt Test fails
+        LLMProvider-->>UserSvc: Error
+        UserSvc->>UserSvc: formatLlmError(rawError)
+        UserSvc->>Firestore: Store test result (failure)
+        UserSvc-->>Web: 200 + failure status + message
+    else Test succeeds
+        LLMProvider-->>UserSvc: LLM response
+        UserSvc->>Firestore: Store test result (success)
+        UserSvc-->>Web: 200 + success status + LLM response
+    end
 ```
 
 ## API Endpoints
@@ -79,15 +102,22 @@ sequenceDiagram
 
 ### User Settings Endpoints
 
-| Method | Path                                     | Description               | Auth         |
-| ------ | ---------------------------------------- | ------------------------- | ------------ |
-| GET    | `/users/:uid/settings`                   | Get user settings         | Bearer token |
-| PATCH  | `/users/:uid/settings`                   | Update user settings      | Bearer token |
-| PATCH  | `/users/:uid/llm-keys`                   | Update LLM API keys       | Bearer token |
-| DELETE | `/users/:uid/llm-keys/:provider`         | Delete LLM API key        | Bearer token |
-| GET    | `/users/:uid/llm-keys/test`              | Test LLM API key          | Bearer token |
-| GET    | `/users/:uid/oauth-connections`          | List OAuth connections    | Bearer token |
-| POST   | `/users/:uid/oauth/:provider/disconnect` | Disconnect OAuth provider | Bearer token |
+| Method | Path                                           | Description               | Auth         |
+| ------ | ---------------------------------------------- | ------------------------- | ------------ |
+| GET    | `/users/:uid/settings`                         | Get user settings         | Bearer token |
+| GET    | `/users/:uid/settings/llm-keys`                | Get LLM API keys (masked) | Bearer token |
+| PATCH  | `/users/:uid/settings/llm-keys`                | Set/update LLM API key    | Bearer token |
+| POST   | `/users/:uid/settings/llm-keys/:provider/test` | Test LLM API key          | Bearer token |
+| DELETE | `/users/:uid/settings/llm-keys/:provider`      | Delete LLM API key        | Bearer token |
+
+### OAuth Connection Endpoints
+
+| Method | Path                                 | Description               | Auth         |
+| ------ | ------------------------------------ | ------------------------- | ------------ |
+| POST   | `/oauth/connections/google/initiate` | Start Google OAuth flow   | Bearer token |
+| GET    | `/oauth/connections/google/callback` | Handle OAuth callback     | None         |
+| GET    | `/oauth/connections/google/status`   | Get connection status     | Bearer token |
+| DELETE | `/oauth/connections/google`          | Disconnect Google account | Bearer token |
 
 ### Internal Endpoints
 
@@ -96,61 +126,121 @@ sequenceDiagram
 | GET    | `/internal/users/:uid/llm-keys`                     | Get decrypted LLM API keys   | Internal header |
 | POST   | `/internal/users/:uid/llm-keys/:provider/last-used` | Update last used timestamp   | Internal header |
 | GET    | `/internal/users/:uid/oauth/google/token`           | Get valid Google OAuth token | Internal header |
+| GET    | `/internal/users/:uid/settings`                     | Get user LLM preferences     | Internal header |
 
 ## Domain Models
 
-### AuthToken
-
-| Field          | Type   | Description                |
-| -------------- | ------ | -------------------------- |
-| `userId`       | string | User identifier            |
-| `accessToken`  | string | Auth0 access token         |
-| `refreshToken` | string | Auth0 refresh token        |
-| `idToken`      | string | Auth0 ID token             |
-| `expiresAt`    | string | Token expiration timestamp |
-| `scope`        | string | Granted scopes             |
-| `createdAt`    | string | Creation timestamp         |
-
 ### UserSettings
 
-| Field            | Type                              | Description                   |
-| ---------------- | --------------------------------- | ----------------------------- |
-| `userId`         | string                            | User identifier               |
-| `llmApiKeys`     | Record\<LlmProvider, string\>     | AES-256 encrypted API keys    |
-| `llmTestResults` | Record\<LlmProvider, TestResult\> | Last test result per provider |
-| `createdAt`      | string                            | Creation timestamp            |
-| `updatedAt`      | string                            | Last update timestamp         |
+| Field            | Type                 | Description                   |
+| ---------------- | -------------------- | ----------------------------- |
+| `userId`         | string               | User identifier               |
+| `llmApiKeys`     | LlmApiKeys           | AES-256 encrypted API keys    |
+| `llmTestResults` | LlmTestResults       | Last test result per provider |
+| `llmPreferences` | LlmPreferences       | User's default model settings |
+| `notifications`  | NotificationSettings | Notification filter rules     |
+| `createdAt`      | string               | Creation timestamp            |
+| `updatedAt`      | string               | Last update timestamp         |
 
-### TestResult
+### LlmApiKeys
 
-| Field | Type | Description |
-| -------------- | ---------- | ------------------------ | | |
-| `status` | 'valid' \ | 'invalid' \ | 'pending' \ | 'error' |
-| `testedAt` | string | ISO 8601 timestamp |
-| `errorMessage` | string | Error details if invalid |
+| Field        | Type           | Description                    |
+| ------------ | -------------- | ------------------------------ |
+| `google`     | EncryptedValue | Gemini API key (encrypted)     |
+| `openai`     | EncryptedValue | OpenAI API key (encrypted)     |
+| `anthropic`  | EncryptedValue | Anthropic API key (encrypted)  |
+| `perplexity` | EncryptedValue | Perplexity API key (encrypted) |
+| `zai`        | EncryptedValue | Zai GLM API key (encrypted)    |
+
+### LlmTestResult
+
+| Field      | Type                   | Description           |
+| ---------- | ---------------------- | --------------------- |
+| `status`   | 'success' \| 'failure' | Test outcome          |
+| `message`  | string                 | LLM response or error |
+| `testedAt` | string                 | ISO 8601 timestamp    |
 
 ### OAuthConnection
 
-| Field          | Type        | Description                |
-| -------------- | ----------- | -------------------------- |
-| `id`           | string      | Connection ID              |
-| `userId`       | string      | User identifier            |
-| `provider`     | 'google' \  | 'microsoft'                |
-| `accessToken`  | string      | Encrypted access token     |
-| `refreshToken` | string      | Encrypted refresh token    |
-| `expiresAt`    | string      | Access token expiry        |
-| `email`        | string      | User's email from provider |
-| `scope`        | string[]    | Granted scopes             |
-| `connectedAt`  | string      | Connection timestamp       |
+| Field       | Type        | Description                |
+| ----------- | ----------- | -------------------------- |
+| `userId`    | string      | User identifier            |
+| `provider`  | 'google'    | OAuth provider             |
+| `email`     | string      | User's email from provider |
+| `tokens`    | OAuthTokens | Encrypted tokens           |
+| `createdAt` | string      | Connection timestamp       |
+| `updatedAt` | string      | Last refresh timestamp     |
 
-## LLM Providers
+### OAuthTokens
 
-| Provider     | Key Name                    |
-| ------------ | --------------------------- |
-| `google`     | Google AI API key (Gemini)  |
-| `openai`     | OpenAI API key (GPT models) |
-| `anthropic`  | Anthropic API key (Claude)  |
-| `perplexity` | Perplexity API key          |
+| Field          | Type   | Description             |
+| -------------- | ------ | ----------------------- |
+| `accessToken`  | string | Encrypted access token  |
+| `refreshToken` | string | Encrypted refresh token |
+| `expiresAt`    | string | Access token expiry     |
+| `scope`        | string | Granted scopes          |
+
+## LLM Error Formatting (v2.0.0)
+
+The `formatLlmError()` function parses provider-specific error responses and returns user-friendly messages. Error detection follows a specific precedence order.
+
+### Error Parsing Order
+
+```
+1. Gemini (Google) JSON format
+2. OpenAI error patterns
+3. Anthropic JSON format
+4. Generic fallback (with rate limit precedence)
+```
+
+### Rate Limit Precedence (INT-199 Fix)
+
+The generic error parser checks for rate limits BEFORE API key errors. This prevents 429 responses from being misdiagnosed as invalid keys:
+
+```typescript
+// parseGenericError() checks in this order:
+1. Rate limit patterns (429, rate_limit, quota exceeded, too many requests)
+   -> "Rate limit exceeded. Please try again later."
+2. API key patterns (api_key, invalid key)
+   -> "The API key for this provider is invalid or expired"
+3. Timeout, network, connection
+4. Truncate long messages
+```
+
+### Provider-Specific Parsing
+
+**Gemini (Google):**
+
+- `API_KEY_INVALID` -> "The API key is invalid or has expired"
+- `API_KEY_NOT_FOUND` -> "The API key does not exist"
+- `PERMISSION_DENIED` -> "The API key lacks required permissions"
+- `RESOURCE_EXHAUSTED` -> "Quota: X tokens/min"
+
+**OpenAI:**
+
+- Rate limit with details -> "tokens: 85000/90000 used, need 10000 more"
+- Quota exceeded -> "OpenAI API quota exceeded. Check billing."
+- Context length -> "The request exceeds the model's context limit"
+
+**Anthropic:**
+
+- Credit balance error -> "Insufficient Anthropic API credits. Please add funds at console.anthropic.com"
+- Rate limit -> "Anthropic API rate limit reached"
+- Overloaded -> "Anthropic API is temporarily overloaded"
+
+## LLM Key Validation
+
+Keys are validated before storage using cheap, fast models:
+
+| Provider   | Validation Model |
+| ---------- | ---------------- |
+| Google     | gemini-2.0-flash |
+| OpenAI     | gpt-4o-mini      |
+| Anthropic  | claude-3.5-haiku |
+| Perplexity | sonar            |
+| Zai        | glm-4.7          |
+
+Validation prompt: `Say "API key validated" in exactly 3 words.`
 
 ## Pub/Sub Events
 
@@ -164,6 +254,15 @@ None - user-service does not publish or subscribe to Pub/Sub events.
 | ------------ | ----------------------------------- |
 | Auth0        | Identity management, authentication |
 | Google OAuth | OAuth token management              |
+| LLM APIs     | Key validation (5 providers)        |
+
+### Internal Services
+
+| Service        | Communication Direction         |
+| -------------- | ------------------------------- |
+| research-agent | <- provides decrypted LLM keys  |
+| image-service  | <- provides decrypted LLM keys  |
+| calendar-agent | <- provides Google OAuth tokens |
 
 ### Infrastructure
 
@@ -189,6 +288,7 @@ None - user-service does not publish or subscribe to Pub/Sub events.
 | `INTEXURAOS_FIREBASE_PROJECT_ID`        | Yes      | Firebase project ID                   |
 | `INTEXURAOS_FIREBASE_CLIENT_EMAIL`      | Yes      | Firebase service account email        |
 | `INTEXURAOS_FIREBASE_PRIVATE_KEY`       | Yes      | Firebase service account private key  |
+| `INTEXURAOS_WEB_APP_URL`                | No       | Web app URL for OAuth redirects       |
 
 ## Gotchas
 
@@ -202,13 +302,13 @@ None - user-service does not publish or subscribe to Pub/Sub events.
 
 **OAuth token refresh**: If refresh fails (token revoked), the connection is marked invalid but not deleted. User must re-authenticate.
 
-**API key masking**: In logs and error messages, API keys are masked showing only first 8 and last 4 characters.
+**API key masking**: In logs and API responses, keys are masked showing only first 4 and last 4 characters.
 
-**Firebase token exchange**: Auth0 tokens are exchanged for Firebase tokens via custom minting, not Firebase Authentication.
+**LLM key testing costs money**: The `/test` endpoint validates keys by making actual API calls to the provider.
 
-**LLM key testing**: The `/test` endpoint validates keys by making actual API calls to the provider, which costs money.
+**Rate limit vs API key errors**: Error parser checks rate limits before API key patterns to avoid misdiagnosis (v2.0.0 fix).
 
-**Provider naming**: The internal provider names (`google`, `openai`, `anthropic`, `perplexity`) differ from some display names.
+**Provider naming**: Internal provider names (`google`, `openai`, `anthropic`, `perplexity`, `zai`) differ from display names.
 
 ## File Structure
 
@@ -217,61 +317,58 @@ apps/user-service/src/
   domain/
     identity/
       models/
-        AuthToken.ts
-        AuthError.ts
+        AuthToken.ts           # Auth token types
       ports/
-        Auth0Client.ts
-        AuthTokenRepository.ts
+        Auth0Client.ts         # Auth0 interface
+        AuthTokenRepository.ts # Token storage interface
       usecases/
-        refreshAccessToken.ts
+        refreshAccessToken.ts  # Token refresh logic
     settings/
       models/
-        UserSettings.ts
-        SettingsError.ts
+        UserSettings.ts        # Settings aggregate
       ports/
-        UserSettingsRepository.ts
-        LlmValidator.ts
+        UserSettingsRepository.ts # Settings storage
+        Encryptor.ts           # Encryption interface
+        LlmValidator.ts        # Key validation interface
       usecases/
-        getUserSettings.ts
-      utils/
-        maskApiKey.ts
-        formatLlmError.ts
+        getUserSettings.ts     # Get settings use case
+      formatLlmError.ts        # Error message formatting
+      maskApiKey.ts            # Key masking utility
     oauth/
       models/
-        OAuthConnection.ts
-        OAuthError.ts
+        OAuthConnection.ts     # OAuth connection types
       ports/
-        GoogleOAuthClient.ts
+        GoogleOAuthClient.ts   # Google OAuth interface
         OAuthConnectionRepository.ts
       usecases/
-        initiateOAuthFlow.ts
-        exchangeOAuthCode.ts
-        getValidAccessToken.ts
-        disconnectProvider.ts
+        initiateOAuthFlow.ts   # Start OAuth
+        exchangeOAuthCode.ts   # Exchange code for tokens
+        getValidAccessToken.ts # Get/refresh access token
+        disconnectProvider.ts  # Revoke OAuth connection
   infra/
     auth0/
-      client.ts
-    encryption.ts
+      client.ts                # Auth0 SDK wrapper
+    encryption.ts              # AES-256-GCM implementation
     firebase/
-      admin.ts
+      admin.ts                 # Firebase Admin SDK
     firestore/
-      authTokenRepository.ts
-      userSettingsRepository.ts
+      authTokenRepository.ts   # Token storage
+      userSettingsRepository.ts # Settings storage
       oauthConnectionRepository.ts
     google/
-      googleOAuthClient.ts
+      googleOAuthClient.ts     # Google OAuth client
     llm/
-      LlmValidatorImpl.ts
+      LlmValidatorImpl.ts      # Key validation (5 providers)
   routes/
-    deviceRoutes.ts         # Device code flow
-    tokenRoutes.ts          # Token refresh
-    firebaseRoutes.ts       # Firebase token exchange
-    oauthRoutes.ts          # OAuth endpoints
-    configRoutes.ts         # Auth0 config
-    settingsRoutes.ts       # User settings
-    llmKeysRoutes.ts        # LLM key management
-    oauthConnectionRoutes.ts
-    frontendRoutes.ts       # Login/logout pages
-    internalRoutes.ts       # Service-to-service
-  services.ts               # DI container
+    deviceRoutes.ts            # Device code flow
+    tokenRoutes.ts             # Token refresh
+    firebaseRoutes.ts          # Firebase token exchange
+    oauthRoutes.ts             # OAuth endpoints
+    oauthConnectionRoutes.ts   # OAuth connection management
+    configRoutes.ts            # Auth0 config
+    settingsRoutes.ts          # User settings CRUD
+    llmKeysRoutes.ts           # LLM key management
+    frontendRoutes.ts          # Login/logout pages
+    internalRoutes.ts          # Service-to-service
+  services.ts                  # DI container
 ```

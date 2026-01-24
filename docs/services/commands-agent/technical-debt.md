@@ -11,35 +11,67 @@
 
 ## Future Plans
 
-Based on code analysis:
+Based on code analysis and git history:
 
-1. **Calendar and reminder handlers** - CommandType includes `calendar` and `reminder` but corresponding handlers in actions-agent are not yet implemented
-2. **Model selection expansion** - MODEL_KEYWORDS mapping could be extended to support more LLM providers
-3. **Multi-language classification** - Classifier prompt currently optimized for English
+1. **Reminder handler implementation** - CommandType includes `reminder` but actions-agent handler not yet implemented
+2. **Additional language support** - Currently English and Polish; German and Spanish phrases could be added
+3. **Confidence threshold tuning** - Low confidence commands default to `note`; could offer user confirmation flow
 
 ## Code Smells
 
-### 1. Parse function extracts JSON with regex
+### 1. JSON extraction uses regex
 
-**File:** `apps/commands-agent/src/infra/gemini/classifier.ts`
+**File:** `apps/commands-agent/src/infra/llm/classifier.ts`
 
-**Issue:** `parseClassifyResponse()` uses regex `/\{[\s\S]*}/` to extract JSON from LLM response. If LLM returns text before/after JSON block, extraction may fail.
+**Issue:** `parseClassifyResponse()` uses regex `/\{[\s\S]*}/` to extract JSON from LLM response. If LLM returns multiple JSON objects or malformed text, extraction may fail unpredictably.
 
-**Impact:** Low - Gemini reliably returns JSON-only responses.
+**Impact:** Low - LLMs reliably return single JSON block; fallback to `note` handles edge cases gracefully.
 
-**Recommendation:** Use markdown code fence parser for more robustness.
+**Recommendation:** Use structured output mode when available (Gemini function calling, OpenAI JSON mode).
 
-### 2. Magic number for title truncation
+### 2. Magic numbers for truncation limits
 
-**File:** `apps/commands-agent/src/infra/gemini/classifier.ts`
+**File:** `apps/commands-agent/src/infra/llm/classifier.ts`
 
-**Issue:** Title sliced to 100 chars, reasoning to 500 chars without constants.
+**Issue:** Title sliced to 100 chars, reasoning to 500 chars without named constants.
 
-**Recommendation:** Extract to named constants.
+**Recommendation:** Extract to constants:
+
+```typescript
+const MAX_TITLE_LENGTH = 100;
+const MAX_REASONING_LENGTH = 500;
+```
+
+## Resolved Issues (v2.0.0)
+
+### URL keyword misclassification
+
+**Resolved in:** INT-177 (v2.0.0)
+
+**Previous issue:** URLs like "https://research-world.com" would trigger `research` classification due to keyword matching.
+
+**Solution:** Added URL keyword isolation guidance to prompt (Step 4) and explicit intent detection (Step 2) that overrides URL-based signals.
+
+### Multilingual support limited to English
+
+**Resolved in:** INT-177 (v2.0.0)
+
+**Previous issue:** Non-English speakers had to use English command phrases.
+
+**Solution:** Added Polish command phrases to Step 1 (explicit prefix) and Step 2 (explicit intent) of classification prompt.
 
 ## Test Coverage
 
-No test coverage gaps identified. All core paths tested.
+No test coverage gaps identified. Core paths tested:
+
+- Classification for all command types
+- URL keyword isolation
+- Explicit intent detection
+- Polish language support
+- PWA-shared confidence boost
+- Error handling (invalid JSON, API errors, timeouts)
+- Confidence clamping
+- Title/reasoning truncation
 
 ## TypeScript Issues
 
@@ -55,6 +87,16 @@ No TODO, FIXME, HACK, or XXX comments found in codebase.
 
 No deprecated API usage detected.
 
-## Resolved Issues
+## Integration Considerations
 
-None - this is initial documentation run.
+### actions-agent dependency
+
+Commands-agent creates actions via HTTP to actions-agent. If actions-agent is unavailable, commands fail with `failed` status. Consider circuit breaker pattern for resilience.
+
+### Prompt versioning
+
+Classification prompt lives in `packages/llm-prompts`. Changes require package rebuild and service redeploy. Consider runtime prompt loading for faster iteration.
+
+---
+
+**Last updated:** 2026-01-24

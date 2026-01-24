@@ -1,95 +1,97 @@
 # Commands Agent
 
-Intelligent command classification system - understand user intent and route to the appropriate action handler.
+Intelligent command classification that understands user intent across languages and contexts.
 
 ## The Problem
 
-Users send natural language requests through multiple channels:
+When users send messages through WhatsApp, voice notes, or web sharing, the system must determine what they want to do. This classification challenge has several dimensions:
 
-1. **Ambiguous intent** - "Remember this" could be a note, todo, or bookmark
-2. **Multiple channels** - WhatsApp, voice transcriptions, web app sharing
-3. **Manual routing** - Users must select the correct action type
-4. **No deduplication** - Same request processed multiple times
+1. **Ambiguous phrasing** - "Remember this" could be a note, todo, or bookmark
+2. **URL-embedded keywords** - "https://research-tools.com" contains "research" but the user is sharing a link
+3. **Conflicting signals** - "Create todo to research competitors" contains both "todo" and "research"
+4. **Multiple languages** - Polish users say "zapisz link" (save link) not "save link"
+5. **Multiple channels** - WhatsApp text, voice transcriptions, and PWA share each need handling
 
 ## How It Helps
 
-Commands-agent is the intelligent entry point for all user commands:
+### Structured Classification Pipeline (v2.0.0)
 
-1. **AI classification** - Uses Gemini 2.5 Flash to categorize commands into 6 action types
-2. **Idempotency** - Deduplicates based on sourceType + externalId (e.g., WhatsApp message ID)
-3. **Model selection** - Detects LLM preferences from command text ("use Claude", "all models")
-4. **Graceful degradation** - Marks as pending_classification when API keys unavailable
-5. **Scheduled retries** - Cloud Scheduler processes pending commands
+Processes commands through a 5-step decision tree that eliminates ambiguity.
 
-## Key Features
+**Step 1:** Explicit prefix override - User says "linear: buy groceries" - respect the prefix
 
-**Classification Types:**
+**Step 2:** Explicit intent detection - "save bookmark https://research-world.com" - the phrase "save bookmark" overrides the "research" keyword in the URL
 
-- `todo` - Task management
-- `research` - Multi-LLM research queries
-- `note` - Note-taking
-- `link` - Bookmark/URL saving
-- `calendar` - Calendar events
-- `linear` - Linear issue creation
-- `reminder` - Reminders (future)
-- `unclassified` - No actionable intent detected
+**Step 3:** Linear detection - Engineering terms like "bug", "issue", "PR" trigger Linear classification
 
-**Source Types:**
+**Step 4:** URL presence check - Any URL strongly suggests link classification
 
-- `whatsapp_text` - Text messages from WhatsApp
-- `whatsapp_voice` - Transcribed voice messages
-- `pwa-shared` - Web app share sheet
+**Step 5:** Category signals - Traditional keyword matching (calendar, reminder, research, note, todo)
 
-**Idempotency:** Commands identified by `{sourceType}:{externalId}`. Duplicate ingestion returns existing command.
+**Example:** "save bookmark https://research-world.com" correctly classifies as `link` because Step 2 (explicit "save bookmark") executes before Step 4 (URL presence), and both override the misleading "research" keyword.
 
-**Model Detection:** Extracts user preferences like "use Claude" or "all models" for research queries.
+### URL Keyword Isolation
 
-## Use Cases
+Keywords embedded in URLs no longer trigger incorrect classifications.
 
-### WhatsApp message flow
+**Example:** "https://todo-app.io/notes" classifies as `link`, not `todo` or `note`. The URL is treated as an opaque token - only keywords outside URLs affect classification.
 
-1. User sends "Research AI safety trends" to WhatsApp
-2. whatsapp-service publishes `command.ingest` event
-3. commands-agent receives via Pub/Sub push
-4. Gemini classifies as `research` with 0.92 confidence
-5. Creates action via actions-agent
-6. Publishes `action.created` event
-7. research-agent processes the research query
+### Multi-Language Support
 
-### Web app sharing flow
+Native Polish command phrases receive equal treatment to English.
 
-1. User shares URL/text via PWA share sheet
-2. Frontend POSTs to `/commands` with source=`pwa-shared`
-3. Classified synchronously
-4. Returns command with actionId
+| English            | Polish                | Category |
+| ------------------ | --------------------- | -------- |
+| "save bookmark"    | "zapisz zakladke"     | link     |
+| "create todo"      | "stwórz zadanie"      | todo     |
+| "perform research" | "zbadaj"              | research |
+| "create note"      | "stwórz notatke"      | note     |
+| "set reminder"     | "przypomnij mi"       | reminder |
+| "add to calendar"  | "dodaj do kalendarza" | calendar |
 
-### Pending classification retry
+### Idempotent Processing
 
-1. User sends command before configuring API keys
-2. Command marked `pending_classification`
-3. Cloud Scheduler calls `/internal/retry-pending` every 5 minutes
-4. Pending commands reprocessed with available keys
+Commands identified by `{sourceType}:{externalId}` prevent duplicate processing. The same WhatsApp message processed twice returns the existing command.
+
+### Graceful Degradation
+
+When a user's LLM API key is unavailable, commands enter `pending_classification` status. Cloud Scheduler retries every 5 minutes.
+
+## Use Case
+
+You share a link via the PWA share sheet: "Check out this great tool https://research-tracker.io"
+
+**Without v2.0.0:** Might classify as `research` (keyword in URL)
+
+**With v2.0.0:**
+
+1. Step 1: No explicit prefix
+2. Step 2: No explicit command phrase like "save bookmark"
+3. Step 3: Not engineering/Linear context
+4. Step 4: URL present - classify as `link` (0.90+ confidence)
+
+Result: Link saved to bookmarks, not queued for research.
 
 ## Key Benefits
 
-**Intent understanding** - No manual action type selection required
-
-**Channel flexibility** - WhatsApp, voice, web all use same pipeline
-
-**Model preference detection** - "Use Sonar for this" automatically configures research
-
-**Graceful degradation** - Commands queued when API unavailable
-
-**Audit trail** - Every command with classification, confidence, reasoning preserved
+- Accurate classification even when URLs contain misleading keywords
+- Polish speakers use native phrases without translation
+- Explicit commands ("save bookmark", "create todo") always respected
+- Duplicate prevention across WhatsApp message retries
+- No manual action type selection required
 
 ## Limitations
 
-**Gemini dependency** - Classification requires Google API key configured
+**Classification models** - Requires Gemini 2.5 Flash, GLM-4.7, or GLM-4.7-Flash API access
 
-**Reminder handler missing** - Reminder action type not yet implemented in actions-agent
+**Reminder handler** - Classification recognizes `reminder` but actions-agent handler not yet implemented
 
-**English optimization** - Classifier prompt optimized for English commands
+**Language coverage** - Currently English and Polish; other languages use English keyword matching
 
-**Confidence threshold** - Low confidence commands marked unclassified
+**Confidence threshold** - Very ambiguous commands default to `note` with low confidence
 
-**No reclassification** - Failed commands must be retried, not reclassified
+**No reclassification** - Failed commands must be deleted and re-sent, not reclassified
+
+---
+
+_Part of [IntexuraOS](../overview.md) - Intelligent command routing for natural language input._

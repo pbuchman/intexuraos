@@ -1,12 +1,12 @@
 # Research Agent - Tutorial
 
-This tutorial will help you get started with the research-agent service, from creating your first research to sharing results.
+This tutorial will help you get started with the research-agent service, from creating your first research to using advanced features like natural language model selection and context enhancement.
 
 ## Prerequisites
 
 - IntexuraOS development environment running
 - Auth0 access token for API requests
-- At least one LLM provider API key configured (Claude, OpenAI, Google, or Perplexity)
+- At least one LLM provider API key configured (Claude, OpenAI, Google, Perplexity, or Zai)
 
 ## Part 1: Hello World - Create Research
 
@@ -46,7 +46,7 @@ curl -X POST https://research-agent.intexuraos.com/research \
   -H "Content-Type: application/json" \
   -d '{
     "prompt": "What are the latest developments in quantum computing?",
-    "selectedModels": ["gemini-2.5-flash", "gpt-4o-mini"],
+    "selectedModels": ["gemini-2.5-flash", "gpt-5.2"],
     "synthesisModel": "gemini-2.5-flash",
     "skipSynthesis": false
   }'
@@ -62,7 +62,7 @@ curl -X POST https://research-agent.intexuraos.com/research \
     "userId": "user_xyz",
     "title": "",
     "prompt": "What are the latest developments in quantum computing?",
-    "selectedModels": ["gemini-2.5-flash", "gpt-4o-mini"],
+    "selectedModels": ["gemini-2.5-flash", "gpt-5.2"],
     "synthesisModel": "gemini-2.5-flash",
     "status": "processing",
     "llmResults": [
@@ -73,11 +73,11 @@ curl -X POST https://research-agent.intexuraos.com/research \
       },
       {
         "provider": "openai",
-        "model": "gpt-4o-mini",
+        "model": "gpt-5.2",
         "status": "pending"
       }
     ],
-    "startedAt": "2026-01-13T10:00:00Z"
+    "startedAt": "2026-01-24T10:00:00Z"
   }
 }
 ```
@@ -89,19 +89,19 @@ curl -X GET https://research-agent.intexuraos.com/research/research_abc123 \
   -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
 ```
 
-When `status` is `completed`, you'll have:
+When `status` is `completed`, you will have:
 
 ```json
 {
   "success": true,
   "data": {
     "id": "research_abc123",
-    "title": "Quantum Computing Advances in 2024",
+    "title": "Quantum Computing Advances in 2026",
     "status": "completed",
     "synthesizedResult": "# Quantum Computing Advances\n\n## Key Developments\n\n...",
     "shareInfo": {
       "shareUrl": "https://intexuraos.com/r/quantum-advances-abc",
-      "sharedAt": "2026-01-13T10:05:00Z"
+      "sharedAt": "2026-01-24T10:05:00Z"
     },
     "totalCostUsd": 0.0042,
     "totalDurationMs": 15000
@@ -117,7 +117,68 @@ You should have:
 2. Received a synthesized result combining all responses
 3. Gotten a shareable URL with an AI-generated cover image
 
-## Part 2: Add Context to Research
+## Part 2: Natural Language Model Selection (v2.0.0)
+
+The new model extraction feature lets you specify models in natural language.
+
+### Create draft with natural language
+
+When creating research through actions-agent, specify models conversationally:
+
+```bash
+curl -X POST https://actions-agent.intexuraos.com/actions \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "message": "Use Claude and Gemini to research the impact of AI on healthcare"
+  }'
+```
+
+The `extractModelPreferences` use case will:
+
+1. Parse your message for model keywords
+2. Check which API keys you have configured
+3. Select appropriate models (one per provider)
+4. Create a draft with pre-selected models
+
+**Expected draft response:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "id": "research_draft_xyz",
+    "status": "draft",
+    "selectedModels": ["claude-opus-4.5", "gemini-2.5-pro"],
+    "synthesisModel": "gemini-2.5-pro"
+  }
+}
+```
+
+### Model keywords recognized
+
+| Keyword               | Model Selected         |
+| --------------------- | ---------------------- |
+| "claude", "anthropic" | `claude-opus-4.5`      |
+| "gpt", "openai"       | `gpt-5.2`              |
+| "gemini", "google"    | `gemini-2.5-pro`       |
+| "perplexity", "sonar" | `sonar-pro`            |
+| "glm", "zai"          | `glm-4.7`              |
+| "deep research"       | deep research variants |
+| "fast", "flash"       | flash/mini variants    |
+
+### Filtering by API keys
+
+If you mention a model but do not have the API key, it is silently excluded:
+
+```bash
+# User has Google and OpenAI keys, but NOT Anthropic
+"Use Claude, Gemini, and GPT to research X"
+# Result: selectedModels = ["gemini-2.5-pro", "gpt-5.2"]
+# (Claude excluded because no anthropic API key)
+```
+
+## Part 3: Add Context to Research
 
 Enhance your research by providing additional context.
 
@@ -146,7 +207,7 @@ curl -X POST https://research-agent.intexuraos.com/research \
 
 The synthesis will include and attribute the provided context alongside LLM-generated content.
 
-### Step 3: Enhance existing research
+### Enhance existing research
 
 Add more models or context to a completed research:
 
@@ -155,7 +216,7 @@ curl -X POST https://research-agent.intexuraos.com/research/research_abc123/enha
   -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
-    "additionalModels": ["claude-3-5-sonnet-20241022"],
+    "additionalModels": ["claude-opus-4.5"],
     "additionalContexts": [
       {
         "content": "New information about quantum error correction...",
@@ -172,7 +233,45 @@ This creates a new research that:
 - Adds new context to the synthesis
 - Tracks the original as `sourceResearchId`
 
-## Part 3: Handle Errors
+## Part 4: Understanding Zod Schema Validation (v2.0.0)
+
+The research-agent uses Zod schemas to validate LLM responses.
+
+### ResearchContext inference
+
+When synthesis begins, the service infers context from your query:
+
+```json
+{
+  "language": "en",
+  "domain": "technical",
+  "mode": "standard",
+  "intent_summary": "Understanding quantum computing developments",
+  "answer_style": ["evidence_first", "practical"],
+  "time_scope": {
+    "as_of_date": "2026-01-24",
+    "prefers_recent_years": 2,
+    "is_time_sensitive": true
+  },
+  "research_plan": {
+    "key_questions": ["What breakthroughs occurred?", "What challenges remain?"],
+    "preferred_source_types": ["academic", "official"]
+  }
+}
+```
+
+### Parser + repair pattern
+
+If the LLM returns malformed JSON, the service attempts repair:
+
+1. First attempt: Parse and validate with Zod
+2. If validation fails: Send repair prompt with specific errors
+3. Repair attempt: Parse the corrected response
+4. If repair fails: Return combined error for debugging
+
+You can see this in the response's `researchContext` field when present.
+
+## Part 5: Handle Errors
 
 ### Error: API key missing
 
@@ -186,9 +285,28 @@ This creates a new research that:
 }
 ```
 
-**Cause:** You haven't configured an API key for the requested provider.
+**Cause:** You have not configured an API key for the requested provider.
 
 **Solution:** Add your API key via the user-service settings endpoint.
+
+### Error: Missing models for selected providers
+
+```json
+{
+  "success": false,
+  "error": {
+    "code": "INVALID_REQUEST",
+    "message": "Missing API keys for selected models",
+    "details": {
+      "missingModels": ["claude-opus-4.5"]
+    }
+  }
+}
+```
+
+**Cause:** You selected models but do not have the required API keys.
+
+**Solution:** Either configure the missing API key or remove the model from selection.
 
 ### Error: Partial failure
 
@@ -198,8 +316,8 @@ This creates a new research that:
   "data": {
     "status": "awaiting_confirmation",
     "partialFailure": {
-      "failedModels": ["gpt-4o"],
-      "detectedAt": "2026-01-13T10:03:00Z",
+      "failedModels": ["gpt-5.2"],
+      "detectedAt": "2026-01-24T10:03:00Z",
       "retryCount": 0
     }
   }
@@ -216,13 +334,13 @@ This creates a new research that:
 
 ```bash
 # Proceed with completed results
-curl -X POST https://research-agent.intexuraos.com/research/research_abc123/retry-failed \
+curl -X POST https://research-agent.intexuraos.com/research/research_abc123/confirm \
   -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"decision": "proceed"}'
 
 # Retry failed models
-curl -X POST https://research-agent.intexuraos.com/research/research_abc123/retry-failed \
+curl -X POST https://research-agent.intexuraos.com/research/research_abc123/confirm \
   -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"decision": "retry"}'
@@ -240,11 +358,11 @@ curl -X POST https://research-agent.intexuraos.com/research/research_abc123/retr
 }
 ```
 
-**Cause:** The research ID doesn't exist or belongs to another user.
+**Cause:** The research ID does not exist or belongs to another user.
 
-**Solution:** Verify the ID and that you're authenticated as the owner.
+**Solution:** Verify the ID and that you are authenticated as the owner.
 
-## Part 4: Real-World Scenario - Multi-Model Research with Sharing
+## Part 6: Real-World Scenario - Multi-Model Research with Sharing
 
 Create comprehensive research and share it publicly.
 
@@ -257,8 +375,8 @@ curl -X POST https://research-agent.intexuraos.com/research \
   -d '{
     "prompt": "What are the pros and cons of TypeScript vs JavaScript for large applications?",
     "selectedModels": [
-      "claude-3-5-sonnet-20241022",
-      "gpt-4o",
+      "claude-opus-4.5",
+      "gpt-5.2",
       "gemini-2.5-pro"
     ],
     "synthesisModel": "gemini-2.5-pro"
@@ -294,10 +412,12 @@ This removes the public page and deletes the generated cover image.
 | Issue                        | Symptom                           | Solution                                                                       |
 | ---------------------------- | --------------------------------- | ------------------------------------------------------------------------------ |
 | Research stuck in processing | Status never changes to completed | Check Pub/Sub configuration; verify LLM call queue is being processed          |
-| Synthesis fails              | Research shows `synthesisError`   | Check synthesis model API key; verify context doesn't exceed limits            |
+| Synthesis fails              | Research shows `synthesisError`   | Check synthesis model API key; verify context does not exceed limits           |
 | High costs                   | Unexpected `totalCostUsd`         | Review model selection; use smaller models (flash/mini) for initial queries    |
 | Missing attribution          | Some sections lack source links   | Attribution repair runs automatically; if it fails, content is still available |
-| Share URL 404s               | Public URL doesn't work           | Verify `shareInfo` exists; check GCS bucket configuration                      |
+| Share URL 404s               | Public URL does not work          | Verify `shareInfo` exists; check GCS bucket configuration                      |
+| Model extraction fails       | Draft has empty selectedModels    | Check if you have API keys; extraction gracefully degrades to manual selection |
+| Zod validation errors        | Research fails with schema error  | Check logs for specific field errors; repair pattern may have failed           |
 
 ## Exercises
 
@@ -310,11 +430,12 @@ This removes the public page and deletes the generated cover image.
 ### Medium
 
 1. Create research with input contexts and verify attribution
-2. Enhance a completed research with additional models
-3. Share a research and verify the public page renders correctly
+2. Use natural language to select models ("use Claude and Gemini")
+3. Enhance a completed research with additional models
 
 ### Hard
 
 1. Implement a client that polls for research completion
 2. Create a script that compares results from different models
 3. Build a cost estimator before research submission
+4. Parse the `researchContext` to understand how the service interpreted your query

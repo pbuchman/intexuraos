@@ -1,27 +1,47 @@
 # Web Agent - Tutorial
 
-Web-agent is an internal service for fetching OpenGraph metadata. This tutorial shows how to integrate with it.
+> **Time:** 20-30 minutes
+> **Prerequisites:** Internal auth token, user with configured LLM API key
+> **You'll learn:** How to fetch link previews and generate AI summaries
+
+---
+
+## What You'll Build
+
+A working integration that:
+
+- Fetches OpenGraph metadata for link previews
+- Generates AI summaries of web pages in the source language
+- Handles errors gracefully including 403 responses
+
+---
 
 ## Prerequisites
 
-- Internal auth token for service-to-service calls
-- Valid HTTP/HTTPS URLs to fetch
-- Familiarity with Promise.all for parallel requests
+Before starting, ensure you have:
 
-## Part 1: Hello World - Single URL
+- [ ] Access to the IntexuraOS project
+- [ ] Internal auth token (`INTEXURAOS_INTERNAL_AUTH_TOKEN`)
+- [ ] A user ID with configured LLM API key (for summarization)
 
-Fetch a preview for a single URL:
+---
+
+## Part 1: Hello World - Link Preview (5 minutes)
+
+Fetch OpenGraph metadata for a single URL.
+
+### Step 1.1: Make Your First Request
 
 ```bash
 curl -X POST https://web-agent.intexuraos.com/internal/link-previews \
   -H "Content-Type: application/json" \
-  -H "X-Internal-Auth: YOUR_INTERNAL_TOKEN" \
+  -H "X-Internal-Auth: $INTEXURAOS_INTERNAL_AUTH_TOKEN" \
   -d '{
     "urls": ["https://www.anthropic.com"]
   }'
 ```
 
-**Response:**
+**Expected response:**
 
 ```json
 {
@@ -34,7 +54,7 @@ curl -X POST https://web-agent.intexuraos.com/internal/link-previews \
         "preview": {
           "url": "https://www.anthropic.com",
           "title": "Anthropic: AI Safety and Research",
-          "description": "Anthropic is an AI safety company working to build reliable, interpretable, and steerable AI systems.",
+          "description": "Anthropic is an AI safety company...",
           "image": "https://www.anthropic.com/images/og-image.jpg",
           "favicon": "https://www.anthropic.com/favicon.ico",
           "siteName": "Anthropic"
@@ -51,48 +71,52 @@ curl -X POST https://web-agent.intexuraos.com/internal/link-previews \
 }
 ```
 
-**Checkpoint:** You should receive a successful preview with title, description, and image.
+### What Just Happened?
 
-## Part 2: Batch Fetch Multiple URLs
+1. web-agent fetched the URL with browser-like headers
+2. Parsed HTML with Cheerio to extract OpenGraph tags
+3. Resolved relative image URLs to absolute paths
+4. Found favicon from link tags or defaulted to /favicon.ico
 
-Fetch previews for multiple URLs in parallel:
+**Checkpoint:** You should see title, description, and image fields populated.
+
+---
+
+## Part 2: Batch Link Previews (5 minutes)
+
+Fetch multiple URLs in parallel with mixed success/failure.
+
+### Step 2.1: Send Batch Request
 
 ```bash
 curl -X POST https://web-agent.intexuraos.com/internal/link-previews \
   -H "Content-Type: application/json" \
-  -H "X-Internal-Auth: YOUR_INTERNAL_TOKEN" \
+  -H "X-Internal-Auth: $INTEXURAOS_INTERNAL_AUTH_TOKEN" \
   -d '{
     "urls": [
       "https://www.anthropic.com",
       "https://example.com",
-      "https://invalid-url-that-does-not-exist.com"
-    ]
+      "https://blocked-site-example.com"
+    ],
+    "timeoutMs": 10000
   }'
 ```
 
-**Partial success response:**
+**Expected partial success:**
 
 ```json
 {
   "success": true,
   "data": {
     "results": [
+      { "url": "https://www.anthropic.com", "status": "success", "preview": {...} },
+      { "url": "https://example.com", "status": "success", "preview": {...} },
       {
-        "url": "https://www.anthropic.com",
-        "status": "success",
-        "preview": { "title": "...", "description": "..." }
-      },
-      {
-        "url": "https://example.com",
-        "status": "success",
-        "preview": { "title": "Example Domain", "description": undefined }
-      },
-      {
-        "url": "https://invalid-url-that-does-not-exist.com",
+        "url": "https://blocked-site-example.com",
         "status": "failed",
         "error": {
-          "code": "FETCH_FAILED",
-          "message": "HTTP 404: Not Found"
+          "code": "ACCESS_DENIED",
+          "message": "Access denied (HTTP 403): The website blocked the request"
         }
       }
     ],
@@ -106,177 +130,345 @@ curl -X POST https://web-agent.intexuraos.com/internal/link-previews \
 }
 ```
 
-**What happened:**
+### Step 2.2: Handle Partial Success
 
-- All 3 URLs fetched in parallel
-- 2 succeeded, 1 failed
-- Failed URL has error code instead of preview
+```typescript
+const response = await fetch('/internal/link-previews', { ... });
+const { data } = await response.json();
 
-## Part 3: Handle Errors
+for (const result of data.results) {
+  if (result.status === 'success') {
+    console.log(`${result.url}: ${result.preview.title}`);
+  } else {
+    console.warn(`${result.url}: ${result.error.code} - ${result.error.message}`);
+  }
+}
+```
 
-### Error: Invalid URL
+**Checkpoint:** Notice how 403 responses return `ACCESS_DENIED` specifically.
+
+---
+
+## Part 3: Page Summarization (10 minutes)
+
+Generate an AI summary using the user's configured LLM.
+
+### Step 3.1: Summarize a Web Page
 
 ```bash
-curl -X POST https://web-agent.intexuraos.com/internal/link-previews \
+curl -X POST https://web-agent.intexuraos.com/internal/page-summaries \
   -H "Content-Type: application/json" \
-  -H "X-Internal-Auth: YOUR_INTERNAL_TOKEN" \
+  -H "X-Internal-Auth: $INTEXURAOS_INTERNAL_AUTH_TOKEN" \
   -d '{
-    "urls": ["not-a-url", "ftp://unsupported.com"]
+    "url": "https://www.example-article.com/news",
+    "userId": "user-abc-123",
+    "maxSentences": 10,
+    "maxReadingMinutes": 2
   }'
 ```
 
-**Response:**
+**Expected response:**
 
 ```json
 {
   "success": true,
   "data": {
-    "results": [
-      {
-        "url": "not-a-url",
-        "status": "failed",
-        "error": {
-          "code": "INVALID_URL",
-          "message": "Invalid URL format or unsupported protocol"
-        }
-      },
-      {
-        "url": "ftp://unsupported.com",
-        "status": "failed",
-        "error": {
-          "code": "INVALID_URL",
-          "message": "Invalid URL format or unsupported protocol"
-        }
+    "result": {
+      "url": "https://www.example-article.com/news",
+      "status": "success",
+      "summary": {
+        "url": "https://www.example-article.com/news",
+        "summary": "The article discusses recent advances in renewable energy...",
+        "wordCount": 150,
+        "estimatedReadingMinutes": 1
       }
-    ],
+    },
     "metadata": {
-      "requestedCount": 2,
-      "successCount": 0,
-      "failedCount": 2,
-      "durationMs": 5
+      "durationMs": 3500
     }
   }
 }
 ```
 
-**Note:** Invalid URLs are detected synchronously before fetching.
+### Step 3.2: Understand the Flow
 
-### Error: Timeout
+When you call `/internal/page-summaries`:
+
+1. **PageContentFetcher** crawls the URL via Crawl4AI (headless browser)
+2. **userServiceClient** fetches the user's default LLM model and API keys
+3. **LlmSummarizer** generates a prompt with language preservation instructions
+4. **parseSummaryResponse** validates the output is prose (not JSON)
+5. If invalid, **repair prompt** triggers one retry automatically
+
+### Step 3.3: Language Preservation
+
+Summarize a non-English article:
 
 ```bash
-curl -X POST https://web-agent.intexuraos.com/internal/link-previews \
+curl -X POST https://web-agent.intexuraos.com/internal/page-summaries \
   -H "Content-Type: application/json" \
-  -H "X-Internal-Auth: YOUR_INTERNAL_TOKEN" \
+  -H "X-Internal-Auth: $INTEXURAOS_INTERNAL_AUTH_TOKEN" \
   -d '{
-    "urls": ["https://slow-site.com"],
-    "timeoutMs": 1000
+    "url": "https://www.gazeta.pl/artykul-w-jezyku-polskim",
+    "userId": "user-abc-123"
   }'
 ```
 
-If the site takes >1 second, response includes:
+**Expected:** Summary returns in Polish, matching the source language.
+
+**Why this works:** The prompt includes `IMPORTANT: Write the summary in the SAME LANGUAGE as the original content`.
+
+---
+
+## Part 4: Handle Errors (5 minutes)
+
+### Error: No API Key Configured
 
 ```json
 {
-  "status": "failed",
-  "error": {
-    "code": "TIMEOUT",
-    "message": "Request timed out after 1000ms"
+  "result": {
+    "url": "https://example.com",
+    "status": "failed",
+    "error": {
+      "code": "API_ERROR",
+      "message": "No API key configured for Google. Please add your Google API key in settings."
+    }
   }
 }
 ```
 
-### Error: Response Too Large
+**Solution:** User needs to add their LLM API key via user-service settings.
 
-If Content-Length exceeds 2MB:
+### Error: Invalid URL
 
 ```json
 {
-  "status": "failed",
-  "error": {
-    "code": "TOO_LARGE",
-    "message": "Response too large: 5242880 bytes"
+  "result": {
+    "url": "not-a-url",
+    "status": "failed",
+    "error": {
+      "code": "INVALID_URL",
+      "message": "Invalid URL format or unsupported protocol"
+    }
   }
 }
 ```
 
-## Part 4: Real-World Integration
+**Solution:** Ensure URLs start with `http://` or `https://`.
 
-Integrate web-agent into bookmarks-agent:
+### Error: Page Crawl Failed
+
+```json
+{
+  "result": {
+    "url": "https://blocked-site.com",
+    "status": "failed",
+    "error": {
+      "code": "FETCH_FAILED",
+      "message": "Crawl4AI crawl failed"
+    }
+  }
+}
+```
+
+**Solution:** Some sites block crawlers. Try a different URL or check if the site is accessible.
+
+### Error: No Content Extracted
+
+```json
+{
+  "result": {
+    "url": "https://empty-page.com",
+    "status": "failed",
+    "error": {
+      "code": "NO_CONTENT",
+      "message": "No content could be extracted from the page"
+    }
+  }
+}
+```
+
+**Solution:** Page may be entirely JavaScript-rendered or blocked.
+
+---
+
+## Part 5: Real-World Integration
+
+### bookmarks-agent Integration
 
 ```typescript
 // bookmarks-agent/src/infra/web/webAgentClient.ts
 
-import type { LinkPreview } from '@intexuraos/web-agent';
+import type { LinkPreview } from './types.js';
 
-export async function fetchLinkPreviews(urls: string[]): Promise<Map<string, LinkPreview>> {
-  const response = await fetch('https://web-agent.intexuraos.com/internal/link-previews', {
+export async function fetchLinkPreview(url: string): Promise<LinkPreview | null> {
+  const response = await fetch(`${process.env.INTEXURAOS_WEB_AGENT_URL}/internal/link-previews`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'X-Internal-Auth': process.env.INTEXURAOS_INTERNAL_AUTH_TOKEN!,
     },
-    body: JSON.stringify({ urls }),
+    body: JSON.stringify({ urls: [url] }),
   });
 
   const { data } = await response.json();
-  const previews = new Map<string, LinkPreview>();
+  const result = data.results[0];
 
-  for (const result of data.results) {
-    if (result.status === 'success') {
-      previews.set(result.url, result.preview);
-    }
+  if (result?.status === 'success') {
+    return result.preview;
   }
 
-  return previews;
+  return null;
 }
 ```
 
-**Usage:**
+### research-agent Integration
 
 ```typescript
-const previews = await fetchLinkPreviews([
-  'https://blog.example.com/article',
-  'https://github.com/user/repo',
-]);
+// research-agent/src/infra/web/webAgentClient.ts
 
-for (const [url, preview] of previews) {
-  console.log(`${url}: ${preview.title}`);
+export async function summarizePage(
+  url: string,
+  userId: string
+): Promise<{ summary: string; wordCount: number } | null> {
+  const response = await fetch(`${process.env.INTEXURAOS_WEB_AGENT_URL}/internal/page-summaries`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Internal-Auth': process.env.INTEXURAOS_INTERNAL_AUTH_TOKEN!,
+    },
+    body: JSON.stringify({
+      url,
+      userId,
+      maxSentences: 15,
+      maxReadingMinutes: 3,
+    }),
+  });
+
+  const { data } = await response.json();
+
+  if (data.result.status === 'success') {
+    return {
+      summary: data.result.summary.summary,
+      wordCount: data.result.summary.wordCount,
+    };
+  }
+
+  console.error(`Summary failed: ${data.result.error.code}`);
+  return null;
 }
 ```
+
+---
 
 ## Troubleshooting
 
-| Issue            | Symptom             | Solution                     |
-| ---------------- | ------------------- | ---------------------------- |
-| Unauthorized     | 401 response        | Check X-Internal-Auth header |
-| Missing metadata | Empty preview       | Site lacks OpenGraph tags    |
-| Partial success  | Mixed results       | Check error.code per result  |
-| Timeout          | All results timeout | Increase timeoutMs parameter |
+| Problem                     | Symptom                    | Solution                                    |
+| --------------------------- | -------------------------- | ------------------------------------------- |
+| "401 Unauthorized"          | Missing auth header        | Add `X-Internal-Auth` header                |
+| "ACCESS_DENIED"             | 403 from target site       | Site blocks scrapers; try different URL     |
+| "No API key configured"     | Missing user LLM key       | User must add API key in settings           |
+| "Summary is JSON"           | Repair mechanism kicked in | Normal behavior - should auto-repair        |
+| "Summary in wrong language" | Old version                | Update to v2.0.0 with language preservation |
+| "Timeout"                   | Slow site or Crawl4AI      | Increase `timeoutMs` parameter              |
+
+---
 
 ## Best Practices
 
-1. **Batch requests** - Fetch multiple URLs in one call for efficiency
+1. **Validate URLs client-side** - Check for http/https before calling
 2. **Handle partial success** - Check `status` field per result
-3. **Set reasonable timeouts** - Default 5s works for most sites
-4. **Log errors** - Track error codes for monitoring
-5. **Implement rate limiting** - Don't overwhelm the service
+3. **Log error codes** - Track `ACCESS_DENIED` vs `FETCH_FAILED` separately
+4. **Set appropriate timeouts** - 5s for link previews, 60s for summaries
+5. **Cache link previews** - Same URL rarely changes; caller should cache
+6. **Provide userId** - Required for summarization to get user's LLM keys
+
+---
 
 ## Exercises
 
 ### Easy
 
-1. Fetch preview for a single URL
-2. Parse the response and extract title
-3. Handle INVALID_URL error
+1. Fetch a link preview for a GitHub repository
+2. Extract the title and description from the response
+3. Handle an invalid URL gracefully
 
 ### Medium
 
-1. Fetch 10 URLs in parallel
-2. Count success vs failed results
-3. Implement retry for TIMEOUT errors
+1. Fetch 5 URLs in parallel and count success vs failure
+2. Summarize an article and display word count and reading time
+3. Implement retry with exponential backoff for timeouts
 
 ### Hard
 
-1. Build a client library with TypeScript types
-2. Implement exponential backoff for retries
-3. Add caching layer for frequently requested URLs
+1. Build a TypeScript client library with proper types
+2. Implement a caching layer for link previews
+3. Create a fallback chain: try link preview, if no description, try summary
+
+<details>
+<summary>Solutions</summary>
+
+### Exercise 1: GitHub Link Preview
+
+```typescript
+const result = await fetch('/internal/link-previews', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'X-Internal-Auth': token,
+  },
+  body: JSON.stringify({
+    urls: ['https://github.com/anthropics/anthropic-sdk-typescript'],
+  }),
+});
+
+const { data } = await result.json();
+console.log(data.results[0].preview.title);
+// "anthropics/anthropic-sdk-typescript"
+```
+
+### Exercise 2: Article Summary
+
+```typescript
+const result = await fetch('/internal/page-summaries', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'X-Internal-Auth': token,
+  },
+  body: JSON.stringify({
+    url: 'https://blog.anthropic.com/some-article',
+    userId: 'user-123',
+  }),
+});
+
+const { data } = await result.json();
+if (data.result.status === 'success') {
+  const { summary, wordCount, estimatedReadingMinutes } = data.result.summary;
+  console.log(`${wordCount} words (~${estimatedReadingMinutes} min read)`);
+  console.log(summary);
+}
+```
+
+### Exercise 3: Caching Layer
+
+```typescript
+const previewCache = new Map<string, { preview: LinkPreview; expires: number }>();
+const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+async function getCachedPreview(url: string): Promise<LinkPreview | null> {
+  const cached = previewCache.get(url);
+  if (cached && cached.expires > Date.now()) {
+    return cached.preview;
+  }
+
+  const preview = await fetchLinkPreview(url);
+  if (preview) {
+    previewCache.set(url, { preview, expires: Date.now() + CACHE_TTL_MS });
+  }
+
+  return preview;
+}
+```
+
+</details>

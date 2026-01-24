@@ -1,5 +1,10 @@
 # Research Agent - Technical Debt
 
+**Last Updated:** 2026-01-24
+**Analysis Run:** v2.0.0 documentation update
+
+---
+
 ## Summary
 
 | Category            | Count | Severity |
@@ -7,11 +12,12 @@
 | TODO/FIXME Comments | 0     | -        |
 | Test Coverage Gaps  | 0     | -        |
 | TypeScript Issues   | 0     | -        |
-| SRP Violations      | 0     | -        |
+| SRP Violations      | 1     | Low      |
 | Code Duplicates     | 0     | -        |
 | Deprecations        | 0     | -        |
+| **Total**           | **1** | Low      |
 
-Last updated: 2026-01-13
+---
 
 ## Future Plans
 
@@ -35,17 +41,32 @@ Currently, research results are returned in bulk when all LLMs complete. Future 
 2. **Tags** - Add custom tags for organization
 3. **Search** - Full-text search across researches
 
+### Model Selection Improvements (v2.0.0 follow-up)
+
+1. **Learning from user preferences** - Track which models users typically select
+2. **Cost-aware selection** - Suggest cheaper models for simple queries
+3. **Provider fallback** - Automatically substitute unavailable models with equivalents
+
+---
+
 ## Code Smells
 
-### None Detected
+### Low Priority
 
-No active code smells found in current codebase.
+| File                           | Issue      | Impact                                           |
+| ------------------------------ | ---------- | ------------------------------------------------ |
+| `src/routes/researchRoutes.ts` | 1344 lines | Large file but logically cohesive                |
+| `src/routes/internalRoutes.ts` | 934 lines  | Large file but contains related Pub/Sub handlers |
+
+**Note:** Both route files are large but contain logically related endpoints. The size is justified by the complexity of the research orchestration flow. No immediate refactoring needed.
+
+---
 
 ## Test Coverage
 
 ### Current Status
 
-Comprehensive test coverage across all layers:
+Comprehensive test coverage across all layers with 95% threshold enforced:
 
 - Domain layer: Research models, use cases fully tested
 - Infrastructure: LLM adapters, repositories, publishers tested
@@ -54,9 +75,18 @@ Comprehensive test coverage across all layers:
 ### Coverage Areas
 
 - **Models**: Research entity creation, enhancement, factories
-- **Use Cases**: Process research, synthesis, retry, enhance, unshare
-- **Infrastructure**: All LLM adapters with nock mocks
+- **Use Cases**: Process research, synthesis, retry, enhance, unshare, extractModelPreferences (v2.0.0)
+- **Infrastructure**: All LLM adapters with nock mocks, ContextInferenceAdapter with repair scenarios
 - **Routes**: PubSub endpoints with proper auth validation
+
+### v2.0.0 Test Additions
+
+| File                              | Coverage | Notes                                     |
+| --------------------------------- | -------- | ----------------------------------------- |
+| `extractModelPreferences.test.ts` | 100%     | All branches covered including edge cases |
+| `ContextInferenceAdapter.test.ts` | 100%     | Repair pattern scenarios tested           |
+
+---
 
 ## TypeScript Issues
 
@@ -64,17 +94,29 @@ Comprehensive test coverage across all layers:
 
 No `any` types, `@ts-ignore`, or `@ts-expect-error` directives found.
 
+The Zod schema migration (INT-86) improved type safety by deriving types from schemas using `z.infer<>`.
+
+---
+
 ## SRP Violations
 
-### None Detected
+### Low Priority
 
-All files are within reasonable size limits. Largest files (routes/internalRoutes.ts at ~840 lines) contain related PubSub handling logic.
+| File                           | Lines | Issue                                           | Suggestion                       |
+| ------------------------------ | ----- | ----------------------------------------------- | -------------------------------- |
+| `src/routes/researchRoutes.ts` | 1344  | Handles many endpoints but all research-related | Acceptable given domain cohesion |
+
+**Analysis:** The file is large but follows single responsibility at the domain level (all research-related endpoints). Splitting would fragment related logic.
+
+---
 
 ## Code Duplicates
 
 ### None Detected
 
-No significant code duplication patterns identified. LLM adapters share common patterns via interface but implement provider-specific logic.
+The Zod schema definitions in `@intexuraos/llm-prompts` are shared across research and synthesis contexts, avoiding duplication. Common schema elements (Domain, Mode, Safety) are reused via imports.
+
+---
 
 ## Deprecations
 
@@ -82,8 +124,43 @@ No significant code duplication patterns identified. LLM adapters share common p
 
 No deprecated APIs or dependencies in use.
 
+---
+
 ## Resolved Issues
+
+### 2026-01-24 - INT-86 Zod Migration
+
+| Date       | Issue                          | Resolution                             |
+| ---------- | ------------------------------ | -------------------------------------- |
+| 2026-01-24 | Manual type guards for context | Migrated to Zod schemas with z.infer<> |
+| 2026-01-24 | Fragile LLM response parsing   | Implemented parser + repair pattern    |
 
 ### Historical Issues
 
-No previously resolved issues tracked. This section will be updated as issues are found and fixed.
+No previously resolved issues tracked prior to v2.0.0.
+
+---
+
+## v2.0.0 Architecture Quality
+
+### Strengths
+
+1. **Type-safe validation** - Zod schemas provide runtime validation with compile-time type inference
+2. **Self-healing** - Parser + repair pattern handles malformed LLM responses gracefully
+3. **Graceful degradation** - Model extraction failures do not block draft creation
+4. **One model per provider** - Clear constraint prevents duplicate costs
+
+### Areas for Future Improvement
+
+1. **Schema versioning** - No mechanism to handle schema changes over time
+2. **Repair telemetry** - Repair attempts are logged but not aggregated for analysis
+3. **Model keyword maintenance** - Keywords in `extractModelPreferences` need manual updates when models change
+
+---
+
+## Related
+
+- [Features](features.md) - User-facing documentation
+- [Technical](technical.md) - Developer reference
+- [Tutorial](tutorial.md) - Getting started guide
+- [Documentation Run Log](../../documentation-runs.md)
