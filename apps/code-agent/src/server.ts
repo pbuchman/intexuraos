@@ -4,8 +4,8 @@
 
 import fastify, { type FastifyInstance } from 'fastify';
 import cors from '@fastify/cors';
-import swagger from '@fastify/swagger';
-import swaggerUi from '@fastify/swagger-ui';
+import fastifySwagger from '@fastify/swagger';
+import fastifySwaggerUi from '@fastify/swagger-ui';
 import { registerRoutes } from './routes/index.js';
 
 export async function buildServer(): Promise<FastifyInstance> {
@@ -17,7 +17,7 @@ export async function buildServer(): Promise<FastifyInstance> {
     origin: true,
   });
 
-  await app.register(swagger, {
+  await app.register(fastifySwagger, {
     openapi: {
       info: {
         title: 'code-agent API',
@@ -26,11 +26,21 @@ export async function buildServer(): Promise<FastifyInstance> {
     },
   });
 
-  await app.register(swaggerUi, {
+  await app.register(fastifySwaggerUi, {
     routePrefix: '/docs',
   });
 
   await registerRoutes(app);
+
+  // Required endpoints for CI verification
+  app.get('/openapi.json', async (_req, reply) => {
+    const spec = app.swagger();
+    return await reply.type('application/json').send(spec);
+  });
+
+  app.get('/health', () => {
+    return { status: 'ok', service: 'code-agent' };
+  });
 
   return await app;
 }

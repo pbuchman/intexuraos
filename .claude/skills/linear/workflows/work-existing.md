@@ -2,6 +2,20 @@
 
 **Trigger:** User calls `/linear INT-123`
 
+---
+
+## 🚨 CRITICAL: Task Fails Without Branch Creation
+
+**A task is FAILED BY DEFINITION if you start working on `development` or `main`.**
+
+This is not a guideline — it's a hard requirement. Before reading code for implementation, before updating Linear state, before ANY work:
+
+1. Check current branch
+2. If on `development` or `main` → CREATE BRANCH FIRST
+3. Only then proceed with work
+
+---
+
 ## Steps
 
 ### 1. Tool Verification
