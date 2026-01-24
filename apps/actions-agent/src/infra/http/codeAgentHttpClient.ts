@@ -7,7 +7,7 @@
  */
 
 import { ok, err, type Result, getErrorMessage } from '@intexuraos/common-core';
-import type { CodeAgentClient } from '../../domain/ports/codeAgentClient.js';
+import type { CodeAgentClient, CodeAgentError } from '../../domain/ports/codeAgentClient.js';
 import type { CodeActionPayload } from '../../domain/models/action.js';
 import pino, { type Logger } from 'pino';
 
@@ -113,11 +113,14 @@ export function createCodeAgentHttpClient(
         try {
           const body = (await response.json()) as ErrorResponse;
           logger.info({ existingTaskId: body.existingTaskId }, 'Duplicate task detected');
-          return err({
+          const error: CodeAgentError = {
             code: 'DUPLICATE',
             message: 'Task already exists for this approval',
-            existingTaskId: body.existingTaskId,
-          });
+          };
+          if (body.existingTaskId !== undefined) {
+            error.existingTaskId = body.existingTaskId;
+          }
+          return err(error);
         } catch {
           return err({
             code: 'DUPLICATE',

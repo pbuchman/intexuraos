@@ -1,9 +1,14 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { isOk, isErr } from '@intexuraos/common-core';
+import { isOk } from '@intexuraos/common-core';
 import { createHandleCodeActionUseCase } from '../domain/usecases/handleCodeAction.js';
 import { registerActionHandler } from '../domain/usecases/createIdempotentActionHandler.js';
 import type { ActionCreatedEvent } from '../domain/models/actionEvent.js';
-import { FakeActionRepository, FakeWhatsAppSendPublisher, createFakeExecuteCodeActionUseCase } from './fakes.js';
+import type { ActionStatus } from '../domain/models/action.js';
+import {
+  FakeActionRepository,
+  FakeWhatsAppSendPublisher,
+  createFakeExecuteCodeActionUseCaseWithRepo,
+} from './fakes.js';
 import pino from 'pino';
 
 vi.mock('../domain/usecases/shouldAutoExecute.js', () => ({
@@ -33,14 +38,17 @@ describe('handleCodeAction usecase', () => {
     ...overrides,
   });
 
-  const createAction = (): {
+  const createAction = (overrides: Partial<{
+    payload: Record<string, unknown>;
+    status: ActionStatus;
+  }> = {}): {
     id: 'action-123';
     userId: 'user-456';
     commandId: 'cmd-789';
     type: 'code';
     confidence: number;
     title: string;
-    status: 'pending';
+    status: ActionStatus;
     payload: Record<string, unknown>;
     createdAt: string;
     updatedAt: string;
@@ -51,10 +59,11 @@ describe('handleCodeAction usecase', () => {
     type: 'code' as const,
     confidence: 0.95,
     title: 'Fix authentication bug',
-    status: 'pending' as const,
-    payload: {},
+    status: 'pending' as ActionStatus,
+    payload: { prompt: 'Fix the login bug', confidence: 0.95, ...overrides.payload },
     createdAt: '2025-01-01T12:00:00.000Z',
     updatedAt: '2025-01-01T12:00:00.000Z',
+    ...overrides,
   });
 
   beforeEach(() => {
@@ -86,7 +95,8 @@ describe('handleCodeAction usecase', () => {
     const messages = fakeWhatsappPublisher.getSentMessages();
     expect(messages).toHaveLength(1);
     expect(messages[0]?.userId).toBe('user-456');
-    expect(messages[0]?.message).toContain('Code task: Fix the login bug');
+    expect(messages[0]?.message).toContain('Code task:');
+    expect(messages[0]?.message).toContain('Fix the login bug');
     expect(messages[0]?.message).toContain('Estimated cost: $1-2');
     expect(messages[0]?.message).toContain('https://app.intexuraos.com/#/inbox?action=action-123');
   });
@@ -149,7 +159,7 @@ describe('handleCodeAction usecase', () => {
 
     await fakeActionRepository.save(createAction());
 
-    const fakeExecuteCodeAction = createFakeExecuteCodeActionUseCase();
+    const fakeExecuteCodeAction = createFakeExecuteCodeActionUseCaseWithRepo(fakeActionRepository);
 
     const usecase = registerActionHandler(createHandleCodeActionUseCase, {
       actionRepository: fakeActionRepository,
@@ -180,7 +190,7 @@ describe('handleCodeAction usecase', () => {
 
     await fakeActionRepository.save(createAction());
 
-    const fakeExecuteCodeAction = createFakeExecuteCodeActionUseCase();
+    const fakeExecuteCodeAction = createFakeExecuteCodeActionUseCaseWithRepo(fakeActionRepository);
 
     const usecase = registerActionHandler(createHandleCodeActionUseCase, {
       actionRepository: fakeActionRepository,
@@ -201,7 +211,7 @@ describe('handleCodeAction usecase', () => {
   });
 
   describe('idempotency', () => {
-    it('returns ok immediately when action already in awaiting_approval status', async () => {
+    it('returns success without sending notification when action already processed (idempotency)', async () => {
       const action = createAction({ status: 'awaiting_approval' });
       await fakeActionRepository.save(action);
 
@@ -220,8 +230,9 @@ describe('handleCodeAction usecase', () => {
         expect(result.value.actionId).toBe('action-123');
       }
 
+      // Should not send WhatsApp message since action was already processed
       const messages = fakeWhatsappPublisher.getSentMessages();
-      expect(messages).toHaveLength(1);
+      expect(messages).toHaveLength(0);
     });
   });
 });

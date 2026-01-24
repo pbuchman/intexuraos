@@ -102,15 +102,24 @@ export function createExecuteCodeActionUseCase(
       'Processing code action via code-agent'
     );
 
+    // Build payload without undefined values (exactOptionalPropertyTypes)
+    const payload: {
+      prompt: string;
+      workerType: 'opus' | 'auto' | 'glm';
+      linearIssueId?: string;
+      linearIssueTitle?: string;
+    } = { prompt, workerType };
+    if (linearIssueId !== undefined) {
+      payload.linearIssueId = linearIssueId;
+    }
+    if (linearIssueTitle !== undefined) {
+      payload.linearIssueTitle = linearIssueTitle;
+    }
+
     const result = await codeAgentClient.submitTask({
       actionId,
       approvalEventId,
-      payload: {
-        prompt,
-        workerType,
-        linearIssueId,
-        linearIssueTitle,
-      },
+      payload,
     });
 
     if (!result.ok) {
@@ -170,7 +179,7 @@ export function createExecuteCodeActionUseCase(
     const { codeTaskId, resourceUrl } = result.value;
     logger.info({ actionId, codeTaskId, resourceUrl }, 'Code task created successfully');
 
-    // Design lines 1471-1474: Store resource_url in action payload
+    // Design lines 1471-1474: Store resource_url and approvalEventId in action payload
     const completedAction: Action = {
       ...action,
       status: 'completed',
@@ -178,6 +187,7 @@ export function createExecuteCodeActionUseCase(
         ...action.payload,
         resource_url: resourceUrl,
         message: `Code task ${codeTaskId} created successfully`,
+        approvalEventId,
       },
       updatedAt: new Date().toISOString(),
     };

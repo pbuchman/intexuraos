@@ -57,6 +57,9 @@ describe('retryPendingActions', () => {
       linear: {
         execute: vi.fn().mockResolvedValue(ok({ actionId: 'action-1' })),
       },
+      code: {
+        execute: vi.fn().mockResolvedValue(ok({ actionId: 'action-1' })),
+      },
     };
   });
 

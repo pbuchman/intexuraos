@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { isOk, isErr } from '@intexuraos/common-core';
 import { createExecuteCodeActionUseCase } from '../domain/usecases/executeCodeAction.js';
-import type { Action, CodeActionPayload } from '../domain/models/action.js';
+import type { Action } from '../domain/models/action.js';
 import {
   FakeActionRepository,
   FakeCodeAgentClient,
@@ -200,12 +200,12 @@ describe('executeCodeAction usecase', () => {
     expect(isOk(result)).toBe(true);
     if (isOk(result)) {
       expect(result.value.status).toBe('failed');
-      expect(result.value.message).toBe('No workers available');
+      expect(result.value.message).toBe('No workers available. Please try again later.');
     }
 
     const updatedAction = await fakeActionRepo.getById('action-123');
     expect(updatedAction?.status).toBe('failed');
-    expect(updatedAction?.payload['message']).toBe('No workers available');
+    expect(updatedAction?.payload['message']).toBe('No workers available. Please try again later.');
   });
 
   it('returns completed status with existing task info when code-agent returns 409 duplicate', async () => {

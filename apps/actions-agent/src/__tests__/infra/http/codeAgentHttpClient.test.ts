@@ -405,7 +405,7 @@ describe('codeAgentHttpClient', () => {
     });
 
     it('handles different worker types (opus, glm, auto)', async () => {
-      const workerTypes: Array<'opus' | 'auto' | 'glm'> = ['opus', 'auto', 'glm'];
+      const workerTypes: ('opus' | 'auto' | 'glm')[] = ['opus', 'auto', 'glm'];
 
       for (const workerType of workerTypes) {
         nock(baseUrl)

@@ -81,6 +81,7 @@ export function createHandleApprovalReplyUseCase(
     executeLinkAction,
     executeCalendarAction,
     executeLinearAction,
+    executeCodeAction,
   } = deps;
 
   return async (input: ApprovalReplyInput): Promise<Result<ApprovalReplyResult>> => {

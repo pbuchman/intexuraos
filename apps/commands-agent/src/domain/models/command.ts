@@ -12,7 +12,8 @@ export type CommandType =
   | 'link'
   | 'calendar'
   | 'reminder'
-  | 'linear';
+  | 'linear'
+  | 'code';
 
 export interface CommandClassification {
   type: CommandType;

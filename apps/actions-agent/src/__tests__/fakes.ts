@@ -741,36 +741,41 @@ export class FakeCodeAgentClient implements CodeAgentClient {
       linearIssueId?: string;
       linearIssueTitle?: string;
     };
-  }): Promise<
-    ReturnType<
-      typeof import('../infra/http/codeAgentHttpClient.js').createCodeAgentHttpClient
-    > extends infer C ? C : never
-    >['submitTask']
-  > {
+  }): Promise<{
+    ok: true;
+    value: { codeTaskId: string; resourceUrl: string };
+  } | {
+    ok: false;
+    error: {
+      code: 'WORKER_UNAVAILABLE' | 'DUPLICATE' | 'NETWORK_ERROR' | 'UNKNOWN';
+      message: string;
+      existingTaskId?: string;
+    };
+  }> {
     if (this.failNext) {
       this.failNext = false;
       return {
-        ok: false as const,
+        ok: false,
         error: {
-          code: 'NETWORK_ERROR' as const,
+          code: 'NETWORK_ERROR',
           message: 'Simulated network failure',
         },
-      } as const;
+      };
     }
 
     this.submittedTasks.push(input);
 
     if (this.nextError !== null) {
       return {
-        ok: false as const,
+        ok: false,
         error: this.nextError,
-      } as const;
+      };
     }
 
     return {
-      ok: true as const,
+      ok: true,
       value: this.nextResponse,
-    } as const;
+    };
   }
 }
 
@@ -940,6 +945,46 @@ export function createFakeExecuteCodeActionUseCase(config?: {
   };
 }
 
+/**
+ * Fake executeCodeAction use case that updates action repository
+ * Use this when you need the action to be marked as completed in the repository
+ */
+export function createFakeExecuteCodeActionUseCaseWithRepo(
+  fakeRepo: FakeActionRepository,
+  config?: {
+    failWithError?: Error;
+    returnResult?: ExecuteCodeActionResult;
+  }
+): FakeExecuteCodeActionUseCase {
+  return async (actionId: string): Promise<Result<ExecuteCodeActionResult, Error>> => {
+    if (config?.failWithError !== undefined) {
+      return err(config.failWithError);
+    }
+    const result = config?.returnResult ?? {
+      status: 'completed',
+      message: 'Code task created: code-task-123',
+      resourceUrl: 'https://app.intexuraos.com/code-tasks/123',
+    };
+
+    // Update action in repository
+    const action = await fakeRepo.getById(actionId);
+    if (action !== null) {
+      await fakeRepo.save({
+        ...action,
+        status: 'completed',
+        payload: {
+          ...action.payload,
+          resource_url: result.resourceUrl,
+          message: result.message,
+          approvalEventId: crypto.randomUUID(),
+        },
+      });
+    }
+
+    return ok(result);
+  };
+}
+
 export function createFakeRetryPendingActionsUseCase(config?: {
   returnResult?: RetryResult;
 }): RetryPendingActionsUseCase {
@@ -1091,6 +1136,10 @@ import {
   createHandleLinearActionUseCase,
   type HandleLinearActionUseCase,
 } from '../domain/usecases/handleLinearAction.js';
+import {
+  createHandleCodeActionUseCase,
+  type HandleCodeActionUseCase,
+} from '../domain/usecases/handleCodeAction.js';
 
 export function createFakeServices(deps: {
   actionServiceClient: FakeActionServiceClient;
@@ -1104,6 +1153,7 @@ export function createFakeServices(deps: {
   bookmarksServiceClient?: FakeBookmarksServiceClient;
   calendarServiceClient?: FakeCalendarServiceClient;
   linearAgentClient?: FakeLinearAgentClient;
+  codeAgentClient?: FakeCodeAgentClient;
   actionEventPublisher?: FakeActionEventPublisher;
   whatsappPublisher?: FakeWhatsAppSendPublisher;
   calendarPreviewPublisher?: FakeCalendarPreviewPublisher;
@@ -1113,6 +1163,7 @@ export function createFakeServices(deps: {
   executeLinkActionUseCase?: FakeExecuteLinkActionUseCase;
   executeCalendarActionUseCase?: FakeExecuteCalendarActionUseCase;
   executeLinearActionUseCase?: FakeExecuteLinearActionUseCase;
+  executeCodeActionUseCase?: FakeExecuteCodeActionUseCase;
   retryPendingActionsUseCase?: RetryPendingActionsUseCase;
   changeActionTypeUseCase?: ChangeActionTypeUseCase;
   approvalMessageRepository?: FakeApprovalMessageRepository;
@@ -1131,6 +1182,7 @@ export function createFakeServices(deps: {
   const bookmarksServiceClient = deps.bookmarksServiceClient ?? new FakeBookmarksServiceClient();
   const calendarServiceClient = deps.calendarServiceClient ?? new FakeCalendarServiceClient();
   const linearAgentClient = deps.linearAgentClient ?? new FakeLinearAgentClient();
+  const codeAgentClient = deps.codeAgentClient ?? new FakeCodeAgentClient();
   const approvalMessageRepository =
     deps.approvalMessageRepository ?? new FakeApprovalMessageRepository();
   const userServiceClient = deps.userServiceClient ?? new FakeUserServiceClient();
@@ -1198,6 +1250,16 @@ export function createFakeServices(deps: {
     }
   );
 
+  const handleCodeActionUseCase: HandleCodeActionUseCase = registerActionHandler(
+    createHandleCodeActionUseCase,
+    {
+      actionRepository,
+      whatsappPublisher,
+      webAppUrl: 'http://test.app',
+      logger: silentLogger,
+    }
+  );
+
   const changeActionTypeUseCase: ChangeActionTypeUseCase =
     deps.changeActionTypeUseCase ??
     createChangeActionTypeUseCase({
@@ -1219,6 +1281,7 @@ export function createFakeServices(deps: {
     bookmarksServiceClient,
     calendarServiceClient,
     linearAgentClient,
+    codeAgentClient,
     actionEventPublisher: deps.actionEventPublisher ?? new FakeActionEventPublisher(),
     whatsappPublisher,
     calendarPreviewPublisher,
@@ -1228,6 +1291,7 @@ export function createFakeServices(deps: {
     handleLinkActionUseCase,
     handleCalendarActionUseCase,
     handleLinearActionUseCase,
+    handleCodeActionUseCase,
     executeResearchActionUseCase:
       deps.executeResearchActionUseCase ?? createFakeExecuteResearchActionUseCase(),
     executeTodoActionUseCase: deps.executeTodoActionUseCase ?? createFakeExecuteTodoActionUseCase(),
@@ -1237,6 +1301,7 @@ export function createFakeServices(deps: {
       deps.executeCalendarActionUseCase ?? createFakeExecuteCalendarActionUseCase(),
     executeLinearActionUseCase:
       deps.executeLinearActionUseCase ?? createFakeExecuteLinearActionUseCase(),
+    executeCodeActionUseCase: deps.executeCodeActionUseCase ?? createFakeExecuteCodeActionUseCase(),
     retryPendingActionsUseCase:
       deps.retryPendingActionsUseCase ?? createFakeRetryPendingActionsUseCase(),
     changeActionTypeUseCase,
@@ -1250,5 +1315,6 @@ export function createFakeServices(deps: {
     link: handleLinkActionUseCase,
     calendar: handleCalendarActionUseCase,
     linear: handleLinearActionUseCase,
+    code: handleCodeActionUseCase,
   };
 }
