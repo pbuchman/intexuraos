@@ -155,6 +155,7 @@ packages/llm-prompts/
 ```
 
 **Dependencies:**
+
 - `@intexuraos/llm-contract` (for LlmModels, ResearchModel types)
 - `@intexuraos/common-core` (for Result types)
 - `zod` (for schema validation)
@@ -174,6 +175,7 @@ packages/llm-utils/
 ```
 
 **Dependencies:**
+
 - `@intexuraos/common-core` only
 
 ---
@@ -182,19 +184,19 @@ packages/llm-utils/
 
 ### Consumer Updates Required
 
-| Consumer | Old Import | New Import |
-|----------|------------|------------|
-| research-agent | `from '@intexuraos/llm-common'` | `from '@intexuraos/llm-prompts'` |
-| todos-agent | `from '@intexuraos/llm-common'` | `from '@intexuraos/llm-prompts'` |
-| commands-agent | `from '@intexuraos/llm-common'` | `from '@intexuraos/llm-prompts'` |
-| calendar-agent | `from '@intexuraos/llm-common'` | `from '@intexuraos/llm-prompts'` |
-| linear-agent | `from '@intexuraos/llm-common'` | `from '@intexuraos/llm-prompts'` |
+| Consumer            | Old Import                      | New Import                       |
+| ------------------- | ------------------------------- | -------------------------------- |
+| research-agent      | `from '@intexuraos/llm-common'` | `from '@intexuraos/llm-prompts'` |
+| todos-agent         | `from '@intexuraos/llm-common'` | `from '@intexuraos/llm-prompts'` |
+| commands-agent      | `from '@intexuraos/llm-common'` | `from '@intexuraos/llm-prompts'` |
+| calendar-agent      | `from '@intexuraos/llm-common'` | `from '@intexuraos/llm-prompts'` |
+| linear-agent        | `from '@intexuraos/llm-common'` | `from '@intexuraos/llm-prompts'` |
 | data-insights-agent | `from '@intexuraos/llm-common'` | `from '@intexuraos/llm-prompts'` |
-| actions-agent | `from '@intexuraos/llm-common'` | `from '@intexuraos/llm-prompts'` |
-| web-agent | `from '@intexuraos/llm-common'` | `from '@intexuraos/llm-prompts'` |
-| image-service | `from '@intexuraos/llm-common'` | `from '@intexuraos/llm-prompts'` |
-| llm-contract | `from '@intexuraos/llm-common'` | Local import (cycle broken) |
-| common-http | `from '@intexuraos/llm-common'` | `from '@intexuraos/llm-utils'` |
+| actions-agent       | `from '@intexuraos/llm-common'` | `from '@intexuraos/llm-prompts'` |
+| web-agent           | `from '@intexuraos/llm-common'` | `from '@intexuraos/llm-prompts'` |
+| image-service       | `from '@intexuraos/llm-common'` | `from '@intexuraos/llm-prompts'` |
+| llm-contract        | `from '@intexuraos/llm-common'` | Local import (cycle broken)      |
+| common-http         | `from '@intexuraos/llm-common'` | `from '@intexuraos/llm-utils'`   |
 
 ### Files Affected
 
@@ -207,70 +209,70 @@ packages/llm-utils/
 
 ### Phase 1: Create New Packages (Foundation)
 
-| Step | Task | Files |
-|------|------|-------|
-| 1.1 | Create `llm-prompts` package scaffold | package.json, tsconfig.json, vitest.config.ts |
-| 1.2 | Create `llm-utils` package scaffold | package.json, tsconfig.json, vitest.config.ts |
-| 1.3 | Move `PromptBuilder`/`PromptDeps` to `llm-prompts/src/types.ts` | 1 file |
+| Step | Task                                                            | Files                                         |
+| ---- | --------------------------------------------------------------- | --------------------------------------------- |
+| 1.1  | Create `llm-prompts` package scaffold                           | package.json, tsconfig.json, vitest.config.ts |
+| 1.2  | Create `llm-utils` package scaffold                             | package.json, tsconfig.json, vitest.config.ts |
+| 1.3  | Move `PromptBuilder`/`PromptDeps` to `llm-prompts/src/types.ts` | 1 file                                        |
 
 ### Phase 2: Migrate Prompts to `llm-prompts`
 
-| Step | Domain | Files to Move |
-|------|--------|---------------|
-| 2.1 | generation | titlePrompt, labelPrompt, feedNamePrompt + tests |
-| 2.2 | classification | commandClassifier, calendarAction, linearAction, intelligent + tests |
-| 2.3 | todos | itemExtractionPrompt + tests |
-| 2.4 | image | thumbnailPrompt + tests |
-| 2.5 | validation | inputQuality, inputImprovement, guards, repair + tests |
-| 2.6 | research | researchPrompt, contextInference, modelExtraction, schemas, guards + tests |
-| 2.7 | synthesis | synthesisPrompt, contextInference, attribution, schemas, guards + tests |
-| 2.8 | dataInsights | analysis, chartDefinition, transform, parsers, repair + tests |
-| 2.9 | approvals | approvalIntentPrompt + tests |
-| 2.10 | shared | contextTypes, contextSchemas |
+| Step | Domain         | Files to Move                                                              |
+| ---- | -------------- | -------------------------------------------------------------------------- |
+| 2.1  | generation     | titlePrompt, labelPrompt, feedNamePrompt + tests                           |
+| 2.2  | classification | commandClassifier, calendarAction, linearAction, intelligent + tests       |
+| 2.3  | todos          | itemExtractionPrompt + tests                                               |
+| 2.4  | image          | thumbnailPrompt + tests                                                    |
+| 2.5  | validation     | inputQuality, inputImprovement, guards, repair + tests                     |
+| 2.6  | research       | researchPrompt, contextInference, modelExtraction, schemas, guards + tests |
+| 2.7  | synthesis      | synthesisPrompt, contextInference, attribution, schemas, guards + tests    |
+| 2.8  | dataInsights   | analysis, chartDefinition, transform, parsers, repair + tests              |
+| 2.9  | approvals      | approvalIntentPrompt + tests                                               |
+| 2.10 | shared         | contextTypes, contextSchemas                                               |
 
 ### Phase 3: Migrate Utilities to `llm-utils`
 
-| Step | Task | Files |
-|------|------|-------|
-| 3.1 | Move redaction utilities | redaction.ts + tests |
-| 3.2 | Move parseError utilities | parseError.ts + tests |
+| Step | Task                      | Files                 |
+| ---- | ------------------------- | --------------------- |
+| 3.1  | Move redaction utilities  | redaction.ts + tests  |
+| 3.2  | Move parseError utilities | parseError.ts + tests |
 
 ### Phase 4: Break the Cycle
 
-| Step | Task | Details |
-|------|------|---------|
-| 4.1 | Update `llm-contract/helpers.ts` | Import thumbnailPrompt from llm-prompts or inline |
-| 4.2 | Remove `@intexuraos/llm-common` from llm-contract | Update package.json |
-| 4.3 | Verify no cyclic dependencies | Run typecheck |
+| Step | Task                                              | Details                                           |
+| ---- | ------------------------------------------------- | ------------------------------------------------- |
+| 4.1  | Update `llm-contract/helpers.ts`                  | Import thumbnailPrompt from llm-prompts or inline |
+| 4.2  | Remove `@intexuraos/llm-common` from llm-contract | Update package.json                               |
+| 4.3  | Verify no cyclic dependencies                     | Run typecheck                                     |
 
 ### Phase 5: Update All Consumers
 
-| Step | Task | Files |
-|------|------|-------|
-| 5.1 | Update research-agent imports | ~10 files |
-| 5.2 | Update data-insights-agent imports | ~6 files |
-| 5.3 | Update commands-agent imports | ~2 files |
-| 5.4 | Update calendar-agent imports | ~2 files |
-| 5.5 | Update linear-agent imports | ~2 files |
-| 5.6 | Update todos-agent imports | ~2 files |
-| 5.7 | Update actions-agent imports | ~2 files |
-| 5.8 | Update web-agent imports | ~2 files |
-| 5.9 | Update image-service imports | ~4 files |
-| 5.10 | Update common-http imports | ~2 files |
-| 5.11 | Run full CI verification | `pnpm run ci:tracked` |
+| Step | Task                               | Files                 |
+| ---- | ---------------------------------- | --------------------- |
+| 5.1  | Update research-agent imports      | ~10 files             |
+| 5.2  | Update data-insights-agent imports | ~6 files              |
+| 5.3  | Update commands-agent imports      | ~2 files              |
+| 5.4  | Update calendar-agent imports      | ~2 files              |
+| 5.5  | Update linear-agent imports        | ~2 files              |
+| 5.6  | Update todos-agent imports         | ~2 files              |
+| 5.7  | Update actions-agent imports       | ~2 files              |
+| 5.8  | Update web-agent imports           | ~2 files              |
+| 5.9  | Update image-service imports       | ~4 files              |
+| 5.10 | Update common-http imports         | ~2 files              |
+| 5.11 | Run full CI verification           | `pnpm run ci:tracked` |
 
 ### Phase 6: Cleanup & Documentation
 
-| Step | Task | Details |
-|------|------|---------|
-| 6.1 | Delete `llm-common` package | Remove directory |
-| 6.2 | Create `llm-prompts/README.md` | Package docs with prompt catalog |
-| 6.3 | Create `llm-utils/README.md` | Utility functions docs |
-| 6.4 | Create `llm-factory/README.md` | Client creation guide |
-| 6.5 | Create `docs/architecture/llm-packages.md` | Comprehensive LLM package guide |
-| 6.6 | Update `docs/architecture/ai-architecture.md` | Update packages section |
-| 6.7 | Update `docs/patterns/llm-response-validation.md` | Change llm-common refs |
-| 6.8 | Mark old plan as superseded | `docs/plans/llm-common-restructuring.md` |
+| Step | Task                                              | Details                                  |
+| ---- | ------------------------------------------------- | ---------------------------------------- |
+| 6.1  | Delete `llm-common` package                       | Remove directory                         |
+| 6.2  | Create `llm-prompts/README.md`                    | Package docs with prompt catalog         |
+| 6.3  | Create `llm-utils/README.md`                      | Utility functions docs                   |
+| 6.4  | Create `llm-factory/README.md`                    | Client creation guide                    |
+| 6.5  | Create `docs/architecture/llm-packages.md`        | Comprehensive LLM package guide          |
+| 6.6  | Update `docs/architecture/ai-architecture.md`     | Update packages section                  |
+| 6.7  | Update `docs/patterns/llm-response-validation.md` | Change llm-common refs                   |
+| 6.8  | Mark old plan as superseded                       | `docs/plans/llm-common-restructuring.md` |
 
 ---
 
@@ -278,19 +280,19 @@ packages/llm-utils/
 
 ### Current Documentation Inventory
 
-| Document | Status | Action |
-|----------|--------|--------|
-| `docs/architecture/ai-architecture.md` | Exists | Update packages section |
-| `docs/patterns/llm-response-validation.md` | Exists | Update package references |
-| `docs/plans/llm-common-restructuring.md` | Obsolete | Mark as SUPERSEDED |
-| `packages/llm-contract/README.md` | Exists | No changes |
-| `packages/llm-audit/README.md` | Exists | No changes |
-| `packages/llm-pricing/README.md` | Exists | No changes |
-| `packages/llm-common/README.md` | Missing | N/A (deleting package) |
-| `packages/llm-factory/README.md` | Missing | Create |
-| `packages/llm-prompts/README.md` | New | Create |
-| `packages/llm-utils/README.md` | New | Create |
-| `docs/architecture/llm-packages.md` | New | Create |
+| Document                                   | Status   | Action                    |
+| ------------------------------------------ | -------- | ------------------------- |
+| `docs/architecture/ai-architecture.md`     | Exists   | Update packages section   |
+| `docs/patterns/llm-response-validation.md` | Exists   | Update package references |
+| `docs/plans/llm-common-restructuring.md`   | Obsolete | Mark as SUPERSEDED        |
+| `packages/llm-contract/README.md`          | Exists   | No changes                |
+| `packages/llm-audit/README.md`             | Exists   | No changes                |
+| `packages/llm-pricing/README.md`           | Exists   | No changes                |
+| `packages/llm-common/README.md`            | Missing  | N/A (deleting package)    |
+| `packages/llm-factory/README.md`           | Missing  | Create                    |
+| `packages/llm-prompts/README.md`           | New      | Create                    |
+| `packages/llm-utils/README.md`             | New      | Create                    |
+| `docs/architecture/llm-packages.md`        | New      | Create                    |
 
 ### New `docs/architecture/llm-packages.md` Structure
 
@@ -300,33 +302,43 @@ packages/llm-utils/
 > Complete reference for IntexuraOS LLM infrastructure packages.
 
 ## Package Overview
+
 [Table of all 6 packages with purpose]
 
 ## Dependency Graph
+
 [Mermaid diagram]
 
 ## llm-contract
+
 [Types, interfaces, model registry]
 
 ## llm-prompts
+
 [Prompt catalog by domain - all 20+ prompts]
 
 ## llm-utils
+
 [Utility functions]
 
 ## llm-factory
+
 [Client creation]
 
 ## llm-pricing
+
 [Cost tracking]
 
 ## llm-audit
+
 [Call logging]
 
 ## Adding New Prompts
+
 [Step-by-step guide]
 
 ## Adding New Models
+
 [Step-by-step guide]
 ```
 
@@ -352,26 +364,29 @@ packages/llm-utils/
 
 ## Risk Assessment
 
-| Risk | Likelihood | Impact | Mitigation |
-|------|------------|--------|------------|
-| Import path breakage | High | High | Systematic find-replace, CI verification |
-| Test path breakage | Medium | Medium | Update test imports alongside source |
-| Missing exports | Medium | Medium | Compare old/new index.ts exports |
-| Type resolution issues | Low | Medium | Verify TypeScript paths after moves |
+| Risk                   | Likelihood | Impact | Mitigation                               |
+| ---------------------- | ---------- | ------ | ---------------------------------------- |
+| Import path breakage   | High       | High   | Systematic find-replace, CI verification |
+| Test path breakage     | Medium     | Medium | Update test imports alongside source     |
+| Missing exports        | Medium     | Medium | Compare old/new index.ts exports         |
+| Type resolution issues | Low        | Medium | Verify TypeScript paths after moves      |
 
 ---
 
 ## Linear Issue Structure
 
 ### Parent Issue
+
 - **INT-228** Fix cyclic dependency between llm-contract and llm-common (update description)
 
 ### Child Issues (Tiers)
 
 **Tier 1: Foundation**
+
 - Create llm-prompts and llm-utils package scaffolds
 
 **Tier 2: Prompt Migration**
+
 - Migrate generation prompts to llm-prompts
 - Migrate classification prompts to llm-prompts
 - Migrate todos prompts to llm-prompts
@@ -383,15 +398,19 @@ packages/llm-utils/
 - Migrate approvals prompts to llm-prompts
 
 **Tier 3: Utility Migration**
+
 - Migrate utilities to llm-utils
 
 **Tier 4: Break Cycle**
+
 - Break llm-contract → llm-common dependency
 
 **Tier 5: Consumer Updates**
+
 - Update all app imports to use llm-prompts
 
 **Tier 6: Cleanup & Docs**
+
 - Delete llm-common and create comprehensive documentation
 
 ---

@@ -20,22 +20,26 @@ Verify Linear, GitHub, GCloud available.
 ⛔ **STOP: You MUST NOT be on `development` or `main` before making ANY changes.**
 
 **Check current branch:**
+
 ```bash
 git branch --show-current
 ```
 
 **If on `development` or `main`:**
+
 - DO NOT update Linear state
 - DO NOT read code for implementation
 - DO NOT make any changes
 - PROCEED TO STEP 4 to create branch FIRST
 
 **If already on a feature branch (`fix/INT-*`, `feature/INT-*`, etc.):**
+
 - Verify branch name contains the issue ID
 - Proceed to Step 5
 
 **Override Exception:**
 User can explicitly override branch requirements by saying:
+
 - "work on development directly"
 - "use branch X instead"
 - "skip branch creation"
@@ -45,12 +49,14 @@ Without explicit override, branch creation is MANDATORY.
 ### 4. Create Branch from Fresh Development (MANDATORY)
 
 **Always branch from `origin/development` (not local):**
+
 ```bash
 git fetch origin
 git checkout -b fix/INT-123 origin/development
 ```
 
 **Why `origin/development`?**
+
 - Local `development` may be stale or have uncommitted changes
 - `origin/development` guarantees fresh state
 - Prevents merge conflicts and ensures CI runs against current code
@@ -80,12 +86,14 @@ pnpm run ci:tracked
 ```
 
 **If tempted to skip because "the change is simple":**
+
 - This is precisely when bugs slip through
 - "Simple" changes have non-obvious dependencies
 - Partial checks (build, typecheck) create false confidence
 - 2-3 minutes of CI is cheaper than debugging production
 
 **What CI checks (ALL required):**
+
 1. TypeCheck (source files)
 2. TypeCheck (test files)
 3. Lint
@@ -94,6 +102,7 @@ pnpm run ci:tracked
 Running only 1-2 of these is WORSE than running none — it creates false confidence.
 
 **If CI fails:**
+
 - Report which step failed
 - Show `.claude/ci-failures/` content if available
 - Fix the issue and re-run CI
@@ -138,20 +147,24 @@ Show table of created artifacts.
 ## PR Creation Checklist
 
 **Blocking gates (cannot proceed without these):**
+
 - [ ] Pre-flight branch check passed (NOT on `development` or `main`)
 - [ ] Branch created from `origin/development` (fresh state)
 - [ ] `pnpm run ci:tracked` passes (ALL 4 checks: typecheck src, typecheck tests, lint, tests+coverage)
 - [ ] ALL CI errors fixed (even in other workspaces — ownership mindset)
 
 **Terraform verification (ALWAYS CHECK):**
+
 ```bash
 git diff --name-only HEAD~1 | grep -E "^terraform/" && echo "TERRAFORM CHANGED" || echo "No terraform changes"
 ```
+
 - [ ] Verified terraform change status (document result)
 - [ ] If terraform changed: `tf fmt -check -recursive` passes
 - [ ] If terraform changed: `tf validate` passes
 
 **Required before PR:**
+
 - [ ] Branch name contains Linear issue ID
 - [ ] Latest base branch merged
 - [ ] Merge conflicts resolved (if any)
@@ -160,25 +173,28 @@ git diff --name-only HEAD~1 | grep -E "^terraform/" && echo "TERRAFORM CHANGED" 
 - [ ] PR description complete with all sections
 
 **Post-PR verification:**
+
 - [ ] PR appears in Linear issue's `attachments` array
 
 ## CI Failure Ownership
 
 When CI fails, you own ALL errors — not just errors in "your" workspace.
 
-| CI Error Location      | Your Response                                                 |
-| ---------------------- | ------------------------------------------------------------- |
-| Workspace you touched  | Fix immediately                                               |
-| Other workspace        | Fix immediately OR ask: "Fix here or separate issue?"         |
-| Pre-existing lint      | Fix it (discovery creates ownership)                          |
-| Flaky test             | Stabilize it                                                  |
+| CI Error Location     | Your Response                                         |
+| --------------------- | ----------------------------------------------------- |
+| Workspace you touched | Fix immediately                                       |
+| Other workspace       | Fix immediately OR ask: "Fix here or separate issue?" |
+| Pre-existing lint     | Fix it (discovery creates ownership)                  |
+| Flaky test            | Stabilize it                                          |
 
 **Forbidden phrases:**
+
 - ❌ "These are unrelated to my changes"
 - ❌ "This was already broken"
 - ❌ "Someone else's code"
 
 **Required response:**
+
 - ✅ "CI failed with X errors. Fixing them now."
 - ✅ "Found X errors in `<workspace>`. Should I fix here or create separate issue?"
 

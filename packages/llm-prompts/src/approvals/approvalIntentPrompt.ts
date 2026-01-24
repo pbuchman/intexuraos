@@ -138,7 +138,7 @@ export function parseApprovalIntentResponse(response: string): ApprovalIntentRes
     }
 
     return { intent, confidence, reasoning };
-  } catch (error) {
+  } catch (_error) {
     // Silently return null for lenient parsing
     // TODO: Add logging version for production debugging
     return null;

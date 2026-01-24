@@ -159,7 +159,7 @@ export function parseModelExtractionResponse(
     }
 
     return { selectedModels, synthesisModel };
-  } catch (error) {
+  } catch (_error) {
     // Silently return null for lenient parsing
     // TODO: Add logging version for production debugging
     return null;

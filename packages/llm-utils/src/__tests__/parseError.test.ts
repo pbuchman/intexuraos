@@ -96,7 +96,6 @@ describe('parseError', () => {
         llmResponse: 'response',
         expectedSchema: 'Schema',
         operation: 'test',
-        prompt: undefined,
       });
 
       expect(result).not.toHaveProperty('prompt');
@@ -182,7 +181,7 @@ describe('parseError', () => {
 
       expect(() => wrapped('test input')).toThrow('Parse error occurred');
       expect(warnSpy).toHaveBeenCalled();
-      expect(warnSpy.mock.calls[0][0]).toMatchObject({
+      expect(warnSpy.mock.calls[0]?.[0]).toMatchObject({
         operation: 'parseTest',
         errorMessage: 'Parse error occurred',
         llmResponse: 'test input',
@@ -207,7 +206,7 @@ describe('parseError', () => {
       });
 
       expect(() => wrapped('input')).toThrow('Failed');
-      expect(warnSpy.mock.calls[0][0]).toMatchObject({
+      expect(warnSpy.mock.calls[0]?.[0]).toMatchObject({
         operation: 'parseTest',
         errorMessage: 'Failed',
         llmResponse: 'input',
@@ -232,8 +231,8 @@ describe('parseError', () => {
       });
 
       expect(() => wrapped('input')).toThrow('Failed');
-      expect(warnSpy.mock.calls[0][0]).not.toHaveProperty('prompt');
-      expect(warnSpy.mock.calls[0][0]).toMatchObject({
+      expect(warnSpy.mock.calls[0]?.[0]).not.toHaveProperty('prompt');
+      expect(warnSpy.mock.calls[0]?.[0]).toMatchObject({
         operation: 'parseTest',
         errorMessage: 'Failed',
         llmResponse: 'input',
