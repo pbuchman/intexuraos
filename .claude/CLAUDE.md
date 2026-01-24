@@ -298,7 +298,7 @@ This is NOT optional. The phrases "unrelated to my changes", "pre-existing", and
 
 ---
 
-## Infrastructure
+## Infrastructure (MANDATORY)
 
 **Service account:** `$HOME/personal/gcloud-claude-code-dev.json`
 
@@ -309,6 +309,37 @@ This is NOT optional. The phrases "unrelated to my changes", "pre-existing", and
 - GCloud CLI: `gcloud auth activate-service-account --key-file=$HOME/personal/gcloud-claude-code-dev.json`
 - Terraform: Use `tf` alias (sets credentials + clears emulator vars)
 - New service image: `./scripts/push-missing-images.sh`
+
+### Terraform-Only Resource Creation
+
+**RULE: ALL persistent infrastructure MUST be created via Terraform. Direct CLI resource creation is FORBIDDEN.**
+
+The following commands are **STRICTLY FORBIDDEN**:
+
+| Command                          | What It Creates        | Use Terraform Instead                 |
+| -------------------------------- | ---------------------- | ------------------------------------- |
+| `gsutil mb`                      | GCS buckets            | `google_storage_bucket`               |
+| `gcloud pubsub topics create`    | Pub/Sub topics         | `google_pubsub_topic`                 |
+| `gcloud pubsub subscriptions`    | Pub/Sub subscriptions  | `google_pubsub_subscription`          |
+| `gcloud run deploy`              | Cloud Run services     | `google_cloud_run_service`            |
+| `gcloud secrets create`          | Secret Manager secrets | `google_secret_manager_secret`        |
+| `gcloud sql instances create`    | Cloud SQL instances    | `google_sql_database_instance`        |
+| `gcloud compute instances`       | Compute Engine VMs     | `google_compute_instance`             |
+| `gcloud iam service-accounts`    | Service accounts       | `google_service_account`              |
+| `gcloud projects add-iam-policy` | IAM bindings           | `google_*_iam_*`                      |
+
+**Why:** Terraform tracks state, enables reproducibility, version control, drift detection, and cost visibility. CLI commands create "orphan" resources invisible to IaC.
+
+**Correct pattern:**
+
+```
+❌ WRONG: Need a bucket → gsutil mb gs://my-bucket → Done
+✅ RIGHT: Need a bucket → Add to terraform/ → tf plan → tf apply → PR
+```
+
+**Exception:** Truly ephemeral resources for debugging (temp files in existing buckets, inspect commands). Never new named resources.
+
+**Recovery:** If orphan resources exist, import into Terraform or delete them.
 
 ---
 
