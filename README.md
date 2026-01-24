@@ -155,34 +155,53 @@ IntexuraOS treats LLMs as a **council of experts**:
 
 ## Engineering Philosophy
 
-### AI as Team Members
+### AI-Native Development
 
-I don't just "use" AI tools. I define autonomous agents with explicit mandates:
+This isn't a codebase that "uses" AI — it's **built with AI as first-class team members**. Every workflow has AI assistance baked in.
 
-| Agent/Skill             | Role                                                        |
-| ----------------------- | ----------------------------------------------------------- |
-| `service-scribe`        | Documentation specialist that infers "why" from git history |
-| `/sentry`               | Sentry triage skill with AI analysis and cross-linking      |
-| `coverage-orchestrator` | QA lead where "94.9% is failure"                            |
-
-### No Dummy Success
-
-Every operation returns `Result<T, E>`. Errors are domain concepts, not exceptions. No silent failures.
-
-```typescript
-const result = await researchAgent.query(prompt);
-if (!result.ok) {
-  return err({ code: 'RESEARCH_FAILED', message: result.error.message });
-}
-// Type-safe access to result.value
+```mermaid
+graph LR
+    L["/linear"] -->|Creates| Issue[Linear Issue]
+    Issue -->|Branch| Code[Write Code]
+    Code -->|Verify| CI["ci:tracked"]
+    CI -->|Pass| PR[Pull Request]
+    PR -->|Cross-linked| Issue
+    Sentry[Sentry Error] -->|"/sentry"| Issue
+    Code -->|"/document-service"| Docs[Auto Docs]
 ```
+
+#### AI Extensions (`.claude/`)
+
+| Type                | Examples                                          | Capabilities                                           |
+| ------------------- | ------------------------------------------------- | ------------------------------------------------------ |
+| **Skills**          | `/linear`, `/sentry`, `/document-service`         | Issue auto-splitting, AI triage (Seer), doc generation |
+| **Agents**          | `coverage-orchestrator`, `service-scribe`         | 100% coverage enforcement, autonomous documentation    |
+| **Commands**        | `/create-service`, `/refactoring`                 | Service scaffolding, code smell detection              |
+
+**Cross-linking**: Linear ↔ GitHub (`INT-XXX` in PR title/body) ↔ Sentry (`[sentry]` prefix) — all artifacts connect automatically.
+
+### Extreme Ownership
+
+Inspired by Jocko Willink: **no bad code, only unowned problems**.
+
+From task acceptance until `pnpm run ci:tracked` passes, YOU own everything. "Pre-existing issue" and "not my fault" are forbidden phrases — discovery creates ownership.
+
+### Quality Gates
+
+```bash
+pnpm run ci:tracked  # TypeCheck → Lint → Tests (95% coverage) → Build
+```
+
+**Coverage is a gate, not a target.** 94.9% is failure. Every operation returns `Result<T, E>` — no silent failures.
 
 ### Sleep-at-Night Reliability
 
-- **95%+ test coverage**: Not a target, a gate
+- **95%+ test coverage**: Enforced by CI, no exceptions
 - **Strict TypeScript**: `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`
 - **Hexagonal architecture**: Domain logic is pure and testable
 - **Infrastructure as Code**: Everything in Terraform
+
+See `.claude/CLAUDE.md` for the complete AI development playbook.
 
 ---
 
