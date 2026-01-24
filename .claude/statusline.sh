@@ -4,7 +4,21 @@
 # Theme: detailed | Colors: true | Features: directory, git, model, context, usage, tokens, burnrate
 STATUSLINE_VERSION="1.4.0"
 
+# Debug logging - writes to file when statusline is called
+DEBUG_LOG="$HOME/.claude-statusline-debug.log"
+echo "$(date '+%Y-%m-%d %H:%M:%S') - statusline.sh called, pwd=$(pwd)" >> "$DEBUG_LOG"
+
+# Trap errors to log them
+trap 'echo "$(date '+%Y-%m-%d %H:%M:%S') - ERROR at line $LINENO: $BASH_COMMAND" >> "$DEBUG_LOG"' ERR
+
 input=$(cat)
+
+# Log whether we got input
+if [ -z "$input" ]; then
+  echo "$(date '+%Y-%m-%d %H:%M:%S') - WARNING: Empty input received" >> "$DEBUG_LOG"
+else
+  echo "$(date '+%Y-%m-%d %H:%M:%S') - Input received, length=${#input}" >> "$DEBUG_LOG"
+fi
 
 # ---- check jq availability ----
 HAS_JQ=0
@@ -259,3 +273,5 @@ if [ -n "$line3" ]; then
   printf '\n%s' "$line3"
 fi
 printf '\n'
+
+echo "$(date '+%Y-%m-%d %H:%M:%S') - statusline.sh completed successfully" >> "$DEBUG_LOG"
