@@ -6,7 +6,7 @@
  * - Uses JSON format in production
  */
 import type { FastifyInstance, FastifyRequest } from 'fastify';
-import { redactObject, SENSITIVE_FIELDS } from '@intexuraos/llm-common';
+import { redactObject, SENSITIVE_FIELDS } from '@intexuraos/llm-utils';
 
 /**
  * Paths that should not be logged (e.g., health checks from Cloud Run).

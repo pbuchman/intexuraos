@@ -4,7 +4,7 @@
  */
 
 import { type Result, ok, err, type Logger } from '@intexuraos/common-core';
-import type { SourceMapItem } from '@intexuraos/llm-common';
+import type { SourceMapItem } from '@intexuraos/llm-prompts';
 import type { LlmSynthesisProvider, LlmUsage } from '../ports/llmProvider.js';
 
 export interface RepairAttributionDeps {

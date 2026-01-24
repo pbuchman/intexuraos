@@ -9,7 +9,6 @@
     { "path": "../common-core" },
     { "path": "../infra-gemini" },
     { "path": "../infra-glm" },
-    { "path": "../llm-common" },
     { "path": "../llm-contract" },
     { "path": "../llm-pricing" }
   ]

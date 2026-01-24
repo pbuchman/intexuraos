@@ -22,7 +22,7 @@
     "@intexuraos/http-server": "workspace:*",
     "@intexuraos/infra-firestore": "workspace:*",
     "@intexuraos/infra-sentry": "workspace:*",
-    "@intexuraos/llm-common": "workspace:*",
+    "@intexuraos/llm-prompts": "workspace:*",
     "@intexuraos/llm-contract": "workspace:*",
     "@intexuraos/llm-factory": "workspace:*",
     "@intexuraos/llm-pricing": "workspace:*",

@@ -17,8 +17,8 @@ export {
   isErr,
 } from '@intexuraos/common-core';
 
-// Re-export llm-common redaction utilities for convenience
-export { redactToken, redactObject, SENSITIVE_FIELDS } from '@intexuraos/llm-common';
+// Re-export llm-utils redaction utilities for convenience
+export { redactToken, redactObject, SENSITIVE_FIELDS } from '@intexuraos/llm-utils';
 
 // HTTP response types and helpers
 export {

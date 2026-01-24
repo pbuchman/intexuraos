@@ -1,7 +1,7 @@
 import { err, type Logger, type Result } from '@intexuraos/common-core';
 import { createGeminiClient } from '@intexuraos/infra-gemini';
-import { generateThumbnailPrompt, LlmModels } from '@intexuraos/llm-contract';
-import type { ModelPricing } from '@intexuraos/llm-contract';
+import { LlmModels, type ModelPricing } from '@intexuraos/llm-contract';
+import { generateThumbnailPrompt } from '@intexuraos/llm-prompts';
 import type { ThumbnailPrompt } from '../../domain/index.js';
 import type { PromptGenerationError, PromptGenerator } from '../../domain/ports/promptGenerator.js';
 

@@ -125,9 +125,9 @@ These require explicit user instruction:
 
 ### Enforcement Rules
 
-| Scenario                         | Agent Response                                        |
-| -------------------------------- | ----------------------------------------------------- |
-| Single issue completed           | Move to In Review or QA, STOP, report to user         |
-| Multiple issues to process       | Complete ONE, checkpoint, wait for user instruction   |
-| User says "mark as Done"         | Then and only then move to Done                       |
-| Temptation to batch update       | STOP — each issue requires separate verification gate |
+| Scenario                   | Agent Response                                        |
+| -------------------------- | ----------------------------------------------------- |
+| Single issue completed     | Move to In Review or QA, STOP, report to user         |
+| Multiple issues to process | Complete ONE, checkpoint, wait for user instruction   |
+| User says "mark as Done"   | Then and only then move to Done                       |
+| Temptation to batch update | STOP — each issue requires separate verification gate |

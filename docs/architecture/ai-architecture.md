@@ -627,18 +627,19 @@ const validationResult = await llmValidator.validateKey({
 
 ## Packages
 
-| Package                        | Purpose                      |
-| ------------------------------ | ---------------------------- |
-| `@intexuraos/llm-contract`     | Shared types and interfaces  |
-| `@intexuraos/llm-factory`      | Client creation factory      |
-| `@intexuraos/llm-pricing`      | Cost calculation             |
-| `@intexuraos/llm-common`       | Shared prompts and utilities |
-| `@intexuraos/llm-audit`        | Usage tracking               |
-| `@intexuraos/infra-gemini`     | Google AI adapter            |
-| `@intexuraos/infra-gpt`        | OpenAI adapter               |
-| `@intexuraos/infra-claude`     | Anthropic adapter            |
-| `@intexuraos/infra-perplexity` | Perplexity adapter           |
-| `@intexuraos/infra-glm`        | Zai adapter                  |
+| Package                        | Purpose                              |
+| ------------------------------ | ------------------------------------ |
+| `@intexuraos/llm-contract`     | Shared types, models, and interfaces |
+| `@intexuraos/llm-factory`      | Client creation factory              |
+| `@intexuraos/llm-pricing`      | Cost calculation                     |
+| `@intexuraos/llm-prompts`      | Prompt builders, schemas, parsers    |
+| `@intexuraos/llm-utils`        | Redaction and parse error utilities  |
+| `@intexuraos/llm-audit`        | Usage tracking                       |
+| `@intexuraos/infra-gemini`     | Google AI adapter                    |
+| `@intexuraos/infra-gpt`        | OpenAI adapter                       |
+| `@intexuraos/infra-claude`     | Anthropic adapter                    |
+| `@intexuraos/infra-perplexity` | Perplexity adapter                   |
+| `@intexuraos/infra-glm`        | Zai adapter                          |
 
 ---
 

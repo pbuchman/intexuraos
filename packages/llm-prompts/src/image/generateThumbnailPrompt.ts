@@ -1,6 +1,11 @@
+/**
+ * Helper function for generating thumbnail prompts using an LLM client.
+ * Moved from llm-contract to break cyclic dependency.
+ */
+
 import { err, ok, type Result } from '@intexuraos/common-core';
-import { thumbnailPrompt } from '@intexuraos/llm-common';
-import type { LLMClient, LLMError, GenerateResult } from './types.js';
+import type { LLMClient, LLMError, GenerateResult } from '@intexuraos/llm-contract';
+import { thumbnailPrompt } from './thumbnailPrompt.js';
 
 export type RealismStyle = 'photorealistic' | 'cinematic illustration' | 'clean vector';
 
