@@ -187,6 +187,7 @@ describe('parseError', () => {
         errorMessage: 'Parse error occurred',
         llmResponse: 'test input',
         expectedSchema: 'TestSchema',
+        responseLength: 10,
       });
     });
 
@@ -207,7 +208,12 @@ describe('parseError', () => {
 
       expect(() => wrapped('input')).toThrow('Failed');
       expect(warnSpy.mock.calls[0][0]).toMatchObject({
+        operation: 'parseTest',
+        errorMessage: 'Failed',
+        llmResponse: 'input',
+        expectedSchema: 'TestSchema',
         prompt: 'The prompt was this',
+        responseLength: 5,
       });
     });
 
@@ -227,6 +233,13 @@ describe('parseError', () => {
 
       expect(() => wrapped('input')).toThrow('Failed');
       expect(warnSpy.mock.calls[0][0]).not.toHaveProperty('prompt');
+      expect(warnSpy.mock.calls[0][0]).toMatchObject({
+        operation: 'parseTest',
+        errorMessage: 'Failed',
+        llmResponse: 'input',
+        expectedSchema: 'TestSchema',
+        responseLength: 5,
+      });
     });
   });
 
