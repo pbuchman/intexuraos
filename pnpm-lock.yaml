@@ -486,6 +486,9 @@ importers:
       '@intexuraos/llm-pricing':
         specifier: workspace:*
         version: link:../../packages/llm-pricing
+      '@intexuraos/llm-prompts':
+        specifier: workspace:*
+        version: link:../../packages/llm-prompts
       fastify:
         specifier: ^5.1.0
         version: 5.6.2
@@ -1421,9 +1424,6 @@ importers:
       '@intexuraos/common-core':
         specifier: workspace:*
         version: link:../common-core
-      '@intexuraos/llm-common':
-        specifier: workspace:*
-        version: link:../llm-common
 
   packages/llm-factory:
     dependencies:

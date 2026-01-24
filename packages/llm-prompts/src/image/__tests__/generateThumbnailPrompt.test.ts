@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ok, err } from '@intexuraos/common-core';
-import { generateThumbnailPrompt } from '../helpers.js';
-import type { LLMClient, NormalizedUsage } from '../types.js';
+import type { LLMClient, NormalizedUsage } from '@intexuraos/llm-contract';
+import { generateThumbnailPrompt } from '../generateThumbnailPrompt.js';
 
 const mockUsage: NormalizedUsage = {
   inputTokens: 100,
