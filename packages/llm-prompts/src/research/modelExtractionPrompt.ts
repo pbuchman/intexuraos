@@ -5,9 +5,9 @@
  * and synthesis based on the user's original message.
  */
 
+import { getErrorMessage } from '@intexuraos/common-core';
 import { LlmModels, type ResearchModel } from '@intexuraos/llm-contract';
 import type { Logger } from 'pino';
-import { withLlmParseErrorLogging } from '@intexuraos/llm-utils';
 
 /**
  * Model information for building the extraction prompt.
@@ -183,21 +183,39 @@ export function parseModelExtractionResponseWithLogging(
   validModels: ResearchModel[],
   logger: Logger
 ): ModelExtractionResponse {
-  const wrapped = withLlmParseErrorLogging<string, ModelExtractionResponse>({
-    logger,
-    operation: 'parseModelExtractionResponse',
-    expectedSchema: '{"selectedModels":["model1",...],"synthesisModel":"model"}',
-    parser: (resp: string): ModelExtractionResponse => {
-      const result = parseModelExtractionResponse(resp, validModels);
-      if (result === null) {
-        throw new Error(
-          'Failed to parse model extraction: response does not match expected schema'
-        );
-      }
-      return result;
-    },
-  });
-  return wrapped(response);
+  try {
+    const result = parseModelExtractionResponse(response, validModels);
+    if (result === null) {
+      const error = new Error(
+        'Failed to parse model extraction: response does not match expected schema'
+      );
+      logger.warn(
+        {
+          operation: 'parseModelExtractionResponse',
+          errorMessage: error.message,
+          llmResponse: response,
+          expectedSchema: '{"selectedModels":["model1",...],"synthesisModel":"model"}',
+          responseLength: response.length,
+        },
+        'LLM parse error in parseModelExtractionResponse: Failed to parse model extraction: response does not match expected schema'
+      );
+      throw error;
+    }
+    return result;
+  } catch (error) {
+    const errorMessage = getErrorMessage(error);
+    logger.warn(
+      {
+        operation: 'parseModelExtractionResponse',
+        errorMessage,
+        llmResponse: response,
+        expectedSchema: '{"selectedModels":["model1",...],"synthesisModel":"model"}',
+        responseLength: response.length,
+      },
+      `LLM parse error in parseModelExtractionResponse: ${errorMessage}`
+    );
+    throw error;
+  }
 }
 
 /**

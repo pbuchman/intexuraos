@@ -5,8 +5,8 @@
  * to an approval request indicates approval, rejection, or is unclear.
  */
 
+import { getErrorMessage } from '@intexuraos/common-core';
 import type { Logger } from 'pino';
-import { withLlmParseErrorLogging } from '@intexuraos/llm-utils';
 
 /**
  * Input for building the approval intent prompt.
@@ -168,18 +168,39 @@ export function parseApprovalIntentResponseWithLogging(
   response: string,
   logger: Logger
 ): ApprovalIntentResponse {
-  const wrapped = withLlmParseErrorLogging<string, ApprovalIntentResponse>({
-    logger,
-    operation: 'parseApprovalIntentResponse',
-    expectedSchema:
-      '{"intent":"approve"|"reject"|"unclear","confidence":0.0-1.0,"reasoning":"string"}',
-    parser: (resp: string): ApprovalIntentResponse => {
-      const result = parseApprovalIntentResponse(resp);
-      if (result === null) {
-        throw new Error('Failed to parse approval intent: response does not match expected schema');
-      }
-      return result;
-    },
-  });
-  return wrapped(response);
+  try {
+    const result = parseApprovalIntentResponse(response);
+    if (result === null) {
+      const error = new Error(
+        'Failed to parse approval intent: response does not match expected schema'
+      );
+      logger.warn(
+        {
+          operation: 'parseApprovalIntentResponse',
+          errorMessage: error.message,
+          llmResponse: response,
+          expectedSchema:
+            '{"intent":"approve"|"reject"|"unclear","confidence":0.0-1.0,"reasoning":"string"}',
+          responseLength: response.length,
+        },
+        'LLM parse error in parseApprovalIntentResponse: Failed to parse approval intent: response does not match expected schema'
+      );
+      throw error;
+    }
+    return result;
+  } catch (error) {
+    const errorMessage = getErrorMessage(error);
+    logger.warn(
+      {
+        operation: 'parseApprovalIntentResponse',
+        errorMessage,
+        llmResponse: response,
+        expectedSchema:
+          '{"intent":"approve"|"reject"|"unclear","confidence":0.0-1.0,"reasoning":"string"}',
+        responseLength: response.length,
+      },
+      `LLM parse error in parseApprovalIntentResponse: ${errorMessage}`
+    );
+    throw error;
+  }
 }
