@@ -247,7 +247,7 @@ for (const [url, preview] of previews) {
 ## Troubleshooting
 
 | Issue            | Symptom             | Solution                     |
-| ----------------  | -------------------  | ----------------------------  |
+| ---------------- | ------------------- | ---------------------------- |
 | Unauthorized     | 401 response        | Check X-Internal-Auth header |
 | Missing metadata | Empty preview       | Site lacks OpenGraph tags    |
 | Partial success  | Mixed results       | Check error.code per result  |

@@ -9,7 +9,7 @@ Data-insights-agent manages user data sources, performs AI analysis using Gemini
 ### Data Sources
 
 | Method | Path                           | Description              | Auth         |
-| ------  | ------------------------------  | ------------------------  | ------------  |
+| ------ | ------------------------------ | ------------------------ | ------------ |
 | POST   | `/data-sources`                | Create data source       | Bearer token |
 | GET    | `/data-sources`                | List user's data sources | Bearer token |
 | GET    | `/data-sources/:id`            | Get specific data source | Bearer token |
@@ -20,7 +20,7 @@ Data-insights-agent manages user data sources, performs AI analysis using Gemini
 ### Composite Feeds
 
 | Method | Path                            | Description                    | Auth         |
-| ------  | -------------------------------  | ------------------------------  | ------------  |
+| ------ | ------------------------------- | ------------------------------ | ------------ |
 | POST   | `/composite-feeds`              | Create composite feed          | Bearer token |
 | GET    | `/composite-feeds`              | List composite feeds           | Bearer token |
 | GET    | `/composite-feeds/:id`          | Get composite feed             | Bearer token |
@@ -33,7 +33,7 @@ Data-insights-agent manages user data sources, performs AI analysis using Gemini
 ### Data Insights
 
 | Method | Path                               | Description          | Auth         |
-| ------  | ----------------------------------  | --------------------  | ------------  |
+| ------ | ---------------------------------- | -------------------- | ------------ |
 | POST   | `/data-insights/analyze`           | Analyze data with AI | Bearer token |
 | POST   | `/data-insights/chart-definition`  | Generate chart       | Bearer token |
 | POST   | `/data-insights/transform-preview` | Transform data       | Bearer token |
@@ -41,7 +41,7 @@ Data-insights-agent manages user data sources, performs AI analysis using Gemini
 ### Snapshots
 
 | Method | Path                              | Description           | Auth           |
-| ------  | ---------------------------------  | ---------------------  | --------------  |
+| ------ | --------------------------------- | --------------------- | -------------- |
 | GET    | `/snapshots/:id`                  | Get cached snapshot   | Bearer token   |
 | POST   | `/internal/snapshots/refresh-all` | Refresh all snapshots | Internal token |
 
@@ -50,7 +50,7 @@ Data-insights-agent manages user data sources, performs AI analysis using Gemini
 ### DataSource
 
 | Field       | Type   | Description                    |
-| -----------  | ------  | ------------------------------  |
+| ----------- | ------ | ------------------------------ |
 | `id`        | string | Unique identifier              |
 | `userId`    | string | Owner user ID                  |
 | `title`     | string | Data source title              |
@@ -60,22 +60,22 @@ Data-insights-agent manages user data sources, performs AI analysis using Gemini
 
 ### CompositeFeed
 
-| Field                 | Type                       | Description                 |
-| ---------------------  | --------------------------  | ---------------------------  |   |
-| `id`                  | string                     | Unique identifier           |
-| `userId`              | string                     | Owner user ID               |
-| `name`                | string                     | AI-generated feed name      |
-| `purpose`             | string                     | User-provided feed purpose  |
-| `staticSourceIds`     | string[]                   | Data source IDs             |
+| Field | Type | Description |
+| --------------------- | -------------------------- | --------------------------- | |
+| `id` | string | Unique identifier |
+| `userId` | string | Owner user ID |
+| `name` | string | AI-generated feed name |
+| `purpose` | string | User-provided feed purpose |
+| `staticSourceIds` | string[] | Data source IDs |
 | `notificationFilters` | NotificationFilterConfig[] | Notification filter configs |
-| `dataInsights`        | DataInsight[]              | null                        | AI analysis results |
-| `createdAt`           | Date                       | Creation timestamp          |
-| `updatedAt`           | Date                       | Last update timestamp       |
+| `dataInsights` | DataInsight[] | null | AI analysis results |
+| `createdAt` | Date | Creation timestamp |
+| `updatedAt` | Date | Last update timestamp |
 
 ### NotificationFilterConfig
 
 | Field    | Type     | Description                  |
-| --------  | --------  | ----------------------------  |
+| -------- | -------- | ---------------------------- |
 | `id`     | string   | Filter identifier            |
 | `name`   | string   | Filter name                  |
 | `app`    | string[] | Multi-select app filter      |
@@ -85,7 +85,7 @@ Data-insights-agent manages user data sources, performs AI analysis using Gemini
 ### Snapshot
 
 | Field          | Type   | Description        |
-| --------------  | ------  | ------------------  |
+| -------------- | ------ | ------------------ |
 | `id`           | string | Unique identifier  |
 | `userId`       | string | Owner user ID      |
 | `dataSourceId` | string | Source data ID     |
@@ -96,7 +96,7 @@ Data-insights-agent manages user data sources, performs AI analysis using Gemini
 ## Services
 
 | Service                     | Purpose                            |
-| ---------------------------  | ----------------------------------  |
+| --------------------------- | ---------------------------------- |
 | `dataSourceRepository`      | Firestore CRUD for data sources    |
 | `titleGenerationService`    | Gemini AI title generation         |
 | `compositeFeedRepository`   | Firestore CRUD for composite feeds |
@@ -111,7 +111,7 @@ Data-insights-agent manages user data sources, performs AI analysis using Gemini
 ## Configuration
 
 | Environment Variable                          | Required | Description                     |
-| ---------------------------------------------  | --------  | -------------------------------  |
+| --------------------------------------------- | -------- | ------------------------------- |
 | `INTEXURAOS_USER_SERVICE_URL`                 | Yes      | user-service base URL           |
 | `INTEXURAOS_INTERNAL_AUTH_TOKEN`              | Yes      | Shared secret for internal auth |
 | `INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_URL` | Yes      | Mobile notifications URL        |

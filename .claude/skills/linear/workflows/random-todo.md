@@ -6,12 +6,12 @@
 
 **This mode operates WITHOUT user interaction. The following rules are absolute:**
 
-| Rule             | Description                                                                       |
-| ---------------- | --------------------------------------------------------------------------------- |
-| **NO PROMPTS**   | Never ask "what should I do?", "which task?", or "ready to start?"                |
-| **AUTO-PROCEED** | Always proceed with the selected Todo item automatically                          |
-| **NO TASKS**     | If Todo state is empty, print message and exit gracefully                         |
-| **BLOCKER PR**   | If task cannot be completed, create PR with explanation and consider it done      |
+| Rule             | Description                                                                  |
+| ---------------- | ---------------------------------------------------------------------------- |
+| **NO PROMPTS**   | Never ask "what should I do?", "which task?", or "ready to start?"           |
+| **AUTO-PROCEED** | Always proceed with the selected Todo item automatically                     |
+| **NO TASKS**     | If Todo state is empty, print message and exit gracefully                    |
+| **BLOCKER PR**   | If task cannot be completed, create PR with explanation and consider it done |
 
 **The command is designed for automated/cron usage. It MUST NOT block on user input.**
 
@@ -19,7 +19,7 @@
 
 ```
 1. List issues where state is "Todo" (NOT from Backlog)
-2. Filter to team: "pbuchman"
+2. Filter to team: "IntexuraOS"
 3. Sort by priority (High → Low) then createdAt (newest first)
 4. Pick first result
 5. If no items: Print "No items in Todo state." and exit
@@ -42,6 +42,7 @@
 ## State Update Priority
 
 **CRITICAL:** You MUST update the Linear issue state to "In Progress" BEFORE:
+
 - Reading any code
 - Planning implementation
 - Investigating the issue

@@ -23,7 +23,7 @@ export interface ServiceContainer {
   linkPreviewFetcher: LinkPreviewFetcherPort;
   enrichPublisher: EnrichPublisher;
   summarizePublisher: SummarizePublisher;
-  whatsAppSendPublisher?: WhatsAppSendPublisher;
+  whatsAppSendPublisher: WhatsAppSendPublisher;
   bookmarkSummaryService: BookmarkSummaryService;
 }
 
@@ -33,7 +33,7 @@ export interface ServiceConfig {
   internalAuthToken: string;
   bookmarkEnrichTopic: string | null;
   bookmarkSummarizeTopic: string | null;
-  whatsappSendMessageTopic: string | null;
+  whatsappSendTopic: string;
 }
 
 let container: ServiceContainer | null = null;
@@ -56,12 +56,10 @@ export function initServices(config: ServiceConfig): void {
       topicName: config.bookmarkSummarizeTopic,
       logger: pino({ name: 'bookmark-summarize-publisher' }),
     }),
-    ...(config.whatsappSendMessageTopic !== null && {
-      whatsAppSendPublisher: createWhatsAppSendPublisher({
-        projectId: config.gcpProjectId,
-        topicName: config.whatsappSendMessageTopic,
-        logger: pino({ name: 'bookmark-whatsapp-send-publisher' }),
-      }),
+    whatsAppSendPublisher: createWhatsAppSendPublisher({
+      projectId: config.gcpProjectId,
+      topicName: config.whatsappSendTopic,
+      logger: pino({ name: 'bookmark-whatsapp-send-publisher' }),
     }),
     bookmarkSummaryService: createWebAgentSummaryClient({
       baseUrl: config.webAgentUrl,

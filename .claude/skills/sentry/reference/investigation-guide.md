@@ -43,18 +43,19 @@ Parameters:
 ```
 
 **Questions to answer:**
+
 - Is this affecting one endpoint or many?
 - Is this production-only or also staging?
 - Is this browser-specific?
 
 ### Common Patterns
 
-| Distribution                      | Likely Cause                          |
-| --------------------------------- | ------------------------------------- |
-| Single URL, single browser        | Client-side race condition            |
-| All URLs, all browsers            | Backend data issue                    |
-| Production only                   | Configuration or data migration issue |
-| Specific release only             | Regression from recent deployment     |
+| Distribution               | Likely Cause                          |
+| -------------------------- | ------------------------------------- |
+| Single URL, single browser | Client-side race condition            |
+| All URLs, all browsers     | Backend data issue                    |
+| Production only            | Configuration or data migration issue |
+| Specific release only      | Regression from recent deployment     |
 
 ## When to Use Seer vs Manual Investigation
 
@@ -87,6 +88,7 @@ gcloud firestore documents get projects/intexuraos-dev-pbuchman/databases/(defau
 ```
 
 **What to look for:**
+
 - Missing fields that should exist
 - Null values where objects expected
 - Timestamp inconsistencies

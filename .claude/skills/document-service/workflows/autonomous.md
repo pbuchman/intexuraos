@@ -8,12 +8,12 @@ Generate comprehensive documentation for one or more services without human inte
 
 ## Key Difference from Interactive Mode
 
-| Aspect      | Interactive                     | Autonomous                          |
-| ----------- | ------------------------------- | ----------------------------------- |
-| Q1 (Why)    | Asks user                       | Infers from git history + README    |
-| Q5 (Killer) | Asks user                       | Infers from code complexity         |
-| Q8 (Future) | Asks user                       | Infers from TODOs + debt docs       |
-| Output      | 4 files                         | 5 files (includes agent.md)         |
+| Aspect      | Interactive | Autonomous                       |
+| ----------- | ----------- | -------------------------------- |
+| Q1 (Why)    | Asks user   | Infers from git history + README |
+| Q5 (Killer) | Asks user   | Infers from code complexity      |
+| Q8 (Future) | Asks user   | Infers from TODOs + debt docs    |
+| Output      | 4 files     | 5 files (includes agent.md)      |
 
 ## Phases
 
@@ -49,6 +49,7 @@ git log -n 15 --pretty=format:"%h - %s (%cr)" apps/<service-name>/
 ```
 
 Extract:
+
 - **Hotspots:** Which files changed most often?
 - **Focus:** Are recent commits `fix:` (stability), `feat:` (growth), or `refactor:` (debt)?
 - **Features:** "Added X capabilities" from commit messages
@@ -72,11 +73,11 @@ Analyze `apps/<service-name>/src/`:
 
 ### Inference Rules
 
-| Question | Inference Sources |
-| -------- | ----------------- |
-| **Q1: Why exists?** | Git first commit, README.md, existing features.md "The Problem" section |
-| **Q5: Killer feature?** | Most complex endpoint, most use cases, primary integration point |
-| **Q8: Future plans?** | TODO/FIXME comments, technical-debt.md "Future Plans", GitHub issues |
+| Question                | Inference Sources                                                       |
+| ----------------------- | ----------------------------------------------------------------------- |
+| **Q1: Why exists?**     | Git first commit, README.md, existing features.md "The Problem" section |
+| **Q5: Killer feature?** | Most complex endpoint, most use cases, primary integration point        |
+| **Q8: Future plans?**   | TODO/FIXME comments, technical-debt.md "Future Plans", GitHub issues    |
 
 See [inference-rules.md](../reference/inference-rules.md) for detailed rules.
 

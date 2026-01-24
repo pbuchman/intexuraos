@@ -7,7 +7,7 @@
 ## Identity
 
 | Field    | Value                                                          |
-| --------  | --------------------------------------------------------------  |
+| -------- | -------------------------------------------------------------- |
 | **Name** | web-agent                                                      |
 | **Role** | Web Content Extraction Service                                 |
 | **Goal** | Extract OpenGraph metadata and generate AI summaries from URLs |
@@ -59,7 +59,7 @@ interface SummaryResult {
 ## Constraints
 
 | Rule               | Description                       |
-| ------------------  | ---------------------------------  |
+| ------------------ | --------------------------------- |
 | **Size Limit**     | Maximum 2MB content size          |
 | **Timeout**        | 30 second fetch timeout           |
 | **Content Types**  | HTML pages only for OG extraction |
@@ -92,7 +92,7 @@ const summary = await summarizeContent({
 ## Internal Endpoints
 
 | Method | Path                  | Purpose                                       |
-| ------  | ---------------------  | ---------------------------------------------  |
+| ------ | --------------------- | --------------------------------------------- |
 | POST   | `/internal/og`        | Fetch OG metadata (called by bookmarks-agent) |
 | POST   | `/internal/summarize` | Generate summary (called by bookmarks-agent)  |
 
@@ -101,7 +101,7 @@ const summary = await summarizeContent({
 ## Error Handling
 
 | Error Code          | Description                      |
-| -------------------  | --------------------------------  |
+| ------------------- | -------------------------------- |
 | `FETCH_FAILED`      | Unable to fetch URL              |
 | `CONTENT_TOO_LARGE` | Content exceeds 2MB limit        |
 | `TIMEOUT`           | Fetch exceeded 30 seconds        |

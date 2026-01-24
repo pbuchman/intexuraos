@@ -7,7 +7,7 @@
 ## Identity
 
 | Field    | Value                                                                        |
-| --------  | ----------------------------------------------------------------------------  |
+| -------- | ---------------------------------------------------------------------------- |
 | **Name** | user-service                                                                 |
 | **Role** | User Authentication and Settings Service                                     |
 | **Goal** | Manage authentication, OAuth connections, LLM API keys, and user preferences |
@@ -107,7 +107,7 @@ interface LlmKeyUpdateResult {
 ## Constraints
 
 | Rule                  | Description                                         |
-| ---------------------  | ---------------------------------------------------  |
+| --------------------- | --------------------------------------------------- |
 | **Self-Access Only**  | Users can only access their own settings            |
 | **Encrypted Storage** | API keys encrypted at rest with user-specific key   |
 | **Key Validation**    | API keys validated with provider before storing     |
@@ -164,7 +164,7 @@ const keys = await getLlmApiKeys(userId);
 ## Internal Endpoints
 
 | Method | Path                            | Purpose                                           |
-| ------  | -------------------------------  | -------------------------------------------------  |
+| ------ | ------------------------------- | ------------------------------------------------- |
 | GET    | `/internal/users/:uid/llm-keys` | Get decrypted LLM keys (called by research-agent) |
 | GET    | `/internal/users/:uid/oauth`    | Get OAuth tokens (called by calendar-agent)       |
 

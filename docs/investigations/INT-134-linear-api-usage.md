@@ -56,7 +56,7 @@ async function mapIssuesWithBatchedStates(issues: Issue[]): Promise<LinearIssue[
 #### Per Dashboard Load
 
 | Operation          | API Calls | Notes                                   |
-| ------------------  | ---------  | ---------------------------------------  |
+| ------------------ | --------- | --------------------------------------- |
 | List issues        | 1         | `client.issues({ filter, first: 100 })` |
 | Fetch states       | N         | One per issue returned                  |
 | **Total per load** | **N + 1** |                                         |
@@ -64,7 +64,7 @@ async function mapIssuesWithBatchedStates(issues: Issue[]): Promise<LinearIssue[
 #### For 30-Issue Dashboard (Scenario in Issue)
 
 | Metric                   | Value  | Calculation                |
-| ------------------------  | ------  | --------------------------  |
+| ------------------------ | ------ | -------------------------- |
 | Issues returned          | 30     | 10 open + 20 closed/3 days |
 | API calls per load       | 31     | 1 (list) + 30 (states)     |
 | Loads per hour (polling) | 60     | 1 per minute               |
@@ -74,7 +74,7 @@ async function mapIssuesWithBatchedStates(issues: Issue[]): Promise<LinearIssue[
 #### For 100 Issues (Current `first: 100` Limit)
 
 | Metric                   | Value  | Calculation             |
-| ------------------------  | ------  | -----------------------  |
+| ------------------------ | ------ | ----------------------- |
 | API calls per load       | 101    | 1 (list) + 100 (states) |
 | API calls per hour       | 6,060  | 101 × 60                |
 | API calls per 8-hour day | 48,480 | 6,060 × 8               |
@@ -84,16 +84,16 @@ async function mapIssuesWithBatchedStates(issues: Issue[]): Promise<LinearIssue[
 The current caching implementation has two components:
 
 | Cache Type    | TTL        | Purpose                           | Effectiveness |
-| -------------  | ----------  | ---------------------------------  | -------------  |
-| Client cache  | 5 minutes  | Reuse LinearClient instances      | ✅ Helps       |
-| Request dedup | 10 seconds | Prevent duplicate in-flight calls | ❌ Not enough  |
+| ------------- | ---------- | --------------------------------- | ------------- |
+| Client cache  | 5 minutes  | Reuse LinearClient instances      | ✅ Helps      |
+| Request dedup | 10 seconds | Prevent duplicate in-flight calls | ❌ Not enough |
 
 **Problem:** The 10-second dedup TTL is shorter than the 60-second polling interval. Each poll is a fresh request, triggering full N+1 queries again.
 
 ### 5. Other API Call Sources
 
 | Endpoint                      | API Calls | Frequency        |
-| -----------------------------  | ---------  | ----------------  |
+| ----------------------------- | --------- | ---------------- |
 | `/linear/connection`          | 0         | Firestore only   |
 | `/linear/connection/validate` | 2         | On connect       |
 | `/linear/failed-issues`       | 0         | Firestore only   |
@@ -155,7 +155,7 @@ Reference: https://developers.linear.app/docs/graphql/working-with-the-graphql-a
 ## Files Analyzed
 
 | File                                                                  | Purpose                 |
-| ---------------------------------------------------------------------  | -----------------------  |
+| --------------------------------------------------------------------- | ----------------------- |
 | `apps/linear-agent/src/infra/linear/linearApiClient.ts`               | Linear SDK wrapper      |
 | `apps/linear-agent/src/domain/useCases/listIssues.ts`                 | Dashboard data use case |
 | `apps/linear-agent/src/routes/linearRoutes.ts`                        | HTTP endpoints          |

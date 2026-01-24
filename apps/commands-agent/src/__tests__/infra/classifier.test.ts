@@ -11,7 +11,7 @@ vi.mock('@intexuraos/llm-pricing', async (importOriginal) => {
   };
 });
 
-const { createGeminiClassifier } = await import('../../infra/gemini/classifier.js');
+const { createGeminiClassifier } = await import('../../infra/llm/classifier.js');
 
 const mockGenerate = vi.fn();
 const mockLlmClient: LlmGenerateClient = {

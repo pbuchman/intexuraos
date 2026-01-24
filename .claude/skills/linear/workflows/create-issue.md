@@ -54,6 +54,7 @@ _This is the original user instruction, transcribed verbatim. May include typos 
 ```
 
 **Requirements:**
+
 - Preserve exactly - Include typos, grammatical errors, raw phrasing
 - No corrections - Do not fix spelling or grammar
 - Quote block - Use `>` blockquote for the instruction
@@ -76,14 +77,14 @@ The existing issue becomes the parent (ledger) — do NOT create a new parent is
 
 ## Issue Naming Conventions
 
-| Type          | Pattern                             | Examples                                              |
-| ------------- | ----------------------------------- | ----------------------------------------------------- |
-| Bug           | `[bug] <short-error-message>`       | `[bug] Cannot read property 'id' of undefined`        |
-| Feature       | `[feature] <action-object-context>` | `[feature] Add OAuth token refresh for calendar`      |
-| Sentry        | `[sentry] <error-name>`             | `[sentry] TypeError: null is not an object`           |
-| Coverage      | `[coverage][<app>] <description>`   | `[coverage][user-service] Add tests for validation`   |
-| Refactoring   | `[refactor] <component-name>`       | `[refactor] Extract shared HTTP client utilities`     |
-| Documentation | `[docs] <topic>`                    | `[docs] API authentication flow`                      |
+| Type          | Pattern                             | Examples                                            |
+| ------------- | ----------------------------------- | --------------------------------------------------- |
+| Bug           | `[bug] <short-error-message>`       | `[bug] Cannot read property 'id' of undefined`      |
+| Feature       | `[feature] <action-object-context>` | `[feature] Add OAuth token refresh for calendar`    |
+| Sentry        | `[sentry] <error-name>`             | `[sentry] TypeError: null is not an object`         |
+| Coverage      | `[coverage][<app>] <description>`   | `[coverage][user-service] Add tests for validation` |
+| Refactoring   | `[refactor] <component-name>`       | `[refactor] Extract shared HTTP client utilities`   |
+| Documentation | `[docs] <topic>`                    | `[docs] API authentication flow`                    |
 
 ## Title Generation Rules
 

@@ -1,23 +1,7 @@
 ---
 name: linear
-description: |
-  Linear issue management with automatic workflow orchestration.
-  Handles issue creation, state transitions, and automatic splitting
-  of large plans into tiered child issues.
-
-invocation: both
-
-triggers:
-  - "/linear"
-  - "INT-\\d+"
-  - "create.*issue"
-  - "track.*task"
-  - "linear.*issue"
-
-config:
-  team: "IntexuraOS"
-  project_key: "INT"
-  base_branch: "development"
+description: Linear issue management with automatic workflow orchestration. Handles issue creation, state transitions, and automatic splitting of large plans into tiered child issues. Use when creating issues, tracking tasks, working on INT-XXX issues, or managing Linear workflow.
+argument-hint: '[INT-XXX | task description | sentry-url]'
 ---
 
 # Linear Issue Management
@@ -49,11 +33,11 @@ Manage Linear issues, branches, and PRs with enforced workflow and cross-linking
 
 The skill automatically detects intent from input:
 
-| Input Pattern                   | Type               | Workflow                              |
-| ------------------------------- | ------------------ | ------------------------------------- |
-| `/linear` (no args)             | Random Todo        | [random-todo.md](workflows/random-todo.md)        |
-| `/linear <task description>`    | Create New         | [create-issue.md](workflows/create-issue.md)      |
-| `/linear INT-<number>`          | Work Existing      | [work-existing.md](workflows/work-existing.md)    |
+| Input Pattern                   | Type               | Workflow                                                 |
+| ------------------------------- | ------------------ | -------------------------------------------------------- |
+| `/linear` (no args)             | Random Todo        | [random-todo.md](workflows/random-todo.md)               |
+| `/linear <task description>`    | Create New         | [create-issue.md](workflows/create-issue.md)             |
+| `/linear INT-<number>`          | Work Existing      | [work-existing.md](workflows/work-existing.md)           |
 | `/linear https://sentry.io/...` | Sentry Integration | [sentry-integration.md](workflows/sentry-integration.md) |
 
 ## Auto-Splitting Detection
@@ -71,11 +55,11 @@ When detected, see: [plan-splitting.md](workflows/plan-splitting.md)
 
 Before ANY operation, verify all required tools:
 
-| Tool       | Verification Command             | Purpose          |
-| ---------- | -------------------------------- | ---------------- |
-| Linear MCP | `mcp__linear__list_teams`        | Issue management |
-| GitHub CLI | `gh auth status`                 | PR creation      |
-| GCloud     | Service account verification     | Firestore access |
+| Tool       | Verification Command         | Purpose          |
+| ---------- | ---------------------------- | ---------------- |
+| Linear MCP | `mcp__linear__list_teams`    | Issue management |
+| GitHub CLI | `gh auth status`             | PR creation      |
+| GCloud     | Service account verification | Firestore access |
 
 ### GCloud Verification
 

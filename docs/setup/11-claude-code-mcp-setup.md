@@ -12,10 +12,10 @@ This document describes how to configure MCP (Model Context Protocol) servers fo
 
 ## Required Environment Variables
 
-| Variable            | Service | Purpose                        |
-| -------------------  | -------  | ------------------------------  |
-| `LINEAR_API_KEY`    | Linear  | Issue tracking API access      |
-| `SENTRY_AUTH_TOKEN` | Sentry  | Error monitoring API access    |
+| Variable            | Service | Purpose                     |
+| ------------------- | ------- | --------------------------- |
+| `LINEAR_API_KEY`    | Linear  | Issue tracking API access   |
+| `SENTRY_AUTH_TOKEN` | Sentry  | Error monitoring API access |
 
 Add to your shell profile (`~/.zshrc` or `~/.bashrc`):
 
@@ -58,14 +58,14 @@ Personal API keys inherit your Linear account permissions. No additional scopes 
 
 Select the following scopes:
 
-| Scope           | Purpose                    |
-| ---------------  | --------------------------  |
-| `org:read`      | List organizations         |
-| `project:read`  | List and view projects     |
-| `project:write` | Update project settings    |
-| `team:read`     | List teams                 |
-| `team:write`    | Manage team membership     |
-| `event:write`   | Create test events         |
+| Scope           | Purpose                 |
+| --------------- | ----------------------- |
+| `org:read`      | List organizations      |
+| `project:read`  | List and view projects  |
+| `project:write` | Update project settings |
+| `team:read`     | List teams              |
+| `team:write`    | Manage team membership  |
+| `event:write`   | Create test events      |
 
 ### 2.3 Key Format
 
@@ -103,10 +103,10 @@ Located at project root, defines MCP server connections:
 
 **Transport types:**
 
-| Type   | Linear | Sentry | Description                          |
-| ------  | ------  | ------  | ------------------------------------  |
-| HTTP   | Yes    | No     | Stateless, headers per request       |
-| STDIO  | No     | Yes    | Subprocess, token passed at startup  |
+| Type  | Linear | Sentry | Description                         |
+| ----- | ------ | ------ | ----------------------------------- |
+| HTTP  | Yes    | No     | Stateless, headers per request      |
+| STDIO | No     | Yes    | Subprocess, token passed at startup |
 
 ### 3.2 Plugins (`.claude/settings.json`)
 
@@ -127,14 +127,14 @@ Defines enabled plugins for the project:
 
 **Plugin descriptions:**
 
-| Plugin                | Purpose                                           |
-| ---------------------  | -------------------------------------------------  |
-| `superpowers`         | TDD workflow, brainstorming, subagent development |
-| `context7`            | Library documentation lookup                      |
-| `commit-commands`     | Git commit workflow helpers                       |
-| `pr-review-toolkit`   | Code review agents (6 specialized reviewers)      |
-| `playwright`          | Browser automation and testing                    |
-| `frontend-design`     | UI/frontend design assistance                     |
+| Plugin              | Purpose                                           |
+| ------------------- | ------------------------------------------------- |
+| `superpowers`       | TDD workflow, brainstorming, subagent development |
+| `context7`          | Library documentation lookup                      |
+| `commit-commands`   | Git commit workflow helpers                       |
+| `pr-review-toolkit` | Code review agents (6 specialized reviewers)      |
+| `playwright`        | Browser automation and testing                    |
+| `frontend-design`   | UI/frontend design assistance                     |
 
 ### 3.3 First-Time Plugin Setup
 

@@ -18,16 +18,19 @@ This workflow processes multiple unresolved Sentry issues sequentially, ensuring
 Before processing any issues, verify access to all required tools:
 
 1. **Sentry**: Can you fetch issues?
+
    ```
    Call: mcp__sentry__whoami
    ```
 
 2. **Linear**: Can you search/create issues?
+
    ```
    Call: mcp__linear__list_teams
    ```
 
 3. **GitHub**: Can you create PRs?
+
    ```
    Run: gh auth status
    ```
@@ -54,6 +57,7 @@ Parameters:
 ```
 
 Projects to query:
+
 1. `intexuraos-development`
 2. `intexuraos-web-development`
 
@@ -66,6 +70,7 @@ For each Sentry issue:
 #### 3.1: Linear Synchronization
 
 1. **Search Linear**: Look for existing issue matching the Sentry error
+
    ```
    Call: mcp__linear__list_issues
    Parameters:
@@ -82,16 +87,17 @@ For each Sentry issue:
 
 **Cross-linking protocol (enforced):**
 
-| Direction        | Method                                   |
-| ---------------- | ---------------------------------------- |
-| Sentry → Linear  | Comment on Sentry with Linear link       |
-| Linear → Sentry  | Link in description                      |
-| Linear → GitHub  | When PR created                          |
-| GitHub → Linear  | `Fixes INT-XXX` in PR body               |
+| Direction       | Method                             |
+| --------------- | ---------------------------------- |
+| Sentry → Linear | Comment on Sentry with Linear link |
+| Linear → Sentry | Link in description                |
+| Linear → GitHub | When PR created                    |
+| GitHub → Linear | `Fixes INT-XXX` in PR body         |
 
 #### 3.2: Deep Investigation
 
 1. **Branching**: Create a new branch from freshly fetched `development`:
+
    ```bash
    git fetch origin
    git checkout -b fix/INT-XXX-sentry-<short-id> origin/development
@@ -126,14 +132,15 @@ After processing (or if stopped due to limit), output a summary table:
 ```markdown
 ## Sentry Triage Summary
 
-| Sentry Issue          | Linear Issue       | GitHub PR          | Status              |
-| :-------------------- | :----------------- | :----------------- | :------------------ |
-| [Title](sentry-url)   | [INT-XXX](url)     | [#123](pr-url)     | ✅ Triaged          |
-| [Title](sentry-url)   | [INT-YYY](url)     | —                  | 🚧 Blocked (DB)     |
-| [Title](sentry-url)   | —                  | —                  | ⏭️ Skipped (known)  |
+| Sentry Issue        | Linear Issue   | GitHub PR      | Status             |
+| :------------------ | :------------- | :------------- | :----------------- |
+| [Title](sentry-url) | [INT-XXX](url) | [#123](pr-url) | ✅ Triaged         |
+| [Title](sentry-url) | [INT-YYY](url) | —              | 🚧 Blocked (DB)    |
+| [Title](sentry-url) | —              | —              | ⏭️ Skipped (known) |
 ```
 
 **Status Legend:**
+
 - ✅ Triaged - PR created and linked
 - 🚧 Blocked - Investigation incomplete, reason documented
 - ⏭️ Skipped - Known/expected warning (see expected-sentry-warnings)

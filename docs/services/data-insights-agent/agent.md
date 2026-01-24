@@ -7,7 +7,7 @@
 ## Identity
 
 | Field    | Value                                                                     |
-| --------  | -------------------------------------------------------------------------  |
+| -------- | ------------------------------------------------------------------------- |
 | **Name** | data-insights-agent                                                       |
 | **Role** | Data Analytics and Visualization Service                                  |
 | **Goal** | Analyze composite data feeds and generate AI-powered insights with charts |
@@ -144,7 +144,7 @@ interface ChartData {
 ## Constraints
 
 | Rule                    | Description                                  |
-| -----------------------  | --------------------------------------------  |
+| ----------------------- | -------------------------------------------- |
 | **Ownership**           | Users can only access their own data         |
 | **LLM Keys Required**   | Analysis requires configured Google API key  |
 | **Max Insights**        | Analyze returns up to 5 insights per feed    |
@@ -234,7 +234,7 @@ const chartData = await previewChart(feedId, {
 ## Internal Endpoints
 
 | Method | Path                           | Purpose                            |
-| ------  | ------------------------------  | ----------------------------------  |
+| ------ | ------------------------------ | ---------------------------------- |
 | GET    | `/internal/feeds/:id/snapshot` | Get snapshot for internal services |
 
 ---
@@ -242,7 +242,7 @@ const chartData = await previewChart(feedId, {
 ## Error Handling
 
 | Error Code             | Description                            |
-| ----------------------  | --------------------------------------  |
+| ---------------------- | -------------------------------------- |
 | `NOT_FOUND`            | Feed, source, or snapshot not found    |
 | `CONFLICT`             | Cannot delete source used by feeds     |
 | `MISCONFIGURED`        | LLM API key not configured             |

@@ -40,17 +40,17 @@ Fixes Sentry issue: [{{sentry_issue_id}}]({{sentry_url}})
 
 ## Field Descriptions
 
-| Field                    | Description                                      |
-| ------------------------ | ------------------------------------------------ |
-| `sentry_issue_id`        | Sentry issue identifier                          |
-| `sentry_url`             | Full Sentry issue URL                            |
-| `brief_description`      | 1-2 sentence summary of what the fix does        |
-| `root_cause_analysis`    | Detailed explanation of WHY the bug happened     |
-| `change_N`               | Specific code changes made                       |
-| `evidence_summary`       | Firestore data, logs, or other investigation data|
-| `linear_issue_id`        | Linear issue ID (e.g., `INT-123`)                |
-| `linear_url`             | Full Linear issue URL                            |
-| `edge_cases`             | Edge cases tested                                |
+| Field                 | Description                                       |
+| --------------------- | ------------------------------------------------- |
+| `sentry_issue_id`     | Sentry issue identifier                           |
+| `sentry_url`          | Full Sentry issue URL                             |
+| `brief_description`   | 1-2 sentence summary of what the fix does         |
+| `root_cause_analysis` | Detailed explanation of WHY the bug happened      |
+| `change_N`            | Specific code changes made                        |
+| `evidence_summary`    | Firestore data, logs, or other investigation data |
+| `linear_issue_id`     | Linear issue ID (e.g., `INT-123`)                 |
+| `linear_url`          | Full Linear issue URL                             |
+| `edge_cases`          | Edge cases tested                                 |
 
 ## Root Cause Section Guidelines
 
@@ -79,22 +79,26 @@ Include relevant evidence from investigation:
 - Seer analysis output
 - Timeline of events
 
-```markdown
+````markdown
 ## Investigation Evidence
 
 Firestore document at `users/abc123`:
+
 ```json
 {
   "email": "user@example.com",
   "createdAt": "2026-01-15T10:30:00Z",
-  "profile": null  // <-- Missing profile object
+  "profile": null // <-- Missing profile object
 }
 ```
+````
 
 Log entry showing the failure point:
+
 ```
 2026-01-15T10:30:05Z ERROR TodoService: Cannot read 'preferences' of null
 ```
+
 ```
 
 ## Cross-Reference Requirements
@@ -106,3 +110,4 @@ The PR will not be approved without:
 2. `Fixes INT-XXX` for Linear issue (enables auto-closing)
 
 The `Fixes` keyword in front of the Linear issue ID enables GitHub to automatically transition the Linear issue when the PR is merged.
+```

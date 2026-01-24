@@ -154,7 +154,7 @@ For broader translation needs, consider:
 ### Translation Scope Analysis
 
 | Service          | User-Facing Strings                    | Priority |
-| ----------------  | --------------------------------------  | --------  |
+| ---------------- | -------------------------------------- | -------- |
 | whatsapp-service | Transcription messages, error messages | High     |
 | web app          | All UI text                            | Medium   |
 | commands-agent   | Classification feedback                | Low      |

@@ -1,25 +1,7 @@
 ---
 name: document-service
-description: |
-  Generate professional documentation for IntexuraOS services.
-  Produces 5 doc files per service plus updates aggregated site content.
-  Supports interactive mode (asks questions) and autonomous mode (infers from code).
-
-invocation: both
-
-triggers:
-  - "/document-service"
-  - "document.*service"
-  - "generate.*documentation"
-  - "update.*docs.*for"
-
-modes:
-  interactive:
-    description: Asks 3 open questions (Q1, Q5, Q8), infers the rest from code
-    invocation: "/document-service <service-name>"
-  autonomous:
-    description: Infers ALL answers from code analysis and git history
-    invocation: "Task tool with subagent_type: service-scribe"
+description: Generate professional documentation for IntexuraOS services. Produces 5 doc files per service plus updates aggregated site content. Supports interactive mode (asks questions) and autonomous mode (infers from code). Use when documenting services, generating docs, or updating service documentation.
+argument-hint: '[service-name]'
 ---
 
 # Document Service
@@ -47,39 +29,39 @@ Generate comprehensive documentation for IntexuraOS services.
 
 Each service produces 5 documentation files:
 
-| File                | Purpose                                     | Audience              |
-| ------------------- | ------------------------------------------- | --------------------- |
-| `features.md`       | Value propositions, capabilities, use cases | Users, marketing      |
-| `technical.md`      | Architecture, APIs, patterns, gotchas       | Developers, AI agents |
-| `tutorial.md`       | Getting-started tutorial with exercises     | New developers        |
-| `technical-debt.md` | Known issues, debt items, future plans      | Maintainers           |
-| `agent.md`          | Machine-readable interface (autonomous only)| AI agents             |
+| File                | Purpose                                      | Audience              |
+| ------------------- | -------------------------------------------- | --------------------- |
+| `features.md`       | Value propositions, capabilities, use cases  | Users, marketing      |
+| `technical.md`      | Architecture, APIs, patterns, gotchas        | Developers, AI agents |
+| `tutorial.md`       | Getting-started tutorial with exercises      | New developers        |
+| `technical-debt.md` | Known issues, debt items, future plans       | Maintainers           |
+| `agent.md`          | Machine-readable interface (autonomous only) | AI agents             |
 
 Plus website content updates:
 
-| File               | Purpose                    |
-| ------------------ | -------------------------- |
-| `services/index.md`| Service catalog            |
-| `site-marketing.md`| Marketing pages source     |
-| `site-developer.md`| Developer docs source      |
-| `site-index.json`  | Structured metadata        |
-| `overview.md`      | Project narrative          |
+| File                | Purpose                |
+| ------------------- | ---------------------- |
+| `services/index.md` | Service catalog        |
+| `site-marketing.md` | Marketing pages source |
+| `site-developer.md` | Developer docs source  |
+| `site-index.json`   | Structured metadata    |
+| `overview.md`       | Project narrative      |
 
 ## Mode Selection
 
-| Mode        | When to Use                              | Invocation                         |
-| ----------- | ---------------------------------------- | ---------------------------------- |
-| Discovery   | List services, check doc status          | `/document-service` (no args)      |
-| Interactive | Document one service with user input     | `/document-service <service-name>` |
-| Autonomous  | Batch document all/multiple services     | Task tool → `service-scribe`       |
+| Mode        | When to Use                          | Invocation                         |
+| ----------- | ------------------------------------ | ---------------------------------- |
+| Discovery   | List services, check doc status      | `/document-service` (no args)      |
+| Interactive | Document one service with user input | `/document-service <service-name>` |
+| Autonomous  | Batch document all/multiple services | Task tool → `service-scribe`       |
 
 ## Invocation Detection
 
-| Input Pattern                          | Workflow                                        |
-| -------------------------------------- | ----------------------------------------------- |
-| `/document-service`                    | [discovery.md](workflows/discovery.md)          |
-| `/document-service <service>`          | [interactive.md](workflows/interactive.md)      |
-| Task tool `service-scribe` subagent    | [autonomous.md](workflows/autonomous.md)        |
+| Input Pattern                       | Workflow                                   |
+| ----------------------------------- | ------------------------------------------ |
+| `/document-service`                 | [discovery.md](workflows/discovery.md)     |
+| `/document-service <service>`       | [interactive.md](workflows/interactive.md) |
+| Task tool `service-scribe` subagent | [autonomous.md](workflows/autonomous.md)   |
 
 ## References
 

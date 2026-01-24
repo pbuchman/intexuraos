@@ -71,6 +71,7 @@ Calculate coverage using formula in [coverage-calculation.md](../reference/cover
 ## Phase 2: Interview
 
 **STRICT RULES:**
+
 - **MAX 3 open questions** per service run
 - **ALL other insights**: Infer from code analysis OR ask via wizard (multiple choice)
 - **NEVER guess**: If inference confidence < 100%, ask wizard question

@@ -61,4 +61,16 @@ export interface WhatsAppCloudApiPort {
    * @param messageId - The ID of the message to mark as read
    */
   markAsRead(phoneNumberId: string, messageId: string): Promise<Result<void, WhatsAppError>>;
+
+  /**
+   * Mark a message as read and show typing indicator.
+   * Combines mark-as-read with a typing indicator that shows for up to 25 seconds
+   * or until a message is sent.
+   * @param phoneNumberId - Business phone number ID
+   * @param messageId - The ID of the message to mark as read
+   */
+  markAsReadWithTyping(
+    phoneNumberId: string,
+    messageId: string
+  ): Promise<Result<void, WhatsAppError>>;
 }

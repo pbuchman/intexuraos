@@ -69,6 +69,7 @@ docs/
 **Update Rule:** Incremental — add documented services, remove from pending
 
 **Sections:**
+
 - Documented Services (with links)
 - Pending Documentation (checklist)
 
@@ -79,6 +80,7 @@ docs/
 **Update Rule:** Update when service adds new capability category
 
 **Sections:**
+
 - What is IntexuraOS
 - How It Works (by problem category)
 - Services table
@@ -92,6 +94,7 @@ docs/
 **Update Rule:** Append only — never modify existing entries
 
 **Entry Format:**
+
 ```markdown
 ## YYYY-MM-DD — <service-name>
 
@@ -113,6 +116,7 @@ docs/
 **Update Rule:** Incremental — add service capabilities, use cases, roadmap items
 
 **Sections:**
+
 - Hero Section
 - Value Propositions
 - Capabilities (by category: Capture, Organize, Automate, Integrate)
@@ -127,6 +131,7 @@ docs/
 **Update Rule:** Incremental — add APIs, events, models, config
 
 **Sections:**
+
 - Quick Start
 - API Reference (by service)
 - Events Reference (Pub/Sub)
@@ -141,6 +146,7 @@ docs/
 **Update Rule:** Append service to array, update stats
 
 **Schema:**
+
 ```json
 {
   "lastUpdated": "YYYY-MM-DD",

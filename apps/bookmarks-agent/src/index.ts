@@ -11,6 +11,7 @@ const REQUIRED_ENV = [
   'INTEXURAOS_AUTH_AUDIENCE',
   'INTEXURAOS_INTERNAL_AUTH_TOKEN',
   'INTEXURAOS_WEB_AGENT_URL',
+  'INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC',
 ];
 
 validateRequiredEnv(REQUIRED_ENV);
@@ -29,7 +30,7 @@ initSentry({
 async function main(): Promise<void> {
   const enrichTopic = process.env['INTEXURAOS_PUBSUB_BOOKMARK_ENRICH'];
   const summarizeTopic = process.env['INTEXURAOS_PUBSUB_BOOKMARK_SUMMARIZE'];
-  const whatsappSendMessageTopic = process.env['INTEXURAOS_PUBSUB_WHATSAPP_SEND_MESSAGE'];
+  const whatsappSendTopic = process.env['INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC'] as string;
   const internalAuthToken = process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] ?? '';
 
   initServices({
@@ -38,7 +39,7 @@ async function main(): Promise<void> {
     internalAuthToken,
     bookmarkEnrichTopic: enrichTopic !== undefined && enrichTopic !== '' ? enrichTopic : null,
     bookmarkSummarizeTopic: summarizeTopic !== undefined && summarizeTopic !== '' ? summarizeTopic : null,
-    whatsappSendMessageTopic: whatsappSendMessageTopic !== undefined && whatsappSendMessageTopic !== '' ? whatsappSendMessageTopic : null,
+    whatsappSendTopic,
   });
 
   const app = await buildServer();

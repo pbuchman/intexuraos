@@ -172,11 +172,11 @@ graph LR
 
 #### AI Extensions (`.claude/`)
 
-| Type                | Examples                                          | Capabilities                                           |
-| ------------------- | ------------------------------------------------- | ------------------------------------------------------ |
-| **Skills**          | `/linear`, `/sentry`, `/document-service`         | Issue auto-splitting, AI triage (Seer), doc generation |
-| **Agents**          | `coverage-orchestrator`, `service-scribe`         | 100% coverage enforcement, autonomous documentation    |
-| **Commands**        | `/create-service`, `/refactoring`                 | Service scaffolding, code smell detection              |
+| Type         | Examples                                  | Capabilities                                           |
+| ------------ | ----------------------------------------- | ------------------------------------------------------ |
+| **Skills**   | `/linear`, `/sentry`, `/document-service` | Issue auto-splitting, AI triage (Seer), doc generation |
+| **Agents**   | `coverage-orchestrator`, `service-scribe` | 100% coverage enforcement, autonomous documentation    |
+| **Commands** | `/create-service`, `/refactoring`         | Service scaffolding, code smell detection              |
 
 **Cross-linking**: Linear ↔ GitHub (`INT-XXX` in PR title/body) ↔ Sentry (`[sentry]` prefix) — all artifacts connect automatically.
 

@@ -7,7 +7,7 @@
 ## Identity
 
 | Field    | Value                                             |
-| --------  | -------------------------------------------------  |
+| -------- | ------------------------------------------------- |
 | **Name** | image-service                                     |
 | **Role** | AI Image Generation Service                       |
 | **Goal** | Generate cover images using DALL-E 3 and Imagen 3 |
@@ -67,7 +67,7 @@ interface ImageMetadata {
 ## Constraints
 
 | Rule                 | Description                                  |
-| --------------------  | --------------------------------------------  |
+| -------------------- | -------------------------------------------- |
 | **API Key Required** | OpenAI key for DALL-E, Google key for Imagen |
 | **Research Link**    | Images must be linked to a research ID       |
 | **Storage**          | Images stored in Google Cloud Storage        |
@@ -105,7 +105,7 @@ art style, 16:9 aspect ratio"
 ## Internal Endpoints
 
 | Method | Path                        | Purpose                                   |
-| ------  | ---------------------------  | -----------------------------------------  |
+| ------ | --------------------------- | ----------------------------------------- |
 | POST   | `/internal/images/generate` | Generate image (called by research-agent) |
 | DELETE | `/internal/images/:id`      | Delete image when research unshared       |
 

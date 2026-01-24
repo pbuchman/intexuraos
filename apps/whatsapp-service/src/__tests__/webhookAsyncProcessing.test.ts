@@ -690,7 +690,7 @@ describe('Webhook async processing', () => {
       expect(events[0]?.status).toBe('failed');
     });
 
-    it('sends confirmation message after successful audio processing', async () => {
+    it('marks audio message as read with typing indicator (no confirmation message)', async () => {
       const senderPhone = '15551234567';
       const userId = 'test-user-id';
 
@@ -723,9 +723,13 @@ describe('Webhook async processing', () => {
 
       await triggerWebhookProcessing();
 
-      // Verify confirmation message was sent via whatsappCloudApi
+      // Verify markAsReadWithTyping was called (shows typing indicator)
+      const markedWithTyping = ctx.whatsappCloudApi.getMarkedAsReadWithTypingMessages();
+      expect(markedWithTyping.length).toBeGreaterThan(0);
+
+      // Verify NO confirmation message was sent (we now use typing indicator instead)
       const sentMessages = ctx.whatsappCloudApi.getSentMessages();
-      expect(sentMessages.length).toBeGreaterThan(0);
+      expect(sentMessages.length).toBe(0);
     });
   });
 

@@ -7,7 +7,7 @@
 ## Identity
 
 | Field    | Value                                                             |
-| --------  | -----------------------------------------------------------------  |
+| -------- | ----------------------------------------------------------------- |
 | **Name** | mobile-notifications-service                                      |
 | **Role** | Mobile Notification Capture Service                               |
 | **Goal** | Capture, store, and provide access to mobile device notifications |
@@ -96,7 +96,7 @@ interface SavedFilter {
 ## Constraints
 
 | Rule               | Description                                       |
-| ------------------  | -------------------------------------------------  |
+| ------------------ | ------------------------------------------------- |
 | **Ownership**      | Users can only access their own notifications     |
 | **Pagination**     | Maximum 100 notifications per request             |
 | **Device Linked**  | Requires Tasker/Automate integration on Android   |
@@ -162,7 +162,7 @@ const filters = await getFilters();
 ## Internal Endpoints
 
 | Method | Path                      | Purpose                                             |
-| ------  | -------------------------  | ---------------------------------------------------  |
+| ------ | ------------------------- | --------------------------------------------------- |
 | GET    | `/internal/notifications` | Query notifications (called by data-insights-agent) |
 | POST   | `/connect`                | Receive notifications from device                   |
 

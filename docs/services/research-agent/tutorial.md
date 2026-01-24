@@ -292,7 +292,7 @@ This removes the public page and deletes the generated cover image.
 ## Troubleshooting
 
 | Issue                        | Symptom                           | Solution                                                                       |
-| ----------------------------  | ---------------------------------  | ------------------------------------------------------------------------------  |
+| ---------------------------- | --------------------------------- | ------------------------------------------------------------------------------ |
 | Research stuck in processing | Status never changes to completed | Check Pub/Sub configuration; verify LLM call queue is being processed          |
 | Synthesis fails              | Research shows `synthesisError`   | Check synthesis model API key; verify context doesn't exceed limits            |
 | High costs                   | Unexpected `totalCostUsd`         | Review model selection; use smaller models (flash/mini) for initial queries    |

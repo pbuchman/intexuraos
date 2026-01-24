@@ -4,16 +4,16 @@ How to infer answers for questions that the interactive mode asks the user.
 
 ## Overview
 
-| Question                             | Type         | Interactive Mode  | Autonomous Mode             |
-| ------------------------------------ | ------------ | ----------------- | --------------------------- |
-| Q1: Why does this service exist?     | Open         | Ask user          | Infer from git + README     |
-| Q2: Primary user type?               | Wizard       | Infer or ask      | Infer from routes           |
-| Q3: Interaction style?               | Wizard       | Infer or ask      | Infer from routes + Pub/Sub |
-| Q4: Data processing mode?            | Wizard       | Infer or ask      | Infer from HTTP methods     |
-| Q5: What's the killer feature?       | Open         | Ask user          | Infer from complexity       |
-| Q6: State management?                | Wizard       | Infer or ask      | Infer from Firestore        |
-| Q7: Known limitations?               | Wizard       | Infer or ask      | Infer from code             |
-| Q8: Planned future developments?     | Open         | Ask user          | Infer from TODOs            |
+| Question                         | Type   | Interactive Mode | Autonomous Mode             |
+| -------------------------------- | ------ | ---------------- | --------------------------- |
+| Q1: Why does this service exist? | Open   | Ask user         | Infer from git + README     |
+| Q2: Primary user type?           | Wizard | Infer or ask     | Infer from routes           |
+| Q3: Interaction style?           | Wizard | Infer or ask     | Infer from routes + Pub/Sub |
+| Q4: Data processing mode?        | Wizard | Infer or ask     | Infer from HTTP methods     |
+| Q5: What's the killer feature?   | Open   | Ask user         | Infer from complexity       |
+| Q6: State management?            | Wizard | Infer or ask     | Infer from Firestore        |
+| Q7: Known limitations?           | Wizard | Infer or ask     | Infer from code             |
+| Q8: Planned future developments? | Open   | Ask user         | Infer from TODOs            |
 
 ---
 

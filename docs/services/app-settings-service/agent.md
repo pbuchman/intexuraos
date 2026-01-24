@@ -7,7 +7,7 @@
 ## Identity
 
 | Field    | Value                                                    |
-| --------  | --------------------------------------------------------  |
+| -------- | -------------------------------------------------------- |
 | **Name** | app-settings-service                                     |
 | **Role** | Application Configuration Service                        |
 | **Goal** | Manage LLM pricing configuration and usage cost tracking |
@@ -88,7 +88,7 @@ interface CallTypeCosts {
 ## Constraints
 
 | Rule               | Description                                       |
-| ------------------  | -------------------------------------------------  |
+| ------------------ | ------------------------------------------------- |
 | **Authentication** | All endpoints require valid Bearer token          |
 | **Days Range**     | Usage costs: 1-365 days, default 90               |
 | **5 Providers**    | Pricing available for all supported LLM providers |
@@ -129,7 +129,7 @@ const estimatedCost =
 ## Internal Endpoints
 
 | Method | Path                          | Purpose                                     |
-| ------  | -----------------------------  | -------------------------------------------  |
+| ------ | ----------------------------- | ------------------------------------------- |
 | POST   | `/internal/usage/record`      | Record LLM usage (called by research-agent) |
 | GET    | `/internal/pricing/:provider` | Get pricing for specific provider           |
 
@@ -138,7 +138,7 @@ const estimatedCost =
 ## Provider Coverage
 
 | Provider   | Models Tracked                                     |
-| ----------  | --------------------------------------------------  |
+| ---------- | -------------------------------------------------- |
 | Google     | gemini-2.5-flash, gemini-2.0-flash, gemini-1.5-pro |
 | OpenAI     | gpt-4o, gpt-4o-mini, o1-mini                       |
 | Anthropic  | claude-sonnet-4-20250514                           |

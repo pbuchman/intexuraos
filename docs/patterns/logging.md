@@ -161,7 +161,7 @@ export function createProcessCommandUseCase(deps: {
 ## Log Levels
 
 | Level   | When to Use                           | Example                               |
-| -------  | -------------------------------------  | -------------------------------------  |
+| ------- | ------------------------------------- | ------------------------------------- |
 | `trace` | Very detailed debugging (rarely used) | Individual loop iterations            |
 | `debug` | Detailed flow information             | State values, intermediate results    |
 | `info`  | Normal operation, key events          | "Starting X", "Completed Y"           |
@@ -243,7 +243,7 @@ This verifies that factory functions accepting `logger?: Logger` are called with
 ## Quick Reference
 
 | Pattern        | Location                     | Logger Passing                 |
-| --------------  | ----------------------------  | ------------------------------  |
+| -------------- | ---------------------------- | ------------------------------ |
 | Module-level   | `infra/` adapters            | None (created at file scope)   |
 | Factory config | `infra/http/`, `infra/user/` | Via `logger:` in config object |
 | Constructor    | Reusable packages            | Via constructor parameter      |

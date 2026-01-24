@@ -7,7 +7,7 @@
 ## Identity
 
 | Field    | Value                                                                                |
-| --------  | ------------------------------------------------------------------------------------  |
+| -------- | ------------------------------------------------------------------------------------ |
 | **Name** | research-agent                                                                       |
 | **Role** | Multi-Model Research Orchestrator                                                    |
 | **Goal** | Execute parallel LLM queries across 5 providers, synthesize results with attribution |
@@ -147,7 +147,7 @@ interface LlmResult {
 ## Constraints
 
 | Rule                       | Description                                                    |
-| --------------------------  | --------------------------------------------------------------  |
+| -------------------------- | -------------------------------------------------------------- |
 | **API Keys Required**      | User must have API keys configured for selected models         |
 | **At Least One Source**    | Research requires either models or input contexts              |
 | **Synthesis Model Key**    | Synthesis model's provider API key must be available           |
@@ -214,7 +214,7 @@ if (research.status === 'awaiting_confirmation') {
 ## Internal Endpoints
 
 | Method | Path                                | Purpose                                |
-| ------  | -----------------------------------  | --------------------------------------  |
+| ------ | ----------------------------------- | -------------------------------------- |
 | POST   | `/internal/research/:id/llm-result` | Receive LLM result from Pub/Sub worker |
 | GET    | `/internal/research/:id`            | Get research for internal services     |
 

@@ -64,6 +64,7 @@ Always verify after creating a PR:
 ### Linking Linear Issue to Sentry
 
 After creating Linear issue, add comment to Sentry with:
+
 - Linear issue link
 - Brief summary of planned fix
 

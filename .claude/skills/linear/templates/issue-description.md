@@ -38,14 +38,14 @@ _This is the original user instruction, transcribed verbatim. May include typos 
 
 ## Mandatory Sections
 
-| Section                   | Required | Purpose                                |
-| ------------------------- | -------- | -------------------------------------- |
-| Original User Instruction | Yes      | Preserves verbatim user request        |
-| Summary                   | Yes      | Quick overview                         |
-| Requirements              | Yes      | What needs to be done                  |
-| Acceptance Criteria       | Yes      | How to verify completion               |
-| Technical Context         | Optional | Background info for implementation     |
-| Related                   | Optional | Cross-references                       |
+| Section                   | Required | Purpose                            |
+| ------------------------- | -------- | ---------------------------------- |
+| Original User Instruction | Yes      | Preserves verbatim user request    |
+| Summary                   | Yes      | Quick overview                     |
+| Requirements              | Yes      | What needs to be done              |
+| Acceptance Criteria       | Yes      | How to verify completion           |
+| Technical Context         | Optional | Background info for implementation |
+| Related                   | Optional | Cross-references                   |
 
 ## Original User Instruction Rules
 

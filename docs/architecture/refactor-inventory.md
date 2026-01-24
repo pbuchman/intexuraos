@@ -23,10 +23,10 @@
 - Ports: `AuthTokenRepository`, `Auth0Client`
 
 **Importers (apps):**
-| App          | Import                | File                     |
-| ------------  | ---------------------  | ------------------------  |
+| App | Import | File |
+| ------------ | --------------------- | ------------------------ |
 | user-service | `type { AuthTokens }` | `routes/deviceRoutes.ts` |
-| user-service | `type { AuthTokens }` | `routes/tokenRoutes.ts`  |
+| user-service | `type { AuthTokens }` | `routes/tokenRoutes.ts` |
 
 **Proposed Owner:** `user-service`
 
@@ -45,10 +45,10 @@
 - Use cases: `ProcessWhatsAppWebhookUseCase`, `WhatsAppWebhookPayload`, `WebhookProcessingConfig`, `WebhookProcessingResult`
 
 **Importers (apps):**
-| App              | Import                                                                                           | File                      |
-| ----------------  | ------------------------------------------------------------------------------------------------  | -------------------------  |
-| whatsapp-service | Types: `WhatsAppWebhookEventRepository`, `WhatsAppUserMappingRepository`, `InboxNotesRepository` | `services.ts`             |
-| whatsapp-service | `ProcessWhatsAppWebhookUseCase`                                                                  | `routes/webhookRoutes.ts` |
+| App | Import | File |
+| ---------------- | ------------------------------------------------------------------------------------------------ | ------------------------- |
+| whatsapp-service | Types: `WhatsAppWebhookEventRepository`, `WhatsAppUserMappingRepository`, `InboxNotesRepository` | `services.ts` |
+| whatsapp-service | `ProcessWhatsAppWebhookUseCase` | `routes/webhookRoutes.ts` |
 
 **Proposed Owner:** `whatsapp-service`
 
@@ -68,12 +68,12 @@
 - Error utilities: `NOTION_ERROR_CODES`, `isNotionErrorCode`, `NotionErrorCodeRuntime`
 
 **Importers (apps):**
-| App                 | Import                                                                   | File                     |
-| -------------------  | ------------------------------------------------------------------------  | ------------------------  |
-| promptvault-service | Types: `NotionConnectionRepository`, `NotionApiPort`, `PromptRepository` | `services.ts`            |
-| promptvault-service | Use cases: `createPrompt`, `listPrompts`, `getPrompt`, `updatePrompt`    | `routes/promptRoutes.ts` |
-| promptvault-service | Type: `PromptVaultErrorCode`                                             | `routes/shared.ts`       |
-| notion-service      | Types: `NotionConnectionRepository`, `NotionApiPort`                     | `services.ts`            |
+| App | Import | File |
+| ------------------- | ------------------------------------------------------------------------ | ------------------------ |
+| promptvault-service | Types: `NotionConnectionRepository`, `NotionApiPort`, `PromptRepository` | `services.ts` |
+| promptvault-service | Use cases: `createPrompt`, `listPrompts`, `getPrompt`, `updatePrompt` | `routes/promptRoutes.ts` |
+| promptvault-service | Type: `PromptVaultErrorCode` | `routes/shared.ts` |
+| notion-service | Types: `NotionConnectionRepository`, `NotionApiPort` | `services.ts` |
 
 **Multi-service:** YES (promptvault-service + notion-service)
 
@@ -95,8 +95,8 @@
 **Exports:** `Auth0ClientImpl`, `loadAuth0Config`
 
 **Importers (apps):**
-| App          | Import                               | File                    |
-| ------------  | ------------------------------------  | -----------------------  |
+| App | Import | File |
+| ------------ | ------------------------------------ | ----------------------- |
 | user-service | `Auth0ClientImpl`, `loadAuth0Config` | `routes/tokenRoutes.ts` |
 
 **Dependencies:** `@intexuraos/common`, `@intexuraos/domain-identity`
@@ -122,17 +122,17 @@
 - `encryption` utilities
 
 **Importers (apps):**
-| App                 | Import                                                                                                                     | File                                                            |
-| -------------------  | --------------------------------------------------------------------------------------------------------------------------  | ---------------------------------------------------------------  |
-| user-service        | `getFirestore`                                                                                                             | `server.ts`                                                     |
-| user-service        | `FirestoreAuthTokenRepository`                                                                                             | `routes/deviceRoutes.ts`, `frontendRoutes.ts`, `tokenRoutes.ts` |
-| promptvault-service | `getFirestore`                                                                                                             | `server.ts`                                                     |
-| promptvault-service | `FirestoreNotionConnectionRepository`                                                                                      | `services.ts`                                                   |
-| promptvault-service | `FakeNotionConnectionRepository`                                                                                           | `__tests__/testUtils.ts`                                        |
-| whatsapp-service    | `getFirestore`                                                                                                             | `server.ts`                                                     |
-| whatsapp-service    | `FirestoreWhatsAppWebhookEventRepository`, `FirestoreWhatsAppUserMappingRepository`, `FirestoreNotionConnectionRepository` | `services.ts`                                                   |
-| whatsapp-service    | Fakes                                                                                                                      | `__tests__/testUtils.ts`                                        |
-| notion-service      | `FirestoreNotionConnectionRepository`                                                                                      | `services.ts`                                                   |
+| App | Import | File |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
+| user-service | `getFirestore` | `server.ts` |
+| user-service | `FirestoreAuthTokenRepository` | `routes/deviceRoutes.ts`, `frontendRoutes.ts`, `tokenRoutes.ts` |
+| promptvault-service | `getFirestore` | `server.ts` |
+| promptvault-service | `FirestoreNotionConnectionRepository` | `services.ts` |
+| promptvault-service | `FakeNotionConnectionRepository` | `__tests__/testUtils.ts` |
+| whatsapp-service | `getFirestore` | `server.ts` |
+| whatsapp-service | `FirestoreWhatsAppWebhookEventRepository`, `FirestoreWhatsAppUserMappingRepository`, `FirestoreNotionConnectionRepository` | `services.ts` |
+| whatsapp-service | Fakes | `__tests__/testUtils.ts` |
+| notion-service | `FirestoreNotionConnectionRepository` | `services.ts` |
 
 **Dependencies:** `@intexuraos/common`, `@intexuraos/domain-identity`, `@intexuraos/domain-promptvault`, `@intexuraos/domain-inbox`
 
@@ -167,13 +167,13 @@
 - `NotionLogger` type
 
 **Importers (apps):**
-| App                 | Import                                                             | File                       |
-| -------------------  | ------------------------------------------------------------------  | --------------------------  |
+| App | Import | File |
+| ------------------- | ------------------------------------------------------------------ | -------------------------- |
 | promptvault-service | `NotionApiAdapter`, `createNotionPromptRepository`, `NotionLogger` | `services.ts`, `server.ts` |
-| promptvault-service | `MockNotionApiAdapter`, `createNotionPromptRepository`             | `__tests__/testUtils.ts`   |
-| notion-service      | `NotionApiAdapter`, `NotionLogger`                                 | `services.ts`, `server.ts` |
-| notion-service      | `MockNotionApiAdapter`                                             | `__tests__/testUtils.ts`   |
-| whatsapp-service    | `NotionInboxNotesRepository`                                       | `routes/webhookRoutes.ts`  |
+| promptvault-service | `MockNotionApiAdapter`, `createNotionPromptRepository` | `__tests__/testUtils.ts` |
+| notion-service | `NotionApiAdapter`, `NotionLogger` | `services.ts`, `server.ts` |
+| notion-service | `MockNotionApiAdapter` | `__tests__/testUtils.ts` |
+| whatsapp-service | `NotionInboxNotesRepository` | `routes/webhookRoutes.ts` |
 
 **Dependencies:** `@intexuraos/common`, `@intexuraos/domain-promptvault`, `@intexuraos/domain-inbox`, `@notionhq/client`
 
@@ -198,7 +198,7 @@
 ### Domain Packages — All Colocate
 
 | Package                          | Owner App           | Multi-service?                  | Action                          |
-| --------------------------------  | -------------------  | -------------------------------  | -------------------------------  |
+| -------------------------------- | ------------------- | ------------------------------- | ------------------------------- |
 | `@intexuraos/domain-identity`    | user-service        | No                              | Colocate                        |
 | `@intexuraos/domain-inbox`       | whatsapp-service    | No                              | Colocate                        |
 | `@intexuraos/domain-promptvault` | promptvault-service | Yes (notion-service uses types) | Colocate + extract shared types |
@@ -206,7 +206,7 @@
 ### Infra Packages — Mixed
 
 | Package                       | Shared Part           | Colocate Part              |
-| -----------------------------  | ---------------------  | --------------------------  |
+| ----------------------------- | --------------------- | -------------------------- |
 | `@intexuraos/infra-auth0`     | None                  | All → user-service         |
 | `@intexuraos/infra-firestore` | `getFirestore` client | Repositories → owning apps |
 | `@intexuraos/infra-notion`    | `NotionApiAdapter`    | Repositories → owning apps |

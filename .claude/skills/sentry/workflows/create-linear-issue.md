@@ -13,6 +13,7 @@ Creates a Linear issue from a Sentry error with proper cross-linking.
 ### 1. Parse Sentry URL
 
 Extract:
+
 - Organization slug
 - Issue ID
 
@@ -43,17 +44,19 @@ Parameters:
 ```
 
 Search the results for:
+
 - Title containing the Sentry error message (fuzzy match)
 - Description containing the Sentry URL
 
 If match found:
+
 - Display: "Existing Linear issue found: [INT-XXX](url)"
 - Ask: "Use existing issue or create new?"
 - If using existing, skip to step 5
 
 ### 4. Create Linear Issue
 
-```
+````
 Call: mcp__linear__create_issue
 Parameters:
   - title: "[sentry] <short-error-message>"
@@ -82,13 +85,14 @@ Parameters:
       ## Investigation Notes
 
       <!-- Add findings here -->
-```
+````
 
 ### 5. Update Sentry Issue
 
 Note: Sentry MCP doesn't support adding comments. Document the link manually or via Sentry UI.
 
 Log the cross-reference:
+
 ```
 Created Linear issue INT-XXX for Sentry issue <sentry-id>
 Cross-link: <linear-url> ↔ <sentry-url>
@@ -113,14 +117,15 @@ Display:
 
 All Linear issues created from Sentry MUST use the `[sentry]` prefix:
 
-| Example                                            |
-| -------------------------------------------------- |
-| `[sentry] TypeError: null is not an object`        |
-| `[sentry] ReferenceError: x is not defined`        |
-| `[sentry] Network request failed in AuthService`   |
-| `[sentry] Cannot read property 'id' of undefined`  |
+| Example                                           |
+| ------------------------------------------------- |
+| `[sentry] TypeError: null is not an object`       |
+| `[sentry] ReferenceError: x is not defined`       |
+| `[sentry] Network request failed in AuthService`  |
+| `[sentry] Cannot read property 'id' of undefined` |
 
 This allows:
+
 - Easy identification of Sentry-sourced issues
 - Searchability in Linear
 - Consistent naming across the codebase

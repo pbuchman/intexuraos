@@ -16,13 +16,13 @@ Auto-splitting is triggered when ANY of:
 
 Tasks are classified into tiers based on dependency and execution order:
 
-| Tier | Name          | Keywords & Patterns                                      |
-| ---- | ------------- | -------------------------------------------------------- |
-| 0    | Setup         | setup, scaffold, terraform, config, prerequisite, init   |
-| 1    | Independent   | domain, model, adapter, implement, create, add           |
-| 2    | Integration   | integrate, webhook, route, wire, connect, link           |
-| 3    | Verification  | test, coverage, verify, UI, e2e                          |
-| 4+   | Finalization  | documentation, deploy, cleanup, polish                   |
+| Tier | Name         | Keywords & Patterns                                    |
+| ---- | ------------ | ------------------------------------------------------ |
+| 0    | Setup        | setup, scaffold, terraform, config, prerequisite, init |
+| 1    | Independent  | domain, model, adapter, implement, create, add         |
+| 2    | Integration  | integrate, webhook, route, wire, connect, link         |
+| 3    | Verification | test, coverage, verify, UI, e2e                        |
+| 4+   | Finalization | documentation, deploy, cleanup, polish                 |
 
 ### Tier Rules
 
@@ -39,7 +39,7 @@ Tasks are classified into tiers based on dependency and execution order:
 3. REUSE existing issue as parent (ledger) OR create new if none exists
 4. CREATE child issues with parentId parameter
 5. SET dependencies via blockedBy arrays
-6. UPDATE parent with child issues table
+6. VERIFY parent-child links in Linear UI
 ```
 
 ### Step-by-Step
@@ -47,6 +47,7 @@ Tasks are classified into tiers based on dependency and execution order:
 #### Step 1: Parse Plan
 
 Extract from plan/description:
+
 - Numbered sections (Phase 1, Phase 2...)
 - Checkbox items (- [ ] ...)
 - Headings (## ..., ### ...)
@@ -55,6 +56,7 @@ Extract from plan/description:
 #### Step 2: Classify Tasks
 
 For each extracted task:
+
 1. Scan for tier keywords (see table above)
 2. Check explicit dependencies mentioned
 3. Assign tier number (0 = setup, 1 = independent, 2+ = dependent)
@@ -80,7 +82,7 @@ Use [ledger-template.md](../templates/ledger-template.md) format for the descrip
 ```
 Title: [feature] <original plan title>  (update if needed)
 State: In Progress
-Team: pbuchman
+Team: IntexuraOS
 Description: Full ledger format (see template)
 ```
 
@@ -91,7 +93,7 @@ For each task, use [subtask-description.md](../templates/subtask-description.md)
 ```
 Title: [tier-X] <task title>
 State: Backlog
-Team: pbuchman
+Team: IntexuraOS
 parentId: <parent issue ID>
 Description: Subtask template format
 ```
@@ -112,34 +114,89 @@ for each tier2Issue:
 // And so on...
 ```
 
-#### Step 6: Update Parent Ledger
+#### Step 6: Verify Parent-Child Links
 
-Add child issues table to parent:
+After creating child issues with `parentId`:
 
-```markdown
-## Child Issues
+1. **Verify in Linear UI** that children appear under parent's "Sub-issues" section
+2. **Parent's "Scope" section** describes what's covered (no IDs needed)
+3. **Linear handles linking automatically** via `parentId` — no manual ID maintenance
 
-| Tier | Issue       | Title                        | Status  |
-| ---- | ----------- | ---------------------------- | ------- |
-| 0    | INT-XXX     | Setup infrastructure         | Backlog |
-| 1    | INT-XXX     | Implement domain model       | Backlog |
-| 1    | INT-XXX     | Create adapter               | Backlog |
-| 2    | INT-XXX     | Wire up routes               | Backlog |
-| 3    | INT-XXX     | Add test coverage            | Backlog |
-```
+**Why no Child Issues table?**
+- Sequential ID assignment makes pre-listing impossible
+- When parent is created before children, placeholder IDs like `INT-XXX-1` never match real IDs
+- Linear's parent-child hierarchy is the source of truth
+- Scope section describes WHAT, Linear tracks WHO
 
 ## Naming Convention for Child Issues
 
 Format: `[tier-X] <action> <subject>`
 
-| Tier | Example Title                                     |
-| ---- | ------------------------------------------------- |
-| 0    | `[tier-0] Setup skill directory structure`        |
-| 1    | `[tier-1] Implement auto-splitting detection`     |
-| 1    | `[tier-1] Create ledger template`                 |
-| 2    | `[tier-2] Wire up skill to command system`        |
-| 3    | `[tier-3] Add tests for plan parsing`             |
-| 4    | `[tier-4] Update documentation`                   |
+| Tier | Example Title                                 |
+| ---- | --------------------------------------------- |
+| 0    | `[tier-0] Setup skill directory structure`    |
+| 1    | `[tier-1] Implement auto-splitting detection` |
+| 1    | `[tier-1] Create ledger template`             |
+| 2    | `[tier-2] Wire up skill to command system`    |
+| 3    | `[tier-3] Add tests for plan parsing`         |
+| 4    | `[tier-4] Update documentation`               |
+
+## Implementation Detail Level
+
+When creating subtasks, the level of detail determines LLM agent success rate.
+
+### Required Detail by Task Type
+
+| Task Type           | Code Snippets | Line Numbers | Edge Cases | Staleness Warning |
+| ------------------- | ------------- | ------------ | ---------- | ----------------- |
+| Migration/Refactor  | ✓ Required    | ✓ Required   | ✓ Required | ✓ Required        |
+| Bug Fix             | ✓ Required    | ✓ Required   | Optional   | ✓ Required        |
+| New Feature         | Recommended   | Recommended  | ✓ Required | If provided       |
+| Documentation       | Optional      | N/A          | N/A        | N/A               |
+| Configuration       | Optional      | Optional     | Optional   | If provided       |
+
+### Code Snippet Freshness Warning
+
+**ALWAYS** include this warning when providing implementation code:
+
+```markdown
+> ⚠️ **Point-in-Time Accuracy:** Code snippets below reflect codebase state at issue creation (YYYY-MM-DD).
+> Before implementing, verify file contents match these assumptions.
+```
+
+### Pre-Flight Verification Checklist
+
+For tasks with code snippets, include verification steps:
+
+```markdown
+### Pre-Flight Verification
+
+Before implementing, confirm:
+
+- [ ] File exists at specified path
+- [ ] Line numbers roughly match (±10 lines acceptable)
+- [ ] Dependencies/imports are available
+- [ ] Type signatures haven't changed
+```
+
+### Edge Case Enumeration
+
+For validation/parsing tasks, enumerate 8-10 edge cases:
+
+```markdown
+### Edge Cases to Cover
+
+1. Valid input (happy path)
+2. Empty/null input
+3. Boundary values (min, max)
+4. Invalid types (string vs number)
+5. Missing required fields
+6. Extra unknown fields
+7. Malformed structure
+8. Concurrent operations (if applicable)
+```
+
+This detail level enables less specialized LLM agents to execute tasks reliably.
 
 ## Execution Protocol
 
@@ -149,8 +206,9 @@ After splitting:
 2. **Start with Tier 0 tasks** (all can run in parallel)
 3. **When Tier 0 complete**, start Tier 1 tasks
 4. **Continue tier by tier** until all complete
-5. **Update parent ledger** after each child completes
-6. **Move parent to Done** when all children Done
+5. **Move parent to Done** when all children Done
+
+Linear automatically tracks child status — no manual ledger updates needed.
 
 ## Continuation Directive
 
@@ -158,6 +216,7 @@ Each child issue (except the final one) includes:
 
 ```markdown
 ---
+
 ## Continuation
 
 **DO NOT STOP.** After completing this task and committing, immediately proceed to the next unblocked task without waiting for user input.
@@ -171,30 +230,34 @@ Given a plan like:
 
 ```markdown
 # Phase 1: Create Skill Directory Structure
+
 - Create .claude/skills/linear/
 - Create SKILL.md
 
 # Phase 2: Migrate Existing Content
+
 - Move workflows from commands/
 - Create templates/
 
 # Phase 3: Implement Auto-Splitting
+
 - Add detection heuristics
 - Create tier classification
 
 # Phase 4: Update Documentation
+
 - Add deprecation notices
 - Create pattern docs
 ```
 
 Results in:
 
-| Tier | Issue   | Title                                   |
-| ---- | ------- | --------------------------------------- |
+| Tier | Issue   | Title                                     |
+| ---- | ------- | ----------------------------------------- |
 | 0    | INT-157 | [tier-0] Create skill directory structure |
-| 1    | INT-158 | [tier-1] Migrate workflow content       |
-| 1    | INT-159 | [tier-1] Create templates               |
-| 2    | INT-160 | [tier-2] Implement auto-splitting       |
-| 3    | INT-161 | [tier-3] Update documentation           |
+| 1    | INT-158 | [tier-1] Migrate workflow content         |
+| 1    | INT-159 | [tier-1] Create templates                 |
+| 2    | INT-160 | [tier-2] Implement auto-splitting         |
+| 3    | INT-161 | [tier-3] Update documentation             |
 
 Parent INT-156 serves as the ledger tracking overall progress.

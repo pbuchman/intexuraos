@@ -34,6 +34,7 @@ Every Sentry issue must be traceable across all systems: Sentry, Linear, and Git
 **Method:** Comment on Sentry issue (manual) or description link
 
 **Content:**
+
 ```
 Linear Issue: [INT-XXX](https://linear.app/pbuchman/issue/INT-XXX)
 ```
@@ -43,6 +44,7 @@ Linear Issue: [INT-XXX](https://linear.app/pbuchman/issue/INT-XXX)
 **Method:** Include in Linear issue description
 
 **Content:**
+
 ```markdown
 **Sentry Issue:** [INTEXURAOS-DEVELOPMENT-42](https://intexuraos-dev-pbuchman.sentry.io/issues/42/)
 ```
@@ -50,6 +52,7 @@ Linear Issue: [INT-XXX](https://linear.app/pbuchman/issue/INT-XXX)
 ### Linear → GitHub (Automatic)
 
 **Method:** GitHub-Linear integration auto-attaches PRs when:
+
 1. Branch name contains Linear issue ID: `fix/INT-123-description`
 2. PR title contains Linear issue ID: `[INT-123] Fix auth redirect`
 
@@ -58,6 +61,7 @@ Linear Issue: [INT-XXX](https://linear.app/pbuchman/issue/INT-XXX)
 **Method:** Include `Fixes INT-XXX` in PR body
 
 **Content:**
+
 ```markdown
 Fixes [INT-123](https://linear.app/pbuchman/issue/INT-123)
 ```
@@ -69,6 +73,7 @@ Fixes [INT-123](https://linear.app/pbuchman/issue/INT-123)
 **Method:** Include Sentry link in PR description
 
 **Content:**
+
 ```markdown
 Fixes Sentry issue: [INTEXURAOS-DEVELOPMENT-42](https://intexuraos-dev-pbuchman.sentry.io/issues/42/)
 ```
@@ -79,11 +84,11 @@ Fixes Sentry issue: [INTEXURAOS-DEVELOPMENT-42](https://intexuraos-dev-pbuchman.
 
 Always use `[sentry]` prefix for Sentry-sourced issues:
 
-| Pattern                                     | Example                                              |
-| ------------------------------------------- | ---------------------------------------------------- |
-| `[sentry] <short-error-message>`            | `[sentry] Cannot read property 'id' of undefined`    |
-| `[sentry] <ErrorType> in <Service>`         | `[sentry] TypeError in TodoService`                  |
-| `[sentry] <Action> failed: <reason>`        | `[sentry] Auth callback failed: missing user record` |
+| Pattern                              | Example                                              |
+| ------------------------------------ | ---------------------------------------------------- |
+| `[sentry] <short-error-message>`     | `[sentry] Cannot read property 'id' of undefined`    |
+| `[sentry] <ErrorType> in <Service>`  | `[sentry] TypeError in TodoService`                  |
+| `[sentry] <Action> failed: <reason>` | `[sentry] Auth callback failed: missing user record` |
 
 ### Branch Name
 
@@ -121,6 +126,7 @@ Before completing a Sentry triage:
 **Cause:** Branch name or PR title doesn't contain issue ID
 
 **Fix:** Rename branch to include `INT-XXX`:
+
 ```bash
 git branch -m old-branch fix/INT-123-description
 ```
@@ -130,6 +136,7 @@ git branch -m old-branch fix/INT-123-description
 **Cause:** PR body doesn't use `Fixes` keyword
 
 **Fix:** Ensure PR body contains:
+
 ```markdown
 Fixes [INT-123](url)
 ```
@@ -137,6 +144,7 @@ Fixes [INT-123](url)
 ### Can't Find Related Sentry Issue
 
 **Search in Linear:**
+
 ```
 Call: mcp__linear__list_issues
 Parameters:
@@ -145,6 +153,7 @@ Parameters:
 ```
 
 **Search in Sentry:**
+
 ```
 Call: mcp__sentry__list_issues
 Parameters:

@@ -7,7 +7,7 @@
 ## Identity
 
 | Field    | Value                                                               |
-| --------  | -------------------------------------------------------------------  |
+| -------- | ------------------------------------------------------------------- |
 | **Name** | whatsapp-service                                                    |
 | **Role** | WhatsApp Integration Service                                        |
 | **Goal** | Receive WhatsApp messages, process media, and extract link previews |
@@ -92,7 +92,7 @@ interface SignedUrlResult {
 ## Constraints
 
 | Rule                    | Description                               |
-| -----------------------  | -----------------------------------------  |
+| ----------------------- | ----------------------------------------- |
 | **Phone Number Mapped** | User must have WhatsApp number registered |
 | **Media Expiration**    | Signed URLs expire after 15 minutes       |
 | **Ownership**           | Users can only access their own messages  |
@@ -143,7 +143,7 @@ WhatsApp messages trigger automatic processing:
 ## Internal Endpoints
 
 | Method | Path                     | Purpose                                         |
-| ------  | ------------------------  | -----------------------------------------------  |
+| ------ | ------------------------ | ----------------------------------------------- |
 | POST   | `/internal/send-message` | Send WhatsApp message (called by actions-agent) |
 | POST   | `/webhook`               | Receive WhatsApp webhook events                 |
 
@@ -152,7 +152,7 @@ WhatsApp messages trigger automatic processing:
 ## Error Handling
 
 | Error Code         | Description                                    |
-| ------------------  | ----------------------------------------------  |
+| ------------------ | ---------------------------------------------- |
 | `NOT_FOUND`        | Message not found or not owned by user         |
 | `DOWNSTREAM_ERROR` | Failed to communicate with storage or WhatsApp |
 

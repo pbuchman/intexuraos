@@ -223,7 +223,7 @@ export const pubsubRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         {
           bookmarkRepository,
           bookmarkSummaryService,
-          ...(whatsAppSendPublisher !== undefined && { whatsAppSendPublisher }),
+          whatsAppSendPublisher,
           logger: request.log,
         },
         { bookmarkId: eventData.bookmarkId, userId: eventData.userId }
