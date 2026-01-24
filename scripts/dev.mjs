@@ -433,7 +433,7 @@ const COMMON_SERVICE_URLS = {
   INTEXURAOS_BOOKMARKS_AGENT_URL: 'http://localhost:8124',
   INTEXURAOS_CALENDAR_AGENT_URL: 'http://localhost:8125',
   INTEXURAOS_WEB_AGENT_URL: 'http://localhost:8126',
-  INTEXURAOS_CODE_AGENT_URL: 'http://localhost:8095',
+  INTEXURAOS_CODE_AGENT_URL: 'http://localhost:8127',
 };
 
 // Service-specific env vars (Pub/Sub topics, non-URL config)
