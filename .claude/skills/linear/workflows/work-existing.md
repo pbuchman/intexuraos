@@ -135,6 +135,50 @@ gh pr create --base development \
 
 Show table of created artifacts.
 
+## Sequential Issue Processing (Epic/Child Issues)
+
+When working on multiple related issues (e.g., epic children), follow these rules:
+
+### One-at-a-Time Enforcement
+
+1. **Complete ONE issue fully** before starting the next:
+   - All code changes committed
+   - CI passes (`pnpm run ci:tracked`)
+   - PR created with issue ID in title
+
+2. **STOP and checkpoint** after each issue:
+   - Move issue to In Review (not Done)
+   - Report completion to user
+   - Wait for explicit "continue" or "next" instruction
+
+3. **Never batch update** Linear issues:
+   ```
+   ❌ WRONG: Call update_issue for INT-232, INT-233, INT-234 in same response
+   ✅ RIGHT: Complete INT-232 fully, checkpoint, get user approval, then start INT-233
+   ```
+
+### Forbidden Patterns
+
+| Pattern                            | Why It's Wrong                          |
+| ---------------------------------- | --------------------------------------- |
+| Parallel `update_issue` calls      | No verification between issues          |
+| Marking Done without user          | Done is user-controlled terminal state  |
+| Continuing without checkpoint      | User loses control of workflow          |
+| "I'll mark these as Done"          | Only user marks Done                    |
+
+### Verification Between Issues
+
+Before starting the NEXT issue, verify the CURRENT issue is complete:
+
+- [ ] Code changes committed with issue ID in message
+- [ ] CI passes (all 4 checks)
+- [ ] PR created OR issue moved to In Review
+- [ ] User acknowledged completion
+
+Only after user says "continue" or "next issue" → proceed.
+
+---
+
 ## PR Creation Checklist
 
 **Blocking gates (cannot proceed without these):**

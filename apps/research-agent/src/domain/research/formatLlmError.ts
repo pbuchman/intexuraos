@@ -177,15 +177,27 @@ function tryParseAnthropicError(raw: string): string | null {
 }
 
 function parseGenericError(raw: string): string {
-  if (raw.toLowerCase().includes('api_key') || raw.toLowerCase().includes('invalid key')) {
+  const lower = raw.toLowerCase();
+
+  if (
+    lower.includes('429') ||
+    lower.includes('rate limit') ||
+    lower.includes('rate_limit') ||
+    lower.includes('quota exceeded') ||
+    lower.includes('too many requests')
+  ) {
+    return 'Rate limit exceeded. Please try again later.';
+  }
+
+  if (lower.includes('api_key') || lower.includes('invalid key')) {
     return 'The API key for this provider is invalid or expired';
   }
 
-  if (raw.toLowerCase().includes('timeout')) {
+  if (lower.includes('timeout')) {
     return 'The API request took too long to respond';
   }
 
-  if (raw.toLowerCase().includes('network') || raw.toLowerCase().includes('connection')) {
+  if (lower.includes('network') || lower.includes('connection')) {
     return 'Could not connect to the API';
   }
 

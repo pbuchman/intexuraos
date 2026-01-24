@@ -100,6 +100,22 @@ describe('linearApiClient helper functions', () => {
       expect(result.message).toBe('Linear API rate limit exceeded');
     });
 
+    it('returns RATE_LIMIT even when message contains API key keywords', () => {
+      const error = new Error('429 Too Many Requests: Invalid request rate exceeded');
+      const result = mapLinearError(error);
+
+      expect(result.code).toBe('RATE_LIMIT');
+      expect(result.message).toBe('Linear API rate limit exceeded');
+    });
+
+    it('returns RATE_LIMIT for 429 with Unauthorized keyword', () => {
+      const error = new Error('429: Unauthorized rate of requests');
+      const result = mapLinearError(error);
+
+      expect(result.code).toBe('RATE_LIMIT');
+      expect(result.message).toBe('Linear API rate limit exceeded');
+    });
+
     it('returns TEAM_NOT_FOUND for 404 error', () => {
       const error = new Error('404 Not Found');
       const result = mapLinearError(error);
