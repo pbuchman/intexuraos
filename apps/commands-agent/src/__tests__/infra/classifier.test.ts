@@ -67,9 +67,11 @@ describe('GeminiClassifier', () => {
       const classifier = createGeminiClassifier(mockLlmClient);
       const classificationResult = await classifier.classify('random gibberish');
 
+      // Zod validation fails for invalid enum value, returns default "note" classification
       expect(classificationResult.type).toBe('note');
-      expect(classificationResult.confidence).toBe(0);
-      expect(classificationResult.title).toBe('Unclassified');
+      expect(classificationResult.confidence).toBe(0.3);
+      expect(classificationResult.title).toBe('Unknown');
+      expect(classificationResult.reasoning).toContain('Invalid response format');
     });
 
     it('throws on API error', async () => {
@@ -168,22 +170,26 @@ describe('GeminiClassifier', () => {
       expect(classificationResult.type).toBe('note');
     });
 
-    it('clamps confidence to valid range', async () => {
+    it('rejects confidence greater than 1', async () => {
       mockGenerate.mockResolvedValue(ok(generateResult(jsonResponse('todo', 1.5, 'Test'))));
 
       const classifier = createGeminiClassifier(mockLlmClient);
       const classificationResult = await classifier.classify('test');
 
-      expect(classificationResult.confidence).toBe(1);
+      // Zod validation fails for confidence > 1, returns default "note" classification
+      expect(classificationResult.type).toBe('note');
+      expect(classificationResult.confidence).toBe(0.3);
     });
 
-    it('clamps negative confidence to zero', async () => {
+    it('rejects negative confidence', async () => {
       mockGenerate.mockResolvedValue(ok(generateResult(jsonResponse('todo', -0.5, 'Test'))));
 
       const classifier = createGeminiClassifier(mockLlmClient);
       const classificationResult = await classifier.classify('test');
 
-      expect(classificationResult.confidence).toBe(0);
+      // Zod validation fails for confidence < 0, returns default "note" classification
+      expect(classificationResult.type).toBe('note');
+      expect(classificationResult.confidence).toBe(0.3);
     });
 
     it('extracts JSON from response with surrounding text', async () => {
@@ -221,23 +227,28 @@ describe('GeminiClassifier', () => {
       const classifier = createGeminiClassifier(mockLlmClient);
       const classificationResult = await classifier.classify('test');
 
-      expect(classificationResult.type).toBe('todo');
-      expect(classificationResult.confidence).toBe(0.5);
+      // Zod validation fails for missing required fields, returns default "note" classification
+      expect(classificationResult.type).toBe('note');
+      expect(classificationResult.confidence).toBe(0.3);
       expect(classificationResult.title).toBe('Unknown');
-      expect(classificationResult.reasoning).toBe('No reasoning provided');
+      expect(classificationResult.reasoning).toContain('Invalid response format');
     });
 
-    it('truncates long title to 100 characters', async () => {
+    it('rejects title exceeding 50 characters', async () => {
       const longTitle = 'A'.repeat(200);
       mockGenerate.mockResolvedValue(ok(generateResult(jsonResponse('todo', 0.9, longTitle))));
 
       const classifier = createGeminiClassifier(mockLlmClient);
       const classificationResult = await classifier.classify('test');
 
-      expect(classificationResult.title).toBe('A'.repeat(100));
+      // Zod validation fails for title > 50 characters, returns default "note" classification
+      expect(classificationResult.type).toBe('note');
+      expect(classificationResult.confidence).toBe(0.3);
+      expect(classificationResult.title).toBe('Unknown');
+      expect(classificationResult.reasoning).toContain('Invalid response format');
     });
 
-    it('truncates long reasoning to 500 characters', async () => {
+    it('accepts long reasoning without truncation', async () => {
       const longReasoning = 'B'.repeat(600);
       mockGenerate.mockResolvedValue(
         ok(generateResult(jsonResponse('todo', 0.9, 'Test', longReasoning)))
@@ -246,7 +257,8 @@ describe('GeminiClassifier', () => {
       const classifier = createGeminiClassifier(mockLlmClient);
       const classificationResult = await classifier.classify('test');
 
-      expect(classificationResult.reasoning).toBe('B'.repeat(500));
+      // Zod doesn't truncate reasoning field - no max length in schema
+      expect(classificationResult.reasoning).toBe(longReasoning);
     });
 
     it('handles non-string title in response', async () => {
@@ -257,7 +269,11 @@ describe('GeminiClassifier', () => {
       const classifier = createGeminiClassifier(mockLlmClient);
       const classificationResult = await classifier.classify('test');
 
+      // Zod validation fails for wrong type, returns default "note" classification
+      expect(classificationResult.type).toBe('note');
+      expect(classificationResult.confidence).toBe(0.3);
       expect(classificationResult.title).toBe('Unknown');
+      expect(classificationResult.reasoning).toContain('Invalid response format');
     });
 
     it('handles non-string reasoning in response', async () => {
@@ -270,7 +286,10 @@ describe('GeminiClassifier', () => {
       const classifier = createGeminiClassifier(mockLlmClient);
       const classificationResult = await classifier.classify('test');
 
-      expect(classificationResult.reasoning).toBe('No reasoning provided');
+      // Zod validation fails for wrong type, returns default "note" classification
+      expect(classificationResult.type).toBe('note');
+      expect(classificationResult.confidence).toBe(0.3);
+      expect(classificationResult.reasoning).toContain('Invalid response format');
     });
 
     it('handles non-number confidence in response', async () => {
@@ -281,7 +300,9 @@ describe('GeminiClassifier', () => {
       const classifier = createGeminiClassifier(mockLlmClient);
       const classificationResult = await classifier.classify('test');
 
-      expect(classificationResult.confidence).toBe(0.5);
+      // Zod validation fails for wrong type, returns default "note" classification
+      expect(classificationResult.type).toBe('note');
+      expect(classificationResult.confidence).toBe(0.3);
     });
 
   });

@@ -368,6 +368,9 @@ importers:
       '@intexuraos/llm-prompts':
         specifier: workspace:*
         version: link:../../packages/llm-prompts
+      '@intexuraos/llm-utils':
+        specifier: workspace:*
+        version: link:../../packages/llm-utils
       fastify:
         specifier: ^5.1.0
         version: 5.6.2
