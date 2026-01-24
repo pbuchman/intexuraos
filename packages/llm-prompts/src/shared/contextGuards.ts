@@ -8,7 +8,9 @@
 import type { DefaultApplied, Domain, Mode, SafetyInfo } from './contextSchemas.js';
 import {
   DefaultAppliedSchema,
+  DOMAINS,
   DomainSchema,
+  MODES,
   ModeSchema,
   SafetyInfoSchema,
 } from './contextSchemas.js';
@@ -53,7 +55,7 @@ export function validateDomain(value: unknown, logger: Logger): value is Domain 
         received: value,
         error: result.error.format(),
       },
-      'Domain validation failed - expected one of: academicy, technical, creative, casual'
+      `Domain validation failed - expected one of: ${DOMAINS.join(', ')}`
     );
     return false;
   }
@@ -68,7 +70,7 @@ export function validateMode(value: unknown, logger: Logger): value is Mode {
         received: value,
         error: result.error.format(),
       },
-      'Mode validation failed - expected one of: balanced, quality, speed, custom'
+      `Mode validation failed - expected one of: ${MODES.join(', ')}`
     );
     return false;
   }

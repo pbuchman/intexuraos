@@ -127,7 +127,7 @@ export function parseApprovalIntentResponse(response: string): ApprovalIntentRes
 
     // Validate confidence
     const confidence = obj['confidence'];
-    if (typeof confidence !== 'number' || confidence < 0 || confidence > 1) {
+    if (typeof confidence !== 'number' || Number.isNaN(confidence) || confidence < 0 || confidence > 1) {
       return null;
     }
 

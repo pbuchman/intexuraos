@@ -101,9 +101,9 @@ export type SynthesisContext = z.infer<typeof SynthesisContextSchema>;
  */
 export interface InferSynthesisContextParams {
   originalPrompt: string;
-  reports?: LlmReport[] | undefined;
-  additionalSources?: AdditionalSource[] | undefined;
-  asOfDate?: string | undefined;
-  defaultJurisdiction?: string | undefined;
-  defaultCurrency?: string | undefined;
+  reports?: LlmReport[];
+  additionalSources?: AdditionalSource[];
+  asOfDate?: string;
+  defaultJurisdiction?: string;
+  defaultCurrency?: string;
 }

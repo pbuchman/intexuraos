@@ -74,7 +74,7 @@ Note these gaps in your synthesis.`;
 
 function buildSourceIdMapSection(
   reports: readonly (SynthesisReport | undefined)[],
-  additionalSources?: readonly (AdditionalSource | undefined)[]
+  additionalSources?: readonly AdditionalSource[]
 ): string {
   const rows: string[] = [];
   rows.push('SOURCE ID MAP (for Attribution)');
@@ -125,7 +125,7 @@ function buildContextualSynthesisPrompt(
   originalPrompt: string,
   reports: (SynthesisReport | undefined)[],
   ctx: SynthesisContext,
-  additionalSources?: (AdditionalSource | undefined)[]
+  additionalSources?: AdditionalSource[]
 ): string {
   const validReports = reports.filter((r): r is SynthesisReport => r !== undefined);
   const formattedReports = validReports
@@ -256,8 +256,8 @@ Write the ENTIRE synthesis in ${ctx.language.toUpperCase()}. This is the languag
 export function buildSynthesisPrompt(
   originalPrompt: string,
   reports: (SynthesisReport | undefined)[],
-  ctxOrAdditionalSources?: SynthesisContext | (AdditionalSource | undefined)[],
-  additionalSources?: (AdditionalSource | undefined)[]
+  ctxOrAdditionalSources?: SynthesisContext | AdditionalSource[],
+  additionalSources?: AdditionalSource[]
 ): string {
   if (
     ctxOrAdditionalSources !== undefined &&

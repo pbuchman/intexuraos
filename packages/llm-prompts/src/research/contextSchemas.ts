@@ -126,9 +126,9 @@ export type ResearchContext = z.infer<typeof ResearchContextSchema>;
  * Options for inferring research context.
  */
 export interface InferResearchContextOptions {
-  asOfDate?: string | undefined;
-  defaultCountryOrRegion?: string | undefined;
-  defaultJurisdiction?: string | undefined;
-  defaultCurrency?: string | undefined;
-  prefersRecentYears?: number | undefined;
+  asOfDate?: string;
+  defaultCountryOrRegion?: string;
+  defaultJurisdiction?: string;
+  defaultCurrency?: string;
+  prefersRecentYears?: number;
 }
