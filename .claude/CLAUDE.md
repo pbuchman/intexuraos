@@ -316,17 +316,17 @@ This is NOT optional. The phrases "unrelated to my changes", "pre-existing", and
 
 The following commands are **STRICTLY FORBIDDEN**:
 
-| Command                          | What It Creates        | Use Terraform Instead                 |
-| -------------------------------- | ---------------------- | ------------------------------------- |
-| `gsutil mb`                      | GCS buckets            | `google_storage_bucket`               |
-| `gcloud pubsub topics create`    | Pub/Sub topics         | `google_pubsub_topic`                 |
-| `gcloud pubsub subscriptions`    | Pub/Sub subscriptions  | `google_pubsub_subscription`          |
-| `gcloud run deploy`              | Cloud Run services     | `google_cloud_run_service`            |
-| `gcloud secrets create`          | Secret Manager secrets | `google_secret_manager_secret`        |
-| `gcloud sql instances create`    | Cloud SQL instances    | `google_sql_database_instance`        |
-| `gcloud compute instances`       | Compute Engine VMs     | `google_compute_instance`             |
-| `gcloud iam service-accounts`    | Service accounts       | `google_service_account`              |
-| `gcloud projects add-iam-policy` | IAM bindings           | `google_*_iam_*`                      |
+| Command                          | What It Creates        | Use Terraform Instead          |
+| -------------------------------- | ---------------------- | ------------------------------ |
+| `gsutil mb`                      | GCS buckets            | `google_storage_bucket`        |
+| `gcloud pubsub topics create`    | Pub/Sub topics         | `google_pubsub_topic`          |
+| `gcloud pubsub subscriptions`    | Pub/Sub subscriptions  | `google_pubsub_subscription`   |
+| `gcloud run deploy`              | Cloud Run services     | `google_cloud_run_service`     |
+| `gcloud secrets create`          | Secret Manager secrets | `google_secret_manager_secret` |
+| `gcloud sql instances create`    | Cloud SQL instances    | `google_sql_database_instance` |
+| `gcloud compute instances`       | Compute Engine VMs     | `google_compute_instance`      |
+| `gcloud iam service-accounts`    | Service accounts       | `google_service_account`       |
+| `gcloud projects add-iam-policy` | IAM bindings           | `google_*_iam_*`               |
 
 **Why:** Terraform tracks state, enables reproducibility, version control, drift detection, and cost visibility. CLI commands create "orphan" resources invisible to IaC.
 
