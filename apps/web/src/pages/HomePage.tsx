@@ -125,7 +125,7 @@ function HeroSection(): React.JSX.Element {
           </h1>
           <p className="mb-10 max-w-2xl text-xl font-medium leading-relaxed text-neutral-900 md:text-2xl">
             IntexuraOS transforms fragmented information into structured intelligence. A council of
-            16 AI models across 5 providers works autonomously — you remain the commander.
+            17 AI models across 5 providers works autonomously — you remain the commander.
           </p>
 
           <div className="flex flex-col gap-4 sm:flex-row">
@@ -250,9 +250,9 @@ function CouncilSection(): React.JSX.Element {
           The Council of AI
         </h2>
         <p className="mx-auto mb-16 max-w-2xl text-lg text-neutral-400">
-          16 models across 5 providers, treated as a council of experts rather than a single oracle.
+          17 models across 5 providers, treated as a council of experts rather than a single oracle.
           Each query is dispatched to multiple models in parallel, then synthesized with confidence
-          scoring.
+          scoring. <span className="text-cyan-400">v2.0.0: Natural language model selection — "research with Claude and GPT"</span>
         </p>
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-5">
           {[
@@ -309,10 +309,22 @@ function ManifestoSection(): React.JSX.Element {
                 The core logic is pure.
               </p>
             </BrutalistCard>
-            <BrutalistCard title="Continuity Ledger" icon={FileText}>
+            <BrutalistCard title="Council Consensus" icon={Brain}>
               <p className="text-neutral-700">
-                Complex reasoning is persisted. We treat the process of solving a problem as valuable
-                data, logged in immutable markdown ledgers.
+                Five AI models debate independently. When they agree, you get certainty. When they
+                disagree, you see the confidence scores.
+              </p>
+            </BrutalistCard>
+            <BrutalistCard title="Source Attribution" icon={FileText}>
+              <p className="text-neutral-700">
+                Every claim links to which model said it. No black-box answers — trace any statement
+                back to its origin.
+              </p>
+            </BrutalistCard>
+            <BrutalistCard title="Cost Transparency" icon={Database}>
+              <p className="text-neutral-700">
+                Every LLM call tracked: model, tokens, cost. Know exactly what you're spending before
+                and after each query.
               </p>
             </BrutalistCard>
             <BrutalistCard title="Sleep-at-Night Reliability" icon={Zap}>
@@ -332,35 +344,65 @@ function RecentUpdatesSection(): React.JSX.Element {
   return (
     <section className="border-b-4 border-black bg-purple-100 px-6 py-24">
       <div className="mx-auto max-w-7xl">
-        <SectionHeading>Latest System Capabilities</SectionHeading>
+        <SectionHeading>
+          What's New in <span className="bg-black px-2 text-white">v2.0.0</span>
+        </SectionHeading>
         <p className="mb-12 max-w-2xl text-lg font-medium text-neutral-700">
-          Continuous improvements to the command classification and action execution pipeline.
+          Major improvements to approval workflows, classification accuracy, and user control.
         </p>
-        <div className="grid gap-6 md:grid-cols-3">
-          <BrutalistCard title="Linear Integration" icon={CheckSquare} className="bg-purple-50">
+        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+          <BrutalistCard title="WhatsApp Approval" icon={CheckSquare} className="bg-green-50">
             <p className="mb-3 text-neutral-700">
-              Create Linear issues via natural language commands through WhatsApp or the PWA.
+              Approve or reject actions directly from WhatsApp. Reply with text ("yes", "ok", "reject")
+              or react with emoji — 👍 to approve, 👎 to reject. No app switching required.
             </p>
             <p className="font-mono text-sm italic text-neutral-500">
-              "Create a bug ticket for the login page timeout issue"
+              LLM-based intent classification for natural replies.
             </p>
           </BrutalistCard>
-          <BrutalistCard title="Smart Auto-Execute" icon={Zap} className="bg-yellow-50">
+          <BrutalistCard title="Calendar Preview" icon={Layers} className="bg-yellow-50">
             <p className="mb-3 text-neutral-700">
-              High-confidence link actions (≥90%) are auto-executed without manual approval,
-              reducing friction for common bookmarking workflows.
+              See exactly what will be created before approving. Event title, time, duration,
+              and all-day detection — full visibility before commit.
             </p>
             <p className="font-mono text-sm italic text-neutral-500">
-              Links are processed instantly when intent is clear.
+              "Meeting Tuesday 2pm" → Preview → 👍 → Created
             </p>
           </BrutalistCard>
-          <BrutalistCard title="Calendar Events" icon={Layers} className="bg-green-50">
+          <BrutalistCard title="Smart Classification" icon={Brain} className="bg-purple-50">
             <p className="mb-3 text-neutral-700">
-              Natural language calendar event creation. Mention a date in your command and the
-              CalendarAgent creates the event.
+              5-step decision tree with URL keyword isolation. "Save bookmark example.com/todo-list"
+              correctly saves as link, not todo. Explicit intent always wins.
             </p>
             <p className="font-mono text-sm italic text-neutral-500">
-              "Schedule a review meeting for Friday at 2pm"
+              Polish language support: "zapisz", "notatka", "zadanie"
+            </p>
+          </BrutalistCard>
+          <BrutalistCard title="Model Selection" icon={Zap} className="bg-cyan-50">
+            <p className="mb-3 text-neutral-700">
+              Specify which AI models to use in natural language. "Research AI trends with Claude
+              and GPT" or "all models except Perplexity" — you're in control.
+            </p>
+            <p className="font-mono text-sm italic text-neutral-500">
+              GLM-4.7-Flash: Free tier for cost-conscious queries.
+            </p>
+          </BrutalistCard>
+          <BrutalistCard title="Linear Dashboard" icon={Database} className="bg-orange-50">
+            <p className="mb-3 text-neutral-700">
+              New 3-column layout: Planning → Work → Closed. Todo and To Test categories with
+              smart state-to-column mapping for visual workflow tracking.
+            </p>
+            <p className="font-mono text-sm italic text-neutral-500">
+              Optimized for daily standup and sprint planning.
+            </p>
+          </BrutalistCard>
+          <BrutalistCard title="Race Prevention" icon={Shield} className="bg-red-50">
+            <p className="mb-3 text-neutral-700">
+              Atomic status transitions via Firestore transactions. No more double-approvals or
+              lost updates when multiple agents process the same action.
+            </p>
+            <p className="font-mono text-sm italic text-neutral-500">
+              updateStatusIf() — optimistic locking pattern.
             </p>
           </BrutalistCard>
         </div>

@@ -15,7 +15,7 @@ AI-generated content needs visual elements:
 
 Image-service provides two core capabilities:
 
-1. **Image generation** - Creates images using OpenAI DALL-E 3 or Google Imagen 3
+1. **Image generation** - Creates images using OpenAI GPT Image 1 or Google Gemini Flash Image
 2. **Prompt generation** - Converts text content into optimized image prompts using LLMs
 
 Generated images are:
@@ -33,7 +33,7 @@ When research completes:
 
 1. Research-agent calls image-service with research title
 2. Image-service generates an optimized prompt from the title
-3. Image is generated using DALL-E 3 or Imagen 3
+3. Image is generated using GPT Image 1 or Gemini Flash Image
 4. Image stored in GCS with signed URLs
 5. Research updated with cover image ID
 6. When research is unshared, image is deleted
@@ -48,7 +48,7 @@ For notes and bookmarks:
 
 ## Key Benefits
 
-**Multi-provider support** - Choose between OpenAI DALL-E 3 and Google Imagen 3
+**Multi-provider support** - Choose between OpenAI GPT Image 1 and Google Gemini Flash Image
 
 **Smart prompt generation** - LLM-powered prompt enhancement for better results
 

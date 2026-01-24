@@ -24,7 +24,7 @@ LLM responses require validation to ensure they match expected schemas before pr
 
 ## Approach 1: Zod Schemas (Recommended for New Code)
 
-**Package:** `@intexuraos/llm-common`
+**Package:** `@intexuraos/llm-prompts`
 
 **When to use:** Structured JSON responses with multiple fields, enums, or nested objects.
 
@@ -92,7 +92,7 @@ function formatZodErrors(error: ZodError): string {
 ### Schema Locations
 
 ```
-packages/llm-common/src/
+packages/llm-prompts/src/
   shared/contextSchemas.ts      # Domain, Mode, DefaultApplied, SafetyInfo
   research/contextSchemas.ts    # ResearchContext, TimeScope, ResearchPlan, etc.
   synthesis/contextSchemas.ts   # SynthesisContext, SynthesisGoal, etc.
@@ -212,7 +212,7 @@ Please fix the JSON to match the expected schema. Return ONLY valid JSON.`;
 
 ### Steps
 
-1. **Create Zod schema** in `packages/llm-common/src/<domain>/`
+1. **Create Zod schema** in `packages/llm-prompts/src/<domain>/`
 2. **Export type** via `z.infer<typeof Schema>`
 3. **Replace guard** with `schema.safeParse()`
 4. **Update error handling** to use `formatZodErrors()`

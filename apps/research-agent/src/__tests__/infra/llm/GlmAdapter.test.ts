@@ -19,7 +19,7 @@ vi.mock('@intexuraos/infra-glm', () => ({
   createGlmClient: mockCreateGlmClient,
 }));
 
-vi.mock('@intexuraos/llm-common', () => ({
+vi.mock('@intexuraos/llm-prompts', () => ({
   buildSynthesisPrompt: vi.fn(),
   titlePrompt: {
     build: vi.fn(),
@@ -30,7 +30,7 @@ const { GlmAdapter } = await import('../../../infra/llm/GlmAdapter.js');
 
 // Get mocked functions after import
 const { buildSynthesisPrompt: mockBuildSynthesisPrompt, titlePrompt: mockTitlePrompt } =
-  await import('@intexuraos/llm-common');
+  await import('@intexuraos/llm-prompts');
 
 const testPricing: ModelPricing = {
   inputPricePerMillion: 0.6,

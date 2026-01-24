@@ -18,15 +18,15 @@ PromptVault-service manages prompt templates stored in Firestore with optional N
 
 ### Prompt
 
-| Field          | Type      | Description                                |
-| -------------- | --------- | ------------------------------------------ | ------------------ |
-| `id`           | string    | Unique identifier (Notion page ID or UUID) |
-| `userId`       | string    | Owner user ID                              |
-| `title`        | string    | Prompt title                               |
-| `content`      | string    | Prompt content                             |
-| `notionPageId` | string \  | undefined                                  | Linked Notion page |
-| `createdAt`    | string    | ISO 8601 creation time                     |
-| `updatedAt`    | string    | ISO 8601 last update                       |
+| Field | Type | Description |
+| -------------- | --------- | ------------------------------------------ | |
+| `id` | string | Unique identifier (Notion page ID or UUID) |
+| `userId` | string | Owner user ID |
+| `title` | string | Prompt title |
+| `content` | string | Prompt content |
+| `notionPageId` | string \ | undefined | Linked Notion page |
+| `createdAt` | string | ISO 8601 creation time |
+| `updatedAt` | string | ISO 8601 last update |
 
 ## Dependencies
 

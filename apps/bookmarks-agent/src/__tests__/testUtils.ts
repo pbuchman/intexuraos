@@ -7,6 +7,7 @@ import { FakeBookmarkRepository } from './fakeBookmarkRepository.js';
 import { FakeLinkPreviewFetcher } from './fakeLinkPreviewFetcher.js';
 import { FakeEnrichPublisher } from './fakeEnrichPublisher.js';
 import { FakeSummarizePublisher } from './fakeSummarizePublisher.js';
+import { FakeWhatsAppSendPublisher } from './fakeWhatsAppSendPublisher.js';
 import { FakeBookmarkSummaryService } from './fakeBookmarkSummaryService.js';
 import { resetServices, setServices } from '../services.js';
 
@@ -73,6 +74,7 @@ export interface TestContext {
   linkPreviewFetcher: FakeLinkPreviewFetcher;
   enrichPublisher: FakeEnrichPublisher;
   summarizePublisher: FakeSummarizePublisher;
+  whatsAppSendPublisher: FakeWhatsAppSendPublisher;
   bookmarkSummaryService: FakeBookmarkSummaryService;
 }
 
@@ -83,6 +85,7 @@ export function setupTestContext(): TestContext {
     linkPreviewFetcher: null as unknown as FakeLinkPreviewFetcher,
     enrichPublisher: null as unknown as FakeEnrichPublisher,
     summarizePublisher: null as unknown as FakeSummarizePublisher,
+    whatsAppSendPublisher: null as unknown as FakeWhatsAppSendPublisher,
     bookmarkSummaryService: null as unknown as FakeBookmarkSummaryService,
   };
 
@@ -100,12 +103,14 @@ export function setupTestContext(): TestContext {
     context.linkPreviewFetcher = new FakeLinkPreviewFetcher();
     context.enrichPublisher = new FakeEnrichPublisher();
     context.summarizePublisher = new FakeSummarizePublisher();
+    context.whatsAppSendPublisher = new FakeWhatsAppSendPublisher();
     context.bookmarkSummaryService = new FakeBookmarkSummaryService();
     setServices({
       bookmarkRepository: context.bookmarkRepository,
       linkPreviewFetcher: context.linkPreviewFetcher,
       enrichPublisher: context.enrichPublisher,
       summarizePublisher: context.summarizePublisher,
+      whatsAppSendPublisher: context.whatsAppSendPublisher,
       bookmarkSummaryService: context.bookmarkSummaryService,
     });
     clearJwksCache();

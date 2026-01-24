@@ -18,6 +18,7 @@ import type { Config } from '../config.js';
 import {
   ProcessAudioMessageUseCase,
   ProcessImageMessageUseCase,
+  type WhatsAppCloudApiPort,
 } from '../domain/whatsapp/index.js';
 import {
   extractAudioMedia,
@@ -28,6 +29,7 @@ import {
   extractMessageTimestamp,
   extractMessageType,
   extractPhoneNumberId,
+  extractReactionData,
   extractReplyContext,
   extractSenderName,
   extractSenderPhoneNumber,
@@ -327,6 +329,7 @@ export async function processWebhookEvent(
     const messageType = extractMessageType(request.body);
     const imageMedia = extractImageMedia(request.body);
     const audioMedia = extractAudioMedia(request.body);
+    const reactionData = extractReactionData(request.body);
 
     request.log.info(
       {
@@ -336,12 +339,14 @@ export async function processWebhookEvent(
         hasText: messageText !== null,
         hasImage: imageMedia !== null,
         hasAudio: audioMedia !== null,
+        hasReaction: reactionData !== null,
+        reactionEmoji: reactionData?.emoji,
       },
       'Extracted message details from webhook payload'
     );
 
     // Validate message type
-    const supportedTypes = ['text', 'image', 'audio'];
+    const supportedTypes = ['text', 'image', 'audio', 'reaction'];
     if (messageType === null || !supportedTypes.includes(messageType)) {
       request.log.info(
         { eventId: savedEvent.id, messageType },
@@ -350,7 +355,7 @@ export async function processWebhookEvent(
       await webhookEventRepository.updateEventStatus(savedEvent.id, 'ignored', {
         ignoredReason: {
           code: 'UNSUPPORTED_MESSAGE_TYPE',
-          message: `Only text, image, and audio messages are supported. Received: ${messageType ?? 'unknown'}`,
+          message: `Only text, image, audio, and reaction messages are supported. Received: ${messageType ?? 'unknown'}`,
           details: { messageType },
         },
       });
@@ -386,6 +391,17 @@ export async function processWebhookEvent(
         ignoredReason: {
           code: 'NO_AUDIO_MEDIA',
           message: 'Audio message has no media info',
+        },
+      });
+      return;
+    }
+
+    if (messageType === 'reaction' && reactionData === null) {
+      request.log.info({ eventId: savedEvent.id }, 'Ignoring reaction message without data');
+      await webhookEventRepository.updateEventStatus(savedEvent.id, 'ignored', {
+        ignoredReason: {
+          code: 'NO_REACTION_DATA',
+          message: 'Reaction message has no data',
         },
       });
       return;
@@ -495,6 +511,11 @@ export async function processWebhookEvent(
         phoneNumberId,
         audioMedia
       );
+      return;
+    }
+
+    if (messageType === 'reaction' && reactionData !== null) {
+      await handleReactionMessage(request, savedEvent, services, userId, reactionData);
       return;
     }
 
@@ -633,8 +654,159 @@ async function handleAudioMessage(
       }
     }
 
-    await sendAudioConfirmationMessage(request, savedEvent, fromNumber);
+    // Mark as read with typing indicator (shows user something is happening)
+    await markAudioAsReadWithTyping(request, savedEvent, services.whatsappCloudApi);
   }
+}
+
+/**
+ * Handle reaction message for action approval/rejection.
+ *
+ * Reactions are used for quick approval responses:
+ * - 👍 (thumbs up) → approve
+ * - 👎 (thumbs down) → reject
+ * - Other emojis → ignored
+ */
+async function handleReactionMessage(
+  request: FastifyRequest<{ Body: WebhookPayload }>,
+  savedEvent: { id: string },
+  services: ReturnType<typeof getServices>,
+  userId: string,
+  reactionData: { emoji: string; messageId: string }
+): Promise<void> {
+  const { webhookEventRepository, outboundMessageRepository, eventPublisher } = services;
+
+  request.log.info(
+    {
+      eventId: savedEvent.id,
+      userId,
+      reactionEmoji: reactionData.emoji,
+      messageId: reactionData.messageId,
+    },
+    'Processing reaction message'
+  );
+
+  // Map emoji to intent
+  let intent: 'approve' | 'reject' | null = null;
+  if (reactionData.emoji === '👍') {
+    intent = 'approve';
+  } else if (reactionData.emoji === '👎') {
+    intent = 'reject';
+  }
+
+  if (intent === null) {
+    request.log.info(
+      { eventId: savedEvent.id, emoji: reactionData.emoji },
+      'Ignoring unsupported reaction emoji'
+    );
+    await webhookEventRepository.updateEventStatus(savedEvent.id, 'ignored', {
+      ignoredReason: {
+        code: 'UNSUPPORTED_REACTION',
+        message: `Only 👍 and 👎 reactions are supported. Received: ${reactionData.emoji}`,
+        details: { emoji: reactionData.emoji },
+      },
+    });
+    return;
+  }
+
+  // Look up the original message being reacted to
+  const outboundResult = await outboundMessageRepository.findByWamid(reactionData.messageId);
+
+  if (!outboundResult.ok) {
+    request.log.error(
+      { eventId: savedEvent.id, messageId: reactionData.messageId, error: outboundResult.error },
+      'Failed to look up outbound message'
+    );
+    await webhookEventRepository.updateEventStatus(savedEvent.id, 'failed', {
+      failureDetails: `Failed to look up outbound message: ${outboundResult.error.message}`,
+    });
+    return;
+  }
+
+  if (outboundResult.value === null) {
+    request.log.info(
+      { eventId: savedEvent.id, messageId: reactionData.messageId },
+      'No outbound message found for reaction (may not be an approval message)'
+    );
+    await webhookEventRepository.updateEventStatus(savedEvent.id, 'ignored', {
+      ignoredReason: {
+        code: 'NO_OUTBOUND_MESSAGE',
+        message: 'No outbound message found for this reaction',
+        details: { messageId: reactionData.messageId },
+      },
+    });
+    return;
+  }
+
+  const correlationId = outboundResult.value.correlationId;
+  // Extract actionId from correlationId (format: action-{type}-approval-{actionId})
+  const match = /action-[^-]+-approval-(.+)$/.exec(correlationId);
+
+  if (match === null) {
+    request.log.info(
+      { eventId: savedEvent.id, correlationId },
+      'Reaction is not for an approval message, ignoring'
+    );
+    await webhookEventRepository.updateEventStatus(savedEvent.id, 'ignored', {
+      ignoredReason: {
+        code: 'NOT_APPROVAL_MESSAGE',
+        message: 'Reaction is not for an approval message',
+        details: { correlationId },
+      },
+    });
+    return;
+  }
+
+  // match[1] is guaranteed to exist and be non-empty because:
+  // 1. We returned early if match === null
+  // 2. The regex uses (.+) which requires at least one character
+  // TypeScript doesn't know this, so we need the fallback for type safety
+  const actionId = match[1] ?? '';
+  request.log.info(
+    { eventId: savedEvent.id, correlationId, actionId, intent },
+    'Reaction is for approval message, publishing reply event'
+  );
+
+  // Publish approval reply event with the intent from the reaction
+  const replyText = intent === 'approve' ? 'yes' : 'no';
+  const approvalReplyEvent: Parameters<typeof eventPublisher.publishApprovalReply>[0] = {
+    type: 'action.approval.reply',
+    replyToWamid: reactionData.messageId,
+    replyText,
+    userId,
+    timestamp: new Date().toISOString(),
+    actionId,
+  };
+
+  const approvalPublishResult = await eventPublisher.publishApprovalReply(approvalReplyEvent);
+
+  if (!approvalPublishResult.ok) {
+    request.log.error(
+      {
+        eventId: savedEvent.id,
+        error: approvalPublishResult.error,
+        replyToWamid: reactionData.messageId,
+      },
+      'Failed to publish approval reply event'
+    );
+    await webhookEventRepository.updateEventStatus(savedEvent.id, 'failed', {
+      failureDetails: `Failed to publish approval reply: ${approvalPublishResult.error.message}`,
+    });
+    return;
+  }
+
+  request.log.info(
+    {
+      eventId: savedEvent.id,
+      userId,
+      replyToWamid: reactionData.messageId,
+      actionId,
+      intent,
+    },
+    'Published approval reply event from reaction'
+  );
+
+  await webhookEventRepository.updateEventStatus(savedEvent.id, 'completed', {});
 }
 
 /**
@@ -707,6 +879,10 @@ async function handleTextMessage(
   // Check if this is a reply to another message (potential approval response)
   const replyContext = extractReplyContext(request.body);
 
+  // Declare actionId outside the if block so it's accessible later
+  // If actionId is defined, this is a confirmed approval reply and we should skip command.ingest
+  let actionId: string | undefined;
+
   if (replyContext !== null) {
     // This message is a reply - look up the original message to get correlationId
     request.log.info(
@@ -719,7 +895,6 @@ async function handleTextMessage(
     );
 
     // Try to find the original outbound message to extract actionId
-    let actionId: string | undefined;
     const outboundResult = await outboundMessageRepository.findByWamid(replyContext.replyToWamid);
 
     if (outboundResult.ok && outboundResult.value !== null) {
@@ -731,6 +906,11 @@ async function handleTextMessage(
         request.log.info(
           { correlationId, actionId },
           'Extracted actionId from correlationId'
+        );
+      } else {
+        request.log.info(
+          { correlationId, replyToWamid: replyContext.replyToWamid },
+          'Outbound message found but correlationId does not match approval pattern'
         );
       }
     } else if (outboundResult.ok) {
@@ -745,65 +925,71 @@ async function handleTextMessage(
       );
     }
 
-    // Publish approval reply event
-    const approvalReplyEvent: Parameters<typeof eventPublisher.publishApprovalReply>[0] = {
-      type: 'action.approval.reply',
-      replyToWamid: replyContext.replyToWamid,
-      replyText: messageText,
-      userId,
-      timestamp: new Date().toISOString(),
-    };
-
+    // Only publish approval reply event if we found an actionId
+    // If no actionId was extracted, this is not a reply to an approval message
     if (actionId !== undefined) {
-      approvalReplyEvent.actionId = actionId;
-    }
+      const approvalReplyEvent: Parameters<typeof eventPublisher.publishApprovalReply>[0] = {
+        type: 'action.approval.reply',
+        replyToWamid: replyContext.replyToWamid,
+        replyText: messageText,
+        userId,
+        actionId,
+        timestamp: new Date().toISOString(),
+      };
 
-    const approvalPublishResult = await eventPublisher.publishApprovalReply(approvalReplyEvent);
+      const approvalPublishResult = await eventPublisher.publishApprovalReply(approvalReplyEvent);
 
-    if (!approvalPublishResult.ok) {
-      request.log.error(
-        {
-          eventId: savedEvent.id,
-          error: approvalPublishResult.error,
-          replyToWamid: replyContext.replyToWamid,
-        },
-        'Failed to publish approval reply event'
-      );
-    } else {
-      request.log.info(
-        {
-          eventId: savedEvent.id,
-          userId,
-          replyToWamid: replyContext.replyToWamid,
-          actionId,
-        },
-        'Published approval reply event'
-      );
+      if (!approvalPublishResult.ok) {
+        request.log.error(
+          {
+            eventId: savedEvent.id,
+            error: approvalPublishResult.error,
+            replyToWamid: replyContext.replyToWamid,
+          },
+          'Failed to publish approval reply event'
+        );
+      } else {
+        request.log.info(
+          {
+            eventId: savedEvent.id,
+            userId,
+            replyToWamid: replyContext.replyToWamid,
+            actionId,
+          },
+          'Published approval reply event'
+        );
+      }
     }
   }
 
-  // Always publish command ingest event for text message
-  // If this was an approval reply, it will be handled by actions-agent
-  // If not, commands-agent will classify it as usual
-  request.log.info(
-    { eventId: savedEvent.id, userId, messageId: savedMessage.id },
-    'Publishing command.ingest event'
-  );
-
-  const commandPublishResult = await eventPublisher.publishCommandIngest({
-    type: 'command.ingest',
-    userId,
-    sourceType: 'whatsapp_text',
-    externalId: waMessageId,
-    text: messageText,
-    timestamp,
-  });
-
-  if (!commandPublishResult.ok) {
-    request.log.error(
-      { eventId: savedEvent.id, error: commandPublishResult.error },
-      'Failed to publish command ingest event'
+  // Only publish command.ingest if this is NOT a confirmed approval reply
+  // If actionId is defined, we've already handled this via approval reply event
+  if (actionId !== undefined) {
+    request.log.info(
+      { eventId: savedEvent.id, actionId, userId },
+      'Skipping command.ingest for approval reply with known actionId'
     );
+  } else {
+    request.log.info(
+      { eventId: savedEvent.id, userId, messageId: savedMessage.id },
+      'Publishing command.ingest event'
+    );
+
+    const commandPublishResult = await eventPublisher.publishCommandIngest({
+      type: 'command.ingest',
+      userId,
+      sourceType: 'whatsapp_text',
+      externalId: waMessageId,
+      text: messageText,
+      timestamp,
+    });
+
+    if (!commandPublishResult.ok) {
+      request.log.error(
+        { eventId: savedEvent.id, error: commandPublishResult.error },
+        'Failed to publish command ingest event'
+      );
+    }
   }
 
   // Publish link preview extraction event to Pub/Sub
@@ -860,37 +1046,30 @@ async function markMessageAsRead(
 }
 
 /**
- * Send confirmation message back to the sender.
- * Used only for audio messages to inform user about transcription progress.
+ * Mark audio message as read with typing indicator.
+ * This shows the user something is happening (typing indicator shows for up to 25s
+ * or until the next message is sent).
  */
-async function sendAudioConfirmationMessage(
+async function markAudioAsReadWithTyping(
   request: FastifyRequest<{ Body: WebhookPayload }>,
   savedEvent: { id: string },
-  fromNumber: string
+  whatsappCloudApi: WhatsAppCloudApiPort
 ): Promise<void> {
   const originalMessageId = extractMessageId(request.body);
   const phoneNumberId = extractPhoneNumberId(request.body);
 
-  if (phoneNumberId !== null) {
-    const { whatsappCloudApi } = getServices();
-    const confirmationText = '✅ Voice message saved. Transcription in progress...';
+  if (phoneNumberId !== null && originalMessageId !== null) {
+    const result = await whatsappCloudApi.markAsReadWithTyping(phoneNumberId, originalMessageId);
 
-    const sendResult = await whatsappCloudApi.sendMessage(
-      phoneNumberId,
-      fromNumber,
-      confirmationText,
-      originalMessageId ?? undefined
-    );
-
-    if (sendResult.ok) {
+    if (result.ok) {
       request.log.info(
-        { eventId: savedEvent.id, messageId: sendResult.value.messageId, recipient: fromNumber },
-        'Sent audio confirmation message'
+        { eventId: savedEvent.id, messageId: originalMessageId },
+        'Marked audio message as read with typing indicator'
       );
     } else {
       request.log.error(
-        { eventId: savedEvent.id, error: sendResult.error, recipient: fromNumber },
-        'Failed to send audio confirmation message'
+        { eventId: savedEvent.id, error: result.error, messageId: originalMessageId },
+        'Failed to mark audio message as read with typing indicator'
       );
     }
   }

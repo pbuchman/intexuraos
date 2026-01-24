@@ -690,7 +690,7 @@ describe('Webhook async processing', () => {
       expect(events[0]?.status).toBe('failed');
     });
 
-    it('sends confirmation message after successful audio processing', async () => {
+    it('marks audio message as read with typing indicator (no confirmation message)', async () => {
       const senderPhone = '15551234567';
       const userId = 'test-user-id';
 
@@ -723,9 +723,13 @@ describe('Webhook async processing', () => {
 
       await triggerWebhookProcessing();
 
-      // Verify confirmation message was sent via whatsappCloudApi
+      // Verify markAsReadWithTyping was called (shows typing indicator)
+      const markedWithTyping = ctx.whatsappCloudApi.getMarkedAsReadWithTypingMessages();
+      expect(markedWithTyping.length).toBeGreaterThan(0);
+
+      // Verify NO confirmation message was sent (we now use typing indicator instead)
       const sentMessages = ctx.whatsappCloudApi.getSentMessages();
-      expect(sentMessages.length).toBeGreaterThan(0);
+      expect(sentMessages.length).toBe(0);
     });
   });
 
@@ -1582,7 +1586,7 @@ describe('Webhook async processing', () => {
       expect(approvalReplyEvents[0]?.actionId).toBe('action-123-456');
     });
 
-    it('publishes approval reply event without actionId when no outbound message exists', async () => {
+    it('does not publish approval reply event when no outbound message exists', async () => {
       // Set up user mapping so the webhook processing reaches handleTextMessage
       await ctx.userMappingRepository.saveMapping(testUserId, [senderPhone]);
 
@@ -1609,15 +1613,16 @@ describe('Webhook async processing', () => {
       // Trigger async processing
       await triggerWebhookProcessing();
 
-      // Check that approval reply event was published without actionId
+      // No approval reply event should be published (no actionId found)
       const approvalReplyEvents = ctx.eventPublisher.getApprovalReplyEvents();
-      expect(approvalReplyEvents.length).toBe(1);
-      expect(approvalReplyEvents[0]?.type).toBe('action.approval.reply');
-      expect(approvalReplyEvents[0]?.replyToWamid).toBe('wamid.unknown.message');
-      expect(approvalReplyEvents[0]?.actionId).toBeUndefined();
+      expect(approvalReplyEvents.length).toBe(0);
+
+      // But command.ingest should still be published
+      const commandEvents = ctx.eventPublisher.getCommandIngestEvents();
+      expect(commandEvents.length).toBeGreaterThanOrEqual(1);
     });
 
-    it('publishes approval reply event without actionId when correlationId does not match pattern', async () => {
+    it('does not publish approval reply event when correlationId does not match pattern', async () => {
       // Set up user mapping so the webhook processing reaches handleTextMessage
       await ctx.userMappingRepository.saveMapping(testUserId, [senderPhone]);
 
@@ -1653,12 +1658,16 @@ describe('Webhook async processing', () => {
       // Trigger async processing
       await triggerWebhookProcessing();
 
+      // No approval reply event should be published (correlationId doesn't match approval pattern)
       const approvalReplyEvents = ctx.eventPublisher.getApprovalReplyEvents();
-      expect(approvalReplyEvents.length).toBe(1);
-      expect(approvalReplyEvents[0]?.actionId).toBeUndefined();
+      expect(approvalReplyEvents.length).toBe(0);
+
+      // But command.ingest should still be published
+      const commandEvents = ctx.eventPublisher.getCommandIngestEvents();
+      expect(commandEvents.length).toBeGreaterThanOrEqual(1);
     });
 
-    it('publishes approval reply event without actionId when repository lookup fails', async () => {
+    it('does not publish approval reply event when repository lookup fails', async () => {
       // Set up user mapping so the webhook processing reaches handleTextMessage
       await ctx.userMappingRepository.saveMapping(testUserId, [senderPhone]);
 
@@ -1690,10 +1699,13 @@ describe('Webhook async processing', () => {
       // Trigger async processing
       await triggerWebhookProcessing();
 
+      // No approval reply event should be published (lookup failed, no actionId)
       const approvalReplyEvents = ctx.eventPublisher.getApprovalReplyEvents();
-      expect(approvalReplyEvents.length).toBe(1);
-      expect(approvalReplyEvents[0]?.actionId).toBeUndefined();
-      expect(approvalReplyEvents[0]?.replyText).toBe('No');
+      expect(approvalReplyEvents.length).toBe(0);
+
+      // But command.ingest should still be published
+      const commandEvents = ctx.eventPublisher.getCommandIngestEvents();
+      expect(commandEvents.length).toBeGreaterThanOrEqual(1);
     });
 
     it('does not publish approval reply event for non-reply messages', async () => {
@@ -1723,6 +1735,125 @@ describe('Webhook async processing', () => {
       // No approval reply events should be published
       const approvalReplyEvents = ctx.eventPublisher.getApprovalReplyEvents();
       expect(approvalReplyEvents.length).toBe(0);
+    });
+  });
+
+  describe('approval reply command.ingest skip', () => {
+    it('should skip command.ingest when approval reply has known actionId', async () => {
+      const senderPhone = '15551234567';
+      const testUserId = 'test-user-approval';
+
+      // Set up user mapping so the webhook processing reaches handleTextMessage
+      await ctx.userMappingRepository.saveMapping(testUserId, [senderPhone]);
+
+      // Setup: Create outbound message with approval correlationId
+      const outboundMessage: OutboundMessage = {
+        wamid: 'wamid.outbound.approval',
+        correlationId: 'action-note-approval-action-123',
+        userId: testUserId,
+        sentAt: new Date().toISOString(),
+        expiresAt: Math.floor(Date.now() / 1000) + 7 * 24 * 60 * 60, // 7 days from now
+      };
+      await ctx.outboundMessageRepository.save(outboundMessage);
+
+      // Create reply webhook payload
+      const webhookPayload = createReplyWebhookPayload({
+        replyToWamid: 'wamid.outbound.approval',
+        messageText: 'Ok',
+      });
+      const payloadString = JSON.stringify(webhookPayload);
+      const signature = createSignature(payloadString, testConfig.appSecret);
+
+      // Send webhook
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/whatsapp/webhooks',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+        },
+        payload: payloadString,
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      // Trigger async processing
+      await triggerWebhookProcessing();
+
+      // Verify: Approval reply event was published
+      const approvalEvents = ctx.eventPublisher.getApprovalReplyEvents();
+      expect(approvalEvents.length).toBeGreaterThanOrEqual(1);
+      const latestApprovalEvent = approvalEvents[approvalEvents.length - 1];
+      expect(latestApprovalEvent).toMatchObject({
+        type: 'action.approval.reply',
+        actionId: 'action-123',
+        replyText: 'Ok',
+      });
+
+      // Verify: Command ingest event was NOT published for this message
+      const commandEvents = ctx.eventPublisher.getCommandIngestEvents();
+      const latestCommandEvent = commandEvents[commandEvents.length - 1];
+      // Either no events, or the latest event is not from this message
+      if (latestCommandEvent !== undefined) {
+        expect(latestCommandEvent.externalId).not.toBe(
+          'wamid.reply.HBgNMTU1NTEyMzQ1Njc4FQIAEhgUM0VCMDRBNzYwREQ0RjMwMjYzMDcA'
+        );
+      }
+    });
+
+    it('should publish command.ingest when reply has no actionId', async () => {
+      const senderPhone = '15551234567';
+      const testUserId = 'test-user-no-action';
+
+      // Set up user mapping so the webhook processing reaches handleTextMessage
+      await ctx.userMappingRepository.saveMapping(testUserId, [senderPhone]);
+
+      // Setup: Create outbound message WITHOUT approval correlationId
+      const outboundMessage: OutboundMessage = {
+        wamid: 'wamid.regular',
+        correlationId: 'some-other-correlation-id',
+        userId: testUserId,
+        sentAt: new Date().toISOString(),
+        expiresAt: Math.floor(Date.now() / 1000) + 7 * 24 * 60 * 60, // 7 days from now
+      };
+      await ctx.outboundMessageRepository.save(outboundMessage);
+
+      // Create reply webhook payload
+      const webhookPayload = createReplyWebhookPayload({
+        replyToWamid: 'wamid.regular',
+        messageText: 'Create a note to buy milk',
+      });
+      const payloadString = JSON.stringify(webhookPayload);
+      const signature = createSignature(payloadString, testConfig.appSecret);
+
+      // Send webhook
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/whatsapp/webhooks',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+        },
+        payload: payloadString,
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      // Trigger async processing
+      await triggerWebhookProcessing();
+
+      // Verify: No approval reply event published (no actionId found)
+      const approvalEvents = ctx.eventPublisher.getApprovalReplyEvents();
+      expect(approvalEvents.length).toBe(0);
+
+      // Verify: Command ingest event WAS published (because no actionId)
+      const commandEvents = ctx.eventPublisher.getCommandIngestEvents();
+      expect(commandEvents.length).toBeGreaterThanOrEqual(1);
+      const latestCommandEvent = commandEvents[commandEvents.length - 1];
+      expect(latestCommandEvent).toMatchObject({
+        type: 'command.ingest',
+        text: 'Create a note to buy milk',
+      });
     });
   });
 });

@@ -5,6 +5,7 @@ import {
   FakeActionRepository,
   FakeApprovalMessageRepository,
   FakeWhatsAppSendPublisher,
+  FakeActionEventPublisher,
 } from '../fakes.js';
 import type {
   ApprovalIntentClassifier,
@@ -71,6 +72,7 @@ describe('HandleApprovalReplyUseCase', () => {
   let approvalMessageRepository: FakeApprovalMessageRepository;
   let classifierFactory: FakeApprovalIntentClassifierFactory;
   let whatsappPublisher: FakeWhatsAppSendPublisher;
+  let actionEventPublisher: FakeActionEventPublisher;
   let useCase: HandleApprovalReplyUseCase;
 
   const testAction: Action = {
@@ -101,12 +103,14 @@ describe('HandleApprovalReplyUseCase', () => {
     approvalMessageRepository = new FakeApprovalMessageRepository();
     classifierFactory = new FakeApprovalIntentClassifierFactory();
     whatsappPublisher = new FakeWhatsAppSendPublisher();
+    actionEventPublisher = new FakeActionEventPublisher();
 
     useCase = createHandleApprovalReplyUseCase({
       actionRepository,
       approvalMessageRepository,
       approvalIntentClassifierFactory: classifierFactory,
       whatsappPublisher,
+      actionEventPublisher,
       logger: pino({ level: 'silent' }),
     });
   });
@@ -268,10 +272,10 @@ describe('HandleApprovalReplyUseCase', () => {
   });
 
   describe('action status check', () => {
-    it('returns early when action is no longer awaiting_approval', async () => {
+    it('returns early when action is in completed terminal state', async () => {
       await actionRepository.save({
         ...testAction,
-        status: 'pending', // Already moved past awaiting_approval
+        status: 'completed',
       });
 
       const result = await useCase({
@@ -287,6 +291,225 @@ describe('HandleApprovalReplyUseCase', () => {
         expect(result.value.actionId).toBe('action-1');
         expect(result.value.intent).toBeUndefined();
         expect(result.value.outcome).toBeUndefined();
+      }
+    });
+
+    it('returns early when action is in rejected terminal state', async () => {
+      await actionRepository.save({
+        ...testAction,
+        status: 'rejected',
+      });
+
+      const result = await useCase({
+        replyToWamid: 'wamid-123',
+        replyText: 'yes',
+        userId: 'user-1',
+        actionId: 'action-1',
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.matched).toBe(true);
+        expect(result.value.actionId).toBe('action-1');
+        expect(result.value.intent).toBeUndefined();
+        expect(result.value.outcome).toBeUndefined();
+      }
+    });
+
+    it('proceeds with classification when action is pending (not terminal)', async () => {
+      await actionRepository.save({
+        ...testAction,
+        status: 'pending',
+      });
+      classifierFactory.getClassifier().setResult({
+        intent: 'approve',
+        confidence: 0.95,
+        reasoning: 'User approved',
+      });
+
+      const result = await useCase({
+        replyToWamid: 'wamid-123',
+        replyText: 'yes',
+        userId: 'user-1',
+        actionId: 'action-1',
+      });
+
+      // Should proceed to classification but status_mismatch on update
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.matched).toBe(true);
+        expect(result.value.actionId).toBe('action-1');
+        // No intent/outcome because updateStatusIf returns status_mismatch
+        expect(result.value.intent).toBeUndefined();
+      }
+    });
+  });
+
+  describe('race condition prevention (atomic status updates)', () => {
+    beforeEach(async () => {
+      await actionRepository.save(testAction);
+    });
+
+    it('prevents duplicate approval when status already changed (race condition)', async () => {
+      classifierFactory.getClassifier().setResult({
+        intent: 'approve',
+        confidence: 0.95,
+        reasoning: 'User approved',
+      });
+
+      // Simulate race condition: status changed between read and update
+      actionRepository.setUpdateStatusIfResult('action-1', {
+        outcome: 'status_mismatch',
+        currentStatus: 'pending',
+      });
+
+      const result = await useCase({
+        replyToWamid: 'wamid-123',
+        replyText: 'yes',
+        userId: 'user-1',
+        actionId: 'action-1',
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.matched).toBe(true);
+        expect(result.value.actionId).toBe('action-1');
+        // No intent/outcome because race condition was detected
+        expect(result.value.intent).toBeUndefined();
+        expect(result.value.outcome).toBeUndefined();
+      }
+
+      // No WhatsApp messages sent (we bailed early)
+      expect(whatsappPublisher.getSentMessages()).toHaveLength(0);
+    });
+
+    it('prevents duplicate rejection when status already changed (race condition)', async () => {
+      classifierFactory.getClassifier().setResult({
+        intent: 'reject',
+        confidence: 0.9,
+        reasoning: 'User rejected',
+      });
+
+      // Simulate race condition: status changed between read and update
+      actionRepository.setUpdateStatusIfResult('action-1', {
+        outcome: 'status_mismatch',
+        currentStatus: 'pending',
+      });
+
+      const result = await useCase({
+        replyToWamid: 'wamid-123',
+        replyText: 'no',
+        userId: 'user-1',
+        actionId: 'action-1',
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.matched).toBe(true);
+        expect(result.value.actionId).toBe('action-1');
+        expect(result.value.intent).toBeUndefined();
+        expect(result.value.outcome).toBeUndefined();
+      }
+
+      // No WhatsApp messages sent
+      expect(whatsappPublisher.getSentMessages()).toHaveLength(0);
+    });
+
+    it('returns error when action not found during approval update', async () => {
+      classifierFactory.getClassifier().setResult({
+        intent: 'approve',
+        confidence: 0.95,
+        reasoning: 'User approved',
+      });
+
+      actionRepository.setUpdateStatusIfResult('action-1', {
+        outcome: 'not_found',
+      });
+
+      const result = await useCase({
+        replyToWamid: 'wamid-123',
+        replyText: 'yes',
+        userId: 'user-1',
+        actionId: 'action-1',
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.message).toBe('Action not found');
+      }
+    });
+
+    it('returns error when action not found during rejection update', async () => {
+      classifierFactory.getClassifier().setResult({
+        intent: 'reject',
+        confidence: 0.9,
+        reasoning: 'User rejected',
+      });
+
+      actionRepository.setUpdateStatusIfResult('action-1', {
+        outcome: 'not_found',
+      });
+
+      const result = await useCase({
+        replyToWamid: 'wamid-123',
+        replyText: 'no',
+        userId: 'user-1',
+        actionId: 'action-1',
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.message).toBe('Action not found');
+      }
+    });
+
+    it('returns error when update fails during approval', async () => {
+      classifierFactory.getClassifier().setResult({
+        intent: 'approve',
+        confidence: 0.95,
+        reasoning: 'User approved',
+      });
+
+      actionRepository.setUpdateStatusIfResult('action-1', {
+        outcome: 'error',
+        error: new Error('Firestore transaction failed'),
+      });
+
+      const result = await useCase({
+        replyToWamid: 'wamid-123',
+        replyText: 'yes',
+        userId: 'user-1',
+        actionId: 'action-1',
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.message).toBe('Failed to update action status');
+      }
+    });
+
+    it('returns error when update fails during rejection', async () => {
+      classifierFactory.getClassifier().setResult({
+        intent: 'reject',
+        confidence: 0.9,
+        reasoning: 'User rejected',
+      });
+
+      actionRepository.setUpdateStatusIfResult('action-1', {
+        outcome: 'error',
+        error: new Error('Firestore transaction failed'),
+      });
+
+      const result = await useCase({
+        replyToWamid: 'wamid-123',
+        replyText: 'no',
+        userId: 'user-1',
+        actionId: 'action-1',
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.message).toBe('Failed to update action status');
       }
     });
   });
@@ -716,6 +939,163 @@ describe('HandleApprovalReplyUseCase', () => {
         expect(result.value.actionId).toBe('action-1');
         expect(result.value.outcome).toBe('approved');
       }
+    });
+  });
+
+  describe('note action execution after approval (no duplicate notification)', () => {
+    it('calls executeNoteAction directly when approving a note action (does not publish event)', async () => {
+      const noteAction: Action = {
+        id: 'note-action-1',
+        userId: 'user-1',
+        commandId: 'cmd-1',
+        type: 'note',
+        confidence: 0.85,
+        title: 'Test note action',
+        status: 'awaiting_approval',
+        payload: { prompt: 'Original prompt content' },
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      };
+      await actionRepository.save(noteAction);
+
+      classifierFactory.getClassifier().setResult({
+        intent: 'approve',
+        confidence: 0.95,
+        reasoning: 'User approved',
+      });
+
+      // Create a mock executeNoteAction function
+      const executeNoteActionCalls: string[] = [];
+      const mockExecuteNoteAction = async (
+        actionId: string
+      ): Promise<Result<{ status: 'completed' | 'failed'; message?: string }>> => {
+        executeNoteActionCalls.push(actionId);
+        return ok({ status: 'completed' as const, message: 'Note created!' });
+      };
+
+      // Create usecase with executeNoteAction
+      const useCaseWithExecute = createHandleApprovalReplyUseCase({
+        actionRepository,
+        approvalMessageRepository,
+        approvalIntentClassifierFactory: classifierFactory,
+        whatsappPublisher,
+        actionEventPublisher,
+        logger: pino({ level: 'silent' }),
+        executeNoteAction: mockExecuteNoteAction,
+      });
+
+      const result = await useCaseWithExecute({
+        replyToWamid: 'wamid-123',
+        replyText: 'yes',
+        userId: 'user-1',
+        actionId: 'note-action-1',
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.outcome).toBe('approved');
+      }
+
+      // executeNoteAction should have been called directly
+      expect(executeNoteActionCalls).toHaveLength(1);
+      expect(executeNoteActionCalls[0]).toBe('note-action-1');
+
+      // action.created event should NOT have been published (prevents duplicate notification)
+      const publishedEvents = actionEventPublisher.getPublishedEvents();
+      expect(publishedEvents).toHaveLength(0);
+    });
+
+    it('falls back to publishing event when executeNoteAction is not provided', async () => {
+      const noteAction: Action = {
+        id: 'note-action-2',
+        userId: 'user-1',
+        commandId: 'cmd-1',
+        type: 'note',
+        confidence: 0.85,
+        title: 'Test note action',
+        status: 'awaiting_approval',
+        payload: { prompt: 'Original prompt content' },
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      };
+      await actionRepository.save(noteAction);
+
+      classifierFactory.getClassifier().setResult({
+        intent: 'approve',
+        confidence: 0.95,
+        reasoning: 'User approved',
+      });
+
+      // useCase does not have executeNoteAction (the default in beforeEach)
+      const result = await useCase({
+        replyToWamid: 'wamid-123',
+        replyText: 'yes',
+        userId: 'user-1',
+        actionId: 'note-action-2',
+      });
+
+      expect(result.ok).toBe(true);
+
+      // action.created event should be published when executeNoteAction not available
+      const publishedEvents = actionEventPublisher.getPublishedEvents();
+      expect(publishedEvents).toHaveLength(1);
+    });
+
+    it('publishes event for non-note actions even when executeNoteAction is provided', async () => {
+      const linkAction: Action = {
+        id: 'link-action-1',
+        userId: 'user-1',
+        commandId: 'cmd-1',
+        type: 'link',
+        confidence: 0.95,
+        title: 'Save this link',
+        status: 'awaiting_approval',
+        payload: { url: 'https://example.com' },
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      };
+      await actionRepository.save(linkAction);
+
+      classifierFactory.getClassifier().setResult({
+        intent: 'approve',
+        confidence: 0.95,
+        reasoning: 'User approved',
+      });
+
+      const executeNoteActionCalls: string[] = [];
+      const mockExecuteNoteAction = async (
+        actionId: string
+      ): Promise<Result<{ status: 'completed' | 'failed'; message?: string }>> => {
+        executeNoteActionCalls.push(actionId);
+        return ok({ status: 'completed' as const, message: 'Note created!' });
+      };
+
+      const useCaseWithExecute = createHandleApprovalReplyUseCase({
+        actionRepository,
+        approvalMessageRepository,
+        approvalIntentClassifierFactory: classifierFactory,
+        whatsappPublisher,
+        actionEventPublisher,
+        logger: pino({ level: 'silent' }),
+        executeNoteAction: mockExecuteNoteAction,
+      });
+
+      const result = await useCaseWithExecute({
+        replyToWamid: 'wamid-123',
+        replyText: 'yes',
+        userId: 'user-1',
+        actionId: 'link-action-1',
+      });
+
+      expect(result.ok).toBe(true);
+
+      // executeNoteAction should NOT be called for non-note actions
+      expect(executeNoteActionCalls).toHaveLength(0);
+
+      // action.created event should be published for link actions
+      const publishedEvents = actionEventPublisher.getPublishedEvents();
+      expect(publishedEvents).toHaveLength(1);
+      expect(publishedEvents[0]?.actionType).toBe('link');
     });
   });
 });

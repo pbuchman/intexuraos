@@ -4,7 +4,7 @@
 
 import { describe, expect, it, vi, type Mock } from 'vitest';
 import { ok, err } from '@intexuraos/common-core';
-import type { SourceMapItem } from '@intexuraos/llm-common';
+import type { SourceMapItem } from '@intexuraos/llm-prompts';
 import { repairAttribution } from '../../../../domain/research/usecases/repairAttribution.js';
 import type { LlmSynthesisProvider } from '../../../../domain/research/ports/llmProvider.js';
 

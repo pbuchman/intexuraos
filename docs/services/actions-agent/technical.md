@@ -4,7 +4,8 @@
 
 Actions-agent is the central action lifecycle management service for IntexuraOS. It receives classified commands from
 commands-agent, maintains action state in Firestore, routes actions to appropriate handlers via Pub/Sub, and tracks
-execution status.
+execution status. In v2.0.0, it gained WhatsApp approval reply handling with LLM-based intent classification and
+atomic status transitions to prevent race conditions.
 
 ## Architecture
 
@@ -23,21 +24,29 @@ graph TB
             PubSub --> TH[Todo Handler]
             PubSub --> NH[Note Handler]
             PubSub --> LH[Link Handler]
+            PubSub --> CH[Calendar Handler]
+            PubSub --> LIH[Linear Handler]
         end
 
         RH --> RA[Research Agent]
         TH --> TA[Todos Agent]
         NH --> NA[Notes Agent]
         LH --> BA[Bookmarks Agent]
+        CH --> CAL[Calendar Agent]
+        LIH --> LA[Linear Agent]
 
         AA --> WAP[WhatsApp Publisher]
         WAP --> WUser[WhatsApp Notification]
+
+        WA -->|"action.approval.reply<br/>Pub/Sub event"| AA
     end
 
     Scheduler[Cloud Scheduler] -->|"/internal/actions/retry-pending"| AA
 ```
 
 ## Data Flow
+
+### Standard Action Flow
 
 ```mermaid
 sequenceDiagram
@@ -57,11 +66,34 @@ sequenceDiagram
     AA->>FS: Save action (status: pending)
     AA->>PS: Publish action.created
     PS->>Handler: Push to /internal/actions/process
-    Handler->>AA: Update status to processing
-    Handler->>Target: Execute action
-    Target-->>Handler: Result
-    Handler->>FS: Update status to completed/failed
-    Handler->>AA: Send WhatsApp notification
+    Handler->>FS: updateStatusIf(awaiting_approval, pending)
+    Handler->>AA: Send WhatsApp approval notification
+    AA->>WA: WhatsApp message with correlationId
+```
+
+### Approval Reply Flow (New in v2.0.0)
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant WA as WhatsApp Service
+    participant AA as Actions Agent
+    participant LLM as LLM Service
+    participant FS as Firestore
+    participant PS as Pub/Sub
+    participant Target as Target Service
+
+    User->>WA: Reply "yes" to approval message
+    WA->>PS: Publish action.approval.reply
+    PS->>AA: Push to /internal/actions/approval-reply
+    AA->>FS: Get action by replyToWamid or actionId
+    AA->>LLM: Classify intent (approve/reject/unclear)
+    LLM-->>AA: intent: approve
+    AA->>FS: updateStatusIf(pending, awaiting_approval)
+    Note over AA,FS: Atomic transaction prevents race condition
+    AA->>WA: "Approved! Processing your research..."
+    AA->>PS: Publish action.created event
+    PS->>Target: Execute action
 ```
 
 ## API Endpoints
@@ -75,16 +107,18 @@ sequenceDiagram
 | DELETE | `/actions/:actionId`                   | Delete an action                       | Bearer token |
 | POST   | `/actions/batch`                       | Fetch multiple actions by IDs (max 50) | Bearer token |
 | POST   | `/actions/:actionId/execute`           | Synchronously execute an action        | Bearer token |
+| GET    | `/actions/:actionId/preview`           | Get calendar action preview            | Bearer token |
 | POST   | `/actions/:actionId/resolve-duplicate` | Skip or update duplicate bookmark      | Bearer token |
 
 ### Internal Endpoints
 
-| Method | Path                              | Description                                      | Auth                    |
-| ------ | --------------------------------- | ------------------------------------------------ | ----------------------- |
-| POST   | `/internal/actions`               | Create new action from classification            | Internal header or OIDC |
-| POST   | `/internal/actions/:actionType`   | Process action from Pub/Sub (type-specific)      | Pub/Sub OIDC            |
-| POST   | `/internal/actions/process`       | Process action from Pub/Sub (unified)            | Pub/Sub OIDC            |
-| POST   | `/internal/actions/retry-pending` | Retry actions stuck in pending (Cloud Scheduler) | OIDC or Internal        |
+| Method | Path                               | Description                                      | Auth                    |
+| ------ | ---------------------------------- | ------------------------------------------------ | ----------------------- |
+| POST   | `/internal/actions`                | Create new action from classification            | Internal header or OIDC |
+| POST   | `/internal/actions/:actionType`    | Process action from Pub/Sub (type-specific)      | Pub/Sub OIDC            |
+| POST   | `/internal/actions/process`        | Process action from Pub/Sub (unified)            | Pub/Sub OIDC            |
+| POST   | `/internal/actions/retry-pending`  | Retry actions stuck in pending (Cloud Scheduler) | OIDC or Internal        |
+| POST   | `/internal/actions/approval-reply` | Handle WhatsApp approval replies (v2.0.0)        | Pub/Sub OIDC            |
 
 ## Domain Models
 
@@ -119,13 +153,44 @@ sequenceDiagram
 
 | Value               | Description                            |
 | ------------------- | -------------------------------------- |
-| `pending`           | Initial state, awaiting processing     |
+| `pending`           | Approved and ready for processing      |
 | `awaiting_approval` | Low confidence, requires user approval |
 | `processing`        | Handler is executing                   |
 | `completed`         | Successfully executed                  |
 | `failed`            | Execution failed                       |
 | `rejected`          | User rejected the action               |
 | `archived`          | No longer relevant                     |
+
+### ApprovalMessage (New in v2.0.0)
+
+| Field         | Type              | Description                           |
+| ------------- | ----------------- | ------------------------------------- |
+| `id`          | string (UUID)     | Firestore document ID                 |
+| `wamid`       | string            | WhatsApp message ID (indexed)         |
+| `actionId`    | string            | Reference to action awaiting approval |
+| `userId`      | string            | User who should approve/reject        |
+| `sentAt`      | string (ISO 8601) | When approval request was sent        |
+| `actionType`  | ActionType        | Action type for logging               |
+| `actionTitle` | string            | Action title for logging              |
+
+### ApprovalReplyEvent (New in v2.0.0)
+
+| Field          | Type              | Description                             |
+| -------------- | ----------------- | --------------------------------------- |
+| `type`         | string            | Always `action.approval.reply`          |
+| `replyToWamid` | string            | Original approval message wamid         |
+| `replyText`    | string            | User's reply text                       |
+| `userId`       | string            | User ID                                 |
+| `timestamp`    | string (ISO 8601) | Reply timestamp                         |
+| `actionId`     | string (optional) | Action ID extracted from correlation ID |
+
+### ApprovalIntent (New in v2.0.0)
+
+| Value     | Description                      |
+| --------- | -------------------------------- |
+| `approve` | User wants to approve the action |
+| `reject`  | User wants to reject the action  |
+| `unclear` | Intent couldn't be determined    |
 
 ### ActionTransition
 
@@ -138,6 +203,50 @@ sequenceDiagram
 | `userId`    | string            | User who made correction |
 | `timestamp` | string (ISO 8601) | When correction occurred |
 
+## Key Use Cases
+
+### handleApprovalReply (New in v2.0.0)
+
+Processes WhatsApp approval replies using LLM-based intent classification.
+
+**Flow:**
+
+1. Receive `action.approval.reply` event from whatsapp-service
+2. Look up action by `actionId` (from correlationId) or `replyToWamid` (from approval_messages)
+3. Verify user ownership and action is not in terminal state
+4. Create LLM classifier using user's configured API key
+5. Classify intent: approve, reject, or unclear
+6. On approve: atomically update status via `updateStatusIf`, send confirmation, publish `action.created`
+7. On reject: atomically update status, record rejection reason, send confirmation
+8. On unclear: request clarification via WhatsApp
+
+**Race Condition Prevention:**
+
+```typescript
+const updateResult = await actionRepository.updateStatusIf(
+  action.id,
+  'pending', // new status
+  'awaiting_approval' // expected current status
+);
+
+if (updateResult.outcome === 'status_mismatch') {
+  // Another handler already processed this - idempotent return
+  return ok({ matched: true, actionId: action.id });
+}
+```
+
+### createIdempotentActionHandler
+
+Wraps action handlers with idempotency protection to prevent duplicate WhatsApp notifications.
+
+**Pattern:**
+
+```typescript
+const handler = registerActionHandler(createHandleXxxActionUseCase, deps);
+// Internally calls updateStatusIf(awaiting_approval, [pending, failed])
+// before invoking the wrapped handler
+```
+
 ## Pub/Sub Events
 
 ### Published
@@ -148,10 +257,10 @@ sequenceDiagram
 
 ### Subscribed
 
-| Subscription                | Handler                         |
-| --------------------------- | ------------------------------- |
-| `actions-{type}` (per-type) | `/internal/actions/:actionType` |
-| `actions-queue` (unified)   | `/internal/actions/process`     |
+| Event Type              | Subscription       | Handler                            |
+| ----------------------- | ------------------ | ---------------------------------- |
+| `action.created`        | `actions-queue`    | `/internal/actions/process`        |
+| `action.approval.reply` | `approval-replies` | `/internal/actions/approval-reply` |
 
 ## Dependencies
 
@@ -166,16 +275,18 @@ sequenceDiagram
 | `bookmarks-agent` | Execute link actions                  |
 | `calendar-agent`  | Execute calendar actions              |
 | `linear-agent`    | Execute Linear issue creation actions |
-| `user-service`    | Fetch user API keys                   |
+| `user-service`    | Fetch user API keys for LLM           |
 
 ### Infrastructure
 
-| Component                                    | Purpose                  |
-| -------------------------------------------- | ------------------------ |
-| Firestore (`actions` collection)             | Action persistence       |
-| Firestore (`actions_transitions` collection) | Type correction tracking |
-| Pub/Sub (`actions` queue)                    | Event distribution       |
-| Pub/Sub (`whatsapp-send`)                    | Notification delivery    |
+| Component                                    | Purpose                            |
+| -------------------------------------------- | ---------------------------------- |
+| Firestore (`actions` collection)             | Action persistence                 |
+| Firestore (`actions_transitions` collection) | Type correction tracking           |
+| Firestore (`approval_messages` collection)   | WhatsApp message to action mapping |
+| Pub/Sub (`actions` queue)                    | Event distribution                 |
+| Pub/Sub (`whatsapp-send`)                    | Notification delivery              |
+| Pub/Sub (`approval-replies`)                 | Approval reply events              |
 
 ## Configuration
 
@@ -217,6 +328,16 @@ in pending status indefinitely.
 **Auto-execution for links**: Link actions with confidence >= 90% are auto-executed immediately via `shouldAutoExecute()`.
 All other action types require manual approval before execution.
 
+**Approval reply idempotency (v2.0.0)**: The `updateStatusIf` method uses Firestore transactions to atomically check
+and update status. If the status doesn't match expectations, the operation is a no-op, preventing race conditions
+when multiple Pub/Sub messages arrive concurrently.
+
+**Note actions direct execution (v2.0.0)**: When approving note actions, the system executes directly rather than
+publishing `action.created` to avoid duplicate "ready for approval" notifications.
+
+**LLM classifier creation**: The approval intent classifier is created per-user using their configured LLM API key.
+If no key is configured, the user receives an error message asking them to configure their API key.
+
 ## File Structure
 
 ```
@@ -226,21 +347,34 @@ apps/actions-agent/src/
       action.ts              # Action entity and factory
       actionEvent.ts         # Event schemas
       actionTransition.ts    # Type correction tracking
+      approvalMessage.ts     # WhatsApp approval tracking (v2.0.0)
+      approvalReplyEvent.ts  # Approval reply event schema (v2.0.0)
     ports/
-      actionRepository.ts    # Action storage interface
+      actionRepository.ts    # Action storage interface + updateStatusIf
       actionTransitionRepository.ts
+      approvalMessageRepository.ts   # Approval message storage (v2.0.0)
+      approvalIntentClassifier.ts    # LLM intent classification port (v2.0.0)
+      approvalIntentClassifierFactory.ts  # Classifier factory port (v2.0.0)
+      actionEventPublisher.ts        # Event publishing port
       notificationSender.ts  # WhatsApp notifications
       *ServiceClient.ts      # HTTP clients for other services
     usecases/
-      handle*Action.ts       # Pub/Sub handlers (async)
-      execute*Action.ts      # Direct execution (sync)
-      changeActionType.ts    # Type correction
-      retryPendingActions.ts # Scheduled retry
-      actionHandlerRegistry.ts
+      handleApprovalReply.ts     # WhatsApp reply handling (v2.0.0)
+      handle*Action.ts           # Pub/Sub handlers (async)
+      execute*Action.ts          # Direct execution (sync)
+      createIdempotentActionHandler.ts  # Idempotency wrapper
+      shouldAutoExecute.ts       # Auto-execution logic
+      changeActionType.ts        # Type correction
+      retryPendingActions.ts     # Scheduled retry
+      actionHandlerRegistry.ts   # Handler routing
   infra/
     firestore/
-      actionRepository.ts
+      actionRepository.ts            # Includes atomic updateStatusIf
       actionTransitionRepository.ts
+      approvalMessageRepository.ts   # Approval message persistence (v2.0.0)
+    llm/
+      llmApprovalIntentClassifier.ts  # LLM-based classifier (v2.0.0)
+      approvalIntentClassifierFactory.ts  # Factory implementation (v2.0.0)
     pubsub/
       actionEventPublisher.ts
     http/
@@ -249,6 +383,6 @@ apps/actions-agent/src/
       whatsappNotificationSender.ts
   routes/
     publicRoutes.ts          # User-facing endpoints
-    internalRoutes.ts        # Service-to-service + Pub/Sub
+    internalRoutes.ts        # Service-to-service + Pub/Sub (includes approval-reply)
   services.ts                # DI container
 ```

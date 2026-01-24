@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import pino from 'pino';
 import { FakeBookmarkRepository } from './fakeBookmarkRepository.js';
 import { FakeBookmarkSummaryService } from './fakeBookmarkSummaryService.js';
+import { FakeWhatsAppSendPublisher } from './fakeWhatsAppSendPublisher.js';
 import { summarizeBookmark } from '../domain/usecases/summarizeBookmark.js';
 
 const silentLogger = pino({ level: 'silent' });
@@ -9,10 +10,168 @@ const silentLogger = pino({ level: 'silent' });
 describe('summarizeBookmark', () => {
   let bookmarkRepository: FakeBookmarkRepository;
   let bookmarkSummaryService: FakeBookmarkSummaryService;
+  let whatsAppSendPublisher: FakeWhatsAppSendPublisher;
 
   beforeEach(() => {
     bookmarkRepository = new FakeBookmarkRepository();
     bookmarkSummaryService = new FakeBookmarkSummaryService();
+    whatsAppSendPublisher = new FakeWhatsAppSendPublisher();
+  });
+
+  describe('WhatsApp integration', () => {
+    it('sends WhatsApp message when publisher is available', async () => {
+      const createResult = await bookmarkRepository.create({
+        userId: 'user-1',
+        url: 'https://example.com/page',
+        source: 'test',
+        sourceId: 'test-1',
+        title: 'Example Page',
+        description: 'A description of the page',
+      });
+
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) return;
+
+      const bookmarkId = createResult.value.id;
+
+      bookmarkSummaryService.setDefaultSummary(
+        'This page is about example content and provides useful information.'
+      );
+
+      const result = await summarizeBookmark(
+        {
+          bookmarkRepository,
+          bookmarkSummaryService,
+          whatsAppSendPublisher,
+          logger: silentLogger,
+        },
+        { bookmarkId, userId: 'user-1' }
+      );
+
+      expect(result.ok).toBe(true);
+      expect(whatsAppSendPublisher.publishedMessages).toHaveLength(1);
+      expect(whatsAppSendPublisher.publishedMessages[0]).toEqual({
+        userId: 'user-1',
+        message:
+          '📑 *Bookmark Summary*\n\n*Example Page*\n\nThis page is about example content and provides useful information.\n\n🔗 https://example.com/page',
+        correlationId: `bookmark-${bookmarkId}`,
+      });
+    });
+
+    it('does not send WhatsApp message when publisher is undefined', async () => {
+      const createResult = await bookmarkRepository.create({
+        userId: 'user-1',
+        url: 'https://example.com/page',
+        source: 'test',
+        sourceId: 'test-1',
+        title: 'Example Page',
+        description: 'A description of the page',
+      });
+
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) return;
+
+      const bookmarkId = createResult.value.id;
+
+      bookmarkSummaryService.setDefaultSummary(
+        'This page is about example content and provides useful information.'
+      );
+
+      const result = await summarizeBookmark(
+        { bookmarkRepository, bookmarkSummaryService, logger: silentLogger },
+        { bookmarkId, userId: 'user-1' }
+      );
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.aiSummary).toBe(
+        'This page is about example content and provides useful information.'
+      );
+      expect(whatsAppSendPublisher.publishedMessages).toHaveLength(0);
+    });
+
+    it('handles publisher errors gracefully', async () => {
+      const createResult = await bookmarkRepository.create({
+        userId: 'user-1',
+        url: 'https://example.com/page',
+        source: 'test',
+        sourceId: 'test-1',
+        title: 'Example Page',
+        description: 'A description of the page',
+      });
+
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) return;
+
+      const bookmarkId = createResult.value.id;
+
+      bookmarkSummaryService.setDefaultSummary(
+        'This page is about example content and provides useful information.'
+      );
+
+      whatsAppSendPublisher.setNextError({
+        code: 'PUBLISH_FAILED',
+        message: 'Failed to publish message',
+      });
+
+      const result = await summarizeBookmark(
+        {
+          bookmarkRepository,
+          bookmarkSummaryService,
+          whatsAppSendPublisher,
+          logger: silentLogger,
+        },
+        { bookmarkId, userId: 'user-1' }
+      );
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.aiSummary).toBe(
+        'This page is about example content and provides useful information.'
+      );
+    });
+
+    it('uses ogPreview title when available in WhatsApp message', async () => {
+      const createResult = await bookmarkRepository.create({
+        userId: 'user-1',
+        url: 'https://example.com/page',
+        source: 'test',
+        sourceId: 'test-1',
+        title: 'Original Title',
+        description: 'Original Description',
+      });
+
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) return;
+
+      const bookmark = createResult.value;
+      bookmark.ogPreview = {
+        title: 'OG Title',
+        description: 'OG Description',
+        image: null,
+        siteName: null,
+        type: null,
+        favicon: null,
+      };
+      await bookmarkRepository.update(bookmark.id, bookmark);
+
+      bookmarkSummaryService.setDefaultSummary('Test summary');
+
+      const result = await summarizeBookmark(
+        {
+          bookmarkRepository,
+          bookmarkSummaryService,
+          whatsAppSendPublisher,
+          logger: silentLogger,
+        },
+        { bookmarkId: bookmark.id, userId: 'user-1' }
+      );
+
+      expect(result.ok).toBe(true);
+      expect(whatsAppSendPublisher.publishedMessages[0]?.message).toContain(
+        '*OG Title*'
+      );
+    });
   });
 
   it('generates summary and updates bookmark', async () => {

@@ -8,6 +8,7 @@ import {
   getCalendarPreviewByActionId,
   createCalendarPreview,
   updateCalendarPreview,
+  deleteCalendarPreview,
   createCalendarPreviewRepository,
 } from '../../../infra/firestore/calendarPreviewRepository.js';
 
@@ -328,6 +329,91 @@ describe('CalendarPreviewRepository', () => {
     });
   });
 
+  describe('deleteCalendarPreview', () => {
+    it('deletes preview successfully when it exists', async () => {
+      const mockDelete = vi.fn().mockResolvedValue(undefined);
+      mockDb.collection.mockReturnValue({
+        doc: vi.fn(() => ({
+          set: vi.fn(),
+          get: vi.fn(() => Promise.resolve({ exists: true, data: vi.fn() })),
+          update: vi.fn(),
+          delete: mockDelete,
+        })),
+      } as unknown as ReturnType<typeof mockDb.collection>);
+
+      const result = await deleteCalendarPreview('action-123');
+
+      expect(isOk(result)).toBe(true);
+      expect(mockDelete).toHaveBeenCalled();
+    });
+
+    it('returns NOT_FOUND when preview does not exist', async () => {
+      mockDb.collection.mockReturnValue({
+        doc: vi.fn(() => ({
+          set: vi.fn(),
+          get: vi.fn(() => Promise.resolve({ exists: false })),
+          update: vi.fn(),
+          delete: vi.fn(),
+        })),
+      } as unknown as ReturnType<typeof mockDb.collection>);
+
+      const result = await deleteCalendarPreview('non-existent');
+
+      expect(isErr(result)).toBe(true);
+      if (isErr(result)) {
+        expect(result.error.code).toBe('NOT_FOUND');
+        expect(result.error.message).toBe('Calendar preview not found');
+      }
+    });
+
+    it('returns error when Firestore throws', async () => {
+      mockDb.collection.mockImplementation(() => {
+        throw new Error('Firestore error');
+      });
+
+      const result = await deleteCalendarPreview('action-123');
+
+      expect(isErr(result)).toBe(true);
+      if (isErr(result)) {
+        expect(result.error.code).toBe('INTERNAL_ERROR');
+        expect(result.error.message).toContain('Firestore error');
+      }
+    });
+
+    it('uses actionId as document ID', async () => {
+      const mockDocFn = vi.fn(() => ({
+        set: vi.fn(),
+        get: vi.fn(() => Promise.resolve({ exists: true, data: vi.fn() })),
+        update: vi.fn(),
+        delete: vi.fn().mockResolvedValue(undefined),
+      }));
+      mockDb.collection.mockReturnValue({ doc: mockDocFn } as unknown as ReturnType<typeof mockDb.collection>);
+
+      await deleteCalendarPreview('specific-action-id');
+
+      expect(mockDocFn).toHaveBeenCalledWith('specific-action-id');
+    });
+
+    it('returns error when delete operation fails', async () => {
+      mockDb.collection.mockReturnValue({
+        doc: vi.fn(() => ({
+          set: vi.fn(),
+          get: vi.fn(() => Promise.resolve({ exists: true, data: vi.fn() })),
+          update: vi.fn(),
+          delete: vi.fn().mockRejectedValue(new Error('Delete failed')),
+        })),
+      } as unknown as ReturnType<typeof mockDb.collection>);
+
+      const result = await deleteCalendarPreview('action-123');
+
+      expect(isErr(result)).toBe(true);
+      if (isErr(result)) {
+        expect(result.error.code).toBe('INTERNAL_ERROR');
+        expect(result.error.message).toContain('Delete failed');
+      }
+    });
+  });
+
   describe('createCalendarPreviewRepository factory', () => {
     it('returns repository with getByActionId method', () => {
       const repository = createCalendarPreviewRepository();
@@ -348,6 +434,13 @@ describe('CalendarPreviewRepository', () => {
 
       expect(repository.update).toBeDefined();
       expect(typeof repository.update).toBe('function');
+    });
+
+    it('returns repository with delete method', () => {
+      const repository = createCalendarPreviewRepository();
+
+      expect(repository.delete).toBeDefined();
+      expect(typeof repository.delete).toBe('function');
     });
   });
 });

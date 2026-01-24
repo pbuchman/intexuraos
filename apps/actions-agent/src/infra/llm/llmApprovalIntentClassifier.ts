@@ -3,7 +3,7 @@ import type { LlmGenerateClient } from '@intexuraos/llm-factory';
 import {
   approvalIntentPrompt,
   parseApprovalIntentResponse,
-} from '@intexuraos/llm-common';
+} from '@intexuraos/llm-prompts';
 import type {
   ApprovalIntentClassifier,
   ApprovalIntentResult,

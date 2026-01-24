@@ -1,3 +1,0 @@
-{"ts":"2026-01-16T16:39:10.993Z","project":"intexuraos","branch":"fix/INT-91-failing-commands","workspace":"--","runNumber":1,"passed":false,"durationMs":521,"failureCount":0,"failures":[]}
-{"ts":"2026-01-16T16:40:23.644Z","project":"intexuraos","branch":"fix/INT-91-failing-commands","workspace":"actions-agent","runNumber":2,"passed":true,"durationMs":66461,"failureCount":0,"failures":[]}
-{"ts":"2026-01-16T16:42:27.118Z","project":"intexuraos","branch":"fix/INT-91-failing-commands","runNumber":3,"passed":true,"durationMs":112048,"failureCount":0,"failures":[]}

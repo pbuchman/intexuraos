@@ -6,7 +6,7 @@ coverage/
 .tsbuildinfo
 *.tsbuildinfo
 .DS_Store
-.eslintcache
+*eslint*cache*
 scripts/test-results/
 .tsconfig.tests-workspace.json
 
@@ -29,6 +29,10 @@ scripts/test-results/
 apps/*/.env
 .envrc
 .envrc.local
+
+# Claude Code local settings
+.claude/settings.local.json
+.claude/settings.local.*.json
 
 # GCP Service Account Keys
 *service-account*.json

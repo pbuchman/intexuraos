@@ -1,35 +1,61 @@
-# Continuity Workflow
+# ⚠️ Continuity Workflow - DEPRECATED
 
-For multi-step features or refactoring, use the continuity process to maintain context across sessions.
+**Status:** This workflow has been deprecated. Use **Linear issues** instead.
 
-## Setup
+---
 
-1. Create numbered directory: `continuity/NNN-task-name/`
-2. Create files:
-   - `INSTRUCTIONS.md` — goal, scope, constraints, success criteria
-   - `CONTINUITY.md` — ledger tracking progress and decisions
-   - `[tier]-[seq]-[title].md` — individual subtask files
+## Migration Notice
 
-## Subtask Numbering
+As of 2026-01-22, the file-based continuity workflow has been replaced with a **Linear-based continuity pattern**.
 
-```
-0-0-setup.md       ← Tier 0: diagnostics/setup
-1-0-feature-a.md   ← Tier 1: independent deliverables
-1-1-feature-b.md
-2-0-integration.md ← Tier 2: dependent/integrative work
-```
+### What Changed
 
-## Ledger (CONTINUITY.md)
+- **Old:** `continuity/NNN-task-name/` directories with markdown files
+- **New:** Linear issues with parent-child relationships
 
-Must track:
+### Why
 
-- Goal and success criteria
-- Done / Now / Next status
-- Key decisions with reasoning
-- Open questions
+- Better visibility (team can see progress in Linear UI)
+- Full history preserved (state transitions, comments)
+- No manual cleanup needed
+- Easier collaboration
+- Better integration with project management
 
-## Completion
+### New Workflow
 
-1. Second-to-last task: verify test coverage
-2. Archive to `continuity/archive/NNN-task-name/`
-3. Only claim complete after archival
+See **[Linear-Based Continuity Pattern](../docs/patterns/linear-continuity.md)** for complete documentation.
+
+**Quick Start:**
+
+1. Create top-level Linear issue for the overall feature
+2. Break down into child issues (tiered: 0-X, 1-X, 2-X)
+3. Use parent issue as ledger (goal, decisions, state tracking)
+4. Execute child issues sequentially
+5. Mark all as Done when complete
+
+---
+
+## Archived Tasks
+
+All previous continuity tasks have been archived to `continuity/archive/`:
+
+- `001-test-coverage-improvements`
+- `002-test-coverage-improvements-phase-2`
+- `003-whatsapp-notes-refactor`
+- ... (38+ archived tasks)
+
+These remain for historical reference but **should not be used for new work**.
+
+---
+
+## Documentation
+
+- **New Pattern:** `docs/patterns/linear-continuity.md`
+- **Workflow:** `.claude/commands/continuity.md` (updated for Linear)
+- **Linear Skill:** `.claude/skills/linear/SKILL.md`
+
+---
+
+## Questions?
+
+If you have questions about the new Linear-based workflow, refer to the documentation above or check existing Linear issues for examples.

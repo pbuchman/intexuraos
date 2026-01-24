@@ -1,3 +1,0 @@
-{"ts":"2026-01-19T14:17:47.770Z","project":"intexuraos","branch":"fix/INT-160-chart-definition-empty","workspace":"--","runNumber":1,"passed":false,"durationMs":468,"failureCount":0,"failures":[]}
-{"ts":"2026-01-19T14:20:15.545Z","project":"intexuraos","branch":"fix/INT-160-chart-definition-empty","workspace":"data-insights-agent","runNumber":2,"passed":true,"durationMs":140482,"failureCount":0,"failures":[]}
-{"ts":"2026-01-19T14:23:04.432Z","project":"intexuraos","branch":"fix/INT-160-chart-definition-empty","runNumber":3,"passed":true,"durationMs":152595,"failureCount":0,"failures":[]}

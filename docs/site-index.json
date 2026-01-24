@@ -4,8 +4,11 @@
       "id": "actions-agent",
       "name": "Actions Agent",
       "category": "infrastructure",
-      "summary": "Central action lifecycle management for todos, research, notes, links, calendar, and reminders",
+      "summary": "Central action lifecycle with atomic status transitions and race condition prevention (v2.0.0)",
       "features": [
+        "Atomic status transitions via Firestore transactions (v2.0.0)",
+        "WhatsApp approval reply handling with LLM intent (v2.0.0)",
+        "Race condition prevention via updateStatusIf (v2.0.0)",
         "Unified action queue",
         "Status workflow management",
         "Pub/Sub event distribution",
@@ -46,9 +49,9 @@
       "id": "image-service",
       "name": "Image Service",
       "category": "infrastructure",
-      "summary": "AI image generation with DALL-E 3 and Imagen 3",
+      "summary": "AI image generation with GPT Image 1 and Gemini Flash Image",
       "features": [
-        "DALL-E 3 and Imagen 3 support",
+        "GPT Image 1 and Gemini Flash Image support",
         "Internal-only endpoints",
         "GCS storage with thumbnails",
         "Prompt enhancement with LLM"
@@ -60,14 +63,14 @@
       "id": "bookmarks-agent",
       "name": "Bookmarks Agent",
       "category": "content",
-      "summary": "Link management with OpenGraph metadata and AI summaries",
+      "summary": "Link management with OpenGraph metadata, AI summaries, and WhatsApp delivery",
       "features": [
         "OpenGraph metadata via web-agent",
-        "AI summaries for content",
-        "Tag-based filtering",
-        "Archive management"
+        "AI summaries with WhatsApp delivery (INT-210)",
+        "Event-driven enrichment pipeline",
+        "Tag-based filtering and archive management"
       ],
-      "endpoints": 6,
+      "endpoints": 14,
       "docs": "services/bookmarks-agent"
     },
     {
@@ -97,8 +100,11 @@
       "id": "whatsapp-service",
       "name": "WhatsApp Service",
       "category": "integrations",
-      "summary": "WhatsApp Business API integration for receiving messages and media",
+      "summary": "WhatsApp Business API with approval workflows via text replies and emoji reactions (v2.0.0)",
       "features": [
+        "Approval via text replies with LLM intent classification (v2.0.0)",
+        "Approval via emoji reactions: 👍 approve, 👎 reject (v2.0.0)",
+        "OutboundMessage correlation for reply tracking (v2.0.0)",
         "Webhook signature validation",
         "Text, image, and audio support",
         "Media download to GCS",
@@ -111,12 +117,15 @@
       "id": "commands-agent",
       "name": "Commands Agent",
       "category": "ai-research",
-      "summary": "AI command classification using Gemini LLM",
+      "summary": "AI command classification with 5-step decision tree and URL isolation (v2.0.0)",
       "features": [
-        "6 action types (todo, research, note, link, calendar, reminder)",
+        "5-step classification decision tree (v2.0.0)",
+        "URL keyword isolation - keywords in URLs ignored (v2.0.0)",
+        "Explicit intent priority detection (v2.0.0)",
+        "Polish language support (v2.0.0)",
+        "6 action types (todo, research, note, link, calendar, linear)",
         "Model preference detection",
-        "Idempotency by source",
-        "Pending classification retry"
+        "Idempotency by source"
       ],
       "endpoints": 7,
       "docs": "services/commands-agent"
@@ -125,28 +134,28 @@
       "id": "web-agent",
       "name": "Web Agent",
       "category": "infrastructure",
-      "summary": "OpenGraph metadata extraction from URLs",
+      "summary": "Web content extraction and AI summarization with language preservation",
       "features": [
-        "Title, description, image extraction",
-        "Favicon detection",
-        "Batch processing",
-        "2MB size limit"
+        "OpenGraph metadata extraction",
+        "AI summaries via user's LLM",
+        "Language preservation (summaries match source)",
+        "Browser-like headers for 403 bypass"
       ],
-      "endpoints": 1,
+      "endpoints": 2,
       "docs": "services/web-agent"
     },
     {
       "id": "calendar-agent",
       "name": "Calendar Agent",
       "category": "integrations",
-      "summary": "Google Calendar integration for event management",
+      "summary": "Google Calendar integration with preview-before-commit and natural language scheduling",
       "features": [
+        "Event preview generation before commit",
+        "Natural language event extraction",
         "Full CRUD operations",
-        "Free/busy queries",
-        "Multi-calendar support",
-        "Attendee management"
+        "Failed event recovery for review"
       ],
-      "endpoints": 6,
+      "endpoints": 10,
       "docs": "services/calendar-agent"
     },
     {
@@ -227,6 +236,22 @@
       "features": ["CRUD operations", "Notion database sync", "Created/updated tracking"],
       "endpoints": 5,
       "docs": "services/promptvault-service"
+    },
+    {
+      "id": "linear-agent",
+      "name": "Linear Agent",
+      "category": "integrations",
+      "summary": "Linear issue management with 3-column dashboard layout (v2.0.0)",
+      "features": [
+        "3-column dashboard: Planning → Work → Closed (v2.0.0)",
+        "Todo and To Test categories (v2.0.0)",
+        "Smart state-to-column mapping (v2.0.0)",
+        "Issue CRUD operations",
+        "AI-powered issue extraction",
+        "Priority and label management"
+      ],
+      "endpoints": 8,
+      "docs": "services/linear-agent"
     }
   ],
   "categories": {
@@ -259,9 +284,10 @@
     }
   },
   "stats": {
-    "total": 17,
-    "documented": 17,
+    "total": 18,
+    "documented": 18,
     "completion": 100,
-    "lastUpdated": "2026-01-14"
+    "version": "2.0.0",
+    "lastUpdated": "2026-01-24"
   }
 }

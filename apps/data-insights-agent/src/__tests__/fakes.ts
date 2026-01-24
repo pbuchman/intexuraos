@@ -43,7 +43,7 @@ import type {
   DataTransformService,
   DataTransformError,
 } from '../infra/gemini/dataTransformService.js';
-import type { ParsedChartDefinition } from '@intexuraos/llm-common';
+import type { ParsedChartDefinition } from '@intexuraos/llm-prompts';
 
 /**
  * Fake DataSource repository for testing.

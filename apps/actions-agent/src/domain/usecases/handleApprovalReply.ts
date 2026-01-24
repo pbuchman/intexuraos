@@ -1,18 +1,24 @@
 import type { Result, Logger } from '@intexuraos/common-core';
-import { ok, err } from '@intexuraos/common-core';
+import { ok, err, getErrorMessage } from '@intexuraos/common-core';
 import type { Action } from '../models/action.js';
 import type { ActionRepository } from '../ports/actionRepository.js';
 import type { ApprovalMessageRepository } from '../ports/approvalMessageRepository.js';
 import type { ApprovalIntent } from '../ports/approvalIntentClassifier.js';
 import type { ApprovalIntentClassifierFactory } from '../ports/approvalIntentClassifierFactory.js';
 import type { WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
+import type { ActionEventPublisher } from '../ports/actionEventPublisher.js';
+import type { ActionCreatedEvent } from '../models/actionEvent.js';
+import type { ExecuteNoteActionUseCase } from './executeNoteAction.js';
 
 export interface HandleApprovalReplyDeps {
   actionRepository: ActionRepository;
   approvalMessageRepository: ApprovalMessageRepository;
   approvalIntentClassifierFactory: ApprovalIntentClassifierFactory;
   whatsappPublisher: WhatsAppSendPublisher;
+  actionEventPublisher: ActionEventPublisher;
   logger: Logger;
+  /** Optional: If provided, note actions will be executed directly (skipping event publishing). */
+  executeNoteAction?: ExecuteNoteActionUseCase;
 }
 
 export interface ApprovalReplyInput {
@@ -49,7 +55,9 @@ export function createHandleApprovalReplyUseCase(
     approvalMessageRepository,
     approvalIntentClassifierFactory,
     whatsappPublisher,
+    actionEventPublisher,
     logger,
+    executeNoteAction,
   } = deps;
 
   return async (input: ApprovalReplyInput): Promise<Result<ApprovalReplyResult>> => {
@@ -126,11 +134,13 @@ export function createHandleApprovalReplyUseCase(
       return err(new Error('User ID mismatch'));
     }
 
-    // Verify action is still awaiting approval
-    if (action.status !== 'awaiting_approval') {
+    // Check if action is in a terminal state (already fully processed)
+    // These states indicate the action cannot be modified by approval reply
+    const terminalStatuses = ['completed', 'rejected'];
+    if (terminalStatuses.includes(action.status)) {
       logger.info(
         { actionId: action.id, status: action.status },
-        'Action is no longer awaiting approval'
+        'Action is in terminal state, ignoring approval reply'
       );
       return ok({
         matched: true,
@@ -192,18 +202,43 @@ export function createHandleApprovalReplyUseCase(
 
     // Handle based on intent
     let outcome: ApprovalReplyResult['outcome'];
-    let updatedAction: Action;
 
     switch (classificationResult.intent) {
       case 'approve': {
-        updatedAction = {
-          ...action,
-          status: 'pending',
-          updatedAt: new Date().toISOString(),
-        };
-        await actionRepository.update(updatedAction);
+        // Atomically update status to prevent race condition with concurrent approval replies
+        const updateResult = await actionRepository.updateStatusIf(
+          action.id,
+          'pending',
+          'awaiting_approval'
+        );
 
-        // Notify user first, then clean up (to avoid race condition)
+        if (updateResult.outcome === 'status_mismatch') {
+          logger.info(
+            { actionId: action.id, currentStatus: updateResult.currentStatus },
+            'Action already processed by another approval reply (race condition prevented)'
+          );
+          return ok({
+            matched: true,
+            actionId: action.id,
+          });
+        }
+
+        if (updateResult.outcome === 'not_found') {
+          logger.warn({ actionId: action.id }, 'Action not found during approval update');
+          return err(new Error('Action not found'));
+        }
+
+        if (updateResult.outcome === 'error') {
+          logger.error(
+            { actionId: action.id, error: updateResult.error.message },
+            'Failed to update action status during approval'
+          );
+          return err(new Error('Failed to update action status'));
+        }
+
+        // Status successfully updated to 'pending'
+
+        // Send approval confirmation FIRST (before execution) so user sees correct order
         const approvePublishResult = await whatsappPublisher.publishSendMessage({
           userId,
           message: `Approved! Processing your ${action.type}: "${action.title}"`,
@@ -226,13 +261,89 @@ export function createHandleApprovalReplyUseCase(
           );
         }
 
+        // For note actions with executeNoteAction provided, execute directly to avoid
+        // duplicate notification (publishing action.created would trigger handleNoteAction
+        // which sends "New note ready for approval" message again).
+        if (action.type === 'note' && executeNoteAction !== undefined) {
+          logger.info({ actionId: action.id }, 'Executing note action directly after approval');
+          const executeResult = await executeNoteAction(action.id);
+          if (!executeResult.ok) {
+            logger.error(
+              { actionId: action.id, error: getErrorMessage(executeResult.error) },
+              'Failed to execute note action after approval'
+            );
+          } else {
+            logger.info({ actionId: action.id }, 'Note action executed successfully after approval');
+          }
+        } else {
+          // For non-note actions or when executeNoteAction not available, publish event
+          const event: ActionCreatedEvent = {
+            type: 'action.created',
+            actionId: action.id,
+            userId: action.userId,
+            commandId: action.commandId,
+            actionType: action.type,
+            title: action.title,
+            payload: {
+              prompt: action.title,
+              confidence: action.confidence,
+            },
+            timestamp: new Date().toISOString(),
+          };
+
+          const eventPublishResult = await actionEventPublisher.publishActionCreated(event);
+
+          if (!eventPublishResult.ok) {
+            logger.error(
+              { actionId: action.id, error: eventPublishResult.error.message },
+              'Failed to publish action.created event after approval'
+            );
+            // Continue anyway - action is already in pending status, will be picked up by retryPendingActions
+          } else {
+            logger.info({ actionId: action.id }, 'Published action.created event after approval');
+          }
+        }
+
         outcome = 'approved';
         logger.info({ actionId: action.id }, 'Action approved and set to pending');
         break;
       }
 
       case 'reject': {
-        updatedAction = {
+        // Atomically update status to prevent race condition with concurrent approval replies
+        const updateResult = await actionRepository.updateStatusIf(
+          action.id,
+          'rejected',
+          'awaiting_approval'
+        );
+
+        if (updateResult.outcome === 'status_mismatch') {
+          logger.info(
+            { actionId: action.id, currentStatus: updateResult.currentStatus },
+            'Action already processed by another approval reply (race condition prevented)'
+          );
+          return ok({
+            matched: true,
+            actionId: action.id,
+          });
+        }
+
+        if (updateResult.outcome === 'not_found') {
+          logger.warn({ actionId: action.id }, 'Action not found during rejection update');
+          return err(new Error('Action not found'));
+        }
+
+        if (updateResult.outcome === 'error') {
+          logger.error(
+            { actionId: action.id, error: updateResult.error.message },
+            'Failed to update action status during rejection'
+          );
+          return err(new Error('Failed to update action status'));
+        }
+
+        // Status successfully updated to 'rejected', now add rejection metadata
+        // This is a non-critical operation - if it fails, the status is already rejected
+        const rejectedAction: Action = {
           ...action,
           status: 'rejected',
           payload: {
@@ -242,7 +353,18 @@ export function createHandleApprovalReplyUseCase(
           },
           updatedAt: new Date().toISOString(),
         };
-        await actionRepository.update(updatedAction);
+        try {
+          await actionRepository.update(rejectedAction);
+        } catch (metadataError) {
+          // Log but continue - status is already rejected, metadata is nice-to-have
+          logger.warn(
+            {
+              actionId: action.id,
+              error: getErrorMessage(metadataError, 'Unknown error'),
+            },
+            'Failed to add rejection metadata, continuing with notification'
+          );
+        }
 
         // Notify user first, then clean up (to avoid race condition)
         const rejectPublishResult = await whatsappPublisher.publishSendMessage({

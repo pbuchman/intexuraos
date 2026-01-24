@@ -8,7 +8,7 @@ import { err, ok } from '@intexuraos/common-core';
 import type { CompositeFeedRepository } from '../../compositeFeed/index.js';
 import type { SnapshotRepository } from '../../snapshot/index.js';
 import type { DataAnalysisService } from '../ports.js';
-import type { ChartTypeInfo } from '@intexuraos/llm-common';
+import type { ChartTypeInfo } from '@intexuraos/llm-prompts';
 import type { DataInsight } from '../types.js';
 import { CHART_TYPES } from '../chartTypes.js';
 

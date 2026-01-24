@@ -2,6 +2,18 @@
 
 > How IntexuraOS orchestrates multiple AI providers as a council of experts.
 
+**Version 2.0.0** — January 24, 2026
+
+---
+
+## v2.0.0 Changes
+
+- **Natural Language Model Selection** — Users can specify models in WhatsApp messages ("research with Claude")
+- **Zod Schema Validation** — ResearchContext and SynthesisContext use Zod for field-level error reporting
+- **Parser + Repair Pattern** — Automatic LLM response repair when validation fails
+- **LLM Package Restructuring** — `llm-common` split into `llm-factory`, `llm-prompts`, `llm-utils`
+- **GLM-4.7-Flash** — Free model added for cost-sensitive classification tasks
+
 ---
 
 ## Overview
@@ -79,7 +91,7 @@ graph TB
 | Quick Classification | Gemini 2.5 Flash      | GLM-4.7             | Fast, cost-effective            |
 | Deep Research        | O4 Mini Deep Research | Sonar Deep Research | Agentic web search              |
 | Fact Verification    | Perplexity Sonar      | Sonar Pro           | Real-time web grounding         |
-| Image Generation     | DALL-E 3              | Gemini Imagen       | High quality, diverse styles    |
+| Image Generation     | GPT Image 1           | Gemini Flash Image  | High quality, diverse styles    |
 
 ### Research Models (11)
 
@@ -115,7 +127,7 @@ Text-to-image generation for cover images and visualizations.
 
 | Model                  | Provider | Capabilities                            |
 | ---------------------- | -------- | --------------------------------------- |
-| GPT Image 1 (DALL-E 3) | OpenAI   | Photorealistic, artistic styles         |
+| GPT Image 1            | OpenAI   | Photorealistic, artistic styles         |
 | Gemini 2.5 Flash Image | Google   | Fast image generation, consistent style |
 
 ### Validation Models (6)
@@ -381,7 +393,7 @@ graph TB
 
 **Purpose**: Generate images from text prompts
 
-**AI Models**: DALL-E 3, Gemini Imagen
+**AI Models**: GPT Image 1, Gemini Flash Image
 
 **Capabilities**:
 
@@ -627,18 +639,19 @@ const validationResult = await llmValidator.validateKey({
 
 ## Packages
 
-| Package                        | Purpose                      |
-| ------------------------------ | ---------------------------- |
-| `@intexuraos/llm-contract`     | Shared types and interfaces  |
-| `@intexuraos/llm-factory`      | Client creation factory      |
-| `@intexuraos/llm-pricing`      | Cost calculation             |
-| `@intexuraos/llm-common`       | Shared prompts and utilities |
-| `@intexuraos/llm-audit`        | Usage tracking               |
-| `@intexuraos/infra-gemini`     | Google AI adapter            |
-| `@intexuraos/infra-gpt`        | OpenAI adapter               |
-| `@intexuraos/infra-claude`     | Anthropic adapter            |
-| `@intexuraos/infra-perplexity` | Perplexity adapter           |
-| `@intexuraos/infra-glm`        | Zai adapter                  |
+| Package                        | Purpose                              |
+| ------------------------------ | ------------------------------------ |
+| `@intexuraos/llm-contract`     | Shared types, models, and interfaces |
+| `@intexuraos/llm-factory`      | Client creation factory              |
+| `@intexuraos/llm-pricing`      | Cost calculation                     |
+| `@intexuraos/llm-prompts`      | Prompt builders, schemas, parsers    |
+| `@intexuraos/llm-utils`        | Redaction and parse error utilities  |
+| `@intexuraos/llm-audit`        | Usage tracking                       |
+| `@intexuraos/infra-gemini`     | Google AI adapter                    |
+| `@intexuraos/infra-gpt`        | OpenAI adapter                       |
+| `@intexuraos/infra-claude`     | Anthropic adapter                    |
+| `@intexuraos/infra-perplexity` | Perplexity adapter                   |
+| `@intexuraos/infra-glm`        | Zai adapter                          |
 
 ---
 
@@ -652,4 +665,4 @@ const validationResult = await llmValidator.validateKey({
 
 ---
 
-**Last updated:** 2026-01-19
+**Last updated:** 2026-01-24 (v2.0.0)

@@ -2,6 +2,8 @@
 
 > **The AI-Native Personal Operating System** — An autonomous agent platform that transforms fragmented information into structured intelligence.
 
+**Version 2.0.0** — January 24, 2026
+
 ---
 
 ## Vision: Intelligence as Infrastructure
@@ -12,23 +14,66 @@ IntexuraOS reimagines personal productivity as an **AI-first system**. Instead o
 
 ---
 
+## What's New in v2.0.0
+
+### WhatsApp Approval Workflow
+
+Approve or reject actions directly from WhatsApp using:
+
+- **Text replies** — "Yes", "Ok", "Reject" with LLM-based intent classification
+- **Emoji reactions** — 👍 to approve, 👎 to reject
+
+### Calendar Preview Before Commit
+
+See exactly what will be created before approving calendar events:
+
+- Event title, time, duration, and all-day detection
+- Preview generation via async Pub/Sub workflow
+- Users approve with full visibility
+
+### Natural Language Model Selection
+
+Specify LLM models directly in your WhatsApp messages:
+
+- "Research AI using Claude and GPT"
+- "Research with all models except Perplexity"
+- "Synthesize with Gemini Pro"
+
+### LLM Package Restructuring
+
+Modular architecture with clear separation of concerns:
+
+- `llm-factory` — Provider creation and configuration
+- `llm-prompts` — All prompt templates and builders with Zod validation
+- `llm-utils` — Shared utilities (redaction, error parsing)
+
+### Linear Board Redesign
+
+New 3-column layout optimized for workflow visibility:
+
+- **Planning** — Todo + Backlog (stacked)
+- **In Progress** — In Progress → In Review → To Test
+- **Recently Closed** — Done (last 7 days)
+
+---
+
 ## The AI Stack
 
 ### Multi-Model Intelligence Layer
 
-IntexuraOS integrates with **5 AI providers** and **16 models**, treating them as a **council of experts** rather than a single oracle:
+IntexuraOS integrates with **5 AI providers** and **17 models**, treating them as a **council of experts** rather than a single oracle:
 
-| Provider   | Models                                   | Capabilities                       |
-| ---------- | ---------------------------------------- | ---------------------------------- |
-| Google     | Gemini 2.5 Pro, Flash, Flash-Image       | Reasoning, classification, images  |
-| OpenAI     | GPT-5.2, o4-mini-deep-research, DALL-E 3 | Deep research, synthesis, images   |
-| Anthropic  | Claude Opus 4.5, Sonnet 4.5, Haiku 3.5   | Analysis, research, validation     |
-| Perplexity | Sonar, Sonar Pro, Sonar Deep Research    | Web search, real-time information  |
-| Zai        | GLM-4.7, GLM-4.7-Flash                   | Multilingual, alternative analysis |
+| Provider   | Models                                      | Capabilities                                  |
+| ---------- | ------------------------------------------- | --------------------------------------------- |
+| Google     | Gemini 2.5 Pro, Flash, Flash-Image          | Reasoning, classification, images             |
+| OpenAI     | GPT-5.2, o4-mini-deep-research, GPT Image 1 | Deep research, synthesis, images              |
+| Anthropic  | Claude Opus 4.5, Sonnet 4.5, Haiku 3.5      | Analysis, research, validation                |
+| Perplexity | Sonar, Sonar Pro, Sonar Deep Research       | Web search, real-time information             |
+| Zai        | GLM-4.7, GLM-4.7-Flash                      | Multilingual, free tier (v2.0.0: Flash added) |
 
 ### Intelligent Routing
 
-The **commands-agent** uses Gemini 2.5 Flash to classify natural language into action types:
+The **commands-agent** uses Gemini 2.5 Flash to classify natural language into action types with a **5-step decision tree** (v2.0.0):
 
 ```
 "Schedule a call with the team for Tuesday at 3pm"
@@ -39,7 +84,16 @@ The **commands-agent** uses Gemini 2.5 Flash to classify natural language into a
 
 "What are the latest developments in quantum computing?"
     → research action (confidence: 0.97)
+
+"Save bookmark https://research-world.com"
+    → link action (v2.0.0: URL keywords ignored, explicit intent detected)
 ```
+
+**v2.0.0 Classification Improvements:**
+
+- URL keyword isolation — keywords inside URLs don't affect classification
+- Explicit intent priority — "save bookmark" overrides incidental keywords
+- Polish language support for command phrases
 
 ### Research Synthesis Protocol
 
@@ -85,31 +139,31 @@ IntexuraOS deploys **18 specialized microservices**, each with a distinct AI-pow
 
 ### AI Agents (Primary Intelligence)
 
-| Agent                   | AI Capabilities                                                            |
-| ----------------------- | -------------------------------------------------------------------------- |
-| **research-agent**      | Multi-model orchestration, parallel queries, synthesis, confidence scoring |
-| **commands-agent**      | Intent classification via Gemini, action routing, model detection          |
-| **data-insights-agent** | Data analysis, chart generation, trend detection via LLM                   |
-| **bookmarks-agent**     | AI-powered link summarization, content extraction                          |
-| **todos-agent**         | Natural language task extraction, priority inference                       |
-| **calendar-agent**      | Date/time parsing, schedule optimization                                   |
-| **linear-agent**        | Issue management, Linear API integration                                   |
-| **notes-agent**         | Content structuring, tag inference                                         |
-| **web-agent**           | Web scraping, metadata extraction, AI summarization                        |
+| Agent                   | AI Capabilities                                                                 |
+| ----------------------- | ------------------------------------------------------------------------------- |
+| **research-agent**      | Multi-model orchestration, parallel queries, synthesis, Zod validation (v2.0.0) |
+| **commands-agent**      | 5-step classification, URL isolation, explicit intent detection (v2.0.0)        |
+| **data-insights-agent** | Data analysis, chart generation, trend detection via LLM                        |
+| **bookmarks-agent**     | AI summarization with WhatsApp delivery, language preservation (v2.0.0)         |
+| **todos-agent**         | Natural language task extraction, priority inference                            |
+| **calendar-agent**      | Preview generation before commit, duration/all-day detection (v2.0.0)           |
+| **linear-agent**        | 3-column dashboard, Todo/To Test categories (v2.0.0)                            |
+| **notes-agent**         | Content structuring, tag inference                                              |
+| **web-agent**           | Separated crawling from LLM summarization, parser+repair pattern (v2.0.0)       |
 
 ### Infrastructure Services
 
-| Service                          | Purpose                                            |
-| -------------------------------- | -------------------------------------------------- |
-| **actions-agent**                | Central action orchestration, lifecycle management |
-| **image-service**                | DALL-E 3 & Imagen 3 image generation               |
-| **whatsapp-service**             | Voice transcription, message routing               |
-| **user-service**                 | API key management, AES-256-GCM encryption         |
-| **mobile-notifications-service** | Push notifications, device management              |
-| **notion-service**               | Notion integration, sync management                |
-| **promptvault-service**          | Prompt template versioning                         |
-| **app-settings-service**         | LLM pricing, usage analytics                       |
-| **api-docs-hub**                 | OpenAPI documentation aggregator                   |
+| Service                          | Purpose                                                                     |
+| -------------------------------- | --------------------------------------------------------------------------- |
+| **actions-agent**                | Atomic status transitions, race condition prevention via Firestore (v2.0.0) |
+| **image-service**                | GPT Image 1 & Gemini Flash Image image generation                           |
+| **whatsapp-service**             | Approval via replies/reactions, OutboundMessage correlation (v2.0.0)        |
+| **user-service**                 | Rate limit detection precedence, API key validation (v2.0.0)                |
+| **mobile-notifications-service** | Push notifications, device management                                       |
+| **notion-service**               | Notion integration, sync management                                         |
+| **promptvault-service**          | Prompt template versioning                                                  |
+| **app-settings-service**         | LLM pricing, usage analytics                                                |
+| **api-docs-hub**                 | OpenAPI documentation aggregator                                            |
 
 ---
 
@@ -172,31 +226,35 @@ Each agent type executes domain-specific logic:
 
 All inter-service communication uses Cloud Pub/Sub:
 
-| Topic                | Publisher        | Subscriber(s)               |
-| -------------------- | ---------------- | --------------------------- |
-| `commands-ingest`    | whatsapp-service | commands-agent              |
-| `action-created`     | actions-agent    | research-agent, todos-agent |
-| `research-process`   | actions-agent    | research-agent              |
-| `whatsapp-send`      | All agents       | whatsapp-service            |
-| `llm-call`           | All LLM services | usage tracking              |
-| `bookmark-enrich`    | bookmarks-agent  | web-agent                   |
-| `bookmark-summarize` | bookmarks-agent  | web-agent                   |
+| Topic                   | Publisher        | Subscriber(s)               | v2.0.0 |
+| ----------------------- | ---------------- | --------------------------- | ------ |
+| `commands-ingest`       | whatsapp-service | commands-agent              |        |
+| `action-created`        | actions-agent    | research-agent, todos-agent |        |
+| `action-approval-reply` | whatsapp-service | actions-agent               | ✓      |
+| `calendar-preview`      | actions-agent    | calendar-agent              | ✓      |
+| `research-process`      | actions-agent    | research-agent              |        |
+| `whatsapp-send`         | All agents       | whatsapp-service            |        |
+| `llm-call`              | All LLM services | usage tracking              |        |
+| `bookmark-enrich`       | bookmarks-agent  | web-agent                   |        |
+| `bookmark-summarize`    | bookmarks-agent  | web-agent                   |        |
 
 ### Firestore Collections
 
 Each service owns its collections (enforced by CI):
 
-| Collection           | Owner               |
-| -------------------- | ------------------- |
-| `research`           | research-agent      |
-| `actions`            | actions-agent       |
-| `commands`           | commands-agent      |
-| `todos`, `todoItems` | todos-agent         |
-| `bookmarks`          | bookmarks-agent     |
-| `notes`              | notes-agent         |
-| `dataSources`        | data-insights-agent |
-| `users`              | user-service        |
-| `calendarEvents`     | calendar-agent      |
+| Collection                   | Owner               | v2.0.0 |
+| ---------------------------- | ------------------- | ------ |
+| `research`                   | research-agent      |        |
+| `actions`                    | actions-agent       |        |
+| `commands`                   | commands-agent      |        |
+| `todos`, `todoItems`         | todos-agent         |        |
+| `bookmarks`                  | bookmarks-agent     |        |
+| `notes`                      | notes-agent         |        |
+| `dataSources`                | data-insights-agent |        |
+| `users`                      | user-service        |        |
+| `calendarEvents`             | calendar-agent      |        |
+| `calendar_previews`          | calendar-agent      | ✓      |
+| `whatsapp_outbound_messages` | whatsapp-service    | ✓      |
 
 ---
 
@@ -280,7 +338,7 @@ User API Keys → AES-256-GCM Encryption → Firestore
 
 **Image Generation**
 
-- [image-service](services/image-service/features.md) - DALL-E 3 and Imagen 3
+- [image-service](services/image-service/features.md) - GPT Image 1 and Gemini Flash Image
 
 **Content Intelligence**
 
@@ -322,4 +380,4 @@ User API Keys → AES-256-GCM Encryption → Firestore
 
 ---
 
-**Last updated:** 2026-01-19
+**Last updated:** 2026-01-24 (v2.0.0)

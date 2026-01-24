@@ -60,17 +60,17 @@ Data-insights-agent manages user data sources, performs AI analysis using Gemini
 
 ### CompositeFeed
 
-| Field                 | Type                       | Description                 |
-| --------------------- | -------------------------- | --------------------------- | ------------------- |
-| `id`                  | string                     | Unique identifier           |
-| `userId`              | string                     | Owner user ID               |
-| `name`                | string                     | AI-generated feed name      |
-| `purpose`             | string                     | User-provided feed purpose  |
-| `staticSourceIds`     | string[]                   | Data source IDs             |
+| Field | Type | Description |
+| --------------------- | -------------------------- | --------------------------- | |
+| `id` | string | Unique identifier |
+| `userId` | string | Owner user ID |
+| `name` | string | AI-generated feed name |
+| `purpose` | string | User-provided feed purpose |
+| `staticSourceIds` | string[] | Data source IDs |
 | `notificationFilters` | NotificationFilterConfig[] | Notification filter configs |
-| `dataInsights`        | DataInsight[]              | null                        | AI analysis results |
-| `createdAt`           | Date                       | Creation timestamp          |
-| `updatedAt`           | Date                       | Last update timestamp       |
+| `dataInsights` | DataInsight[] | null | AI analysis results |
+| `createdAt` | Date | Creation timestamp |
+| `updatedAt` | Date | Last update timestamp |
 
 ### NotificationFilterConfig
 

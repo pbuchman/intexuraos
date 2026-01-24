@@ -4,7 +4,7 @@
  */
 
 import type { Result } from '@intexuraos/common-core';
-import type { ChartTypeInfo, ParsedDataInsight, ParsedChartDefinition } from '@intexuraos/llm-common';
+import type { ChartTypeInfo, ParsedDataInsight, ParsedChartDefinition } from '@intexuraos/llm-prompts';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Data Analysis Service

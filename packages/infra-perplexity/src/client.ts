@@ -39,7 +39,7 @@
  */
 
 import { randomUUID } from 'node:crypto';
-import { buildResearchPrompt } from '@intexuraos/llm-common';
+import { buildResearchPrompt } from '@intexuraos/llm-prompts';
 import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
 import { type AuditContext, createAuditContext } from '@intexuraos/llm-audit';
 import {

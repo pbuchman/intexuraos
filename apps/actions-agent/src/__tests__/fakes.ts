@@ -239,7 +239,8 @@ export class FakeActionRepository implements ActionRepository {
       this.failNext = false;
       throw this.failError ?? new Error('Simulated failure');
     }
-    this.actions.set(action.id, action);
+    // Store a copy to prevent mutation of the original object
+    this.actions.set(action.id, { ...action, payload: { ...action.payload } });
   }
 
   async update(action: Action): Promise<void> {
@@ -247,7 +248,8 @@ export class FakeActionRepository implements ActionRepository {
       this.failNext = false;
       throw this.failError ?? new Error('Simulated failure');
     }
-    this.actions.set(action.id, action);
+    // Store a copy to prevent mutation of the original object
+    this.actions.set(action.id, { ...action, payload: { ...action.payload } });
   }
 
   async delete(id: string): Promise<void> {

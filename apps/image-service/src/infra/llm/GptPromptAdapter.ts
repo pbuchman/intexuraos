@@ -1,7 +1,7 @@
 import { err, type Logger, type Result } from '@intexuraos/common-core';
 import { createGptClient } from '@intexuraos/infra-gpt';
-import { generateThumbnailPrompt } from '@intexuraos/llm-contract';
 import type { ModelPricing } from '@intexuraos/llm-contract';
+import { generateThumbnailPrompt } from '@intexuraos/llm-prompts';
 import type { ThumbnailPrompt } from '../../domain/index.js';
 import type { PromptGenerationError, PromptGenerator } from '../../domain/ports/promptGenerator.js';
 

@@ -395,7 +395,9 @@ export async function initServices(config: ServiceConfig): Promise<void> {
     approvalMessageRepository,
     approvalIntentClassifierFactory,
     whatsappPublisher,
+    actionEventPublisher,
     logger: pino({ name: 'handleApprovalReply' }),
+    executeNoteAction: executeNoteActionUseCase,
   });
 
   container = {

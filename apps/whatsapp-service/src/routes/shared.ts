@@ -162,6 +162,10 @@ interface WebhookValue {
       mime_type?: string;
       sha256?: string;
     };
+    reaction?: {
+      message_id?: string;
+      emoji?: string;
+    };
     context?: {
       from?: string;
       id?: string;
@@ -452,4 +456,35 @@ export function extractReplyContext(payload: unknown): ReplyContext | null {
   }
 
   return result;
+}
+
+/**
+ * Reaction info from webhook payload.
+ */
+export interface ReactionInfo {
+  /** The emoji used in the reaction */
+  emoji: string;
+  /** The wamid of the message being reacted to */
+  messageId: string;
+}
+
+/**
+ * Extract reaction info from webhook payload.
+ *
+ * Path: entry[0].changes[0].value.messages[0].reaction
+ *
+ * @see https://developers.facebook.com/docs/whatsapp/cloud-api/webhooks/components#reaction-object
+ */
+export function extractReactionData(payload: unknown): ReactionInfo | null {
+  const value = extractFirstValue(payload);
+  const message = value?.messages?.[0];
+  if (message === undefined) return null;
+  const reaction = message.reaction;
+  if (reaction === undefined) return null;
+  if (typeof reaction.emoji !== 'string' || typeof reaction.message_id !== 'string') return null;
+
+  return {
+    emoji: reaction.emoji,
+    messageId: reaction.message_id,
+  };
 }

@@ -49,9 +49,7 @@ export function createActionsAgentClient(config: ActionsAgentClientConfig): Acti
           },
           'Failed to call actions-agent'
         );
-        return err(
-          error instanceof Error ? error : new Error(`Failed to create action: ${String(error)}`)
-        );
+        return err(new Error(`Failed to create action: ${getErrorMessage(error)}`));
       }
 
       if (!response.ok) {

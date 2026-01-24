@@ -2,7 +2,7 @@
 
 ## Overview
 
-Commands-agent receives user commands from multiple channels, classifies intent using Gemini LLM, creates actions via actions-agent, and publishes events for downstream processing.
+Commands-agent classifies natural language input into action types using a structured 5-step LLM prompt. It receives commands from WhatsApp (via Pub/Sub) and PWA (via REST), creates actions through actions-agent, and publishes events for downstream processing.
 
 ## Architecture
 
@@ -20,9 +20,13 @@ graph TB
     subgraph CommandsAgent[Commands Agent]
         IngestRoute[/internal/commands]
         ProcessUC[processCommand useCase]
-        Classifier[Gemini Classifier]
+        Classifier[LLM Classifier]
         ActionsClient[actions-agent client]
         UserClient[user-service client]
+    end
+
+    subgraph LLMPrompts[llm-prompts package]
+        Prompt[commandClassifierPrompt]
     end
 
     subgraph Storage
@@ -39,6 +43,7 @@ graph TB
 
     ProcessUC -->|getApiKeys| UserClient
     ProcessUC -->|classify| Classifier
+    Classifier -->|build prompt| Prompt
     ProcessUC -->|createAction| ActionsClient
     ProcessUC -->|save| Commands
     ActionsClient -->|HTTP| ActionsSvc
@@ -46,6 +51,71 @@ graph TB
 
     ProcessUC -->|action.created| ActionsQueue
 ```
+
+## Classification Prompt Structure (v2.0.0)
+
+The classification prompt in `packages/llm-prompts/src/classification/commandClassifierPrompt.ts` uses a 5-step decision tree executed in strict order:
+
+### Step 1: Explicit Prefix Override
+
+If message starts with a category keyword (with or without colon), that category wins.
+
+```
+"linear: buy groceries" → linear
+"todo: meeting tomorrow" → todo
+"do lineara: fix bug" → linear (Polish)
+```
+
+### Step 2: Explicit Intent Command Detection (HIGH PRIORITY)
+
+Explicit command phrases override all other signals including URL content.
+
+**English phrases (confidence 0.90+):**
+
+- link: "save bookmark", "save link", "bookmark this"
+- todo: "create todo", "add todo", "add task"
+- research: "perform research", "do research", "investigate"
+- note: "create note", "save note", "write note"
+- reminder: "set reminder", "remind me"
+- calendar: "schedule", "add to calendar", "book appointment"
+- linear: "create issue", "add bug", "report issue"
+
+**Polish phrases:**
+
+- link: "zapisz link", "dodaj zakladke"
+- todo: "stwórz zadanie", "dodaj zadanie"
+- research: "zbadaj", "sprawdz", "przeprowadz research"
+- note: "stwórz notatke", "zapisz notatke"
+- reminder: "przypomnij mi"
+- calendar: "zaplanuj", "dodaj do kalendarza"
+- linear: "zglos blad", "stwórz issue", "dodaj do lineara"
+
+### Step 3: Linear Detection
+
+Engineering context triggers linear classification:
+
+- Keywords: bug, issue, ticket, feature request, PR, pull request
+- Phrases: "add to linear", "create linear issue", "in linear"
+
+**Exception:** Math/science context ("linear regression", "linear algebra") excluded.
+
+### Step 4: URL Presence Check
+
+If message contains `http://` or `https://`, strongly prefer `link` classification.
+
+**Critical:** Keywords inside URLs are IGNORED. "https://research-world.com" does not trigger `research`.
+
+### Step 5: Category Detection (Fallback)
+
+Traditional signal matching when no URL and no explicit intent:
+
+| Category | Signals                                             |
+| -------- | --------------------------------------------------- |
+| calendar | tomorrow, today, weekday names, time (3pm), meeting |
+| reminder | remind me, przypomnij, don't forget                 |
+| research | how does, what is, why, find out, learn about, ?    |
+| note     | notes, idea, remember that, jot down                |
+| todo     | (default for actionable requests)                   |
 
 ## Data Flow
 
@@ -55,7 +125,7 @@ sequenceDiagram
     participant Source
     participant PubSub
     participant Commands
-    participant Gemini
+    participant LLM
     participant Actions
     participant Queue
 
@@ -68,12 +138,12 @@ sequenceDiagram
         Commands-->>PubSub: Return existing
     else New command
         Commands->>Commands: Save to Firestore
-        Commands->>Commands: Fetch API keys
+        Commands->>Commands: Fetch LLM client
         alt No API key
             Commands->>Commands: Mark pending_classification
         else API key available
-            Commands->>Gemini: Classify intent
-            Gemini-->>Commands: {type, confidence, title}
+            Commands->>LLM: Build + send prompt
+            LLM-->>Commands: {type, confidence, title, reasoning}
             Commands->>Actions: Create action
             Actions-->>Commands: actionId
             Commands->>Queue: action.created event
@@ -114,35 +184,29 @@ sequenceDiagram
 | `summary`        | string (optional)     | Summary for voice transcriptions                               |
 | `timestamp`      | string                | ISO 8601 timestamp from source                                 |
 | `status`         | CommandStatus         | received, classified, pending_classification, failed, archived |
-| `classification` | CommandClassification | Classification result with reasoning (null if not classified)  |
-| `actionId`       | string                | Created action ID (null if no action)                          |
-| `failureReason`  | string                | Error details if failed (null if no error)                     |
+| `classification` | CommandClassification | Classification result (null if not classified)                 |
+| `actionId`       | string (optional)     | Created action ID                                              |
+| `failureReason`  | string (optional)     | Error details if failed                                        |
 | `createdAt`      | string                | ISO 8601 creation time                                         |
 | `updatedAt`      | string                | ISO 8601 last update                                           |
 
 ### CommandClassification
 
-| Field          | Type        | Description                                                          |
-| -------------- | ----------- | -------------------------------------------------------------------- |
-| `type`         | CommandType | todo, research, note, link, calendar, linear, reminder, unclassified |
-| `confidence`   | number      | 0-1 confidence score                                                 |
-| `reasoning`    | string      | LLM explanation for classification                                   |
-| `classifiedAt` | string      | ISO 8601 classification timestamp                                    |
+| Field          | Type        | Description                                            |
+| -------------- | ----------- | ------------------------------------------------------ |
+| `type`         | CommandType | todo, research, note, link, calendar, linear, reminder |
+| `confidence`   | number      | 0-1 confidence score                                   |
+| `reasoning`    | string      | LLM explanation for classification                     |
+| `classifiedAt` | string      | ISO 8601 classification timestamp                      |
 
-### Action (forwarded type)
+### Confidence Semantics
 
-| Field        | Type                    | Description                                                                   |
-| ------------ | ----------------------- | ----------------------------------------------------------------------------- |
-| `id`         | string                  | UUID                                                                          |
-| `userId`     | string                  | Owner user ID                                                                 |
-| `commandId`  | string                  | Source command ID                                                             |
-| `type`       | ActionType              | Same as CommandType without unclassified                                      |
-| `confidence` | number                  | Classification confidence                                                     |
-| `title`      | string                  | Generated title from LLM                                                      |
-| `status`     | ActionStatus            | pending, awaiting_approval, processing, completed, failed, rejected, archived |
-| `payload`    | Record<string, unknown> | Action-specific data                                                          |
-| `createdAt`  | string                  | ISO 8601 creation time                                                        |
-| `updatedAt`  | string                  | ISO 8601 last update                                                          |
+| Range     | Meaning                                         |
+| --------- | ----------------------------------------------- |
+| 0.90+     | Clear match (explicit prefix, multiple signals) |
+| 0.70-0.90 | Strong match (single clear signal)              |
+| 0.50-0.70 | Choosing between 2-3 plausible categories       |
+| <0.50     | Genuinely uncertain, defaults to `note`         |
 
 ## Status Enums
 
@@ -150,19 +214,9 @@ sequenceDiagram
 
 - `received` - Initial state, not yet processed
 - `classified` - Successfully classified with action created
-- `pending_classification` - Waiting for API keys to be configured
+- `pending_classification` - Waiting for API keys
 - `failed` - Classification or action creation failed
 - `archived` - Soft deleted by user
-
-**ActionStatus:**
-
-- `pending` - Awaiting agent processing
-- `awaiting_approval` - Requires user confirmation (research)
-- `processing` - Agent working on action
-- `completed` - Action finished successfully
-- `failed` - Action execution failed
-- `rejected` - User declined action
-- `archived` - Soft deleted
 
 ## Pub/Sub Events
 
@@ -178,41 +232,36 @@ sequenceDiagram
 | ---------------- | --------- | ----------------------- |
 | `action.created` | `actions` | Triggers action handler |
 
-## Model Detection
-
-The classifier detects LLM preferences from command text:
-
-| Pattern                       | Models Selected                                            |
-| ----------------------------- | ---------------------------------------------------------- |
-| "all LLMs", "every model"     | DEFAULT_MODELS (Gemini Pro, Claude Opus, GPT-5, Sonar Pro) |
-| "claude", "anthropic", "opus" | Claude Opus 4.5                                            |
-| "sonar", "perplexity", "pplx" | Sonar Pro                                                  |
-| "gpt", "openai", "chatgpt"    | GPT-5.2                                                    |
-| "o4", "deep research"         | O4 Mini Deep Research                                      |
-| "gemini", "google"            | Gemini 2.5 Pro                                             |
-
 ## Dependencies
 
 ### Internal Services
 
 | Service         | Purpose                                 |
 | --------------- | --------------------------------------- |
-| `user-service`  | Fetch Google API key for classification |
+| `user-service`  | Fetch LLM client for classification     |
 | `actions-agent` | Create actions from classified commands |
+
+### Packages
+
+| Package       | Purpose                       |
+| ------------- | ----------------------------- |
+| `llm-prompts` | Classification prompt builder |
+| `llm-factory` | LLM client abstraction        |
 
 ### Infrastructure
 
-| Component                         | Purpose                  |
-| --------------------------------- | ------------------------ |
-| Firestore (`commands` collection) | Command persistence      |
-| Pub/Sub (`command-ingest` topic)  | Command ingestion events |
-| Pub/Sub (`actions` topic)         | Action creation events   |
+| Component                         | Purpose                   |
+| --------------------------------- | ------------------------- |
+| Firestore (`commands` collection) | Command persistence       |
+| Pub/Sub (`command-ingest` topic)  | Command ingestion events  |
+| Pub/Sub (`actions` topic)         | Action creation events    |
+| Cloud Scheduler                   | Retry pending every 5 min |
 
 ### External APIs
 
-| Service          | Purpose                |
-| ---------------- | ---------------------- |
-| Gemini 2.5 Flash | Command classification |
+| Service                                    | Purpose                |
+| ------------------------------------------ | ---------------------- |
+| Gemini 2.5 Flash / GLM-4.7 / GLM-4.7-Flash | Command classification |
 
 ## Configuration
 
@@ -225,21 +274,19 @@ The classifier detects LLM preferences from command text:
 
 ## Gotchas
 
+**URL keyword isolation** - The prompt instructs the LLM to ignore keywords inside URLs. This is prompt-level guidance, not code-level URL parsing. LLM compliance is high but not guaranteed.
+
+**Explicit intent priority** - Step 2 executes BEFORE Step 4. "research this https://example.com" classifies as `research` (explicit intent), not `link` (URL presence).
+
+**PWA-shared confidence boost** - Links from `pwa-shared` source get +0.1 confidence boost (capped at 1.0) because share sheet usage strongly indicates link-saving intent.
+
 **Idempotency key format** - `{sourceType}:{externalId}` must be unique. WhatsApp message IDs can be reused across different phone numbers.
 
-**Classification pricing** - Uses Gemini 2.5 Flash at $0.30/M input, $2.50/M output. Each classification costs ~$0.001.
+**Classification pricing** - Uses Gemini 2.5 Flash at ~$0.001 per classification, GLM-4.7-Flash is free.
 
-**Pending retry window** - Cloud Scheduler calls `/internal/retry-pending` every 5 minutes.
+**Pub/Sub push authentication** - Uses `from: noreply@google.com` header to detect Pub/Sub pushes vs direct service calls.
 
-**Action ownership** - Actions are owned by actions-agent. commands-agent only creates them via HTTP.
-
-**Model selection only for research** - Selected models passed as `selectedModels` in payload, only consumed by research-agent.
-
-**Pub/Sub push authentication** - Uses `from: noreply@google.com` header detection to distinguish from direct service calls.
-
-**No reclassification** - Failed commands stay failed. Must be deleted and re-sent.
-
-**Archive vs delete** - Classified commands can only be archived (PATCH), not deleted. Only received/pending/failed can be deleted.
+**Archive vs delete** - Classified commands can only be archived, not deleted. Only received/pending/failed can be deleted.
 
 ## File Structure
 
@@ -253,6 +300,8 @@ apps/commands-agent/src/
       classifier.ts        # Classifier interface
       commandRepository.ts # Repository interface
       eventPublisher.ts    # PubSub publisher interface
+      userServiceClient.ts
+      actionsAgentClient.ts
     usecases/
       processCommand.ts    # Main command processing logic
       retryPendingCommands.ts
@@ -261,8 +310,8 @@ apps/commands-agent/src/
   infra/
     firestore/
       commandRepository.ts
-    gemini/
-      classifier.ts        # Gemini 2.5 Flash implementation
+    llm/
+      classifier.ts        # LLM classifier implementation
     pubsub/
       actionEventPublisher.ts
       config.ts
@@ -276,4 +325,13 @@ apps/commands-agent/src/
     index.ts
   services.ts              # DI container
   server.ts                # Fastify server setup
+
+packages/llm-prompts/src/
+  classification/
+    commandClassifierPrompt.ts  # 5-step classification prompt
+    index.ts
 ```
+
+---
+
+**Last updated:** 2026-01-24

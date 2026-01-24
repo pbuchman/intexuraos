@@ -12,7 +12,7 @@ import {
   type InferSynthesisContextParams,
   type ResearchContext,
   type SynthesisContext,
-} from '@intexuraos/llm-common';
+} from '@intexuraos/llm-prompts';
 import type {
   LabelGenerateResult,
   LlmError,

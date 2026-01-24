@@ -116,13 +116,13 @@ To prevent WhatsApp updates from being treated as duplicates, the `notification_
 
 **Variables:**
 
-| Variable     | Description                                 |
-| ------------ | ------------------------------------------- | ------------------ | -------- |
-| `%TIMES`     | Current Unix timestamp (seconds)            |
-| `%ankey`     | Unique notification key (e.g., `0\          | com.whatsapp.w4b\  | 101...`) |
+| Variable | Description |
+| ------------ | ------------------------------------------- | | |
+| `%TIMES` | Current Unix timestamp (seconds) |
+| `%ankey` | Unique notification key (e.g., `0\          | com.whatsapp.w4b\ | 101...`) |
 | `%anpackage` | App package name (e.g., `com.whatsapp.w4b`) |
-| `%antitle`   | Notification title (sanitized)              |
-| `%antext`    | Notification text content (sanitized)       |
+| `%antitle` | Notification title (sanitized) |
+| `%antext` | Notification text content (sanitized) |
 
 ---
 

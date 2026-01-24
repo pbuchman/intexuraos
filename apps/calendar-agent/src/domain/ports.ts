@@ -148,4 +148,7 @@ export interface CalendarPreviewRepository {
 
   /** Update an existing preview */
   update(actionId: string, updates: UpdateCalendarPreviewInput): Promise<Result<void, CalendarError>>;
+
+  /** Delete a preview by actionId */
+  delete(actionId: string): Promise<Result<void, CalendarError>>;
 }
