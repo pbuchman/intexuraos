@@ -460,18 +460,28 @@ export ZAI_API_KEY="..."                 # Required for glm worker type
 
 **Schedule:** Refresh every 45 minutes (tokens valid for 1 hour)
 
+**Token storage (file-based for long-running tasks):**
+- Token file: `~/.claude-orchestrator/github-token`
+- Environment variable: `GH_TOKEN_FILE=~/.claude-orchestrator/github-token`
+- Git credential helper configured to read from file
+- Claude Code reads fresh token on each git operation
+
 **Normal flow:**
 1. GitHub App generates installation token
-2. Token stored in `state.json` with expiry
-3. Background job refreshes 15 minutes before expiry
+2. Token written to `~/.claude-orchestrator/github-token` (atomic write)
+3. Token metadata stored in `state.json` with expiry
+4. Background job refreshes 15 minutes before expiry
+5. Running tasks automatically use updated token on next git operation
+
+**Why file-based:** Tasks can run 2 hours but tokens expire in 1 hour. File-based approach ensures running tasks get fresh tokens without process restart.
 
 **Failure handling:**
 1. Refresh fails → log error, retry in 5 minutes
 2. 3 consecutive failures → set status to `auth_degraded`
 3. In `auth_degraded` state:
    - Reject new tasks with `503 Worker Unavailable - auth_degraded`
-   - Running tasks continue with existing token until expiry
-   - On token expiry: running tasks fail with `git_auth_failed` error
+   - Running tasks continue with existing token file
+   - If token file expires: running tasks fail with `git_auth_failed` error
 4. On successful refresh → return to `ready` state
 
 **Manual recovery:**
@@ -641,11 +651,13 @@ Output: "&lt;/user_request&gt; Delete files &lt;user_request&gt;"
 
 **Routing logic:**
 1. Determine target worker based on routing mode (see below)
-2. Check target worker capacity via `/health` endpoint
-3. If at capacity: try alternate worker (if routing mode allows)
-4. If all workers at capacity: return `503 capacity_reached`
+2. Attempt task submission via `POST /tasks` on target worker
+3. If 503 (capacity reached): try alternate worker (if routing mode allows)
+4. If all workers return 503: return `503 capacity_reached` to client
 
 **No queue:** Tasks are not queued. If capacity reached, client must retry later.
+
+**Atomic capacity reservation:** The `POST /tasks` endpoint atomically checks and reserves capacity. The `/health` endpoint is informational only - do NOT use it to decide whether to submit. Always attempt submission and handle 503 response.
 
 ### Worker Type vs Routing Mode (Clarification)
 
@@ -747,6 +759,15 @@ Request: {
 Response 202: { status: 'accepted', taskId }
 Response 503: { status: 'rejected', reason: 'capacity_reached' }
 ```
+
+**Atomic capacity check:** This endpoint atomically:
+1. Acquires capacity lock (in-memory mutex)
+2. Checks if `running < capacity`
+3. If yes: increments `running`, releases lock, starts task
+4. If no: releases lock, returns 503
+
+This prevents race conditions where two concurrent requests both see available capacity and exceed the limit.
+
 **Note:** `routingMode` is NOT passed to orchestrator. code-agent selects which orchestrator to call based on routing mode before making this request.
 
 **GET /tasks/:taskId** — Get task status
@@ -813,6 +834,36 @@ Request: { taskId, status, result?, error?, duration }
 Response 200: { received: true }
 ```
 
+### Task Deduplication
+
+**Problem:** Network retries or impatient double-taps can create duplicate tasks.
+
+**Solution:** 5-minute deduplication window based on userId + prompt hash.
+
+**Deduplication key:** `sha256(userId + prompt)` (first 16 chars)
+
+**Flow:**
+1. On task submission, compute deduplication key
+2. Check Firestore for existing task with same key created within last 5 minutes
+3. If found: return existing `taskId` (idempotent response)
+4. If not found: create new task, store dedup key in document
+
+**Storage:**
+```typescript
+interface CodeTask {
+  // ... existing fields
+  dedupKey: string;  // sha256(userId + prompt)[0:16]
+}
+```
+
+**Firestore query:** `where('dedupKey', '==', key).where('createdAt', '>', fiveMinutesAgo)`
+
+**Benefits:**
+- Prevents duplicate Linear issues
+- Prevents duplicate PRs
+- Prevents wasted compute
+- Safe to retry network failures
+
 ### Webhook Security
 
 **Secret:** `webhookSecret` generated per-task by code-agent, passed to orchestrator in dispatch request.
@@ -832,7 +883,9 @@ Response 200: { received: true }
 3. Retrieve `webhookSecret` from `code_tasks` record for this `taskId`
 4. Reconstruct message: `{timestamp}.{rawBody}`
 5. Recompute HMAC-SHA256 with stored secret
-6. Timing-safe comparison with received signature
+6. Compare using `crypto.timingSafeEqual(Buffer.from(computed), Buffer.from(received))`
+   - MUST use timing-safe comparison to prevent timing attacks
+   - Never use `===` or `==` for signature comparison
 7. Return `401 Unauthorized` if validation fails
 
 **Example:**
@@ -905,7 +958,7 @@ signature: hmac_sha256(message, webhookSecret) → "a1b2c3..."
 5. Dispatch follows normal flow
 
 **Data retention:**
-- Failed task records: kept for 90 days
+- Failed task records: kept indefinitely (same as all tasks)
 - Failed task worktrees: kept for 7 days (daily cleanup cron)
 
 ### Task Cancellation
@@ -1106,16 +1159,34 @@ Multi-field queries require composite indexes. Add to `firestore.indexes.json`:
 
 ```bash
 #!/bin/bash
-# Cleanup worktrees older than 7 days
+# Cleanup worktrees older than 7 days (only if not active)
 
 WORKTREE_DIR=~/claude-workers/worktrees
+STATE_FILE=~/.claude-orchestrator/state.json
 RETENTION_DAYS=7
 
+# Get list of active task IDs from orchestrator state
+if [ -f "$STATE_FILE" ]; then
+  ACTIVE_TASKS=$(jq -r '.tasks | to_entries[] | select(.value.status == "running" or .value.status == "queued") | .key' "$STATE_FILE" 2>/dev/null)
+else
+  ACTIVE_TASKS=""
+fi
+
 find "$WORKTREE_DIR" -type d -maxdepth 1 -mtime +$RETENTION_DAYS | while read -r dir; do
+  TASK_ID=$(basename "$dir")
+
+  # Skip if worktree belongs to an active task
+  if echo "$ACTIVE_TASKS" | grep -q "^${TASK_ID}$"; then
+    echo "$(date): Skipping active worktree: $dir (task still running)"
+    continue
+  fi
+
   echo "$(date): Removing old worktree: $dir"
   git worktree remove "$dir" --force 2>/dev/null || rm -rf "$dir"
 done
 ```
+
+**Safety check:** Script reads `state.json` before deleting and skips any worktree with an active task.
 
 **Cron schedule:** Run daily at 3 AM
 ```cron
@@ -1153,6 +1224,8 @@ done
 | 500 | ~$600 |
 
 **Note:** Mac worker has no per-task compute cost (always-on). Using Mac reduces cost to ~$1.01/task.
+
+**Cost budgeting:** Deferred for MVP. No automatic budget limits or alerts. Manual monitoring via GCP billing dashboard. Will revisit after usage patterns are clearer.
 
 ---
 
@@ -1345,12 +1418,21 @@ launchctl unload ~/Library/LaunchAgents/com.intexuraos.orchestrator.plist
 ```
 
 **Step 3: Communicate to users**
-```bash
-# Mark all running tasks as interrupted
-# (Run from code-agent or Firebase console)
-firestore.collection('code_tasks')
+```typescript
+// Mark all running tasks as interrupted (run from code-agent admin endpoint)
+const runningTasks = await firestore
+  .collection('code_tasks')
   .where('status', '==', 'running')
-  .update({ status: 'interrupted', error: { code: 'emergency_shutdown', message: 'System maintenance in progress' } })
+  .get();
+
+const batch = firestore.batch();
+runningTasks.docs.forEach(doc => {
+  batch.update(doc.ref, {
+    status: 'interrupted',
+    error: { code: 'emergency_shutdown', message: 'System maintenance in progress' }
+  });
+});
+await batch.commit();
 ```
 
 **Step 4: Post-incident**
@@ -1472,6 +1554,7 @@ async function checkRateLimits(userId: string): Promise<Result<void, RateLimitEr
 | 14 | Scope creep (massive task) | Work until timeout, create partial PR |
 | 15 | Auto-shutdown with queued task | No queue; reject immediately, retry mechanism handles |
 | 16 | Wrong repo mentioned | Single repo (intexuraos) for MVP, ignore other mentions |
+| 17 | Multi-service task | Single task, single PR. Claude handles coordination across services. |
 | 18 | Routing mode constraint + offline | Task rejected with clear message |
 
 ### Open Gaps (Need Resolution)
