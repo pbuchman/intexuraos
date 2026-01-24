@@ -355,6 +355,9 @@ importers:
         specifier: ^3.24.1
         version: 3.25.76
     devDependencies:
+      '@google-cloud/firestore':
+        specifier: ^7.10.0
+        version: 7.11.6(encoding@0.1.13)
       '@types/node':
         specifier: ^22.10.5
         version: 22.19.5

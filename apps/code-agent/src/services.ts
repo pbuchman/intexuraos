@@ -4,9 +4,12 @@
  */
 
 import pino from 'pino';
+import type { Firestore } from '@google-cloud/firestore';
+import { getFirestore } from '@intexuraos/infra-firestore';
 import type { CodeWorkersConfig } from './config.js';
 
 export interface ServiceContainer {
+  firestore: Firestore;
   logger: pino.Logger;
   // Add more services as needed
 }
@@ -33,6 +36,7 @@ let container: ServiceContainer | null = null;
  */
 export function initServices(_config: ServiceConfig): void {
   container = {
+    firestore: getFirestore(),
     logger: pino({ name: 'code-agent' }),
     // Add more service initializations as needed
   };
