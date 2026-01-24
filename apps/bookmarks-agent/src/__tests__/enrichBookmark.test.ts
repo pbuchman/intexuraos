@@ -271,4 +271,76 @@ describe('enrichBookmark', () => {
       favicon: null,
     });
   });
+
+  it('logs warning and still succeeds when summarize publisher fails', async () => {
+    const createResult = await bookmarkRepository.create({
+      userId: 'user-1',
+      url: 'https://example.com/publish-fail',
+      source: 'test',
+      sourceId: 'test-5',
+    });
+
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) return;
+
+    linkPreviewFetcher.setDefaultPreview({
+      title: 'Test Page',
+      description: 'Test description',
+      image: null,
+      siteName: null,
+      type: null,
+      favicon: null,
+    });
+
+    summarizePublisher.setNextError({
+      code: 'PUBLISH_FAILED',
+      message: 'PubSub connection failed',
+    });
+
+    const result = await enrichBookmark(
+      { bookmarkRepository, linkPreviewFetcher, summarizePublisher, logger: silentLogger },
+      { bookmarkId: createResult.value.id, userId: 'user-1' }
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.ogFetchStatus).toBe('processed');
+    expect(summarizePublisher.publishedEvents).toHaveLength(0);
+  });
+
+  it('does not publish summarize event when update after preview fetch fails', async () => {
+    const createResult = await bookmarkRepository.create({
+      userId: 'user-1',
+      url: 'https://example.com/update-fail',
+      source: 'test',
+      sourceId: 'test-6',
+    });
+
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) return;
+
+    linkPreviewFetcher.setDefaultPreview({
+      title: 'Test Page',
+      description: 'Test description',
+      image: null,
+      siteName: null,
+      type: null,
+      favicon: null,
+    });
+
+    bookmarkRepository.simulateMethodError('update', {
+      code: 'STORAGE_ERROR',
+      message: 'Database write failed',
+    });
+
+    const result = await enrichBookmark(
+      { bookmarkRepository, linkPreviewFetcher, summarizePublisher, logger: silentLogger },
+      { bookmarkId: createResult.value.id, userId: 'user-1' }
+    );
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe('STORAGE_ERROR');
+    expect(summarizePublisher.publishedEvents).toHaveLength(0);
+  });
 });

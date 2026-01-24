@@ -1,3 +1,0 @@
-{"ts":"2026-01-18T20:16:05.200Z","project":"intexuraos","branch":"fix/INT-148-ipad-actions-view","workspace":"--","runNumber":1,"passed":false,"durationMs":352,"failureCount":0,"failures":[]}
-{"ts":"2026-01-18T20:16:53.957Z","project":"intexuraos","branch":"fix/INT-148-ipad-actions-view","workspace":"web","runNumber":2,"passed":true,"durationMs":43437,"failureCount":0,"failures":[]}
-{"ts":"2026-01-18T20:20:49.822Z","project":"intexuraos","branch":"fix/INT-148-ipad-actions-view","runNumber":3,"passed":true,"durationMs":178677,"failureCount":0,"failures":[]}

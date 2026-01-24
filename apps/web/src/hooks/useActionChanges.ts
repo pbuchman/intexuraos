@@ -46,6 +46,7 @@ export function useActionChanges(enabled = true): UseActionChangesResult {
   const isVisibleRef = useRef(true);
   const firebaseAuthenticatedRef = useRef(false);
   const isSettingUpRef = useRef(false);
+  const isInitialSnapshotRef = useRef(true);
 
   const clearChangedIds = useCallback((): void => {
     setChangedActionIds([]);
@@ -93,9 +94,19 @@ export function useActionChanges(enabled = true): UseActionChangesResult {
 
       // 💰 CostGuard: Listener only reads minimal metadata (userId, status, updatedAt)
       // Full action data fetched separately via batch API
+      // Reset initial snapshot flag when starting new listener
+      isInitialSnapshotRef.current = true;
+
       unsubscribeRef.current = onSnapshot(
         q,
         (snapshot) => {
+          // Skip the initial snapshot - it reports all documents as 'added'
+          // which would override the filtered data from fetchData()
+          if (isInitialSnapshotRef.current) {
+            isInitialSnapshotRef.current = false;
+            return;
+          }
+
           const changed: string[] = [];
 
           snapshot.docChanges().forEach((change) => {

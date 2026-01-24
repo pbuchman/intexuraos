@@ -268,4 +268,79 @@ describe('WhatsAppClient', () => {
       vi.useRealTimers();
     });
   });
+
+  describe('markAsRead', () => {
+    const MESSAGE_ID = 'wamid.HBgNMTU1NTEyMzQ1Njc4FQIAEhg';
+
+    it('marks message as read successfully', async () => {
+      nock(GRAPH_API_BASE)
+        .post(`/v22.0/${PHONE_NUMBER_ID}/messages`, (body: object) => {
+          const b = body as { messaging_product: string; status: string; message_id: string };
+          return (
+            b.messaging_product === 'whatsapp' && b.status === 'read' && b.message_id === MESSAGE_ID
+          );
+        })
+        .reply(200, { success: true });
+
+      const client = createWhatsAppClient(config);
+      const result = await client.markAsRead(MESSAGE_ID);
+
+      expect(result.ok).toBe(true);
+    });
+
+    it('returns error on HTTP 400', async () => {
+      nock(GRAPH_API_BASE)
+        .post(`/v22.0/${PHONE_NUMBER_ID}/messages`)
+        .reply(400, { error: { message: 'Invalid message ID' } });
+
+      const client = createWhatsAppClient(config);
+      const result = await client.markAsRead(MESSAGE_ID);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('API_ERROR');
+        expect(result.error.message).toContain('400');
+      }
+    });
+
+    it('returns error on network failure', async () => {
+      nock(GRAPH_API_BASE)
+        .post(`/v22.0/${PHONE_NUMBER_ID}/messages`)
+        .replyWithError('Network error');
+
+      const client = createWhatsAppClient(config);
+      const result = await client.markAsRead(MESSAGE_ID);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('NETWORK_ERROR');
+        expect(result.error.message).toContain('Failed to mark message as read');
+      }
+    });
+
+    it('returns timeout error when request takes too long', async () => {
+      vi.useFakeTimers();
+
+      nock(GRAPH_API_BASE)
+        .post(`/v22.0/${PHONE_NUMBER_ID}/messages`)
+        .delay(35000)
+        .reply(200, { success: true });
+
+      const client = createWhatsAppClient(config);
+      const resultPromise = client.markAsRead(MESSAGE_ID);
+
+      await vi.advanceTimersByTimeAsync(31000);
+
+      const result = await resultPromise;
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('TIMEOUT');
+        expect(result.error.message).toContain('timed out');
+        expect(result.error.message).toContain('30000');
+      }
+
+      vi.useRealTimers();
+    });
+  });
 });

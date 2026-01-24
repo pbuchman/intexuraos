@@ -5,6 +5,7 @@ import type { ActionServiceClient } from '../domain/ports/actionServiceClient.js
 import type {
   CalendarServiceClient,
   ProcessCalendarRequest,
+  CalendarPreview,
 } from '../domain/ports/calendarServiceClient.js';
 import type { ResearchServiceClient } from '../domain/ports/researchServiceClient.js';
 import type { NotificationSender } from '../domain/ports/notificationSender.js';
@@ -37,7 +38,6 @@ import type { LinearAgentClient } from '../domain/ports/linearAgentClient.js';
 import type { Action } from '../domain/models/action.js';
 import type { ActionTransition } from '../domain/models/actionTransition.js';
 import type { ActionCreatedEvent } from '../domain/models/actionEvent.js';
-import type { ResearchModel } from '@intexuraos/llm-contract';
 import {
   createHandleResearchActionUseCase,
   type HandleResearchActionUseCase,
@@ -46,8 +46,24 @@ import {
   createChangeActionTypeUseCase,
   type ChangeActionTypeUseCase,
 } from '../domain/usecases/changeActionType.js';
+import type {
+  HandleApprovalReplyUseCase,
+  ApprovalReplyInput,
+  ApprovalReplyResult,
+} from '../domain/usecases/handleApprovalReply.js';
+import type {
+  ApprovalMessageRepository,
+  ApprovalMessageRepositoryError,
+} from '../domain/ports/approvalMessageRepository.js';
+import type { ApprovalMessage } from '../domain/models/approvalMessage.js';
+import type { UserServiceClient, UserServiceError } from '../infra/user/userServiceClient.js';
+import type { LlmGenerateClient } from '@intexuraos/llm-factory';
 import type { Services } from '../services.js';
-import type { PublishError, WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
+import type {
+  PublishError,
+  WhatsAppSendPublisher,
+  CalendarPreviewPublisher,
+} from '@intexuraos/infra-pubsub';
 import type { ActionEventPublisher } from '../infra/pubsub/index.js';
 import pino from 'pino';
 
@@ -117,7 +133,7 @@ export class FakeResearchServiceClient implements ResearchServiceClient {
     userId: string;
     title: string;
     prompt: string;
-    selectedModels: ResearchModel[];
+    originalMessage: string;
     sourceActionId?: string;
   } | null = null;
   private nextResponse: ServiceFeedback = {
@@ -145,7 +161,7 @@ export class FakeResearchServiceClient implements ResearchServiceClient {
     userId: string;
     title: string;
     prompt: string;
-    selectedModels: ResearchModel[];
+    originalMessage: string;
     sourceActionId?: string;
   }): Promise<Result<ServiceFeedback>> {
     if (this.failNext) {
@@ -223,7 +239,8 @@ export class FakeActionRepository implements ActionRepository {
       this.failNext = false;
       throw this.failError ?? new Error('Simulated failure');
     }
-    this.actions.set(action.id, action);
+    // Store a copy to prevent mutation of the original object
+    this.actions.set(action.id, { ...action, payload: { ...action.payload } });
   }
 
   async update(action: Action): Promise<void> {
@@ -231,7 +248,8 @@ export class FakeActionRepository implements ActionRepository {
       this.failNext = false;
       throw this.failError ?? new Error('Simulated failure');
     }
-    this.actions.set(action.id, action);
+    // Store a copy to prevent mutation of the original object
+    this.actions.set(action.id, { ...action, payload: { ...action.payload } });
   }
 
   async delete(id: string): Promise<void> {
@@ -355,6 +373,48 @@ export class FakeWhatsAppSendPublisher implements WhatsAppSendPublisher {
     this.sentMessages.push({
       userId: params.userId,
       message: params.message,
+      correlationId: params.correlationId ?? '',
+    });
+    return ok(undefined);
+  }
+}
+
+export class FakeCalendarPreviewPublisher implements CalendarPreviewPublisher {
+  private publishedRequests: {
+    actionId: string;
+    userId: string;
+    text: string;
+    currentDate: string;
+    correlationId: string;
+  }[] = [];
+  private failNext = false;
+  private failError: PublishError | null = null;
+
+  getPublishedRequests(): typeof this.publishedRequests {
+    return this.publishedRequests;
+  }
+
+  setFailNext(fail: boolean, error?: PublishError): void {
+    this.failNext = fail;
+    this.failError = error ?? null;
+  }
+
+  async publishGeneratePreview(params: {
+    actionId: string;
+    userId: string;
+    text: string;
+    currentDate: string;
+    correlationId?: string;
+  }): Promise<Result<void, PublishError>> {
+    if (this.failNext) {
+      this.failNext = false;
+      return err(this.failError ?? { code: 'PUBLISH_FAILED', message: 'Simulated failure' });
+    }
+    this.publishedRequests.push({
+      actionId: params.actionId,
+      userId: params.userId,
+      text: params.text,
+      currentDate: params.currentDate,
       correlationId: params.correlationId ?? '',
     });
     return ok(undefined);
@@ -536,6 +596,7 @@ export class FakeBookmarksServiceClient implements BookmarksServiceClient {
 
 export class FakeCalendarServiceClient implements CalendarServiceClient {
   private processedActions: ProcessCalendarRequest[] = [];
+  private previews = new Map<string, CalendarPreview>();
   private nextResponse: ServiceFeedback = {
     status: 'completed',
     message: 'Calendar event created successfully',
@@ -557,6 +618,10 @@ export class FakeCalendarServiceClient implements CalendarServiceClient {
     this.failError = error ?? null;
   }
 
+  setPreview(actionId: string, preview: CalendarPreview): void {
+    this.previews.set(actionId, preview);
+  }
+
   async processAction(request: ProcessCalendarRequest): Promise<Result<ServiceFeedback>> {
     if (this.failNext) {
       this.failNext = false;
@@ -564,6 +629,14 @@ export class FakeCalendarServiceClient implements CalendarServiceClient {
     }
     this.processedActions.push(request);
     return ok(this.nextResponse);
+  }
+
+  async getPreview(actionId: string): Promise<Result<CalendarPreview | null>> {
+    if (this.failNext) {
+      this.failNext = false;
+      return err(this.failError ?? new Error('Simulated failure'));
+    }
+    return ok(this.previews.get(actionId) ?? null);
   }
 }
 
@@ -776,6 +849,119 @@ export function createFakeRetryPendingActionsUseCase(config?: {
   };
 }
 
+// Fake ApprovalMessageRepository
+export class FakeApprovalMessageRepository implements ApprovalMessageRepository {
+  private messages = new Map<string, ApprovalMessage>();
+  private messagesByAction = new Map<string, ApprovalMessage>();
+  private failNext = false;
+  private failError: ApprovalMessageRepositoryError | null = null;
+
+  setFailNext(fail: boolean, error?: ApprovalMessageRepositoryError): void {
+    this.failNext = fail;
+    this.failError = error ?? null;
+  }
+
+  async save(message: ApprovalMessage): Promise<Result<void, ApprovalMessageRepositoryError>> {
+    if (this.failNext) {
+      this.failNext = false;
+      return err(this.failError ?? { code: 'PERSISTENCE_ERROR', message: 'Simulated failure' });
+    }
+    this.messages.set(message.wamid, message);
+    this.messagesByAction.set(message.actionId, message);
+    return ok(undefined);
+  }
+
+  async findByWamid(wamid: string): Promise<Result<ApprovalMessage | null, ApprovalMessageRepositoryError>> {
+    if (this.failNext) {
+      this.failNext = false;
+      return err(this.failError ?? { code: 'PERSISTENCE_ERROR', message: 'Simulated failure' });
+    }
+    return ok(this.messages.get(wamid) ?? null);
+  }
+
+  async findByActionId(actionId: string): Promise<Result<ApprovalMessage | null, ApprovalMessageRepositoryError>> {
+    if (this.failNext) {
+      this.failNext = false;
+      return err(this.failError ?? { code: 'PERSISTENCE_ERROR', message: 'Simulated failure' });
+    }
+    return ok(this.messagesByAction.get(actionId) ?? null);
+  }
+
+  async deleteByActionId(actionId: string): Promise<Result<void, ApprovalMessageRepositoryError>> {
+    if (this.failNext) {
+      this.failNext = false;
+      return err(this.failError ?? { code: 'PERSISTENCE_ERROR', message: 'Simulated failure' });
+    }
+    const message = this.messagesByAction.get(actionId);
+    if (message !== undefined) {
+      this.messages.delete(message.wamid);
+      this.messagesByAction.delete(actionId);
+    }
+    return ok(undefined);
+  }
+
+  // Test helpers
+  setMessage(message: ApprovalMessage): void {
+    this.messages.set(message.wamid, message);
+    this.messagesByAction.set(message.actionId, message);
+  }
+
+  getMessages(): ApprovalMessage[] {
+    return Array.from(this.messages.values());
+  }
+
+  clear(): void {
+    this.messages.clear();
+    this.messagesByAction.clear();
+  }
+}
+
+// Fake UserServiceClient
+export class FakeUserServiceClient implements UserServiceClient {
+  private llmClient: LlmGenerateClient | null = null;
+  private error: UserServiceError | null = null;
+
+  setLlmClient(client: LlmGenerateClient): void {
+    this.llmClient = client;
+    this.error = null;
+  }
+
+  setError(error: UserServiceError): void {
+    this.error = error;
+    this.llmClient = null;
+  }
+
+  async getLlmClient(_userId: string): Promise<Result<LlmGenerateClient, UserServiceError>> {
+    if (this.error !== null) {
+      return err(this.error);
+    }
+    if (this.llmClient === null) {
+      return err({
+        code: 'NO_API_KEY',
+        message: 'No LLM client configured in fake',
+      });
+    }
+    return ok(this.llmClient);
+  }
+}
+
+// Fake HandleApprovalReplyUseCase
+export function createFakeHandleApprovalReplyUseCase(config?: {
+  failWithError?: Error;
+  returnResult?: ApprovalReplyResult;
+}): HandleApprovalReplyUseCase {
+  return async (_input: ApprovalReplyInput): Promise<Result<ApprovalReplyResult>> => {
+    if (config?.failWithError !== undefined) {
+      return err(config.failWithError);
+    }
+    return ok(
+      config?.returnResult ?? {
+        matched: false,
+      }
+    );
+  };
+}
+
 import {
   createHandleTodoActionUseCase,
   type HandleTodoActionUseCase,
@@ -811,6 +997,7 @@ export function createFakeServices(deps: {
   linearAgentClient?: FakeLinearAgentClient;
   actionEventPublisher?: FakeActionEventPublisher;
   whatsappPublisher?: FakeWhatsAppSendPublisher;
+  calendarPreviewPublisher?: FakeCalendarPreviewPublisher;
   executeResearchActionUseCase?: FakeExecuteResearchActionUseCase;
   executeTodoActionUseCase?: FakeExecuteTodoActionUseCase;
   executeNoteActionUseCase?: FakeExecuteNoteActionUseCase;
@@ -819,8 +1006,13 @@ export function createFakeServices(deps: {
   executeLinearActionUseCase?: FakeExecuteLinearActionUseCase;
   retryPendingActionsUseCase?: RetryPendingActionsUseCase;
   changeActionTypeUseCase?: ChangeActionTypeUseCase;
+  approvalMessageRepository?: FakeApprovalMessageRepository;
+  userServiceClient?: FakeUserServiceClient;
+  handleApprovalReplyUseCase?: HandleApprovalReplyUseCase;
 }): Services {
   const whatsappPublisher = deps.whatsappPublisher ?? new FakeWhatsAppSendPublisher();
+  const calendarPreviewPublisher =
+    deps.calendarPreviewPublisher ?? new FakeCalendarPreviewPublisher();
   const actionRepository = deps.actionRepository ?? new FakeActionRepository();
   const actionTransitionRepository =
     deps.actionTransitionRepository ?? new FakeActionTransitionRepository();
@@ -830,6 +1022,9 @@ export function createFakeServices(deps: {
   const bookmarksServiceClient = deps.bookmarksServiceClient ?? new FakeBookmarksServiceClient();
   const calendarServiceClient = deps.calendarServiceClient ?? new FakeCalendarServiceClient();
   const linearAgentClient = deps.linearAgentClient ?? new FakeLinearAgentClient();
+  const approvalMessageRepository =
+    deps.approvalMessageRepository ?? new FakeApprovalMessageRepository();
+  const userServiceClient = deps.userServiceClient ?? new FakeUserServiceClient();
 
   const silentLogger = pino({ level: 'silent' });
 
@@ -876,9 +1071,9 @@ export function createFakeServices(deps: {
   const handleCalendarActionUseCase: HandleCalendarActionUseCase = registerActionHandler(
     createHandleCalendarActionUseCase,
     {
-      actionServiceClient: deps.actionServiceClient,
       actionRepository,
       whatsappPublisher,
+      calendarPreviewPublisher,
       webAppUrl: 'http://test.app',
       logger: silentLogger,
     }
@@ -917,6 +1112,7 @@ export function createFakeServices(deps: {
     linearAgentClient,
     actionEventPublisher: deps.actionEventPublisher ?? new FakeActionEventPublisher(),
     whatsappPublisher,
+    calendarPreviewPublisher,
     handleResearchActionUseCase,
     handleTodoActionUseCase,
     handleNoteActionUseCase,
@@ -935,6 +1131,10 @@ export function createFakeServices(deps: {
     retryPendingActionsUseCase:
       deps.retryPendingActionsUseCase ?? createFakeRetryPendingActionsUseCase(),
     changeActionTypeUseCase,
+    approvalMessageRepository,
+    userServiceClient,
+    handleApprovalReplyUseCase:
+      deps.handleApprovalReplyUseCase ?? createFakeHandleApprovalReplyUseCase(),
     research: handleResearchActionUseCase,
     todo: handleTodoActionUseCase,
     note: handleNoteActionUseCase,

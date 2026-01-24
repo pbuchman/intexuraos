@@ -6,7 +6,12 @@
     "types": ["vitest/globals", "node"],
     "baseUrl": ".",
     "paths": {
-      "@intexuraos/*": ["packages/*/src", "apps/*/src"]
+      "@intexuraos/*": [
+        "packages/*/src/index.ts",
+        "packages/*/src",
+        "apps/*/src/index.ts",
+        "apps/*/src"
+      ]
     }
   },
   "include": ["apps/*/src/__tests__/**/*.ts", "packages/*/src/__tests__/**/*.ts"],

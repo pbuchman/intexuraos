@@ -13,7 +13,8 @@ export interface OpenGraphFetcherConfig {
 const DEFAULT_CONFIG: OpenGraphFetcherConfig = {
   timeoutMs: 5000,
   maxResponseSize: 2097152, // 2MB
-  userAgent: 'Mozilla/5.0 (compatible; IntexuraOSBot/1.0; +https://intexuraos.cloud)',
+  userAgent:
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36',
 };
 
 function extractFavicon($: cheerio.CheerioAPI, baseUrl: string): string | undefined {
@@ -78,7 +79,16 @@ export class OpenGraphFetcher implements LinkPreviewFetcherPort {
         method: 'GET',
         headers: {
           'User-Agent': this.config.userAgent,
-          Accept: 'text/html,application/xhtml+xml',
+          Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+          'Accept-Language': 'en-US,en;q=0.9',
+          'Accept-Encoding': 'gzip, deflate, br',
+          'Cache-Control': 'no-cache',
+          Connection: 'keep-alive',
+          'Sec-Fetch-Dest': 'document',
+          'Sec-Fetch-Mode': 'navigate',
+          'Sec-Fetch-Site': 'none',
+          'Sec-Fetch-User': '?1',
+          'Upgrade-Insecure-Requests': '1',
         },
         signal: controller.signal,
         redirect: 'follow',
@@ -95,6 +105,14 @@ export class OpenGraphFetcher implements LinkPreviewFetcherPort {
           },
           'HTTP error response'
         );
+
+        if (response.status === 403) {
+          return err({
+            code: 'ACCESS_DENIED',
+            message: `Access denied (HTTP 403): The website blocked the request`,
+          });
+        }
+
         return err({
           code: 'FETCH_FAILED',
           message: `HTTP ${String(response.status)}: ${response.statusText}`,

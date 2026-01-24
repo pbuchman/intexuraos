@@ -15,6 +15,9 @@ import type {
   CreateFailedEventInput,
   FailedEventFilters,
   ProcessedAction,
+  CalendarPreview,
+  CreateCalendarPreviewInput,
+  UpdateCalendarPreviewInput,
 } from './models.js';
 import type { CalendarError } from './errors.js';
 
@@ -129,4 +132,23 @@ export interface ProcessedActionRepository {
     eventId: string;
     resourceUrl: string;
   }): Promise<Result<ProcessedAction, CalendarError>>;
+}
+
+/**
+ * Repository for calendar event previews.
+ * Previews are generated async after action creation to show users
+ * what event will be created before they approve.
+ */
+export interface CalendarPreviewRepository {
+  /** Get a preview by actionId */
+  getByActionId(actionId: string): Promise<Result<CalendarPreview | null, CalendarError>>;
+
+  /** Create a new preview */
+  create(input: CreateCalendarPreviewInput): Promise<Result<CalendarPreview, CalendarError>>;
+
+  /** Update an existing preview */
+  update(actionId: string, updates: UpdateCalendarPreviewInput): Promise<Result<void, CalendarError>>;
+
+  /** Delete a preview by actionId */
+  delete(actionId: string): Promise<Result<void, CalendarError>>;
 }

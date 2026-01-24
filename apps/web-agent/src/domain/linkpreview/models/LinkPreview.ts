@@ -7,7 +7,12 @@ export interface LinkPreview {
   siteName?: string;
 }
 
-export type LinkPreviewErrorCode = 'FETCH_FAILED' | 'TIMEOUT' | 'TOO_LARGE' | 'INVALID_URL';
+export type LinkPreviewErrorCode =
+  | 'FETCH_FAILED'
+  | 'TIMEOUT'
+  | 'TOO_LARGE'
+  | 'INVALID_URL'
+  | 'ACCESS_DENIED';
 
 export interface LinkPreviewError {
   code: LinkPreviewErrorCode;

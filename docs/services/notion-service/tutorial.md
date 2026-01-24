@@ -38,6 +38,6 @@ curl -X DELETE https://notion-service.intexuraos.com/notion/disconnect \
 ## Troubleshooting
 
 | Error            | Cause            | Solution             |
-| ---------------- | ---------------- | -------------------- |
+| ----------------  | ----------------  | --------------------  |
 | INVALID_TOKEN    | Bad token        | Regenerate in Notion |
 | DOWNSTREAM_ERROR | Notion API issue | Retry later          |

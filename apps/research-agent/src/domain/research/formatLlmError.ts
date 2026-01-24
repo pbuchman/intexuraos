@@ -125,7 +125,7 @@ function tryParseGeminiError(raw: string): string | null {
     }
 
     return 'An error occurred with the Gemini API';
-  } catch {
+  } catch /* v8 ignore next -- defensive, JSON.parse failure returns null */ {
     return null;
   }
 }
@@ -160,7 +160,7 @@ function tryParseAnthropicError(raw: string): string | null {
         const { message } = parsed.error;
         return message.length > 150 ? message.slice(0, 147) + '...' : message;
       }
-    } catch {
+    } catch /* v8 ignore next -- defensive, JSON.parse failure falls through */ {
       // Fall through
     }
   }

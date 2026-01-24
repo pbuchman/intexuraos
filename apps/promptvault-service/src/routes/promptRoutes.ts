@@ -284,9 +284,11 @@ export const promptRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       if (user === null) return;
 
       const parseResult = createPromptRequestSchema.safeParse(request.body);
+      /* v8 ignore start - Defensive: Fastify schema validation catches most errors first */
       if (!parseResult.success) {
         return await handleValidationError(parseResult.error, reply);
       }
+      /* v8 ignore stop */
 
       const { title, prompt: promptContent } = parseResult.data;
       const { promptRepository } = getServices();

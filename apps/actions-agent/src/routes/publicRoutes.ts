@@ -536,6 +536,121 @@ export const publicRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
     }
   );
 
+  fastify.get<{ Params: { actionId: string } }>(
+    '/actions/:actionId/preview',
+    {
+      schema: {
+        operationId: 'getActionPreview',
+        summary: 'Get action preview',
+        description: 'Get the preview for a calendar action (shows what will be created when approved).',
+        tags: ['actions'],
+        params: {
+          type: 'object',
+          properties: {
+            actionId: { type: 'string' },
+          },
+          required: ['actionId'],
+        },
+        response: {
+          200: {
+            description: 'Preview retrieved successfully',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [true] },
+              data: {
+                type: 'object',
+                properties: {
+                  preview: {
+                    type: 'object',
+                    nullable: true,
+                    properties: {
+                      actionId: { type: 'string' },
+                      userId: { type: 'string' },
+                      status: { type: 'string', enum: ['pending', 'ready', 'failed'] },
+                      summary: { type: 'string' },
+                      start: { type: 'string' },
+                      end: { type: 'string', nullable: true },
+                      location: { type: 'string', nullable: true },
+                      description: { type: 'string', nullable: true },
+                      duration: { type: 'string', nullable: true },
+                      isAllDay: { type: 'boolean' },
+                      error: { type: 'string' },
+                      reasoning: { type: 'string' },
+                      generatedAt: { type: 'string', format: 'date-time' },
+                    },
+                    required: ['actionId', 'userId', 'status', 'generatedAt'],
+                  },
+                },
+                required: ['preview'],
+              },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+            required: ['success', 'data'],
+          },
+          400: {
+            description: 'Bad Request',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+            required: ['success', 'error'],
+          },
+          401: {
+            description: 'Unauthorized',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+            required: ['success', 'error'],
+          },
+          404: {
+            description: 'Action not found',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+            required: ['success', 'error'],
+          },
+        },
+      },
+    },
+    async (request: FastifyRequest<{ Params: { actionId: string } }>, reply: FastifyReply) => {
+      logIncomingRequest(request);
+      const user = await requireAuth(request, reply);
+      if (user === null) {
+        return;
+      }
+
+      const { actionId } = request.params;
+
+      const services = getServices();
+      const action = await services.actionRepository.getById(actionId);
+
+      if (action?.userId !== user.userId) {
+        return await reply.fail('NOT_FOUND', 'Action not found');
+      }
+
+      if (action.type !== 'calendar') {
+        return await reply.fail('INVALID_REQUEST', 'Preview is only available for calendar actions');
+      }
+
+      const result = await services.calendarServiceClient.getPreview(actionId);
+
+      if (!result.ok) {
+        request.log.error({ error: result.error.message, actionId }, 'Failed to fetch preview');
+        return await reply.fail('DOWNSTREAM_ERROR', 'Failed to fetch preview');
+      }
+
+      return await reply.ok({ preview: result.value });
+    }
+  );
+
   fastify.post<{ Params: { actionId: string }; Body: { action: 'skip' | 'update' } }>(
     '/actions/:actionId/resolve-duplicate',
     {

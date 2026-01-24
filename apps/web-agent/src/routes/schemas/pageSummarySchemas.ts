@@ -1,11 +1,15 @@
 export const summarizePageBodySchema = {
   type: 'object',
-  required: ['url'],
+  required: ['url', 'userId'],
   properties: {
     url: {
       type: 'string',
       format: 'uri',
       description: 'URL of the page to summarize',
+    },
+    userId: {
+      type: 'string',
+      description: 'User ID for fetching LLM API keys',
     },
     maxSentences: {
       type: 'number',
@@ -84,6 +88,7 @@ export const summarizePageResponseSchema = {
 
 export interface SummarizePageBody {
   url: string;
+  userId: string;
   maxSentences?: number;
   maxReadingMinutes?: number;
 }

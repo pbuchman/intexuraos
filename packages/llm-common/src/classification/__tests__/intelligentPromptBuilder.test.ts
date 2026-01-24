@@ -20,7 +20,28 @@ describe('intelligentClassifierPrompt', () => {
       expect(prompt).toContain('Classify the message into exactly one category');
       expect(prompt).toContain('Return ONLY valid JSON');
       expect(prompt).not.toContain('REAL EXAMPLES FROM HISTORY');
-      expect(prompt).not.toContain('CRITICAL: LEARNED CORRECTIONS');
+      expect(prompt).not.toContain('LEARNED CORRECTIONS');
+    });
+
+    it('includes URL keyword isolation guidance', () => {
+      const prompt = intelligentClassifierPrompt.build({ message: 'test' });
+
+      expect(prompt).toContain('CRITICAL: URL Keyword Isolation');
+      expect(prompt).toContain('Keywords inside URLs must be IGNORED');
+    });
+
+    it('includes explicit intent command detection step', () => {
+      const prompt = intelligentClassifierPrompt.build({ message: 'test' });
+
+      expect(prompt).toContain('STEP 2: Explicit Intent Command Detection (HIGH PRIORITY)');
+      expect(prompt).toContain('OVERRIDE category signals from URL content');
+    });
+
+    it('includes URL presence check before category detection', () => {
+      const prompt = intelligentClassifierPrompt.build({ message: 'test' });
+
+      expect(prompt).toContain('STEP 4: URL Presence Check (BEFORE other category signals)');
+      expect(prompt).toContain('strongly prefer "link" classification');
     });
 
     it('includes examples section when examples are provided', () => {

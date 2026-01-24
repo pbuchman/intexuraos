@@ -6,7 +6,7 @@ This document describes how to run IntexuraOS services locally while using GCP F
 
 Local uses:
 
-- **Local services**: Node.js processes via `docker-compose` or `ppnpm run dev`
+- **Local services**: Node.js processes via `docker-compose` or `pnpm run dev`
 - **Remote Firestore**: Dev project's Firestore database
 - **Remote Secret Manager**: Dev project's secrets (or local .env override)
 
@@ -36,7 +36,7 @@ gcloud auth application-default print-access-token
 Your user account needs these roles on the dev project:
 
 | Role                                 | Purpose              |
-| ------------------------------------ | -------------------- |
+| ------------------------------------  | --------------------  |
 | `roles/datastore.user`               | Read/write Firestore |
 | `roles/secretmanager.secretAccessor` | Read secrets         |
 
@@ -90,11 +90,11 @@ LOG_LEVEL=debug
 ```bash
 # Terminal 1: Auth service
 cd apps/user-service
-ppnpm run dev
+pnpm run dev
 
 # Terminal 2: PromptVault service
 cd apps/promptvault-service
-ppnpm run dev
+pnpm run dev
 ```
 
 ### Option B: Using Docker Compose
@@ -132,9 +132,9 @@ open http://localhost:8081/docs
 Tests use **in-memory fake repositories** via dependency injection—no external services required:
 
 ```bash
-ppnpm run test          # Run all tests
-ppppnpm run test:coverage # Run with coverage report
-ppnpm run ci            # Full CI pipeline
+pnpm run test          # Run all tests
+pppnpm run test:coverage # Run with coverage report
+pnpm run ci            # Full CI pipeline
 ```
 
 ## Project Structure for Local Development
@@ -215,15 +215,28 @@ Then use `tf init`, `tf plan`, `tf apply` instead of `terraform`.
 
 After completing these steps, you can:
 
-- [x] Run services locally with `ppnpm run dev` or Docker Compose
+- [x] Run services locally with `pnpm run dev` or Docker Compose
 - [x] Connect to dev Firestore database
 - [x] Access secrets via ADC or direct environment variables
 - [x] Test API endpoints locally
 
+## Claude Code Setup
+
+If using Claude Code for development, configure MCP servers for Linear and Sentry integration:
+
+- See [11 - Claude Code MCP Setup](./11-claude-code-mcp-setup.md)
+
+Required environment variables:
+
+```bash
+export LINEAR_API_KEY="lin_api_xxxxx"      # Linear issue tracking
+export SENTRY_AUTH_TOKEN="sntrys_xxxxx"    # Sentry error monitoring
+```
+
 ## Development Workflow
 
 1. Make code changes
-2. Run `ppnpm run ci` to validate
-3. Test locally with `ppnpm run dev`
+2. Run `pnpm run ci` to validate
+3. Test locally with `pnpm run dev`
 4. Push to `development` branch
 5. Cloud Build automatically deploys

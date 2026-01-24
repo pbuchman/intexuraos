@@ -171,7 +171,7 @@ curl "https://todos-agent.intexuraos.com/todos?archived=false" \
 ## Troubleshooting
 
 | Issue             | Symptom          | Solution                         |
-| ----------------- | ---------------- | -------------------------------- |
+| -----------------  | ----------------  | --------------------------------  |
 | Auth failed       | 401 Unauthorized | Check token validity             |
 | Todo not found    | 404 error        | Verify todo ID                   |
 | Invalid request   | 400 error        | Check required fields            |

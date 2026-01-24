@@ -31,6 +31,7 @@ export class FakeConnectionRepository {
   private shouldFailGet = false;
   private shouldFailDisconnect = false;
   private shouldFailIsConnected = false;
+  private shouldFailGetToken = false;
 
   setFailNextSave(fail: boolean): void {
     this.shouldFailSave = fail;
@@ -46,6 +47,10 @@ export class FakeConnectionRepository {
 
   setFailNextIsConnected(fail: boolean): void {
     this.shouldFailIsConnected = fail;
+  }
+
+  setFailNextGetToken(fail: boolean): void {
+    this.shouldFailGetToken = fail;
   }
 
   saveConnection(
@@ -90,6 +95,10 @@ export class FakeConnectionRepository {
   }
 
   getToken(userId: string): Promise<Result<string | null, NotionError>> {
+    if (this.shouldFailGetToken) {
+      this.shouldFailGetToken = false;
+      return Promise.resolve(err({ code: 'INTERNAL_ERROR', message: 'Simulated getToken failure' }));
+    }
     const conn = this.connections.get(userId);
     if (conn?.connected !== true) return Promise.resolve(ok(null));
     return Promise.resolve(ok(conn.token));

@@ -5,6 +5,7 @@
 import type { Result } from '@intexuraos/common-core';
 import type { WhatsAppError } from './repositories.js';
 import type {
+  ApprovalReplyEvent,
   CommandIngestEvent,
   ExtractLinkPreviewsEvent,
   MediaCleanupEvent,
@@ -45,4 +46,10 @@ export interface EventPublisherPort {
    * Triggers async Open Graph metadata fetching.
    */
   publishExtractLinkPreviews(event: ExtractLinkPreviewsEvent): Promise<Result<void, WhatsAppError>>;
+
+  /**
+   * Publish an approval reply event.
+   * Triggers actions-agent to process approval/rejection of an action.
+   */
+  publishApprovalReply(event: ApprovalReplyEvent): Promise<Result<void, WhatsAppError>>;
 }

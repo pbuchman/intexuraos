@@ -1,20 +1,20 @@
 # Infrastructure Reference
 
+GCloud authentication, Terraform operations, and Cloud Build deployment details.
+
+---
+
 ## GCloud Authentication
 
-**RULE:** NEVER claim "gcloud is not authenticated" or "unauthenticated to gcloud" without first verifying service account credentials.
+**RULE:** NEVER claim "gcloud is not authenticated" without first verifying service account credentials.
 
 ### Service Account Credentials
-
-A service account key file is available at:
 
 ```
 ~/personal/gcloud-claude-code-dev.json
 ```
 
-### Verification Before Claiming Auth Failure
-
-Before reporting any gcloud authentication issues, you MUST:
+### Verification Steps
 
 1. **Check if credentials file exists:**
 
@@ -43,9 +43,23 @@ Before reporting any gcloud authentication issues, you MUST:
 
 **You are NEVER "unauthenticated" if the service account key file exists.** Activate it and proceed.
 
-### Terraform with Service Account
+---
+
+## Terraform Operations
 
 **RULE:** Always use the service account for Terraform operations. Never rely on browser-based authentication.
+
+### Terraform Alias
+
+Use `tf` command instead of `terraform`. This alias clears emulator env vars that break Terraform:
+
+```bash
+alias tf='STORAGE_EMULATOR_HOST= FIRESTORE_EMULATOR_HOST= PUBSUB_EMULATOR_HOST= terraform'
+```
+
+Note: The alias may not be available in spawned subshells - if `tf` is not found, the user should run commands manually.
+
+### Commands with Service Account
 
 ```bash
 # Set credentials and clear emulator env vars
@@ -59,7 +73,7 @@ STORAGE_EMULATOR_HOST= FIRESTORE_EMULATOR_HOST= PUBSUB_EMULATOR_HOST= \
 terraform apply
 ```
 
-**Why service account over browser auth:**
+### Why Service Account Over Browser Auth
 
 - Browser OAuth tokens expire and require re-authentication
 - Service accounts provide consistent, scriptable access
@@ -67,23 +81,11 @@ terraform apply
 
 The service account `claude-code-dev@intexuraos-dev-pbuchman.iam.gserviceaccount.com` has full admin permissions for all Terraform-managed resources.
 
----
-
-## Terraform
-
-**Gotchas:**
+### Gotchas
 
 - Cloud Run images managed by Cloud Build, not Terraform (uses `ignore_changes`)
 - "Image not found": run `./scripts/push-missing-images.sh` for new services
 - Web app: backend buckets need URL rewrite for `/` → `/index.html`
-
-**IMPORTANT:** Use `tf` command instead of `terraform`. This alias clears emulator env vars that break Terraform:
-
-```bash
-alias tf='STORAGE_EMULATOR_HOST= FIRESTORE_EMULATOR_HOST= PUBSUB_EMULATOR_HOST= terraform'
-```
-
-Note: The alias may not be available in spawned subshells - if `tf` is not found, the user should run commands manually.
 
 ---
 
@@ -126,3 +128,22 @@ Note: The alias may not be available in spawned subshells - if `tf` is not found
 5. Add to `SERVICES` array in `.github/scripts/smart-dispatch.mjs`
 
 **First deployment:** Service must exist in Terraform before Cloud Build can deploy. Run `./scripts/push-missing-images.sh` for new services.
+
+---
+
+## Pub/Sub Topic Registration
+
+**RULE:** When adding a NEW Pub/Sub topic, you MUST update THREE locations:
+
+1. **Terraform:** `terraform/environments/dev/main.tf` — Add `module "pubsub_<topic-name>"` declaration
+2. **Pub/Sub UI:** `tools/pubsub-ui/server.mjs` — Add to `TOPICS` array and `TOPIC_ENDPOINTS` mapping
+3. **Test Script:** `scripts/pubsub-publish-test.mjs` — Add event template to `EVENTS` object
+
+**Why:** The Pub/Sub UI auto-creates topics on emulator startup and provides manual testing interface. Missing registration breaks local development workflow.
+
+**Files to update:**
+
+- `tools/pubsub-ui/server.mjs` — TOPICS array + TOPIC_ENDPOINTS object
+- `tools/pubsub-ui/index.html` — CSS styles, dropdown option, EVENT_TEMPLATES
+- `tools/pubsub-ui/README.md` — Documentation tables
+- `scripts/pubsub-publish-test.mjs` — Event type + usage docs

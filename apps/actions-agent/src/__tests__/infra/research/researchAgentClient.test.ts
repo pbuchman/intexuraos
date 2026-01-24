@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import nock from 'nock';
-import { LlmModels } from '@intexuraos/llm-contract';
 import { createResearchAgentClient } from '../../../infra/research/researchAgentClient.js';
 
 describe('createResearchAgentClient', () => {
@@ -34,8 +33,8 @@ describe('createResearchAgentClient', () => {
       const result = await client.createDraft({
         userId: 'user-456',
         title: 'AI Research',
-        prompt: 'Research about artificial intelligence',
-        selectedModels: [LlmModels.Gemini25Pro, LlmModels.O4MiniDeepResearch],
+        prompt: 'Research about artificial intelligence with key points',
+        originalMessage: 'Research about artificial intelligence',
       });
 
       expect(result.ok).toBe(true);
@@ -51,8 +50,8 @@ describe('createResearchAgentClient', () => {
         .post('/internal/research/draft', {
           userId: 'user-789',
           title: 'Test Research',
-          prompt: 'Research prompt',
-          selectedModels: [LlmModels.Gemini25Pro, LlmModels.ClaudeOpus45],
+          prompt: 'Research prompt with key points',
+          originalMessage: 'Research prompt',
           sourceActionId: 'action-111',
         })
         .reply(200, {
@@ -68,8 +67,8 @@ describe('createResearchAgentClient', () => {
       await client.createDraft({
         userId: 'user-789',
         title: 'Test Research',
-        prompt: 'Research prompt',
-        selectedModels: [LlmModels.Gemini25Pro, LlmModels.ClaudeOpus45],
+        prompt: 'Research prompt with key points',
+        originalMessage: 'Research prompt',
         sourceActionId: 'action-111',
       });
 
@@ -84,7 +83,7 @@ describe('createResearchAgentClient', () => {
         userId: 'user-123',
         title: 'Test',
         prompt: 'Test prompt',
-        selectedModels: [LlmModels.O4MiniDeepResearch],
+        originalMessage: 'Test prompt',
       });
 
       expect(result.ok).toBe(false);
@@ -104,7 +103,7 @@ describe('createResearchAgentClient', () => {
         userId: 'user-123',
         title: 'Test',
         prompt: 'Test prompt',
-        selectedModels: [LlmModels.O4MiniDeepResearch],
+        originalMessage: 'Test prompt',
       });
 
       expect(result.ok).toBe(true);
@@ -125,7 +124,7 @@ describe('createResearchAgentClient', () => {
         userId: 'user-123',
         title: 'Test',
         prompt: 'Test prompt',
-        selectedModels: [LlmModels.O4MiniDeepResearch],
+        originalMessage: 'Test prompt',
       });
 
       expect(result.ok).toBe(true);
@@ -146,7 +145,7 @@ describe('createResearchAgentClient', () => {
         userId: 'user-123',
         title: 'Test',
         prompt: 'Test prompt',
-        selectedModels: [LlmModels.O4MiniDeepResearch],
+        originalMessage: 'Test prompt',
       });
 
       expect(result.ok).toBe(false);
@@ -168,7 +167,7 @@ describe('createResearchAgentClient', () => {
         userId: 'user-123',
         title: 'Test',
         prompt: 'Test prompt',
-        selectedModels: [LlmModels.O4MiniDeepResearch],
+        originalMessage: 'Test prompt',
       });
 
       expect(result.ok).toBe(false);
@@ -187,7 +186,7 @@ describe('createResearchAgentClient', () => {
         userId: 'user-123',
         title: 'Test',
         prompt: 'Test prompt',
-        selectedModels: [LlmModels.O4MiniDeepResearch],
+        originalMessage: 'Test prompt',
       });
 
       expect(result.ok).toBe(false);
@@ -206,7 +205,7 @@ describe('createResearchAgentClient', () => {
         userId: 'user-123',
         title: 'Test',
         prompt: 'Test prompt',
-        selectedModels: [LlmModels.O4MiniDeepResearch],
+        originalMessage: 'Test prompt',
       });
 
       expect(result.ok).toBe(false);
@@ -223,12 +222,63 @@ describe('createResearchAgentClient', () => {
         userId: 'user-123',
         title: 'Test',
         prompt: 'Test prompt',
-        selectedModels: [LlmModels.O4MiniDeepResearch],
+        originalMessage: 'Test prompt',
       });
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
         expect(result.error.message).toContain('Network error');
+      }
+    });
+
+    it('includes resourceUrl and errorCode from successful data response', async () => {
+      nock(baseUrl)
+        .post('/internal/research/draft')
+        .reply(200, {
+          success: true,
+          data: {
+            status: 'completed',
+            message: 'Draft created',
+            resourceUrl: '/#/research/draft-999',
+            errorCode: 'PARTIAL_SUCCESS',
+          },
+        });
+
+      const client = createResearchAgentClient({ baseUrl, internalAuthToken });
+      const result = await client.createDraft({
+        userId: 'user-123',
+        title: 'Test',
+        prompt: 'Test prompt',
+        originalMessage: 'Test prompt',
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.status).toBe('completed');
+        expect(result.value.message).toBe('Draft created');
+        expect(result.value.resourceUrl).toBe('/#/research/draft-999');
+        expect(result.value.errorCode).toBe('PARTIAL_SUCCESS');
+      }
+    });
+
+    it('returns failed ServiceFeedback with default message on HTTP error without error body message', async () => {
+      nock(baseUrl).post('/internal/research/draft').reply(403, {
+        success: false,
+        error: {},
+      });
+
+      const client = createResearchAgentClient({ baseUrl, internalAuthToken });
+      const result = await client.createDraft({
+        userId: 'user-123',
+        title: 'Test',
+        prompt: 'Test prompt',
+        originalMessage: 'Test prompt',
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.status).toBe('failed');
+        expect(result.value.message).toContain('HTTP 403');
       }
     });
   });

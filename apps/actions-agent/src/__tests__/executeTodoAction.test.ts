@@ -289,4 +289,101 @@ describe('executeTodoAction usecase', () => {
       sourceId: 'action-123',
     });
   });
+
+  it('returns completed status with message from payload for already completed action', async () => {
+    const action = createAction({
+      status: 'completed',
+      payload: {
+        resource_url: '/#/todos/existing-todo',
+        message: 'Previously created todo',
+      },
+    });
+    await fakeActionRepo.save(action);
+
+    const usecase = createExecuteTodoActionUseCase({
+      actionRepository: fakeActionRepo,
+      todosServiceClient: fakeTodosClient,
+      whatsappPublisher: fakeWhatsappPublisher,
+      webAppUrl: 'https://app.test.com',
+      logger: silentLogger,
+    });
+
+    const result = await usecase('action-123');
+
+    expect(isOk(result)).toBe(true);
+    if (isOk(result)) {
+      expect(result.value.status).toBe('completed');
+      expect(result.value.message).toBe('Previously created todo');
+      expect(result.value.resourceUrl).toBe('/#/todos/existing-todo');
+    }
+  });
+
+  it('allows execution from pending status', async () => {
+    const action = createAction({ status: 'pending' });
+    await fakeActionRepo.save(action);
+    fakeTodosClient.setNextResponse({
+      status: 'completed',
+      message: 'Todo created successfully',
+      resourceUrl: '/#/todos/pending-todo-123',
+    });
+
+    const usecase = createExecuteTodoActionUseCase({
+      actionRepository: fakeActionRepo,
+      todosServiceClient: fakeTodosClient,
+      whatsappPublisher: fakeWhatsappPublisher,
+      webAppUrl: 'https://app.test.com',
+      logger: silentLogger,
+    });
+
+    const result = await usecase('action-123');
+
+    expect(isOk(result)).toBe(true);
+    if (isOk(result)) {
+      expect(result.value.status).toBe('completed');
+    }
+  });
+
+  it('does not send WhatsApp notification when resourceUrl is missing', async () => {
+    const action = createAction({ status: 'awaiting_approval' });
+    await fakeActionRepo.save(action);
+    fakeTodosClient.setNextResponse({
+      status: 'completed',
+      message: 'Todo created',
+    });
+
+    const usecase = createExecuteTodoActionUseCase({
+      actionRepository: fakeActionRepo,
+      todosServiceClient: fakeTodosClient,
+      whatsappPublisher: fakeWhatsappPublisher,
+      webAppUrl: 'https://app.test.com',
+      logger: silentLogger,
+    });
+
+    await usecase('action-123');
+
+    const messages = fakeWhatsappPublisher.getSentMessages();
+    expect(messages).toHaveLength(0);
+  });
+
+  it('uses title as description when payload.prompt is not provided', async () => {
+    const action = createAction({
+      status: 'awaiting_approval',
+      payload: {},
+    });
+    await fakeActionRepo.save(action);
+
+    const usecase = createExecuteTodoActionUseCase({
+      actionRepository: fakeActionRepo,
+      todosServiceClient: fakeTodosClient,
+      whatsappPublisher: fakeWhatsappPublisher,
+      webAppUrl: 'https://app.test.com',
+      logger: silentLogger,
+    });
+
+    await usecase('action-123');
+
+    const createdTodos = fakeTodosClient.getCreatedTodos();
+    expect(createdTodos).toHaveLength(1);
+    expect(createdTodos[0]?.description).toBe('Buy groceries');
+  });
 });

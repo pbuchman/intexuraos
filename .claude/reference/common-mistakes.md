@@ -1,17 +1,19 @@
-# Common LLM Mistakes & Code Smells
+# Common LLM Mistakes
 
-These patterns cause 80% of CI failures. Internalize them.
+These patterns cause 80% of CI failures. Reference this file when debugging TypeScript or ESLint errors.
 
-## Common LLM Mistakes
+---
 
-### 1. ESM Imports — Always use `.js` extension
+## 1. ESM Imports — Always use `.js` extension
 
 ```typescript
 // ❌ import { foo } from '../services/bar';
 // ✅ import { foo } from '../services/bar.js';
 ```
 
-### 2. ServiceContainer — Check existing tests before adding services
+---
+
+## 2. ServiceContainer — Check existing tests before adding services
 
 When modifying `ServiceContainer`, **read existing test files first** to see all required fields.
 New fields break ALL tests that use `setServices()`.
@@ -24,21 +26,27 @@ setServices({ existingRepo: fakeRepo }); // Missing new required field!
 setServices({ existingRepo: fakeRepo, newService: fakeNewService });
 ```
 
-### 3. exactOptionalPropertyTypes — Use `?:` not `| undefined`
+---
+
+## 3. exactOptionalPropertyTypes — Use `?:` not `| undefined`
 
 ```typescript
 // ❌ type Deps = { logger: Logger | undefined };
 // ✅ type Deps = { logger?: Logger };
 ```
 
-### 4. Template Literals — Wrap non-strings with `String()`
+---
+
+## 4. Template Literals — Wrap non-strings with `String()`
 
 ```typescript
 // ❌ `Status: ${response.status}` // status is number
 // ✅ `Status: ${String(response.status)}`
 ```
 
-### 5. Unsafe Type Operations — Resolve types before accessing
+---
+
+## 5. Unsafe Type Operations — Resolve types before accessing
 
 ESLint's `no-unsafe-*` rules fire when TypeScript can't resolve a type. Common causes:
 
@@ -62,7 +70,9 @@ const model = 'gemini-2.5-flash' as const;
 
 **Root cause:** If `no-unsafe-*` errors appear, the type isn't resolving — check imports, run `pnpm build`, or add explicit type annotations.
 
-### 6. Mock Logger — Include ALL required methods
+---
+
+## 6. Mock Logger — Include ALL required methods
 
 The `Logger` interface requires `info`, `warn`, `error`, AND `debug`. Missing any causes TS2345.
 
@@ -87,7 +97,9 @@ import { FakeLogger } from './fakes.js';
 const logger = new FakeLogger();
 ```
 
-### 7. Empty Functions in Mocks — Use arrow functions
+---
+
+## 7. Empty Functions in Mocks — Use arrow functions
 
 ESLint's `no-empty-function` forbids `() => {}`. Use explicit return or vi.fn().
 
@@ -100,7 +112,9 @@ const mock = { process: (): undefined => undefined };
 const mock = { process: vi.fn() };
 ```
 
-### 8. Async Template Expressions — Await or wrap in `String()`
+---
+
+## 8. Async Template Expressions — Await or wrap in `String()`
 
 ```typescript
 // ❌ `Result: ${asyncFunction()}` // Promise<string> in template
@@ -108,9 +122,9 @@ const mock = { process: vi.fn() };
 // OR: `Result: ${String(asyncFunction())}`
 ```
 
-## Code Smells
+---
 
-**RULE:** When fixing a new smell, add it here.
+## Code Smells Reference
 
 | Smell                      | ❌ Wrong                       | ✅ Fix                    |
 | -------------------------- | ------------------------------ | ------------------------- |

@@ -1,31 +1,51 @@
 import pino from 'pino';
 import { getLogLevel } from '@intexuraos/common-core';
-import type { LinkPreviewFetcherPort, PageSummaryServicePort } from './domain/index.js';
-import { OpenGraphFetcher, createCrawl4AIClient } from './infra/index.js';
+import type { LinkPreviewFetcherPort } from './domain/index.js';
+import {
+  OpenGraphFetcher,
+  createPageContentFetcher,
+  createLlmSummarizer,
+  createUserServiceClient,
+  type PageContentFetcher,
+  type UserServiceClient,
+  type LlmSummarizer,
+} from './infra/index.js';
+import type { IPricingContext } from '@intexuraos/llm-pricing';
 
 export interface ServiceContainer {
   linkPreviewFetcher: LinkPreviewFetcherPort;
-  pageSummaryService: PageSummaryServicePort;
+  pageContentFetcher: PageContentFetcher;
+  llmSummarizer: LlmSummarizer;
+  userServiceClient: UserServiceClient;
+}
+
+export interface ServiceDependencies {
+  crawl4aiApiKey: string;
+  userServiceUrl: string;
+  internalAuthToken: string;
+  pricingContext: IPricingContext;
 }
 
 let container: ServiceContainer | undefined;
 
-export function initServices(): void {
-  // CRAWL4AI_API_KEY is validated by validateRequiredEnv() in index.ts
-  const crawl4aiApiKey = process.env['INTEXURAOS_CRAWL4AI_API_KEY'];
-  if (crawl4aiApiKey === undefined) {
-    throw new Error('INTEXURAOS_CRAWL4AI_API_KEY is required');
-  }
+export function initServices(dependencies: ServiceDependencies): void {
+  const logger = pino({ level: getLogLevel() });
 
   container = {
-    linkPreviewFetcher: new OpenGraphFetcher(
-      {},
-      pino({ name: 'openGraphFetcher', level: getLogLevel() })
+    linkPreviewFetcher: new OpenGraphFetcher({}, logger),
+    pageContentFetcher: createPageContentFetcher(
+      { apiKey: dependencies.crawl4aiApiKey },
+      pino({ name: 'pageContentFetcher', level: getLogLevel() })
     ),
-    pageSummaryService: createCrawl4AIClient(
-      { apiKey: crawl4aiApiKey },
-      pino({ name: 'crawl4aiClient', level: getLogLevel() })
+    llmSummarizer: createLlmSummarizer(
+      pino({ name: 'llmSummarizer', level: getLogLevel() })
     ),
+    userServiceClient: createUserServiceClient({
+      baseUrl: dependencies.userServiceUrl,
+      internalAuthToken: dependencies.internalAuthToken,
+      pricingContext: dependencies.pricingContext,
+      logger: pino({ name: 'userServiceClient', level: getLogLevel() }),
+    }),
   };
 }
 

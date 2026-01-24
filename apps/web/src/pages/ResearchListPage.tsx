@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Star } from 'lucide-react';
+import { CheckCircle, Star, Trash2, XCircle } from 'lucide-react';
 import { Button, Card, Layout, RefreshIndicator } from '@/components';
 import { useAuth } from '@/context';
 import { useResearches } from '@/hooks';
@@ -237,7 +237,8 @@ function ResearchCard({ research, onDelete, onToggleFavourite, updatingFavourite
             }}
           >
             <Button variant="danger" onClick={onDelete}>
-              Confirm {deleteLabel}
+              <CheckCircle className="h-4 w-4 sm:mr-2" />
+              <span className="hidden sm:inline">Confirm {deleteLabel}</span>
             </Button>
             <Button
               variant="secondary"
@@ -245,7 +246,8 @@ function ResearchCard({ research, onDelete, onToggleFavourite, updatingFavourite
                 setShowDeleteConfirm(false);
               }}
             >
-              Cancel
+              <XCircle className="h-4 w-4 sm:mr-2" />
+              <span className="hidden sm:inline">Cancel</span>
             </Button>
           </div>
         ) : (
@@ -254,9 +256,10 @@ function ResearchCard({ research, onDelete, onToggleFavourite, updatingFavourite
               e.stopPropagation();
               setShowDeleteConfirm(true);
             }}
-            className="text-sm text-slate-400 hover:text-red-600"
+            className="text-sm text-slate-400 hover:text-red-600 flex items-center gap-1"
           >
-            {deleteLabel}
+            <Trash2 className="h-4 w-4" />
+            <span className="hidden sm:inline">{deleteLabel}</span>
           </button>
         )}
       </div>

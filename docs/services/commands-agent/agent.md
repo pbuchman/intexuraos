@@ -6,10 +6,10 @@
 
 ## Identity
 
-| Field | Value |
-| ----- | ----- |
-| **Name** | commands-agent |
-| **Role** | AI Intent Classifier |
+| Field    | Value                                                              |
+| --------  | ------------------------------------------------------------------  |
+| **Name** | commands-agent                                                     |
+| **Role** | AI Intent Classifier                                               |
 | **Goal** | Classify natural language input into action types using Gemini LLM |
 
 ---
@@ -24,18 +24,18 @@ interface CommandsAgentTools {
   listCommands(): Promise<{ commands: Command[] }>;
 
   // Create command from shared text/link
-  createCommand(params: {
-    text: string;
-    source: 'pwa-shared';
-  }): Promise<{ command: Command }>;
+  createCommand(params: { text: string; source: 'pwa-shared' }): Promise<{ command: Command }>;
 
   // Delete unclassified command
   deleteCommand(commandId: string): Promise<void>;
 
   // Archive classified command
-  archiveCommand(commandId: string, params: {
-    status: 'archived';
-  }): Promise<{ command: Command }>;
+  archiveCommand(
+    commandId: string,
+    params: {
+      status: 'archived';
+    }
+  ): Promise<{ command: Command }>;
 }
 ```
 
@@ -44,12 +44,7 @@ interface CommandsAgentTools {
 ```typescript
 type SourceType = 'whatsapp_text' | 'whatsapp_voice' | 'pwa-shared';
 
-type CommandStatus =
-  | 'received'
-  | 'classified'
-  | 'pending_classification'
-  | 'failed'
-  | 'archived';
+type CommandStatus = 'received' | 'classified' | 'pending_classification' | 'failed' | 'archived';
 
 type ClassificationType =
   | 'todo'
@@ -86,12 +81,12 @@ interface Command {
 
 ## Constraints
 
-| Rule | Description |
-| ---- | ----------- |
-| **Delete Restriction** | Can only delete commands with status: received, pending_classification, or failed |
-| **Archive Restriction** | Can only archive commands with status: classified |
-| **Source Types** | Create endpoint only supports 'pwa-shared' source |
-| **Classification** | Automatic via Gemini 2.5 Flash or GLM-4.7 |
+| Rule                    | Description                                                                       |
+| -----------------------  | ---------------------------------------------------------------------------------  |
+| **Delete Restriction**  | Can only delete commands with status: received, pending_classification, or failed |
+| **Archive Restriction** | Can only archive commands with status: classified                                 |
+| **Source Types**        | Create endpoint only supports 'pwa-shared' source                                 |
+| **Classification**      | Automatic via Gemini 2.5 Flash or GLM-4.7                                         |
 
 ---
 
@@ -111,9 +106,7 @@ const { command } = await createCommand({
 
 ```typescript
 const { commands } = await listCommands();
-const pendingCommands = commands.filter(
-  (c) => c.status === 'pending_classification'
-);
+const pendingCommands = commands.filter((c) => c.status === 'pending_classification');
 ```
 
 ### Archive Processed Command
@@ -144,10 +137,10 @@ When a command is classified, the LLM returns:
 
 ## Internal Endpoints
 
-| Method | Path | Purpose |
-| ------ | ---- | ------- |
-| POST | `/internal/commands` | Create command from whatsapp-service |
-| GET | `/internal/commands/:id` | Get command for internal processing |
+| Method | Path                     | Purpose                              |
+| ------  | ------------------------  | ------------------------------------  |
+| POST   | `/internal/commands`     | Create command from whatsapp-service |
+| GET    | `/internal/commands/:id` | Get command for internal processing  |
 
 ---
 

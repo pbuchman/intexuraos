@@ -1,5 +1,4 @@
 import pino from 'pino';
-import { LlmModels } from '@intexuraos/llm-contract';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   ActionEventPublisher,
@@ -60,7 +59,6 @@ describe('ActionEventPublisher', () => {
         payload: {
           prompt: 'What are the latest AI trends?',
           confidence: 0.95,
-          selectedModels: [LlmModels.Gemini25Pro, LlmModels.ClaudeOpus45],
         },
         timestamp: '2025-01-01T12:00:00.000Z',
       };
@@ -151,38 +149,6 @@ describe('ActionEventPublisher', () => {
       }
     });
 
-    it('includes selectedModels in event data', async () => {
-      const event: ActionCreatedEvent = {
-        type: 'action.created',
-        actionId: 'action-456',
-        userId: 'user-789',
-        commandId: 'cmd-123',
-        actionType: 'research',
-        title: 'Multi-model research',
-        payload: {
-          prompt: 'Compare AI models',
-          confidence: 0.92,
-          selectedModels: [
-            LlmModels.Gemini25Pro,
-            LlmModels.O4MiniDeepResearch,
-            LlmModels.ClaudeOpus45,
-          ],
-        },
-        timestamp: '2025-01-01T12:00:00.000Z',
-      };
-
-      const result = await publisher.publishActionCreated(event);
-
-      expect(result.ok).toBe(true);
-      expect(mockPublishToTopic).toHaveBeenCalled();
-
-      const [, publishedData] = mockPublishToTopic.mock.calls[0] as [string, ActionCreatedEvent];
-      expect(publishedData.payload.selectedModels).toEqual([
-        LlmModels.Gemini25Pro,
-        LlmModels.O4MiniDeepResearch,
-        LlmModels.ClaudeOpus45,
-      ]);
-    });
   });
 
   describe('createActionEventPublisher', () => {

@@ -2,6 +2,7 @@
  * Events exports.
  */
 export type {
+  ApprovalReplyEvent,
   AudioStoredEvent,
   CommandIngestEvent,
   ExtractLinkPreviewsEvent,

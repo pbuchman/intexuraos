@@ -13,6 +13,7 @@ import {
   FakeLinkPreviewFetcherPort,
   FakeMediaStorage,
   FakeMessageSender,
+  FakeOutboundMessageRepository,
   FakeSpeechTranscriptionPort,
   FakeThumbnailGeneratorPort,
   FakeWhatsAppCloudApiPort,
@@ -229,6 +230,63 @@ export function createImageWebhookPayload(options?: {
 }
 
 /**
+ * Create a WhatsApp text message webhook payload with reply context.
+ * Used to test approval reply handling when a user replies to a previous message.
+ */
+export function createReplyWebhookPayload(options: {
+  replyToWamid: string;
+  messageText?: string;
+  messageId?: string;
+}): object {
+  const messageText = options.messageText ?? 'Yes, approved!';
+  const messageId = options.messageId ?? 'wamid.reply.HBgNMTU1NTEyMzQ1Njc4FQIAEhgUM0VCMDRBNzYwREQ0RjMwMjYzMDcA';
+
+  return {
+    object: 'whatsapp_business_account',
+    entry: [
+      {
+        id: '102290129340398',
+        changes: [
+          {
+            field: 'messages',
+            value: {
+              messaging_product: 'whatsapp',
+              metadata: {
+                display_phone_number: '15551234567',
+                phone_number_id: '123456789012345',
+              },
+              contacts: [
+                {
+                  wa_id: '15551234567',
+                  profile: {
+                    name: 'Test User',
+                  },
+                },
+              ],
+              messages: [
+                {
+                  from: '15551234567',
+                  id: messageId,
+                  timestamp: '1234567890',
+                  type: 'text',
+                  text: {
+                    body: messageText,
+                  },
+                  context: {
+                    from: '15550987654', // Business phone number
+                    id: options.replyToWamid, // The wamid being replied to
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    ],
+  };
+}
+
+/**
  * Create a WhatsApp audio message webhook payload.
  * Uses IDs that match testConfig.allowedWabaIds and testConfig.allowedPhoneNumberIds.
  */
@@ -277,6 +335,61 @@ export function createAudioWebhookPayload(options?: { mediaId?: string }): objec
   };
 }
 
+/**
+ * Create a WhatsApp reaction webhook payload.
+ * Used to test reaction-based approval/rejection handling.
+ */
+export function createReactionWebhookPayload(options: {
+  emoji: string;
+  messageId: string; // The wamid being reacted to
+  reactionMessageId?: string; // The ID of the reaction message itself
+}): object {
+  const reactionMessageId =
+    options.reactionMessageId ??
+    'wamid.reaction.HBgNMTU1NTEyMzQ1Njc4FQIAEhgUM0VCMDRBNzYwREQ0RjMwMjYzMDcA';
+
+  return {
+    object: 'whatsapp_business_account',
+    entry: [
+      {
+        id: '102290129340398',
+        changes: [
+          {
+            field: 'messages',
+            value: {
+              messaging_product: 'whatsapp',
+              metadata: {
+                display_phone_number: '15551234567',
+                phone_number_id: '123456789012345',
+              },
+              contacts: [
+                {
+                  wa_id: '15551234567',
+                  profile: {
+                    name: 'Test User',
+                  },
+                },
+              ],
+              messages: [
+                {
+                  from: '15551234567',
+                  id: reactionMessageId,
+                  timestamp: '1234567890',
+                  type: 'reaction',
+                  reaction: {
+                    emoji: options.emoji,
+                    message_id: options.messageId,
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    ],
+  };
+}
+
 export interface TestContext {
   app: FastifyInstance;
   webhookEventRepository: FakeWhatsAppWebhookEventRepository;
@@ -285,6 +398,7 @@ export interface TestContext {
   mediaStorage: FakeMediaStorage;
   eventPublisher: FakeEventPublisher;
   whatsappCloudApi: FakeWhatsAppCloudApiPort;
+  outboundMessageRepository: FakeOutboundMessageRepository;
 }
 
 /**
@@ -299,6 +413,7 @@ export function setupTestContext(): TestContext {
     mediaStorage: null as unknown as FakeMediaStorage,
     eventPublisher: null as unknown as FakeEventPublisher,
     whatsappCloudApi: null as unknown as FakeWhatsAppCloudApiPort,
+    outboundMessageRepository: null as unknown as FakeOutboundMessageRepository,
   };
 
   beforeAll(async () => {
@@ -316,6 +431,7 @@ export function setupTestContext(): TestContext {
     context.mediaStorage = new FakeMediaStorage();
     context.eventPublisher = new FakeEventPublisher();
     context.whatsappCloudApi = new FakeWhatsAppCloudApiPort();
+    context.outboundMessageRepository = new FakeOutboundMessageRepository();
 
     setServices({
       webhookEventRepository: context.webhookEventRepository,
@@ -328,6 +444,7 @@ export function setupTestContext(): TestContext {
       whatsappCloudApi: context.whatsappCloudApi,
       thumbnailGenerator: new FakeThumbnailGeneratorPort(),
       linkPreviewFetcher: new FakeLinkPreviewFetcherPort(),
+      outboundMessageRepository: context.outboundMessageRepository,
     });
 
     clearJwksCache();

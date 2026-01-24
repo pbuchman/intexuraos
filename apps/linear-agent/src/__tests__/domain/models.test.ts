@@ -6,8 +6,16 @@ describe('mapStateToDashboardColumn', () => {
     expect(mapStateToDashboardColumn('backlog', 'Backlog')).toBe('backlog');
   });
 
-  it('maps unstarted state to backlog column', () => {
-    expect(mapStateToDashboardColumn('unstarted', 'Todo')).toBe('backlog');
+  it('maps unstarted state with Todo name to todo column', () => {
+    expect(mapStateToDashboardColumn('unstarted', 'Todo')).toBe('todo');
+  });
+
+  it('maps unstarted state with Backlog name to backlog column', () => {
+    expect(mapStateToDashboardColumn('unstarted', 'Backlog')).toBe('backlog');
+  });
+
+  it('maps unstarted state to todo column (default)', () => {
+    expect(mapStateToDashboardColumn('unstarted', 'Some Unstarted')).toBe('todo');
   });
 
   it('maps started state to in_progress column', () => {
@@ -20,6 +28,13 @@ describe('mapStateToDashboardColumn', () => {
     expect(mapStateToDashboardColumn('started', 'REVIEW')).toBe('in_review');
   });
 
+  it('maps started state with test/qa name to to_test column', () => {
+    expect(mapStateToDashboardColumn('started', 'To Test')).toBe('to_test');
+    expect(mapStateToDashboardColumn('started', 'Testing')).toBe('to_test');
+    expect(mapStateToDashboardColumn('started', 'QA')).toBe('to_test');
+    expect(mapStateToDashboardColumn('started', 'Quality Assurance')).toBe('to_test');
+  });
+
   it('maps completed state to done column', () => {
     expect(mapStateToDashboardColumn('completed', 'Done')).toBe('done');
   });
@@ -28,8 +43,8 @@ describe('mapStateToDashboardColumn', () => {
     expect(mapStateToDashboardColumn('cancelled', 'Cancelled')).toBe('done');
   });
 
-  it('maps unknown state type to backlog (default)', () => {
+  it('maps unknown state type to todo (default)', () => {
     const unknownType = 'unknown_state' as IssueStateCategory;
-    expect(mapStateToDashboardColumn(unknownType, 'Some State')).toBe('backlog');
+    expect(mapStateToDashboardColumn(unknownType, 'Some State')).toBe('todo');
   });
 });

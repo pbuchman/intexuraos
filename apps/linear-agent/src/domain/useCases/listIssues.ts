@@ -27,9 +27,11 @@ export interface ListIssuesRequest {
 }
 
 export interface GroupedIssues {
+  todo: LinearIssue[];
   backlog: LinearIssue[];
   in_progress: LinearIssue[];
   in_review: LinearIssue[];
+  to_test: LinearIssue[];
   done: LinearIssue[];
   archive: LinearIssue[];
 }
@@ -76,9 +78,11 @@ export async function listIssues(
 
   // Group issues by dashboard column
   const grouped: GroupedIssues = {
+    todo: [],
     backlog: [],
     in_progress: [],
     in_review: [],
+    to_test: [],
     done: [],
     archive: [],
   };
@@ -112,18 +116,22 @@ export async function listIssues(
   const sortByUpdated = (a: LinearIssue, b: LinearIssue): number =>
     new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
 
+  grouped.todo.sort(sortByUpdated);
   grouped.backlog.sort(sortByUpdated);
   grouped.in_progress.sort(sortByUpdated);
   grouped.in_review.sort(sortByUpdated);
+  grouped.to_test.sort(sortByUpdated);
   grouped.done.sort(sortByUpdated);
   grouped.archive.sort(sortByUpdated);
 
   logger?.info(
     {
       userId,
+      todo: grouped.todo.length,
       backlog: grouped.backlog.length,
       in_progress: grouped.in_progress.length,
       in_review: grouped.in_review.length,
+      to_test: grouped.to_test.length,
       done: grouped.done.length,
       archive: grouped.archive.length,
     },

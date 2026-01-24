@@ -3,6 +3,7 @@ import { validateInternalAuth, logIncomingRequest } from '@intexuraos/common-htt
 import { getErrorMessage } from '@intexuraos/common-core';
 import { getServices } from '../services.js';
 import type { ActionCreatedEvent } from '../domain/models/actionEvent.js';
+import type { ApprovalReplyEvent } from '../domain/models/approvalReplyEvent.js';
 import { getHandlerForType } from '../domain/usecases/actionHandlerRegistry.js';
 import { createAction } from '../domain/models/action.js';
 import type { ActionType } from '../domain/models/action.js';
@@ -627,6 +628,168 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       return {
         success: true,
         ...result,
+      };
+    }
+  );
+
+  fastify.post(
+    '/internal/actions/approval-reply',
+    {
+      schema: {
+        operationId: 'handleApprovalReply',
+        summary: 'Handle approval reply from WhatsApp',
+        description:
+          'Internal endpoint for Pub/Sub push. Receives approval reply events from whatsapp-service.',
+        tags: ['internal'],
+        body: {
+          type: 'object',
+          properties: {
+            message: {
+              type: 'object',
+              properties: {
+                data: { type: 'string', description: 'Base64 encoded message data' },
+                messageId: { type: 'string' },
+                publishTime: { type: 'string' },
+              },
+              required: ['data', 'messageId'],
+            },
+            subscription: { type: 'string' },
+          },
+          required: ['message'],
+        },
+        response: {
+          200: {
+            description: 'Reply processed',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean' },
+              matched: { type: 'boolean' },
+              actionId: { type: 'string' },
+              intent: { type: 'string' },
+              outcome: { type: 'string' },
+            },
+            required: ['success'],
+          },
+          400: {
+            description: 'Invalid message',
+            type: 'object',
+            properties: {
+              error: { type: 'string' },
+            },
+          },
+          401: {
+            description: 'Unauthorized',
+            type: 'object',
+            properties: {
+              error: { type: 'string' },
+            },
+          },
+          500: {
+            description: 'Processing failed',
+            type: 'object',
+            properties: {
+              error: { type: 'string' },
+            },
+          },
+        },
+      },
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      logIncomingRequest(request, {
+        message: 'Received request to /internal/actions/approval-reply',
+        bodyPreviewLength: 500,
+      });
+
+      const fromHeader = request.headers.from;
+      const isPubSubPush = typeof fromHeader === 'string' && fromHeader === 'noreply@google.com';
+
+      if (isPubSubPush) {
+        request.log.info(
+          {
+            from: fromHeader,
+            userAgent: request.headers['user-agent'],
+          },
+          'Authenticated Pub/Sub push request (OIDC validated by Cloud Run)'
+        );
+      } else {
+        const authResult = validateInternalAuth(request);
+        if (!authResult.valid) {
+          request.log.warn(
+            { reason: authResult.reason },
+            'Internal auth failed for /internal/actions/approval-reply'
+          );
+          reply.status(401);
+          return { error: 'Unauthorized' };
+        }
+      }
+
+      const body = request.body as PubSubMessage;
+
+      let eventData: ApprovalReplyEvent;
+      try {
+        const decoded = Buffer.from(body.message.data, 'base64').toString('utf-8');
+        eventData = JSON.parse(decoded) as ApprovalReplyEvent;
+      } catch {
+        request.log.error({ data: body.message.data }, 'Failed to decode PubSub message');
+        reply.status(400);
+        return { error: 'Invalid message format' };
+      }
+
+      const parsedType = eventData.type as string;
+      if (parsedType !== 'action.approval.reply') {
+        request.log.warn(
+          {
+            type: parsedType,
+            messageId: body.message.messageId,
+          },
+          'Unexpected event type for approval reply'
+        );
+        reply.status(400);
+        return { error: 'Invalid event type' };
+      }
+
+      request.log.info(
+        {
+          replyToWamid: eventData.replyToWamid,
+          userId: eventData.userId,
+          messageId: body.message.messageId,
+        },
+        'Processing approval reply from PubSub'
+      );
+
+      const services = getServices();
+      const result = await services.handleApprovalReplyUseCase({
+        replyToWamid: eventData.replyToWamid,
+        replyText: eventData.replyText,
+        userId: eventData.userId,
+        ...(eventData.actionId !== undefined && { actionId: eventData.actionId }),
+      });
+
+      if (!result.ok) {
+        request.log.error(
+          { err: result.error, replyToWamid: eventData.replyToWamid },
+          'Failed to process approval reply'
+        );
+        reply.status(500);
+        return { error: result.error.message };
+      }
+
+      request.log.info(
+        {
+          matched: result.value.matched,
+          actionId: result.value.actionId,
+          intent: result.value.intent,
+          outcome: result.value.outcome,
+        },
+        'Approval reply processed'
+      );
+
+      return {
+        success: true,
+        matched: result.value.matched,
+        ...(result.value.actionId !== undefined && { actionId: result.value.actionId }),
+        ...(result.value.intent !== undefined && { intent: result.value.intent }),
+        ...(result.value.outcome !== undefined && { outcome: result.value.outcome }),
       };
     }
   );

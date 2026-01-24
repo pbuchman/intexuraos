@@ -52,6 +52,15 @@ describe('formatLlmError', () => {
       expect(result).toBe('Anthropic API rate limit reached');
     });
 
+    it('detects credit_balance error inside parsed JSON message', () => {
+      // This tests the branch at line 167-168: message.includes('credit_balance')
+      // The message itself contains credit_balance, triggering the inner check
+      const rawError =
+        '400 {"type":"error","error":{"type":"billing_error","message":"Your credit_balance is insufficient"}}';
+      const result = formatLlmError(rawError);
+      expect(result).toBe('Insufficient Anthropic API credits. Please add funds at console.anthropic.com');
+    });
+
     it('falls through when JSON has type:error but is not valid Anthropic error structure', () => {
       const rawError = '{"type":"error","error":"string not object"}';
       const result = formatLlmError(rawError);

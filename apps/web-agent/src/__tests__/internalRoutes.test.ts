@@ -1,10 +1,26 @@
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import nock from 'nock';
-import { err } from '@intexuraos/common-core';
+import { err, ok, type Result } from '@intexuraos/common-core';
+import type { Logger } from 'pino';
+import type { GenerateResult, LLMError } from '@intexuraos/llm-factory';
 import { buildServer } from '../server.js';
 import { resetServices, setServices, type ServiceContainer } from '../services.js';
-import { FakeLinkPreviewFetcher, FakePageSummaryService } from './fakes.js';
+import { createLlmSummarizer } from '../infra/pagesummary/llmSummarizer.js';
+import {
+  FakeLinkPreviewFetcher,
+  FakePageContentFetcher,
+  FakeLlmSummarizer,
+  FakeUserServiceClient,
+  FakeLlmGenerateClient,
+} from './fakes.js';
+
+const fakeLogger: Logger = {
+  info: vi.fn(),
+  warn: vi.fn(),
+  error: vi.fn(),
+  debug: vi.fn(),
+} as unknown as Logger;
 
 const TEST_INTERNAL_TOKEN = 'test-internal-auth-token';
 
@@ -51,7 +67,9 @@ interface ErrorResponse {
 describe('Internal Routes', () => {
   let app: FastifyInstance;
   let fakeFetcher: FakeLinkPreviewFetcher;
-  let fakeSummaryService: FakePageSummaryService;
+  let fakePageContentFetcher: FakePageContentFetcher;
+  let fakeLlmSummarizer: FakeLlmSummarizer;
+  let fakeUserServiceClient: FakeUserServiceClient;
 
   beforeAll(() => {
     nock.disableNetConnect();
@@ -66,11 +84,15 @@ describe('Internal Routes', () => {
     process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = TEST_INTERNAL_TOKEN;
 
     fakeFetcher = new FakeLinkPreviewFetcher();
-    fakeSummaryService = new FakePageSummaryService();
+    fakePageContentFetcher = new FakePageContentFetcher();
+    fakeLlmSummarizer = new FakeLlmSummarizer();
+    fakeUserServiceClient = new FakeUserServiceClient();
 
     const services: ServiceContainer = {
       linkPreviewFetcher: fakeFetcher,
-      pageSummaryService: fakeSummaryService,
+      pageContentFetcher: fakePageContentFetcher,
+      llmSummarizer: fakeLlmSummarizer,
+      userServiceClient: fakeUserServiceClient,
     };
 
     setServices(services);
@@ -410,12 +432,15 @@ describe('Internal Routes', () => {
       };
     }
 
+    const testUserId = 'test-user-123';
+
     it('returns 401 when X-Internal-Auth header is missing', async () => {
       const response = await app.inject({
         method: 'POST',
         url: '/internal/page-summaries',
         payload: {
           url: 'https://example.com',
+          userId: testUserId,
         },
       });
 
@@ -431,6 +456,7 @@ describe('Internal Routes', () => {
         headers: { 'x-internal-auth': 'wrong-token' },
         payload: {
           url: 'https://example.com',
+          userId: testUserId,
         },
       });
 
@@ -442,7 +468,22 @@ describe('Internal Routes', () => {
         method: 'POST',
         url: '/internal/page-summaries',
         headers: { 'x-internal-auth': TEST_INTERNAL_TOKEN },
-        payload: {},
+        payload: {
+          userId: testUserId,
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+    });
+
+    it('returns 400 when userId is missing', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/page-summaries',
+        headers: { 'x-internal-auth': TEST_INTERNAL_TOKEN },
+        payload: {
+          url: 'https://example.com',
+        },
       });
 
       expect(response.statusCode).toBe(400);
@@ -455,19 +496,21 @@ describe('Internal Routes', () => {
         headers: { 'x-internal-auth': TEST_INTERNAL_TOKEN },
         payload: {
           url: 'not-a-valid-url',
+          userId: testUserId,
         },
       });
 
       expect(response.statusCode).toBe(400);
     });
 
-    it('summarizes page successfully', async () => {
+    it('summarizes page successfully with userId', async () => {
       const response = await app.inject({
         method: 'POST',
         url: '/internal/page-summaries',
         headers: { 'x-internal-auth': TEST_INTERNAL_TOKEN },
         payload: {
           url: 'https://example.com/article',
+          userId: testUserId,
         },
       });
 
@@ -475,9 +518,12 @@ describe('Internal Routes', () => {
       const body = JSON.parse(response.payload) as PageSummaryResponse;
       expect(body.success).toBe(true);
       expect(body.data.result.status).toBe('success');
-      expect(body.data.result.summary?.summary).toBe('Test summary of the page content.');
-      expect(body.data.result.summary?.wordCount).toBe(8);
+      expect(body.data.result.summary?.summary).toBe('This is a clean summary.');
+      expect(body.data.result.summary?.wordCount).toBe(5);
       expect(typeof body.data.metadata.durationMs).toBe('number');
+
+      // Verify the flow: content fetch, user service, summarization
+      expect(fakePageContentFetcher.getFetchCalls()).toEqual(['https://example.com/article']);
     });
 
     it('accepts optional maxSentences parameter', async () => {
@@ -487,12 +533,13 @@ describe('Internal Routes', () => {
         headers: { 'x-internal-auth': TEST_INTERNAL_TOKEN },
         payload: {
           url: 'https://example.com',
+          userId: testUserId,
           maxSentences: 10,
         },
       });
 
       expect(response.statusCode).toBe(200);
-      expect(fakeSummaryService.calls[0]?.options?.maxSentences).toBe(10);
+      expect(fakeLlmSummarizer.getSummarizeCalls()[0]?.options?.maxSentences).toBe(10);
     });
 
     it('accepts optional maxReadingMinutes parameter', async () => {
@@ -502,12 +549,13 @@ describe('Internal Routes', () => {
         headers: { 'x-internal-auth': TEST_INTERNAL_TOKEN },
         payload: {
           url: 'https://example.com',
+          userId: testUserId,
           maxReadingMinutes: 5,
         },
       });
 
       expect(response.statusCode).toBe(200);
-      expect(fakeSummaryService.calls[0]?.options?.maxReadingMinutes).toBe(5);
+      expect(fakeLlmSummarizer.getSummarizeCalls()[0]?.options?.maxReadingMinutes).toBe(5);
     });
 
     it('handles INVALID_URL for non-HTTP protocols', async () => {
@@ -517,6 +565,7 @@ describe('Internal Routes', () => {
         headers: { 'x-internal-auth': TEST_INTERNAL_TOKEN },
         payload: {
           url: 'ftp://example.com/file.txt',
+          userId: testUserId,
         },
       });
 
@@ -526,8 +575,8 @@ describe('Internal Routes', () => {
       expect(body.data.result.error?.code).toBe('INVALID_URL');
     });
 
-    it('handles NO_CONTENT error from summary service', async () => {
-      fakeSummaryService.setFailNext('NO_CONTENT', 'No extractable content');
+    it('handles NO_CONTENT error from page content fetcher', async () => {
+      fakePageContentFetcher.setFailNext('NO_CONTENT');
 
       const response = await app.inject({
         method: 'POST',
@@ -535,6 +584,7 @@ describe('Internal Routes', () => {
         headers: { 'x-internal-auth': TEST_INTERNAL_TOKEN },
         payload: {
           url: 'https://example.com/empty',
+          userId: testUserId,
         },
       });
 
@@ -544,8 +594,8 @@ describe('Internal Routes', () => {
       expect(body.data.result.error?.code).toBe('NO_CONTENT');
     });
 
-    it('handles API_ERROR from summary service', async () => {
-      fakeSummaryService.setFailNext('API_ERROR', 'External API failure');
+    it('handles API_ERROR from page content fetcher', async () => {
+      fakePageContentFetcher.setFailNext('API_ERROR');
 
       const response = await app.inject({
         method: 'POST',
@@ -553,6 +603,7 @@ describe('Internal Routes', () => {
         headers: { 'x-internal-auth': TEST_INTERNAL_TOKEN },
         payload: {
           url: 'https://example.com/error',
+          userId: testUserId,
         },
       });
 
@@ -562,24 +613,103 @@ describe('Internal Routes', () => {
       expect(body.data.result.error?.code).toBe('API_ERROR');
     });
 
-    it('handles TIMEOUT error from summary service', async () => {
-      fakeSummaryService.setFailNext('TIMEOUT', 'Request timed out');
+    it('handles NO_API_KEY error from user service', async () => {
+      fakeUserServiceClient.setFailNext('NO_API_KEY', 'No API key configured for Google');
 
       const response = await app.inject({
         method: 'POST',
         url: '/internal/page-summaries',
         headers: { 'x-internal-auth': TEST_INTERNAL_TOKEN },
         payload: {
-          url: 'https://example.com/slow',
+          url: 'https://example.com',
+          userId: testUserId,
         },
       });
 
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.payload) as PageSummaryResponse;
       expect(body.data.result.status).toBe('failed');
-      expect(body.data.result.error?.code).toBe('TIMEOUT');
+      expect(body.data.result.error?.code).toBe('API_ERROR');
+      expect(body.data.result.error?.message).toContain('No API key');
     });
 
+    it('handles API_ERROR from LLM summarizer', async () => {
+      fakeLlmSummarizer.setShouldFail(true);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/page-summaries',
+        headers: { 'x-internal-auth': TEST_INTERNAL_TOKEN },
+        payload: {
+          url: 'https://example.com',
+          userId: testUserId,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.payload) as PageSummaryResponse;
+      expect(body.data.result.status).toBe('failed');
+      expect(body.data.result.error?.code).toBe('API_ERROR');
+    });
+
+    it('returns durationMs in metadata', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/page-summaries',
+        headers: { 'x-internal-auth': TEST_INTERNAL_TOKEN },
+        payload: {
+          url: 'https://example.com',
+          userId: testUserId,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.payload) as PageSummaryResponse;
+      expect(typeof body.data.metadata.durationMs).toBe('number');
+      expect(body.data.metadata.durationMs).toBeGreaterThanOrEqual(0);
+    });
+
+    it('triggers repair and succeeds when LLM returns invalid JSON', async () => {
+      // Setup fake LLM client to return JSON first, then valid summary
+      const fakeLlm = new FakeLlmGenerateClient();
+      let callCount = 0;
+      const mockUsage = { inputTokens: 100, outputTokens: 50, totalTokens: 150, costUsd: 0.001 };
+      fakeLlm.generate = async (): Promise<Result<GenerateResult, LLMError>> => {
+        callCount++;
+        if (callCount === 1) {
+          return ok({ content: '[{"summary": "invalid json"}]', usage: mockUsage });
+        }
+        return ok({ content: 'Repaired valid summary text.', usage: mockUsage });
+      };
+
+      const fakeUserService = new FakeUserServiceClient();
+      fakeUserService.setLlmClient(fakeLlm);
+
+      setServices({
+        linkPreviewFetcher: fakeFetcher,
+        pageContentFetcher: fakePageContentFetcher,
+        llmSummarizer: createLlmSummarizer(fakeLogger as unknown as Logger),
+        userServiceClient: fakeUserService,
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/page-summaries',
+        headers: { 'x-internal-auth': TEST_INTERNAL_TOKEN },
+        payload: {
+          url: 'https://example.com',
+          userId: testUserId,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.payload) as PageSummaryResponse;
+      expect(body.data.result.status).toBe('success');
+      if (body.data.result.summary) {
+        expect(body.data.result.summary.summary).toBe('Repaired valid summary text.');
+        expect(body.data.result.summary.summary).not.toContain('[{');
+      }
+    });
   });
 
   describe('GET /health', () => {
