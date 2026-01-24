@@ -52,7 +52,7 @@ These remain for historical reference but **should not be used for new work**.
 
 - **New Pattern:** `docs/patterns/linear-continuity.md`
 - **Workflow:** `.claude/commands/continuity.md` (updated for Linear)
-- **Linear Integration:** `.claude/commands/linear.md`
+- **Linear Skill:** `.claude/skills/linear/SKILL.md`
 
 ---
 

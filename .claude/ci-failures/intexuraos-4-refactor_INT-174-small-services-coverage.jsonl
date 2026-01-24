@@ -1,3 +1,0 @@
-{"ts":"2026-01-21T10:20:46.234Z","project":"intexuraos-4","branch":"refactor/INT-174-small-services-coverage","workspace":"--","runNumber":1,"passed":false,"durationMs":21,"failureCount":0,"failures":[]}
-{"ts":"2026-01-21T10:28:40.934Z","project":"intexuraos-4","branch":"refactor/INT-174-small-services-coverage","workspace":"--","runNumber":2,"passed":false,"durationMs":44,"failureCount":0,"failures":[]}
-{"ts":"2026-01-21T10:41:08.291Z","project":"intexuraos-4","branch":"refactor/INT-174-small-services-coverage","runNumber":3,"passed":false,"durationMs":75756,"failureCount":1,"failures":[{"type":"verify","code":"VERIFY_FAIL","file":"unknown","line":0,"message":"FAILED","snippet":null,"context":null}]}

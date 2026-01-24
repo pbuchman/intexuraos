@@ -22,7 +22,7 @@ All API responses use a consistent JSON envelope structure.
 ```
 
 | Field         | Type          | Required | Description               |
-| ------------- | ------------- | -------- | ------------------------- |
+| -------------  | -------------  | --------  | -------------------------  |
 | `success`     | `true`        | Yes      | Discriminator for success |
 | `data`        | `T`           | Yes      | Response payload          |
 | `diagnostics` | `Diagnostics` | No       | Request metadata          |
@@ -48,7 +48,7 @@ All API responses use a consistent JSON envelope structure.
 ```
 
 | Field           | Type          | Required | Description                     |
-| --------------- | ------------- | -------- | ------------------------------- |
+| ---------------  | -------------  | --------  | -------------------------------  |
 | `success`       | `false`       | Yes      | Discriminator for error         |
 | `error.code`    | `ErrorCode`   | Yes      | Machine-readable error code     |
 | `error.message` | `string`      | Yes      | Human-readable message          |
@@ -60,7 +60,7 @@ All API responses use a consistent JSON envelope structure.
 All services use a shared error code catalog.
 
 | Code               | HTTP Status | Description                       |
-| ------------------ | ----------- | --------------------------------- |
+| ------------------  | -----------  | ---------------------------------  |
 | `INVALID_REQUEST`  | 400         | Malformed or invalid request      |
 | `UNAUTHORIZED`     | 401         | Missing or invalid authentication |
 | `FORBIDDEN`        | 403         | Authenticated but not authorized  |
@@ -82,7 +82,7 @@ All services use a shared error code catalog.
 The diagnostics object provides request tracing information.
 
 | Field                 | Type     | When Included                                  |
-| --------------------- | -------- | ---------------------------------------------- |
+| ---------------------  | --------  | ----------------------------------------------  |
 | `requestId`           | `string` | Always                                         |
 | `durationMs`          | `number` | Always                                         |
 | `downstreamStatus`    | `number` | On downstream call                             |
@@ -146,7 +146,7 @@ All services implement `GET /health` with consistent response shape.
 ### Status Values
 
 | Status     | Meaning                          |
-| ---------- | -------------------------------- |
+| ----------  | --------------------------------  |
 | `ok`       | All checks passing               |
 | `degraded` | Some non-critical checks failing |
 | `down`     | Critical checks failing          |
@@ -154,9 +154,9 @@ All services implement `GET /health` with consistent response shape.
 ### Check Object
 
 | Field       | Type        | Description      |
-| ----------- | ----------- | ---------------- | ---------------------------- | ------------ |
+| -----------  | -----------  | ----------------  |   |   |
 | `name`      | `string`    | Check identifier |
-| `status`    | `"ok" \     | "degraded" \     | "down"`                      | Check status |
+| `status`    | `"ok" \     | "degraded" \     | "down"` | Check status |
 | `latencyMs` | `number`    | Check duration   |
 | `details`   | `unknown \  | null`            | Additional info (no secrets) |
 
@@ -175,7 +175,7 @@ Each service exposes OpenAPI documentation.
 ### Endpoints
 
 | Endpoint            | Description               |
-| ------------------- | ------------------------- |
+| -------------------  | -------------------------  |
 | `GET /openapi.json` | OpenAPI 3.0 specification |
 | `GET /docs`         | Swagger UI                |
 
@@ -220,7 +220,7 @@ IntexuraOS provides a central API documentation hub (`api-docs-hub`) that aggreg
 #### Environment Variables
 
 | Variable                                     | Description                             |
-| -------------------------------------------- | --------------------------------------- |
+| --------------------------------------------  | ---------------------------------------  |
 | `INTEXURAOS_USER_SERVICE_OPENAPI_URL`        | URL to user-service OpenAPI JSON        |
 | `INTEXURAOS_PROMPTVAULT_SERVICE_OPENAPI_URL` | URL to promptvault-service OpenAPI JSON |
 | `INTEXURAOS_NOTION_SERVICE_OPENAPI_URL`      | URL to notion-service OpenAPI JSON      |
@@ -349,7 +349,7 @@ These endpoints implement domain logic and require authentication.
 System endpoints are NOT wrapped in the unified envelope:
 
 | Endpoint            | Response Format                |
-| ------------------- | ------------------------------ |
+| -------------------  | ------------------------------  |
 | `GET /health`       | Raw `HealthResponse` object    |
 | `GET /docs`         | Swagger UI HTML                |
 | `GET /openapi.json` | Raw OpenAPI specification JSON |
@@ -387,7 +387,7 @@ This provides a stable identifier across sessions.
 #### Required Environment Variables
 
 | Variable                   | Description                   | Example                                               |
-| -------------------------- | ----------------------------- | ----------------------------------------------------- |
+| --------------------------  | -----------------------------  | -----------------------------------------------------  |
 | `INTEXURAOS_AUTH_JWKS_URL` | URL to fetch JSON Web Key Set | `https://your-tenant.auth0.com/.well-known/jwks.json` |
 | `INTEXURAOS_AUTH_ISSUER`   | Expected token issuer         | `https://your-tenant.auth0.com/`                      |
 | `INTEXURAOS_AUTH_AUDIENCE` | Expected token audience       | `urn:intexuraos:api`                                  |
@@ -402,7 +402,7 @@ The user-service provides Device Authorization Flow helpers for CLI/device authe
 ### Configuration
 
 | Variable                     | Description              | Example                       |
-| ---------------------------- | ------------------------ | ----------------------------- |
+| ----------------------------  | ------------------------  | -----------------------------  |
 | `INTEXURAOS_AUTH0_DOMAIN`    | Auth0 tenant domain      | `intexuraos-dev.eu.auth0.com` |
 | `INTEXURAOS_AUTH0_CLIENT_ID` | Native app client ID     | `abc123...`                   |
 | `INTEXURAOS_AUTH_AUDIENCE`   | API identifier (default) | `urn:intexuraos:api`          |
@@ -423,7 +423,7 @@ Start Device Authorization Flow. Returns device code and user code.
 ```
 
 | Field      | Type     | Required | Default                             |
-| ---------- | -------- | -------- | ----------------------------------- |
+| ----------  | --------  | --------  | -----------------------------------  |
 | `audience` | `string` | No       | From `INTEXURAOS_AUTH_AUDIENCE` env |
 | `scope`    | `string` | No       | `openid profile email`              |
 
@@ -457,7 +457,7 @@ Poll for token after user authorization.
 ```
 
 | Field         | Type     | Required |
-| ------------- | -------- | -------- |
+| -------------  | --------  | --------  |
 | `device_code` | `string` | Yes      |
 
 **Pending Response (409 CONFLICT):**
@@ -509,7 +509,7 @@ Get non-secret auth configuration for troubleshooting.
 #### Error Responses
 
 | Condition           | Error Code      | HTTP Status |
-| ------------------- | --------------- | ----------- |
+| -------------------  | ---------------  | -----------  |
 | Missing auth header | `UNAUTHORIZED`  | 401         |
 | Invalid auth format | `UNAUTHORIZED`  | 401         |
 | Invalid/expired JWT | `UNAUTHORIZED`  | 401         |
@@ -537,14 +537,14 @@ Get a signed URL for the original media file (image or audio).
 ```
 
 | Field       | Type     | Description                          |
-| ----------- | -------- | ------------------------------------ |
+| -----------  | --------  | ------------------------------------  |
 | `url`       | `string` | Signed URL for media access (15 min) |
 | `expiresAt` | `string` | URL expiration timestamp             |
 
 #### Error Responses
 
 | Condition            | Error Code     | HTTP Status |
-| -------------------- | -------------- | ----------- |
+| --------------------  | --------------  | -----------  |
 | Not authenticated    | `UNAUTHORIZED` | 401         |
 | Message not found    | `NOT_FOUND`    | 404         |
 | Not owner of message | `NOT_FOUND`    | 404         |
@@ -569,7 +569,7 @@ Get a signed URL for the thumbnail image (256px max edge).
 #### Error Responses
 
 | Condition                | Error Code     | HTTP Status |
-| ------------------------ | -------------- | ----------- |
+| ------------------------  | --------------  | -----------  |
 | Not authenticated        | `UNAUTHORIZED` | 401         |
 | Message not found        | `NOT_FOUND`    | 404         |
 | Not owner of message     | `NOT_FOUND`    | 404         |
@@ -598,7 +598,7 @@ Create a transcription job for an audio file.
 ```
 
 | Field       | Type     | Required | Description            |
-| ----------- | -------- | -------- | ---------------------- |
+| -----------  | --------  | --------  | ----------------------  |
 | `messageId` | `string` | Yes      | WhatsApp message ID    |
 | `mediaId`   | `string` | Yes      | WhatsApp media ID      |
 | `userId`    | `string` | Yes      | IntexuraOS user ID     |
@@ -654,7 +654,7 @@ Get transcription job status.
 **Job Status Values:**
 
 | Status       | Description                                  |
-| ------------ | -------------------------------------------- |
+| ------------  | --------------------------------------------  |
 | `pending`    | Job created, not yet submitted               |
 | `processing` | Submitted to Speechmatics, polling           |
 | `completed`  | Transcription complete, transcript available |

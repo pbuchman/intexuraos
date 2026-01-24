@@ -411,6 +411,66 @@ Strict mode enabled: `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`, `
 
 ---
 
+## Pre-Flight Checks (MANDATORY)
+
+**RULE:** Read types BEFORE writing code. Most CI failures happen because code is written from memory instead of from actual type definitions.
+
+### Before Writing Test Mocks
+
+**ALWAYS** read the dependency interface before creating mock objects:
+
+```typescript
+// ❌ Writing mock from memory — misses new required fields
+const deps = { repo: fakeRepo, logger: fakeLogger };
+
+// ✅ Read the Deps type first, then create mock with ALL fields
+// 1. Read: apps/<service>/src/domain/usecases/<usecase>.ts → find XxxDeps type
+// 2. Create mock matching ALL required fields
+```
+
+**Checklist:**
+
+1. Open the use case file and find the `*Deps` type definition
+2. List all required fields
+3. Create mock with ALL fields — don't guess
+
+### Before Modifying ServiceContainer
+
+When adding/removing services from `services.ts`:
+
+1. **Read** `services.ts` to see current `ServiceContainer` interface
+2. **Search** for `setServices(` across all test files: `grep -r "setServices(" apps/<service>/src/__tests__/`
+3. **Update ALL** test files with the new field
+
+### Before Importing from Packages
+
+Cross-package imports require built packages:
+
+```bash
+# At session start, build all packages once
+pnpm build
+
+# If you see "Cannot find module '@intexuraos/...'" — rebuild
+pnpm build
+```
+
+### Before Accessing Discriminated Unions
+
+Result types (`Result<T, E>`) and other discriminated unions require narrowing:
+
+```typescript
+// ❌ Accessing without narrowing — TS2339: Property 'value' does not exist
+const result = await repo.find(id);
+return result.value;
+
+// ✅ Narrow first, then access
+const result = await repo.find(id);
+if (!result.ok) return result;  // Narrows to Success<T>
+return result.value;            // Now safe
+```
+
+---
+
 ## Common LLM Mistakes (LEARN FROM HISTORY)
 
 These patterns cause 80% of CI failures. Internalize them.
@@ -680,16 +740,18 @@ gh pr create --base development  # or --base main
 
 ## Linear Issue Workflow
 
-Use the `/linear` command for issue tracking and workflow management.
+Use the `/linear` skill for issue tracking and workflow management.
 
-**When "linear" appears in context**, the agent should reference `/linear` for issue creation and workflow.
+**Skill Location:** `.claude/skills/linear/SKILL.md`
+
+**When "linear" appears in context**, the skill is automatically invoked for issue creation and workflow.
 
 **Usage:**
 
 ```bash
 /linear                    # Pick random Todo issue (cron mode)
-/linear <task description> # Create new issue
-/linear LIN-123            # Work on existing issue
+/linear <task description> # Create new issue (auto-splits if complex)
+/linear INT-123            # Work on existing issue
 /linear <sentry-url>       # Create from Sentry error
 ```
 
@@ -697,35 +759,165 @@ Use the `/linear` command for issue tracking and workflow management.
 
 ```bash
 /linear Fix authentication token not refreshing
-/linear LIN-42
+/linear INT-42
 /linear https://intexuraos-dev-pbuchman.sentry.io/issues/123/
 ```
 
 **Mandatory Requirements:**
 
 1. All bugs/features must have corresponding Linear issues
-2. PR descriptions must link to Linear issues (`Fixes LIN-XXX`)
+2. PR descriptions must link to Linear issues (`Fixes INT-XXX`)
 3. Reasoning belongs in PR descriptions, not code comments
-4. State transitions happen automatically: Backlog → In Progress → In Review → Q&A QA (Done state requires explicit user instruction)
+4. State transitions happen automatically: Backlog → In Progress → In Review → QA (Done state requires explicit user instruction)
 5. `pnpm run ci:tracked` MUST pass before PR creation (unless explicitly overridden)
 
 **Cross-Linking Protocol:**
 
 | Direction       | Method                                                             |
 | --------------- | ------------------------------------------------------------------ |
-| Linear → GitHub | PR title contains `LIN-XXX` (enables auto-attachment)              |
+| Linear → GitHub | PR title contains `INT-XXX` (enables auto-attachment)              |
 | GitHub → Linear | GitHub integration attaches PR (when title + branch have issue ID) |
-| Linear → GitHub | `Fixes LIN-XXX` in PR body (for issue closing behavior)            |
+| Linear → GitHub | `Fixes INT-XXX` in PR body (for issue closing behavior)            |
 | Sentry → Linear | `[sentry] <title>` naming + link in description                    |
 | Linear → Sentry | Comment on Sentry issue                                            |
 
-**See:** `.claude/commands/linear.md` for complete workflow documentation.
+**Auto-Splitting:** For complex multi-step tasks, the skill automatically detects and offers to split into tiered child issues. See [Linear-Based Continuity Pattern](../docs/patterns/linear-continuity.md).
+
+**Full Documentation:** `.claude/skills/linear/`
 
 ---
 
-## Complex Tasks — Continuity Workflow
+## Sentry Issue Workflow
 
-For multi-step features, use numbered directories in `continuity/`. See [continuity/README.md](../continuity/README.md).
+Use the `/sentry` skill for error triage, investigation, and resolution.
+
+**Skill Location:** `.claude/skills/sentry/SKILL.md`
+
+**When Sentry URLs or error triage appears in context**, the skill is automatically invoked.
+
+**Usage:**
+
+```bash
+/sentry                           # Batch triage unresolved issues
+/sentry <sentry-url>              # Investigate specific issue
+/sentry analyze <sentry-url>      # AI-powered root cause analysis (Seer)
+/sentry linear <sentry-url>       # Create Linear issue from Sentry error
+/sentry triage --limit 5          # Batch triage with limit
+```
+
+**Examples:**
+
+```bash
+/sentry https://intexuraos-dev-pbuchman.sentry.io/issues/123/
+/sentry analyze https://intexuraos-dev-pbuchman.sentry.io/issues/456/
+/sentry triage --limit 3
+```
+
+**Mandatory Requirements:**
+
+1. Every Sentry issue MUST be linked to a Linear issue (use `[sentry] <title>` prefix)
+2. Every fix PR MUST link both Sentry and Linear issues
+3. No band-aid fixes — investigate root cause before implementing
+4. `pnpm run ci:tracked` MUST pass before PR creation
+
+**Cross-Linking Protocol:**
+
+| Direction        | Method                                         |
+| ---------------- | ---------------------------------------------- |
+| Sentry → Linear  | Comment on Sentry with Linear issue link       |
+| Linear → Sentry  | `[sentry] <title>` naming + link in description |
+| Linear → GitHub  | PR title contains `INT-XXX`                    |
+| GitHub → Linear  | `Fixes INT-XXX` in PR body                     |
+| GitHub → Sentry  | Sentry link in PR description                  |
+
+**Full Documentation:** `.claude/skills/sentry/`
+
+---
+
+## Document-Service Skill
+
+Use the `/document-service` skill to generate comprehensive service documentation.
+
+**Skill Location:** `.claude/skills/document-service/SKILL.md`
+
+**Modes:**
+
+| Mode        | Invocation                              | Behavior                        |
+| ----------- | --------------------------------------- | ------------------------------- |
+| Discovery   | `/document-service` (no args)           | Lists services + doc status     |
+| Interactive | `/document-service <service-name>`      | Asks 3 questions (Q1, Q5, Q8)   |
+| Autonomous  | Task tool → `service-scribe` subagent   | Infers all answers from code    |
+
+**Output:** 5 files per service + website content updates
+
+**Full Documentation:** `.claude/skills/document-service/`
+
+---
+
+## Claude Extensions Taxonomy
+
+This project uses three types of Claude extensions:
+
+### Skills (Directory-Based)
+
+**Location:** `.claude/skills/<skill-name>/`
+**Structure:** SKILL.md + workflows/ + templates/ + reference/
+**Invocation:** `/skill-name` (user) or auto-trigger (model)
+
+| Skill               | Purpose                                            |
+| ------------------- | -------------------------------------------------- |
+| `/linear`           | Linear issue management with auto-splitting        |
+| `/sentry`           | Sentry triage with AI analysis and cross-linking   |
+| `/document-service` | Service documentation (interactive + autonomous)   |
+
+### Agents (Task-Spawned)
+
+**Location:** `.claude/agents/<agent-name>.md`
+**Invocation:** Task tool with `subagent_type: <agent-name>`
+**Mode:** Autonomous, no user interaction during execution
+
+| Agent                   | Purpose                                        |
+| ----------------------- | ---------------------------------------------- |
+| `coverage-orchestrator` | 100% branch coverage enforcement               |
+| `llm-manager`           | LLM usage audit and pricing verification       |
+| `service-creator`       | New service scaffolding                        |
+| `service-scribe`        | Autonomous documentation (delegates to skill)  |
+| `whatsapp-sender`       | WhatsApp notification specialist               |
+
+### Commands (Single-File)
+
+**Location:** `.claude/commands/<command-name>.md`
+**Invocation:** `/<command-name>`
+**Mode:** Interactive, typically requires user input
+
+| Command               | Purpose                           |
+| --------------------- | --------------------------------- |
+| `/analyze-ci-failures`| Analyze CI failure patterns       |
+| `/analyze-logs`       | Production log analysis           |
+| `/coverage`           | Coverage improvement suggestions  |
+| `/create-service`     | New service creation wizard       |
+| `/refactoring`        | Code smell detection and fixes    |
+| `/semver-release`     | Semantic versioning release       |
+| `/verify-deployment`  | Deployment verification           |
+| `/teach-me-something` | Educational content generation    |
+| `/continuity`         | (Deprecated) → Use Linear skill   |
+
+---
+
+## Complex Tasks — Linear Continuity
+
+For multi-step features, use the Linear-based continuity pattern with parent-child issues.
+
+**See:** [docs/patterns/linear-continuity.md](../docs/patterns/linear-continuity.md)
+
+**Quick Start:**
+1. Create top-level Linear issue for overall feature
+2. Use `/linear` with complex description to auto-split into child issues
+3. Parent issue serves as ledger (goal, decisions, state tracking)
+4. Execute child issues sequentially by tier
+5. Mark all as Done when complete
+
+**Note:** The file-based `continuity/NNN-task-name/` workflow is deprecated. See `continuity/README.md` for migration details.
 
 ---
 

@@ -1,3 +1,0 @@
-{"ts":"2026-01-16T18:11:33.885Z","project":"intexuraos-1","branch":"fix/INT-98-modal-overflowing","workspace":"--","runNumber":1,"passed":false,"durationMs":425,"failureCount":0,"failures":[]}
-{"ts":"2026-01-16T18:12:31.607Z","project":"intexuraos-1","branch":"fix/INT-98-modal-overflowing","workspace":"web","runNumber":2,"passed":true,"durationMs":50482,"failureCount":0,"failures":[]}
-{"ts":"2026-01-16T18:14:32.696Z","project":"intexuraos-1","branch":"fix/INT-98-modal-overflowing","runNumber":3,"passed":true,"durationMs":110744,"failureCount":0,"failures":[]}

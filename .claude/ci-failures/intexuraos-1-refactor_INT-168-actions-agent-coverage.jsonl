@@ -1,2 +1,0 @@
-{"ts":"2026-01-21T15:21:59.954Z","project":"intexuraos-1","branch":"refactor/INT-168-actions-agent-coverage","workspace":"--","runNumber":1,"passed":false,"durationMs":1064,"failureCount":0,"failures":[]}
-{"ts":"2026-01-21T15:33:23.358Z","project":"intexuraos-1","branch":"refactor/INT-168-actions-agent-coverage","runNumber":2,"passed":true,"durationMs":646051,"failureCount":0,"failures":[]}

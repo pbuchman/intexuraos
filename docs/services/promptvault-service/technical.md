@@ -7,7 +7,7 @@ PromptVault-service manages prompt templates stored in Firestore with optional N
 ## API Endpoints
 
 | Method | Path                               | Description         | Auth         |
-| ------ | ---------------------------------- | ------------------- | ------------ |
+| ------  | ----------------------------------  | -------------------  | ------------  |
 | GET    | `/prompt-vault/main-page`          | List all prompts    | Bearer token |
 | GET    | `/prompt-vault/prompts`            | List prompts        | Bearer token |
 | POST   | `/prompt-vault/prompts`            | Create prompt       | Bearer token |
@@ -19,7 +19,7 @@ PromptVault-service manages prompt templates stored in Firestore with optional N
 ### Prompt
 
 | Field          | Type      | Description                                |
-| -------------- | --------- | ------------------------------------------ | ------------------ |
+| --------------  | ---------  | ------------------------------------------  |   |
 | `id`           | string    | Unique identifier (Notion page ID or UUID) |
 | `userId`       | string    | Owner user ID                              |
 | `title`        | string    | Prompt title                               |
@@ -42,7 +42,7 @@ PromptVault-service manages prompt templates stored in Firestore with optional N
 ## Configuration
 
 | Environment Variable             | Required | Description                     |
-| -------------------------------- | -------- | ------------------------------- |
+| --------------------------------  | --------  | -------------------------------  |
 | `INTEXURAOS_NOTION_SERVICE_URL`  | Yes      | notion-service base URL         |
 | `INTEXURAOS_INTERNAL_AUTH_TOKEN` | Yes      | Shared secret for internal auth |
 

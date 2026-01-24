@@ -33,7 +33,7 @@ docs/assets/branding/
 ## Prompt Files
 
 | File                           | Purpose                     |
-| ------------------------------ | --------------------------- |
+| ------------------------------  | ---------------------------  |
 | `logo-primary-dark.prompt.md`  | Full logo, dark background  |
 | `logo-primary-light.prompt.md` | Full logo, light background |
 | `icon-dark.prompt.md`          | Icon only, dark background  |
