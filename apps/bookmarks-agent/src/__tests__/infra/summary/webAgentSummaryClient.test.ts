@@ -106,6 +106,7 @@ describe('webAgentSummaryClient', () => {
       const scope = nock(TEST_BASE_URL)
         .post('/internal/page-summaries', {
           url: 'https://example.com/page',
+          userId: 'user-456',
           maxSentences: 20,
           maxReadingMinutes: 3,
         })

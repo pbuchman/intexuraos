@@ -1100,6 +1100,18 @@ importers:
       '@intexuraos/infra-sentry':
         specifier: workspace:*
         version: link:../../packages/infra-sentry
+      '@intexuraos/llm-common':
+        specifier: workspace:*
+        version: link:../../packages/llm-common
+      '@intexuraos/llm-contract':
+        specifier: workspace:*
+        version: link:../../packages/llm-contract
+      '@intexuraos/llm-factory':
+        specifier: workspace:*
+        version: link:../../packages/llm-factory
+      '@intexuraos/llm-pricing':
+        specifier: workspace:*
+        version: link:../../packages/llm-pricing
       cheerio:
         specifier: ^1.0.0
         version: 1.1.2
