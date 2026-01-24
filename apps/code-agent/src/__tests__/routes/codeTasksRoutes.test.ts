@@ -217,4 +217,98 @@ describe('codeTasksRoutes', () => {
       expect(body.data.task.updatedAt).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
     });
   });
+
+  describe('GET /internal/code-tasks/:taskId', () => {
+    it('returns task when user owns it', async () => {
+      // First create a task
+      const createResponse = await app.inject({
+        method: 'POST',
+        url: '/internal/code-tasks',
+        headers: {
+          'X-Internal-Auth': process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] ?? 'test-token',
+        },
+        payload: createTaskBody({ userId: 'user-123' }),
+      });
+
+      expect(createResponse.statusCode).toBe(201);
+      const createdBody = JSON.parse(createResponse.body);
+      const taskId = createdBody.data.task.id;
+
+      // Now fetch it
+      const response = await app.inject({
+        method: 'GET',
+        url: `/internal/code-tasks/${taskId}?userId=user-123`,
+        headers: {
+          'X-Internal-Auth': process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] ?? 'test-token',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(true);
+      expect(body.data.task.id).toBe(taskId);
+      expect(body.data.task.userId).toBe('user-123');
+    });
+
+    it('returns 404 when task does not exist', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/internal/code-tasks/non-existent?userId=user-123',
+        headers: {
+          'X-Internal-Auth': process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] ?? 'test-token',
+        },
+      });
+
+      expect(response.statusCode).toBe(404);
+
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('NOT_FOUND');
+    });
+
+    it('returns 404 when user does not own task', async () => {
+      // First create a task for user-123
+      const createResponse = await app.inject({
+        method: 'POST',
+        url: '/internal/code-tasks',
+        headers: {
+          'X-Internal-Auth': process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] ?? 'test-token',
+        },
+        payload: createTaskBody({ userId: 'user-123' }),
+      });
+
+      expect(createResponse.statusCode).toBe(201);
+      const createdBody = JSON.parse(createResponse.body);
+      const taskId = createdBody.data.task.id;
+
+      // Try to fetch as different user
+      const response = await app.inject({
+        method: 'GET',
+        url: `/internal/code-tasks/${taskId}?userId=user-456`,
+        headers: {
+          'X-Internal-Auth': process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] ?? 'test-token',
+        },
+      });
+
+      expect(response.statusCode).toBe(404);
+
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('NOT_FOUND');
+    });
+
+    it('rejects without internal auth token', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/internal/code-tasks/some-task?userId=user-123',
+      });
+
+      expect(response.statusCode).toBe(401);
+
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('UNAUTHORIZED');
+    });
+  });
 });

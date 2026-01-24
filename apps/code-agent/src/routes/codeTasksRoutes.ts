@@ -424,5 +424,118 @@ export const codeTasksRoutes: FastifyPluginCallback = (fastify, _opts, done) => 
     }
   );
 
+  fastify.get<{ Params: { taskId: string } }>(
+    '/internal/code-tasks/:taskId',
+    {
+      schema: {
+        operationId: 'getCodeTask',
+        summary: 'Get a code task by ID',
+        description: 'Internal endpoint for fetching a code task. Includes user ownership check.',
+        tags: ['internal'],
+        params: {
+          type: 'object',
+          properties: {
+            taskId: { type: 'string' },
+          },
+          required: ['taskId'],
+        },
+        querystring: {
+          type: 'object',
+          properties: {
+            userId: { type: 'string' },
+          },
+          required: ['userId'],
+        },
+        response: {
+          200: {
+            description: 'Task found',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [true] },
+              data: {
+                type: 'object',
+                properties: {
+                  task: codeTaskSchema,
+                },
+                required: ['task'],
+              },
+            },
+            required: ['success', 'data'],
+          },
+          401: {
+            description: 'Unauthorized',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: {
+                type: 'object',
+                properties: {
+                  code: { type: 'string' },
+                  message: { type: 'string' },
+                },
+                required: ['code', 'message'],
+              },
+            },
+            required: ['success', 'error'],
+          },
+          404: {
+            description: 'Task not found or access denied',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: {
+                type: 'object',
+                properties: {
+                  code: { type: 'string' },
+                  message: { type: 'string' },
+                },
+                required: ['code', 'message'],
+              },
+            },
+            required: ['success', 'error'],
+          },
+        },
+      },
+    },
+    async (request: FastifyRequest<{ Params: { taskId: string } }>, reply: FastifyReply) => {
+      logIncomingRequest(request, {
+        message: 'Received request to GET /internal/code-tasks/:taskId',
+        includeParams: true,
+      });
+
+      // Validate internal auth
+      const authResult = validateInternalAuth(request);
+      if (!authResult.valid) {
+        request.log.warn({ reason: authResult.reason }, 'Internal auth failed for code tasks');
+        reply.status(401);
+        return { success: false, error: { code: 'UNAUTHORIZED', message: 'Unauthorized' } };
+      }
+
+      const { codeTaskRepo } = getServices();
+      const { taskId } = request.params;
+      const { userId } = request.query as { userId: string };
+
+      request.log.info({ taskId, userId }, 'Fetching code task');
+
+      const result = await codeTaskRepo.findByIdForUser(taskId, userId);
+
+      if (!result.ok) {
+        request.log.warn({ taskId, userId, errorCode: result.error.code }, 'Task not found or access denied');
+        reply.status(404);
+        return {
+          success: false,
+          error: {
+            code: result.error.code,
+            message: result.error.message,
+          },
+        };
+      }
+
+      request.log.info({ taskId, userId }, 'Code task retrieved successfully');
+
+      return await reply.send({ success: true, data: { task: taskToApiResponse(result.value) } });
+    }
+  );
+
   done();
 };
