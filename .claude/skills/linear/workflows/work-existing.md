@@ -141,6 +141,15 @@ Show table of created artifacts.
 - [ ] Pre-flight branch check passed (NOT on `development` or `main`)
 - [ ] Branch created from `origin/development` (fresh state)
 - [ ] `pnpm run ci:tracked` passes (ALL 4 checks: typecheck src, typecheck tests, lint, tests+coverage)
+- [ ] ALL CI errors fixed (even in other workspaces — ownership mindset)
+
+**Terraform verification (ALWAYS CHECK):**
+```bash
+git diff --name-only HEAD~1 | grep -E "^terraform/" && echo "TERRAFORM CHANGED" || echo "No terraform changes"
+```
+- [ ] Verified terraform change status (document result)
+- [ ] If terraform changed: `tf fmt -check -recursive` passes
+- [ ] If terraform changed: `tf validate` passes
 
 **Required before PR:**
 - [ ] Branch name contains Linear issue ID
@@ -152,6 +161,26 @@ Show table of created artifacts.
 
 **Post-PR verification:**
 - [ ] PR appears in Linear issue's `attachments` array
+
+## CI Failure Ownership
+
+When CI fails, you own ALL errors — not just errors in "your" workspace.
+
+| CI Error Location      | Your Response                                                 |
+| ---------------------- | ------------------------------------------------------------- |
+| Workspace you touched  | Fix immediately                                               |
+| Other workspace        | Fix immediately OR ask: "Fix here or separate issue?"         |
+| Pre-existing lint      | Fix it (discovery creates ownership)                          |
+| Flaky test             | Stabilize it                                                  |
+
+**Forbidden phrases:**
+- ❌ "These are unrelated to my changes"
+- ❌ "This was already broken"
+- ❌ "Someone else's code"
+
+**Required response:**
+- ✅ "CI failed with X errors. Fixing them now."
+- ✅ "Found X errors in `<workspace>`. Should I fix here or create separate issue?"
 
 ## Branch Naming Conventions
 

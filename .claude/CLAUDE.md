@@ -10,6 +10,66 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ---
 
+## User Control (MANDATORY)
+
+**RULE: The user controls, Claude executes. Never assume permission to act.**
+
+### Questions Get Answers, Not Implementations
+
+When the user asks a question, they want an **answer** — not code changes, not implementations, not "let me fix that for you."
+
+| User Says                                    | User Wants              | Claude Does                          |
+| -------------------------------------------- | ----------------------- | ------------------------------------ |
+| "What went wrong?"                           | Analysis                | Explain the issue, wait for decision |
+| "What can be improved?"                      | Suggestions             | List options, wait for selection     |
+| "Look at X — what do you think?"             | Opinion/assessment      | Provide assessment, wait             |
+| "Why did this fail?"                         | Diagnosis               | Diagnose, wait for next instruction  |
+| "Implement X" / "Fix X" / "Do X"             | Action                  | Execute the task                     |
+
+### Forbidden Auto-Actions
+
+**NEVER** do the following without explicit instruction:
+
+- Start implementing after analyzing (ask first: "Should I implement this?")
+- Create branches or commits after reviewing
+- Fix issues discovered during investigation
+- "While I'm here, let me also..."
+- Assume a plan approval means "start coding now"
+
+### The Checkpoint Pattern
+
+After completing any analysis, investigation, or review phase:
+
+```
+1. Present findings
+2. STOP
+3. Wait for explicit instruction: "proceed", "implement", "fix it", etc.
+```
+
+**Exception:** Only proceed automatically if the user said "analyze AND fix" or similar compound instruction upfront.
+
+### Practical Examples
+
+```
+❌ User: "What went wrong with INT-218?"
+   Claude: "The issue is X. Let me fix it..." [starts coding]
+
+✅ User: "What went wrong with INT-218?"
+   Claude: "The issue is X because Y. Here are options: A, B, C."
+   User: "Do option B"
+   Claude: [now implements option B]
+```
+
+```
+❌ User: "Review this code"
+   Claude: "Found 3 issues. Fixing them now..." [edits files]
+
+✅ User: "Review this code"
+   Claude: "Found 3 issues: [list]. Should I fix them?"
+```
+
+---
+
 ## Ownership Mindset (MANDATORY)
 
 _Inspired by "Extreme Ownership" by Jocko Willink and Leif Babin_
@@ -88,6 +148,53 @@ If you're unsure whether something is your responsibility, ASK — but phrase th
 
 ---
 
+## CI Failure Protocol (MANDATORY)
+
+**RULE:** When `pnpm run ci:tracked` fails, follow this protocol. No rationalizing.
+
+### Step 1: Capture and Categorize
+
+```bash
+pnpm run ci:tracked 2>&1 | tee /tmp/ci-output.txt
+grep -E "(error|Error|ERROR|FAIL)" /tmp/ci-output.txt
+```
+
+### Step 2: Fix or Ask (No Skipping)
+
+| Failure Location         | Action                                                                 |
+| ------------------------ | ---------------------------------------------------------------------- |
+| Workspace I touched      | Fix immediately                                                        |
+| OTHER workspace          | Fix immediately OR ask: "Found X errors in Y. Fix here or separate issue?" |
+| Flaky test               | Stabilize it                                                           |
+| Type error               | Fix it                                                                 |
+| Lint error               | Fix it                                                                 |
+
+### Forbidden Responses
+
+These responses are **NEVER acceptable** when CI fails:
+
+- ❌ "These errors are unrelated to my changes"
+- ❌ "The lint errors are in a different workspace"
+- ❌ "This was already broken before I started"
+- ❌ "I'll ignore these for now"
+- ❌ "Someone else should fix these"
+
+### Required Responses
+
+Always respond with ownership:
+
+- ✅ "CI failed with X errors. Fixing them now."
+- ✅ "CI failed with X errors in `<workspace>`. Should I fix here or create separate issue?"
+
+### The Anti-Pattern to Avoid
+
+```
+❌ WRONG: CI fails → "Not my code" → Skip → Claim done
+✅ RIGHT: CI fails → Own it → Fix or ask → Verify passes → Done
+```
+
+---
+
 ## Verification (MANDATORY)
 
 ### Step 1: Targeted Verification (per workspace)
@@ -98,15 +205,51 @@ pnpm run verify:workspace:tracked -- <app-name>   # e.g. research-agent
 
 Runs: TypeCheck (source + tests) → Lint → Tests + Coverage (95% threshold)
 
-### Step 2: Full CI
+### Step 2: Verify Packages Built (Safety Net)
+
+Before running CI, verify packages have `dist/` directories:
+
+```bash
+# Quick check - if this shows missing dist/, run pnpm build
+ls packages/*/dist/ >/dev/null 2>&1 || echo "WARNING: Some packages not built. Run 'pnpm build' first."
+```
+
+**If packages aren't built:** You'll see 50+ lint errors in apps that look like type errors but are actually missing dependencies.
+
+### Step 3: Full CI
 
 ```bash
 pnpm run ci:tracked            # MUST pass before task completion
-tf fmt -check -recursive      # If terraform changed
-tf validate                   # If terraform changed
+```
+
+### Step 4: Terraform Verification (ALWAYS CHECK)
+
+**RULE:** Never assume terraform didn't change. Always verify explicitly.
+
+```bash
+# 1. Check if terraform files changed (ALWAYS RUN THIS)
+git diff --name-only HEAD~1 | grep -E "^terraform/" && echo "TERRAFORM CHANGED" || echo "No terraform changes"
+
+# 2. IF terraform changed, run validation:
+tf fmt -check -recursive
+tf validate
 ```
 
 **IMPORTANT:** Use `tf` alias instead of `terraform` — clears emulator env vars. See `.claude/reference/infrastructure.md`.
+
+### Step 5: Document Verification Result
+
+Always state the verification result explicitly:
+
+- ✅ "Verified: No terraform files changed"
+- ✅ "Terraform changed. Ran `tf fmt` and `tf validate` — both passed"
+
+**The Error Pattern to Avoid:**
+
+```
+❌ WRONG: Assume "probably didn't change" → Skip checks → Hope
+✅ RIGHT: Verify with git diff → Run checks if needed → Document result
+```
 
 **Do not claim complete until verification passes.**
 
@@ -129,14 +272,14 @@ Never re-run tests just to grep different patterns — each run takes 2-5 minute
 
 ## Infrastructure
 
-**Service account:** `~/personal/gcloud-claude-code-dev.json`
+**Service account:** `$HOME/personal/gcloud-claude-code-dev.json`
 
 **Full reference:** `.claude/reference/infrastructure.md` (GCloud auth, Terraform, Cloud Build, Pub/Sub)
 
 **Quick commands:**
 
-- Activate: `gcloud auth activate-service-account --key-file=~/personal/gcloud-claude-code-dev.json`
-- Terraform: Use `tf` alias (clears emulator vars)
+- GCloud CLI: `gcloud auth activate-service-account --key-file=$HOME/personal/gcloud-claude-code-dev.json`
+- Terraform: Use `tf` alias (sets credentials + clears emulator vars)
 - New service image: `./scripts/push-missing-images.sh`
 
 ---
@@ -218,6 +361,29 @@ Pattern: `/internal/{resource-name}` with `X-Internal-Auth` header. Use `validat
 ## TypeScript Patterns
 
 Strict mode enabled: `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`, `strictBooleanExpressions`. Compiler errors guide fixes — use `arr[0] ?? fallback`, explicit `=== true` checks, `String()` for template numbers.
+
+---
+
+## Session Start Protocol (MANDATORY)
+
+**RULE:** At the start of every fresh session, build all packages:
+
+```bash
+pnpm build
+```
+
+**Why:** Apps depend on packages. Without built `dist/` directories, apps fail typecheck with misleading errors.
+
+**Signs you forgot:**
+- 50+ `no-unsafe-*` lint errors in apps
+- `Cannot find module '@intexuraos/...'`
+- Errors only in `apps/` not `packages/`
+
+**When to run:**
+- Fresh clone
+- Switched branches
+- After pulling changes that touched `packages/`
+- When you see the signs above
 
 ---
 
@@ -417,8 +583,10 @@ Use the `/sentry` skill for error triage, investigation, and resolution.
 **Usage:**
 
 ```bash
-/sentry                           # Batch triage unresolved issues
+/sentry                           # NON-INTERACTIVE: Batch triage unresolved issues
 /sentry <sentry-url>              # Investigate specific issue
+/sentry INT-123                   # Find Sentry issues linked to Linear issue
+/sentry triage --limit 5          # Batch triage with limit
 /sentry analyze <sentry-url>      # AI-powered root cause analysis (Seer)
 /sentry linear <sentry-url>       # Create Linear issue from Sentry error
 ```
@@ -487,15 +655,16 @@ This project uses three types of Claude extensions:
 **Location:** `.claude/commands/<command-name>.md`
 **Invocation:** `/<command-name>`
 
-| Command                | Purpose                          |
-| ---------------------- | -------------------------------- |
-| `/analyze-ci-failures` | Analyze CI failure patterns      |
-| `/analyze-logs`        | Production log analysis          |
-| `/coverage`            | Coverage improvement suggestions |
-| `/create-service`      | New service creation wizard      |
-| `/refactoring`         | Code smell detection and fixes   |
-| `/semver-release`      | Semantic versioning release      |
-| `/verify-deployment`   | Deployment verification          |
+| Command                | Purpose                           |
+| ---------------------- | --------------------------------- |
+| `/analyze-ci-failures` | Analyze CI failure patterns       |
+| `/analyze-logs`        | Production log analysis           |
+| `/coverage`            | Coverage improvement suggestions  |
+| `/create-service`      | New service creation wizard       |
+| `/refactoring`         | Code smell detection and fixes    |
+| `/semver-release`      | Semantic versioning release       |
+| `/teach-me-something`  | Learn and persist tech insights   |
+| `/verify-deployment`   | Deployment verification           |
 
 ---
 

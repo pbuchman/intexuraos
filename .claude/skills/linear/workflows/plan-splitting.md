@@ -82,7 +82,7 @@ Use [ledger-template.md](../templates/ledger-template.md) format for the descrip
 ```
 Title: [feature] <original plan title>  (update if needed)
 State: In Progress
-Team: pbuchman
+Team: IntexuraOS
 Description: Full ledger format (see template)
 ```
 
@@ -93,7 +93,7 @@ For each task, use [subtask-description.md](../templates/subtask-description.md)
 ```
 Title: [tier-X] <task title>
 State: Backlog
-Team: pbuchman
+Team: IntexuraOS
 parentId: <parent issue ID>
 Description: Subtask template format
 ```
@@ -140,6 +140,63 @@ Format: `[tier-X] <action> <subject>`
 | 2    | `[tier-2] Wire up skill to command system`    |
 | 3    | `[tier-3] Add tests for plan parsing`         |
 | 4    | `[tier-4] Update documentation`               |
+
+## Implementation Detail Level
+
+When creating subtasks, the level of detail determines LLM agent success rate.
+
+### Required Detail by Task Type
+
+| Task Type           | Code Snippets | Line Numbers | Edge Cases | Staleness Warning |
+| ------------------- | ------------- | ------------ | ---------- | ----------------- |
+| Migration/Refactor  | ✓ Required    | ✓ Required   | ✓ Required | ✓ Required        |
+| Bug Fix             | ✓ Required    | ✓ Required   | Optional   | ✓ Required        |
+| New Feature         | Recommended   | Recommended  | ✓ Required | If provided       |
+| Documentation       | Optional      | N/A          | N/A        | N/A               |
+| Configuration       | Optional      | Optional     | Optional   | If provided       |
+
+### Code Snippet Freshness Warning
+
+**ALWAYS** include this warning when providing implementation code:
+
+```markdown
+> ⚠️ **Point-in-Time Accuracy:** Code snippets below reflect codebase state at issue creation (YYYY-MM-DD).
+> Before implementing, verify file contents match these assumptions.
+```
+
+### Pre-Flight Verification Checklist
+
+For tasks with code snippets, include verification steps:
+
+```markdown
+### Pre-Flight Verification
+
+Before implementing, confirm:
+
+- [ ] File exists at specified path
+- [ ] Line numbers roughly match (±10 lines acceptable)
+- [ ] Dependencies/imports are available
+- [ ] Type signatures haven't changed
+```
+
+### Edge Case Enumeration
+
+For validation/parsing tasks, enumerate 8-10 edge cases:
+
+```markdown
+### Edge Cases to Cover
+
+1. Valid input (happy path)
+2. Empty/null input
+3. Boundary values (min, max)
+4. Invalid types (string vs number)
+5. Missing required fields
+6. Extra unknown fields
+7. Malformed structure
+8. Concurrent operations (if applicable)
+```
+
+This detail level enables less specialized LLM agents to execute tasks reliably.
 
 ## Execution Protocol
 

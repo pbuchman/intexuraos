@@ -54,7 +54,7 @@ Required tools:
 ```
 - Call mcp__linear__create_issue
 - Format: [sentry] <short-error-message>
-- Team: "pbuchman"
+- Team: "IntexuraOS"
 - State: "Backlog"
 - Description includes:
   - Sentry issue link

@@ -19,7 +19,7 @@
 
 ```
 1. List issues where state is "Todo" (NOT from Backlog)
-2. Filter to team: "pbuchman"
+2. Filter to team: "IntexuraOS"
 3. Sort by priority (High → Low) then createdAt (newest first)
 4. Pick first result
 5. If no items: Print "No items in Todo state." and exit
