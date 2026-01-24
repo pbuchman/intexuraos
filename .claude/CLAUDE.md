@@ -268,6 +268,23 @@ grep -E "(Coverage for|ERROR:)" /tmp/ci-output.txt
 
 Never re-run tests just to grep different patterns — each run takes 2-5 minutes.
 
+### Verification Ownership
+
+**RULE:** ALL verification failures are YOUR responsibility, regardless of source.
+
+When `./scripts/verify-deployment.sh`, `pnpm run ci:tracked`, or any verification command fails:
+
+| Response                                             | Correct? |
+| ---------------------------------------------------- | -------- |
+| "Terraform failed, but not related to my changes"    | ❌ FORBIDDEN |
+| "Tests failed in another workspace, not my problem"  | ❌ FORBIDDEN |
+| "Terraform failed. Investigating and fixing."        | ✅ CORRECT |
+| "Tests failed in X. Fix here or separate issue?"     | ✅ CORRECT |
+
+**The discovery-ownership rule applies to ALL verification:** seeing a failure = owning the fix.
+
+This is NOT optional. The phrases "unrelated to my changes", "pre-existing", and "not my problem" are explicitly forbidden in the Ownership Mindset section — they apply equally to verification failures.
+
 ---
 
 ## Infrastructure
@@ -528,6 +545,24 @@ const result = await repo.find(id);
 if (!result.ok) return result; // Narrows to Success<T>
 return result.value; // Now safe
 ```
+
+### Before Running Terraform
+
+**ALWAYS** use the `tf` alias, not `terraform`:
+
+```bash
+# ❌ WRONG - will fail without credentials or with emulator env vars
+terraform init
+terraform plan
+
+# ✅ RIGHT - sets credentials and clears emulator vars
+tf init
+tf plan
+```
+
+**Why:** The `tf` alias (defined in shell config) sets `GOOGLE_APPLICATION_CREDENTIALS` and clears `FIRESTORE_EMULATOR_HOST`, `PUBSUB_EMULATOR_HOST`, etc. Without this, terraform commands will fail with permission errors or try to use emulators.
+
+**Full reference:** `.claude/reference/infrastructure.md`
 
 ---
 
