@@ -36,7 +36,7 @@ When keywords match both patterns, ask: "Is this a bug or a feature?"
 ```
 - Call mcp__linear__create_issue
 - Format: [bug] <short-description> or [feature] <short-description>
-- Team: "pbuchman"
+- Team: "IntexuraOS" (ALWAYS use this exact name)
 - State: "Backlog"
 - Description: MUST start with "Original User Instruction" section
 ```

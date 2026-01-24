@@ -15,7 +15,7 @@ triggers:
   - "linear.*issue"
 
 config:
-  team: "pbuchman"
+  team: "IntexuraOS"
   project_key: "INT"
   base_branch: "development"
 ---
@@ -23,6 +23,8 @@ config:
 # Linear Issue Management
 
 Manage Linear issues, branches, and PRs with enforced workflow and cross-linking.
+
+**Team:** `IntexuraOS` — ALWAYS use this exact team name for all Linear API calls. Never guess.
 
 **Project Key:** `INT-` (e.g., `INT-123`, `INT-144`). All issue references use generic `LIN-XXX` placeholders, but for this project always use `INT-XXX`.
 
