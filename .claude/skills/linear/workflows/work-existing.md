@@ -15,14 +15,49 @@ Verify Linear, GitHub, GCloud available.
 - Extract: title, description, state, assignee
 ```
 
-### 3. Update State to In Progress (FIRST!)
+### 3. Pre-Flight Branch Check (MANDATORY - BLOCKS ALL WORK)
 
-**CRITICAL:** You MUST update the Linear issue state to "In Progress" BEFORE:
+⛔ **STOP: You MUST NOT be on `development` or `main` before making ANY changes.**
 
-- Reading any code
-- Planning implementation
-- Investigating the issue
-- Running any commands
+**Check current branch:**
+```bash
+git branch --show-current
+```
+
+**If on `development` or `main`:**
+- DO NOT update Linear state
+- DO NOT read code for implementation
+- DO NOT make any changes
+- PROCEED TO STEP 4 to create branch FIRST
+
+**If already on a feature branch (`fix/INT-*`, `feature/INT-*`, etc.):**
+- Verify branch name contains the issue ID
+- Proceed to Step 5
+
+**Override Exception:**
+User can explicitly override branch requirements by saying:
+- "work on development directly"
+- "use branch X instead"
+- "skip branch creation"
+
+Without explicit override, branch creation is MANDATORY.
+
+### 4. Create Branch from Fresh Development (MANDATORY)
+
+**Always branch from `origin/development` (not local):**
+```bash
+git fetch origin
+git checkout -b fix/INT-123 origin/development
+```
+
+**Why `origin/development`?**
+- Local `development` may be stale or have uncommitted changes
+- `origin/development` guarantees fresh state
+- Prevents merge conflicts and ensures CI runs against current code
+
+### 5. Update State to In Progress
+
+**CRITICAL:** Only update Linear state AFTER you have a proper feature branch.
 
 ```
 - Call mcp__linear__update_issue
@@ -31,20 +66,12 @@ Verify Linear, GitHub, GCloud available.
 
 This signals that work has begun and prevents duplicate work.
 
-### 4. Create Branch
-
-```bash
-git fetch origin
-BASE_BRANCH="origin/development"  # or origin/main if development doesn't exist
-git checkout -b fix/INT-123 "$BASE_BRANCH"
-```
-
-### 5. Guide Implementation
+### 6. Guide Implementation
 
 - Execute the task described in issue
 - Make commits with clear messages
 
-### 6. CI Gate (MANDATORY)
+### 7. CI Gate (MANDATORY)
 
 Run `pnpm run ci:tracked`
 
@@ -54,7 +81,7 @@ Run `pnpm run ci:tracked`
   - Show `.claude/ci-failures/` content if available
   - Ask: "CI failed. Fix and retry, or explicitly override to proceed anyway?"
 
-### 7. Update Branch with Latest Base (MANDATORY)
+### 8. Update Branch with Latest Base (MANDATORY)
 
 Before creating a PR, merge the latest base branch:
 
@@ -65,7 +92,7 @@ git merge origin/development  # or origin/main if using main as base
 git add -A && git commit -m "Resolve merge conflicts with development"
 ```
 
-### 8. Create PR (Critical: Title MUST include issue ID)
+### 9. Create PR (Critical: Title MUST include issue ID)
 
 ```bash
 git push -u origin fix/INT-123
@@ -76,23 +103,24 @@ gh pr create --base development \
 
 **MANDATORY:** PR title MUST contain the Linear issue ID (e.g., `[INT-123]`, `INT-123:`)
 
-### 9. Update Linear
+### 10. Update Linear
 
 - Set state to "In Review"
 - GitHub integration automatically attaches PR (verify in `attachments` array)
 - Only add comment if attachment is missing (fallback)
 
-### 10. Cross-Link Summary
+### 11. Cross-Link Summary
 
 Show table of created artifacts.
 
 ## PR Creation Checklist
 
+- [ ] Pre-flight branch check passed (NOT on `development` or `main`)
+- [ ] Branch created from `origin/development` (fresh state)
+- [ ] Branch name contains Linear issue ID
 - [ ] `pnpm run ci:tracked` passes OR user explicitly overridden
-- [ ] Branch created from correct base
 - [ ] Latest base branch merged
 - [ ] Merge conflicts resolved (if any)
-- [ ] Branch name contains Linear issue ID
 - [ ] PR title contains Linear issue ID
 - [ ] All commits made
 - [ ] PR description complete with all sections

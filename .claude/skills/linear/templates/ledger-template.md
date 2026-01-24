@@ -38,15 +38,14 @@ Template for parent issues that serve as ledgers during plan splitting.
 - [ ] <Upcoming task 1>
 - [ ] <Upcoming task 2>
 
-## Child Issues
+## Scope
 
-| Tier | Issue   | Title                  | Status      |
-| ---- | ------- | ---------------------- | ----------- |
-| 0    | INT-XXX | Setup infrastructure   | Done        |
-| 1    | INT-XXX | Implement domain model | In Progress |
-| 1    | INT-XXX | Create adapter         | Backlog     |
-| 2    | INT-XXX | Wire up routes         | Backlog     |
-| 3    | INT-XXX | Add test coverage      | Backlog     |
+This epic covers:
+- <component/service 1>: <what's being done>
+- <component/service 2>: <what's being done>
+- <component/service 3>: <what's being done>
+
+_Child issues are linked automatically via Linear's parent-child hierarchy._
 
 ## Constraints / Assumptions
 
@@ -85,17 +84,17 @@ Template for parent issues that serve as ledgers during plan splitting.
 
 ## Mandatory Sections
 
-| Section          | Required | Purpose                      |
-| ---------------- | -------- | ---------------------------- |
-| Goal             | Yes      | What we're trying to achieve |
-| Success Criteria | Yes      | How we know we're done       |
-| Key Decisions    | Yes      | Audit trail of choices made  |
-| State Tracking   | Yes      | Done/Now/Next status         |
-| Child Issues     | Yes      | Table of all subtasks        |
-| Constraints      | Optional | Boundaries and assumptions   |
-| Open Questions   | Optional | Unresolved items             |
-| Working Set      | Optional | Active files and commands    |
-| Progress Notes   | Optional | Timestamped updates          |
+| Section          | Required | Purpose                                   |
+| ---------------- | -------- | ----------------------------------------- |
+| Goal             | Yes      | What we're trying to achieve              |
+| Success Criteria | Yes      | How we know we're done                    |
+| Key Decisions    | Yes      | Audit trail of choices made               |
+| State Tracking   | Yes      | Done/Now/Next status                      |
+| Scope            | Yes      | What components/services are covered      |
+| Constraints      | Optional | Boundaries and assumptions                |
+| Open Questions   | Optional | Unresolved items                          |
+| Working Set      | Optional | Active files and commands                 |
+| Progress Notes   | Optional | Timestamped updates                       |
 
 ## Ledger Principles
 
@@ -106,15 +105,3 @@ Template for parent issues that serve as ledgers during plan splitting.
 5. **Always read the ledger before resuming a session**
 6. **Update after every subtask or change in plan**
 
-## Child Issues Table Updates
-
-Update the Status column as work progresses:
-
-| Status      | Meaning                          |
-| ----------- | -------------------------------- |
-| Backlog     | Not started                      |
-| Todo        | Ready to start                   |
-| In Progress | Currently being worked on        |
-| In Review   | PR created, awaiting review      |
-| QA          | Testing/verification in progress |
-| Done        | Complete                         |

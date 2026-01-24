@@ -39,7 +39,7 @@ Tasks are classified into tiers based on dependency and execution order:
 3. REUSE existing issue as parent (ledger) OR create new if none exists
 4. CREATE child issues with parentId parameter
 5. SET dependencies via blockedBy arrays
-6. UPDATE parent with child issues table
+6. VERIFY parent-child links in Linear UI
 ```
 
 ### Step-by-Step
@@ -114,21 +114,19 @@ for each tier2Issue:
 // And so on...
 ```
 
-#### Step 6: Update Parent Ledger
+#### Step 6: Verify Parent-Child Links
 
-Add child issues table to parent:
+After creating child issues with `parentId`:
 
-```markdown
-## Child Issues
+1. **Verify in Linear UI** that children appear under parent's "Sub-issues" section
+2. **Parent's "Scope" section** describes what's covered (no IDs needed)
+3. **Linear handles linking automatically** via `parentId` — no manual ID maintenance
 
-| Tier | Issue   | Title                  | Status  |
-| ---- | ------- | ---------------------- | ------- |
-| 0    | INT-XXX | Setup infrastructure   | Backlog |
-| 1    | INT-XXX | Implement domain model | Backlog |
-| 1    | INT-XXX | Create adapter         | Backlog |
-| 2    | INT-XXX | Wire up routes         | Backlog |
-| 3    | INT-XXX | Add test coverage      | Backlog |
-```
+**Why no Child Issues table?**
+- Sequential ID assignment makes pre-listing impossible
+- When parent is created before children, placeholder IDs like `INT-XXX-1` never match real IDs
+- Linear's parent-child hierarchy is the source of truth
+- Scope section describes WHAT, Linear tracks WHO
 
 ## Naming Convention for Child Issues
 
@@ -151,8 +149,9 @@ After splitting:
 2. **Start with Tier 0 tasks** (all can run in parallel)
 3. **When Tier 0 complete**, start Tier 1 tasks
 4. **Continue tier by tier** until all complete
-5. **Update parent ledger** after each child completes
-6. **Move parent to Done** when all children Done
+5. **Move parent to Done** when all children Done
+
+Linear automatically tracks child status — no manual ledger updates needed.
 
 ## Continuation Directive
 
