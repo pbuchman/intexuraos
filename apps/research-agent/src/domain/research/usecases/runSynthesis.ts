@@ -48,7 +48,6 @@ export interface RunSynthesisDeps {
   reportLlmSuccess?: () => void;
   logger: Logger;
   imageApiKeys?: ImageApiKeys;
-  generatedBy?: GeneratedByUserInfo;
 }
 
 export async function runSynthesis(
@@ -68,7 +67,6 @@ export async function runSynthesis(
     reportLlmSuccess,
     logger,
     imageApiKeys,
-    generatedBy,
   } = deps;
 
   logger.info({}, '[4.1] Loading research from database');
@@ -314,6 +312,14 @@ export async function runSynthesis(
     const idPrefix = researchId.slice(0, 6);
     const fileName = `research/${idPrefix}-${shareToken}-${slug}.html`;
     shareUrl = `${shareConfig.shareBaseUrl}/${idPrefix}-${shareToken}-${slug}.html`;
+
+    const generatedBy: GeneratedByUserInfo | undefined =
+      research.userName !== undefined || research.userEmail !== undefined
+        ? {
+            ...(research.userName !== undefined && { name: research.userName }),
+            ...(research.userEmail !== undefined && { email: research.userEmail }),
+          }
+        : undefined;
 
     const html = generateShareableHtml({
       title: research.title,
