@@ -71,15 +71,37 @@ This signals that work has begun and prevents duplicate work.
 - Execute the task described in issue
 - Make commits with clear messages
 
-### 7. CI Gate (MANDATORY)
+### 7. CI Gate (MANDATORY - BLOCKS PR CREATION)
 
-Run `pnpm run ci:tracked`
+⛔ **STOP: You MUST NOT push or create a PR until `pnpm run ci:tracked` passes.**
 
-- If passes: Continue to PR creation
-- If fails:
-  - Report which step failed
-  - Show `.claude/ci-failures/` content if available
-  - Ask: "CI failed. Fix and retry, or explicitly override to proceed anyway?"
+```bash
+pnpm run ci:tracked
+```
+
+**If tempted to skip because "the change is simple":**
+- This is precisely when bugs slip through
+- "Simple" changes have non-obvious dependencies
+- Partial checks (build, typecheck) create false confidence
+- 2-3 minutes of CI is cheaper than debugging production
+
+**What CI checks (ALL required):**
+1. TypeCheck (source files)
+2. TypeCheck (test files)
+3. Lint
+4. Tests + Coverage (95% threshold)
+
+Running only 1-2 of these is WORSE than running none — it creates false confidence.
+
+**If CI fails:**
+- Report which step failed
+- Show `.claude/ci-failures/` content if available
+- Fix the issue and re-run CI
+- Only after CI passes, continue to Step 8
+
+**Override Exception:**
+User can explicitly override CI requirements by saying "skip CI" or "push anyway".
+Without explicit override, passing CI is MANDATORY.
 
 ### 8. Update Branch with Latest Base (MANDATORY)
 
@@ -115,15 +137,20 @@ Show table of created artifacts.
 
 ## PR Creation Checklist
 
+**Blocking gates (cannot proceed without these):**
 - [ ] Pre-flight branch check passed (NOT on `development` or `main`)
 - [ ] Branch created from `origin/development` (fresh state)
+- [ ] `pnpm run ci:tracked` passes (ALL 4 checks: typecheck src, typecheck tests, lint, tests+coverage)
+
+**Required before PR:**
 - [ ] Branch name contains Linear issue ID
-- [ ] `pnpm run ci:tracked` passes OR user explicitly overridden
 - [ ] Latest base branch merged
 - [ ] Merge conflicts resolved (if any)
 - [ ] PR title contains Linear issue ID
 - [ ] All commits made
 - [ ] PR description complete with all sections
+
+**Post-PR verification:**
 - [ ] PR appears in Linear issue's `attachments` array
 
 ## Branch Naming Conventions
