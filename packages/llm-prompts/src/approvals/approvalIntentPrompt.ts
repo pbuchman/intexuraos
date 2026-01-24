@@ -168,7 +168,7 @@ export function parseApprovalIntentResponseWithLogging(
   response: string,
   logger: Logger
 ): ApprovalIntentResponse {
-  return withLlmParseErrorLogging({
+  const wrapped = withLlmParseErrorLogging<string, ApprovalIntentResponse>({
     logger,
     operation: 'parseApprovalIntentResponse',
     expectedSchema:
@@ -180,5 +180,6 @@ export function parseApprovalIntentResponseWithLogging(
       }
       return result;
     },
-  })(response);
+  });
+  return wrapped(response);
 }

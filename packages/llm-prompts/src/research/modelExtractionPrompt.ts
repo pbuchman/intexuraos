@@ -183,7 +183,7 @@ export function parseModelExtractionResponseWithLogging(
   validModels: ResearchModel[],
   logger: Logger
 ): ModelExtractionResponse {
-  return withLlmParseErrorLogging({
+  const wrapped = withLlmParseErrorLogging<string, ModelExtractionResponse>({
     logger,
     operation: 'parseModelExtractionResponse',
     expectedSchema: '{"selectedModels":["model1",...],"synthesisModel":"model"}',
@@ -196,7 +196,8 @@ export function parseModelExtractionResponseWithLogging(
       }
       return result;
     },
-  })(response);
+  });
+  return wrapped(response);
 }
 
 /**
