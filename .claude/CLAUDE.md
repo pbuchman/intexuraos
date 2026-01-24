@@ -255,7 +255,18 @@ Always state the verification result explicitly:
 
 **NEVER modify `vitest.config.ts` coverage exclusions or thresholds. Write tests instead.**
 
-**ALWAYS commit `.claude/ci-failures/*` files with your changes.**
+### CI Failure Tracking (MANDATORY)
+
+**RULE:** ALWAYS commit `.claude/ci-failures/*` files with your changes.
+
+These files are auto-generated during `pnpm run ci:tracked` and record failure patterns for analysis. They enable the `/analyze-ci-failures` skill to identify recurring issues and improve documentation.
+
+```
+❌ WRONG: See .claude/ci-failures/ in git status → Ignore → Commit only "real" changes
+✅ RIGHT: See .claude/ci-failures/ in git status → Stage → Commit with your changes
+```
+
+**Why this matters:** Without these files, CI failure patterns are invisible. We can't improve instructions for problems we can't measure.
 
 ### Coverage Verification Efficiency
 
@@ -267,6 +278,23 @@ grep -E "(Coverage for|ERROR:)" /tmp/ci-output.txt
 ```
 
 Never re-run tests just to grep different patterns — each run takes 2-5 minutes.
+
+### Verification Ownership
+
+**RULE:** ALL verification failures are YOUR responsibility, regardless of source.
+
+When `./scripts/verify-deployment.sh`, `pnpm run ci:tracked`, or any verification command fails:
+
+| Response                                             | Correct? |
+| ---------------------------------------------------- | -------- |
+| "Terraform failed, but not related to my changes"    | ❌ FORBIDDEN |
+| "Tests failed in another workspace, not my problem"  | ❌ FORBIDDEN |
+| "Terraform failed. Investigating and fixing."        | ✅ CORRECT |
+| "Tests failed in X. Fix here or separate issue?"     | ✅ CORRECT |
+
+**The discovery-ownership rule applies to ALL verification:** seeing a failure = owning the fix.
+
+This is NOT optional. The phrases "unrelated to my changes", "pre-existing", and "not my problem" are explicitly forbidden in the Ownership Mindset section — they apply equally to verification failures.
 
 ---
 
@@ -347,6 +375,90 @@ Pattern: `/internal/{resource-name}` with `X-Internal-Auth` header. Use `validat
 **Pub/Sub Publishers:**
 
 **RULE:** All publishers MUST extend `BasePubSubPublisher`. Topic names from env vars only (no hardcoding). Verification: `pnpm run verify:pubsub`.
+
+---
+
+## Environment Variables (MANDATORY)
+
+**RULE:** Adding a new environment variable requires updating THREE locations:
+
+| Step | Location                        | What to Update                                                          |
+| ---- | ------------------------------- | ----------------------------------------------------------------------- |
+| 1    | `apps/<service>/src/index.ts`   | Add to `REQUIRED_ENV` array                                             |
+| 2    | `terraform/environments/dev/main.tf` | Add to service's `env_vars` or `secrets`                           |
+| 3    | `scripts/dev.mjs`               | Add to `COMMON_SERVICE_ENV`, `COMMON_SERVICE_URLS`, or `SERVICE_ENV_MAPPINGS` |
+
+**Failure to update all three causes:**
+
+- Missing in Terraform → **Startup probe failure** (22% of build failures)
+- Missing in dev.mjs → Local development broken
+- Missing in REQUIRED_ENV → Runtime crash when var accessed
+
+### Terraform Patterns
+
+**Common env var (all services):**
+
+```hcl
+# terraform/environments/dev/main.tf - local.common_service_env_vars
+locals {
+  common_service_env_vars = {
+    INTEXURAOS_NEW_VAR = "value"
+  }
+}
+```
+
+**Service-specific env var:**
+
+```hcl
+# terraform/environments/dev/main.tf - service module
+module "my_service" {
+  env_vars = merge(local.common_service_env_vars, {
+    INTEXURAOS_SERVICE_SPECIFIC_VAR = "value"
+  })
+}
+```
+
+**Secret (from Secret Manager):**
+
+```hcl
+# terraform/environments/dev/main.tf - service module
+module "my_service" {
+  secrets = merge(local.common_service_secrets, {
+    INTEXURAOS_MY_SECRET = module.secret_manager.secret_ids["INTEXURAOS_MY_SECRET"]
+  })
+}
+```
+
+### dev.mjs Patterns
+
+**Common URL:**
+
+```javascript
+// scripts/dev.mjs - COMMON_SERVICE_URLS
+const COMMON_SERVICE_URLS = {
+  INTEXURAOS_NEW_SERVICE_URL: 'http://localhost:8XXX',
+};
+```
+
+**Common secret (from .envrc.local):**
+
+```javascript
+// scripts/dev.mjs - COMMON_SERVICE_ENV
+const COMMON_SERVICE_ENV = {
+  INTEXURAOS_NEW_SECRET: process.env.INTEXURAOS_NEW_SECRET,
+};
+```
+
+**Service-specific:**
+
+```javascript
+// scripts/dev.mjs - SERVICE_ENV_MAPPINGS
+const SERVICE_ENV_MAPPINGS = {
+  'my-service': {
+    INTEXURAOS_MY_SERVICE_TOPIC: 'my-topic',
+  },
+};
+```
 
 ---
 
@@ -447,6 +559,24 @@ if (!result.ok) return result; // Narrows to Success<T>
 return result.value; // Now safe
 ```
 
+### Before Running Terraform
+
+**ALWAYS** use the `tf` alias, not `terraform`:
+
+```bash
+# ❌ WRONG - will fail without credentials or with emulator env vars
+terraform init
+terraform plan
+
+# ✅ RIGHT - sets credentials and clears emulator vars
+tf init
+tf plan
+```
+
+**Why:** The `tf` alias (defined in shell config) sets `GOOGLE_APPLICATION_CREDENTIALS` and clears `FIRESTORE_EMULATOR_HOST`, `PUBSUB_EMULATOR_HOST`, etc. Without this, terraform commands will fail with permission errors or try to use emulators.
+
+**Full reference:** `.claude/reference/infrastructure.md`
+
 ---
 
 ## Common LLM Mistakes
@@ -512,9 +642,28 @@ return result.value; // Now safe
 - `"commit"` → local only, no push
 - `"commit and push"` → push once
 
+**RULE: NEVER commit without `pnpm run ci:tracked` passing first.**
+
+This is non-negotiable. Running only package-level tests (`vitest`, `tsc`) is NOT sufficient.
+
+```
+❌ WRONG: Fix code → Run vitest → Commit → Push → Check GitHub Actions
+✅ RIGHT: Fix code → Run pnpm run ci:tracked → Passes → Commit → Push
+```
+
+| Shortcut Taken                        | Why It Fails                                      |
+| ------------------------------------- | ------------------------------------------------- |
+| `npx vitest run` only                 | Misses other workspaces, lint, type-check         |
+| `pnpm run test` in one package        | Misses cross-package type errors                  |
+| `tsc --noEmit` only                   | Misses lint errors, test failures                 |
+| "I'll check GitHub Actions"           | Wastes CI resources, delays feedback, breaks main |
+
+**The only acceptable verification is `pnpm run ci:tracked` passing locally.**
+
 **RULE:** Before creating a PR, merge latest base branch and resolve conflicts.
 
 ```bash
+pnpm run ci:tracked              # MUST pass first
 git add -A && git commit -m "message"
 git fetch origin && git merge origin/development
 git push -u origin <branch>

@@ -309,6 +309,26 @@ describe('formatLlmError', () => {
   });
 
   describe('Generic errors', () => {
+    it('handles generic 429 rate limit errors', () => {
+      const result = formatLlmError('429 Too Many Requests');
+      expect(result).toBe('Rate limit exceeded. Please try again later.');
+    });
+
+    it('handles rate limit text in error message', () => {
+      const result = formatLlmError('Error: rate limit exceeded');
+      expect(result).toBe('Rate limit exceeded. Please try again later.');
+    });
+
+    it('handles quota exceeded generic error', () => {
+      const result = formatLlmError('quota exceeded for this request');
+      expect(result).toBe('Rate limit exceeded. Please try again later.');
+    });
+
+    it('prioritizes rate limit over API key when both patterns present', () => {
+      const result = formatLlmError('429 API rate limit exceeded');
+      expect(result).toBe('Rate limit exceeded. Please try again later.');
+    });
+
     it('handles API key errors', () => {
       const result = formatLlmError('invalid api_key provided');
       expect(result).toBe('The API key for this provider is invalid or expired');

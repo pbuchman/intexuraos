@@ -28,6 +28,9 @@ Manage Linear issues, branches, and PRs with enforced workflow and cross-linking
 3. **Cross-Linking**: Every issue MUST link between systems (Linear <-> GitHub <-> Sentry)
 4. **CI Gate**: `pnpm run ci:tracked` MUST pass before PR creation unless explicitly overridden
 5. **State Management**: Automatically transition issues through the state machine
+6. **One Issue at a Time**: Complete verification, commit, and PR for EACH issue before starting the next
+7. **Checkpoint Pattern**: After completing an issue, STOP and wait for user instruction before proceeding
+8. **Done Forbidden**: Never move issues to Done — maximum agent-controlled state is QA
 
 ## Invocation Detection
 

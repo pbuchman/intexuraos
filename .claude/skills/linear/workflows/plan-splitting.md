@@ -225,6 +225,31 @@ Each child issue (except the final one) includes:
 
 The final task does NOT include this directive, allowing natural completion.
 
+### Continuation Directive Scope
+
+The "DO NOT STOP" continuation directive ONLY applies to:
+
+- ✅ Child issues created by auto-splitting in the SAME session
+- ✅ Tiered execution of a planned multi-step task
+
+It does NOT apply to:
+
+- ❌ Independent Todo issues (each is a separate task)
+- ❌ Epic child issues created in Linear UI (not auto-split)
+- ❌ Issues that require separate PRs
+- ❌ Any issue where the user didn't explicitly request batch execution
+
+**When in doubt:** STOP and checkpoint. User can always say "continue".
+
+### Distinguishing Auto-Split vs Independent Issues
+
+| Scenario                           | Continuation Applies? | Reason                                    |
+| ---------------------------------- | --------------------- | ----------------------------------------- |
+| `/linear` creates parent + 5 kids  | ✅ Yes                | Same session, auto-split, shared context  |
+| User manually creates epic + kids  | ❌ No                 | Each is independent work unit             |
+| `/linear INT-XXX` on random issue  | ❌ No                 | Standalone issue, not part of split       |
+| Working through Todo queue         | ❌ No                 | Each issue is separate task               |
+
 ## Example: INT-156 Style Plan
 
 Given a plan like:
