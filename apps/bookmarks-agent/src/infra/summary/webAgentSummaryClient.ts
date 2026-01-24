@@ -76,6 +76,7 @@ export function createWebAgentSummaryClient(
           },
           body: JSON.stringify({
             url: content.url,
+            userId: _userId,
             maxSentences: 20,
             maxReadingMinutes: 3,
           }),
