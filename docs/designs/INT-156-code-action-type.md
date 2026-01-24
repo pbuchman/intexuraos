@@ -2117,6 +2117,22 @@ Multi-field queries require composite indexes. Add to `firestore.indexes.json`:
       "collectionGroup": "logs",
       "queryScope": "COLLECTION_GROUP",
       "fields": [{ "fieldPath": "sequence", "order": "ASCENDING" }]
+    },
+    {
+      "collectionGroup": "code_tasks",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "updatedAt", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "code_tasks",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "linearIssueId", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" }
+      ]
     }
   ]
 }
@@ -2129,20 +2145,22 @@ Multi-field queries require composite indexes. Add to `firestore.indexes.json`:
 - User's tasks by status, sorted by date: `/code-tasks` page
 - Deduplication check: `where('dedupKey', '==', key).where('createdAt', '>', fiveMinutesAgo)`
 - Logs by sequence: real-time log streaming
+- Zombie detection: `where('status', '==', 'running').where('updatedAt', '<', thirtyMinutesAgo)`
+- Single task per issue: `where('linearIssueId', '==', id).where('status', 'in', ['dispatched', 'running'])`
 
 ### Data Retention
 
 **Firestore:**
 
-- `code_tasks` documents: Kept indefinitely (no automatic cleanup)
-- `logs` subcollection: Kept indefinitely (no automatic cleanup)
+- `code_tasks` documents: Kept indefinitely (task history valuable for auditing)
+- `logs` subcollection: **90 days** (see cleanup function in `code_tasks/{taskId}/logs` section)
 
 **Worker machines:**
 
 - Worktrees: Cleaned up after 7 days via daily cron (`cleanup-worktrees.sh`)
-- Local logs: Cleaned up with worktree
+- Local logs: Cleaned up after 7 days with worktree
 
-**Rationale:** Firestore storage is cheap, task history is valuable for debugging and auditing. Worker disk space is limited, so worktrees are cleaned up.
+**Rationale:** Task records are cheap and valuable for debugging. Log chunks are larger and cleaned after 90 days to manage storage costs while retaining sufficient history.
 
 **Cleanup script:** `~/claude-workers/scripts/cleanup-worktrees.sh`
 
