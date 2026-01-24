@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
+import { codeTasksRoutes } from './codeTasksRoutes.js';
 
-export async function registerRoutes(_app: FastifyInstance): Promise<void> {
-  // Routes will be registered here as the service grows
-  // Infrastructure routes (/health, /openapi.json, /docs) are in server.ts
+export async function registerRoutes(app: FastifyInstance): Promise<void> {
+  await app.register(codeTasksRoutes);
 }
