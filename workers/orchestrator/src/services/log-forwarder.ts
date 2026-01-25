@@ -51,7 +51,6 @@ export class LogForwarder {
       return;
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
     this.logger.info({ taskId, logFilePath }, 'Starting log forwarding');
 
     const state: ForwardingState = {

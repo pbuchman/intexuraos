@@ -15,8 +15,9 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@intexuraos/common-core": "workspace:*",
     "@fastify/cors": "^10.0.1",
+    "@intexuraos/common-core": "workspace:*",
+    "async-mutex": "^0.5.0",
     "fastify": "^5.1.0",
     "jsonwebtoken": "^9.0.2",
     "zod": "^3.24.1"
