@@ -172,14 +172,15 @@ export function registerRoutes(
   });
 
   // POST /admin/shutdown - Graceful shutdown
-  app.post('/admin/shutdown', async (_request, reply) => {
+  app.post('/admin/shutdown', async (request, reply) => {
+    logger.info({ method: request.method, url: request.url }, 'Admin endpoint called');
     // TODO: Implement graceful shutdown logic
-    logger.info({ message: 'Shutdown requested' });
     reply.send({ status: 'shutting_down' });
   });
 
   // POST /admin/refresh-token - Force token refresh
-  app.post('/admin/refresh-token', async (_request, reply) => {
+  app.post('/admin/refresh-token', async (request, reply) => {
+    logger.info({ method: request.method, url: request.url }, 'Admin endpoint called');
     const refreshResult = await tokenService.refreshToken();
 
     if (!refreshResult.ok) {
