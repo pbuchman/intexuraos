@@ -85,8 +85,8 @@ The current caching implementation has two components:
 
 | Cache Type    | TTL        | Purpose                           | Effectiveness |
 | ------------- | ---------- | --------------------------------- | ------------- |
-| Client cache  | 5 minutes  | Reuse LinearClient instances      | ✅ Helps       |
-| Request dedup | 10 seconds | Prevent duplicate in-flight calls | ❌ Not enough  |
+| Client cache  | 5 minutes  | Reuse LinearClient instances      | ✅ Helps      |
+| Request dedup | 10 seconds | Prevent duplicate in-flight calls | ❌ Not enough |
 
 **Problem:** The 10-second dedup TTL is shorter than the 60-second polling interval. Each poll is a fresh request, triggering full N+1 queries again.
 

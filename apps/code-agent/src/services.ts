@@ -8,12 +8,15 @@ import type { Firestore } from '@google-cloud/firestore';
 import { getFirestore } from '@intexuraos/infra-firestore';
 import type { CodeWorkersConfig } from './config.js';
 import type { CodeTaskRepository } from './domain/repositories/codeTaskRepository.js';
+import type { WorkerDiscoveryService } from './domain/services/workerDiscovery.js';
 import { createFirestoreCodeTaskRepository } from './infra/repositories/firestoreCodeTaskRepository.js';
+import { createWorkerDiscoveryService } from './infra/services/workerDiscoveryImpl.js';
 
 export interface ServiceContainer {
   firestore: Firestore;
   logger: pino.Logger;
   codeTaskRepo: CodeTaskRepository;
+  workerDiscovery: WorkerDiscoveryService;
 }
 
 // Configuration required to initialize services
@@ -44,6 +47,7 @@ export function initServices(_config: ServiceConfig): void {
     firestore,
     logger,
     codeTaskRepo: createFirestoreCodeTaskRepository({ firestore, logger }),
+    workerDiscovery: createWorkerDiscoveryService({ logger }),
   };
 }
 

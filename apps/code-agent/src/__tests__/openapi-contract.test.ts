@@ -10,11 +10,19 @@ import pino from 'pino';
 import type { Logger } from 'pino';
 import { createFirestoreCodeTaskRepository } from '../infra/repositories/firestoreCodeTaskRepository.js';
 import type { CodeTaskRepository } from '../domain/repositories/codeTaskRepository.js';
+import { createWorkerDiscoveryService } from '../infra/services/workerDiscoveryImpl.js';
+import type { WorkerDiscoveryService } from '../domain/services/workerDiscovery.js';
 
 describe('OpenAPI contract', () => {
   let app: Awaited<ReturnType<typeof buildServer>>;
 
   beforeEach(async () => {
+    // Set required env vars for worker discovery
+    process.env['INTEXURAOS_CODE_WORKERS'] =
+      'mac:https://cc-mac.intexuraos.cloud:1,vm:https://cc-vm.intexuraos.cloud:2';
+    process.env['INTEXURAOS_CF_ACCESS_CLIENT_ID'] = 'test-client-id';
+    process.env['INTEXURAOS_CF_ACCESS_CLIENT_SECRET'] = 'test-client-secret';
+
     const fakeFirestore = createFakeFirestore() as unknown as Firestore;
     setFirestore(fakeFirestore);
     const logger = pino({ name: 'test' }) as unknown as Logger;
@@ -26,10 +34,12 @@ describe('OpenAPI contract', () => {
         firestore: fakeFirestore,
         logger,
       }),
+      workerDiscovery: createWorkerDiscoveryService({ logger }),
     } as {
       firestore: Firestore;
       logger: Logger;
       codeTaskRepo: CodeTaskRepository;
+      workerDiscovery: WorkerDiscoveryService;
     });
 
     app = await buildServer();
