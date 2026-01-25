@@ -90,6 +90,70 @@ For each modified service detected in Phase 1:
 2. **CHECKPOINT**: Present proposed section, wait for approval
 3. Apply approved changes to README.md
 
+#### README Section Format
+
+**User Feedback:** "Make it more concise, include really important info"
+
+**Principle:** When in doubt, cut words. Keep only core value propositions with one-line impact statements.
+
+##### Example: v2.1.0 (Approved Format)
+
+```markdown
+## What's New in v2.1.0
+
+| Improvement                 | Impact                                           |
+| --------------------------- | ------------------------------------------------ |
+| **Code Consolidation**      | Removed 4,200+ duplicate lines across 8 services |
+| **Standardized Validation** | All LLM responses now use Zod schemas            |
+| **Cost Optimization**       | 63% Cloud Build cost reduction                   |
+| **Bug Fix**                 | Fixed duplicate WhatsApp approval messages       |
+```
+
+##### Before/After Comparison
+
+**❌ Verbose (Avoid):**
+
+```markdown
+## What's New in v2.1.0
+
+### Code Consolidation
+
+We have significantly improved the codebase by removing duplicate code across multiple services. This effort resulted in the elimination of over 4,200 lines of redundant code spread across 8 different microservices, which will improve maintainability and reduce the cognitive load for developers working on the codebase.
+
+### Standardized Validation
+
+In this release, we have implemented a comprehensive validation standardization effort. All LLM responses throughout the system now utilize Zod schemas for runtime validation, which provides better type safety and more consistent error handling across all services.
+
+### Cost Optimization
+
+After analyzing our cloud infrastructure costs, we identified several optimization opportunities. This release includes changes that resulted in a 63% reduction in Cloud Build costs, which will result in significant ongoing savings for our operations.
+
+### Bug Fixes
+
+Fixed an issue where WhatsApp approval messages were being sent multiple times, causing confusion for users. This issue has been resolved and messages are now sent only once as intended.
+```
+
+**✅ Concise (Use):**
+
+```markdown
+## What's New in v2.1.0
+
+| Improvement                 | Impact                                           |
+| --------------------------- | ------------------------------------------------ |
+| **Code Consolidation**      | Removed 4,200+ duplicate lines across 8 services |
+| **Standardized Validation** | All LLM responses now use Zod schemas            |
+| **Cost Optimization**       | 63% Cloud Build cost reduction                   |
+| **Bug Fix**                 | Fixed duplicate WhatsApp approval messages       |
+```
+
+**Key Differences:**
+
+- Remove wordy descriptions and redundant phrases
+- One-line impact statements (no paragraphs)
+- Focus on quantifiable metrics and user-facing value
+- Table format for scannability
+- Bold key terms for quick skimming
+
 ### Phase 5: Website Improvements (Checkpoint)
 
 1. Generate `RecentUpdatesSection.tsx` content from release

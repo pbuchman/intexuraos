@@ -213,6 +213,13 @@ locals {
       min_scale = 0
       max_scale = 1
     }
+    code_agent = {
+      name      = "intexuraos-code-agent"
+      app_path  = "apps/code-agent"
+      port      = 8095
+      min_scale = 0
+      max_scale = 1
+    }
     app_settings_service = {
       name      = "intexuraos-app-settings-service"
       app_path  = "apps/app-settings-service"
@@ -270,6 +277,7 @@ locals {
     INTEXURAOS_NOTES_AGENT_URL                  = "https://${local.services.notes_agent.name}-${local.cloud_run_url_suffix}"
     INTEXURAOS_TODOS_AGENT_URL                  = "https://${local.services.todos_agent.name}-${local.cloud_run_url_suffix}"
     INTEXURAOS_BOOKMARKS_AGENT_URL              = "https://${local.services.bookmarks_agent.name}-${local.cloud_run_url_suffix}"
+    INTEXURAOS_CODE_AGENT_URL                   = "https://${local.services.code_agent.name}-${local.cloud_run_url_suffix}"
     INTEXURAOS_APP_SETTINGS_SERVICE_URL         = "https://${local.services.app_settings_service.name}-${local.cloud_run_url_suffix}"
     INTEXURAOS_CALENDAR_AGENT_URL               = "https://${local.services.calendar_agent.name}-${local.cloud_run_url_suffix}"
     INTEXURAOS_WEB_AGENT_URL                    = "https://${local.services.web_agent.name}-${local.cloud_run_url_suffix}"
@@ -1363,6 +1371,32 @@ module "app_settings_service" {
   labels          = local.common_labels
 
   image = "${var.region}-docker.pkg.dev/${var.project_id}/${module.artifact_registry.repository_id}/app-settings-service:latest"
+
+  secrets  = local.common_service_secrets
+  env_vars = local.common_service_env_vars
+
+  depends_on = [
+    module.artifact_registry,
+    module.iam,
+    module.secret_manager,
+  ]
+}
+
+# Code Agent - Code execution service
+module "code_agent" {
+  source = "../../modules/cloud-run-service"
+
+  project_id      = var.project_id
+  region          = var.region
+  environment     = var.environment
+  service_name    = local.services.code_agent.name
+  service_account = module.iam.service_accounts["code_agent"]
+  port            = local.services.code_agent.port
+  min_scale       = local.services.code_agent.min_scale
+  max_scale       = local.services.code_agent.max_scale
+  labels          = local.common_labels
+
+  image = "${var.region}-docker.pkg.dev/${var.project_id}/${module.artifact_registry.repository_id}/code-agent:latest"
 
   secrets  = local.common_service_secrets
   env_vars = local.common_service_env_vars

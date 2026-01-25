@@ -114,6 +114,17 @@ parentId: <parent issue ID>
 Description: Subtask template format
 ```
 
+**⚠️ CRITICAL: Every child issue description MUST include:**
+
+1. The `🚨 MANDATORY EXECUTION RULES` section at the TOP
+2. Branch creation instruction with the specific issue ID
+3. Full CI verification requirement (`pnpm run ci:tracked`)
+4. 95% coverage as MINIMUM (not target)
+5. Continuation instruction pointing to the NEXT issue ID
+6. All test scenarios listed — agents MUST implement them ALL
+
+**DO NOT create "simplified" issues.** The template exists for a reason. Use it fully.
+
 #### Step 5: Set Dependencies
 
 After all issues created:
