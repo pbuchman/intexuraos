@@ -161,7 +161,7 @@ sequenceDiagram
 | ------------- | -------------------------------- | ----------------------------- |
 | `actionId`    | string                           | Action ID (document ID)       |
 | `userId`      | string                           | User ID                       |
-| `status`      | 'pending' \| 'ready' \| 'failed' | Preview generation status     |
+| `status`      | 'pending' \                      | 'ready' \                     | 'failed' | Preview generation status |
 | `summary`     | string?                          | Extracted event title         |
 | `start`       | string?                          | ISO 8601 start datetime       |
 | `end`         | string?                          | ISO 8601 end datetime         |

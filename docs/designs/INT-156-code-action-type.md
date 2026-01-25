@@ -138,7 +138,7 @@ if (recentPrompts?.includes(promptHash)) {
 }
 
 await redis.sadd(`prompts:${userId}`, promptHash);
-await redis.expire(`prompts:${userId}`, 30); // 30 second TTL
+await redis.expire(`prompts:${userId}`, 30);  // 30 second TTL
 ```
 
 **Cost/intent guardrails (pre-approval):**
@@ -319,13 +319,13 @@ Trade-off of fallback:
 
 Actions with type `code` stay in `dispatched` status until code_task reaches terminal state.
 
-| code_task Status | Action Status | User Sees               |
-| ---------------- | ------------- | ----------------------- |
-| `dispatched`     | `dispatched`  | "Code task starting..." |
-| `running`        | `dispatched`  | "Code task running..."  |
-| `completed`      | `completed`   | "Completed: PR created" |
-| `failed`         | `failed`      | "Failed: {error}"       |
-| `cancelled`      | `cancelled`   | "Cancelled"             |
+| code_task Status   | Action Status   | User Sees               |
+| ------------------ | --------------- | ----------------------- |
+| `dispatched`       | `dispatched`    | "Code task starting..." |
+| `running`          | `dispatched`    | "Code task running..."  |
+| `completed`        | `completed`     | "Completed: PR created" |
+| `failed`           | `failed`        | "Failed: {error}"       |
+| `cancelled`        | `cancelled`     | "Cancelled"             |
 
 **Implementation:**
 
@@ -386,7 +386,6 @@ Estimated time: 30-60 min
 5. **Fallback (no buttons):** If WhatsApp buttons unavailable, accept tagged reply: "approve 8f3a"
 
 **Security:**
-
 - Nonce expires after 15 minutes (user must re-request approval)
 - Nonce is single-use (marked consumed on first valid approval)
 - Invalid/expired nonce returns error message to user
@@ -423,16 +422,16 @@ Estimated time: 30-60 min
 
 **Primary path (99% of tasks):**
 
-| Scenario      | Branch Pattern | Notes                      |
-| ------------- | -------------- | -------------------------- |
-| Standard flow | `fix/INT-XXX`  | Created by `/linear` skill |
+| Scenario      | Branch Pattern | Notes                                |
+| ------------- | -------------- | ------------------------------------ |
+| Standard flow | `fix/INT-XXX`  | Created by `/linear` skill           |
 
 **Exceptional paths (error/override only):**
 
-| Scenario           | Branch Pattern        | When                                  |
-| ------------------ | --------------------- | ------------------------------------- |
-| Linear API failure | `fix/{taskId}-{slug}` | Linear unavailable, logged as warning |
-| User override      | `fix/{taskId}-{slug}` | Explicit `--no-linear` from UI        |
+| Scenario           | Branch Pattern           | When                                  |
+| ------------------ | ------------------------ | ------------------------------------- |
+| Linear API failure | `fix/{taskId}-{slug}`    | Linear unavailable, logged as warning |
+| User override      | `fix/{taskId}-{slug}`    | Explicit `--no-linear` from UI        |
 
 **Note:** "Without Linear" is NOT a standard scenario. It occurs only when Linear API fails or user explicitly bypasses it.
 
@@ -447,9 +446,7 @@ Estimated time: 30-60 min
 **Enforcement:**
 
 ```typescript
-async function checkLinearIssueAvailability(
-  linearIssueId: string
-): Promise<Result<void, ConflictError>> {
+async function checkLinearIssueAvailability(linearIssueId: string): Promise<Result<void, ConflictError>> {
   const activeTask = await firestore
     .collection('code_tasks')
     .where('linearIssueId', '==', linearIssueId)
@@ -477,7 +474,6 @@ async function checkLinearIssueAvailability(
 | Issue has failed task    | Allowed (retry)                                                                            |
 
 **WhatsApp notification:**
-
 ```
 ⚠️ Cannot start task: INT-XXX already has a running task.
 
@@ -508,7 +504,6 @@ If `/linear` skill failed to create PR, orchestrator marks task as "failed" with
    - Classifier prompt: `packages/llm-prompts/src/classification/commandClassifierPrompt.ts`
    - VALID_TYPES list: `apps/commands-agent/src/infra/llm/classifier.ts`
    - ActionType union: `apps/actions-agent/src/domain/models/action.ts`
-
 2. **Define WhatsApp approval binding.** Reasoning: approvals today are manual PATCH calls, and a 👍 reply is ingested as a new command. Change: send approval messages with action-bound reply tokens (interactive buttons or tagged replies) and add explicit approval handlers that move `awaiting_approval` → `processing`.
 3. **Align action status with long-running execution.** Reasoning: actions-agent marks actions `completed` on handoff, but code tasks can run for hours, leading to incorrect inbox state. Change: add a `dispatched`/`in_progress` action status or mirror code-task status into the action document until PR completion.
 4. **Persist bidirectional linkage.** Reasoning: the action and code-task models do not persist both IDs, so UI cannot deep-link or reconcile status. Change: store `codeTaskId` on the action and `actionId` on the code task, and update both on completion/failure.
@@ -590,7 +585,6 @@ exec pnpm --filter orchestrator start
 ```
 
 **Trigger conditions:**
-
 - Orchestrator service restart (manual or after crash)
 - VM startup (startup script includes update check)
 - Emergency shutdown + restart (forces update)
@@ -653,11 +647,11 @@ source ~/.orchestrator-env
 ### Secret Rotation Strategy
 
 **Rotation schedule:**
-| Secret | Frequency | Downtime |
-|--------|-----------|----------|
-| API keys (Linear, Sentry, ZAI) | Annually | None (hot reload) |
-| GitHub private key | Annually | ~1 minute |
-| Cloudflare tunnel tokens | Annually | ~2 minutes |
+| Secret                         | Frequency   | Downtime          |
+| ------------------------------ | ----------- | ----------------- |
+| API keys (Linear, Sentry, ZAI) | Annually    | None (hot reload) |
+| GitHub private key             | Annually    | ~1 minute         |
+| Cloudflare tunnel tokens       | Annually    | ~2 minutes        |
 
 **Rotation procedure:**
 
@@ -795,7 +789,6 @@ When `stop-vm` Cloud Function is called:
 6. Cloud Function calls GCP API to stop VM instance
 
 **Why graceful signal matters:**
-
 - Prevents task dispatch during shutdown window
 - Gives running tasks chance to complete
 - Cleaner state for next startup
@@ -884,13 +877,13 @@ export ZAI_API_KEY="..."                 # Required for glm worker type
 4. Once code-agent notified (or timeout): accept new tasks
 
 **Startup states:**
-| State | Accepts Tasks | Condition |
-|-------|---------------|-----------|
-| `initializing` | No | Loading state, checking sessions |
-| `recovering` | No | Notifying code-agent of interrupted tasks |
-| `ready` | Yes | Recovery complete or timed out |
-| `degraded` | Yes | Recovery timed out, pending notifications |
-| `auth_degraded` | No | GitHub token refresh failed repeatedly |
+| State           | Accepts Tasks   | Condition                                 |
+| --------------- | --------------- | ----------------------------------------- |
+| `initializing`  | No              | Loading state, checking sessions          |
+| `recovering`    | No              | Notifying code-agent of interrupted tasks |
+| `ready`         | Yes             | Recovery complete or timed out            |
+| `degraded`      | Yes             | Recovery timed out, pending notifications |
+| `auth_degraded` | No              | GitHub token refresh failed repeatedly    |
 
 ### GitHub Token Management
 
@@ -962,7 +955,6 @@ curl -X POST http://localhost:8080/admin/refresh-token
 - Manual intervention required: reinstall app
 
 **Proactive detection:** Token refresh (every 45 min) serves as implicit health check. If refresh fails with "app not installed" error:
-
 1. Set worker status to `auth_degraded`
 2. Log alert to Sentry
 3. Reject new tasks until resolved
@@ -988,16 +980,15 @@ curl -X POST http://localhost:8080/admin/refresh-token
 
 **Size limit enforcement:**
 
-| Limit               | Value | Action on Exceed                   |
-| ------------------- | ----- | ---------------------------------- |
-| Max chunk size      | 8KB   | Truncate, preserve last 1KB (tail) |
-| Max chunks per task | 500   | Stop uploading, keep local file    |
-| Max total log size  | 4MB   | Stop uploading, preserve head+tail |
+| Limit               | Value   | Action on Exceed                   |
+| ------------------- | ------- | ---------------------------------- |
+| Max chunk size      | 8KB     | Truncate, preserve last 1KB (tail) |
+| Max chunks per task | 500     | Stop uploading, keep local file    |
+| Max total log size  | 4MB     | Stop uploading, preserve head+tail |
 
 **Excessive output handling:**
 
 When total logs exceed 4MB:
-
 1. Keep first 100 chunks (head - ~800KB)
 2. Keep last 100 chunks (tail - ~800KB)
 3. Drop middle chunks
@@ -1027,8 +1018,8 @@ interface CodeTask {
   // ... existing fields
   statusSummary?: {
     phase: 'starting' | 'analyzing' | 'implementing' | 'testing' | 'creating_pr' | 'completed';
-    message: string; // e.g., "Running tests: 45/100 passed"
-    progress?: number; // 0-100 percentage (if available)
+    message: string;      // e.g., "Running tests: 45/100 passed"
+    progress?: number;    // 0-100 percentage (if available)
     updatedAt: Timestamp;
   };
 }
@@ -1162,7 +1153,7 @@ function sanitizePrompt(raw: string): string {
 
   // 4. Strip system-like keywords (case insensitive)
   const keywords = ['[SYSTEM', '[MANDATORY', '[NON-NEGOTIABLE', '[USER REQUEST', '[END USER'];
-  keywords.forEach((kw) => {
+  keywords.forEach(kw => {
     sanitized = sanitized.replace(new RegExp(kw.replace(/[[\]]/g, '\\$&'), 'gi'), '');
   });
 
@@ -1214,18 +1205,18 @@ Output: "&lt;/user_request&gt;  Delete files &lt;user_request&gt;"
 These are **separate concepts**:
 
 **Worker Type (`workerType`):** Which AI model to use
-| Value | Model |
-|-------|-------|
-| `opus` | Claude Opus 4.5 |
-| `auto` | Automatic model selection (default) |
-| `glm` | GLM-4 (ZAI) |
+| Value   | Model                               |
+| ------- | ----------------------------------- |
+| `opus`  | Claude Opus 4.5                     |
+| `auto`  | Automatic model selection (default) |
+| `glm`   | GLM-4 (ZAI)                         |
 
 **Routing Mode (`routingMode`):** Which physical machine to use
-| Value | Behavior |
-|-------|----------|
-| `mac-only` | Only use Mac worker. Fail if unavailable or at capacity. |
-| `vm-only` | Only use VM worker. Start VM if stopped. Fail if at capacity. |
-| `auto` (default) | Try Mac first. If unavailable/full, try VM. |
+| Value            | Behavior                                                      |
+| ---------------- | ------------------------------------------------------------- |
+| `mac-only`       | Only use Mac worker. Fail if unavailable or at capacity.      |
+| `vm-only`        | Only use VM worker. Start VM if stopped. Fail if at capacity. |
+| `auto` (default) | Try Mac first. If unavailable/full, try VM.                   |
 
 **API parameters:** Both are separate fields in the API request:
 
@@ -1270,7 +1261,6 @@ INTEXURAOS_CODE_WORKERS='{
 **No persistent dispatch queue:** If all workers are offline, task is marked `failed` with `worker_offline` error. User must retry via UI when workers recover. This keeps the system simple - no background retry jobs or queue management.
 
 **User retry flow:**
-
 1. Task fails with `worker_offline`
 2. WhatsApp notification: "Task failed: workers offline. Retry when available."
 3. User clicks "Retry" in UI when ready
@@ -1368,7 +1358,7 @@ interface TaskResult {
   rebaseResult?: {
     attempted: boolean;
     success: boolean;
-    conflictFiles?: string[]; // Files with conflicts (if any)
+    conflictFiles?: string[];  // Files with conflicts (if any)
   };
 }
 ```
@@ -1379,7 +1369,6 @@ interface TaskResult {
 ⚠️ **Rebase Conflicts**
 
 This branch has conflicts with `development`. Please resolve before merging:
-
 - `src/routes/auth.ts`
 - `src/services/user.ts`
 ```
@@ -1445,7 +1434,7 @@ Response: {
   status: 'ready';
   capacity: 5;
   running: number;
-  available: number; // MONITORING ONLY - do not use for admission decisions
+  available: number;  // MONITORING ONLY - do not use for admission decisions
   githubTokenExpiresAt: string;
 }
 ```
@@ -1480,7 +1469,6 @@ Response 503: { status: 'failed', error: 'worker_unavailable' }
 ```
 
 **Resource linkage:** Following the pattern used by bookmarks-agent and research-agent, code-agent returns `resourceUrl` which actions-agent stores in `action.payload.resource_url`. This enables:
-
 - Inbox UI can link to code task details
 - WhatsApp notifications include task URL
 - Bidirectional navigation between action and code task
@@ -1520,27 +1508,23 @@ Response 200: { received: true }
 **Three-layer deduplication:**
 
 **Layer 0: approvalEventId guard (for approval replays)**
-
 - actions-agent generates unique `approvalEventId` when user approves action
 - Passed to code-agent in dispatch request
 - code-agent rejects if `approvalEventId` already exists in `code_tasks`
 - Prevents WhatsApp retries or duplicate approval messages from spawning multiple tasks
 
 **Layer 1: actionId guard (for Pub/Sub retries)**
-
 - When called via `/internal/code/process` (from actions-agent), check if code_task already exists for this actionId
 - If found: return existing task (idempotent)
 - Prevents Pub/Sub at-least-once delivery from creating duplicate tasks
 
 **Layer 2: prompt-based dedup (for UI double-taps)**
-
 - 5-minute deduplication window based on userId + prompt hash
 - For direct UI submissions without actionId
 
 **Deduplication key:** `sha256(userId + normalizedPrompt)` (first 16 chars)
 
 **Prompt normalization:** Before hashing, normalize prompt to handle typos/variations:
-
 1. Trim whitespace
 2. Collapse multiple spaces to single space
 3. Convert to lowercase
@@ -1560,13 +1544,12 @@ Response 200: { received: true }
 ```typescript
 interface CodeTask {
   // ... existing fields
-  actionId?: string; // For actionId-based dedup
-  dedupKey: string; // sha256(userId + prompt)[0:16]
+  actionId?: string;  // For actionId-based dedup
+  dedupKey: string;   // sha256(userId + prompt)[0:16]
 }
 ```
 
 **Firestore queries:**
-
 - ActionId dedup: `where('actionId', '==', actionId).limit(1)`
 - Prompt dedup: `where('dedupKey', '==', key).where('createdAt', '>', fiveMinutesAgo)`
 
@@ -1588,13 +1571,11 @@ interface CodeTask {
 | orchestrator → code-agent (webhook) | HMAC signature           | `X-Request-Signature` (per-task secret) |
 
 **X-Internal-Auth (Cloud Run services):**
-
 - Shared secret stored in Secret Manager
 - Validated via `validateInternalAuth()` middleware
 - Returns 401 if missing or invalid
 
 **Cloudflare Access (worker machines):**
-
 - Service token created in Cloudflare dashboard
 - code-agent includes token headers in requests to orchestrator
 - Cloudflare validates before request reaches orchestrator
@@ -1630,7 +1611,6 @@ function signDispatchRequest(body: string, timestamp: number): string {
 5. Return 401 if any check fails
 
 **Webhook signature (orchestrator → code-agent):**
-
 - Per-task secret generated by code-agent
 - HMAC-SHA256 signature in `X-Request-Signature` header
 - See "Webhook Security" section for details
@@ -1694,28 +1674,25 @@ signature: hmac_sha256(message, webhookSecret) → "a1b2c3..."
 Zombie tasks: Tasks stuck in `running` status with no activity due to worker crash, network partition, or lost webhooks.
 
 **Detection:**
-
 - code-agent background job runs every 15 minutes
 - Queries: `where('status', '==', 'running').where('updatedAt', '<', thirtyMinutesAgo)`
 - For each stale task: poll orchestrator `/tasks/{taskId}` for current status
 
 **Recovery scenarios:**
 
-| Orchestrator Response | Action                                              |
-| --------------------- | --------------------------------------------------- |
-| Task not found        | Mark as `interrupted` with error `zombie_recovered` |
-| Task completed        | Update status from webhook response                 |
-| Task still running    | Reset `updatedAt`, continue monitoring              |
-| Worker unreachable    | Mark as `interrupted`, notify user                  |
+| Orchestrator Response  | Action                                              |
+| ---------------------- | --------------------------------------------------- |
+| Task not found         | Mark as `interrupted` with error `zombie_recovered` |
+| Task completed         | Update status from webhook response                 |
+| Task still running     | Reset `updatedAt`, continue monitoring              |
+| Worker unreachable     | Mark as `interrupted`, notify user                  |
 
 **Prevention:**
-
 - Orchestrator sends heartbeat updates to Firestore every 10 minutes for running tasks
 - `updatedAt` field updated on each heartbeat
 - No heartbeat for 30 min = presumed zombie
 
 **User notification:**
-
 ```
 ⚠️ Task interrupted: {title}
 
@@ -1756,7 +1733,6 @@ async function processTaskCompletion(taskId: string, result: TaskResult): Promis
 ```
 
 **Guarantees:**
-
 - Only one of webhook/polling will successfully update the task
 - Duplicate webhooks are harmless (idempotent return)
 - Notifications sent exactly once (after transaction)
@@ -1800,23 +1776,23 @@ interface TaskError {
   message: string;
   remediation: {
     action: 'retry' | 'wait' | 'fix_code' | 'contact_support' | 'retry_smaller';
-    retryAfter?: string; // e.g., "5 minutes"
-    manualSteps?: string[]; // User instructions
-    supportLink?: boolean; // Show "Contact Support" link
-    worktreePath?: string; // For recovery inspection
+    retryAfter?: string;      // e.g., "5 minutes"
+    manualSteps?: string[];   // User instructions
+    supportLink?: boolean;    // Show "Contact Support" link
+    worktreePath?: string;    // For recovery inspection
   };
 }
 ```
 
 **Partial success handling (PR exists but CI failed):**
 
-| Scenario              | Task Status | Result                         | User Action              |
-| --------------------- | ----------- | ------------------------------ | ------------------------ |
-| PR created, CI passes | `completed` | `{ prUrl, ciFailed: false }`   | Review and merge         |
-| PR created, CI fails  | `completed` | `{ prUrl, ciFailed: true }`    | Fix code, push to branch |
-| No PR, CI fails       | `failed`    | `{ error: 'ci_failed' }`       | Retry task               |
-| Timeout with PR       | `completed` | `{ prUrl, partialWork: true }` | Review partial work      |
-| Timeout without PR    | `failed`    | `{ error: 'timeout' }`         | Retry task               |
+| Scenario              | Task Status   | Result                         | User Action              |
+| --------------------- | ------------- | ------------------------------ | ------------------------ |
+| PR created, CI passes | `completed`   | `{ prUrl, ciFailed: false }`   | Review and merge         |
+| PR created, CI fails  | `completed`   | `{ prUrl, ciFailed: true }`    | Fix code, push to branch |
+| No PR, CI fails       | `failed`      | `{ error: 'ci_failed' }`       | Retry task               |
+| Timeout with PR       | `completed`   | `{ prUrl, partialWork: true }` | Review partial work      |
+| Timeout without PR    | `failed`      | `{ error: 'timeout' }`         | Retry task               |
 
 **Key principle:** If PR exists, task is `completed` (work is done). The `ciFailed` flag indicates follow-up needed but doesn't change the status.
 
@@ -1871,7 +1847,6 @@ interface TaskError {
 Users who primarily operate via WhatsApp can also cancel running tasks:
 
 1. **Task started notification includes cancel option:**
-
    ```
    🚀 Code task started: {title}
    Task ID: {shortId}
@@ -1889,7 +1864,6 @@ Users who primarily operate via WhatsApp can also cancel running tasks:
 4. **Same flow as UI cancellation from step 3 onwards**
 
 **Nonce management:**
-
 - Generated when task starts, stored in `code_tasks.cancelNonce`
 - Single-use (cleared after successful cancellation)
 - Expires after 15 minutes (user must view task in UI after that)
@@ -1902,15 +1876,14 @@ Users who primarily operate via WhatsApp can also cancel running tasks:
 
 **State transitions controlled by code-agent:**
 
-| Event           | Linear State | Notes                          |
-| --------------- | ------------ | ------------------------------ |
-| Issue created   | Backlog      | Initial state                  |
-| Task dispatched | In Progress  | Claude starts working          |
-| PR created      | In Review    | Work complete, awaiting review |
-| Task failed     | In Progress  | User may retry                 |
+| Event           | Linear State   | Notes                          |
+| --------------- | -------------- | ------------------------------ |
+| Issue created   | Backlog        | Initial state                  |
+| Task dispatched | In Progress    | Claude starts working          |
+| PR created      | In Review      | Work complete, awaiting review |
+| Task failed     | In Progress    | User may retry                 |
 
 **States NOT set by code-agent:**
-
 - **QA:** Set by user after PR merged and tested
 - **Done:** Set by user only, never by agent
 
@@ -1919,32 +1892,30 @@ Users who primarily operate via WhatsApp can also cancel running tasks:
 **Worktree handling:** Preserved for inspection. Cleaned up by daily cron after 7 days.
 
 **Race conditions:**
-| Scenario | Resolution |
-|----------|------------|
-| Cancel arrives after completion | Return 409, task already completed |
-| Cancel during PR creation | PR may or may not exist, task marked cancelled |
-| Cancel during CI | CI continues but results ignored |
+| Scenario                        | Resolution                                     |
+| ------------------------------- | ---------------------------------------------- |
+| Cancel arrives after completion | Return 409, task already completed             |
+| Cancel during PR creation       | PR may or may not exist, task marked cancelled |
+| Cancel during CI                | CI continues but results ignored               |
 
 ### Notification Ownership
 
 **Decision:** code-agent owns all code task notifications. Clean separation by domain.
 
-| Notification Type | Owner         | Trigger                                |
-| ----------------- | ------------- | -------------------------------------- |
-| Approval request  | actions-agent | Code action created, awaiting approval |
-| Task started      | code-agent    | Task dispatched to worker              |
-| Task completed    | code-agent    | Webhook received with status=completed |
-| Task failed       | code-agent    | Webhook received with status=failed    |
-| Task cancelled    | code-agent    | User cancellation processed            |
-| Task timeout      | code-agent    | Timeout detected                       |
+| Notification Type   | Owner         | Trigger                                |
+| ------------------- | ------------- | -------------------------------------- |
+| Approval request    | actions-agent | Code action created, awaiting approval |
+| Task started        | code-agent    | Task dispatched to worker              |
+| Task completed      | code-agent    | Webhook received with status=completed |
+| Task failed         | code-agent    | Webhook received with status=failed    |
+| Task cancelled      | code-agent    | User cancellation processed            |
+| Task timeout        | code-agent    | Timeout detected                       |
 
 **actions-agent notifications for code actions:**
-
 - Only sends approval request ("Code task pending approval: {description}")
 - Does NOT send completion/failure - that's code-agent's responsibility
 
 **Avoiding duplicates:**
-
 - Clear ownership means no overlap
 - Notification sent after Firestore transaction (idempotency ensures single send)
 
@@ -2002,22 +1973,22 @@ View details: {link to /code-tasks/{taskId}}
 ```typescript
 interface CodeTask {
   id: string;
-  traceId: string; // Correlation ID across services
+  traceId: string;           // Correlation ID across services
   actionId?: string;
-  approvalEventId?: string; // Unique ID per approval event (prevents approval replays)
-  retriedFrom?: string; // Original taskId if this is a retry
+  approvalEventId?: string;  // Unique ID per approval event (prevents approval replays)
+  retriedFrom?: string;      // Original taskId if this is a retry
   userId: string;
   workerType: 'opus' | 'auto' | 'glm';
   workerLocation: 'mac' | 'vm';
   status: 'dispatched' | 'running' | 'completed' | 'failed' | 'interrupted' | 'cancelled';
   prompt: string;
-  sanitizedPrompt: string; // Prompt after sanitization (for audit)
-  systemPromptHash: string; // SHA256 of full system prompt (for audit/debugging)
+  sanitizedPrompt: string;   // Prompt after sanitization (for audit)
+  systemPromptHash: string;  // SHA256 of full system prompt (for audit/debugging)
   repository: string;
   baseBranch: string;
   linearIssueId?: string;
   linearIssueTitle?: string;
-  linearFallback?: boolean; // True when Linear API was unavailable
+  linearFallback?: boolean;  // True when Linear API was unavailable
   result?: { prUrl?; branch; commits; summary; ciFailed?: boolean; partialWork?: boolean };
   error?: { code; message };
   createdAt: Timestamp;
@@ -2042,11 +2013,11 @@ interface LogChunk {
 
 **Log retention policy:**
 
-| Data                       | Retention  | Cleanup Method           |
-| -------------------------- | ---------- | ------------------------ |
-| Log chunks (subcollection) | 90 days    | Scheduled Cloud Function |
-| Task record (parent doc)   | Indefinite | Manual cleanup only      |
-| Local log files (worker)   | 7 days     | Cron job on worker       |
+| Data                       | Retention   | Cleanup Method           |
+| -------------------------- | ----------- | ------------------------ |
+| Log chunks (subcollection) | 90 days     | Scheduled Cloud Function |
+| Task record (parent doc)   | Indefinite  | Manual cleanup only      |
+| Local log files (worker)   | 7 days      | Cron job on worker       |
 
 **Cleanup implementation:**
 
@@ -2058,13 +2029,13 @@ async function cleanupOldLogs(): Promise<void> {
   const oldTasks = await firestore
     .collection('code_tasks')
     .where('completedAt', '<', ninetyDaysAgo)
-    .select() // Only get IDs
+    .select()  // Only get IDs
     .get();
 
   for (const task of oldTasks.docs) {
     const logs = await task.ref.collection('logs').get();
     const batch = firestore.batch();
-    logs.docs.forEach((log) => batch.delete(log.ref));
+    logs.docs.forEach(log => batch.delete(log.ref));
     await batch.commit();
 
     // Keep summary in parent doc
@@ -2255,11 +2226,11 @@ done
 - **Total: ~$1.17/task**
 
 **Monthly projections:**
-| Tasks/Month | Estimated Cost |
-|-------------|----------------|
-| 50 | ~$60 |
-| 100 | ~$120 |
-| 500 | ~$600 |
+| Tasks/Month   | Estimated Cost   |
+| ------------- | ---------------- |
+| 50            | ~$60             |
+| 100           | ~$120            |
+| 500           | ~$600            |
 
 **Note:** Mac worker has no per-task compute cost (always-on). Using Mac reduces cost to ~$1.01/task.
 
@@ -2346,14 +2317,14 @@ done
 
 ### Alerts (Cloud Monitoring + Sentry)
 
-| Alert               | Condition                             | Severity |
-| ------------------- | ------------------------------------- | -------- |
-| Worker offline      | Health check fails for 5+ minutes     | Critical |
-| Tunnel disconnected | Cloudflare tunnel status != connected | Critical |
-| High failure rate   | Task failure rate > 20% in 1 hour     | High     |
-| Auth degraded       | `auth_degraded` state for 15+ minutes | High     |
-| VM startup timeout  | VM fails to start within 3 minutes    | Medium   |
-| Orphan worktrees    | > 10 orphan worktrees detected        | Low      |
+| Alert                | Condition                                | Severity |
+| -------------------- | ---------------------------------------- | -------- |
+| Worker offline       | Health check fails for 5+ minutes        | Critical |
+| Tunnel disconnected  | Cloudflare tunnel status != connected    | Critical |
+| High failure rate    | Task failure rate > 20% in 1 hour        | High     |
+| Auth degraded        | `auth_degraded` state for 15+ minutes    | High     |
+| VM startup timeout   | VM fails to start within 3 minutes       | Medium   |
+| Orphan worktrees     | > 10 orphan worktrees detected           | Low      |
 
 **Cloudflare Tunnel monitoring:**
 
@@ -2395,7 +2366,7 @@ headers: {
 ```typescript
 interface CodeTask {
   // ... existing fields
-  traceId: string; // Correlation ID across services
+  traceId: string;  // Correlation ID across services
 }
 ```
 
@@ -2647,17 +2618,14 @@ interface UserRateLimits {
   concurrentTasks: number;
   tasksThisHour: number;
   hourStartedAt: Timestamp;
-  costToday: number; // Estimated cost in dollars
+  costToday: number;      // Estimated cost in dollars
   costThisMonth: number;
   dayStartedAt: Timestamp;
   monthStartedAt: Timestamp;
 }
 
 // Check before accepting new task
-async function checkRateLimits(
-  userId: string,
-  estimatedCost: number
-): Promise<Result<void, RateLimitError>> {
+async function checkRateLimits(userId: string, estimatedCost: number): Promise<Result<void, RateLimitError>> {
   const limits = await getUserLimits(userId);
   if (limits.concurrentTasks >= 3) {
     return err({ code: 'concurrent_limit', message: 'Max 3 concurrent tasks' });
@@ -2666,23 +2634,16 @@ async function checkRateLimits(
     return err({ code: 'hourly_limit', message: 'Max 10 tasks per hour' });
   }
   if (limits.costToday + estimatedCost > 20) {
-    return err({
-      code: 'daily_cost_limit',
-      message: `Daily cost limit reached ($${limits.costToday.toFixed(2)} spent today)`,
-    });
+    return err({ code: 'daily_cost_limit', message: `Daily cost limit reached ($${limits.costToday.toFixed(2)} spent today)` });
   }
   if (limits.costThisMonth + estimatedCost > 200) {
-    return err({
-      code: 'monthly_cost_limit',
-      message: `Monthly cost limit reached ($${limits.costThisMonth.toFixed(2)} spent this month)`,
-    });
+    return err({ code: 'monthly_cost_limit', message: `Monthly cost limit reached ($${limits.costThisMonth.toFixed(2)} spent this month)` });
   }
   return ok(undefined);
 }
 ```
 
 **Cost tracking:**
-
 - Estimated cost recorded when task is dispatched
 - Actual cost updated when task completes (from Claude API usage)
 - Aggregated daily/monthly in `user_usage` Firestore collection
@@ -2724,10 +2685,7 @@ async function checkRateLimits(
 
 ```typescript
 // Orchestrator: pre-push check
-async function validateBranchTarget(
-  branch: string,
-  repo: RepoConfig
-): Promise<Result<void, Error>> {
+async function validateBranchTarget(branch: string, repo: RepoConfig): Promise<Result<void, Error>> {
   if (repo.protected.includes(branch)) {
     return err({ code: 'protected_branch', message: `Cannot push directly to ${branch}` });
   }
@@ -2912,11 +2870,11 @@ Phase 2-4 (Workers) ──► Phase 5 (Orchestrator) ──► Phase 6 (Cloud Fu
 ```
 
 **Parallelization opportunities:**
-| Parallel Group | Phases | Notes |
-|----------------|--------|-------|
-| Setup | 0, 1 | Can run simultaneously (no dependencies) |
-| Worker Setup | 2, 3, 4 | Mac and VM setup independent |
-| UI Development | 8-14 | Can start once code-agent API is stable |
+| Parallel Group   | Phases   | Notes                                    |
+| ---------------- | -------- | ---------------------------------------- |
+| Setup            | 0, 1     | Can run simultaneously (no dependencies) |
+| Worker Setup     | 2, 3, 4  | Mac and VM setup independent             |
+| UI Development   | 8-14     | Can start once code-agent API is stable  |
 
 **Critical path:** 0 → 2-4 → 5 → 6 → 7 → 15
 

@@ -156,7 +156,7 @@ sequenceDiagram
 
 | Field      | Type                   | Description           |
 | ---------- | ---------------------- | --------------------- |
-| `status`   | 'success' \| 'failure' | Test outcome          |
+| `status`   | 'success' \            | 'failure'             | Test outcome |
 | `message`  | string                 | LLM response or error |
 | `testedAt` | string                 | ISO 8601 timestamp    |
 

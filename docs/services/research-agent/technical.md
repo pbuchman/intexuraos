@@ -280,7 +280,7 @@ sequenceDiagram
 | Field            | Type                       | Description                             |
 | ---------------- | -------------------------- | --------------------------------------- |
 | `selectedModels` | ResearchModel[]            | Models extracted from natural language  |
-| `synthesisModel` | ResearchModel \| undefined | Synthesis model if explicitly mentioned |
+| `synthesisModel` | ResearchModel \            | undefined                               | Synthesis model if explicitly mentioned |
 
 ## Model Filtering Logic (v2.0.0)
 
