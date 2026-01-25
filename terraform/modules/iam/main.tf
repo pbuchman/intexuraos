@@ -106,6 +106,13 @@ resource "google_service_account" "bookmarks_agent" {
   description  = "Service account for bookmarks-agent Cloud Run deployment"
 }
 
+# Service account for code-agent
+resource "google_service_account" "code_agent" {
+  account_id   = "intexuraos-code-${var.environment}"
+  display_name = "IntexuraOS Code Agent (${var.environment})"
+  description  = "Service account for code-agent Cloud Run deployment"
+}
+
 # Service account for calendar-agent
 resource "google_service_account" "calendar_agent" {
   account_id   = "intexuraos-calendar-${var.environment}"
