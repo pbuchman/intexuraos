@@ -1,21 +1,47 @@
 # Teach Me Something
 
-Share an interesting tech insight and persist it for future reference using claude-mem.
+Share an interesting tech insight and log it for future reference.
+
+**IMPORTANT: Always write content in English, regardless of the conversation language.**
 
 **Usage:**
 
-- `/teach-me-something` — pick topic from recent context or trending tech
+- `/teach-me-something` — pick topic from recent context or Threads/ClaudeCode community
 - `/teach-me-something [topic]` — teach about specific topic
 
 ---
 
-## Step 1: Choose a Topic
+## Step 1: Check for Duplicates
+
+**MANDATORY:** Before selecting a topic, check existing insights to avoid duplicates:
+
+```bash
+ls -t ~/personal/teach-me-something/*.md | head -20
+```
+
+Note the recent topics from filenames (format: `YYYY-MM-DD-topic-slug.md`). Do NOT teach about topics already covered.
+
+---
+
+## Step 2: Choose a Topic
 
 **Priority order:**
 
 1. If user provided a topic argument → teach about that (use WebSearch if needed for depth)
 2. If interesting patterns, architecture decisions, or techniques were discussed recently → teach about that
-3. Otherwise → use WebSearch for trending tech/AI topics (current year)
+3. Otherwise → search for trending ClaudeCode topics:
+
+**ClaudeCode Community Search:**
+
+```
+WebFetch: https://www.threads.com/search?q=ClaudeCode&serp_type=default
+Prompt: "Extract the most interesting technical insights, tips, or discoveries about Claude Code from the last few posts. Focus on practical techniques, workflows, or features. List 3-5 topics with brief descriptions."
+```
+
+Then pick the most interesting topic that:
+- Is NOT already in `~/personal/teach-me-something/`
+- Is practical and applicable
+- Relates to: AI coding assistants, prompt engineering, developer workflows, TypeScript/Node.js
 
 **Good topics:**
 
@@ -26,83 +52,79 @@ Share an interesting tech insight and persist it for future reference using clau
 
 ---
 
-## Step 2: Check for Prior Knowledge
+## Step 3: Teach (Immediate)
 
-Before teaching, search memory for related insights:
-
-```
-Use mcp__plugin_claude-mem_mcp-search__search with:
-- query: "[topic]"
-- type: "discovery" or "decision"
-- limit: 5
-```
-
-If related insights exist:
-
-- Reference them in your teaching ("Building on what we learned about X...")
-- Avoid repeating the same insight
-- Focus on new angles or deeper exploration
-
----
-
-## Step 3: Present the Insight
-
-Use this format:
+Present the insight directly in chat using this format:
 
 ```
 ★ Insight ─────────────────────────────────────
 **[Topic Title]**
 
-[2-4 key educational points with clear explanations]
+[2-4 key educational points with clear explanations and examples where helpful]
 
-[Code examples if applicable]
-
-[Practical application in this project]
-
-Sources: (if from web search)
-- [Source Title](url)
+Sources:
+- [Source Title 1](url)
+- [Source Title 2](url)
 ─────────────────────────────────────────────────
 ```
 
-**Guidelines:**
-
-- Make it actionable, not just theoretical
-- Connect to the current codebase when possible
-- Include code snippets for programming concepts
-- Keep it concise but complete
+If teaching from recent context, no web sources needed.
+If teaching from web search, include 1-3 relevant sources.
 
 ---
 
-## Step 4: Persist to Memory
+## Step 4: Log to Repository (Background)
 
-**MANDATORY:** Store the insight using claude-mem for future reference.
-
-The insight should be stored as an observation that future sessions can reference:
+After presenting the insight, spawn a background agent using the Task tool:
 
 ```
-Store observation with:
-- Type: discovery
-- Title: "Learned: [Topic Title]"
-- Content: Full insight content including:
-  - Key points
-  - Code examples
-  - Sources
-  - Context (what prompted this learning)
-- Project: intexuraos (if relevant to project)
+Task tool parameters:
+- subagent_type: "general-purpose"
+- run_in_background: true
+- prompt: |
+    Create a markdown file documenting what was just taught.
+
+    Topic: [TOPIC_TITLE]
+    Context: [BRIEF_DESCRIPTION_OF_WHAT_USER_WAS_BUILDING - 1-2 sentences]
+    Content: [FULL_EXPLANATION_FROM_STEP_3]
+    Sources: [LIST_OF_SOURCES_IF_ANY]
+
+    Steps:
+    1. Create file: ~/personal/teach-me-something/YYYY-MM-DD-[topic-slug].md
+       - Use today's date
+       - Slug: lowercase, hyphens, max 50 chars
+
+    2. File content format:
+       # [Topic Title]
+
+       *Learned: YYYY-MM-DD*
+
+       ## Context
+
+       [What I was building when I learned this - helps trigger memory later]
+
+       ## Insight
+
+       [Full explanation]
+
+       ## Sources
+
+       - [Title](url)
+
+    3. Git operations:
+       cd ~/personal/teach-me-something
+       git add .
+       git commit -m "Add: [topic-slug]"
+       git push
 ```
 
-**Why persist:**
-
-1. **Continuity** — Future sessions can build on this knowledge
-2. **Pattern Recognition** — Similar questions trigger related insights
-3. **Personal Knowledge Base** — Accumulated learnings accessible anytime
-4. **Context Awareness** — AI understands what you've already learned
+Do NOT wait for the background task to complete. Continue conversation immediately after spawning.
 
 ---
 
 ## Step 5: Suggest Next Steps
 
-After presenting and persisting:
+After presenting the insight:
 
 ```
 💡 **Related Explorations:**
@@ -119,11 +141,13 @@ After presenting and persisting:
 
 **Assistant:**
 
-1. Checks recent context → sees discussion about Pub/Sub patterns
-2. Searches memory → no prior insights on "dead letter queues"
-3. Presents insight on DLQ patterns with GCP Pub/Sub examples
-4. Persists to memory with `discovery` type
-5. Suggests: "Consider: exponential backoff, poison message detection"
+1. Lists recent files in `~/personal/teach-me-something/` → sees `2026-01-20-subpath-exports.md`
+2. Checks recent context → nothing particularly interesting
+3. Fetches Threads ClaudeCode search → finds tip about "using hooks for automated testing"
+4. Verifies "hooks-automated-testing" not in existing files
+5. Presents insight on Claude Code hooks
+6. Spawns background agent to persist
+7. Suggests related explorations
 
 ---
 
@@ -137,17 +161,4 @@ After presenting and persisting:
 | **AI/ML**               | Prompt engineering, RAG patterns, model selection     |
 | **DevOps**              | GitOps, progressive delivery, observability           |
 | **Security**            | OWASP patterns, secrets management, zero trust        |
-
----
-
-## Memory Integration
-
-This skill uses claude-mem MCP for persistence:
-
-| Action                     | Tool                                                  |
-| -------------------------- | ----------------------------------------------------- |
-| Search existing insights   | `mcp__plugin_claude-mem_mcp-search__search`           |
-| Get context around insight | `mcp__plugin_claude-mem_mcp-search__timeline`         |
-| Fetch full details         | `mcp__plugin_claude-mem_mcp-search__get_observations` |
-
-**Note:** Storing observations happens automatically through the conversation - insights shared become part of the memory context.
+| **Claude Code**         | Hooks, MCP servers, skills, custom agents             |
