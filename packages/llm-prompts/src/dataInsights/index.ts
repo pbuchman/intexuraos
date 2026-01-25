@@ -23,6 +23,8 @@ export {
 
 export { parseChartDefinition, type ParsedChartDefinition } from './parseChartDefinition.js';
 
+export { VegaLiteConfigSchema, type VegaLiteConfig } from './contextSchemas.js';
+
 export {
   dataTransformPrompt,
   type DataTransformPromptInput,

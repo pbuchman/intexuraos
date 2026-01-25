@@ -2,6 +2,8 @@
  * Parser for chart definition LLM responses.
  */
 
+import { VegaLiteConfigSchema } from './contextSchemas.js';
+
 /**
  * Parsed chart definition from LLM response.
  */
@@ -45,35 +47,26 @@ export function parseChartDefinition(response: string): ParsedChartDefinition {
     throw new Error('Transform instructions are empty');
   }
 
-  let vegaLiteConfig: object;
+  let parsed: unknown;
   try {
-    vegaLiteConfig = JSON.parse(chartConfigJson) as object;
+    parsed = JSON.parse(chartConfigJson);
   } catch (error) {
     throw new Error(`Invalid JSON in chart config: ${String(error)}`);
   }
 
-  if (typeof vegaLiteConfig !== 'object') {
+  if (typeof parsed !== 'object') {
     throw new Error('Chart config must be an object');
   }
 
-  if ('data' in vegaLiteConfig) {
-    throw new Error('Chart config must NOT include "data" property');
-  }
-
-  if (!('$schema' in vegaLiteConfig)) {
-    throw new Error('Chart config must include "$schema" property');
-  }
-
-  if (!('mark' in vegaLiteConfig)) {
-    throw new Error('Chart config must include "mark" property');
-  }
-
-  if (!('encoding' in vegaLiteConfig)) {
-    throw new Error('Chart config must include "encoding" property');
+  const validationResult = VegaLiteConfigSchema.safeParse(parsed);
+  if (!validationResult.success) {
+    const issues = validationResult.error.issues;
+    const errorMessages = issues.map((issue) => issue.message).join(', ');
+    throw new Error(`Invalid chart config: ${errorMessages}`);
   }
 
   return {
-    vegaLiteConfig,
+    vegaLiteConfig: validationResult.data,
     transformInstructions,
   };
 }
