@@ -11,11 +11,13 @@ import type { CodeTaskRepository } from './domain/repositories/codeTaskRepositor
 import type { LogChunkRepository } from './domain/repositories/logChunkRepository.js';
 import type { WorkerDiscoveryService } from './domain/services/workerDiscovery.js';
 import type { TaskDispatcherService } from './domain/services/taskDispatcher.js';
+import type { WhatsAppNotifier } from './domain/services/whatsappNotifier.js';
 import type { ActionsAgentClient } from './infra/clients/actionsAgentClient.js';
 import { createFirestoreCodeTaskRepository } from './infra/repositories/firestoreCodeTaskRepository.js';
 import { createFirestoreLogChunkRepository } from './infra/repositories/firestoreLogChunkRepository.js';
 import { createWorkerDiscoveryService } from './infra/services/workerDiscoveryImpl.js';
 import { createTaskDispatcherService } from './infra/services/taskDispatcherImpl.js';
+import { createWhatsAppNotifier } from './infra/services/whatsappNotifierImpl.js';
 import { createActionsAgentClient } from './infra/clients/actionsAgentClient.js';
 
 export interface ServiceContainer {
@@ -25,6 +27,7 @@ export interface ServiceContainer {
   logChunkRepo: LogChunkRepository;
   workerDiscovery: WorkerDiscoveryService;
   taskDispatcher: TaskDispatcherService;
+  whatsappNotifier: WhatsAppNotifier;
   actionsAgentClient: ActionsAgentClient;
 }
 
@@ -59,6 +62,11 @@ export function initServices(config: ServiceConfig): void {
     logChunkRepo: createFirestoreLogChunkRepository({ firestore, logger }),
     workerDiscovery: createWorkerDiscoveryService({ logger }),
     taskDispatcher: createTaskDispatcherService({ logger }),
+    whatsappNotifier: createWhatsAppNotifier({
+      baseUrl: config.whatsappServiceUrl,
+      internalAuthToken: config.internalAuthToken,
+      logger,
+    }),
     actionsAgentClient: createActionsAgentClient({
       baseUrl: config.actionsAgentUrl,
       internalAuthToken: config.internalAuthToken,

@@ -139,7 +139,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         };
       }
 
-      const { codeTaskRepo, actionsAgentClient } = getServices();
+      const { codeTaskRepo, actionsAgentClient, whatsappNotifier } = getServices();
       const { taskId, status, result, error } = request.body;
 
       request.log.info({ taskId, status }, 'Processing task-complete webhook');
@@ -195,6 +195,9 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           }
         }
 
+        // Send WhatsApp notification
+        await whatsappNotifier.notifyTaskComplete(task.userId, task);
+
         request.log.info({ taskId, result }, 'Task marked as completed');
         return reply.send({ received: true });
       }
@@ -235,6 +238,16 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             // Don't fail the webhook - task update succeeded
           }
         }
+
+        // Send WhatsApp notification
+        await whatsappNotifier.notifyTaskFailed(
+          task.userId,
+          task,
+          error ?? {
+            code: 'worker_interrupted',
+            message: 'Worker was interrupted during task execution',
+          }
+        );
 
         request.log.info({ taskId, error }, 'Task marked as failed');
         return reply.send({ received: true });
