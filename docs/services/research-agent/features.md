@@ -78,6 +78,22 @@ Research-agent automates multi-model AI research:
 
 **Self-healing responses** - Parser + repair pattern automatically fixes malformed LLM JSON (v2.0.0)
 
+## Recent Changes (v2.1.0)
+
+### INT-269: Internal Clients Migration
+
+- Migrated user-service client to `@intexuraos/internal-clients` package
+- Standardized HTTP client across all services via shared infrastructure
+- Improved error handling with typed `UserServiceError` codes
+- Flat exports enable proper esbuild bundling for Docker deployment
+
+### INT-218: Input Validation Zod Migration
+
+- Created `InputQualitySchema` with backwards compatibility for `quality_scale` alias
+- Migrated `InputValidationAdapter` to use Zod validation
+- Added `formatZodErrors()` utility for detailed field-level error messages
+- Comprehensive test coverage for schema validation scenarios
+
 ## Recent Changes (v2.0.0)
 
 ### INT-178: LLM Model Selection
@@ -117,3 +133,7 @@ Research-agent automates multi-model AI research:
 **No editing** - Once research is completed, it cannot be edited (only enhanced or deleted)
 
 **One model per provider** - Model selection enforces maximum one model from each provider
+
+---
+
+_Part of [IntexuraOS](../overview.md) — AI-powered research orchestration._

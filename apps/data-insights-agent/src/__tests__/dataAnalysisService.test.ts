@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ok, err } from '@intexuraos/common-core';
 import { createDataAnalysisService } from '../infra/gemini/dataAnalysisService.js';
-import type { UserServiceClient } from '../infra/user/userServiceClient.js';
+import type { UserServiceClient } from '@intexuraos/internal-clients';
 import type { LlmGenerateClient } from '@intexuraos/llm-factory';
 
 const mockGenerate = vi.fn();
@@ -22,6 +22,8 @@ describe('dataAnalysisService', () => {
           .mockResolvedValue(
             err({ code: errorCode ?? 'NO_API_KEY', message: 'No API key configured' })
           ),
+        getApiKeys: vi.fn(),
+        reportLlmSuccess: vi.fn(),
       };
     }
     const mockLlmClient: LlmGenerateClient = {
@@ -29,6 +31,8 @@ describe('dataAnalysisService', () => {
     };
     return {
       getLlmClient: vi.fn().mockResolvedValue(ok(mockLlmClient)),
+      getApiKeys: vi.fn(),
+      reportLlmSuccess: vi.fn(),
     };
   }
 

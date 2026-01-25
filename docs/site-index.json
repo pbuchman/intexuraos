@@ -4,11 +4,12 @@
       "id": "actions-agent",
       "name": "Actions Agent",
       "category": "infrastructure",
-      "summary": "Central action lifecycle with atomic status transitions and race condition prevention (v2.0.0)",
+      "summary": "Central action lifecycle with atomic status transitions, race condition prevention, and WhatsApp approval (v2.1.0)",
       "features": [
         "Atomic status transitions via Firestore transactions (v2.0.0)",
         "WhatsApp approval reply handling with LLM intent (v2.0.0)",
         "Race condition prevention via updateStatusIf (v2.0.0)",
+        "Centralized user service client via @intexuraos/internal-clients (v2.1.0)",
         "Unified action queue",
         "Status workflow management",
         "Pub/Sub event distribution",
@@ -21,14 +22,17 @@
       "id": "research-agent",
       "name": "Research Agent",
       "category": "ai-research",
-      "summary": "Multi-LLM research orchestration with parallel queries and public sharing",
+      "summary": "Multi-LLM research orchestration with natural language model selection (v2.1.0)",
       "features": [
         "5 LLM providers (Claude, OpenAI, Google, Perplexity, Zai)",
-        "Parallel query execution",
-        "Public sharing via GCS",
-        "Cover image generation"
+        "Natural language model selection (v2.0.0)",
+        "Zod schema validation for LLM responses (v2.0.0)",
+        "Parallel query execution via Pub/Sub",
+        "Public sharing via GCS with cover images",
+        "Input validation with Zod schemas (v2.1.0)",
+        "User service client via @intexuraos/internal-clients (v2.1.0)"
       ],
-      "endpoints": 10,
+      "endpoints": 15,
       "docs": "services/research-agent"
     },
     {
@@ -49,14 +53,15 @@
       "id": "image-service",
       "name": "Image Service",
       "category": "infrastructure",
-      "summary": "AI image generation with GPT Image 1 and Gemini Flash Image",
+      "summary": "AI image generation with GPT Image 1 and Gemini Flash Image (v2.1.0)",
       "features": [
         "GPT Image 1 and Gemini Flash Image support",
-        "Internal-only endpoints",
-        "GCS storage with thumbnails",
-        "Prompt enhancement with LLM"
+        "LLM-powered prompt enhancement (GPT-4.1, Gemini 2.5 Pro)",
+        "Internal-only endpoints with X-Internal-Auth",
+        "GCS storage with automatic thumbnailing (256px)",
+        "user-service client via @intexuraos/internal-clients (v2.1.0)"
       ],
-      "endpoints": 2,
+      "endpoints": 3,
       "docs": "services/image-service"
     },
     {
@@ -86,14 +91,14 @@
       "id": "todos-agent",
       "name": "Todos Agent",
       "category": "content",
-      "summary": "Task management with sub-items and priorities",
+      "summary": "Task management with AI item extraction and sub-items (v2.1.0)",
       "features": [
-        "AI-powered item extraction",
+        "AI item extraction via user's LLM (Gemini/GLM) with Zod validation (v2.1.0)",
         "Sub-items with custom ordering",
         "Priorities: low, medium, high, urgent",
         "Status workflow"
       ],
-      "endpoints": 10,
+      "endpoints": 13,
       "docs": "services/todos-agent"
     },
     {
@@ -134,12 +139,14 @@
       "id": "web-agent",
       "name": "Web Agent",
       "category": "infrastructure",
-      "summary": "Web content extraction and AI summarization with language preservation",
+      "summary": "Web content extraction and AI summarization with language preservation (v2.1.0)",
       "features": [
         "OpenGraph metadata extraction",
         "AI summaries via user's LLM",
         "Language preservation (summaries match source)",
-        "Browser-like headers for 403 bypass"
+        "Browser-like headers for 403 bypass",
+        "Self-healing JSON response repair",
+        "@intexuraos/internal-clients integration (v2.1.0)"
       ],
       "endpoints": 2,
       "docs": "services/web-agent"
@@ -155,21 +162,25 @@
         "Full CRUD operations",
         "Failed event recovery for review"
       ],
-      "endpoints": 10,
+      "endpoints": 13,
       "docs": "services/calendar-agent"
     },
     {
       "id": "data-insights-agent",
       "name": "Data Insights Agent",
       "category": "ai-research",
-      "summary": "AI-powered data analysis with Gemini",
+      "summary": "AI-powered data analysis with composite feeds and Vega-Lite chart generation (v2.1.0)",
       "features": [
-        "Custom data sources",
-        "Title generation",
-        "Chart definition generation",
-        "Composite feeds"
+        "Custom data sources (CSV, JSON)",
+        "AI-generated titles and feed names",
+        "Composite feeds with notification filters",
+        "Zod-validated LLM response parsing (INT-218)",
+        "Vega-Lite chart definitions (6 types: line, bar, scatter, area, pie, heatmap)",
+        "15-minute snapshot caching",
+        "Auto-retry on parse failures (INT-79)",
+        "Internal-clients package migration (INT-269)"
       ],
-      "endpoints": 14,
+      "endpoints": 18,
       "docs": "services/data-insights-agent"
     },
     {
@@ -183,7 +194,7 @@
         "Webhook support",
         "Multi-device support"
       ],
-      "endpoints": 10,
+      "endpoints": 13,
       "docs": "services/mobile-notifications-service"
     },
     {
@@ -252,6 +263,24 @@
       ],
       "endpoints": 8,
       "docs": "services/linear-agent"
+    },
+    {
+      "id": "web",
+      "name": "Web App",
+      "category": "ui",
+      "summary": "Progressive Web App (PWA) providing unified UI dashboard for IntexuraOS",
+      "features": [
+        "Real-time action inbox with Firestore listeners",
+        "Configurable action buttons via YAML",
+        "PWA with offline support and install prompts",
+        "Hash routing for GCS backend bucket hosting",
+        "Integration settings for all external services",
+        "Deep linking to specific actions",
+        "Infinite scroll pagination",
+        "Sentry error tracking"
+      ],
+      "endpoints": 0,
+      "docs": "services/web"
     }
   ],
   "categories": {
@@ -281,13 +310,18 @@
         "api-docs-hub",
         "app-settings-service"
       ]
+    },
+    "ui": {
+      "name": "User Interface",
+      "description": "Frontend applications and dashboards",
+      "services": ["web"]
     }
   },
   "stats": {
-    "total": 18,
-    "documented": 18,
+    "total": 19,
+    "documented": 19,
     "completion": 100,
-    "version": "2.0.0",
-    "lastUpdated": "2026-01-24"
+    "version": "2.1.0",
+    "lastUpdated": "2026-01-25"
   }
 }

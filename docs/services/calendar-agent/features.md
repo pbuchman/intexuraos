@@ -53,7 +53,7 @@ When extraction fails (ambiguous dates, missing info), events are saved for manu
 
 ## Use Cases
 
-### Voice-to-Calendar Flow (v2.0.0)
+### Voice-to-Calendar Flow (v2.1.0)
 
 1. User sends "Schedule dentist Tuesday 3pm" via WhatsApp
 2. commands-agent classifies as `calendar` action

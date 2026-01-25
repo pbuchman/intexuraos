@@ -34,3 +34,9 @@ export {
   toClassificationExample,
   toClassificationCorrection,
 } from './intelligentPromptBuilder.js';
+
+export {
+  CommandClassificationSchema,
+  type CommandType,
+  type CommandClassification,
+} from './contextSchemas.js';

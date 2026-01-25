@@ -16,8 +16,8 @@ LLM responses require validation to ensure they match expected schemas before pr
 
 | Approach               | Count | When to Use                         | Key Feature              |
 | ---------------------- | ----- | ----------------------------------- | ------------------------ |
-| **Zod Schemas**        | 2     | Complex JSON with nested types      | Field-level error paths  |
-| **Manual Type Guards** | 8     | Simple JSON with known fields       | Custom validation logic  |
+| **Zod Schemas**        | 10    | Complex JSON with nested types      | Field-level error paths  |
+| **Manual Type Guards** | 2     | Simple JSON with known fields       | Custom validation logic  |
 | **No Validation**      | 6     | Unstructured text (prose, markdown) | Raw content pass-through |
 
 ---
@@ -84,19 +84,31 @@ function formatZodErrors(error: ZodError): string {
 
 ### Current Usage
 
-| Service        | File                         | Method                    | Schema                   |
-| -------------- | ---------------------------- | ------------------------- | ------------------------ |
-| research-agent | `ContextInferenceAdapter.ts` | `inferResearchContext()`  | `ResearchContextSchema`  |
-| research-agent | `ContextInferenceAdapter.ts` | `inferSynthesisContext()` | `SynthesisContextSchema` |
+| Service        | File                                 | Method                    | Schema                         |
+| -------------- | ------------------------------------ | ------------------------- | ------------------------------ |
+| research-agent | `ContextInferenceAdapter.ts`         | `inferResearchContext()`  | `ResearchContextSchema`        |
+| research-agent | `ContextInferenceAdapter.ts`         | `inferSynthesisContext()` | `SynthesisContextSchema`       |
+| todos-agent    | `todoItemExtractionService.ts`       | `extractItem()`           | `TodoExtractionResponseSchema` |
+| linear-agent   | `linearActionExtractionService.ts`   | `extractLinearIssue()`    | `LinearIssueDataSchema`        |
+| calendar-agent | `calendarActionExtractionService.ts` | `extractEvent()`          | `CalendarEventSchema`          |
+| commands-agent | `classifier.ts`                      | `classify()`              | `CommandClassificationSchema`  |
+| data-insights  | `chartDefinitionService.ts`          | `parseChartDefinition()`  | `VegaLiteConfigSchema`         |
+| data-insights  | `contextSchemas.ts`                  | (export)                  | `DataInsightSchema`            |
+| data-insights  | `contextSchemas.ts`                  | (export)                  | `TransformedDataSchema`        |
 
 ### Schema Locations
 
 ```
 packages/llm-prompts/src/
-  shared/contextSchemas.ts      # Domain, Mode, DefaultApplied, SafetyInfo
-  research/contextSchemas.ts    # ResearchContext, TimeScope, ResearchPlan, etc.
-  synthesis/contextSchemas.ts   # SynthesisContext, SynthesisGoal, etc.
+  shared/contextSchemas.ts      # InputQuality, DefaultApplied, SafetyInfo
+  todos/contextSchemas.ts       # TodoExtractionResponse, ExtractedItem
+  linear/contextSchemas.ts      # LinearIssueData with literal union priority
+  calendar/contextSchemas.ts    # CalendarEvent with ISO date-time validation
+  classification/contextSchemas.ts # CommandClassification with enum types
+  dataInsights/contextSchemas.ts # DataInsight, TransformedData, VegaLiteConfig
 ```
+
+**Pattern:** Each domain has `contextSchemas.ts` with Zod schemas and type exports.
 
 ---
 
@@ -130,16 +142,12 @@ function isValidExtractionResponse(value: unknown): value is ExtractionResponse 
 
 ### Current Usage
 
-| Service             | File                                 | Guard Function                |
-| ------------------- | ------------------------------------ | ----------------------------- |
-| research-agent      | `InputValidationAdapter.ts`          | `isInputQualityResult()`      |
-| todos-agent         | `todoItemExtractionService.ts`       | `isValidExtractionResponse()` |
-| linear-agent        | `linearActionExtractionService.ts`   | `isValidExtractionResponse()` |
-| calendar-agent      | `calendarActionExtractionService.ts` | `isValidExtractionResponse()` |
-| commands-agent      | `classifier.ts`                      | Inline regex + type checks    |
-| data-insights-agent | `chartDefinitionService.ts`          | `parseChartDefinition()`      |
-| data-insights-agent | `dataAnalysisService.ts`             | `parseInsightResponse()`      |
-| data-insights-agent | `dataTransformService.ts`            | `parseTransformedData()`      |
+| Service             | File                        | Guard/Parser Function    |
+| ------------------- | --------------------------- | ------------------------ |
+| research-agent      | `InputValidationAdapter.ts` | `isInputQualityResult()` |
+| data-insights-agent | `parseInsightResponse.ts`   | `parseInsightResponse()` |
+
+**Note:** The `parseInsightResponse()` function uses custom text-based parsing (not JSON), so manual validation is appropriate.
 
 ---
 
@@ -246,22 +254,9 @@ export function isResearchContext(value: unknown): value is ResearchContext {
 
 ---
 
-## Future Migration Candidates
-
-Services with manual guards that would benefit from Zod:
-
-| Service             | Current Approach              | Migration Benefit                    |
-| ------------------- | ----------------------------- | ------------------------------------ |
-| todos-agent         | `isValidExtractionResponse()` | Better errors for malformed tasks    |
-| linear-agent        | `isValidExtractionResponse()` | Field-level validation for issues    |
-| calendar-agent      | `isValidExtractionResponse()` | Date/time format validation          |
-| data-insights-agent | `parse*()` functions          | Schema-based chart config validation |
-
----
-
 **Related:**
 
 - [AI Architecture](../architecture/ai-architecture.md) - Error handling overview
-- [INT-86](https://linear.app/pbuchman/issue/INT-86) - Zod migration implementation
+- [INT-218](https://linear.app/pbuchman/issue/INT-218) - Zod migration epic (completed)
 
-**Last updated:** 2026-01-22
+**Last updated:** 2026-01-25

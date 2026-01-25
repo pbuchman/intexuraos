@@ -1,3 +1,144 @@
+## 2026-01-25 - web Documentation Update
+
+**Action:** Created
+**Agent:** service-scribe (autonomous)
+**Trigger:** Release 2.1.0 (INT-269/INT-270 context)
+
+**Files Created:**
+
+- `docs/services/web/features.md` - User-facing features documentation for the PWA dashboard
+- `docs/services/web/technical.md` - Developer reference with architecture, routes, and configuration
+- `docs/services/web/tutorial.md` - Getting-started guide for running and developing the web app
+- `docs/services/web/technical-debt.md` - Technical debt tracking and code quality analysis
+- `docs/services/web/agent.md` - Machine-readable interface specification for AI agents
+
+**Files Updated:**
+
+- `docs/services/index.md` - Added web to User Interface section
+- `docs/site-index.json` - Added web service entry with ui category, updated stats to 19 total services
+
+**Inferred Insights:**
+
+- **Why exists:** Provide a unified Progressive Web App dashboard for accessing all IntexuraOS services from a single interface
+- **Killer feature:** Real-time action inbox with Firestore listeners for instant updates without page refresh
+- **Future plans:** PWA enhancements, improved mobile responsiveness, offline capabilities expansion
+- **Limitations:** Coverage threshold not enforced (planned refactoring), hash routing required for GCS hosting
+
+**Technical Debt Found:**
+
+- Code Smells: 3 (InboxPage.tsx at 879 lines exceeds SRP guideline)
+- Test Gaps: Several services/hooks lack tests (coverage exempt for UI components)
+- TODOs: 1 (documentation clarity issue in config.ts)
+
+**Documentation Coverage:** 100% (5/5 files created)
+
+---
+
+## 2025-01-25 - commands-agent v2.1.0 Documentation Update
+
+**Action:** Updated
+**Agent:** service-scribe (autonomous)
+**Trigger:** INT-269 (internal-clients migration), INT-218 (Zod schema validation)
+
+**Files Updated:**
+
+- `docs/services/commands-agent/SERVICE.md` - Created comprehensive features documentation with v2.0.0 classification pipeline details
+- `docs/services/commands-agent/ARCHITECTURE.md` - Created technical reference with architecture diagrams, recent changes (INT-269, INT-218)
+- `docs/services/commands-agent/API.md` - Created complete API reference for public and internal endpoints
+- `docs/services/commands-agent/TESTING.md` - Created testing guide with patterns and coverage info
+- `docs/services/commands-agent/DEPLOYMENT.md` - Created deployment guide with Terraform configuration
+- `docs/services/commands-agent/technical-debt.md` - Updated with INT-269, INT-218 resolved issues, future plans
+
+**Key Changes Documented:**
+
+| Change                         | Section                            | Documentation Impact                                  |
+| ------------------------------ | ---------------------------------- | ----------------------------------------------------- |
+| INT-269 internal-clients       | ARCHITECTURE.md                    | Added package to dependencies, updated file structure |
+| INT-218 Zod validation         | ARCHITECTURE.md, technical-debt.md | Documented schema validation, added resolved issue    |
+| Recent commits (88cec45, etc.) | ARCHITECTURE.md                    | Updated "Recent Changes" table                        |
+| LLM UsageLogger (INT-266)      | ARCHITECTURE.md                    | Added to dependencies list                            |
+| Classifier directory rename    | ARCHITECTURE.md                    | Updated file structure (gemini/ -> llm/)              |
+
+**Inferred Insights:**
+
+- **Why exists:** Classify natural language input from WhatsApp and PWA into actionable types (todo, research, note, link, calendar, linear, reminder) using a 5-step LLM decision tree
+- **Killer feature:** Structured 5-step classification pipeline with URL keyword isolation, explicit intent detection, and multi-language support (English + Polish)
+- **Future plans:** Reminder handler implementation, additional language support (German, Spanish), structured output mode (Gemini function calling)
+- **Limitations:** No reclassification of failed commands, reminder handler not implemented, language coverage limited to English/Polish
+
+**Technical Debt Summary:**
+
+| Category            | Count | Severity |
+| ------------------- | ----- | -------- |
+| TODO/FIXME Comments | 0     | -        |
+| Test Coverage Gaps  | 0     | -        |
+| TypeScript Issues   | 0     | -        |
+| Code Smells         | 2     | Low      |
+| **Total**           | **2** | Low      |
+
+**Documentation Quality:**
+
+- All 5 documentation files generated/updated
+- SERVICE.md includes v2.0.0 classification pipeline details with examples
+- ARCHITECTURE.md includes mermaid diagrams for architecture and data flow
+- API.md documents all public and internal endpoints with request/response schemas
+- TESTING.md includes test patterns and coverage information
+- DEPLOYMENT.md includes Terraform configuration and environment variables
+- technical-debt.md includes resolved issues for INT-177, INT-218, INT-269
+
+---
+
+## 2026-01-25 - todos-agent v2.1.0 Documentation Update
+
+**Action:** Updated (HIGH CARE)
+**Agent:** service-scribe (autonomous)
+**Trigger:** v2.1.0 release with INT-269 (internal-clients migration), INT-218 (Zod schema migration)
+
+**Files Updated:**
+
+- `docs/services/todos-agent/features.md` - Rewritten with active voice, concrete examples, clear value propositions
+- `docs/services/todos-agent/technical.md` - Added architecture diagrams, data flow sequence, recent changes table (INT-269, INT-218)
+- `docs/services/todos-agent/tutorial.md` - Complete rewrite with progressive exercises, AI extraction scenario
+- `docs/services/todos-agent/technical-debt.md` - Updated with INT-269/INT-218 resolved issues, recent improvements
+- `docs/services/todos-agent/agent.md` - Updated with constraint clarifications, AI extraction section
+
+**Key Changes Documented:**
+
+| Change                                   | Section           | Documentation Impact                                     |
+| ---------------------------------------- | ----------------- | -------------------------------------------------------- |
+| Migrate to @intexuraos/internal-clients  | technical.md      | Updated dependencies, added services.ts diagram          |
+| Zod schema migration for item extraction | technical.md      | Added AI Item Extraction section with Zod validation     |
+| todoItemExtractionService refactoring    | technical-debt.md | Added INT-218 before/after comparison                    |
+| User service client consolidation        | technical-debt.md | Added INT-269 resolved issue documenting DRY improvement |
+
+**Inferred Insights:**
+
+- **Why exists:** Task management service that handles todos with sub-items, AI-powered item extraction from natural language, and comprehensive status workflows
+- **Killer feature:** AI-powered todo item extraction using LLM (Gemini/GLM) - parses natural language descriptions into actionable items with priorities, due dates, and Zod-validated responses
+- **Future plans:** Todo templates, recurring todos, todo dependencies, bulk operations, full-text search, collaboration features, reminders, subtask nesting
+
+**Technical Debt Summary:**
+
+| Category            | Count | Severity |
+| ------------------- | ----- | -------- |
+| TODO/FIXME Comments | 0     | -        |
+| Test Coverage Gaps  | 0     | -        |
+| TypeScript Issues   | 0     | -        |
+| SRP Violations      | 0     | -        |
+| Code Duplicates     | 0     | -        |
+| Deprecations        | 0     | -        |
+
+**Documentation Quality:**
+
+- HIGH CARE applied to all dimensions
+- Active voice throughout features.md (e.g., "Send a message, get items" vs "Messages are sent")
+- Mermaid diagrams for architecture and data flow
+- Tutorial includes AI extraction scenario with polling pattern
+- Agent interface includes constraint clarifications and fallback behaviors
+- Recent changes table tracks INT-269 and INT-218 commits
+
+---
+
 # Documentation Runs
 
 Log of all `/document-service` runs.
@@ -5,6 +146,303 @@ Log of all `/document-service` runs.
 ---
 
 <!-- Entries are prepended below this line -->
+
+## 2026-01-25 - todos-agent v2.1.0 Documentation Update
+
+**Action:** Updated (HIGH CARE)
+**Agent:** service-scribe (autonomous)
+**Trigger:** v2.1.0 release with INT-269 (internal-clients migration), INT-218 (Zod schema migration)
+
+**Files Updated:**
+
+- `docs/services/todos-agent/features.md` - Rewritten with active voice, concrete examples, clear value propositions
+- `docs/services/todos-agent/technical.md` - Added architecture diagrams, data flow sequence, recent changes table (INT-269, INT-218)
+- `docs/services/todos-agent/tutorial.md` - Complete rewrite with progressive exercises, AI extraction scenario
+- `docs/services/todos-agent/technical-debt.md` - Updated with INT-269/INT-218 resolved issues, recent improvements
+- `docs/services/todos-agent/agent.md` - Updated with constraint clarifications, AI extraction section
+
+**Key Changes Documented:**
+
+| Change                                   | Section           | Documentation Impact                                     |
+| ---------------------------------------- | ----------------- | -------------------------------------------------------- |
+| Migrate to @intexuraos/internal-clients  | technical.md      | Updated dependencies, added services.ts diagram          |
+| Zod schema migration for item extraction | technical.md      | Added AI Item Extraction section with Zod validation     |
+| todoItemExtractionService refactoring    | technical-debt.md | Added INT-218 before/after comparison                    |
+| User service client consolidation        | technical-debt.md | Added INT-269 resolved issue documenting DRY improvement |
+
+**Inferred Insights:**
+
+- **Why exists:** Task management service that handles todos with sub-items, AI-powered item extraction from natural language, and comprehensive status workflows
+- **Killer feature:** AI-powered todo item extraction using LLM (Gemini/GLM) - parses natural language descriptions into actionable items with priorities, due dates, and Zod-validated responses
+- **Future plans:** Todo templates, recurring todos, todo dependencies, bulk operations, full-text search, collaboration features, reminders, subtask nesting
+
+**Technical Debt Summary:**
+
+| Category            | Count | Severity |
+| ------------------- | ----- | -------- |
+| TODO/FIXME Comments | 0     | -        |
+| Test Coverage Gaps  | 0     | -        |
+| TypeScript Issues   | 0     | -        |
+| SRP Violations      | 0     | -        |
+| Code Duplicates     | 0     | -        |
+| Deprecations        | 0     | -        |
+
+**Documentation Quality:**
+
+- HIGH CARE applied to all dimensions
+- Active voice throughout features.md (e.g., "Send a message, get items" vs "Messages are sent")
+- Mermaid diagrams for architecture and data flow
+- Tutorial includes AI extraction scenario with polling pattern
+- Agent interface includes constraint clarifications and fallback behaviors
+- Recent changes table tracks INT-269 and INT-218 commits
+
+---
+
+## 2025-01-25 - data-insights-agent v2.1.0 Documentation Update
+
+**Action:** Updated
+**Agent:** service-scribe (autonomous)
+**Trigger:** v2.1.0 release with INT-269 (internal-clients migration), INT-218 (Zod schema migration for LLM response validation)
+
+**Files Updated:**
+
+- `docs/services/data-insights-agent/features.md` - Complete rewrite with active voice, clear use cases, concrete examples
+- `docs/services/data-insights-agent/technical.md` - Added architecture diagram, data flow sequence, recent changes table, Firestore collections
+- `docs/services/data-insights-agent/tutorial.md` - Expanded to 5-part progressive tutorial with exercises
+- `docs/services/data-insights-agent/technical-debt.md` - Added INT-218/INT-269 resolved issues, Zod migration notes
+- `docs/services/data-insights-agent/agent.md` - Complete rewrite with proper TypeScript interfaces, examples
+
+**Key Changes Documented:**
+
+| Change                                  | Section               | Documentation Impact                                     |
+| --------------------------------------- | --------------------- | -------------------------------------------------------- |
+| @intexuraos/internal-clients migration  | technical.md, debt.md | Added INT-269 resolved issue documenting DRY improvement |
+| Zod schema migration for LLM validation | technical-debt.md     | Added INT-218 resolved issue with 3 services migrated    |
+| LLM response repair pattern             | technical.md, debt.md | Added INT-79 resolved issue documenting auto-retry logic |
+| Empty insights handling improvement     | technical.md, debt.md | Added INT-77 resolved issue documenting success response |
+
+**Inferred Insights:**
+
+- **Why exists:** Turn scattered data (CSV/JSON + mobile notifications) into actionable insights with AI-powered analysis and automatic chart generation
+- **Killer feature:** Composite feeds that unify static data sources with live mobile notifications, analyzed by AI to extract up to 5 measurable insights with chart recommendations
+- **Future plans:** Zod schema validation complete (INT-218), internal-clients migration complete (INT-269), placeholder visualization fields remain unused
+
+**Technical Debt Summary:**
+
+| Category            | Count | Severity |
+| ------------------- | ----- | -------- |
+| TODO/FIXME Comments | 0     | -        |
+| Test Coverage Gaps  | 0     | -        |
+| TypeScript Issues   | 0     | -        |
+| Code Smells         | 0     | -        |
+| SRP Violations      | 0     | -        |
+| Code Duplicates     | 0     | -        |
+| **Total**           | **0** | —        |
+
+**Documentation Quality:**
+
+- All 5 documentation files regenerated with current v2.1.0 state
+- Architecture diagrams added showing service interactions
+- Data flow sequence diagram included
+- Chart types reference table (C1-C6) documented
+- Recent changes table tracking last 10 commits
+- Tutorial includes progressive exercises with solutions
+
+---
+
+## 2025-01-25 - image-service v2.1.0 Documentation Update
+
+**Action:** Updated
+**Agent:** service-scribe (autonomous)
+**Trigger:** INT-269 internal-clients migration
+
+**Files Updated:**
+
+- `docs/services/image-service/features.md` - No changes needed (content still accurate)
+- `docs/services/image-service/technical.md` - Added INT-269 migration notes, recent commits, GCS path patterns
+- `docs/services/image-service/tutorial.md` - Added v2.1.0 updates section
+- `docs/services/image-service/technical-debt.md` - Added resolved issues for INT-269, INT-266
+- `docs/services/image-service/agent.md` - Complete refresh with accurate schemas and endpoints
+- `docs/site-index.json` - Updated image-service summary and features for v2.1.0
+
+**Key Changes Documented (INT-269):**
+
+| Change                        | Section      | Documentation Impact                  |
+| ----------------------------- | ------------ | ------------------------------------- |
+| UserServiceClient migration   | technical.md | Added INT-269 migration notes         |
+| internal-clients package      | agent.md     | Updated dependency information        |
+| GCS path patterns with slug   | technical.md | Documented path variants              |
+| DELETE endpoint documentation | agent.md     | Added delete capability documentation |
+
+**Inferred Insights:**
+
+- **Why exists:** Generate AI cover images for research with automatic thumbnail generation
+- **Killer feature:** LLM-powered prompt enhancement + multi-provider image generation (OpenAI GPT Image 1, Google Gemini Flash Image)
+- **Future plans:** Additional image providers (Midjourney, Stable Diffusion, Ideogram), image editing features, cost management
+- **Limitations:** No image editing, fixed 16:9 aspect ratio, no image variations
+
+**Technical Debt Summary:**
+
+| Category            | Count | Severity |
+| ------------------- | ----- | -------- |
+| TODO/FIXME Comments | 0     | -        |
+| Test Coverage Gaps  | 0     | -        |
+| TypeScript Issues   | 0     | -        |
+| SRP Violations      | 0     | -        |
+| Code Duplicates     | 0     | -        |
+| Deprecations        | 0     | -        |
+
+**Documentation Quality:**
+
+- HIGH CARE applied to all dimensions
+- Mermaid diagrams for architecture and data flow
+- Complete API schemas for all three endpoints
+- Tutorial includes v2.1.0 migration notes
+- Agent interface includes usage patterns and error handling
+
+---
+
+## 2026-01-25 - web-agent v2.1.0 Documentation Update
+
+**Action:** Updated
+**Agent:** service-scribe (autonomous)
+**Trigger:** v2.1.0 release with INT-269 (internal-clients migration)
+
+**Files Updated:**
+
+- `docs/services/web-agent/technical.md` - Added INT-269 migration, internal-clients integration notes, updated file structure
+- `docs/services/web-agent/technical-debt.md` - Added INT-269 resolved issue
+- `docs/services/web-agent/agent.md` - Updated last updated date
+- `docs/site-index.json` - Updated web-agent summary and features, bumped version to 2.1.0
+
+**Key Changes Documented (INT-269):**
+
+| Change                           | Section      | Documentation Impact                                |
+| -------------------------------- | ------------ | --------------------------------------------------- |
+| @intexuraos/internal-clients     | technical.md | Added integration note, factory pattern docs        |
+| createUserServiceClient()        | technical.md | Documented factory function and interface           |
+| UserServiceClient.getLlmClient() | technical.md | Documented method for getting user's LLM client     |
+| infra/user/index.ts re-exports   | technical.md | Updated file structure to show internal-clients use |
+
+**Inferred Insights:**
+
+- **Why exists:** Extract web content and generate AI summaries while preserving source language
+- **Killer feature:** Self-healing LLM response parser with automatic JSON-to-prose repair
+- **Future plans:** Caching layer, batch summarization, rate limiting, retry logic, PDF support
+
+**Technical Debt Summary:**
+
+| Category            | Count | Severity |
+| ------------------- | ----- | -------- |
+| TODO/FIXME Comments | 0     | -        |
+| Test Coverage Gaps  | 0     | -        |
+| TypeScript Issues   | 0     | -        |
+| Code Smells         | 2     | Low      |
+| **Total**           | **2** | Low      |
+
+**Documentation Quality:**
+
+- All 5 documentation files maintained and updated
+- Technical documentation includes architecture diagrams and data flow sequences
+- Agent interface provides machine-readable schemas for AI integration
+- Tutorial covers both link preview and page summarization workflows
+
+---
+
+## 2025-01-25 - calendar-agent v2.1.0 Documentation Update
+
+**Action:** Updated (HIGH CARE)
+**Agent:** service-scribe (autonomous)
+**Trigger:** v2.1.0 release with INT-269 (internal-clients migration), INT-222 (Zod schema migration)
+
+**Files Updated:**
+
+- `docs/services/calendar-agent/technical.md` - Added recent changes table for INT-269/INT-222, updated dependencies section
+- `docs/services/calendar-agent/technical-debt.md` - Added INT-269 and INT-222 resolved issue entries
+- `docs/services/calendar-agent/agent.md` - Updated last updated date
+- `docs/services/calendar-agent/tutorial.md` - Updated last updated date
+- `docs/services/calendar-agent/features.md` - Updated version reference to v2.1.0
+
+**Key Changes Documented:**
+
+| Change                                    | Section           | Documentation Impact                                     |
+| ----------------------------------------- | ----------------- | -------------------------------------------------------- |
+| Migrate to @intexuraos/internal-clients   | technical.md      | Updated dependencies to reflect centralized package      |
+| Zod schema migration for event validation | technical-debt.md | Added INT-222 resolved issue with benefits               |
+| User service client consolidation         | technical-debt.md | Added INT-269 resolved issue documenting DRY improvement |
+
+**Inferred Insights:**
+
+- **Why exists:** Google Calendar integration with AI-powered natural language event extraction and preview-before-commit workflow
+- **Killer feature:** Async preview generation with Pub/Sub, LLM reasoning, and automatic cleanup after event creation
+- **Future plans:** Recurring events support, event colors, reminders, attachments, conference data, batch operations, preview TTL
+
+**Technical Debt Summary:**
+
+| Category            | Count | Severity |
+| ------------------- | ----- | -------- |
+| TODO/FIXME Comments | 0     | -        |
+| Test Coverage Gaps  | 0     | -        |
+| TypeScript Issues   | 0     | -        |
+| Code Smells         | 1     | Low      |
+| SRP Violations      | 0     | -        |
+| Code Duplicates     | 0     | -        |
+| Deprecations        | 0     | -        |
+
+**Documentation Quality:**
+
+- Documentation already comprehensive from v2.0.0
+- Minor updates for INT-269 and INT-222 architectural improvements
+- Recent changes table added for tracking commit history
+- No breaking changes to API surface
+
+---
+
+## 2026-01-25 - actions-agent v2.1.0 Documentation Update
+
+**Action:** Updated (HIGH CARE)
+**Agent:** service-scribe (autonomous)
+**Trigger:** v2.1.0 release with INT-269 (internal-clients migration)
+
+**Files Updated:**
+
+- `docs/services/actions-agent/technical.md` - Added INT-269 migration note, updated dependencies section, added recent changes table
+- `docs/services/actions-agent/technical-debt.md` - Added INT-269 resolved issue entry
+- `docs/site-index.json` - Updated actions-agent summary and features for v2.1.0
+
+**Key Changes Documented (INT-269):**
+
+| Change                                  | Section           | Documentation Impact                                |
+| --------------------------------------- | ----------------- | --------------------------------------------------- |
+| Migrate to @intexuraos/internal-clients | technical.md      | Updated dependencies to reflect centralized package |
+| User service client consolidation       | technical-debt.md | Added resolved issue documenting DRY improvement    |
+| Package version bump to 2.1.0           | site-index.json   | Updated summary and feature list                    |
+
+**Inferred Insights:**
+
+- **Why exists:** Central action lifecycle manager coordinating all user-initiated commands across specialized services
+- **Killer feature:** WhatsApp approval reply handling with LLM intent classification and atomic status transitions
+- **Future plans:** Reminder handler implementation, bulk action execution, configurable auto-execution thresholds
+
+**Technical Debt Summary:**
+
+| Category            | Count | Severity   |
+| ------------------- | ----- | ---------- |
+| TODO/FIXME Comments | 0     | -          |
+| Test Coverage Gaps  | 0     | -          |
+| TypeScript Issues   | 4     | Low (test) |
+| SRP Violations      | 2     | Medium     |
+| Code Duplicates     | 0     | -          |
+| Deprecations        | 0     | -          |
+
+**Documentation Quality:**
+
+- Documentation already comprehensive from v2.0.0
+- Minor updates for INT-269 architectural improvement
+- Recent changes table added for tracking commit history
+- No breaking changes to API surface
+
+---
 
 ## 2026-01-24 - research-agent v2.0.0 Documentation Update
 

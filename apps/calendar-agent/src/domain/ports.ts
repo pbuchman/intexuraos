@@ -93,6 +93,7 @@ export interface ExtractionError {
   details?: {
     llmErrorCode?: string;
     parseError?: string;
+    zodErrors?: string;
     rawResponsePreview?: string;
     userServiceError?: string;
     wasWrappedInMarkdown?: boolean;

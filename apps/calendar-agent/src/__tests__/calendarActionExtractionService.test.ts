@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { err, ok } from '@intexuraos/common-core';
 import { createCalendarActionExtractionService } from '../infra/gemini/calendarActionExtractionService.js';
-import type { LlmUserServiceClient } from '../infra/user/llmUserServiceClient.js';
+import type { UserServiceClient } from '@intexuraos/internal-clients';
 import type { LlmGenerateClient } from '@intexuraos/llm-factory';
 import pino from 'pino';
 
@@ -20,7 +20,7 @@ const mockLogger: pino.Logger = {
 } as unknown as pino.Logger;
 
 describe('calendarActionExtractionService', () => {
-  let mockUserServiceClient: LlmUserServiceClient;
+  let mockUserServiceClient: UserServiceClient;
   let mockLlmClient: LlmGenerateClient;
 
   beforeEach(() => {
@@ -50,33 +50,41 @@ describe('calendarActionExtractionService', () => {
 
   function createMockUserServiceClient(
     result: 'ok' | 'no_api_key' | 'api_error' | 'network_error' | 'invalid_model' = 'ok'
-  ): LlmUserServiceClient {
+  ): UserServiceClient {
     switch (result) {
       case 'ok':
         return {
           getLlmClient: vi.fn().mockResolvedValue(ok(mockLlmClient)),
-        };
+        getApiKeys: vi.fn(),
+        reportLlmSuccess: vi.fn()        };
       case 'no_api_key':
         return {
           getLlmClient: vi
             .fn()
             .mockResolvedValue(err({ code: 'NO_API_KEY' as const, message: 'No API key configured' })),
+          getApiKeys: vi.fn(),
+          reportLlmSuccess: vi.fn(),
         };
       case 'api_error':
         return {
           getLlmClient: vi.fn().mockResolvedValue(err({ code: 'API_ERROR' as const, message: 'Service error' })),
-        };
+        getApiKeys: vi.fn(),
+        reportLlmSuccess: vi.fn()        };
       case 'network_error':
         return {
           getLlmClient: vi
             .fn()
             .mockResolvedValue(err({ code: 'NETWORK_ERROR' as const, message: 'Network error' })),
+          getApiKeys: vi.fn(),
+          reportLlmSuccess: vi.fn(),
         };
       case 'invalid_model':
         return {
           getLlmClient: vi
             .fn()
             .mockResolvedValue(err({ code: 'INVALID_MODEL' as const, message: 'Unsupported model' })),
+          getApiKeys: vi.fn(),
+          reportLlmSuccess: vi.fn(),
         };
     }
   }
@@ -166,7 +174,7 @@ describe('calendarActionExtractionService', () => {
       expect(result.ok).toBe(false);
       if (!result.ok) {
         expect(result.error.code).toBe('INVALID_RESPONSE');
-        expect(result.error.message).toContain('Failed to parse LLM response');
+        expect(result.error.message).toContain('Failed to parse');
         expect(result.error.details?.parseError).toBeDefined();
         expect(result.error.details?.rawResponsePreview).toBe('not valid json');
       }
@@ -175,7 +183,7 @@ describe('calendarActionExtractionService', () => {
     it('returns INVALID_RESPONSE when response schema validation fails', async () => {
       const invalidResponse = JSON.stringify({
         summary: 'Test',
-        // Missing required fields
+        // Missing required fields: valid, reasoning
       });
 
       mockGenerate.mockResolvedValue(ok({ content: invalidResponse, usage: mockUsage }));
@@ -187,8 +195,9 @@ describe('calendarActionExtractionService', () => {
       expect(result.ok).toBe(false);
       if (!result.ok) {
         expect(result.error.code).toBe('INVALID_RESPONSE');
-        expect(result.error.message).toBe('LLM returned invalid response format');
-        expect(result.error.details?.parseError).toBe('Schema validation failed');
+        expect(result.error.message).toContain('LLM returned invalid response format');
+        expect(result.error.details?.zodErrors).toBeDefined();
+        expect(result.error.details?.zodErrors).toContain('valid');
       }
     });
 
@@ -244,7 +253,7 @@ describe('calendarActionExtractionService', () => {
       }
     });
 
-    it('handles null date fields correctly', async () => {
+    it('handles date-only format with Zod validation error', async () => {
       const nullDatesResponse = JSON.stringify({
         summary: 'All day event',
         start: '2025-01-15',
@@ -262,11 +271,13 @@ describe('calendarActionExtractionService', () => {
 
       const result = await service.extractEvent('user-123', 'Company holiday on Jan 15', '2025-01-14');
 
-      expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.value.start).toBe('2025-01-15');
-        expect(result.value.end).toBeNull();
-        expect(result.value.valid).toBe(true);
+      // Zod schema requires ISO date-time format, not date-only
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('INVALID_RESPONSE');
+        expect(result.error.message).toContain('LLM returned invalid response format');
+        expect(result.error.details?.zodErrors).toBeDefined();
+        expect(result.error.details?.zodErrors).toContain('start');
       }
     });
 

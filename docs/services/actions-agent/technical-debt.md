@@ -136,6 +136,14 @@ No deprecated APIs or dependencies in use.
 
 ## Resolved Issues
 
+### v2.1.0 Internal Clients Migration (INT-269)
+
+**Issue:** User service client was duplicated across multiple services, violating DRY principle and creating maintenance burden.
+
+**Resolution:** Migrated to centralized `@intexuraos/internal-clients/user-service` package. All services now share a single, well-tested implementation for user settings and LLM client creation.
+
+**Date Resolved:** 2026-01-25
+
 ### v2.0.0 Race Condition Fix (INT-211)
 
 **Issue:** Concurrent Pub/Sub messages could trigger multiple WhatsApp notifications for the same action.
