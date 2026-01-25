@@ -25,12 +25,16 @@ function collectExternalDeps(pkgName, visited = new Set()) {
     return new Set(); // npm package - not our concern
   }
 
-  // Determine package path - check apps first, then packages
+  // Determine package path - check apps first, then workers, then packages
   const shortName = pkgName.replace('@intexuraos/', '');
   const appPath = resolve(rootDir, `apps/${shortName}/package.json`);
-  const pkgPath = existsSync(appPath)
-    ? appPath
-    : resolve(rootDir, `packages/${shortName}/package.json`);
+  const workerPath = resolve(rootDir, `workers/${shortName}/package.json`);
+  let pkgPath = appPath;
+  if (!existsSync(appPath)) {
+    pkgPath = existsSync(workerPath)
+      ? workerPath
+      : resolve(rootDir, `packages/${shortName}/package.json`);
+  }
 
   if (!existsSync(pkgPath)) return new Set();
 
@@ -64,9 +68,13 @@ function collectExternalDepsWithVersions(pkgName, visited = new Set()) {
 
   const shortName = pkgName.replace('@intexuraos/', '');
   const appPath = resolve(rootDir, `apps/${shortName}/package.json`);
-  const pkgPath = existsSync(appPath)
-    ? appPath
-    : resolve(rootDir, `packages/${shortName}/package.json`);
+  const workerPath = resolve(rootDir, `workers/${shortName}/package.json`);
+  let pkgPath = appPath;
+  if (!existsSync(appPath)) {
+    pkgPath = existsSync(workerPath)
+      ? workerPath
+      : resolve(rootDir, `packages/${shortName}/package.json`);
+  }
 
   if (!existsSync(pkgPath)) return new Map();
 
@@ -89,13 +97,25 @@ function collectExternalDepsWithVersions(pkgName, visited = new Set()) {
 // Collect all external npm deps (including transitive from workspace packages)
 const externalPackages = [...collectExternalDeps(`@intexuraos/${service}`)];
 
+// Detect service directory (apps, workers, or packages)
+let serviceDir;
+if (existsSync(resolve(rootDir, `apps/${service}/src/index.ts`))) {
+  serviceDir = `apps/${service}`;
+} else if (existsSync(resolve(rootDir, `workers/${service}/src/index.ts`))) {
+  serviceDir = `workers/${service}`;
+} else {
+  console.error(`ERROR: Cannot find service entry point for ${service}`);
+  console.error(`  Checked: apps/${service}/src/index.ts, workers/${service}/src/index.ts`);
+  process.exit(1);
+}
+
 const result = await esbuild.build({
-  entryPoints: [resolve(rootDir, `apps/${service}/src/index.ts`)],
+  entryPoints: [resolve(rootDir, `${serviceDir}/src/index.ts`)],
   bundle: true,
   platform: 'node',
   target: 'node22',
   format: 'esm',
-  outfile: resolve(rootDir, `apps/${service}/dist/index.js`),
+  outfile: resolve(rootDir, `${serviceDir}/dist/index.js`),
   external: externalPackages,
   sourcemap: true,
   mainFields: ['module', 'main'],
@@ -122,7 +142,7 @@ if (bundledNpmPackages.size > 0) {
   for (const pkg of bundledNpmPackages) {
     console.error(`  - ${pkg}`);
   }
-  console.error(`\nFix: Add missing packages to apps/${service}/package.json dependencies\n`);
+  console.error(`\nFix: Add missing packages to ${serviceDir}/package.json dependencies\n`);
   process.exit(1);
 }
 
@@ -136,7 +156,7 @@ const prodPackageJson = {
 };
 
 writeFileSync(
-  resolve(rootDir, `apps/${service}/dist/package.json`),
+  resolve(rootDir, `${serviceDir}/dist/package.json`),
   JSON.stringify(prodPackageJson, null, 2)
 );
 
