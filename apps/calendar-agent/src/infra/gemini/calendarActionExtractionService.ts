@@ -2,7 +2,7 @@ import type { Result } from '@intexuraos/common-core';
 import { err, getErrorMessage, ok } from '@intexuraos/common-core';
 import { calendarActionExtractionPrompt } from '@intexuraos/llm-prompts';
 import type { LlmGenerateClient } from '@intexuraos/llm-factory';
-import type { LlmUserServiceClient } from '../user/llmUserServiceClient.js';
+import type { UserServiceClient } from '@intexuraos/internal-clients/user-service';
 import type {
   CalendarActionExtractionService,
   ExtractedCalendarEvent,
@@ -17,7 +17,7 @@ const MAX_DESCRIPTION_LENGTH = 1000;
 type MinimalLogger = pino.Logger;
 
 export function createCalendarActionExtractionService(
-  llmUserServiceClient: LlmUserServiceClient,
+  llmUserServiceClient: UserServiceClient,
   logger: MinimalLogger
 ): CalendarActionExtractionService {
   const log: MinimalLogger = logger;

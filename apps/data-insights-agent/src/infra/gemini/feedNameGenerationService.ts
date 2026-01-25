@@ -6,7 +6,7 @@
 import type { Result } from '@intexuraos/common-core';
 import { err, ok } from '@intexuraos/common-core';
 import { feedNamePrompt } from '@intexuraos/llm-prompts';
-import type { UserServiceClient } from '../user/userServiceClient.js';
+import type { UserServiceClient } from '@intexuraos/internal-clients/user-service';
 import type {
   FeedNameGenerationService,
   NameGenerationError,

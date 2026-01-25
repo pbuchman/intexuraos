@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { err, ok } from '@intexuraos/common-core';
 import { createCalendarActionExtractionService } from '../infra/gemini/calendarActionExtractionService.js';
-import type { LlmUserServiceClient } from '../infra/user/llmUserServiceClient.js';
+import type { UserServiceClient } from '@intexuraos/internal-clients/user-service';
 import type { LlmGenerateClient } from '@intexuraos/llm-factory';
 import pino from 'pino';
 
@@ -20,7 +20,7 @@ const mockLogger: pino.Logger = {
 } as unknown as pino.Logger;
 
 describe('calendarActionExtractionService', () => {
-  let mockUserServiceClient: LlmUserServiceClient;
+  let mockUserServiceClient: UserServiceClient;
   let mockLlmClient: LlmGenerateClient;
 
   beforeEach(() => {
@@ -50,33 +50,41 @@ describe('calendarActionExtractionService', () => {
 
   function createMockUserServiceClient(
     result: 'ok' | 'no_api_key' | 'api_error' | 'network_error' | 'invalid_model' = 'ok'
-  ): LlmUserServiceClient {
+  ): UserServiceClient {
     switch (result) {
       case 'ok':
         return {
           getLlmClient: vi.fn().mockResolvedValue(ok(mockLlmClient)),
-        };
+        getApiKeys: vi.fn(),
+        reportLlmSuccess: vi.fn()        };
       case 'no_api_key':
         return {
           getLlmClient: vi
             .fn()
             .mockResolvedValue(err({ code: 'NO_API_KEY' as const, message: 'No API key configured' })),
+          getApiKeys: vi.fn(),
+          reportLlmSuccess: vi.fn(),
         };
       case 'api_error':
         return {
           getLlmClient: vi.fn().mockResolvedValue(err({ code: 'API_ERROR' as const, message: 'Service error' })),
-        };
+        getApiKeys: vi.fn(),
+        reportLlmSuccess: vi.fn()        };
       case 'network_error':
         return {
           getLlmClient: vi
             .fn()
             .mockResolvedValue(err({ code: 'NETWORK_ERROR' as const, message: 'Network error' })),
+          getApiKeys: vi.fn(),
+          reportLlmSuccess: vi.fn(),
         };
       case 'invalid_model':
         return {
           getLlmClient: vi
             .fn()
             .mockResolvedValue(err({ code: 'INVALID_MODEL' as const, message: 'Unsupported model' })),
+          getApiKeys: vi.fn(),
+          reportLlmSuccess: vi.fn(),
         };
     }
   }

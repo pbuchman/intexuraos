@@ -9,6 +9,7 @@ import { resetServices, setServices } from '../../services.js';
 import {
   FakeGoogleCalendarClient,
   FakeUserServiceClient,
+  FakeLlmUserServiceClient,
   FakeFailedEventRepository,
   FakeCalendarActionExtractionService,
   FakeProcessedActionRepository,
@@ -20,6 +21,7 @@ const INTERNAL_AUTH_TOKEN = 'test-internal-auth-token';
 describe('Internal Routes', () => {
   let app: FastifyInstance;
   let fakeUserService: FakeUserServiceClient;
+  let fakeLlmUserService: FakeLlmUserServiceClient;
   let fakeCalendarClient: FakeGoogleCalendarClient;
   let fakeFailedEventRepository: FakeFailedEventRepository;
   let fakeCalendarActionExtractionService: FakeCalendarActionExtractionService;
@@ -33,6 +35,7 @@ describe('Internal Routes', () => {
     process.env['INTEXURAOS_AUTH_ISSUER'] = 'https://test.auth0.com/';
 
     fakeUserService = new FakeUserServiceClient();
+    fakeLlmUserService = new FakeLlmUserServiceClient();
     fakeCalendarClient = new FakeGoogleCalendarClient();
     fakeFailedEventRepository = new FakeFailedEventRepository();
     fakeCalendarActionExtractionService = new FakeCalendarActionExtractionService();
@@ -41,6 +44,7 @@ describe('Internal Routes', () => {
 
     setServices({
       userServiceClient: fakeUserService,
+      llmUserServiceClient: fakeLlmUserService,
       googleCalendarClient: fakeCalendarClient,
       failedEventRepository: fakeFailedEventRepository,
       calendarActionExtractionService: fakeCalendarActionExtractionService,

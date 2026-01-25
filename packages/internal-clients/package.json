@@ -1,0 +1,28 @@
+{
+  "name": "@intexuraos/internal-clients",
+  "version": "0.0.1",
+  "type": "module",
+  "exports": {
+    "./user-service": {
+      "types": "./dist/user-service/index.d.ts",
+      "import": "./dist/user-service/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@intexuraos/common-core": "workspace:*",
+    "@intexuraos/llm-contract": "workspace:*",
+    "@intexuraos/llm-factory": "workspace:*",
+    "@intexuraos/llm-pricing": "workspace:*"
+  },
+  "devDependencies": {
+    "nock": "^14.0.5",
+    "typescript": "^5.8.3",
+    "vitest": "^3.1.1"
+  }
+}
