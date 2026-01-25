@@ -234,7 +234,7 @@ if (trackableMetric.length === 0) {
   3. But `.+` in regex requires at least one non-whitespace char at the boundaries
 - **Defensive Purpose:** Explicit validation after type narrowing
 
-### Line 120: `if (reason.length === 0)`
+### Line 122: `if (reason.length === 0)`
 
 ```typescript
 const match = /^NO_INSIGHTS:\s*Reason=(.+)$/.exec(line);
@@ -250,7 +250,7 @@ if (reason.length === 0) {
 - **Reason:** Same as above - regex `.+` requires non-empty content
 - **Defensive Purpose:** Explicit error for debugging
 
-### Line 138: `if (firstLine === undefined)`
+### Line 140: `if (firstLine === undefined)`
 
 ```typescript
 if (lines.length === 0) {
@@ -263,11 +263,11 @@ if (firstLine === undefined) {
 ```
 
 - **Reason:** The exception branch is unreachable because:
-  1. We already verified `lines.length > 0` on line 133
+  1. We already verified `lines.length > 0` on line 134
   2. An array with length > 0 always has a defined element at index 0
 - **Defensive Purpose:** TypeScript `noUncheckedIndexedAccess` compliance
 
-### Line 153: `if (line === undefined)`
+### Line 155: `if (line === undefined)`
 
 ```typescript
 for (let i = 0; i < lines.length; i++) {
@@ -280,7 +280,7 @@ for (let i = 0; i < lines.length; i++) {
 - **Reason:** Same dense array pattern - iteration within bounds always yields defined elements
 - **Defensive Purpose:** TypeScript `noUncheckedIndexedAccess` compliance
 
-### Line 165: `if (insights.length === 0)`
+### Line 167: `if (insights.length === 0)`
 
 ```typescript
 if (insights.length === 0) {
@@ -291,7 +291,7 @@ if (insights.length === 0) {
 - **Reason:** This branch is unreachable because:
   1. The only way to reach this point is if all lines started with `INSIGHT_`
   2. Each such line adds an insight to the array (or throws on parse error)
-  3. At least one line must exist (verified at line 133)
+  3. At least one line must exist (verified at line 134)
 - **Defensive Purpose:** Guard against logic errors in parsing loop
 
 ---
