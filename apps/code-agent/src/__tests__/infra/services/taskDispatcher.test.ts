@@ -368,6 +368,135 @@ describe('taskDispatcherImpl', () => {
         expect(result.value.workerLocation).toBe('vm');
       }
     });
+
+    it('includes linearIssueId when provided', async () => {
+      const service = createTaskDispatcherService({ logger });
+      const mockFetch = vi.mocked(global.fetch);
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ status: 'accepted' }),
+      } as Response);
+
+      await service.dispatch({
+        taskId: 'task-123',
+        prompt: 'Test',
+        systemPromptHash: 'abc123',
+        repository: 'test/repo',
+        baseBranch: 'main',
+        workerType: 'opus',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'whsec_test',
+        linearIssueId: 'INT-123',
+      });
+
+      const fetchCall = mockFetch.mock.calls[0];
+      if (!fetchCall) {
+        throw new Error('Fetch was not called');
+      }
+      const options = fetchCall[1];
+      if (!options) {
+        throw new Error('Fetch options not found');
+      }
+      const body = JSON.parse(options.body as string);
+
+      expect(body.linearIssueId).toBe('INT-123');
+    });
+
+    it('omits linearIssueId when undefined', async () => {
+      const service = createTaskDispatcherService({ logger });
+      const mockFetch = vi.mocked(global.fetch);
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ status: 'accepted' }),
+      } as Response);
+
+      await service.dispatch({
+        taskId: 'task-123',
+        prompt: 'Test',
+        systemPromptHash: 'abc123',
+        repository: 'test/repo',
+        baseBranch: 'main',
+        workerType: 'opus',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'whsec_test',
+        // linearIssueId not provided
+      });
+
+      const fetchCall = mockFetch.mock.calls[0];
+      if (!fetchCall) {
+        throw new Error('Fetch was not called');
+      }
+      const options = fetchCall[1];
+      if (!options) {
+        throw new Error('Fetch options not found');
+      }
+      const body = JSON.parse(options.body as string);
+
+      expect(body.linearIssueId).toBeUndefined();
+    });
+
+    it('returns network_error on fetch failure', async () => {
+      const service = createTaskDispatcherService({ logger });
+      const mockFetch = vi.mocked(global.fetch);
+
+      // Mock fetch to throw a non-503 error
+      mockFetch.mockRejectedValueOnce(new Error('Network connection failed'));
+
+      const result = await service.dispatch({
+        taskId: 'task-123',
+        prompt: 'Test',
+        systemPromptHash: 'abc123',
+        repository: 'test/repo',
+        baseBranch: 'main',
+        workerType: 'opus',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'whsec_test',
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('network_error');
+        expect(result.error.message).toContain('Network error');
+        expect(result.error.message).toContain('Network connection failed');
+      }
+    });
+
+    it('uses empty string for missing CF credentials', async () => {
+      // Delete CF credentials from env
+      delete process.env['INTEXURAOS_CF_ACCESS_CLIENT_ID'];
+      delete process.env['INTEXURAOS_CF_ACCESS_CLIENT_SECRET'];
+
+      const service = createTaskDispatcherService({ logger });
+      const mockFetch = vi.mocked(global.fetch);
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ status: 'accepted' }),
+      } as Response);
+
+      await service.dispatch({
+        taskId: 'task-123',
+        prompt: 'Test',
+        systemPromptHash: 'abc123',
+        repository: 'test/repo',
+        baseBranch: 'main',
+        workerType: 'opus',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'whsec_test',
+      });
+
+      const fetchCall = mockFetch.mock.calls[0];
+      if (!fetchCall) {
+        throw new Error('Fetch was not called');
+      }
+      const options = fetchCall[1];
+      if (!options) {
+        throw new Error('Fetch options not found');
+      }
+      const headers = options.headers as Record<string, string>;
+
+      expect(headers['CF-Access-Client-Id']).toBe('');
+      expect(headers['CF-Access-Client-Secret']).toBe('');
+    });
   });
 
   describe('getWorkerConfigs', () => {

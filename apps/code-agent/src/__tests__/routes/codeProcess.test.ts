@@ -10,10 +10,14 @@ import pino from 'pino';
 import type { Logger } from 'pino';
 import { createFirestoreCodeTaskRepository } from '../../infra/repositories/firestoreCodeTaskRepository.js';
 import { createTaskDispatcherService } from '../../infra/services/taskDispatcherImpl.js';
+import { createFirestoreLogChunkRepository } from '../../infra/repositories/firestoreLogChunkRepository.js';
 import { createWorkerDiscoveryService } from '../../infra/services/workerDiscoveryImpl.js';
+import { createActionsAgentClient } from '../../infra/clients/actionsAgentClient.js';
 import type { CodeTaskRepository } from '../../domain/repositories/codeTaskRepository.js';
 import type { TaskDispatcherService } from '../../domain/services/taskDispatcher.js';
+import type { LogChunkRepository } from '../../domain/repositories/logChunkRepository.js';
 import type { WorkerDiscoveryService } from '../../domain/services/workerDiscovery.js';
+import type { ActionsAgentClient } from '../../infra/clients/actionsAgentClient.js';
 
 describe('POST /internal/code/process', () => {
   let app: Awaited<ReturnType<typeof buildServer>>;
@@ -21,7 +25,8 @@ describe('POST /internal/code/process', () => {
   let logger: Logger;
   let codeTaskRepo: CodeTaskRepository;
   let taskDispatcher: TaskDispatcherService;
-  let workerDiscovery: WorkerDiscoveryService;
+  let _logChunkRepo: LogChunkRepository;
+  let _workerDiscovery: WorkerDiscoveryService;
 
   beforeEach(async () => {
     // Set required env vars
@@ -42,20 +47,35 @@ describe('POST /internal/code/process', () => {
     });
 
     taskDispatcher = createTaskDispatcherService({ logger });
-    workerDiscovery = createWorkerDiscoveryService({ logger });
+
+    _logChunkRepo = createFirestoreLogChunkRepository({
+      firestore: fakeFirestore as unknown as Firestore,
+      logger,
+    });
+    _workerDiscovery = createWorkerDiscoveryService({ logger });
+
+    const actionsAgentClient = createActionsAgentClient({
+      baseUrl: 'http://actions-agent',
+      internalAuthToken: 'test-token',
+      logger,
+    });
 
     setServices({
       firestore: fakeFirestore as unknown as Firestore,
       logger,
       codeTaskRepo,
       taskDispatcher,
-      workerDiscovery,
+      workerDiscovery: _workerDiscovery,
+      logChunkRepo: _logChunkRepo,
+      actionsAgentClient,
     } as {
       firestore: Firestore;
       logger: Logger;
       codeTaskRepo: CodeTaskRepository;
       taskDispatcher: TaskDispatcherService;
       workerDiscovery: WorkerDiscoveryService;
+      logChunkRepo: LogChunkRepository;
+      actionsAgentClient: ActionsAgentClient;
     });
 
     app = await buildServer();

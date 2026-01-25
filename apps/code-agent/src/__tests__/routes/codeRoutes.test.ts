@@ -11,9 +11,12 @@ import type { Logger } from 'pino';
 import type { CodeTaskRepository } from '../../domain/repositories/codeTaskRepository.js';
 import { createWorkerDiscoveryService } from '../../infra/services/workerDiscoveryImpl.js';
 import { createTaskDispatcherService } from '../../infra/services/taskDispatcherImpl.js';
+import { createFirestoreLogChunkRepository } from '../../infra/repositories/firestoreLogChunkRepository.js';
+import { createActionsAgentClient } from '../../infra/clients/actionsAgentClient.js';
 import type { WorkerDiscoveryService } from '../../domain/services/workerDiscovery.js';
 import type { TaskDispatcherService } from '../../domain/services/taskDispatcher.js';
-
+import type { LogChunkRepository } from '../../domain/repositories/logChunkRepository.js';
+import type { ActionsAgentClient } from '../../infra/clients/actionsAgentClient.js';
 describe('codeRoutes', () => {
   let fakeFirestore: ReturnType<typeof createFakeFirestore>;
   let logger: Logger;
@@ -45,18 +48,33 @@ describe('codeRoutes', () => {
     const workerDiscovery = createWorkerDiscoveryService({ logger });
     const taskDispatcher = createTaskDispatcherService({ logger });
 
+    const logChunkRepo = createFirestoreLogChunkRepository({
+      firestore: fakeFirestore as unknown as Firestore,
+      logger,
+    });
+
+    const actionsAgentClient = createActionsAgentClient({
+      baseUrl: 'http://actions-agent',
+      internalAuthToken: 'test-token',
+      logger,
+    });
+
     setServices({
       firestore: fakeFirestore as unknown as Firestore,
       logger,
       codeTaskRepo,
       workerDiscovery,
       taskDispatcher,
+      logChunkRepo,
+      actionsAgentClient,
     } as {
       firestore: Firestore;
       logger: Logger;
       codeTaskRepo: CodeTaskRepository;
       workerDiscovery: WorkerDiscoveryService;
       taskDispatcher: TaskDispatcherService;
+      logChunkRepo: LogChunkRepository;
+      actionsAgentClient: ActionsAgentClient;
     });
 
     server = await buildServer();

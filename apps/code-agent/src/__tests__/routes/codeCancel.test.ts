@@ -12,15 +12,20 @@ import type { Logger } from 'pino';
 import { createFirestoreCodeTaskRepository } from '../../infra/repositories/firestoreCodeTaskRepository.js';
 import { createWorkerDiscoveryService } from '../../infra/services/workerDiscoveryImpl.js';
 import { createTaskDispatcherService } from '../../infra/services/taskDispatcherImpl.js';
+import { createFirestoreLogChunkRepository } from '../../infra/repositories/firestoreLogChunkRepository.js';
+import { createActionsAgentClient } from '../../infra/clients/actionsAgentClient.js';
 import type { CodeTaskRepository } from '../../domain/repositories/codeTaskRepository.js';
 import type { TaskDispatcherService } from '../../domain/services/taskDispatcher.js';
-
+import type { LogChunkRepository } from '../../domain/repositories/logChunkRepository.js';
+import type { WorkerDiscoveryService } from '../../domain/services/workerDiscovery.js';
+import type { ActionsAgentClient } from '../../infra/clients/actionsAgentClient.js';
 describe('POST /code/cancel', () => {
   let app: Awaited<ReturnType<typeof buildServer>>;
   let fakeFirestore: ReturnType<typeof createFakeFirestore>;
   let logger: Logger;
   let codeTaskRepo: CodeTaskRepository;
   let taskDispatcher: TaskDispatcherService;
+  let logChunkRepo: LogChunkRepository;
   let cancelOnWorkerSpy: ReturnType<typeof vi.spyOn> | null;
 
   beforeEach(async () => {
@@ -44,6 +49,17 @@ describe('POST /code/cancel', () => {
     const workerDiscovery = createWorkerDiscoveryService({ logger });
     taskDispatcher = createTaskDispatcherService({ logger });
 
+    logChunkRepo = createFirestoreLogChunkRepository({
+      firestore: fakeFirestore as unknown as Firestore,
+      logger,
+    });
+
+    const actionsAgentClient = createActionsAgentClient({
+      baseUrl: 'http://actions-agent',
+      internalAuthToken: 'test-token',
+      logger,
+    });
+
     // Spy on cancelOnWorker to verify it's called
     cancelOnWorkerSpy = vi.spyOn(taskDispatcher, 'cancelOnWorker' as never).mockResolvedValue(undefined);
 
@@ -53,6 +69,16 @@ describe('POST /code/cancel', () => {
       codeTaskRepo,
       workerDiscovery,
       taskDispatcher,
+      logChunkRepo,
+      actionsAgentClient,
+    } as {
+      firestore: Firestore;
+      logger: Logger;
+      codeTaskRepo: CodeTaskRepository;
+      workerDiscovery: WorkerDiscoveryService;
+      taskDispatcher: TaskDispatcherService;
+      logChunkRepo: LogChunkRepository;
+      actionsAgentClient: ActionsAgentClient;
     });
 
     app = await buildServer();

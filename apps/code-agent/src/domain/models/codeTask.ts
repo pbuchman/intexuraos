@@ -133,6 +133,7 @@ export interface CodeTask {
 
   // Webhook state
   callbackReceived: boolean;
+  webhookSecret?: string;     // Per-task secret for HMAC signature validation (design lines 1634-1636)
 
   // Log streaming health
   logChunksDropped?: number;    // Count of failed uploads (design line 1004)

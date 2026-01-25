@@ -9,11 +9,15 @@ import type { Firestore } from '@google-cloud/firestore';
 import pino from 'pino';
 import type { Logger } from 'pino';
 import { createFirestoreCodeTaskRepository } from '../infra/repositories/firestoreCodeTaskRepository.js';
+import { createFirestoreLogChunkRepository } from '../infra/repositories/firestoreLogChunkRepository.js';
+import { createActionsAgentClient } from '../infra/clients/actionsAgentClient.js';
 import type { CodeTaskRepository } from '../domain/repositories/codeTaskRepository.js';
 import { createWorkerDiscoveryService } from '../infra/services/workerDiscoveryImpl.js';
 import { createTaskDispatcherService } from '../infra/services/taskDispatcherImpl.js';
 import type { WorkerDiscoveryService } from '../domain/services/workerDiscovery.js';
 import type { TaskDispatcherService } from '../domain/services/taskDispatcher.js';
+import type { LogChunkRepository } from '../domain/repositories/logChunkRepository.js';
+import type { ActionsAgentClient } from '../infra/clients/actionsAgentClient.js';
 
 describe('OpenAPI contract', () => {
   let app: Awaited<ReturnType<typeof buildServer>>;
@@ -38,12 +42,23 @@ describe('OpenAPI contract', () => {
       }),
       workerDiscovery: createWorkerDiscoveryService({ logger }),
       taskDispatcher: createTaskDispatcherService({ logger }),
+      logChunkRepo: createFirestoreLogChunkRepository({
+        firestore: fakeFirestore,
+        logger,
+      }),
+      actionsAgentClient: createActionsAgentClient({
+        baseUrl: 'http://actions-agent',
+        internalAuthToken: 'test-token',
+        logger,
+      }),
     } as {
       firestore: Firestore;
       logger: Logger;
       codeTaskRepo: CodeTaskRepository;
       workerDiscovery: WorkerDiscoveryService;
       taskDispatcher: TaskDispatcherService;
+      logChunkRepo: LogChunkRepository;
+      actionsAgentClient: ActionsAgentClient;
     });
 
     app = await buildServer();

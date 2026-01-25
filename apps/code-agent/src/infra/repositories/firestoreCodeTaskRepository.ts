@@ -157,6 +157,9 @@ export const createFirestoreCodeTaskRepository = (deps: {
           if (input.linearFallback !== undefined) {
             taskData.linearFallback = input.linearFallback;
           }
+          if (input.webhookSecret !== undefined) {
+            taskData.webhookSecret = input.webhookSecret;
+          }
 
           const docRef = collection.doc(taskId);
           transaction.set(docRef, taskData);

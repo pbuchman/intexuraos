@@ -8,18 +8,24 @@ import type { Firestore } from '@google-cloud/firestore';
 import { getFirestore } from '@intexuraos/infra-firestore';
 import type { CodeWorkersConfig } from './config.js';
 import type { CodeTaskRepository } from './domain/repositories/codeTaskRepository.js';
+import type { LogChunkRepository } from './domain/repositories/logChunkRepository.js';
 import type { WorkerDiscoveryService } from './domain/services/workerDiscovery.js';
 import type { TaskDispatcherService } from './domain/services/taskDispatcher.js';
+import type { ActionsAgentClient } from './infra/clients/actionsAgentClient.js';
 import { createFirestoreCodeTaskRepository } from './infra/repositories/firestoreCodeTaskRepository.js';
+import { createFirestoreLogChunkRepository } from './infra/repositories/firestoreLogChunkRepository.js';
 import { createWorkerDiscoveryService } from './infra/services/workerDiscoveryImpl.js';
 import { createTaskDispatcherService } from './infra/services/taskDispatcherImpl.js';
+import { createActionsAgentClient } from './infra/clients/actionsAgentClient.js';
 
 export interface ServiceContainer {
   firestore: Firestore;
   logger: pino.Logger;
   codeTaskRepo: CodeTaskRepository;
+  logChunkRepo: LogChunkRepository;
   workerDiscovery: WorkerDiscoveryService;
   taskDispatcher: TaskDispatcherService;
+  actionsAgentClient: ActionsAgentClient;
 }
 
 // Configuration required to initialize services
@@ -42,7 +48,7 @@ let container: ServiceContainer | null = null;
  * Initialize services with config. Call this early in server startup.
  * MUST be called before getServices().
  */
-export function initServices(_config: ServiceConfig): void {
+export function initServices(config: ServiceConfig): void {
   const firestore = getFirestore();
   const logger = pino({ name: 'code-agent' });
 
@@ -50,10 +56,17 @@ export function initServices(_config: ServiceConfig): void {
     firestore,
     logger,
     codeTaskRepo: createFirestoreCodeTaskRepository({ firestore, logger }),
+    logChunkRepo: createFirestoreLogChunkRepository({ firestore, logger }),
     workerDiscovery: createWorkerDiscoveryService({ logger }),
     taskDispatcher: createTaskDispatcherService({ logger }),
+    actionsAgentClient: createActionsAgentClient({
+      baseUrl: config.actionsAgentUrl,
+      internalAuthToken: config.internalAuthToken,
+      logger,
+    }),
   };
 }
+
 
 /**
  * Get the service container. Throws if initServices() wasn't called.

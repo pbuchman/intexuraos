@@ -21,6 +21,7 @@ export interface CreateTaskInput {
   linearIssueId?: string;
   linearIssueTitle?: string;
   linearFallback?: boolean;
+  webhookSecret?: string;
 }
 
 export interface UpdateTaskInput {

@@ -7,10 +7,12 @@ import { createFakeFirestore } from '@intexuraos/infra-firestore';
 import type { Firestore } from '@google-cloud/firestore';
 import pino from 'pino';
 import { createFirestoreCodeTaskRepository } from '../../infra/repositories/firestoreCodeTaskRepository.js';
+import { createFirestoreLogChunkRepository } from '../../infra/repositories/firestoreLogChunkRepository.js';
 import { createWorkerDiscoveryService } from '../../infra/services/workerDiscoveryImpl.js';
 import { createTaskDispatcherService } from '../../infra/services/taskDispatcherImpl.js';
+import { createActionsAgentClient } from '../../infra/clients/actionsAgentClient.js';
 
-export function setupTestServices(): void {
+export function setupTestServices({ actionsAgentUrl = 'http://actions-agent' }: { actionsAgentUrl?: string } = {}): void {
   // Set required env vars for worker discovery
   process.env['INTEXURAOS_CODE_WORKERS'] =
     'mac:https://cc-mac.intexuraos.cloud:1,vm:https://cc-vm.intexuraos.cloud:2';
@@ -28,8 +30,17 @@ export function setupTestServices(): void {
       firestore: fakeFirestore,
       logger,
     }),
+    logChunkRepo: createFirestoreLogChunkRepository({
+      firestore: fakeFirestore,
+      logger,
+    }),
     workerDiscovery: createWorkerDiscoveryService({ logger }),
     taskDispatcher: createTaskDispatcherService({ logger }),
+    actionsAgentClient: createActionsAgentClient({
+      baseUrl: actionsAgentUrl,
+      internalAuthToken: 'test-token',
+      logger,
+    }),
   };
 
   setServices(container);

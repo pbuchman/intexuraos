@@ -12,8 +12,14 @@ import type { Logger } from 'pino';
 import { createFirestoreCodeTaskRepository } from '../../infra/repositories/firestoreCodeTaskRepository.js';
 import { createWorkerDiscoveryService } from '../../infra/services/workerDiscoveryImpl.js';
 import { createTaskDispatcherService } from '../../infra/services/taskDispatcherImpl.js';
+import { createFirestoreLogChunkRepository } from '../../infra/repositories/firestoreLogChunkRepository.js';
+import { createActionsAgentClient } from '../../infra/clients/actionsAgentClient.js';
+import type { LogChunkRepository } from '../../domain/repositories/logChunkRepository.js';
 import type { CodeTaskRepository } from '../../domain/repositories/codeTaskRepository.js';
 import type { CodeTask } from '../../domain/models/codeTask.js';
+import type { WorkerDiscoveryService } from '../../domain/services/workerDiscovery.js';
+import type { TaskDispatcherService } from '../../domain/services/taskDispatcher.js';
+import type { ActionsAgentClient } from '../../infra/clients/actionsAgentClient.js';
 
 describe('GET /code/tasks endpoints', () => {
   let app: Awaited<ReturnType<typeof buildServer>>;
@@ -42,12 +48,33 @@ describe('GET /code/tasks endpoints', () => {
     const workerDiscovery = createWorkerDiscoveryService({ logger });
     const taskDispatcher = createTaskDispatcherService({ logger });
 
+    const logChunkRepo = createFirestoreLogChunkRepository({
+      firestore: fakeFirestore as unknown as Firestore,
+      logger,
+    });
+
+    const actionsAgentClient = createActionsAgentClient({
+      baseUrl: 'http://actions-agent',
+      internalAuthToken: 'test-token',
+      logger,
+    });
+
     setServices({
       firestore: fakeFirestore as unknown as Firestore,
       logger,
       codeTaskRepo,
       workerDiscovery,
       taskDispatcher,
+      logChunkRepo,
+      actionsAgentClient,
+    } as {
+      firestore: Firestore;
+      logger: Logger;
+      codeTaskRepo: CodeTaskRepository;
+      workerDiscovery: WorkerDiscoveryService;
+      taskDispatcher: TaskDispatcherService;
+      logChunkRepo: LogChunkRepository;
+      actionsAgentClient: ActionsAgentClient;
     });
 
     app = await buildServer();
