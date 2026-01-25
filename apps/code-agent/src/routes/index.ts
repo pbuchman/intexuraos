@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
-import { codeTasksRoutes } from './codeTasksRoutes.js';
+import { codeRoutes } from './codeRoutes.js';
 
 export async function registerRoutes(app: FastifyInstance): Promise<void> {
-  await app.register(codeTasksRoutes);
+  await app.register(codeRoutes);
 }
