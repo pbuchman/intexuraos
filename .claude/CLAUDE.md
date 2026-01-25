@@ -804,6 +804,35 @@ Use the `/document-service` skill to generate comprehensive service documentatio
 
 ---
 
+## Release Skill
+
+Use the `/release` skill to orchestrate comprehensive release workflows.
+
+**Skill Location:** `.claude/skills/release/SKILL.md`
+
+**Usage:**
+
+```bash
+/release                # Full 6-phase release workflow
+/release --skip-docs    # Skip service documentation phase
+/release --phase 3      # Resume from specific phase
+```
+
+**Phases:**
+
+| Phase | Name           | Interaction       | Key Actions                              |
+| ----- | -------------- | ----------------- | ---------------------------------------- |
+| 1     | Kickoff        | User Input        | Semver analysis, detect modified services|
+| 2     | Service Docs   | Silent Batch      | Spawn service-scribe agents in parallel  |
+| 3     | High-Level Docs| **Checkpoint**    | Propose docs/overview.md updates         |
+| 4     | README         | **Checkpoint**    | Propose "What's New" section             |
+| 5     | Website        | **Checkpoint**    | 3 improvement suggestions                |
+| 6     | Finalize       | Automatic         | CI check, commit, tag push               |
+
+**Full Documentation:** `.claude/skills/release/`
+
+---
+
 ## Claude Extensions Taxonomy
 
 This project uses three types of Claude extensions:
@@ -818,6 +847,7 @@ This project uses three types of Claude extensions:
 | `/linear`           | Linear issue management with auto-splitting      |
 | `/sentry`           | Sentry triage with AI analysis and cross-linking |
 | `/document-service` | Service documentation (interactive + autonomous) |
+| `/release`          | 6-phase release workflow with checkpoints        |
 
 ### Agents (Task-Spawned)
 

@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ok, err } from '@intexuraos/common-core';
 import type { GenerateResult } from '@intexuraos/llm-contract';
 import type { LlmGenerateClient } from '@intexuraos/llm-factory';
+import type { Logger } from 'pino';
 
 vi.mock('@intexuraos/llm-pricing', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@intexuraos/llm-pricing')>();
@@ -17,6 +18,13 @@ const mockGenerate = vi.fn();
 const mockLlmClient: LlmGenerateClient = {
   generate: mockGenerate,
 };
+
+const mockLogger: Logger = {
+  info: vi.fn(),
+  warn: vi.fn(),
+  error: vi.fn(),
+  debug: vi.fn(),
+} as unknown as Logger;
 
 const mockUsage = { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd: 0.001 };
 
@@ -39,7 +47,7 @@ describe('GeminiClassifier', () => {
         ok(generateResult(jsonResponse('todo', 0.95, 'Buy groceries')))
       );
 
-      const classifier = createGeminiClassifier(mockLlmClient);
+      const classifier = createGeminiClassifier(mockLlmClient, mockLogger);
       const classificationResult = await classifier.classify('I need to buy groceries');
 
       expect(classificationResult.type).toBe('todo');
@@ -52,7 +60,7 @@ describe('GeminiClassifier', () => {
         ok(generateResult(jsonResponse('research', 0.88, 'AI trends research')))
       );
 
-      const classifier = createGeminiClassifier(mockLlmClient);
+      const classifier = createGeminiClassifier(mockLlmClient, mockLogger);
       const classificationResult = await classifier.classify('What are the latest AI trends?');
 
       expect(classificationResult.type).toBe('research');
@@ -64,19 +72,21 @@ describe('GeminiClassifier', () => {
         ok(generateResult(jsonResponse('unclassified', 0, 'Unclassified')))
       );
 
-      const classifier = createGeminiClassifier(mockLlmClient);
+      const classifier = createGeminiClassifier(mockLlmClient, mockLogger);
       const classificationResult = await classifier.classify('random gibberish');
 
+      // Zod validation fails for invalid enum value, returns default "note" classification
       expect(classificationResult.type).toBe('note');
-      expect(classificationResult.confidence).toBe(0);
-      expect(classificationResult.title).toBe('Unclassified');
+      expect(classificationResult.confidence).toBe(0.3);
+      expect(classificationResult.title).toBe('Unknown');
+      expect(classificationResult.reasoning).toContain('Invalid response format');
     });
 
     it('throws on API error', async () => {
       const error = { code: 'RATE_LIMITED', message: 'API rate limit exceeded' };
       mockGenerate.mockResolvedValue(err(error));
 
-      const classifier = createGeminiClassifier(mockLlmClient);
+      const classifier = createGeminiClassifier(mockLlmClient, mockLogger);
 
       await expect(classifier.classify('test')).rejects.toThrow(
         'Classification failed: API rate limit exceeded'
@@ -87,7 +97,7 @@ describe('GeminiClassifier', () => {
       const error = { code: 'INVALID_KEY', message: 'Invalid API key provided' };
       mockGenerate.mockResolvedValue(err(error));
 
-      const classifier = createGeminiClassifier(mockLlmClient);
+      const classifier = createGeminiClassifier(mockLlmClient, mockLogger);
 
       await expect(classifier.classify('test')).rejects.toThrow(
         'Classification failed: Invalid API key provided'
@@ -99,7 +109,7 @@ describe('GeminiClassifier', () => {
         ok(generateResult(jsonResponse('note', 0.9, 'Meeting notes')))
       );
 
-      const classifier = createGeminiClassifier(mockLlmClient);
+      const classifier = createGeminiClassifier(mockLlmClient, mockLogger);
       const classificationResult = await classifier.classify('Meeting notes from today');
 
       expect(classificationResult.type).toBe('note');
@@ -109,7 +119,7 @@ describe('GeminiClassifier', () => {
     it('passes prompt containing the text to generate', async () => {
       mockGenerate.mockResolvedValue(ok(generateResult(jsonResponse('todo', 0.9, 'Test'))));
 
-      const classifier = createGeminiClassifier(mockLlmClient);
+      const classifier = createGeminiClassifier(mockLlmClient, mockLogger);
       await classifier.classify('test message');
 
       expect(mockGenerate).toHaveBeenCalledWith(expect.stringContaining('test message'));
@@ -120,7 +130,7 @@ describe('GeminiClassifier', () => {
         ok(generateResult(jsonResponse('calendar', 0.85, 'Team meeting')))
       );
 
-      const classifier = createGeminiClassifier(mockLlmClient);
+      const classifier = createGeminiClassifier(mockLlmClient, mockLogger);
       await classifier.classify('Team meeting tomorrow at 3pm');
 
       expect(mockGenerate).toHaveBeenCalledWith(expect.stringContaining('Classify the message'));
@@ -130,7 +140,7 @@ describe('GeminiClassifier', () => {
       const error = { code: 'TIMEOUT', message: 'Request timed out' };
       mockGenerate.mockResolvedValue(err(error));
 
-      const classifier = createGeminiClassifier(mockLlmClient);
+      const classifier = createGeminiClassifier(mockLlmClient, mockLogger);
 
       await expect(classifier.classify('test')).rejects.toThrow(
         'Classification failed: Request timed out'
@@ -141,7 +151,7 @@ describe('GeminiClassifier', () => {
       const error = { code: 'API_ERROR', message: 'Server error' };
       mockGenerate.mockResolvedValue(err(error));
 
-      const classifier = createGeminiClassifier(mockLlmClient);
+      const classifier = createGeminiClassifier(mockLlmClient, mockLogger);
 
       await expect(classifier.classify('test')).rejects.toThrow(
         'Classification failed: Server error'
@@ -151,7 +161,7 @@ describe('GeminiClassifier', () => {
     it('returns note for invalid JSON response', async () => {
       mockGenerate.mockResolvedValue(ok(generateResult('This is not valid JSON')));
 
-      const classifier = createGeminiClassifier(mockLlmClient);
+      const classifier = createGeminiClassifier(mockLlmClient, mockLogger);
       const classificationResult = await classifier.classify('test');
 
       expect(classificationResult.type).toBe('note');
@@ -162,28 +172,32 @@ describe('GeminiClassifier', () => {
     it('returns note for unknown type in response', async () => {
       mockGenerate.mockResolvedValue(ok(generateResult(jsonResponse('unknown_type', 0.9, 'Test'))));
 
-      const classifier = createGeminiClassifier(mockLlmClient);
+      const classifier = createGeminiClassifier(mockLlmClient, mockLogger);
       const classificationResult = await classifier.classify('test');
 
       expect(classificationResult.type).toBe('note');
     });
 
-    it('clamps confidence to valid range', async () => {
+    it('rejects confidence greater than 1', async () => {
       mockGenerate.mockResolvedValue(ok(generateResult(jsonResponse('todo', 1.5, 'Test'))));
 
-      const classifier = createGeminiClassifier(mockLlmClient);
+      const classifier = createGeminiClassifier(mockLlmClient, mockLogger);
       const classificationResult = await classifier.classify('test');
 
-      expect(classificationResult.confidence).toBe(1);
+      // Zod validation fails for confidence > 1, returns default "note" classification
+      expect(classificationResult.type).toBe('note');
+      expect(classificationResult.confidence).toBe(0.3);
     });
 
-    it('clamps negative confidence to zero', async () => {
+    it('rejects negative confidence', async () => {
       mockGenerate.mockResolvedValue(ok(generateResult(jsonResponse('todo', -0.5, 'Test'))));
 
-      const classifier = createGeminiClassifier(mockLlmClient);
+      const classifier = createGeminiClassifier(mockLlmClient, mockLogger);
       const classificationResult = await classifier.classify('test');
 
-      expect(classificationResult.confidence).toBe(0);
+      // Zod validation fails for confidence < 0, returns default "note" classification
+      expect(classificationResult.type).toBe('note');
+      expect(classificationResult.confidence).toBe(0.3);
     });
 
     it('extracts JSON from response with surrounding text', async () => {
@@ -191,7 +205,7 @@ describe('GeminiClassifier', () => {
         ok(generateResult(`Here is the classification: ${jsonResponse('todo', 0.9, 'Test')} done.`))
       );
 
-      const classifier = createGeminiClassifier(mockLlmClient);
+      const classifier = createGeminiClassifier(mockLlmClient, mockLogger);
       const classificationResult = await classifier.classify('test');
 
       expect(classificationResult.type).toBe('todo');
@@ -205,7 +219,7 @@ describe('GeminiClassifier', () => {
       try {
         mockGenerate.mockResolvedValue(ok(generateResult('{"type": "todo"}')));
 
-        const classifier = createGeminiClassifier(mockLlmClient);
+        const classifier = createGeminiClassifier(mockLlmClient, mockLogger);
         const classificationResult = await classifier.classify('test');
 
         expect(classificationResult.type).toBe('note');
@@ -218,35 +232,41 @@ describe('GeminiClassifier', () => {
     it('uses defaults for missing confidence, title, and reasoning', async () => {
       mockGenerate.mockResolvedValue(ok(generateResult('{"type": "todo"}')));
 
-      const classifier = createGeminiClassifier(mockLlmClient);
+      const classifier = createGeminiClassifier(mockLlmClient, mockLogger);
       const classificationResult = await classifier.classify('test');
 
-      expect(classificationResult.type).toBe('todo');
-      expect(classificationResult.confidence).toBe(0.5);
+      // Zod validation fails for missing required fields, returns default "note" classification
+      expect(classificationResult.type).toBe('note');
+      expect(classificationResult.confidence).toBe(0.3);
       expect(classificationResult.title).toBe('Unknown');
-      expect(classificationResult.reasoning).toBe('No reasoning provided');
+      expect(classificationResult.reasoning).toContain('Invalid response format');
     });
 
-    it('truncates long title to 100 characters', async () => {
+    it('rejects title exceeding 50 characters', async () => {
       const longTitle = 'A'.repeat(200);
       mockGenerate.mockResolvedValue(ok(generateResult(jsonResponse('todo', 0.9, longTitle))));
 
-      const classifier = createGeminiClassifier(mockLlmClient);
+      const classifier = createGeminiClassifier(mockLlmClient, mockLogger);
       const classificationResult = await classifier.classify('test');
 
-      expect(classificationResult.title).toBe('A'.repeat(100));
+      // Zod validation fails for title > 50 characters, returns default "note" classification
+      expect(classificationResult.type).toBe('note');
+      expect(classificationResult.confidence).toBe(0.3);
+      expect(classificationResult.title).toBe('Unknown');
+      expect(classificationResult.reasoning).toContain('Invalid response format');
     });
 
-    it('truncates long reasoning to 500 characters', async () => {
+    it('accepts long reasoning without truncation', async () => {
       const longReasoning = 'B'.repeat(600);
       mockGenerate.mockResolvedValue(
         ok(generateResult(jsonResponse('todo', 0.9, 'Test', longReasoning)))
       );
 
-      const classifier = createGeminiClassifier(mockLlmClient);
+      const classifier = createGeminiClassifier(mockLlmClient, mockLogger);
       const classificationResult = await classifier.classify('test');
 
-      expect(classificationResult.reasoning).toBe('B'.repeat(500));
+      // Zod doesn't truncate reasoning field - no max length in schema
+      expect(classificationResult.reasoning).toBe(longReasoning);
     });
 
     it('handles non-string title in response', async () => {
@@ -254,10 +274,14 @@ describe('GeminiClassifier', () => {
         ok(generateResult('{"type": "todo", "confidence": 0.9, "title": 123}'))
       );
 
-      const classifier = createGeminiClassifier(mockLlmClient);
+      const classifier = createGeminiClassifier(mockLlmClient, mockLogger);
       const classificationResult = await classifier.classify('test');
 
+      // Zod validation fails for wrong type, returns default "note" classification
+      expect(classificationResult.type).toBe('note');
+      expect(classificationResult.confidence).toBe(0.3);
       expect(classificationResult.title).toBe('Unknown');
+      expect(classificationResult.reasoning).toContain('Invalid response format');
     });
 
     it('handles non-string reasoning in response', async () => {
@@ -267,10 +291,13 @@ describe('GeminiClassifier', () => {
         )
       );
 
-      const classifier = createGeminiClassifier(mockLlmClient);
+      const classifier = createGeminiClassifier(mockLlmClient, mockLogger);
       const classificationResult = await classifier.classify('test');
 
-      expect(classificationResult.reasoning).toBe('No reasoning provided');
+      // Zod validation fails for wrong type, returns default "note" classification
+      expect(classificationResult.type).toBe('note');
+      expect(classificationResult.confidence).toBe(0.3);
+      expect(classificationResult.reasoning).toContain('Invalid response format');
     });
 
     it('handles non-number confidence in response', async () => {
@@ -278,10 +305,12 @@ describe('GeminiClassifier', () => {
         ok(generateResult('{"type": "todo", "confidence": "high", "title": "Test"}'))
       );
 
-      const classifier = createGeminiClassifier(mockLlmClient);
+      const classifier = createGeminiClassifier(mockLlmClient, mockLogger);
       const classificationResult = await classifier.classify('test');
 
-      expect(classificationResult.confidence).toBe(0.5);
+      // Zod validation fails for wrong type, returns default "note" classification
+      expect(classificationResult.type).toBe('note');
+      expect(classificationResult.confidence).toBe(0.3);
     });
 
   });
@@ -292,7 +321,7 @@ describe('GeminiClassifier', () => {
         ok(generateResult(jsonResponse('link', 0.85, 'Interesting article')))
       );
 
-      const classifier = createGeminiClassifier(mockLlmClient);
+      const classifier = createGeminiClassifier(mockLlmClient, mockLogger);
       const classificationResult = await classifier.classify('https://example.com', {
         sourceType: 'pwa-shared',
       });
@@ -307,7 +336,7 @@ describe('GeminiClassifier', () => {
         ok(generateResult(jsonResponse('link', 0.95, 'Cool link')))
       );
 
-      const classifier = createGeminiClassifier(mockLlmClient);
+      const classifier = createGeminiClassifier(mockLlmClient, mockLogger);
       const classificationResult = await classifier.classify('https://example.com', {
         sourceType: 'pwa-shared',
       });
@@ -318,7 +347,7 @@ describe('GeminiClassifier', () => {
     it('does not boost confidence for non-link types with pwa-shared', async () => {
       mockGenerate.mockResolvedValue(ok(generateResult(jsonResponse('note', 0.8, 'Some note'))));
 
-      const classifier = createGeminiClassifier(mockLlmClient);
+      const classifier = createGeminiClassifier(mockLlmClient, mockLogger);
       const classificationResult = await classifier.classify('Just a note', {
         sourceType: 'pwa-shared',
       });
@@ -333,7 +362,7 @@ describe('GeminiClassifier', () => {
         ok(generateResult(jsonResponse('link', 0.85, 'A link')))
       );
 
-      const classifier = createGeminiClassifier(mockLlmClient);
+      const classifier = createGeminiClassifier(mockLlmClient, mockLogger);
       const classificationResult = await classifier.classify('https://example.com', {
         sourceType: 'whatsapp_text',
       });
@@ -348,7 +377,7 @@ describe('GeminiClassifier', () => {
         ok(generateResult(jsonResponse('link', 0.85, 'A link')))
       );
 
-      const classifier = createGeminiClassifier(mockLlmClient);
+      const classifier = createGeminiClassifier(mockLlmClient, mockLogger);
       const classificationResult = await classifier.classify('https://example.com');
 
       expect(classificationResult.confidence).toBe(0.85);
@@ -361,7 +390,7 @@ describe('GeminiClassifier', () => {
         ok(generateResult(jsonResponse('link', 0.92, 'Research World', 'URL present, keyword in URL ignored')))
       );
 
-      const classifier = createGeminiClassifier(mockLlmClient);
+      const classifier = createGeminiClassifier(mockLlmClient, mockLogger);
       const classificationResult = await classifier.classify('https://research-world.com');
 
       expect(classificationResult.type).toBe('link');
@@ -373,7 +402,7 @@ describe('GeminiClassifier', () => {
         ok(generateResult(jsonResponse('link', 0.90, 'Todo App', 'URL present, keyword in URL ignored')))
       );
 
-      const classifier = createGeminiClassifier(mockLlmClient);
+      const classifier = createGeminiClassifier(mockLlmClient, mockLogger);
       const classificationResult = await classifier.classify('https://todo-app.io/notes');
 
       expect(classificationResult.type).toBe('link');
@@ -385,7 +414,7 @@ describe('GeminiClassifier', () => {
         ok(generateResult(jsonResponse('research', 0.92, 'Example Research', 'Explicit research intent overrides URL')))
       );
 
-      const classifier = createGeminiClassifier(mockLlmClient);
+      const classifier = createGeminiClassifier(mockLlmClient, mockLogger);
       const classificationResult = await classifier.classify('research this https://example.com');
 
       expect(classificationResult.type).toBe('research');
@@ -397,7 +426,7 @@ describe('GeminiClassifier', () => {
         ok(generateResult(jsonResponse('link', 0.91, 'Research Todo Notes', 'URL present, keywords in URL ignored')))
       );
 
-      const classifier = createGeminiClassifier(mockLlmClient);
+      const classifier = createGeminiClassifier(mockLlmClient, mockLogger);
       const classificationResult = await classifier.classify('https://research-todo-notes.com');
 
       expect(classificationResult.type).toBe('link');
@@ -409,7 +438,7 @@ describe('GeminiClassifier', () => {
         ok(generateResult(jsonResponse('link', 0.9, 'Test Link')))
       );
 
-      const classifier = createGeminiClassifier(mockLlmClient);
+      const classifier = createGeminiClassifier(mockLlmClient, mockLogger);
       await classifier.classify('check this https://research-world.com');
 
       expect(mockGenerate).toHaveBeenCalledWith(
@@ -422,7 +451,7 @@ describe('GeminiClassifier', () => {
         ok(generateResult(jsonResponse('link', 0.9, 'Test')))
       );
 
-      const classifier = createGeminiClassifier(mockLlmClient);
+      const classifier = createGeminiClassifier(mockLlmClient, mockLogger);
       await classifier.classify('https://example.com');
 
       expect(mockGenerate).toHaveBeenCalledWith(

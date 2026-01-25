@@ -10,11 +10,12 @@ import {
   buildValidationRepairPrompt,
   inputImprovementPrompt,
   inputQualityPrompt,
-  isInputQualityResult,
+  InputQualitySchema,
 } from '@intexuraos/llm-prompts';
-import { createLlmParseError, logLlmParseError } from '@intexuraos/llm-utils';
+import { createLlmParseError, formatZodErrors, logLlmParseError } from '@intexuraos/llm-utils';
 import { getErrorMessage, type Logger, type Result } from '@intexuraos/common-core';
 import type { LlmError } from '../../domain/research/ports/llmProvider.js';
+import type { ZodSchema } from 'zod';
 
 export interface ValidationResult {
   quality: 0 | 1 | 2;
@@ -71,7 +72,7 @@ export class InputValidationAdapter implements InputValidationProvider {
       return { ok: false, error };
     }
 
-    const parsed = parseJson(result.value.content, isInputQualityResult);
+    const parsed = parseJsonWithZod(result.value.content, InputQualitySchema);
     if (!parsed.ok) {
       return await this.attemptValidationRepair(prompt, result.value.content, parsed.error, result.value.usage);
     }
@@ -162,7 +163,7 @@ export class InputValidationAdapter implements InputValidationProvider {
       };
     }
 
-    const parsed = parseJson(result.value.content, isInputQualityResult);
+    const parsed = parseJsonWithZod(result.value.content, InputQualitySchema);
     if (!parsed.ok) {
       logLlmParseError(
         this.logger,
@@ -324,9 +325,9 @@ function mapToLlmError(error: { code: string; message: string }): LlmError {
   return { code, message: error.message };
 }
 
-function parseJson<T>(
+function parseJsonWithZod<T>(
   raw: string,
-  guard: (v: unknown) => v is T
+  schema: ZodSchema<T>
 ): { ok: true; value: T } | { ok: false; error: string } {
   const cleaned = raw
     .replace(/^```json\s*/i, '')
@@ -341,9 +342,10 @@ function parseJson<T>(
     return { ok: false, error: `JSON parse error: ${getErrorMessage(e)}` };
   }
 
-  if (!guard(parsed)) {
-    return { ok: false, error: 'Response does not match expected schema' };
+  const result = schema.safeParse(parsed);
+  if (!result.success) {
+    return { ok: false, error: formatZodErrors(result.error) };
   }
 
-  return { ok: true, value: parsed };
+  return { ok: true, value: result.data };
 }

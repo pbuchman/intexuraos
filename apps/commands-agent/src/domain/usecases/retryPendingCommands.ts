@@ -68,7 +68,7 @@ export function createRetryPendingCommandsUseCase(deps: {
         }
 
         try {
-          const classifier = classifierFactory(llmClientResult.value);
+          const classifier = classifierFactory(llmClientResult.value, logger);
           const classification = await classifier.classify(command.text);
 
           logger.info(

@@ -12,4 +12,5 @@ export {
   type Mode,
   type DefaultApplied,
   type SafetyInfo,
+  type InputQuality,
 } from './contextSchemas.js';

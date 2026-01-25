@@ -174,7 +174,7 @@ describe('LinearActionExtractionService', () => {
       expect(result.ok).toBe(false);
       if (!result.ok) {
         expect(result.error.code).toBe('EXTRACTION_FAILED');
-        expect(result.error.message).toBe('Invalid LLM response format');
+        expect(result.error.message).toContain('LLM returned invalid response format');
       }
     });
 
@@ -191,7 +191,8 @@ describe('LinearActionExtractionService', () => {
       expect(result.ok).toBe(false);
       if (!result.ok) {
         expect(result.error.code).toBe('EXTRACTION_FAILED');
-        expect(result.error.message).toBe('Invalid LLM response format');
+        expect(result.error.message).toContain('LLM returned invalid response format');
+        expect(result.error.message).toContain('priority');
       }
     });
 
@@ -208,7 +209,8 @@ describe('LinearActionExtractionService', () => {
       expect(result.ok).toBe(false);
       if (!result.ok) {
         expect(result.error.code).toBe('EXTRACTION_FAILED');
-        expect(result.error.message).toBe('Invalid LLM response format');
+        expect(result.error.message).toContain('LLM returned invalid response format');
+        expect(result.error.message).toContain('priority');
       }
     });
 
@@ -225,7 +227,8 @@ describe('LinearActionExtractionService', () => {
       expect(result.ok).toBe(false);
       if (!result.ok) {
         expect(result.error.code).toBe('EXTRACTION_FAILED');
-        expect(result.error.message).toBe('Invalid LLM response format');
+        expect(result.error.message).toContain('LLM returned invalid response format');
+        expect(result.error.message).toContain('title');
       }
     });
 
@@ -286,7 +289,8 @@ describe('LinearActionExtractionService', () => {
       expect(result.ok).toBe(false);
       if (!result.ok) {
         expect(result.error.code).toBe('EXTRACTION_FAILED');
-        expect(result.error.message).toBe('Invalid LLM response format');
+        expect(result.error.message).toContain('LLM returned invalid response format');
+        expect(result.error.message).toContain('functionalRequirements');
       }
     });
 
@@ -303,7 +307,8 @@ describe('LinearActionExtractionService', () => {
       expect(result.ok).toBe(false);
       if (!result.ok) {
         expect(result.error.code).toBe('EXTRACTION_FAILED');
-        expect(result.error.message).toBe('Invalid LLM response format');
+        expect(result.error.message).toContain('LLM returned invalid response format');
+        expect(result.error.message).toContain('technicalDetails');
       }
     });
 
@@ -320,7 +325,8 @@ describe('LinearActionExtractionService', () => {
       expect(result.ok).toBe(false);
       if (!result.ok) {
         expect(result.error.code).toBe('EXTRACTION_FAILED');
-        expect(result.error.message).toBe('Invalid LLM response format');
+        expect(result.error.message).toContain('LLM returned invalid response format');
+        expect(result.error.message).toContain('reasoning');
       }
     });
 
@@ -335,7 +341,7 @@ describe('LinearActionExtractionService', () => {
       expect(result.ok).toBe(false);
       if (!result.ok) {
         expect(result.error.code).toBe('EXTRACTION_FAILED');
-        expect(result.error.message).toBe('Invalid LLM response format');
+        expect(result.error.message).toContain('LLM returned invalid response format');
       }
     });
 
@@ -352,7 +358,8 @@ describe('LinearActionExtractionService', () => {
       expect(result.ok).toBe(false);
       if (!result.ok) {
         expect(result.error.code).toBe('EXTRACTION_FAILED');
-        expect(result.error.message).toBe('Invalid LLM response format');
+        expect(result.error.message).toContain('LLM returned invalid response format');
+        expect(result.error.message).toContain('error');
       }
     });
 
@@ -369,7 +376,8 @@ describe('LinearActionExtractionService', () => {
       expect(result.ok).toBe(false);
       if (!result.ok) {
         expect(result.error.code).toBe('EXTRACTION_FAILED');
-        expect(result.error.message).toBe('Invalid LLM response format');
+        expect(result.error.message).toContain('LLM returned invalid response format');
+        expect(result.error.message).toContain('valid');
       }
     });
 

@@ -5,6 +5,7 @@
  */
 
 export * from './generation/index.js';
+export * from './linear/index.js';
 export * from './classification/index.js';
 export * from './todos/index.js';
 export * from './image/index.js';
@@ -13,4 +14,5 @@ export * from './research/index.js';
 export * from './synthesis/index.js';
 export * from './dataInsights/index.js';
 export * from './approvals/index.js';
+export * from './calendar/index.js';
 export * from './shared/index.js';

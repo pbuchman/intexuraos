@@ -141,7 +141,7 @@ describe('InputValidationAdapter', () => {
       expect(result.ok).toBe(false);
       if (!result.ok) {
         expect(result.error.code).toBe('API_ERROR');
-        expect(result.error.message).toContain('expected schema');
+        expect(result.error.message).toContain('expected');
         expect(result.error.message).toContain('Repair:');
         expect(result.error.usage?.inputTokens).toBe(10);
       }

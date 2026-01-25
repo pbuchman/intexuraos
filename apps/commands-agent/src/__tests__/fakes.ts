@@ -227,7 +227,7 @@ export function createFakeServices(deps: {
   };
   deps.userServiceClient.setLlmClientResult(ok(fakeLlmClient));
 
-  const classifierFactory: ClassifierFactory = (_client: LlmGenerateClient) => deps.classifier;
+  const classifierFactory: ClassifierFactory = (_client, _logger) => deps.classifier;
 
   return {
     commandRepository: deps.commandRepository,

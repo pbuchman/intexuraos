@@ -2,27 +2,13 @@
  * Type guards for validation responses.
  */
 
-export interface InputQualityResult {
-  quality: 0 | 1 | 2;
-  reason: string;
-}
+import { InputQualitySchema } from '../shared/contextSchemas.js';
+
+// Re-export type for backwards compatibility
+export type InputQualityResult = import('../shared/contextSchemas.js').InputQuality;
 
 export function isInputQualityResult(value: unknown): value is InputQualityResult {
-  if (typeof value !== 'object' || value === null) {
-    return false;
-  }
-
-  const obj = value as Record<string, unknown>;
-  const qualityKey = 'quality' in obj ? 'quality' : 'quality_scale' in obj ? 'quality_scale' : null;
-  const qualityValue = qualityKey ? obj[qualityKey] : undefined;
-
-  // Check if quality is a valid number (0, 1, or 2)
-  const isValidQuality = qualityValue === 0 || qualityValue === 1 || qualityValue === 2;
-
-  // Check if reason is a non-empty string
-  const hasValidReason = typeof obj['reason'] === 'string' && obj['reason'].length > 0;
-
-  return isValidQuality && hasValidReason;
+  return InputQualitySchema.safeParse(value).success;
 }
 
 export function getInputQualityGuardError(value: unknown): string | null {

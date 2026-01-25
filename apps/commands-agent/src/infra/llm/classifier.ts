@@ -1,4 +1,6 @@
-import { commandClassifierPrompt } from '@intexuraos/llm-prompts';
+import type { Logger } from 'pino';
+import { commandClassifierPrompt, CommandClassificationSchema } from '@intexuraos/llm-prompts';
+import { formatZodErrors } from '@intexuraos/llm-utils';
 import type { LlmGenerateClient } from '@intexuraos/llm-factory';
 import type { CommandType } from '../../domain/models/command.js';
 import type {
@@ -7,19 +9,9 @@ import type {
   ClassifyOptions,
 } from '../../domain/ports/classifier.js';
 
-const VALID_TYPES: readonly CommandType[] = [
-  'todo',
-  'research',
-  'note',
-  'link',
-  'calendar',
-  'reminder',
-  'linear',
-] as const;
-
 const PWA_SHARED_LINK_CONFIDENCE_BOOST = 0.1;
 
-export function createGeminiClassifier(client: LlmGenerateClient): Classifier {
+export function createGeminiClassifier(client: LlmGenerateClient, logger: Logger): Classifier {
   return {
     async classify(text: string, options?: ClassifyOptions): Promise<ClassificationResult> {
       const prompt = commandClassifierPrompt.build({ message: text });
@@ -30,7 +22,7 @@ export function createGeminiClassifier(client: LlmGenerateClient): Classifier {
         throw new Error(`Classification failed: ${result.error.message}`);
       }
 
-      const parsed = parseClassifyResponse(result.value.content, VALID_TYPES);
+      const parsed = parseClassifyResponse(result.value.content, logger);
 
       let adjustedConfidence = parsed.confidence;
       let adjustedReasoning = parsed.reasoning;
@@ -52,10 +44,14 @@ export function createGeminiClassifier(client: LlmGenerateClient): Classifier {
 
 function parseClassifyResponse(
   response: string,
-  validTypes: readonly CommandType[]
+  logger: Logger
 ): { type: CommandType; confidence: number; title: string; reasoning: string } {
   const jsonMatch = /\{[\s\S]*}/.exec(response);
   if (jsonMatch === null) {
+    logger.warn(
+      { rawResponsePreview: response.slice(0, 500) },
+      'Classification response contains no JSON, falling back to note'
+    );
     return {
       type: 'note',
       confidence: 0.3,
@@ -64,30 +60,28 @@ function parseClassifyResponse(
     };
   }
 
-  const parsed: unknown = JSON.parse(jsonMatch[0]);
+  const cleaned: string = jsonMatch[0];
+  const parsed: unknown = JSON.parse(cleaned);
 
-  if (typeof parsed !== 'object' || parsed === null) {
+  const validationResult = CommandClassificationSchema.safeParse(parsed);
+  if (!validationResult.success) {
+    const zodErrors: string = formatZodErrors(validationResult.error);
+    logger.warn(
+      { zodErrors, rawResponsePreview: cleaned.slice(0, 500) },
+      'Classification validation failed, falling back to note'
+    );
     return {
       type: 'note',
       confidence: 0.3,
       title: 'Unknown',
-      reasoning: 'Invalid response format, defaulting to note',
+      reasoning: `Invalid response format: ${zodErrors}`,
     };
   }
 
-  const obj = parsed as Record<string, unknown>;
-
-  const type = validTypes.includes(obj['type'] as CommandType)
-    ? (obj['type'] as CommandType)
-    : 'note';
-
-  const confidence =
-    typeof obj['confidence'] === 'number' ? Math.max(0, Math.min(1, obj['confidence'])) : 0.5;
-
-  const title = typeof obj['title'] === 'string' ? obj['title'].slice(0, 100) : 'Unknown';
-
-  const reasoning =
-    typeof obj['reasoning'] === 'string' ? obj['reasoning'].slice(0, 500) : 'No reasoning provided';
-
-  return { type, confidence, title, reasoning };
+  return {
+    type: validationResult.data.type,
+    confidence: validationResult.data.confidence,
+    title: validationResult.data.title,
+    reasoning: validationResult.data.reasoning,
+  };
 }
