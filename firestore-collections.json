@@ -141,6 +141,15 @@
     "linear_processed_actions": {
       "owner": "linear-agent",
       "description": "Successfully processed actions for idempotency"
+    },
+    "code_tasks": {
+      "owner": "code-agent",
+      "description": "Code execution tasks",
+      "subcollections": ["logs"]
+    },
+    "user_spend": {
+      "owner": "code-agent",
+      "description": "User cost tracking for rate limiting"
     }
   }
 }

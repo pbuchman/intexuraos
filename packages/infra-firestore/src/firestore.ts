@@ -7,6 +7,9 @@ import { FieldValue, Firestore } from '@google-cloud/firestore';
 // Re-export FieldValue for use in repositories (e.g., FieldValue.delete())
 export { FieldValue };
 
+// Re-export Firestore type for type annotations
+export type { Firestore };
+
 let firestoreInstance: Firestore | null = null;
 
 /**
