@@ -33,3 +33,25 @@ export const VegaLiteConfigSchema = z
   });
 
 export type VegaLiteConfig = z.infer<typeof VegaLiteConfigSchema>;
+
+/**
+ * Schema for data insight (from analysis LLM response).
+ */
+export const DataInsightSchema = z.object({
+  title: z.string().min(1),
+  description: z.string().min(1),
+  trackableMetric: z.string().min(1),
+  suggestedChartType: z.enum(['C1', 'C2', 'C3', 'C4', 'C5', 'C6']),
+});
+
+export type DataInsight = z.infer<typeof DataInsightSchema>;
+
+/**
+ * Schema for transformed data array.
+ * Each item must be an object (passthrough allows any properties).
+ */
+export const TransformedDataSchema = z
+  .array(z.object({}).passthrough())
+  .min(1, { message: 'Data array cannot be empty' });
+
+export type TransformedData = z.infer<typeof TransformedDataSchema>;

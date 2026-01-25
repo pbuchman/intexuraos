@@ -26,6 +26,13 @@ export { parseChartDefinition, type ParsedChartDefinition } from './parseChartDe
 export { VegaLiteConfigSchema, type VegaLiteConfig } from './contextSchemas.js';
 
 export {
+  DataInsightSchema,
+  TransformedDataSchema,
+  type DataInsight,
+  type TransformedData,
+} from './contextSchemas.js';
+
+export {
   dataTransformPrompt,
   type DataTransformPromptInput,
   type DataTransformPromptDeps,
