@@ -401,4 +401,111 @@ describe('codeTasksRoutes', () => {
       expect(body.error.code).toBe('UNAUTHORIZED');
     });
   });
+
+  describe('PATCH /internal/code-tasks/:taskId', () => {
+    it('updates task status', async () => {
+      // First create a task
+      const createResponse = await app.inject({
+        method: 'POST',
+        url: '/internal/code-tasks',
+        headers: {
+          'X-Internal-Auth': process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] ?? 'test-token',
+        },
+        payload: createTaskBody({ userId: 'user-123' }),
+      });
+
+      expect(createResponse.statusCode).toBe(201);
+      const createdBody = JSON.parse(createResponse.body);
+      const taskId = createdBody.data.task.id;
+
+      // Update task status
+      const response = await app.inject({
+        method: 'PATCH',
+        url: `/internal/code-tasks/${taskId}`,
+        headers: {
+          'X-Internal-Auth': process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] ?? 'test-token',
+        },
+        payload: { status: 'completed' },
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(true);
+      expect(body.data.task.status).toBe('completed');
+    });
+
+    it('updates task with result', async () => {
+      // First create a task
+      const createResponse = await app.inject({
+        method: 'POST',
+        url: '/internal/code-tasks',
+        headers: {
+          'X-Internal-Auth': process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] ?? 'test-token',
+        },
+        payload: createTaskBody({ userId: 'user-123' }),
+      });
+
+      expect(createResponse.statusCode).toBe(201);
+      const createdBody = JSON.parse(createResponse.body);
+      const taskId = createdBody.data.task.id;
+
+      // Update task with result
+      const response = await app.inject({
+        method: 'PATCH',
+        url: `/internal/code-tasks/${taskId}`,
+        headers: {
+          'X-Internal-Auth': process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] ?? 'test-token',
+        },
+        payload: {
+          status: 'completed',
+          result: {
+            branch: 'feature/test',
+            commits: 3,
+            summary: 'Fixed the bug',
+            prUrl: 'https://github.com/test/pr/1',
+          },
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(true);
+      expect(body.data.task.status).toBe('completed');
+      expect(body.data.task.result?.branch).toBe('feature/test');
+      expect(body.data.task.result?.summary).toBe('Fixed the bug');
+    });
+
+    it('returns 404 for non-existent task', async () => {
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/internal/code-tasks/non-existent',
+        headers: {
+          'X-Internal-Auth': process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] ?? 'test-token',
+        },
+        payload: { status: 'completed' },
+      });
+
+      expect(response.statusCode).toBe(404);
+
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('NOT_FOUND');
+    });
+
+    it('rejects without internal auth token', async () => {
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/internal/code-tasks/some-task',
+        payload: { status: 'completed' },
+      });
+
+      expect(response.statusCode).toBe(401);
+
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('UNAUTHORIZED');
+    });
+  });
 });
