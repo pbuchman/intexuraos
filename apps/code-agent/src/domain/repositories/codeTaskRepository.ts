@@ -97,4 +97,10 @@ export interface CodeTaskRepository {
    * Design reference: Lines 1675-1690
    */
   findZombieTasks(staleThreshold: Date): Promise<Result<CodeTask[], RepositoryError>>;
+
+  /**
+   * Count tasks created by user today (for rate limiting).
+   * Returns the number of tasks created since midnight.
+   */
+  countByUserToday(userId: string): Promise<Result<number, RepositoryError>>;
 }

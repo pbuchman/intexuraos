@@ -422,6 +422,27 @@ export const createFirestoreCodeTaskRepository = (deps: {
         });
       }
     },
+
+    countByUserToday: async (userId: string): Promise<Result<number, RepositoryError>> => {
+      try {
+        // Calculate start of today in UTC
+        const now = new Date();
+        const startOfDay = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0, 0));
+
+        const snapshot = await collection
+          .where('userId', '==', userId)
+          .where('createdAt', '>=', Timestamp.fromDate(startOfDay))
+          .get();
+
+        return ok(snapshot.size);
+      } catch (error) {
+        logger.error({ error, userId }, 'Failed to count user tasks for today');
+        return err({
+          code: 'FIRESTORE_ERROR',
+          message: `Firestore error: ${getErrorMessage(error)}`,
+        });
+      }
+    },
   };
 };
 

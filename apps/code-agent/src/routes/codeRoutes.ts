@@ -1082,6 +1082,284 @@ export const codeRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
     }
   );
 
+  // POST /code/submit - Submit task from UI (public, Auth0 JWT)
+  fastify.post<{
+    Body: {
+      prompt: string;
+      workerType?: 'opus' | 'auto' | 'glm';
+      linearIssueId?: string;
+    };
+  }>(
+    '/code/submit',
+    {
+      schema: {
+        operationId: 'submitCodeTask',
+        summary: 'Submit a code task from the UI',
+        description: 'Public endpoint for submitting code tasks directly from the web UI. Requires Auth0 JWT.',
+        tags: ['public'],
+        body: {
+          type: 'object',
+          properties: {
+            prompt: { type: 'string', minLength: 1, maxLength: 100000 },
+            workerType: { type: 'string', enum: ['opus', 'auto', 'glm'] },
+            linearIssueId: { type: 'string' },
+          },
+          required: ['prompt'],
+        },
+        response: {
+          200: {
+            description: 'Task submitted successfully',
+            type: 'object',
+            properties: {
+              status: { type: 'string', enum: ['submitted'] },
+              codeTaskId: { type: 'string' },
+            },
+            required: ['status', 'codeTaskId'],
+          },
+          401: {
+            description: 'Unauthorized',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: {
+                type: 'object',
+                properties: {
+                  code: { type: 'string' },
+                  message: { type: 'string' },
+                },
+                required: ['code', 'message'],
+              },
+            },
+            required: ['success', 'error'],
+          },
+          409: {
+            description: 'Duplicate task (similar prompt within 5 minutes)',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: {
+                type: 'object',
+                properties: {
+                  code: { type: 'string', enum: ['DUPLICATE_PROMPT'] },
+                  message: { type: 'string' },
+                  existingTaskId: { type: 'string' },
+                },
+                required: ['code', 'message', 'existingTaskId'],
+              },
+            },
+            required: ['success', 'error'],
+          },
+          429: {
+            description: 'Rate limit exceeded',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: {
+                type: 'object',
+                properties: {
+                  code: { type: 'string', enum: ['RATE_LIMIT_EXCEEDED'] },
+                  message: { type: 'string' },
+                },
+                required: ['code', 'message'],
+              },
+            },
+            required: ['success', 'error'],
+          },
+          500: {
+            description: 'Internal server error',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: {
+                type: 'object',
+                properties: {
+                  code: { type: 'string' },
+                  message: { type: 'string' },
+                },
+                required: ['code', 'message'],
+              },
+            },
+            required: ['success', 'error'],
+          },
+        },
+      },
+    },
+    async (request: FastifyRequest<{ Body: { prompt: string; workerType?: 'opus' | 'auto' | 'glm'; linearIssueId?: string } }>, reply: FastifyReply) => {
+      logIncomingRequest(request, {
+        message: 'Received request to POST /code/submit',
+        includeParams: true,
+      });
+
+      // TODO: Replace with Auth0 JWT validation in INT-254
+      // For now, using internal auth temporarily
+      const authResult = validateInternalAuth(request);
+      if (!authResult.valid) {
+        request.log.warn({ reason: authResult.reason }, 'Auth failed for code task submission');
+        reply.status(401);
+        return { success: false, error: { code: 'UNAUTHORIZED', message: 'Unauthorized' } };
+      }
+
+      const { codeTaskRepo, taskDispatcher } = getServices();
+      const body = request.body;
+      // TODO: Extract userId from Auth0 JWT in INT-254
+      const userId = 'unknown-user';
+
+      request.log.info({ userId, promptLength: body.prompt.length }, 'Submitting code task from UI');
+
+      // Apply rate limiting: 10 tasks per day per user
+      const countResult = await codeTaskRepo.countByUserToday(userId);
+      if (!countResult.ok) {
+        request.log.error({ error: countResult.error }, 'Failed to check rate limit');
+        reply.status(500);
+        return {
+          success: false,
+          error: {
+            code: 'RATE_LIMIT_CHECK_FAILED',
+            message: 'Failed to check rate limit',
+          },
+        };
+      }
+
+      const DAILY_LIMIT = 10;
+      if (countResult.value >= DAILY_LIMIT) {
+        request.log.warn({ userId, count: countResult.value }, 'Rate limit exceeded for code task submission');
+        reply.status(429);
+        return {
+          success: false,
+          error: {
+            code: 'RATE_LIMIT_EXCEEDED',
+            message: `Maximum ${DAILY_LIMIT} tasks per day`,
+          },
+        };
+      }
+
+      // Create task with prompt deduplication (Layer 2 only - no actionId/approvalEventId)
+      const createInput: {
+        userId: string;
+        prompt: string;
+        sanitizedPrompt: string;
+        systemPromptHash: string;
+        workerType: 'opus' | 'auto' | 'glm';
+        workerLocation: 'mac' | 'vm';
+        repository: string;
+        baseBranch: string;
+        traceId: string;
+        linearIssueId?: string;
+      } = {
+        userId,
+        prompt: body.prompt,
+        sanitizedPrompt: body.prompt.trim().replace(/\s+/g, ' '),
+        systemPromptHash: 'default', // TODO: Use actual system prompt hash
+        workerType: body.workerType ?? 'auto',
+        workerLocation: 'mac', // Will be overridden by dispatcher
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: `trace_${Date.now()}_${Math.random().toString(36).substring(7)}`,
+      };
+
+      if (body.linearIssueId !== undefined) {
+        createInput.linearIssueId = body.linearIssueId;
+      }
+
+      const createResult = await codeTaskRepo.create(createInput);
+
+      if (!createResult.ok) {
+        request.log.warn({ error: createResult.error }, 'Failed to create code task');
+
+        if (createResult.error.code === 'DUPLICATE_PROMPT') {
+          reply.status(409);
+          return {
+            success: false,
+            error: {
+              code: 'DUPLICATE_PROMPT',
+              message: 'Similar task submitted in last 5 minutes',
+              existingTaskId: createResult.error.existingTaskId,
+            },
+          };
+        }
+
+        if (createResult.error.code === 'ACTIVE_TASK_EXISTS') {
+          reply.status(409);
+          return {
+            success: false,
+            error: {
+              code: 'ACTIVE_TASK_EXISTS',
+              message: 'Active task already exists for this Linear issue',
+              existingTaskId: createResult.error.existingTaskId,
+            },
+          };
+        }
+
+        reply.status(500);
+        return {
+          success: false,
+          error: {
+            code: createResult.error.code,
+            message: createResult.error.message,
+          },
+        };
+      }
+
+      const task = createResult.value;
+
+      // Dispatch to worker
+      const dispatchInput: {
+        taskId: string;
+        linearIssueId?: string;
+        prompt: string;
+        systemPromptHash: string;
+        repository: string;
+        baseBranch: string;
+        workerType: 'opus' | 'auto' | 'glm';
+        webhookUrl: string;
+        webhookSecret: string;
+      } = {
+        taskId: task.id,
+        prompt: task.sanitizedPrompt,
+        systemPromptHash: task.systemPromptHash,
+        repository: task.repository,
+        baseBranch: task.baseBranch,
+        workerType: task.workerType,
+        webhookUrl: `${process.env['INTEXURAOS_SERVICE_URL']}/internal/webhooks/task-complete`,
+        webhookSecret: process.env['INTEXURAOS_WEBHOOK_VERIFY_SECRET'] ?? '',
+      };
+
+      if (task.linearIssueId !== undefined) {
+        dispatchInput.linearIssueId = task.linearIssueId;
+      }
+
+      const dispatchResult = await taskDispatcher.dispatch(dispatchInput);
+
+      if (!dispatchResult.ok) {
+        request.log.error({ error: dispatchResult.error, taskId: task.id }, 'Failed to dispatch code task');
+
+        // Update task with error
+        await codeTaskRepo.update(task.id, {
+          error: {
+            code: dispatchResult.error.code,
+            message: dispatchResult.error.message,
+          },
+        });
+
+        reply.status(503);
+        return {
+          success: false,
+          error: {
+            code: 'DISPATCH_FAILED',
+            message: 'Failed to dispatch task to worker',
+          },
+        };
+      }
+
+      request.log.info({ taskId: task.id, workerLocation: dispatchResult.value.workerLocation }, 'Code task submitted successfully');
+
+      return reply.status(200).send({
+        status: 'submitted',
+        codeTaskId: task.id,
+      });
+    }
+  );
+
   // POST /code/cancel - Cancel running task (public, Auth0 JWT)
   // TODO: Implement in INT-255
   fastify.post<{ Body: { taskId: string } }>(
