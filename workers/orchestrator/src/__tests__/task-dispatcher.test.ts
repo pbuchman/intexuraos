@@ -166,8 +166,7 @@ describe('TaskDispatcher', () => {
       expect(dispatcher.getRunningCount()).toBe(5);
     });
 
-    it.skip('should handle worktree creation failure', async () => {
-      // TODO: Fix test to match actual service API
+    it('should handle worktree creation failure', async () => {
       vi.mocked(mockWorktreeManager.createWorktree).mockRejectedValueOnce(
         new Error('Failed to create worktree')
       );
@@ -191,9 +190,7 @@ describe('TaskDispatcher', () => {
   });
 
   describe('cancelTask', () => {
-    it.skip('should cancel running task', { timeout: 15000 }, async () => {
-      // TODO: Fix test to match actual service API
-      // First submit a task
+    it('should cancel running task', { timeout: 15000 }, async () => {
       const request: CreateTaskRequest = {
         taskId: 'test-task',
         workerType: 'auto',
@@ -203,11 +200,10 @@ describe('TaskDispatcher', () => {
       };
       await dispatcher.submitTask(request);
 
-      // Then cancel it
       const result = await dispatcher.cancelTask('test-task');
 
       expect(result.ok).toBe(true);
-      expect(mockTmuxManager.stopSession).toHaveBeenCalled();
+      expect(mockTmuxManager.killSession).toHaveBeenCalled();
       expect(mockLogForwarder.stopForwarding).toHaveBeenCalledWith('test-task');
       expect(mockWebhookClient.send).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -294,6 +290,68 @@ describe('TaskDispatcher', () => {
 
     it('should return configured capacity', () => {
       expect(dispatcher.getCapacity()).toBe(5);
+    });
+  });
+
+  describe('Task Timeout', () => {
+    let timeoutDispatcher: TaskDispatcher;
+    let timeoutStatePersistence: StatePersistence;
+
+    beforeEach(() => {
+      vi.useFakeTimers();
+      // For timeout tests, session should always appear running (until killed)
+      vi.mocked(mockTmuxManager.isSessionRunning).mockResolvedValue(true);
+      timeoutStatePersistence = createStatePersistence();
+      timeoutDispatcher = new TaskDispatcher(
+        mockConfig,
+        timeoutStatePersistence,
+        mockWorktreeManager,
+        mockTmuxManager,
+        mockLogForwarder,
+        mockWebhookClient,
+        mockGitHubTokenService,
+        mockLogger
+      );
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+      vi.mocked(mockTmuxManager.isSessionRunning).mockResolvedValue(false);
+    });
+
+    it('should log warning at 1h 55m', async () => {
+      const request: CreateTaskRequest = {
+        taskId: 'timeout-test',
+        workerType: 'auto',
+        prompt: 'Test timeout',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+      };
+
+      await timeoutDispatcher.submitTask(request);
+
+      // Advance to 1h 55m (115 minutes)
+      await vi.advanceTimersByTimeAsync(115 * 60 * 1000);
+
+      expect(timeoutDispatcher.getRunningCount()).toBe(1);
+    });
+
+    it('should kill session at 2h timeout', async () => {
+      const request: CreateTaskRequest = {
+        taskId: 'timeout-kill-test',
+        workerType: 'auto',
+        prompt: 'Test timeout kill',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+      };
+
+      await timeoutDispatcher.submitTask(request);
+      vi.clearAllMocks();
+
+      // Advance to 2h (120 minutes)
+      await vi.advanceTimersByTimeAsync(120 * 60 * 1000);
+
+      expect(mockTmuxManager.killSession).toHaveBeenCalled();
     });
   });
 });

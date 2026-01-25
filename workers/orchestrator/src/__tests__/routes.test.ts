@@ -1,27 +1,48 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { FastifyInstance } from 'fastify';
-// import { build } from 'fastify-server/build';
-// import { registerRoutes } from '../routes.js';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import Fastify, { type FastifyInstance } from 'fastify';
+import { createHmac } from 'node:crypto';
+import { registerRoutes } from '../routes.js';
 import type { TaskDispatcher } from '../services/task-dispatcher.js';
-// import type { GitHubTokenService } from '../github/token-service.js';
-// import type { Logger } from '@intexuraos/common-core';
+import type { GitHubTokenService } from '../github/token-service.js';
+import type { Logger } from '@intexuraos/common-core';
 
 describe('Routes', () => {
   let app: FastifyInstance;
   let dispatcher: TaskDispatcher;
-  // let tokenService: GitHubTokenService;
-  // const mockLogger: Logger = {
-  //   info(): void {},
-  //   warn(): void {},
-  //   error(): void {},
-  //   debug(): void {},
-  // };
+  let tokenService: GitHubTokenService;
+
+  const mockLogger: Logger = {
+    info: () => undefined,
+    warn: () => undefined,
+    error: () => undefined,
+    debug: () => undefined,
+  };
+
+  const dispatchSecret = 'test-secret';
+
+  const createSignedRequest = (
+    payload: object
+  ): { headers: Record<string, string>; body: string } => {
+    const timestamp = String(Date.now());
+    const nonce = `nonce-${Math.random().toString(36).slice(2)}`;
+    const body = JSON.stringify(payload);
+    const message = `${timestamp}.${nonce}.${body}`;
+    const signature = createHmac('sha256', dispatchSecret).update(message).digest('hex');
+
+    return {
+      headers: {
+        'x-dispatch-timestamp': timestamp,
+        'x-dispatch-signature': signature,
+        'x-dispatch-nonce': nonce,
+        'content-type': 'application/json',
+      },
+      body,
+    };
+  };
 
   beforeEach(async () => {
-    // TODO: Fix fastify-server import issue
-    // app = build();
+    app = Fastify();
 
-    // Mock dispatcher
     dispatcher = {
       submitTask: vi.fn(async () => ({ ok: true, value: undefined })),
       cancelTask: vi.fn(async () => ({ ok: true, value: undefined })),
@@ -30,41 +51,37 @@ describe('Routes', () => {
       getCapacity: vi.fn(() => 5),
     } as unknown as TaskDispatcher;
 
-    // Mock token service
-    // tokenService = {
-    //   getToken: vi.fn(async () => ({ token: 'test-token', expiresAt: '2025-01-26T00:00:00Z' })),
-    //   refreshToken: vi.fn(async () => ({ ok: true, value: { token: 'new-token', expiresAt: '2025-01-27T00:00:00Z' } })),
-    // } as unknown as GitHubTokenService;
+    tokenService = {
+      getToken: vi.fn(async () => 'test-token'),
+      getExpiresAt: vi.fn(() => new Date(Date.now() + 3600000)),
+      refreshToken: vi.fn(async () => ({ ok: true, value: 'new-token' })),
+    } as unknown as GitHubTokenService;
 
-    // registerRoutes(app, dispatcher, tokenService, { dispatchSecret: 'test-secret' }, mockLogger);
+    registerRoutes(app, dispatcher, tokenService, { dispatchSecret }, mockLogger);
+    await app.ready();
   });
 
-  describe.skip('POST /tasks', () => {
+  afterEach(async () => {
+    await app.close();
+  });
+
+  describe('POST /tasks', () => {
     it('should accept valid task with correct signature', async () => {
-      const timestamp = Date.now();
-      const nonce = 'unique-nonce-123';
-      const payload = {
+      const taskPayload = {
         taskId: 'test-task',
-        workerType: 'auto' as const,
+        workerType: 'auto',
         prompt: 'Test prompt',
         webhookUrl: 'https://example.com/webhook',
         webhookSecret: 'secret',
       };
 
-      // Generate signature
-      const { createHmac } = await import('node:crypto');
-      const message = `${timestamp}.${nonce}.${JSON.stringify(payload)}`;
-      const signature = createHmac('sha256', 'test-secret').update(message).digest('hex');
+      const { headers, body } = createSignedRequest(taskPayload);
 
       const response = await app.inject({
         method: 'POST',
         url: '/tasks',
-        headers: {
-          'x-dispatch-timestamp': String(timestamp),
-          'x-dispatch-signature': signature,
-          'x-dispatch-nonce': nonce,
-        },
-        payload,
+        headers,
+        body,
       });
 
       expect(response.statusCode).toBe(202);
@@ -96,42 +113,34 @@ describe('Routes', () => {
         error: { type: 'at_capacity', message: 'Service at capacity' },
       });
 
-      const timestamp = Date.now();
-      const nonce = 'unique-nonce-456';
-      const payload = {
+      const taskPayload = {
         taskId: 'test-task',
-        workerType: 'auto' as const,
+        workerType: 'auto',
         prompt: 'Test',
         webhookUrl: 'https://example.com/webhook',
         webhookSecret: 'secret',
       };
 
-      const { createHmac } = await import('node:crypto');
-      const message = `${timestamp}.${nonce}.${JSON.stringify(payload)}`;
-      const signature = createHmac('sha256', 'test-secret').update(message).digest('hex');
+      const { headers, body } = createSignedRequest(taskPayload);
 
       const response = await app.inject({
         method: 'POST',
         url: '/tasks',
-        headers: {
-          'x-dispatch-timestamp': String(timestamp),
-          'x-dispatch-signature': signature,
-          'x-dispatch-nonce': nonce,
-        },
-        payload,
+        headers,
+        body,
       });
 
       expect(response.statusCode).toBe(503);
     });
   });
 
-  describe.skip('GET /tasks/:id', () => {
+  describe('GET /tasks/:id', () => {
     it('should return task status', async () => {
       vi.mocked(dispatcher.getTask).mockResolvedValueOnce({
         taskId: 'test-task',
         status: 'running',
         startedAt: '2025-01-25T14:00:00Z',
-      } as unknown);
+      } as never);
 
       const response = await app.inject({
         method: 'GET',
@@ -155,7 +164,7 @@ describe('Routes', () => {
     });
   });
 
-  describe.skip('DELETE /tasks/:id', () => {
+  describe('DELETE /tasks/:id', () => {
     it('should cancel task', async () => {
       const response = await app.inject({
         method: 'DELETE',
@@ -184,7 +193,7 @@ describe('Routes', () => {
     });
   });
 
-  describe.skip('GET /health', () => {
+  describe('GET /health', () => {
     it('should return health status', async () => {
       const response = await app.inject({
         method: 'GET',
@@ -192,16 +201,18 @@ describe('Routes', () => {
       });
 
       expect(response.statusCode).toBe(200);
-      expect(response.json()).toMatchObject({
+      const json = response.json();
+      expect(json).toMatchObject({
         status: 'ready',
         capacity: 5,
         running: 0,
         available: 5,
       });
+      expect(json).toHaveProperty('githubTokenExpiresAt');
     });
   });
 
-  describe.skip('POST /admin/refresh-token', () => {
+  describe('POST /admin/refresh-token', () => {
     it('should refresh token', async () => {
       const response = await app.inject({
         method: 'POST',

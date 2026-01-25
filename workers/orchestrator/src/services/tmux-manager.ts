@@ -2,6 +2,7 @@ import { mkdir } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
+import type { Logger } from '@intexuraos/common-core';
 
 const execAsync = promisify(exec);
 
@@ -33,7 +34,10 @@ export interface SessionParams {
 export class TmuxManager {
   private readonly execAsync: ExecAsync;
 
-  constructor(private readonly config: TmuxManagerConfig) {
+  constructor(
+    private readonly config: TmuxManagerConfig,
+    private readonly logger: Logger
+  ) {
     this.execAsync = config.execAsync ?? execAsync;
   }
 
@@ -81,8 +85,11 @@ export class TmuxManager {
         // Send Ctrl-C for graceful shutdown
         try {
           await this.execAsync(`tmux send-keys -t ${sessionName} C-c`);
-        } catch {
-          // Session might not exist, continue to kill
+        } catch (error: unknown) {
+          const stderr = (error as { stderr?: string }).stderr ?? '';
+          if (!stderr.includes("can't find session") && !stderr.includes('no session')) {
+            this.logger.warn({ taskId, error }, 'Graceful shutdown signal failed unexpectedly');
+          }
         }
 
         // Wait 10 seconds
@@ -108,7 +115,11 @@ export class TmuxManager {
     try {
       await this.execAsync(`tmux has-session -t ${sessionName}`);
       return true;
-    } catch {
+    } catch (error: unknown) {
+      const stderr = (error as { stderr?: string }).stderr ?? '';
+      if (!stderr.includes("can't find session") && !stderr.includes('no session')) {
+        this.logger.error({ taskId, error }, 'Unexpected error checking tmux session');
+      }
       return false;
     }
   }
@@ -124,7 +135,8 @@ export class TmuxManager {
         .map((name) => name.replace('cc-task-', ''));
 
       return sessions;
-    } catch {
+    } catch (error: unknown) {
+      this.logger.error({ error }, 'Failed to list tmux sessions');
       return [];
     }
   }

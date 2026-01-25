@@ -84,7 +84,7 @@ export function registerRoutes(
   };
 
   // POST /tasks - Submit new task
-  app.post('/tasks', { onRequest: [verifyDispatchSignature] }, async (request, reply) => {
+  app.post('/tasks', { preHandler: [verifyDispatchSignature] }, async (request, reply) => {
     const parseResult = CreateTaskRequestSchema.safeParse(request.body);
     if (!parseResult.success) {
       reply.status(400).send({ error: parseResult.error.message });
