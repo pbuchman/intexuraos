@@ -165,27 +165,6 @@ describe('codeRoutes', () => {
     });
   });
 
-  describe('POST /code/cancel', () => {
-    it('returns 501 not implemented', async () => {
-      const response = await server.inject({
-        method: 'POST',
-        url: '/code/cancel',
-        headers: {
-          'X-Internal-Auth': 'test-internal-token',
-        },
-        payload: {
-          taskId: 'task-123',
-        },
-      });
-
-      expect(response.statusCode).toBe(501);
-      const body = JSON.parse(response.body);
-      expect(body.success).toBe(false);
-      expect(body.error.code).toBe('NOT_IMPLEMENTED');
-      expect(body.error.message).toContain('INT-255');
-    });
-  });
-
   describe('GET /internal/code-tasks/zombies', () => {
     it('returns zombie tasks successfully', async () => {
       const repo = createFirestoreCodeTaskRepository({

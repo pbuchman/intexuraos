@@ -256,6 +256,42 @@ class TaskDispatcherImpl implements TaskDispatcherService {
 
     return workers;
   }
+
+  async cancelOnWorker(taskId: string, location: 'mac' | 'vm'): Promise<void> {
+    this.logger.info({ taskId, location }, 'Sending cancellation request to worker');
+
+    const workers = this.getWorkerConfigs();
+    const worker = workers.find((w) => w.location === location);
+
+    if (!worker) {
+      this.logger.warn({ taskId, location }, 'Worker configuration not found for cancellation');
+      return;
+    }
+
+    try {
+      const response = await this.fetchWithTimeout(`${worker.url}/tasks/${taskId}`, {
+        method: 'DELETE',
+        headers: {
+          'CF-Access-Client-Id': this.cfAccessClientId,
+          'CF-Access-Client-Secret': this.cfAccessClientSecret,
+        },
+        signal: AbortSignal.timeout(10000), // 10 second timeout for cancellation
+      });
+
+      if (!response.ok) {
+        this.logger.warn(
+          { taskId, location, status: response.status },
+          'Worker cancellation request failed'
+        );
+        return;
+      }
+
+      this.logger.info({ taskId, location }, 'Worker cancellation request successful');
+    } catch (error) {
+      // Log but don't fail - task is already marked cancelled in Firestore
+      this.logger.warn({ taskId, location, error: getErrorMessage(error) }, 'Failed to notify worker of cancellation');
+    }
+  }
 }
 
 /**

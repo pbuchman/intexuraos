@@ -1430,14 +1430,15 @@ export const codeRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   );
 
   // POST /code/cancel - Cancel running task (public, Auth0 JWT)
-  // TODO: Implement in INT-255
-  fastify.post<{ Body: { taskId: string } }>(
+  fastify.post<{
+    Body: { taskId: string };
+  }>(
     '/code/cancel',
     {
       schema: {
         operationId: 'cancelCodeTask',
         summary: 'Cancel a running code task',
-        description: 'Public endpoint for canceling a running task. Requires Auth0 JWT. TODO: Implement in INT-255.',
+        description: 'Public endpoint for canceling a running task. Requires Auth0 JWT.',
         tags: ['public'],
         body: {
           type: 'object',
@@ -1447,39 +1448,116 @@ export const codeRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           required: ['taskId'],
         },
         response: {
-          501: {
-            description: 'Not implemented',
+          200: {
+            description: 'Task cancelled successfully',
             type: 'object',
             properties: {
-              success: { type: 'boolean', enum: [false] },
-              error: {
-                type: 'object',
-                properties: {
-                  code: { type: 'string' },
-                  message: { type: 'string' },
-                },
-                required: ['code', 'message'],
-              },
+              status: { type: 'string', enum: ['cancelled'] },
             },
-            required: ['success', 'error'],
+            required: ['status'],
+          },
+          401: {
+            description: 'Unauthorized',
+            type: 'object',
+            properties: {
+              error: { type: 'string', enum: ['unauthorized'] },
+            },
+            required: ['error'],
+          },
+          404: {
+            description: 'Task not found',
+            type: 'object',
+            properties: {
+              error: { type: 'string', enum: ['task_not_found'] },
+            },
+            required: ['error'],
+          },
+          403: {
+            description: 'Forbidden',
+            type: 'object',
+            properties: {
+              error: { type: 'string', enum: ['forbidden'] },
+            },
+            required: ['error'],
+          },
+          409: {
+            description: 'Task not running',
+            type: 'object',
+            properties: {
+              error: { type: 'string', enum: ['task_not_running'] },
+            },
+            required: ['error'],
           },
         },
       },
     },
-    async (_request: FastifyRequest<{ Body: { taskId: string } }>, reply: FastifyReply) => {
-      logIncomingRequest(_request, {
-        message: 'Received request to POST /code/cancel (not implemented)',
+    async (request: FastifyRequest<{ Body: { taskId: string } }>, reply: FastifyReply) => {
+      logIncomingRequest(request, {
+        message: 'Received request to POST /code/cancel',
+        includeParams: true,
       });
 
-      // TODO: Implement in INT-255
-      reply.status(501);
-      return {
-        success: false,
-        error: {
-          code: 'NOT_IMPLEMENTED',
-          message: 'Cancel endpoint will be implemented in INT-255',
-        },
-      };
+      // TODO: Replace with Auth0 JWT validation in INT-254
+      // For now, using internal auth temporarily
+      const authResult = validateInternalAuth(request);
+      if (!authResult.valid) {
+        request.log.warn({ reason: authResult.reason }, 'Auth failed for code task cancellation');
+        reply.status(401);
+        return { error: 'unauthorized' };
+      }
+
+      const { codeTaskRepo, taskDispatcher } = getServices();
+      const { taskId } = request.body;
+      // TODO: Extract userId from Auth0 JWT in INT-254
+      const userId = 'unknown-user';
+
+      request.log.info({ userId, taskId }, 'Cancelling code task');
+
+      // Step 1: Fetch and validate task
+      const taskResult = await codeTaskRepo.findById(taskId);
+
+      if (!taskResult.ok) {
+        request.log.warn({ taskId, errorCode: taskResult.error.code }, 'Task not found for cancellation');
+        reply.status(404);
+        return { error: 'task_not_found' };
+      }
+
+      const task = taskResult.value;
+
+      // Step 2: Verify ownership
+      if (task.userId !== userId) {
+        request.log.warn({ taskId, taskUserId: task.userId, requestUserId: userId }, 'Cancellation forbidden - not task owner');
+        reply.status(403);
+        return { error: 'forbidden' };
+      }
+
+      // Step 3: Check task is cancellable
+      if (!['dispatched', 'running'].includes(task.status)) {
+        request.log.info({ taskId, status: task.status }, 'Cannot cancel task - not in running state');
+        reply.status(409);
+        return { error: 'task_not_running' };
+      }
+
+      // Step 4: Update Firestore status to cancelled (source of truth)
+      const updateResult = await codeTaskRepo.update(taskId, { status: 'cancelled' });
+
+      if (!updateResult.ok) {
+        request.log.error({ taskId, error: updateResult.error }, 'Failed to update task status to cancelled');
+        reply.status(500);
+        return { error: 'failed_to_cancel' };
+      }
+
+      // Step 5: Notify worker to stop (best effort)
+      try {
+        await taskDispatcher.cancelOnWorker(taskId, task.workerLocation);
+      } catch (error) {
+        // Log but don't fail - task is already marked cancelled in Firestore
+        request.log.warn({ taskId, error }, 'Failed to notify worker of cancellation');
+      }
+
+      request.log.info({ taskId }, 'Code task cancelled successfully');
+
+      return reply.status(200).send({ status: 'cancelled' });
     }
   );
 

@@ -71,4 +71,16 @@ export interface TaskDispatcherService {
    * @returns Dispatch result with worker location or error
    */
   dispatch(request: DispatchRequest): Promise<Result<DispatchResult, DispatchError>>;
+
+  /**
+   * Cancel a running task on a worker.
+   *
+   * Sends a DELETE request to the worker to stop task execution.
+   * This is a best-effort notification - the task status in Firestore
+   * is the source of truth and should be updated before calling this.
+   *
+   * @param taskId - The task ID to cancel
+   * @param location - The worker location where the task is running
+   */
+  cancelOnWorker(taskId: string, location: WorkerLocation): Promise<void>;
 }
