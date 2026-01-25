@@ -139,10 +139,9 @@ export class WebhookClient {
     await this.statePersistence.save(state);
   }
 
-  getPendingCount(): number {
-    // This needs to be synchronous for the API layer to call
-    // We'll need to refactor this to get the count from state
-    throw new Error('getPendingCount requires async state loading - refactor needed');
+  async getPendingCount(): Promise<number> {
+    const state = await this.statePersistence.load();
+    return state.pendingWebhooks.length;
   }
 
   private async deliver(
@@ -151,26 +150,49 @@ export class WebhookClient {
     signature: string,
     timestamp: number
   ): Promise<void> {
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Request-Timestamp': String(timestamp),
-        'X-Request-Signature': signature,
-      },
-      body,
-    });
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => {
+      controller.abort();
+    }, 30000);
 
-    if (!response.ok) {
-      const error = new Error(`HTTP ${String(response.status)}: ${response.statusText}`);
-      (error as { status: number }).status = response.status;
-      throw error;
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Request-Timestamp': String(timestamp),
+          'X-Request-Signature': signature,
+        },
+        body,
+        signal: controller.signal,
+      });
+
+      if (!response.ok) {
+        const error = new Error(
+          `HTTP ${String(response.status)}: ${response.statusText}`
+        ) as Error & {
+          status?: number;
+        };
+        error.status = response.status;
+        throw error;
+      }
+    } finally {
+      clearTimeout(timeoutId);
     }
   }
 
   private classifyError(error: unknown): WebhookError {
     if (error instanceof Error) {
-      const status = (error as { status?: number }).status;
+      // Handle timeout (AbortError)
+      if (error.name === 'AbortError') {
+        return {
+          type: 'timeout',
+          message: 'Webhook request timed out after 30s',
+          originalError: error,
+        };
+      }
+
+      const status = (error as Error & { status?: number }).status;
 
       if (status !== undefined && status >= 400 && status < 500) {
         return {
@@ -188,10 +210,11 @@ export class WebhookClient {
         };
       }
 
+      // TypeError is typically a network/client error, not server error
       if (error.name === 'TypeError') {
         return {
-          type: '5xx',
-          message: `Server error: ${error.message}`,
+          type: 'network',
+          message: `Network or client error: ${error.message}`,
           originalError: error,
         };
       }

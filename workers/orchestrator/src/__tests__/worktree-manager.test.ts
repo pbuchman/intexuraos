@@ -3,6 +3,14 @@ import { mkdtempSync, rmSync, readFileSync, writeFileSync, mkdirSync, existsSync
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { WorktreeManager } from '../services/worktree-manager.js';
+import type { Logger } from '@intexuraos/common-core';
+
+const mockLogger: Logger = {
+  info: () => undefined,
+  warn: () => undefined,
+  error: () => undefined,
+  debug: () => undefined,
+};
 
 describe('WorktreeManager', () => {
   const tempDir = mkdtempSync(join(tmpdir(), 'worktree-test-'));
@@ -62,7 +70,7 @@ describe('WorktreeManager', () => {
 
   describe('createWorktree', () => {
     it('should create a new worktree', async () => {
-      const manager = new WorktreeManager(mockConfig);
+      const manager = new WorktreeManager(mockConfig, mockLogger);
 
       const worktreePath = await manager.createWorktree('task-123', 'feature-branch');
 
@@ -70,7 +78,7 @@ describe('WorktreeManager', () => {
     });
 
     it('should create base directory if it does not exist', async () => {
-      const manager = new WorktreeManager(mockConfig);
+      const manager = new WorktreeManager(mockConfig, mockLogger);
 
       await manager.createWorktree('task-456', 'feature-branch');
 
@@ -78,7 +86,7 @@ describe('WorktreeManager', () => {
     });
 
     it('should throw if worktree already exists', async () => {
-      const manager = new WorktreeManager(mockConfig);
+      const manager = new WorktreeManager(mockConfig, mockLogger);
 
       // First call succeeds
       await manager.createWorktree('task-789', 'feature-branch');
@@ -93,7 +101,7 @@ describe('WorktreeManager', () => {
       process.env['LINEAR_API_KEY'] = 'test-linear-key';
       process.env['SENTRY_AUTH_TOKEN'] = 'test-sentry-token';
 
-      const manager = new WorktreeManager(mockConfig);
+      const manager = new WorktreeManager(mockConfig, mockLogger);
 
       await manager.createWorktree('task-mcp', 'feature-branch');
 
@@ -109,7 +117,7 @@ describe('WorktreeManager', () => {
     });
 
     it('should handle missing env vars gracefully', async () => {
-      const manager = new WorktreeManager(mockConfig);
+      const manager = new WorktreeManager(mockConfig, mockLogger);
 
       await manager.createWorktree('task-no-env', 'feature-branch');
 
@@ -120,10 +128,13 @@ describe('WorktreeManager', () => {
     });
 
     it('should skip MCP config if template does not exist', async () => {
-      const manager = new WorktreeManager({
-        ...mockConfig,
-        mcpConfigTemplatePath: join(tempDir, 'non-existent.json'),
-      });
+      const manager = new WorktreeManager(
+        {
+          ...mockConfig,
+          mcpConfigTemplatePath: join(tempDir, 'non-existent.json'),
+        },
+        mockLogger
+      );
 
       // Should not throw
       await manager.createWorktree('task-no-template', 'feature-branch');
@@ -132,7 +143,7 @@ describe('WorktreeManager', () => {
 
   describe('removeWorktree', () => {
     it('should remove an existing worktree', async () => {
-      const manager = new WorktreeManager(mockConfig);
+      const manager = new WorktreeManager(mockConfig, mockLogger);
 
       // Create worktree first
       await manager.createWorktree('task-remove', 'feature-branch');
@@ -142,7 +153,7 @@ describe('WorktreeManager', () => {
     });
 
     it('should throw if worktree does not exist', async () => {
-      const manager = new WorktreeManager(mockConfig);
+      const manager = new WorktreeManager(mockConfig, mockLogger);
 
       await expect(manager.removeWorktree('non-existent')).rejects.toThrow('does not exist');
     });
@@ -150,7 +161,7 @@ describe('WorktreeManager', () => {
 
   describe('listWorktrees', () => {
     it('should return empty array when no worktrees exist', async () => {
-      const manager = new WorktreeManager(mockConfig);
+      const manager = new WorktreeManager(mockConfig, mockLogger);
 
       const worktrees = await manager.listWorktrees();
 
@@ -158,7 +169,7 @@ describe('WorktreeManager', () => {
     });
 
     it('should list all worktrees under base path', async () => {
-      const manager = new WorktreeManager(mockConfig);
+      const manager = new WorktreeManager(mockConfig, mockLogger);
 
       // Our mock returns empty list, so we just verify the method runs
       const worktrees = await manager.listWorktrees();
@@ -169,7 +180,7 @@ describe('WorktreeManager', () => {
 
   describe('worktreeExists', () => {
     it('should return false for non-existent worktree', async () => {
-      const manager = new WorktreeManager(mockConfig);
+      const manager = new WorktreeManager(mockConfig, mockLogger);
 
       const exists = await manager.worktreeExists('non-existent');
 
@@ -177,7 +188,7 @@ describe('WorktreeManager', () => {
     });
 
     it('should return true for existing worktree', async () => {
-      const manager = new WorktreeManager(mockConfig);
+      const manager = new WorktreeManager(mockConfig, mockLogger);
 
       await manager.createWorktree('task-exists', 'feature-branch');
 

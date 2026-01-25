@@ -4,6 +4,14 @@ import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { StatePersistence } from '../services/state-persistence.js';
 import type { OrchestratorState } from '../types/index.js';
+import type { Logger } from '@intexuraos/common-core';
+
+const mockLogger: Logger = {
+  info: () => undefined,
+  warn: () => undefined,
+  error: () => undefined,
+  debug: () => undefined,
+};
 
 describe('StatePersistence', () => {
   const tempDir = mkdtempSync(join(tmpdir(), 'orchestrator-test-'));
@@ -39,7 +47,7 @@ describe('StatePersistence', () => {
 
   describe('load/save roundtrip', () => {
     it('should save and load state correctly', async () => {
-      const persistence = new StatePersistence(stateFilePath);
+      const persistence = new StatePersistence(stateFilePath, mockLogger);
 
       await persistence.save(mockState);
       const loaded = await persistence.load();
@@ -48,7 +56,7 @@ describe('StatePersistence', () => {
     });
 
     it('should return empty state if file does not exist', async () => {
-      const persistence = new StatePersistence(stateFilePath);
+      const persistence = new StatePersistence(stateFilePath, mockLogger);
 
       const loaded = await persistence.load();
 
@@ -62,7 +70,7 @@ describe('StatePersistence', () => {
 
   describe('atomic writes', () => {
     it('should write to temp file then rename', async () => {
-      const persistence = new StatePersistence(stateFilePath);
+      const persistence = new StatePersistence(stateFilePath, mockLogger);
 
       await persistence.saveAtomic(mockState);
 
@@ -79,7 +87,7 @@ describe('StatePersistence', () => {
     });
 
     it('should overwrite existing state atomically', async () => {
-      const persistence = new StatePersistence(stateFilePath);
+      const persistence = new StatePersistence(stateFilePath, mockLogger);
 
       // Save initial state
       await persistence.save(mockState);
@@ -125,7 +133,7 @@ describe('StatePersistence', () => {
       const { writeFile } = await import('node:fs/promises');
       await writeFile(corruptedPath, '{ invalid json', 'utf-8');
 
-      const corruptPersistence = new StatePersistence(corruptedPath);
+      const corruptPersistence = new StatePersistence(corruptedPath, mockLogger);
 
       // Load should recover
       const loaded = await corruptPersistence.load();
@@ -147,7 +155,7 @@ describe('StatePersistence', () => {
     });
 
     it('should handle valid JSON but wrong structure gracefully', async () => {
-      const persistence = new StatePersistence(stateFilePath);
+      const persistence = new StatePersistence(stateFilePath, mockLogger);
 
       // Create directory first (afterEach might have cleaned it up)
       const { mkdir } = await import('node:fs/promises');
@@ -166,7 +174,7 @@ describe('StatePersistence', () => {
 
   describe('orphan worktree detection', () => {
     it('should return empty array if git command fails', async () => {
-      const persistence = new StatePersistence(stateFilePath);
+      const persistence = new StatePersistence(stateFilePath, mockLogger);
       await persistence.save(mockState);
 
       // Use non-existent repository path - git command will fail
@@ -177,7 +185,7 @@ describe('StatePersistence', () => {
     });
 
     it('should detect worktrees not in state', async () => {
-      const persistence = new StatePersistence(stateFilePath);
+      const persistence = new StatePersistence(stateFilePath, mockLogger);
 
       // Create a mock git repository directory for testing
       const mockRepoDir = join(tempDir, 'mock-repo');
@@ -196,7 +204,7 @@ describe('StatePersistence', () => {
     });
 
     it('should return empty array for valid repo with no orphans', async () => {
-      const persistence = new StatePersistence(stateFilePath);
+      const persistence = new StatePersistence(stateFilePath, mockLogger);
       await persistence.save(mockState);
 
       // Use temp dir (not a git repo) - command fails
@@ -209,7 +217,7 @@ describe('StatePersistence', () => {
   describe('directory creation', () => {
     it('should create directory if it does not exist', async () => {
       const nestedPath = join(tempDir, 'nested', 'dir', 'state.json');
-      const persistence = new StatePersistence(nestedPath);
+      const persistence = new StatePersistence(nestedPath, mockLogger);
 
       await persistence.save(mockState);
 

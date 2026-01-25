@@ -1,6 +1,5 @@
-/* eslint-disable @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access */
 import { readFileSync, existsSync } from 'node:fs';
-import type { Logger } from '@intexuraos/infra-logging';
+import type { Logger } from '@intexuraos/common-core';
 
 export interface LogForwarderConfig {
   logBasePath: string;

@@ -3,6 +3,7 @@ import { existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
+import type { Logger } from '@intexuraos/common-core';
 
 const execAsync = promisify(exec);
 
@@ -13,7 +14,10 @@ export interface WorktreeManagerConfig {
 }
 
 export class WorktreeManager {
-  constructor(private readonly config: WorktreeManagerConfig) {}
+  constructor(
+    private readonly config: WorktreeManagerConfig,
+    private readonly logger: Logger
+  ) {}
 
   async createWorktree(taskId: string, baseBranch: string): Promise<string> {
     const worktreePath = join(this.config.worktreeBasePath, taskId);
@@ -97,7 +101,8 @@ export class WorktreeManager {
       }
 
       return worktreePaths;
-    } catch (_error) {
+    } catch (error) {
+      this.logger.error({ error }, 'Failed to list worktrees');
       return [];
     }
   }
@@ -115,10 +120,21 @@ export class WorktreeManager {
       // Read template
       const template = await readFile(this.config.mcpConfigTemplatePath, 'utf-8');
 
+      // Validate environment variables
+      const linearKey = process.env['LINEAR_API_KEY'];
+      const sentryToken = process.env['SENTRY_AUTH_TOKEN'];
+
+      if (linearKey === undefined || linearKey === '') {
+        this.logger.warn({}, 'LINEAR_API_KEY not set - MCP Linear integration will fail');
+      }
+      if (sentryToken === undefined || sentryToken === '') {
+        this.logger.warn({}, 'SENTRY_AUTH_TOKEN not set - MCP Sentry integration will fail');
+      }
+
       // Substitute environment variables
       const config = template
-        .replace(/\{\{LINEAR_API_KEY\}\}/g, process.env['LINEAR_API_KEY'] ?? '')
-        .replace(/\{\{SENTRY_AUTH_TOKEN\}\}/g, process.env['SENTRY_AUTH_TOKEN'] ?? '');
+        .replace(/\{\{LINEAR_API_KEY\}\}/g, linearKey ?? '')
+        .replace(/\{\{SENTRY_AUTH_TOKEN\}\}/g, sentryToken ?? '');
 
       // Ensure target directory exists
       await mkdir(dirname(targetPath), { recursive: true });

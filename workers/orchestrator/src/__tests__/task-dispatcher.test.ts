@@ -75,7 +75,7 @@ describe('TaskDispatcher', () => {
   const mockWebhookClient = {
     send: vi.fn(async () => ({ ok: true, value: undefined })),
     retryPending: vi.fn(async () => undefined),
-    getPendingCount: vi.fn(() => 0),
+    getPendingCount: vi.fn(async () => 0),
   } as unknown as WebhookClient;
 
   // Mock GitHubTokenService

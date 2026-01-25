@@ -4,11 +4,15 @@ import { dirname } from 'node:path';
 import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
 import type { OrchestratorState } from '../types/index.js';
+import type { Logger } from '@intexuraos/common-core';
 
 const execAsync = promisify(exec);
 
 export class StatePersistence {
-  constructor(private readonly filePath: string) {}
+  constructor(
+    private readonly filePath: string,
+    private readonly logger: Logger
+  ) {}
 
   async load(): Promise<OrchestratorState> {
     try {
@@ -26,13 +30,11 @@ export class StatePersistence {
       const state = JSON.parse(content) as OrchestratorState;
       return state;
     } catch (error) {
-      // Corrupted JSON - backup and return empty state
       if (error instanceof SyntaxError) {
         const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
         const backupPath = `${this.filePath}.corrupted.${timestamp}`;
         await rename(this.filePath, backupPath);
-        // Log warning but continue with empty state
-        // TODO: Add proper logger when available
+        this.logger.warn({ backupPath }, 'State file corrupted - backed up and starting fresh');
         return this.emptyState();
       }
       throw error;
@@ -84,8 +86,8 @@ export class StatePersistence {
       }
 
       return orphans;
-    } catch (_error) {
-      // TODO: Add proper logger when available
+    } catch (error) {
+      this.logger.error({ error }, 'Failed to detect orphan worktrees');
       return [];
     }
   }

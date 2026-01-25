@@ -16,6 +16,7 @@ export default tseslint.config(
       'vitest.setup.ts',
       'vitest.config.ts',
       'vitest-mocks/**',
+      'workers/**/scripts/**',
       // Test files now linted with same rules as production code
     ],
   },

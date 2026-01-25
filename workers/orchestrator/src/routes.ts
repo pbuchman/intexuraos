@@ -1,17 +1,17 @@
-/* eslint-disable @typescript-eslint/no-unsafe-member-access */
-/* eslint-disable @typescript-eslint/no-unsafe-assignment */
-/* eslint-disable @typescript-eslint/no-unsafe-call */
-/* eslint-disable @typescript-eslint/strict-boolean-expressions */
-/* eslint-disable @typescript-eslint/no-explicit-any */
-/* eslint-disable @typescript-eslint/no-dynamic-delete */
-/* eslint-disable @typescript-eslint/require-await */
-
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { createHmac } from 'node:crypto';
-import type { TaskDispatcher } from '../services/task-dispatcher.js';
-import type { GitHubTokenService } from '../github/token-service.js';
+import type { TaskDispatcher } from './services/task-dispatcher.js';
+import type { GitHubTokenService } from './github/token-service.js';
 import type { Logger } from '@intexuraos/common-core';
-import type { CreateTaskRequest } from '../types/api.js';
+import type { CreateTaskRequest } from './types/api.js';
+import { CreateTaskRequestSchema } from './types/schemas.js';
+
+interface TaskParams {
+  id: string;
+}
+
+type TaskParamsRequest = FastifyRequest<{ Params: TaskParams }>;
+type TaskBodyRequest = FastifyRequest<{ Body: unknown }>;
 
 const NONCE_CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
 const TIMESTAMP_TOLERANCE_MS = 5 * 60 * 1000; // 5 minutes
@@ -27,8 +27,10 @@ export function registerRoutes(
 ): void {
   const nonceCache: NonceCache = {};
 
-  // Auth middleware for dispatch endpoint
-  const verifyDispatchSignature = async (request: any, reply: any): Promise<void> => {
+  const verifyDispatchSignature = async (
+    request: TaskBodyRequest,
+    reply: FastifyReply
+  ): Promise<void> => {
     const timestamp = request.headers['x-dispatch-timestamp'] as string | undefined;
     const signature = request.headers['x-dispatch-signature'] as string | undefined;
     const nonce = request.headers['x-dispatch-nonce'] as string | undefined;
@@ -75,7 +77,7 @@ export function registerRoutes(
       for (const key of nonceKeys) {
         const cachedTimestamp = nonceCache[key];
         if (cachedTimestamp !== undefined && cachedTimestamp < cutoff) {
-          delete nonceCache[key];
+          Reflect.deleteProperty(nonceCache, key);
         }
       }
     }
@@ -83,7 +85,26 @@ export function registerRoutes(
 
   // POST /tasks - Submit new task
   app.post('/tasks', { onRequest: [verifyDispatchSignature] }, async (request, reply) => {
-    const body = request.body as CreateTaskRequest;
+    const parseResult = CreateTaskRequestSchema.safeParse(request.body);
+    if (!parseResult.success) {
+      reply.status(400).send({ error: parseResult.error.message });
+      return;
+    }
+    const parsed = parseResult.data;
+
+    const body: CreateTaskRequest = {
+      taskId: parsed.taskId,
+      workerType: parsed.workerType,
+      prompt: parsed.prompt,
+      webhookUrl: parsed.webhookUrl,
+      webhookSecret: parsed.webhookSecret,
+      ...(parsed.repository !== undefined && { repository: parsed.repository }),
+      ...(parsed.baseBranch !== undefined && { baseBranch: parsed.baseBranch }),
+      ...(parsed.linearIssueId !== undefined && { linearIssueId: parsed.linearIssueId }),
+      ...(parsed.linearIssueTitle !== undefined && { linearIssueTitle: parsed.linearIssueTitle }),
+      ...(parsed.slug !== undefined && { slug: parsed.slug }),
+      ...(parsed.actionId !== undefined && { actionId: parsed.actionId }),
+    };
 
     const result = await dispatcher.submitTask(body);
 
@@ -101,8 +122,8 @@ export function registerRoutes(
   });
 
   // GET /tasks/:id - Get task status
-  app.get('/tasks/:id', async (request, reply) => {
-    const { id } = request.params as { id: string };
+  app.get<{ Params: TaskParams }>('/tasks/:id', async (request: TaskParamsRequest, reply) => {
+    const { id } = request.params;
     const task = await dispatcher.getTask(id);
 
     if (task === null) {
@@ -114,8 +135,8 @@ export function registerRoutes(
   });
 
   // DELETE /tasks/:id - Cancel task
-  app.delete('/tasks/:id', async (request, reply) => {
-    const { id } = request.params as { id: string };
+  app.delete<{ Params: TaskParams }>('/tasks/:id', async (request: TaskParamsRequest, reply) => {
+    const { id } = request.params;
     const result = await dispatcher.cancelTask(id);
 
     if (!result.ok) {
@@ -139,15 +160,14 @@ export function registerRoutes(
   app.get('/health', async (_request, reply) => {
     const running = dispatcher.getRunningCount();
     const capacity = dispatcher.getCapacity();
-
-    const tokenResult = await tokenService.getToken();
+    const tokenExpiry = tokenService.getExpiresAt();
 
     reply.send({
       status: 'ready',
       capacity,
       running,
       available: capacity - running,
-      githubTokenExpiresAt: tokenResult.expiresAt,
+      githubTokenExpiresAt: tokenExpiry?.toISOString() ?? null,
     });
   });
 
@@ -167,6 +187,10 @@ export function registerRoutes(
       return;
     }
 
-    reply.send({ tokenExpiresAt: refreshResult.value.expiresAt });
+    const tokenExpiry = tokenService.getExpiresAt();
+    reply.send({
+      status: 'refreshed',
+      tokenExpiresAt: tokenExpiry?.toISOString() ?? null,
+    });
   });
 }

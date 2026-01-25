@@ -1,4 +1,5 @@
 import { minimatch } from 'minimatch';
+import type { Logger } from '@intexuraos/common-core';
 
 export interface GuardResult {
   reverted: string[];
@@ -9,7 +10,7 @@ export interface GuardResult {
 export class SensitiveFileGuard {
   private readonly patterns: string[];
 
-  constructor() {
+  constructor(private readonly logger: Logger) {
     this.patterns = [
       '**/.env',
       '**/.env.*',
@@ -61,8 +62,7 @@ export class SensitiveFileGuard {
           });
           reverted.push(file);
         } catch (error) {
-          // eslint-disable-next-line no-console
-          console.error(`Failed to revert ${file}:`, error);
+          this.logger.error({ file, error }, 'Failed to revert sensitive file');
           remaining.push(file);
         }
       } else {

@@ -43,7 +43,7 @@ export class TaskDispatcher {
     private readonly tmuxManager: TmuxManager,
     private readonly logForwarder: LogForwarder,
     private readonly webhookClient: WebhookClient,
-    private readonly githubTokenService: GitHubTokenService,
+    _githubTokenService: GitHubTokenService,
     private readonly logger: Logger
   ) {}
 
@@ -93,15 +93,20 @@ export class TaskDispatcher {
         worktreePath,
         prompt: request.prompt,
         workerType: request.workerType,
-        machine: 'mac', // TODO: determine from config
-        linearIssueId: request.linearIssueId,
+        machine: 'mac',
+        ...(request.linearIssueId !== undefined && { linearIssueId: request.linearIssueId }),
       };
 
       try {
         await this.tmuxManager.startSession(sessionParams);
       } catch (error) {
         this.runningCount--;
-        void this.worktreeManager.removeWorktree(taskId);
+        this.worktreeManager.removeWorktree(taskId).catch((cleanupError: unknown) => {
+          this.logger.error(
+            { taskId, cleanupError },
+            'Failed to cleanup worktree after tmux session start failure'
+          );
+        });
         return {
           ok: false,
           error: {
@@ -123,15 +128,17 @@ export class TaskDispatcher {
         prompt: request.prompt,
         repository,
         baseBranch,
-        linearIssueId: request.linearIssueId,
-        linearIssueTitle: request.linearIssueTitle,
-        slug: request.slug,
         webhookUrl: request.webhookUrl,
         webhookSecret: request.webhookSecret,
-        actionId: request.actionId,
         status: 'running',
         tmuxSession: `cc-task-${taskId}`,
         worktreePath,
+        ...(request.linearIssueId !== undefined && { linearIssueId: request.linearIssueId }),
+        ...(request.linearIssueTitle !== undefined && {
+          linearIssueTitle: request.linearIssueTitle,
+        }),
+        ...(request.slug !== undefined && { slug: request.slug }),
+        ...(request.actionId !== undefined && { actionId: request.actionId }),
         startedAt: new Date().toISOString(),
       };
 
@@ -249,9 +256,13 @@ export class TaskDispatcher {
   private scheduleTimeoutWarning(taskId: string): void {
     const timeout = setTimeout(() => {
       void (async (): Promise<void> => {
-        const task = await this.getTask(taskId);
-        if (task !== null && task.status === 'running') {
-          this.logger.warn({ taskId }, 'Task approaching 2-hour timeout');
+        try {
+          const task = await this.getTask(taskId);
+          if (task !== null && task.status === 'running') {
+            this.logger.warn({ taskId }, 'Task approaching 2-hour timeout');
+          }
+        } catch (error) {
+          this.logger.error({ taskId, error }, 'Error in timeout warning callback');
         }
       })();
     }, TASK_TIMEOUT_WARNING_MS);
@@ -262,43 +273,47 @@ export class TaskDispatcher {
   private scheduleTimeoutKill(taskId: string): void {
     const timeout = setTimeout(() => {
       void (async (): Promise<void> => {
-        const task = await this.getTask(taskId);
-        if (task?.status !== 'running') {
-          return;
-        }
+        try {
+          const task = await this.getTask(taskId);
+          if (task?.status !== 'running') {
+            return;
+          }
 
-        this.logger.warn({ taskId }, 'Task timeout - killing');
+          this.logger.warn({ taskId }, 'Task timeout - killing');
 
-        // Kill tmux session
-        await this.tmuxManager.killSession(taskId, false);
+          // Kill tmux session
+          await this.tmuxManager.killSession(taskId, false);
 
-        // Stop log forwarding
-        await this.logForwarder.stopForwarding(taskId);
+          // Stop log forwarding
+          await this.logForwarder.stopForwarding(taskId);
 
-        // Check for PR
-        const result = await this.checkForResult(task);
+          // Check for PR
+          const result = await this.checkForResult(task);
 
-        // Update task
-        task.status = 'interrupted';
-        task.completedAt = new Date().toISOString();
-        await this.saveTask(task);
+          // Update task
+          task.status = 'interrupted';
+          task.completedAt = new Date().toISOString();
+          await this.saveTask(task);
 
-        // Decrease running count
-        this.runningCount--;
-        this.clearTaskTimers(taskId);
+          // Decrease running count
+          this.runningCount--;
+          this.clearTaskTimers(taskId);
 
-        // Send webhook
-        await this.webhookClient.send({
-          url: task.webhookUrl,
-          secret: task.webhookSecret,
-          payload: {
+          // Send webhook
+          await this.webhookClient.send({
+            url: task.webhookUrl,
+            secret: task.webhookSecret,
+            payload: {
+              taskId,
+              status: 'interrupted',
+              result,
+              duration: new Date(task.completedAt).getTime() - new Date(task.startedAt).getTime(),
+            },
             taskId,
-            status: 'interrupted',
-            result,
-            duration: new Date(task.completedAt).getTime() - new Date(task.startedAt).getTime(),
-          },
-          taskId,
-        });
+          });
+        } catch (error) {
+          this.logger.error({ taskId, error }, 'Error in timeout kill callback');
+        }
       })();
     }, TASK_TIMEOUT_KILL_MS);
 
@@ -308,16 +323,20 @@ export class TaskDispatcher {
   private startCompletionMonitoring(taskId: string): void {
     const checkInterval = setInterval(() => {
       void (async (): Promise<void> => {
-        const task = await this.getTask(taskId);
-        if (task?.status !== 'running') {
-          this.clearTaskTimers(taskId);
-          return;
-        }
+        try {
+          const task = await this.getTask(taskId);
+          if (task?.status !== 'running') {
+            this.clearTaskTimers(taskId);
+            return;
+          }
 
-        const isRunning = await this.tmuxManager.isSessionRunning(taskId);
-        if (!isRunning) {
-          // Task completed
-          await this.handleTaskCompletion(task);
+          const isRunning = await this.tmuxManager.isSessionRunning(taskId);
+          if (!isRunning) {
+            // Task completed
+            await this.handleTaskCompletion(task);
+          }
+        } catch (error) {
+          this.logger.error({ taskId, error }, 'Error in completion monitoring callback');
         }
       })();
     }, COMPLETION_CHECK_INTERVAL_MS);
@@ -382,12 +401,12 @@ export class TaskDispatcher {
 
   private async checkForResult(task: Task): Promise<TaskResult | undefined> {
     try {
-      // Change to worktree directory
-      process.chdir(task.worktreePath);
+      const execOptions = { cwd: task.worktreePath };
 
       // Check for pull requests
       const { stdout: prOutput } = await execAsync(
-        'gh pr list --head "*" --json url,number,title,commits --jq .'
+        'gh pr list --head "*" --json url,number,title,commits --jq .',
+        execOptions
       );
       const prs = JSON.parse(prOutput) as {
         url: string;
@@ -406,35 +425,48 @@ export class TaskDispatcher {
 
         // Check CI status
         const { stdout: ciOutput } = await execAsync(
-          `gh pr checks ${branch} --json status --jq .status`
+          `gh pr checks ${branch} --json status --jq .status`,
+          execOptions
         );
         const ciStatus = JSON.parse(ciOutput) as string;
         const ciFailed = ciStatus === 'FAILURE';
 
         // Check for rebase result
-        let rebaseResult: TaskResult['rebaseResult'];
+        let rebaseResult: TaskResult['rebaseResult'] | undefined;
         try {
           const { stdout: rebaseOutput } = await execAsync(
-            'cat .rebase-result.json 2>/dev/null || echo "{}"'
+            'cat .rebase-result.json 2>/dev/null || echo "{}"',
+            execOptions
           );
           const parsed = JSON.parse(rebaseOutput) as {
             attempted?: boolean;
             success?: boolean;
             conflictFiles?: string[];
           };
-          rebaseResult = parsed.attempted === true ? parsed : undefined;
-        } catch {
-          // Ignore
+          if (parsed.attempted === true && typeof parsed.success === 'boolean') {
+            rebaseResult = {
+              attempted: parsed.attempted,
+              success: parsed.success,
+              ...(parsed.conflictFiles !== undefined && { conflictFiles: parsed.conflictFiles }),
+            };
+          }
+        } catch (parseError) {
+          this.logger.warn(
+            { taskId: task.taskId, error: parseError },
+            'Failed to parse rebase result'
+          );
         }
 
-        return {
-          prUrl: pr.url,
+        const result: TaskResult = {
           branch,
           commits,
+          prUrl: pr.url,
           summary: pr.title,
           ciFailed,
-          rebaseResult,
+          ...(rebaseResult !== undefined && { rebaseResult }),
         };
+
+        return result;
       }
 
       return undefined;

@@ -24,6 +24,11 @@ export class GitHubTokenService {
   ) {}
 
   async refreshToken(): Promise<Result<string, TokenError>> {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => {
+      controller.abort();
+    }, 30000);
+
     try {
       // Generate JWT
       const jwt = await this.generateJWT();
@@ -37,6 +42,7 @@ export class GitHubTokenService {
             Authorization: `Bearer ${jwt}`,
             Accept: 'application/vnd.github+json',
           },
+          signal: controller.signal,
         }
       );
 
@@ -64,6 +70,16 @@ export class GitHubTokenService {
         this.authDegradedCallback();
       }
 
+      if (error instanceof Error && error.name === 'AbortError') {
+        return {
+          ok: false,
+          error: {
+            code: 'TOKEN_REFRESH_TIMEOUT',
+            message: 'GitHub API request timed out after 30s',
+          },
+        };
+      }
+
       const message = error instanceof Error ? error.message : 'Unknown error';
       return {
         ok: false,
@@ -72,6 +88,8 @@ export class GitHubTokenService {
           message,
         },
       };
+    } finally {
+      clearTimeout(timeoutId);
     }
   }
 

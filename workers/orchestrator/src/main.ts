@@ -7,7 +7,7 @@ import type { GitHubTokenService } from './github/token-service.js';
 import type { WebhookClient } from './services/webhook-client.js';
 import { registerRoutes } from './routes.js';
 import fastify from 'fastify';
-import { cors } from '@fastify/cors';
+import cors from '@fastify/cors';
 import type { Logger } from '@intexuraos/common-core';
 
 const TOKEN_REFRESH_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
@@ -48,8 +48,7 @@ export async function main(
     // Start HTTP server
     const app = fastify();
 
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-call
-    app.register(cors());
+    void app.register(cors);
 
     registerRoutes(app, dispatcher, tokenService, config, logger);
 
@@ -87,7 +86,7 @@ export async function main(
 
 async function runStartupRecovery(
   statePersistence: StatePersistence,
-  dispatcher: TaskDispatcher,
+  _dispatcher: TaskDispatcher,
   webhookClient: WebhookClient,
   logger: Logger
 ): Promise<void> {
@@ -160,9 +159,8 @@ function scheduleWebhookRetry(webhookClient: WebhookClient, logger: Logger): Nod
   }, WEBHOOK_RETRY_INTERVAL_MS);
 }
 
-function scheduleTaskPolling(dispatcher: TaskDispatcher, logger: Logger): NodeJS.Timeout {
+function scheduleTaskPolling(_dispatcher: TaskDispatcher, logger: Logger): NodeJS.Timeout {
   return setInterval(() => {
-    // Task polling is handled by completion monitoring in dispatcher
     logger.debug({ message: 'Task polling check' });
   }, TASK_POLL_INTERVAL_MS);
 }
