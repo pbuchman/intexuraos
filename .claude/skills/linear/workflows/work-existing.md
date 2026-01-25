@@ -112,6 +112,33 @@ git checkout -b fix/INT-123 origin/development
 - `origin/development` guarantees fresh state
 - Prevents merge conflicts and ensures CI runs against current code
 
+### 4.5. Build All Packages (MANDATORY - BLOCKS ALL WORK)
+
+⛔ **STOP: You MUST build packages before starting any implementation work.**
+
+**Always run `pnpm build` in repository root after branch checkout:**
+
+```bash
+pnpm build
+```
+
+**Why this is MANDATORY:**
+
+- Apps depend on packages' `dist/` directories for type imports
+- Without built packages, apps fail typecheck with misleading errors (50+ lint errors)
+- Fresh branch checkout means packages aren't built yet
+- The CLAUDE.md "Session Start Protocol" specifies this requirement
+
+**Signs you forgot to build:**
+
+- `Cannot find module '@intexuraos/...'` errors
+- 50+ `no-unsafe-*` lint errors in apps
+- Typecheck errors only in `apps/` not `packages/`
+
+**Time estimate:** 30-60 seconds for all packages
+
+**DO NOT proceed to state update or implementation until packages are built.**
+
 ### 5. Update State to In Progress (MANDATORY - BLOCKS ALL WORK)
 
 ⛔ **STOP: You MUST update Linear state BEFORE making any code changes.**
@@ -267,6 +294,7 @@ Only after user says "continue" or "next issue" → proceed.
 
 - [ ] Pre-flight branch check passed (NOT on `development` or `main`)
 - [ ] Branch created from `origin/development` (fresh state)
+- [ ] Packages built with `pnpm build` (MANDATORY after branch checkout)
 - [ ] `pnpm run ci:tracked` passes (ALL 4 checks: typecheck src, typecheck tests, lint, tests+coverage)
 - [ ] ALL CI errors fixed (even in other workspaces — ownership mindset)
 
