@@ -464,8 +464,8 @@ const SERVICE_ENV_MAPPINGS = {
   },
   'code-agent': {
     INTEXURAOS_CODE_WORKERS: JSON.stringify({
-      mac: { url: 'http://localhost:8100', priority: 1 },
-      vm: { url: 'http://localhost:8101', priority: 2 },
+      mac: { url: 'http://localhost:8199', priority: 1 },
+      vm: { url: 'http://localhost:8198', priority: 2 },
     }),
     INTEXURAOS_DISPATCH_SECRET: 'dev-dispatch-secret',
     INTEXURAOS_WEBHOOK_VERIFY_SECRET: 'dev-webhook-secret',

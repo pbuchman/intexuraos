@@ -9,17 +9,6 @@ import type {
   ClassifyOptions,
 } from '../../domain/ports/classifier.js';
 
-const VALID_TYPES: readonly CommandType[] = [
-  'todo',
-  'research',
-  'note',
-  'link',
-  'calendar',
-  'reminder',
-  'linear',
-  'code',
-] as const;
-
 const PWA_SHARED_LINK_CONFIDENCE_BOOST = 0.1;
 
 export function createGeminiClassifier(client: LlmGenerateClient, logger: Logger): Classifier {

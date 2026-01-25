@@ -1,0 +1,1 @@
+{"ts":"2026-01-25T22:02:47.037Z","project":"intexuraos-1","branch":"feature/INT-245-code-action-type","runNumber":1,"passed":false,"durationMs":226072,"failureCount":1,"failures":[{"type":"verify","code":"VERIFY_FAIL","file":"unknown","line":0,"message":"FAILED","snippet":null,"context":null}]}
