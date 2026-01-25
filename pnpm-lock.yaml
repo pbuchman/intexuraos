@@ -111,6 +111,9 @@ importers:
       '@intexuraos/infra-sentry':
         specifier: workspace:*
         version: link:../../packages/infra-sentry
+      '@intexuraos/internal-clients':
+        specifier: workspace:*
+        version: link:../../packages/internal-clients
       '@intexuraos/llm-contract':
         specifier: workspace:*
         version: link:../../packages/llm-contract
@@ -290,6 +293,9 @@ importers:
       '@intexuraos/infra-sentry':
         specifier: workspace:*
         version: link:../../packages/infra-sentry
+      '@intexuraos/internal-clients':
+        specifier: workspace:*
+        version: link:../../packages/internal-clients
       '@intexuraos/llm-contract':
         specifier: workspace:*
         version: link:../../packages/llm-contract
@@ -356,6 +362,9 @@ importers:
       '@intexuraos/infra-sentry':
         specifier: workspace:*
         version: link:../../packages/infra-sentry
+      '@intexuraos/internal-clients':
+        specifier: workspace:*
+        version: link:../../packages/internal-clients
       '@intexuraos/llm-contract':
         specifier: workspace:*
         version: link:../../packages/llm-contract
@@ -416,6 +425,9 @@ importers:
       '@intexuraos/infra-sentry':
         specifier: workspace:*
         version: link:../../packages/infra-sentry
+      '@intexuraos/internal-clients':
+        specifier: workspace:*
+        version: link:../../packages/internal-clients
       '@intexuraos/llm-contract':
         specifier: workspace:*
         version: link:../../packages/llm-contract
@@ -483,6 +495,9 @@ importers:
       '@intexuraos/infra-sentry':
         specifier: workspace:*
         version: link:../../packages/infra-sentry
+      '@intexuraos/internal-clients':
+        specifier: workspace:*
+        version: link:../../packages/internal-clients
       '@intexuraos/llm-audit':
         specifier: workspace:*
         version: link:../../packages/llm-audit
@@ -799,6 +814,9 @@ importers:
       '@intexuraos/infra-sentry':
         specifier: workspace:*
         version: link:../../packages/infra-sentry
+      '@intexuraos/internal-clients':
+        specifier: workspace:*
+        version: link:../../packages/internal-clients
       '@intexuraos/llm-contract':
         specifier: workspace:*
         version: link:../../packages/llm-contract
@@ -869,6 +887,9 @@ importers:
       '@intexuraos/infra-sentry':
         specifier: workspace:*
         version: link:../../packages/infra-sentry
+      '@intexuraos/internal-clients':
+        specifier: workspace:*
+        version: link:../../packages/internal-clients
       '@intexuraos/llm-contract':
         specifier: workspace:*
         version: link:../../packages/llm-contract
@@ -1118,6 +1139,9 @@ importers:
       '@intexuraos/infra-sentry':
         specifier: workspace:*
         version: link:../../packages/infra-sentry
+      '@intexuraos/internal-clients':
+        specifier: workspace:*
+        version: link:../../packages/internal-clients
       '@intexuraos/llm-contract':
         specifier: workspace:*
         version: link:../../packages/llm-contract
@@ -1409,6 +1433,31 @@ importers:
       '@intexuraos/common-core':
         specifier: workspace:*
         version: link:../common-core
+
+  packages/internal-clients:
+    dependencies:
+      '@intexuraos/common-core':
+        specifier: workspace:*
+        version: link:../common-core
+      '@intexuraos/llm-contract':
+        specifier: workspace:*
+        version: link:../llm-contract
+      '@intexuraos/llm-factory':
+        specifier: workspace:*
+        version: link:../llm-factory
+      '@intexuraos/llm-pricing':
+        specifier: workspace:*
+        version: link:../llm-pricing
+    devDependencies:
+      nock:
+        specifier: ^14.0.5
+        version: 14.0.10
+      typescript:
+        specifier: ^5.8.3
+        version: 5.9.3
+      vitest:
+        specifier: ^3.1.1
+        version: 3.2.4(@types/debug@4.1.12)(@types/node@22.19.5)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.2)
 
   packages/llm-audit:
     dependencies:

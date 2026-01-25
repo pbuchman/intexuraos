@@ -12,6 +12,7 @@ import { resetServices, setServices } from '../services.js';
 import {
   FakeGoogleCalendarClient,
   FakeUserServiceClient,
+  FakeLlmUserServiceClient,
   FakeFailedEventRepository,
   FakeCalendarActionExtractionService,
   FakeProcessedActionRepository,
@@ -31,6 +32,7 @@ describe('Calendar Routes', () => {
   const issuer = `https://${AUTH_DOMAIN}/`;
 
   let fakeUserService: FakeUserServiceClient;
+  let fakeLlmUserService: FakeLlmUserServiceClient;
   let fakeCalendarClient: FakeGoogleCalendarClient;
   let fakeFailedEventRepository: FakeFailedEventRepository;
   let fakeCalendarActionExtractionService: FakeCalendarActionExtractionService;
@@ -79,6 +81,7 @@ describe('Calendar Routes', () => {
     clearJwksCache();
 
     fakeUserService = new FakeUserServiceClient();
+    fakeLlmUserService = new FakeLlmUserServiceClient();
     fakeCalendarClient = new FakeGoogleCalendarClient();
     fakeFailedEventRepository = new FakeFailedEventRepository();
     fakeCalendarActionExtractionService = new FakeCalendarActionExtractionService();
@@ -86,6 +89,7 @@ describe('Calendar Routes', () => {
 
     setServices({
       userServiceClient: fakeUserService,
+      llmUserServiceClient: fakeLlmUserService,
       googleCalendarClient: fakeCalendarClient,
       failedEventRepository: fakeFailedEventRepository,
       calendarActionExtractionService: fakeCalendarActionExtractionService,
@@ -757,6 +761,7 @@ describe('Calendar Routes', () => {
       clearJwksCache();
       setServices({
         userServiceClient: fakeUserService,
+        llmUserServiceClient: fakeLlmUserService,
         googleCalendarClient: fakeCalendarClient,
         failedEventRepository: fakeFailedEventRepository,
         calendarActionExtractionService: fakeCalendarActionExtractionService,
@@ -779,6 +784,7 @@ describe('Calendar Routes', () => {
       clearJwksCache();
       setServices({
         userServiceClient: fakeUserService,
+        llmUserServiceClient: fakeLlmUserService,
         googleCalendarClient: fakeCalendarClient,
         failedEventRepository: fakeFailedEventRepository,
         calendarActionExtractionService: fakeCalendarActionExtractionService,
