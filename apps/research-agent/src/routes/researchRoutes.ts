@@ -206,6 +206,15 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       if (body.skipSynthesis === true) {
         submitParams.skipSynthesis = true;
       }
+      const generatedBy = extractGeneratedByInfo(user);
+      if (generatedBy !== undefined) {
+        if (generatedBy.name !== undefined) {
+          submitParams.userName = generatedBy.name;
+        }
+        if (generatedBy.email !== undefined) {
+          submitParams.userEmail = generatedBy.email;
+        }
+      }
       const result = await submitResearch(submitParams, {
         researchRepo,
         generateId,
@@ -305,6 +314,15 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           }
           return inputContext;
         });
+      }
+      const generatedBy = extractGeneratedByInfo(user);
+      if (generatedBy !== undefined) {
+        if (generatedBy.name !== undefined) {
+          draftParams.userName = generatedBy.name;
+        }
+        if (generatedBy.email !== undefined) {
+          draftParams.userEmail = generatedBy.email;
+        }
       }
       const draft = createDraftResearch(draftParams);
 
@@ -870,7 +888,6 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             request.log
           );
 
-          const generatedBy = extractGeneratedByInfo(user);
           const synthesisResult = await runSynthesis(id, {
             researchRepo,
             synthesizer,
@@ -900,7 +917,6 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                 request.log.debug({ researchId: id, ...obj }, msg);
               },
             },
-            ...(generatedBy !== undefined && { generatedBy }),
           });
 
           if (synthesisResult.ok) {
@@ -1021,7 +1037,6 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         request.log
       );
 
-      const generatedBy = extractGeneratedByInfo(user);
       const retryResult = await retryFromFailed(id, {
         researchRepo,
         llmCallPublisher,
@@ -1039,7 +1054,6 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           },
           imageApiKeys: apiKeysResult.value,
           logger: request.log,
-          ...(generatedBy !== undefined && { generatedBy }),
         },
       });
 

@@ -2,6 +2,22 @@
 
 **Trigger:** Detected automatically when working with complex multi-step tasks, or user explicitly says "split this into subtasks".
 
+---
+
+## 🚨 CRITICAL: Mandatory Rules for ALL Created Subtasks
+
+When creating multiple subtasks in a row, **EACH subtask MUST contain**:
+
+1. **Mandatory branch creation instruction** — Task fails if work starts on `development`/`main`
+2. **Full CI verification requirement** — `pnpm run ci:tracked` must pass, non-negotiable
+3. **Continuation instruction** — Agent MUST proceed to next task after completion
+4. **95% coverage is MINIMUM** — Do NOT simplify work to save tokens/time
+5. **All tests required** — Every test scenario in the issue MUST be implemented
+
+**These rules are embedded in the subtask-description.md template. NEVER remove them.**
+
+---
+
 ## Detection Heuristics
 
 Auto-splitting is triggered when ANY of:
@@ -218,12 +234,26 @@ Each child issue (except the final one) includes:
 ```markdown
 ---
 
-## Continuation
+## 🚨 AFTER COMPLETION — MANDATORY NEXT STEPS
+
+1. ✅ Verify `pnpm run ci:tracked` passes (NON-NEGOTIABLE)
+2. ✅ Commit all changes with message: `INT-XXX <task description>`
+3. ✅ **IMMEDIATELY proceed to INT-YYY** — DO NOT STOP
 
 **DO NOT STOP.** After completing this task and committing, immediately proceed to the next unblocked task without waiting for user input.
 ```
 
-The final task does NOT include this directive, allowing natural completion.
+### Why This Matters
+
+LLM agents tend to:
+- Stop after each task waiting for user input
+- Simplify work to save tokens/time
+- Skip "optional" tests or edge cases
+- Run partial CI checks instead of full `pnpm run ci:tracked`
+
+**These tendencies are UNACCEPTABLE.** The continuation directive and mandatory rules counteract them.
+
+The final task does NOT include the continuation directive, allowing natural completion.
 
 ### Continuation Directive Scope
 

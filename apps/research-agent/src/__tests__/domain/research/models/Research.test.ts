@@ -67,6 +67,48 @@ describe('Research factory functions', () => {
 
       expect(research.originalPrompt).toBeUndefined();
     });
+
+    it('stores userName and userEmail when provided', () => {
+      const research = createResearch({
+        id: 'test-id',
+        userId: 'user-123',
+        prompt: 'Test prompt',
+        selectedModels: [LlmModels.Gemini25Flash],
+        synthesisModel: LlmModels.Gemini25Flash,
+        userName: 'Piotr Buchman',
+        userEmail: 'pbuchman@example.com',
+      });
+
+      expect(research.userName).toBe('Piotr Buchman');
+      expect(research.userEmail).toBe('pbuchman@example.com');
+    });
+
+    it('stores only userName when userEmail is not provided', () => {
+      const research = createResearch({
+        id: 'test-id',
+        userId: 'user-123',
+        prompt: 'Test prompt',
+        selectedModels: [LlmModels.Gemini25Flash],
+        synthesisModel: LlmModels.Gemini25Flash,
+        userName: 'Test User',
+      });
+
+      expect(research.userName).toBe('Test User');
+      expect(research.userEmail).toBeUndefined();
+    });
+
+    it('does not set userName or userEmail when not provided', () => {
+      const research = createResearch({
+        id: 'test-id',
+        userId: 'user-123',
+        prompt: 'Test prompt',
+        selectedModels: [LlmModels.Gemini25Flash],
+        synthesisModel: LlmModels.Gemini25Flash,
+      });
+
+      expect(research.userName).toBeUndefined();
+      expect(research.userEmail).toBeUndefined();
+    });
   });
 
   describe('createDraftResearch', () => {
@@ -95,6 +137,22 @@ describe('Research factory functions', () => {
 
       expect(research.status).toBe('draft');
       expect(research.title).toBe('Draft Title');
+    });
+
+    it('stores userName and userEmail in draft when provided', () => {
+      const research = createDraftResearch({
+        id: 'draft-id',
+        userId: 'user-123',
+        title: 'Draft Title',
+        prompt: 'Test prompt',
+        selectedModels: [LlmModels.Gemini25Flash],
+        synthesisModel: LlmModels.Gemini25Flash,
+        userName: 'Draft User',
+        userEmail: 'draft@example.com',
+      });
+
+      expect(research.userName).toBe('Draft User');
+      expect(research.userEmail).toBe('draft@example.com');
     });
   });
 
@@ -143,6 +201,36 @@ describe('Research factory functions', () => {
       expect(enhanced.sourceResearchId).toBe('source-id');
       expect(enhanced.status).toBe('pending');
       expect(enhanced.prompt).toBe('Original prompt');
+    });
+
+    it('preserves userName and userEmail from source research', () => {
+      const sourceWithUserInfo: Research = {
+        ...sourceResearch,
+        userName: 'Original Creator',
+        userEmail: 'creator@example.com',
+      };
+
+      const enhanced = createEnhancedResearch({
+        id: 'enhanced-id',
+        userId: 'user-123',
+        sourceResearch: sourceWithUserInfo,
+        additionalModels: [LlmModels.ClaudeSonnet45],
+      });
+
+      expect(enhanced.userName).toBe('Original Creator');
+      expect(enhanced.userEmail).toBe('creator@example.com');
+    });
+
+    it('does not set userName or userEmail when source does not have them', () => {
+      const enhanced = createEnhancedResearch({
+        id: 'enhanced-id',
+        userId: 'user-123',
+        sourceResearch,
+        additionalModels: [LlmModels.ClaudeSonnet45],
+      });
+
+      expect(enhanced.userName).toBeUndefined();
+      expect(enhanced.userEmail).toBeUndefined();
     });
   });
 });

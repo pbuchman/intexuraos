@@ -5,6 +5,47 @@ Template for child issues created during plan splitting.
 ## Template
 
 ````markdown
+## 🚨 MANDATORY EXECUTION RULES (NON-NEGOTIABLE)
+
+### Branch Creation — TASK FAILS WITHOUT THIS
+
+**YOU MUST CREATE A NEW BRANCH BEFORE ANY WORK.** This is not optional.
+
+```bash
+git fetch origin
+git checkout -b feature/INT-XXX origin/development
+```
+
+If you start working on `development` or `main`, **THE TASK HAS FAILED BY DEFINITION**. Stop immediately and create the branch.
+
+### Full CI Verification — NON-NEGOTIABLE
+
+**`pnpm run ci:tracked` MUST pass before marking this task complete.**
+
+- Running only `vitest` or `tsc` is NOT sufficient
+- Running only workspace-level checks is NOT sufficient
+- The ONLY acceptable verification is `pnpm run ci:tracked` passing locally
+- If CI fails, fix ALL errors (even in other workspaces) — you OWN them
+
+### Test Coverage — 95% is MINIMUM, Not Target
+
+- You MUST implement ALL required tests listed in this issue
+- 95% branch coverage is the MINIMUM acceptable threshold
+- Do NOT simplify work to save tokens or time
+- Do NOT skip edge cases or "nice to have" tests
+- Every test scenario mentioned MUST be implemented
+
+### Continuation — MANDATORY
+
+**After completing this task, you MUST IMMEDIATELY proceed to the next task.**
+
+- Do NOT wait for user input
+- Do NOT stop to ask if you should continue
+- Do NOT claim you need a break or fresh context
+- Commit, verify CI passes, then MOVE ON to the next issue
+
+---
+
 ## Context
 
 Part of: [Parent Title](PARENT_ISSUE_URL)
@@ -95,7 +136,11 @@ describe('featureName', () => {
 
 ---
 
-## Continuation
+## 🚨 AFTER COMPLETION — MANDATORY NEXT STEPS
+
+1. ✅ Verify `pnpm run ci:tracked` passes (NON-NEGOTIABLE)
+2. ✅ Commit all changes with message: `INT-XXX <task description>`
+3. ✅ **IMMEDIATELY proceed to INT-YYY** — DO NOT STOP
 
 **DO NOT STOP.** After completing this task and committing, immediately proceed to the next unblocked task without waiting for user input.
 
