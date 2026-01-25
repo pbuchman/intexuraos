@@ -2,6 +2,7 @@
  * Parser for chart definition LLM responses.
  */
 
+import { formatZodErrors } from '@intexuraos/llm-utils';
 import { VegaLiteConfigSchema } from './contextSchemas.js';
 
 /**
@@ -60,9 +61,8 @@ export function parseChartDefinition(response: string): ParsedChartDefinition {
 
   const validationResult = VegaLiteConfigSchema.safeParse(parsed);
   if (!validationResult.success) {
-    const issues = validationResult.error.issues;
-    const errorMessages = issues.map((issue) => issue.message).join(', ');
-    throw new Error(`Invalid chart config: ${errorMessages}`);
+    const zodErrors = formatZodErrors(validationResult.error);
+    throw new Error(`Invalid chart config: ${zodErrors}`);
   }
 
   return {

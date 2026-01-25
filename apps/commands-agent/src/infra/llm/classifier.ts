@@ -1,3 +1,4 @@
+import type { Logger } from 'pino';
 import { commandClassifierPrompt, CommandClassificationSchema } from '@intexuraos/llm-prompts';
 import { formatZodErrors } from '@intexuraos/llm-utils';
 import type { LlmGenerateClient } from '@intexuraos/llm-factory';
@@ -10,7 +11,7 @@ import type {
 
 const PWA_SHARED_LINK_CONFIDENCE_BOOST = 0.1;
 
-export function createGeminiClassifier(client: LlmGenerateClient): Classifier {
+export function createGeminiClassifier(client: LlmGenerateClient, logger: Logger): Classifier {
   return {
     async classify(text: string, options?: ClassifyOptions): Promise<ClassificationResult> {
       const prompt = commandClassifierPrompt.build({ message: text });
@@ -21,7 +22,7 @@ export function createGeminiClassifier(client: LlmGenerateClient): Classifier {
         throw new Error(`Classification failed: ${result.error.message}`);
       }
 
-      const parsed = parseClassifyResponse(result.value.content);
+      const parsed = parseClassifyResponse(result.value.content, logger);
 
       let adjustedConfidence = parsed.confidence;
       let adjustedReasoning = parsed.reasoning;
@@ -42,10 +43,15 @@ export function createGeminiClassifier(client: LlmGenerateClient): Classifier {
 }
 
 function parseClassifyResponse(
-  response: string
+  response: string,
+  logger: Logger
 ): { type: CommandType; confidence: number; title: string; reasoning: string } {
   const jsonMatch = /\{[\s\S]*}/.exec(response);
   if (jsonMatch === null) {
+    logger.warn(
+      { rawResponsePreview: response.slice(0, 500) },
+      'Classification response contains no JSON, falling back to note'
+    );
     return {
       type: 'note',
       confidence: 0.3,
@@ -59,9 +65,11 @@ function parseClassifyResponse(
 
   const validationResult = CommandClassificationSchema.safeParse(parsed);
   if (!validationResult.success) {
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-assignment
     const zodErrors: string = formatZodErrors(validationResult.error);
-    // Return default classification instead of throwing
+    logger.warn(
+      { zodErrors, rawResponsePreview: cleaned.slice(0, 500) },
+      'Classification validation failed, falling back to note'
+    );
     return {
       type: 'note',
       confidence: 0.3,
