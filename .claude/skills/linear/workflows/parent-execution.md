@@ -10,12 +10,12 @@ When `/linear INT-XXX` is called with a parent issue that has child subissues, t
 
 **Key Differences from Single-Issue Workflow:**
 
-| Aspect    | Single Issue (`work-existing.md`) | Parent Execution (this workflow)      |
-| --------- | --------------------------------- | ------------------------------------- |
-| Branch    | Per-issue (`fix/INT-302`)         | Parent only (`refactor/INT-301`)      |
-| Execution | One issue → STOP → wait           | All children continuously             |
-| PR        | One per issue                     | Single PR for parent                  |
-| Resume    | N/A                               | Detect interruption, continue         |
+| Aspect    | Single Issue (`work-existing.md`) | Parent Execution (this workflow) |
+| --------- | --------------------------------- | -------------------------------- |
+| Branch    | Per-issue (`fix/INT-302`)         | Parent only (`refactor/INT-301`) |
+| Execution | One issue → STOP → wait           | All children continuously        |
+| PR        | One per issue                     | Single PR for parent             |
+| Resume    | N/A                               | Detect interruption, continue    |
 
 ---
 
@@ -24,6 +24,7 @@ When `/linear INT-XXX` is called with a parent issue that has child subissues, t
 **A task FAILS if you start working on `development` or `main`.**
 
 Before ANY work:
+
 1. Check current branch: `git branch --show-current`
 2. If on `development` or `main` → CREATE BRANCH FIRST (see Step 3)
 3. Only then proceed with execution loop
@@ -35,6 +36,7 @@ Before ANY work:
 ### 1. Validate Entry Point
 
 This workflow should only be reached via redirect from `work-existing.md`. Confirm:
+
 - Issue was fetched with `mcp__linear__get_issue`
 - Subissues were detected with `mcp__linear__issue_read(method: "get_sub_issues")`
 - Children array is non-empty
@@ -52,6 +54,7 @@ This workflow should only be reached via redirect from `work-existing.md`. Confi
 ```
 
 **Tier Extraction:**
+
 - Parse `[tier-X]` from title prefix
 - `[tier-0]` = Setup/prerequisites (execute first)
 - `[tier-1]` = Independent deliverables
@@ -70,13 +73,13 @@ git checkout -b <type>/INT-<parent-id> origin/development
 **Branch Type Extraction:**
 Extract type from parent title prefix:
 
-| Parent Title Prefix | Branch Type  | Example                |
-| ------------------- | ------------ | ---------------------- |
-| `[feature]`         | `feature/`   | `feature/INT-301`      |
-| `[bug]`             | `fix/`       | `fix/INT-301`          |
-| `[refactor]`        | `refactor/`  | `refactor/INT-301`     |
-| `[docs]`            | `docs/`      | `docs/INT-301`         |
-| Other/None          | `feature/`   | `feature/INT-301`      |
+| Parent Title Prefix | Branch Type | Example            |
+| ------------------- | ----------- | ------------------ |
+| `[feature]`         | `feature/`  | `feature/INT-301`  |
+| `[bug]`             | `fix/`      | `fix/INT-301`      |
+| `[refactor]`        | `refactor/` | `refactor/INT-301` |
+| `[docs]`            | `docs/`     | `docs/INT-301`     |
+| Other/None          | `feature/`  | `feature/INT-301`  |
 
 ### 4. Update Parent State (MANDATORY)
 
@@ -111,13 +114,13 @@ FOR each child in tier order:
 
 **Resume States:**
 
-| Child State | Action                          |
-| ----------- | ------------------------------- |
-| In Progress | Resume here (was interrupted)   |
-| Backlog     | Start fresh (if no blockers)    |
-| In Review   | Skip (completed)                |
-| QA          | Skip (completed)                |
-| Done        | Skip (completed)                |
+| Child State | Action                        |
+| ----------- | ----------------------------- |
+| In Progress | Resume here (was interrupted) |
+| Backlog     | Start fresh (if no blockers)  |
+| In Review   | Skip (completed)              |
+| QA          | Skip (completed)              |
+| Done        | Skip (completed)              |
 
 ### 6. Execute Children Loop (NO CHECKPOINTS)
 
@@ -240,12 +243,12 @@ All artifacts cross-linked via GitHub integration.
 
 ## State Transitions
 
-| Event                     | Issue  | From        | To          |
-| ------------------------- | ------ | ----------- | ----------- |
-| Start parent execution    | Parent | Backlog     | In Progress |
-| Begin child work          | Child  | Backlog     | In Progress |
-| Complete child work       | Child  | In Progress | In Review   |
-| All children done, PR up  | Parent | In Progress | In Review   |
+| Event                    | Issue  | From        | To          |
+| ------------------------ | ------ | ----------- | ----------- |
+| Start parent execution   | Parent | Backlog     | In Progress |
+| Begin child work         | Child  | Backlog     | In Progress |
+| Complete child work      | Child  | In Progress | In Review   |
+| All children done, PR up | Parent | In Progress | In Review   |
 
 ---
 
@@ -254,20 +257,26 @@ All artifacts cross-linked via GitHub integration.
 After each child completion, update the parent issue's State Tracking section:
 
 **Before child completion:**
+
 ```markdown
 ### Now
+
 - [ ] INT-302: [tier-0] Setup infrastructure
 
 ### Next
+
 - [ ] INT-303: [tier-1] Implement core feature
 ```
 
 **After child completion:**
+
 ```markdown
 ### Done
+
 - [x] INT-302: [tier-0] Setup infrastructure
 
 ### Now
+
 - [ ] INT-303: [tier-1] Implement core feature
 ```
 
@@ -288,13 +297,13 @@ If execution is interrupted mid-workflow:
 
 ## Forbidden Patterns
 
-| Pattern                            | Why It's Wrong                              |
-| ---------------------------------- | ------------------------------------------- |
-| Creating branch per child          | Creates merge hell, loses context           |
-| Stopping after each child          | Defeats purpose of continuous execution     |
-| Creating PR per child              | Fragments review, loses cohesion            |
-| Skipping CI between children       | Accumulates failures, harder to debug       |
-| Moving parent to Done              | Only user can mark Done (terminal state)    |
+| Pattern                      | Why It's Wrong                           |
+| ---------------------------- | ---------------------------------------- |
+| Creating branch per child    | Creates merge hell, loses context        |
+| Stopping after each child    | Defeats purpose of continuous execution  |
+| Creating PR per child        | Fragments review, loses cohesion         |
+| Skipping CI between children | Accumulates failures, harder to debug    |
+| Moving parent to Done        | Only user can mark Done (terminal state) |
 
 ---
 

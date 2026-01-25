@@ -66,6 +66,16 @@ export class FakeUserServiceClient implements UserServiceClient {
   async reportLlmSuccess(_userId: string, _provider: string): Promise<void> {
     // Best effort - silently ignore in tests
   }
+
+  async getOAuthToken(
+    _userId: string,
+    _provider: import('@intexuraos/internal-clients').OAuthProvider
+  ): Promise<Result<{ accessToken: string; email: string }, import('@intexuraos/internal-clients').UserServiceError>> {
+    return err({
+      code: 'CONNECTION_NOT_FOUND',
+      message: 'OAuth not configured in fake',
+    });
+  }
 }
 
 export class FakeTodoItemExtractionService implements TodoItemExtractionService {

@@ -4,7 +4,7 @@ import type { CommandRepository } from '../ports/commandRepository.js';
 import type { ClassifierFactory } from '../ports/classifier.js';
 import type { EventPublisherPort } from '../ports/eventPublisher.js';
 import type { ActionCreatedEvent } from '../events/actionCreatedEvent.js';
-import type { UserServiceClient } from '../ports/userServiceClient.js';
+import type { UserServiceClient } from '@intexuraos/internal-clients';
 import type { ActionsAgentClient } from '../ports/actionsAgentClient.js';
 
 export interface RetryResult {

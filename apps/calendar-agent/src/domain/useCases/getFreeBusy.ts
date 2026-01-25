@@ -5,6 +5,7 @@
 import { err, type Result } from '@intexuraos/common-core';
 import type { Logger } from '@intexuraos/common-core';
 import type { CalendarError } from '../errors.js';
+import { mapUserServiceError } from '../errors.js';
 import type { FreeBusyInput, FreeBusySlot } from '../models.js';
 import type { GoogleCalendarClient, UserServiceClient } from '../ports.js';
 
@@ -28,10 +29,10 @@ export async function getFreeBusy(
 
   logger.info({ userId, timeMin: input.timeMin, timeMax: input.timeMax, calendarCount: input.items?.length ?? 1 }, 'getFreeBusy: entry');
 
-  const tokenResult = await userServiceClient.getOAuthToken(userId);
+  const tokenResult = await userServiceClient.getOAuthToken(userId, 'google');
   if (!tokenResult.ok) {
     logger.error({ userId, error: tokenResult.error }, 'getFreeBusy: failed to get OAuth token');
-    return err(tokenResult.error);
+    return err(mapUserServiceError(tokenResult.error));
   }
 
   const result = await googleCalendarClient.getFreeBusy(tokenResult.value.accessToken, input, logger);

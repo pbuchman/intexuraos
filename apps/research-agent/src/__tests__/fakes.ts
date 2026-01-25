@@ -39,7 +39,7 @@ import type {
   ValidationResult,
   ImprovementResult,
 } from '../infra/llm/InputValidationAdapter.js';
-import type { DecryptedApiKeys, UserServiceClient, UserServiceError } from '../infra/user/index.js';
+import type { DecryptedApiKeys, UserServiceClient, UserServiceError } from '@intexuraos/internal-clients';
 import type { LlmGenerateClient, GenerateResult, LLMError } from '@intexuraos/llm-factory';
 import type { ResearchEventPublisher, ResearchProcessEvent } from '../infra/pubsub/index.js';
 import type { NotificationSender } from '../domain/research/index.js';
@@ -246,6 +246,16 @@ export class FakeUserServiceClient implements UserServiceClient {
       return err({ code: 'API_ERROR', message: 'Test getLlmClient failure' });
     }
     return ok(this.llmClient);
+  }
+
+  async getOAuthToken(
+    _userId: string,
+    _provider: import('@intexuraos/internal-clients').OAuthProvider
+  ): Promise<Result<{ accessToken: string; email: string }, UserServiceError>> {
+    return err({
+      code: 'CONNECTION_NOT_FOUND',
+      message: 'OAuth not configured in fake',
+    });
   }
 
   // Test helpers

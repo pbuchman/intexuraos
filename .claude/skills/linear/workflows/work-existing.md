@@ -76,10 +76,10 @@ Call mcp__linear__issue_read(method: "get_sub_issues", issueId: "INT-XXX")
 
 **Routing Decision:**
 
-| Result                    | Action                                                    |
-| ------------------------- | --------------------------------------------------------- |
+| Result                    | Action                                                     |
+| ------------------------- | ---------------------------------------------------------- |
 | Children array non-empty  | **REDIRECT** to [parent-execution.md](parent-execution.md) |
-| Children array empty/null | Continue with single-issue workflow (Step 3 below)        |
+| Children array empty/null | Continue with single-issue workflow (Step 3 below)         |
 
 **Why:** Parent issues with children require continuous execution of ALL children without stopping. The parent-execution workflow handles branch naming, commit grouping, and PR creation differently.
 

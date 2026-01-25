@@ -617,6 +617,9 @@ importers:
       '@intexuraos/infra-sentry':
         specifier: workspace:*
         version: link:../../packages/infra-sentry
+      '@intexuraos/internal-clients':
+        specifier: workspace:*
+        version: link:../../packages/internal-clients
       '@intexuraos/llm-contract':
         specifier: workspace:*
         version: link:../../packages/llm-contract

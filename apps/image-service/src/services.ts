@@ -19,7 +19,7 @@ import {
   createUserServiceClient,
   type UserServiceClient,
   type DecryptedApiKeys,
-} from './infra/user/index.js';
+} from '@intexuraos/internal-clients';
 
 export interface ServiceContainer {
   generatedImageRepository: GeneratedImageRepository;
