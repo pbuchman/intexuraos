@@ -4,39 +4,7 @@ import { Timestamp } from '@google-cloud/firestore';
 import type { FastifyPluginCallback, FastifyRequest, FastifyReply } from 'fastify';
 import { logIncomingRequest, validateInternalAuth } from '@intexuraos/common-http';
 import { getServices } from '../services.js';
-import type { CreateTaskInput } from '../domain/repositories/codeTaskRepository.js';
-
-// Request schema for creating a code task
-const createCodeTaskBodySchema = {
-  type: 'object',
-  properties: {
-    userId: { type: 'string' },
-    prompt: { type: 'string', minLength: 1 },
-    sanitizedPrompt: { type: 'string', minLength: 1 },
-    systemPromptHash: { type: 'string' },
-    workerType: { type: 'string', enum: ['opus', 'auto', 'glm'] },
-    workerLocation: { type: 'string', enum: ['mac', 'vm'] },
-    repository: { type: 'string', minLength: 1 },
-    baseBranch: { type: 'string', minLength: 1 },
-    traceId: { type: 'string' },
-    actionId: { type: 'string', nullable: true },
-    approvalEventId: { type: 'string', nullable: true },
-    linearIssueId: { type: 'string', nullable: true },
-    linearIssueTitle: { type: 'string', nullable: true },
-    linearFallback: { type: 'boolean', nullable: true },
-  },
-  required: [
-    'userId',
-    'prompt',
-    'sanitizedPrompt',
-    'systemPromptHash',
-    'workerType',
-    'workerLocation',
-    'repository',
-    'baseBranch',
-    'traceId',
-  ],
-} as const;
+import { processCodeAction } from '../domain/usecases/processCodeAction.js';
 
 // Response schema for created task
 const codeTaskSchema = {
@@ -114,23 +82,6 @@ const codeTaskSchema = {
     'updatedAt',
   ],
 } as const;
-
-interface CreateCodeTaskBody {
-  userId: string;
-  prompt: string;
-  sanitizedPrompt: string;
-  systemPromptHash: string;
-  workerType: 'opus' | 'auto' | 'glm';
-  workerLocation: 'mac' | 'vm';
-  repository: string;
-  baseBranch: string;
-  traceId: string;
-  actionId?: string;
-  approvalEventId?: string;
-  linearIssueId?: string;
-  linearIssueTitle?: string;
-  linearFallback?: boolean;
-}
 
 /**
  * Convert Firestore Timestamp to ISO string for JSON serialization
@@ -263,30 +214,26 @@ function taskToApiResponse(task: {
   };
 }
 
-/**
- * Map repository error to HTTP status code
- */
-function getErrorStatus(error: { code: string; message: string }): number {
-  switch (error.code) {
-    case 'DUPLICATE_APPROVAL':
-    case 'DUPLICATE_ACTION':
-    case 'DUPLICATE_PROMPT':
-    case 'ACTIVE_TASK_EXISTS':
-      return 409; // Conflict
-    case 'NOT_FOUND':
-      return 404;
-    default:
-      return 500;
-  }
-}
-
 export const codeRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   // ============================================================
   // INTERNAL ROUTES (X-Internal-Auth)
   // ============================================================
 
   // POST /internal/code/process - Called by actions-agent
-  fastify.post<{ Body: CreateCodeTaskBody }>(
+  fastify.post<{
+    Body: {
+      actionId: string;
+      approvalEventId: string;
+      userId: string;
+      payload: {
+        prompt: string;
+        workerType?: 'opus' | 'auto' | 'glm';
+        linearIssueId?: string;
+        repository?: string;
+        baseBranch?: string;
+      };
+    };
+  }>(
     '/internal/code/process',
     {
       schema: {
@@ -294,60 +241,75 @@ export const codeRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         summary: 'Process code action from actions-agent',
         description: 'Internal endpoint for processing code actions. Called by actions-agent when a code action is approved.',
         tags: ['internal'],
-        body: createCodeTaskBodySchema,
+        body: {
+          type: 'object',
+          properties: {
+            actionId: { type: 'string' },
+            approvalEventId: { type: 'string' },
+            userId: { type: 'string' },
+            payload: {
+              type: 'object',
+              properties: {
+                prompt: { type: 'string' },
+                workerType: { type: 'string', enum: ['opus', 'auto', 'glm'] },
+                linearIssueId: { type: 'string' },
+                repository: { type: 'string' },
+                baseBranch: { type: 'string' },
+              },
+              required: ['prompt'],
+            },
+          },
+          required: ['actionId', 'approvalEventId', 'userId', 'payload'],
+        },
         response: {
-          201: {
-            description: 'Task created successfully',
+          200: {
+            description: 'Task submitted successfully',
             type: 'object',
             properties: {
-              success: { type: 'boolean', enum: [true] },
-              data: {
-                type: 'object',
-                properties: {
-                  task: codeTaskSchema,
-                },
-                required: ['task'],
-              },
+              status: { type: 'string', enum: ['submitted'] },
+              codeTaskId: { type: 'string' },
+              resourceUrl: { type: 'string' },
             },
-            required: ['success', 'data'],
+            required: ['status', 'codeTaskId', 'resourceUrl'],
+          },
+          401: {
+            description: 'Unauthorized',
+            type: 'object',
+            properties: {
+              error: { type: 'string', enum: ['unauthorized'] },
+            },
+            required: ['error'],
           },
           409: {
             description: 'Duplicate task (deduplication triggered)',
             type: 'object',
             properties: {
-              success: { type: 'boolean', enum: [false] },
-              error: {
-                type: 'object',
-                properties: {
-                  code: { type: 'string' },
-                  message: { type: 'string' },
-                  existingTaskId: { type: 'string' },
-                },
-                required: ['code', 'message', 'existingTaskId'],
-              },
+              status: { type: 'string', enum: ['duplicate'] },
+              existingTaskId: { type: 'string' },
             },
-            required: ['success', 'error'],
+            required: ['status', 'existingTaskId'],
+          },
+          503: {
+            description: 'Worker unavailable',
+            type: 'object',
+            properties: {
+              status: { type: 'string', enum: ['failed'] },
+              error: { type: 'string', enum: ['worker_unavailable'] },
+            },
+            required: ['status', 'error'],
           },
           500: {
             description: 'Server error',
             type: 'object',
             properties: {
-              success: { type: 'boolean', enum: [false] },
-              error: {
-                type: 'object',
-                properties: {
-                  code: { type: 'string' },
-                  message: { type: 'string' },
-                },
-                required: ['code', 'message'],
-              },
+              error: { type: 'string' },
             },
-            required: ['success', 'error'],
+            required: ['error'],
           },
         },
       },
     },
-    async (request: FastifyRequest<{ Body: CreateCodeTaskBody }>, reply: FastifyReply) => {
+    async (request: FastifyRequest<{ Body: { actionId: string; approvalEventId: string; userId: string; payload: { prompt: string; workerType?: 'opus' | 'auto' | 'glm'; linearIssueId?: string; repository?: string; baseBranch?: string } } }>, reply: FastifyReply) => {
       logIncomingRequest(request, {
         message: 'Received request to POST /internal/code/process',
       });
@@ -357,78 +319,99 @@ export const codeRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       if (!authResult.valid) {
         request.log.warn({ reason: authResult.reason }, 'Internal auth failed for code process');
         reply.status(401);
-        return { success: false, error: { code: 'UNAUTHORIZED', message: 'Unauthorized' } };
+        return { error: 'unauthorized' };
       }
 
-      const { codeTaskRepo } = getServices();
+      const services = getServices();
       const body = request.body;
 
       request.log.info(
         {
+          actionId: body.actionId,
           userId: body.userId,
-          workerType: body.workerType,
-          workerLocation: body.workerLocation,
-          repository: body.repository,
+          workerType: body.payload.workerType,
+          repository: body.payload.repository,
         },
         'Processing code action'
       );
 
-      const input: CreateTaskInput = {
+      // Process the code action using use case
+      const processRequest: {
+        actionId: string;
+        approvalEventId: string;
+        userId: string;
+        prompt: string;
+        workerType: 'opus' | 'auto' | 'glm';
+        linearIssueId?: string;
+        repository?: string;
+        baseBranch?: string;
+      } = {
+        actionId: body.actionId,
+        approvalEventId: body.approvalEventId,
         userId: body.userId,
-        prompt: body.prompt,
-        sanitizedPrompt: body.sanitizedPrompt,
-        systemPromptHash: body.systemPromptHash,
-        workerType: body.workerType,
-        workerLocation: body.workerLocation,
-        repository: body.repository,
-        baseBranch: body.baseBranch,
-        traceId: body.traceId,
-        ...(body.actionId !== undefined && { actionId: body.actionId }),
-        ...(body.approvalEventId !== undefined && { approvalEventId: body.approvalEventId }),
-        ...(body.linearIssueId !== undefined && { linearIssueId: body.linearIssueId }),
-        ...(body.linearIssueTitle !== undefined && { linearIssueTitle: body.linearIssueTitle }),
-        ...(body.linearFallback !== undefined && { linearFallback: body.linearFallback }),
+        prompt: body.payload.prompt,
+        workerType: body.payload.workerType ?? 'auto',
       };
 
-      const result = await codeTaskRepo.create(input);
+      // Only include optional fields if they are defined
+      if (body.payload.linearIssueId !== undefined) {
+        processRequest.linearIssueId = body.payload.linearIssueId;
+      }
+      if (body.payload.repository !== undefined) {
+        processRequest.repository = body.payload.repository;
+      }
+      if (body.payload.baseBranch !== undefined) {
+        processRequest.baseBranch = body.payload.baseBranch;
+      }
+
+      const result = await processCodeAction(
+        {
+          logger: services.logger,
+          codeTaskRepo: services.codeTaskRepo,
+          taskDispatcher: services.taskDispatcher,
+        },
+        processRequest
+      );
 
       if (!result.ok) {
-        const statusCode = getErrorStatus(result.error);
+        const error = result.error;
         request.log.warn(
           {
-            errorCode: result.error.code,
-            errorMessage: result.error.message,
-            existingTaskId: 'existingTaskId' in result.error ? result.error.existingTaskId : undefined,
+            errorCode: error.code,
+            errorMessage: error.message,
+            existingTaskId: error.existingTaskId,
           },
           'Failed to process code action'
         );
-        reply.status(statusCode);
 
-        if (statusCode === 409 && 'existingTaskId' in result.error) {
+        // Handle specific error codes
+        if (error.code === 'duplicate_approval' || error.code === 'duplicate_action') {
+          reply.status(409);
           return {
-            success: false,
-            error: {
-              code: result.error.code,
-              message: result.error.message,
-              existingTaskId: result.error.existingTaskId,
-            },
+            status: 'duplicate',
+            existingTaskId: error.existingTaskId ?? '',
           };
         }
 
-        return {
-          success: false,
-          error: {
-            code: result.error.code,
-            message: result.error.message,
-          },
-        };
+        if (error.code === 'worker_unavailable') {
+          reply.status(503);
+          return {
+            status: 'failed',
+            error: 'worker_unavailable',
+          };
+        }
+
+        reply.status(500);
+        return { error: error.message };
       }
 
-      request.log.info({ taskId: result.value.id }, 'Code action processed successfully');
+      request.log.info({ codeTaskId: result.value.codeTaskId }, 'Code action processed successfully');
 
-      return await reply
-        .status(201)
-        .send({ success: true, data: { task: taskToApiResponse(result.value) } });
+      return await reply.send({
+        status: 'submitted',
+        codeTaskId: result.value.codeTaskId,
+        resourceUrl: result.value.resourceUrl,
+      });
     }
   );
 

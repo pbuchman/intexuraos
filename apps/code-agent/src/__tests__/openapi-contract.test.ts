@@ -11,7 +11,9 @@ import type { Logger } from 'pino';
 import { createFirestoreCodeTaskRepository } from '../infra/repositories/firestoreCodeTaskRepository.js';
 import type { CodeTaskRepository } from '../domain/repositories/codeTaskRepository.js';
 import { createWorkerDiscoveryService } from '../infra/services/workerDiscoveryImpl.js';
+import { createTaskDispatcherService } from '../infra/services/taskDispatcherImpl.js';
 import type { WorkerDiscoveryService } from '../domain/services/workerDiscovery.js';
+import type { TaskDispatcherService } from '../domain/services/taskDispatcher.js';
 
 describe('OpenAPI contract', () => {
   let app: Awaited<ReturnType<typeof buildServer>>;
@@ -35,11 +37,13 @@ describe('OpenAPI contract', () => {
         logger,
       }),
       workerDiscovery: createWorkerDiscoveryService({ logger }),
+      taskDispatcher: createTaskDispatcherService({ logger }),
     } as {
       firestore: Firestore;
       logger: Logger;
       codeTaskRepo: CodeTaskRepository;
       workerDiscovery: WorkerDiscoveryService;
+      taskDispatcher: TaskDispatcherService;
     });
 
     app = await buildServer();
@@ -114,8 +118,10 @@ describe('OpenAPI contract', () => {
 
     // Verify POST /internal/code/process responses
     const processPostEndpoint = schema.paths['/internal/code/process'].post;
-    expect(processPostEndpoint.responses).toHaveProperty('201');
+    expect(processPostEndpoint.responses).toHaveProperty('200');
+    expect(processPostEndpoint.responses).toHaveProperty('401');
     expect(processPostEndpoint.responses).toHaveProperty('409');
+    expect(processPostEndpoint.responses).toHaveProperty('503');
     expect(processPostEndpoint.responses).toHaveProperty('500');
 
     // Verify GET /code/tasks/{taskId} responses

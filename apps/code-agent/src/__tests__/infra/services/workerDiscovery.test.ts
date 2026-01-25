@@ -137,6 +137,25 @@ describe('workerDiscoveryImpl', () => {
       mockFetch.mockRestore();
     });
 
+    it('returns error on timeout with nested cause', async () => {
+      const service = createWorkerDiscoveryService({ logger });
+      const abortError = new Error('Request timeout') as Error & { cause?: Error };
+      abortError.cause = new Error('Aborted');
+      abortError.cause.name = 'AbortError';
+
+      const mockFetch = vi.spyOn(global, 'fetch').mockRejectedValueOnce(abortError);
+
+      const result = await service.checkHealth('mac');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('health_check_failed');
+        expect(result.error.message).toContain('timed out');
+      }
+
+      mockFetch.mockRestore();
+    });
+
     it('returns error on network error', async () => {
       const service = createWorkerDiscoveryService({ logger });
       const mockFetch = vi.spyOn(global, 'fetch').mockRejectedValueOnce(new Error('Network error'));
