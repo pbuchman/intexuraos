@@ -20,29 +20,6 @@
 
 ---
 
-## What's New in v2.1.0
-
-| Improvement                 | Impact                                           |
-| --------------------------- | ------------------------------------------------ |
-| **Code Consolidation**      | Removed 4,200+ duplicate lines across 8 services |
-| **Standardized Validation** | All LLM responses now use Zod schemas            |
-| **Cost Optimization**       | 63% Cloud Build cost reduction                   |
-| **Bug Fix**                 | Fixed duplicate WhatsApp approval messages       |
-
-## What's New in v2.0.0
-
-| Feature                     | Description                                        |
-| --------------------------- | -------------------------------------------------- |
-| **WhatsApp Approval**       | Approve/reject via text replies or emoji reactions |
-| **Calendar Preview**        | See event details before approving                 |
-| **Natural Language Models** | "Research with Claude and GPT"                     |
-| **5-Step Classification**   | URL isolation, explicit intent, Polish support     |
-| **Zod Validation**          | Type-safe LLM response handling                    |
-| **GLM-4.7-Flash**           | New free-tier model                                |
-| **Linear Dashboard**        | 3-column layout (Planning → Work → Closed)         |
-
----
-
 ## The Problem
 
 Your brain is for thinking, not for task management.
@@ -318,6 +295,29 @@ IntexuraOS demonstrates that **software engineering is a discipline, not just a 
 This project applies Staff Engineer thinking to personal productivity: rigorous standards, comprehensive automation, and AI integration enable a single developer to build and maintain a complex, distributed system with enterprise-grade reliability.
 
 Built by [Piotr Buchman](https://www.linkedin.com/in/piotrbuchman/) — open to discussing architecture, AI-native development, or leadership roles where technical excellence is a core value.
+
+---
+
+## What's New in v2.1.0
+
+| Improvement                 | Impact                                           |
+| --------------------------- | ------------------------------------------------ |
+| **Code Consolidation**      | Removed 4,200+ duplicate lines across 8 services |
+| **Standardized Validation** | All LLM responses now use Zod schemas            |
+| **Cost Optimization**       | 63% Cloud Build cost reduction                   |
+| **Bug Fix**                 | Fixed duplicate WhatsApp approval messages       |
+
+## What's New in v2.0.0
+
+| Feature                     | Description                                        |
+| --------------------------- | -------------------------------------------------- |
+| **WhatsApp Approval**       | Approve/reject via text replies or emoji reactions |
+| **Calendar Preview**        | See event details before approving                 |
+| **Natural Language Models** | "Research with Claude and GPT"                     |
+| **5-Step Classification**   | URL isolation, explicit intent, Polish support     |
+| **Zod Validation**          | Type-safe LLM response handling                    |
+| **GLM-4.7-Flash**           | New free-tier model                                |
+| **Linear Dashboard**        | 3-column layout (Planning → Work → Closed)         |
 
 ---
 
