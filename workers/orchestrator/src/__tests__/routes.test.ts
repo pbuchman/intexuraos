@@ -1,21 +1,21 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { FastifyInstance } from 'fastify';
-import { build } from 'fastify-server/build';
-import { registerRoutes } from '../routes.js';
+// import { build } from 'fastify-server/build';
+// import { registerRoutes } from '../routes.js';
 import type { TaskDispatcher } from '../services/task-dispatcher.js';
-import type { GitHubTokenService } from '../github/token-service.js';
-import type { Logger } from '@intexuraos/common-core';
+// import type { GitHubTokenService } from '../github/token-service.js';
+// import type { Logger } from '@intexuraos/common-core';
 
 describe('Routes', () => {
   let app: FastifyInstance;
   let dispatcher: TaskDispatcher;
-  let tokenService: GitHubTokenService;
-  const mockLogger: Logger = {
-    info(): void {},
-    warn(): void {},
-    error(): void {},
-    debug(): void {},
-  };
+  // let tokenService: GitHubTokenService;
+  // const mockLogger: Logger = {
+  //   info(): void {},
+  //   warn(): void {},
+  //   error(): void {},
+  //   debug(): void {},
+  // };
 
   beforeEach(async () => {
     // TODO: Fix fastify-server import issue
@@ -31,10 +31,10 @@ describe('Routes', () => {
     } as unknown as TaskDispatcher;
 
     // Mock token service
-    tokenService = {
-      getToken: vi.fn(async () => ({ token: 'test-token', expiresAt: '2025-01-26T00:00:00Z' })),
-      refreshToken: vi.fn(async () => ({ ok: true, value: { token: 'new-token', expiresAt: '2025-01-27T00:00:00Z' } })),
-    } as unknown as GitHubTokenService;
+    // tokenService = {
+    //   getToken: vi.fn(async () => ({ token: 'test-token', expiresAt: '2025-01-26T00:00:00Z' })),
+    //   refreshToken: vi.fn(async () => ({ ok: true, value: { token: 'new-token', expiresAt: '2025-01-27T00:00:00Z' } })),
+    // } as unknown as GitHubTokenService;
 
     // registerRoutes(app, dispatcher, tokenService, { dispatchSecret: 'test-secret' }, mockLogger);
   });
@@ -131,7 +131,7 @@ describe('Routes', () => {
         taskId: 'test-task',
         status: 'running',
         startedAt: '2025-01-25T14:00:00Z',
-      } as any);
+      } as unknown);
 
       const response = await app.inject({
         method: 'GET',

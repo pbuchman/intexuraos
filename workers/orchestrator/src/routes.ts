@@ -23,7 +23,7 @@ export function registerRoutes(
   dispatcher: TaskDispatcher,
   tokenService: GitHubTokenService,
   config: { dispatchSecret: string },
-  logger: Logger,
+  logger: Logger
 ): void {
   const nonceCache: NonceCache = {};
 
