@@ -5,7 +5,7 @@ import type {
   ApprovalIntentClassifierFactoryError,
 } from '../../domain/ports/approvalIntentClassifierFactory.js';
 import type { ApprovalIntentClassifier } from '../../domain/ports/approvalIntentClassifier.js';
-import type { UserServiceClient } from '@intexuraos/internal-clients/user-service';
+import type { UserServiceClient } from '@intexuraos/internal-clients';
 import { createLlmApprovalIntentClassifier } from './llmApprovalIntentClassifier.js';
 
 export interface ApprovalIntentClassifierFactoryConfig {

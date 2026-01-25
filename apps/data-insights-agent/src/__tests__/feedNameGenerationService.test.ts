@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach, type Mock } from 'vitest';
 import { createFeedNameGenerationService } from '../infra/gemini/feedNameGenerationService.js';
-import type { UserServiceClient } from '@intexuraos/internal-clients/user-service';
+import type { UserServiceClient } from '@intexuraos/internal-clients';
 import { ok, err, type Result } from '@intexuraos/common-core';
 import type {
   GenerateResult,

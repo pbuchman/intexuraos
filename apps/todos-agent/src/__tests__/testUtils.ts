@@ -8,7 +8,7 @@ import { ok, err } from '@intexuraos/common-core';
 import { FakeTodoRepository } from './fakeTodoRepository.js';
 import { resetServices, setServices } from '../services.js';
 import type { TodosProcessingPublisher, PublishError } from '@intexuraos/infra-pubsub';
-import type { UserServiceClient } from '@intexuraos/internal-clients/user-service';
+import type { UserServiceClient } from '@intexuraos/internal-clients';
 import type { TodoItemExtractionService, ExtractedItem, ExtractionError } from '../infra/gemini/todoItemExtractionService.js';
 import type { LlmGenerateClient } from '@intexuraos/llm-factory';
 
@@ -59,7 +59,7 @@ export class FakeUserServiceClient implements UserServiceClient {
     return ok(fakeLlmClient);
   }
 
-  async getApiKeys(_userId: string): Promise<Result<import('@intexuraos/internal-clients/user-service').DecryptedApiKeys, import('@intexuraos/internal-clients/user-service').UserServiceError>> {
+  async getApiKeys(_userId: string): Promise<Result<import('@intexuraos/internal-clients').DecryptedApiKeys, import('@intexuraos/internal-clients').UserServiceError>> {
     return ok({});
   }
 

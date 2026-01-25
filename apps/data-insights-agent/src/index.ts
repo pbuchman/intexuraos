@@ -10,7 +10,7 @@ import { initServices } from './services.js';
 import { FirestoreDataSourceRepository } from './infra/firestore/dataSourceRepository.js';
 import { FirestoreCompositeFeedRepository } from './infra/firestore/compositeFeedRepository.js';
 import { FirestoreSnapshotRepository } from './infra/firestore/snapshotRepository.js';
-import { createUserServiceClient } from '@intexuraos/internal-clients/user-service';
+import { createUserServiceClient } from '@intexuraos/internal-clients';
 import { createTitleGenerationService } from './infra/gemini/titleGenerationService.js';
 import { createFeedNameGenerationService } from './infra/gemini/feedNameGenerationService.js';
 import { createMobileNotificationsClient } from './infra/http/mobileNotificationsClient.js';

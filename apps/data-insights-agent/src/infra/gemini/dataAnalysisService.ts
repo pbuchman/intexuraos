@@ -12,7 +12,7 @@ import {
   type ChartTypeInfo,
 } from '@intexuraos/llm-prompts';
 import type { LlmGenerateClient } from '@intexuraos/llm-factory';
-import type { UserServiceClient } from '@intexuraos/internal-clients/user-service';
+import type { UserServiceClient } from '@intexuraos/internal-clients';
 import type {
   DataAnalysisService,
   DataAnalysisError,

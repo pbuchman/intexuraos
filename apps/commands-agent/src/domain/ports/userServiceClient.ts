@@ -5,7 +5,7 @@ import type {
   UserServiceClient as SharedUserServiceClient,
   DecryptedApiKeys,
   UserServiceError as SharedUserServiceError,
-} from '@intexuraos/internal-clients/user-service';
+} from '@intexuraos/internal-clients';
 
 // Re-export types from shared package for convenience
 export type { DecryptedApiKeys };

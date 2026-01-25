@@ -38,14 +38,6 @@ function collectExternalDeps(pkgName, visited = new Set()) {
   const deps = { ...pkg.dependencies, ...pkg.devDependencies };
   const externals = new Set();
 
-  // Add this @intexuraos package itself as external (for subpath exports)
-  // Only @intexuraos/internal-clients uses subpath exports that require external marking
-  // All other @intexuraos packages (common-*, infra-*, etc.) should be bundled
-  if (pkgName === '@intexuraos/internal-clients') {
-    externals.add(pkgName);
-    externals.add(`${pkgName}/*`);
-  }
-
   for (const dep of Object.keys(deps)) {
     if (dep.startsWith('@intexuraos/')) {
       // Recurse into workspace package
@@ -81,11 +73,6 @@ function collectExternalDepsWithVersions(pkgName, visited = new Set()) {
   const pkg = JSON.parse(readFileSync(pkgPath, 'utf8'));
   const deps = { ...pkg.dependencies };
   const externals = new Map();
-
-  // Add this package if it's @intexuraos/internal-clients (needs to be in dist/package.json)
-  if (pkgName === '@intexuraos/internal-clients') {
-    externals.set(pkgName, pkg.version);
-  }
 
   for (const [dep, version] of Object.entries(deps)) {
     if (dep.startsWith('@intexuraos/')) {
