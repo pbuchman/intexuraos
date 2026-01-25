@@ -92,12 +92,13 @@ sequenceDiagram
 
 ## Recent Changes
 
-| Commit     | Description                                            | Date       |
-| ---------- | ------------------------------------------------------ | ---------- |
-| `4cc3276f` | INT-213 Fix AI summary returning raw JSON              | 2025-01-24 |
-| `31dbd6d0` | Handle 403 errors on OpenGraph link preview fetching   | 2025-01-21 |
-| `8e006901` | INT-193 Migrate Crawl4AI client to api.crawl4ai.com/v1 | 2025-01-20 |
-| `5b589289` | INT-128 Add page summarization via Crawl4AI            | 2025-01-18 |
+| Commit     | Description                                             | Date       |
+| ---------- | ------------------------------------------------------- | ---------- |
+| `b1c7a4bb` | INT-269 Migrate to @intexuraos/internal-clients package | 2026-01-25 |
+| `4cc3276f` | INT-213 Fix AI summary returning raw JSON               | 2026-01-24 |
+| `31dbd6d0` | Handle 403 errors on OpenGraph link preview fetching    | 2026-01-21 |
+| `8e006901` | INT-193 Migrate Crawl4AI client to api.crawl4ai.com/v1  | 2026-01-20 |
+| `5b589289` | INT-128 Add page summarization via Crawl4AI             | 2026-01-18 |
 
 ## API Endpoints
 
@@ -164,14 +165,14 @@ interface PageSummary {
 
 ### LinkPreview
 
-| Field         | Type       | Description  |
-| ------------- | ---------- | ------------ | --------------------------- |
-| `url`         | `string`   | Original URL |
-| `title`       | `string \  | undefined`   | og:title or HTML title      |
-| `description` | `string \  | undefined`   | og:description or meta desc |
-| `image`       | `string \  | undefined`   | Resolved absolute og:image  |
-| `favicon`     | `string \  | undefined`   | Favicon URL                 |
-| `siteName`    | `string \  | undefined`   | og:site_name                |
+| Field | Type | Description |
+| ------------- | ---------- | ------------ | |
+| `url` | `string` | Original URL |
+| `title` | `string \  | undefined` | og:title or HTML title |
+| `description` | `string \  | undefined` | og:description or meta desc |
+| `image` | `string \  | undefined` | Resolved absolute og:image |
+| `favicon` | `string \  | undefined` | Favicon URL |
+| `siteName` | `string \  | undefined` | og:site_name |
 
 ### LinkPreviewError
 
@@ -272,10 +273,16 @@ Fetches and parses OpenGraph metadata.
 
 ### Internal Services
 
-| Service      | Endpoint                        | Purpose               |
-| ------------ | ------------------------------- | --------------------- |
-| user-service | `/internal/users/{id}/settings` | Get default LLM model |
-| user-service | `/internal/users/{id}/llm-keys` | Get LLM API keys      |
+| Service      | Endpoint                        | Purpose                    |
+| ------------ | ------------------------------- | -------------------------- |
+| user-service | `/internal/users/{id}/settings` | Get default LLM model      |
+| user-service | `/internal/users/{id}/llm-keys` | Get encrypted LLM API keys |
+
+**Integration Note (v2.1.0):** web-agent uses `@intexuraos/internal-clients/user-service` for type-safe, validated communication with user-service. This package provides:
+
+- `createUserServiceClient()` - Factory for configured client
+- `UserServiceClient` interface with `getLlmClient()` method
+- Automatic error handling and result types
 
 ## Configuration
 
@@ -332,12 +339,19 @@ apps/web-agent/src/
       parseSummaryResponse.ts    # Response validation
       buildSummaryRepairPrompt.ts # Prompt builders
     user/
-      userServiceClient.ts       # User service client
+      index.ts                   # Re-exports from @intexuraos/internal-clients
   routes/
     internalRoutes.ts            # /internal/* endpoints
     schemas/
-      linkPreviewSchemas.ts      # Zod schemas for link previews
-      pageSummarySchemas.ts      # Zod schemas for page summaries
+      linkPreviewSchemas.ts      # Request/response schemas
+      pageSummarySchemas.ts      # Request/response schemas
   services.ts                    # DI container
   server.ts                      # Fastify server
+  index.ts                       # Entry point
 ```
+
+**Package Dependencies (v2.1.0):**
+
+- `@intexuraos/internal-clients` - Type-safe clients for internal services
+- `@intexuraos/llm-pricing` - Pricing context for LLM cost tracking
+- `@intexuraos/llm-factory` - User's LLM client generation

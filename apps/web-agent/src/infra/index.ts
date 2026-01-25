@@ -18,4 +18,4 @@ export {
   type UserServiceClient,
   type UserServiceConfig,
   type UserServiceError,
-} from '@intexuraos/internal-clients/user-service';
+} from '@intexuraos/internal-clients';

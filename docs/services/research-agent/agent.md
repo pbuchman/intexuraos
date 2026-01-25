@@ -31,6 +31,7 @@ interface ResearchAgentTools {
 
   // Create draft research (internal - used by actions-agent)
   // v2.0.0: Supports natural language model extraction
+  // v2.1.0: Uses @intexuraos/internal-clients for user service communication
   createDraftResearch(params: {
     prompt: string;
     originalMessage?: string; // For model preference extraction
@@ -56,6 +57,18 @@ interface ResearchAgentTools {
   // Get single research by ID
   getResearch(id: string): Promise<Research>;
 
+  // Update draft research (PATCH /research/:id)
+  updateDraft(
+    id: string,
+    params: {
+      title?: string;
+      prompt?: string;
+      selectedModels?: ResearchModel[];
+      synthesisModel?: ResearchModel;
+      inputContexts?: { content: string; label?: string }[];
+    }
+  ): Promise<Research>;
+
   // Approve draft to start processing
   approveResearch(id: string): Promise<{ status: 'pending' }>;
 
@@ -63,9 +76,9 @@ interface ResearchAgentTools {
   confirmPartialFailure(
     id: string,
     params: {
-      action: 'proceed' | 'retry' | 'cancel';
+      decision: 'proceed' | 'retry' | 'cancel';
     }
-  ): Promise<{ action: string; message: string }>;
+  ): Promise<{ decision: string; message: string }>;
 
   // Retry from failed status
   retryFromFailed(id: string): Promise<{
@@ -93,7 +106,7 @@ interface ResearchAgentTools {
   // Toggle favourite status
   toggleFavourite(id: string, params: { favourite: boolean }): Promise<Research>;
 
-  // Validate input quality before research
+  // Validate input quality before research (v2.1.0: Zod-validated)
   validateInput(params: {
     prompt: string;
     includeImprovement?: boolean;
@@ -117,7 +130,8 @@ type ResearchModel =
   | 'sonar'
   | 'sonar-pro'
   | 'sonar-deep-research'
-  | 'glm-4.7';
+  | 'glm-4.7'
+  | 'glm-4.7-flash';
 
 type ResearchStatus =
   | 'draft'
@@ -136,23 +150,34 @@ interface Research {
   selectedModels: ResearchModel[];
   synthesisModel: ResearchModel;
   status: ResearchStatus;
-  llmResults: Record<ResearchModel, LlmResult>;
+  llmResults: LlmResult[];
   synthesizedResult?: string;
   researchContext?: ResearchContext; // v2.0.0: Zod-validated context
   synthesisContext?: SynthesisContext; // v2.0.0: Zod-validated context
   inputContexts?: InputContext[];
   shareInfo?: ShareInfo;
   favourite?: boolean;
-  createdAt: string;
+  startedAt: string;
   completedAt?: string;
 }
 
 interface LlmResult {
-  status: 'pending' | 'completed' | 'failed';
-  content?: string;
+  provider: LlmProvider;
+  model: string;
+  status: 'pending' | 'processing' | 'completed' | 'failed';
+  result?: string;
   error?: string;
-  tokenUsage?: { input: number; output: number };
+  sources?: string[];
+  startedAt?: string;
+  completedAt?: string;
+  durationMs?: number;
+  inputTokens?: number;
+  outputTokens?: number;
+  costUsd?: number;
+  copiedFromSource?: boolean;
 }
+
+type LlmProvider = 'anthropic' | 'openai' | 'google' | 'perplexity' | 'zai';
 
 // v2.0.0: Zod-validated context types
 interface ResearchContext {
@@ -167,8 +192,15 @@ interface ResearchContext {
 }
 
 interface SynthesisContext {
-  synthesis_goal: SynthesisGoal;
+  synthesis_goals: SynthesisGoal[];
   detected_conflicts?: DetectedConflict[];
+}
+
+// v2.1.0: Zod-validated input quality result
+interface InputQualityResult {
+  quality: 0 | 1 | 2; // 0: poor, 1: fair, 2: good
+  reason: string;
+  improvedPrompt?: string;
 }
 ```
 
@@ -194,7 +226,7 @@ When creating draft research via actions-agent, model preferences are extracted 
 
 ### API Key Filtering
 
-Extracted models are filtered by user's configured API keys:
+Extracted models are filtered by user's configured API keys (via `@intexuraos/internal-clients` in v2.1.0):
 
 ```typescript
 // Example: User says "Use Claude and Gemini"
@@ -287,6 +319,10 @@ const { id } = await saveDraft({
 });
 
 // 2. Update draft (via PATCH /research/:id)
+await updateDraft(id, {
+  selectedModels: ['gemini-2.5-flash'],
+});
+
 // 3. Approve when ready
 await approveResearch(id);
 ```
@@ -297,11 +333,11 @@ await approveResearch(id);
 const research = await getResearch(id);
 if (research.status === 'awaiting_confirmation') {
   // Some models failed - user must decide
-  await confirmPartialFailure(id, { action: 'proceed' }); // Use successful results
+  await confirmPartialFailure(id, { decision: 'proceed' }); // Use successful results
   // OR
-  await confirmPartialFailure(id, { action: 'retry' }); // Retry failed models
+  await confirmPartialFailure(id, { decision: 'retry' }); // Retry failed models
   // OR
-  await confirmPartialFailure(id, { action: 'cancel' }); // Cancel research
+  await confirmPartialFailure(id, { decision: 'cancel' }); // Cancel research
 }
 ```
 
@@ -309,11 +345,12 @@ if (research.status === 'awaiting_confirmation') {
 
 ## Internal Endpoints
 
-| Method | Path                                | Purpose                                     |
-| ------ | ----------------------------------- | ------------------------------------------- |
-| POST   | `/internal/research/draft`          | Create draft with model extraction (v2.0.0) |
-| POST   | `/internal/research/:id/llm-result` | Receive LLM result from Pub/Sub worker      |
-| GET    | `/internal/research/:id`            | Get research for internal services          |
+| Method | Path                                    | Purpose                                     |
+| ------ | --------------------------------------- | ------------------------------------------- |
+| POST   | `/internal/research/draft`              | Create draft with model extraction (v2.0.0) |
+| POST   | `/internal/llm/pubsub/process-research` | Process research from Pub/Sub               |
+| POST   | `/internal/llm/pubsub/process-llm-call` | Process individual LLM call                 |
+| POST   | `/internal/llm/pubsub/report-analytics` | Report LLM analytics                        |
 
 ---
 
@@ -354,4 +391,19 @@ draft ──approve──> pending ──process──> processing ──all_com
 
 ---
 
-**Last updated:** 2026-01-24
+## Dependencies (v2.1.0)
+
+| Package                        | Purpose                             |
+| ------------------------------ | ----------------------------------- |
+| `@intexuraos/internal-clients` | User service client (NEW in v2.1.0) |
+| `@intexuraos/llm-contract`     | Model types, provider mapping       |
+| `@intexuraos/llm-prompts`      | Zod schemas, prompt builders        |
+| `@intexuraos/llm-pricing`      | Pricing context interface           |
+| `@intexuraos/llm-utils`        | Parse error formatting              |
+| `@intexuraos/infra-gemini`     | Gemini client wrapper               |
+| `@intexuraos/common-http`      | HTTP utilities, auth                |
+| `@intexuraos/common-core`      | Result types, logging               |
+
+---
+
+**Last updated:** 2026-01-25 (v2.1.0)

@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { err, ok } from '@intexuraos/common-core';
 import { createTodoItemExtractionService } from '../infra/gemini/todoItemExtractionService.js';
-import type { UserServiceClient } from '@intexuraos/internal-clients/user-service';
+import type { UserServiceClient } from '@intexuraos/internal-clients';
 import type { LlmGenerateClient } from '@intexuraos/llm-factory';
 import type { Logger } from '@intexuraos/common-core';
 

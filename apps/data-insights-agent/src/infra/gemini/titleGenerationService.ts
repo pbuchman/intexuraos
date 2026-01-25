@@ -6,7 +6,7 @@
 import type { Result } from '@intexuraos/common-core';
 import { err, ok } from '@intexuraos/common-core';
 import { titlePrompt } from '@intexuraos/llm-prompts';
-import type { UserServiceClient } from '@intexuraos/internal-clients/user-service';
+import type { UserServiceClient } from '@intexuraos/internal-clients';
 import { MAX_TITLE_LENGTH } from '../../domain/dataSource/index.js';
 
 /**

@@ -5,7 +5,7 @@ export {
   type UserServiceConfig,
   type UserServiceError,
   type DecryptedApiKeys,
-} from '@intexuraos/internal-clients/user-service';
+} from '@intexuraos/internal-clients';
 
 // Calendar OAuth user service client - local implementation
 export { UserServiceClientImpl } from './userServiceClient.js';

@@ -1,12 +1,10 @@
 {
   "name": "@intexuraos/internal-clients",
   "version": "0.0.1",
+  "private": true,
   "type": "module",
   "exports": {
-    "./user-service": {
-      "types": "./dist/user-service/index.d.ts",
-      "import": "./dist/user-service/index.js"
-    }
+    ".": "./src/index.ts"
   },
   "scripts": {
     "build": "tsc",

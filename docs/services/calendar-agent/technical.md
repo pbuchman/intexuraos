@@ -94,13 +94,15 @@ sequenceDiagram
     CA-->>AA: ServiceFeedback response
 ```
 
-## Recent Changes (v2.0.0)
+## Recent Changes
 
-| Commit  | Description                                   | Issue   |
-| ------- | --------------------------------------------- | ------- |
-| INT-189 | Calendar preview generation before approval   | INT-189 |
-| INT-200 | Calendar preview cleanup after event creation | INT-200 |
-| INT-171 | Improved test coverage for calendar-agent     | INT-171 |
+| Commit  | Description                                     | Date       |
+| ------- | ----------------------------------------------- | ---------- |
+| INT-269 | Migrate to @intexuraos/internal-clients package | 2025-01-25 |
+| INT-222 | Migrate to Zod schema for event validation      | 2025-01-25 |
+| INT-189 | Calendar preview generation before approval     | 2025-01-21 |
+| INT-200 | Calendar preview cleanup after event creation   | 2025-01-21 |
+| INT-171 | Improved test coverage for calendar-agent       | 2025-01-20 |
 
 ## API Endpoints
 
@@ -157,21 +159,21 @@ sequenceDiagram
 
 ### CalendarPreview (v2.0.0)
 
-| Field         | Type         | Description                   |
-| ------------- | ------------ | ----------------------------- | -------- | ------------------------- |
-| `actionId`    | string       | Action ID (document ID)       |
-| `userId`      | string       | User ID                       |
-| `status`      | 'pending' \  | 'ready' \                     | 'failed' | Preview generation status |
-| `summary`     | string?      | Extracted event title         |
-| `start`       | string?      | ISO 8601 start datetime       |
-| `end`         | string?      | ISO 8601 end datetime         |
-| `location`    | string?      | Extracted location            |
-| `description` | string?      | Extracted description         |
-| `duration`    | string?      | Human-readable duration       |
-| `isAllDay`    | boolean?     | True if all-day event         |
-| `error`       | string?      | Error message (if failed)     |
-| `reasoning`   | string?      | LLM reasoning for extraction  |
-| `generatedAt` | string       | ISO 8601 generation timestamp |
+| Field | Type | Description |
+| ------------- | ------------ | ----------------------------- | | |
+| `actionId` | string | Action ID (document ID) |
+| `userId` | string | User ID |
+| `status` | 'pending' \ | 'ready' \ | 'failed' | Preview generation status |
+| `summary` | string? | Extracted event title |
+| `start` | string? | ISO 8601 start datetime |
+| `end` | string? | ISO 8601 end datetime |
+| `location` | string? | Extracted location |
+| `description` | string? | Extracted description |
+| `duration` | string? | Human-readable duration |
+| `isAllDay` | boolean? | True if all-day event |
+| `error` | string? | Error message (if failed) |
+| `reasoning` | string? | LLM reasoning for extraction |
+| `generatedAt` | string | ISO 8601 generation timestamp |
 
 ### ProcessedAction
 
@@ -251,10 +253,10 @@ interface GeneratePreviewMessage {
 
 ### Internal Services
 
-| Service        | Endpoint                          | Purpose                         |
-| -------------- | --------------------------------- | ------------------------------- |
-| `user-service` | `/internal/google-oauth-token`    | Fetch Google OAuth access token |
-| `user-service` | `/internal/users/:id/llm-api-key` | Get LLM API key for extraction  |
+| Service        | Endpoint                       | Purpose                             |
+| -------------- | ------------------------------ | ----------------------------------- |
+| `user-service` | `/internal/google-oauth-token` | Fetch Google OAuth access token     |
+| `user-service` | `/internal/llm-client`         | Get LLM client for event extraction |
 
 ### External APIs
 
@@ -321,8 +323,8 @@ apps/calendar-agent/src/
     gemini/
       calendarActionExtractionService.ts # LLM extraction
     user/
-      userServiceClient.ts       # user-service HTTP client
-      llmUserServiceClient.ts    # LLM API key client
+      userServiceClient.ts       # user-service HTTP client (OAuth)
+      index.ts                   # Internal clients exports
   routes/
     calendarRoutes.ts            # Public endpoints
     internalRoutes.ts            # Internal + Pub/Sub endpoints
@@ -332,4 +334,4 @@ apps/calendar-agent/src/
 
 ---
 
-**Last updated:** 2026-01-24
+**Last updated:** 2025-01-25

@@ -57,13 +57,13 @@ export class FakeUserServiceClient implements UserServiceClient {
 
 // Fake for the LLM user service client (from shared package)
 export class FakeLlmUserServiceClient {
-  private llmClientResult?: Result<LlmGenerateClient, import('@intexuraos/internal-clients/user-service').UserServiceError>;
+  private llmClientResult?: Result<LlmGenerateClient, import('@intexuraos/internal-clients').UserServiceError>;
 
-  setLlmClientResult(result: Result<LlmGenerateClient, import('@intexuraos/internal-clients/user-service').UserServiceError>): void {
+  setLlmClientResult(result: Result<LlmGenerateClient, import('@intexuraos/internal-clients').UserServiceError>): void {
     this.llmClientResult = result;
   }
 
-  async getLlmClient(_userId: string): Promise<Result<LlmGenerateClient, import('@intexuraos/internal-clients/user-service').UserServiceError>> {
+  async getLlmClient(_userId: string): Promise<Result<LlmGenerateClient, import('@intexuraos/internal-clients').UserServiceError>> {
     if (this.llmClientResult) return this.llmClientResult;
 
     const mockLlmClient: LlmGenerateClient = {
@@ -75,7 +75,7 @@ export class FakeLlmUserServiceClient {
     return ok(mockLlmClient);
   }
 
-  async getApiKeys(_userId: string): Promise<Result<import('@intexuraos/internal-clients/user-service').DecryptedApiKeys, import('@intexuraos/internal-clients/user-service').UserServiceError>> {
+  async getApiKeys(_userId: string): Promise<Result<import('@intexuraos/internal-clients').DecryptedApiKeys, import('@intexuraos/internal-clients').UserServiceError>> {
     return ok({});
   }
 

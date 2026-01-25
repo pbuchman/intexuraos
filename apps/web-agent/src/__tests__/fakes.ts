@@ -167,7 +167,7 @@ export class FakeUserServiceClient implements UserServiceClient {
     return ok(this.llmClient);
   }
 
-  async getApiKeys(_userId: string): Promise<Result<import('@intexuraos/internal-clients/user-service').DecryptedApiKeys, UserServiceError>> {
+  async getApiKeys(_userId: string): Promise<Result<import('@intexuraos/internal-clients').DecryptedApiKeys, UserServiceError>> {
     if (this.shouldFail) {
       return err({
         code: this.failCode,

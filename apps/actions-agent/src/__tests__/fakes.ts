@@ -56,7 +56,7 @@ import type {
   ApprovalMessageRepositoryError,
 } from '../domain/ports/approvalMessageRepository.js';
 import type { ApprovalMessage } from '../domain/models/approvalMessage.js';
-import type { UserServiceClient, UserServiceError, DecryptedApiKeys } from '@intexuraos/internal-clients/user-service';
+import type { UserServiceClient, UserServiceError, DecryptedApiKeys } from '@intexuraos/internal-clients';
 import type { LlmGenerateClient } from '@intexuraos/llm-factory';
 import type { Services } from '../services.js';
 import type {

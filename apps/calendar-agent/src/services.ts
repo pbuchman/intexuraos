@@ -9,13 +9,13 @@ import type {
   ProcessedActionRepository,
   CalendarPreviewRepository,
 } from './domain/index.js';
-import type { UserServiceClient as LlmUserServiceClient } from '@intexuraos/internal-clients/user-service';
+import type { UserServiceClient as LlmUserServiceClient } from '@intexuraos/internal-clients';
 import { GoogleCalendarClientImpl } from './infra/google/googleCalendarClient.js';
 import { createFailedEventRepository } from './infra/firestore/failedEventRepository.js';
 import { createProcessedActionRepository } from './infra/firestore/processedActionRepository.js';
 import { createCalendarPreviewRepository } from './infra/firestore/calendarPreviewRepository.js';
 import { createCalendarActionExtractionService } from './infra/gemini/calendarActionExtractionService.js';
-import { createUserServiceClient } from '@intexuraos/internal-clients/user-service';
+import { createUserServiceClient } from '@intexuraos/internal-clients';
 import { UserServiceClientImpl } from './infra/user/userServiceClient.js';
 import type { IPricingContext } from '@intexuraos/llm-pricing';
 import pino from 'pino';

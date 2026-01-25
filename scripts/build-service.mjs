@@ -38,13 +38,6 @@ function collectExternalDeps(pkgName, visited = new Set()) {
   const deps = { ...pkg.dependencies, ...pkg.devDependencies };
   const externals = new Set();
 
-  // Add this @intexuraos package itself as external (for subpath exports)
-  // Exception: infra-* packages should be bundled, not external
-  if (!pkgName.startsWith('@intexuraos/infra-')) {
-    externals.add(pkgName);
-    externals.add(`${pkgName}/*`);
-  }
-
   for (const dep of Object.keys(deps)) {
     if (dep.startsWith('@intexuraos/')) {
       // Recurse into workspace package

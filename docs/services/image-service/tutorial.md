@@ -1,6 +1,22 @@
 # Image Service - Tutorial
 
-Image-service is an internal service with no public endpoints. This tutorial covers the internal endpoints used by other services.
+> **Time:** 15-20 minutes
+> **Prerequisites:** Node.js 22+, IntexuraOS development environment
+> **You'll learn:** How to generate AI images and optimized prompts using image-service
+
+Image-service is an internal service with no public endpoints. This tutorial covers the internal endpoints used by other services like research-agent.
+
+**Version:** 2.1.0 (INT-269 internal-clients migration)
+
+## v2.1.0 Updates
+
+**INT-269 Internal-Clients Migration (January 2025):**
+
+- User service client migrated to `@intexuraos/internal-clients/user-service` package
+- API key retrieval now uses shared client implementation
+- No breaking changes - endpoints and responses unchanged
+
+---
 
 ## Prerequisites
 
