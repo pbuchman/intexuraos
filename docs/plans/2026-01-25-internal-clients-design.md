@@ -146,11 +146,11 @@ export function createUserServiceClient(config: UserServiceConfig): UserServiceC
 
 **Endpoints called:**
 
-| Method | Internal Path |
-|--------|---------------|
-| `getApiKeys` | `GET /internal/users/{userId}/llm-keys` |
-| `getLlmClient` | `GET /internal/users/{userId}/settings` + `GET /internal/users/{userId}/llm-keys` |
-| `reportLlmSuccess` | `POST /internal/users/{userId}/llm-keys/{provider}/last-used` |
+| Method             | Internal Path                                                                     |
+| ------------------ | --------------------------------------------------------------------------------- |
+| `getApiKeys`       | `GET /internal/users/{userId}/llm-keys`                                           |
+| `getLlmClient`     | `GET /internal/users/{userId}/settings` + `GET /internal/users/{userId}/llm-keys` |
+| `reportLlmSuccess` | `POST /internal/users/{userId}/llm-keys/{provider}/last-used`                     |
 
 ## Migration Strategy
 
@@ -178,16 +178,16 @@ For each app, in a single commit:
 
 **Migration order:**
 
-| Order | App | Risk | Notes |
-|-------|-----|------|-------|
-| 1 | image-service | Low | Minimal client, good first test |
-| 2 | calendar-agent | Low | Simple |
-| 3 | web-agent | Medium | |
-| 4 | data-insights-agent | Medium | |
-| 5 | actions-agent | Medium | |
-| 6 | todos-agent | Medium | |
-| 7 | commands-agent | Medium | |
-| 8 | research-agent | Low | Source of truth - last to avoid changes during migration |
+| Order | App                 | Risk   | Notes                                                    |
+| ----- | ------------------- | ------ | -------------------------------------------------------- |
+| 1     | image-service       | Low    | Minimal client, good first test                          |
+| 2     | calendar-agent      | Low    | Simple                                                   |
+| 3     | web-agent           | Medium |                                                          |
+| 4     | data-insights-agent | Medium |                                                          |
+| 5     | actions-agent       | Medium |                                                          |
+| 6     | todos-agent         | Medium |                                                          |
+| 7     | commands-agent      | Medium |                                                          |
+| 8     | research-agent      | Low    | Source of truth - last to avoid changes during migration |
 
 ## Testing Strategy
 
@@ -220,11 +220,13 @@ describe('createUserServiceClient', () => {
 ```
 
 **Test approach:**
+
 - Use `nock` to mock HTTP calls to user-service
 - No real network calls - fully isolated
 - Cover all error codes in `UserServiceError`
 
 **App-level tests after migration:**
+
 - Apps no longer need `userServiceClient.test.ts`
 - Integration tests (`routes.test.ts`) still mock the client via `services.ts` fakes
 

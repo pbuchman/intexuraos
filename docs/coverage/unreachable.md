@@ -1102,7 +1102,7 @@ if (typeof value !== 'string') { return fallback; }
 ## Summary
 
 | File                                                               | Unreachable Branches | Root Cause                                                                 |
-| ------------------------------------------------------------------  | --------------------  | --------------------------------------------------------------------------  |
+| ------------------------------------------------------------------ | -------------------- | -------------------------------------------------------------------------- |
 | `infra-perplexity/src/client.ts`                                   | 1                    | setTimeout callback (network timeout)                                      |
 | `infra-sentry/src/fastify.ts`                                      | 1                    | Fastify header normalization (arrays converted to strings)                 |
 | `llm-prompts/src/research/attribution.ts`                          | 6                    | TypeScript noUncheckedIndexedAccess + regex guarantees                     |

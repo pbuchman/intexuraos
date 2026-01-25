@@ -16,6 +16,43 @@ This is not a guideline — it's a hard requirement. Before reading code for imp
 
 ---
 
+## 🚨 CRITICAL: Issue State Transitions Are NON-NEGOTIABLE
+
+**A task is INCOMPLETE if Linear issue state is not updated.**
+
+This is not a guideline — it's a hard requirement. EVERY task must update state at two specific points:
+
+### Point 1: When Starting Work (MANDATORY)
+
+**BEFORE making any code changes:**
+
+1. Create feature branch (see above)
+2. Update Linear state to "In Progress"
+3. Only then proceed with implementation
+
+**If you skip this:** Team has no visibility that work started, duplicate work may occur.
+
+### Point 2: After Creating PR (MANDATORY)
+
+**AFTER PR is created but BEFORE marking task complete:**
+
+1. Create PR with issue ID in title
+2. Update Linear state to "In Review"
+3. Verify PR appears in Linear attachments
+
+**If you skip this:** PR workflow breaks, team can't find your PR, review process stalls.
+
+### Summary Table
+
+| Timing         | Linear State   | When                    | Why                                  |
+| -------------- | -------------- | ----------------------- | ------------------------------------- |
+| **MANDATORY 1** | In Progress    | AFTER branch, BEFORE code | Signals work started, prevents dupes  |
+| **MANDATORY 2** | In Review      | AFTER PR, BEFORE done    | Signals review requested, links PR    |
+
+**No exceptions. No shortcuts. Both transitions are REQUIRED.**
+
+---
+
 ## Steps
 
 ### 1. Tool Verification
@@ -75,16 +112,25 @@ git checkout -b fix/INT-123 origin/development
 - `origin/development` guarantees fresh state
 - Prevents merge conflicts and ensures CI runs against current code
 
-### 5. Update State to In Progress
+### 5. Update State to In Progress (MANDATORY - BLOCKS ALL WORK)
 
-**CRITICAL:** Only update Linear state AFTER you have a proper feature branch.
+⛔ **STOP: You MUST update Linear state BEFORE making any code changes.**
+
+**This is not optional — it's a hard requirement:**
 
 ```
 - Call mcp__linear__update_issue
 - Set state: "In Progress"
 ```
 
-This signals that work has begun and prevents duplicate work.
+**Why this is MANDATORY:**
+
+- Signals to team that work has begun
+- Prevents duplicate work from others
+- Creates audit trail of when work started
+- Enables accurate time tracking
+
+**DO NOT proceed to implementation until state is updated.**
 
 ### 6. Guide Implementation
 
@@ -148,11 +194,24 @@ gh pr create --base development \
 
 **MANDATORY:** PR title MUST contain the Linear issue ID (e.g., `[INT-123]`, `INT-123:`)
 
-### 10. Update Linear
+### 10. Update Linear State (MANDATORY - NON-NEGOTIABLE)
+
+⛔ **STOP: You MUST update Linear state AFTER creating PR. Task is INCOMPLETE until this is done.**
+
+**This is not optional — it's a hard requirement:**
 
 - Set state to "In Review"
 - GitHub integration automatically attaches PR (verify in `attachments` array)
 - Only add comment if attachment is missing (fallback)
+
+**Why this is MANDATORY:**
+
+- Signals to team that review is requested
+- Enables PR workflow in Linear UI
+- Creates link between GitHub PR and Linear issue
+- Required for code review process
+
+**DO NOT mark task complete until state is updated to "In Review".**
 
 ### 11. Cross-Link Summary
 

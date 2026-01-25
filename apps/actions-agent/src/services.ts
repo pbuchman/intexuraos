@@ -398,6 +398,11 @@ export async function initServices(config: ServiceConfig): Promise<void> {
     actionEventPublisher,
     logger: pino({ name: 'handleApprovalReply' }),
     executeNoteAction: executeNoteActionUseCase,
+    executeTodoAction: executeTodoActionUseCase,
+    executeResearchAction: executeResearchActionUseCase,
+    executeLinkAction: executeLinkActionUseCase,
+    executeCalendarAction: executeCalendarActionUseCase,
+    executeLinearAction: executeLinearActionUseCase,
   });
 
   container = {

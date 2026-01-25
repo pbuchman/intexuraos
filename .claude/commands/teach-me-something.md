@@ -39,6 +39,7 @@ Prompt: "Extract the most interesting technical insights, tips, or discoveries a
 ```
 
 Then pick the most interesting topic that:
+
 - Is NOT already in `~/personal/teach-me-something/`
 - Is practical and applicable
 - Relates to: AI coding assistants, prompt engineering, developer workflows, TypeScript/Node.js

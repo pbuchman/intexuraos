@@ -282,8 +282,8 @@ Do this
 
 | Permission                     | Purpose                         | Required |
 | ------------------------------ | ------------------------------- | -------- |
-| `whatsapp_business_messaging`  | Send/receive messages           | ✅ Yes   |
-| `whatsapp_business_management` | Manage phone numbers, templates | ✅ Yes   |
+| `whatsapp_business_messaging`  | Send/receive messages           | ✅ Yes    |
+| `whatsapp_business_management` | Manage phone numbers, templates | ✅ Yes    |
 | `business_management`          | Access business settings        | Optional |
 
 These permissions are selected when generating your System User token.
