@@ -18,9 +18,10 @@ export interface OrchestratorState {
 }
 
 export interface PendingWebhook {
-  taskId: string;
   url: string;
+  secret: string;
   payload: unknown;
+  taskId: string;
   attempts: number;
-  lastAttempt: string;
+  createdAt: number; // Unix timestamp
 }
