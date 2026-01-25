@@ -611,4 +611,78 @@ describe('codeTasksRoutes', () => {
       expect(body.error.code).toBe('UNAUTHORIZED');
     });
   });
+
+  describe('GET /internal/code-tasks/zombies', () => {
+    it('returns empty array when no zombie tasks', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/internal/code-tasks/zombies?staleThresholdMinutes=5',
+        headers: {
+          'X-Internal-Auth': process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] ?? 'test-token',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(true);
+      expect(body.data.tasks).toEqual([]);
+    });
+
+    it('finds stale running tasks', async () => {
+      // Create a task
+      const createResponse = await app.inject({
+        method: 'POST',
+        url: '/internal/code-tasks',
+        headers: {
+          'X-Internal-Auth': process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] ?? 'test-token',
+        },
+        payload: createTaskBody({ userId: 'user-123' }),
+      });
+
+      expect(createResponse.statusCode).toBe(201);
+      const createdBody = JSON.parse(createResponse.body);
+      const taskId = createdBody.data.task.id;
+
+      // Update task to running with old timestamp
+      await app.inject({
+        method: 'PATCH',
+        url: `/internal/code-tasks/${taskId}`,
+        headers: {
+          'X-Internal-Auth': process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] ?? 'test-token',
+        },
+        payload: {
+          status: 'running',
+        },
+      });
+
+      // Query for zombies (10 minute threshold)
+      const response = await app.inject({
+        method: 'GET',
+        url: '/internal/code-tasks/zombies?staleThresholdMinutes=10',
+        headers: {
+          'X-Internal-Auth': process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] ?? 'test-token',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(true);
+      expect(Array.isArray(body.data.tasks)).toBe(true);
+    });
+
+    it('rejects without internal auth token', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/internal/code-tasks/zombies?staleThresholdMinutes=5',
+      });
+
+      expect(response.statusCode).toBe(401);
+
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('UNAUTHORIZED');
+    });
+  });
 });
