@@ -3,12 +3,13 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Logger } from '@intexuraos/common-core';
+import type { TaskDispatcherDeps } from '../../../domain/services/taskDispatcher.js';
 import { createTaskDispatcherService } from '../../../infra/services/taskDispatcherImpl.js';
 import { generateNonce, generateWebhookSecret, signDispatchRequest } from '../../../infra/services/hmacSigning.js';
 
 describe('taskDispatcherImpl', () => {
   let logger: Logger;
-  let originalEnv: NodeJS.ProcessEnv;
+  let baseDeps: TaskDispatcherDeps;
 
   beforeEach(() => {
     logger = {
@@ -18,28 +19,27 @@ describe('taskDispatcherImpl', () => {
       debug: vi.fn(),
     };
 
-    // Store original env and set up test env
-    originalEnv = { ...process.env };
-    process.env['INTEXURAOS_CODE_WORKERS'] =
-      'mac:https://cc-mac.intexuraos.cloud:1,vm:https://cc-vm.intexuraos.cloud:2';
-    process.env['INTEXURAOS_CF_ACCESS_CLIENT_ID'] = 'test-client-id';
-    process.env['INTEXURAOS_CF_ACCESS_CLIENT_SECRET'] = 'test-client-secret';
-    process.env['INTEXURAOS_DISPATCH_SECRET'] = 'test-dispatch-secret';
+    baseDeps = {
+      logger,
+      cfAccessClientId: 'test-client-id',
+      cfAccessClientSecret: 'test-client-secret',
+      dispatchSigningSecret: 'test-dispatch-secret',
+      orchestratorMacUrl: 'https://cc-mac.intexuraos.cloud',
+      orchestratorVmUrl: 'https://cc-vm.intexuraos.cloud',
+    };
 
     // Mock global fetch
     vi.stubGlobal('fetch', vi.fn());
   });
 
   afterEach(() => {
-    // Restore original env
-    process.env = originalEnv;
     vi.clearAllMocks();
     vi.unstubAllGlobals();
   });
 
   describe('dispatch', () => {
     it('successfully dispatches to available worker', async () => {
-      const service = createTaskDispatcherService({ logger });
+      const service = createTaskDispatcherService(baseDeps);
       vi.mocked(global.fetch).mockResolvedValueOnce({
         ok: true,
         json: async () => ({ status: 'accepted' }),
@@ -81,7 +81,7 @@ describe('taskDispatcherImpl', () => {
     });
 
     it('computes HMAC signature correctly', async () => {
-      const service = createTaskDispatcherService({ logger });
+      const service = createTaskDispatcherService(baseDeps);
       vi.mocked(global.fetch).mockResolvedValueOnce({
         ok: true,
         json: async () => ({ status: 'accepted' }),
@@ -130,7 +130,7 @@ describe('taskDispatcherImpl', () => {
     });
 
     it('includes all required headers', async () => {
-      const service = createTaskDispatcherService({ logger });
+      const service = createTaskDispatcherService(baseDeps);
       vi.mocked(global.fetch).mockResolvedValueOnce({
         ok: true,
         json: async () => ({ status: 'accepted' }),
@@ -167,7 +167,7 @@ describe('taskDispatcherImpl', () => {
     });
 
     it('falls back to second worker on 503', async () => {
-      const service = createTaskDispatcherService({ logger });
+      const service = createTaskDispatcherService(baseDeps);
       const mockFetch = vi.mocked(global.fetch);
 
       // First call (Mac) returns 503
@@ -200,7 +200,7 @@ describe('taskDispatcherImpl', () => {
     });
 
     it('returns error when all workers fail', async () => {
-      const service = createTaskDispatcherService({ logger });
+      const service = createTaskDispatcherService(baseDeps);
       const mockFetch = vi.mocked(global.fetch);
 
       // Both workers return 503
@@ -225,7 +225,7 @@ describe('taskDispatcherImpl', () => {
     });
 
     it('returns error when worker rejects task', async () => {
-      const service = createTaskDispatcherService({ logger });
+      const service = createTaskDispatcherService(baseDeps);
       const mockFetch = vi.mocked(global.fetch).mockResolvedValueOnce({
         ok: true,
         json: async () => ({ status: 'rejected', reason: 'Worker overloaded' }),
@@ -255,7 +255,7 @@ describe('taskDispatcherImpl', () => {
     });
 
     it('returns error for non-503 HTTP errors during dispatch', async () => {
-      const service = createTaskDispatcherService({ logger });
+      const service = createTaskDispatcherService(baseDeps);
       vi.mocked(global.fetch).mockResolvedValueOnce({
         ok: false,
         status: 500,
@@ -281,7 +281,7 @@ describe('taskDispatcherImpl', () => {
     });
 
     it('returns error for 401 unauthorized from worker', async () => {
-      const service = createTaskDispatcherService({ logger });
+      const service = createTaskDispatcherService(baseDeps);
       vi.mocked(global.fetch).mockResolvedValueOnce({
         ok: false,
         status: 401,
@@ -306,11 +306,13 @@ describe('taskDispatcherImpl', () => {
       }
     });
 
-    it('returns error when signDispatchRequest fails (missing dispatch secret)', async () => {
-      // Delete dispatch secret to trigger signDispatchRequest failure
-      delete process.env['INTEXURAOS_DISPATCH_SECRET'];
+    it('returns error when dispatchSigningSecret is empty', async () => {
+      const depsWithEmptySecret: TaskDispatcherDeps = {
+        ...baseDeps,
+        dispatchSigningSecret: '',
+      };
 
-      const service = createTaskDispatcherService({ logger });
+      const service = createTaskDispatcherService(depsWithEmptySecret);
       vi.mocked(global.fetch).mockResolvedValueOnce({
         ok: true,
         json: async () => ({ status: 'accepted' }),
@@ -330,12 +332,12 @@ describe('taskDispatcherImpl', () => {
       expect(result.ok).toBe(false);
       if (!result.ok) {
         expect(result.error.code).toBe('dispatch_failed');
-        expect(result.error.message).toContain('INTEXURAOS_DISPATCH_SECRET');
+        expect(result.error.message).toContain('dispatchSigningSecret is required');
       }
     });
 
     it('covers 503 error handling code path (Response with status 503)', async () => {
-      const service = createTaskDispatcherService({ logger });
+      const service = createTaskDispatcherService(baseDeps);
       const mockFetch = vi.mocked(global.fetch);
 
       // First call returns Response with status 503 (not rejected)
@@ -370,7 +372,7 @@ describe('taskDispatcherImpl', () => {
     });
 
     it('includes linearIssueId when provided', async () => {
-      const service = createTaskDispatcherService({ logger });
+      const service = createTaskDispatcherService(baseDeps);
       const mockFetch = vi.mocked(global.fetch);
       mockFetch.mockResolvedValueOnce({
         ok: true,
@@ -403,7 +405,7 @@ describe('taskDispatcherImpl', () => {
     });
 
     it('omits linearIssueId when undefined', async () => {
-      const service = createTaskDispatcherService({ logger });
+      const service = createTaskDispatcherService(baseDeps);
       const mockFetch = vi.mocked(global.fetch);
       mockFetch.mockResolvedValueOnce({
         ok: true,
@@ -436,7 +438,7 @@ describe('taskDispatcherImpl', () => {
     });
 
     it('returns network_error on fetch failure', async () => {
-      const service = createTaskDispatcherService({ logger });
+      const service = createTaskDispatcherService(baseDeps);
       const mockFetch = vi.mocked(global.fetch);
 
       // Mock fetch to throw a non-503 error
@@ -462,11 +464,13 @@ describe('taskDispatcherImpl', () => {
     });
 
     it('uses empty string for missing CF credentials', async () => {
-      // Delete CF credentials from env
-      delete process.env['INTEXURAOS_CF_ACCESS_CLIENT_ID'];
-      delete process.env['INTEXURAOS_CF_ACCESS_CLIENT_SECRET'];
+      const depsWithEmptyCF: TaskDispatcherDeps = {
+        ...baseDeps,
+        cfAccessClientId: '',
+        cfAccessClientSecret: '',
+      };
 
-      const service = createTaskDispatcherService({ logger });
+      const service = createTaskDispatcherService(depsWithEmptyCF);
       const mockFetch = vi.mocked(global.fetch);
       mockFetch.mockResolvedValueOnce({
         ok: true,
@@ -500,26 +504,14 @@ describe('taskDispatcherImpl', () => {
   });
 
   describe('getWorkerConfigs', () => {
-    it('returns empty array when INTEXURAOS_CODE_WORKERS not set', () => {
-      delete process.env['INTEXURAOS_CODE_WORKERS'];
+    it('returns empty array when no orchestrator URLs configured', async () => {
+      const depsWithNoWorkers: TaskDispatcherDeps = {
+        ...baseDeps,
+        orchestratorMacUrl: '',
+        orchestratorVmUrl: '',
+      };
 
-      // Service should initialize but have no workers
-      // This will cause dispatch to fail with worker_unavailable
-      createTaskDispatcherService({ logger });
-    });
-
-    it('returns empty array when INTEXURAOS_CODE_WORKERS is empty string', () => {
-      process.env['INTEXURAOS_CODE_WORKERS'] = '';
-
-      // Service should initialize but have no workers
-      createTaskDispatcherService({ logger });
-    });
-
-    it('dispatch fails when no workers available', async () => {
-      // Set empty workers env var
-      process.env['INTEXURAOS_CODE_WORKERS'] = '';
-
-      const service = createTaskDispatcherService({ logger });
+      const service = createTaskDispatcherService(depsWithNoWorkers);
 
       const result = await service.dispatch({
         taskId: 'task-123',
@@ -536,6 +528,67 @@ describe('taskDispatcherImpl', () => {
       if (!result.ok) {
         expect(result.error.code).toBe('worker_unavailable');
         expect(result.error.message).toContain('No workers available');
+      }
+    });
+
+    it('uses only mac worker when vm URL not configured', async () => {
+      const depsWithMacOnly: TaskDispatcherDeps = {
+        ...baseDeps,
+        orchestratorVmUrl: '',
+      };
+
+      const service = createTaskDispatcherService(depsWithMacOnly);
+      vi.mocked(global.fetch).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ status: 'accepted' }),
+      } as Response);
+
+      const result = await service.dispatch({
+        taskId: 'task-123',
+        prompt: 'Test',
+        systemPromptHash: 'abc123',
+        repository: 'test/repo',
+        baseBranch: 'main',
+        workerType: 'opus',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'whsec_test',
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.workerLocation).toBe('mac');
+      }
+
+      // Only one call since vm is not configured
+      expect(vi.mocked(global.fetch)).toHaveBeenCalledTimes(1);
+    });
+
+    it('uses only vm worker when mac URL not configured', async () => {
+      const depsWithVmOnly: TaskDispatcherDeps = {
+        ...baseDeps,
+        orchestratorMacUrl: '',
+      };
+
+      const service = createTaskDispatcherService(depsWithVmOnly);
+      vi.mocked(global.fetch).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ status: 'accepted' }),
+      } as Response);
+
+      const result = await service.dispatch({
+        taskId: 'task-123',
+        prompt: 'Test',
+        systemPromptHash: 'abc123',
+        repository: 'test/repo',
+        baseBranch: 'main',
+        workerType: 'opus',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'whsec_test',
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.workerLocation).toBe('vm');
       }
     });
   });
@@ -569,11 +622,9 @@ describe('taskDispatcherImpl', () => {
   });
 
   describe('signDispatchRequest', () => {
-    it('returns error when INTEXURAOS_DISPATCH_SECRET is not set', () => {
-      delete process.env['INTEXURAOS_DISPATCH_SECRET'];
-
+    it('returns error when dispatchSigningSecret is empty', () => {
       const result = signDispatchRequest(
-        { logger },
+        { logger, dispatchSigningSecret: '' },
         { body: '{"test": "body"}', timestamp: Date.now() }
       );
 
@@ -587,7 +638,10 @@ describe('taskDispatcherImpl', () => {
       const body = '{"test": "body"}';
       const timestamp = 1234567890;
 
-      const result = signDispatchRequest({ logger }, { body, timestamp });
+      const result = signDispatchRequest(
+        { logger, dispatchSigningSecret: 'test-dispatch-secret' },
+        { body, timestamp }
+      );
 
       expect(result.ok).toBe(true);
       if (result.ok) {
@@ -601,9 +655,16 @@ describe('taskDispatcherImpl', () => {
 
     it('generates different signatures for different inputs', () => {
       const timestamp = Date.now();
+      const dispatchSigningSecret = 'test-dispatch-secret';
 
-      const result1 = signDispatchRequest({ logger }, { body: '{"test": "body1"}', timestamp });
-      const result2 = signDispatchRequest({ logger }, { body: '{"test": "body2"}', timestamp });
+      const result1 = signDispatchRequest(
+        { logger, dispatchSigningSecret },
+        { body: '{"test": "body1"}', timestamp }
+      );
+      const result2 = signDispatchRequest(
+        { logger, dispatchSigningSecret },
+        { body: '{"test": "body2"}', timestamp }
+      );
 
       expect(result1.ok).toBe(true);
       expect(result2.ok).toBe(true);

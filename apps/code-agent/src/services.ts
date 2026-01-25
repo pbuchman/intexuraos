@@ -6,7 +6,6 @@
 import pino from 'pino';
 import type { Firestore } from '@google-cloud/firestore';
 import { getFirestore } from '@intexuraos/infra-firestore';
-import type { CodeWorkersConfig } from './config.js';
 import type { CodeTaskRepository } from './domain/repositories/codeTaskRepository.js';
 import type { LogChunkRepository } from './domain/repositories/logChunkRepository.js';
 import type { WorkerDiscoveryService } from './domain/services/workerDiscovery.js';
@@ -35,11 +34,12 @@ export interface ServiceConfig {
   whatsappServiceUrl: string;
   linearAgentUrl: string;
   actionsAgentUrl: string;
-  dispatchSecret: string;
+  dispatchSigningSecret: string;
   webhookVerifySecret: string;
   cfAccessClientId: string;
   cfAccessClientSecret: string;
-  codeWorkers: CodeWorkersConfig;
+  orchestratorMacUrl: string;
+  orchestratorVmUrl: string;
 }
 
 let container: ServiceContainer | null = null;
@@ -58,7 +58,14 @@ export function initServices(config: ServiceConfig): void {
     codeTaskRepo: createFirestoreCodeTaskRepository({ firestore, logger }),
     logChunkRepo: createFirestoreLogChunkRepository({ firestore, logger }),
     workerDiscovery: createWorkerDiscoveryService({ logger }),
-    taskDispatcher: createTaskDispatcherService({ logger }),
+    taskDispatcher: createTaskDispatcherService({
+      logger,
+      cfAccessClientId: config.cfAccessClientId,
+      cfAccessClientSecret: config.cfAccessClientSecret,
+      dispatchSigningSecret: config.dispatchSigningSecret,
+      orchestratorMacUrl: config.orchestratorMacUrl,
+      orchestratorVmUrl: config.orchestratorVmUrl,
+    }),
     actionsAgentClient: createActionsAgentClient({
       baseUrl: config.actionsAgentUrl,
       internalAuthToken: config.internalAuthToken,

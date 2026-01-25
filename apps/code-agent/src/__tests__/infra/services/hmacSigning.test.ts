@@ -1,32 +1,19 @@
 /**
  * Tests for HMAC signing utilities.
  */
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { Logger } from '@intexuraos/common-core';
 import { generateNonce, generateWebhookSecret, signDispatchRequest } from '../../../infra/services/hmacSigning.js';
 
 describe('hmacSigning', () => {
-  let logger: Logger;
-  let originalEnv: NodeJS.ProcessEnv;
+  const logger: Logger = {
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
+  };
 
-  beforeEach(() => {
-    logger = {
-      info: vi.fn(),
-      warn: vi.fn(),
-      error: vi.fn(),
-      debug: vi.fn(),
-    };
-
-    // Store original env and set up test env
-    originalEnv = { ...process.env };
-    process.env['INTEXURAOS_DISPATCH_SECRET'] = 'test-dispatch-secret';
-  });
-
-  afterEach(() => {
-    // Restore original env
-    process.env = originalEnv;
-    vi.clearAllMocks();
-  });
+  const dispatchSigningSecret = 'test-dispatch-secret';
 
   describe('generateNonce', () => {
     it('generates a unique nonce each time', () => {
@@ -74,7 +61,7 @@ describe('hmacSigning', () => {
       const body = '{"taskId":"task-123","prompt":"Fix the bug"}';
       const timestamp = 1234567890;
 
-      const result = signDispatchRequest({ logger }, { body, timestamp });
+      const result = signDispatchRequest({ logger, dispatchSigningSecret }, { body, timestamp });
 
       expect(result.ok).toBe(true);
       if (result.ok) {
@@ -84,15 +71,16 @@ describe('hmacSigning', () => {
       }
     });
 
-    it('returns error when DISPATCH_SECRET not configured', () => {
-      delete process.env['INTEXURAOS_DISPATCH_SECRET'];
-
-      const result = signDispatchRequest({ logger }, { body: '{}', timestamp: Date.now() });
+    it('returns error when dispatchSigningSecret is empty', () => {
+      const result = signDispatchRequest(
+        { logger, dispatchSigningSecret: '' },
+        { body: '{}', timestamp: Date.now() }
+      );
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
         expect(result.error.code).toBe('missing_secret');
-        expect(result.error.message).toContain('INTEXURAOS_DISPATCH_SECRET');
+        expect(result.error.message).toContain('dispatchSigningSecret is required');
       }
     });
 
@@ -100,8 +88,8 @@ describe('hmacSigning', () => {
       const body = '{"test":"body"}';
       const timestamp = 1234567890;
 
-      const result1 = signDispatchRequest({ logger }, { body, timestamp });
-      const result2 = signDispatchRequest({ logger }, { body, timestamp });
+      const result1 = signDispatchRequest({ logger, dispatchSigningSecret }, { body, timestamp });
+      const result2 = signDispatchRequest({ logger, dispatchSigningSecret }, { body, timestamp });
 
       expect(result1.ok).toBe(true);
       expect(result2.ok).toBe(true);
@@ -116,8 +104,8 @@ describe('hmacSigning', () => {
     it('generates different signatures for different inputs', () => {
       const timestamp = Date.now();
 
-      const result1 = signDispatchRequest({ logger }, { body: '{"test":"body1"}', timestamp });
-      const result2 = signDispatchRequest({ logger }, { body: '{"test":"body2"}', timestamp });
+      const result1 = signDispatchRequest({ logger, dispatchSigningSecret }, { body: '{"test":"body1"}', timestamp });
+      const result2 = signDispatchRequest({ logger, dispatchSigningSecret }, { body: '{"test":"body2"}', timestamp });
 
       expect(result1.ok).toBe(true);
       expect(result2.ok).toBe(true);
@@ -130,8 +118,8 @@ describe('hmacSigning', () => {
     it('generates different signatures for different timestamps', () => {
       const body = '{"test":"body"}';
 
-      const result1 = signDispatchRequest({ logger }, { body, timestamp: 1234567890 });
-      const result2 = signDispatchRequest({ logger }, { body, timestamp: 1234567891 });
+      const result1 = signDispatchRequest({ logger, dispatchSigningSecret }, { body, timestamp: 1234567890 });
+      const result2 = signDispatchRequest({ logger, dispatchSigningSecret }, { body, timestamp: 1234567891 });
 
       expect(result1.ok).toBe(true);
       expect(result2.ok).toBe(true);

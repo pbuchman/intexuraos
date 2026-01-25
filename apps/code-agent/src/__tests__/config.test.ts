@@ -46,10 +46,12 @@ describe('loadConfig', () => {
       expect(config.whatsappServiceUrl).toBe('');
       expect(config.linearAgentUrl).toBe('');
       expect(config.actionsAgentUrl).toBe('');
-      expect(config.dispatchSecret).toBe('');
+      expect(config.dispatchSigningSecret).toBe('');
       expect(config.webhookVerifySecret).toBe('');
       expect(config.cfAccessClientId).toBe('');
       expect(config.cfAccessClientSecret).toBe('');
+      expect(config.orchestratorMacUrl).toBe('');
+      expect(config.orchestratorVmUrl).toBe('');
     });
 
     it('loads all env vars when set', () => {
@@ -59,10 +61,12 @@ describe('loadConfig', () => {
       process.env['INTEXURAOS_WHATSAPP_SERVICE_URL'] = 'http://whatsapp';
       process.env['INTEXURAOS_LINEAR_AGENT_URL'] = 'http://linear';
       process.env['INTEXURAOS_ACTIONS_AGENT_URL'] = 'http://actions';
-      process.env['INTEXURAOS_DISPATCH_SECRET'] = 'test-dispatch';
+      process.env['INTEXURAOS_DISPATCH_SIGNING_SECRET'] = 'test-dispatch-signing';
       process.env['INTEXURAOS_WEBHOOK_VERIFY_SECRET'] = 'test-webhook';
       process.env['INTEXURAOS_CF_ACCESS_CLIENT_ID'] = 'test-client-id';
       process.env['INTEXURAOS_CF_ACCESS_CLIENT_SECRET'] = 'test-client-secret';
+      process.env['INTEXURAOS_ORCHESTRATOR_MAC_URL'] = 'https://cc-mac.intexuraos.cloud';
+      process.env['INTEXURAOS_ORCHESTRATOR_VM_URL'] = 'https://cc-vm.intexuraos.cloud';
 
       const config = loadConfig();
       expect(config.gcpProjectId).toBe('test-project');
@@ -71,47 +75,12 @@ describe('loadConfig', () => {
       expect(config.whatsappServiceUrl).toBe('http://whatsapp');
       expect(config.linearAgentUrl).toBe('http://linear');
       expect(config.actionsAgentUrl).toBe('http://actions');
-      expect(config.dispatchSecret).toBe('test-dispatch');
+      expect(config.dispatchSigningSecret).toBe('test-dispatch-signing');
       expect(config.webhookVerifySecret).toBe('test-webhook');
       expect(config.cfAccessClientId).toBe('test-client-id');
       expect(config.cfAccessClientSecret).toBe('test-client-secret');
-    });
-  });
-
-  describe('codeWorkers', () => {
-    it('parses INTEXURAOS_CODE_WORKERS as JSON', () => {
-      process.env['INTEXURAOS_CODE_WORKERS'] = JSON.stringify({
-        mac: { url: 'https://mac-worker', priority: 1 },
-        vm: { url: 'https://vm-worker', priority: 2 },
-      });
-
-      const config = loadConfig();
-      expect(config.codeWorkers.mac).toEqual({ url: 'https://mac-worker', priority: 1 });
-      expect(config.codeWorkers.vm).toEqual({ url: 'https://vm-worker', priority: 2 });
-    });
-
-    it('returns empty codeWorkers when env var not set', () => {
-      const config = loadConfig();
-      expect(config.codeWorkers).toEqual({});
-    });
-
-    it('handles complex worker config', () => {
-      process.env['INTEXURAOS_CODE_WORKERS'] = JSON.stringify({
-        mac: { url: 'https://cc-mac.intexuraos.cloud', priority: 1 },
-        vm: { url: 'https://cc-vm.intexuraos.cloud', priority: 2 },
-      });
-
-      const config = loadConfig();
-      expect(config.codeWorkers.mac?.url).toBe('https://cc-mac.intexuraos.cloud');
-      expect(config.codeWorkers.mac?.priority).toBe(1);
-      expect(config.codeWorkers.vm?.url).toBe('https://cc-vm.intexuraos.cloud');
-      expect(config.codeWorkers.vm?.priority).toBe(2);
-    });
-
-    it('throws on invalid JSON in CODE_WORKERS', () => {
-      process.env['INTEXURAOS_CODE_WORKERS'] = 'invalid{json';
-
-      expect(() => loadConfig()).toThrow();
+      expect(config.orchestratorMacUrl).toBe('https://cc-mac.intexuraos.cloud');
+      expect(config.orchestratorVmUrl).toBe('https://cc-vm.intexuraos.cloud');
     });
   });
 });

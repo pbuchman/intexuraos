@@ -15,11 +15,12 @@ const REQUIRED_ENV = [
   'INTEXURAOS_WHATSAPP_SERVICE_URL',
   'INTEXURAOS_LINEAR_AGENT_URL',
   'INTEXURAOS_ACTIONS_AGENT_URL',
-  'INTEXURAOS_DISPATCH_SECRET',
+  'INTEXURAOS_DISPATCH_SIGNING_SECRET',
   'INTEXURAOS_WEBHOOK_VERIFY_SECRET',
   'INTEXURAOS_CF_ACCESS_CLIENT_ID',
   'INTEXURAOS_CF_ACCESS_CLIENT_SECRET',
-  'INTEXURAOS_CODE_WORKERS',
+  'INTEXURAOS_ORCHESTRATOR_MAC_URL',
+  'INTEXURAOS_ORCHESTRATOR_VM_URL',
 ];
 
 validateRequiredEnv(REQUIRED_ENV);
@@ -44,11 +45,12 @@ async function main(): Promise<void> {
     whatsappServiceUrl: config.whatsappServiceUrl,
     linearAgentUrl: config.linearAgentUrl,
     actionsAgentUrl: config.actionsAgentUrl,
-    dispatchSecret: config.dispatchSecret,
+    dispatchSigningSecret: config.dispatchSigningSecret,
     webhookVerifySecret: config.webhookVerifySecret,
     cfAccessClientId: config.cfAccessClientId,
     cfAccessClientSecret: config.cfAccessClientSecret,
-    codeWorkers: config.codeWorkers,
+    orchestratorMacUrl: config.orchestratorMacUrl,
+    orchestratorVmUrl: config.orchestratorVmUrl,
   });
 
   const app = await buildServer();

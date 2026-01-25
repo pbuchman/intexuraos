@@ -48,6 +48,11 @@ export interface DispatchError {
  */
 export interface TaskDispatcherDeps {
   logger: Logger;
+  cfAccessClientId: string;
+  cfAccessClientSecret: string;
+  dispatchSigningSecret: string;
+  orchestratorMacUrl: string;
+  orchestratorVmUrl: string;
 }
 
 /**

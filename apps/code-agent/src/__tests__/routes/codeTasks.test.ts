@@ -46,7 +46,14 @@ describe('GET /code/tasks endpoints', () => {
     });
 
     const workerDiscovery = createWorkerDiscoveryService({ logger });
-    const taskDispatcher = createTaskDispatcherService({ logger });
+    const taskDispatcher = createTaskDispatcherService({
+      logger,
+      cfAccessClientId: 'test-client-id',
+      cfAccessClientSecret: 'test-client-secret',
+      dispatchSigningSecret: 'test-dispatch-secret',
+      orchestratorMacUrl: 'https://cc-mac.intexuraos.cloud',
+      orchestratorVmUrl: 'https://cc-vm.intexuraos.cloud',
+    });
 
     const logChunkRepo = createFirestoreLogChunkRepository({
       firestore: fakeFirestore as unknown as Firestore,
