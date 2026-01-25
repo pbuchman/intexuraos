@@ -468,9 +468,12 @@ const SERVICE_ENV_MAPPINGS = {
       vm: { url: 'http://localhost:8101', priority: 2 },
     }),
     INTEXURAOS_DISPATCH_SECRET: 'dev-dispatch-secret',
+    INTEXURAOS_DISPATCH_SIGNING_SECRET: 'dev-dispatch-signing-secret',
     INTEXURAOS_WEBHOOK_VERIFY_SECRET: 'dev-webhook-secret',
     INTEXURAOS_CF_ACCESS_CLIENT_ID: 'dev-cf-client-id',
     INTEXURAOS_CF_ACCESS_CLIENT_SECRET: 'dev-cf-client-secret',
+    INTEXURAOS_ORCHESTRATOR_MAC_URL: 'http://localhost:8199',
+    INTEXURAOS_ORCHESTRATOR_VM_URL: 'http://localhost:8199',
   },
 };
 
