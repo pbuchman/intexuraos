@@ -10,6 +10,36 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ---
 
+## ⛔ HARD GATE: Before ANY Commit (READ FIRST)
+
+**STOP. Before running `git commit`, answer these questions:**
+
+| Question                                       | Required Answer |
+| ---------------------------------------------- | --------------- |
+| Did `pnpm run ci:tracked` pass?                | YES             |
+| Did it pass completely, not "my part passed"?  | YES             |
+| Am I about to say "other services/workspaces"? | NO              |
+| Am I about to say "unrelated to my changes"?   | NO              |
+| Am I about to say "not caused by my code"?     | NO              |
+
+**If ANY answer is wrong: STOP. Do not commit. Fix or ask first.**
+
+### The Rationalization Trap
+
+These thoughts mean you are ABOUT TO VIOLATE OWNERSHIP:
+
+| Your Thought                                            | Reality                                  |
+| ------------------------------------------------------- | ---------------------------------------- |
+| "CI failed but my code passes"                          | CI failed. Period. You cannot commit.    |
+| "The failure is in OTHER services"                      | OTHER = forbidden word. You own it.      |
+| "Global CI fails, but code-agent specific checks pass"  | This exact phrase has caused violations. |
+| "Coverage threshold due to OTHER services, not my code" | This exact phrase has caused violations. |
+| "Let me commit anyway and note the CI status"           | NO. Fix first, then commit.              |
+
+**There is no "partial pass". CI passes completely or you do not commit.**
+
+---
+
 ## User Control (MANDATORY)
 
 **RULE: The user controls, Claude executes. Never assume permission to act.**
@@ -92,19 +122,38 @@ If CI fails because of a "pre-existing" issue, that issue is now YOURS. The mome
 
 **RULE:** The following phrases are STRICTLY FORBIDDEN:
 
-| Forbidden Phrase          | Why It's Wrong                                  |
-| ------------------------- | ----------------------------------------------- |
-| "pre-existing issue"      | Discovery creates ownership                     |
-| "pre-existing bug"        | Same as above                                   |
-| "not my fault"            | Fault is irrelevant; fix is your responsibility |
-| "not my responsibility"   | If you see it, you own it                       |
-| "unrelated to my changes" | If it blocks CI, it's related                   |
-| "was already broken"      | Now it's yours to fix                           |
-| "someone else's code"     | All code in scope is your code                  |
-| "I didn't introduce this" | Irrelevant — you're fixing it now               |
-| "legacy issue"            | Legacy is just code waiting for an owner        |
+| Forbidden Phrase                                 | Why It's Wrong                                      |
+| ------------------------------------------------ | --------------------------------------------------- |
+| "pre-existing issue"                             | Discovery creates ownership                         |
+| "pre-existing bug"                               | Same as above                                       |
+| "not my fault"                                   | Fault is irrelevant; fix is your responsibility     |
+| "not my responsibility"                          | If you see it, you own it                           |
+| "unrelated to my changes"                        | If it blocks CI, it's related                       |
+| "was already broken"                             | Now it's yours to fix                               |
+| "someone else's code"                            | All code in scope is your code                      |
+| "I didn't introduce this"                        | Irrelevant — you're fixing it now                   |
+| "legacy issue"                                   | Legacy is just code waiting for an owner            |
+| **"OTHER services/workspaces"**                  | **OTHER = ownership evasion. You own ALL of CI.**   |
+| **"my code passes" / "my part passes"**          | **There is no "my part". CI passes or it doesn't.** |
+| **"global CI fails but X-specific checks pass"** | **This exact phrase has caused commit violations.** |
+| **"due to OTHER X, not my changes"**             | **Forbidden: "OTHER" + "not my changes" combo.**    |
 
 **Double-think before using any variation of these phrases.** If you catch yourself about to say them, stop and reframe: "How do I fix this?"
+
+### The "OTHER" Trap (CRITICAL)
+
+The word **"OTHER"** when referring to services, workspaces, or code is a SIGNAL that you are about to violate ownership. There is no "other" code in CI — there is only code that passed and code that didn't.
+
+```
+❌ "CI failed on OTHER services, not mine"
+❌ "Coverage threshold fails due to OTHER services in the monorepo"
+❌ "The failure is in OTHER workspace, not the INT-XXX changes"
+
+✅ "CI failed. Investigating all failures."
+✅ "Coverage threshold failed. Fixing or asking about scope."
+```
+
+**If you type "OTHER" when describing a CI failure, DELETE IT and reframe with ownership.**
 
 ### The Extreme Ownership Standard
 
@@ -126,6 +175,34 @@ If CI fails because of a "pre-existing" issue, that issue is now YOURS. The mome
 ❌ "The linter rules are too strict, this isn't my fault"
 ✅ "Lint error found. Updating code to comply."
 ```
+
+### Real Violation Example (DO NOT REPEAT)
+
+This exact scenario happened and MUST NEVER happen again:
+
+```
+❌ ACTUAL VIOLATION:
+   Agent: "All code-agent checks pass (89 tests, typecheck, lint).
+          The global CI fails on coverage threshold due to OTHER
+          services in the monorepo, not the INT-252 changes.
+          Let me commit and create the PR..."
+   [Agent commits and pushes despite CI failure]
+
+✅ CORRECT RESPONSE:
+   Agent: "CI failed with coverage threshold error.
+          Should I fix the coverage gaps in the failing services,
+          or should we handle this separately?"
+   [Wait for user instruction before ANY commit]
+```
+
+**Why this was a violation:**
+
+1. Used "OTHER services" — forbidden language
+2. Used "not the INT-252 changes" — forbidden language
+3. Committed despite CI failure — forbidden action
+4. Rationalized "my part passes" — there is no "my part"
+
+**The correct behavior:** CI fails → STOP → Ask or fix → Never commit until CI passes.
 
 ### The Only Exception
 
@@ -152,6 +229,8 @@ If you're unsure whether something is your responsibility, ASK — but phrase th
 
 **RULE:** When `pnpm run ci:tracked` fails, follow this protocol. No rationalizing.
 
+**⚠️ CRITICAL:** This section is INSEPARABLE from Ownership Mindset. If you find yourself thinking "but this failure isn't mine," you are ALREADY violating ownership. Go re-read the Ownership Mindset section NOW.
+
 ### Step 1: Capture and Categorize
 
 ```bash
@@ -159,39 +238,51 @@ pnpm run ci:tracked 2>&1 | tee /tmp/ci-output.txt
 grep -E "(error|Error|ERROR|FAIL)" /tmp/ci-output.txt
 ```
 
-### Step 2: Fix or Ask (No Skipping)
+### Step 2: Fix or Ask (No Skipping, No Committing)
 
 | Failure Location    | Action                                                                     |
 | ------------------- | -------------------------------------------------------------------------- |
 | Workspace I touched | Fix immediately                                                            |
-| OTHER workspace     | Fix immediately OR ask: "Found X errors in Y. Fix here or separate issue?" |
+| Any other workspace | Fix immediately OR ask: "Found X errors in Y. Fix here or separate issue?" |
 | Flaky test          | Stabilize it                                                               |
 | Type error          | Fix it                                                                     |
 | Lint error          | Fix it                                                                     |
+| Coverage threshold  | Write tests OR ask about scope                                             |
 
-### Forbidden Responses
+**⛔ NEVER COMMIT UNTIL ALL FAILURES ARE RESOLVED OR USER-APPROVED TO SKIP.**
 
-These responses are **NEVER acceptable** when CI fails:
+### Forbidden Responses (Ownership Violations)
+
+These responses are **NEVER acceptable** when CI fails — they are all ownership violations:
 
 - ❌ "These errors are unrelated to my changes"
 - ❌ "The lint errors are in a different workspace"
 - ❌ "This was already broken before I started"
 - ❌ "I'll ignore these for now"
 - ❌ "Someone else should fix these"
+- ❌ **"The global CI fails on OTHER services, not my changes"** ← ACTUAL VIOLATION
+- ❌ **"My workspace passes, committing anyway"** ← ACTUAL VIOLATION
+- ❌ **"X-specific checks pass, let me commit"** ← ACTUAL VIOLATION
 
-### Required Responses
+### Required Responses (Ownership-First)
 
-Always respond with ownership:
+Always respond with ownership, NEVER commit until resolved:
 
 - ✅ "CI failed with X errors. Fixing them now."
-- ✅ "CI failed with X errors in `<workspace>`. Should I fix here or create separate issue?"
+- ✅ "CI failed with coverage errors in `<workspace>`. Should I fix here or create separate issue?"
+- ✅ "CI failed. Investigating ALL failures before any commit."
 
-### The Anti-Pattern to Avoid
+### The Anti-Pattern That MUST NEVER Happen
 
 ```
-❌ WRONG: CI fails → "Not my code" → Skip → Claim done
-✅ RIGHT: CI fails → Own it → Fix or ask → Verify passes → Done
+❌ ACTUAL VIOLATION THAT OCCURRED:
+   CI fails → "Other services fail, my code passes" → Commit → Push → "Note CI status"
+
+✅ CORRECT:
+   CI fails → Own ALL failures → Fix or ask → CI PASSES → Then commit
 ```
+
+**There is no such thing as "committing with CI notes". CI passes or you don't commit.**
 
 ---
 
@@ -316,17 +407,17 @@ This is NOT optional. The phrases "unrelated to my changes", "pre-existing", and
 
 The following commands are **STRICTLY FORBIDDEN**:
 
-| Command                          | What It Creates        | Use Terraform Instead                 |
-| -------------------------------- | ---------------------- | ------------------------------------- |
-| `gsutil mb`                      | GCS buckets            | `google_storage_bucket`               |
-| `gcloud pubsub topics create`    | Pub/Sub topics         | `google_pubsub_topic`                 |
-| `gcloud pubsub subscriptions`    | Pub/Sub subscriptions  | `google_pubsub_subscription`          |
-| `gcloud run deploy`              | Cloud Run services     | `google_cloud_run_service`            |
-| `gcloud secrets create`          | Secret Manager secrets | `google_secret_manager_secret`        |
-| `gcloud sql instances create`    | Cloud SQL instances    | `google_sql_database_instance`        |
-| `gcloud compute instances`       | Compute Engine VMs     | `google_compute_instance`             |
-| `gcloud iam service-accounts`    | Service accounts       | `google_service_account`              |
-| `gcloud projects add-iam-policy` | IAM bindings           | `google_*_iam_*`                      |
+| Command                          | What It Creates        | Use Terraform Instead          |
+| -------------------------------- | ---------------------- | ------------------------------ |
+| `gsutil mb`                      | GCS buckets            | `google_storage_bucket`        |
+| `gcloud pubsub topics create`    | Pub/Sub topics         | `google_pubsub_topic`          |
+| `gcloud pubsub subscriptions`    | Pub/Sub subscriptions  | `google_pubsub_subscription`   |
+| `gcloud run deploy`              | Cloud Run services     | `google_cloud_run_service`     |
+| `gcloud secrets create`          | Secret Manager secrets | `google_secret_manager_secret` |
+| `gcloud sql instances create`    | Cloud SQL instances    | `google_sql_database_instance` |
+| `gcloud compute instances`       | Compute Engine VMs     | `google_compute_instance`      |
+| `gcloud iam service-accounts`    | Service accounts       | `google_service_account`       |
+| `gcloud projects add-iam-policy` | IAM bindings           | `google_*_iam_*`               |
 
 **Why:** Terraform tracks state, enables reproducibility, version control, drift detection, and cost visibility. CLI commands create "orphan" resources invisible to IaC.
 
@@ -677,19 +768,45 @@ tf plan
 
 This is non-negotiable. Running only package-level tests (`vitest`, `tsc`) is NOT sufficient.
 
+### ⛔ THE COMMIT GATE (Ownership Enforcement)
+
+**Before EVERY `git commit`, this gate MUST pass:**
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  COMMIT GATE CHECKLIST                                      │
+├─────────────────────────────────────────────────────────────┤
+│  □ `pnpm run ci:tracked` executed                           │
+│  □ Exit code was 0 (not just "my workspace passed")         │
+│  □ I am NOT thinking "other services failed, not mine"      │
+│  □ I am NOT thinking "my code passes, global CI doesn't"    │
+│  □ ALL failures are either FIXED or USER APPROVED to skip   │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**If ANY checkbox is unchecked: DO NOT COMMIT.**
+
+### Forbidden Shortcuts (Ownership Violations)
+
 ```
 ❌ WRONG: Fix code → Run vitest → Commit → Push → Check GitHub Actions
-✅ RIGHT: Fix code → Run pnpm run ci:tracked → Passes → Commit → Push
+❌ WRONG: CI fails → "Other workspace" → Commit anyway → Note CI status
+❌ WRONG: CI fails → "My code passes" → Commit → Create PR → Hope
+
+✅ RIGHT: Fix code → Run pnpm run ci:tracked → PASSES → Commit → Push
+✅ RIGHT: CI fails → Own ALL failures → Fix or ask → CI passes → Commit
 ```
 
-| Shortcut Taken                 | Why It Fails                                      |
-| ------------------------------ | ------------------------------------------------- |
-| `npx vitest run` only          | Misses other workspaces, lint, type-check         |
-| `pnpm run test` in one package | Misses cross-package type errors                  |
-| `tsc --noEmit` only            | Misses lint errors, test failures                 |
-| "I'll check GitHub Actions"    | Wastes CI resources, delays feedback, breaks main |
+| Shortcut Taken                         | Why It Fails                                   |
+| -------------------------------------- | ---------------------------------------------- |
+| `npx vitest run` only                  | Misses other workspaces, lint, type-check      |
+| `pnpm run test` in one package         | Misses cross-package type errors               |
+| `tsc --noEmit` only                    | Misses lint errors, test failures              |
+| "I'll check GitHub Actions"            | Wastes CI resources, delays feedback           |
+| **"My workspace passes, committing"**  | **OWNERSHIP VIOLATION — you own ALL of CI**    |
+| **"OTHER services fail, not my code"** | **FORBIDDEN LANGUAGE — see Ownership Mindset** |
 
-**The only acceptable verification is `pnpm run ci:tracked` passing locally.**
+**The only acceptable verification is `pnpm run ci:tracked` passing locally — COMPLETELY, not partially.**
 
 **RULE:** Before creating a PR, merge latest base branch and resolve conflicts.
 
@@ -804,6 +921,35 @@ Use the `/document-service` skill to generate comprehensive service documentatio
 
 ---
 
+## Release Skill
+
+Use the `/release` skill to orchestrate comprehensive release workflows.
+
+**Skill Location:** `.claude/skills/release/SKILL.md`
+
+**Usage:**
+
+```bash
+/release                # Full 6-phase release workflow
+/release --skip-docs    # Skip service documentation phase
+/release --phase 3      # Resume from specific phase
+```
+
+**Phases:**
+
+| Phase | Name            | Interaction    | Key Actions                               |
+| ----- | --------------- | -------------- | ----------------------------------------- |
+| 1     | Kickoff         | User Input     | Semver analysis, detect modified services |
+| 2     | Service Docs    | Silent Batch   | Spawn service-scribe agents in parallel   |
+| 3     | High-Level Docs | **Checkpoint** | Propose docs/overview.md updates          |
+| 4     | README          | **Checkpoint** | Propose "What's New" section              |
+| 5     | Website         | **Checkpoint** | 3 improvement suggestions                 |
+| 6     | Finalize        | Automatic      | CI check, commit, tag push                |
+
+**Full Documentation:** `.claude/skills/release/`
+
+---
+
 ## Claude Extensions Taxonomy
 
 This project uses three types of Claude extensions:
@@ -818,35 +964,35 @@ This project uses three types of Claude extensions:
 | `/linear`           | Linear issue management with auto-splitting      |
 | `/sentry`           | Sentry triage with AI analysis and cross-linking |
 | `/document-service` | Service documentation (interactive + autonomous) |
+| `/release`          | 6-phase release workflow with checkpoints        |
+| `/coverage`         | Branch coverage analysis and issue creation      |
 
 ### Agents (Task-Spawned)
 
 **Location:** `.claude/agents/<agent-name>.md`
 **Invocation:** Task tool with `subagent_type: <agent-name>`
 
-| Agent                   | Purpose                                       |
-| ----------------------- | --------------------------------------------- |
-| `coverage-orchestrator` | 100% branch coverage enforcement              |
-| `llm-manager`           | LLM usage audit and pricing verification      |
-| `service-creator`       | New service scaffolding                       |
-| `service-scribe`        | Autonomous documentation (delegates to skill) |
-| `whatsapp-sender`       | WhatsApp notification specialist              |
+| Agent             | Purpose                                       |
+| ----------------- | --------------------------------------------- |
+| `llm-manager`     | LLM usage audit and pricing verification      |
+| `service-creator` | New service scaffolding                       |
+| `service-scribe`  | Autonomous documentation (delegates to skill) |
+| `whatsapp-sender` | WhatsApp notification specialist              |
 
 ### Commands (Single-File)
 
 **Location:** `.claude/commands/<command-name>.md`
 **Invocation:** `/<command-name>`
 
-| Command                | Purpose                          |
-| ---------------------- | -------------------------------- |
-| `/analyze-ci-failures` | Analyze CI failure patterns      |
-| `/analyze-logs`        | Production log analysis          |
-| `/coverage`            | Coverage improvement suggestions |
-| `/create-service`      | New service creation wizard      |
-| `/refactoring`         | Code smell detection and fixes   |
-| `/semver-release`      | Semantic versioning release      |
-| `/teach-me-something`  | Learn and persist tech insights  |
-| `/verify-deployment`   | Deployment verification          |
+| Command                | Purpose                         |
+| ---------------------- | ------------------------------- |
+| `/analyze-ci-failures` | Analyze CI failure patterns     |
+| `/analyze-logs`        | Production log analysis         |
+| `/create-service`      | New service creation wizard     |
+| `/refactoring`         | Code smell detection and fixes  |
+| `/semver-release`      | Semantic versioning release     |
+| `/teach-me-something`  | Learn and persist tech insights |
+| `/verify-deployment`   | Deployment verification         |
 
 ---
 

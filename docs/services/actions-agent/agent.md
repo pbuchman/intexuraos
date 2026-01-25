@@ -236,9 +236,9 @@ User replies to WhatsApp message
 whatsapp-service -> action.approval.reply -> actions-agent
                                                   |
                                         Classify intent (LLM)
-                                                  |
-        +----------------+----------------+---------------+
-        |                |                |               |
+|  |  |
+|  |
+|  |  |  |
     approve          reject           unclear         error
         |                |                |               |
 updateStatusIf    updateStatusIf    Send clarification  Send error

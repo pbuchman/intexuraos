@@ -23,6 +23,9 @@ vi.mock('@intexuraos/infra-gemini', () => ({
 
 vi.mock('@intexuraos/llm-pricing', () => ({
   logUsage: vi.fn().mockResolvedValue(undefined),
+  createUsageLogger: vi.fn().mockReturnValue({
+    log: vi.fn().mockResolvedValue(undefined),
+  }),
 }));
 
 const testPricing: ModelPricing = {

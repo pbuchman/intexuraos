@@ -333,6 +333,24 @@ function ManifestoSection(): React.JSX.Element {
                 doesn't merge.
               </p>
             </BrutalistCard>
+            <BrutalistCard
+              title="Extreme Ownership"
+              icon={Shield}
+              className="hover:border-cyan-600 hover:shadow-[6px_6px_0px_0px_rgba(8,145,178,1)]"
+            >
+              <p className="mb-3 text-neutral-700">
+                Our engineering philosophy based on Jocko Willink&apos;s book. CI failure = your problem.
+                No &quot;other services failed&quot; rationalizations. Own it, fix it, ship it.
+              </p>
+              <a
+                href="https://github.com/pbuchman/intexuraos/blob/main/docs/philosophy/extreme-ownership.md"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-2 font-mono text-sm font-bold text-black hover:text-cyan-700 underline"
+              >
+                Read Philosophy <ArrowRight className="h-4 w-4" />
+              </a>
+            </BrutalistCard>
           </div>
         </div>
       </div>
@@ -344,16 +362,26 @@ function RecentUpdatesSection(): React.JSX.Element {
   return (
     <section className="border-b-4 border-black bg-purple-100 px-6 py-24">
       <div className="mx-auto max-w-7xl">
-        <SectionHeading>
-          What's New in <span className="bg-black px-2 text-white">v2.0.0</span>
-        </SectionHeading>
+        <div className="mb-12 flex items-center justify-between max-w-2xl">
+          <SectionHeading className="mb-0">
+            What's New
+          </SectionHeading>
+          <a
+            href="https://github.com/pbuchman/intexuraos/blob/main/CHANGELOG.md"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-2 font-mono text-sm font-bold text-black hover:text-cyan-700 underline"
+          >
+            View Changelog <ArrowRight className="h-4 w-4" />
+          </a>
+        </div>
         <p className="mb-12 max-w-2xl text-lg font-medium text-neutral-700">
           Major improvements to approval workflows, classification accuracy, and user control.
         </p>
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
           <BrutalistCard title="WhatsApp Approval" icon={CheckSquare} className="bg-green-50">
             <p className="mb-3 text-neutral-700">
-              Approve or reject actions directly from WhatsApp. Reply with text ("yes", "ok", "reject")
+              Approve or reject actions directly from WhatsApp. Reply with text (&quot;yes&quot;, &quot;ok&quot;, &quot;reject&quot;)
               or react with emoji — 👍 to approve, 👎 to reject. No app switching required.
             </p>
             <p className="font-mono text-sm italic text-neutral-500">
@@ -366,22 +394,22 @@ function RecentUpdatesSection(): React.JSX.Element {
               and all-day detection — full visibility before commit.
             </p>
             <p className="font-mono text-sm italic text-neutral-500">
-              "Meeting Tuesday 2pm" → Preview → 👍 → Created
+              &quot;Meeting Tuesday 2pm&quot; → Preview → 👍 → Created
             </p>
           </BrutalistCard>
           <BrutalistCard title="Smart Classification" icon={Brain} className="bg-purple-50">
             <p className="mb-3 text-neutral-700">
-              5-step decision tree with URL keyword isolation. "Save bookmark example.com/todo-list"
+              5-step decision tree with URL keyword isolation. &quot;Save bookmark example.com/todo-list&quot;
               correctly saves as link, not todo. Explicit intent always wins.
             </p>
             <p className="font-mono text-sm italic text-neutral-500">
-              Polish language support: "zapisz", "notatka", "zadanie"
+              Polish language support: &quot;zapisz&quot;, &quot;notatka&quot;, &quot;zadanie&quot;
             </p>
           </BrutalistCard>
           <BrutalistCard title="Model Selection" icon={Zap} className="bg-cyan-50">
             <p className="mb-3 text-neutral-700">
-              Specify which AI models to use in natural language. "Research AI trends with Claude
-              and GPT" or "all models except Perplexity" — you're in control.
+              Specify which AI models to use in natural language. &quot;Research AI trends with Claude
+              and GPT&quot; or &quot;all models except Perplexity&quot; — you&apos;re in control.
             </p>
             <p className="font-mono text-sm italic text-neutral-500">
               GLM-4.7-Flash: Free tier for cost-conscious queries.
@@ -405,7 +433,61 @@ function RecentUpdatesSection(): React.JSX.Element {
               updateStatusIf() — optimistic locking pattern.
             </p>
           </BrutalistCard>
+          <BrutalistCard title="Trust & Verify" icon={Shield} className="bg-green-50">
+            <p className="mb-3 text-neutral-700">
+              We believe in AI models, but validation builds trust. Every LLM response is verified
+              with structured schemas — catching errors before they affect your data.
+            </p>
+            <p className="font-mono text-sm italic text-neutral-500">
+              Zod schemas: Runtime safety + TypeScript types in one
+            </p>
+          </BrutalistCard>
+          <BrutalistCard title="No More Duplicates" icon={CheckSquare} className="bg-purple-50">
+            <p className="mb-3 text-neutral-700">
+              Fixed duplicate WhatsApp approval notifications. Now you receive exactly one message
+              per action — clean, predictable, and clutter-free.
+            </p>
+            <p className="font-mono text-sm italic text-neutral-500">
+              One notification per action. Period.
+            </p>
+          </BrutalistCard>
         </div>
+      </div>
+    </section>
+  );
+}
+
+function VersionHistorySection(): React.JSX.Element {
+  const [showHistory, setShowHistory] = useState(false);
+
+  return (
+    <section className="border-b-4 border-black bg-neutral-100 px-6 py-24">
+      <div className="mx-auto max-w-7xl">
+        <div className="mb-8">
+          <button
+            onClick={() => {
+              setShowHistory(!showHistory);
+            }}
+            className="flex items-center gap-3 font-mono text-lg font-bold uppercase hover:text-cyan-700"
+          >
+            <ArrowRight className={`h-5 w-5 transition-transform ${
+              showHistory ? 'rotate-90' : ''
+            }`} />
+            Previous Versions
+          </button>
+        </div>
+
+        {showHistory && (
+          <div className="border-2 border-black bg-white p-8 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+            <h3 className="mb-4 font-mono text-xl font-bold">v1.x — Launch</h3>
+            <p className="text-lg font-medium leading-relaxed text-neutral-800">
+              End-to-end AI autonomy: From your mobile to the cloud and back. IntexuraOS went from
+              architecture document to handling live traffic — voice to research, links to bookmarks,
+              dates to calendar events. The full AI agent pipeline is now processing real user
+              requests in production.
+            </p>
+          </div>
+        )}
       </div>
     </section>
   );
@@ -456,6 +538,7 @@ export function HomePage(): React.JSX.Element {
       <CouncilSection />
       <ManifestoSection />
       <RecentUpdatesSection />
+      <VersionHistorySection />
       <Footer />
     </div>
   );

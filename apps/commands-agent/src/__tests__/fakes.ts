@@ -13,7 +13,7 @@ import type {
 } from '../domain/ports/classifier.js';
 import type { EventPublisherPort, PublishError } from '../domain/ports/eventPublisher.js';
 import type { ActionCreatedEvent } from '../domain/events/actionCreatedEvent.js';
-import type { UserServiceClient, UserApiKeys, UserServiceError } from '../infra/user/index.js';
+import type { UserServiceClient, UserApiKeys, UserServiceError } from '../domain/ports/userServiceClient.js';
 import type { ActionsAgentClient, CreateActionParams } from '../infra/actionsAgent/client.js';
 import { createProcessCommandUseCase } from '../domain/usecases/processCommand.js';
 import { createRetryPendingCommandsUseCase } from '../domain/usecases/retryPendingCommands.js';
@@ -227,7 +227,7 @@ export function createFakeServices(deps: {
   };
   deps.userServiceClient.setLlmClientResult(ok(fakeLlmClient));
 
-  const classifierFactory: ClassifierFactory = (_client: LlmGenerateClient) => deps.classifier;
+  const classifierFactory: ClassifierFactory = (_client, _logger) => deps.classifier;
 
   return {
     commandRepository: deps.commandRepository,

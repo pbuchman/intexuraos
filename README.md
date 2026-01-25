@@ -20,18 +20,26 @@
 
 ---
 
+## What's New in v2.1.0
+
+| Improvement                 | Impact                                           |
+| --------------------------- | ------------------------------------------------ |
+| **Code Consolidation**      | Removed 4,200+ duplicate lines across 8 services |
+| **Standardized Validation** | All LLM responses now use Zod schemas            |
+| **Cost Optimization**       | 63% Cloud Build cost reduction                   |
+| **Bug Fix**                 | Fixed duplicate WhatsApp approval messages       |
+
 ## What's New in v2.0.0
 
-| Feature                              | Description                                                                                   |
-| ------------------------------------ | --------------------------------------------------------------------------------------------- |
-| **WhatsApp Approval Workflow**       | Approve or reject actions via text replies ("yes", "ok", "reject") or emoji reactions (👍/👎) |
-| **Calendar Preview**                 | See exactly what will be created before approving calendar events                             |
-| **Natural Language Model Selection** | Specify models in messages: "research with Claude and GPT"                                    |
-| **5-Step Classification**            | URL keyword isolation, explicit intent priority, Polish language support                      |
-| **Zod Schema Validation**            | Type-safe LLM response handling with parser + repair pattern                                  |
-| **GLM-4.7-Flash**                    | New free-tier model for cost-effective classification                                         |
-| **Linear 3-Column Dashboard**        | Planning → Work → Closed layout with Todo/To Test categories                                  |
-| **Atomic Status Transitions**        | Race condition prevention via Firestore transactions                                          |
+| Feature                     | Description                                        |
+| --------------------------- | -------------------------------------------------- |
+| **WhatsApp Approval**       | Approve/reject via text replies or emoji reactions |
+| **Calendar Preview**        | See event details before approving                 |
+| **Natural Language Models** | "Research with Claude and GPT"                     |
+| **5-Step Classification**   | URL isolation, explicit intent, Polish support     |
+| **Zod Validation**          | Type-safe LLM response handling                    |
+| **GLM-4.7-Flash**           | New free-tier model                                |
+| **Linear Dashboard**        | 3-column layout (Planning → Work → Closed)         |
 
 ---
 
@@ -227,6 +235,8 @@ graph LR
 Inspired by Jocko Willink: **no bad code, only unowned problems**.
 
 From task acceptance until `pnpm run ci:tracked` passes, YOU own everything. "Pre-existing issue" and "not my fault" are forbidden phrases — discovery creates ownership.
+
+**[→ The Full Philosophy: 10 Laws Applied to Engineering](docs/philosophy/extreme-ownership.md)**
 
 ### Quality Gates
 

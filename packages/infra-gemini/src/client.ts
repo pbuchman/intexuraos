@@ -47,7 +47,7 @@ import {
   type GenerateResult,
   type ImageSize,
 } from '@intexuraos/llm-contract';
-import { logUsage, type CallType } from '@intexuraos/llm-pricing';
+import { createUsageLogger, type CallType } from '@intexuraos/llm-pricing';
 import type { GeminiConfig, GeminiError, ResearchResult } from './types.js';
 import { normalizeUsage, calculateImageCost } from './costCalculator.js';
 
@@ -76,6 +76,7 @@ function createRequestContext(
 export function createGeminiClient(config: GeminiConfig): GeminiClient {
   const ai = new GoogleGenAI({ apiKey: config.apiKey });
   const { model, userId, pricing, imagePricing, logger } = config;
+  const usageLogger = createUsageLogger({ logger });
 
   function trackUsage(
     callType: CallType,
@@ -83,8 +84,7 @@ export function createGeminiClient(config: GeminiConfig): GeminiClient {
     success: boolean,
     errorMessage?: string
   ): void {
-    // eslint-disable-next-line @typescript-eslint/no-deprecated -- TODO: Migrate to UsageLogger class with injected logger
-    void logUsage({
+    void usageLogger.log({
       userId,
       provider: LlmProviders.Google,
       model,
@@ -92,7 +92,6 @@ export function createGeminiClient(config: GeminiConfig): GeminiClient {
       usage,
       success,
       ...(errorMessage !== undefined && { errorMessage }),
-      logger,
     });
   }
 

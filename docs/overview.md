@@ -2,7 +2,7 @@
 
 > **The AI-Native Personal Operating System** — An autonomous agent platform that transforms fragmented information into structured intelligence.
 
-**Version 2.0.0** — January 24, 2026
+**Version 2.1.0** — January 25, 2026
 
 ---
 
@@ -11,6 +11,43 @@
 IntexuraOS reimagines personal productivity as an **AI-first system**. Instead of building another app that uses AI as a feature, IntexuraOS builds AI agents that use apps as tools.
 
 **The Core Insight**: Your brain excels at creative thinking and decision-making. It struggles with remembering, scheduling, aggregating, and cross-referencing. IntexuraOS handles the cognitive load while you remain the commander.
+
+---
+
+## What's New in v2.1.0
+
+### Code Quality & Refactoring Focus
+
+This release consolidates duplicate code, standardizes validation patterns, and improves infrastructure efficiency:
+
+**Internal Clients Package (INT-269)**
+
+- Eliminated ~4,200 lines of duplicate code across 8 services
+- Created `@intexuraos/internal-clients` package for shared user-service client
+- Standardized HTTP client initialization and API key management
+
+**Zod Schema Validation (INT-218)**
+
+- Migrated all 8 LLM response validations from manual type guards to Zod schemas
+- Field-level error messages for easier debugging (e.g., `priority: expected 'low' | 'medium' | 'high', received 'urgent'`)
+- Single source of truth for runtime validation and TypeScript types
+
+**Usage Logger Migration (INT-266)**
+
+- All 5 LLM client packages migrated to structured `UsageLogger` class
+- Proper dependency injection via constructor
+- Removed deprecated `logUsage()` function usage
+
+**Cloud Build Optimization (INT-243)**
+
+- Reduced build costs by 63% ($98/month → $36/month)
+- Trade-off: +60% build time increase (7.75 min → 12.4 min)
+- All builds remain under 15-minute SLA target
+
+**Bug Fix: Duplicate Approval Messages**
+
+- Fixed race condition causing duplicate WhatsApp notifications after action approval
+- Extended direct execution pattern to all action types
 
 ---
 
@@ -380,4 +417,4 @@ User API Keys → AES-256-GCM Encryption → Firestore
 
 ---
 
-**Last updated:** 2026-01-24 (v2.0.0)
+**Last updated:** 2026-01-25 (v2.1.0)

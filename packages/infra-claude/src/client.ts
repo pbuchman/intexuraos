@@ -55,7 +55,7 @@ import {
   type NormalizedUsage,
   type GenerateResult,
 } from '@intexuraos/llm-contract';
-import { logUsage, type CallType } from '@intexuraos/llm-pricing';
+import { createUsageLogger, type CallType } from '@intexuraos/llm-pricing';
 import type { ClaudeConfig, ClaudeError, ResearchResult } from './types.js';
 import { normalizeUsage } from './costCalculator.js';
 
@@ -92,6 +92,7 @@ const MAX_TOKENS = 8192;
 export function createClaudeClient(config: ClaudeConfig): ClaudeClient {
   const client = new Anthropic({ apiKey: config.apiKey });
   const { model, userId, pricing, logger } = config;
+  const usageLogger = createUsageLogger({ logger });
 
   function createRequestContext(
     method: string,
@@ -116,8 +117,7 @@ export function createClaudeClient(config: ClaudeConfig): ClaudeClient {
     success: boolean,
     errorMessage?: string
   ): void {
-    // eslint-disable-next-line @typescript-eslint/no-deprecated -- TODO: Migrate to UsageLogger class with injected logger
-    void logUsage({
+    void usageLogger.log({
       userId,
       provider: LlmProviders.Anthropic,
       model,
@@ -125,7 +125,6 @@ export function createClaudeClient(config: ClaudeConfig): ClaudeClient {
       usage,
       success,
       ...(errorMessage !== undefined && { errorMessage }),
-      logger,
     });
   }
 

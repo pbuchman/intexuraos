@@ -77,7 +77,7 @@ curl -X POST https://research-agent.intexuraos.com/research \
         "status": "pending"
       }
     ],
-    "startedAt": "2026-01-24T10:00:00Z"
+    "startedAt": "2026-01-25T10:00:00Z"
   }
 }
 ```
@@ -101,7 +101,7 @@ When `status` is `completed`, you will have:
     "synthesizedResult": "# Quantum Computing Advances\n\n## Key Developments\n\n...",
     "shareInfo": {
       "shareUrl": "https://intexuraos.com/r/quantum-advances-abc",
-      "sharedAt": "2026-01-24T10:05:00Z"
+      "sharedAt": "2026-01-25T10:05:00Z"
     },
     "totalCostUsd": 0.0042,
     "totalDurationMs": 15000
@@ -249,7 +249,7 @@ When synthesis begins, the service infers context from your query:
   "intent_summary": "Understanding quantum computing developments",
   "answer_style": ["evidence_first", "practical"],
   "time_scope": {
-    "as_of_date": "2026-01-24",
+    "as_of_date": "2026-01-25",
     "prefers_recent_years": 2,
     "is_time_sensitive": true
   },
@@ -317,7 +317,7 @@ You can see this in the response's `researchContext` field when present.
     "status": "awaiting_confirmation",
     "partialFailure": {
       "failedModels": ["gpt-5.2"],
-      "detectedAt": "2026-01-24T10:03:00Z",
+      "detectedAt": "2026-01-25T10:03:00Z",
       "retryCount": 0
     }
   }

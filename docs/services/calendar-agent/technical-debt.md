@@ -1,7 +1,7 @@
 # Calendar Agent - Technical Debt
 
-**Last Updated:** 2026-01-24
-**Analysis Run:** v2.0.0 documentation update
+**Last Updated:** 2025-01-25
+**Analysis Run:** v2.1.0 (INT-269 migration)
 
 ---
 
@@ -14,6 +14,54 @@
 | Type Issues   | 0     | -        |
 | TODOs         | 0     | -        |
 | **Total**     | **1** | Low      |
+
+---
+
+## Recent Improvements (v2.1.0)
+
+### INT-269: Internal Clients Migration
+
+**Status:** Complete
+
+Migrated from local `llmUserServiceClient` to shared `@intexuraos/internal-clients` package:
+
+**Before:**
+
+```typescript
+// Local implementation in infra/user/llmUserServiceClient.ts
+const llmUserServiceClient = new LlmUserServiceClientImpl(url, token);
+```
+
+**After:**
+
+```typescript
+// Shared package
+import { createUserServiceClient } from '@intexuraos/internal-clients';
+const llmUserServiceClient = createUserServiceClient({
+  baseUrl: config.userServiceUrl,
+  internalAuthToken: config.internalAuthToken,
+  pricingContext: config.pricingContext,
+  logger: logger,
+});
+```
+
+**Benefits:**
+
+- Consistent LLM client initialization across all services
+- Centralized pricing context management
+- Reduced code duplication
+
+### INT-222: Zod Schema Migration
+
+**Status:** Complete
+
+Migrated from custom validation to `CalendarEventSchema` from `@intexuraos/llm-prompts`:
+
+**Benefits:**
+
+- Consistent schema across LLM extraction services
+- Better error messages with `formatZodErrors()`
+- Single source of truth for event extraction shape
 
 ---
 

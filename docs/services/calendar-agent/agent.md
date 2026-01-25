@@ -281,4 +281,4 @@ interface ServiceFeedback {
 
 ---
 
-**Last updated:** 2026-01-24
+**Last updated:** 2025-01-25 (v2.1.0 - INT-269 internal-clients migration)
