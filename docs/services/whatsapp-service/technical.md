@@ -152,12 +152,12 @@ sequenceDiagram
 | `fromNumber`       | string                       | Sender's phone number              |
 | `toNumber`         | string                       | Recipient phone number             |
 | `text`             | string                       | Message text (text messages)       |
-| `mediaType`        | `text` \| `image` \| `audio` | Message type                       |
+| `mediaType`        | `text` \                     | `image` \                          | `audio` | Message type |
 | `gcsPath`          | string                       | GCS path to media file             |
 | `thumbnailGcsPath` | string                       | GCS path to thumbnail              |
-| `caption`          | string \| null               | Media caption                      |
-| `transcription`    | TranscriptionState \| null   | Audio transcription result         |
-| `linkPreview`      | LinkPreviewState \| null     | Extracted link metadata            |
+| `caption`          | string \                     | null                               | Media caption |
+| `transcription`    | TranscriptionState \         | null                               | Audio transcription result |
+| `linkPreview`      | LinkPreviewState \           | null                               | Extracted link metadata |
 | `timestamp`        | string                       | WhatsApp timestamp                 |
 | `receivedAt`       | string                       | ISO 8601 receive time              |
 | `webhookEventId`   | string                       | Associated webhook event           |
@@ -179,10 +179,10 @@ Tracks sent messages for reply correlation. Uses wamid as document ID for effici
 
 | Field     | Type                                                 | Description             |
 | --------- | ---------------------------------------------------- | ----------------------- |
-| `status`  | `pending` \| `processing` \| `completed` \| `failed` | Transcription progress  |
-| `text`    | string \| null                                       | Full transcribed text   |
-| `summary` | string \| null                                       | AI-generated key points |
-| `error`   | object \| null                                       | Error details if failed |
+| `status`  | `pending` \                                          | `processing` \          | `completed` \ | `failed` | Transcription progress |
+| `text`    | string \                                             | null                    | Full transcribed text |
+| `summary` | string \                                             | null                    | AI-generated key points |
+| `error`   | object \                                             | null                    | Error details if failed |
 
 ### WebhookEvent
 
@@ -193,7 +193,7 @@ Tracks sent messages for reply correlation. Uses wamid as document ID for effici
 | `signatureValid` | boolean                                                                              | Signature verification result |
 | `receivedAt`     | string                                                                               | ISO 8601 timestamp            |
 | `phoneNumberId`  | string                                                                               | WhatsApp phone number ID      |
-| `status`         | `pending` \| `processing` \| `completed` \| `failed` \| `ignored` \| `user_unmapped` | Processing status             |
+| `status`         | `pending` \                                                                          | `processing` \                | `completed` \ | `failed` \ | `ignored` \ | `user_unmapped` | Processing status |
 
 ### UserMapping
 

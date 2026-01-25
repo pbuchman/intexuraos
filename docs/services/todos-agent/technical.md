@@ -30,37 +30,37 @@ Todos-agent manages tasks with support for todo items, priorities, due dates, an
 
 ### Todo
 
-| Field | Type | Description |
-| ------------- | ------------ | ---------------------- | | | | | |
-| `id` | string | Unique todo identifier |
-| `userId` | string | Owner user ID |
-| `title` | string | Todo title |
-| `description` | string \ | null | Optional description |
-| `tags` | string[] | User-defined tags |
-| `priority` | TodoPriority | low \ | medium \ | high \ | urgent |
-| `dueDate` | Date \ | null | Deadline |
-| `status` | TodoStatus | draft \ | processing \ | pending \ | in_progress \ | completed \ | cancelled |
-| `archived` | boolean | Soft delete flag |
-| `items` | TodoItem[] | Sub-items |
-| `completedAt` | Date \ | null | When marked completed |
-| `createdAt` | Date | Creation timestamp |
-| `updatedAt` | Date | Last update timestamp |
-| `source` | string | Source system |
-| `sourceId` | string | ID in source system |
+| Field         | Type         | Description            |
+| ------------- | ------------ | ---------------------- |  |  |  |  |  |
+| `id`          | string       | Unique todo identifier |
+| `userId`      | string       | Owner user ID          |
+| `title`       | string       | Todo title             |
+| `description` | string \     | null                   | Optional description |
+| `tags`        | string[]     | User-defined tags      |
+| `priority`    | TodoPriority | low \                  | medium \ | high \ | urgent |
+| `dueDate`     | Date \       | null                   | Deadline |
+| `status`      | TodoStatus   | draft \                | processing \ | pending \ | in_progress \ | completed \ | cancelled |
+| `archived`    | boolean      | Soft delete flag       |
+| `items`       | TodoItem[]   | Sub-items              |
+| `completedAt` | Date \       | null                   | When marked completed |
+| `createdAt`   | Date         | Creation timestamp     |
+| `updatedAt`   | Date         | Last update timestamp  |
+| `source`      | string       | Source system          |
+| `sourceId`    | string       | ID in source system    |
 
 ### TodoItem
 
-| Field | Type | Description |
-| ------------- | --------------- | ---------------------- | |
-| `id` | string | Unique item identifier |
-| `title` | string | Item title |
-| `status` | TodoItemStatus | pending \ | completed |
-| `priority` | TodoPriority \ | null | Item priority |
-| `dueDate` | Date \ | null | Item deadline |
-| `position` | number | Display order |
-| `completedAt` | Date \ | null | Completion time |
-| `createdAt` | Date | Creation timestamp |
-| `updatedAt` | Date | Last update timestamp |
+| Field         | Type            | Description            |
+| ------------- | --------------- | ---------------------- |  |
+| `id`          | string          | Unique item identifier |
+| `title`       | string          | Item title             |
+| `status`      | TodoItemStatus  | pending \              | completed |
+| `priority`    | TodoPriority \  | null                   | Item priority |
+| `dueDate`     | Date \          | null                   | Item deadline |
+| `position`    | number          | Display order          |
+| `completedAt` | Date \          | null                   | Completion time |
+| `createdAt`   | Date            | Creation timestamp     |
+| `updatedAt`   | Date            | Last update timestamp  |
 
 ## Pub/Sub Events
 

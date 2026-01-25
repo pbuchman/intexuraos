@@ -167,11 +167,11 @@ interface PageSummary {
 | Field         | Type                  | Description                 |
 | ------------- | --------------------- | --------------------------- |
 | `url`         | `string`              | Original URL                |
-| `title`       | `string \| undefined` | og:title or HTML title      |
-| `description` | `string \| undefined` | og:description or meta desc |
-| `image`       | `string \| undefined` | Resolved absolute og:image  |
-| `favicon`     | `string \| undefined` | Favicon URL                 |
-| `siteName`    | `string \| undefined` | og:site_name                |
+| `title`       | `string \             | undefined`                  | og:title or HTML title |
+| `description` | `string \             | undefined`                  | og:description or meta desc |
+| `image`       | `string \             | undefined`                  | Resolved absolute og:image |
+| `favicon`     | `string \             | undefined`                  | Favicon URL |
+| `siteName`    | `string \             | undefined`                  | og:site_name |
 
 ### LinkPreviewError
 

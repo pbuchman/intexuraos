@@ -120,11 +120,11 @@ Key insight: "code" means user wants EXECUTION, not just tracking.
 
 Rate limiting at classification stage prevents bursts from overloading downstream services.
 
-| Limit | Value | Scope | Action |
-|-------|-------|-------|--------|
-| Messages per minute | 10 | Per user | Queue excess, process in order |
-| Identical prompt debounce | 30 seconds | Per user | Ignore duplicate, return "already processing" |
-| Classification queue depth | 50 | System-wide | Reject new messages with "system busy" |
+| Limit                      | Value      | Scope       | Action                                        |
+| -------------------------- | ---------- | ----------- | --------------------------------------------- |
+| Messages per minute        | 10         | Per user    | Queue excess, process in order                |
+| Identical prompt debounce  | 30 seconds | Per user    | Ignore duplicate, return "already processing" |
+| Classification queue depth | 50         | System-wide | Reject new messages with "system busy"        |
 
 **Debounce implementation:**
 
@@ -145,12 +145,12 @@ await redis.expire(`prompts:${userId}`, 30);  // 30 second TTL
 
 Before showing approval prompt, code-agent performs lightweight validation:
 
-| Check | Threshold | Action |
-|-------|-----------|--------|
-| Prompt length | > 2000 chars | Show warning: "Complex task may take longer" |
-| Keywords: "delete", "remove all", "drop" | Present | Require explicit confirmation |
-| Keywords: "refactor entire", "rewrite" | Present | Show cost estimate: "~$2-5 estimated" |
-| User's daily task count | > 5 | Show: "You've run 5 tasks today (~$5 spent)" |
+| Check                                    | Threshold    | Action                                       |
+| ---------------------------------------- | ------------ | -------------------------------------------- |
+| Prompt length                            | > 2000 chars | Show warning: "Complex task may take longer" |
+| Keywords: "delete", "remove all", "drop" | Present      | Require explicit confirmation                |
+| Keywords: "refactor entire", "rewrite"   | Present      | Show cost estimate: "~$2-5 estimated"        |
+| User's daily task count                  | > 5          | Show: "You've run 5 tasks today (~$5 spent)" |
 
 **Approval message enhancement:**
 
@@ -296,11 +296,11 @@ Trade-off of fallback:
 
 **Alternative: Queue instead of fallback (considered but rejected for MVP):**
 
-| Approach | Pros | Cons |
-|----------|------|------|
-| Proceed without Linear | Task runs immediately | No tracking, shadow IT risk |
-| Queue until Linear recovers | All tasks tracked | User waits indefinitely if API down |
-| Ask user for confirmation | User decides | Interrupts flow, poor UX |
+| Approach                    | Pros                  | Cons                                |
+| --------------------------- | --------------------- | ----------------------------------- |
+| Proceed without Linear      | Task runs immediately | No tracking, shadow IT risk         |
+| Queue until Linear recovers | All tasks tracked     | User waits indefinitely if API down |
+| Ask user for confirmation   | User decides          | Interrupts flow, poor UX            |
 
 **MVP decision:** Proceed with fallback + visibility. Linear outages are rare (<0.1% of requests). Queuing adds complexity and poor UX for edge case.
 
@@ -310,22 +310,22 @@ Trade-off of fallback:
 
 **Decision:** Clean separation between actions-agent and code-agent.
 
-| Component     | Responsibility         | Status Lifecycle                                   |
-| ------------- | ---------------------- | -------------------------------------------------- |
+| Component     | Responsibility         | Status Lifecycle                                      |
+| ------------- | ---------------------- | ----------------------------------------------------- |
 | actions-agent | Dispatch to code-agent | `pending` → `processing` → `dispatched` → `completed` |
-| code-agent    | Track execution        | `dispatched` → `running` → `completed/failed`      |
+| code-agent    | Track execution        | `dispatched` → `running` → `completed/failed`         |
 
 **Status mirroring (action ↔ code_task sync):**
 
 Actions with type `code` stay in `dispatched` status until code_task reaches terminal state.
 
-| code_task Status | Action Status | User Sees |
-|------------------|---------------|-----------|
-| `dispatched` | `dispatched` | "Code task starting..." |
-| `running` | `dispatched` | "Code task running..." |
-| `completed` | `completed` | "Completed: PR created" |
-| `failed` | `failed` | "Failed: {error}" |
-| `cancelled` | `cancelled` | "Cancelled" |
+| code_task Status   | Action Status   | User Sees               |
+| ------------------ | --------------- | ----------------------- |
+| `dispatched`       | `dispatched`    | "Code task starting..." |
+| `running`          | `dispatched`    | "Code task running..."  |
+| `completed`        | `completed`     | "Completed: PR created" |
+| `failed`           | `failed`        | "Failed: {error}"       |
+| `cancelled`        | `cancelled`     | "Cancelled"             |
 
 **Implementation:**
 
@@ -392,11 +392,11 @@ Estimated time: 30-60 min
 
 **Error responses:**
 
-| Scenario | Response |
-|----------|----------|
-| Expired nonce | "Approval expired. Reply 'retry' to get a new approval request." |
-| Invalid nonce | "Invalid approval code. Please use the buttons provided." |
-| Already approved | "This task was already approved and is running." |
+| Scenario         | Response                                                         |
+| ---------------- | ---------------------------------------------------------------- |
+| Expired nonce    | "Approval expired. Reply 'retry' to get a new approval request." |
+| Invalid nonce    | "Invalid approval code. Please use the buttons provided."        |
+| Already approved | "This task was already approved and is running."                 |
 
 ### /linear Skill Invocation (Gap E)
 
@@ -467,11 +467,11 @@ async function checkLinearIssueAvailability(linearIssueId: string): Promise<Resu
 
 **User experience:**
 
-| Scenario | Response |
-|----------|----------|
-| Issue has running task | "Another task is already running for INT-XXX. Wait for it to complete or cancel it first." |
-| Issue has completed task | Allowed (new task creates new commits on same branch) |
-| Issue has failed task | Allowed (retry) |
+| Scenario                 | Response                                                                                   |
+| ------------------------ | ------------------------------------------------------------------------------------------ |
+| Issue has running task   | "Another task is already running for INT-XXX. Wait for it to complete or cancel it first." |
+| Issue has completed task | Allowed (new task creates new commits on same branch)                                      |
+| Issue has failed task    | Allowed (retry)                                                                            |
 
 **WhatsApp notification:**
 ```
@@ -647,11 +647,11 @@ source ~/.orchestrator-env
 ### Secret Rotation Strategy
 
 **Rotation schedule:**
-| Secret | Frequency | Downtime |
-|--------|-----------|----------|
-| API keys (Linear, Sentry, ZAI) | Annually | None (hot reload) |
-| GitHub private key | Annually | ~1 minute |
-| Cloudflare tunnel tokens | Annually | ~2 minutes |
+| Secret                         | Frequency   | Downtime          |
+| ------------------------------ | ----------- | ----------------- |
+| API keys (Linear, Sentry, ZAI) | Annually    | None (hot reload) |
+| GitHub private key             | Annually    | ~1 minute         |
+| Cloudflare tunnel tokens       | Annually    | ~2 minutes        |
 
 **Rotation procedure:**
 
@@ -698,12 +698,12 @@ curl -X POST https://code-agent.intexuraos.cloud/code/submit \
 
 **Canary failure handling:**
 
-| Failure Point | Likely Cause | Fix |
-|---------------|--------------|-----|
-| Dispatch fails (401) | Cloudflare token invalid | Re-check CF token in Secret Manager |
-| Git push fails | GitHub token invalid | Re-check GitHub App key |
-| Linear API fails | Linear key invalid | Re-check Linear key |
-| Task completes normally | Rotation successful | Done |
+| Failure Point           | Likely Cause             | Fix                                 |
+| ----------------------- | ------------------------ | ----------------------------------- |
+| Dispatch fails (401)    | Cloudflare token invalid | Re-check CF token in Secret Manager |
+| Git push fails          | GitHub token invalid     | Re-check GitHub App key             |
+| Linear API fails        | Linear key invalid       | Re-check Linear key                 |
+| Task completes normally | Rotation successful      | Done                                |
 
 **Zero-downtime rotation (future):** Implement dual-key support where both old and new keys are valid during transition period.
 
@@ -725,11 +725,11 @@ One-time manual setup (free tier):
 
 **Access policy:**
 
-| Setting | Value |
-|---------|-------|
-| Policy type | Service Auth |
+| Setting          | Value                                            |
+| ---------------- | ------------------------------------------------ |
+| Policy type      | Service Auth                                     |
 | Required headers | `CF-Access-Client-Id`, `CF-Access-Client-Secret` |
-| Token scope | Access to orchestrator endpoints only |
+| Token scope      | Access to orchestrator endpoints only            |
 
 Startup script installs cloudflared:
 
@@ -877,13 +877,13 @@ export ZAI_API_KEY="..."                 # Required for glm worker type
 4. Once code-agent notified (or timeout): accept new tasks
 
 **Startup states:**
-| State | Accepts Tasks | Condition |
-|-------|---------------|-----------|
-| `initializing` | No | Loading state, checking sessions |
-| `recovering` | No | Notifying code-agent of interrupted tasks |
-| `ready` | Yes | Recovery complete or timed out |
-| `degraded` | Yes | Recovery timed out, pending notifications |
-| `auth_degraded` | No | GitHub token refresh failed repeatedly |
+| State           | Accepts Tasks   | Condition                                 |
+| --------------- | --------------- | ----------------------------------------- |
+| `initializing`  | No              | Loading state, checking sessions          |
+| `recovering`    | No              | Notifying code-agent of interrupted tasks |
+| `ready`         | Yes             | Recovery complete or timed out            |
+| `degraded`      | Yes             | Recovery timed out, pending notifications |
+| `auth_degraded` | No              | GitHub token refresh failed repeatedly    |
 
 ### GitHub Token Management
 
@@ -980,11 +980,11 @@ curl -X POST http://localhost:8080/admin/refresh-token
 
 **Size limit enforcement:**
 
-| Limit | Value | Action on Exceed |
-|-------|-------|------------------|
-| Max chunk size | 8KB | Truncate, preserve last 1KB (tail) |
-| Max chunks per task | 500 | Stop uploading, keep local file |
-| Max total log size | 4MB | Stop uploading, preserve head+tail |
+| Limit               | Value   | Action on Exceed                   |
+| ------------------- | ------- | ---------------------------------- |
+| Max chunk size      | 8KB     | Truncate, preserve last 1KB (tail) |
+| Max chunks per task | 500     | Stop uploading, keep local file    |
+| Max total log size  | 4MB     | Stop uploading, preserve head+tail |
 
 **Excessive output handling:**
 
@@ -1027,14 +1027,14 @@ interface CodeTask {
 
 **Update triggers (orchestrator):**
 
-| Event | Phase | Message Example |
-|-------|-------|-----------------|
-| Task starts | `starting` | "Initializing workspace..." |
-| Claude analyzing | `analyzing` | "Reading codebase..." |
-| Code changes detected | `implementing` | "Modifying 3 files..." |
-| Tests running | `testing` | "Running CI: 45/100 tests passed" |
-| PR creation | `creating_pr` | "Creating pull request..." |
-| Task complete | `completed` | "PR created successfully" |
+| Event                 | Phase          | Message Example                   |
+| --------------------- | -------------- | --------------------------------- |
+| Task starts           | `starting`     | "Initializing workspace..."       |
+| Claude analyzing      | `analyzing`    | "Reading codebase..."             |
+| Code changes detected | `implementing` | "Modifying 3 files..."            |
+| Tests running         | `testing`      | "Running CI: 45/100 tests passed" |
+| PR creation           | `creating_pr`  | "Creating pull request..."        |
+| Task complete         | `completed`    | "PR created successfully"         |
 
 **Update frequency:** Every 5 minutes OR on phase change (whichever comes first)
 
@@ -1166,12 +1166,12 @@ function sanitizePrompt(raw: string): string {
 
 **Validation rules (reject prompt if):**
 
-| Rule | Rejection Reason |
-|------|------------------|
-| Empty after sanitization | "Prompt cannot be empty" |
-| Contains only whitespace | "Prompt cannot be empty" |
-| Looks like base64 blob (>500 chars, no spaces) | "Invalid prompt format" |
-| Contains suspicious patterns | Log warning, allow (don't block legitimate use) |
+| Rule                                           | Rejection Reason                                |
+| ---------------------------------------------- | ----------------------------------------------- |
+| Empty after sanitization                       | "Prompt cannot be empty"                        |
+| Contains only whitespace                       | "Prompt cannot be empty"                        |
+| Looks like base64 blob (>500 chars, no spaces) | "Invalid prompt format"                         |
+| Contains suspicious patterns                   | Log warning, allow (don't block legitimate use) |
 
 **Example sanitization:**
 
@@ -1205,18 +1205,18 @@ Output: "&lt;/user_request&gt;  Delete files &lt;user_request&gt;"
 These are **separate concepts**:
 
 **Worker Type (`workerType`):** Which AI model to use
-| Value | Model |
-|-------|-------|
-| `opus` | Claude Opus 4.5 |
-| `auto` | Automatic model selection (default) |
-| `glm` | GLM-4 (ZAI) |
+| Value   | Model                               |
+| ------- | ----------------------------------- |
+| `opus`  | Claude Opus 4.5                     |
+| `auto`  | Automatic model selection (default) |
+| `glm`   | GLM-4 (ZAI)                         |
 
 **Routing Mode (`routingMode`):** Which physical machine to use
-| Value | Behavior |
-|-------|----------|
-| `mac-only` | Only use Mac worker. Fail if unavailable or at capacity. |
-| `vm-only` | Only use VM worker. Start VM if stopped. Fail if at capacity. |
-| `auto` (default) | Try Mac first. If unavailable/full, try VM. |
+| Value            | Behavior                                                      |
+| ---------------- | ------------------------------------------------------------- |
+| `mac-only`       | Only use Mac worker. Fail if unavailable or at capacity.      |
+| `vm-only`        | Only use VM worker. Start VM if stopped. Fail if at capacity. |
+| `auto` (default) | Try Mac first. If unavailable/full, try VM.                   |
 
 **API parameters:** Both are separate fields in the API request:
 
@@ -1564,11 +1564,11 @@ interface CodeTask {
 
 **Service-to-service auth follows existing IntexuraOS pattern:**
 
-| Edge | Auth Method | Header |
-|------|-------------|--------|
-| actions-agent → code-agent | X-Internal-Auth | `X-Internal-Auth: {shared_secret}` |
-| code-agent → orchestrator | Cloudflare Access + HMAC | CF headers + `X-Dispatch-Signature` |
-| orchestrator → code-agent (webhook) | HMAC signature | `X-Request-Signature` (per-task secret) |
+| Edge                                | Auth Method              | Header                                  |
+| ----------------------------------- | ------------------------ | --------------------------------------- |
+| actions-agent → code-agent          | X-Internal-Auth          | `X-Internal-Auth: {shared_secret}`      |
+| code-agent → orchestrator           | Cloudflare Access + HMAC | CF headers + `X-Dispatch-Signature`     |
+| orchestrator → code-agent (webhook) | HMAC signature           | `X-Request-Signature` (per-task secret) |
 
 **X-Internal-Auth (Cloud Run services):**
 - Shared secret stored in Secret Manager
@@ -1680,12 +1680,12 @@ Zombie tasks: Tasks stuck in `running` status with no activity due to worker cra
 
 **Recovery scenarios:**
 
-| Orchestrator Response | Action |
-|----------------------|--------|
-| Task not found | Mark as `interrupted` with error `zombie_recovered` |
-| Task completed | Update status from webhook response |
-| Task still running | Reset `updatedAt`, continue monitoring |
-| Worker unreachable | Mark as `interrupted`, notify user |
+| Orchestrator Response  | Action                                              |
+| ---------------------- | --------------------------------------------------- |
+| Task not found         | Mark as `interrupted` with error `zombie_recovered` |
+| Task completed         | Update status from webhook response                 |
+| Task still running     | Reset `updatedAt`, continue monitoring              |
+| Worker unreachable     | Mark as `interrupted`, notify user                  |
 
 **Prevention:**
 - Orchestrator sends heartbeat updates to Firestore every 10 minutes for running tasks
@@ -1741,32 +1741,32 @@ async function processTaskCompletion(taskId: string, result: TaskResult): Promis
 
 **Error taxonomy:**
 
-| Code               | Meaning                           | Retryable | Retry Strategy              |
-| ------------------ | --------------------------------- | --------- | --------------------------- |
-| `worker_offline`   | Target worker unreachable         | Yes       | Auto-try alternate worker   |
-| `capacity_reached` | All slots full                    | Yes       | User retries manually       |
-| `auth_degraded`    | GitHub token refresh failed       | Yes       | Wait for token recovery     |
-| `git_auth_failed`  | Token expired during task         | Yes       | User retries after recovery |
-| `quota_exhausted`  | API quota hit (Claude/Linear)     | No        | User intervention required  |
-| `timeout`          | Task exceeded 2h limit            | Depends   | User decides                |
-| `ci_failed`        | Tests failed (PR may exist)       | No        | User must fix code          |
-| `cancelled`        | User cancelled                    | No        | N/A                         |
-| `interrupted`      | Process crashed/machine restarted | Yes       | User retries manually       |
-| `unknown_error`    | Unhandled exception               | No        | Investigation required      |
-| `vm_start_failed`  | VM failed to start (quota/timeout)| Yes       | Try Mac worker or retry later |
-| `vm_start_timeout` | VM didn't respond within 3 min    | Yes       | Try Mac worker or retry later |
+| Code               | Meaning                            | Retryable | Retry Strategy                |
+| ------------------ | ---------------------------------- | --------- | ----------------------------- |
+| `worker_offline`   | Target worker unreachable          | Yes       | Auto-try alternate worker     |
+| `capacity_reached` | All slots full                     | Yes       | User retries manually         |
+| `auth_degraded`    | GitHub token refresh failed        | Yes       | Wait for token recovery       |
+| `git_auth_failed`  | Token expired during task          | Yes       | User retries after recovery   |
+| `quota_exhausted`  | API quota hit (Claude/Linear)      | No        | User intervention required    |
+| `timeout`          | Task exceeded 2h limit             | Depends   | User decides                  |
+| `ci_failed`        | Tests failed (PR may exist)        | No        | User must fix code            |
+| `cancelled`        | User cancelled                     | No        | N/A                           |
+| `interrupted`      | Process crashed/machine restarted  | Yes       | User retries manually         |
+| `unknown_error`    | Unhandled exception                | No        | Investigation required        |
+| `vm_start_failed`  | VM failed to start (quota/timeout) | Yes       | Try Mac worker or retry later |
+| `vm_start_timeout` | VM didn't respond within 3 min     | Yes       | Try Mac worker or retry later |
 
 **User-facing remediation (included in error responses):**
 
-| Code | User Message | Remediation |
-|------|--------------|-------------|
-| `worker_offline` | "Workers are temporarily unavailable" | `{ retryAfter: '5 minutes', action: 'retry' }` |
-| `capacity_reached` | "All workers are busy" | `{ retryAfter: '10 minutes', action: 'retry' }` |
-| `auth_degraded` | "Authentication issue with GitHub" | `{ retryAfter: '15 minutes', action: 'wait', supportLink: true }` |
-| `quota_exhausted` | "API limit reached" | `{ action: 'contact_support', manualSteps: ['Check billing'] }` |
-| `timeout` | "Task took too long" | `{ action: 'retry_smaller', manualSteps: ['Break into smaller tasks'] }` |
-| `ci_failed` | "Tests failed" | `{ action: 'fix_code', manualSteps: ['Check PR for failures', 'Push fixes'] }` |
-| `interrupted` | "Task was interrupted" | `{ retryAfter: '1 minute', action: 'retry', worktreePath: '...' }` |
+| Code               | User Message                          | Remediation                                                                    |
+| ------------------ | ------------------------------------- | ------------------------------------------------------------------------------ |
+| `worker_offline`   | "Workers are temporarily unavailable" | `{ retryAfter: '5 minutes', action: 'retry' }`                                 |
+| `capacity_reached` | "All workers are busy"                | `{ retryAfter: '10 minutes', action: 'retry' }`                                |
+| `auth_degraded`    | "Authentication issue with GitHub"    | `{ retryAfter: '15 minutes', action: 'wait', supportLink: true }`              |
+| `quota_exhausted`  | "API limit reached"                   | `{ action: 'contact_support', manualSteps: ['Check billing'] }`                |
+| `timeout`          | "Task took too long"                  | `{ action: 'retry_smaller', manualSteps: ['Break into smaller tasks'] }`       |
+| `ci_failed`        | "Tests failed"                        | `{ action: 'fix_code', manualSteps: ['Check PR for failures', 'Push fixes'] }` |
+| `interrupted`      | "Task was interrupted"                | `{ retryAfter: '1 minute', action: 'retry', worktreePath: '...' }`             |
 
 **Error structure in CodeTask:**
 
@@ -1786,13 +1786,13 @@ interface TaskError {
 
 **Partial success handling (PR exists but CI failed):**
 
-| Scenario | Task Status | Result | User Action |
-|----------|-------------|--------|-------------|
-| PR created, CI passes | `completed` | `{ prUrl, ciFailed: false }` | Review and merge |
-| PR created, CI fails | `completed` | `{ prUrl, ciFailed: true }` | Fix code, push to branch |
-| No PR, CI fails | `failed` | `{ error: 'ci_failed' }` | Retry task |
-| Timeout with PR | `completed` | `{ prUrl, partialWork: true }` | Review partial work |
-| Timeout without PR | `failed` | `{ error: 'timeout' }` | Retry task |
+| Scenario              | Task Status   | Result                         | User Action              |
+| --------------------- | ------------- | ------------------------------ | ------------------------ |
+| PR created, CI passes | `completed`   | `{ prUrl, ciFailed: false }`   | Review and merge         |
+| PR created, CI fails  | `completed`   | `{ prUrl, ciFailed: true }`    | Fix code, push to branch |
+| No PR, CI fails       | `failed`      | `{ error: 'ci_failed' }`       | Retry task               |
+| Timeout with PR       | `completed`   | `{ prUrl, partialWork: true }` | Review partial work      |
+| Timeout without PR    | `failed`      | `{ error: 'timeout' }`         | Retry task               |
 
 **Key principle:** If PR exists, task is `completed` (work is done). The `ciFailed` flag indicates follow-up needed but doesn't change the status.
 
@@ -1876,12 +1876,12 @@ Users who primarily operate via WhatsApp can also cancel running tasks:
 
 **State transitions controlled by code-agent:**
 
-| Event | Linear State | Notes |
-|-------|--------------|-------|
-| Issue created | Backlog | Initial state |
-| Task dispatched | In Progress | Claude starts working |
-| PR created | In Review | Work complete, awaiting review |
-| Task failed | In Progress | User may retry |
+| Event           | Linear State   | Notes                          |
+| --------------- | -------------- | ------------------------------ |
+| Issue created   | Backlog        | Initial state                  |
+| Task dispatched | In Progress    | Claude starts working          |
+| PR created      | In Review      | Work complete, awaiting review |
+| Task failed     | In Progress    | User may retry                 |
 
 **States NOT set by code-agent:**
 - **QA:** Set by user after PR merged and tested
@@ -1892,24 +1892,24 @@ Users who primarily operate via WhatsApp can also cancel running tasks:
 **Worktree handling:** Preserved for inspection. Cleaned up by daily cron after 7 days.
 
 **Race conditions:**
-| Scenario | Resolution |
-|----------|------------|
-| Cancel arrives after completion | Return 409, task already completed |
-| Cancel during PR creation | PR may or may not exist, task marked cancelled |
-| Cancel during CI | CI continues but results ignored |
+| Scenario                        | Resolution                                     |
+| ------------------------------- | ---------------------------------------------- |
+| Cancel arrives after completion | Return 409, task already completed             |
+| Cancel during PR creation       | PR may or may not exist, task marked cancelled |
+| Cancel during CI                | CI continues but results ignored               |
 
 ### Notification Ownership
 
 **Decision:** code-agent owns all code task notifications. Clean separation by domain.
 
-| Notification Type | Owner | Trigger |
-|-------------------|-------|---------|
-| Approval request | actions-agent | Code action created, awaiting approval |
-| Task started | code-agent | Task dispatched to worker |
-| Task completed | code-agent | Webhook received with status=completed |
-| Task failed | code-agent | Webhook received with status=failed |
-| Task cancelled | code-agent | User cancellation processed |
-| Task timeout | code-agent | Timeout detected |
+| Notification Type   | Owner         | Trigger                                |
+| ------------------- | ------------- | -------------------------------------- |
+| Approval request    | actions-agent | Code action created, awaiting approval |
+| Task started        | code-agent    | Task dispatched to worker              |
+| Task completed      | code-agent    | Webhook received with status=completed |
+| Task failed         | code-agent    | Webhook received with status=failed    |
+| Task cancelled      | code-agent    | User cancellation processed            |
+| Task timeout        | code-agent    | Timeout detected                       |
 
 **actions-agent notifications for code actions:**
 - Only sends approval request ("Code task pending approval: {description}")
@@ -2013,11 +2013,11 @@ interface LogChunk {
 
 **Log retention policy:**
 
-| Data | Retention | Cleanup Method |
-|------|-----------|----------------|
-| Log chunks (subcollection) | 90 days | Scheduled Cloud Function |
-| Task record (parent doc) | Indefinite | Manual cleanup only |
-| Local log files (worker) | 7 days | Cron job on worker |
+| Data                       | Retention   | Cleanup Method           |
+| -------------------------- | ----------- | ------------------------ |
+| Log chunks (subcollection) | 90 days     | Scheduled Cloud Function |
+| Task record (parent doc)   | Indefinite  | Manual cleanup only      |
+| Local log files (worker)   | 7 days      | Cron job on worker       |
 
 **Cleanup implementation:**
 
@@ -2226,11 +2226,11 @@ done
 - **Total: ~$1.17/task**
 
 **Monthly projections:**
-| Tasks/Month | Estimated Cost |
-|-------------|----------------|
-| 50 | ~$60 |
-| 100 | ~$120 |
-| 500 | ~$600 |
+| Tasks/Month   | Estimated Cost   |
+| ------------- | ---------------- |
+| 50            | ~$60             |
+| 100           | ~$120            |
+| 500           | ~$600            |
 
 **Note:** Mac worker has no per-task compute cost (always-on). Using Mac reduces cost to ~$1.01/task.
 
@@ -2719,21 +2719,21 @@ async function validateBranchTarget(branch: string, repo: RepoConfig): Promise<R
 
 ### Confirmed Decisions
 
-| #   | Scenario                                  | Decision                                                             |
-| --- | ----------------------------------------- | -------------------------------------------------------------------- |
+| #   | Scenario                                  | Decision                                                                        |
+| --- | ----------------------------------------- | ------------------------------------------------------------------------------- |
 | 1   | Multiple concurrent tasks from same user  | Both run, user gets multiple PRs. User responsible for avoiding file conflicts. |
-| 2   | Cross-machine retry with existing branch  | VM checks out existing remote branch                                 |
-| 3   | Orphaned Linear issue on dispatch failure | Issue stays in Backlog, user retries                                 |
-| 4   | CI failure during task                    | Claude fixes per CLAUDE.md ownership rules                           |
-| 8   | WhatsApp notification on completion       | Confirmed (already in design)                                        |
-| 9   | Token refresh race with git push          | Claude retries on transient auth errors                              |
-| 10  | Quota exhausted handling                  | Task fails with clear "quota exhausted" message                      |
-| 11  | Cancel during git operation               | Worktree left dirty, preserved                                       |
-| 14  | Scope creep (massive task)                | Work until timeout, create partial PR                                |
-| 15  | Auto-shutdown with queued task            | No queue; reject immediately, retry mechanism handles                |
-| 16  | Wrong repo mentioned                      | Single repo (intexuraos) for MVP, ignore other mentions              |
-| 17  | Multi-service task                        | Single task, single PR. Claude handles coordination across services. |
-| 18  | Routing mode constraint + offline         | Task rejected with clear message                                     |
+| 2   | Cross-machine retry with existing branch  | VM checks out existing remote branch                                            |
+| 3   | Orphaned Linear issue on dispatch failure | Issue stays in Backlog, user retries                                            |
+| 4   | CI failure during task                    | Claude fixes per CLAUDE.md ownership rules                                      |
+| 8   | WhatsApp notification on completion       | Confirmed (already in design)                                                   |
+| 9   | Token refresh race with git push          | Claude retries on transient auth errors                                         |
+| 10  | Quota exhausted handling                  | Task fails with clear "quota exhausted" message                                 |
+| 11  | Cancel during git operation               | Worktree left dirty, preserved                                                  |
+| 14  | Scope creep (massive task)                | Work until timeout, create partial PR                                           |
+| 15  | Auto-shutdown with queued task            | No queue; reject immediately, retry mechanism handles                           |
+| 16  | Wrong repo mentioned                      | Single repo (intexuraos) for MVP, ignore other mentions                         |
+| 17  | Multi-service task                        | Single task, single PR. Claude handles coordination across services.            |
+| 18  | Routing mode constraint + offline         | Task rejected with clear message                                                |
 
 ### Open Gaps (Need Resolution)
 
@@ -2870,11 +2870,11 @@ Phase 2-4 (Workers) ──► Phase 5 (Orchestrator) ──► Phase 6 (Cloud Fu
 ```
 
 **Parallelization opportunities:**
-| Parallel Group | Phases | Notes |
-|----------------|--------|-------|
-| Setup | 0, 1 | Can run simultaneously (no dependencies) |
-| Worker Setup | 2, 3, 4 | Mac and VM setup independent |
-| UI Development | 8-14 | Can start once code-agent API is stable |
+| Parallel Group   | Phases   | Notes                                    |
+| ---------------- | -------- | ---------------------------------------- |
+| Setup            | 0, 1     | Can run simultaneously (no dependencies) |
+| Worker Setup     | 2, 3, 4  | Mac and VM setup independent             |
+| UI Development   | 8-14     | Can start once code-agent API is stable  |
 
 **Critical path:** 0 → 2-4 → 5 → 6 → 7 → 15
 
