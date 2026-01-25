@@ -378,3 +378,7 @@ curl -X GET "https://calendar-agent.intexuraos.com/calendar/failed-events?limit=
 1. Find next available 1-hour slot for multiple attendees
 2. Implement preview polling with exponential backoff
 3. Handle all preview states (pending, ready, failed) in UI
+
+---
+
+**Last updated:** 2025-01-25

@@ -144,24 +144,24 @@ sequenceDiagram
 
 ### WhatsAppMessage
 
-| Field              | Type                         | Description                        |
-| ------------------ | ---------------------------- | ---------------------------------- |
-| `id`               | string                       | Unique message identifier          |
-| `userId`           | string                       | User who received the message      |
-| `waMessageId`      | string                       | WhatsApp message ID                |
-| `fromNumber`       | string                       | Sender's phone number              |
-| `toNumber`         | string                       | Recipient phone number             |
-| `text`             | string                       | Message text (text messages)       |
-| `mediaType`        | `text` \| `image` \| `audio` | Message type                       |
-| `gcsPath`          | string                       | GCS path to media file             |
-| `thumbnailGcsPath` | string                       | GCS path to thumbnail              |
-| `caption`          | string \| null               | Media caption                      |
-| `transcription`    | TranscriptionState \| null   | Audio transcription result         |
-| `linkPreview`      | LinkPreviewState \| null     | Extracted link metadata            |
-| `timestamp`        | string                       | WhatsApp timestamp                 |
-| `receivedAt`       | string                       | ISO 8601 receive time              |
-| `webhookEventId`   | string                       | Associated webhook event           |
-| `metadata`         | object                       | Additional data (senderName, etc.) |
+| Field | Type | Description |
+| ------------------ | --------------------- | ---------------------------------- | | |
+| `id` | string | Unique message identifier |
+| `userId` | string | User who received the message |
+| `waMessageId` | string | WhatsApp message ID |
+| `fromNumber` | string | Sender's phone number |
+| `toNumber` | string | Recipient phone number |
+| `text` | string | Message text (text messages) |
+| `mediaType` | `text` \ | `image` \ | `audio` | Message type |
+| `gcsPath` | string | GCS path to media file |
+| `thumbnailGcsPath` | string | GCS path to thumbnail |
+| `caption` | string \ | null | Media caption |
+| `transcription` | TranscriptionState \ | null | Audio transcription result |
+| `linkPreview` | LinkPreviewState \ | null | Extracted link metadata |
+| `timestamp` | string | WhatsApp timestamp |
+| `receivedAt` | string | ISO 8601 receive time |
+| `webhookEventId` | string | Associated webhook event |
+| `metadata` | object | Additional data (senderName, etc.) |
 
 ### OutboundMessage (v2.0.0)
 
@@ -177,23 +177,23 @@ Tracks sent messages for reply correlation. Uses wamid as document ID for effici
 
 ### TranscriptionState
 
-| Field     | Type                                                 | Description             |
-| --------- | ---------------------------------------------------- | ----------------------- |
-| `status`  | `pending` \| `processing` \| `completed` \| `failed` | Transcription progress  |
-| `text`    | string \| null                                       | Full transcribed text   |
-| `summary` | string \| null                                       | AI-generated key points |
-| `error`   | object \| null                                       | Error details if failed |
+| Field | Type | Description |
+| --------- | ------------ | --------------- | | | |
+| `status` | `pending` \ | `processing` \ | `completed` \ | `failed` | Transcription progress |
+| `text` | string \ | null | Full transcribed text |
+| `summary` | string \ | null | AI-generated key points |
+| `error` | object \ | null | Error details if failed |
 
 ### WebhookEvent
 
-| Field            | Type                                                                                 | Description                   |
-| ---------------- | ------------------------------------------------------------------------------------ | ----------------------------- |
-| `id`             | string                                                                               | Unique event ID               |
-| `payload`        | object                                                                               | Raw webhook payload           |
-| `signatureValid` | boolean                                                                              | Signature verification result |
-| `receivedAt`     | string                                                                               | ISO 8601 timestamp            |
-| `phoneNumberId`  | string                                                                               | WhatsApp phone number ID      |
-| `status`         | `pending` \| `processing` \| `completed` \| `failed` \| `ignored` \| `user_unmapped` | Processing status             |
+| Field | Type | Description |
+| ---------------- | ------------ | ----------------------------- | | | | | |
+| `id` | string | Unique event ID |
+| `payload` | object | Raw webhook payload |
+| `signatureValid` | boolean | Signature verification result |
+| `receivedAt` | string | ISO 8601 timestamp |
+| `phoneNumberId` | string | WhatsApp phone number ID |
+| `status` | `pending` \ | `processing` \ | `completed` \ | `failed` \ | `ignored` \ | `user_unmapped` | Processing status |
 
 ### UserMapping
 

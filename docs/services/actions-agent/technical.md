@@ -5,7 +5,8 @@
 Actions-agent is the central action lifecycle management service for IntexuraOS. It receives classified commands from
 commands-agent, maintains action state in Firestore, routes actions to appropriate handlers via Pub/Sub, and tracks
 execution status. In v2.0.0, it gained WhatsApp approval reply handling with LLM-based intent classification and
-atomic status transitions to prevent race conditions.
+atomic status transitions to prevent race conditions. In v2.1.0, it migrated to the centralized
+`@intexuraos/internal-clients/user-service` package for improved code quality and consistency.
 
 ## Architecture
 
@@ -43,6 +44,18 @@ graph TB
 
     Scheduler[Cloud Scheduler] -->|"/internal/actions/retry-pending"| AA
 ```
+
+## Recent Changes
+
+| Commit    | Description                                                  | Date       |
+| --------- | ------------------------------------------------------------ | ---------- |
+| `88cec45` | INT-269 Migrate to @intexuraos/internal-clients/user-service | 2026-01-25 |
+| `b1c7a4b` | INT-269 Create internal-clients package and migrate apps     | 2026-01-25 |
+| `24c9e29` | Fix duplicate approval messages for all action types         | 2026-01-24 |
+| `4fa0fed` | Release v2.0.0                                               | 2026-01-24 |
+| `a0263b1` | Fix approval message ordering for note actions               | 2026-01-22 |
+| `d26ed6a` | Prevent race condition in approval reply processing          | 2026-01-22 |
+| `c2e3c10` | Publish action.created event after WhatsApp approval         | 2026-01-21 |
 
 ## Data Flow
 
@@ -266,16 +279,16 @@ const handler = registerActionHandler(createHandleXxxActionUseCase, deps);
 
 ### Internal Services
 
-| Service           | Purpose                               |
-| ----------------- | ------------------------------------- |
-| `commands-agent`  | Create new commands from transitions  |
-| `research-agent`  | Execute research actions              |
-| `todos-agent`     | Execute todo actions                  |
-| `notes-agent`     | Execute note actions                  |
-| `bookmarks-agent` | Execute link actions                  |
-| `calendar-agent`  | Execute calendar actions              |
-| `linear-agent`    | Execute Linear issue creation actions |
-| `user-service`    | Fetch user API keys for LLM           |
+| Service           | Purpose                                                                                 |
+| ----------------- | --------------------------------------------------------------------------------------- |
+| `commands-agent`  | Create new commands from transitions                                                    |
+| `research-agent`  | Execute research actions                                                                |
+| `todos-agent`     | Execute todo actions                                                                    |
+| `notes-agent`     | Execute note actions                                                                    |
+| `bookmarks-agent` | Execute link actions                                                                    |
+| `calendar-agent`  | Execute calendar actions                                                                |
+| `linear-agent`    | Execute Linear issue creation actions                                                   |
+| `user-service`    | Fetch user API keys for LLM (via `@intexuraos/internal-clients/user-service` in v2.1.0) |
 
 ### Infrastructure
 

@@ -1,13 +1,17 @@
 import type { Result } from '@intexuraos/common-core';
 import { err, getErrorMessage, ok } from '@intexuraos/common-core';
-import { calendarActionExtractionPrompt } from '@intexuraos/llm-prompts';
+import {
+  calendarActionExtractionPrompt,
+  CalendarEventSchema,
+} from '@intexuraos/llm-prompts';
+import { formatZodErrors } from '@intexuraos/llm-utils';
 import type { LlmGenerateClient } from '@intexuraos/llm-factory';
-import type { LlmUserServiceClient } from '../user/llmUserServiceClient.js';
+import type { UserServiceClient } from '@intexuraos/internal-clients';
 import type {
   CalendarActionExtractionService,
-  ExtractedCalendarEvent,
   ExtractionError,
 } from '../../domain/ports.js';
+import type { ExtractedCalendarEvent } from '../../domain/ports.js';
 import pino from 'pino';
 
 export type { CalendarActionExtractionService, ExtractedCalendarEvent, ExtractionError };
@@ -17,7 +21,7 @@ const MAX_DESCRIPTION_LENGTH = 1000;
 type MinimalLogger = pino.Logger;
 
 export function createCalendarActionExtractionService(
-  llmUserServiceClient: LlmUserServiceClient,
+  llmUserServiceClient: UserServiceClient,
   logger: MinimalLogger
 ): CalendarActionExtractionService {
   const log: MinimalLogger = logger;
@@ -115,29 +119,58 @@ export function createCalendarActionExtractionService(
       }
 
       try {
-        const parsed = JSON.parse(cleaned) as unknown;
-
-        if (!isValidExtractionResponse(parsed)) {
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(cleaned);
+        } catch (e) {
           log.error(
-            {
-              userId,
-              parseError: 'Schema validation failed',
-              rawResponsePreview: cleaned.slice(0, 500),
-            },
-            'LLM returned invalid response format'
+            { userId, parseError: getErrorMessage(e) },
+            'Failed to parse LLM response as JSON'
           );
           return err({
             code: 'INVALID_RESPONSE',
-            message: 'LLM returned invalid response format',
+            message: `Failed to parse: ${getErrorMessage(e)}`,
             details: {
-              parseError: 'Schema validation failed',
+              parseError: getErrorMessage(e),
               rawResponsePreview: cleaned.slice(0, 1000),
               wasWrappedInMarkdown,
             },
           });
         }
 
-        const event = parsed as ExtractedCalendarEvent;
+        const validationResult = CalendarEventSchema.safeParse(parsed);
+        if (!validationResult.success) {
+          const zodErrors = formatZodErrors(validationResult.error);
+          log.error(
+            {
+              userId,
+              zodErrors,
+              rawResponsePreview: cleaned.slice(0, 500),
+              wasWrappedInMarkdown,
+            },
+            'LLM returned invalid response format'
+          );
+          return err({
+            code: 'INVALID_RESPONSE',
+            message: `LLM returned invalid response format: ${zodErrors}`,
+            details: {
+              zodErrors,
+              rawResponsePreview: cleaned.slice(0, 1000),
+              wasWrappedInMarkdown,
+            },
+          });
+        }
+
+        const event: ExtractedCalendarEvent = {
+          summary: validationResult.data.summary,
+          start: validationResult.data.start,
+          end: validationResult.data.end,
+          location: validationResult.data.location,
+          description: validationResult.data.description,
+          valid: validationResult.data.valid,
+          error: validationResult.data.error,
+          reasoning: validationResult.data.reasoning,
+        };
 
         log.info(
           {
@@ -160,7 +193,7 @@ export function createCalendarActionExtractionService(
         );
         return err({
           code: 'INVALID_RESPONSE',
-          message: `Failed to parse LLM response: ${getErrorMessage(error)}`,
+          message: `Failed to parse: ${getErrorMessage(error)}`,
           details: {
             parseError: getErrorMessage(error),
             rawResponsePreview: cleaned.slice(0, 1000),
@@ -172,21 +205,4 @@ export function createCalendarActionExtractionService(
       }
     },
   };
-}
-
-function isValidExtractionResponse(value: unknown): boolean {
-  if (typeof value !== 'object' || value === null) return false;
-
-  const obj = value as Record<string, unknown>;
-
-  if (typeof obj['summary'] !== 'string') return false;
-  if (obj['start'] !== null && typeof obj['start'] !== 'string') return false;
-  if (obj['end'] !== null && typeof obj['end'] !== 'string') return false;
-  if (obj['location'] !== null && typeof obj['location'] !== 'string') return false;
-  if (obj['description'] !== null && typeof obj['description'] !== 'string') return false;
-  if (typeof obj['valid'] !== 'boolean') return false;
-  if (obj['error'] !== null && typeof obj['error'] !== 'string') return false;
-  if (typeof obj['reasoning'] !== 'string') return false;
-
-  return true;
 }

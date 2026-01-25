@@ -131,36 +131,36 @@ sequenceDiagram
 
 ### Bookmark
 
-| Field            | Type                                   | Description                      |
-| ---------------- | -------------------------------------- | -------------------------------- |
-| `id`             | `string`                               | Unique bookmark identifier       |
-| `userId`         | `string`                               | Owner user ID                    |
-| `status`         | `'draft' \| 'active'`                  | Draft or active status           |
-| `url`            | `string`                               | Bookmark URL                     |
-| `title`          | `string \| null`                       | Page title                       |
-| `description`    | `string \| null`                       | Page description                 |
-| `tags`           | `string[]`                             | User-defined tags                |
-| `ogPreview`      | `OpenGraphPreview \| null`             | Fetched metadata                 |
-| `ogFetchedAt`    | `Date \| null`                         | When metadata was fetched        |
-| `ogFetchStatus`  | `'pending' \| 'processed' \| 'failed'` | Metadata fetch status            |
-| `aiSummary`      | `string \| null`                       | AI-generated summary             |
-| `aiSummarizedAt` | `Date \| null`                         | When summary was generated       |
-| `source`         | `string`                               | Source system (e.g., 'whatsapp') |
-| `sourceId`       | `string`                               | ID in source system              |
-| `archived`       | `boolean`                              | Soft delete flag                 |
-| `createdAt`      | `Date`                                 | Creation timestamp               |
-| `updatedAt`      | `Date`                                 | Last update timestamp            |
+| Field | Type | Description |
+| ---------------- | -------------------- | -------------------------------- | | |
+| `id` | `string` | Unique bookmark identifier |
+| `userId` | `string` | Owner user ID |
+| `status` | `'draft' \           | 'active'` | Draft or active status |
+| `url` | `string` | Bookmark URL |
+| `title` | `string \            | null` | Page title |
+| `description` | `string \            | null` | Page description |
+| `tags` | `string[]` | User-defined tags |
+| `ogPreview` | `OpenGraphPreview \  | null` | Fetched metadata |
+| `ogFetchedAt` | `Date \              | null` | When metadata was fetched |
+| `ogFetchStatus` | `'pending' \         | 'processed' \                    | 'failed'` | Metadata fetch status |
+| `aiSummary` | `string \            | null` | AI-generated summary |
+| `aiSummarizedAt` | `Date \              | null` | When summary was generated |
+| `source` | `string` | Source system (e.g., 'whatsapp') |
+| `sourceId` | `string` | ID in source system |
+| `archived` | `boolean` | Soft delete flag |
+| `createdAt` | `Date` | Creation timestamp |
+| `updatedAt` | `Date` | Last update timestamp |
 
 ### OpenGraphPreview
 
-| Field         | Type             | Description    |
-| ------------- | ---------------- | -------------- |
-| `title`       | `string \| null` | OG title       |
-| `description` | `string \| null` | OG description |
-| `image`       | `string \| null` | OG image URL   |
-| `siteName`    | `string \| null` | OG site name   |
-| `type`        | `string \| null` | OG type        |
-| `favicon`     | `string \| null` | Favicon URL    |
+| Field | Type | Description |
+| ------------- | ---------- | ----------- | |
+| `title` | `string \  | null` | OG title |
+| `description` | `string \  | null` | OG description |
+| `image` | `string \  | null` | OG image URL |
+| `siteName` | `string \  | null` | OG site name |
+| `type` | `string \  | null` | OG type |
+| `favicon` | `string \  | null` | Favicon URL |
 
 ### Status Values
 

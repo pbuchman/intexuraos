@@ -55,6 +55,35 @@ export class FakeUserServiceClient implements UserServiceClient {
   }
 }
 
+// Fake for the LLM user service client (from shared package)
+export class FakeLlmUserServiceClient {
+  private llmClientResult?: Result<LlmGenerateClient, import('@intexuraos/internal-clients').UserServiceError>;
+
+  setLlmClientResult(result: Result<LlmGenerateClient, import('@intexuraos/internal-clients').UserServiceError>): void {
+    this.llmClientResult = result;
+  }
+
+  async getLlmClient(_userId: string): Promise<Result<LlmGenerateClient, import('@intexuraos/internal-clients').UserServiceError>> {
+    if (this.llmClientResult) return this.llmClientResult;
+
+    const mockLlmClient: LlmGenerateClient = {
+      generate: async () => ok({
+        content: 'fake response',
+        usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd: 0.0001 },
+      }),
+    };
+    return ok(mockLlmClient);
+  }
+
+  async getApiKeys(_userId: string): Promise<Result<import('@intexuraos/internal-clients').DecryptedApiKeys, import('@intexuraos/internal-clients').UserServiceError>> {
+    return ok({});
+  }
+
+  async reportLlmSuccess(_userId: string, _provider: string): Promise<void> {
+    // Best effort - silently ignore in tests
+  }
+}
+
 export class FakeGoogleCalendarClient implements GoogleCalendarClient {
   private events: CalendarEvent[] = [];
   private listResult: Result<CalendarEvent[], CalendarError> | null = null;

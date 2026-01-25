@@ -1092,10 +1092,564 @@ describe('HandleApprovalReplyUseCase', () => {
       // executeNoteAction should NOT be called for non-note actions
       expect(executeNoteActionCalls).toHaveLength(0);
 
-      // action.created event should be published for link actions
+      // action.created event should be published for link actions (fallback)
       const publishedEvents = actionEventPublisher.getPublishedEvents();
       expect(publishedEvents).toHaveLength(1);
       expect(publishedEvents[0]?.actionType).toBe('link');
+    });
+  });
+
+  describe('todo action execution after approval', () => {
+    it('calls executeTodoAction directly when approving (does not publish event)', async () => {
+      const todoAction: Action = {
+        id: 'todo-action-1',
+        type: 'todo',
+        userId: 'user-1',
+        title: 'Test todo',
+        status: 'awaiting_approval',
+        confidence: 0.95,
+        commandId: 'cmd-1',
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+        payload: {},
+      };
+      await actionRepository.save(todoAction);
+
+      const executeCalls: string[] = [];
+      const mockExecuteTodoAction = async (
+        actionId: string
+      ): Promise<Result<{ status: 'completed' | 'failed'; message?: string }>> => {
+        executeCalls.push(actionId);
+        return ok({ status: 'completed' as const, message: 'Todo created!' });
+      };
+
+      const useCaseWithExecute = createHandleApprovalReplyUseCase({
+        actionRepository,
+        approvalMessageRepository,
+        approvalIntentClassifierFactory: classifierFactory,
+        whatsappPublisher,
+        actionEventPublisher,
+        logger: pino({ level: 'silent' }),
+        executeTodoAction: mockExecuteTodoAction,
+      });
+
+      classifierFactory.getClassifier().setResult({
+        intent: 'approve',
+        confidence: 0.95,
+        reasoning: 'User approved',
+      });
+
+      const result = await useCaseWithExecute({
+        replyToWamid: 'wamid-123',
+        replyText: 'yes',
+        userId: 'user-1',
+        actionId: 'todo-action-1',
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.outcome).toBe('approved');
+      }
+
+      expect(executeCalls).toHaveLength(1);
+      expect(executeCalls[0]).toBe('todo-action-1');
+      expect(actionEventPublisher.getPublishedEvents()).toHaveLength(0);
+    });
+
+    it('falls back to publishing event when executeTodoAction is not provided', async () => {
+      const todoAction: Action = {
+        id: 'todo-action-2',
+        type: 'todo',
+        userId: 'user-1',
+        title: 'Test todo',
+        status: 'awaiting_approval',
+        confidence: 0.95,
+        commandId: 'cmd-1',
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+        payload: {},
+      };
+      await actionRepository.save(todoAction);
+
+      classifierFactory.getClassifier().setResult({
+        intent: 'approve',
+        confidence: 0.95,
+        reasoning: 'User approved',
+      });
+
+      const result = await useCase({
+        replyToWamid: 'wamid-123',
+        replyText: 'yes',
+        userId: 'user-1',
+        actionId: 'todo-action-2',
+      });
+
+      expect(result.ok).toBe(true);
+
+      const publishedEvents = actionEventPublisher.getPublishedEvents();
+      expect(publishedEvents).toHaveLength(1);
+      expect(publishedEvents[0]?.actionType).toBe('todo');
+    });
+  });
+
+  describe('research action execution after approval', () => {
+    it('calls executeResearchAction directly when approving (does not publish event)', async () => {
+      const researchAction: Action = {
+        id: 'research-action-1',
+        type: 'research',
+        userId: 'user-1',
+        title: 'Test research',
+        status: 'awaiting_approval',
+        confidence: 0.95,
+        commandId: 'cmd-1',
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+        payload: {},
+      };
+      await actionRepository.save(researchAction);
+
+      const executeCalls: string[] = [];
+      const mockExecuteResearchAction = async (
+        actionId: string
+      ): Promise<Result<{ status: 'completed' | 'failed'; message?: string }>> => {
+        executeCalls.push(actionId);
+        return ok({ status: 'completed' as const, message: 'Research created!' });
+      };
+
+      const useCaseWithExecute = createHandleApprovalReplyUseCase({
+        actionRepository,
+        approvalMessageRepository,
+        approvalIntentClassifierFactory: classifierFactory,
+        whatsappPublisher,
+        actionEventPublisher,
+        logger: pino({ level: 'silent' }),
+        executeResearchAction: mockExecuteResearchAction,
+      });
+
+      classifierFactory.getClassifier().setResult({
+        intent: 'approve',
+        confidence: 0.95,
+        reasoning: 'User approved',
+      });
+
+      const result = await useCaseWithExecute({
+        replyToWamid: 'wamid-123',
+        replyText: 'yes',
+        userId: 'user-1',
+        actionId: 'research-action-1',
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.outcome).toBe('approved');
+      }
+
+      expect(executeCalls).toHaveLength(1);
+      expect(executeCalls[0]).toBe('research-action-1');
+      expect(actionEventPublisher.getPublishedEvents()).toHaveLength(0);
+    });
+
+    it('falls back to publishing event when executeResearchAction is not provided', async () => {
+      const researchAction: Action = {
+        id: 'research-action-2',
+        type: 'research',
+        userId: 'user-1',
+        title: 'Test research',
+        status: 'awaiting_approval',
+        confidence: 0.95,
+        commandId: 'cmd-1',
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+        payload: {},
+      };
+      await actionRepository.save(researchAction);
+
+      classifierFactory.getClassifier().setResult({
+        intent: 'approve',
+        confidence: 0.95,
+        reasoning: 'User approved',
+      });
+
+      const result = await useCase({
+        replyToWamid: 'wamid-123',
+        replyText: 'yes',
+        userId: 'user-1',
+        actionId: 'research-action-2',
+      });
+
+      expect(result.ok).toBe(true);
+
+      const publishedEvents = actionEventPublisher.getPublishedEvents();
+      expect(publishedEvents).toHaveLength(1);
+      expect(publishedEvents[0]?.actionType).toBe('research');
+    });
+  });
+
+  describe('link action execution after approval', () => {
+    it('calls executeLinkAction directly when approving (does not publish event)', async () => {
+      const linkAction: Action = {
+        id: 'link-action-2',
+        type: 'link',
+        userId: 'user-1',
+        title: 'Test link',
+        status: 'awaiting_approval',
+        confidence: 0.95,
+        commandId: 'cmd-1',
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+        payload: {},
+      };
+      await actionRepository.save(linkAction);
+
+      const executeCalls: string[] = [];
+      const mockExecuteLinkAction = async (
+        actionId: string
+      ): Promise<Result<{ status: 'completed' | 'failed'; message?: string }>> => {
+        executeCalls.push(actionId);
+        return ok({ status: 'completed' as const, message: 'Link saved!' });
+      };
+
+      const useCaseWithExecute = createHandleApprovalReplyUseCase({
+        actionRepository,
+        approvalMessageRepository,
+        approvalIntentClassifierFactory: classifierFactory,
+        whatsappPublisher,
+        actionEventPublisher,
+        logger: pino({ level: 'silent' }),
+        executeLinkAction: mockExecuteLinkAction,
+      });
+
+      classifierFactory.getClassifier().setResult({
+        intent: 'approve',
+        confidence: 0.95,
+        reasoning: 'User approved',
+      });
+
+      const result = await useCaseWithExecute({
+        replyToWamid: 'wamid-123',
+        replyText: 'yes',
+        userId: 'user-1',
+        actionId: 'link-action-2',
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.outcome).toBe('approved');
+      }
+
+      expect(executeCalls).toHaveLength(1);
+      expect(executeCalls[0]).toBe('link-action-2');
+      expect(actionEventPublisher.getPublishedEvents()).toHaveLength(0);
+    });
+
+    it('falls back to publishing event when executeLinkAction is not provided', async () => {
+      const linkAction: Action = {
+        id: 'link-action-3',
+        type: 'link',
+        userId: 'user-1',
+        title: 'Test link',
+        status: 'awaiting_approval',
+        confidence: 0.95,
+        commandId: 'cmd-1',
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+        payload: {},
+      };
+      await actionRepository.save(linkAction);
+
+      classifierFactory.getClassifier().setResult({
+        intent: 'approve',
+        confidence: 0.95,
+        reasoning: 'User approved',
+      });
+
+      const result = await useCase({
+        replyToWamid: 'wamid-123',
+        replyText: 'yes',
+        userId: 'user-1',
+        actionId: 'link-action-3',
+      });
+
+      expect(result.ok).toBe(true);
+
+      const publishedEvents = actionEventPublisher.getPublishedEvents();
+      expect(publishedEvents).toHaveLength(1);
+      expect(publishedEvents[0]?.actionType).toBe('link');
+    });
+  });
+
+  describe('calendar action execution after approval', () => {
+    it('calls executeCalendarAction directly when approving (does not publish event)', async () => {
+      const calendarAction: Action = {
+        id: 'calendar-action-1',
+        type: 'calendar',
+        userId: 'user-1',
+        title: 'Test calendar',
+        status: 'awaiting_approval',
+        confidence: 0.95,
+        commandId: 'cmd-1',
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+        payload: {},
+      };
+      await actionRepository.save(calendarAction);
+
+      const executeCalls: string[] = [];
+      const mockExecuteCalendarAction = async (
+        actionId: string
+      ): Promise<Result<{ status: 'completed' | 'failed'; message?: string }>> => {
+        executeCalls.push(actionId);
+        return ok({ status: 'completed' as const, message: 'Calendar event created!' });
+      };
+
+      const useCaseWithExecute = createHandleApprovalReplyUseCase({
+        actionRepository,
+        approvalMessageRepository,
+        approvalIntentClassifierFactory: classifierFactory,
+        whatsappPublisher,
+        actionEventPublisher,
+        logger: pino({ level: 'silent' }),
+        executeCalendarAction: mockExecuteCalendarAction,
+      });
+
+      classifierFactory.getClassifier().setResult({
+        intent: 'approve',
+        confidence: 0.95,
+        reasoning: 'User approved',
+      });
+
+      const result = await useCaseWithExecute({
+        replyToWamid: 'wamid-123',
+        replyText: 'yes',
+        userId: 'user-1',
+        actionId: 'calendar-action-1',
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.outcome).toBe('approved');
+      }
+
+      expect(executeCalls).toHaveLength(1);
+      expect(executeCalls[0]).toBe('calendar-action-1');
+      expect(actionEventPublisher.getPublishedEvents()).toHaveLength(0);
+    });
+
+    it('falls back to publishing event when executeCalendarAction is not provided', async () => {
+      const calendarAction: Action = {
+        id: 'calendar-action-2',
+        type: 'calendar',
+        userId: 'user-1',
+        title: 'Test calendar',
+        status: 'awaiting_approval',
+        confidence: 0.95,
+        commandId: 'cmd-1',
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+        payload: {},
+      };
+      await actionRepository.save(calendarAction);
+
+      classifierFactory.getClassifier().setResult({
+        intent: 'approve',
+        confidence: 0.95,
+        reasoning: 'User approved',
+      });
+
+      const result = await useCase({
+        replyToWamid: 'wamid-123',
+        replyText: 'yes',
+        userId: 'user-1',
+        actionId: 'calendar-action-2',
+      });
+
+      expect(result.ok).toBe(true);
+
+      const publishedEvents = actionEventPublisher.getPublishedEvents();
+      expect(publishedEvents).toHaveLength(1);
+      expect(publishedEvents[0]?.actionType).toBe('calendar');
+    });
+  });
+
+  describe('linear action execution after approval', () => {
+    it('calls executeLinearAction directly when approving (does not publish event)', async () => {
+      const linearAction: Action = {
+        id: 'linear-action-1',
+        type: 'linear',
+        userId: 'user-1',
+        title: 'Test linear',
+        status: 'awaiting_approval',
+        confidence: 0.95,
+        commandId: 'cmd-1',
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+        payload: {},
+      };
+      await actionRepository.save(linearAction);
+
+      const executeCalls: string[] = [];
+      const mockExecuteLinearAction = async (
+        actionId: string
+      ): Promise<Result<{ status: 'completed' | 'failed'; message?: string }>> => {
+        executeCalls.push(actionId);
+        return ok({ status: 'completed' as const, message: 'Linear issue created!' });
+      };
+
+      const useCaseWithExecute = createHandleApprovalReplyUseCase({
+        actionRepository,
+        approvalMessageRepository,
+        approvalIntentClassifierFactory: classifierFactory,
+        whatsappPublisher,
+        actionEventPublisher,
+        logger: pino({ level: 'silent' }),
+        executeLinearAction: mockExecuteLinearAction,
+      });
+
+      classifierFactory.getClassifier().setResult({
+        intent: 'approve',
+        confidence: 0.95,
+        reasoning: 'User approved',
+      });
+
+      const result = await useCaseWithExecute({
+        replyToWamid: 'wamid-123',
+        replyText: 'yes',
+        userId: 'user-1',
+        actionId: 'linear-action-1',
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.outcome).toBe('approved');
+      }
+
+      expect(executeCalls).toHaveLength(1);
+      expect(executeCalls[0]).toBe('linear-action-1');
+      expect(actionEventPublisher.getPublishedEvents()).toHaveLength(0);
+    });
+
+    it('falls back to publishing event when executeLinearAction is not provided', async () => {
+      const linearAction: Action = {
+        id: 'linear-action-2',
+        type: 'linear',
+        userId: 'user-1',
+        title: 'Test linear',
+        status: 'awaiting_approval',
+        confidence: 0.95,
+        commandId: 'cmd-1',
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+        payload: {},
+      };
+      await actionRepository.save(linearAction);
+
+      classifierFactory.getClassifier().setResult({
+        intent: 'approve',
+        confidence: 0.95,
+        reasoning: 'User approved',
+      });
+
+      const result = await useCase({
+        replyToWamid: 'wamid-123',
+        replyText: 'yes',
+        userId: 'user-1',
+        actionId: 'linear-action-2',
+      });
+
+      expect(result.ok).toBe(true);
+
+      const publishedEvents = actionEventPublisher.getPublishedEvents();
+      expect(publishedEvents).toHaveLength(1);
+      expect(publishedEvents[0]?.actionType).toBe('linear');
+    });
+  });
+
+  describe('execute function failure handling', () => {
+    it('logs error but returns success when execute function fails', async () => {
+      const calendarAction: Action = {
+        id: 'calendar-action-fail',
+        type: 'calendar',
+        userId: 'user-1',
+        title: 'Test calendar',
+        status: 'awaiting_approval',
+        confidence: 0.95,
+        commandId: 'cmd-1',
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+        payload: {},
+      };
+      await actionRepository.save(calendarAction);
+
+      const failingExecute = async (): Promise<Result<{ status: 'completed' | 'failed'; message?: string }>> =>
+        err(new Error('Execution failed'));
+
+      const useCaseWithFailingExecute = createHandleApprovalReplyUseCase({
+        actionRepository,
+        approvalMessageRepository,
+        approvalIntentClassifierFactory: classifierFactory,
+        whatsappPublisher,
+        actionEventPublisher,
+        logger: pino({ level: 'silent' }),
+        executeCalendarAction: failingExecute,
+      });
+
+      classifierFactory.getClassifier().setResult({
+        intent: 'approve',
+        confidence: 0.95,
+        reasoning: 'User approved',
+      });
+
+      const result = await useCaseWithFailingExecute({
+        replyToWamid: 'wamid-123',
+        replyText: 'yes',
+        userId: 'user-1',
+        actionId: 'calendar-action-fail',
+      });
+
+      // Should still return approved (execution is best-effort)
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.outcome).toBe('approved');
+      }
+    });
+  });
+
+  describe('reminder action (not implemented)', () => {
+    it('logs warning for reminder actions (no execute function exists)', async () => {
+      const reminderAction: Action = {
+        id: 'reminder-action-1',
+        type: 'reminder',
+        userId: 'user-1',
+        title: 'Test reminder',
+        status: 'awaiting_approval',
+        confidence: 0.95,
+        commandId: 'cmd-1',
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+        payload: {},
+      };
+      await actionRepository.save(reminderAction);
+
+      classifierFactory.getClassifier().setResult({
+        intent: 'approve',
+        confidence: 0.95,
+        reasoning: 'User approved',
+      });
+
+      const result = await useCase({
+        replyToWamid: 'wamid-123',
+        replyText: 'yes',
+        userId: 'user-1',
+        actionId: 'reminder-action-1',
+      });
+
+      // Should succeed and publish event (reminder falls through to event publishing)
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.outcome).toBe('approved');
+      }
+      expect(actionEventPublisher.getPublishedEvents()).toHaveLength(1);
+      expect(actionEventPublisher.getPublishedEvents()[0]?.type).toBe('action.created');
     });
   });
 });

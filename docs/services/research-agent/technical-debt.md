@@ -1,7 +1,7 @@
 # Research Agent - Technical Debt
 
-**Last Updated:** 2026-01-24
-**Analysis Run:** v2.0.0 documentation update
+**Last Updated:** 2026-01-25
+**Analysis Run:** v2.1.0 documentation update
 
 ---
 
@@ -76,7 +76,7 @@ Comprehensive test coverage across all layers with 95% threshold enforced:
 
 - **Models**: Research entity creation, enhancement, factories
 - **Use Cases**: Process research, synthesis, retry, enhance, unshare, extractModelPreferences (v2.0.0)
-- **Infrastructure**: All LLM adapters with nock mocks, ContextInferenceAdapter with repair scenarios
+- **Infrastructure**: All LLM adapters with nock mocks, ContextInferenceAdapter with repair scenarios, InputValidationAdapter with Zod schemas (v2.1.0)
 - **Routes**: PubSub endpoints with proper auth validation
 
 ### v2.0.0 Test Additions
@@ -86,6 +86,12 @@ Comprehensive test coverage across all layers with 95% threshold enforced:
 | `extractModelPreferences.test.ts` | 100%     | All branches covered including edge cases |
 | `ContextInferenceAdapter.test.ts` | 100%     | Repair pattern scenarios tested           |
 
+### v2.1.0 Test Additions
+
+| File                             | Coverage | Notes                                     |
+| -------------------------------- | -------- | ----------------------------------------- |
+| `InputValidationAdapter.test.ts` | 100%     | Zod schema validation with repair pattern |
+
 ---
 
 ## TypeScript Issues
@@ -94,7 +100,7 @@ Comprehensive test coverage across all layers with 95% threshold enforced:
 
 No `any` types, `@ts-ignore`, or `@ts-expect-error` directives found.
 
-The Zod schema migration (INT-86) improved type safety by deriving types from schemas using `z.infer<>`.
+The Zod schema migration (INT-86, INT-218) improved type safety by deriving types from schemas using `z.infer<>`.
 
 ---
 
@@ -128,6 +134,21 @@ No deprecated APIs or dependencies in use.
 
 ## Resolved Issues
 
+### 2026-01-25 - INT-218 Input Validation Zod Migration
+
+| Date       | Issue                       | Resolution                           |
+| ---------- | --------------------------- | ------------------------------------ |
+| 2026-01-25 | Manual input quality guards | Migrated to InputQualitySchema (Zod) |
+| 2026-01-25 | Fragile input validation    | Implemented parser + repair pattern  |
+
+### 2026-01-25 - INT-269 Internal Clients Migration
+
+| Date       | Issue                       | Resolution                               |
+| ---------- | --------------------------- | ---------------------------------------- |
+| 2026-01-25 | Duplicate user client code  | Migrated to @intexuraos/internal-clients |
+| 2026-01-25 | Inconsistent error handling | Standardized UserServiceError codes      |
+| 2026-01-25 | Docker build failures       | Flat exports enable esbuild bundling     |
+
 ### 2026-01-24 - INT-86 Zod Migration
 
 | Date       | Issue                          | Resolution                             |
@@ -141,13 +162,13 @@ No previously resolved issues tracked prior to v2.0.0.
 
 ---
 
-## v2.0.0 Architecture Quality
+## v2.1.0 Architecture Quality
 
 ### Strengths
 
-1. **Type-safe validation** - Zod schemas provide runtime validation with compile-time type inference
+1. **Type-safe validation** - All LLM response validation uses Zod schemas (ResearchContext, SynthesisContext, InputQuality)
 2. **Self-healing** - Parser + repair pattern handles malformed LLM responses gracefully
-3. **Graceful degradation** - Model extraction failures do not block draft creation
+3. **Standardized clients** - `@intexuraos/internal-clients` provides consistent service-to-service communication
 4. **One model per provider** - Clear constraint prevents duplicate costs
 
 ### Areas for Future Improvement

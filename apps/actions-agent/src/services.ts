@@ -91,7 +91,7 @@ import {
   createCalendarPreviewPublisher,
   type CalendarPreviewPublisher,
 } from '@intexuraos/infra-pubsub';
-import { createUserServiceClient, type UserServiceClient } from './infra/user/userServiceClient.js';
+import { createUserServiceClient, type UserServiceClient } from './infra/user/index.js';
 import { createApprovalIntentClassifierFactory } from './infra/llm/approvalIntentClassifierFactory.js';
 import { fetchAllPricing, createPricingContext } from '@intexuraos/llm-pricing';
 import { LlmModels } from '@intexuraos/llm-contract';
@@ -398,6 +398,11 @@ export async function initServices(config: ServiceConfig): Promise<void> {
     actionEventPublisher,
     logger: pino({ name: 'handleApprovalReply' }),
     executeNoteAction: executeNoteActionUseCase,
+    executeTodoAction: executeTodoActionUseCase,
+    executeResearchAction: executeResearchActionUseCase,
+    executeLinkAction: executeLinkActionUseCase,
+    executeCalendarAction: executeCalendarActionUseCase,
+    executeLinearAction: executeLinearActionUseCase,
   });
 
   container = {

@@ -9,6 +9,11 @@ import type { WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
 import type { ActionEventPublisher } from '../ports/actionEventPublisher.js';
 import type { ActionCreatedEvent } from '../models/actionEvent.js';
 import type { ExecuteNoteActionUseCase } from './executeNoteAction.js';
+import type { ExecuteTodoActionUseCase } from './executeTodoAction.js';
+import type { ExecuteResearchActionUseCase } from './executeResearchAction.js';
+import type { ExecuteLinkActionUseCase } from './executeLinkAction.js';
+import type { ExecuteCalendarActionUseCase } from './executeCalendarAction.js';
+import type { ExecuteLinearActionUseCase } from './executeLinearAction.js';
 
 export interface HandleApprovalReplyDeps {
   actionRepository: ActionRepository;
@@ -19,6 +24,16 @@ export interface HandleApprovalReplyDeps {
   logger: Logger;
   /** Optional: If provided, note actions will be executed directly (skipping event publishing). */
   executeNoteAction?: ExecuteNoteActionUseCase;
+  /** Optional: If provided, todo actions will be executed directly (skipping event publishing). */
+  executeTodoAction?: ExecuteTodoActionUseCase;
+  /** Optional: If provided, research actions will be executed directly (skipping event publishing). */
+  executeResearchAction?: ExecuteResearchActionUseCase;
+  /** Optional: If provided, link actions will be executed directly (skipping event publishing). */
+  executeLinkAction?: ExecuteLinkActionUseCase;
+  /** Optional: If provided, calendar actions will be executed directly (skipping event publishing). */
+  executeCalendarAction?: ExecuteCalendarActionUseCase;
+  /** Optional: If provided, linear actions will be executed directly (skipping event publishing). */
+  executeLinearAction?: ExecuteLinearActionUseCase;
 }
 
 export interface ApprovalReplyInput {
@@ -58,6 +73,11 @@ export function createHandleApprovalReplyUseCase(
     actionEventPublisher,
     logger,
     executeNoteAction,
+    executeTodoAction,
+    executeResearchAction,
+    executeLinkAction,
+    executeCalendarAction,
+    executeLinearAction,
   } = deps;
 
   return async (input: ApprovalReplyInput): Promise<Result<ApprovalReplyResult>> => {
@@ -261,22 +281,104 @@ export function createHandleApprovalReplyUseCase(
           );
         }
 
-        // For note actions with executeNoteAction provided, execute directly to avoid
-        // duplicate notification (publishing action.created would trigger handleNoteAction
-        // which sends "New note ready for approval" message again).
-        if (action.type === 'note' && executeNoteAction !== undefined) {
-          logger.info({ actionId: action.id }, 'Executing note action directly after approval');
-          const executeResult = await executeNoteAction(action.id);
-          if (!executeResult.ok) {
-            logger.error(
-              { actionId: action.id, error: getErrorMessage(executeResult.error) },
-              'Failed to execute note action after approval'
-            );
-          } else {
-            logger.info({ actionId: action.id }, 'Note action executed successfully after approval');
+        // Execute action directly based on type to avoid duplicate notification.
+        // If execute function is provided, call it directly (skipping event publishing).
+        // Otherwise, fall back to publishing action.created event for backward compatibility.
+        const executeAction = async (): Promise<void> => {
+          switch (action.type) {
+            case 'note':
+              if (executeNoteAction !== undefined) {
+                logger.info({ actionId: action.id }, 'Executing note action directly after approval');
+                const result = await executeNoteAction(action.id);
+                if (!result.ok) {
+                  logger.error(
+                    { actionId: action.id, error: getErrorMessage(result.error) },
+                    'Failed to execute note action after approval'
+                  );
+                } else {
+                  logger.info({ actionId: action.id }, 'Note action executed successfully after approval');
+                }
+                return;
+              }
+              break;
+            case 'todo':
+              if (executeTodoAction !== undefined) {
+                logger.info({ actionId: action.id }, 'Executing todo action directly after approval');
+                const result = await executeTodoAction(action.id);
+                if (!result.ok) {
+                  logger.error(
+                    { actionId: action.id, error: getErrorMessage(result.error) },
+                    'Failed to execute todo action after approval'
+                  );
+                } else {
+                  logger.info({ actionId: action.id }, 'Todo action executed successfully after approval');
+                }
+                return;
+              }
+              break;
+            case 'research':
+              if (executeResearchAction !== undefined) {
+                logger.info({ actionId: action.id }, 'Executing research action directly after approval');
+                const result = await executeResearchAction(action.id);
+                if (!result.ok) {
+                  logger.error(
+                    { actionId: action.id, error: getErrorMessage(result.error) },
+                    'Failed to execute research action after approval'
+                  );
+                } else {
+                  logger.info({ actionId: action.id }, 'Research action executed successfully after approval');
+                }
+                return;
+              }
+              break;
+            case 'link':
+              if (executeLinkAction !== undefined) {
+                logger.info({ actionId: action.id }, 'Executing link action directly after approval');
+                const result = await executeLinkAction(action.id);
+                if (!result.ok) {
+                  logger.error(
+                    { actionId: action.id, error: getErrorMessage(result.error) },
+                    'Failed to execute link action after approval'
+                  );
+                } else {
+                  logger.info({ actionId: action.id }, 'Link action executed successfully after approval');
+                }
+                return;
+              }
+              break;
+            case 'calendar':
+              if (executeCalendarAction !== undefined) {
+                logger.info({ actionId: action.id }, 'Executing calendar action directly after approval');
+                const result = await executeCalendarAction(action.id);
+                if (!result.ok) {
+                  logger.error(
+                    { actionId: action.id, error: getErrorMessage(result.error) },
+                    'Failed to execute calendar action after approval'
+                  );
+                } else {
+                  logger.info({ actionId: action.id }, 'Calendar action executed successfully after approval');
+                }
+                return;
+              }
+              break;
+            case 'linear':
+              if (executeLinearAction !== undefined) {
+                logger.info({ actionId: action.id }, 'Executing linear action directly after approval');
+                const result = await executeLinearAction(action.id);
+                if (!result.ok) {
+                  logger.error(
+                    { actionId: action.id, error: getErrorMessage(result.error) },
+                    'Failed to execute linear action after approval'
+                  );
+                } else {
+                  logger.info({ actionId: action.id }, 'Linear action executed successfully after approval');
+                }
+                return;
+              }
+              break;
           }
-        } else {
-          // For non-note actions or when executeNoteAction not available, publish event
+
+          // Fallback: No execute function provided for this action type, publish event
           const event: ActionCreatedEvent = {
             type: 'action.created',
             actionId: action.id,
@@ -302,7 +404,9 @@ export function createHandleApprovalReplyUseCase(
           } else {
             logger.info({ actionId: action.id }, 'Published action.created event after approval');
           }
-        }
+        };
+
+        await executeAction();
 
         outcome = 'approved';
         logger.info({ actionId: action.id }, 'Action approved and set to pending');
