@@ -11,6 +11,7 @@ export interface ExtractionError {
   details?: {
     llmErrorCode?: string;
     parseError?: string;
+    zodErrors?: string;
     rawResponsePreview?: string | undefined;
     userServiceError?: string;
     wasWrappedInMarkdown?: boolean;

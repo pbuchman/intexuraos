@@ -1,10 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import pino from 'pino';
+import { ZodError } from 'zod';
 import {
   createLlmParseError,
   logLlmParseError,
   withLlmParseErrorLogging,
   createDetailedParseErrorMessage,
+  formatZodErrors,
   type LlmParseErrorDetails,
 } from '../parseError.js';
 
@@ -280,6 +282,170 @@ describe('parseError', () => {
 
       expect(result).toContain('OK');
       expect(result).not.toContain('[truncated');
+    });
+  });
+
+  describe('formatZodErrors', () => {
+    it('formats single error with field path', () => {
+      const zodError = new ZodError([
+        {
+          code: 'invalid_type',
+          path: ['quality'],
+          expected: 'number',
+          received: 'string',
+          message: 'Expected number, received string',
+        },
+      ]);
+
+      const result = formatZodErrors(zodError);
+      expect(result).toBe('quality: expected number, received "string"');
+    });
+
+    it('formats invalid enum value errors', () => {
+      const zodError = new ZodError([
+        {
+          code: 'invalid_enum_value',
+          path: ['priority'],
+          options: ['low', 'medium', 'high'],
+          received: 'urgent',
+          message: 'Invalid enum value',
+        } as never,
+      ]);
+
+      const result = formatZodErrors(zodError);
+      expect(result).toBe("priority: expected 'low' | 'medium' | 'high', received \"urgent\"");
+    });
+
+    it('formats invalid union errors', () => {
+      const zodError = new ZodError([
+        {
+          code: 'invalid_union',
+          path: ['mode'],
+          unionErrors: [
+            new ZodError([
+              {
+                code: 'invalid_enum_value',
+                path: ['mode'],
+                options: ['compact', 'standard'],
+                received: 'deep',
+              },
+            ] as never),
+          ],
+          message: 'Invalid union value',
+        } as never,
+      ]);
+
+      const result = formatZodErrors(zodError);
+      expect(result).toBe('mode: Invalid union value');
+    });
+
+    it('formats multiple errors separated by semicolon', () => {
+      const zodError = new ZodError([
+        {
+          code: 'invalid_type',
+          path: ['quality'],
+          expected: 'number',
+          received: 'string',
+          message: 'Expected number',
+        },
+        {
+          code: 'invalid_type',
+          path: ['reason'],
+          expected: 'string',
+          received: 'number',
+          message: 'Expected string',
+        },
+      ]);
+
+      const result = formatZodErrors(zodError);
+      expect(result).toBe(
+        'quality: expected number, received "string"; reason: expected string, received "number"'
+      );
+    });
+
+    it('formats root path errors as (root)', () => {
+      const zodError = new ZodError([
+        {
+          code: 'invalid_type',
+          path: [],
+          expected: 'object',
+          received: 'string',
+          message: 'Expected object',
+        },
+      ]);
+
+      const result = formatZodErrors(zodError);
+      expect(result).toBe('(root): expected object, received "string"');
+    });
+
+    it('limits output to 5 issues and adds count for remaining', () => {
+      const issues = Array.from({ length: 10 }, (_, i) => ({
+        code: 'invalid_type' as const,
+        path: [`field${i}`],
+        expected: 'string' as const,
+        received: 'number' as const,
+        message: `Field ${i} error`,
+      })) as never[];
+
+      const zodError = new ZodError(issues);
+      const result = formatZodErrors(zodError);
+
+      expect(result).toContain('... (+5 more)');
+      // Should have first 5 errors
+      expect(result).toContain('field0');
+      expect(result).toContain('field4');
+      // Should not have errors beyond 5
+      expect(result).not.toContain('field5');
+      expect(result).not.toContain('field9');
+    });
+
+    it('returns message for unknown error codes', () => {
+      const zodError = new ZodError([
+        {
+          code: 'custom' as never,
+          path: ['field'],
+          message: 'Custom validation failed',
+        },
+      ]);
+
+      const result = formatZodErrors(zodError);
+      expect(result).toBe('field: Custom validation failed');
+    });
+
+    it('returns special message for empty issues array', () => {
+      const zodError = new ZodError([]);
+      const result = formatZodErrors(zodError);
+      expect(result).toBe('Unknown validation error (no issues reported)');
+    });
+
+    it('handles nested field paths', () => {
+      const zodError = new ZodError([
+        {
+          code: 'invalid_type',
+          path: ['user', 'age'],
+          expected: 'number',
+          received: 'string',
+          message: 'Expected number',
+        },
+      ]);
+
+      const result = formatZodErrors(zodError);
+      expect(result).toBe('user.age: expected number, received "string"');
+    });
+
+    it('handles array index paths', () => {
+      const zodError = new ZodError([
+        {
+          code: 'invalid_type',
+          path: ['items', 0, 'title'],
+          expected: 'string',
+          received: 'number',
+          message: 'Expected string',
+        },
+      ]);
+
+      const result = formatZodErrors(zodError);
+      expect(result).toBe('items.0.title: expected string, received "number"');
     });
   });
 });

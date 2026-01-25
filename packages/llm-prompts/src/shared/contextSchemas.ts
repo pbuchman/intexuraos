@@ -64,8 +64,38 @@ export const SafetyInfoSchema = z.object({
   required_disclaimers: z.array(z.string()),
 });
 
+/**
+ * Schema for InputQualityResult objects.
+ * Used for validating input quality assessment responses from LLMs.
+ *
+ * Note: The schema supports both 'quality' and 'quality_scale' fields
+ * for backwards compatibility with the old guard implementation.
+ * At least one of them must be provided.
+ * The transform normalizes both to the canonical 'quality' field.
+ */
+const baseSchema = z.object({
+  quality: z.union([z.literal(0), z.literal(1), z.literal(2)]).optional(),
+  quality_scale: z.union([z.literal(0), z.literal(1), z.literal(2)]).optional(),
+  reason: z.string().min(1),
+});
+
+export const InputQualitySchema = baseSchema
+  .refine((data) => data.quality !== undefined || data.quality_scale !== undefined, {
+    message: 'At least one of quality or quality_scale must be provided',
+    path: ['quality'],
+  })
+  .transform((data) => {
+    // Normalize to always use 'quality' field
+    const qualityValue = data.quality ?? data.quality_scale ?? 0;
+    return {
+      quality: qualityValue,
+      reason: data.reason,
+    };
+  }) as unknown as z.ZodType<{ quality: 0 | 1 | 2; reason: string }>;
+
 // Export derived types
 export type Domain = z.infer<typeof DomainSchema>;
 export type Mode = z.infer<typeof ModeSchema>;
 export type DefaultApplied = z.infer<typeof DefaultAppliedSchema>;
 export type SafetyInfo = z.infer<typeof SafetyInfoSchema>;
+export type InputQuality = z.infer<typeof InputQualitySchema>;

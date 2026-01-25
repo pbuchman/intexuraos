@@ -1,6 +1,5 @@
 import pino from 'pino';
 import { fetchAllPricing, createPricingContext } from '@intexuraos/llm-pricing';
-import type { LlmGenerateClient } from '@intexuraos/llm-factory';
 import { LlmModels } from '@intexuraos/llm-contract';
 import type { CommandRepository } from './domain/ports/commandRepository.js';
 import type { ClassifierFactory } from './domain/ports/classifier.js';
@@ -69,8 +68,8 @@ export async function initServices(config: ServiceConfig): Promise<void> {
     internalAuthToken: config.internalAuthToken,
     logger: pino({ name: 'actionsAgentClient' }),
   });
-  const classifierFactory: ClassifierFactory = (client: LlmGenerateClient) =>
-    createGeminiClassifier(client);
+  const classifierFactory: ClassifierFactory = (client, classifierLogger) =>
+    createGeminiClassifier(client, classifierLogger);
   const userServiceClient = createUserServiceClient({
     baseUrl: config.userServiceUrl,
     internalAuthToken: config.internalAuthToken,

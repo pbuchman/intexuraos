@@ -148,9 +148,7 @@ describe('parseChartDefinition', () => {
       TRANSFORM_INSTRUCTIONS_END
     `;
 
-    expect(() => parseChartDefinition(response)).toThrow(
-      'Chart config must include "$schema" property'
-    );
+    expect(() => parseChartDefinition(response)).toThrow(/Invalid chart config/);
   });
 
   it('throws when chart config missing mark property', () => {
@@ -167,9 +165,7 @@ describe('parseChartDefinition', () => {
       TRANSFORM_INSTRUCTIONS_END
     `;
 
-    expect(() => parseChartDefinition(response)).toThrow(
-      'Chart config must include "mark" property'
-    );
+    expect(() => parseChartDefinition(response)).toThrow(/Invalid chart config/);
   });
 
   it('throws when chart config missing encoding property', () => {
@@ -186,9 +182,7 @@ describe('parseChartDefinition', () => {
       TRANSFORM_INSTRUCTIONS_END
     `;
 
-    expect(() => parseChartDefinition(response)).toThrow(
-      'Chart config must include "encoding" property'
-    );
+    expect(() => parseChartDefinition(response)).toThrow(/Invalid chart config/);
   });
 
   it('handles extra whitespace in response', () => {

@@ -206,8 +206,9 @@ describe('todoItemExtractionService', () => {
       expect(result.ok).toBe(false);
       if (!result.ok) {
         expect(result.error.code).toBe('INVALID_RESPONSE');
-        expect(result.error.message).toBe('LLM returned invalid response format');
-        expect(result.error.details?.parseError).toBe('Schema validation failed');
+        expect(result.error.message).toContain('LLM returned invalid response format');
+        expect(result.error.message).toContain('items: expected array');
+        expect(result.error.details?.zodErrors).toBeDefined();
         expect(result.error.details?.rawResponsePreview).toBeDefined();
       }
     });
@@ -479,7 +480,8 @@ describe('todoItemExtractionService', () => {
       expect(result.ok).toBe(false);
       if (!result.ok) {
         expect(result.error.code).toBe('INVALID_RESPONSE');
-        expect(result.error.message).toBe('LLM returned invalid response format');
+        expect(result.error.message).toContain('LLM returned invalid response format');
+        expect(result.error.message).toContain('items: expected array');
         expect(result.error.details?.wasWrappedInMarkdown).toBe(true);
       }
     });

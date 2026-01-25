@@ -302,6 +302,9 @@ importers:
       '@intexuraos/llm-prompts':
         specifier: workspace:*
         version: link:../../packages/llm-prompts
+      '@intexuraos/llm-utils':
+        specifier: workspace:*
+        version: link:../../packages/llm-utils
       fastify:
         specifier: ^5.1.0
         version: 5.6.2
@@ -365,6 +368,9 @@ importers:
       '@intexuraos/llm-prompts':
         specifier: workspace:*
         version: link:../../packages/llm-prompts
+      '@intexuraos/llm-utils':
+        specifier: workspace:*
+        version: link:../../packages/llm-utils
       fastify:
         specifier: ^5.1.0
         version: 5.6.2
@@ -547,6 +553,9 @@ importers:
       '@intexuraos/llm-prompts':
         specifier: workspace:*
         version: link:../../packages/llm-prompts
+      '@intexuraos/llm-utils':
+        specifier: workspace:*
+        version: link:../../packages/llm-utils
       '@linear/sdk':
         specifier: ^29.0.0
         version: 29.0.0(encoding@0.1.13)
@@ -872,6 +881,9 @@ importers:
       '@intexuraos/llm-prompts':
         specifier: workspace:*
         version: link:../../packages/llm-prompts
+      '@intexuraos/llm-utils':
+        specifier: workspace:*
+        version: link:../../packages/llm-utils
       fastify:
         specifier: ^5.1.0
         version: 5.6.2
@@ -1472,6 +1484,9 @@ importers:
       pino:
         specifier: ^10.1.0
         version: 10.1.1
+      zod:
+        specifier: ^3.24.1
+        version: 3.25.76
 
 packages:
   '@adobe/css-tools@4.4.4':
