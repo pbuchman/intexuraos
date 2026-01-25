@@ -15,6 +15,17 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 
+# Detect service directory (apps, workers, or packages)
+if [ -d "$PROJECT_ROOT/apps/$WORKSPACE/src" ]; then
+  SERVICE_DIR="apps/$WORKSPACE"
+elif [ -d "$PROJECT_ROOT/workers/$WORKSPACE/src" ]; then
+  SERVICE_DIR="workers/$WORKSPACE"
+else
+  echo "ERROR: Cannot find workspace directory for $WORKSPACE"
+  echo "Looked in: apps/$WORKSPACE/src, workers/$WORKSPACE/src"
+  exit 1
+fi
+
 # Web app has different verification due to planned refactoring
 # - Tests are in nested __tests__ directories (not centralized)
 # - Source files use Vite-specific patterns (import.meta.env)
@@ -28,11 +39,11 @@ if [ "$WORKSPACE" = "web" ]; then
 
   echo ""
   echo "[2/3] Lint..."
-  pnpm run lint -- apps/$WORKSPACE/src
+  pnpm run lint -- $SERVICE_DIR/src
 
   echo ""
   echo "[3/3] Tests (no coverage threshold)..."
-  pnpm run test -- apps/$WORKSPACE
+  pnpm run test -- $SERVICE_DIR
 
   echo ""
   echo "=== All checks passed for $WORKSPACE ==="
@@ -58,23 +69,23 @@ cat > "$TEMP_TSCONFIG" << EOF
     "types": ["vitest/globals", "node"],
     "baseUrl": ".",
     "paths": {
-      "@intexuraos/*": ["packages/*/src", "apps/*/src"]
+      "@intexuraos/*": ["packages/*/src", "apps/*/src", "workers/*/src"]
     }
   },
-  "include": ["apps/$WORKSPACE/src/__tests__/**/*.ts"],
+  "include": ["$SERVICE_DIR/src/__tests__/**/*.ts"],
   "exclude": ["node_modules", "dist"]
 }
 EOF
-tsc --project "$TEMP_TSCONFIG"
+npx tsc --project "$TEMP_TSCONFIG"
 rm "$TEMP_TSCONFIG"
 
 echo ""
 echo "[3/4] Lint..."
-pnpm run lint -- apps/$WORKSPACE/src
+pnpm run lint -- $SERVICE_DIR/src
 
 echo ""
 echo "[4/4] Tests + Coverage..."
-pnpm run test -- apps/$WORKSPACE --coverage --coverage.include="apps/$WORKSPACE/src/**/*.ts"
+pnpm run test -- $SERVICE_DIR --coverage --coverage.include="$SERVICE_DIR/src/**/*.ts"
 
 echo ""
 echo "=== All checks passed for $WORKSPACE ==="
