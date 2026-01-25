@@ -5,6 +5,7 @@ import type { FastifyPluginCallback, FastifyRequest, FastifyReply } from 'fastif
 import { logIncomingRequest, validateInternalAuth } from '@intexuraos/common-http';
 import { getServices } from '../services.js';
 import { processCodeAction } from '../domain/usecases/processCodeAction.js';
+import type { TaskStatus } from '../domain/models/codeTask.js';
 
 // Response schema for created task
 const codeTaskSchema = {
@@ -1357,6 +1358,320 @@ export const codeRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         status: 'submitted',
         codeTaskId: task.id,
       });
+    }
+  );
+
+  // GET /code/tasks - List user's tasks (public, Auth0 JWT)
+  fastify.get<{
+    Querystring: {
+      status?: TaskStatus;
+      limit?: number;
+      cursor?: string;
+    };
+  }>(
+    '/code/tasks',
+    {
+      schema: {
+        operationId: 'listCodeTasks',
+        summary: 'List user code tasks',
+        description: 'Public endpoint for listing user code tasks. Requires Auth0 JWT.',
+        tags: ['public'],
+        querystring: {
+          type: 'object',
+          properties: {
+            status: {
+              type: 'string',
+              enum: ['dispatched', 'running', 'completed', 'failed', 'interrupted', 'cancelled'],
+              description: 'Filter by task status',
+            },
+            limit: {
+              type: 'integer',
+              minimum: 1,
+              maximum: 100,
+              default: 20,
+              description: 'Maximum number of tasks to return',
+            },
+            cursor: {
+              type: 'string',
+              description: 'Pagination cursor from previous request',
+            },
+          },
+        },
+        response: {
+          200: {
+            type: 'object',
+            properties: {
+              tasks: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  properties: {
+                    id: { type: 'string' },
+                    status: { type: 'string' },
+                    prompt: { type: 'string' },
+                    workerType: { type: 'string' },
+                    workerLocation: { type: 'string' },
+                    linearIssueId: { type: 'string' },
+                    createdAt: { type: 'string', format: 'date-time' },
+                    result: { type: 'object', nullable: true },
+                    error: { type: 'object', nullable: true },
+                  },
+                },
+              },
+              nextCursor: { type: 'string', nullable: true },
+            },
+          },
+          401: {
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: {
+                type: 'object',
+                properties: {
+                  code: { type: 'string', enum: ['UNAUTHORIZED'] },
+                  message: { type: 'string' },
+                },
+                required: ['code', 'message'],
+              },
+            },
+            required: ['success', 'error'],
+          },
+          500: {
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: {
+                type: 'object',
+                properties: {
+                  code: { type: 'string' },
+                  message: { type: 'string' },
+                },
+                required: ['code', 'message'],
+              },
+            },
+            required: ['success', 'error'],
+          },
+        },
+      },
+    },
+    async (request: FastifyRequest<{ Querystring: { status?: TaskStatus; limit?: number; cursor?: string } }>, reply: FastifyReply) => {
+      logIncomingRequest(request, {
+        message: 'Received request to GET /code/tasks',
+        includeParams: true,
+      });
+
+      // TODO: Replace with Auth0 JWT validation in INT-254
+      // For now, using internal auth temporarily
+      const authResult = validateInternalAuth(request);
+      if (!authResult.valid) {
+        request.log.warn({ reason: authResult.reason }, 'Auth failed for code task list');
+        reply.status(401);
+        return { success: false, error: { code: 'UNAUTHORIZED', message: 'Unauthorized' } };
+      }
+
+      const { codeTaskRepo } = getServices();
+      // TODO: Extract userId from Auth0 JWT in INT-254
+      const userId = 'unknown-user';
+
+      request.log.info({ userId, status: request.query.status }, 'Listing code tasks');
+
+      const listInput: {
+        userId: string;
+        status?: TaskStatus;
+        limit: number;
+        cursor?: string;
+      } = {
+        userId,
+        limit: request.query.limit ?? 20,
+      };
+
+      if (request.query.status !== undefined) {
+        listInput.status = request.query.status;
+      }
+
+      if (request.query.cursor !== undefined) {
+        listInput.cursor = request.query.cursor;
+      }
+
+      const listResult = await codeTaskRepo.list(listInput);
+
+      if (!listResult.ok) {
+        request.log.error({ error: listResult.error }, 'Failed to list code tasks');
+        reply.status(500);
+        return {
+          success: false,
+          error: {
+            code: listResult.error.code,
+            message: listResult.error.message,
+          },
+        };
+      }
+
+      return reply.status(200).send({
+        tasks: listResult.value.tasks,
+        ...(listResult.value.nextCursor !== undefined && { nextCursor: listResult.value.nextCursor }),
+      });
+    }
+  );
+
+  // GET /code/tasks/:taskId - Get single task (public, Auth0 JWT)
+  fastify.get<{
+    Params: { taskId: string };
+  }>(
+    '/code/tasks/:taskId',
+    {
+      schema: {
+        operationId: 'getCodeTask',
+        summary: 'Get code task details',
+        description: 'Public endpoint for getting a single code task. Requires Auth0 JWT.',
+        tags: ['public'],
+        params: {
+          type: 'object',
+          properties: {
+            taskId: { type: 'string', description: 'Task ID' },
+          },
+          required: ['taskId'],
+        },
+        response: {
+          200: {
+            type: 'object',
+            properties: {
+              id: { type: 'string' },
+              userId: { type: 'string' },
+              prompt: { type: 'string' },
+              sanitizedPrompt: { type: 'string' },
+              systemPromptHash: { type: 'string' },
+              workerType: { type: 'string' },
+              workerLocation: { type: 'string' },
+              repository: { type: 'string' },
+              baseBranch: { type: 'string' },
+              traceId: { type: 'string' },
+              status: { type: 'string' },
+              dedupKey: { type: 'string' },
+              callbackReceived: { type: 'boolean' },
+              linearIssueId: { type: 'string' },
+              linearIssueTitle: { type: 'string' },
+              linearFallback: { type: 'boolean' },
+              createdAt: { type: 'string', format: 'date-time' },
+              updatedAt: { type: 'string', format: 'date-time' },
+              dispatchedAt: { type: 'string', format: 'date-time', nullable: true },
+              completedAt: { type: 'string', format: 'date-time', nullable: true },
+              result: { type: 'object', nullable: true },
+              error: { type: 'object', nullable: true },
+              statusSummary: { type: 'object', nullable: true },
+            },
+          },
+          401: {
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: {
+                type: 'object',
+                properties: {
+                  code: { type: 'string', enum: ['UNAUTHORIZED'] },
+                  message: { type: 'string' },
+                },
+                required: ['code', 'message'],
+              },
+            },
+            required: ['success', 'error'],
+          },
+          403: {
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: {
+                type: 'object',
+                properties: {
+                  code: { type: 'string', enum: ['FORBIDDEN'] },
+                  message: { type: 'string' },
+                },
+                required: ['code', 'message'],
+              },
+            },
+            required: ['success', 'error'],
+          },
+          404: {
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: {
+                type: 'object',
+                properties: {
+                  code: { type: 'string', enum: ['NOT_FOUND'] },
+                  message: { type: 'string' },
+                },
+                required: ['code', 'message'],
+              },
+            },
+            required: ['success', 'error'],
+          },
+          500: {
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: {
+                type: 'object',
+                properties: {
+                  code: { type: 'string' },
+                  message: { type: 'string' },
+                },
+                required: ['code', 'message'],
+              },
+            },
+            required: ['success', 'error'],
+          },
+        },
+      },
+    },
+    async (request: FastifyRequest<{ Params: { taskId: string } }>, reply: FastifyReply) => {
+      logIncomingRequest(request, {
+        message: 'Received request to GET /code/tasks/:taskId',
+        includeParams: true,
+      });
+
+      // TODO: Replace with Auth0 JWT validation in INT-254
+      // For now, using internal auth temporarily
+      const authResult = validateInternalAuth(request);
+      if (!authResult.valid) {
+        request.log.warn({ reason: authResult.reason }, 'Auth failed for code task get');
+        reply.status(401);
+        return { success: false, error: { code: 'UNAUTHORIZED', message: 'Unauthorized' } };
+      }
+
+      const { codeTaskRepo } = getServices();
+      // TODO: Extract userId from Auth0 JWT in INT-254
+      const userId = 'unknown-user';
+
+      request.log.info({ userId, taskId: request.params.taskId }, 'Getting code task');
+
+      const getResult = await codeTaskRepo.findByIdForUser(request.params.taskId, userId);
+
+      if (!getResult.ok) {
+        if (getResult.error.code === 'NOT_FOUND') {
+          request.log.warn({ taskId: request.params.taskId, userId }, 'Code task not found');
+          reply.status(404);
+          return {
+            success: false,
+            error: {
+              code: 'NOT_FOUND',
+              message: `Task ${request.params.taskId} not found`,
+            },
+          };
+        }
+
+        request.log.error({ error: getResult.error }, 'Failed to get code task');
+        reply.status(500);
+        return {
+          success: false,
+          error: {
+            code: getResult.error.code,
+            message: getResult.error.message,
+          },
+        };
+      }
+
+      return reply.status(200).send(getResult.value);
     }
   );
 
