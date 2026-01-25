@@ -515,5 +515,245 @@ describe('firestoreCodeTaskRepository', () => {
 
       expect(result.ok).toBe(true);
     });
+
+    it('returns empty array when no zombie tasks', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const staleThreshold = new Date(Date.now() - 5 * 60 * 1000);
+      const result = await repo.findZombieTasks(staleThreshold);
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      expect(result.value).toEqual([]);
+    });
+  });
+
+  describe('findByIdForUser', () => {
+    it('returns task when user owns it', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const created = await repo.create(createTaskInput({ userId: 'user-123' }));
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+
+      const result = await repo.findByIdForUser(created.value.id, 'user-123');
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      expect(result.value.id).toBe(created.value.id);
+      expect(result.value.userId).toBe('user-123');
+    });
+
+    it('returns NOT_FOUND when task belongs to different user', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const created = await repo.create(createTaskInput({ userId: 'user-123' }));
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+
+      const result = await repo.findByIdForUser(created.value.id, 'user-456');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('NOT_FOUND');
+      }
+    });
+
+    it('returns NOT_FOUND when task does not exist', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const result = await repo.findByIdForUser('non-existent-task', 'user-123');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('NOT_FOUND');
+      }
+    });
+  });
+
+  describe('list', () => {
+    it('returns tasks for user', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      // Create tasks for two users
+      await repo.create(createTaskInput({ userId: 'user-123', prompt: 'Task 1' }));
+      await repo.create(createTaskInput({ userId: 'user-123', prompt: 'Task 2' }));
+      await repo.create(createTaskInput({ userId: 'user-456', prompt: 'Task 3' }));
+
+      const result = await repo.list({ userId: 'user-123' });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      expect(result.value.tasks).toHaveLength(2);
+    });
+
+    it('filters by status', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      // Create tasks
+      const task1 = await repo.create(createTaskInput({ userId: 'user-123' }));
+      expect(task1.ok).toBe(true);
+      if (task1.ok) {
+        await repo.update(task1.value.id, { status: 'completed' });
+      }
+
+      await repo.create(createTaskInput({ userId: 'user-123' }));
+
+      const result = await repo.list({ userId: 'user-123', status: 'completed' });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      expect(result.value.tasks).toHaveLength(1);
+      expect(result.value.tasks[0]?.status).toBe('completed');
+    });
+
+    it('paginates with limit', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      // Create 3 tasks
+      await repo.create(createTaskInput({ userId: 'user-123', prompt: 'Task 1' }));
+      await repo.create(createTaskInput({ userId: 'user-123', prompt: 'Task 2' }));
+      await repo.create(createTaskInput({ userId: 'user-123', prompt: 'Task 3' }));
+
+      const result = await repo.list({ userId: 'user-123', limit: 2 });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      expect(result.value.tasks).toHaveLength(2);
+      expect(result.value.nextCursor).toBeDefined();
+    });
+
+    it('returns empty array when user has no tasks', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const result = await repo.list({ userId: 'user-999' });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      expect(result.value.tasks).toEqual([]);
+      expect(result.value.nextCursor).toBeUndefined();
+    });
+  });
+
+  describe('update', () => {
+    it('updates existing task', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const created = await repo.create(createTaskInput());
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+
+      const result = await repo.update(created.value.id, {
+        status: 'completed',
+        result: {
+          branch: 'fix-branch',
+          commits: 3,
+          summary: 'Fixed the bug',
+        },
+      });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      expect(result.value.status).toBe('completed');
+      expect(result.value.result?.branch).toBe('fix-branch');
+    });
+
+    it('returns NOT_FOUND when task does not exist', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const result = await repo.update('non-existent-task', { status: 'completed' });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('NOT_FOUND');
+      }
+    });
+
+    it('updates task error', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const created = await repo.create(createTaskInput());
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+
+      const result = await repo.update(created.value.id, {
+        error: {
+          code: 'worker_error',
+          message: 'Worker failed',
+        },
+      });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      expect(result.value.error?.code).toBe('worker_error');
+    });
+
+    it('updates statusSummary', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const created = await repo.create(createTaskInput());
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+
+      // Import Timestamp to create a proper timestamp
+      const { Timestamp } = await import('@google-cloud/firestore');
+      const result = await repo.update(created.value.id, {
+        statusSummary: {
+          phase: 'implementing',
+          message: 'Task is in progress',
+          progress: 50,
+          updatedAt: Timestamp.now(),
+        },
+      });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      expect(result.value.statusSummary?.message).toBe('Task is in progress');
+    });
   });
 });
