@@ -850,239 +850,6 @@ export const codeRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   // For now, using internal auth temporarily
   // ============================================================
 
-  // GET /code/tasks - List tasks (public, Auth0 JWT)
-  fastify.get<{
-    Querystring: {
-      userId: string;
-      status?: 'dispatched' | 'running' | 'completed' | 'failed' | 'interrupted' | 'cancelled';
-      limit?: number;
-      cursor?: string;
-    };
-  }>(
-    '/code/tasks',
-    {
-      schema: {
-        operationId: 'listCodeTasks',
-        summary: 'List code tasks',
-        description: 'Public endpoint for listing code tasks with optional status filter and pagination. Requires Auth0 JWT.',
-        tags: ['public'],
-        querystring: {
-          type: 'object',
-          properties: {
-            userId: { type: 'string' },
-            status: {
-              type: 'string',
-              enum: ['dispatched', 'running', 'completed', 'failed', 'interrupted', 'cancelled'],
-            },
-            limit: { type: 'number', minimum: 1, maximum: 100 },
-            cursor: { type: 'string' },
-          },
-          required: ['userId'],
-        },
-        response: {
-          200: {
-            description: 'List of tasks',
-            type: 'object',
-            properties: {
-              success: { type: 'boolean', enum: [true] },
-              data: {
-                type: 'object',
-                properties: {
-                  tasks: {
-                    type: 'array',
-                    items: codeTaskSchema,
-                  },
-                  nextCursor: { type: 'string', nullable: true },
-                },
-                required: ['tasks'],
-              },
-            },
-            required: ['success', 'data'],
-          },
-          401: {
-            description: 'Unauthorized',
-            type: 'object',
-            properties: {
-              success: { type: 'boolean', enum: [false] },
-              error: {
-                type: 'object',
-                properties: {
-                  code: { type: 'string' },
-                  message: { type: 'string' },
-                },
-                required: ['code', 'message'],
-              },
-            },
-            required: ['success', 'error'],
-          },
-        },
-      },
-    },
-    async (request: FastifyRequest<{ Querystring: { userId: string; status?: 'dispatched' | 'running' | 'completed' | 'failed' | 'interrupted' | 'cancelled'; limit?: number; cursor?: string } }>, reply: FastifyReply) => {
-      logIncomingRequest(request, {
-        message: 'Received request to GET /code/tasks',
-      });
-
-      // TODO: Replace with Auth0 JWT validation in INT-254
-      // For now, using internal auth temporarily
-      const authResult = validateInternalAuth(request);
-      if (!authResult.valid) {
-        request.log.warn({ reason: authResult.reason }, 'Auth failed for code tasks list');
-        reply.status(401);
-        return { success: false, error: { code: 'UNAUTHORIZED', message: 'Unauthorized' } };
-      }
-
-      const { codeTaskRepo } = getServices();
-      const { userId, status, limit, cursor } = request.query;
-
-      request.log.info({ userId, status, limit, cursor }, 'Listing code tasks');
-
-      const result = await codeTaskRepo.list({
-        userId,
-        ...(status !== undefined && { status }),
-        ...(limit !== undefined && { limit }),
-        ...(cursor !== undefined && { cursor }),
-      });
-
-      if (!result.ok) {
-        request.log.error({ userId, error: result.error }, 'Failed to list code tasks');
-        reply.status(500);
-        return {
-          success: false,
-          error: {
-            code: result.error.code,
-            message: result.error.message,
-          },
-        };
-      }
-
-      request.log.info({ userId, count: result.value.tasks.length }, 'Code tasks listed successfully');
-
-      return await reply.send({
-        success: true,
-        data: {
-          tasks: result.value.tasks.map(taskToApiResponse),
-          ...(result.value.nextCursor !== undefined && { nextCursor: result.value.nextCursor }),
-        },
-      });
-    }
-  );
-
-  // GET /code/tasks/:taskId - Get task by ID (public, Auth0 JWT)
-  fastify.get<{ Params: { taskId: string } }>(
-    '/code/tasks/:taskId',
-    {
-      schema: {
-        operationId: 'getCodeTask',
-        summary: 'Get a code task by ID',
-        description: 'Public endpoint for fetching a code task. Includes user ownership check. Requires Auth0 JWT.',
-        tags: ['public'],
-        params: {
-          type: 'object',
-          properties: {
-            taskId: { type: 'string' },
-          },
-          required: ['taskId'],
-        },
-        querystring: {
-          type: 'object',
-          properties: {
-            userId: { type: 'string' },
-          },
-          required: ['userId'],
-        },
-        response: {
-          200: {
-            description: 'Task found',
-            type: 'object',
-            properties: {
-              success: { type: 'boolean', enum: [true] },
-              data: {
-                type: 'object',
-                properties: {
-                  task: codeTaskSchema,
-                },
-                required: ['task'],
-              },
-            },
-            required: ['success', 'data'],
-          },
-          401: {
-            description: 'Unauthorized',
-            type: 'object',
-            properties: {
-              success: { type: 'boolean', enum: [false] },
-              error: {
-                type: 'object',
-                properties: {
-                  code: { type: 'string' },
-                  message: { type: 'string' },
-                },
-                required: ['code', 'message'],
-              },
-            },
-            required: ['success', 'error'],
-          },
-          404: {
-            description: 'Task not found or access denied',
-            type: 'object',
-            properties: {
-              success: { type: 'boolean', enum: [false] },
-              error: {
-                type: 'object',
-                properties: {
-                  code: { type: 'string' },
-                  message: { type: 'string' },
-                },
-                required: ['code', 'message'],
-              },
-            },
-            required: ['success', 'error'],
-          },
-        },
-      },
-    },
-    async (request: FastifyRequest<{ Params: { taskId: string } }>, reply: FastifyReply) => {
-      logIncomingRequest(request, {
-        message: 'Received request to GET /code/tasks/:taskId',
-        includeParams: true,
-      });
-
-      // TODO: Replace with Auth0 JWT validation in INT-254
-      // For now, using internal auth temporarily
-      const authResult = validateInternalAuth(request);
-      if (!authResult.valid) {
-        request.log.warn({ reason: authResult.reason }, 'Auth failed for code task fetch');
-        reply.status(401);
-        return { success: false, error: { code: 'UNAUTHORIZED', message: 'Unauthorized' } };
-      }
-
-      const { codeTaskRepo } = getServices();
-      const { taskId } = request.params;
-      const { userId } = request.query as { userId: string };
-
-      request.log.info({ taskId, userId }, 'Fetching code task');
-
-      const result = await codeTaskRepo.findByIdForUser(taskId, userId);
-
-      if (!result.ok) {
-        request.log.warn({ taskId, userId, errorCode: result.error.code }, 'Task not found or access denied');
-        reply.status(404);
-        return {
-          success: false,
-          error: {
-            code: result.error.code,
-            message: result.error.message,
-          },
-        };
-      }
-
-      request.log.info({ taskId, userId }, 'Code task retrieved successfully');
-
-      return await reply.send({ success: true, data: { task: taskToApiResponse(result.value) } });
-    }
-  );
-
   // POST /code/submit - Submit task from UI (public, Auth0 JWT)
   fastify.post<{
     Body: {
@@ -1403,20 +1170,7 @@ export const codeRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             properties: {
               tasks: {
                 type: 'array',
-                items: {
-                  type: 'object',
-                  properties: {
-                    id: { type: 'string' },
-                    status: { type: 'string' },
-                    prompt: { type: 'string' },
-                    workerType: { type: 'string' },
-                    workerLocation: { type: 'string' },
-                    linearIssueId: { type: 'string' },
-                    createdAt: { type: 'string', format: 'date-time' },
-                    result: { type: 'object', nullable: true },
-                    error: { type: 'object', nullable: true },
-                  },
-                },
+                items: codeTaskSchema,
               },
               nextCursor: { type: 'string', nullable: true },
             },
@@ -1508,7 +1262,7 @@ export const codeRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       }
 
       return reply.status(200).send({
-        tasks: listResult.value.tasks,
+        tasks: listResult.value.tasks.map(taskToApiResponse),
         ...(listResult.value.nextCursor !== undefined && { nextCursor: listResult.value.nextCursor }),
       });
     }
@@ -1671,7 +1425,7 @@ export const codeRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         };
       }
 
-      return reply.status(200).send(getResult.value);
+      return reply.status(200).send(taskToApiResponse(getResult.value));
     }
   );
 

@@ -81,7 +81,7 @@ describe('codeRoutes', () => {
 
       // Create a task
       const created = await repo.create({
-        userId: 'user-123',
+        userId: 'unknown-user',
         prompt: 'Fix login bug',
         sanitizedPrompt: 'fix login bug',
         systemPromptHash: 'abc123',
@@ -96,16 +96,15 @@ describe('codeRoutes', () => {
 
       const response = await server.inject({
         method: 'GET',
-        url: `/code/tasks/${created.value.id}?userId=user-123`,
+        url: `/code/tasks/${created.value.id}`,
         headers: {
           'X-Internal-Auth': 'test-internal-token',
         },
       });
 
       expect(response.statusCode).toBe(200);
-      const body = JSON.parse(response.body);
-      expect(body.success).toBe(true);
-      expect(body.data.task.id).toBe(created.value.id);
+      const task = JSON.parse(response.body);
+      expect(task.id).toBe(created.value.id);
     });
 
     it('returns 404 for other user\'s task', async () => {
@@ -116,7 +115,7 @@ describe('codeRoutes', () => {
 
       // Create a task
       const created = await repo.create({
-        userId: 'user-123',
+        userId: 'other-user',
         prompt: 'Fix login bug',
         sanitizedPrompt: 'fix login bug',
         systemPromptHash: 'abc123',
@@ -131,7 +130,7 @@ describe('codeRoutes', () => {
 
       const response = await server.inject({
         method: 'GET',
-        url: `/code/tasks/${created.value.id}?userId=user-456`,
+        url: `/code/tasks/${created.value.id}`,
         headers: {
           'X-Internal-Auth': 'test-internal-token',
         },
@@ -145,7 +144,7 @@ describe('codeRoutes', () => {
     it('returns 404 for non-existent task', async () => {
       const response = await server.inject({
         method: 'GET',
-        url: '/code/tasks/non-existent?userId=user-123',
+        url: '/code/tasks/non-existent',
         headers: {
           'X-Internal-Auth': 'test-internal-token',
         },
@@ -159,7 +158,7 @@ describe('codeRoutes', () => {
     it('returns 401 when missing auth header', async () => {
       const response = await server.inject({
         method: 'GET',
-        url: '/code/tasks/task-123?userId=user-123',
+        url: '/code/tasks/task-123',
       });
 
       expect(response.statusCode).toBe(401);
@@ -260,9 +259,9 @@ describe('codeRoutes', () => {
         logger,
       });
 
-      // Create tasks for two different users
+      // Create tasks for 'unknown-user' (what validateInternalAuth returns)
       const task1 = await repo.create({
-        userId: 'user-123',
+        userId: 'unknown-user',
         prompt: 'Task 1',
         sanitizedPrompt: 'task 1',
         systemPromptHash: 'abc123',
@@ -275,7 +274,7 @@ describe('codeRoutes', () => {
       expect(task1.ok).toBe(true);
 
       const task2 = await repo.create({
-        userId: 'user-123',
+        userId: 'unknown-user',
         prompt: 'Task 2',
         sanitizedPrompt: 'task 2',
         systemPromptHash: 'def456',
@@ -288,7 +287,7 @@ describe('codeRoutes', () => {
       expect(task2.ok).toBe(true);
 
       await repo.create({
-        userId: 'user-456',
+        userId: 'other-user',
         prompt: 'Other user task',
         sanitizedPrompt: 'other user task',
         systemPromptHash: 'ghi789',
@@ -301,7 +300,7 @@ describe('codeRoutes', () => {
 
       const response = await server.inject({
         method: 'GET',
-        url: '/code/tasks?userId=user-123',
+        url: '/code/tasks',
         headers: {
           'X-Internal-Auth': 'test-internal-token',
         },
@@ -309,9 +308,8 @@ describe('codeRoutes', () => {
 
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body);
-      expect(body.success).toBe(true);
-      expect(body.data.tasks).toBeInstanceOf(Array);
-      expect(body.data.tasks.length).toBe(2);
+      expect(body.tasks).toBeInstanceOf(Array);
+      expect(body.tasks.length).toBe(2);
     });
 
     it('filters tasks by status', async () => {
@@ -322,7 +320,7 @@ describe('codeRoutes', () => {
 
       // Create tasks with different statuses
       const task1 = await repo.create({
-        userId: 'user-123',
+        userId: 'unknown-user',
         prompt: 'Completed task',
         sanitizedPrompt: 'completed task',
         systemPromptHash: 'abc123',
@@ -338,7 +336,7 @@ describe('codeRoutes', () => {
       }
 
       await repo.create({
-        userId: 'user-123',
+        userId: 'unknown-user',
         prompt: 'Dispatched task',
         sanitizedPrompt: 'dispatched task',
         systemPromptHash: 'def456',
@@ -351,7 +349,7 @@ describe('codeRoutes', () => {
 
       const response = await server.inject({
         method: 'GET',
-        url: '/code/tasks?userId=user-123&status=completed',
+        url: '/code/tasks?status=completed',
         headers: {
           'X-Internal-Auth': 'test-internal-token',
         },
@@ -359,9 +357,8 @@ describe('codeRoutes', () => {
 
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body);
-      expect(body.success).toBe(true);
-      expect(body.data.tasks.length).toBe(1);
-      expect(body.data.tasks[0].status).toBe('completed');
+      expect(body.tasks.length).toBe(1);
+      expect(body.tasks[0].status).toBe('completed');
     });
 
     it('paginates results with limit', async () => {
@@ -373,7 +370,7 @@ describe('codeRoutes', () => {
       // Create multiple tasks
       for (let i = 0; i < 5; i++) {
         await repo.create({
-          userId: 'user-123',
+          userId: 'unknown-user',
           prompt: `Task ${i}`,
           sanitizedPrompt: `task ${i}`,
           systemPromptHash: `hash${i}`,
@@ -387,7 +384,7 @@ describe('codeRoutes', () => {
 
       const response = await server.inject({
         method: 'GET',
-        url: '/code/tasks?userId=user-123&limit=2',
+        url: '/code/tasks?limit=2',
         headers: {
           'X-Internal-Auth': 'test-internal-token',
         },
@@ -395,15 +392,14 @@ describe('codeRoutes', () => {
 
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body);
-      expect(body.success).toBe(true);
-      expect(body.data.tasks.length).toBe(2);
-      expect(body.data.nextCursor).toBeDefined();
+      expect(body.tasks.length).toBe(2);
+      expect(body.nextCursor).toBeDefined();
     });
 
     it('returns empty array for user with no tasks', async () => {
       const response = await server.inject({
         method: 'GET',
-        url: '/code/tasks?userId=user-999',
+        url: '/code/tasks',
         headers: {
           'X-Internal-Auth': 'test-internal-token',
         },
@@ -411,14 +407,13 @@ describe('codeRoutes', () => {
 
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body);
-      expect(body.success).toBe(true);
-      expect(body.data.tasks).toEqual([]);
+      expect(body.tasks).toEqual([]);
     });
 
     it('returns 401 when missing auth header', async () => {
       const response = await server.inject({
         method: 'GET',
-        url: '/code/tasks?userId=user-123',
+        url: '/code/tasks',
       });
 
       expect(response.statusCode).toBe(401);

@@ -53,20 +53,20 @@ POST   /internal/logs                                 → Log chunks from worker
 
 After alignment, work through issues in this order (respecting dependencies):
 
-| Priority | Issue | Task | Blocked By |
-|----------|-------|------|------------|
-| 1 | INT-250 | Worker discovery and health checking | - |
-| 2 | INT-251 | Task dispatcher with HMAC signing | INT-250 |
-| 3 | INT-252 | POST /internal/code/process endpoint | INT-251 |
-| 4 | INT-253 | POST /code/submit endpoint (UI) | INT-251 |
-| 5 | INT-254 | GET /code/tasks endpoints | - |
-| 6 | INT-255 | POST /code/cancel endpoint | INT-251 |
-| 7 | INT-256 | Webhook handler + Log chunks | - |
-| 8 | INT-257 | Status callback to actions-agent | INT-256 |
-| 9 | INT-258 | WhatsApp notifications | INT-256 |
-| 10 | INT-259 | Zombie task detection and recovery | - |
-| 11 | INT-260 | Cost tracking and rate limiting | - |
-| 12 | INT-262 | Integration tests | All above |
+| Priority | Issue   | Task                                 | Blocked By |
+| -------- | ------- | ------------------------------------ | ---------- |
+| 1        | INT-250 | Worker discovery and health checking | -          |
+| 2        | INT-251 | Task dispatcher with HMAC signing    | INT-250    |
+| 3        | INT-252 | POST /internal/code/process endpoint | INT-251    |
+| 4        | INT-253 | POST /code/submit endpoint (UI)      | INT-251    |
+| 5        | INT-254 | GET /code/tasks endpoints            | -          |
+| 6        | INT-255 | POST /code/cancel endpoint           | INT-251    |
+| 7        | INT-256 | Webhook handler + Log chunks         | -          |
+| 8        | INT-257 | Status callback to actions-agent     | INT-256    |
+| 9        | INT-258 | WhatsApp notifications               | INT-256    |
+| 10       | INT-259 | Zombie task detection and recovery   | -          |
+| 11       | INT-260 | Cost tracking and rate limiting      | -          |
+| 12       | INT-262 | Integration tests                    | All above  |
 
 ---
 
@@ -79,6 +79,7 @@ Use the `/linear` skill to manage each issue:
 ```
 
 This will:
+
 1. Transition the issue to "In Progress"
 2. Show you the full issue description with step-by-step instructions
 3. Track your work
@@ -108,15 +109,15 @@ For each issue:
 
 These will be added as you implement each issue:
 
-| Variable | Issue | Purpose |
-|----------|-------|---------|
-| `INTEXURAOS_CF_CLIENT_ID` | INT-250 | Cloudflare Access |
-| `INTEXURAOS_CF_CLIENT_SECRET` | INT-250 | Cloudflare Access |
-| `INTEXURAOS_WORKER_MAC_URL` | INT-250 | Mac worker endpoint |
-| `INTEXURAOS_WORKER_VM_URL` | INT-250 | VM worker endpoint |
-| `INTEXURAOS_DISPATCH_SECRET` | INT-251 | HMAC signing |
-| `INTEXURAOS_ACTIONS_AGENT_URL` | INT-257 | Status callbacks |
-| `INTEXURAOS_WHATSAPP_SERVICE_URL` | INT-258 | Notifications |
+| Variable                          | Issue   | Purpose             |
+| --------------------------------- | ------- | ------------------- |
+| `INTEXURAOS_CF_CLIENT_ID`         | INT-250 | Cloudflare Access   |
+| `INTEXURAOS_CF_CLIENT_SECRET`     | INT-250 | Cloudflare Access   |
+| `INTEXURAOS_WORKER_MAC_URL`       | INT-250 | Mac worker endpoint |
+| `INTEXURAOS_WORKER_VM_URL`        | INT-250 | VM worker endpoint  |
+| `INTEXURAOS_DISPATCH_SECRET`      | INT-251 | HMAC signing        |
+| `INTEXURAOS_ACTIONS_AGENT_URL`    | INT-257 | Status callbacks    |
+| `INTEXURAOS_WHATSAPP_SERVICE_URL` | INT-258 | Notifications       |
 
 ---
 

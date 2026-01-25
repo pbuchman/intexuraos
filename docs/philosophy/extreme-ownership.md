@@ -18,7 +18,7 @@ AI-assisted development makes this more important, not less. When agents write c
 
 ### Law 1: Extreme Ownership
 
-*The leader owns everything in their world. There is no one else to blame. No excuses. No finger-pointing. When things go wrong, the leader looks in the mirror — not out the window.*
+_The leader owns everything in their world. There is no one else to blame. No excuses. No finger-pointing. When things go wrong, the leader looks in the mirror — not out the window._
 
 **Engineering translation:** When CI fails, you own it. All of it.
 
@@ -51,7 +51,7 @@ The agent used "OTHER services" and "not my changes" — both forbidden phrases.
 
 ### Law 2: No Bad Teams, Only Bad Leaders
 
-*A leader's attitude sets the tone. When it comes to standards, it's not what you preach, it's what you tolerate. If substandard performance is accepted, it becomes the new standard.*
+_A leader's attitude sets the tone. When it comes to standards, it's not what you preach, it's what you tolerate. If substandard performance is accepted, it becomes the new standard._
 
 **Engineering translation:** There is no bad code, only unowned problems.
 
@@ -73,11 +73,11 @@ The code isn't broken. You just haven't owned fixing it yet.
 
 ### Law 5: Cover and Move
 
-*Teamwork. Each element must support the others. Departments and groups within the team must break down silos and work together. When one member struggles, others must pick up the slack.*
+_Teamwork. Each element must support the others. Departments and groups within the team must break down silos and work together. When one member struggles, others must pick up the slack._
 
 **Engineering translation:** Fix issues everywhere, not just "your" code.
 
-Your PR touches `actions-agent`. CI fails in `calendar-agent` due to a shared package change. You don't say "calendar-agent isn't my PR." You *cover* for calendar-agent by fixing it too.
+Your PR touches `actions-agent`. CI fails in `calendar-agent` due to a shared package change. You don't say "calendar-agent isn't my PR." You _cover_ for calendar-agent by fixing it too.
 
 The word "OTHER" when describing failures is your signal you're NOT covering. There is no "other team's code" in CI — there's only code that passed and code that didn't.
 
@@ -96,7 +96,7 @@ The word "OTHER" when describing failures is your signal you're NOT covering. Th
 
 ### Law 7: Prioritize and Execute
 
-*When overwhelmed, don't panic. Identify the highest priority problem. Focus all energy on that one problem until solved. Then move to the next. Repeat until all problems are solved.*
+_When overwhelmed, don't panic. Identify the highest priority problem. Focus all energy on that one problem until solved. Then move to the next. Repeat until all problems are solved._
 
 **Engineering translation:** When CI fails with multiple errors, don't freeze. Prioritize and execute.
 
@@ -105,6 +105,7 @@ CI fails with: type error, lint error, 3 test failures, coverage gap.
 Don't stare at the wall of red. Don't try to fix everything at once. Don't open 5 files and context-switch between them.
 
 **Priority order:**
+
 1. Type errors — block compilation, nothing else works
 2. Test failures — business logic is broken
 3. Lint errors — code hygiene
@@ -123,13 +124,14 @@ Fix one category. Re-run CI. Move to the next.
 
 ### Law 11: Decisiveness Amid Uncertainty
 
-*Leaders cannot afford to wait for perfect information. Make the best decision you can with the information available. Be willing to adjust as new information emerges.*
+_Leaders cannot afford to wait for perfect information. Make the best decision you can with the information available. Be willing to adjust as new information emerges._
 
 **Engineering translation:** When you encounter an issue, decide: Fix it now OR ask for guidance. Never defer.
 
 You find a type error in a file you didn't touch. You don't know if it's a real bug or an intentional pattern. You have incomplete information.
 
 Options:
+
 - A) Investigate for 30 minutes to fully understand
 - B) Fix it now
 - C) Ask: "Found type error in X. Fix here or separate issue?"
@@ -150,7 +152,7 @@ Options:
 
 ### Law 12: Discipline Equals Freedom
 
-*The more disciplined you are, the more freedom you have. Strict SOPs, rehearsals, and procedures enable units to operate autonomously. Discipline is the foundation of freedom.*
+_The more disciplined you are, the more freedom you have. Strict SOPs, rehearsals, and procedures enable units to operate autonomously. Discipline is the foundation of freedom._
 
 **Engineering translation:** Strict rules enable fast, confident shipping.
 
@@ -180,7 +182,7 @@ With discipline:
 
 ### Law 4: Check the Ego
 
-*Ego clouds judgment. Operating with a high degree of humility allows a leader to accept constructive criticism and find the best solution.*
+_Ego clouds judgment. Operating with a high degree of humility allows a leader to accept constructive criticism and find the best solution._
 
 **Engineering translation:** Your code has bugs. Accept feedback. Fix it.
 
@@ -204,7 +206,7 @@ The phrase "I didn't write this bug" is ego speaking. "I'm fixing this bug" is o
 
 ### Law 6: Simple
 
-*Complexity fails under pressure. Plans and orders must be simple, clear, and concise. When things go wrong, complexity compounds the confusion.*
+_Complexity fails under pressure. Plans and orders must be simple, clear, and concise. When things go wrong, complexity compounds the confusion._
 
 **Engineering translation:** The right amount of complexity is the minimum needed for the current task.
 
@@ -226,7 +228,7 @@ Don't add features that weren't requested. Don't create `formatDate()` for one u
 
 ### Law 8: Decentralized Command
 
-*Leaders must delegate decision-making authority to trusted subordinates. Each team member must understand the overall mission and commander's intent, then execute within those boundaries.*
+_Leaders must delegate decision-making authority to trusted subordinates. Each team member must understand the overall mission and commander's intent, then execute within those boundaries._
 
 **Engineering translation:** Autonomous agents with clear mandates need no hand-holding.
 
@@ -250,19 +252,21 @@ The `service-scribe` agent has full authority to document services. It doesn't a
 
 ### Law 9: Plan
 
-*Planning must be thorough. But no plan survives first contact. Leaders must anticipate likely challenges and develop contingencies. The best teams rehearse and prepare relentlessly.*
+_Planning must be thorough. But no plan survives first contact. Leaders must anticipate likely challenges and develop contingencies. The best teams rehearse and prepare relentlessly._
 
 **Engineering translation:** Read before you write. Explore before you implement.
 
 The Pre-Flight Checks exist because most CI failures come from writing code without reading existing code first.
 
 **Failure pattern:**
+
 1. Write mock from memory
 2. Miss a required field
 3. CI fails
 4. Waste 20 minutes debugging
 
 **Planned approach:**
+
 1. Read the `*Deps` type definition
 2. List all required fields
 3. Create mock with ALL of them

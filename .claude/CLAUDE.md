@@ -14,13 +14,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **STOP. Before running `git commit`, answer these questions:**
 
-| Question                                         | Required Answer |
-| ------------------------------------------------ | --------------- |
-| Did `pnpm run ci:tracked` pass?                  | YES             |
-| Did it pass completely, not "my part passed"?    | YES             |
-| Am I about to say "other services/workspaces"?   | NO              |
-| Am I about to say "unrelated to my changes"?     | NO              |
-| Am I about to say "not caused by my code"?       | NO              |
+| Question                                       | Required Answer |
+| ---------------------------------------------- | --------------- |
+| Did `pnpm run ci:tracked` pass?                | YES             |
+| Did it pass completely, not "my part passed"?  | YES             |
+| Am I about to say "other services/workspaces"? | NO              |
+| Am I about to say "unrelated to my changes"?   | NO              |
+| Am I about to say "not caused by my code"?     | NO              |
 
 **If ANY answer is wrong: STOP. Do not commit. Fix or ask first.**
 
@@ -28,13 +28,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 These thoughts mean you are ABOUT TO VIOLATE OWNERSHIP:
 
-| Your Thought                                              | Reality                                    |
-| --------------------------------------------------------- | ------------------------------------------ |
-| "CI failed but my code passes"                            | CI failed. Period. You cannot commit.      |
-| "The failure is in OTHER services"                        | OTHER = forbidden word. You own it.        |
-| "Global CI fails, but code-agent specific checks pass"    | This exact phrase has caused violations.   |
-| "Coverage threshold due to OTHER services, not my code"   | This exact phrase has caused violations.   |
-| "Let me commit anyway and note the CI status"             | NO. Fix first, then commit.                |
+| Your Thought                                            | Reality                                  |
+| ------------------------------------------------------- | ---------------------------------------- |
+| "CI failed but my code passes"                          | CI failed. Period. You cannot commit.    |
+| "The failure is in OTHER services"                      | OTHER = forbidden word. You own it.      |
+| "Global CI fails, but code-agent specific checks pass"  | This exact phrase has caused violations. |
+| "Coverage threshold due to OTHER services, not my code" | This exact phrase has caused violations. |
+| "Let me commit anyway and note the CI status"           | NO. Fix first, then commit.              |
 
 **There is no "partial pass". CI passes completely or you do not commit.**
 
@@ -122,21 +122,21 @@ If CI fails because of a "pre-existing" issue, that issue is now YOURS. The mome
 
 **RULE:** The following phrases are STRICTLY FORBIDDEN:
 
-| Forbidden Phrase                                  | Why It's Wrong                                   |
-| ------------------------------------------------- | ------------------------------------------------ |
-| "pre-existing issue"                              | Discovery creates ownership                      |
-| "pre-existing bug"                                | Same as above                                    |
-| "not my fault"                                    | Fault is irrelevant; fix is your responsibility  |
-| "not my responsibility"                           | If you see it, you own it                        |
-| "unrelated to my changes"                         | If it blocks CI, it's related                    |
-| "was already broken"                              | Now it's yours to fix                            |
-| "someone else's code"                             | All code in scope is your code                   |
-| "I didn't introduce this"                         | Irrelevant — you're fixing it now                |
-| "legacy issue"                                    | Legacy is just code waiting for an owner         |
-| **"OTHER services/workspaces"**                   | **OTHER = ownership evasion. You own ALL of CI.**|
-| **"my code passes" / "my part passes"**           | **There is no "my part". CI passes or it doesn't.**|
-| **"global CI fails but X-specific checks pass"**  | **This exact phrase has caused commit violations.**|
-| **"due to OTHER X, not my changes"**              | **Forbidden: "OTHER" + "not my changes" combo.** |
+| Forbidden Phrase                                 | Why It's Wrong                                      |
+| ------------------------------------------------ | --------------------------------------------------- |
+| "pre-existing issue"                             | Discovery creates ownership                         |
+| "pre-existing bug"                               | Same as above                                       |
+| "not my fault"                                   | Fault is irrelevant; fix is your responsibility     |
+| "not my responsibility"                          | If you see it, you own it                           |
+| "unrelated to my changes"                        | If it blocks CI, it's related                       |
+| "was already broken"                             | Now it's yours to fix                               |
+| "someone else's code"                            | All code in scope is your code                      |
+| "I didn't introduce this"                        | Irrelevant — you're fixing it now                   |
+| "legacy issue"                                   | Legacy is just code waiting for an owner            |
+| **"OTHER services/workspaces"**                  | **OTHER = ownership evasion. You own ALL of CI.**   |
+| **"my code passes" / "my part passes"**          | **There is no "my part". CI passes or it doesn't.** |
+| **"global CI fails but X-specific checks pass"** | **This exact phrase has caused commit violations.** |
+| **"due to OTHER X, not my changes"**             | **Forbidden: "OTHER" + "not my changes" combo.**    |
 
 **Double-think before using any variation of these phrases.** If you catch yourself about to say them, stop and reframe: "How do I fix this?"
 
@@ -196,6 +196,7 @@ This exact scenario happened and MUST NEVER happen again:
 ```
 
 **Why this was a violation:**
+
 1. Used "OTHER services" — forbidden language
 2. Used "not the INT-252 changes" — forbidden language
 3. Committed despite CI failure — forbidden action
@@ -796,14 +797,14 @@ This is non-negotiable. Running only package-level tests (`vitest`, `tsc`) is NO
 ✅ RIGHT: CI fails → Own ALL failures → Fix or ask → CI passes → Commit
 ```
 
-| Shortcut Taken                           | Why It Fails                                    |
-| ---------------------------------------- | ----------------------------------------------- |
-| `npx vitest run` only                    | Misses other workspaces, lint, type-check       |
-| `pnpm run test` in one package           | Misses cross-package type errors                |
-| `tsc --noEmit` only                      | Misses lint errors, test failures               |
-| "I'll check GitHub Actions"              | Wastes CI resources, delays feedback            |
-| **"My workspace passes, committing"**    | **OWNERSHIP VIOLATION — you own ALL of CI**     |
-| **"OTHER services fail, not my code"**   | **FORBIDDEN LANGUAGE — see Ownership Mindset**  |
+| Shortcut Taken                         | Why It Fails                                   |
+| -------------------------------------- | ---------------------------------------------- |
+| `npx vitest run` only                  | Misses other workspaces, lint, type-check      |
+| `pnpm run test` in one package         | Misses cross-package type errors               |
+| `tsc --noEmit` only                    | Misses lint errors, test failures              |
+| "I'll check GitHub Actions"            | Wastes CI resources, delays feedback           |
+| **"My workspace passes, committing"**  | **OWNERSHIP VIOLATION — you own ALL of CI**    |
+| **"OTHER services fail, not my code"** | **FORBIDDEN LANGUAGE — see Ownership Mindset** |
 
 **The only acceptable verification is `pnpm run ci:tracked` passing locally — COMPLETELY, not partially.**
 
