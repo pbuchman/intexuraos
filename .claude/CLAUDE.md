@@ -972,28 +972,27 @@ This project uses three types of Claude extensions:
 **Location:** `.claude/agents/<agent-name>.md`
 **Invocation:** Task tool with `subagent_type: <agent-name>`
 
-| Agent           | Purpose                                       |
-| --------------- | --------------------------------------------- |
-| `llm-manager`   | LLM usage audit and pricing verification      |
-| `service-creator` | New service scaffolding                     |
+| Agent             | Purpose                                       |
+| ----------------- | --------------------------------------------- |
+| `llm-manager`     | LLM usage audit and pricing verification      |
+| `service-creator` | New service scaffolding                       |
 | `service-scribe`  | Autonomous documentation (delegates to skill) |
-| `whatsapp-sender` | WhatsApp notification specialist            |
+| `whatsapp-sender` | WhatsApp notification specialist              |
 
 ### Commands (Single-File)
 
 **Location:** `.claude/commands/<command-name>.md`
 **Invocation:** `/<command-name>`
 
-| Command                | Purpose                          |
-| ---------------------- | -------------------------------- |
-| `/analyze-ci-failures` | Analyze CI failure patterns      |
-| `/analyze-logs`        | Production log analysis          |
-| `/coverage`            | Coverage improvement suggestions |
-| `/create-service`      | New service creation wizard      |
-| `/refactoring`         | Code smell detection and fixes   |
-| `/semver-release`      | Semantic versioning release      |
-| `/teach-me-something`  | Learn and persist tech insights  |
-| `/verify-deployment`   | Deployment verification          |
+| Command                | Purpose                         |
+| ---------------------- | ------------------------------- |
+| `/analyze-ci-failures` | Analyze CI failure patterns     |
+| `/analyze-logs`        | Production log analysis         |
+| `/create-service`      | New service creation wizard     |
+| `/refactoring`         | Code smell detection and fixes  |
+| `/semver-release`      | Semantic versioning release     |
+| `/teach-me-something`  | Learn and persist tech insights |
+| `/verify-deployment`   | Deployment verification         |
 
 ---
 
