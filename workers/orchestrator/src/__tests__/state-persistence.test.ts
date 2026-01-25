@@ -89,8 +89,17 @@ describe('StatePersistence', () => {
         ...mockState,
         tasks: {
           'task-2': {
-            ...mockState.tasks['task-1'],
             taskId: 'task-2',
+            workerType: 'opus',
+            prompt: 'Test prompt 2',
+            repository: 'https://github.com/test/repo',
+            baseBranch: 'main',
+            webhookUrl: 'https://example.com/webhook',
+            webhookSecret: 'secret2',
+            status: 'queued',
+            tmuxSession: 'session2',
+            worktreePath: '/tmp/session2',
+            startedAt: new Date().toISOString(),
           },
         },
       };

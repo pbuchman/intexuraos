@@ -1,6 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-member-access */
-/* eslint-disable @typescript-eslint/no-unsafe-assignment */
-/* eslint-disable @typescript-eslint/no-unsafe-return */
 /* eslint-disable @typescript-eslint/unbound-method */
 
 import { readFile } from 'node:fs/promises';
@@ -85,10 +82,8 @@ export class GitHubTokenService {
     }
 
     // Try to refresh
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-assignment
     const result = await this.refreshToken();
-    if (result.ok === true) {
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-return
+    if (result.ok) {
       return result.value;
     }
 
