@@ -1,6 +1,5 @@
 import pino from 'pino';
 import { fetchAllPricing, createPricingContext } from '@intexuraos/llm-pricing';
-import type { LlmGenerateClient } from '@intexuraos/llm-factory';
 import { LlmModels } from '@intexuraos/llm-contract';
 import type { CommandRepository } from './domain/ports/commandRepository.js';
 import type { ClassifierFactory } from './domain/ports/classifier.js';
@@ -16,7 +15,8 @@ import {
 import { createFirestoreCommandRepository } from './infra/firestore/commandRepository.js';
 import { createGeminiClassifier } from './infra/llm/classifier.js';
 import { createActionEventPublisher } from './infra/pubsub/index.js';
-import { createUserServiceClient, type UserServiceClient } from './infra/user/index.js';
+import { createUserServiceClient } from './infra/user/index.js';
+import { adaptUserServiceClient, type UserServiceClient } from './domain/ports/userServiceClient.js';
 import { createActionsAgentClient, type ActionsAgentClient } from './infra/actionsAgent/client.js';
 
 export interface Services {
@@ -69,14 +69,15 @@ export async function initServices(config: ServiceConfig): Promise<void> {
     internalAuthToken: config.internalAuthToken,
     logger: pino({ name: 'actionsAgentClient' }),
   });
-  const classifierFactory: ClassifierFactory = (client: LlmGenerateClient) =>
-    createGeminiClassifier(client);
-  const userServiceClient = createUserServiceClient({
+  const classifierFactory: ClassifierFactory = (client, classifierLogger) =>
+    createGeminiClassifier(client, classifierLogger);
+  const sharedUserServiceClient = createUserServiceClient({
     baseUrl: config.userServiceUrl,
     internalAuthToken: config.internalAuthToken,
     pricingContext,
     logger: pino({ name: 'userServiceClient' }),
   });
+  const userServiceClient = adaptUserServiceClient(sharedUserServiceClient);
   const eventPublisher = createActionEventPublisher({
     projectId: config.gcpProjectId,
     logger: pino({ name: 'action-event-publisher' }),

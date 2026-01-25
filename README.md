@@ -228,6 +228,8 @@ Inspired by Jocko Willink: **no bad code, only unowned problems**.
 
 From task acceptance until `pnpm run ci:tracked` passes, YOU own everything. "Pre-existing issue" and "not my fault" are forbidden phrases — discovery creates ownership.
 
+**[→ The Full Philosophy: 10 Laws Applied to Engineering](docs/philosophy/extreme-ownership.md)**
+
 ### Quality Gates
 
 ```bash

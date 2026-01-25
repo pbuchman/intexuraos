@@ -56,7 +56,7 @@ import type {
   ApprovalMessageRepositoryError,
 } from '../domain/ports/approvalMessageRepository.js';
 import type { ApprovalMessage } from '../domain/models/approvalMessage.js';
-import type { UserServiceClient, UserServiceError } from '../infra/user/userServiceClient.js';
+import type { UserServiceClient, UserServiceError, DecryptedApiKeys } from '@intexuraos/internal-clients/user-service';
 import type { LlmGenerateClient } from '@intexuraos/llm-factory';
 import type { Services } from '../services.js';
 import type {
@@ -920,6 +920,7 @@ export class FakeApprovalMessageRepository implements ApprovalMessageRepository 
 export class FakeUserServiceClient implements UserServiceClient {
   private llmClient: LlmGenerateClient | null = null;
   private error: UserServiceError | null = null;
+  private apiKeys: DecryptedApiKeys | null = null;
 
   setLlmClient(client: LlmGenerateClient): void {
     this.llmClient = client;
@@ -929,6 +930,24 @@ export class FakeUserServiceClient implements UserServiceClient {
   setError(error: UserServiceError): void {
     this.error = error;
     this.llmClient = null;
+  }
+
+  setApiKeys(keys: DecryptedApiKeys): void {
+    this.apiKeys = keys;
+    this.error = null;
+  }
+
+  async getApiKeys(_userId: string): Promise<Result<DecryptedApiKeys, UserServiceError>> {
+    if (this.error !== null) {
+      return err(this.error);
+    }
+    if (this.apiKeys === null) {
+      return err({
+        code: 'API_ERROR',
+        message: 'No API keys configured in fake',
+      });
+    }
+    return ok(this.apiKeys);
   }
 
   async getLlmClient(_userId: string): Promise<Result<LlmGenerateClient, UserServiceError>> {
@@ -942,6 +961,10 @@ export class FakeUserServiceClient implements UserServiceClient {
       });
     }
     return ok(this.llmClient);
+  }
+
+  async reportLlmSuccess(_userId: string, _provider: string): Promise<void> {
+    // Best effort - silently ignore in tests
   }
 }
 

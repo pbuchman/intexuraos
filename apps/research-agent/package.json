@@ -29,6 +29,7 @@
     "@intexuraos/infra-perplexity": "workspace:*",
     "@intexuraos/infra-pubsub": "workspace:*",
     "@intexuraos/infra-sentry": "workspace:*",
+    "@intexuraos/internal-clients": "workspace:*",
     "@intexuraos/llm-prompts": "workspace:*",
     "@intexuraos/llm-utils": "workspace:*",
     "@intexuraos/llm-contract": "workspace:*",

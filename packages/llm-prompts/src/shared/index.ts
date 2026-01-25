@@ -12,6 +12,7 @@ export {
   type Mode,
   type DefaultApplied,
   type SafetyInfo,
+  type InputQuality,
 } from './contextTypes.js';
 export {
   isStringArray,
@@ -27,4 +28,5 @@ export {
   ModeSchema,
   DefaultAppliedSchema,
   SafetyInfoSchema,
+  InputQualitySchema,
 } from './contextSchemas.js';

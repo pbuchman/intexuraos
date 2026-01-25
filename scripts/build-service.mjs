@@ -38,6 +38,11 @@ function collectExternalDeps(pkgName, visited = new Set()) {
   const deps = { ...pkg.dependencies, ...pkg.devDependencies };
   const externals = new Set();
 
+  // Add this @intexuraos package itself as external (for subpath exports)
+  externals.add(pkgName);
+  // Also add a pattern for subpath exports
+  externals.add(`${pkgName}/*`);
+
   for (const dep of Object.keys(deps)) {
     if (dep.startsWith('@intexuraos/')) {
       // Recurse into workspace package

@@ -41,12 +41,16 @@ vi.mock('@intexuraos/llm-audit', () => ({
   }),
 }));
 
+const mockUsageLoggerLog = vi.fn().mockResolvedValue(undefined);
+
 vi.mock('@intexuraos/llm-pricing', () => ({
   logUsage: vi.fn().mockResolvedValue(undefined),
+  createUsageLogger: vi.fn().mockReturnValue({
+    log: mockUsageLoggerLog,
+  }),
 }));
 
 const { createGlmClient } = await import('../client.js');
-const { logUsage } = await import('@intexuraos/llm-pricing');
 
 const TEST_MODEL = 'glm-4.7';
 
@@ -327,7 +331,7 @@ describe('createGlmClient', () => {
       });
       await client.research('Test prompt');
 
-      expect(logUsage).toHaveBeenCalledWith(
+      expect(mockUsageLoggerLog).toHaveBeenCalledWith(
         expect.objectContaining({
           userId: 'test-user',
           provider: LlmProviders.Zai,
@@ -488,7 +492,7 @@ describe('createGlmClient', () => {
       });
       await client.research('Test prompt');
 
-      expect(logUsage).toHaveBeenCalledWith(
+      expect(mockUsageLoggerLog).toHaveBeenCalledWith(
         expect.objectContaining({
           success: false,
           errorMessage: expect.any(String),
@@ -542,7 +546,7 @@ describe('createGlmClient', () => {
       });
       await client.generate('Write something');
 
-      expect(logUsage).toHaveBeenCalledWith(
+      expect(mockUsageLoggerLog).toHaveBeenCalledWith(
         expect.objectContaining({
           callType: 'generate',
           success: true,

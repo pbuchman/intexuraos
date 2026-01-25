@@ -1,10 +1,10 @@
-import type { Result, Logger } from '@intexuraos/common-core';
+/**
+ * HTTP client for user-service internal API.
+ * Provides access to user API keys and LLM client creation.
+ */
+
+import type { Result } from '@intexuraos/common-core';
 import { err, getErrorMessage, ok } from '@intexuraos/common-core';
-import {
-  createLlmClient,
-  type LlmClientConfig,
-  type LlmGenerateClient,
-} from '@intexuraos/llm-factory';
 import {
   getProviderForModel,
   isValidModel,
@@ -12,27 +12,26 @@ import {
   LlmProviders,
   type LlmProvider,
 } from '@intexuraos/llm-contract';
-import type { IPricingContext } from '@intexuraos/llm-pricing';
+import {
+  createLlmClient,
+  type LlmClientConfig,
+  type LlmGenerateClient,
+} from '@intexuraos/llm-factory';
 
-export interface UserServiceConfig {
-  baseUrl: string;
-  internalAuthToken: string;
-  pricingContext: IPricingContext;
-  logger: Logger;
-}
+import type {
+  UserServiceConfig,
+  UserServiceError,
+  DecryptedApiKeys,
+  UserServiceClient,
+} from './types.js';
 
-export interface UserServiceError {
-  code: 'NETWORK_ERROR' | 'API_ERROR' | 'NO_API_KEY' | 'INVALID_MODEL';
-  message: string;
-}
-
-export interface UserServiceClient {
-  /**
-   * Get a ready-to-use LLM client based on user's settings.
-   * Handles model selection, API key retrieval, and client creation.
-   */
-  getLlmClient(userId: string): Promise<Result<LlmGenerateClient, UserServiceError>>;
-}
+export type { LlmProvider } from '@intexuraos/llm-contract';
+export type {
+  UserServiceConfig,
+  UserServiceError,
+  DecryptedApiKeys,
+  UserServiceClient,
+} from './types.js';
 
 // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
 function providerToKeyField(provider: LlmProvider) {
@@ -50,13 +49,65 @@ function providerToKeyField(provider: LlmProvider) {
   }
 }
 
+/**
+ * Create a user service client with the given configuration.
+ */
 export function createUserServiceClient(config: UserServiceConfig): UserServiceClient {
   const { logger } = config;
 
   return {
-    async getLlmClient(
-      userId: string
-    ): Promise<Result<LlmGenerateClient, UserServiceError>> {
+    async getApiKeys(userId: string): Promise<Result<DecryptedApiKeys, UserServiceError>> {
+      try {
+        const response = await fetch(`${config.baseUrl}/internal/users/${userId}/llm-keys`, {
+          headers: {
+            'X-Internal-Auth': config.internalAuthToken,
+          },
+        });
+
+        if (!response.ok) {
+          return err({
+            code: 'API_ERROR',
+            message: `HTTP ${String(response.status)}`,
+          });
+        }
+
+        const data = (await response.json()) as {
+          google?: string | null;
+          openai?: string | null;
+          anthropic?: string | null;
+          perplexity?: string | null;
+          zai?: string | null;
+        };
+
+        // Convert null values to undefined (null is used by JSON to distinguish from missing)
+        const result: DecryptedApiKeys = {};
+        if (data.google !== null && data.google !== undefined) {
+          result.google = data.google;
+        }
+        if (data.openai !== null && data.openai !== undefined) {
+          result.openai = data.openai;
+        }
+        if (data.anthropic !== null && data.anthropic !== undefined) {
+          result.anthropic = data.anthropic;
+        }
+        if (data.perplexity !== null && data.perplexity !== undefined) {
+          result.perplexity = data.perplexity;
+        }
+        if (data.zai !== null && data.zai !== undefined) {
+          result.zai = data.zai;
+        }
+
+        return ok(result);
+      } catch (error) {
+        const message = getErrorMessage(error);
+        return err({
+          code: 'NETWORK_ERROR',
+          message,
+        });
+      }
+    },
+
+    async getLlmClient(userId: string): Promise<Result<LlmGenerateClient, UserServiceError>> {
       logger.info({ userId }, 'Creating LLM client for user');
 
       try {
@@ -105,30 +156,21 @@ export function createUserServiceClient(config: UserServiceConfig): UserServiceC
         const provider = getProviderForModel(defaultModel);
         const keyField = providerToKeyField(provider);
 
-        const keysResponse = await fetch(
-          `${config.baseUrl}/internal/users/${userId}/llm-keys`,
-          {
-            headers: {
-              'X-Internal-Auth': config.internalAuthToken,
-            },
-          }
-        );
+        const keysResponse = await fetch(`${config.baseUrl}/internal/users/${userId}/llm-keys`, {
+          headers: {
+            'X-Internal-Auth': config.internalAuthToken,
+          },
+        });
 
         if (!keysResponse.ok) {
-          logger.error(
-            { userId, status: keysResponse.status },
-            'Failed to fetch API keys'
-          );
+          logger.error({ userId, status: keysResponse.status }, 'Failed to fetch API keys');
           return err({
             code: 'API_ERROR',
             message: `Failed to fetch API keys: HTTP ${String(keysResponse.status)}`,
           });
         }
 
-        const keysData = (await keysResponse.json()) as Record<
-          string,
-          string | null | undefined
-        >;
+        const keysData = (await keysResponse.json()) as Record<string, string | null | undefined>;
 
         const apiKey = keysData[keyField];
 
@@ -152,7 +194,7 @@ export function createUserServiceClient(config: UserServiceConfig): UserServiceC
           logger: config.logger,
         };
 
-        const client = createLlmClient(clientConfig);
+        const client: LlmGenerateClient = createLlmClient(clientConfig);
 
         logger.info({ userId, model: defaultModel, provider }, 'LLM client created successfully');
 
@@ -167,6 +209,19 @@ export function createUserServiceClient(config: UserServiceConfig): UserServiceC
           code: 'NETWORK_ERROR',
           message,
         });
+      }
+    },
+
+    async reportLlmSuccess(userId: string, provider: LlmProvider): Promise<void> {
+      try {
+        await fetch(`${config.baseUrl}/internal/users/${userId}/llm-keys/${provider}/last-used`, {
+          method: 'POST',
+          headers: {
+            'X-Internal-Auth': config.internalAuthToken,
+          },
+        });
+      } catch /* v8 ignore next -- best effort, silent failure intentional */ {
+        // Best effort - don't block on failure
       }
     },
   };

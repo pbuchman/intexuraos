@@ -40,7 +40,6 @@ import {
   ResearchListPage,
   ShareHistoryPage,
   ShareTargetPage,
-  SystemHealthPage,
   TodosListPage,
   WhatsAppConnectionPage,
   WhatsAppNotesPage,
@@ -125,14 +124,6 @@ function AppRoutes(): React.JSX.Element {
           <PublicRoute>
             <LoginPage />
           </PublicRoute>
-        }
-      />
-      <Route
-        path="/system-health"
-        element={
-          <ProtectedRoute>
-            <SystemHealthPage />
-          </ProtectedRoute>
         }
       />
       {/* Settings routes */}

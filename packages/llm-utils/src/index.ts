@@ -13,5 +13,6 @@ export {
   logLlmParseError,
   withLlmParseErrorLogging,
   createDetailedParseErrorMessage,
+  formatZodErrors,
   type LlmParseErrorDetails,
 } from './parseError.js';

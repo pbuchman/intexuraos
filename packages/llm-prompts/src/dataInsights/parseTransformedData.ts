@@ -2,6 +2,9 @@
  * Parser for data transformation LLM responses.
  */
 
+import { formatZodErrors } from '@intexuraos/llm-utils';
+import { TransformedDataSchema } from './contextSchemas.js';
+
 /**
  * Parse transformed data response from LLM.
  * Expected format:
@@ -29,20 +32,11 @@ export function parseTransformedData(response: string): unknown[] {
     throw new Error(`Invalid JSON in data: ${String(error)}`);
   }
 
-  if (!Array.isArray(data)) {
-    throw new Error('Data must be an array');
+  const validationResult = TransformedDataSchema.safeParse(data);
+  if (!validationResult.success) {
+    const zodErrors = formatZodErrors(validationResult.error);
+    throw new Error(`Invalid data array: ${zodErrors}`);
   }
 
-  if (data.length === 0) {
-    throw new Error('Data array cannot be empty');
-  }
-
-  for (let i = 0; i < data.length; i++) {
-    const item: unknown = data[i];
-    if (typeof item !== 'object' || item === null || Array.isArray(item)) {
-      throw new Error(`Item at index ${String(i)} must be an object`);
-    }
-  }
-
-  return data;
+  return validationResult.data;
 }

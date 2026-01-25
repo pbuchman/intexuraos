@@ -4,4 +4,4 @@ export {
   type UserServiceConfig,
   type UserServiceError,
   type DecryptedApiKeys,
-} from './userServiceClient.js';
+} from '@intexuraos/internal-clients/user-service';

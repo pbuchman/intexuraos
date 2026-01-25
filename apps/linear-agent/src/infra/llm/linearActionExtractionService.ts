@@ -5,10 +5,15 @@
 
 import type { Result } from '@intexuraos/common-core';
 import { err, getErrorMessage, ok } from '@intexuraos/common-core';
-import { linearActionExtractionPrompt } from '@intexuraos/llm-prompts';
+import {
+  linearActionExtractionPrompt,
+  LinearIssueDataSchema,
+} from '@intexuraos/llm-prompts';
+import { formatZodErrors } from '@intexuraos/llm-utils';
 import type { LlmGenerateClient } from '@intexuraos/llm-factory';
 import type { LlmUserServiceClient } from '../user/llmUserServiceClient.js';
-import type { ExtractedIssueData, LinearError } from '../../domain/index.js';
+import type { LinearError } from '../../domain/index.js';
+import type { ExtractedIssueData } from '../../domain/index.js';
 import pino from 'pino';
 
 const MAX_DESCRIPTION_LENGTH = 2000;
@@ -69,19 +74,46 @@ export function createLinearActionExtractionService(
       let cleaned = result.value.content.trim();
       const codeBlockRegex = /^```(?:json)?\s*\n([\s\S]*?)\n```$/;
       const codeBlockMatch = codeBlockRegex.exec(cleaned);
-      if (codeBlockMatch?.[1] !== undefined) {
+      const wasWrappedInMarkdown = codeBlockMatch?.[1] !== undefined;
+      if (wasWrappedInMarkdown && codeBlockMatch[1] !== undefined) {
         cleaned = codeBlockMatch[1].trim();
       }
 
       try {
-        const parsed = JSON.parse(cleaned) as unknown;
-
-        if (!isValidExtractionResponse(parsed)) {
-          log.error({ userId, rawPreview: cleaned.slice(0, 500) }, 'Invalid response format');
-          return err({ code: 'EXTRACTION_FAILED', message: 'Invalid LLM response format' });
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(cleaned);
+        } catch (e) {
+          log.error({ userId, parseError: getErrorMessage(e) }, 'Failed to parse LLM response as JSON');
+          return err({
+            code: 'EXTRACTION_FAILED',
+            message: `Failed to parse: ${getErrorMessage(e)}`,
+          });
         }
 
-        const extracted = parsed as ExtractedIssueData;
+        const validationResult = LinearIssueDataSchema.safeParse(parsed);
+        if (!validationResult.success) {
+          const zodErrors = formatZodErrors(validationResult.error);
+          log.error(
+            { userId, zodErrors, rawResponsePreview: cleaned.slice(0, 500), wasWrappedInMarkdown },
+            'LLM returned invalid response format'
+          );
+          return err({
+            code: 'EXTRACTION_FAILED',
+            message: `LLM returned invalid response format: ${zodErrors}`,
+          });
+        }
+
+        const extracted: ExtractedIssueData = {
+          title: validationResult.data.title,
+          priority: validationResult.data.priority as ExtractedIssueData['priority'],
+          functionalRequirements: validationResult.data.functionalRequirements,
+          technicalDetails: validationResult.data.technicalDetails,
+          valid: validationResult.data.valid,
+          error: validationResult.data.error,
+          reasoning: validationResult.data.reasoning,
+        };
+
         log.info({ userId, title: extracted.title, valid: extracted.valid }, 'Extraction complete');
 
         return ok(extracted);
@@ -94,22 +126,4 @@ export function createLinearActionExtractionService(
       }
     },
   };
-}
-
-function isValidExtractionResponse(value: unknown): boolean {
-  if (typeof value !== 'object' || value === null) return false;
-
-  const obj = value as Record<string, unknown>;
-
-  if (typeof obj['title'] !== 'string') return false;
-  if (typeof obj['priority'] !== 'number') return false;
-  if (obj['priority'] < 0 || obj['priority'] > 4) return false;
-  if (obj['functionalRequirements'] !== null && typeof obj['functionalRequirements'] !== 'string')
-    return false;
-  if (obj['technicalDetails'] !== null && typeof obj['technicalDetails'] !== 'string') return false;
-  if (typeof obj['valid'] !== 'boolean') return false;
-  if (obj['error'] !== null && typeof obj['error'] !== 'string') return false;
-  if (typeof obj['reasoning'] !== 'string') return false;
-
-  return true;
 }
