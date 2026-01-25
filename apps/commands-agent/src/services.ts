@@ -15,7 +15,7 @@ import {
 import { createFirestoreCommandRepository } from './infra/firestore/commandRepository.js';
 import { createGeminiClassifier } from './infra/llm/classifier.js';
 import { createActionEventPublisher } from './infra/pubsub/index.js';
-import { createUserServiceClient as createSharedUserServiceClient } from './infra/user/index.js';
+import { createUserServiceClient } from './infra/user/index.js';
 import { adaptUserServiceClient, type UserServiceClient } from './domain/ports/userServiceClient.js';
 import { createActionsAgentClient, type ActionsAgentClient } from './infra/actionsAgent/client.js';
 

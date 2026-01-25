@@ -9,11 +9,11 @@ Use this template when generating the "What's New in vX.Y.Z" section for README.
 ```markdown
 ## What's New in vX.Y.Z
 
-| Feature                        | Description                                                   |
-| ------------------------------ | ------------------------------------------------------------- |
-| **Feature Name**               | One-sentence user-facing description                          |
-| **Another Feature**            | Brief explanation of the value it provides                    |
-| **Third Feature**              | What the user can now do                                      |
+| Feature             | Description                                |
+| ------------------- | ------------------------------------------ |
+| **Feature Name**    | One-sentence user-facing description       |
+| **Another Feature** | Brief explanation of the value it provides |
+| **Third Feature**   | What the user can now do                   |
 ```
 
 ---
@@ -28,13 +28,13 @@ Use this template when generating the "What's New in vX.Y.Z" section for README.
 
 ### Writing Style
 
-| Do                                      | Don't                                     |
-| --------------------------------------- | ----------------------------------------- |
-| User-facing language                    | Internal jargon or code terms             |
-| Focus on what user can do               | Focus on how it's implemented             |
-| Action verbs: "Add", "Enable", "Support"| Passive voice: "Was added", "Has been"    |
-| Concrete benefits                       | Vague improvements                        |
-| Present tense                           | Past tense                                |
+| Do                                       | Don't                                  |
+| ---------------------------------------- | -------------------------------------- |
+| User-facing language                     | Internal jargon or code terms          |
+| Focus on what user can do                | Focus on how it's implemented          |
+| Action verbs: "Add", "Enable", "Support" | Passive voice: "Was added", "Has been" |
+| Concrete benefits                        | Vague improvements                     |
+| Present tense                            | Past tense                             |
 
 ### Sorting Order
 
@@ -46,12 +46,12 @@ Use this template when generating the "What's New in vX.Y.Z" section for README.
 
 ### Feature Naming
 
-| Good                               | Bad                                    |
-| ---------------------------------- | -------------------------------------- |
-| "WhatsApp Approval Workflow"       | "Added approval flow to WhatsApp"      |
-| "Natural Language Model Selection" | "LLM selection via message parsing"    |
-| "Calendar Preview"                 | "Preview calendar events before create"|
-| "5-Step Classification"            | "Improved classifier pipeline"         |
+| Good                               | Bad                                     |
+| ---------------------------------- | --------------------------------------- |
+| "WhatsApp Approval Workflow"       | "Added approval flow to WhatsApp"       |
+| "Natural Language Model Selection" | "LLM selection via message parsing"     |
+| "Calendar Preview"                 | "Preview calendar events before create" |
+| "5-Step Classification"            | "Improved classifier pipeline"          |
 
 ### Description Guidelines
 
@@ -69,14 +69,14 @@ Use this template when generating the "What's New in vX.Y.Z" section for README.
 ```markdown
 ## What's New in v2.0.0
 
-| Feature                              | Description                                                                                   |
-| ------------------------------------ | --------------------------------------------------------------------------------------------- |
-| **WhatsApp Approval Workflow**       | Approve or reject actions via text replies ("yes", "ok", "reject") or emoji reactions (...)   |
-| **Calendar Preview**                 | See exactly what will be created before approving calendar events                             |
-| **Natural Language Model Selection** | Specify models in messages: "research with Claude and GPT"                                    |
-| **5-Step Classification**            | URL keyword isolation, explicit intent priority, Polish language support                      |
-| **Zod Schema Validation**            | Type-safe LLM response handling with parser + repair pattern                                  |
-| **GLM-4.7-Flash**                    | New free-tier model for cost-effective classification                                         |
+| Feature                              | Description                                                                                 |
+| ------------------------------------ | ------------------------------------------------------------------------------------------- |
+| **WhatsApp Approval Workflow**       | Approve or reject actions via text replies ("yes", "ok", "reject") or emoji reactions (...) |
+| **Calendar Preview**                 | See exactly what will be created before approving calendar events                           |
+| **Natural Language Model Selection** | Specify models in messages: "research with Claude and GPT"                                  |
+| **5-Step Classification**            | URL keyword isolation, explicit intent priority, Polish language support                    |
+| **Zod Schema Validation**            | Type-safe LLM response handling with parser + repair pattern                                |
+| **GLM-4.7-Flash**                    | New free-tier model for cost-effective classification                                       |
 ```
 
 ### Bad Example
@@ -84,14 +84,14 @@ Use this template when generating the "What's New in vX.Y.Z" section for README.
 ```markdown
 ## What's New
 
-| Feature | Description |
-|---------|-------------|
-| Approval | Added approval flow |
-| Calendar | Preview support |
-| Models | Can use multiple models |
-| Classifier | Better classification |
-| Validation | Zod validation |
-| GLM | New model |
+| Feature    | Description             |
+| ---------- | ----------------------- |
+| Approval   | Added approval flow     |
+| Calendar   | Preview support         |
+| Models     | Can use multiple models |
+| Classifier | Better classification   |
+| Validation | Zod validation          |
+| GLM        | New model               |
 ```
 
 ---

@@ -820,14 +820,14 @@ Use the `/release` skill to orchestrate comprehensive release workflows.
 
 **Phases:**
 
-| Phase | Name           | Interaction       | Key Actions                              |
-| ----- | -------------- | ----------------- | ---------------------------------------- |
-| 1     | Kickoff        | User Input        | Semver analysis, detect modified services|
-| 2     | Service Docs   | Silent Batch      | Spawn service-scribe agents in parallel  |
-| 3     | High-Level Docs| **Checkpoint**    | Propose docs/overview.md updates         |
-| 4     | README         | **Checkpoint**    | Propose "What's New" section             |
-| 5     | Website        | **Checkpoint**    | 3 improvement suggestions                |
-| 6     | Finalize       | Automatic         | CI check, commit, tag push               |
+| Phase | Name            | Interaction    | Key Actions                               |
+| ----- | --------------- | -------------- | ----------------------------------------- |
+| 1     | Kickoff         | User Input     | Semver analysis, detect modified services |
+| 2     | Service Docs    | Silent Batch   | Spawn service-scribe agents in parallel   |
+| 3     | High-Level Docs | **Checkpoint** | Propose docs/overview.md updates          |
+| 4     | README          | **Checkpoint** | Propose "What's New" section              |
+| 5     | Website         | **Checkpoint** | 3 improvement suggestions                 |
+| 6     | Finalize        | Automatic      | CI check, commit, tag push                |
 
 **Full Documentation:** `.claude/skills/release/`
 
