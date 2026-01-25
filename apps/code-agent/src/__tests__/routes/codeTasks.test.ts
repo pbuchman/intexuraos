@@ -12,6 +12,7 @@ import type { Logger } from 'pino';
 import { createFirestoreCodeTaskRepository } from '../../infra/repositories/firestoreCodeTaskRepository.js';
 import { createWorkerDiscoveryService } from '../../infra/services/workerDiscoveryImpl.js';
 import { createTaskDispatcherService } from '../../infra/services/taskDispatcherImpl.js';
+import { createWhatsAppNotifier } from '../../infra/services/whatsappNotifierImpl.js';
 import { createFirestoreLogChunkRepository } from '../../infra/repositories/firestoreLogChunkRepository.js';
 import { createActionsAgentClient } from '../../infra/clients/actionsAgentClient.js';
 import type { LogChunkRepository } from '../../domain/repositories/logChunkRepository.js';
@@ -48,6 +49,12 @@ describe('GET /code/tasks endpoints', () => {
     const workerDiscovery = createWorkerDiscoveryService({ logger });
     const taskDispatcher = createTaskDispatcherService({ logger });
 
+    const whatsappNotifier = createWhatsAppNotifier({
+      baseUrl: 'http://whatsapp-service',
+      internalAuthToken: 'test-token',
+      logger,
+    });
+
     const logChunkRepo = createFirestoreLogChunkRepository({
       firestore: fakeFirestore as unknown as Firestore,
       logger,
@@ -65,6 +72,7 @@ describe('GET /code/tasks endpoints', () => {
       codeTaskRepo,
       workerDiscovery,
       taskDispatcher,
+      whatsappNotifier,
       logChunkRepo,
       actionsAgentClient,
     } as {
@@ -75,6 +83,7 @@ describe('GET /code/tasks endpoints', () => {
       taskDispatcher: TaskDispatcherService;
       logChunkRepo: LogChunkRepository;
       actionsAgentClient: ActionsAgentClient;
+      whatsappNotifier: any;
     });
 
     app = await buildServer();

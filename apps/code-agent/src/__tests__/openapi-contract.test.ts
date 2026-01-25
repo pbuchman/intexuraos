@@ -14,6 +14,7 @@ import { createActionsAgentClient } from '../infra/clients/actionsAgentClient.js
 import type { CodeTaskRepository } from '../domain/repositories/codeTaskRepository.js';
 import { createWorkerDiscoveryService } from '../infra/services/workerDiscoveryImpl.js';
 import { createTaskDispatcherService } from '../infra/services/taskDispatcherImpl.js';
+import { createWhatsAppNotifier } from '../infra/services/whatsappNotifierImpl.js';
 import type { WorkerDiscoveryService } from '../domain/services/workerDiscovery.js';
 import type { TaskDispatcherService } from '../domain/services/taskDispatcher.js';
 import type { LogChunkRepository } from '../domain/repositories/logChunkRepository.js';
@@ -42,6 +43,11 @@ describe('OpenAPI contract', () => {
       }),
       workerDiscovery: createWorkerDiscoveryService({ logger }),
       taskDispatcher: createTaskDispatcherService({ logger }),
+      whatsappNotifier: createWhatsAppNotifier({
+        baseUrl: 'http://whatsapp-service',
+        internalAuthToken: 'test-token',
+        logger,
+      }),
       logChunkRepo: createFirestoreLogChunkRepository({
         firestore: fakeFirestore,
         logger,
@@ -59,6 +65,7 @@ describe('OpenAPI contract', () => {
       taskDispatcher: TaskDispatcherService;
       logChunkRepo: LogChunkRepository;
       actionsAgentClient: ActionsAgentClient;
+      whatsappNotifier: any;
     });
 
     app = await buildServer();

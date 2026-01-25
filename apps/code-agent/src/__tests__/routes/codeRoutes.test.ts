@@ -11,6 +11,7 @@ import type { Logger } from 'pino';
 import type { CodeTaskRepository } from '../../domain/repositories/codeTaskRepository.js';
 import { createWorkerDiscoveryService } from '../../infra/services/workerDiscoveryImpl.js';
 import { createTaskDispatcherService } from '../../infra/services/taskDispatcherImpl.js';
+import { createWhatsAppNotifier } from '../../infra/services/whatsappNotifierImpl.js';
 import { createFirestoreLogChunkRepository } from '../../infra/repositories/firestoreLogChunkRepository.js';
 import { createActionsAgentClient } from '../../infra/clients/actionsAgentClient.js';
 import type { WorkerDiscoveryService } from '../../domain/services/workerDiscovery.js';
@@ -47,6 +48,11 @@ describe('codeRoutes', () => {
 
     const workerDiscovery = createWorkerDiscoveryService({ logger });
     const taskDispatcher = createTaskDispatcherService({ logger });
+    const whatsappNotifier = createWhatsAppNotifier({
+      baseUrl: 'http://whatsapp-service',
+      internalAuthToken: 'test-token',
+      logger,
+    });
 
     const logChunkRepo = createFirestoreLogChunkRepository({
       firestore: fakeFirestore as unknown as Firestore,
@@ -65,6 +71,7 @@ describe('codeRoutes', () => {
       codeTaskRepo,
       workerDiscovery,
       taskDispatcher,
+      whatsappNotifier,
       logChunkRepo,
       actionsAgentClient,
     } as {
@@ -75,6 +82,7 @@ describe('codeRoutes', () => {
       taskDispatcher: TaskDispatcherService;
       logChunkRepo: LogChunkRepository;
       actionsAgentClient: ActionsAgentClient;
+      whatsappNotifier: any;
     });
 
     server = await buildServer();
