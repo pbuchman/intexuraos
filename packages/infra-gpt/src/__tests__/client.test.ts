@@ -41,12 +41,16 @@ vi.mock('@intexuraos/llm-audit', () => ({
   }),
 }));
 
+const mockUsageLoggerLog = vi.fn().mockResolvedValue(undefined);
+
 vi.mock('@intexuraos/llm-pricing', () => ({
   logUsage: vi.fn().mockResolvedValue(undefined),
+  createUsageLogger: vi.fn().mockReturnValue({
+    log: mockUsageLoggerLog,
+  }),
 }));
 
 const { createGptClient } = await import('../client.js');
-const { logUsage } = await import('@intexuraos/llm-pricing');
 
 const TEST_MODEL = 'gpt-4o';
 
@@ -225,7 +229,7 @@ describe('createGptClient', () => {
       });
       await client.research('Test prompt');
 
-      expect(logUsage).toHaveBeenCalledWith(
+      expect(mockUsageLoggerLog).toHaveBeenCalledWith(
         expect.objectContaining({
           userId: 'test-user',
           provider: LlmProviders.OpenAI,
@@ -304,7 +308,7 @@ describe('createGptClient', () => {
       });
       await client.research('Test prompt');
 
-      expect(logUsage).toHaveBeenCalledWith(
+      expect(mockUsageLoggerLog).toHaveBeenCalledWith(
         expect.objectContaining({
           success: false,
           errorMessage: expect.any(String),
@@ -358,7 +362,7 @@ describe('createGptClient', () => {
       });
       await client.generate('Write something');
 
-      expect(logUsage).toHaveBeenCalledWith(
+      expect(mockUsageLoggerLog).toHaveBeenCalledWith(
         expect.objectContaining({
           callType: 'generate',
           success: true,
@@ -526,7 +530,7 @@ describe('createGptClient', () => {
       if (client.generateImage === undefined) throw new Error('generateImage not defined');
       await client.generateImage('A cat');
 
-      expect(logUsage).toHaveBeenCalledWith(
+      expect(mockUsageLoggerLog).toHaveBeenCalledWith(
         expect.objectContaining({
           callType: 'image_generation',
           success: true,

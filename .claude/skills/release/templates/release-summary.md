@@ -6,7 +6,7 @@ Use this template to display the final summary after Phase 6 completes.
 
 ## Format
 
-```markdown
+````markdown
 # Release Summary: vX.Y.Z
 
 ## Tag Created
@@ -17,33 +17,36 @@ Use this template to display the final summary after Phase 6 completes.
 
 ## Services Documented
 
-| Service            | Status    |
-| ------------------ | --------- |
-| actions-agent      | Updated   |
-| bookmarks-agent    | Updated   |
-| research-agent     | Skipped   |
+| Service         | Status  |
+| --------------- | ------- |
+| actions-agent   | Updated |
+| bookmarks-agent | Updated |
+| research-agent  | Skipped |
 
 ## Files Changed
 
 ### Documentation
+
 - `docs/overview.md` — [Approved | Skipped]
 - `README.md` — [Approved | Skipped]
 
 ### Service Docs
+
 - `docs/services/actions-agent/*.md` — 5 files
 - `docs/services/bookmarks-agent/*.md` — 5 files
 
 ### Website
+
 - `apps/web/src/components/RecentUpdatesSection.tsx` — [Updated | Skipped]
 - `apps/web/src/pages/HomePage.tsx` — [Updated | Skipped]
 
 ## Website Suggestions Implemented
 
-| # | Suggestion                     | Status      |
-| - | ------------------------------ | ----------- |
-| 1 | Update RecentUpdatesSection    | Implemented |
-| 2 | Update hero statistics         | Implemented |
-| 3 | Add approval flow visualization| Skipped     |
+| #   | Suggestion                      | Status      |
+| --- | ------------------------------- | ----------- |
+| 1   | Update RecentUpdatesSection     | Implemented |
+| 2   | Update hero statistics          | Implemented |
+| 3   | Add approval flow visualization | Skipped     |
 
 ## CI Status
 
@@ -63,11 +66,13 @@ open https://github.com/pbuchman/intexuraos/releases/tag/vX.Y.Z
 # Deploy to production
 ./scripts/deploy-production.sh
 ```
+````
 
 ---
 
 Release complete.
-```
+
+````
 
 ---
 
@@ -144,12 +149,13 @@ All documentation updates were skipped by user request.
 
 ```bash
 gh release create vX.Y.Z --generate-notes
-```
+````
 
 ---
 
 Release complete.
-```
+
+````
 
 ---
 
@@ -168,9 +174,11 @@ If release fails:
 
 ## Error Details
 
-```
+````
+
 apps/research-agent/src/services.ts:42:5
-  error TS2345: Argument of type 'string' is not assignable...
+error TS2345: Argument of type 'string' is not assignable...
+
 ```
 
 ## Recovery

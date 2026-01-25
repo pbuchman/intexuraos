@@ -157,21 +157,21 @@ sequenceDiagram
 
 ### CalendarPreview (v2.0.0)
 
-| Field         | Type                             | Description                   |
-| ------------- | -------------------------------- | ----------------------------- |
-| `actionId`    | string                           | Action ID (document ID)       |
-| `userId`      | string                           | User ID                       |
-| `status`      | 'pending' \                      | 'ready' \                     | 'failed' | Preview generation status |
-| `summary`     | string?                          | Extracted event title         |
-| `start`       | string?                          | ISO 8601 start datetime       |
-| `end`         | string?                          | ISO 8601 end datetime         |
-| `location`    | string?                          | Extracted location            |
-| `description` | string?                          | Extracted description         |
-| `duration`    | string?                          | Human-readable duration       |
-| `isAllDay`    | boolean?                         | True if all-day event         |
-| `error`       | string?                          | Error message (if failed)     |
-| `reasoning`   | string?                          | LLM reasoning for extraction  |
-| `generatedAt` | string                           | ISO 8601 generation timestamp |
+| Field         | Type         | Description                   |
+| ------------- | ------------ | ----------------------------- | -------- | ------------------------- |
+| `actionId`    | string       | Action ID (document ID)       |
+| `userId`      | string       | User ID                       |
+| `status`      | 'pending' \  | 'ready' \                     | 'failed' | Preview generation status |
+| `summary`     | string?      | Extracted event title         |
+| `start`       | string?      | ISO 8601 start datetime       |
+| `end`         | string?      | ISO 8601 end datetime         |
+| `location`    | string?      | Extracted location            |
+| `description` | string?      | Extracted description         |
+| `duration`    | string?      | Human-readable duration       |
+| `isAllDay`    | boolean?     | True if all-day event         |
+| `error`       | string?      | Error message (if failed)     |
+| `reasoning`   | string?      | LLM reasoning for extraction  |
+| `generatedAt` | string       | ISO 8601 generation timestamp |
 
 ### ProcessedAction
 

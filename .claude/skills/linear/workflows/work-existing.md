@@ -44,10 +44,10 @@ This is not a guideline — it's a hard requirement. EVERY task must update stat
 
 ### Summary Table
 
-| Timing         | Linear State   | When                    | Why                                  |
-| -------------- | -------------- | ----------------------- | ------------------------------------- |
-| **MANDATORY 1** | In Progress    | AFTER branch, BEFORE code | Signals work started, prevents dupes  |
-| **MANDATORY 2** | In Review      | AFTER PR, BEFORE done    | Signals review requested, links PR    |
+| Timing          | Linear State | When                      | Why                                  |
+| --------------- | ------------ | ------------------------- | ------------------------------------ |
+| **MANDATORY 1** | In Progress  | AFTER branch, BEFORE code | Signals work started, prevents dupes |
+| **MANDATORY 2** | In Review    | AFTER PR, BEFORE done     | Signals review requested, links PR   |
 
 **No exceptions. No shortcuts. Both transitions are REQUIRED.**
 

@@ -8,6 +8,9 @@ vi.mock('@intexuraos/llm-pricing', async (importOriginal) => {
   return {
     ...actual,
     logUsage: vi.fn().mockResolvedValue(undefined),
+  createUsageLogger: vi.fn().mockReturnValue({
+    log: vi.fn().mockResolvedValue(undefined),
+  }),
   };
 });
 
