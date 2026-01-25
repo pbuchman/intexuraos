@@ -277,10 +277,10 @@ sequenceDiagram
 
 ### ExtractModelPreferencesResult (v2.0.0)
 
-| Field            | Type             | Description                            |
-| ---------------- | ---------------- | -------------------------------------- | --------------------------------------- |
-| `selectedModels` | ResearchModel[]  | Models extracted from natural language |
-| `synthesisModel` | ResearchModel \  | undefined                              | Synthesis model if explicitly mentioned |
+| Field | Type | Description |
+| ---------------- | ---------------- | -------------------------------------- | |
+| `selectedModels` | ResearchModel[] | Models extracted from natural language |
+| `synthesisModel` | ResearchModel \ | undefined | Synthesis model if explicitly mentioned |
 
 ## Model Filtering Logic (v2.0.0)
 

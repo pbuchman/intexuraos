@@ -376,9 +376,6 @@ export function createHandleApprovalReplyUseCase(
                 return;
               }
               break;
-            case 'reminder':
-              logger.warn({ actionId: action.id }, 'Reminder actions not implemented');
-              return;
           }
 
           // Fallback: No execute function provided for this action type, publish event
