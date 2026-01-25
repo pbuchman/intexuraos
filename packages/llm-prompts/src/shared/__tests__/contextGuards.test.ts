@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { DOMAINS } from '../contextTypes.js';
+import type { Logger } from 'pino';
 import {
   isDomain,
   isMode,
@@ -7,6 +8,8 @@ import {
   isSafetyInfo,
   isStringArray,
   isObject,
+  validateDomain,
+  validateMode,
 } from '../contextGuards.js';
 
 describe('DOMAINS constant', () => {
@@ -130,5 +133,87 @@ describe('isSafetyInfo', () => {
   it('returns false for invalid values', () => {
     expect(isSafetyInfo(null)).toBe(false);
     expect(isSafetyInfo({ high_stakes: true })).toBe(false);
+  });
+});
+
+describe('validateDomain', () => {
+  const logger = {
+    warn: vi.fn(),
+  } as unknown as Logger;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('returns true for valid domains', () => {
+    expect(validateDomain('travel', logger)).toBe(true);
+    expect(validateDomain('product', logger)).toBe(true);
+    expect(validateDomain('technical', logger)).toBe(true);
+    expect(validateDomain('general', logger)).toBe(true);
+    expect(validateDomain('unknown', logger)).toBe(true);
+    expect(logger.warn).not.toHaveBeenCalled();
+  });
+
+  it('returns false and logs warning for invalid domain string', () => {
+    const result = validateDomain('invalid-domain', logger);
+
+    expect(result).toBe(false);
+    expect(logger.warn).toHaveBeenCalledTimes(1);
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        received: 'invalid-domain',
+        error: expect.anything(),
+      }),
+      expect.stringContaining('Domain validation failed - expected one of:')
+    );
+  });
+
+  it('returns false and logs warning for non-string values', () => {
+    expect(validateDomain(123, logger)).toBe(false);
+    expect(validateDomain(null, logger)).toBe(false);
+    expect(validateDomain(undefined, logger)).toBe(false);
+    expect(validateDomain({}, logger)).toBe(false);
+
+    expect(logger.warn).toHaveBeenCalledTimes(4);
+  });
+});
+
+describe('validateMode', () => {
+  const logger = {
+    warn: vi.fn(),
+  } as unknown as Logger;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('returns true for valid modes', () => {
+    expect(validateMode('compact', logger)).toBe(true);
+    expect(validateMode('standard', logger)).toBe(true);
+    expect(validateMode('audit', logger)).toBe(true);
+    expect(logger.warn).not.toHaveBeenCalled();
+  });
+
+  it('returns false and logs warning for invalid mode string', () => {
+    const result = validateMode('invalid-mode', logger);
+
+    expect(result).toBe(false);
+    expect(logger.warn).toHaveBeenCalledTimes(1);
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        received: 'invalid-mode',
+        error: expect.anything(),
+      }),
+      expect.stringContaining('Mode validation failed - expected one of:')
+    );
+  });
+
+  it('returns false and logs warning for non-string values', () => {
+    expect(validateMode(123, logger)).toBe(false);
+    expect(validateMode(null, logger)).toBe(false);
+    expect(validateMode(undefined, logger)).toBe(false);
+    expect(validateMode({}, logger)).toBe(false);
+
+    expect(logger.warn).toHaveBeenCalledTimes(4);
   });
 });
