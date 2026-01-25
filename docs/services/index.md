@@ -2,11 +2,11 @@
 
 Complete documentation for all IntexuraOS services, organized by AI capability.
 
-**Version 2.0.0** — January 24, 2026
+**Version 2.1.0** — January 25, 2026
 
 ---
 
-## v2.0.0 Highlights
+## v2.1.0 Highlights
 
 | Service              | Key Changes                                             |
 | -------------------- | ------------------------------------------------------- |
@@ -16,9 +16,11 @@ Complete documentation for all IntexuraOS services, organized by AI capability.
 | **research-agent**   | Natural language model selection, Zod schema validation |
 | **commands-agent**   | 5-step classification, URL isolation, Polish support    |
 | **bookmarks-agent**  | WhatsApp delivery for AI summaries                      |
-| **web-agent**        | Separated crawling from LLM, language preservation      |
+| **web-agent**        | @intexuraos/internal-clients integration (INT-269)      |
 | **linear-agent**     | 3-column dashboard with Todo/To Test categories         |
 | **user-service**     | Rate limit detection precedence fix                     |
+
+## v2.0.0 Highlights (Previous)
 
 ---
 
@@ -141,6 +143,14 @@ Core platform services that support the AI agents.
 | [notion-service](notion-service/features.md)                             | Notion integration             | -              | [features](notion-service/features.md) / [technical](notion-service/technical.md) / [debt](notion-service/technical-debt.md) / [agent](notion-service/agent.md)                                                         |
 | [app-settings-service](app-settings-service/features.md)                 | LLM pricing and analytics      | -              | [features](app-settings-service/features.md) / [technical](app-settings-service/technical.md) / [debt](app-settings-service/technical-debt.md) / [agent](app-settings-service/agent.md)                                 |
 | [api-docs-hub](api-docs-hub/features.md)                                 | OpenAPI documentation          | -              | [features](api-docs-hub/features.md) / [technical](api-docs-hub/technical.md) / [debt](api-docs-hub/technical-debt.md) / [agent](api-docs-hub/agent.md)                                                                 |
+
+### User Interface
+
+Progressive Web App providing the unified dashboard for IntexuraOS.
+
+| Service                | Purpose                   | AI  | Docs                                                                                                                                              |
+| ---------------------- | ------------------------- | --- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [web](web/features.md) | Progressive Web App (PWA) | -   | [features](web/features.md) / [technical](web/technical.md) / [tutorial](web/tutorial.md) / [debt](web/technical-debt.md) / [agent](web/agent.md) |
 
 ---
 
@@ -287,6 +297,6 @@ graph TD
 
 ---
 
-**Last updated:** 2026-01-24
+**Last updated:** 2026-01-25
 
 **Services documented:** 18 / 18 (100%)

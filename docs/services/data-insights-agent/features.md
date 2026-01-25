@@ -1,83 +1,55 @@
 # Data Insights Agent
 
-AI-powered data analysis - upload datasets, generate visualizations, and create composite data feeds using Gemini.
+Turn scattered data into actionable insights with AI-powered analysis and automatic chart generation.
 
 ## The Problem
 
-Users need insights from data without manual analysis:
-
-1. **Data upload** - Store and manage custom datasets
-2. **AI analysis** - Extract insights from unstructured data
-3. **Visualization** - Generate charts and graphs automatically
-4. **Composite feeds** - Combine multiple data sources
+Data sits in silos across your digital life — mobile notifications, custom datasets, and disconnected spreadsheets. Finding patterns requires manual analysis, spreadsheet expertise, and repetitive work. Traditional dashboards need pre-defined metrics and miss insights that emerge organically from your data.
 
 ## How It Helps
 
-Data-insights-agent provides end-to-end data analysis:
+### Composite Feeds Unify Your Data
 
-1. **Data sources** - CRUD for custom datasets (title, content)
-2. **Title generation** - AI-generated titles using Gemini
-3. **Data analysis** - Extract insights with LLM
-4. **Chart definitions** - Auto-generate chart configurations
-5. **Composite feeds** - Combine multiple sources into unified feeds
-6. **Snapshots** - Cached analysis results for performance
+Combine multiple data sources into a single feed for analysis. Mix custom datasets with live mobile notifications filtered by app, source, or content.
 
-## Key Features
+**Example:** Create a "Sales & Inventory" feed that combines CSV sales data with inventory alerts from your warehouse app. The AI sees both data streams together and identifies correlations you'd miss.
 
-**Data Source Management:**
+### AI Discovers Hidden Patterns
 
-- Create, read, update, delete custom data sources
-- Title auto-generation with Gemini
-- Content validation and storage
+Gemini analyzes your feed and extracts up to 5 measurable, trackable insights with suggested visualizations. No SQL or spreadsheet formulas required.
 
-**Analysis Capabilities:**
+**Example:** Upload customer support data and get insights like "Response time increases 40% on weekends" with a line chart recommendation.
 
-- Natural language data queries
-- Chart type detection (bar, line, pie, scatter)
-- Data transformation for preview
+### Automatic Chart Generation
 
-**Composite Feeds:**
+Get ready-to-use Vega-Lite chart specifications matched to your data type. Six chart types supported: line, bar, scatter, area, pie, and heatmap.
 
-- Combine multiple data sources
-- Feed name generation
-- Mobile notifications for updates
+**Example:** An insight about revenue trends gets a line chart with proper time-series encoding. A category comparison gets a bar chart.
 
-## Use Cases
+### Snapshots for Fast Performance
 
-### Create and analyze data
+Analysis results are cached as 15-minute snapshots, so repeated queries return instantly without re-running AI analysis.
 
-1. User uploads CSV content as data source
-2. Generate AI title: "Q1 Sales Data"
-3. Request analysis: "What are the trends?"
-4. Receive insights and chart definition
+## Use Case
 
-### Composite feed creation
-
-1. User selects multiple data sources
-2. Creates composite feed
-3. Receives unified insights across sources
-4. Gets notified on updates
+You're tracking sales data across three sources: a monthly CSV export, inventory alerts from your mobile app, and custom notes about promotions. You create a composite feed with all three sources. The service aggregates the data and generates a snapshot. You click "Analyze" and get 5 insights: one shows seasonal trends (line chart), another compares product categories (bar chart), and a third correlates low inventory with sales spikes (scatter plot). Each insight includes the trackable metric and a ready-to-render chart definition.
 
 ## Key Benefits
 
-**AI-powered insights** - Gemini extracts patterns without SQL
-
-**Auto-visualization** - Chart definitions generated automatically
-
-**Multi-source** - Composite feeds combine datasets
-
-**Cached snapshots** - Fast response on repeated queries
-
-**Mobile notifications** - Updates pushed to devices
+- **Zero SQL required** — AI extracts insights from raw data
+- **Multi-source aggregation** — Combine datasets with live notifications
+- **Smart chart recommendations** — AI picks the best visualization type
+- **Cached snapshots** — Fast responses on repeated queries
+- **Vega-Lite output** — Charts render anywhere the spec is supported
 
 ## Limitations
 
-**Text-only data** - Binary formats not supported
+- **Text-based data only** — Binary formats (images, PDFs) not supported
+- **LLM API key required** — Analysis needs a configured Gemini or other LLM key
+- **15-minute cache window** — Snapshots refresh every 15 minutes via scheduled job
+- **Max 5 insights per feed** — Keeps analysis focused and actionable
+- **5 static sources per feed** — Ensures performance on large datasets
 
-**Google API required** - Analysis requires Gemini API key
+---
 
-**Size limits** - Large datasets may timeout
-
-**No real-time** - Snapshot-based, not streaming
-
-**No export** - Results can't be exported to CSV/Excel
+_Part of [IntexuraOS](../overview.md) — Turn data into insights, not spreadsheets._

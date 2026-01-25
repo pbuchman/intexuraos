@@ -150,9 +150,10 @@ interface Todo {
 | ----------------------- | --------------------------------------------- |
 | **Archive Restriction** | Can only archive completed or cancelled todos |
 | **Cancel Restriction**  | Cannot cancel already completed todos         |
-| **Item Completion**     | Completing all items auto-completes the todo  |
+| **Item Completion**     | Items are independent - no auto-complete      |
 | **Ownership**           | Users can only access their own todos         |
 | **Reorder**             | Item IDs must match existing items exactly    |
+| **Description Limit**   | Descriptions over 10,000 chars are truncated  |
 
 ---
 
@@ -176,13 +177,29 @@ const todo = await createTodo({
 });
 ```
 
+### Filter Todos
+
+```typescript
+// High priority work items
+const urgentTodos = await listTodos({
+  status: 'pending',
+  priority: 'high',
+  tags: ['work'],
+});
+
+// Archived items
+const archived = await listTodos({ archived: true });
+```
+
 ### Complete Items Progressively
 
 ```typescript
 // Mark first item complete
 await updateTodoItem(todoId, itemId, { status: 'completed' });
 
-// When all items completed, todo auto-completes
+// Items are independent - todo does NOT auto-complete
+// To complete todo, use updateTodo with status: 'completed'
+await updateTodo(todoId, { status: 'completed' });
 ```
 
 ### Archive Completed Todos
@@ -198,10 +215,10 @@ for (const todo of todos) {
 
 ## Internal Endpoints
 
-| Method | Path                  | Purpose                        |
-| ------ | --------------------- | ------------------------------ |
-| POST   | `/internal/todos`     | Create todo from actions-agent |
-| GET    | `/internal/todos/:id` | Get todo for internal services |
+| Method | Path                                      | Purpose                        |
+| ------ | ----------------------------------------- | ------------------------------ |
+| POST   | `/internal/todos`                         | Create todo from actions-agent |
+| POST   | `/internal/todos/pubsub/todos-processing` | Pub/Sub push handler           |
 
 ---
 
@@ -213,6 +230,46 @@ draft → processing → pending → in_progress → completed → archived
                     cancelled ──────────────────→
 ```
 
+**Notes:**
+
+- `draft`: Initial state, not visible in lists
+- `processing`: AI extraction in progress (async via Pub/Sub)
+- `pending`: Ready to work on
+- `in_progress`: Currently being worked on
+- `completed`: Done (can be archived)
+- `cancelled`: Cancelled before completion (can be archived)
+- `archived`: Soft delete, not in default lists
+
 ---
 
-**Last updated:** 2026-01-19
+## Error Handling
+
+| Error Code | Meaning            | Recovery Action           |
+| ---------- | ------------------ | ------------------------- |
+| 400        | Invalid input      | Fix request payload       |
+| 401        | Unauthorized       | Refresh token             |
+| 403        | Forbidden          | Verify todo ownership     |
+| 404        | Resource not found | Verify todo ID exists     |
+| 422        | Invalid operation  | Check status restrictions |
+| 500        | Server error       | Retry with backoff        |
+
+---
+
+## AI Item Extraction
+
+Todos with a `description` trigger automatic AI item extraction:
+
+1. Create todo with description → status = `processing`
+2. Pub/Sub event fires → handler calls LLM
+3. LLM extracts items (Zod-validated)
+4. Items added to todo → status = `pending`
+
+**Fallback behaviors:**
+
+- No API key: Adds warning item "No API key configured"
+- No items found: Adds "No actionable items found"
+- Extraction fails: Adds "Item extraction failed (code)"
+
+---
+
+**Last updated:** 2026-01-25

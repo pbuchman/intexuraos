@@ -333,6 +333,24 @@ function ManifestoSection(): React.JSX.Element {
                 doesn't merge.
               </p>
             </BrutalistCard>
+            <BrutalistCard
+              title="Extreme Ownership"
+              icon={Shield}
+              className="hover:border-cyan-600 hover:shadow-[6px_6px_0px_0px_rgba(8,145,178,1)]"
+            >
+              <p className="mb-3 text-neutral-700">
+                Our engineering philosophy based on Jocko Willink&apos;s book. CI failure = your problem.
+                No &quot;other services failed&quot; rationalizations. Own it, fix it, ship it.
+              </p>
+              <a
+                href="https://github.com/pbuchman/intexuraos/blob/main/docs/philosophy/extreme-ownership.md"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-2 font-mono text-sm font-bold text-black hover:text-cyan-700 underline"
+              >
+                Read Philosophy <ArrowRight className="h-4 w-4" />
+              </a>
+            </BrutalistCard>
           </div>
         </div>
       </div>
@@ -344,65 +362,45 @@ function RecentUpdatesSection(): React.JSX.Element {
   return (
     <section className="border-b-4 border-black bg-purple-100 px-6 py-24">
       <div className="mx-auto max-w-7xl">
-        <SectionHeading>
-          What's New in <span className="bg-black px-2 text-white">v2.0.0</span>
-        </SectionHeading>
+        <div className="mb-12 flex items-center justify-between max-w-2xl">
+          <SectionHeading className="mb-0">
+            What's New
+          </SectionHeading>
+          <a
+            href="https://github.com/pbuchman/intexuraos/blob/main/CHANGELOG.md"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-2 font-mono text-sm font-bold text-black hover:text-cyan-700 underline"
+          >
+            View Changelog <ArrowRight className="h-4 w-4" />
+          </a>
+        </div>
         <p className="mb-12 max-w-2xl text-lg font-medium text-neutral-700">
-          Major improvements to approval workflows, classification accuracy, and user control.
+          Code quality consolidation, standardized validation, and infrastructure optimization.
         </p>
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          <BrutalistCard title="WhatsApp Approval" icon={CheckSquare} className="bg-green-50">
+          <BrutalistCard title="Code Consolidation" icon={Layers} className="bg-green-50">
             <p className="mb-3 text-neutral-700">
-              Approve or reject actions directly from WhatsApp. Reply with text ("yes", "ok", "reject")
-              or react with emoji — 👍 to approve, 👎 to reject. No app switching required.
+              Eliminated 4,200+ lines of duplicate code across 8 services by creating @intexuraos/internal-clients package. Standardized user-service communication.
             </p>
             <p className="font-mono text-sm italic text-neutral-500">
-              LLM-based intent classification for natural replies.
+              One client factory → 8 services migrated → Zero duplication
             </p>
           </BrutalistCard>
-          <BrutalistCard title="Calendar Preview" icon={Layers} className="bg-yellow-50">
+          <BrutalistCard title="Zod Validation" icon={Shield} className="bg-cyan-50">
             <p className="mb-3 text-neutral-700">
-              See exactly what will be created before approving. Event title, time, duration,
-              and all-day detection — full visibility before commit.
+              All 8 LLM response validations migrated to Zod schemas. Field-level error messages like &quot;priority: expected &apos;low&apos; | &apos;medium&apos;, received &apos;urgent&apos;&quot; for faster debugging.
             </p>
             <p className="font-mono text-sm italic text-neutral-500">
-              "Meeting Tuesday 2pm" → Preview → 👍 → Created
+              Single source of truth for runtime + TypeScript types
             </p>
           </BrutalistCard>
-          <BrutalistCard title="Smart Classification" icon={Brain} className="bg-purple-50">
+          <BrutalistCard title="Cost Optimization" icon={Database} className="bg-yellow-50">
             <p className="mb-3 text-neutral-700">
-              5-step decision tree with URL keyword isolation. "Save bookmark example.com/todo-list"
-              correctly saves as link, not todo. Explicit intent always wins.
+              63% Cloud Build cost reduction ($98→$36/month) via machine type optimization. Trade-off: +60% build time, all under 15-min SLA.
             </p>
             <p className="font-mono text-sm italic text-neutral-500">
-              Polish language support: "zapisz", "notatka", "zadanie"
-            </p>
-          </BrutalistCard>
-          <BrutalistCard title="Model Selection" icon={Zap} className="bg-cyan-50">
-            <p className="mb-3 text-neutral-700">
-              Specify which AI models to use in natural language. "Research AI trends with Claude
-              and GPT" or "all models except Perplexity" — you're in control.
-            </p>
-            <p className="font-mono text-sm italic text-neutral-500">
-              GLM-4.7-Flash: Free tier for cost-conscious queries.
-            </p>
-          </BrutalistCard>
-          <BrutalistCard title="Linear Dashboard" icon={Database} className="bg-orange-50">
-            <p className="mb-3 text-neutral-700">
-              New 3-column layout: Planning → Work → Closed. Todo and To Test categories with
-              smart state-to-column mapping for visual workflow tracking.
-            </p>
-            <p className="font-mono text-sm italic text-neutral-500">
-              Optimized for daily standup and sprint planning.
-            </p>
-          </BrutalistCard>
-          <BrutalistCard title="Race Prevention" icon={Shield} className="bg-red-50">
-            <p className="mb-3 text-neutral-700">
-              Atomic status transitions via Firestore transactions. No more double-approvals or
-              lost updates when multiple agents process the same action.
-            </p>
-            <p className="font-mono text-sm italic text-neutral-500">
-              updateStatusIf() — optimistic locking pattern.
+              E2_HIGHCPU_8 → E2_MEDIUM = $62/month savings
             </p>
           </BrutalistCard>
         </div>

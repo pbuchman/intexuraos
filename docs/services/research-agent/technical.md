@@ -2,7 +2,7 @@
 
 ## Overview
 
-Research-agent orchestrates AI research across multiple LLM providers (Claude, GPT, Gemini, Perplexity, GLM). It queries models in parallel via Pub/Sub, tracks costs and attribution, synthesizes results, and manages public sharing with generated cover images. Version 2.0.0 introduces intelligent model selection from natural language and Zod-based schema validation for LLM responses.
+Research-agent orchestrates AI research across multiple LLM providers (Claude, GPT, Gemini, Perplexity, GLM). It queries models in parallel via Pub/Sub, tracks costs and attribution, synthesizes results, and manages public sharing with generated cover images. Version 2.1.0 adds internal client standardization and enhanced input validation.
 
 ## Architecture
 
@@ -15,7 +15,7 @@ graph TB
         AA -->|approve| RA
 
         RA --> ModelExtract[Model Extraction<br/>extractModelPreferences]
-        ModelExtract --> UserSvc[User Service:<br/>API keys]
+        ModelExtract --> UserSvc[User Service:<br/>internal-clients]
 
         RA --> PubSub[PubSub:<br/>llm-call topic]
         PubSub --> Worker1[Worker: Claude]
@@ -40,7 +40,60 @@ graph TB
     end
 
     Pricing[Pricing Service] --> RA
+    InternalClients["@intexuraos/internal-clients"] --> UserSvc
 ```
+
+## Recent Changes (v2.1.0)
+
+### INT-269: Internal Clients Migration
+
+Migrated user-service communication to the centralized `@intexuraos/internal-clients` package:
+
+**Before:**
+
+```typescript
+// apps/research-agent/src/infra/user/userServiceClient.ts (local)
+import { createUserClient } from './userServiceClient';
+```
+
+**After:**
+
+```typescript
+// apps/research-agent/src/infra/user/index.ts
+export { createUserServiceClient, type UserServiceClient } from '@intexuraos/internal-clients';
+```
+
+**Benefits:**
+
+- Shared HTTP client implementation across all services
+- Consistent error handling with typed `UserServiceError` codes
+- Single source of truth for user-service integration
+- Flat exports enable proper esbuild bundling for Docker
+
+### INT-218: Input Validation Zod Migration
+
+Migrated `InputValidationAdapter` to use Zod schema validation:
+
+```typescript
+// Before: Manual type guard
+const isValidQuality = (q: unknown): q is 0 | 1 | 2 => {
+  /* ... */
+};
+
+// After: Zod schema
+const InputQualitySchema = z.object({
+  quality: z.union([z.literal(0), z.literal(1), z.literal(2)]),
+  quality_scale: z.union([z.literal(0), z.literal(1), z.literal(2)]).optional(),
+  reason: z.string(),
+});
+```
+
+**Benefits:**
+
+- Type-safe validation with compile-time inference
+- Detailed error messages with field paths
+- Backwards compatible with `quality_scale` alias
+- Parser + repair pattern for resilient validation
 
 ## Model Extraction Flow (v2.0.0)
 
@@ -54,10 +107,10 @@ sequenceDiagram
 
     User->>Actions: "Use Claude and Gemini to research X"
     Actions->>Research: POST /internal/research/draft
-    Research->>UserSvc: getApiKeys(userId)
+    Research->>UserSvc: getApiKeys(userId) via internal-clients
     UserSvc-->>Research: {google: "key1", anthropic: "key2"}
     Research->>Research: buildAvailableModels(keys)
-    Research->>UserSvc: getLlmClient(userId)
+    Research->>UserSvc: getLlmClient(userId) via internal-clients
     UserSvc-->>Research: LlmGenerateClient
     Research->>LLM: extractModelPreferences(message, availableModels)
     LLM-->>Research: {selectedModels: ["gemini-2.5-pro", "claude-opus-4.5"], synthesisModel: "gemini-2.5-pro"}
@@ -182,23 +235,22 @@ sequenceDiagram
 
 ### Public Endpoints
 
-| Method | Path                         | Description                             | Auth         |
-| ------ | ---------------------------- | --------------------------------------- | ------------ |
-| POST   | `/research`                  | Create new research (starts processing) | Bearer token |
-| POST   | `/research/draft`            | Save as draft (v2.0.0)                  | Bearer token |
-| GET    | `/research`                  | List researches for user                | Bearer token |
-| GET    | `/research/:id`              | Get research by ID                      | Bearer token |
-| DELETE | `/research/:id`              | Delete research and unshare             | Bearer token |
-| POST   | `/research/:id/approve`      | Approve draft research                  | Bearer token |
-| POST   | `/research/:id/enhance`      | Enhance with more models/context        | Bearer token |
-| POST   | `/research/:id/retry-failed` | Retry failed LLM calls                  | Bearer token |
-| POST   | `/research/:id/confirm`      | Confirm partial failure decision        | Bearer token |
-| DELETE | `/research/:id/share`        | Remove public sharing                   | Bearer token |
-| PATCH  | `/research/:id/favourite`    | Toggle favourite status                 | Bearer token |
-| GET    | `/research/shared/:slug`     | Get shared research (public)            | None         |
-| GET    | `/pricing`                   | Get LLM pricing per provider/model      | Bearer token |
-| POST   | `/research/validate-input`   | Validate input quality                  | Bearer token |
-| POST   | `/research/improve-input`    | Improve research prompt                 | Bearer token |
+| Method | Path                       | Description                             | Auth         |
+| ------ | -------------------------- | --------------------------------------- | ------------ |
+| POST   | `/research`                | Create new research (starts processing) | Bearer token |
+| POST   | `/research/draft`          | Save as draft (v2.0.0)                  | Bearer token |
+| GET    | `/research`                | List researches for user                | Bearer token |
+| GET    | `/research/:id`            | Get research by ID                      | Bearer token |
+| DELETE | `/research/:id`            | Delete research and unshare             | Bearer token |
+| POST   | `/research/:id/approve`    | Approve draft research                  | Bearer token |
+| POST   | `/research/:id/enhance`    | Enhance with more models/context        | Bearer token |
+| POST   | `/research/:id/retry`      | Retry failed LLM calls                  | Bearer token |
+| POST   | `/research/:id/confirm`    | Confirm partial failure decision        | Bearer token |
+| DELETE | `/research/:id/share`      | Remove public sharing                   | Bearer token |
+| PATCH  | `/research/:id/favourite`  | Toggle favourite status                 | Bearer token |
+| POST   | `/research/validate-input` | Validate input quality                  | Bearer token |
+| POST   | `/research/improve-input`  | Improve research prompt                 | Bearer token |
+| PATCH  | `/research/:id`            | Update draft research                   | Bearer token |
 
 ### Internal Endpoints
 
@@ -243,6 +295,8 @@ sequenceDiagram
 | `auxiliaryCostUsd`  | number            | Non-LLM costs (images, etc)          |
 | `sourceLlmCostUsd`  | number            | Cost from source research            |
 | `favourite`         | boolean           | User favorited                       |
+| `userName`          | string            | User's name for "Generated by"       |
+| `userEmail`         | string            | User's email for "Generated by"      |
 
 ### ResearchStatus Enum
 
@@ -259,28 +313,21 @@ sequenceDiagram
 
 ### LlmResult
 
-| Field              | Type            | Description                            |
-| ------------------ | --------------- | -------------------------------------- |
-| `provider`         | LlmProvider     | claude, openai, google, perplexity,zai |
-| `model`            | string          | Model name                             |
-| `status`           | LlmResultStatus | pending, processing, completed, failed |
-| `result`           | string          | LLM response content                   |
-| `error`            | string          | Error message if failed                |
-| `sources`          | string[]        | Source citations (if provided)         |
-| `startedAt`        | string          | Start timestamp                        |
-| `completedAt`      | string          | End timestamp                          |
-| `durationMs`       | number          | Processing duration                    |
-| `inputTokens`      | number          | Tokens consumed                        |
-| `outputTokens`     | number          | Tokens generated                       |
-| `costUsd`          | number          | Cost of this call                      |
-| `copiedFromSource` | boolean         | Copied from enhanced source research   |
-
-### ExtractModelPreferencesResult (v2.0.0)
-
-| Field | Type | Description |
-| ---------------- | ---------------- | -------------------------------------- | |
-| `selectedModels` | ResearchModel[] | Models extracted from natural language |
-| `synthesisModel` | ResearchModel \ | undefined | Synthesis model if explicitly mentioned |
+| Field              | Type            | Description                             |
+| ------------------ | --------------- | --------------------------------------- |
+| `provider`         | LlmProvider     | claude, openai, google, perplexity, zai |
+| `model`            | string          | Model name                              |
+| `status`           | LlmResultStatus | pending, processing, completed, failed  |
+| `result`           | string          | LLM response content                    |
+| `error`            | string          | Error message if failed                 |
+| `sources`          | string[]        | Source citations (if provided)          |
+| `startedAt`        | string          | Start timestamp                         |
+| `completedAt`      | string          | End timestamp                           |
+| `durationMs`       | number          | Processing duration                     |
+| `inputTokens`      | number          | Tokens consumed                         |
+| `outputTokens`     | number          | Tokens generated                        |
+| `costUsd`          | number          | Cost of this call                       |
+| `copiedFromSource` | boolean         | Copied from enhanced source research    |
 
 ## Model Filtering Logic (v2.0.0)
 
@@ -305,37 +352,17 @@ const RESEARCH_MODELS: ResearchModel[] = [
   'glm-4.7',
   'glm-4.7-flash',
 ];
-
-// Provider to API key field mapping
-function providerToKeyField(provider: string): keyof ApiKeyStore {
-  switch (provider) {
-    case 'google':
-      return 'google';
-    case 'openai':
-      return 'openai';
-    case 'anthropic':
-      return 'anthropic';
-    case 'perplexity':
-      return 'perplexity';
-    case 'zai':
-      return 'zai';
-    default:
-      return 'google';
-  }
-}
 ```
 
 ## Pub/Sub Events
 
 ### Published
 
-| Event Type          | Topic               | Purpose                          |
-| ------------------- | ------------------- | -------------------------------- |
-| `research.process`  | `llm-process-queue` | Trigger research processing      |
-| `llm.call`          | `llm-call-queue`    | Execute individual LLM call      |
-| `llm.report`        | `llm-analytics`     | Report LLM success for analytics |
-| `research.shared`   | `research-events`   | Notify on research share         |
-| `research.unshared` | `research-events`   | Notify on research unshare       |
+| Event Type         | Topic               | Purpose                          |
+| ------------------ | ------------------- | -------------------------------- |
+| `research.process` | `llm-process-queue` | Trigger research processing      |
+| `llm.call`         | `llm-call-queue`    | Execute individual LLM call      |
+| `llm.report`       | `llm-analytics`     | Report LLM success for analytics |
 
 ### Subscribed
 
@@ -347,12 +374,12 @@ function providerToKeyField(provider: string): keyof ApiKeyStore {
 
 ## Dependencies
 
-### Internal Services
+### Internal Services (v2.1.0 via internal-clients)
 
-| Service         | Purpose                         |
-| --------------- | ------------------------------- |
-| `user-service`  | API keys, LLM usage, LLM client |
-| `image-service` | Cover image generation          |
+| Service         | Purpose                                                            |
+| --------------- | ------------------------------------------------------------------ |
+| `user-service`  | API keys, LLM usage, LLM client via `@intexuraos/internal-clients` |
+| `image-service` | Cover image generation                                             |
 
 ### Infrastructure
 
@@ -375,6 +402,19 @@ function providerToKeyField(provider: string): keyof ApiKeyStore {
 | Google     | `gemini-2.5-pro`, `gemini-2.5-flash`        |
 | Perplexity | `sonar`, `sonar-pro`, `sonar-deep-research` |
 | Zai        | `glm-4.7`, `glm-4.7-flash`                  |
+
+### Shared Packages (v2.1.0)
+
+| Package                        | Purpose                             |
+| ------------------------------ | ----------------------------------- |
+| `@intexuraos/internal-clients` | User service client (NEW in v2.1.0) |
+| `@intexuraos/llm-contract`     | Model types, provider mapping       |
+| `@intexuraos/llm-prompts`      | Zod schemas, prompt builders        |
+| `@intexuraos/llm-pricing`      | Pricing context interface           |
+| `@intexuraos/llm-utils`        | Parse error formatting              |
+| `@intexuraos/infra-gemini`     | Gemini client wrapper               |
+| `@intexuraos/common-http`      | HTTP utilities, auth                |
+| `@intexuraos/common-core`      | Result types, logging               |
 
 ## Configuration
 
@@ -417,6 +457,8 @@ function providerToKeyField(provider: string): keyof ApiKeyStore {
 
 **One model per provider**: The `validateSelectedModels` function enforces maximum one model per provider to prevent duplicate costs and conflicting results.
 
+**Internal-clients flat exports**: The `@intexuraos/internal-clients` package uses flat exports (not subpath exports) to enable proper esbuild bundling for Docker deployment.
+
 ## File Structure
 
 ```
@@ -453,11 +495,11 @@ apps/research-agent/src/
     llm/
       ClaudeAdapter.ts              # Claude API integration
       GptAdapter.ts                 # OpenAI API integration
-      GeminiAdapter.ts              # Google API integration (deprecated name)
+      GeminiAdapter.ts              # Google API integration
       PerplexityAdapter.ts          # Perplexity API integration
       GlmAdapter.ts                 # GLM (Zai) API integration
       ContextInferenceAdapter.ts    # Zod-validated context inference (v2.0.0)
-      InputValidationAdapter.ts     # Input quality validation
+      InputValidationAdapter.ts     # Zod-validated input validation (v2.1.0)
       LlmAdapterFactory.ts          # Factory pattern
     research/
       FirestoreResearchRepository.ts  # Research persistence
@@ -474,7 +516,7 @@ apps/research-agent/src/
       WhatsAppNotificationSender.ts
       NoopNotificationSender.ts
     user/
-      userServiceClient.ts          # API keys, LLM client, usage reporting
+      index.ts                      # Re-exports from @intexuraos/internal-clients (v2.1.0)
   routes/
     internalRoutes.ts               # Service-to-service + Pub/Sub
     researchRoutes.ts               # User-facing endpoints
@@ -483,18 +525,8 @@ apps/research-agent/src/
       synthesisHelper.ts            # Synthesis setup
     schemas/
       researchSchemas.ts            # Request/response schemas
-      validationSchemas.ts          # Input validation
+      validationSchemas.ts          # Input validation schemas (v2.1.0)
   services.ts                       # DI container with factories
   server.ts                         # Fastify server setup
   index.ts                          # Entry point
 ```
-
-## Key Packages
-
-| Package                    | Purpose                       |
-| -------------------------- | ----------------------------- |
-| `@intexuraos/llm-contract` | Model types, provider mapping |
-| `@intexuraos/llm-prompts`  | Zod schemas, prompt builders  |
-| `@intexuraos/llm-pricing`  | Pricing context interface     |
-| `@intexuraos/llm-utils`    | Parse error formatting        |
-| `@intexuraos/infra-gemini` | Gemini client wrapper         |

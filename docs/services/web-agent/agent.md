@@ -232,4 +232,4 @@ interface SummarizePageResponse {
 
 ---
 
-**Last updated:** 2026-01-24
+**Last updated:** 2026-01-25 (INT-269: internal-clients migration)

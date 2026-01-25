@@ -120,6 +120,8 @@ When classification is wrong:
 
 **Progressive enhancement** - New action types can be added without modifying core routing logic
 
+**Code quality** - Migrated to centralized `@intexuraos/internal-clients` package (v2.1.0)
+
 ## Limitations
 
 **No reminder handler** - The reminder action type is defined but has no handler (action stays in pending)
