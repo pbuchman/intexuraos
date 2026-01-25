@@ -965,19 +965,19 @@ This project uses three types of Claude extensions:
 | `/sentry`           | Sentry triage with AI analysis and cross-linking |
 | `/document-service` | Service documentation (interactive + autonomous) |
 | `/release`          | 6-phase release workflow with checkpoints        |
+| `/coverage`         | Branch coverage analysis and issue creation      |
 
 ### Agents (Task-Spawned)
 
 **Location:** `.claude/agents/<agent-name>.md`
 **Invocation:** Task tool with `subagent_type: <agent-name>`
 
-| Agent                   | Purpose                                       |
-| ----------------------- | --------------------------------------------- |
-| `coverage-orchestrator` | 100% branch coverage enforcement              |
-| `llm-manager`           | LLM usage audit and pricing verification      |
-| `service-creator`       | New service scaffolding                       |
-| `service-scribe`        | Autonomous documentation (delegates to skill) |
-| `whatsapp-sender`       | WhatsApp notification specialist              |
+| Agent           | Purpose                                       |
+| --------------- | --------------------------------------------- |
+| `llm-manager`   | LLM usage audit and pricing verification      |
+| `service-creator` | New service scaffolding                     |
+| `service-scribe`  | Autonomous documentation (delegates to skill) |
+| `whatsapp-sender` | WhatsApp notification specialist            |
 
 ### Commands (Single-File)
 
