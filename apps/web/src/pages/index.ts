@@ -3,7 +3,6 @@ export { CalendarPage } from './CalendarPage.js';
 export { DataInsightsPage } from './DataInsightsPage.js';
 export { HomePage } from './HomePage.js';
 export { LoginPage } from './LoginPage.js';
-export { SystemHealthPage } from './SystemHealthPage.js';
 export { NotionConnectionPage } from './NotionConnectionPage.js';
 export { GoogleCalendarConnectionPage } from './GoogleCalendarConnectionPage.js';
 export { LinearConnectionPage } from './LinearConnectionPage.js';
