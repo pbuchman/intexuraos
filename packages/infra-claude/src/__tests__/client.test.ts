@@ -35,8 +35,13 @@ vi.mock('@intexuraos/llm-audit', () => ({
   }),
 }));
 
+const mockUsageLoggerLog = vi.fn().mockResolvedValue(undefined);
+
 vi.mock('@intexuraos/llm-pricing', () => ({
   logUsage: vi.fn().mockResolvedValue(undefined),
+  createUsageLogger: vi.fn().mockReturnValue({
+    log: mockUsageLoggerLog,
+  }),
 }));
 
 const { createClaudeClient } = await import('../client.js');

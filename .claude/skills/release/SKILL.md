@@ -26,24 +26,24 @@ Orchestrate a comprehensive 6-phase release workflow with checkpoints for user c
 
 ## Phase Overview
 
-| Phase | Name           | Interaction       | Key Actions                                    |
-| ----- | -------------- | ----------------- | ---------------------------------------------- |
-| 1     | Kickoff        | User Input        | Run semver analysis, detect modified services  |
-| 2     | Service Docs   | Silent Batch      | Spawn service-scribe agents in parallel        |
-| 3     | High-Level Docs| **Checkpoint**    | Propose docs/overview.md updates, wait         |
-| 4     | README         | **Checkpoint**    | Propose "What's New" section, wait             |
-| 5     | Website        | **Checkpoint**    | RecentUpdatesSection + 3 suggestions           |
-| 6     | Finalize       | Automatic         | CI check, commit, tag push, summary            |
+| Phase | Name            | Interaction    | Key Actions                                   |
+| ----- | --------------- | -------------- | --------------------------------------------- |
+| 1     | Kickoff         | User Input     | Run semver analysis, detect modified services |
+| 2     | Service Docs    | Silent Batch   | Spawn service-scribe agents in parallel       |
+| 3     | High-Level Docs | **Checkpoint** | Propose docs/overview.md updates, wait        |
+| 4     | README          | **Checkpoint** | Propose "What's New" section, wait            |
+| 5     | Website         | **Checkpoint** | RecentUpdatesSection + 3 suggestions          |
+| 6     | Finalize        | Automatic      | CI check, commit, tag push, summary           |
 
 ## Tool Verification (Fail Fast)
 
 Before ANY operation, verify all required tools:
 
-| Tool       | Verification Command      | Purpose               |
-| ---------- | ------------------------- | --------------------- |
-| Git        | `git --version`           | Version control       |
-| GitHub CLI | `gh auth status`          | PR/release operations |
-| Node.js    | `node --version`          | Package management    |
+| Tool       | Verification Command | Purpose               |
+| ---------- | -------------------- | --------------------- |
+| Git        | `git --version`      | Version control       |
+| GitHub CLI | `gh auth status`     | PR/release operations |
+| Node.js    | `node --version`     | Package management    |
 
 ### Failure Handling
 
@@ -72,6 +72,7 @@ Aborting.
 ### Phase 2: Service Documentation (Silent)
 
 For each modified service detected in Phase 1:
+
 - Spawn Task tool with `subagent_type: service-scribe`
 - Run all agents in parallel
 - Wait for all to complete before proceeding

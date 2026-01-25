@@ -17,12 +17,16 @@ vi.mock('@intexuraos/llm-audit', () => ({
   }),
 }));
 
+const mockUsageLoggerLog = vi.fn().mockResolvedValue(undefined);
+
 vi.mock('@intexuraos/llm-pricing', () => ({
   logUsage: vi.fn().mockResolvedValue(undefined),
+  createUsageLogger: vi.fn().mockReturnValue({
+    log: mockUsageLoggerLog,
+  }),
 }));
 
 const { createPerplexityClient } = await import('../client.js');
-const { logUsage } = await import('@intexuraos/llm-pricing');
 
 const API_BASE_URL = 'https://api.perplexity.ai';
 const TEST_MODEL = LlmModels.SonarPro;
@@ -272,7 +276,7 @@ describe('createPerplexityClient', () => {
       });
       await client.research('Test prompt');
 
-      expect(logUsage).toHaveBeenCalledWith(
+      expect(mockUsageLoggerLog).toHaveBeenCalledWith(
         expect.objectContaining({
           userId: 'test-user',
           provider: LlmProviders.Perplexity,
@@ -349,7 +353,7 @@ describe('createPerplexityClient', () => {
       });
       await client.research('Test prompt');
 
-      expect(logUsage).toHaveBeenCalledWith(
+      expect(mockUsageLoggerLog).toHaveBeenCalledWith(
         expect.objectContaining({
           success: false,
           errorMessage: expect.any(String),
@@ -482,7 +486,7 @@ describe('createPerplexityClient', () => {
       });
       await client.generate('Write something');
 
-      expect(logUsage).toHaveBeenCalledWith(
+      expect(mockUsageLoggerLog).toHaveBeenCalledWith(
         expect.objectContaining({
           callType: 'generate',
           success: true,

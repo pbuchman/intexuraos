@@ -16,11 +16,12 @@ import { join, relative } from 'node:path';
 const ROOT = process.cwd();
 
 const ALLOWED_CLIENT_FILES = [
-  // Legacy clients (v1)
+  // LLM client implementations
   'packages/infra-gemini/src/client.ts',
   'packages/infra-gpt/src/client.ts',
   'packages/infra-claude/src/client.ts',
   'packages/infra-perplexity/src/client.ts',
+  'packages/infra-glm/src/client.ts',
 ];
 
 // All LLM model string literals that should not appear outside llm-contract
@@ -160,19 +161,24 @@ function checkRule2_ClientsLogUsage(): void {
 
     const content = readFileSync(fullPath, 'utf-8');
 
-    // Check that client imports logUsage from @intexuraos/llm-pricing
+    // Check that client imports either logUsage (deprecated) or createUsageLogger from @intexuraos/llm-pricing
     const hasLogUsageImport =
-      /import\s*\{[^}]*logUsage[^}]*\}\s*from\s*['"]@intexuraos\/llm-pricing['"]/.test(content);
+      /import\s*\{[^}]*\b(logUsage|createUsageLogger|UsageLogger)\b[^}]*\}\s*from\s*['"]@intexuraos\/llm-pricing['"]/.test(
+        content
+      );
 
-    // Check that logUsage is called (directly or via a trackUsage helper)
-    const hasLogUsageCall = /\blogUsage\s*\(/.test(content) || /\btrackUsage\s*\(/.test(content);
+    // Check that usage is logged (directly or via a trackUsage helper)
+    const hasLogUsageCall =
+      /\blogUsage\s*\(/.test(content) ||
+      /\busageLogger\.log\s*\(/.test(content) ||
+      /\btrackUsage\s*\(/.test(content);
 
     if (!hasLogUsageImport) {
       violations.push({
         file: clientFile,
         line: 0,
         rule: 'RULE-2',
-        message: `Client missing logUsage import. Must import { logUsage } from '@intexuraos/llm-pricing'.`,
+        message: `Client missing usage logging import. Must import { createUsageLogger } or { logUsage } from '@intexuraos/llm-pricing'.`,
       });
     }
 
@@ -181,7 +187,7 @@ function checkRule2_ClientsLogUsage(): void {
         file: clientFile,
         line: 0,
         rule: 'RULE-2',
-        message: `Client does not call logUsage(). Each client must log usage via llm-pricing.`,
+        message: `Client does not log usage. Each client must log usage via llm-pricing (logUsage or UsageLogger).`,
       });
     }
   }
