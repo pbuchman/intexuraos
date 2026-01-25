@@ -1120,6 +1120,19 @@ export class FakeUserServiceClient implements UserServiceClient {
   async reportLlmSuccess(_userId: string, _provider: string): Promise<void> {
     // Best effort - silently ignore in tests
   }
+
+  async getOAuthToken(
+    _userId: string,
+    _provider: string
+  ): Promise<Result<{ accessToken: string; email: string }, UserServiceError>> {
+    if (this.error !== null) {
+      return err(this.error);
+    }
+    return err({
+      code: 'CONNECTION_NOT_FOUND',
+      message: 'OAuth not configured in fake',
+    });
+  }
 }
 
 // Fake HandleApprovalReplyUseCase

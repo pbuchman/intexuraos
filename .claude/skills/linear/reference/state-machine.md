@@ -198,9 +198,9 @@ CHILD ISSUES (executed continuously, no stops):
 
 ### Key Differences from Single-Issue Flow
 
-| Aspect           | Single Issue                      | Parent Execution                    |
-| ---------------- | --------------------------------- | ----------------------------------- |
-| Checkpoints      | STOP after each issue             | NO stops between children           |
-| Branch           | One branch per issue              | One branch for parent (all children)|
-| PR               | One PR per issue                  | One PR for parent                   |
-| State updates    | Sequential with user confirmation | Continuous, automatic               |
+| Aspect        | Single Issue                      | Parent Execution                     |
+| ------------- | --------------------------------- | ------------------------------------ |
+| Checkpoints   | STOP after each issue             | NO stops between children            |
+| Branch        | One branch per issue              | One branch for parent (all children) |
+| PR            | One PR per issue                  | One PR for parent                    |
+| State updates | Sequential with user confirmation | Continuous, automatic                |

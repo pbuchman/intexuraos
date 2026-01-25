@@ -338,4 +338,111 @@ describe('createUserServiceClient', () => {
       ).resolves.toBeUndefined();
     });
   });
+
+  describe('getOAuthToken', () => {
+    it('returns token on success', async () => {
+      const mockToken = {
+        accessToken: 'ya29.a0...',
+        email: 'user@example.com',
+      };
+
+      nock('http://localhost:3000')
+        .get('/internal/users/user123/oauth/google/token')
+        .matchHeader('X-Internal-Auth', 'test-token')
+        .reply(200, mockToken);
+
+      const client = createUserServiceClient(config);
+      const result = await client.getOAuthToken('user123', 'google');
+
+      if (result.ok) {
+        expect(result.value).toEqual(mockToken);
+      } else {
+        expect.fail('Expected successful result');
+      }
+    });
+
+    it('returns CONNECTION_NOT_FOUND when not connected', async () => {
+      nock('http://localhost:3000')
+        .get('/internal/users/user123/oauth/google/token')
+        .matchHeader('X-Internal-Auth', 'test-token')
+        .reply(404, { code: 'CONNECTION_NOT_FOUND', error: 'Not connected' });
+
+      const client = createUserServiceClient(config);
+      const result = await client.getOAuthToken('user123', 'google');
+
+      if (!result.ok) {
+        expect(result.error.code).toBe('CONNECTION_NOT_FOUND');
+        expect(result.error.message).toBe('OAuth not connected');
+      } else {
+        expect.fail('Expected error result');
+      }
+    });
+
+    it('returns CONNECTION_NOT_FOUND on 404 without code', async () => {
+      nock('http://localhost:3000')
+        .get('/internal/users/user123/oauth/google/token')
+        .matchHeader('X-Internal-Auth', 'test-token')
+        .reply(404, { error: 'Not found' });
+
+      const client = createUserServiceClient(config);
+      const result = await client.getOAuthToken('user123', 'google');
+
+      if (!result.ok) {
+        expect(result.error.code).toBe('CONNECTION_NOT_FOUND');
+        expect(result.error.message).toBe('OAuth not connected');
+      } else {
+        expect.fail('Expected error result');
+      }
+    });
+
+    it('returns TOKEN_REFRESH_FAILED when refresh fails', async () => {
+      nock('http://localhost:3000')
+        .get('/internal/users/user123/oauth/google/token')
+        .matchHeader('X-Internal-Auth', 'test-token')
+        .reply(500, { code: 'TOKEN_REFRESH_FAILED', error: 'Refresh failed' });
+
+      const client = createUserServiceClient(config);
+      const result = await client.getOAuthToken('user123', 'google');
+
+      if (!result.ok) {
+        expect(result.error.code).toBe('TOKEN_REFRESH_FAILED');
+        expect(result.error.message).toBe('Failed to refresh token');
+      } else {
+        expect.fail('Expected error result');
+      }
+    });
+
+    it('returns OAUTH_NOT_CONFIGURED when not set up', async () => {
+      nock('http://localhost:3000')
+        .get('/internal/users/user123/oauth/google/token')
+        .matchHeader('X-Internal-Auth', 'test-token')
+        .reply(500, { code: 'CONFIGURATION_ERROR', error: 'Not configured' });
+
+      const client = createUserServiceClient(config);
+      const result = await client.getOAuthToken('user123', 'google');
+
+      if (!result.ok) {
+        expect(result.error.code).toBe('OAUTH_NOT_CONFIGURED');
+        expect(result.error.message).toBe('OAuth not configured');
+      } else {
+        expect.fail('Expected error result');
+      }
+    });
+
+    it('returns NETWORK_ERROR on fetch failure', async () => {
+      nock('http://localhost:3000')
+        .get('/internal/users/user123/oauth/google/token')
+        .replyWithError('ECONNREFUSED');
+
+      const client = createUserServiceClient(config);
+      const result = await client.getOAuthToken('user123', 'google');
+
+      if (!result.ok) {
+        expect(result.error.code).toBe('NETWORK_ERROR');
+        expect(result.error.message).toContain('ECONNREFUSED');
+      } else {
+        expect.fail('Expected error result');
+      }
+    });
+  });
 });

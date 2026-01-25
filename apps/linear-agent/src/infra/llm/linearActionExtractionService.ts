@@ -11,7 +11,7 @@ import {
 } from '@intexuraos/llm-prompts';
 import { formatZodErrors } from '@intexuraos/llm-utils';
 import type { LlmGenerateClient } from '@intexuraos/llm-factory';
-import type { LlmUserServiceClient } from '../user/llmUserServiceClient.js';
+import type { UserServiceClient } from '@intexuraos/internal-clients';
 import type { LinearError } from '../../domain/index.js';
 import type { ExtractedIssueData } from '../../domain/index.js';
 import pino from 'pino';
@@ -25,7 +25,7 @@ export interface LinearActionExtractionService {
 }
 
 export function createLinearActionExtractionService(
-  llmUserServiceClient: LlmUserServiceClient,
+  userServiceClient: UserServiceClient,
   logger: MinimalLogger
 ): LinearActionExtractionService {
   const log: MinimalLogger = logger;
@@ -37,7 +37,7 @@ export function createLinearActionExtractionService(
     ): Promise<Result<ExtractedIssueData, LinearError>> {
       log.info({ userId, textLength: text.length }, 'Starting LLM issue extraction');
 
-      const clientResult = await llmUserServiceClient.getLlmClient(userId);
+      const clientResult = await userServiceClient.getLlmClient(userId);
 
       if (!clientResult.ok) {
         const error = clientResult.error;

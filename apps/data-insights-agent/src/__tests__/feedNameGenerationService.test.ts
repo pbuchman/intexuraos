@@ -32,8 +32,10 @@ describe('feedNameGenerationService', () => {
     };
     mockUserServiceClient = {
       getLlmClient: vi.fn().mockResolvedValue(ok(mockLlmClient)),
-        getApiKeys: vi.fn(),
-        reportLlmSuccess: vi.fn()    };
+      getApiKeys: vi.fn(),
+      reportLlmSuccess: vi.fn(),
+      getOAuthToken: vi.fn(),
+    };
   });
 
   afterEach(() => {

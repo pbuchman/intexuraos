@@ -12,7 +12,6 @@ import { resetServices, setServices } from '../services.js';
 import {
   FakeGoogleCalendarClient,
   FakeUserServiceClient,
-  FakeLlmUserServiceClient,
   FakeFailedEventRepository,
   FakeCalendarActionExtractionService,
   FakeProcessedActionRepository,
@@ -32,7 +31,6 @@ describe('Calendar Routes', () => {
   const issuer = `https://${AUTH_DOMAIN}/`;
 
   let fakeUserService: FakeUserServiceClient;
-  let fakeLlmUserService: FakeLlmUserServiceClient;
   let fakeCalendarClient: FakeGoogleCalendarClient;
   let fakeFailedEventRepository: FakeFailedEventRepository;
   let fakeCalendarActionExtractionService: FakeCalendarActionExtractionService;
@@ -81,7 +79,6 @@ describe('Calendar Routes', () => {
     clearJwksCache();
 
     fakeUserService = new FakeUserServiceClient();
-    fakeLlmUserService = new FakeLlmUserServiceClient();
     fakeCalendarClient = new FakeGoogleCalendarClient();
     fakeFailedEventRepository = new FakeFailedEventRepository();
     fakeCalendarActionExtractionService = new FakeCalendarActionExtractionService();
@@ -89,7 +86,6 @@ describe('Calendar Routes', () => {
 
     setServices({
       userServiceClient: fakeUserService,
-      llmUserServiceClient: fakeLlmUserService,
       googleCalendarClient: fakeCalendarClient,
       failedEventRepository: fakeFailedEventRepository,
       calendarActionExtractionService: fakeCalendarActionExtractionService,
@@ -164,7 +160,7 @@ describe('Calendar Routes', () => {
 
     it('returns 403 when not connected', async () => {
       const jwt = await createJwt('user-123');
-      fakeUserService.setTokenError('NOT_CONNECTED', 'Google Calendar not connected');
+      fakeUserService.setTokenError('CONNECTION_NOT_FOUND', 'Google Calendar not connected');
 
       const response = await app.inject({
         method: 'GET',
@@ -178,7 +174,7 @@ describe('Calendar Routes', () => {
 
     it('returns 401 on token error', async () => {
       const jwt = await createJwt('user-123');
-      fakeUserService.setTokenError('TOKEN_ERROR', 'Token expired');
+      fakeUserService.setTokenError('TOKEN_REFRESH_FAILED', 'Token expired');
 
       const response = await app.inject({
         method: 'GET',
@@ -270,7 +266,7 @@ describe('Calendar Routes', () => {
 
     it('returns 403 when not connected', async () => {
       const jwt = await createJwt('user-123');
-      fakeUserService.setTokenError('NOT_CONNECTED', 'Not connected');
+      fakeUserService.setTokenError('CONNECTION_NOT_FOUND', 'Not connected');
 
       const response = await app.inject({
         method: 'GET',
@@ -390,7 +386,7 @@ describe('Calendar Routes', () => {
 
     it('returns 403 when not connected', async () => {
       const jwt = await createJwt('user-123');
-      fakeUserService.setTokenError('NOT_CONNECTED', 'Not connected');
+      fakeUserService.setTokenError('CONNECTION_NOT_FOUND', 'Not connected');
 
       const response = await app.inject({
         method: 'POST',
@@ -548,7 +544,7 @@ describe('Calendar Routes', () => {
 
     it('returns 403 when not connected', async () => {
       const jwt = await createJwt('user-123');
-      fakeUserService.setTokenError('NOT_CONNECTED', 'Not connected');
+      fakeUserService.setTokenError('CONNECTION_NOT_FOUND', 'Not connected');
 
       const response = await app.inject({
         method: 'PATCH',
@@ -625,7 +621,7 @@ describe('Calendar Routes', () => {
 
     it('returns 403 when not connected', async () => {
       const jwt = await createJwt('user-123');
-      fakeUserService.setTokenError('NOT_CONNECTED', 'Not connected');
+      fakeUserService.setTokenError('CONNECTION_NOT_FOUND', 'Not connected');
 
       const response = await app.inject({
         method: 'DELETE',
@@ -716,7 +712,7 @@ describe('Calendar Routes', () => {
 
     it('returns 403 when not connected', async () => {
       const jwt = await createJwt('user-123');
-      fakeUserService.setTokenError('NOT_CONNECTED', 'Not connected');
+      fakeUserService.setTokenError('CONNECTION_NOT_FOUND', 'Not connected');
 
       const response = await app.inject({
         method: 'POST',
@@ -761,7 +757,6 @@ describe('Calendar Routes', () => {
       clearJwksCache();
       setServices({
         userServiceClient: fakeUserService,
-        llmUserServiceClient: fakeLlmUserService,
         googleCalendarClient: fakeCalendarClient,
         failedEventRepository: fakeFailedEventRepository,
         calendarActionExtractionService: fakeCalendarActionExtractionService,
@@ -784,7 +779,6 @@ describe('Calendar Routes', () => {
       clearJwksCache();
       setServices({
         userServiceClient: fakeUserService,
-        llmUserServiceClient: fakeLlmUserService,
         googleCalendarClient: fakeCalendarClient,
         failedEventRepository: fakeFailedEventRepository,
         calendarActionExtractionService: fakeCalendarActionExtractionService,

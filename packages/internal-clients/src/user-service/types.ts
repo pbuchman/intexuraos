@@ -25,10 +25,30 @@ export interface DecryptedApiKeys {
 }
 
 /**
+ * OAuth token result from user-service.
+ */
+export interface OAuthTokenResult {
+  accessToken: string;
+  email: string;
+}
+
+/**
+ * Supported OAuth providers.
+ */
+export type OAuthProvider = 'google';
+
+/**
  * Error from user service operations.
  */
 export interface UserServiceError {
-  code: 'NETWORK_ERROR' | 'API_ERROR' | 'NO_API_KEY' | 'INVALID_MODEL';
+  code:
+    | 'NETWORK_ERROR'
+    | 'API_ERROR'
+    | 'NO_API_KEY'
+    | 'INVALID_MODEL'
+    | 'CONNECTION_NOT_FOUND'
+    | 'TOKEN_REFRESH_FAILED'
+    | 'OAUTH_NOT_CONFIGURED';
   message: string;
 }
 
@@ -43,4 +63,8 @@ export interface UserServiceClient {
     userId: string
   ): Promise<import('@intexuraos/common-core').Result<LlmGenerateClient, UserServiceError>>;
   reportLlmSuccess(userId: string, provider: LlmProvider): Promise<void>;
+  getOAuthToken(
+    userId: string,
+    provider: OAuthProvider
+  ): Promise<import('@intexuraos/common-core').Result<OAuthTokenResult, UserServiceError>>;
 }

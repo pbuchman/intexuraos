@@ -23,6 +23,8 @@ import type {
   UserServiceError,
   DecryptedApiKeys,
   UserServiceClient,
+  OAuthTokenResult,
+  OAuthProvider,
 } from './types.js';
 
 export type { LlmProvider } from '@intexuraos/llm-contract';
@@ -31,6 +33,8 @@ export type {
   UserServiceError,
   DecryptedApiKeys,
   UserServiceClient,
+  OAuthTokenResult,
+  OAuthProvider,
 } from './types.js';
 
 // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
@@ -222,6 +226,45 @@ export function createUserServiceClient(config: UserServiceConfig): UserServiceC
         });
       } catch /* v8 ignore next -- best effort, silent failure intentional */ {
         // Best effort - don't block on failure
+      }
+    },
+
+    async getOAuthToken(
+      userId: string,
+      provider: OAuthProvider
+    ): Promise<Result<OAuthTokenResult, UserServiceError>> {
+      try {
+        const response = await fetch(
+          `${config.baseUrl}/internal/users/${userId}/oauth/${provider}/token`,
+          {
+            headers: { 'X-Internal-Auth': config.internalAuthToken },
+          }
+        );
+
+        if (!response.ok) {
+          const errorBody = (await response.json()) as { code?: string; error?: string };
+          const code = errorBody.code;
+
+          if (code === 'CONNECTION_NOT_FOUND' || response.status === 404) {
+            return err({ code: 'CONNECTION_NOT_FOUND', message: 'OAuth not connected' });
+          }
+          if (code === 'TOKEN_REFRESH_FAILED') {
+            return err({ code: 'TOKEN_REFRESH_FAILED', message: 'Failed to refresh token' });
+          }
+          if (code === 'CONFIGURATION_ERROR') {
+            return err({ code: 'OAUTH_NOT_CONFIGURED', message: 'OAuth not configured' });
+          }
+
+          return err({
+            code: 'API_ERROR',
+            message: errorBody.error ?? `HTTP ${String(response.status)}`,
+          });
+        }
+
+        const data = (await response.json()) as { accessToken: string; email: string };
+        return ok({ accessToken: data.accessToken, email: data.email });
+      } catch (error) {
+        return err({ code: 'NETWORK_ERROR', message: getErrorMessage(error) });
       }
     },
   };

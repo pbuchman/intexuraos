@@ -33,9 +33,10 @@ import type {
 } from '../infra/gemini/calendarActionExtractionService.js';
 
 export class FakeUserServiceClient implements UserServiceClient {
-  private tokenResult: Result<OAuthTokenResult, CalendarError> | null = null;
+  private tokenResult: Result<OAuthTokenResult, import('@intexuraos/internal-clients').UserServiceError> | null = null;
+  private llmClientResult?: Result<LlmGenerateClient, import('@intexuraos/internal-clients').UserServiceError>;
 
-  setTokenResult(result: Result<OAuthTokenResult, CalendarError>): void {
+  setTokenResult(result: Result<OAuthTokenResult, import('@intexuraos/internal-clients').UserServiceError>): void {
     this.tokenResult = result;
   }
 
@@ -43,24 +44,19 @@ export class FakeUserServiceClient implements UserServiceClient {
     this.tokenResult = ok({ accessToken, email });
   }
 
-  setTokenError(code: CalendarError['code'], message: string): void {
+  setTokenError(code: import('@intexuraos/internal-clients').UserServiceError['code'], message: string): void {
     this.tokenResult = err({ code, message });
   }
 
-  async getOAuthToken(_userId: string): Promise<Result<OAuthTokenResult, CalendarError>> {
+  setLlmClientResult(result: Result<LlmGenerateClient, import('@intexuraos/internal-clients').UserServiceError>): void {
+    this.llmClientResult = result;
+  }
+
+  async getOAuthToken(_userId: string, _provider: 'google'): Promise<Result<OAuthTokenResult, import('@intexuraos/internal-clients').UserServiceError>> {
     if (this.tokenResult === null) {
       return ok({ accessToken: 'test-access-token', email: 'test@example.com' });
     }
     return this.tokenResult;
-  }
-}
-
-// Fake for the LLM user service client (from shared package)
-export class FakeLlmUserServiceClient {
-  private llmClientResult?: Result<LlmGenerateClient, import('@intexuraos/internal-clients').UserServiceError>;
-
-  setLlmClientResult(result: Result<LlmGenerateClient, import('@intexuraos/internal-clients').UserServiceError>): void {
-    this.llmClientResult = result;
   }
 
   async getLlmClient(_userId: string): Promise<Result<LlmGenerateClient, import('@intexuraos/internal-clients').UserServiceError>> {
@@ -79,7 +75,7 @@ export class FakeLlmUserServiceClient {
     return ok({});
   }
 
-  async reportLlmSuccess(_userId: string, _provider: string): Promise<void> {
+  async reportLlmSuccess(_userId: string, _provider: import('@intexuraos/llm-contract').LlmProvider): Promise<void> {
     // Best effort - silently ignore in tests
   }
 }

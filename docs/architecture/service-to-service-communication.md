@@ -444,6 +444,41 @@ const token = contextResult.value.token;
 - Verify service is responding to requests
 - Check service health endpoint
 
+## User Service Client
+
+All apps use the shared `@intexuraos/internal-clients` package for user-service communication.
+
+### Available Methods
+
+| Method                               | Endpoint                                                  | Purpose                      |
+| ------------------------------------ | --------------------------------------------------------- | ---------------------------- |
+| `getApiKeys(userId)`                 | `GET /internal/users/{id}/llm-keys`                       | Fetch decrypted LLM API keys |
+| `getLlmClient(userId)`               | Multiple                                                  | Create configured LLM client |
+| `reportLlmSuccess(userId, provider)` | `POST /internal/users/{id}/llm-keys/{provider}/last-used` | Track usage                  |
+| `getOAuthToken(userId, provider)`    | `GET /internal/users/{id}/oauth/{provider}/token`         | Get OAuth access token       |
+
+### Usage
+
+```typescript
+import { createUserServiceClient } from '@intexuraos/internal-clients';
+
+const client = createUserServiceClient({
+  baseUrl: process.env.INTEXURAOS_USER_SERVICE_URL,
+  internalAuthToken: process.env.INTEXURAOS_INTERNAL_AUTH_TOKEN,
+  pricingContext,
+  logger,
+});
+
+// Get API keys
+const keysResult = await client.getApiKeys(userId);
+
+// Get OAuth token (e.g., for Google Calendar)
+const tokenResult = await client.getOAuthToken(userId, 'google');
+
+// Get configured LLM client
+const llmResult = await client.getLlmClient(userId);
+```
+
 ## Future Considerations
 
 1. **Service Mesh** - Consider Istio/Linkerd for automatic mTLS
@@ -457,4 +492,4 @@ const token = contextResult.value.token;
 - [Internal Routes Implementation (notion-service)](../../apps/notion-service/src/routes/internalRoutes.ts)
 - [Internal Routes Implementation (user-service)](../../apps/user-service/src/routes/internalRoutes.ts)
 - [Service Client Example (notionServiceClient)](../../apps/promptvault-service/src/infra/notion/notionServiceClient.ts)
-- [Service Client Example (userServiceClient)](../../apps/llm-orchestrator/src/infra/user/userServiceClient.ts)
+- [Shared User Service Client](../../packages/internal-clients/src/user-service/client.ts)

@@ -5,7 +5,7 @@ import {
   createTodosProcessingPublisher,
   type TodosProcessingPublisher,
 } from '@intexuraos/infra-pubsub';
-import { createUserServiceClient, type UserServiceClient } from './infra/user/index.js';
+import { createUserServiceClient, type UserServiceClient } from '@intexuraos/internal-clients';
 import { createTodoItemExtractionService, type TodoItemExtractionService } from './infra/gemini/todoItemExtractionService.js';
 import { fetchAllPricing, createPricingContext } from '@intexuraos/llm-pricing';
 import { LlmModels } from '@intexuraos/llm-contract';
