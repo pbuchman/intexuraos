@@ -5,9 +5,15 @@ import { promisify } from 'node:util';
 
 const execAsync = promisify(exec);
 
+export type ExecAsync = (
+  command: string,
+  options?: { timeout?: number }
+) => Promise<{ stdout: string; stderr: string }>;
+
 export interface TmuxManagerConfig {
   logBasePath: string;
   claudePath?: string;
+  execAsync?: ExecAsync;
 }
 
 export interface TmuxError {
@@ -25,7 +31,11 @@ export interface SessionParams {
 }
 
 export class TmuxManager {
-  constructor(private readonly config: TmuxManagerConfig) {}
+  private readonly execAsync: ExecAsync;
+
+  constructor(private readonly config: TmuxManagerConfig) {
+    this.execAsync = config.execAsync ?? execAsync;
+  }
 
   async startSession(params: SessionParams): Promise<void> {
     const { taskId, worktreePath, linearIssueId, prompt, machine } = params;
@@ -56,7 +66,7 @@ export class TmuxManager {
     const tmuxCommand = `tmux new-session -d -s ${sessionName} "cd '${worktreePath}' && ${claudeCommand} 2>&1 | tee '${logFilePath}'"`;
 
     try {
-      await execAsync(tmuxCommand);
+      await this.execAsync(tmuxCommand);
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Unknown error';
       throw new Error(`Failed to start tmux session: ${message}`);
@@ -70,7 +80,7 @@ export class TmuxManager {
       if (graceful) {
         // Send Ctrl-C for graceful shutdown
         try {
-          await execAsync(`tmux send-keys -t ${sessionName} C-c`);
+          await this.execAsync(`tmux send-keys -t ${sessionName} C-c`);
         } catch {
           // Session might not exist, continue to kill
         }
@@ -80,11 +90,11 @@ export class TmuxManager {
 
         // Check if still running
         if (await this.isSessionRunning(taskId)) {
-          await execAsync(`tmux kill-session -t ${sessionName}`);
+          await this.execAsync(`tmux kill-session -t ${sessionName}`);
         }
       } else {
         // Force kill immediately
-        await execAsync(`tmux kill-session -t ${sessionName}`);
+        await this.execAsync(`tmux kill-session -t ${sessionName}`);
       }
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Unknown error';
@@ -96,7 +106,7 @@ export class TmuxManager {
     const sessionName = `cc-task-${taskId}`;
 
     try {
-      await execAsync(`tmux has-session -t ${sessionName}`);
+      await this.execAsync(`tmux has-session -t ${sessionName}`);
       return true;
     } catch {
       return false;
@@ -105,7 +115,7 @@ export class TmuxManager {
 
   async listSessions(): Promise<string[]> {
     try {
-      const { stdout } = await execAsync('tmux list-sessions -F "#{session_name}"');
+      const { stdout } = await this.execAsync('tmux list-sessions -F "#{session_name}"');
 
       const sessions = stdout
         .split('\n')
@@ -166,7 +176,7 @@ DO NOT proceed with any other action until this completes.`
 ${sanitizedPrompt}`;
 
     // Truncate to 4000 characters
-    return systemPrompt.slice(0, 4000);
+    return systemPrompt.length > 4000 ? systemPrompt.slice(0, 4000) : systemPrompt;
   }
 
   private sanitizePrompt(prompt: string): string {
@@ -181,6 +191,7 @@ ${sanitizedPrompt}`;
       'override',
       'system',
       'instruction',
+      'instructions',
       'instead',
       'rather',
       'but',

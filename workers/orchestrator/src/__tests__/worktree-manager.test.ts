@@ -31,7 +31,10 @@ describe('WorktreeManager', () => {
     // Mock exec to succeed
     vi.mock('node:util', () => ({
       promisify: vi.fn((_cmd: unknown) => {
-        return async (command: string, _options: { cwd?: string; timeout?: number }): Promise<{ stdout: string; stderr: string }> => {
+        return async (
+          command: string,
+          _options: { cwd?: string; timeout?: number }
+        ): Promise<{ stdout: string; stderr: string }> => {
           // Mock successful git commands
           if (command.includes('git worktree add')) {
             return { stdout: '', stderr: 'Preparing worktree' };
