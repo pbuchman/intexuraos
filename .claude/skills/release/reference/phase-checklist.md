@@ -15,6 +15,7 @@ Quick reference for all release phases and their requirements.
 - [ ] Ask user for release focus (AskUserQuestion)
 
 **Commands:**
+
 ```bash
 cat package.json | jq -r '.version'
 git tag -l "v*" --sort=-v:refname | head -1
@@ -32,6 +33,7 @@ git diff --name-only $LAST_TAG..HEAD -- apps/ | cut -d'/' -f2 | sort -u | grep -
 - [ ] No checkpoint — silent batch processing
 
 **Tool Usage:**
+
 ```
 Task tool with subagent_type: "service-scribe"
 Multiple Task calls in single message for parallel execution
@@ -48,6 +50,7 @@ Multiple Task calls in single message for parallel execution
 - [ ] If approved: apply changes with Edit tool
 
 **Checkpoint Options:**
+
 1. Approve — Apply changes
 2. Revise — Incorporate feedback, re-present
 3. Skip — Proceed without changes
@@ -64,6 +67,7 @@ Multiple Task calls in single message for parallel execution
 **Template:** `templates/readme-whats-new.md`
 
 **Checkpoint Options:**
+
 1. Approve — Apply changes
 2. Revise — Incorporate feedback, re-present
 3. Skip — Proceed without changes
@@ -81,11 +85,13 @@ Multiple Task calls in single message for parallel execution
 **Template:** `templates/website-suggestions.md`
 
 **Selection Rules:**
+
 - At least 1 release-driven
 - At least 1 Low effort
 - Maximum 1 High effort
 
 **Checkpoint Options (multiSelect):**
+
 1. Suggestion 1
 2. Suggestion 2
 3. Suggestion 3
@@ -103,6 +109,7 @@ Multiple Task calls in single message for parallel execution
 - [ ] Display summary using template
 
 **Commands:**
+
 ```bash
 pnpm run ci:tracked
 git add -A
@@ -117,15 +124,15 @@ git push origin "vX.Y.Z"
 
 ## Quick Commands Reference
 
-| Action                    | Command                                              |
-| ------------------------- | ---------------------------------------------------- |
-| Get current version       | `cat package.json \| jq -r '.version'`               |
-| Get last tag              | `git tag -l "v*" --sort=-v:refname \| head -1`       |
-| List merged PRs           | `gh pr list --state merged --base development`       |
-| Detect modified services  | `git diff --name-only $TAG..HEAD -- apps/`           |
-| Run CI                    | `pnpm run ci:tracked`                                |
-| Create tag                | `git tag -a "vX.Y.Z" -m "Release vX.Y.Z"`            |
-| Push tag                  | `git push origin vX.Y.Z`                             |
+| Action                   | Command                                        |
+| ------------------------ | ---------------------------------------------- |
+| Get current version      | `cat package.json \| jq -r '.version'`         |
+| Get last tag             | `git tag -l "v*" --sort=-v:refname \| head -1` |
+| List merged PRs          | `gh pr list --state merged --base development` |
+| Detect modified services | `git diff --name-only $TAG..HEAD -- apps/`     |
+| Run CI                   | `pnpm run ci:tracked`                          |
+| Create tag               | `git tag -a "vX.Y.Z" -m "Release vX.Y.Z"`      |
+| Push tag                 | `git push origin vX.Y.Z`                       |
 
 ---
 
@@ -160,12 +167,12 @@ At each checkpoint (Phases 3, 4, 5):
 
 ## Error Recovery
 
-| Error                        | Recovery                                   |
-| ---------------------------- | ------------------------------------------ |
-| CI fails in Phase 6          | Fix issues, re-run CI, then commit         |
-| service-scribe agent fails   | Log error, continue with other services    |
-| User declines all checkpoints| Proceed with version-only release          |
-| Tool unavailable             | ABORT immediately with clear error         |
+| Error                         | Recovery                                |
+| ----------------------------- | --------------------------------------- |
+| CI fails in Phase 6           | Fix issues, re-run CI, then commit      |
+| service-scribe agent fails    | Log error, continue with other services |
+| User declines all checkpoints | Proceed with version-only release       |
+| Tool unavailable              | ABORT immediately with clear error      |
 
 ---
 
@@ -177,10 +184,10 @@ To resume from a specific phase after interruption:
 /release --phase N
 ```
 
-| N | Phase Name      | What Gets Skipped              |
-| - | --------------- | ------------------------------ |
-| 2 | Service Docs    | Kickoff (uses cached data)     |
-| 3 | High-Level Docs | Phases 1-2                     |
-| 4 | README          | Phases 1-3                     |
-| 5 | Website         | Phases 1-4                     |
-| 6 | Finalize        | All documentation phases       |
+| N   | Phase Name      | What Gets Skipped          |
+| --- | --------------- | -------------------------- |
+| 2   | Service Docs    | Kickoff (uses cached data) |
+| 3   | High-Level Docs | Phases 1-2                 |
+| 4   | README          | Phases 1-3                 |
+| 5   | Website         | Phases 1-4                 |
+| 6   | Finalize        | All documentation phases   |

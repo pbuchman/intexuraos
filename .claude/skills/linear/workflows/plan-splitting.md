@@ -246,6 +246,7 @@ Each child issue (except the final one) includes:
 ### Why This Matters
 
 LLM agents tend to:
+
 - Stop after each task waiting for user input
 - Simplify work to save tokens/time
 - Skip "optional" tests or edge cases

@@ -56,11 +56,11 @@ echo "Modified services: $MODIFIED_SERVICES"
 
 Follow the semver-release logic:
 
-| Change Type       | Version Bump | Detection                            |
-| ----------------- | ------------ | ------------------------------------ |
-| Breaking changes  | MAJOR        | `breaking` label, API removal        |
-| New features      | MINOR        | `feature` label, new endpoints       |
-| Bug fixes/patches | PATCH        | `bug` label, `fix:` prefix           |
+| Change Type       | Version Bump | Detection                      |
+| ----------------- | ------------ | ------------------------------ |
+| Breaking changes  | MAJOR        | `breaking` label, API removal  |
+| New features      | MINOR        | `feature` label, new endpoints |
+| Bug fixes/patches | PATCH        | `bug` label, `fix:` prefix     |
 
 Calculate new version: `CURRENT_VERSION` → `NEW_VERSION`
 
@@ -80,6 +80,7 @@ What should be highlighted in this release? (optional)
 ```
 
 **Options:**
+
 1. "Auto-detect from PRs" (Recommended)
 2. "Let me specify highlights"
 3. "Skip highlights"
@@ -127,6 +128,7 @@ cat docs/overview.md
 ### 3.2 Analyze Changes
 
 From merged PRs and modified services, identify:
+
 - New capabilities added
 - Significant architectural changes
 - New integrations or patterns
@@ -139,11 +141,14 @@ Draft specific additions/modifications to `docs/overview.md`:
 ## Proposed Changes to docs/overview.md
 
 ### Section: [section name]
+
 **Change type:** [Add | Modify | Remove]
 **Current content:**
+
 > [existing text if modifying]
 
 **Proposed content:**
+
 > [new text]
 
 **Rationale:** [why this change]
@@ -162,6 +167,7 @@ Approve these changes to docs/overview.md?
 ```
 
 **Options:**
+
 1. "Approve" — Apply changes
 2. "Revise" — Provide feedback
 3. "Skip" — Proceed without changes
@@ -187,6 +193,7 @@ head -150 README.md
 Use template from [`templates/readme-whats-new.md`](../templates/readme-whats-new.md).
 
 Extract from merged PRs:
+
 - Feature titles (user-facing language)
 - Brief descriptions (1 sentence each)
 - Sort by impact/importance
@@ -210,6 +217,7 @@ Approve this "What's New" section?
 ```
 
 **Options:**
+
 1. "Approve" — Apply changes
 2. "Revise" — Provide feedback
 3. "Skip" — Proceed without changes
@@ -217,6 +225,7 @@ Approve this "What's New" section?
 ### 4.4 Apply Changes
 
 If approved, use Edit tool to:
+
 1. Replace existing "What's New in vX.Y.Z" section
 2. Update version number in section header
 
@@ -227,6 +236,7 @@ If approved, use Edit tool to:
 ### 5.1 Generate RecentUpdatesSection Content
 
 Map release features to website-ready content:
+
 - Transform PR/feature descriptions into user-facing language
 - Group by category (Features, Improvements, Fixes)
 - Prepare props for `RecentUpdatesSection.tsx`
@@ -234,6 +244,7 @@ Map release features to website-ready content:
 ### 5.2 Run Website Audit
 
 Follow [`workflows/website-audit.md`](website-audit.md) to:
+
 1. Analyze release impact on website sections
 2. Review `HomePage.tsx` for staleness/improvements
 3. Identify quick wins and high-impact changes
@@ -242,11 +253,11 @@ Follow [`workflows/website-audit.md`](website-audit.md) to:
 
 Combine audit results into EXACTLY 3 suggestions:
 
-| Type        | What                          | Why                      | Effort |
-| ----------- | ----------------------------- | ------------------------ | ------ |
-| [FEATURE]   | Update RecentUpdatesSection   | New release content      | Low    |
-| [IMPROVE]   | Enhance hero section          | Reflect new capabilities | Medium |
-| [CONTENT]   | Add testimonial/case study    | Social proof             | Medium |
+| Type      | What                        | Why                      | Effort |
+| --------- | --------------------------- | ------------------------ | ------ |
+| [FEATURE] | Update RecentUpdatesSection | New release content      | Low    |
+| [IMPROVE] | Enhance hero section        | Reflect new capabilities | Medium |
+| [CONTENT] | Add testimonial/case study  | Social proof             | Medium |
 
 ### 5.4 CHECKPOINT
 
@@ -273,6 +284,7 @@ Which suggestions should I implement?
 ```
 
 **Options (multiSelect: true):**
+
 1. "Suggestion 1"
 2. "Suggestion 2"
 3. "Suggestion 3"
@@ -301,6 +313,7 @@ pnpm run ci:tracked
 ```
 
 **This MUST pass.** If it fails:
+
 1. Report the failure
 2. Fix the issues
 3. Re-run CI
