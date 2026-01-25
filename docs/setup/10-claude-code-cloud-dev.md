@@ -188,10 +188,10 @@ ls -la /home/user/intexuraos/gcp-service-account.json
 
 | Task                    | Local Development       | Claude Code Cloud          |
 | ----------------------- | ----------------------- | -------------------------- |
-| Install gcloud CLI      | ✅ Required             | ❌ Not needed              |
-| Run `gcloud auth login` | ✅ Required             | ❌ Not needed              |
-| Service Account Key     | ❌ Optional             | ✅ Required                |
-| `.env.local` file       | ✅ Used                 | ✅ Used                    |
+| Install gcloud CLI      | ✅ Required              | ❌ Not needed               |
+| Run `gcloud auth login` | ✅ Required              | ❌ Not needed               |
+| Service Account Key     | ❌ Optional              | ✅ Required                 |
+| `.env.local` file       | ✅ Used                  | ✅ Used                     |
 | IAM Roles               | Granted to user account | Granted to service account |
 
 ## 8. Related Documentation

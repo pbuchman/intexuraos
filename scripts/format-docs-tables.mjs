@@ -73,7 +73,7 @@ function formatTable(table) {
         const hasLeft = sep.startsWith(':');
         const hasRight = sep.endsWith(':');
         const dashes = '-'.repeat(Math.max(3, width - (hasLeft ? 1 : 0) - (hasRight ? 1 : 0)));
-        return (hasLeft ? ':' : '') + dashes + (hasRight ? ':' : ' ');
+        return (hasLeft ? ':' : '') + dashes + (hasRight ? ':' : '');
       })
       .join(' | ') +
     ' |';
