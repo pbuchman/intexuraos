@@ -54,7 +54,7 @@ import {
   type GenerateResult,
   type ImageSize,
 } from '@intexuraos/llm-contract';
-import { logUsage, type CallType } from '@intexuraos/llm-pricing';
+import { createUsageLogger, type CallType } from '@intexuraos/llm-pricing';
 import type { GptConfig, GptError, ResearchResult } from './types.js';
 import { normalizeUsage, calculateImageCost } from './costCalculator.js';
 
@@ -95,6 +95,7 @@ const DEFAULT_IMAGE_SIZE: ImageSize = '1024x1024';
 export function createGptClient(config: GptConfig): GptClient {
   const client = new OpenAI({ apiKey: config.apiKey });
   const { model, userId, pricing, imagePricing, logger } = config;
+  const usageLogger = createUsageLogger({ logger });
 
   function createRequestContext(
     method: string,
@@ -119,8 +120,7 @@ export function createGptClient(config: GptConfig): GptClient {
     success: boolean,
     errorMessage?: string
   ): void {
-    // eslint-disable-next-line @typescript-eslint/no-deprecated -- TODO: Migrate to UsageLogger class with injected logger
-    void logUsage({
+    void usageLogger.log({
       userId,
       provider: LlmProviders.OpenAI,
       model,
@@ -128,7 +128,6 @@ export function createGptClient(config: GptConfig): GptClient {
       usage,
       success,
       ...(errorMessage !== undefined && { errorMessage }),
-      logger,
     });
   }
 

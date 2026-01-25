@@ -44,7 +44,7 @@ import {
   type NormalizedUsage,
   type GenerateResult,
 } from '@intexuraos/llm-contract';
-import { logUsage, type CallType } from '@intexuraos/llm-pricing';
+import { createUsageLogger, type CallType } from '@intexuraos/llm-pricing';
 import type { GlmConfig, GlmError, ResearchResult } from './types.js';
 import { normalizeUsage } from './costCalculator.js';
 
@@ -75,6 +75,7 @@ export function createGlmClient(config: GlmConfig): GlmClient {
     baseURL: GLM_API_BASE,
   });
   const { model, userId, pricing, logger } = config;
+  const usageLogger = createUsageLogger({ logger });
 
   function createRequestContext(
     method: string,
@@ -99,8 +100,7 @@ export function createGlmClient(config: GlmConfig): GlmClient {
     success: boolean,
     errorMessage?: string
   ): void {
-    // eslint-disable-next-line @typescript-eslint/no-deprecated -- TODO: Migrate to UsageLogger class with injected logger
-    void logUsage({
+    void usageLogger.log({
       userId,
       provider: LlmProviders.Zai,
       model,
@@ -108,7 +108,6 @@ export function createGlmClient(config: GlmConfig): GlmClient {
       usage,
       success,
       ...(errorMessage !== undefined && { errorMessage }),
-      logger,
     });
   }
 

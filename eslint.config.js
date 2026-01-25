@@ -15,6 +15,7 @@ export default tseslint.config(
       'docker/**',
       'vitest.setup.ts',
       'vitest.config.ts',
+      'packages/*/vitest.config.ts',
       'vitest-mocks/**',
       // Test files now linted with same rules as production code
     ],
@@ -27,6 +28,7 @@ export default tseslint.config(
       parserOptions: {
         projectService: true,
         tsconfigRootDir: import.meta.dirname,
+        allowDefaultProject: ['vitest.config.ts', 'vitest.setup.ts'],
       },
       globals: {
         ...globals.node,

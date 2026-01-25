@@ -15,6 +15,7 @@
 
 import type { Logger } from '@intexuraos/common-core';
 import { getErrorMessage } from '@intexuraos/common-core';
+import type { ZodError } from 'zod';
 
 /**
  * Error details from LLM response parsing failures.
@@ -152,4 +153,64 @@ Expected: ${options.expectedSchema}
 
 Received (first 500 chars):
 ${truncated}`;
+}
+
+/**
+ * Format Zod validation errors into human-readable messages.
+ *
+ * Limits output to prevent log bloat (max 5 issues) and provides
+ * field-level error paths for debugging.
+ *
+ * @param error - The Zod error object
+ * @returns A formatted error string with field paths and descriptions
+ *
+ * @example
+ * ```ts
+ * const result = schema.safeParse(data);
+ * if (!result.success) {
+ *   const errorMsg = formatZodErrors(result.error);
+ *   // "quality: expected 0 | 1 | 2, received '5'"
+ * }
+ * ```
+ */
+export function formatZodErrors(error: ZodError): string {
+  const MAX_ISSUES = 5;
+
+  if (error.issues.length === 0) {
+    return 'Unknown validation error (no issues reported)';
+  }
+
+  const totalIssues = error.issues.length;
+  const issuesToReport = error.issues.slice(0, MAX_ISSUES);
+
+  const formatted = issuesToReport
+    .map((issue) => {
+      const path = issue.path.join('.');
+      const pathStr = path !== '' ? path : '(root)';
+
+      if (issue.code === 'invalid_enum_value') {
+        const options = (issue.options as unknown[]).map((o) => `'${String(o)}'`).join(' | ');
+        return `${pathStr}: expected ${options}, received "${String(issue.received)}"`;
+      }
+
+      if (issue.code === 'invalid_type') {
+        const expected = issue.expected as string;
+        return `${pathStr}: expected ${expected}, received "${issue.received}"`;
+      }
+
+      if (issue.code === 'invalid_union') {
+        // Union errors don't provide detailed options in a type-safe way
+        // Use the default message
+        return `${pathStr}: ${issue.message}`;
+      }
+
+      return `${pathStr}: ${issue.message}`;
+    })
+    .join('; ');
+
+  if (totalIssues > MAX_ISSUES) {
+    return `${formatted}... (+${String(totalIssues - MAX_ISSUES)} more)`;
+  }
+
+  return formatted;
 }

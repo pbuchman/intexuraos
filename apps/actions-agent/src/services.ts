@@ -101,7 +101,7 @@ import {
   createCalendarPreviewPublisher,
   type CalendarPreviewPublisher,
 } from '@intexuraos/infra-pubsub';
-import { createUserServiceClient, type UserServiceClient } from './infra/user/userServiceClient.js';
+import { createUserServiceClient, type UserServiceClient } from './infra/user/index.js';
 import { createApprovalIntentClassifierFactory } from './infra/llm/approvalIntentClassifierFactory.js';
 import { fetchAllPricing, createPricingContext } from '@intexuraos/llm-pricing';
 import { LlmModels } from '@intexuraos/llm-contract';

@@ -25,6 +25,7 @@
     "@intexuraos/infra-gemini": "workspace:*",
     "@intexuraos/infra-gpt": "workspace:*",
     "@intexuraos/infra-sentry": "workspace:*",
+    "@intexuraos/internal-clients": "workspace:*",
     "@intexuraos/llm-audit": "workspace:*",
     "@intexuraos/llm-contract": "workspace:*",
     "@intexuraos/llm-prompts": "workspace:*",

@@ -1,7 +1,7 @@
 # Web Agent - Technical Debt
 
-**Last Updated:** 2026-01-24
-**Analysis Run:** v2.0.0 documentation refresh
+**Last Updated:** 2026-01-25
+**Analysis Run:** v2.1.0 documentation refresh (INT-269)
 
 ---
 
@@ -112,12 +112,13 @@ No TODO, FIXME, HACK, or XXX comments found in codebase.
 
 ## Resolved Issues
 
-| Date       | Issue                                    | Resolution                                       |
-| ---------- | ---------------------------------------- | ------------------------------------------------ |
-| 2026-01-24 | AI summaries returning raw JSON          | Added parseSummaryResponse + repair mechanism    |
-| 2026-01-21 | 403 errors not distinguished from others | Added ACCESS_DENIED error code                   |
-| 2026-01-20 | Summaries losing source language         | Added "SAME LANGUAGE" instruction to prompt      |
-| 2026-01-18 | Using shared LLM infrastructure          | Switched to user's own LLM keys via user-service |
+| Date       | Issue                                     | Resolution                                         |
+| ---------- | ----------------------------------------- | -------------------------------------------------- |
+| 2026-01-25 | Manual user-service client implementation | Migrated to @intexuraos/internal-clients (INT-269) |
+| 2026-01-24 | AI summaries returning raw JSON           | Added parseSummaryResponse + repair mechanism      |
+| 2026-01-21 | 403 errors not distinguished from others  | Added ACCESS_DENIED error code                     |
+| 2026-01-20 | Summaries losing source language          | Added "SAME LANGUAGE" instruction to prompt        |
+| 2026-01-18 | Using shared LLM infrastructure           | Switched to user's own LLM keys via user-service   |
 
 ---
 

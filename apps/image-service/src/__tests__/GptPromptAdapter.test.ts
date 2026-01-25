@@ -13,6 +13,9 @@ vi.mock('@intexuraos/llm-audit', (): object => ({
 
 vi.mock('@intexuraos/llm-pricing', (): object => ({
   logUsage: vi.fn().mockResolvedValue(undefined),
+  createUsageLogger: vi.fn().mockReturnValue({
+    log: vi.fn().mockResolvedValue(undefined),
+  }),
 }));
 
 const testPricing: ModelPricing = {

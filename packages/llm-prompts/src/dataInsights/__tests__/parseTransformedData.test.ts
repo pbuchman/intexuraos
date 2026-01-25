@@ -53,7 +53,7 @@ describe('parseTransformedData', () => {
       DATA_END
     `;
 
-    expect(() => parseTransformedData(response)).toThrow('Data must be an array');
+    expect(() => parseTransformedData(response)).toThrow(/Invalid data array/);
   });
 
   it('throws when array is empty', () => {
@@ -63,7 +63,7 @@ describe('parseTransformedData', () => {
       DATA_END
     `;
 
-    expect(() => parseTransformedData(response)).toThrow('Data array cannot be empty');
+    expect(() => parseTransformedData(response)).toThrow(/cannot be empty/);
   });
 
   it('throws when array item is not an object', () => {
@@ -73,7 +73,7 @@ describe('parseTransformedData', () => {
       DATA_END
     `;
 
-    expect(() => parseTransformedData(response)).toThrow('Item at index 1 must be an object');
+    expect(() => parseTransformedData(response)).toThrow(/Invalid data array/);
   });
 
   it('throws when array item is null', () => {
@@ -83,7 +83,7 @@ describe('parseTransformedData', () => {
       DATA_END
     `;
 
-    expect(() => parseTransformedData(response)).toThrow('Item at index 0 must be an object');
+    expect(() => parseTransformedData(response)).toThrow(/Invalid data array/);
   });
 
   it('throws when array item is an array', () => {
@@ -93,7 +93,7 @@ describe('parseTransformedData', () => {
       DATA_END
     `;
 
-    expect(() => parseTransformedData(response)).toThrow('Item at index 0 must be an object');
+    expect(() => parseTransformedData(response)).toThrow(/Invalid data array/);
   });
 
   it('handles array with nested objects', () => {

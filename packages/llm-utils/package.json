@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@intexuraos/common-core": "workspace:*",
-    "pino": "^10.1.0"
+    "pino": "^10.1.0",
+    "zod": "^3.24.1"
   }
 }

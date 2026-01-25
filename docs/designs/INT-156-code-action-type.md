@@ -654,7 +654,7 @@ source ~/.orchestrator-env
 
 **Rotation schedule:**
 | Secret | Frequency | Downtime |
-|--------|-----------|----------|
+| ------------------------------ | ----------- | ----------------- |
 | API keys (Linear, Sentry, ZAI) | Annually | None (hot reload) |
 | GitHub private key | Annually | ~1 minute |
 | Cloudflare tunnel tokens | Annually | ~2 minutes |
@@ -885,7 +885,7 @@ export ZAI_API_KEY="..."                 # Required for glm worker type
 
 **Startup states:**
 | State | Accepts Tasks | Condition |
-|-------|---------------|-----------|
+| --------------- | --------------- | ----------------------------------------- |
 | `initializing` | No | Loading state, checking sessions |
 | `recovering` | No | Notifying code-agent of interrupted tasks |
 | `ready` | Yes | Recovery complete or timed out |
@@ -1215,14 +1215,14 @@ These are **separate concepts**:
 
 **Worker Type (`workerType`):** Which AI model to use
 | Value | Model |
-|-------|-------|
+| ------- | ----------------------------------- |
 | `opus` | Claude Opus 4.5 |
 | `auto` | Automatic model selection (default) |
 | `glm` | GLM-4 (ZAI) |
 
 **Routing Mode (`routingMode`):** Which physical machine to use
 | Value | Behavior |
-|-------|----------|
+| ---------------- | ------------------------------------------------------------- |
 | `mac-only` | Only use Mac worker. Fail if unavailable or at capacity. |
 | `vm-only` | Only use VM worker. Start VM if stopped. Fail if at capacity. |
 | `auto` (default) | Try Mac first. If unavailable/full, try VM. |
@@ -1920,7 +1920,7 @@ Users who primarily operate via WhatsApp can also cancel running tasks:
 
 **Race conditions:**
 | Scenario | Resolution |
-|----------|------------|
+| ------------------------------- | ---------------------------------------------- |
 | Cancel arrives after completion | Return 409, task already completed |
 | Cancel during PR creation | PR may or may not exist, task marked cancelled |
 | Cancel during CI | CI continues but results ignored |
@@ -2256,7 +2256,7 @@ done
 
 **Monthly projections:**
 | Tasks/Month | Estimated Cost |
-|-------------|----------------|
+| ------------- | ---------------- |
 | 50 | ~$60 |
 | 100 | ~$120 |
 | 500 | ~$600 |
@@ -2913,7 +2913,7 @@ Phase 2-4 (Workers) ──► Phase 5 (Orchestrator) ──► Phase 6 (Cloud Fu
 
 **Parallelization opportunities:**
 | Parallel Group | Phases | Notes |
-|----------------|--------|-------|
+| ---------------- | -------- | ---------------------------------------- |
 | Setup | 0, 1 | Can run simultaneously (no dependencies) |
 | Worker Setup | 2, 3, 4 | Mac and VM setup independent |
 | UI Development | 8-14 | Can start once code-agent API is stable |

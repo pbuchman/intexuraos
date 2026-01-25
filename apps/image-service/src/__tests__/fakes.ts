@@ -14,7 +14,8 @@ import type {
   PromptGenerationError,
   ThumbnailPrompt,
 } from '../domain/index.js';
-import type { UserServiceClient, DecryptedApiKeys } from '../infra/user/index.js';
+import type { UserServiceClient, DecryptedApiKeys, UserServiceError } from '../infra/user/index.js';
+import type { LlmGenerateClient } from '@intexuraos/llm-factory';
 
 export class FakeImageStorage implements ImageStorage {
   private images = new Map<string, { fullPath: string; thumbPath: string }>();
@@ -149,6 +150,17 @@ export class FakeUserServiceClient implements UserServiceClient {
     }
 
     return ok(this.apiKeys);
+  }
+
+  async getLlmClient(_userId: string): Promise<Result<LlmGenerateClient, UserServiceError>> {
+    return err({
+      code: 'NO_API_KEY',
+      message: 'Not implemented in fake',
+    });
+  }
+
+  async reportLlmSuccess(_userId: string, _provider: string): Promise<void> {
+    // Best effort - silently ignore in tests
   }
 
   setApiKeys(keys: DecryptedApiKeys): void {

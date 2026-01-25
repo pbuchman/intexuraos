@@ -1643,12 +1643,13 @@ describe('HandleApprovalReplyUseCase', () => {
         actionId: 'reminder-action-1',
       });
 
-      // Should succeed but not publish event (reminder has no execution path)
+      // Should succeed and publish event (reminder falls through to event publishing)
       expect(result.ok).toBe(true);
       if (result.ok) {
         expect(result.value.outcome).toBe('approved');
       }
-      expect(actionEventPublisher.getPublishedEvents()).toHaveLength(0);
+      expect(actionEventPublisher.getPublishedEvents()).toHaveLength(1);
+      expect(actionEventPublisher.getPublishedEvents()[0]?.type).toBe('action.created');
     });
   });
 });

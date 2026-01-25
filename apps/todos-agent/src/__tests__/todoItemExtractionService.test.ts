@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { err, ok } from '@intexuraos/common-core';
 import { createTodoItemExtractionService } from '../infra/gemini/todoItemExtractionService.js';
-import type { UserServiceClient } from '../infra/user/userServiceClient.js';
+import type { UserServiceClient } from '@intexuraos/internal-clients';
 import type { LlmGenerateClient } from '@intexuraos/llm-factory';
 import type { Logger } from '@intexuraos/common-core';
 
@@ -51,30 +51,40 @@ describe('todoItemExtractionService', () => {
       case 'ok':
         return {
           getLlmClient: vi.fn().mockResolvedValue(ok(mockLlmClient)),
+          getApiKeys: vi.fn(),
+          reportLlmSuccess: vi.fn(),
         };
       case 'no_api_key':
         return {
           getLlmClient: vi
             .fn()
             .mockResolvedValue(err({ code: 'NO_API_KEY' as const, message: 'No API key configured for google' })),
+          getApiKeys: vi.fn(),
+          reportLlmSuccess: vi.fn(),
         };
       case 'api_error':
         return {
           getLlmClient: vi
             .fn()
             .mockResolvedValue(err({ code: 'API_ERROR' as const, message: 'Service error' })),
+          getApiKeys: vi.fn(),
+          reportLlmSuccess: vi.fn(),
         };
       case 'network_error':
         return {
           getLlmClient: vi
             .fn()
             .mockResolvedValue(err({ code: 'NETWORK_ERROR' as const, message: 'Network error' })),
+          getApiKeys: vi.fn(),
+          reportLlmSuccess: vi.fn(),
         };
       case 'invalid_model':
         return {
           getLlmClient: vi
             .fn()
             .mockResolvedValue(err({ code: 'INVALID_MODEL' as const, message: 'Unsupported model' })),
+          getApiKeys: vi.fn(),
+          reportLlmSuccess: vi.fn(),
         };
     }
   }
@@ -206,8 +216,9 @@ describe('todoItemExtractionService', () => {
       expect(result.ok).toBe(false);
       if (!result.ok) {
         expect(result.error.code).toBe('INVALID_RESPONSE');
-        expect(result.error.message).toBe('LLM returned invalid response format');
-        expect(result.error.details?.parseError).toBe('Schema validation failed');
+        expect(result.error.message).toContain('LLM returned invalid response format');
+        expect(result.error.message).toContain('items: expected array');
+        expect(result.error.details?.zodErrors).toBeDefined();
         expect(result.error.details?.rawResponsePreview).toBeDefined();
       }
     });
@@ -479,7 +490,8 @@ describe('todoItemExtractionService', () => {
       expect(result.ok).toBe(false);
       if (!result.ok) {
         expect(result.error.code).toBe('INVALID_RESPONSE');
-        expect(result.error.message).toBe('LLM returned invalid response format');
+        expect(result.error.message).toContain('LLM returned invalid response format');
+        expect(result.error.message).toContain('items: expected array');
         expect(result.error.details?.wasWrappedInMarkdown).toBe(true);
       }
     });

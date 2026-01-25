@@ -1,3 +1,4 @@
+import type { Logger } from 'pino';
 import type { CommandType, CommandSourceType } from '../models/command.js';
 import type { LlmGenerateClient } from '@intexuraos/llm-factory';
 
@@ -16,4 +17,4 @@ export interface Classifier {
   classify(text: string, options?: ClassifyOptions): Promise<ClassificationResult>;
 }
 
-export type ClassifierFactory = (client: LlmGenerateClient) => Classifier;
+export type ClassifierFactory = (client: LlmGenerateClient, logger: Logger) => Classifier;
