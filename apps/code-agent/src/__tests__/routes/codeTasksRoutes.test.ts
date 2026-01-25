@@ -508,4 +508,107 @@ describe('codeTasksRoutes', () => {
       expect(body.error.code).toBe('UNAUTHORIZED');
     });
   });
+
+  describe('GET /internal/code-tasks/linear/:linearIssueId/active', () => {
+    it('returns true when active task exists', async () => {
+      // Create a task with Linear issue
+      const createResponse = await app.inject({
+        method: 'POST',
+        url: '/internal/code-tasks',
+        headers: {
+          'X-Internal-Auth': process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] ?? 'test-token',
+        },
+        payload: createTaskBody({ userId: 'user-123', linearIssueId: 'LIN-123' }),
+      });
+
+      expect(createResponse.statusCode).toBe(201);
+
+      // Check for active task
+      const response = await app.inject({
+        method: 'GET',
+        url: '/internal/code-tasks/linear/LIN-123/active',
+        headers: {
+          'X-Internal-Auth': process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] ?? 'test-token',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(true);
+      expect(body.data.hasActive).toBe(true);
+      expect(body.data.taskId).toBeDefined();
+    });
+
+    it('returns false when no active task exists', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/internal/code-tasks/linear/LIN-999/active',
+        headers: {
+          'X-Internal-Auth': process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] ?? 'test-token',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(true);
+      expect(body.data.hasActive).toBe(false);
+      expect(body.data.taskId).toBeUndefined();
+    });
+
+    it('returns false when task is completed', async () => {
+      // Create a task with Linear issue
+      const createResponse = await app.inject({
+        method: 'POST',
+        url: '/internal/code-tasks',
+        headers: {
+          'X-Internal-Auth': process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] ?? 'test-token',
+        },
+        payload: createTaskBody({ userId: 'user-123', linearIssueId: 'LIN-456' }),
+      });
+
+      expect(createResponse.statusCode).toBe(201);
+      const createdBody = JSON.parse(createResponse.body);
+      const taskId = createdBody.data.task.id;
+
+      // Mark task as completed
+      await app.inject({
+        method: 'PATCH',
+        url: `/internal/code-tasks/${taskId}`,
+        headers: {
+          'X-Internal-Auth': process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] ?? 'test-token',
+        },
+        payload: { status: 'completed' },
+      });
+
+      // Check for active task
+      const response = await app.inject({
+        method: 'GET',
+        url: '/internal/code-tasks/linear/LIN-456/active',
+        headers: {
+          'X-Internal-Auth': process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] ?? 'test-token',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(true);
+      expect(body.data.hasActive).toBe(false);
+    });
+
+    it('rejects without internal auth token', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/internal/code-tasks/linear/LIN-123/active',
+      });
+
+      expect(response.statusCode).toBe(401);
+
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('UNAUTHORIZED');
+    });
+  });
 });
