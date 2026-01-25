@@ -8,6 +8,7 @@ import type { HandleNoteActionUseCase } from '../domain/usecases/handleNoteActio
 import type { HandleLinkActionUseCase } from '../domain/usecases/handleLinkAction.js';
 import type { HandleCalendarActionUseCase } from '../domain/usecases/handleCalendarAction.js';
 import type { HandleLinearActionUseCase } from '../domain/usecases/handleLinearAction.js';
+import type { HandleCodeActionUseCase } from '../domain/usecases/handleCodeAction.js';
 import pino from 'pino';
 import { ok } from '@intexuraos/common-core';
 
@@ -27,6 +28,7 @@ describe('retryPendingActions usecase', () => {
     link: HandleLinkActionUseCase;
     calendar: HandleCalendarActionUseCase;
     linear: HandleLinearActionUseCase;
+    code: HandleCodeActionUseCase;
   };
 
   const createAction = (overrides: Partial<Action> = {}): Action => ({
@@ -53,6 +55,7 @@ describe('retryPendingActions usecase', () => {
       link: createFakeHandler() as unknown as HandleLinkActionUseCase,
       calendar: createFakeHandler() as unknown as HandleCalendarActionUseCase,
       linear: createFakeHandler() as unknown as HandleLinearActionUseCase,
+      code: createFakeHandler() as unknown as HandleCodeActionUseCase,
     };
   });
 
