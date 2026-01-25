@@ -462,5 +462,47 @@ describe('workerDiscoveryImpl', () => {
 
       mockFetch.mockRestore();
     });
+
+    it('ignores worker entry with no colon', async () => {
+      process.env['INTEXURAOS_CODE_WORKERS'] =
+        'mac:https://cc-mac.intexuraos.cloud:1,invalid-entry,vm:https://cc-vm.intexuraos.cloud:2';
+
+      const service = createWorkerDiscoveryService({ logger });
+      const mockFetch = vi.spyOn(global, 'fetch').mockResolvedValue({
+        ok: true,
+        json: async () => ({ status: 'ready', capacity: 2 }),
+      } as Response);
+
+      const result = await service.findAvailableWorker();
+
+      // Should work with only valid entries (invalid-entry has no colon)
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.location).toBe('mac');
+      }
+
+      mockFetch.mockRestore();
+    });
+
+    it('ignores worker entry with invalid location (not mac or vm)', async () => {
+      process.env['INTEXURAOS_CODE_WORKERS'] =
+        'mac:https://cc-mac.intexuraos.cloud:1,cloud:https://cc-cloud.intexuraos.cloud:2,vm:https://cc-vm.intexuraos.cloud:3';
+
+      const service = createWorkerDiscoveryService({ logger });
+      const mockFetch = vi.spyOn(global, 'fetch').mockResolvedValue({
+        ok: true,
+        json: async () => ({ status: 'ready', capacity: 2 }),
+      } as Response);
+
+      const result = await service.findAvailableWorker();
+
+      // Should work with only valid locations (mac and vm)
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.location).toBe('mac');
+      }
+
+      mockFetch.mockRestore();
+    });
   });
 });

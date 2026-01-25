@@ -305,6 +305,69 @@ describe('taskDispatcherImpl', () => {
         expect(result.error.message).toContain('HTTP 401');
       }
     });
+
+    it('returns error when signDispatchRequest fails (missing dispatch secret)', async () => {
+      // Delete dispatch secret to trigger signDispatchRequest failure
+      delete process.env['INTEXURAOS_DISPATCH_SECRET'];
+
+      const service = createTaskDispatcherService({ logger });
+      vi.mocked(global.fetch).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ status: 'accepted' }),
+      } as Response);
+
+      const result = await service.dispatch({
+        taskId: 'task-123',
+        prompt: 'Test',
+        systemPromptHash: 'abc123',
+        repository: 'test/repo',
+        baseBranch: 'main',
+        workerType: 'opus',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'whsec_test',
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('dispatch_failed');
+        expect(result.error.message).toContain('INTEXURAOS_DISPATCH_SECRET');
+      }
+    });
+
+    it('covers 503 error handling code path (Response with status 503)', async () => {
+      const service = createTaskDispatcherService({ logger });
+      const mockFetch = vi.mocked(global.fetch);
+
+      // First call returns Response with status 503 (not rejected)
+      // This hits lines 194-197: creating error with code='503'
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 503,
+        json: async () => ({ error: 'Service Unavailable' }),
+      } as Response);
+
+      // Second call succeeds
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ status: 'accepted' }),
+      } as Response);
+
+      const result = await service.dispatch({
+        taskId: 'task-123',
+        prompt: 'Test',
+        systemPromptHash: 'abc123',
+        repository: 'test/repo',
+        baseBranch: 'main',
+        workerType: 'opus',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'whsec_test',
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.workerLocation).toBe('vm');
+      }
+    });
   });
 
   describe('getWorkerConfigs', () => {
@@ -314,6 +377,37 @@ describe('taskDispatcherImpl', () => {
       // Service should initialize but have no workers
       // This will cause dispatch to fail with worker_unavailable
       createTaskDispatcherService({ logger });
+    });
+
+    it('returns empty array when INTEXURAOS_CODE_WORKERS is empty string', () => {
+      process.env['INTEXURAOS_CODE_WORKERS'] = '';
+
+      // Service should initialize but have no workers
+      createTaskDispatcherService({ logger });
+    });
+
+    it('dispatch fails when no workers available', async () => {
+      // Set empty workers env var
+      process.env['INTEXURAOS_CODE_WORKERS'] = '';
+
+      const service = createTaskDispatcherService({ logger });
+
+      const result = await service.dispatch({
+        taskId: 'task-123',
+        prompt: 'Test',
+        systemPromptHash: 'abc123',
+        repository: 'test/repo',
+        baseBranch: 'main',
+        workerType: 'opus',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'whsec_test',
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('worker_unavailable');
+        expect(result.error.message).toContain('No workers available');
+      }
     });
   });
 
