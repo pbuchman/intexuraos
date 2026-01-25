@@ -39,8 +39,9 @@ function collectExternalDeps(pkgName, visited = new Set()) {
   const externals = new Set();
 
   // Add this @intexuraos package itself as external (for subpath exports)
-  // Exception: infra-* packages should be bundled, not external
-  if (!pkgName.startsWith('@intexuraos/infra-')) {
+  // Only @intexuraos/internal-clients uses subpath exports that require external marking
+  // All other @intexuraos packages (common-*, infra-*, etc.) should be bundled
+  if (pkgName === '@intexuraos/internal-clients') {
     externals.add(pkgName);
     externals.add(`${pkgName}/*`);
   }
