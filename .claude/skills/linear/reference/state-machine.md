@@ -131,3 +131,76 @@ These require explicit user instruction:
 | Multiple issues to process | Complete ONE, checkpoint, wait for user instruction   |
 | User says "mark as Done"   | Then and only then move to Done                       |
 | Temptation to batch update | STOP — each issue requires separate verification gate |
+
+---
+
+## Parent Execution Flow
+
+When `/linear INT-XXX` is called on a **parent issue with child subissues**, the workflow changes significantly:
+
+```
+PARENT ISSUE:
+                    +-------------------------+
+                    |        Backlog          |
+                    +-----------+-------------+
+                                |
+                    /linear INT-<parent> called
+                    (children detected)
+                                |
+                                v
+                    +-------------------------+
+                    |      In Progress        |  ← Parent stays here during all child work
+                    +-----------+-------------+
+                                |
+                    All children complete +
+                    PR created
+                                |
+                                v
+                    +-------------------------+
+                    |       In Review         |
+                    +-------------------------+
+
+
+CHILD ISSUES (executed continuously, no stops):
+
+    Child 1              Child 2              Child 3
+    ┌─────────┐         ┌─────────┐         ┌─────────┐
+    │ Backlog │         │ Backlog │         │ Backlog │
+    └────┬────┘         └────┬────┘         └────┬────┘
+         │                   │                   │
+    Start work          (wait for 1)        (wait for 2)
+         │                   │                   │
+         v                   v                   v
+    ┌───────────┐       ┌───────────┐       ┌───────────┐
+    │In Progress│──────>│In Progress│──────>│In Progress│
+    └────┬──────┘       └────┬──────┘       └────┬──────┘
+         │                   │                   │
+    CI + commit         CI + commit         CI + commit
+         │                   │                   │
+         v                   v                   v
+    ┌───────────┐       ┌───────────┐       ┌───────────┐
+    │ In Review │       │ In Review │       │ In Review │
+    └───────────┘       └───────────┘       └───────────┘
+
+    ════════════════════════════════════════════════════
+              NO STOPS BETWEEN CHILDREN
+    ════════════════════════════════════════════════════
+```
+
+### Parent Execution State Rules
+
+| Event                        | Issue  | From        | To          |
+| ---------------------------- | ------ | ----------- | ----------- |
+| Start parent execution       | Parent | Backlog     | In Progress |
+| Begin child work             | Child  | Backlog     | In Progress |
+| Complete child (CI + commit) | Child  | In Progress | In Review   |
+| ALL children done, PR up     | Parent | In Progress | In Review   |
+
+### Key Differences from Single-Issue Flow
+
+| Aspect           | Single Issue                      | Parent Execution                    |
+| ---------------- | --------------------------------- | ----------------------------------- |
+| Checkpoints      | STOP after each issue             | NO stops between children           |
+| Branch           | One branch per issue              | One branch for parent (all children)|
+| PR               | One PR per issue                  | One PR for parent                   |
+| State updates    | Sequential with user confirmation | Continuous, automatic               |
