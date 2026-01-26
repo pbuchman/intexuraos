@@ -18,6 +18,7 @@ import type { WorkerDiscoveryService } from '../../domain/services/workerDiscove
 import type { TaskDispatcherService } from '../../domain/services/taskDispatcher.js';
 import type { LogChunkRepository } from '../../domain/repositories/logChunkRepository.js';
 import type { ActionsAgentClient } from '../../infra/clients/actionsAgentClient.js';
+import type { WhatsAppNotifier } from '../../domain/services/whatsappNotifier.js';
 describe('codeRoutes', () => {
   let fakeFirestore: ReturnType<typeof createFakeFirestore>;
   let logger: Logger;
@@ -82,7 +83,7 @@ describe('codeRoutes', () => {
       taskDispatcher: TaskDispatcherService;
       logChunkRepo: LogChunkRepository;
       actionsAgentClient: ActionsAgentClient;
-      whatsappNotifier: any;
+      whatsappNotifier: WhatsAppNotifier;
     });
 
     server = await buildServer();

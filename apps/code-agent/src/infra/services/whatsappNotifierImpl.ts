@@ -16,7 +16,7 @@ import type { CodeTask, TaskError } from '../../domain/models/codeTask.js';
  */
 function formatCompletionMessage(task: CodeTask): string {
   const title = task.linearIssueTitle ?? task.prompt.slice(0, 50);
-  const fallbackWarning = task.linearFallback
+  const fallbackWarning = task.linearFallback === true
     ? '\n⚠️ (Linear unavailable - no issue tracking)'
     : '';
 
@@ -25,11 +25,13 @@ function formatCompletionMessage(task: CodeTask): string {
     return `✅ Code task completed: ${title}${fallbackWarning}`;
   }
 
-  const prLine = result.prUrl ? `PR: ${result.prUrl}\n` : '';
+  const prLine = result.prUrl !== undefined && result.prUrl.length > 0
+    ? `PR: ${result.prUrl}\n`
+    : '';
   return `✅ Code task completed: ${title}
 
 ${prLine}Branch: ${result.branch}
-Commits: ${result.commits}
+Commits: ${String(result.commits)}
 ${result.summary}${fallbackWarning}`;
 }
 
@@ -38,11 +40,12 @@ ${result.summary}${fallbackWarning}`;
  */
 function formatFailureMessage(task: CodeTask, error: TaskError): string {
   const title = task.linearIssueTitle ?? task.prompt.slice(0, 50);
-  const fallbackWarning = task.linearFallback
+  const fallbackWarning = task.linearFallback === true
     ? '\n⚠️ (Linear unavailable - no issue tracking)'
     : '';
 
-  const remedation = error.remediation?.manualSteps
+  const remedation = error.remediation?.manualSteps !== undefined &&
+    error.remediation.manualSteps.length > 0
     ? `\nSuggestion: ${error.remediation.manualSteps}`
     : '';
 
@@ -81,7 +84,7 @@ export function createWhatsAppNotifier(config: ServiceClientConfig): WhatsAppNot
       if (!response.ok) {
         return err({
           code: 'notification_failed',
-          message: response.error?.message ?? 'Unknown error',
+          message: response.error.message,
         });
       }
 
@@ -114,7 +117,7 @@ export function createWhatsAppNotifier(config: ServiceClientConfig): WhatsAppNot
       if (!response.ok) {
         return err({
           code: 'notification_failed',
-          message: response.error?.message ?? 'Unknown error',
+          message: response.error.message,
         });
       }
 

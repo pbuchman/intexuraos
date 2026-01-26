@@ -19,6 +19,7 @@ import type { TaskDispatcherService } from '../../domain/services/taskDispatcher
 import type { LogChunkRepository } from '../../domain/repositories/logChunkRepository.js';
 import type { WorkerDiscoveryService } from '../../domain/services/workerDiscovery.js';
 import type { ActionsAgentClient } from '../../infra/clients/actionsAgentClient.js';
+import type { WhatsAppNotifier } from '../../domain/services/whatsappNotifier.js';
 
 describe('POST /internal/code/process', () => {
   let app: Awaited<ReturnType<typeof buildServer>>;
@@ -84,7 +85,7 @@ describe('POST /internal/code/process', () => {
       workerDiscovery: WorkerDiscoveryService;
       logChunkRepo: LogChunkRepository;
       actionsAgentClient: ActionsAgentClient;
-      whatsappNotifier: any;
+      whatsappNotifier: WhatsAppNotifier;
     });
 
     app = await buildServer();

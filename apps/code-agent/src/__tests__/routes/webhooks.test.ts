@@ -22,6 +22,7 @@ import type { LogChunkRepository } from '../../domain/repositories/logChunkRepos
 import type { WorkerDiscoveryService } from '../../domain/services/workerDiscovery.js';
 import crypto from 'node:crypto';
 import { fetchWithAuth } from '@intexuraos/internal-clients';
+import type { WhatsAppNotifier } from '../../domain/services/whatsappNotifier.js';
 
 // Mock fetchWithAuth
 vi.mock('@intexuraos/internal-clients', async () => ({
@@ -620,8 +621,16 @@ describe('POST /internal/webhooks/task-complete', () => {
 
       expect(response.statusCode).toBe(200);
 
-      // Verify actions-agent was NOT called
-      expect(mockFetchWithAuth).not.toHaveBeenCalled();
+      // Verify WhatsApp notification was sent (but not actions-agent)
+      expect(mockFetchWithAuth).toHaveBeenCalledTimes(1);
+      expect(mockFetchWithAuth).toHaveBeenCalledWith(
+        expect.any(Object),
+        '/internal/messages/send',
+        expect.objectContaining({
+          method: 'POST',
+          body: expect.stringContaining('userId'),
+        })
+      );
     });
 
     it('calls actions-agent for completed task without prUrl', async () => {
@@ -1176,7 +1185,7 @@ describe('POST /internal/logs', () => {
       workerDiscovery: WorkerDiscoveryService;
       taskDispatcher: TaskDispatcherService;
       actionsAgentClient: ActionsAgentClient;
-      whatsappNotifier: any;
+      whatsappNotifier: WhatsAppNotifier;
     });
 
     app = await buildServer();

@@ -19,6 +19,7 @@ import type { WorkerDiscoveryService } from '../domain/services/workerDiscovery.
 import type { TaskDispatcherService } from '../domain/services/taskDispatcher.js';
 import type { LogChunkRepository } from '../domain/repositories/logChunkRepository.js';
 import type { ActionsAgentClient } from '../infra/clients/actionsAgentClient.js';
+import type { WhatsAppNotifier } from '../domain/services/whatsappNotifier.js';
 
 describe('OpenAPI contract', () => {
   let app: Awaited<ReturnType<typeof buildServer>>;
@@ -65,7 +66,7 @@ describe('OpenAPI contract', () => {
       taskDispatcher: TaskDispatcherService;
       logChunkRepo: LogChunkRepository;
       actionsAgentClient: ActionsAgentClient;
-      whatsappNotifier: any;
+      whatsappNotifier: WhatsAppNotifier;
     });
 
     app = await buildServer();

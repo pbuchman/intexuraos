@@ -21,6 +21,7 @@ import type { CodeTask } from '../../domain/models/codeTask.js';
 import type { WorkerDiscoveryService } from '../../domain/services/workerDiscovery.js';
 import type { TaskDispatcherService } from '../../domain/services/taskDispatcher.js';
 import type { ActionsAgentClient } from '../../infra/clients/actionsAgentClient.js';
+import type { WhatsAppNotifier } from '../../domain/services/whatsappNotifier.js';
 
 describe('GET /code/tasks endpoints', () => {
   let app: Awaited<ReturnType<typeof buildServer>>;
@@ -83,7 +84,7 @@ describe('GET /code/tasks endpoints', () => {
       taskDispatcher: TaskDispatcherService;
       logChunkRepo: LogChunkRepository;
       actionsAgentClient: ActionsAgentClient;
-      whatsappNotifier: any;
+      whatsappNotifier: WhatsAppNotifier;
     });
 
     app = await buildServer();
