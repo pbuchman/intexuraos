@@ -14,6 +14,7 @@ import { createWhatsAppNotifier } from '../../infra/services/whatsappNotifierImp
 import { createActionsAgentClient } from '../../infra/clients/actionsAgentClient.js';
 import { createLinearAgentHttpClient } from '../../infra/http/linearAgentHttpClient.js';
 import { createLinearIssueService } from '../../domain/services/linearIssueService.js';
+import { createStatusMirrorService } from '../../infra/services/statusMirrorServiceImpl.js';
 
 export function setupTestServices({ actionsAgentUrl = 'http://actions-agent' }: { actionsAgentUrl?: string } = {}): void {
   const fakeFirestore = createFakeFirestore() as unknown as Firestore;
@@ -27,6 +28,12 @@ export function setupTestServices({ actionsAgentUrl = 'http://actions-agent' }: 
 
   const linearIssueService = createLinearIssueService({
     linearAgentClient,
+    logger,
+  });
+
+  const actionsAgentClient = createActionsAgentClient({
+    baseUrl: actionsAgentUrl,
+    internalAuthToken: 'test-token',
     logger,
   });
 
@@ -55,9 +62,9 @@ export function setupTestServices({ actionsAgentUrl = 'http://actions-agent' }: 
       internalAuthToken: 'test-token',
       logger,
     }),
-    actionsAgentClient: createActionsAgentClient({
-      baseUrl: actionsAgentUrl,
-      internalAuthToken: 'test-token',
+    actionsAgentClient,
+    statusMirrorService: createStatusMirrorService({
+      actionsAgentClient,
       logger,
     }),
     linearIssueService,

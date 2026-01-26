@@ -2,6 +2,13 @@
 # BLOCK: terraform command without env var clearing
 # Exit 0 = allow, Exit 2 = block with stderr message
 
+HOOK_NAME="validate-terraform"
+LOG_FILE="$(dirname "$0")/${HOOK_NAME}.log"
+
+log_blocked() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] BLOCKED: $1" >> "$LOG_FILE"
+}
+
 INPUT=$(cat)
 TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name // ""')
 COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // ""')
@@ -42,6 +49,7 @@ if echo "$COMMAND" | grep -qE '\bterraform\s+(init|plan|apply|destroy|import|sta
 ║                                                                              ║
 ╚══════════════════════════════════════════════════════════════════════════════╝
 EOF
+    log_blocked "$COMMAND"
     exit 2
 fi
 

@@ -5,6 +5,7 @@
 import pino from 'pino';
 import {
   MessageRepositoryAdapter,
+  PhoneVerificationRepositoryAdapter,
   UserMappingRepositoryAdapter,
   WebhookEventRepositoryAdapter,
 } from './adapters.js';
@@ -19,6 +20,7 @@ import type {
   LinkPreviewFetcherPort,
   MediaStoragePort,
   OutboundMessageRepository,
+  PhoneVerificationRepository,
   SpeechTranscriptionPort,
   ThumbnailGeneratorPort,
   WhatsAppCloudApiPort,
@@ -77,6 +79,7 @@ export interface ServiceContainer {
   userMappingRepository: WhatsAppUserMappingRepository;
   messageRepository: WhatsAppMessageRepository;
   outboundMessageRepository: OutboundMessageRepository;
+  phoneVerificationRepository: PhoneVerificationRepository;
   mediaStorage: MediaStoragePort;
   eventPublisher: EventPublisherPort;
   messageSender: WhatsAppMessageSender;
@@ -115,6 +118,7 @@ export function getServices(): ServiceContainer {
     userMappingRepository: new UserMappingRepositoryAdapter(),
     messageRepository: new MessageRepositoryAdapter(),
     outboundMessageRepository: createOutboundMessageRepository(),
+    phoneVerificationRepository: new PhoneVerificationRepositoryAdapter(),
     mediaStorage: new GcsMediaStorageAdapter(serviceConfig.mediaBucket),
     eventPublisher: new GcpPubSubPublisher(buildPubSubConfig(serviceConfig)),
     messageSender: new WhatsAppCloudApiSender(

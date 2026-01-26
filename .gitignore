@@ -77,3 +77,6 @@ CLAUDE.md
 
 .playwright-mcp/
 
+# Hook logs (for analyzing false positives)
+.claude/hooks/*.log
+

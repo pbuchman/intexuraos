@@ -9,7 +9,7 @@ import { err, ok, type Result } from '@intexuraos/common-core';
 import {
   createNotionClient,
   mapNotionError,
-  type NotionError,
+  type NotionClient,
   type NotionLogger,
 } from '@intexuraos/infra-notion';
 import type { Research } from '../../domain/research/models/Research.js';
@@ -81,16 +81,32 @@ function stripHiddenContent(content: string): string {
 // Error mapping
 // ============================================================================
 
-function mapExportError(e: NotionError): NotionResearchExportError {
-  switch (e.code) {
+// Define error type locally to avoid import resolution issues
+type LocalNotionErrorCode =
+  | 'NOT_FOUND'
+  | 'UNAUTHORIZED'
+  | 'RATE_LIMITED'
+  | 'VALIDATION_ERROR'
+  | 'INTERNAL_ERROR';
+
+interface LocalNotionError {
+  code: LocalNotionErrorCode;
+  message: string;
+}
+
+function mapExportError(e: LocalNotionError): NotionResearchExportError {
+  const code = e.code;
+  const message = e.message;
+
+  switch (code) {
     case 'NOT_FOUND':
-      return { code: 'NOT_FOUND', message: e.message };
+      return { code: 'NOT_FOUND', message };
     case 'UNAUTHORIZED':
-      return { code: 'UNAUTHORIZED', message: e.message };
+      return { code: 'UNAUTHORIZED', message };
     case 'RATE_LIMITED':
-      return { code: 'RATE_LIMITED', message: e.message };
+      return { code: 'RATE_LIMITED', message };
     default:
-      return { code: 'INTERNAL_ERROR', message: e.message };
+      return { code: 'INTERNAL_ERROR', message };
   }
 }
 
@@ -125,7 +141,8 @@ export async function exportResearchToNotion(
   }
 
   try {
-    const client = createNotionClient(notionToken, logger);
+     
+    const client: NotionClient = createNotionClient(notionToken, logger);
 
     // Filter completed LLM results
     const completedResults = research.llmResults.filter((r) => r.status === 'completed');
@@ -141,6 +158,7 @@ export async function exportResearchToNotion(
       },
     }));
 
+     
     const mainPageResponse = await client.pages.create({
       parent: { page_id: targetPageId },
       properties: {
@@ -161,8 +179,14 @@ export async function exportResearchToNotion(
       ],
     });
 
+     
     const mainPageId = mainPageResponse.id;
-    const mainPageUrl = 'url' in mainPageResponse ? mainPageResponse.url : `https://notion.so/${mainPageId}`;
+     
+    const mainPageUrl =
+      'url' in mainPageResponse && typeof mainPageResponse.url === 'string'
+        ? mainPageResponse.url
+        : `https://notion.so/${mainPageId}`;
+     
 
     const llmReportPages: { model: string; pageId: string; pageUrl: string }[] = [];
 
@@ -235,6 +259,7 @@ export async function exportResearchToNotion(
         }
       }
 
+       
       const pageResponse = await client.pages.create({
         parent: { page_id: mainPageId },
         properties: {
@@ -243,12 +268,20 @@ export async function exportResearchToNotion(
         children: childBlocks,
       });
 
-      const pageUrl = 'url' in pageResponse ? pageResponse.url : `https://notion.so/${pageResponse.id}`;
+      const pageId = pageResponse.id;
+       
+      const pageUrl =
+        'url' in pageResponse && typeof pageResponse.url === 'string'
+          ? pageResponse.url
+          : `https://notion.so/${pageId}`;
+       
+       
       llmReportPages.push({
         model: llmResult.model,
-        pageId: pageResponse.id,
+        pageId,
         pageUrl,
       });
+       
     }
 
     // Append source links to main page
@@ -264,18 +297,24 @@ export async function exportResearchToNotion(
         },
       }));
 
+       
       await client.blocks.children.append({
         block_id: mainPageId,
         children: sourceLinks,
       });
+       
     }
 
+     
     return ok({
       mainPageId,
       mainPageUrl,
       llmReportPages,
     });
+     
   } catch (error) {
+     
     return err(mapExportError(mapNotionError(error)));
+     
   }
 }

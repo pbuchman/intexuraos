@@ -10,7 +10,10 @@ export type WhatsAppErrorCode =
   | 'NOT_FOUND'
   | 'VALIDATION_ERROR'
   | 'PERSISTENCE_ERROR'
-  | 'INTERNAL_ERROR';
+  | 'INTERNAL_ERROR'
+  | 'ALREADY_VERIFIED'
+  | 'COOLDOWN_ACTIVE'
+  | 'RATE_LIMIT_EXCEEDED';
 
 /**
  * Domain error type.

@@ -20,6 +20,7 @@ import { createWhatsAppNotifier } from './infra/services/whatsappNotifierImpl.js
 import { createActionsAgentClient } from './infra/clients/actionsAgentClient.js';
 import { createLinearAgentHttpClient } from './infra/http/linearAgentHttpClient.js';
 import { createLinearIssueService, type LinearIssueService } from './domain/services/linearIssueService.js';
+import { createStatusMirrorService, type StatusMirrorService } from './infra/services/statusMirrorServiceImpl.js';
 
 export interface ServiceContainer {
   firestore: Firestore;
@@ -31,6 +32,7 @@ export interface ServiceContainer {
   whatsappNotifier: WhatsAppNotifier;
   actionsAgentClient: ActionsAgentClient;
   linearIssueService: LinearIssueService;
+  statusMirrorService: StatusMirrorService;
 }
 
 // Configuration required to initialize services
@@ -69,6 +71,12 @@ export function initServices(config: ServiceConfig): void {
     logger,
   });
 
+  const actionsAgentClient = createActionsAgentClient({
+    baseUrl: config.actionsAgentUrl,
+    internalAuthToken: config.internalAuthToken,
+    logger,
+  });
+
   container = {
     firestore,
     logger,
@@ -88,9 +96,9 @@ export function initServices(config: ServiceConfig): void {
       internalAuthToken: config.internalAuthToken,
       logger,
     }),
-    actionsAgentClient: createActionsAgentClient({
-      baseUrl: config.actionsAgentUrl,
-      internalAuthToken: config.internalAuthToken,
+    actionsAgentClient,
+    statusMirrorService: createStatusMirrorService({
+      actionsAgentClient,
       logger,
     }),
     linearIssueService,

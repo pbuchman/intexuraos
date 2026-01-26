@@ -34,6 +34,9 @@ import type { WorkerDiscoveryService } from '../../domain/services/workerDiscove
 import type { ActionsAgentClient } from '../../infra/clients/actionsAgentClient.js';
 import type { WhatsAppNotifier } from '../../domain/services/whatsappNotifier.js';
 import type { LinearIssueService } from '../../domain/services/linearIssueService.js';
+import { createStatusMirrorService } from '../../infra/services/statusMirrorServiceImpl.js';
+import type { StatusMirrorService } from '../../infra/services/statusMirrorServiceImpl.js';
+
 describe('POST /code/submit', () => {
   let app: Awaited<ReturnType<typeof buildServer>>;
   let fakeFirestore: ReturnType<typeof createFakeFirestore>;
@@ -117,6 +120,10 @@ describe('POST /code/submit', () => {
       logChunkRepo,
       actionsAgentClient,
       linearIssueService,
+      statusMirrorService: createStatusMirrorService({
+        actionsAgentClient,
+        logger,
+      }),
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -127,6 +134,7 @@ describe('POST /code/submit', () => {
       actionsAgentClient: ActionsAgentClient;
       whatsappNotifier: WhatsAppNotifier;
       linearIssueService: LinearIssueService;
+      statusMirrorService: StatusMirrorService;
     });
 
     app = await buildServer();
