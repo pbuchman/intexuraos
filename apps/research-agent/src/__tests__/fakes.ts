@@ -46,7 +46,7 @@ import type { NotificationSender } from '../domain/research/index.js';
 import type {
   NotionServiceClient,
   NotionTokenContext,
-} from '../infra/notion/notionServiceClient.js';
+} from '../infra/notion/index.js';
 import type { ResearchExportSettingsError, ResearchExportSettings } from '../infra/firestore/researchExportSettingsRepository.js';
 
 /**

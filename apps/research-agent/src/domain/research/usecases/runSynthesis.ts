@@ -48,6 +48,8 @@ export interface RunSynthesisDeps {
   reportLlmSuccess?: () => void;
   logger: Logger;
   imageApiKeys?: ImageApiKeys;
+  notionServiceClient?: unknown;
+  researchExportSettings?: unknown;
 }
 
 export async function runSynthesis(
@@ -67,6 +69,8 @@ export async function runSynthesis(
     reportLlmSuccess,
     logger,
     imageApiKeys,
+    notionServiceClient,
+    researchExportSettings,
   } = deps;
 
   logger.info({}, '[4.1] Loading research from database');
@@ -348,6 +352,18 @@ export async function runSynthesis(
     } else {
       logger.error({}, '[4.5.3] HTML upload failed');
     }
+  }
+
+  // [4.5.4] Fire-and-forget Notion export (non-blocking)
+  if (notionServiceClient !== undefined && notionServiceClient !== null && researchExportSettings !== undefined && researchExportSettings !== null) {
+    logger.info({}, '[4.5.4] Starting fire-and-forget Notion export');
+    const { exportResearchToNotion: exportToNotion } = await import('../../../infra/notion/exportResearchToNotionUseCase.js');
+    void exportToNotion(researchId, userId, {
+      researchRepo,
+      notionServiceClient: notionServiceClient as never,
+      researchExportSettings: researchExportSettings as never,
+      logger,
+    });
   }
 
   logger.info({}, '[4.6] Saving final research result to database');

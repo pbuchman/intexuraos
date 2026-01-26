@@ -75,6 +75,8 @@ function createMockDeps(): RunSynthesisDeps & {
     webAppUrl: 'https://app.example.com',
     reportLlmSuccess: mockReportSuccess,
     logger: mockLogger,
+    notionServiceClient: null,
+    researchExportSettings: null,
     mockRepo,
     mockSynthesizer,
     mockNotificationSender,
