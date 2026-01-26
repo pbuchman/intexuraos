@@ -32,6 +32,8 @@ import type { TaskDispatcherService } from '../domain/services/taskDispatcher.js
 import type { LogChunkRepository } from '../domain/repositories/logChunkRepository.js';
 import type { ActionsAgentClient } from '../infra/clients/actionsAgentClient.js';
 import type { WhatsAppNotifier } from '../domain/services/whatsappNotifier.js';
+import type { RateLimitService } from '../domain/services/rateLimitService.js';
+import { ok } from '@intexuraos/common-core';
 import type { LinearIssueService } from '../domain/services/linearIssueService.js';
 import type { StatusMirrorService } from '../infra/services/statusMirrorServiceImpl.js';
 
@@ -51,6 +53,18 @@ describe('OpenAPI contract', () => {
     const fakeFirestore = createFakeFirestore() as unknown as Firestore;
     setFirestore(fakeFirestore);
     const logger = pino({ name: 'test' }) as unknown as Logger;
+
+    const rateLimitService: RateLimitService = {
+      async checkLimits() {
+        return ok(undefined);
+      },
+      async recordTaskStart() {
+        return;
+      },
+      async recordTaskComplete() {
+        return;
+      },
+    };
 
     const actionsAgentClient = createActionsAgentClient({
       baseUrl: 'http://actions-agent',
@@ -96,6 +110,7 @@ describe('OpenAPI contract', () => {
         }, logger),
         logger,
       }),
+      rateLimitService,
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -105,6 +120,7 @@ describe('OpenAPI contract', () => {
       logChunkRepo: LogChunkRepository;
       actionsAgentClient: ActionsAgentClient;
       whatsappNotifier: WhatsAppNotifier;
+      rateLimitService: RateLimitService;
       linearIssueService: LinearIssueService;
       statusMirrorService: StatusMirrorService;
     });

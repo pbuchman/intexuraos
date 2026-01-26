@@ -34,6 +34,8 @@ import type { WorkerDiscoveryService } from '../../domain/services/workerDiscove
 import type { TaskDispatcherService } from '../../domain/services/taskDispatcher.js';
 import type { ActionsAgentClient } from '../../infra/clients/actionsAgentClient.js';
 import type { WhatsAppNotifier } from '../../domain/services/whatsappNotifier.js';
+import type { RateLimitService } from '../../domain/services/rateLimitService.js';
+import { ok } from '@intexuraos/common-core';
 import type { LinearIssueService } from '../../domain/services/linearIssueService.js';
 import { createStatusMirrorService } from '../../infra/services/statusMirrorServiceImpl.js';
 import type { StatusMirrorService } from '../../infra/services/statusMirrorServiceImpl.js';
@@ -98,6 +100,18 @@ describe('GET /code/tasks endpoints', () => {
       logger,
     });
 
+    const rateLimitService: RateLimitService = {
+      async checkLimits() {
+        return ok(undefined);
+      },
+      async recordTaskStart() {
+        return;
+      },
+      async recordTaskComplete() {
+        return;
+      },
+    };
+
     const linearAgentClient = createLinearAgentHttpClient({
       baseUrl: 'http://linear-agent:8086',
       internalAuthToken: 'test-token',
@@ -118,6 +132,7 @@ describe('GET /code/tasks endpoints', () => {
       whatsappNotifier,
       logChunkRepo,
       actionsAgentClient,
+      rateLimitService,
       linearIssueService,
       statusMirrorService: createStatusMirrorService({
         actionsAgentClient,
@@ -132,6 +147,7 @@ describe('GET /code/tasks endpoints', () => {
       logChunkRepo: LogChunkRepository;
       actionsAgentClient: ActionsAgentClient;
       whatsappNotifier: WhatsAppNotifier;
+      rateLimitService: RateLimitService;
       linearIssueService: LinearIssueService;
       statusMirrorService: StatusMirrorService;
     });

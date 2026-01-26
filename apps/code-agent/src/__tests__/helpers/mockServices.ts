@@ -12,6 +12,8 @@ import { createWorkerDiscoveryService } from '../../infra/services/workerDiscove
 import { createTaskDispatcherService } from '../../infra/services/taskDispatcherImpl.js';
 import { createWhatsAppNotifier } from '../../infra/services/whatsappNotifierImpl.js';
 import { createActionsAgentClient } from '../../infra/clients/actionsAgentClient.js';
+import type { RateLimitService } from '../../domain/services/rateLimitService.js';
+import { ok } from '@intexuraos/common-core';
 import { createLinearAgentHttpClient } from '../../infra/http/linearAgentHttpClient.js';
 import { createLinearIssueService } from '../../domain/services/linearIssueService.js';
 import { createStatusMirrorService } from '../../infra/services/statusMirrorServiceImpl.js';
@@ -19,6 +21,18 @@ import { createStatusMirrorService } from '../../infra/services/statusMirrorServ
 export function setupTestServices({ actionsAgentUrl = 'http://actions-agent' }: { actionsAgentUrl?: string } = {}): void {
   const fakeFirestore = createFakeFirestore() as unknown as Firestore;
   const logger = pino({ name: 'test' });
+
+  const rateLimitService: RateLimitService = {
+    async checkLimits() {
+      return ok(undefined);
+    },
+    async recordTaskStart() {
+      return;
+    },
+    async recordTaskComplete() {
+      return;
+    },
+  };
 
   const linearAgentClient = createLinearAgentHttpClient({
     baseUrl: 'http://linear-agent:8086',
@@ -67,6 +81,7 @@ export function setupTestServices({ actionsAgentUrl = 'http://actions-agent' }: 
       actionsAgentClient,
       logger,
     }),
+    rateLimitService,
     linearIssueService,
   };
 

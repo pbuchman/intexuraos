@@ -33,10 +33,11 @@ import type { TaskDispatcherService } from '../../domain/services/taskDispatcher
 import type { WorkerDiscoveryService } from '../../domain/services/workerDiscovery.js';
 import type { ActionsAgentClient } from '../../infra/clients/actionsAgentClient.js';
 import type { WhatsAppNotifier } from '../../domain/services/whatsappNotifier.js';
+import type { RateLimitService } from '../../domain/services/rateLimitService.js';
+import { ok } from '@intexuraos/common-core';
 import type { LinearIssueService } from '../../domain/services/linearIssueService.js';
 import { createStatusMirrorService } from '../../infra/services/statusMirrorServiceImpl.js';
 import type { StatusMirrorService } from '../../infra/services/statusMirrorServiceImpl.js';
-
 describe('POST /code/submit', () => {
   let app: Awaited<ReturnType<typeof buildServer>>;
   let fakeFirestore: ReturnType<typeof createFakeFirestore>;
@@ -99,6 +100,18 @@ describe('POST /code/submit', () => {
       logger,
     });
 
+    const rateLimitService: RateLimitService = {
+      async checkLimits() {
+        return ok(undefined);
+      },
+      async recordTaskStart() {
+        return;
+      },
+      async recordTaskComplete() {
+        return;
+      },
+    };
+
     const linearAgentClient = createLinearAgentHttpClient({
       baseUrl: 'http://linear-agent:8086',
       internalAuthToken: 'test-token',
@@ -119,6 +132,7 @@ describe('POST /code/submit', () => {
       whatsappNotifier,
       logChunkRepo,
       actionsAgentClient,
+      rateLimitService,
       linearIssueService,
       statusMirrorService: createStatusMirrorService({
         actionsAgentClient,
@@ -133,6 +147,7 @@ describe('POST /code/submit', () => {
       logChunkRepo: LogChunkRepository;
       actionsAgentClient: ActionsAgentClient;
       whatsappNotifier: WhatsAppNotifier;
+      rateLimitService: RateLimitService;
       linearIssueService: LinearIssueService;
       statusMirrorService: StatusMirrorService;
     });
@@ -312,38 +327,21 @@ describe('POST /code/submit', () => {
   });
 
   describe('rate limiting', () => {
-    it('returns 429 when daily limit exceeded', async () => {
-      // Mock successful dispatch
-      vi.spyOn(taskDispatcher, 'dispatch').mockResolvedValueOnce({
-        ok: true,
-        value: {
-          dispatched: true,
-          workerLocation: 'mac',
+    it('returns 429 when hourly limit exceeded', async () => {
+      // Get the service container and mock rateLimitService to return error
+      const { getServices } = await import('../../services.js');
+      const services = getServices();
+
+      // Mock rateLimitService to return hourly limit error
+      vi.spyOn(services.rateLimitService, 'checkLimits').mockResolvedValueOnce({
+        ok: false,
+        error: {
+          code: 'hourly_limit',
+          message: 'Maximum 10 tasks per hour allowed',
+          retryAfter: 'in about 1 hour',
         },
       });
 
-      // Create 10 existing tasks for today to hit the limit
-      // Note: Use the same userId that JWT validation returns ('test-user-id')
-      for (let i = 0; i < 10; i++) {
-        const result = await codeTaskRepo.create({
-          userId: 'test-user-id',  // This is what JWT validation returns
-          prompt: `Task ${i}`,
-          sanitizedPrompt: `Task ${i}`,
-          systemPromptHash: 'default',
-          workerType: 'auto',
-          workerLocation: 'mac',
-          repository: 'pbuchman/intexuraos',
-          baseBranch: 'development',
-          traceId: `trace_${i}`,
-        });
-
-        // Verify first 10 succeed
-        if (i < 10) {
-          expect(result.ok).toBe(true);
-        }
-      }
-
-      // Now try to submit the 11th task via the endpoint
       const response = await app.inject({
         method: 'POST',
         url: '/code/submit',
@@ -357,16 +355,12 @@ describe('POST /code/submit', () => {
 
       expect(response.statusCode).toBe(429);
       const body = JSON.parse(response.body);
-      expect(body).toEqual({
-        success: false,
-        error: {
-          code: 'RATE_LIMIT_EXCEEDED',
-          message: 'Maximum 10 tasks per day',
-        },
-      });
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('hourly_limit');
+      expect(body.error.message).toContain('tasks per hour');
     });
 
-    it('allows submissions below daily limit', async () => {
+    it('allows submissions when within limits', async () => {
       // Mock successful dispatch
       vi.spyOn(taskDispatcher, 'dispatch').mockResolvedValueOnce({
         ok: true,
@@ -375,22 +369,6 @@ describe('POST /code/submit', () => {
           workerLocation: 'mac',
         },
       });
-
-      // Create only 5 tasks (below limit of 10)
-      const userId = 'test-user-id';
-      for (let i = 0; i < 5; i++) {
-        await codeTaskRepo.create({
-          userId,
-          prompt: `Task ${i}`,
-          sanitizedPrompt: `Task ${i}`,
-          systemPromptHash: 'default',
-          workerType: 'auto',
-          workerLocation: 'mac',
-          repository: 'pbuchman/intexuraos',
-          baseBranch: 'development',
-          traceId: `trace_${i}`,
-        });
-      }
 
       const response = await app.inject({
         method: 'POST',
