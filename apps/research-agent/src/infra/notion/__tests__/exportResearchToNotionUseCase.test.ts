@@ -254,7 +254,7 @@ describe('exportResearchToNotion', () => {
           mainPageUrl: 'https://notion.so/page-123',
           llmReportPages: [
             { model: LlmModels.Gemini25Pro, pageId: 'llm-page-1', pageUrl: 'https://notion.so/llm-1' },
-            { model: LlmModels.GPT4o, pageId: 'llm-page-2', pageUrl: 'https://notion.so/llm-2' },
+            { model: LlmModels.GPT4oMini, pageId: 'llm-page-2', pageUrl: 'https://notion.so/llm-2' },
           ],
         })
       );
@@ -268,7 +268,7 @@ describe('exportResearchToNotion', () => {
           mainPageUrl: 'https://notion.so/page-123',
           llmReportPageIds: [
             { model: LlmModels.Gemini25Pro, pageId: 'llm-page-1' },
-            { model: LlmModels.GPT4o, pageId: 'llm-page-2' },
+            { model: LlmModels.GPT4oMini, pageId: 'llm-page-2' },
           ],
           exportedAt: expect.any(String),
         },
