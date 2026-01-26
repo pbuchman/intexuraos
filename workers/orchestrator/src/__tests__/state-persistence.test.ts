@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, vi, beforeEach } from 'vitest';
 import { mkdtempSync, rmSync, readFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
@@ -11,6 +11,30 @@ const mockLogger: Logger = {
   warn: () => undefined,
   error: () => undefined,
   debug: () => undefined,
+};
+
+// Create mock for exec with promisify.custom support using vi.hoisted
+// to ensure these are available when the hoisted vi.mock runs
+// Use Symbol.for directly since promisify.custom is just a well-known symbol
+const { mockExecPromisified, mockExec } = vi.hoisted(() => {
+  const mockExecPromisified = vi.fn();
+  const mockExec = vi.fn() as ReturnType<typeof vi.fn> &
+    Record<symbol, ReturnType<typeof vi.fn>>;
+  mockExec[Symbol.for('nodejs.util.promisify.custom')] = mockExecPromisified;
+  return { mockExecPromisified, mockExec };
+});
+
+// Mock child_process exec
+vi.mock('node:child_process', () => ({
+  exec: mockExec,
+}));
+
+const mockExecWithOutput = (stdout: string): void => {
+  mockExecPromisified.mockResolvedValue({ stdout, stderr: '' });
+};
+
+const mockExecWithError = (error: Error): void => {
+  mockExecPromisified.mockRejectedValue(error);
 };
 
 describe('StatePersistence', () => {
@@ -172,48 +196,6 @@ describe('StatePersistence', () => {
     });
   });
 
-  describe('orphan worktree detection', () => {
-    it('should return empty array if git command fails', async () => {
-      const persistence = new StatePersistence(stateFilePath, mockLogger);
-      await persistence.save(mockState);
-
-      // Use non-existent repository path - git command will fail
-      const orphans = await persistence.detectOrphanWorktrees('/nonexistent/repo/path');
-
-      // Should catch error and return empty array
-      expect(orphans).toEqual([]);
-    });
-
-    it('should detect worktrees not in state', async () => {
-      const persistence = new StatePersistence(stateFilePath, mockLogger);
-
-      // Create a mock git repository directory for testing
-      const mockRepoDir = join(tempDir, 'mock-repo');
-      const { mkdir } = await import('node:fs/promises');
-      await mkdir(mockRepoDir, { recursive: true });
-
-      // Save state with one worktree
-      await persistence.save(mockState);
-
-      // The test will fail gracefully since we can't actually run git in tests
-      // but we verify the error handling works
-      const orphans = await persistence.detectOrphanWorktrees(mockRepoDir);
-
-      // Should return empty array (git fails in non-git directory)
-      expect(Array.isArray(orphans)).toBe(true);
-    });
-
-    it('should return empty array for valid repo with no orphans', async () => {
-      const persistence = new StatePersistence(stateFilePath, mockLogger);
-      await persistence.save(mockState);
-
-      // Use temp dir (not a git repo) - command fails
-      const orphans = await persistence.detectOrphanWorktrees(tempDir);
-
-      expect(orphans).toEqual([]);
-    });
-  });
-
   describe('directory creation', () => {
     it('should create directory if it does not exist', async () => {
       const nestedPath = join(tempDir, 'nested', 'dir', 'state.json');
@@ -222,6 +204,154 @@ describe('StatePersistence', () => {
       await persistence.save(mockState);
 
       expect(existsSync(nestedPath)).toBe(true);
+    });
+  });
+
+  describe('error handling', () => {
+    it('should throw non-SyntaxError errors', async () => {
+      const persistence = new StatePersistence(stateFilePath, mockLogger);
+
+      // Create a directory at the state file path to cause an EISDIR error
+      const { mkdir } = await import('node:fs/promises');
+      const { dirname } = await import('node:path');
+      await mkdir(dirname(stateFilePath), { recursive: true });
+      await mkdir(stateFilePath, { recursive: true });
+
+      // Trying to read a directory as a file will throw an error (not SyntaxError)
+      await expect(persistence.load()).rejects.toThrow();
+    });
+  });
+
+  describe('detectOrphanWorktrees', () => {
+    beforeEach(() => {
+      mockExecPromisified.mockClear();
+    });
+
+    it('should return orphan worktrees not in active state', async () => {
+      const persistence = new StatePersistence(stateFilePath, mockLogger);
+
+      // Save state with one active task
+      const task1 = mockState.tasks['task-1'];
+      if (!task1) throw new Error('mockState.tasks["task-1"] should exist');
+      await persistence.save({
+        ...mockState,
+        tasks: {
+          'task-1': {
+            ...task1,
+            worktreePath: '/active/worktree',
+          },
+        },
+      });
+
+      // Mock git worktree list output with multiple worktrees
+      mockExecWithOutput(
+        'worktree /active/worktree\nworktree /orphan/worktree\nworktree /another/orphan\n'
+      );
+
+      const orphans = await persistence.detectOrphanWorktrees('/repo/path');
+
+      expect(orphans).toEqual(['/orphan/worktree', '/another/orphan']);
+      expect(mockExecPromisified).toHaveBeenCalledWith('git worktree list --porcelain', {
+        cwd: '/repo/path',
+      });
+    });
+
+    it('should return empty array when all worktrees are active', async () => {
+      const persistence = new StatePersistence(stateFilePath, mockLogger);
+
+      // Save state with two active tasks
+      const task1 = mockState.tasks['task-1'];
+      if (!task1) throw new Error('mockState.tasks["task-1"] should exist');
+      await persistence.save({
+        ...mockState,
+        tasks: {
+          'task-1': {
+            ...task1,
+            worktreePath: '/active/one',
+          },
+          'task-2': {
+            taskId: 'task-2',
+            workerType: 'opus',
+            prompt: 'Test',
+            repository: 'test/repo',
+            baseBranch: 'main',
+            webhookUrl: 'https://example.com',
+            webhookSecret: 'secret',
+            status: 'running',
+            tmuxSession: 'session-2',
+            worktreePath: '/active/two',
+            startedAt: new Date().toISOString(),
+          },
+        },
+      });
+
+      mockExecWithOutput('worktree /active/one\nworktree /active/two\n');
+
+      const orphans = await persistence.detectOrphanWorktrees('/repo/path');
+
+      expect(orphans).toEqual([]);
+    });
+
+    it('should return empty array when no worktrees exist', async () => {
+      const persistence = new StatePersistence(stateFilePath, mockLogger);
+      await persistence.save(mockState);
+
+      mockExecWithOutput('');
+
+      const orphans = await persistence.detectOrphanWorktrees('/repo/path');
+
+      expect(orphans).toEqual([]);
+    });
+
+    it('should return empty array and log error when git command fails', async () => {
+      const persistence = new StatePersistence(stateFilePath, mockLogger);
+      const errorSpy = vi.spyOn(mockLogger, 'error');
+
+      mockExecWithError(new Error('Git command failed'));
+
+      const orphans = await persistence.detectOrphanWorktrees('/repo/path');
+
+      expect(orphans).toEqual([]);
+      expect(errorSpy).toHaveBeenCalledWith(
+        { error: expect.any(Error) },
+        'Failed to detect orphan worktrees'
+      );
+    });
+
+    it('should parse worktree list with porcelain format correctly', async () => {
+      const persistence = new StatePersistence(stateFilePath, mockLogger);
+
+      // Save empty state
+      await persistence.save({
+        tasks: {},
+        githubToken: null,
+        pendingWebhooks: [],
+      });
+
+      // Porcelain format has additional metadata lines
+      mockExecWithOutput(
+        'worktree /path/one\nHEAD abcd123\nbranch refs/heads/main\nworktree /path/two\nHEAD dcba456\ndetached\n'
+      );
+
+      const orphans = await persistence.detectOrphanWorktrees('/repo/path');
+
+      expect(orphans).toEqual(['/path/one', '/path/two']);
+    });
+
+    it('should handle worktree paths with spaces', async () => {
+      const persistence = new StatePersistence(stateFilePath, mockLogger);
+
+      await persistence.save({
+        tasks: {},
+        githubToken: null,
+        pendingWebhooks: [],
+      });
+
+      mockExecWithOutput('worktree /path with spaces/tree\n');
+
+      const orphans = await persistence.detectOrphanWorktrees('/repo/path');
+
+      expect(orphans).toEqual(['/path with spaces/tree']);
     });
   });
 });

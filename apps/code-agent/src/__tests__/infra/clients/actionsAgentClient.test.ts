@@ -166,4 +166,21 @@ describe('ActionsAgentClient', () => {
       })
     );
   });
+
+  it('sends status without result parameter', async () => {
+    mockFetchWithAuth.mockResolvedValue(ok(undefined));
+
+    const result = await client.updateActionStatus('action-444', 'completed');
+
+    expect(result.ok).toBe(true);
+    expect(mockFetchWithAuth).toHaveBeenCalledWith(
+      expect.any(Object),
+      '/internal/actions/action-444/status',
+      expect.objectContaining({
+        body: JSON.stringify({
+          resource_status: 'completed',
+        }),
+      })
+    );
+  });
 });

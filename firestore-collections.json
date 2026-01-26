@@ -30,6 +30,10 @@
       "owner": "whatsapp-service",
       "description": "Tracking of outbound WhatsApp messages with wamid and correlationId for reply matching"
     },
+    "whatsapp_phone_verifications": {
+      "owner": "whatsapp-service",
+      "description": "Phone number verification codes with TTL-based expiry for WhatsApp connection"
+    },
     "mobile_notifications": {
       "owner": "mobile-notifications-service",
       "description": "Mobile push notifications received from user devices"

@@ -467,5 +467,103 @@ describe('POST /code/cancel', () => {
       if (!cancelOnWorkerSpy) throw new Error('cancelOnWorkerSpy not initialized');
       expect(cancelOnWorkerSpy).toHaveBeenCalledWith(taskId, 'mac');
     });
+
+    it('handles Firestore update failure gracefully', async () => {
+      // Create a running task with the same userId as the JWT mock returns
+      const createResult = await codeTaskRepo.create({
+        userId: 'test-user-id',
+        prompt: 'Fix the bug',
+        sanitizedPrompt: 'Fix the bug',
+        systemPromptHash: 'default',
+        workerType: 'auto',
+        workerLocation: 'vm',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: 'trace_123',
+      });
+
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) throw new Error('Failed to create task');
+      const taskId = createResult.value.id;
+
+      await codeTaskRepo.update(taskId, { status: 'running' });
+
+      // Mock the codeTaskRepo.update to return an error
+      const updateSpy = vi.spyOn(codeTaskRepo, 'update').mockResolvedValueOnce({
+        ok: false,
+        error: { code: 'FIRESTORE_ERROR', message: 'Firestore update failed' },
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/code/cancel',
+        headers: {
+          authorization: 'Bearer test-token',
+        },
+        payload: {
+          taskId,
+        },
+      });
+
+      expect(response.statusCode).toBe(500);
+      const body = JSON.parse(response.body);
+      expect(body).toEqual({
+        error: 'failed_to_cancel',
+      });
+
+      updateSpy.mockRestore();
+    });
+
+    it('continues cancellation even when worker notification fails', async () => {
+      // Create a running task with the same userId as the JWT mock returns
+      const createResult = await codeTaskRepo.create({
+        userId: 'test-user-id',
+        prompt: 'Fix the bug',
+        sanitizedPrompt: 'Fix the bug',
+        systemPromptHash: 'default',
+        workerType: 'auto',
+        workerLocation: 'vm',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: 'trace_123',
+      });
+
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) throw new Error('Failed to create task');
+      const taskId = createResult.value.id;
+
+      await codeTaskRepo.update(taskId, { status: 'running' });
+
+      // Mock cancelOnWorker to throw an error
+      if (!cancelOnWorkerSpy) throw new Error('cancelOnWorkerSpy not initialized');
+      cancelOnWorkerSpy.mockImplementationOnce(() => {
+        throw new Error('Worker notification failed');
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/code/cancel',
+        headers: {
+          authorization: 'Bearer test-token',
+        },
+        payload: {
+          taskId,
+        },
+      });
+
+      // Should still succeed - the task is cancelled in Firestore
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body).toEqual({
+        status: 'cancelled',
+      });
+
+      // Verify task was still marked cancelled in Firestore
+      const getResult = await codeTaskRepo.findById(taskId);
+      expect(getResult.ok).toBe(true);
+      if (getResult.ok) {
+        expect(getResult.value.status).toBe('cancelled');
+      }
+    });
   });
 });

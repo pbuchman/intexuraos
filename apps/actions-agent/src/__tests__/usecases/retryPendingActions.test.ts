@@ -5,7 +5,7 @@ import type { ActionEventPublisher } from '../../infra/pubsub/actionEventPublish
 import type { ActionHandlerRegistry } from '../../domain/usecases/actionHandlerRegistry.js';
 import type { Action } from '../../domain/models/action.js';
 import { ok, err } from '@intexuraos/common-core';
-import pino from 'pino';
+import { createMockLogger } from '../fakes.js';
 
 const createTestAction = (overrides: Partial<Action> = {}): Action => ({
   id: 'action-1',
@@ -29,7 +29,7 @@ describe('retryPendingActions', () => {
     publishActionCreated: ReturnType<typeof vi.fn>;
   };
   let mockRegistry: ActionHandlerRegistry;
-  const logger = pino({ level: 'silent' });
+  const logger = createMockLogger();
 
   beforeEach(() => {
     mockRepository = {

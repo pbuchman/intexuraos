@@ -3,9 +3,7 @@ import { isOk, isErr } from '@intexuraos/common-core';
 import nock from 'nock';
 import { createCodeAgentHttpClient } from '../../../infra/http/codeAgentHttpClient.js';
 import type { CodeAgentClient } from '../../../domain/ports/codeAgentClient.js';
-import pino from 'pino';
-
-const silentLogger = pino({ level: 'silent' });
+import { createMockLogger } from '../../fakes.js';
 
 const baseUrl = 'http://code-agent.test';
 const internalAuthToken = 'test-internal-token';
@@ -19,7 +17,7 @@ describe('codeAgentHttpClient', () => {
     createCodeAgentHttpClient({
       baseUrl,
       internalAuthToken,
-      logger: silentLogger,
+      logger: createMockLogger(),
     });
 
   describe('successful responses', () => {

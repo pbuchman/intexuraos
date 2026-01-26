@@ -19,7 +19,20 @@ import type { Result, Logger } from '@intexuraos/common-core';
 import { ok, err } from '@intexuraos/common-core';
 import type { Action } from '../../domain/models/action.js';
 import type { ApprovalMessage } from '../../domain/models/approvalMessage.js';
-import pino from 'pino';
+
+// Create a proper logger mock that actually logs (for coverage)
+const createMockLogger = (): Logger =>
+  ({
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
+    level: 'silent',
+    fatal: vi.fn(),
+    trace: vi.fn(),
+    silent: vi.fn(),
+    msgPrefix: '',
+  }) as unknown as Logger;
 
 // Fake ApprovalIntentClassifier
 class FakeApprovalIntentClassifier implements ApprovalIntentClassifier {
@@ -111,7 +124,7 @@ describe('HandleApprovalReplyUseCase', () => {
       approvalIntentClassifierFactory: classifierFactory,
       whatsappPublisher,
       actionEventPublisher,
-      logger: pino({ level: 'silent' }),
+      logger: createMockLogger(),
     });
   });
 
@@ -980,7 +993,7 @@ describe('HandleApprovalReplyUseCase', () => {
         approvalIntentClassifierFactory: classifierFactory,
         whatsappPublisher,
         actionEventPublisher,
-        logger: pino({ level: 'silent' }),
+        logger: createMockLogger(),
         executeNoteAction: mockExecuteNoteAction,
       });
 
@@ -1076,7 +1089,7 @@ describe('HandleApprovalReplyUseCase', () => {
         approvalIntentClassifierFactory: classifierFactory,
         whatsappPublisher,
         actionEventPublisher,
-        logger: pino({ level: 'silent' }),
+        logger: createMockLogger(),
         executeNoteAction: mockExecuteNoteAction,
       });
 
@@ -1129,7 +1142,7 @@ describe('HandleApprovalReplyUseCase', () => {
         approvalIntentClassifierFactory: classifierFactory,
         whatsappPublisher,
         actionEventPublisher,
-        logger: pino({ level: 'silent' }),
+        logger: createMockLogger(),
         executeTodoAction: mockExecuteTodoAction,
       });
 
@@ -1222,7 +1235,7 @@ describe('HandleApprovalReplyUseCase', () => {
         approvalIntentClassifierFactory: classifierFactory,
         whatsappPublisher,
         actionEventPublisher,
-        logger: pino({ level: 'silent' }),
+        logger: createMockLogger(),
         executeResearchAction: mockExecuteResearchAction,
       });
 
@@ -1315,7 +1328,7 @@ describe('HandleApprovalReplyUseCase', () => {
         approvalIntentClassifierFactory: classifierFactory,
         whatsappPublisher,
         actionEventPublisher,
-        logger: pino({ level: 'silent' }),
+        logger: createMockLogger(),
         executeLinkAction: mockExecuteLinkAction,
       });
 
@@ -1340,6 +1353,66 @@ describe('HandleApprovalReplyUseCase', () => {
       expect(executeCalls).toHaveLength(1);
       expect(executeCalls[0]).toBe('link-action-2');
       expect(actionEventPublisher.getPublishedEvents()).toHaveLength(0);
+    });
+
+    it('logs error when executeLinkAction fails after approval', async () => {
+      const linkAction: Action = {
+        id: 'link-action-error',
+        type: 'link',
+        userId: 'user-1',
+        title: 'Test link error',
+        status: 'awaiting_approval',
+        confidence: 0.95,
+        commandId: 'cmd-1',
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+        payload: {},
+      };
+      await actionRepository.save(linkAction);
+
+      const errorLogger = createMockLogger();
+      const errorSpy = vi.spyOn(errorLogger, 'error');
+      const mockExecuteLinkAction = async (
+        _actionId: string
+      ): Promise<Result<{ status: 'completed' | 'failed'; message?: string }>> => {
+        return err({ name: 'NetworkError', code: 'NETWORK_ERROR', message: 'Link API failed' });
+      };
+
+      const useCaseWithError = createHandleApprovalReplyUseCase({
+        actionRepository,
+        approvalMessageRepository,
+        approvalIntentClassifierFactory: classifierFactory,
+        whatsappPublisher,
+        actionEventPublisher,
+        logger: errorLogger,
+        executeLinkAction: mockExecuteLinkAction,
+      });
+
+      classifierFactory.getClassifier().setResult({
+        intent: 'approve',
+        confidence: 0.95,
+        reasoning: 'User approved',
+      });
+
+      const result = await useCaseWithError({
+        replyToWamid: 'wamid-123',
+        replyText: 'yes',
+        userId: 'user-1',
+        actionId: 'link-action-error',
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.outcome).toBe('approved');
+      }
+
+      // Verify error was logged
+      expect(errorSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          actionId: 'link-action-error',
+        }),
+        'Failed to execute link action after approval'
+      );
     });
 
     it('falls back to publishing event when executeLinkAction is not provided', async () => {
@@ -1408,7 +1481,7 @@ describe('HandleApprovalReplyUseCase', () => {
         approvalIntentClassifierFactory: classifierFactory,
         whatsappPublisher,
         actionEventPublisher,
-        logger: pino({ level: 'silent' }),
+        logger: createMockLogger(),
         executeCalendarAction: mockExecuteCalendarAction,
       });
 
@@ -1469,6 +1542,66 @@ describe('HandleApprovalReplyUseCase', () => {
       expect(publishedEvents).toHaveLength(1);
       expect(publishedEvents[0]?.actionType).toBe('calendar');
     });
+
+    it('logs error when executeCalendarAction fails after approval', async () => {
+      const calendarAction: Action = {
+        id: 'calendar-action-error',
+        type: 'calendar',
+        userId: 'user-1',
+        title: 'Test calendar error',
+        status: 'awaiting_approval',
+        confidence: 0.95,
+        commandId: 'cmd-1',
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+        payload: {},
+      };
+      await actionRepository.save(calendarAction);
+
+      const errorLogger = createMockLogger();
+      const errorSpy = vi.spyOn(errorLogger, 'error');
+      const mockExecuteCalendarAction = async (
+        _actionId: string
+      ): Promise<Result<{ status: 'completed' | 'failed'; message?: string }>> => {
+        return err({ name: 'ApiError', code: 'API_ERROR', message: 'Calendar API failed' });
+      };
+
+      const useCaseWithError = createHandleApprovalReplyUseCase({
+        actionRepository,
+        approvalMessageRepository,
+        approvalIntentClassifierFactory: classifierFactory,
+        whatsappPublisher,
+        actionEventPublisher,
+        logger: errorLogger,
+        executeCalendarAction: mockExecuteCalendarAction,
+      });
+
+      classifierFactory.getClassifier().setResult({
+        intent: 'approve',
+        confidence: 0.95,
+        reasoning: 'User approved',
+      });
+
+      const result = await useCaseWithError({
+        replyToWamid: 'wamid-123',
+        replyText: 'yes',
+        userId: 'user-1',
+        actionId: 'calendar-action-error',
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.outcome).toBe('approved');
+      }
+
+      // Verify error was logged
+      expect(errorSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          actionId: 'calendar-action-error',
+        }),
+        'Failed to execute calendar action after approval'
+      );
+    });
   });
 
   describe('linear action execution after approval', () => {
@@ -1501,7 +1634,7 @@ describe('HandleApprovalReplyUseCase', () => {
         approvalIntentClassifierFactory: classifierFactory,
         whatsappPublisher,
         actionEventPublisher,
-        logger: pino({ level: 'silent' }),
+        logger: createMockLogger(),
         executeLinearAction: mockExecuteLinearAction,
       });
 
@@ -1562,6 +1695,66 @@ describe('HandleApprovalReplyUseCase', () => {
       expect(publishedEvents).toHaveLength(1);
       expect(publishedEvents[0]?.actionType).toBe('linear');
     });
+
+    it('logs error when executeLinearAction fails after approval', async () => {
+      const linearAction: Action = {
+        id: 'linear-action-error',
+        type: 'linear',
+        userId: 'user-1',
+        title: 'Test linear error',
+        status: 'awaiting_approval',
+        confidence: 0.95,
+        commandId: 'cmd-1',
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+        payload: {},
+      };
+      await actionRepository.save(linearAction);
+
+      const errorLogger = createMockLogger();
+      const errorSpy = vi.spyOn(errorLogger, 'error');
+      const mockExecuteLinearAction = async (
+        _actionId: string
+      ): Promise<Result<{ status: 'completed' | 'failed'; message?: string }>> => {
+        return err({ name: 'NetworkError', code: 'NETWORK_ERROR', message: 'Linear API failed' });
+      };
+
+      const useCaseWithError = createHandleApprovalReplyUseCase({
+        actionRepository,
+        approvalMessageRepository,
+        approvalIntentClassifierFactory: classifierFactory,
+        whatsappPublisher,
+        actionEventPublisher,
+        logger: errorLogger,
+        executeLinearAction: mockExecuteLinearAction,
+      });
+
+      classifierFactory.getClassifier().setResult({
+        intent: 'approve',
+        confidence: 0.95,
+        reasoning: 'User approved',
+      });
+
+      const result = await useCaseWithError({
+        replyToWamid: 'wamid-123',
+        replyText: 'yes',
+        userId: 'user-1',
+        actionId: 'linear-action-error',
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.outcome).toBe('approved');
+      }
+
+      // Verify error was logged
+      expect(errorSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          actionId: 'linear-action-error',
+        }),
+        'Failed to execute linear action after approval'
+      );
+    });
   });
 
   describe('execute function failure handling', () => {
@@ -1589,7 +1782,7 @@ describe('HandleApprovalReplyUseCase', () => {
         approvalIntentClassifierFactory: classifierFactory,
         whatsappPublisher,
         actionEventPublisher,
-        logger: pino({ level: 'silent' }),
+        logger: createMockLogger(),
         executeCalendarAction: failingExecute,
       });
 
@@ -1650,6 +1843,185 @@ describe('HandleApprovalReplyUseCase', () => {
       }
       expect(actionEventPublisher.getPublishedEvents()).toHaveLength(1);
       expect(actionEventPublisher.getPublishedEvents()[0]?.type).toBe('action.created');
+    });
+  });
+
+  describe('code action execution after approval', () => {
+    it('calls executeCodeAction directly when approving (does not publish event)', async () => {
+      const codeAction: Action = {
+        id: 'code-action-1',
+        type: 'code',
+        userId: 'user-1',
+        title: 'Test code',
+        status: 'awaiting_approval',
+        confidence: 0.95,
+        commandId: 'cmd-1',
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+        payload: {},
+      };
+      await actionRepository.save(codeAction);
+
+      const executeCalls: string[] = [];
+      const mockExecuteCodeAction = async (
+        actionId: string
+      ): Promise<Result<{ status: 'completed' | 'failed'; message?: string }>> => {
+        executeCalls.push(actionId);
+        return ok({ status: 'completed' as const, message: 'Code task created!' });
+      };
+
+      const useCaseWithExecute = createHandleApprovalReplyUseCase({
+        actionRepository,
+        approvalMessageRepository,
+        approvalIntentClassifierFactory: classifierFactory,
+        whatsappPublisher,
+        actionEventPublisher,
+        logger: createMockLogger(),
+        executeCodeAction: mockExecuteCodeAction,
+      });
+
+      classifierFactory.getClassifier().setResult({
+        intent: 'approve',
+        confidence: 0.95,
+        reasoning: 'User approved',
+      });
+
+      const result = await useCaseWithExecute({
+        replyToWamid: 'wamid-123',
+        replyText: 'yes',
+        userId: 'user-1',
+        actionId: 'code-action-1',
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.outcome).toBe('approved');
+      }
+
+      expect(executeCalls).toHaveLength(1);
+      expect(executeCalls[0]).toBe('code-action-1');
+      expect(actionEventPublisher.getPublishedEvents()).toHaveLength(0);
+    });
+
+    it('falls back to publishing event when executeCodeAction is not provided', async () => {
+      const codeAction: Action = {
+        id: 'code-action-2',
+        type: 'code',
+        userId: 'user-1',
+        title: 'Test code',
+        status: 'awaiting_approval',
+        confidence: 0.95,
+        commandId: 'cmd-1',
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+        payload: {},
+      };
+      await actionRepository.save(codeAction);
+
+      classifierFactory.getClassifier().setResult({
+        intent: 'approve',
+        confidence: 0.95,
+        reasoning: 'User approved',
+      });
+
+      const result = await useCase({
+        replyToWamid: 'wamid-123',
+        replyText: 'yes',
+        userId: 'user-1',
+        actionId: 'code-action-2',
+      });
+
+      expect(result.ok).toBe(true);
+
+      const publishedEvents = actionEventPublisher.getPublishedEvents();
+      expect(publishedEvents).toHaveLength(1);
+      expect(publishedEvents[0]?.actionType).toBe('code');
+    });
+  });
+
+  describe('event publish failure after approval', () => {
+    it('logs error when action event publisher fails but continues execution', async () => {
+      const linkAction: Action = {
+        id: 'link-action-fallback',
+        type: 'link',
+        userId: 'user-1',
+        title: 'Test link',
+        status: 'awaiting_approval',
+        confidence: 0.95,
+        commandId: 'cmd-1',
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+        payload: {},
+      };
+      await actionRepository.save(linkAction);
+
+      classifierFactory.getClassifier().setResult({
+        intent: 'approve',
+        confidence: 0.95,
+        reasoning: 'User approved',
+      });
+
+      // Make event publisher fail (no execute function provided, so falls back to event publishing)
+      actionEventPublisher.setFailNext(true);
+
+      const result = await useCase({
+        replyToWamid: 'wamid-123',
+        replyText: 'yes',
+        userId: 'user-1',
+        actionId: 'link-action-fallback',
+      });
+
+      // Should still succeed despite event publish failure
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.outcome).toBe('approved');
+      }
+
+      // Action should still be updated to pending
+      const action = await actionRepository.getById('link-action-fallback');
+      expect(action?.status).toBe('pending');
+    });
+  });
+
+  describe('rejection metadata update failure', () => {
+    it('logs warning but continues when adding rejection metadata throws error', async () => {
+      await actionRepository.save(testAction);
+
+      classifierFactory.getClassifier().setResult({
+        intent: 'reject',
+        confidence: 0.9,
+        reasoning: 'User rejected',
+      });
+
+      // Mock actionRepository.update to throw error
+      const originalUpdate = actionRepository.update.bind(actionRepository);
+      let callCount = 0;
+      vi.spyOn(actionRepository, 'update').mockImplementation(async (action: Action) => {
+        callCount++;
+        if (callCount === 1) {
+          // First call is the status update via updateStatusIf - let it succeed
+          return originalUpdate(action);
+        }
+        // Second call is the metadata update - throw error
+        throw new Error('Database connection lost');
+      });
+
+      const result = await useCase({
+        replyToWamid: 'wamid-123',
+        replyText: 'no thanks',
+        userId: 'user-1',
+        actionId: 'action-1',
+      });
+
+      // Should still succeed despite metadata update failure
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.outcome).toBe('rejected');
+      }
+
+      // Action should still be rejected (status updated via updateStatusIf)
+      const action = await actionRepository.getById('action-1');
+      expect(action?.status).toBe('rejected');
     });
   });
 });

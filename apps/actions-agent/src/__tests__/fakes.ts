@@ -66,7 +66,26 @@ import type {
   CalendarPreviewPublisher,
 } from '@intexuraos/infra-pubsub';
 import type { ActionEventPublisher } from '../infra/pubsub/index.js';
-import pino from 'pino';
+import type { Logger } from 'pino';
+import { vi } from 'vitest';
+
+/**
+ * Creates a mock logger that actually executes logging code paths for coverage.
+ * Unlike pino({ level: 'silent' }), which makes logger calls no-ops.
+ */
+export function createMockLogger(): Logger {
+  return {
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
+    level: 'silent',
+    fatal: vi.fn(),
+    trace: vi.fn(),
+    silent: vi.fn(),
+    msgPrefix: '',
+  } as unknown as Logger;
+}
 
 export class FakeActionServiceClient implements ActionServiceClient {
   private actions = new Map<string, Action>();
@@ -1223,7 +1242,7 @@ export function createFakeServices(deps: {
     deps.approvalMessageRepository ?? new FakeApprovalMessageRepository();
   const userServiceClient = deps.userServiceClient ?? new FakeUserServiceClient();
 
-  const silentLogger = pino({ level: 'silent' });
+  const silentLogger = createMockLogger();
 
   const handleResearchActionUseCase: HandleResearchActionUseCase = registerActionHandler(
     createHandleResearchActionUseCase,
@@ -1302,7 +1321,7 @@ export function createFakeServices(deps: {
       actionRepository,
       actionTransitionRepository,
       commandsAgentClient,
-      logger: pino({ level: 'silent' }),
+      logger: createMockLogger(),
     });
 
   return {

@@ -8,9 +8,8 @@ import {
   FakeCommandsAgentClient,
   FakeWhatsAppSendPublisher,
 } from './fakes.js';
-import pino from 'pino';
 
-const silentLogger = pino({ level: 'silent' });
+import { createMockLogger } from './fakes.js';
 
 describe('executeLinkAction usecase', () => {
   let fakeActionRepo: FakeActionRepository;
@@ -47,7 +46,7 @@ describe('executeLinkAction usecase', () => {
       commandsAgentClient: fakeCommandsAgentClient,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.test.com',
-      logger: silentLogger,
+      logger: createMockLogger(),
     });
 
     const result = await usecase('non-existent-action');
@@ -71,7 +70,7 @@ describe('executeLinkAction usecase', () => {
       commandsAgentClient: fakeCommandsAgentClient,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.test.com',
-      logger: silentLogger,
+      logger: createMockLogger(),
     });
 
     const result = await usecase('action-123');
@@ -93,7 +92,7 @@ describe('executeLinkAction usecase', () => {
       commandsAgentClient: fakeCommandsAgentClient,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.test.com',
-      logger: silentLogger,
+      logger: createMockLogger(),
     });
 
     const result = await usecase('action-123');
@@ -118,7 +117,7 @@ describe('executeLinkAction usecase', () => {
       commandsAgentClient: fakeCommandsAgentClient,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.test.com',
-      logger: silentLogger,
+      logger: createMockLogger(),
     });
 
     const result = await usecase('action-123');
@@ -152,7 +151,7 @@ describe('executeLinkAction usecase', () => {
       commandsAgentClient: fakeCommandsAgentClient,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.test.com',
-      logger: silentLogger,
+      logger: createMockLogger(),
     });
 
     const result = await usecase('action-123');
@@ -181,7 +180,7 @@ describe('executeLinkAction usecase', () => {
       commandsAgentClient: fakeCommandsAgentClient,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.test.com',
-      logger: silentLogger,
+      logger: createMockLogger(),
     });
 
     const result = await usecase('action-123');
@@ -210,7 +209,7 @@ describe('executeLinkAction usecase', () => {
       commandsAgentClient: fakeCommandsAgentClient,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.test.com',
-      logger: silentLogger,
+      logger: createMockLogger(),
     });
 
     const result = await usecase('action-123');
@@ -236,7 +235,7 @@ describe('executeLinkAction usecase', () => {
       commandsAgentClient: fakeCommandsAgentClient,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.test.com',
-      logger: silentLogger,
+      logger: createMockLogger(),
     });
 
     const result = await usecase('action-123');
@@ -265,7 +264,7 @@ describe('executeLinkAction usecase', () => {
       commandsAgentClient: fakeCommandsAgentClient,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.test.com',
-      logger: silentLogger,
+      logger: createMockLogger(),
     });
 
     const result = await usecase('action-123');
@@ -290,7 +289,7 @@ describe('executeLinkAction usecase', () => {
       commandsAgentClient: fakeCommandsAgentClient,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.test.com',
-      logger: silentLogger,
+      logger: createMockLogger(),
     });
 
     await usecase('action-123');
@@ -321,7 +320,7 @@ describe('executeLinkAction usecase', () => {
       commandsAgentClient: fakeCommandsAgentClient,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.test.com',
-      logger: silentLogger,
+      logger: createMockLogger(),
     });
 
     const result = await usecase('action-123');
@@ -346,7 +345,7 @@ describe('executeLinkAction usecase', () => {
       commandsAgentClient: fakeCommandsAgentClient,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.test.com',
-      logger: silentLogger,
+      logger: createMockLogger(),
     });
 
     await usecase('action-123');
@@ -377,7 +376,7 @@ describe('executeLinkAction usecase', () => {
       commandsAgentClient: fakeCommandsAgentClient,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.test.com',
-      logger: silentLogger,
+      logger: createMockLogger(),
     });
 
     await usecase('action-123');
@@ -400,7 +399,7 @@ describe('executeLinkAction usecase', () => {
       commandsAgentClient: fakeCommandsAgentClient,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.test.com',
-      logger: silentLogger,
+      logger: createMockLogger(),
     });
 
     await usecase('action-123');
@@ -423,7 +422,7 @@ describe('executeLinkAction usecase', () => {
       commandsAgentClient: fakeCommandsAgentClient,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.test.com',
-      logger: silentLogger,
+      logger: createMockLogger(),
     });
 
     await usecase('action-123');
@@ -446,7 +445,7 @@ describe('executeLinkAction usecase', () => {
       commandsAgentClient: fakeCommandsAgentClient,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.test.com',
-      logger: silentLogger,
+      logger: createMockLogger(),
     });
 
     const result = await usecase('action-123');
@@ -481,7 +480,7 @@ describe('executeLinkAction usecase', () => {
       commandsAgentClient: fakeCommandsAgentClient,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.test.com',
-      logger: silentLogger,
+      logger: createMockLogger(),
     });
 
     const result = await usecase('action-123');

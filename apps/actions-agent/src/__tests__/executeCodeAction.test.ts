@@ -1,15 +1,27 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { isOk, isErr } from '@intexuraos/common-core';
 import { createExecuteCodeActionUseCase } from '../domain/usecases/executeCodeAction.js';
 import type { Action } from '../domain/models/action.js';
+import type { Logger } from 'pino';
 import {
   FakeActionRepository,
   FakeCodeAgentClient,
   FakeWhatsAppSendPublisher,
 } from './fakes.js';
-import pino from 'pino';
 
-const silentLogger = pino({ level: 'silent' });
+// Create a proper logger mock that actually logs (for coverage)
+const createMockLogger = (): Logger =>
+  ({
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
+    level: 'silent',
+    fatal: vi.fn(),
+    trace: vi.fn(),
+    silent: vi.fn(),
+    msgPrefix: '',
+  }) as unknown as Logger;
 
 describe('executeCodeAction usecase', () => {
   let fakeActionRepo: FakeActionRepository;
@@ -40,12 +52,13 @@ describe('executeCodeAction usecase', () => {
   });
 
   it('returns error when action not found', async () => {
+    const mockLogger = createMockLogger();
     const usecase = createExecuteCodeActionUseCase({
       actionRepository: fakeActionRepo,
       codeAgentClient: fakeCodeClient,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.intexuraos.com',
-      logger: silentLogger,
+      logger: mockLogger,
     });
 
     const result = await usecase('non-existent-action');
@@ -68,12 +81,13 @@ describe('executeCodeAction usecase', () => {
     });
     await fakeActionRepo.save(action);
 
+    const mockLogger = createMockLogger();
     const usecase = createExecuteCodeActionUseCase({
       actionRepository: fakeActionRepo,
       codeAgentClient: fakeCodeClient,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.intexuraos.com',
-      logger: silentLogger,
+      logger: mockLogger,
     });
 
     const result = await usecase('action-123');
@@ -90,12 +104,13 @@ describe('executeCodeAction usecase', () => {
     const action = createAction({ status: 'processing' });
     await fakeActionRepo.save(action);
 
+    const mockLogger = createMockLogger();
     const usecase = createExecuteCodeActionUseCase({
       actionRepository: fakeActionRepo,
       codeAgentClient: fakeCodeClient,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.intexuraos.com',
-      logger: silentLogger,
+      logger: mockLogger,
     });
 
     const result = await usecase('action-123');
@@ -110,12 +125,13 @@ describe('executeCodeAction usecase', () => {
     const action = createAction({ status: 'pending' });
     await fakeActionRepo.save(action);
 
+    const mockLogger = createMockLogger();
     const usecase = createExecuteCodeActionUseCase({
       actionRepository: fakeActionRepo,
       codeAgentClient: fakeCodeClient,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.intexuraos.com',
-      logger: silentLogger,
+      logger: mockLogger,
     });
 
     const result = await usecase('action-123');
@@ -140,12 +156,13 @@ describe('executeCodeAction usecase', () => {
     });
     await fakeActionRepo.save(action);
 
+    const mockLogger = createMockLogger();
     const usecase = createExecuteCodeActionUseCase({
       actionRepository: fakeActionRepo,
       codeAgentClient: fakeCodeClient,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.intexuraos.com',
-      logger: silentLogger,
+      logger: mockLogger,
     });
 
     const result = await usecase('action-123');
@@ -163,12 +180,13 @@ describe('executeCodeAction usecase', () => {
     const action = createAction({ status: 'awaiting_approval' });
     await fakeActionRepo.save(action);
 
+    const mockLogger = createMockLogger();
     const usecase = createExecuteCodeActionUseCase({
       actionRepository: fakeActionRepo,
       codeAgentClient: fakeCodeClient,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.intexuraos.com',
-      logger: silentLogger,
+      logger: mockLogger,
     });
 
     const result = await usecase('action-123');
@@ -187,12 +205,13 @@ describe('executeCodeAction usecase', () => {
       message: 'No workers available',
     });
 
+    const mockLogger = createMockLogger();
     const usecase = createExecuteCodeActionUseCase({
       actionRepository: fakeActionRepo,
       codeAgentClient: fakeCodeClient,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.intexuraos.com',
-      logger: silentLogger,
+      logger: mockLogger,
     });
 
     const result = await usecase('action-123');
@@ -217,12 +236,13 @@ describe('executeCodeAction usecase', () => {
       existingTaskId: 'existing-task-456',
     });
 
+    const mockLogger = createMockLogger();
     const usecase = createExecuteCodeActionUseCase({
       actionRepository: fakeActionRepo,
       codeAgentClient: fakeCodeClient,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.intexuraos.com',
-      logger: silentLogger,
+      logger: mockLogger,
     });
 
     const result = await usecase('action-123');
@@ -234,17 +254,45 @@ describe('executeCodeAction usecase', () => {
     }
   });
 
-  it('updates action to failed when code-agent call fails with network error', async () => {
+  it('returns completed status without task ID when duplicate error has no existingTaskId', async () => {
     const action = createAction({ status: 'pending' });
     await fakeActionRepo.save(action);
-    fakeCodeClient.setFailNext(true);
+    fakeCodeClient.setNextError({
+      code: 'DUPLICATE',
+      message: 'Task already exists for this approval',
+      // existingTaskId is undefined
+    });
 
+    const mockLogger = createMockLogger();
     const usecase = createExecuteCodeActionUseCase({
       actionRepository: fakeActionRepo,
       codeAgentClient: fakeCodeClient,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.intexuraos.com',
-      logger: silentLogger,
+      logger: mockLogger,
+    });
+
+    const result = await usecase('action-123');
+
+    expect(isOk(result)).toBe(true);
+    if (isOk(result)) {
+      expect(result.value.status).toBe('completed');
+      expect(result.value.message).toBe('Task already exists');
+    }
+  });
+
+  it('updates action to failed when code-agent call fails with network error', async () => {
+    const action = createAction({ status: 'pending' });
+    await fakeActionRepo.save(action);
+    fakeCodeClient.setFailNext(true);
+
+    const mockLogger = createMockLogger();
+    const usecase = createExecuteCodeActionUseCase({
+      actionRepository: fakeActionRepo,
+      codeAgentClient: fakeCodeClient,
+      whatsappPublisher: fakeWhatsappPublisher,
+      webAppUrl: 'https://app.intexuraos.com',
+      logger: mockLogger,
     });
 
     const result = await usecase('action-123');
@@ -263,12 +311,13 @@ describe('executeCodeAction usecase', () => {
     const action = createAction({ status: 'pending' });
     await fakeActionRepo.save(action);
 
+    const mockLogger = createMockLogger();
     const usecase = createExecuteCodeActionUseCase({
       actionRepository: fakeActionRepo,
       codeAgentClient: fakeCodeClient,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.intexuraos.com',
-      logger: silentLogger,
+      logger: mockLogger,
     });
 
     await usecase('action-123');
@@ -284,12 +333,13 @@ describe('executeCodeAction usecase', () => {
     const action = createAction({ status: 'pending' });
     await fakeActionRepo.save(action);
 
+    const mockLogger = createMockLogger();
     const usecase = createExecuteCodeActionUseCase({
       actionRepository: fakeActionRepo,
       codeAgentClient: fakeCodeClient,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.intexuraos.com',
-      logger: silentLogger,
+      logger: mockLogger,
     });
 
     await usecase('action-123');
@@ -309,12 +359,13 @@ describe('executeCodeAction usecase', () => {
     });
     await fakeActionRepo.save(action);
 
+    const mockLogger = createMockLogger();
     const usecase = createExecuteCodeActionUseCase({
       actionRepository: fakeActionRepo,
       codeAgentClient: fakeCodeClient,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.intexuraos.com',
-      logger: silentLogger,
+      logger: mockLogger,
     });
 
     await usecase('action-123');
@@ -328,6 +379,34 @@ describe('executeCodeAction usecase', () => {
     expect(submittedTasks[0]?.approvalEventId).toBeDefined();
   });
 
+  it('includes linearIssueTitle in payload when provided', async () => {
+    const action = createAction({
+      status: 'pending',
+      payload: {
+        prompt: 'Fix the login bug',
+        workerType: 'opus',
+        linearIssueId: 'LIN-123',
+        linearIssueTitle: 'Fix authentication bug',
+      },
+    });
+    await fakeActionRepo.save(action);
+
+    const mockLogger = createMockLogger();
+    const usecase = createExecuteCodeActionUseCase({
+      actionRepository: fakeActionRepo,
+      codeAgentClient: fakeCodeClient,
+      whatsappPublisher: fakeWhatsappPublisher,
+      webAppUrl: 'https://app.intexuraos.com',
+      logger: mockLogger,
+    });
+
+    await usecase('action-123');
+
+    const submittedTasks = fakeCodeClient.getSubmittedTasks();
+    expect(submittedTasks).toHaveLength(1);
+    expect(submittedTasks[0]?.payload.linearIssueTitle).toBe('Fix authentication bug');
+  });
+
   it('defaults workerType to auto when not specified in payload', async () => {
     const action = createAction({
       status: 'pending',
@@ -337,12 +416,13 @@ describe('executeCodeAction usecase', () => {
     });
     await fakeActionRepo.save(action);
 
+    const mockLogger = createMockLogger();
     const usecase = createExecuteCodeActionUseCase({
       actionRepository: fakeActionRepo,
       codeAgentClient: fakeCodeClient,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.intexuraos.com',
-      logger: silentLogger,
+      logger: mockLogger,
     });
 
     await usecase('action-123');
@@ -352,16 +432,46 @@ describe('executeCodeAction usecase', () => {
     expect(submittedTasks[0]?.payload.workerType).toBe('auto');
   });
 
-  it('publishes WhatsApp notification on success when resourceUrl exists', async () => {
-    const action = createAction({ status: 'pending' });
+  it('uses action title when payload prompt is not a string', async () => {
+    const action = createAction({
+      status: 'pending',
+      title: 'Fix authentication bug',
+      payload: {
+        // prompt is not a string (e.g., could be an object or missing)
+        prompt: { some: 'object' } as unknown as undefined,
+        workerType: 'auto',
+      },
+    });
     await fakeActionRepo.save(action);
 
+    const mockLogger = createMockLogger();
     const usecase = createExecuteCodeActionUseCase({
       actionRepository: fakeActionRepo,
       codeAgentClient: fakeCodeClient,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.intexuraos.com',
-      logger: silentLogger,
+      logger: mockLogger,
+    });
+
+    await usecase('action-123');
+
+    const submittedTasks = fakeCodeClient.getSubmittedTasks();
+    expect(submittedTasks).toHaveLength(1);
+    // When prompt is not a string, it should fall back to the action title
+    expect(submittedTasks[0]?.payload.prompt).toBe('Fix authentication bug');
+  });
+
+  it('publishes WhatsApp notification on success when resourceUrl exists', async () => {
+    const action = createAction({ status: 'pending' });
+    await fakeActionRepo.save(action);
+
+    const mockLogger = createMockLogger();
+    const usecase = createExecuteCodeActionUseCase({
+      actionRepository: fakeActionRepo,
+      codeAgentClient: fakeCodeClient,
+      whatsappPublisher: fakeWhatsappPublisher,
+      webAppUrl: 'https://app.intexuraos.com',
+      logger: mockLogger,
     });
 
     await usecase('action-123');
@@ -382,12 +492,13 @@ describe('executeCodeAction usecase', () => {
       message: 'WhatsApp unavailable',
     });
 
+    const mockLogger = createMockLogger();
     const usecase = createExecuteCodeActionUseCase({
       actionRepository: fakeActionRepo,
       codeAgentClient: fakeCodeClient,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.intexuraos.com',
-      logger: silentLogger,
+      logger: mockLogger,
     });
 
     const result = await usecase('action-123');
@@ -398,16 +509,17 @@ describe('executeCodeAction usecase', () => {
     }
   });
 
-  it('returns error for action with archived status', async () => {
+  it('returns error for archived status (another invalid status)', async () => {
     const action = createAction({ status: 'archived' });
     await fakeActionRepo.save(action);
 
+    const mockLogger = createMockLogger();
     const usecase = createExecuteCodeActionUseCase({
       actionRepository: fakeActionRepo,
       codeAgentClient: fakeCodeClient,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.intexuraos.com',
-      logger: silentLogger,
+      logger: mockLogger,
     });
 
     const result = await usecase('action-123');
@@ -415,31 +527,6 @@ describe('executeCodeAction usecase', () => {
     expect(isErr(result)).toBe(true);
     if (isErr(result)) {
       expect(result.error.message).toContain('Cannot execute action with status: archived');
-    }
-  });
-
-  it('returns completed status without existingTaskId when DUPLICATE error has no taskId', async () => {
-    const action = createAction({ status: 'pending' });
-    await fakeActionRepo.save(action);
-    fakeCodeClient.setNextError({
-      code: 'DUPLICATE',
-      message: 'Task already exists for this approval',
-    });
-
-    const usecase = createExecuteCodeActionUseCase({
-      actionRepository: fakeActionRepo,
-      codeAgentClient: fakeCodeClient,
-      whatsappPublisher: fakeWhatsappPublisher,
-      webAppUrl: 'https://app.intexuraos.com',
-      logger: silentLogger,
-    });
-
-    const result = await usecase('action-123');
-
-    expect(isOk(result)).toBe(true);
-    if (isOk(result)) {
-      expect(result.value.status).toBe('completed');
-      expect(result.value.message).toBe('Task already exists');
     }
   });
 });

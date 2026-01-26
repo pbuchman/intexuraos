@@ -3,10 +3,7 @@ import { isOk, isErr, ok, err } from '@intexuraos/common-core';
 import { createHandleLinkActionUseCase } from '../domain/usecases/handleLinkAction.js';
 import { registerActionHandler } from '../domain/usecases/createIdempotentActionHandler.js';
 import type { ActionCreatedEvent } from '../domain/models/actionEvent.js';
-import { FakeActionRepository, FakeWhatsAppSendPublisher } from './fakes.js';
-import pino from 'pino';
-
-const silentLogger = pino({ level: 'silent' });
+import { FakeActionRepository, FakeWhatsAppSendPublisher, createMockLogger } from './fakes.js';
 
 describe('handleLinkAction usecase', () => {
   let fakeActionRepository: FakeActionRepository;
@@ -63,7 +60,7 @@ describe('handleLinkAction usecase', () => {
       actionRepository: fakeActionRepository,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.intexuraos.com',
-      logger: silentLogger,
+      logger: createMockLogger(),
     });
 
     // Default event has 0.95 confidence (< 100%), so it requires approval
@@ -92,7 +89,7 @@ describe('handleLinkAction usecase', () => {
       actionRepository: fakeActionRepository,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.intexuraos.com',
-      logger: silentLogger,
+      logger: createMockLogger(),
     });
 
     fakeActionRepository.setFailNext(true, new Error('Database unavailable'));
@@ -113,7 +110,7 @@ describe('handleLinkAction usecase', () => {
       actionRepository: fakeActionRepository,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.intexuraos.com',
-      logger: silentLogger,
+      logger: createMockLogger(),
     });
 
     fakeWhatsappPublisher.setFailNext(true, {
@@ -138,7 +135,7 @@ describe('handleLinkAction usecase', () => {
       actionRepository: fakeActionRepository,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.intexuraos.com',
-      logger: silentLogger,
+      logger: createMockLogger(),
     });
 
     const event = createEvent();
@@ -161,7 +158,7 @@ describe('handleLinkAction usecase', () => {
       actionRepository: fakeActionRepository,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.intexuraos.com',
-      logger: silentLogger,
+      logger: createMockLogger(),
     });
 
     const event = createEvent();
@@ -188,7 +185,7 @@ describe('handleLinkAction usecase', () => {
         actionRepository: fakeActionRepository,
         whatsappPublisher: fakeWhatsappPublisher,
         webAppUrl: 'https://app.intexuraos.com',
-        logger: silentLogger,
+        logger: createMockLogger(),
         executeLinkAction: fakeExecuteLinkAction,
       });
 
@@ -219,7 +216,7 @@ describe('handleLinkAction usecase', () => {
         actionRepository: fakeActionRepository,
         whatsappPublisher: fakeWhatsappPublisher,
         webAppUrl: 'https://app.intexuraos.com',
-        logger: silentLogger,
+        logger: createMockLogger(),
         executeLinkAction: fakeExecuteLinkAction,
       });
 
@@ -239,7 +236,7 @@ describe('handleLinkAction usecase', () => {
         actionRepository: fakeActionRepository,
         whatsappPublisher: fakeWhatsappPublisher,
         webAppUrl: 'https://app.intexuraos.com',
-        logger: silentLogger,
+        logger: createMockLogger(),
       });
 
       const event = createEvent({ payload: { prompt: 'https://example.com/article', confidence: 1 } });
@@ -263,7 +260,7 @@ describe('handleLinkAction usecase', () => {
         actionRepository: fakeActionRepository,
         whatsappPublisher: fakeWhatsappPublisher,
         webAppUrl: 'https://app.intexuraos.com',
-        logger: silentLogger,
+        logger: createMockLogger(),
         executeLinkAction: fakeExecuteLinkAction,
       });
 

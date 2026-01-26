@@ -322,8 +322,8 @@ git diff --name-only HEAD~1 | grep -E "^terraform/" && echo "TERRAFORM CHANGED" 
 ```
 
 - [ ] Verified terraform change status (document result)
-- [ ] If terraform changed: `tf fmt -check -recursive` passes
-- [ ] If terraform changed: `tf validate` passes
+- [ ] If terraform changed: `terraform fmt -check -recursive` passes (with env var clearing)
+- [ ] If terraform changed: `terraform validate` passes (with env var clearing)
 
 **Required before PR:**
 

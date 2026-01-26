@@ -30,7 +30,7 @@ export default defineConfig({
       provider: 'v8',
       reporter: ['text', 'json', 'json-summary', 'html'],
       reportOnFailure: true,
-      include: ['packages/**/src/**/*.ts', 'apps/**/src/**/*.ts'],
+      include: ['packages/**/src/**/*.ts', 'apps/**/src/**/*.ts', 'workers/**/src/**/*.ts'],
       exclude: [
         // Test files (no coverage for tests themselves)
         '**/*.test.ts',
@@ -55,7 +55,6 @@ export default defineConfig({
         // JUSTIFIED: Interfaces and types only, no executable code
         '**/domain/**/models/**',
         '**/domain/**/ports/**',
-        '**/domain/**/events/**',
 
         // Web app - React frontend
         // JUSTIFIED: Requires E2E testing strategy, out of scope for unit coverage

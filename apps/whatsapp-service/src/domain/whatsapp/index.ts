@@ -25,6 +25,12 @@ export type {
   LinkPreviewState,
 } from './models/LinkPreview.js';
 
+export type {
+  PhoneVerification,
+  PhoneVerificationPublic,
+  PhoneVerificationStatus,
+} from './models/PhoneVerification.js';
+
 // Ports
 export type {
   WhatsAppUserMapping,
@@ -35,6 +41,7 @@ export type {
   WhatsAppWebhookEvent,
   WhatsAppWebhookEventRepository,
   WhatsAppMessageRepository,
+  PhoneVerificationRepository,
 } from './ports/repositories.js';
 
 export type { MediaStoragePort, UploadResult } from './ports/mediaStorage.js';

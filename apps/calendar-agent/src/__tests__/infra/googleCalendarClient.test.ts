@@ -203,6 +203,38 @@ describe('GoogleCalendarClientImpl', () => {
         expect(result.error.code).toBe('INTERNAL_ERROR');
       }
     });
+
+    it('passes maxResults to API', async () => {
+      const scope = nock(GOOGLE_CALENDAR_API)
+        .get('/calendar/v3/calendars/primary/events')
+        .query((actualQuery) => {
+          return actualQuery['maxResults'] === '50';
+        })
+        .reply(200, { items: [] });
+
+      const result = await client.listEvents(TEST_ACCESS_TOKEN, TEST_CALENDAR_ID, {
+        maxResults: 50,
+      }, mockLogger);
+
+      expect(result.ok).toBe(true);
+      expect(scope.isDone()).toBe(true);
+    });
+
+    it('passes q query to API', async () => {
+      const scope = nock(GOOGLE_CALENDAR_API)
+        .get('/calendar/v3/calendars/primary/events')
+        .query((actualQuery) => {
+          return actualQuery['q'] === 'meeting';
+        })
+        .reply(200, { items: [] });
+
+      const result = await client.listEvents(TEST_ACCESS_TOKEN, TEST_CALENDAR_ID, {
+        q: 'meeting',
+      }, mockLogger);
+
+      expect(result.ok).toBe(true);
+      expect(scope.isDone()).toBe(true);
+    });
   });
 
   describe('getCalendarTimezone', () => {

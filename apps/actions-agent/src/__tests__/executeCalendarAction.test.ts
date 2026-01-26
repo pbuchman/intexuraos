@@ -7,9 +7,8 @@ import {
   FakeCalendarServiceClient,
   FakeWhatsAppSendPublisher,
 } from './fakes.js';
-import pino from 'pino';
 
-const silentLogger = pino({ level: 'silent' });
+import { createMockLogger } from './fakes.js';
 
 describe('executeCalendarAction usecase', () => {
   let fakeActionRepo: FakeActionRepository;
@@ -42,7 +41,7 @@ describe('executeCalendarAction usecase', () => {
       calendarServiceClient: fakeCalendarClient,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.test.com',
-      logger: silentLogger,
+      logger: createMockLogger(),
     });
 
     const result = await usecase('non-existent-action');
@@ -65,7 +64,7 @@ describe('executeCalendarAction usecase', () => {
       calendarServiceClient: fakeCalendarClient,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.test.com',
-      logger: silentLogger,
+      logger: createMockLogger(),
     });
 
     const result = await usecase('action-123');
@@ -86,7 +85,7 @@ describe('executeCalendarAction usecase', () => {
       calendarServiceClient: fakeCalendarClient,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.test.com',
-      logger: silentLogger,
+      logger: createMockLogger(),
     });
 
     const result = await usecase('action-123');
@@ -108,7 +107,7 @@ describe('executeCalendarAction usecase', () => {
       calendarServiceClient: fakeCalendarClient,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.test.com',
-      logger: silentLogger,
+      logger: createMockLogger(),
     });
 
     const result = await usecase('action-123');
@@ -138,7 +137,7 @@ describe('executeCalendarAction usecase', () => {
       calendarServiceClient: fakeCalendarClient,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.test.com',
-      logger: silentLogger,
+      logger: createMockLogger(),
     });
 
     const result = await usecase('action-123');
@@ -167,7 +166,7 @@ describe('executeCalendarAction usecase', () => {
       calendarServiceClient: fakeCalendarClient,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.test.com',
-      logger: silentLogger,
+      logger: createMockLogger(),
     });
 
     const result = await usecase('action-123');
@@ -193,7 +192,7 @@ describe('executeCalendarAction usecase', () => {
       calendarServiceClient: fakeCalendarClient,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.test.com',
-      logger: silentLogger,
+      logger: createMockLogger(),
     });
 
     const result = await usecase('action-123');
@@ -217,7 +216,7 @@ describe('executeCalendarAction usecase', () => {
       calendarServiceClient: fakeCalendarClient,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.test.com',
-      logger: silentLogger,
+      logger: createMockLogger(),
     });
 
     const result = await usecase('action-123');
@@ -237,7 +236,7 @@ describe('executeCalendarAction usecase', () => {
       calendarServiceClient: fakeCalendarClient,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.test.com',
-      logger: silentLogger,
+      logger: createMockLogger(),
     });
 
     await usecase('action-123');
@@ -262,7 +261,7 @@ describe('executeCalendarAction usecase', () => {
       calendarServiceClient: fakeCalendarClient,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.test.com',
-      logger: silentLogger,
+      logger: createMockLogger(),
     });
 
     const result = await usecase('action-123');
@@ -282,7 +281,7 @@ describe('executeCalendarAction usecase', () => {
       calendarServiceClient: fakeCalendarClient,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.test.com',
-      logger: silentLogger,
+      logger: createMockLogger(),
     });
 
     await usecase('action-123');
@@ -306,7 +305,7 @@ describe('executeCalendarAction usecase', () => {
       calendarServiceClient: fakeCalendarClient,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.test.com',
-      logger: silentLogger,
+      logger: createMockLogger(),
     });
 
     await usecase('action-123');
@@ -330,7 +329,7 @@ describe('executeCalendarAction usecase', () => {
       calendarServiceClient: fakeCalendarClient,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.test.com',
-      logger: silentLogger,
+      logger: createMockLogger(),
     });
 
     const result = await usecase('action-123');
@@ -352,7 +351,7 @@ describe('executeCalendarAction usecase', () => {
       calendarServiceClient: fakeCalendarClient,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.test.com',
-      logger: silentLogger,
+      logger: createMockLogger(),
     });
 
     const result = await usecase('action-123');
