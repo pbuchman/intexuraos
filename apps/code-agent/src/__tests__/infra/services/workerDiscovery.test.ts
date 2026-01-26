@@ -171,6 +171,30 @@ describe('workerDiscoveryImpl', () => {
       mockFetch.mockRestore();
     });
 
+    it('returns health_check_failed when worker returns invalid JSON', async () => {
+      const service = createWorkerDiscoveryService({ logger });
+      const mockFetch = vi.spyOn(global, 'fetch').mockResolvedValueOnce({
+        ok: true,
+        json: async () => {
+          throw new SyntaxError('Unexpected token < in JSON at position 0');
+        },
+        headers: new Headers(),
+        status: 200,
+        statusText: 'OK',
+        url: 'https://test.com',
+      } as unknown as Response);
+
+      const result = await service.checkHealth('mac');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('health_check_failed');
+        expect(result.error.message).toContain('invalid JSON');
+      }
+
+      mockFetch.mockRestore();
+    });
+
     it('clamps capacity to 0-5 range', async () => {
       const service = createWorkerDiscoveryService({ logger });
       const mockFetch = vi.spyOn(global, 'fetch');
