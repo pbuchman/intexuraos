@@ -22,10 +22,10 @@ import {
   type LlmCallPublisher,
   type ResearchEventPublisher,
 } from './infra/pubsub/index.js';
-import { createUserServiceClient, type UserServiceClient } from './infra/user/index.js';
+import { createUserServiceClient, type UserServiceClient } from '@intexuraos/internal-clients';
 import { createImageServiceClient, type ImageServiceClient } from './infra/image/index.js';
 
-export type { DecryptedApiKeys } from './infra/user/index.js';
+export type { DecryptedApiKeys } from '@intexuraos/internal-clients';
 export type { ImageServiceClient, GeneratedImageData } from './infra/image/index.js';
 import type { Logger } from '@intexuraos/common-core';
 import type { ModelPricing, ResearchModel, FastModel } from '@intexuraos/llm-contract';

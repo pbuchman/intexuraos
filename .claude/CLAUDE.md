@@ -234,9 +234,12 @@ If you're unsure whether something is your responsibility, ASK — but phrase th
 ### Step 1: Capture and Categorize
 
 ```bash
-pnpm run ci:tracked 2>&1 | tee /tmp/ci-output.txt
-grep -E "(error|Error|ERROR|FAIL)" /tmp/ci-output.txt
+BRANCH=$(git branch --show-current | sed 's/\//-/g')
+pnpm run ci:tracked 2>&1 | tee /tmp/ci-output-${BRANCH}-$(date +%Y%m%d-%H%M%S).txt
+grep -E "(error|Error|ERROR|FAIL)" /tmp/ci-output-${BRANCH}-*.txt
 ```
+
+**Note:** Use wildcard `${BRANCH}-*.txt` to find the most recent capture. Never re-run CI just to grep — see [CI Efficiency](#ci-efficiency-mandatory).
 
 ### Step 2: Fix or Ask (No Skipping, No Committing)
 
@@ -364,11 +367,53 @@ These files are auto-generated during `pnpm run ci:tracked` and record failure p
 **RULE:** Capture CI output once, analyze many times:
 
 ```bash
-pnpm run ci:tracked 2>&1 | tee /tmp/ci-output.txt
-grep -E "(Coverage for|ERROR:)" /tmp/ci-output.txt
+BRANCH=$(git branch --show-current | sed 's/\//-/g')
+pnpm run ci:tracked 2>&1 | tee /tmp/ci-output-${BRANCH}-$(date +%Y%m%d-%H%M%S).txt
+grep -E "(Coverage for|ERROR:)" /tmp/ci-output-${BRANCH}-*.txt
 ```
 
-Never re-run tests just to grep different patterns — each run takes 2-5 minutes.
+Never re-run tests just to grep different patterns — each run takes 2-5 minutes. See [CI Efficiency](#ci-efficiency-mandatory).
+
+### CI Efficiency (MANDATORY)
+
+**RULE:** NEVER re-run `pnpm run ci:tracked` to grep for patterns. ALWAYS use captured output.
+
+**Why this matters:**
+
+- CI runs take 3-5 minutes each
+- Multiple parallel runs can overwrite each other's output files
+- Re-running wastes compute time and delays feedback
+
+**Branch-safe naming pattern:**
+
+```bash
+# Capture once (set BRANCH first)
+BRANCH=$(git branch --show-current | sed 's/\//-/g')
+pnpm run ci:tracked 2>&1 | tee /tmp/ci-output-${BRANCH}-$(date +%Y%m%d-%H%M%S).txt
+
+# Reuse many times (wildcard finds latest capture)
+grep -E "(error|Error|ERROR)" /tmp/ci-output-${BRANCH}-*.txt
+grep -E "FAIL" /tmp/ci-output-${BRANCH}-*.txt
+grep -E "Coverage for" /tmp/ci-output-${BRANCH}-*.txt
+```
+
+**Examples:**
+
+```
+✅ CORRECT: Reuse captured output
+   pnpm run ci:tracked 2>&1 | tee /tmp/ci-output-fix-INT-299-20260125-143052.txt
+   grep "error" /tmp/ci-output-fix-INT-299-*.txt
+   grep "Coverage" /tmp/ci-output-fix-INT-299-*.txt  # Different pattern, same file
+
+❌ WRONG: Re-run CI to grep (3-5 minutes wasted per grep)
+   pnpm run ci:tracked 2>&1 | grep "error"
+   pnpm run ci:tracked 2>&1 | grep "Coverage"  # Runs CI AGAIN
+
+❌ WRONG: Fixed filename (collisions with parallel runs)
+   pnpm run ci:tracked 2>&1 | tee /tmp/ci-output.txt
+```
+
+**Helper script:** Use `./scripts/ci-capture.sh` for automatic branch-safe naming.
 
 ### Verification Ownership
 

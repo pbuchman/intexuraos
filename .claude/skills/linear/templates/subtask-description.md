@@ -2,6 +2,31 @@
 
 Template for child issues created during plan splitting.
 
+---
+
+## Parent Execution Mode Variant
+
+When child issues are executed via the **parent execution workflow** (invoked with `/linear INT-<parent>`), include this header at the top of the description:
+
+```markdown
+## 🚨 PARENT EXECUTION MODE
+
+This issue is part of **parent issue execution**. The workflow:
+
+1. Executes ALL children in tier order continuously
+2. Does **NOT** stop between children
+3. Creates **ONE PR** for the parent issue
+4. Uses **ONE branch** named after the parent
+
+**DO NOT STOP** after completing this task — the parent execution loop continues automatically to the next child.
+
+---
+```
+
+**When to use:** Add this variant when the subtask will be executed as part of a parent issue batch, not as a standalone issue.
+
+---
+
 ## Template
 
 ````markdown

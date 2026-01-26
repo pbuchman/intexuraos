@@ -66,6 +66,23 @@ Verify Linear, GitHub, GCloud available.
 - Extract: title, description, state, assignee
 ```
 
+### 2.5 Parent Issue Detection (MANDATORY)
+
+Check if this issue has child subissues:
+
+```
+Call mcp__linear__issue_read(method: "get_sub_issues", issueId: "INT-XXX")
+```
+
+**Routing Decision:**
+
+| Result                    | Action                                                     |
+| ------------------------- | ---------------------------------------------------------- |
+| Children array non-empty  | **REDIRECT** to [parent-execution.md](parent-execution.md) |
+| Children array empty/null | Continue with single-issue workflow (Step 3 below)         |
+
+**Why:** Parent issues with children require continuous execution of ALL children without stopping. The parent-execution workflow handles branch naming, commit grouping, and PR creation differently.
+
 ### 3. Pre-Flight Branch Check (MANDATORY - BLOCKS ALL WORK)
 
 ⛔ **STOP: You MUST NOT be on `development` or `main` before making ANY changes.**
@@ -111,6 +128,33 @@ git checkout -b fix/INT-123 origin/development
 - Local `development` may be stale or have uncommitted changes
 - `origin/development` guarantees fresh state
 - Prevents merge conflicts and ensures CI runs against current code
+
+### 4.5. Build All Packages (MANDATORY - BLOCKS ALL WORK)
+
+⛔ **STOP: You MUST build packages before starting any implementation work.**
+
+**Always run `pnpm build` in repository root after branch checkout:**
+
+```bash
+pnpm build
+```
+
+**Why this is MANDATORY:**
+
+- Apps depend on packages' `dist/` directories for type imports
+- Without built packages, apps fail typecheck with misleading errors (50+ lint errors)
+- Fresh branch checkout means packages aren't built yet
+- The CLAUDE.md "Session Start Protocol" specifies this requirement
+
+**Signs you forgot to build:**
+
+- `Cannot find module '@intexuraos/...'` errors
+- 50+ `no-unsafe-*` lint errors in apps
+- Typecheck errors only in `apps/` not `packages/`
+
+**Time estimate:** 30-60 seconds for all packages
+
+**DO NOT proceed to state update or implementation until packages are built.**
 
 ### 5. Update State to In Progress (MANDATORY - BLOCKS ALL WORK)
 
@@ -267,6 +311,7 @@ Only after user says "continue" or "next issue" → proceed.
 
 - [ ] Pre-flight branch check passed (NOT on `development` or `main`)
 - [ ] Branch created from `origin/development` (fresh state)
+- [ ] Packages built with `pnpm build` (MANDATORY after branch checkout)
 - [ ] `pnpm run ci:tracked` passes (ALL 4 checks: typecheck src, typecheck tests, lint, tests+coverage)
 - [ ] ALL CI errors fixed (even in other workspaces — ownership mindset)
 

@@ -14,7 +14,7 @@ import { createLinearApiClient } from './infra/linear/linearApiClient.js';
 import { createLinearActionExtractionService } from './infra/llm/linearActionExtractionService.js';
 import { createFailedIssueRepository } from './infra/firestore/failedIssueRepository.js';
 import { createProcessedActionRepository } from './infra/firestore/processedActionRepository.js';
-import { createLlmUserServiceClient } from './infra/user/llmUserServiceClient.js';
+import { createUserServiceClient } from '@intexuraos/internal-clients';
 import type { IPricingContext } from '@intexuraos/llm-pricing';
 import pino from 'pino';
 
@@ -42,14 +42,14 @@ export interface ServiceConfig {
 let container: ServiceContainer | null = null;
 
 export function initServices(config: ServiceConfig): void {
-  const llmUserServiceClient = createLlmUserServiceClient({
+  const userServiceClient = createUserServiceClient({
     baseUrl: config.userServiceUrl,
     internalAuthToken: config.internalAuthToken,
     pricingContext: config.pricingContext,
     logger: logger,
   });
 
-  const extractionService = createLinearActionExtractionService(llmUserServiceClient, logger);
+  const extractionService = createLinearActionExtractionService(userServiceClient, logger);
 
   container = {
     connectionRepository: createLinearConnectionRepository(),

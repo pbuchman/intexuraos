@@ -359,7 +359,7 @@ describe('processCalendarAction', () => {
         reasoning: 'Clear meeting request',
       });
 
-      userServiceClient.setTokenError('NOT_CONNECTED', 'Google Calendar not connected');
+      userServiceClient.setTokenError('CONNECTION_NOT_FOUND', 'Google Calendar not connected');
 
       const result = await processCalendarAction(
         {
@@ -397,7 +397,7 @@ describe('processCalendarAction', () => {
         reasoning: 'Clear meeting request',
       });
 
-      userServiceClient.setTokenError('TOKEN_ERROR', 'Token expired');
+      userServiceClient.setTokenError('TOKEN_REFRESH_FAILED', 'Token expired');
 
       const result = await processCalendarAction(
         {
@@ -419,7 +419,7 @@ describe('processCalendarAction', () => {
       expect(result.ok).toBe(false);
       if (!result.ok) {
         expect(result.error.code).toBe('TOKEN_ERROR');
-        expect(result.error.message).toBe('Token expired');
+        expect(result.error.message).toBe('Failed to refresh token');
       }
     });
   });

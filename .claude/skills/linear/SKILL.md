@@ -33,6 +33,7 @@ Manage Linear issues, branches, and PRs with enforced workflow and cross-linking
 8. **Checkpoint Pattern**: After completing an issue, STOP and wait for user instruction before proceeding
 9. **Done Forbidden**: Never move issues to Done — maximum agent-controlled state is QA
 10. **95% Coverage MINIMUM**: All tests listed in issues MUST be implemented. Do NOT simplify work.
+11. **Parent Execution Mode**: When working on parent issues with children, execute ALL children continuously without stopping between them. Single branch and single PR for the parent.
 
 ## Invocation Detection
 
@@ -42,8 +43,10 @@ The skill automatically detects intent from input:
 | ------------------------------- | ------------------ | -------------------------------------------------------- |
 | `/linear` (no args)             | Random Todo        | [random-todo.md](workflows/random-todo.md)               |
 | `/linear <task description>`    | Create New         | [create-issue.md](workflows/create-issue.md)             |
-| `/linear INT-<number>`          | Work Existing      | [work-existing.md](workflows/work-existing.md)           |
+| `/linear INT-<number>`          | Work Existing      | [work-existing.md](workflows/work-existing.md)\*         |
 | `/linear https://sentry.io/...` | Sentry Integration | [sentry-integration.md](workflows/sentry-integration.md) |
+
+\*Routes to [parent-execution.md](workflows/parent-execution.md) if issue has child subissues
 
 ## Auto-Splitting Detection
 

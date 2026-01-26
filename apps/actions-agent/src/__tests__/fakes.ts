@@ -35,6 +35,7 @@ import type {
   ForceRefreshBookmarkResponse,
 } from '../domain/ports/bookmarksServiceClient.js';
 import type { LinearAgentClient } from '../domain/ports/linearAgentClient.js';
+import type { CodeAgentClient } from '../domain/ports/codeAgentClient.js';
 import type { Action } from '../domain/models/action.js';
 import type { ActionTransition } from '../domain/models/actionTransition.js';
 import type { ActionCreatedEvent } from '../domain/models/actionEvent.js';
@@ -688,12 +689,103 @@ export class FakeLinearAgentClient implements LinearAgentClient {
   }
 }
 
+export class FakeCodeAgentClient implements CodeAgentClient {
+  private submittedTasks: {
+    actionId: string;
+    approvalEventId: string;
+    payload: {
+      prompt: string;
+      workerType: 'opus' | 'auto' | 'glm';
+      linearIssueId?: string;
+      linearIssueTitle?: string;
+    };
+  }[] = [];
+  private nextResponse = {
+    codeTaskId: 'code-task-123',
+    resourceUrl: 'https://app.intexuraos.com/code-tasks/123',
+  };
+  private nextError: {
+    code: 'WORKER_UNAVAILABLE' | 'DUPLICATE' | 'NETWORK_ERROR' | 'UNKNOWN';
+    message: string;
+    existingTaskId?: string;
+  } | null = null;
+  private failNext = false;
+
+  getSubmittedTasks(): typeof this.submittedTasks {
+    return this.submittedTasks;
+  }
+
+  setNextResponse(response: { codeTaskId: string; resourceUrl: string }): void {
+    this.nextResponse = response;
+    this.nextError = null;
+  }
+
+  setNextError(error: {
+    code: 'WORKER_UNAVAILABLE' | 'DUPLICATE' | 'NETWORK_ERROR' | 'UNKNOWN';
+    message: string;
+    existingTaskId?: string;
+  }): void {
+    this.nextError = error;
+  }
+
+  setFailNext(fail: boolean): void {
+    this.failNext = fail;
+  }
+
+  async submitTask(input: {
+    actionId: string;
+    approvalEventId: string;
+    payload: {
+      prompt: string;
+      workerType: 'opus' | 'auto' | 'glm';
+      linearIssueId?: string;
+      linearIssueTitle?: string;
+    };
+  }): Promise<{
+    ok: true;
+    value: { codeTaskId: string; resourceUrl: string };
+  } | {
+    ok: false;
+    error: {
+      code: 'WORKER_UNAVAILABLE' | 'DUPLICATE' | 'NETWORK_ERROR' | 'UNKNOWN';
+      message: string;
+      existingTaskId?: string;
+    };
+  }> {
+    if (this.failNext) {
+      this.failNext = false;
+      return {
+        ok: false,
+        error: {
+          code: 'NETWORK_ERROR',
+          message: 'Simulated network failure',
+        },
+      };
+    }
+
+    this.submittedTasks.push(input);
+
+    if (this.nextError !== null) {
+      return {
+        ok: false,
+        error: this.nextError,
+      };
+    }
+
+    return {
+      ok: true,
+      value: this.nextResponse,
+    };
+  }
+}
+
 import type { ExecuteResearchActionResult } from '../domain/usecases/executeResearchAction.js';
 import type { ExecuteTodoActionResult } from '../domain/usecases/executeTodoAction.js';
 import type { ExecuteNoteActionResult } from '../domain/usecases/executeNoteAction.js';
 import type { ExecuteLinkActionResult } from '../domain/usecases/executeLinkAction.js';
 import type { ExecuteCalendarActionResult } from '../domain/usecases/executeCalendarAction.js';
 import type { ExecuteLinearActionResult } from '../domain/usecases/executeLinearAction.js';
+import type { ExecuteCodeActionResult } from '../domain/usecases/executeCodeAction.js';
 import type {
   RetryResult,
   RetryPendingActionsUseCase,
@@ -828,6 +920,68 @@ export function createFakeExecuteLinearActionUseCase(config?: {
         resourceUrl: 'https://linear.app/issue/TEST-123',
       }
     );
+  };
+}
+
+export type FakeExecuteCodeActionUseCase = (
+  actionId: string
+) => Promise<Result<ExecuteCodeActionResult, Error>>;
+
+export function createFakeExecuteCodeActionUseCase(config?: {
+  failWithError?: Error;
+  returnResult?: ExecuteCodeActionResult;
+}): FakeExecuteCodeActionUseCase {
+  return async (_actionId: string): Promise<Result<ExecuteCodeActionResult, Error>> => {
+    if (config?.failWithError !== undefined) {
+      return err(config.failWithError);
+    }
+    return ok(
+      config?.returnResult ?? {
+        status: 'completed',
+        message: 'Code task created: code-task-123',
+        resourceUrl: 'https://app.intexuraos.com/code-tasks/123',
+      }
+    );
+  };
+}
+
+/**
+ * Fake executeCodeAction use case that updates action repository
+ * Use this when you need the action to be marked as completed in the repository
+ */
+export function createFakeExecuteCodeActionUseCaseWithRepo(
+  fakeRepo: FakeActionRepository,
+  config?: {
+    failWithError?: Error;
+    returnResult?: ExecuteCodeActionResult;
+  }
+): FakeExecuteCodeActionUseCase {
+  return async (actionId: string): Promise<Result<ExecuteCodeActionResult, Error>> => {
+    if (config?.failWithError !== undefined) {
+      return err(config.failWithError);
+    }
+    const result = config?.returnResult ?? {
+      status: 'completed',
+      message: 'Code task created: code-task-123',
+      resourceUrl: 'https://app.intexuraos.com/code-tasks/123',
+    };
+
+    // Update action in repository
+    const action = await fakeRepo.getById(actionId);
+    if (action !== null) {
+      await fakeRepo.save({
+        ...action,
+        status: 'completed',
+        payload: {
+          ...action.payload,
+          resource_url: result.resourceUrl,
+          message: result.message,
+          approvalEventId: crypto.randomUUID(),
+        },
+      });
+    }
+
+    return ok(result);
   };
 }
 
@@ -966,6 +1120,19 @@ export class FakeUserServiceClient implements UserServiceClient {
   async reportLlmSuccess(_userId: string, _provider: string): Promise<void> {
     // Best effort - silently ignore in tests
   }
+
+  async getOAuthToken(
+    _userId: string,
+    _provider: string
+  ): Promise<Result<{ accessToken: string; email: string }, UserServiceError>> {
+    if (this.error !== null) {
+      return err(this.error);
+    }
+    return err({
+      code: 'CONNECTION_NOT_FOUND',
+      message: 'OAuth not configured in fake',
+    });
+  }
 }
 
 // Fake HandleApprovalReplyUseCase
@@ -1005,6 +1172,10 @@ import {
   createHandleLinearActionUseCase,
   type HandleLinearActionUseCase,
 } from '../domain/usecases/handleLinearAction.js';
+import {
+  createHandleCodeActionUseCase,
+  type HandleCodeActionUseCase,
+} from '../domain/usecases/handleCodeAction.js';
 
 export function createFakeServices(deps: {
   actionServiceClient: FakeActionServiceClient;
@@ -1018,6 +1189,7 @@ export function createFakeServices(deps: {
   bookmarksServiceClient?: FakeBookmarksServiceClient;
   calendarServiceClient?: FakeCalendarServiceClient;
   linearAgentClient?: FakeLinearAgentClient;
+  codeAgentClient?: FakeCodeAgentClient;
   actionEventPublisher?: FakeActionEventPublisher;
   whatsappPublisher?: FakeWhatsAppSendPublisher;
   calendarPreviewPublisher?: FakeCalendarPreviewPublisher;
@@ -1027,6 +1199,7 @@ export function createFakeServices(deps: {
   executeLinkActionUseCase?: FakeExecuteLinkActionUseCase;
   executeCalendarActionUseCase?: FakeExecuteCalendarActionUseCase;
   executeLinearActionUseCase?: FakeExecuteLinearActionUseCase;
+  executeCodeActionUseCase?: FakeExecuteCodeActionUseCase;
   retryPendingActionsUseCase?: RetryPendingActionsUseCase;
   changeActionTypeUseCase?: ChangeActionTypeUseCase;
   approvalMessageRepository?: FakeApprovalMessageRepository;
@@ -1045,6 +1218,7 @@ export function createFakeServices(deps: {
   const bookmarksServiceClient = deps.bookmarksServiceClient ?? new FakeBookmarksServiceClient();
   const calendarServiceClient = deps.calendarServiceClient ?? new FakeCalendarServiceClient();
   const linearAgentClient = deps.linearAgentClient ?? new FakeLinearAgentClient();
+  const codeAgentClient = deps.codeAgentClient ?? new FakeCodeAgentClient();
   const approvalMessageRepository =
     deps.approvalMessageRepository ?? new FakeApprovalMessageRepository();
   const userServiceClient = deps.userServiceClient ?? new FakeUserServiceClient();
@@ -1112,6 +1286,16 @@ export function createFakeServices(deps: {
     }
   );
 
+  const handleCodeActionUseCase: HandleCodeActionUseCase = registerActionHandler(
+    createHandleCodeActionUseCase,
+    {
+      actionRepository,
+      whatsappPublisher,
+      webAppUrl: 'http://test.app',
+      logger: silentLogger,
+    }
+  );
+
   const changeActionTypeUseCase: ChangeActionTypeUseCase =
     deps.changeActionTypeUseCase ??
     createChangeActionTypeUseCase({
@@ -1133,6 +1317,7 @@ export function createFakeServices(deps: {
     bookmarksServiceClient,
     calendarServiceClient,
     linearAgentClient,
+    codeAgentClient,
     actionEventPublisher: deps.actionEventPublisher ?? new FakeActionEventPublisher(),
     whatsappPublisher,
     calendarPreviewPublisher,
@@ -1142,6 +1327,7 @@ export function createFakeServices(deps: {
     handleLinkActionUseCase,
     handleCalendarActionUseCase,
     handleLinearActionUseCase,
+    handleCodeActionUseCase,
     executeResearchActionUseCase:
       deps.executeResearchActionUseCase ?? createFakeExecuteResearchActionUseCase(),
     executeTodoActionUseCase: deps.executeTodoActionUseCase ?? createFakeExecuteTodoActionUseCase(),
@@ -1151,6 +1337,7 @@ export function createFakeServices(deps: {
       deps.executeCalendarActionUseCase ?? createFakeExecuteCalendarActionUseCase(),
     executeLinearActionUseCase:
       deps.executeLinearActionUseCase ?? createFakeExecuteLinearActionUseCase(),
+    executeCodeActionUseCase: deps.executeCodeActionUseCase ?? createFakeExecuteCodeActionUseCase(),
     retryPendingActionsUseCase:
       deps.retryPendingActionsUseCase ?? createFakeRetryPendingActionsUseCase(),
     changeActionTypeUseCase,
@@ -1164,5 +1351,6 @@ export function createFakeServices(deps: {
     link: handleLinkActionUseCase,
     calendar: handleCalendarActionUseCase,
     linear: handleLinearActionUseCase,
+    code: handleCodeActionUseCase,
   };
 }

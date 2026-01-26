@@ -5,6 +5,10 @@
 import type { Result } from '@intexuraos/common-core';
 import type { Logger } from '@intexuraos/common-core';
 import type {
+  UserServiceClient,
+  OAuthTokenResult,
+} from '@intexuraos/internal-clients';
+import type {
   CalendarEvent,
   CreateEventInput,
   FreeBusyInput,
@@ -20,6 +24,8 @@ import type {
   UpdateCalendarPreviewInput,
 } from './models.js';
 import type { CalendarError } from './errors.js';
+
+export type { UserServiceClient, OAuthTokenResult };
 
 export interface GoogleCalendarClient {
   getCalendarTimezone(
@@ -69,15 +75,6 @@ export interface GoogleCalendarClient {
     input: FreeBusyInput,
     logger: Logger
   ): Promise<Result<Map<string, FreeBusySlot[]>, CalendarError>>;
-}
-
-export interface OAuthTokenResult {
-  accessToken: string;
-  email: string;
-}
-
-export interface UserServiceClient {
-  getOAuthToken(userId: string): Promise<Result<OAuthTokenResult, CalendarError>>;
 }
 
 export interface FailedEventRepository {

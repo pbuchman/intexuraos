@@ -144,7 +144,7 @@ describe('getFreeBusy', () => {
 
   describe('OAuth token errors', () => {
     it('returns error when user is not connected', async () => {
-      userServiceClient.setTokenError('NOT_CONNECTED', 'Google Calendar not connected');
+      userServiceClient.setTokenError('CONNECTION_NOT_FOUND', 'Google Calendar not connected');
 
       const result = await getFreeBusy(
         {
@@ -170,14 +170,14 @@ describe('getFreeBusy', () => {
       expect(mockLogger.error).toHaveBeenCalledWith(
         {
           userId: 'user-123',
-          error: { code: 'NOT_CONNECTED', message: 'Google Calendar not connected' },
+          error: { code: 'CONNECTION_NOT_FOUND', message: 'Google Calendar not connected' },
         },
         'getFreeBusy: failed to get OAuth token'
       );
     });
 
     it('returns error when token fetch fails', async () => {
-      userServiceClient.setTokenError('TOKEN_ERROR', 'Invalid token');
+      userServiceClient.setTokenError('TOKEN_REFRESH_FAILED', 'Invalid token');
 
       const result = await getFreeBusy(
         {

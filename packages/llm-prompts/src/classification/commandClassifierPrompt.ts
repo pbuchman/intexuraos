@@ -12,7 +12,8 @@ export type CommandCategory =
   | 'link'
   | 'calendar'
   | 'reminder'
-  | 'linear';
+  | 'linear'
+  | 'code';
 
 export interface CommandClassifierPromptInput {
   /** The user message to classify */
@@ -62,6 +63,7 @@ These phrases OVERRIDE category signals from URL content or incidental keywords.
 - **reminder**: "set reminder", "remind me", "przypomnij mi"
 - **calendar**: "schedule", "add to calendar", "book appointment", "zaplanuj", "dodaj do kalendarza"
 - **linear**: "create issue", "add bug", "report issue", "zgłoś błąd", "stwórz issue", "dodaj do lineara"
+- **code**: "fix", "implement", "build", "refactor", "update the code", "change the", "add a function", "create a component", "modify", "debug", "write code for"
 
 Examples:
 - "save bookmark https://research-world.com" → link (explicit "save bookmark" overrides "research" in URL)
@@ -70,6 +72,11 @@ Examples:
 - "save note about the research meeting" → note (explicit "save note" is the command)
 - "research this https://example.com" → research (explicit "research this" overrides URL presence - STEP 2 > STEP 4)
 - "investigate https://competitor.io/pricing" → research (explicit "investigate" overrides URL)
+- "fix the login bug" → code (explicit "fix" indicates execution)
+- "implement dark mode" → code (explicit "implement" indicates execution)
+- "create an issue for the bug" → linear (tracking intent, NOT execution)
+- "refactor the auth module" → code (explicit "refactor" indicates code changes)
+- "look into the performance issue" → research (investigation, NOT execution)
 
 ## STEP 3: Linear Detection (if no explicit intent match)
 Classify as "linear" when message contains:
@@ -114,6 +121,14 @@ Signals: remind me, przypomnij, don't forget
 Signals: how does, what is, why, find out, learn about, ?
 - "how does OAuth work?" → research
 - "find out about competitor pricing" → research
+
+**code** — User wants Claude to make code changes, fix bugs, implement features, or refactor
+Signals: fix, implement, build, refactor, update the code, change the, add a function, create a component, modify, debug, write code for
+- "fix the login bug" → code
+- "implement dark mode" → code
+- "refactor the auth module" → code
+- "add validation to the form" → code
+- "build a new API endpoint" → code
 
 **note** — Information to store
 Signals: notes, idea, remember that, jot down

@@ -10,6 +10,7 @@
 import { err, ok, type Result, ServiceErrorCodes } from '@intexuraos/common-core';
 import type { Logger, ServiceFeedback } from '@intexuraos/common-core';
 import type { CalendarError } from '../errors.js';
+import { mapUserServiceError } from '../errors.js';
 import type { CreateEventInput } from '../models.js';
 import type {
   GoogleCalendarClient,
@@ -249,10 +250,10 @@ export async function processCalendarAction(
     });
   }
 
-  const tokenResult = await userServiceClient.getOAuthToken(userId);
+  const tokenResult = await userServiceClient.getOAuthToken(userId, 'google');
   if (!tokenResult.ok) {
     logger.error({ userId, actionId, error: tokenResult.error }, 'processCalendarAction: failed to get OAuth token');
-    return err(tokenResult.error);
+    return err(mapUserServiceError(tokenResult.error));
   }
 
   const timezoneResult = await googleCalendarClient.getCalendarTimezone(

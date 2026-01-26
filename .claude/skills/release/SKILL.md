@@ -90,6 +90,27 @@ For each modified service detected in Phase 1:
 2. **CHECKPOINT**: Present proposed section, wait for approval
 3. Apply approved changes to README.md
 
+**Accumulation Pattern (MANDATORY):**
+
+Website "What's New" section accumulates features across a MAJOR version:
+
+- **Showcase ALL approved features** from ALL sub-releases in current major version
+- Example: v2.0.0 (6 features) + v2.1.0 (2 features) → 8 tiles total in v2.x section
+- **Only when new major version releases** (e.g., v3.0.0) do old features move to VersionHistorySection
+- **Header**: "What's New" (no version number)
+- **Right side**: Changelog link
+- **Maximum**: 3-12 feature tiles
+
+**Content Approval Process:**
+
+Ask user ONE BY ONE for each potential feature:
+
+- User decides: tile-worthy or skip
+- **Default rules**:
+  - User-facing features (new capabilities, UX improvements) → YES
+  - Bug fixes that users notice → YES
+  - Technical refactorings → NO (unless major impact like cost savings)
+
 #### README Section Format
 
 **User Feedback:** "Make it more concise, include really important info"
@@ -157,10 +178,24 @@ Fixed an issue where WhatsApp approval messages were being sent multiple times, 
 ### Phase 5: Website Improvements (Checkpoint)
 
 1. Generate `RecentUpdatesSection.tsx` content from release
-2. Audit `HomePage.tsx` for improvement opportunities
-3. Combine into EXACTLY 3 suggestions
-4. **CHECKPOINT**: Present suggestions, wait for selection
-5. For each approved suggestion: invoke `/frontend-design` skill
+2. **Check if major version release** — if YES, also create `VersionHistorySection` content
+3. Audit `HomePage.tsx` for improvement opportunities
+4. Combine into EXACTLY 3 suggestions
+5. **CHECKPOINT**: Present suggestions, wait for selection
+6. For each approved suggestion: invoke `/frontend-design` skill
+
+**Version History Pattern (Major Version Release Only):**
+
+When releasing a NEW major version (e.g., v3.0.0):
+
+- **Trigger**: Activated when new major version releases
+- **Structure**: Expandable button below "What's New" section
+- **Content**: Combined subreleases (e.g., v2.0.0, v2.1.0 → v2.x paragraph)
+- **Format**: List format with paragraphs, not tiles
+- **Required**: Marketing slogan for each major version
+
+**Example v1.x slogan:**
+"End-to-end AI autonomy: From your mobile to the cloud and back. IntexuraOS went from architecture document to handling live traffic — voice to research, links to bookmarks, dates to calendar events."
 
 ### Phase 6: Finalize
 

@@ -9,14 +9,12 @@ import type {
   ProcessedActionRepository,
   CalendarPreviewRepository,
 } from './domain/index.js';
-import type { UserServiceClient as LlmUserServiceClient } from '@intexuraos/internal-clients';
 import { GoogleCalendarClientImpl } from './infra/google/googleCalendarClient.js';
 import { createFailedEventRepository } from './infra/firestore/failedEventRepository.js';
 import { createProcessedActionRepository } from './infra/firestore/processedActionRepository.js';
 import { createCalendarPreviewRepository } from './infra/firestore/calendarPreviewRepository.js';
 import { createCalendarActionExtractionService } from './infra/gemini/calendarActionExtractionService.js';
 import { createUserServiceClient } from '@intexuraos/internal-clients';
-import { UserServiceClientImpl } from './infra/user/userServiceClient.js';
 import type { IPricingContext } from '@intexuraos/llm-pricing';
 import pino from 'pino';
 
@@ -29,8 +27,7 @@ export type { IPricingContext as PricingContext };
 
 export interface ServiceContainer {
   googleCalendarClient: GoogleCalendarClient;
-  userServiceClient: UserServiceClient; // Calendar OAuth client (from domain)
-  llmUserServiceClient: LlmUserServiceClient; // LLM client (from shared package)
+  userServiceClient: UserServiceClient;
   failedEventRepository: FailedEventRepository;
   calendarActionExtractionService: CalendarActionExtractionService;
   processedActionRepository: ProcessedActionRepository;
@@ -46,26 +43,18 @@ export interface ServiceConfig {
 let container: ServiceContainer | null = null;
 
 export function initServices(config: ServiceConfig): void {
-  // Calendar OAuth user service client
-  const userServiceClient = new UserServiceClientImpl(
-    config.userServiceUrl,
-    config.internalAuthToken
-  );
-
-  // LLM user service client (from shared package)
-  const llmUserServiceClient = createUserServiceClient({
+  const userServiceClient = createUserServiceClient({
     baseUrl: config.userServiceUrl,
     internalAuthToken: config.internalAuthToken,
     pricingContext: config.pricingContext,
     logger: logger,
   });
 
-  const calendarActionExtractionService = createCalendarActionExtractionService(llmUserServiceClient, logger);
+  const calendarActionExtractionService = createCalendarActionExtractionService(userServiceClient, logger);
 
   container = {
     googleCalendarClient: new GoogleCalendarClientImpl(),
-    userServiceClient, // Calendar OAuth client
-    llmUserServiceClient, // LLM client
+    userServiceClient,
     failedEventRepository: createFailedEventRepository(),
     calendarActionExtractionService,
     processedActionRepository: createProcessedActionRepository(),
