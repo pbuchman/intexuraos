@@ -33,12 +33,12 @@ export function createLinearAgentHttpClient(
 
       logger.info({ title: request.title }, 'Creating Linear issue via linear-agent');
 
-      try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => {
-          controller.abort();
-        }, timeoutMs);
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => {
+        controller.abort();
+      }, timeoutMs);
 
+      try {
         const response = await fetch(url, {
           method: 'POST',
           headers: {
@@ -52,8 +52,6 @@ export function createLinearAgentHttpClient(
           }),
           signal: controller.signal,
         });
-
-        clearTimeout(timeoutId);
 
         if (!response.ok) {
           const errorText = await response.text();
@@ -91,6 +89,8 @@ export function createLinearAgentHttpClient(
 
         logger.error({ error }, 'linear-agent request failed');
         return err({ code: 'UNKNOWN', message: String(error) });
+      } finally {
+        clearTimeout(timeoutId);
       }
     },
 
@@ -99,12 +99,12 @@ export function createLinearAgentHttpClient(
 
       logger.info({ issueId: request.issueId, state: request.state }, 'Updating Linear issue state');
 
-      try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => {
-          controller.abort();
-        }, timeoutMs);
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => {
+        controller.abort();
+      }, timeoutMs);
 
+      try {
         const response = await fetch(url, {
           method: 'PATCH',
           headers: {
@@ -114,8 +114,6 @@ export function createLinearAgentHttpClient(
           body: JSON.stringify({ state: request.state }),
           signal: controller.signal,
         });
-
-        clearTimeout(timeoutId);
 
         if (!response.ok) {
           const errorText = await response.text();
@@ -128,6 +126,8 @@ export function createLinearAgentHttpClient(
       } catch (error) {
         logger.error({ error }, 'linear-agent updateState request failed');
         return err({ code: 'UNKNOWN', message: String(error) });
+      } finally {
+        clearTimeout(timeoutId);
       }
     },
   };

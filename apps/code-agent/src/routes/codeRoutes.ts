@@ -1007,7 +1007,8 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       } = { taskPrompt: body.prompt };
       if ('linearIssueId' in body && body.linearIssueId !== undefined) {
         ensureParams.linearIssueId = body.linearIssueId;
-      } else if ('linearIssueTitle' in body && body.linearIssueTitle !== undefined) {
+      }
+      if ('linearIssueTitle' in body && body.linearIssueTitle !== undefined) {
         ensureParams.linearIssueTitle = body.linearIssueTitle;
       }
       const issueResult = await linearIssueService.ensureIssueExists(ensureParams);
