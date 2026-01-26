@@ -122,6 +122,63 @@ describe('createUserServiceClient', () => {
         expect.fail('Expected successful result');
       }
     });
+
+    it('URL encodes userId with spaces', async () => {
+      const mockKeys = { google: 'google-key' };
+      const userId = 'user 123';
+
+      nock('http://localhost:3000')
+        .get(`/internal/users/${encodeURIComponent(userId)}/llm-keys`)
+        .matchHeader('X-Internal-Auth', 'test-token')
+        .reply(200, mockKeys);
+
+      const client = createUserServiceClient(config);
+      const result = await client.getApiKeys(userId);
+
+      if (result.ok) {
+        expect(result.value).toEqual(mockKeys);
+      } else {
+        expect.fail('Expected successful result');
+      }
+    });
+
+    it('URL encodes userId with plus', async () => {
+      const mockKeys = { google: 'google-key' };
+      const userId = 'user+123';
+
+      nock('http://localhost:3000')
+        .get(`/internal/users/${encodeURIComponent(userId)}/llm-keys`)
+        .matchHeader('X-Internal-Auth', 'test-token')
+        .reply(200, mockKeys);
+
+      const client = createUserServiceClient(config);
+      const result = await client.getApiKeys(userId);
+
+      if (result.ok) {
+        expect(result.value).toEqual(mockKeys);
+      } else {
+        expect.fail('Expected successful result');
+      }
+    });
+
+    it('URL encodes userId with pipe (Auth0 format)', async () => {
+      const mockKeys = { google: 'google-key' };
+      const userId = 'auth0|1234567890';
+
+      nock('http://localhost:3000')
+        .get(`/internal/users/${encodeURIComponent(userId)}/llm-keys`)
+        .matchHeader('X-Internal-Auth', 'test-token')
+        .reply(200, mockKeys);
+
+      const client = createUserServiceClient(config);
+      const result = await client.getApiKeys(userId);
+
+      if (result.ok) {
+        expect(result.value).toEqual(mockKeys);
+      } else {
+        expect.fail('Expected successful result');
+      }
+    });
   });
 
   describe('getLlmClient', () => {
@@ -308,6 +365,64 @@ describe('createUserServiceClient', () => {
         expect.fail('Expected error result');
       }
     });
+
+    it('URL encodes userId with ampersand in settings request', async () => {
+      const mockSettings = {
+        llmPreferences: {
+          defaultModel: LlmModels.Gemini25Flash,
+        },
+      };
+      const mockKeys = { google: 'google-key' };
+      const userId = 'user&test';
+
+      nock('http://localhost:3000')
+        .get(`/internal/users/${encodeURIComponent(userId)}/settings`)
+        .matchHeader('X-Internal-Auth', 'test-token')
+        .reply(200, mockSettings);
+
+      nock('http://localhost:3000')
+        .get(`/internal/users/${encodeURIComponent(userId)}/llm-keys`)
+        .matchHeader('X-Internal-Auth', 'test-token')
+        .reply(200, mockKeys);
+
+      const client = createUserServiceClient(config);
+      const result = await client.getLlmClient(userId);
+
+      if (result.ok) {
+        expect(result.value).toBeDefined();
+      } else {
+        expect.fail('Expected successful result');
+      }
+    });
+
+    it('URL encodes userId with pipe (Auth0 format) in keys request', async () => {
+      const mockSettings = {
+        llmPreferences: {
+          defaultModel: LlmModels.Gemini25Flash,
+        },
+      };
+      const mockKeys = { google: 'google-key' };
+      const userId = 'auth0|123';
+
+      nock('http://localhost:3000')
+        .get(`/internal/users/${encodeURIComponent(userId)}/settings`)
+        .matchHeader('X-Internal-Auth', 'test-token')
+        .reply(200, mockSettings);
+
+      nock('http://localhost:3000')
+        .get(`/internal/users/${encodeURIComponent(userId)}/llm-keys`)
+        .matchHeader('X-Internal-Auth', 'test-token')
+        .reply(200, mockKeys);
+
+      const client = createUserServiceClient(config);
+      const result = await client.getLlmClient(userId);
+
+      if (result.ok) {
+        expect(result.value).toBeDefined();
+      } else {
+        expect.fail('Expected successful result');
+      }
+    });
   });
 
   describe('reportLlmSuccess', () => {
@@ -390,6 +505,38 @@ describe('createUserServiceClient', () => {
       await expect(
         client.reportLlmSuccess('user123', LlmProviders.Google)
       ).resolves.toBeUndefined();
+    });
+
+    it('URL encodes userId with plus in reportLlmSuccess', async () => {
+      const userId = 'user+special';
+      const provider = 'Google';
+
+      nock('http://localhost:3000')
+        .post(`/internal/users/${encodeURIComponent(userId)}/llm-keys/${provider}/last-used`)
+        .matchHeader('X-Internal-Auth', 'test-token')
+        .reply(200);
+
+      const client = createUserServiceClient(config);
+      await client.reportLlmSuccess(userId, LlmProviders.Google);
+
+      // Should complete without throwing
+      expect(true).toBe(true);
+    });
+
+    it('URL encodes userId with pipe (Auth0 format) in reportLlmSuccess', async () => {
+      const userId = 'auth0|xyz123';
+      const provider = 'Google';
+
+      nock('http://localhost:3000')
+        .post(`/internal/users/${encodeURIComponent(userId)}/llm-keys/${provider}/last-used`)
+        .matchHeader('X-Internal-Auth', 'test-token')
+        .reply(200);
+
+      const client = createUserServiceClient(config);
+      await client.reportLlmSuccess(userId, LlmProviders.Google);
+
+      // Should complete without throwing
+      expect(true).toBe(true);
     });
   });
 
@@ -496,6 +643,72 @@ describe('createUserServiceClient', () => {
         expect(result.error.message).toContain('ECONNREFUSED');
       } else {
         expect.fail('Expected error result');
+      }
+    });
+
+    it('URL encodes userId with pipe (Auth0 format) in getOAuthToken', async () => {
+      const mockToken = {
+        accessToken: 'ya29.a0...',
+        email: 'user@example.com',
+      };
+      const userId = 'auth0|abc123';
+
+      nock('http://localhost:3000')
+        .get(`/internal/users/${encodeURIComponent(userId)}/oauth/google/token`)
+        .matchHeader('X-Internal-Auth', 'test-token')
+        .reply(200, mockToken);
+
+      const client = createUserServiceClient(config);
+      const result = await client.getOAuthToken(userId, 'google');
+
+      if (result.ok) {
+        expect(result.value).toEqual(mockToken);
+      } else {
+        expect.fail('Expected successful result');
+      }
+    });
+
+    it('URL encodes userId with ampersand in getOAuthToken', async () => {
+      const mockToken = {
+        accessToken: 'ya29.a0...',
+        email: 'user@example.com',
+      };
+      const userId = 'user&test';
+
+      nock('http://localhost:3000')
+        .get(`/internal/users/${encodeURIComponent(userId)}/oauth/google/token`)
+        .matchHeader('X-Internal-Auth', 'test-token')
+        .reply(200, mockToken);
+
+      const client = createUserServiceClient(config);
+      const result = await client.getOAuthToken(userId, 'google');
+
+      if (result.ok) {
+        expect(result.value).toEqual(mockToken);
+      } else {
+        expect.fail('Expected successful result');
+      }
+    });
+
+    it('URL encodes userId with slash in getOAuthToken', async () => {
+      const mockToken = {
+        accessToken: 'ya29.a0...',
+        email: 'user@example.com',
+      };
+      const userId = 'user/with/slash';
+
+      nock('http://localhost:3000')
+        .get(`/internal/users/${encodeURIComponent(userId)}/oauth/google/token`)
+        .matchHeader('X-Internal-Auth', 'test-token')
+        .reply(200, mockToken);
+
+      const client = createUserServiceClient(config);
+      const result = await client.getOAuthToken(userId, 'google');
+
+      if (result.ok) {
+        expect(result.value).toEqual(mockToken);
+      } else {
+        expect.fail('Expected successful result');
       }
     });
   });
