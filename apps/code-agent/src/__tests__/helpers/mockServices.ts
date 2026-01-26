@@ -12,10 +12,23 @@ import { createWorkerDiscoveryService } from '../../infra/services/workerDiscove
 import { createTaskDispatcherService } from '../../infra/services/taskDispatcherImpl.js';
 import { createWhatsAppNotifier } from '../../infra/services/whatsappNotifierImpl.js';
 import { createActionsAgentClient } from '../../infra/clients/actionsAgentClient.js';
+import { createLinearAgentHttpClient } from '../../infra/http/linearAgentHttpClient.js';
+import { createLinearIssueService } from '../../domain/services/linearIssueService.js';
 
 export function setupTestServices({ actionsAgentUrl = 'http://actions-agent' }: { actionsAgentUrl?: string } = {}): void {
   const fakeFirestore = createFakeFirestore() as unknown as Firestore;
   const logger = pino({ name: 'test' });
+
+  const linearAgentClient = createLinearAgentHttpClient({
+    baseUrl: 'http://linear-agent:8086',
+    internalAuthToken: 'test-token',
+    timeoutMs: 10000,
+  }, logger);
+
+  const linearIssueService = createLinearIssueService({
+    linearAgentClient,
+    logger,
+  });
 
   const container: ServiceContainer = {
     firestore: fakeFirestore,
@@ -47,6 +60,7 @@ export function setupTestServices({ actionsAgentUrl = 'http://actions-agent' }: 
       internalAuthToken: 'test-token',
       logger,
     }),
+    linearIssueService,
   };
 
   setServices(container);

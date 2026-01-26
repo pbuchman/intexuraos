@@ -24,12 +24,15 @@ import { createWhatsAppNotifier } from '../../infra/services/whatsappNotifierImp
 import { createFirestoreLogChunkRepository } from '../../infra/repositories/firestoreLogChunkRepository.js';
 import { createWorkerDiscoveryService } from '../../infra/services/workerDiscoveryImpl.js';
 import { createActionsAgentClient } from '../../infra/clients/actionsAgentClient.js';
+import { createLinearAgentHttpClient } from '../../infra/http/linearAgentHttpClient.js';
+import { createLinearIssueService } from '../../domain/services/linearIssueService.js';
 import type { CodeTaskRepository } from '../../domain/repositories/codeTaskRepository.js';
 import type { TaskDispatcherService } from '../../domain/services/taskDispatcher.js';
 import type { LogChunkRepository } from '../../domain/repositories/logChunkRepository.js';
 import type { WorkerDiscoveryService } from '../../domain/services/workerDiscovery.js';
 import type { ActionsAgentClient } from '../../infra/clients/actionsAgentClient.js';
 import type { WhatsAppNotifier } from '../../domain/services/whatsappNotifier.js';
+import type { LinearIssueService } from '../../domain/services/linearIssueService.js';
 
 describe('POST /internal/code/process', () => {
   let app: Awaited<ReturnType<typeof buildServer>>;
@@ -94,6 +97,17 @@ describe('POST /internal/code/process', () => {
       logger,
     });
 
+    const linearAgentClient = createLinearAgentHttpClient({
+      baseUrl: 'http://linear-agent:8086',
+      internalAuthToken: 'test-token',
+      timeoutMs: 10000,
+    }, logger);
+
+    const linearIssueService = createLinearIssueService({
+      linearAgentClient,
+      logger,
+    });
+
     setServices({
       firestore: fakeFirestore as unknown as Firestore,
       logger,
@@ -103,6 +117,7 @@ describe('POST /internal/code/process', () => {
       whatsappNotifier,
       logChunkRepo: _logChunkRepo,
       actionsAgentClient,
+      linearIssueService,
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -112,6 +127,7 @@ describe('POST /internal/code/process', () => {
       logChunkRepo: LogChunkRepository;
       actionsAgentClient: ActionsAgentClient;
       whatsappNotifier: WhatsAppNotifier;
+      linearIssueService: LinearIssueService;
     });
 
     app = await buildServer();

@@ -25,6 +25,8 @@ import { createTaskDispatcherService } from '../../infra/services/taskDispatcher
 import { createWhatsAppNotifier } from '../../infra/services/whatsappNotifierImpl.js';
 import { createFirestoreLogChunkRepository } from '../../infra/repositories/firestoreLogChunkRepository.js';
 import { createActionsAgentClient } from '../../infra/clients/actionsAgentClient.js';
+import { createLinearAgentHttpClient } from '../../infra/http/linearAgentHttpClient.js';
+import { createLinearIssueService } from '../../domain/services/linearIssueService.js';
 import type { LogChunkRepository } from '../../domain/repositories/logChunkRepository.js';
 import type { CodeTaskRepository } from '../../domain/repositories/codeTaskRepository.js';
 import type { CodeTask } from '../../domain/models/codeTask.js';
@@ -32,6 +34,7 @@ import type { WorkerDiscoveryService } from '../../domain/services/workerDiscove
 import type { TaskDispatcherService } from '../../domain/services/taskDispatcher.js';
 import type { ActionsAgentClient } from '../../infra/clients/actionsAgentClient.js';
 import type { WhatsAppNotifier } from '../../domain/services/whatsappNotifier.js';
+import type { LinearIssueService } from '../../domain/services/linearIssueService.js';
 
 describe('GET /code/tasks endpoints', () => {
   let app: Awaited<ReturnType<typeof buildServer>>;
@@ -93,6 +96,17 @@ describe('GET /code/tasks endpoints', () => {
       logger,
     });
 
+    const linearAgentClient = createLinearAgentHttpClient({
+      baseUrl: 'http://linear-agent:8086',
+      internalAuthToken: 'test-token',
+      timeoutMs: 10000,
+    }, logger);
+
+    const linearIssueService = createLinearIssueService({
+      linearAgentClient,
+      logger,
+    });
+
     setServices({
       firestore: fakeFirestore as unknown as Firestore,
       logger,
@@ -102,6 +116,7 @@ describe('GET /code/tasks endpoints', () => {
       whatsappNotifier,
       logChunkRepo,
       actionsAgentClient,
+      linearIssueService,
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -111,6 +126,7 @@ describe('GET /code/tasks endpoints', () => {
       logChunkRepo: LogChunkRepository;
       actionsAgentClient: ActionsAgentClient;
       whatsappNotifier: WhatsAppNotifier;
+      linearIssueService: LinearIssueService;
     });
 
     app = await buildServer();

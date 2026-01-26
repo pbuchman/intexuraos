@@ -18,6 +18,8 @@ import { createWorkerDiscoveryService } from './infra/services/workerDiscoveryIm
 import { createTaskDispatcherService } from './infra/services/taskDispatcherImpl.js';
 import { createWhatsAppNotifier } from './infra/services/whatsappNotifierImpl.js';
 import { createActionsAgentClient } from './infra/clients/actionsAgentClient.js';
+import { createLinearAgentHttpClient } from './infra/http/linearAgentHttpClient.js';
+import { createLinearIssueService, type LinearIssueService } from './domain/services/linearIssueService.js';
 
 export interface ServiceContainer {
   firestore: Firestore;
@@ -28,6 +30,7 @@ export interface ServiceContainer {
   taskDispatcher: TaskDispatcherService;
   whatsappNotifier: WhatsAppNotifier;
   actionsAgentClient: ActionsAgentClient;
+  linearIssueService: LinearIssueService;
 }
 
 // Configuration required to initialize services
@@ -55,6 +58,17 @@ export function initServices(config: ServiceConfig): void {
   const firestore = getFirestore();
   const logger = pino({ name: 'code-agent' });
 
+  const linearAgentClient = createLinearAgentHttpClient({
+    baseUrl: config.linearAgentUrl,
+    internalAuthToken: config.internalAuthToken,
+    timeoutMs: 10000,
+  }, logger);
+
+  const linearIssueService = createLinearIssueService({
+    linearAgentClient,
+    logger,
+  });
+
   container = {
     firestore,
     logger,
@@ -79,6 +93,7 @@ export function initServices(config: ServiceConfig): void {
       internalAuthToken: config.internalAuthToken,
       logger,
     }),
+    linearIssueService,
   };
 }
 
