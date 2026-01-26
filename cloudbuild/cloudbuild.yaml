@@ -38,18 +38,21 @@
 # │   2. todos-agent                                                        │
 # │   3. bookmarks-agent                                                    │
 # ├─────────────────────────────────────────────────────────────────────────┤
-# │ BATCH 6 - Final Services (add new services HERE)                        │
+# │ BATCH 6 - Agents C                                                      │
 # │   1. calendar-agent                                                     │
 # │   2. linear-agent                                                       │
 # │   3. web-agent                                                          │
 # ├─────────────────────────────────────────────────────────────────────────┤
-# │ BATCH 7 - Web Frontend                                                  │
+# │ BATCH 7 - Code Agent (add new services HERE)                            │
+# │   1. code-agent                                                         │
+# ├─────────────────────────────────────────────────────────────────────────┤
+# │ BATCH 8 - Web Frontend                                                  │
 # │   1. web (frontend - after all services deployed)                       │
 # └─────────────────────────────────────────────────────────────────────────┘
 #
 # ADDING NEW SERVICES:
-#   1. Add to Batch 6 if it has < 3 services
-#   2. If Batch 6 is full, create new batch before web frontend
+#   1. Add to Batch 7 if it has < 3 services
+#   2. If Batch 7 is full, create new batch before web frontend
 #   3. Update waitFor dependencies accordingly
 #
 # RETRY LOGIC:
@@ -505,7 +508,7 @@ steps:
       - 'ENVIRONMENT=${_ENVIRONMENT}'
 
   # ===========================================================================
-  # BATCH 6 - Final Services (ADD NEW SERVICES HERE, max 3)
+  # BATCH 6 - Agents C (3 services)
   # ===========================================================================
 
   # --- Batch 6 Builds (wait for Batch 5 deploys) ---
@@ -583,12 +586,40 @@ steps:
       - 'ENVIRONMENT=${_ENVIRONMENT}'
 
   # ===========================================================================
-  # BATCH 7 - Web Frontend (after all services deployed)
+  # BATCH 7 - Code Agent (ADD NEW SERVICES HERE, max 3)
+  # ===========================================================================
+
+  # --- Batch 7 Builds (wait for Batch 6 deploys) ---
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'build-push-code-agent'
+    waitFor: ['deploy-calendar-agent', 'deploy-linear-agent', 'deploy-web-agent']
+    timeout: 900s
+    entrypoint: 'bash'
+    args: ['cloudbuild/scripts/build-push-monitored.sh', 'code-agent', 'apps/code-agent/Dockerfile']
+    env:
+      - 'DOCKER_BUILDKIT=1'
+      - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
+      - 'COMMIT_SHA=$COMMIT_SHA'
+
+  # --- Batch 7 Deploys ---
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    id: 'deploy-code-agent'
+    waitFor: ['build-push-code-agent']
+    entrypoint: 'bash'
+    args: ['-c', 'bash cloudbuild/scripts/deploy-code-agent.sh']
+    env:
+      - 'COMMIT_SHA=$COMMIT_SHA'
+      - 'REGION=${_REGION}'
+      - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
+      - 'ENVIRONMENT=${_ENVIRONMENT}'
+
+  # ===========================================================================
+  # BATCH 8 - Web Frontend (after all services deployed)
   # ===========================================================================
 
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     id: 'fetch-web-config'
-    waitFor: ['deploy-calendar-agent', 'deploy-linear-agent', 'deploy-web-agent']
+    waitFor: ['deploy-code-agent']
     entrypoint: 'bash'
     args:
       - '-c'
@@ -612,6 +643,7 @@ steps:
           "calendar-agent:CALENDAR_AGENT"
           "app-settings-service:APP_SETTINGS_SERVICE"
           "linear-agent:LINEAR_AGENT"
+          "code-agent:CODE_AGENT"
         )
 
         # Fetch service URLs
