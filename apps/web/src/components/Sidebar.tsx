@@ -10,6 +10,7 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronUp,
+  Code2,
   Database,
   DollarSign,
   FileText,
@@ -57,6 +58,11 @@ const researchAgentItems: NavItem[] = [
 const dataInsightsItems: NavItem[] = [
   { to: '/data-insights', label: 'Data Sources', icon: List },
   { to: '/data-insights/new', label: 'Add Source', icon: Plus },
+];
+
+const codeTasksItems: NavItem[] = [
+  { to: '/code-tasks', label: 'Task History', icon: List },
+  { to: '/code-tasks/new', label: 'New Task', icon: Plus },
 ];
 
 /**
@@ -116,6 +122,9 @@ export function Sidebar(): React.JSX.Element {
   const [isDataInsightsOpen, setIsDataInsightsOpen] = useState(() =>
     window.location.hash.includes('/data-insights')
   );
+  const [isCodeTasksOpen, setIsCodeTasksOpen] = useState(() =>
+    window.location.hash.includes('/code-tasks')
+  );
   const [savedFilters, setSavedFilters] = useState<SavedNotificationFilter[]>([]);
   const location = useLocation();
   const navigate = useNavigate();
@@ -145,6 +154,13 @@ export function Sidebar(): React.JSX.Element {
   useEffect(() => {
     if (location.pathname.startsWith('/data-insights')) {
       setIsDataInsightsOpen(true);
+    }
+  }, [location.pathname]);
+
+  // Auto-expand code tasks when on code-tasks page
+  useEffect(() => {
+    if (location.pathname.startsWith('/code-tasks')) {
+      setIsCodeTasksOpen(true);
     }
   }, [location.pathname]);
 
@@ -346,6 +362,55 @@ export function Sidebar(): React.JSX.Element {
                     key={item.to}
                     to={item.to}
                     end={item.to === '/data-insights'}
+                    className={({ isActive }): string =>
+                      `flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                        isActive
+                          ? 'bg-blue-50 text-blue-700'
+                          : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'
+                      }`
+                    }
+                  >
+                    <item.icon className="h-4 w-4 shrink-0" />
+                    <span>{item.label}</span>
+                  </NavLink>
+                ))}
+              </div>
+            ) : null}
+          </div>
+
+          {/* Code Tasks section (collapsible) */}
+          <div className="pt-2">
+            <button
+              onClick={(): void => {
+                setIsCodeTasksOpen(!isCodeTasksOpen);
+              }}
+              className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
+                location.pathname.startsWith('/code-tasks')
+                  ? 'bg-blue-50 text-blue-700'
+                  : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+              }`}
+            >
+              <Code2 className="h-5 w-5 shrink-0" />
+              {!isCollapsed ? (
+                <>
+                  <span className="flex-1 text-left">Code Tasks</span>
+                  {isCodeTasksOpen ? (
+                    <ChevronUp className="h-4 w-4" />
+                  ) : (
+                    <ChevronDown className="h-4 w-4" />
+                  )}
+                </>
+              ) : null}
+            </button>
+
+            {/* Code Tasks sub-items */}
+            {isCodeTasksOpen && !isCollapsed ? (
+              <div className="ml-4 mt-1 space-y-1 border-l border-slate-200 pl-3">
+                {codeTasksItems.map((item) => (
+                  <NavLink
+                    key={item.to}
+                    to={item.to}
+                    end={item.to === '/code-tasks'}
                     className={({ isActive }): string =>
                       `flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
                         isActive
