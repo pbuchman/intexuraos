@@ -15,6 +15,7 @@ export { ImageThumbnail } from './ImageThumbnail.js';
 export { AudioPlayer } from './AudioPlayer.js';
 export { LinkPreview } from './LinkPreview.js';
 export { LinkPreviewList } from './LinkPreviewList.js';
+export { MarkdownContent, type MarkdownContentProps } from './MarkdownContent.js';
 export { ModelSelector, getSelectedModelsList, PROVIDER_MODELS } from './ModelSelector.js';
 export { VegaChart } from './VegaChart.js';
 export { RefreshIndicator } from './RefreshIndicator.js';

@@ -17,7 +17,7 @@ import {
   Trash2,
   X,
 } from 'lucide-react';
-import { Button, Card, Input, Layout, RefreshIndicator } from '@/components';
+import { Button, Card, Input, Layout, MarkdownContent, RefreshIndicator } from '@/components';
 import { useAuth } from '@/context';
 import { useBookmarkChanges, useBookmarks } from '@/hooks';
 import { ApiError } from '@/services/apiClient';
@@ -378,7 +378,7 @@ function BookmarkModal({
                     <Sparkles className="h-4 w-4" />
                     AI Summary
                   </div>
-                  <p className="text-sm text-purple-900">{bookmark.aiSummary}</p>
+                  <MarkdownContent content={bookmark.aiSummary} />
                 </div>
               ) : null}
 
