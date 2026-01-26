@@ -311,9 +311,13 @@ describe('FailedIssueRepository', () => {
 
       const createResult = await repository.create(createTestInput());
       expect(createResult.ok).toBe(true);
+      if (!createResult.ok) return;
 
       const getResult = await repository.getById(createResult.value.id);
       expect(getResult.ok).toBe(true);
+      if (getResult.ok) {
+        expect(getResult.value.id).toBe(createResult.value.id);
+      }
 
       const listResult = await repository.listByUser('user-123');
       expect(listResult.ok).toBe(true);
