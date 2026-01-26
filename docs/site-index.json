@@ -240,15 +240,6 @@
       "docs": "services/notion-service"
     },
     {
-      "id": "promptvault-service",
-      "name": "PromptVault Service",
-      "category": "content",
-      "summary": "Prompt template management with Notion sync",
-      "features": ["CRUD operations", "Notion database sync", "Created/updated tracking"],
-      "endpoints": 5,
-      "docs": "services/promptvault-service"
-    },
-    {
       "id": "linear-agent",
       "name": "Linear Agent",
       "category": "integrations",
@@ -292,7 +283,7 @@
     "content": {
       "name": "Content Management",
       "description": "Services for managing user content",
-      "services": ["bookmarks-agent", "notes-agent", "todos-agent", "promptvault-service"]
+      "services": ["bookmarks-agent", "notes-agent", "todos-agent"]
     },
     "integrations": {
       "name": "External Integrations",
@@ -318,10 +309,10 @@
     }
   },
   "stats": {
-    "total": 19,
-    "documented": 19,
+    "total": 18,
+    "documented": 18,
     "completion": 100,
     "version": "2.1.0",
-    "lastUpdated": "2026-01-25"
+    "lastUpdated": "2026-01-26"
   }
 }

@@ -37,7 +37,6 @@ export STORAGE_EMULATOR_HOST=http://localhost:8103
 # Uncomment services you're running locally via 'npm run dev'.
 
 export INTEXURAOS_USER_SERVICE_URL=http://localhost:8110
-export INTEXURAOS_PROMPTVAULT_SERVICE_URL=http://localhost:8111
 export INTEXURAOS_NOTION_SERVICE_URL=http://localhost:8112
 export INTEXURAOS_WHATSAPP_SERVICE_URL=http://localhost:8113
 export INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_URL=http://localhost:8114
@@ -114,12 +113,11 @@ export INTEXURAOS_GCP_PROJECT_ID=demo-intexuraos
 # OPTIONAL: Custom ports
 # =============================================================================
 # Override default ports if needed (e.g., port conflict).
-# Default ports: user=8110, promptvault=8111, notion=8112, whatsapp=8113,
+# Default ports: user=8110, notion=8112, whatsapp=8113,
 # mobile-notifications=8114, api-docs-hub=8115, research-agent=8116,
 # web=3000
 
 # export USER_SERVICE_PORT=9110
-# export PROMPTVAULT_SERVICE_PORT=9111
 
 # =============================================================================
 # PERSONAL IDENTIFIERS

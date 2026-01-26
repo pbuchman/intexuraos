@@ -44,7 +44,6 @@ export interface UserInfo {
 export interface NotionStatus {
   configured: boolean;
   connected: boolean;
-  promptVaultPageId: string | null;
   createdAt: string | null;
   updatedAt: string | null;
 }
@@ -54,11 +53,8 @@ export interface NotionStatus {
  */
 export interface NotionConnectResponse {
   connected: boolean;
-  promptVaultPageId: string;
   createdAt: string;
   updatedAt: string;
-  pageTitle?: string;
-  pageUrl?: string;
 }
 
 /**
@@ -168,7 +164,6 @@ export interface AppConfig {
   auth0ClientId: string;
   authAudience: string;
   authServiceUrl: string;
-  promptVaultServiceUrl: string;
   whatsappServiceUrl: string;
   notionServiceUrl: string;
   mobileNotificationsServiceUrl: string;

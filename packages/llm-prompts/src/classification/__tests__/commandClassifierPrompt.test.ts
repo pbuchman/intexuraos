@@ -124,6 +124,51 @@ describe('commandClassifierPrompt', () => {
 
       expect(prompt).toContain('Explicit command phrases (confidence 0.90+)');
     });
+
+    it('includes Linear vs Code distinction guidance', () => {
+      const prompt = commandClassifierPrompt.build({ message: 'test' });
+
+      expect(prompt).toContain('CRITICAL: Linear vs Code Distinction');
+      expect(prompt).toContain('linear** = DOCUMENT/TRACK/CREATE an issue');
+      expect(prompt).toContain('code** = EXECUTE/IMPLEMENT/DO the work NOW');
+      expect(prompt).toContain('prefer "linear" (documenting) unless');
+    });
+
+    it('includes Linear document intent phrases', () => {
+      const prompt = commandClassifierPrompt.build({ message: 'test' });
+
+      expect(prompt).toContain('"linear issue"');
+      expect(prompt).toContain('"linear task"');
+      expect(prompt).toContain('"create linear"');
+      expect(prompt).toContain('"create linear issue"');
+      expect(prompt).toContain('"track this"');
+      expect(prompt).toContain('"document this"');
+    });
+
+    it('includes Code execute intent phrases requiring explicit action', () => {
+      const prompt = commandClassifierPrompt.build({ message: 'test' });
+
+      expect(prompt).toContain('"execute this"');
+      expect(prompt).toContain('"implement this now"');
+      expect(prompt).toContain('"start working on"');
+      expect(prompt).toContain('"execute linear issue"');
+    });
+
+    it('shows that engineering terms without execute default to linear', () => {
+      const prompt = commandClassifierPrompt.build({ message: 'test' });
+
+      expect(prompt).toContain('"fix the login bug" → linear');
+      expect(prompt).toContain('"implement dark mode" → linear');
+      expect(prompt).toContain('no explicit execution = documenting');
+    });
+
+    it('shows explicit execution commands classify as code', () => {
+      const prompt = commandClassifierPrompt.build({ message: 'test' });
+
+      expect(prompt).toContain('"execute: fix the login bug" → code');
+      expect(prompt).toContain('"start working on dark mode" → code');
+      expect(prompt).toContain('explicit "execute"');
+    });
   });
 
   describe('metadata', () => {

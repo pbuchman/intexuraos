@@ -21,7 +21,6 @@ interface EnvVar {
 
 const REQUIRED_ENV_VARS: EnvVar[] = [
   { key: 'INTEXURAOS_USER_SERVICE_OPENAPI_URL', displayName: 'User Service API' },
-  { key: 'INTEXURAOS_PROMPTVAULT_SERVICE_OPENAPI_URL', displayName: 'PromptVault Service API' },
   { key: 'INTEXURAOS_NOTION_SERVICE_OPENAPI_URL', displayName: 'Notion Service API' },
   { key: 'INTEXURAOS_WHATSAPP_SERVICE_OPENAPI_URL', displayName: 'WhatsApp Service API' },
   {

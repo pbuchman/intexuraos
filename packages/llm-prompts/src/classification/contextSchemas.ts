@@ -16,6 +16,7 @@ export const COMMAND_TYPES = [
   'calendar',
   'reminder',
   'linear',
+  'code',
 ] as const;
 
 export type CommandType = (typeof COMMAND_TYPES)[number];

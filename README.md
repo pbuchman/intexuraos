@@ -147,7 +147,7 @@ Single-model assistants hallucinate. IntexuraOS queries multiple AI experts simu
 | Category           | Services                                                                                                      |
 | ------------------ | ------------------------------------------------------------------------------------------------------------- |
 | **AI Agents**      | research-agent, commands-agent, data-insights-agent, todos-agent, calendar-agent, linear-agent, image-service |
-| **Content**        | bookmarks-agent, notes-agent, promptvault-service                                                             |
+| **Content**        | bookmarks-agent, notes-agent                                                                                  |
 | **Integration**    | whatsapp-service, notion-service, user-service                                                                |
 | **Infrastructure** | actions-agent, web-agent, mobile-notifications-service, api-docs-hub, app-settings-service                    |
 

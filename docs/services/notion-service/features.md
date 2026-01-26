@@ -69,7 +69,7 @@ Notion-service provides Notion integration lifecycle:
 
 **Notion-only** - No other integrations
 
-**No sync** - PromptVault handles actual data sync
+**No sync** - Only manages connection lifecycle
 
 **Token required** - User must generate token manually
 

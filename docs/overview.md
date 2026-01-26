@@ -198,7 +198,6 @@ IntexuraOS deploys **18 specialized microservices**, each with a distinct AI-pow
 | **user-service**                 | Rate limit detection precedence, API key validation (v2.0.0)                |
 | **mobile-notifications-service** | Push notifications, device management                                       |
 | **notion-service**               | Notion integration, sync management                                         |
-| **promptvault-service**          | Prompt template versioning                                                  |
 | **app-settings-service**         | LLM pricing, usage analytics                                                |
 | **api-docs-hub**                 | OpenAPI documentation aggregator                                            |
 

@@ -7,7 +7,6 @@ REGION="europe-central2"
 
 SERVICES=(
   "intexuraos-user-service"
-  "intexuraos-promptvault-service"
   "intexuraos-notion-service"
   "intexuraos-whatsapp-service"
   "intexuraos-mobile-notifications-service"

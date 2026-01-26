@@ -13,7 +13,6 @@ import type { NotionStatus } from '@/types';
 
 interface FormState {
   notionToken: string;
-  promptVaultPageId: string;
   researchPageId: string;
 }
 
@@ -30,7 +29,6 @@ export function NotionConnectionPage(): React.JSX.Element {
 
   const [form, setForm] = useState<FormState>({
     notionToken: '',
-    promptVaultPageId: '',
     researchPageId: '',
   });
 
@@ -40,12 +38,6 @@ export function NotionConnectionPage(): React.JSX.Element {
       const token = await getAccessToken();
       const notionStatus = await getNotionStatus(token);
       setStatus(notionStatus);
-      if (notionStatus.promptVaultPageId !== null && notionStatus.promptVaultPageId !== '') {
-        setForm((prev) => ({
-          ...prev,
-          promptVaultPageId: notionStatus.promptVaultPageId ?? '',
-        }));
-      }
 
       // Fetch research settings if Notion is connected
       if (notionStatus.connected) {
@@ -77,8 +69,8 @@ export function NotionConnectionPage(): React.JSX.Element {
     setError(null);
     setSuccessMessage(null);
 
-    if (!form.notionToken.trim() || !form.promptVaultPageId.trim()) {
-      setError('Both fields are required');
+    if (!form.notionToken.trim()) {
+      setError('Notion token is required');
       return;
     }
 
@@ -87,7 +79,6 @@ export function NotionConnectionPage(): React.JSX.Element {
       const token = await getAccessToken();
       await connectNotion(token, {
         notionToken: form.notionToken.trim(),
-        promptVaultPageId: form.promptVaultPageId.trim(),
       });
       setSuccessMessage('Notion connection saved successfully');
       setForm((prev) => ({ ...prev, notionToken: '' }));
@@ -108,7 +99,7 @@ export function NotionConnectionPage(): React.JSX.Element {
       const token = await getAccessToken();
       await disconnectNotion(token);
       setSuccessMessage('Notion disconnected successfully');
-      setForm({ notionToken: '', promptVaultPageId: '', researchPageId: '' });
+      setForm({ notionToken: '', researchPageId: '' });
       setResearchSettingsLoaded(false);
       await fetchStatus();
     } catch (e) {
@@ -169,15 +160,6 @@ export function NotionConnectionPage(): React.JSX.Element {
 
         <Card title="Connection Settings">
           <form onSubmit={(e) => void handleSubmit(e)} className="space-y-4">
-            <Input
-              label="PromptVault Page ID"
-              placeholder="Enter your Notion page ID"
-              value={form.promptVaultPageId}
-              onChange={(e) => {
-                setForm((prev) => ({ ...prev, promptVaultPageId: e.target.value }));
-              }}
-            />
-
             <Input
               label="Notion Integration Token"
               type="password"
@@ -253,10 +235,6 @@ export function NotionConnectionPage(): React.JSX.Element {
               <div className="flex justify-between">
                 <dt className="text-slate-600">Status</dt>
                 <dd className="font-medium text-green-700">Connected</dd>
-              </div>
-              <div className="flex justify-between">
-                <dt className="text-slate-600">PromptVault Page ID</dt>
-                <dd className="font-mono text-slate-900">{status.promptVaultPageId}</dd>
               </div>
               {form.researchPageId ? (
                 <div className="flex justify-between">

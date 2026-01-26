@@ -88,8 +88,6 @@ const ADDITIONAL_VOCAB = [
   // Service agents
   { content: 'service-scribe', sounds_like: ['service scribe'] },
   { content: 'coverage-orchestrator', sounds_like: ['coverage orchestrator'] },
-  { content: 'promptvault', sounds_like: ['prompt vault'] },
-  { content: 'promptvault-service', sounds_like: ['prompt vault service'] },
   { content: 'actions-agent', sounds_like: ['actions agent'] },
   { content: 'research-agent', sounds_like: ['research agent'] },
   { content: 'commands-agent', sounds_like: ['commands agent'] },

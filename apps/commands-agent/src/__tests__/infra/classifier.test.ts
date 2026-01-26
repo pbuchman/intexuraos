@@ -181,6 +181,19 @@ describe('GeminiClassifier', () => {
       expect(classificationResult.type).toBe('note');
     });
 
+    it('classifies code command correctly', async () => {
+      mockGenerate.mockResolvedValue(
+        ok(generateResult(jsonResponse('code', 0.92, 'Fix login bug')))
+      );
+
+      const classifier = createGeminiClassifier(mockLlmClient, mockLogger);
+      const classificationResult = await classifier.classify('fix the login bug');
+
+      expect(classificationResult.type).toBe('code');
+      expect(classificationResult.confidence).toBe(0.92);
+      expect(classificationResult.title).toBe('Fix login bug');
+    });
+
     it('rejects confidence greater than 1', async () => {
       mockGenerate.mockResolvedValue(ok(generateResult(jsonResponse('todo', 1.5, 'Test'))));
 
