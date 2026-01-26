@@ -141,19 +141,19 @@ function ModelBreakdown({ data }: ModelBreakdownProps): React.JSX.Element {
   return (
     <Card>
       <h3 className="mb-4 text-lg font-semibold text-slate-900">By Model</h3>
-      <div className="space-y-4">
+      <div className="space-y-4 overflow-hidden">
         {data.map((model, idx) => (
-          <div key={model.model}>
-            <div className="mb-1 flex items-center justify-between">
-              <span className="max-w-[200px] truncate font-mono text-sm text-slate-700">
+          <div key={model.model} className="overflow-hidden">
+            <div className="mb-1 flex items-center justify-between gap-2">
+              <span className="min-w-0 flex-shrink truncate font-mono text-sm text-slate-700">
                 {model.model}
               </span>
-              <div className="flex items-center gap-4">
-                <span className="text-xs text-slate-500">{formatNumber(model.calls)} calls</span>
+              <div className="flex flex-shrink-0 items-center gap-2 text-right sm:gap-4">
+                <span className="hidden text-xs text-slate-500 sm:inline">{formatNumber(model.calls)} calls</span>
                 <span className="text-sm font-semibold text-slate-900">
                   {formatCost(model.costUsd)}
                 </span>
-                <span className="w-12 text-right text-xs text-slate-400">{model.percentage}%</span>
+                <span className="w-10 text-right text-xs text-slate-400 sm:w-12">{model.percentage}%</span>
               </div>
             </div>
             <ProgressBar percentage={model.percentage} color={colors[idx % colors.length] ?? 'bg-blue-500'} />

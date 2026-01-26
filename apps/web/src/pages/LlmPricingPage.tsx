@@ -1,6 +1,6 @@
 import { LlmProviders } from '@intexuraos/llm-contract';
 import { useCallback, useEffect, useState } from 'react';
-import { DollarSign, RefreshCw } from 'lucide-react';
+import { DollarSign } from 'lucide-react';
 import { getErrorMessage } from '@intexuraos/common-core/errors';
 import { Card, Layout } from '@/components';
 import { useAuth } from '@/context';
@@ -160,21 +160,9 @@ export function LlmPricingPage(): React.JSX.Element {
 
   return (
     <Layout>
-      <div className="mb-6 flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-bold text-slate-900">LLM Pricing</h2>
-          <p className="text-slate-600">View current pricing for all LLM providers.</p>
-        </div>
-        <button
-          onClick={(): void => {
-            void fetchPricing();
-          }}
-          disabled={loading}
-          className="rounded p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 disabled:opacity-50"
-          title="Refresh"
-        >
-          <RefreshCw className={`h-5 w-5 ${loading ? 'animate-spin' : ''}`} />
-        </button>
+      <div className="mb-6">
+        <h2 className="text-2xl font-bold text-slate-900">LLM Pricing</h2>
+        <p className="text-slate-600">View current pricing for all LLM providers.</p>
       </div>
 
       {error !== null && error !== '' ? (
