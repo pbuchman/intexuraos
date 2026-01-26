@@ -467,6 +467,7 @@ const SERVICE_ENV_MAPPINGS = {
     INTEXURAOS_CF_ACCESS_CLIENT_SECRET: 'dev-cf-client-secret',
     INTEXURAOS_ORCHESTRATOR_MAC_URL: 'http://localhost:8199',
     INTEXURAOS_ORCHESTRATOR_VM_URL: 'http://localhost:8198',
+    INTEXURAOS_CODE_WORKERS: 'mac:http://localhost:8199:1,vm:http://localhost:8198:2',
   },
 };
 

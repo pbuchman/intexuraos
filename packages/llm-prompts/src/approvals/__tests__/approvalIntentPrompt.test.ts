@@ -226,4 +226,68 @@ That's my classification.`;
       reasoning: 'definitely yes',
     });
   });
+
+  it('returns null for malformed JSON causing parse error', () => {
+    const response = '{"intent": "approve", "confidence": }';
+
+    const result = parseApprovalIntentResponse(response);
+
+    expect(result).toBeNull();
+  });
+
+  it('returns null for JSON with syntax error', () => {
+    const response = '{"intent": "approve",';
+
+    const result = parseApprovalIntentResponse(response);
+
+    expect(result).toBeNull();
+  });
+
+  it('returns null for JSON with trailing comma', () => {
+    const response = '{"intent": "approve", "confidence": 0.5, "reasoning": "test",}';
+
+    const result = parseApprovalIntentResponse(response);
+
+    expect(result).toBeNull();
+  });
+
+  it('returns null for JSON with unquoted keys', () => {
+    const response = '{intent: "approve", confidence: 0.5, reasoning: "test"}';
+
+    const result = parseApprovalIntentResponse(response);
+
+    expect(result).toBeNull();
+  });
+
+  it('returns null for response with only opening brace', () => {
+    const response = '{';
+
+    const result = parseApprovalIntentResponse(response);
+
+    expect(result).toBeNull();
+  });
+
+  it('returns null for response with only opening bracket', () => {
+    const response = '[';
+
+    const result = parseApprovalIntentResponse(response);
+
+    expect(result).toBeNull();
+  });
+
+  it('returns null for response with unclosed string', () => {
+    const response = '{"intent": "approve", "confidence": 0.5, "reasoning": "test';
+
+    const result = parseApprovalIntentResponse(response);
+
+    expect(result).toBeNull();
+  });
+
+  it('returns null for NaN confidence value', () => {
+    const response = '{"intent": "approve", "confidence": NaN, "reasoning": "test"}';
+
+    const result = parseApprovalIntentResponse(response);
+
+    expect(result).toBeNull();
+  });
 });

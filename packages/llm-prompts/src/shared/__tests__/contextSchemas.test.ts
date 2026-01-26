@@ -205,6 +205,62 @@ describe('InputQualitySchema', () => {
       expect(result.success).toBe(true);
     });
 
+    it('accepts quality_scale field with valid value', () => {
+      const result = InputQualitySchema.safeParse({
+        quality_scale: 1,
+        reason: 'Moderate quality',
+      });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.quality).toBe(1);
+        expect(result.data.reason).toBe('Moderate quality');
+      }
+    });
+
+    it('normalizes quality_scale to quality field', () => {
+      const result = InputQualitySchema.safeParse({
+        quality_scale: 2,
+        reason: 'High quality',
+      });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.quality).toBe(2);
+      }
+    });
+
+    it('prefers quality over quality_scale when both provided', () => {
+      const result = InputQualitySchema.safeParse({
+        quality: 1,
+        quality_scale: 2,
+        reason: 'Test',
+      });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.quality).toBe(1);
+      }
+    });
+
+    it('returns error when both quality and quality_scale are undefined', () => {
+      const result = InputQualitySchema.safeParse({
+        quality: undefined,
+        quality_scale: undefined,
+        reason: 'Test reason',
+      });
+      // The refine requires at least one to be defined
+      expect(result.success).toBe(false);
+    });
+
+    it('uses quality_scale when quality is omitted (nullish coalescing branch)', () => {
+      const result = InputQualitySchema.safeParse({
+        quality_scale: 0,
+        reason: 'Low quality',
+      });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.quality).toBe(0);
+      }
+    });
+
     it('accepts reason with special characters', () => {
       const result = InputQualitySchema.safeParse({
         quality: 1,

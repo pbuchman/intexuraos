@@ -1,18 +1,18 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Edit2, FileText, Plus, Tag, Trash2, X } from 'lucide-react';
+import { Calendar, Edit2, FileText, Link2, Plus, RotateCcw, Tag, Trash2, X } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { Button, Card, Input, Layout, RefreshIndicator } from '@/components';
 import { useNotes } from '@/hooks';
 import type { Note, UpdateNoteRequest } from '@/types';
 
 function formatDate(isoString: string): string {
   const date = new Date(isoString);
-  return date.toLocaleString(undefined, {
+  return date.toLocaleDateString(undefined, {
     year: 'numeric',
     month: 'short',
     day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
   });
 }
 
@@ -21,32 +21,6 @@ function truncateContent(content: string, maxLength = 150): string {
     return content;
   }
   return content.slice(0, maxLength).trim() + '...';
-}
-
-function renderTextWithLinks(text: string): React.JSX.Element {
-  const urlPattern = /(https?:\/\/[^\s]+)/g;
-  const parts = text.split(urlPattern);
-
-  return (
-    <>
-      {parts.map((part, index) => {
-        if (part.match(urlPattern) !== null) {
-          return (
-            <a
-              key={index}
-              href={part}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-blue-600 underline hover:text-blue-800"
-            >
-              {part}
-            </a>
-          );
-        }
-        return <span key={index}>{part}</span>;
-      })}
-    </>
-  );
 }
 
 interface NoteModalProps {
@@ -173,15 +147,24 @@ function NoteModal({ note, onClose, onUpdate, onDelete }: NoteModalProps): React
                   ))}
                 </div>
               ) : null}
-              <div className="whitespace-pre-wrap break-words text-slate-700">
-                {renderTextWithLinks(note.content)}
+              <div className="prose prose-slate prose-sm max-w-none">
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                  {note.content}
+                </ReactMarkdown>
               </div>
-              <div className="text-xs text-slate-400">
-                <span>Created: {formatDate(note.createdAt)}</span>
-                <span className="mx-2">·</span>
-                <span>Updated: {formatDate(note.updatedAt)}</span>
-                <span className="mx-2">·</span>
-                <span>Source: {note.source}</span>
+              <div className="flex flex-wrap items-center gap-3 text-xs text-slate-400">
+                <span className="flex items-center gap-1" title="Created">
+                  <Calendar className="h-3 w-3" />
+                  {formatDate(note.createdAt)}
+                </span>
+                <span className="flex items-center gap-1" title="Updated">
+                  <RotateCcw className="h-3 w-3" />
+                  {formatDate(note.updatedAt)}
+                </span>
+                <span className="flex items-center gap-1" title="Source">
+                  <Link2 className="h-3 w-3" />
+                  {note.source}
+                </span>
               </div>
             </div>
           )}
@@ -525,8 +508,8 @@ export function NotesListPage(): React.JSX.Element {
             setShowCreateModal(true);
           }}
         >
-          <Plus className="mr-2 h-4 w-4" />
-          New Note
+          <Plus className="h-4 w-4 sm:mr-2" />
+          <span className="hidden sm:inline">New Note</span>
         </Button>
       </div>
 
@@ -551,8 +534,8 @@ export function NotesListPage(): React.JSX.Element {
                 setShowCreateModal(true);
               }}
             >
-              <Plus className="mr-2 h-4 w-4" />
-              New Note
+              <Plus className="h-4 w-4 sm:mr-2" />
+              <span className="hidden sm:inline">New Note</span>
             </Button>
           </div>
         </Card>

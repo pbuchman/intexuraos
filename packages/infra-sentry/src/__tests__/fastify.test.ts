@@ -391,6 +391,109 @@ describe('sanitizeHeaders (via error handler)', () => {
     expect(Sentry.withScope).toHaveBeenCalled();
   });
 
+  it('handles requests with array header containing empty string at index 0', async () => {
+    const app = Fastify({ logger: false });
+    setupSentryErrorHandler(app);
+
+    app.get('/test', async (request) => {
+      (request.headers as Record<string, string | string[] | undefined>)['x-custom'] = [''];
+      throw new Error('Test error');
+    });
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/test',
+    });
+
+    expect(response.statusCode).toBe(500);
+    expect(Sentry.withScope).toHaveBeenCalled();
+  });
+
+  it('handles requests with array header containing undefined value', async () => {
+    const app = Fastify({ logger: false });
+    setupSentryErrorHandler(app);
+
+    app.get('/test', async (request) => {
+      (request.headers as Record<string, string | string[] | undefined>)['x-custom'] = [
+        'value',
+        undefined as unknown as string,
+      ];
+      throw new Error('Test error');
+    });
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/test',
+    });
+
+    expect(response.statusCode).toBe(500);
+    expect(Sentry.withScope).toHaveBeenCalled();
+  });
+
+  it('handles requests with header key containing undefined value in array', async () => {
+    const app = Fastify({ logger: false });
+    setupSentryErrorHandler(app);
+
+    app.get('/test', async (request) => {
+      (request.headers as Record<string, string | string[] | undefined>)['x-custom'] = [
+        undefined as unknown as string,
+        'value',
+      ];
+      throw new Error('Test error');
+    });
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/test',
+    });
+
+    expect(response.statusCode).toBe(500);
+    expect(Sentry.withScope).toHaveBeenCalled();
+  });
+
+  it('handles requests with array header with only empty strings', async () => {
+    const app = Fastify({ logger: false });
+    setupSentryErrorHandler(app);
+
+    app.get('/test', async (request) => {
+      (request.headers as Record<string, string | string[] | undefined>)['x-custom'] = ['', '', ''];
+      throw new Error('Test error');
+    });
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/test',
+    });
+
+    expect(response.statusCode).toBe(500);
+    expect(Sentry.withScope).toHaveBeenCalled();
+  });
+
+  it('handles requests with multiple array headers', async () => {
+    const app = Fastify({ logger: false });
+    setupSentryErrorHandler(app);
+
+    app.get('/test', async (request) => {
+      (request.headers as Record<string, string | string[] | undefined>)['accept'] = [
+        'application/json',
+        'text/html',
+      ];
+      (request.headers as Record<string, string | string[] | undefined>)['accept-encoding'] = [
+        'gzip',
+        'br',
+      ];
+      throw new Error('Test error');
+    });
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/test',
+    });
+
+    expect(response.statusCode).toBe(500);
+    expect(Sentry.withScope).toHaveBeenCalled();
+  });
+
   it('handles requests with no special headers', async () => {
     const app = Fastify({ logger: false });
     setupSentryErrorHandler(app);

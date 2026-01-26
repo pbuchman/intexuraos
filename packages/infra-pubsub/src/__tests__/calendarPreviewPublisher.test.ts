@@ -89,6 +89,36 @@ describe('createCalendarPreviewPublisher', () => {
       expect((publishedData['correlationId'] as string).length).toBeGreaterThan(0);
     });
 
+    it('generates unique correlationIds for each call when not provided', async () => {
+      const publisher = createCalendarPreviewPublisher(config);
+
+      const result1 = await publisher.publishGeneratePreview({
+        actionId: 'action-123',
+        userId: 'user-456',
+        text: 'Preview my calendar',
+        currentDate: '2025-01-25',
+      });
+
+      const result2 = await publisher.publishGeneratePreview({
+        actionId: 'action-123',
+        userId: 'user-456',
+        text: 'Preview my calendar',
+        currentDate: '2025-01-25',
+      });
+
+      expect(result1.ok).toBe(true);
+      expect(result2.ok).toBe(true);
+
+      const call1 = mockPublishMessage.mock.calls[0] as [{ data: Buffer }];
+      const call2 = mockPublishMessage.mock.calls[1] as [{ data: Buffer }];
+      const publishedData1 = JSON.parse(call1[0].data.toString()) as Record<string, unknown>;
+      const publishedData2 = JSON.parse(call2[0].data.toString()) as Record<string, unknown>;
+
+      expect(publishedData1['correlationId']).toBeDefined();
+      expect(publishedData2['correlationId']).toBeDefined();
+      expect(publishedData1['correlationId']).not.toBe(publishedData2['correlationId']);
+    });
+
     it('verifies event structure has correct type', async () => {
       const publisher = createCalendarPreviewPublisher(config);
 

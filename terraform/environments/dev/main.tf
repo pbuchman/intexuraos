@@ -1379,6 +1379,7 @@ module "code_agent" {
   env_vars = merge(local.common_service_env_vars, {
     INTEXURAOS_ORCHESTRATOR_MAC_URL = "https://cc-mac.intexuraos.cloud"
     INTEXURAOS_ORCHESTRATOR_VM_URL  = "https://cc-vm.intexuraos.cloud"
+    INTEXURAOS_CODE_WORKERS         = "mac:https://cc-mac.intexuraos.cloud:1,vm:https://cc-vm.intexuraos.cloud:2"
   })
 
   depends_on = [

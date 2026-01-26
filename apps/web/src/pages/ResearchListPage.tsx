@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { CheckCircle, Star, Trash2, XCircle } from 'lucide-react';
+import { CheckCircle, Plus, Star, Trash2, XCircle } from 'lucide-react';
 import { Button, Card, Layout, RefreshIndicator } from '@/components';
 import { useAuth } from '@/context';
 import { useResearches } from '@/hooks';
@@ -83,7 +83,10 @@ export function ResearchListPage(): React.JSX.Element {
           <p className="text-slate-600">View and manage your research history</p>
         </div>
         <Link to="/research/new">
-          <Button>New Research</Button>
+          <Button>
+            <Plus className="h-4 w-4 sm:mr-2" />
+            <span className="hidden sm:inline">New Research</span>
+          </Button>
         </Link>
       </div>
 
