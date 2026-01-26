@@ -786,6 +786,46 @@ describe('codeRoutes', () => {
 
       expect(response.statusCode).toBe(404);
     });
+
+    it('calls recordTaskComplete when task status changes to completed', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      // Create a task first
+      const createResult = await repo.create({
+        userId: 'user-123',
+        prompt: 'Test',
+        sanitizedPrompt: 'Test',
+        systemPromptHash: 'default',
+        workerType: 'auto',
+        workerLocation: 'mac',
+        repository: 'test/repo',
+        baseBranch: 'main',
+        traceId: 'trace_123',
+      });
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) return;
+      const task = createResult.value;
+
+      const { getServices } = await import('../../services.js');
+      const services = getServices();
+      const recordCompleteSpy = vi.spyOn(services.rateLimitService, 'recordTaskComplete');
+
+      const response = await server.inject({
+        method: 'PATCH',
+        url: `/internal/code-tasks/${task.id}`,
+        headers: { 'x-internal-auth': 'test-internal-token' },
+        payload: {
+          status: 'completed',
+          result: { branch: 'test', commits: 1, summary: 'Done' },
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(recordCompleteSpy).toHaveBeenCalledWith('user-123', undefined);
+    });
   });
 
   describe('POST /internal/code/process error handling', () => {
