@@ -1,5 +1,242 @@
 import { describe, expect, it } from 'vitest';
-import { InputQualitySchema } from '../contextSchemas.js';
+import {
+  InputQualitySchema,
+  DomainSchema,
+  ModeSchema,
+  DefaultAppliedSchema,
+  SafetyInfoSchema,
+  DOMAINS,
+  MODES,
+} from '../contextSchemas.js';
+
+describe('DomainSchema', () => {
+  it('accepts all valid domain values', () => {
+    for (const domain of DOMAINS) {
+      const result = DomainSchema.safeParse(domain);
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data).toBe(domain);
+      }
+    }
+  });
+
+  it('rejects invalid domain values', () => {
+    const result = DomainSchema.safeParse('invalid_domain');
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects empty string', () => {
+    const result = DomainSchema.safeParse('');
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects null', () => {
+    const result = DomainSchema.safeParse(null);
+    expect(result.success).toBe(false);
+  });
+});
+
+describe('ModeSchema', () => {
+  it('accepts all valid mode values', () => {
+    for (const mode of MODES) {
+      const result = ModeSchema.safeParse(mode);
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data).toBe(mode);
+      }
+    }
+  });
+
+  it('rejects invalid mode values', () => {
+    const result = ModeSchema.safeParse('invalid_mode');
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects empty string', () => {
+    const result = ModeSchema.safeParse('');
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects null', () => {
+    const result = ModeSchema.safeParse(null);
+    expect(result.success).toBe(false);
+  });
+});
+
+describe('DefaultAppliedSchema', () => {
+  describe('valid inputs', () => {
+    it('accepts string value', () => {
+      const result = DefaultAppliedSchema.safeParse({
+        key: 'model',
+        value: 'gpt-4',
+        reason: 'User specified model',
+      });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.value).toBe('gpt-4');
+      }
+    });
+
+    it('accepts number value', () => {
+      const result = DefaultAppliedSchema.safeParse({
+        key: 'temperature',
+        value: 0.7,
+        reason: 'Default temperature',
+      });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.value).toBe(0.7);
+      }
+    });
+
+    it('accepts boolean value', () => {
+      const result = DefaultAppliedSchema.safeParse({
+        key: 'stream',
+        value: true,
+        reason: 'Streaming enabled',
+      });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.value).toBe(true);
+      }
+    });
+
+    it('accepts boolean false value', () => {
+      const result = DefaultAppliedSchema.safeParse({
+        key: 'verbose',
+        value: false,
+        reason: 'Verbose mode disabled',
+      });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.value).toBe(false);
+      }
+    });
+  });
+
+  describe('invalid inputs', () => {
+    it('rejects missing key', () => {
+      const result = DefaultAppliedSchema.safeParse({
+        value: 'test',
+        reason: 'test',
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects missing value', () => {
+      const result = DefaultAppliedSchema.safeParse({
+        key: 'test',
+        reason: 'test',
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects missing reason', () => {
+      const result = DefaultAppliedSchema.safeParse({
+        key: 'test',
+        value: 'test',
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects invalid value type (object)', () => {
+      const result = DefaultAppliedSchema.safeParse({
+        key: 'test',
+        value: { invalid: 'object' } as unknown as string,
+        reason: 'test',
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('accepts empty string key (z.string() allows empty by default)', () => {
+      const result = DefaultAppliedSchema.safeParse({
+        key: '',
+        value: 'test',
+        reason: 'test',
+      });
+      expect(result.success).toBe(true);
+    });
+  });
+});
+
+describe('SafetyInfoSchema', () => {
+  describe('valid inputs', () => {
+    it('accepts high_stakes true with empty disclaimers array', () => {
+      const result = SafetyInfoSchema.safeParse({
+        high_stakes: true,
+        required_disclaimers: [],
+      });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.high_stakes).toBe(true);
+        expect(result.data.required_disclaimers).toEqual([]);
+      }
+    });
+
+    it('accepts high_stakes false with disclaimers', () => {
+      const result = SafetyInfoSchema.safeParse({
+        high_stakes: false,
+        required_disclaimers: ['Consult a professional'],
+      });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.high_stakes).toBe(false);
+        expect(result.data.required_disclaimers).toHaveLength(1);
+      }
+    });
+
+    it('accepts multiple disclaimers', () => {
+      const result = SafetyInfoSchema.safeParse({
+        high_stakes: true,
+        required_disclaimers: ['Medical advice', 'Consult a doctor', 'Not a diagnosis'],
+      });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.required_disclaimers).toHaveLength(3);
+      }
+    });
+  });
+
+  describe('invalid inputs', () => {
+    it('rejects missing high_stakes', () => {
+      const result = SafetyInfoSchema.safeParse({
+        required_disclaimers: [],
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects missing required_disclaimers', () => {
+      const result = SafetyInfoSchema.safeParse({
+        high_stakes: true,
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects non-boolean high_stakes', () => {
+      const result = SafetyInfoSchema.safeParse({
+        high_stakes: 'true' as unknown as boolean,
+        required_disclaimers: [],
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects non-array required_disclaimers', () => {
+      const result = SafetyInfoSchema.safeParse({
+        high_stakes: true,
+        required_disclaimers: 'not an array' as unknown as string[],
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects array with non-string elements', () => {
+      const result = SafetyInfoSchema.safeParse({
+        high_stakes: true,
+        required_disclaimers: [123 as unknown as string],
+      });
+      expect(result.success).toBe(false);
+    });
+  });
+});
 
 describe('InputQualitySchema', () => {
   describe('valid inputs', () => {

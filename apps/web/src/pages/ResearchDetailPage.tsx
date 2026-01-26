@@ -647,6 +647,24 @@ export function ResearchDetailPage(): React.JSX.Element {
           </div>
         ) : null}
 
+        {research.notionExportInfo !== undefined ? (
+          <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-purple-200 bg-purple-50 px-3 py-2">
+            <span className="text-sm text-purple-700">Exported to Notion</span>
+            <a
+              href={research.notionExportInfo.mainPageUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 text-sm font-medium text-blue-600 hover:text-blue-800 hover:underline"
+            >
+              View in Notion
+              <ExternalLink className="h-3 w-3" />
+            </a>
+            <span className="text-xs text-slate-400">
+              {new Date(research.notionExportInfo.exportedAt).toLocaleDateString()}
+            </span>
+          </div>
+        ) : null}
+
         {unshareError !== null && unshareError !== '' ? (
           <div className="mt-2 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
             {unshareError}

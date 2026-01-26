@@ -15,6 +15,7 @@ export {
   type SetLlmKeyResponse,
 } from './llmKeysApi.js';
 export * from './researchAgentApi.js';
+export * from './researchSettingsApi.js';
 export * from './commandsApi.js';
 export * from './dataSourceApi.js';
 export {

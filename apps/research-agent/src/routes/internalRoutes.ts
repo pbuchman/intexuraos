@@ -459,6 +459,8 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
               },
             },
             imageApiKeys: apiKeys,
+            notionServiceClient: services.notionServiceClient,
+            researchExportSettings: services.researchExportSettings,
           });
         }
 

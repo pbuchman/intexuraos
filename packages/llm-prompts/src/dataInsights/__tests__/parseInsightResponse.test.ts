@@ -160,6 +160,14 @@ EXTRA_LINE`;
     expect(() => parseInsightResponse(response)).toThrow();
   });
 
+  it('throws on NO_INSIGHTS with spaces and letters as reason (trimmed)', () => {
+    const response = 'NO_INSIGHTS: Reason=   x   ';
+
+    // This should pass the regex but after trim becomes 'x'
+    const result = parseInsightResponse(response);
+    expect(result.noInsightsReason).toBe('x');
+  });
+
   it('throws on insights without INSIGHT_ prefix', () => {
     const response = 'NOT_AN_INSIGHT: Title=Test; Description=Test; Trackable=Test; ChartType=C1';
 

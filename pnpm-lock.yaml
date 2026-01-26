@@ -826,6 +826,9 @@ importers:
       '@intexuraos/infra-gpt':
         specifier: workspace:*
         version: link:../../packages/infra-gpt
+      '@intexuraos/infra-notion':
+        specifier: workspace:*
+        version: link:../../packages/infra-notion
       '@intexuraos/infra-perplexity':
         specifier: workspace:*
         version: link:../../packages/infra-perplexity

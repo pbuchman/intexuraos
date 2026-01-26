@@ -124,6 +124,8 @@ export async function handleAllCompleted(params: AllCompletedHandlerParams): Pro
       },
     },
     imageApiKeys: apiKeys,
+    notionServiceClient: services.notionServiceClient,
+    researchExportSettings: services.researchExportSettings,
   });
 
   if (synthesisResult.ok) {

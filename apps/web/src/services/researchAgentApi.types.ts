@@ -86,6 +86,16 @@ export interface ShareInfo {
 }
 
 /**
+ * Notion export information for a research.
+ */
+export interface NotionExportInfo {
+  mainPageId: string;
+  mainPageUrl: string;
+  llmReportPageIds: { model: string; pageId: string }[];
+  exportedAt: string;
+}
+
+/**
  * Research document representing a multi-LLM research session.
  */
 export interface Research {
@@ -104,6 +114,7 @@ export interface Research {
   synthesisError?: string;
   partialFailure?: PartialFailure;
   shareInfo?: ShareInfo;
+  notionExportInfo?: NotionExportInfo;
   startedAt: string;
   completedAt?: string;
   totalDurationMs?: number;
