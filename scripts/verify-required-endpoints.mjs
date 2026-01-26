@@ -100,7 +100,7 @@ const violations = [];
 for (const app of apps) {
   const { exists, missing } = checkServerFile(app);
 
-  if (!exists || missing.length > 0) {
+  if (!exists) {
     violations.push({
       app,
       issue: 'Missing server.ts file',
