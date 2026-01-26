@@ -83,3 +83,4 @@ CLAUDE.md
 # CI failure tracking (local analysis only)
 .claude/ci-failures/*.jsonl
 
+.claude/hooks/commands.log

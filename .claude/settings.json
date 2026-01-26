@@ -25,6 +25,7 @@
       {
         "matcher": "Bash",
         "hooks": [
+          { "type": "command", "command": ".claude/hooks/log-command-start.sh" },
           { "type": "command", "command": ".claude/hooks/validate-coverage-commands.sh" },
           { "type": "command", "command": ".claude/hooks/validate-terraform.sh" },
           { "type": "command", "command": ".claude/hooks/validate-gcloud-resources.sh" },
@@ -36,6 +37,14 @@
         "matcher": "Edit|Write",
         "hooks": [
           { "type": "command", "command": ".claude/hooks/validate-coverage-config.sh" }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          { "type": "command", "command": ".claude/hooks/log-command-end.sh" }
         ]
       }
     ]
