@@ -187,7 +187,7 @@ describe('statusMirrorService', () => {
       expect(mockUpdateActionStatus).toHaveBeenCalledWith('action-123', 'cancelled', undefined, undefined);
     });
 
-    it('should map interrupted status to failed', async () => {
+    it('should map interrupted status to interrupted', async () => {
       mockUpdateActionStatus.mockResolvedValue(ok(undefined));
 
       const service = createStatusMirrorService({
@@ -200,16 +200,48 @@ describe('statusMirrorService', () => {
         taskStatus: 'interrupted',
       });
 
-      expect(mockUpdateActionStatus).toHaveBeenCalledWith('action-123', 'failed', undefined, undefined);
+      expect(mockUpdateActionStatus).toHaveBeenCalledWith('action-123', 'interrupted', undefined, undefined);
+    });
+
+    it('should map dispatched status to dispatched', async () => {
+      mockUpdateActionStatus.mockResolvedValue(ok(undefined));
+
+      const service = createStatusMirrorService({
+        actionsAgentClient: mockActionsAgentClient,
+        logger,
+      });
+
+      await service.mirrorStatus({
+        actionId: 'action-123',
+        taskStatus: 'dispatched',
+      });
+
+      expect(mockUpdateActionStatus).toHaveBeenCalledWith('action-123', 'dispatched', undefined, undefined);
+    });
+
+    it('should map running status to running', async () => {
+      mockUpdateActionStatus.mockResolvedValue(ok(undefined));
+
+      const service = createStatusMirrorService({
+        actionsAgentClient: mockActionsAgentClient,
+        logger,
+      });
+
+      await service.mirrorStatus({
+        actionId: 'action-123',
+        taskStatus: 'running',
+      });
+
+      expect(mockUpdateActionStatus).toHaveBeenCalledWith('action-123', 'running', undefined, undefined);
     });
 
     it.each([
-      ['dispatched', 'completed'],
-      ['running', 'completed'],
+      ['dispatched', 'dispatched'],
+      ['running', 'running'],
       ['completed', 'completed'],
       ['failed', 'failed'],
       ['cancelled', 'cancelled'],
-      ['interrupted', 'failed'],
+      ['interrupted', 'interrupted'],
     ])('should map %s to %s', async (taskStatus, expectedResourceStatus) => {
       mockUpdateActionStatus.mockResolvedValue(ok(undefined));
 

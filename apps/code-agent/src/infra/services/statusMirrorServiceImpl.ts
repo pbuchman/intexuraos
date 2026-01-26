@@ -9,6 +9,19 @@ import type { Logger } from '@intexuraos/common-core';
 import type { ActionsAgentClient } from '../clients/actionsAgentClient.js';
 import type { TaskStatus } from '../../domain/models/codeTask.js';
 
+/**
+ * Status of the associated resource (e.g., code task).
+ * Must match actions-agent's ResourceStatus type exactly.
+ * See: apps/actions-agent/src/domain/models/action.ts
+ */
+export type ResourceStatus =
+  | 'dispatched'
+  | 'running'
+  | 'completed'
+  | 'failed'
+  | 'cancelled'
+  | 'interrupted';
+
 export interface StatusMirrorServiceDeps {
   actionsAgentClient: ActionsAgentClient;
   logger: Logger;
@@ -31,13 +44,14 @@ export interface StatusMirrorService {
 export function createStatusMirrorService(deps: StatusMirrorServiceDeps): StatusMirrorService {
   const { actionsAgentClient, logger } = deps;
 
-  const statusMapping: Record<TaskStatus, 'completed' | 'failed' | 'cancelled'> = {
-    dispatched: 'completed',
-    running: 'completed',
+  // Identity mapping: TaskStatus values match ResourceStatus exactly
+  const statusMapping: Record<TaskStatus, ResourceStatus> = {
+    dispatched: 'dispatched',
+    running: 'running',
     completed: 'completed',
     failed: 'failed',
     cancelled: 'cancelled',
-    interrupted: 'failed',
+    interrupted: 'interrupted',
   };
 
   return {
