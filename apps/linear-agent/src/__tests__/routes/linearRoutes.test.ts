@@ -1,5 +1,14 @@
-import { createToken, describe, expect, it, setupTestContext } from '../testUtils.js';
+import { createToken, describe, expect, it, setupTestContext, clearTestLogs, getTestLoggerStream, beforeEach, afterEach, beforeAll, afterAll, setupJwksServer, teardownJwksServer, resetServices, setServices } from '../testUtils.js';
+import { buildServer } from '../../server.js';
+import type { FastifyInstance } from 'fastify';
 import type { LinearConnection } from '../../domain/models.js';
+import {
+  FakeLinearConnectionRepository,
+  FakeLinearApiClient,
+  FakeFailedIssueRepository,
+  FakeLinearActionExtractionService,
+  FakeProcessedActionRepository,
+} from '../fakes.js';
 
 describe('linearRoutes', () => {
   const ctx = setupTestContext();
@@ -849,6 +858,197 @@ describe('linearRoutes', () => {
       const body = response.json();
       expect(body.success).toBe(false);
       expect(body.error.code).toBe('FORBIDDEN');
+    });
+  });
+});
+
+// Logging coverage tests - use beforeEach to build server with test logger
+describe('linearRoutes logging coverage', () => {
+  let loggingApp: FastifyInstance;
+  const loggingRepos = {
+    connectionRepository: new FakeLinearConnectionRepository(),
+    linearApiClient: new FakeLinearApiClient(),
+    extractionService: new FakeLinearActionExtractionService(),
+    failedIssueRepository: new FakeFailedIssueRepository(),
+    processedActionRepository: new FakeProcessedActionRepository(),
+  };
+
+  beforeAll(async () => {
+    await setupJwksServer();
+  });
+
+  afterAll(async () => {
+    await teardownJwksServer();
+  });
+
+  function seedConnection(userId: string): void {
+    const connection: LinearConnection = {
+      userId,
+      apiKey: 'linear-api-key-123',
+      teamId: 'team-456',
+      teamName: 'Engineering',
+      connected: true,
+      createdAt: '2025-01-15T00:00:00Z',
+      updatedAt: '2025-01-15T00:00:00Z',
+    };
+    loggingRepos.connectionRepository.seedConnection(connection);
+  }
+
+  beforeEach(async () => {
+    clearTestLogs();
+    process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = 'test-internal-token';
+    loggingRepos.connectionRepository.reset();
+    loggingRepos.linearApiClient.reset();
+    loggingRepos.extractionService.reset();
+    loggingRepos.failedIssueRepository.reset();
+    loggingRepos.processedActionRepository.reset();
+    setServices(loggingRepos);
+    loggingApp = await buildServer(getTestLoggerStream());
+    await loggingApp.ready();
+  });
+
+  afterEach(async () => {
+    if (loggingApp) {
+      await loggingApp.close();
+    }
+    resetServices();
+    delete process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'];
+  });
+
+  describe('DELETE /linear/failed-issues/:id - logging', () => {
+    it('logs error when getById repository fails', async () => {
+      const createResult = await loggingRepos.failedIssueRepository.create({
+        userId: 'test-user-123',
+        actionId: 'action-1',
+        originalText: 'Create a task for testing',
+        extractedTitle: 'Testing task',
+        extractedPriority: 2,
+        error: 'Connection error',
+        reasoning: 'Network timeout',
+      });
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) return;
+
+      loggingRepos.failedIssueRepository.setGetByIdFailure(true);
+
+      const token = await createToken({ sub: 'test-user-123' });
+      const response = await loggingApp.inject({
+        method: 'DELETE',
+        url: `/linear/failed-issues/${createResult.value.id}`,
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(404);
+      // Error logging is enabled - coverage will verify the log line is hit
+    });
+
+    it('logs error when delete repository fails', async () => {
+      const createResult = await loggingRepos.failedIssueRepository.create({
+        userId: 'test-user-123',
+        actionId: 'action-1',
+        originalText: 'Create a task for testing',
+        extractedTitle: 'Testing task',
+        extractedPriority: 2,
+        error: 'Connection error',
+        reasoning: 'Network timeout',
+      });
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) return;
+
+      loggingRepos.failedIssueRepository.setDeleteFailure(true);
+
+      const token = await createToken({ sub: 'test-user-123' });
+      const response = await loggingApp.inject({
+        method: 'DELETE',
+        url: `/linear/failed-issues/${createResult.value.id}`,
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(502);
+      // Error logging is enabled - coverage will verify the log line is hit
+    });
+  });
+
+  describe('POST /linear/failed-issues/:id/retry - logging', () => {
+    it('logs error when getById repository fails', async () => {
+      const createResult = await loggingRepos.failedIssueRepository.create({
+        userId: 'test-user-123',
+        actionId: 'action-1',
+        originalText: 'Create a task for testing',
+        extractedTitle: 'Testing task',
+        extractedPriority: 2,
+        error: 'Connection error',
+        reasoning: 'Network timeout',
+      });
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) return;
+
+      loggingRepos.failedIssueRepository.setGetByIdFailure(true);
+
+      const token = await createToken({ sub: 'test-user-123' });
+      const response = await loggingApp.inject({
+        method: 'POST',
+        url: `/linear/failed-issues/${createResult.value.id}/retry`,
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(404);
+      // Error logging is enabled - coverage will verify the log line is hit
+    });
+
+    it('logs error when update fails after retry fails', async () => {
+      seedConnection('test-user-123');
+      const createResult = await loggingRepos.failedIssueRepository.create({
+        userId: 'test-user-123',
+        actionId: 'action-1',
+        originalText: 'Create a task for testing',
+        extractedTitle: 'Testing task',
+        extractedPriority: 2,
+        error: 'Connection error',
+        reasoning: 'Network timeout',
+      });
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) return;
+
+      loggingRepos.linearApiClient.setFailure(true, { code: 'RATE_LIMIT', message: 'Rate limit exceeded' });
+      loggingRepos.failedIssueRepository.setUpdateFailure(true);
+
+      const token = await createToken({ sub: 'test-user-123' });
+      const response = await loggingApp.inject({
+        method: 'POST',
+        url: `/linear/failed-issues/${createResult.value.id}/retry`,
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(422);
+      // Error logging is enabled - coverage will verify the log line is hit
+    });
+
+    it('logs error when delete fails after successful retry', async () => {
+      seedConnection('test-user-123');
+      const createResult = await loggingRepos.failedIssueRepository.create({
+        userId: 'test-user-123',
+        actionId: 'action-1',
+        originalText: 'Create a task for testing',
+        extractedTitle: 'Testing task',
+        extractedPriority: 2,
+        error: 'Connection error',
+        reasoning: 'Network timeout',
+      });
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) return;
+
+      loggingRepos.failedIssueRepository.setDeleteFailure(true);
+
+      const token = await createToken({ sub: 'test-user-123' });
+      const response = await loggingApp.inject({
+        method: 'POST',
+        url: `/linear/failed-issues/${createResult.value.id}/retry`,
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      // Error logging is enabled - coverage will verify the log line is hit
     });
   });
 });

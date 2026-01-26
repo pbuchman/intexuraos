@@ -1,5 +1,6 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import Fastify, { type FastifyInstance } from 'fastify';
+import pino from 'pino';
 import * as jose from 'jose';
 import { buildServer } from '../server.js';
 import { clearJwksCache } from '@intexuraos/common-http';
@@ -14,6 +15,95 @@ import { resetServices, setServices } from '../services.js';
 
 export const issuer = 'https://test-issuer.example.com/';
 export const audience = 'test-audience';
+
+// Test logger that captures log calls for coverage and assertions
+const testLogs: { level: string; msg: string; err?: unknown }[] = [];
+
+// Create a temporary file for pino to write to
+import fs from 'node:fs';
+import path from 'node:path';
+
+const logTempDir = path.join(process.env['TMPDIR'] ?? '/tmp', 'linear-agent-test-logs');
+const logFilePath = path.join(logTempDir, `test-log-${process.pid}.log`);
+
+// Ensure temp directory exists
+if (!fs.existsSync(logTempDir)) {
+  fs.mkdirSync(logTempDir, { recursive: true });
+}
+
+// Level number to name mapping
+function levelName(level: number): string {
+  const levels: Record<number, string> = {
+    10: 'trace',
+    20: 'debug',
+    30: 'info',
+    40: 'warn',
+    50: 'error',
+    60: 'fatal',
+  };
+  return levels[level] || 'unknown';
+}
+
+// Function to capture logs from file
+function captureLogsFromFile(): void {
+  try {
+    if (!fs.existsSync(logFilePath)) return;
+    const content = fs.readFileSync(logFilePath, 'utf-8');
+    const lines = content.trim().split('\n').filter(Boolean);
+    for (const line of lines) {
+      try {
+        const logEntry = JSON.parse(line);
+        // Only add error logs
+        const level = typeof logEntry.level === 'number' ? levelName(logEntry.level) : logEntry.level;
+        if (level === 'error' || (typeof logEntry.level === 'number' && logEntry.level === 50)) {
+          testLogs.push({
+            level,
+            msg: logEntry.msg || '',
+            err: logEntry.err,
+          });
+        }
+      } catch {
+        // Ignore parse errors for individual lines
+      }
+    }
+  } catch {
+    // Ignore file read errors
+  }
+}
+
+export function getTestLoggerOptions(): { level: string; formatters: { level: (label: string) => string } } {
+  return {
+    level: 'error',
+    formatters: {
+      level: (label: string): string => label,
+    },
+  };
+}
+
+export function getTestLoggerStream(): NodeJS.WritableStream {
+  // Use pino.destination with sync flag for immediate writes
+  return pino.destination({ dest: logFilePath, sync: true }) as unknown as NodeJS.WritableStream;
+}
+
+export function clearTestLogs(): void {
+  testLogs.length = 0;
+  // Truncate the log file
+  try {
+    fs.truncateSync(logFilePath, 0);
+  } catch {
+    // File might not exist yet, ignore
+  }
+}
+
+export function getAllTestLogs(): { level: string; msg: string; err?: unknown }[] {
+  captureLogsFromFile();
+  return [...testLogs];
+}
+
+export function findTestLog(message: string): boolean {
+  captureLogsFromFile();
+  return testLogs.some((log) => log.msg.includes(message) && (log.level === 'error'));
+}
 
 let jwksServer: FastifyInstance;
 let privateKey: jose.KeyLike;
@@ -76,9 +166,10 @@ export interface TestContext {
   extractionService: FakeLinearActionExtractionService;
   failedIssueRepository: FakeFailedIssueRepository;
   processedActionRepository: FakeProcessedActionRepository;
+  withTestLogger?: boolean;
 }
 
-export function setupTestContext(): TestContext {
+export function setupTestContext(withTestLogger = false): TestContext {
   const context: TestContext = {
     app: null as unknown as FastifyInstance,
     connectionRepository: null as unknown as FakeLinearConnectionRepository,
@@ -86,6 +177,7 @@ export function setupTestContext(): TestContext {
     extractionService: null as unknown as FakeLinearActionExtractionService,
     failedIssueRepository: null as unknown as FakeFailedIssueRepository,
     processedActionRepository: null as unknown as FakeProcessedActionRepository,
+    withTestLogger,
   };
 
   beforeAll(async () => {
@@ -97,6 +189,7 @@ export function setupTestContext(): TestContext {
   });
 
   beforeEach(async () => {
+    clearTestLogs();
     process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = 'test-internal-token';
     context.connectionRepository = new FakeLinearConnectionRepository();
     context.linearApiClient = new FakeLinearApiClient();
@@ -111,12 +204,14 @@ export function setupTestContext(): TestContext {
       processedActionRepository: context.processedActionRepository,
     });
     clearJwksCache();
-    context.app = await buildServer();
+    context.app = await buildServer(withTestLogger ? getTestLoggerStream() : undefined);
     await context.app.ready();
   });
 
   afterEach(async () => {
-    await context.app.close();
+    if (context.app !== null) {
+      await context.app.close();
+    }
     resetServices();
     context.connectionRepository.reset();
     context.linearApiClient.reset();
@@ -129,4 +224,4 @@ export function setupTestContext(): TestContext {
   return context;
 }
 
-export { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach };
+export { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, setServices, resetServices };
