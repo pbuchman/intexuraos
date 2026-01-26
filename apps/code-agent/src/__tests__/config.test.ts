@@ -56,8 +56,7 @@ describe('loadConfig', () => {
 
     it('loads all env vars when set', () => {
       process.env['INTEXURAOS_GCP_PROJECT_ID'] = 'test-project';
-      process.env['INTEXURAOS_INTERNAL_AUTH_SECRET'] = 'test-auth-token';
-      process.env['INTEXURAOS_FIRESTORE_PROJECT_ID'] = 'test-firestore-project';
+      process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = 'test-auth-token';
       process.env['INTEXURAOS_WHATSAPP_SERVICE_URL'] = 'http://whatsapp';
       process.env['INTEXURAOS_LINEAR_AGENT_URL'] = 'http://linear';
       process.env['INTEXURAOS_ACTIONS_AGENT_URL'] = 'http://actions';
@@ -71,7 +70,7 @@ describe('loadConfig', () => {
       const config = loadConfig();
       expect(config.gcpProjectId).toBe('test-project');
       expect(config.internalAuthToken).toBe('test-auth-token');
-      expect(config.firestoreProjectId).toBe('test-firestore-project');
+      expect(config.firestoreProjectId).toBe('test-project');
       expect(config.whatsappServiceUrl).toBe('http://whatsapp');
       expect(config.linearAgentUrl).toBe('http://linear');
       expect(config.actionsAgentUrl).toBe('http://actions');
