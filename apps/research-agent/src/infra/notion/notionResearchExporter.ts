@@ -141,8 +141,8 @@ export async function exportResearchToNotion(
   }
 
   try {
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call
-    const client: NotionClient = createNotionClient(notionToken, logger) as NotionClient;
+     
+    const client: NotionClient = createNotionClient(notionToken, logger);
 
     // Filter completed LLM results
     const completedResults = research.llmResults.filter((r) => r.status === 'completed');
@@ -158,7 +158,7 @@ export async function exportResearchToNotion(
       },
     }));
 
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
+     
     const mainPageResponse = await client.pages.create({
       parent: { page_id: targetPageId },
       properties: {
@@ -179,14 +179,14 @@ export async function exportResearchToNotion(
       ],
     });
 
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
+     
     const mainPageId = mainPageResponse.id;
-    /* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/restrict-template-expressions */
+     
     const mainPageUrl =
       'url' in mainPageResponse && typeof mainPageResponse.url === 'string'
         ? mainPageResponse.url
         : `https://notion.so/${mainPageId}`;
-    /* eslint-enable */
+     
 
     const llmReportPages: { model: string; pageId: string; pageUrl: string }[] = [];
 
@@ -259,7 +259,7 @@ export async function exportResearchToNotion(
         }
       }
 
-      /* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access */
+       
       const pageResponse = await client.pages.create({
         parent: { page_id: mainPageId },
         properties: {
@@ -269,19 +269,19 @@ export async function exportResearchToNotion(
       });
 
       const pageId = pageResponse.id;
-      /* eslint-disable @typescript-eslint/no-unsafe-member-access, @typescript-eslint/restrict-template-expressions */
+       
       const pageUrl =
         'url' in pageResponse && typeof pageResponse.url === 'string'
           ? pageResponse.url
           : `https://notion.so/${pageId}`;
-      /* eslint-enable */
-      /* eslint-disable @typescript-eslint/no-unsafe-assignment */
+       
+       
       llmReportPages.push({
         model: llmResult.model,
         pageId,
         pageUrl,
       });
-      /* eslint-enable */
+       
     }
 
     // Append source links to main page
@@ -297,24 +297,24 @@ export async function exportResearchToNotion(
         },
       }));
 
-      /* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access */
+       
       await client.blocks.children.append({
         block_id: mainPageId,
         children: sourceLinks,
       });
-      /* eslint-enable */
+       
     }
 
-    /* eslint-disable @typescript-eslint/no-unsafe-assignment */
+     
     return ok({
       mainPageId,
       mainPageUrl,
       llmReportPages,
     });
-    /* eslint-enable */
+     
   } catch (error) {
-    /* eslint-disable @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-call */
+     
     return err(mapExportError(mapNotionError(error)));
-    /* eslint-enable */
+     
   }
 }
