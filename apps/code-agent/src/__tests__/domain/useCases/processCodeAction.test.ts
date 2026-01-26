@@ -215,4 +215,103 @@ describe('processCodeAction', () => {
       },
     });
   });
+
+  it('successfully creates task with linearIssueId when provided', async () => {
+    vi.mocked(codeTaskRepo.create).mockResolvedValueOnce(
+      ok({
+        id: 'new-task-456',
+        userId: 'user-789',
+        prompt: 'Fix the bug',
+        sanitizedPrompt: 'Fix the bug',
+        systemPromptHash: 'hash-123',
+        workerType: 'auto',
+        workerLocation: 'mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: 'trace-123',
+        actionId: 'action-123',
+        approvalEventId: 'approval-456',
+        status: 'dispatched',
+        callbackReceived: false,
+        dedupKey: 'dedup-key-123',
+        createdAt: Timestamp.now(),
+        updatedAt: Timestamp.now(),
+        linearIssueId: 'INT-305',
+      })
+    );
+
+    vi.mocked(taskDispatcher.dispatch).mockResolvedValueOnce(
+      ok({
+        dispatched: true,
+        workerLocation: 'vm',
+      })
+    );
+
+    const result = await processCodeAction(
+      { logger, codeTaskRepo, taskDispatcher },
+      {
+        actionId: 'action-123',
+        approvalEventId: 'approval-456',
+        userId: 'user-789',
+        prompt: 'Fix the bug',
+        workerType: 'auto',
+        linearIssueId: 'INT-305',
+      }
+    );
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.codeTaskId).toBe('new-task-456');
+      expect(result.value.workerLocation).toBe('vm');
+    }
+  });
+
+  it('successfully creates task with custom repository when provided', async () => {
+    vi.mocked(codeTaskRepo.create).mockResolvedValueOnce(
+      ok({
+        id: 'new-task-789',
+        userId: 'user-789',
+        prompt: 'Fix the bug',
+        sanitizedPrompt: 'Fix the bug',
+        systemPromptHash: 'hash-123',
+        workerType: 'auto',
+        workerLocation: 'vm',
+        repository: 'custom/repo',
+        baseBranch: 'development',
+        traceId: 'trace-123',
+        actionId: 'action-123',
+        approvalEventId: 'approval-456',
+        status: 'dispatched',
+        callbackReceived: false,
+        dedupKey: 'dedup-key-123',
+        createdAt: Timestamp.now(),
+        updatedAt: Timestamp.now(),
+      })
+    );
+
+    vi.mocked(taskDispatcher.dispatch).mockResolvedValueOnce(
+      ok({
+        dispatched: true,
+        workerLocation: 'vm',
+      })
+    );
+
+    const result = await processCodeAction(
+      { logger, codeTaskRepo, taskDispatcher },
+      {
+        actionId: 'action-123',
+        approvalEventId: 'approval-456',
+        userId: 'user-789',
+        prompt: 'Fix the bug',
+        workerType: 'auto',
+        repository: 'custom/repo',
+      }
+    );
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.codeTaskId).toBe('new-task-789');
+      expect(result.value.workerLocation).toBe('vm');
+    }
+  });
 });

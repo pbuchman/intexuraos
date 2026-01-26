@@ -3,6 +3,16 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import * as jose from 'jose';
+
+// Mock jose library for JWT validation
+vi.mock('jose', () => ({
+  createRemoteJWKSet: vi.fn(() => vi.fn()),
+  jwtVerify: vi.fn(),
+}));
+
+const mockedJwtVerify = vi.mocked(jose.jwtVerify);
+
 import { buildServer } from '../../server.js';
 import { resetServices, setServices } from '../../services.js';
 import { createFakeFirestore, resetFirestore, setFirestore } from '@intexuraos/infra-firestore';
@@ -31,6 +41,12 @@ describe('POST /code/cancel', () => {
   let cancelOnWorkerSpy: ReturnType<typeof vi.spyOn> | null;
 
   beforeEach(async () => {
+    // Set jwtVerify to resolve by default (simulating valid token)
+    mockedJwtVerify.mockResolvedValue({
+      payload: { sub: 'test-user-id', email: 'test@example.com' },
+      protectedHeader: new Uint8Array(),
+    } as never);
+
     // Set required env vars
     process.env['INTEXURAOS_CODE_WORKERS'] =
       'mac:https://cc-mac.intexuraos.cloud:1,vm:https://cc-vm.intexuraos.cloud:2';
@@ -38,6 +54,9 @@ describe('POST /code/cancel', () => {
     process.env['INTEXURAOS_CF_ACCESS_CLIENT_SECRET'] = 'test-client-secret';
     process.env['INTEXURAOS_DISPATCH_SECRET'] = 'test-dispatch-secret';
     process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = 'test-internal-token';
+    process.env['INTEXURAOS_AUTH0_AUDIENCE'] = 'https://api.intexuraos.cloud';
+    process.env['INTEXURAOS_AUTH0_ISSUER'] = 'https://intexuraos.eu.auth0.com/';
+    process.env['INTEXURAOS_AUTH0_JWKS_URI'] = 'https://intexuraos.eu.auth0.com/.well-known/jwks.json';
 
     fakeFirestore = createFakeFirestore();
     setFirestore(fakeFirestore as unknown as Firestore);
@@ -108,7 +127,7 @@ describe('POST /code/cancel', () => {
   });
 
   describe('authentication', () => {
-    it('returns 401 without X-Internal-Auth header', async () => {
+    it('returns 401 without Authorization header', async () => {
       const response = await app.inject({
         method: 'POST',
         url: '/code/cancel',
@@ -120,7 +139,11 @@ describe('POST /code/cancel', () => {
       expect(response.statusCode).toBe(401);
       const body = JSON.parse(response.body);
       expect(body).toEqual({
-        error: 'unauthorized',
+        success: false,
+        error: {
+          code: 'UNAUTHORIZED',
+          message: 'Unauthorized',
+        },
       });
     });
 
@@ -146,7 +169,7 @@ describe('POST /code/cancel', () => {
         method: 'POST',
         url: '/code/cancel',
         headers: {
-          'x-internal-auth': 'test-internal-token',
+          authorization: 'Bearer test-token',
         },
         payload: {
           taskId: 'non-existent-task',
@@ -185,7 +208,7 @@ describe('POST /code/cancel', () => {
         method: 'POST',
         url: '/code/cancel',
         headers: {
-          'x-internal-auth': 'test-internal-token',
+          authorization: 'Bearer test-token',
         },
         payload: {
           taskId,
@@ -204,7 +227,7 @@ describe('POST /code/cancel', () => {
     it('returns 409 for already completed task', async () => {
       // Create and complete a task
       const createResult = await codeTaskRepo.create({
-        userId: 'unknown-user',
+        userId: 'test-user-id',
         prompt: 'Fix the bug',
         sanitizedPrompt: 'Fix the bug',
         systemPromptHash: 'default',
@@ -225,7 +248,7 @@ describe('POST /code/cancel', () => {
         method: 'POST',
         url: '/code/cancel',
         headers: {
-          'x-internal-auth': 'test-internal-token',
+          authorization: 'Bearer test-token',
         },
         payload: {
           taskId,
@@ -242,7 +265,7 @@ describe('POST /code/cancel', () => {
     it('returns 409 for already cancelled task', async () => {
       // Create and cancel a task
       const createResult = await codeTaskRepo.create({
-        userId: 'unknown-user',
+        userId: 'test-user-id',
         prompt: 'Fix the bug',
         sanitizedPrompt: 'Fix the bug',
         systemPromptHash: 'default',
@@ -263,7 +286,7 @@ describe('POST /code/cancel', () => {
         method: 'POST',
         url: '/code/cancel',
         headers: {
-          'x-internal-auth': 'test-internal-token',
+          authorization: 'Bearer test-token',
         },
         payload: {
           taskId,
@@ -280,7 +303,7 @@ describe('POST /code/cancel', () => {
     it('returns 409 for failed task', async () => {
       // Create and fail a task
       const createResult = await codeTaskRepo.create({
-        userId: 'unknown-user',
+        userId: 'test-user-id',
         prompt: 'Fix the bug',
         sanitizedPrompt: 'Fix the bug',
         systemPromptHash: 'default',
@@ -301,7 +324,7 @@ describe('POST /code/cancel', () => {
         method: 'POST',
         url: '/code/cancel',
         headers: {
-          'x-internal-auth': 'test-internal-token',
+          authorization: 'Bearer test-token',
         },
         payload: {
           taskId,
@@ -320,7 +343,7 @@ describe('POST /code/cancel', () => {
     it('successfully cancels a dispatched task', async () => {
       // Create a dispatched task
       const createResult = await codeTaskRepo.create({
-        userId: 'unknown-user',
+        userId: 'test-user-id',
         prompt: 'Fix the bug',
         sanitizedPrompt: 'Fix the bug',
         systemPromptHash: 'default',
@@ -339,7 +362,7 @@ describe('POST /code/cancel', () => {
         method: 'POST',
         url: '/code/cancel',
         headers: {
-          'x-internal-auth': 'test-internal-token',
+          authorization: 'Bearer test-token',
         },
         payload: {
           taskId,
@@ -367,7 +390,7 @@ describe('POST /code/cancel', () => {
     it('successfully cancels a running task', async () => {
       // Create a running task
       const createResult = await codeTaskRepo.create({
-        userId: 'unknown-user',
+        userId: 'test-user-id',
         prompt: 'Fix the bug',
         sanitizedPrompt: 'Fix the bug',
         systemPromptHash: 'default',
@@ -388,7 +411,7 @@ describe('POST /code/cancel', () => {
         method: 'POST',
         url: '/code/cancel',
         headers: {
-          'x-internal-auth': 'test-internal-token',
+          authorization: 'Bearer test-token',
         },
         payload: {
           taskId,
@@ -410,7 +433,7 @@ describe('POST /code/cancel', () => {
     it('calls worker to stop task', async () => {
       // Create a running task
       const createResult = await codeTaskRepo.create({
-        userId: 'unknown-user',
+        userId: 'test-user-id',
         prompt: 'Fix the bug',
         sanitizedPrompt: 'Fix the bug',
         systemPromptHash: 'default',
@@ -431,7 +454,7 @@ describe('POST /code/cancel', () => {
         method: 'POST',
         url: '/code/cancel',
         headers: {
-          'x-internal-auth': 'test-internal-token',
+          authorization: 'Bearer test-token',
         },
         payload: {
           taskId,

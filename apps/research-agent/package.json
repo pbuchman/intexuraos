@@ -23,6 +23,7 @@
     "@intexuraos/http-server": "workspace:*",
     "@intexuraos/infra-claude": "workspace:*",
     "@intexuraos/infra-firestore": "workspace:*",
+    "@intexuraos/infra-notion": "workspace:*",
     "@intexuraos/infra-gemini": "workspace:*",
     "@intexuraos/infra-glm": "workspace:*",
     "@intexuraos/infra-gpt": "workspace:*",

@@ -10,6 +10,10 @@
       "owner": "notion-service",
       "description": "Notion OAuth connection tokens and state"
     },
+    "research_export_settings": {
+      "owner": "research-agent",
+      "description": "Notion research export page ID configuration per user"
+    },
     "whatsapp_messages": {
       "owner": "whatsapp-service",
       "description": "WhatsApp messages with transcription and link preview metadata"

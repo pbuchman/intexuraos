@@ -1,7 +1,16 @@
 /**
  * OpenAPI contract verification tests for code-agent service.
  */
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+// Mock jose library for JWT validation
+vi.mock('jose', () => ({
+  createRemoteJWKSet: vi.fn(() => vi.fn()),
+  jwtVerify: vi.fn().mockResolvedValue({
+    payload: { sub: 'test-user-id', email: 'test@example.com' },
+  }),
+}));
+
 import { buildServer } from '../server.js';
 import { resetServices, setServices } from '../services.js';
 import { createFakeFirestore, resetFirestore, setFirestore } from '@intexuraos/infra-firestore';
@@ -30,6 +39,9 @@ describe('OpenAPI contract', () => {
       'mac:https://cc-mac.intexuraos.cloud:1,vm:https://cc-vm.intexuraos.cloud:2';
     process.env['INTEXURAOS_CF_ACCESS_CLIENT_ID'] = 'test-client-id';
     process.env['INTEXURAOS_CF_ACCESS_CLIENT_SECRET'] = 'test-client-secret';
+    process.env['INTEXURAOS_AUTH0_AUDIENCE'] = 'https://api.intexuraos.cloud';
+    process.env['INTEXURAOS_AUTH0_ISSUER'] = 'https://intexuraos.eu.auth0.com/';
+    process.env['INTEXURAOS_AUTH0_JWKS_URI'] = 'https://intexuraos.eu.auth0.com/.well-known/jwks.json';
 
     const fakeFirestore = createFakeFirestore() as unknown as Firestore;
     setFirestore(fakeFirestore);

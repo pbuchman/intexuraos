@@ -828,6 +828,8 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         shareStorage,
         shareConfig,
         webAppUrl,
+        notionServiceClient,
+        researchExportSettings,
       } = getServices();
 
       const existing = await getResearch(id, { researchRepo });
@@ -917,6 +919,8 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                 request.log.debug({ researchId: id, ...obj }, msg);
               },
             },
+            notionServiceClient,
+            researchExportSettings,
           });
 
           if (synthesisResult.ok) {

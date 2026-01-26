@@ -467,6 +467,9 @@ const SERVICE_ENV_MAPPINGS = {
     INTEXURAOS_ORCHESTRATOR_MAC_URL: 'http://localhost:8199',
     INTEXURAOS_ORCHESTRATOR_VM_URL: 'http://localhost:8198',
     INTEXURAOS_CODE_WORKERS: 'mac:http://localhost:8199:1,vm:http://localhost:8198:2',
+    INTEXURAOS_AUTH0_AUDIENCE: 'https://api.intexuraos.cloud',
+    INTEXURAOS_AUTH0_ISSUER: 'https://intexuraos.eu.auth0.com/',
+    INTEXURAOS_AUTH0_JWKS_URI: 'https://intexuraos.eu.auth0.com/.well-known/jwks.json',
   },
 };
 

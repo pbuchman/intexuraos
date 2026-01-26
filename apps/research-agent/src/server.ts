@@ -17,7 +17,7 @@ import {
   type HealthCheck,
 } from '@intexuraos/http-server';
 import { createSentryStream, setupSentryErrorHandler } from '@intexuraos/infra-sentry';
-import { researchRoutes, internalRoutes } from './routes/index.js';
+import { researchRoutes, researchExportRoutes, internalRoutes } from './routes/index.js';
 
 const SERVICE_NAME = 'research-agent';
 const SERVICE_VERSION = '0.0.4';
@@ -165,6 +165,9 @@ export async function buildServer(): Promise<FastifyInstance> {
 
   // Register research routes
   await app.register(researchRoutes);
+
+  // Register research export settings routes
+  await app.register(researchExportRoutes);
 
   // Register internal routes
   await app.register(internalRoutes);

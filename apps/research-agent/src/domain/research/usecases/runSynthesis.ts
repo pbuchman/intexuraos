@@ -23,6 +23,7 @@ import type { ShareInfo, AttributionStatus } from '../models/Research.js';
 import type { CoverImageInput, GeneratedByUserInfo } from '../utils/htmlGenerator.js';
 import { generateShareableHtml, slugify, generateShareToken } from '../utils/index.js';
 import type { ImageServiceClient, GeneratedImageData } from '../../../services.js';
+import type { ResearchExportSettingsPort } from '../ports/researchExportSettings.js';
 import { repairAttribution } from './repairAttribution.js';
 
 export interface ShareConfig {
@@ -48,6 +49,10 @@ export interface RunSynthesisDeps {
   reportLlmSuccess?: () => void;
   logger: Logger;
   imageApiKeys?: ImageApiKeys;
+  // NotionServiceClient is from infra layer, typed as unknown to avoid import restriction
+  // Use `as NotionServiceClient` when consuming (e.g., in synthesis export)
+  notionServiceClient?: unknown;
+  researchExportSettings?: ResearchExportSettingsPort | null;
 }
 
 export async function runSynthesis(
@@ -67,6 +72,8 @@ export async function runSynthesis(
     reportLlmSuccess,
     logger,
     imageApiKeys,
+    notionServiceClient,
+    researchExportSettings,
   } = deps;
 
   logger.info({}, '[4.1] Loading research from database');
@@ -348,6 +355,18 @@ export async function runSynthesis(
     } else {
       logger.error({}, '[4.5.3] HTML upload failed');
     }
+  }
+
+  // [4.5.4] Fire-and-forget Notion export (non-blocking)
+  if (notionServiceClient !== undefined && notionServiceClient !== null && researchExportSettings !== undefined && researchExportSettings !== null) {
+    logger.info({}, '[4.5.4] Starting fire-and-forget Notion export');
+    const { exportResearchToNotion: exportToNotion } = await import('../../../infra/notion/exportResearchToNotionUseCase.js');
+    void exportToNotion(researchId, userId, {
+      researchRepo,
+      notionServiceClient: notionServiceClient as never, // TODO: define port interface for NotionServiceClient
+      researchExportSettings,
+      logger,
+    });
   }
 
   logger.info({}, '[4.6] Saving final research result to database');

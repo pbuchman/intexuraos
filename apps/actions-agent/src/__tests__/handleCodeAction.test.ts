@@ -17,7 +17,6 @@ vi.mock('../domain/usecases/shouldAutoExecute.js', () => ({
 
 import { shouldAutoExecute } from '../domain/usecases/shouldAutoExecute.js';
 
-// Create a proper logger mock that actually logs (for coverage)
 const createMockLogger = (): Logger =>
   ({
     info: vi.fn(),
@@ -343,6 +342,26 @@ describe('handleCodeAction usecase', () => {
 
       const messages = fakeWhatsappPublisher.getSentMessages();
       expect(messages[0]?.message).toContain('Estimated cost: $1-2');
+    });
+  });
+
+  describe('error cases', () => {
+    it('returns error when action not found in repository', async () => {
+      // Do NOT save the action to repository, simulating "not found"
+      const usecase = createHandleCodeActionUseCase({
+        actionRepository: fakeActionRepository,
+        whatsappPublisher: fakeWhatsappPublisher,
+        webAppUrl: 'https://app.intexuraos.com',
+        logger: createMockLogger(),
+      });
+
+      const event = createEvent();
+      const result = await usecase.execute(event);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.message).toBe('Action not found');
+      }
     });
   });
 });

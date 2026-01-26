@@ -99,6 +99,7 @@ export interface FailedLinearIssue {
   error: string;
   reasoning: string | null;
   createdAt: string;
+  lastRetryAt?: string;
 }
 
 /** Successfully processed action record for idempotency */

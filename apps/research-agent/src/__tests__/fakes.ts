@@ -43,6 +43,11 @@ import type { DecryptedApiKeys, UserServiceClient, UserServiceError } from '@int
 import type { LlmGenerateClient, GenerateResult, LLMError } from '@intexuraos/llm-factory';
 import type { ResearchEventPublisher, ResearchProcessEvent } from '../infra/pubsub/index.js';
 import type { NotificationSender } from '../domain/research/index.js';
+import type {
+  NotionServiceClient,
+  NotionTokenContext,
+} from '../infra/notion/index.js';
+import type { ResearchExportSettingsError, ResearchExportSettings } from '../infra/firestore/researchExportSettingsRepository.js';
 
 /**
  * In-memory fake implementation of ResearchRepository.
@@ -679,4 +684,65 @@ export function createFakeInputValidator(): InputValidationProvider {
       });
     },
   };
+}
+
+/**
+ * Fake implementation of ResearchExportSettingsPort for testing.
+ */
+export class FakeResearchExportSettings {
+  private settings = new Map<string, ResearchExportSettings>();
+
+  async getResearchPageId(userId: string): Promise<Result<string | null, ResearchExportSettingsError>> {
+    const setting = this.settings.get(userId);
+    return ok(setting?.researchPageId ?? null);
+  }
+
+  async saveResearchPageId(
+    userId: string,
+    researchPageId: string
+  ): Promise<Result<ResearchExportSettings, ResearchExportSettingsError>> {
+    const now = new Date().toISOString();
+    const existing = this.settings.get(userId);
+    const settings: ResearchExportSettings = {
+      researchPageId,
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+    };
+    this.settings.set(userId, settings);
+    return ok(settings);
+  }
+
+  clear(): void {
+    this.settings.clear();
+  }
+}
+
+/**
+ * Fake implementation of NotionServiceClient for testing.
+ */
+export class FakeNotionServiceClient implements NotionServiceClient {
+  private connected = false;
+  private token: string | null = null;
+
+  async getNotionToken(_userId: string): Promise<Result<NotionTokenContext, never>> {
+    return ok({
+      connected: this.connected,
+      token: this.token,
+    });
+  }
+
+  // Test helpers
+  setConnected(connected: boolean): void {
+    this.connected = connected;
+  }
+
+  setToken(token: string | null): void {
+    this.token = token;
+    this.connected = token !== null;
+  }
+
+  clear(): void {
+    this.connected = false;
+    this.token = null;
+  }
 }
