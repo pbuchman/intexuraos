@@ -16,9 +16,7 @@
   "hooks": {
     "SessionStart": [
       {
-        "hooks": [
-          { "type": "command", "command": ".claude/hooks/session-start-build.sh" }
-        ]
+        "hooks": [{ "type": "command", "command": ".claude/hooks/session-start-build.sh" }]
       }
     ],
     "PreToolUse": [
@@ -35,17 +33,13 @@
       },
       {
         "matcher": "Edit|Write",
-        "hooks": [
-          { "type": "command", "command": ".claude/hooks/validate-coverage-config.sh" }
-        ]
+        "hooks": [{ "type": "command", "command": ".claude/hooks/validate-coverage-config.sh" }]
       }
     ],
     "PostToolUse": [
       {
         "matcher": "Bash",
-        "hooks": [
-          { "type": "command", "command": ".claude/hooks/log-command-end.sh" }
-        ]
+        "hooks": [{ "type": "command", "command": ".claude/hooks/log-command-end.sh" }]
       }
     ]
   }

@@ -156,15 +156,18 @@ describe('main.ts', () => {
       const infoCalls = vi.mocked(mockLogger.info).mock.calls;
       const recoveryCall = infoCalls.find((call) => {
         const firstArg = call[0] as { message?: string } | undefined;
-        return firstArg?.message === 'Running startup recovery' ||
-          call[1] === 'Running startup recovery';
+        return (
+          firstArg?.message === 'Running startup recovery' || call[1] === 'Running startup recovery'
+        );
       });
       expect(recoveryCall).toBeDefined();
 
       const noInterruptedCall = infoCalls.find((call) => {
         const firstArg = call[0] as { message?: string } | undefined;
-        return firstArg?.message === 'No interrupted tasks to recover' ||
-          call[1] === 'No interrupted tasks to recover';
+        return (
+          firstArg?.message === 'No interrupted tasks to recover' ||
+          call[1] === 'No interrupted tasks to recover'
+        );
       });
       expect(noInterruptedCall).toBeDefined();
 
@@ -250,9 +253,7 @@ describe('main.ts', () => {
         pendingWebhooks: [],
       });
 
-      vi.mocked(mockWebhookClient.send).mockRejectedValue(
-        new Error('Webhook send failed')
-      );
+      vi.mocked(mockWebhookClient.send).mockRejectedValue(new Error('Webhook send failed'));
 
       // exit is mocked at module level via mockExit
 
@@ -406,10 +407,7 @@ describe('main.ts', () => {
         // Expected
       }
 
-      expect(mockLogger.info).toHaveBeenCalledWith(
-        { count: 2 },
-        'Found interrupted tasks'
-      );
+      expect(mockLogger.info).toHaveBeenCalledWith({ count: 2 }, 'Found interrupted tasks');
       expect(mockWebhookClient.send).toHaveBeenCalledTimes(2);
 
       // mockExit doesn't need restore - it's cleared in beforeEach
@@ -502,9 +500,7 @@ describe('main.ts', () => {
       // Advance time to trigger token refresh
       await vi.advanceTimersByTimeAsync(5 * 60 * 1000);
 
-      expect(mockLogger.debug).toHaveBeenCalledWith(
-        { message: 'Token refreshed successfully' }
-      );
+      expect(mockLogger.debug).toHaveBeenCalledWith({ message: 'Token refreshed successfully' });
 
       // mockExit doesn't need restore - it's cleared in beforeEach
     });
@@ -626,9 +622,7 @@ describe('main.ts', () => {
       // Advance time to trigger task polling
       await vi.advanceTimersByTimeAsync(30 * 1000);
 
-      expect(mockLogger.debug).toHaveBeenCalledWith(
-        { message: 'Task polling check' }
-      );
+      expect(mockLogger.debug).toHaveBeenCalledWith({ message: 'Task polling check' });
 
       // mockExit doesn't need restore - it's cleared in beforeEach
     });
@@ -656,9 +650,7 @@ describe('main.ts', () => {
       await vi.advanceTimersByTimeAsync(30 * 1000);
       await vi.advanceTimersByTimeAsync(30 * 1000);
 
-      expect(mockLogger.debug).toHaveBeenCalledWith(
-        { message: 'Task polling check' }
-      );
+      expect(mockLogger.debug).toHaveBeenCalledWith({ message: 'Task polling check' });
 
       // mockExit doesn't need restore - it's cleared in beforeEach
     });
@@ -942,9 +934,7 @@ describe('main.ts', () => {
       }
 
       // Should not have called save again (early return)
-      expect(vi.mocked(mockStatePersistence.save).mock.calls.length).toBe(
-        saveCallCount
-      );
+      expect(vi.mocked(mockStatePersistence.save).mock.calls.length).toBe(saveCallCount);
 
       // mockExit doesn't need restore - it's cleared in beforeEach
     });

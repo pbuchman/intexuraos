@@ -12,40 +12,41 @@ import type { Logger } from '@intexuraos/common-core';
 import type { CreateTaskRequest } from '../types/api.js';
 import type { OrchestratorState } from '../types/state.js';
 
-const createMockChildProcess = (): ChildProcess => ({
-  pid: 12345,
-  stdin: null,
-  stdout: null,
-  stderr: null,
-  stdio: [null, null, null],
-  killed: false,
-  exitCode: null,
-  signalCode: null,
-  spawnargs: [],
-  spawnfile: '',
-  connected: false,
-  kill: vi.fn(),
-  send: vi.fn(),
-  disconnect: vi.fn(),
-  unref: vi.fn(),
-  ref: vi.fn(),
-  addListener: vi.fn(),
-  emit: vi.fn(),
-  on: vi.fn(),
-  once: vi.fn(),
-  prependListener: vi.fn(),
-  prependOnceListener: vi.fn(),
-  removeListener: vi.fn(),
-  off: vi.fn(),
-  removeAllListeners: vi.fn(),
-  setMaxListeners: vi.fn(),
-  getMaxListeners: vi.fn(() => 10),
-  listeners: vi.fn(() => []),
-  rawListeners: vi.fn(() => []),
-  listenerCount: vi.fn(() => 0),
-  eventNames: vi.fn(() => []),
-  [Symbol.dispose]: vi.fn(),
-}) as unknown as ChildProcess;
+const createMockChildProcess = (): ChildProcess =>
+  ({
+    pid: 12345,
+    stdin: null,
+    stdout: null,
+    stderr: null,
+    stdio: [null, null, null],
+    killed: false,
+    exitCode: null,
+    signalCode: null,
+    spawnargs: [],
+    spawnfile: '',
+    connected: false,
+    kill: vi.fn(),
+    send: vi.fn(),
+    disconnect: vi.fn(),
+    unref: vi.fn(),
+    ref: vi.fn(),
+    addListener: vi.fn(),
+    emit: vi.fn(),
+    on: vi.fn(),
+    once: vi.fn(),
+    prependListener: vi.fn(),
+    prependOnceListener: vi.fn(),
+    removeListener: vi.fn(),
+    off: vi.fn(),
+    removeAllListeners: vi.fn(),
+    setMaxListeners: vi.fn(),
+    getMaxListeners: vi.fn(() => 10),
+    listeners: vi.fn(() => []),
+    rawListeners: vi.fn(() => []),
+    listenerCount: vi.fn(() => 0),
+    eventNames: vi.fn(() => []),
+    [Symbol.dispose]: vi.fn(),
+  }) as unknown as ChildProcess;
 
 describe('TaskDispatcher', () => {
   // Mock config
@@ -796,7 +797,8 @@ describe('TaskDispatcher', () => {
           // Second call is force kill
           return { ok: true, value: undefined };
         }),
-        isSessionRunning: vi.fn()
+        isSessionRunning: vi
+          .fn()
           .mockResolvedValueOnce(true) // Still running after graceful period
           .mockResolvedValueOnce(false), // Not running after force kill
       } as unknown as TmuxManager;
@@ -832,10 +834,7 @@ describe('TaskDispatcher', () => {
       // Should have called kill twice - once graceful, once force
       expect(forceKillTmuxManager.killSession).toHaveBeenCalledTimes(2);
       // Second call should be force kill (graceful=false)
-      expect(forceKillTmuxManager.killSession).toHaveBeenLastCalledWith(
-        'force-kill-test',
-        false
-      );
+      expect(forceKillTmuxManager.killSession).toHaveBeenLastCalledWith('force-kill-test', false);
     });
 
     it('should return early from timeout kill if task no longer running', async () => {
@@ -911,17 +910,13 @@ describe('TaskDispatcher', () => {
       await statePersistence.save(state);
 
       // Mock gh pr list to return empty array
-      const execSpy = vi.spyOn({ exec }, 'exec').mockImplementation(
-        (_command: string, _options: unknown, callback: unknown) => {
-          const cb = callback as (
-            error: Error | null,
-            stdout: string,
-            stderr: string
-          ) => void;
+      const execSpy = vi
+        .spyOn({ exec }, 'exec')
+        .mockImplementation((_command: string, _options: unknown, callback: unknown) => {
+          const cb = callback as (error: Error | null, stdout: string, stderr: string) => void;
           cb(null, '[]', '');
           return createMockChildProcess();
-        }
-      );
+        });
 
       // Stop the session to trigger completion check
       vi.mocked(mockTmuxManager.isSessionRunning).mockResolvedValue(false);
@@ -972,17 +967,13 @@ describe('TaskDispatcher', () => {
       await statePersistence.save(state);
 
       // Mock gh pr list to return invalid JSON
-      const execSpy = vi.spyOn({ exec }, 'exec').mockImplementation(
-        (_command: string, _options: unknown, callback: unknown) => {
-          const cb = callback as (
-            error: Error | null,
-            stdout: string,
-            stderr: string
-          ) => void;
+      const execSpy = vi
+        .spyOn({ exec }, 'exec')
+        .mockImplementation((_command: string, _options: unknown, callback: unknown) => {
+          const cb = callback as (error: Error | null, stdout: string, stderr: string) => void;
           cb(null, 'invalid json {{{', '');
           return createMockChildProcess();
-        }
-      );
+        });
 
       // Mock isSessionRunning to return false
       vi.mocked(mockTmuxManager.isSessionRunning).mockResolvedValue(false);
@@ -1026,13 +1017,10 @@ describe('TaskDispatcher', () => {
       await resultDispatcher.submitTask(request);
 
       // Mock gh pr list to return a PR
-      const execSpy = vi.spyOn({ exec }, 'exec').mockImplementation(
-        (command: string, _options: unknown, callback: unknown) => {
-          const cb = callback as (
-            error: Error | null,
-            stdout: string,
-            stderr: string
-          ) => void;
+      const execSpy = vi
+        .spyOn({ exec }, 'exec')
+        .mockImplementation((command: string, _options: unknown, callback: unknown) => {
+          const cb = callback as (error: Error | null, stdout: string, stderr: string) => void;
 
           if (command.includes('gh pr list')) {
             // Return a PR
@@ -1055,8 +1043,7 @@ describe('TaskDispatcher', () => {
             cb(null, '', '');
           }
           return createMockChildProcess();
-        }
-      );
+        });
 
       // Mock isSessionRunning to return false (task completed)
       vi.mocked(mockTmuxManager.isSessionRunning).mockResolvedValue(false);

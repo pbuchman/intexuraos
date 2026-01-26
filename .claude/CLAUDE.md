@@ -24,12 +24,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### The Rationalization Trap
 
-| Your Thought                                   | Reality                           |
-| ---------------------------------------------- | --------------------------------- |
-| "CI failed but my code passes"                 | CI failed. No commit.             |
-| "The failure is in OTHER services"             | OTHER = forbidden. You own it.    |
-| "Global CI fails, but X-specific checks pass"  | This phrase has caused violations.|
-| "Let me commit anyway and note the CI status"  | NO. Fix first, then commit.       |
+| Your Thought                                  | Reality                            |
+| --------------------------------------------- | ---------------------------------- |
+| "CI failed but my code passes"                | CI failed. No commit.              |
+| "The failure is in OTHER services"            | OTHER = forbidden. You own it.     |
+| "Global CI fails, but X-specific checks pass" | This phrase has caused violations. |
+| "Let me commit anyway and note the CI status" | NO. Fix first, then commit.        |
 
 **No partial pass.**
 
@@ -101,11 +101,11 @@ After completing any analysis, investigation, or review phase:
 
 ### The Rationalization Trap
 
-| Your Thought                                  | Reality                        |
-| --------------------------------------------- | ------------------------------ |
-| "The PR is merged, so it's obviously done"    | Merged ≠ Done. User decides.   |
-| "All child issues are complete"               | Complete ≠ Done. User confirms.|
-| "This is just bookkeeping, I'll mark it done" | Bookkeeping requires permission.|
+| Your Thought                                  | Reality                          |
+| --------------------------------------------- | -------------------------------- |
+| "The PR is merged, so it's obviously done"    | Merged ≠ Done. User decides.     |
+| "All child issues are complete"               | Complete ≠ Done. User confirms.  |
+| "This is just bookkeeping, I'll mark it done" | Bookkeeping requires permission. |
 
 ### Correct Behavior
 
@@ -132,16 +132,16 @@ If CI fails due to a "pre-existing" issue, that issue is now YOURS.
 
 ### Forbidden Language
 
-| Forbidden                          | Why                              |
-| ---------------------------------- | -------------------------------- |
-| "pre-existing issue/bug"           | Discovery = ownership            |
-| "not my fault/responsibility"      | Fault irrelevant; fix is yours   |
-| "unrelated to my changes"          | Blocks CI = related              |
-| "was already broken"               | Now yours to fix                 |
-| "legacy issue"                     | Legacy = code awaiting owner     |
-| **"OTHER services/workspaces"**    | No "other" in CI                 |
-| **"my code/part passes"**          | CI passes or doesn't             |
-| **"global CI fails but X passes"** | This phrase = violation          |
+| Forbidden                          | Why                            |
+| ---------------------------------- | ------------------------------ |
+| "pre-existing issue/bug"           | Discovery = ownership          |
+| "not my fault/responsibility"      | Fault irrelevant; fix is yours |
+| "unrelated to my changes"          | Blocks CI = related            |
+| "was already broken"               | Now yours to fix               |
+| "legacy issue"                     | Legacy = code awaiting owner   |
+| **"OTHER services/workspaces"**    | No "other" in CI               |
+| **"my code/part passes"**          | CI passes or doesn't           |
+| **"global CI fails but X passes"** | This phrase = violation        |
 
 Catch yourself using these? Stop. Reframe: "How do I fix this?"
 
@@ -173,6 +173,7 @@ Catch yourself using these? Stop. Reframe: "How do I fix this?"
 ### The Only Exception
 
 May acknowledge pre-existing state ONLY when user EXPLICITLY instructs:
+
 - "Ignore the type errors in legacy/, focus only on new code"
 - "This is a known issue, skip it for now"
 
@@ -194,6 +195,7 @@ pnpm run ci:tracked 2>&1 | tee /tmp/ci-output-${BRANCH}-$(date +%Y%m%d-%H%M%S).t
 ```
 
 Then analyze with proper tools (in priority order):
+
 1. `bat /tmp/ci-output-*.txt` — syntax highlighting
 2. `rg "error|FAIL" /tmp/ci-*.txt -C3` — fast search with context
 3. For coverage: `jq '.total.branches.pct' coverage/coverage-summary.json`
@@ -395,14 +397,14 @@ Pattern: `/internal/{resource-name}` with `X-Internal-Auth` header. Use `validat
 
 ## Apps & Packages
 
-**Apps (`apps/**`):**
+**Apps (`apps/**`):\*\*
 
 - Use `getServices()` for deps, `getFirestore()` singleton for DB
 - Env vars: `INTEXURAOS_*` prefix (except `NODE_ENV`, `PORT`, emulators)
 - Fail-fast: `validateRequiredEnv()` at startup
 - New service: Use `/create-service` command
 
-**Packages (`packages/**`):**
+**Packages (`packages/**`):\*\*
 
 - `common-*` are leaf packages (no deps)
 - `infra-*` wrap external services

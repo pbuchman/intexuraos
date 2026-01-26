@@ -35,19 +35,19 @@ This document analyzes the design and implementation options for creating a nati
 
 ### Amazfit Balance 2 Hardware
 
-| Specification          | Details                                                    |
-| ---------------------- | ---------------------------------------------------------- |
-| **Operating System**   | Zepp OS 5.0                                                |
-| **API Level**          | 4.2                                                        |
-| **Device Source IDs**  | `9568512*` (China), `9568513`, `9568515`                   |
-| **Display**            | 47mm AMOLED, 480 × 480 pixels (round)                      |
-| **Physical Keys**      | 2                                                          |
-| **Storage**            | 4 GB built-in                                              |
-| **Connectivity**       | Wi-Fi 2.4GHz, Bluetooth 5.2 BLE                            |
-| **Water Resistance**   | 5 ATM (45m diving certified)                               |
-| **Battery Life**       | Up to 21 days typical use                                  |
-| **GPS**                | Dual-band (L1 + L5), 6 satellite systems                   |
-| **Phone Compatibility** | Android 7.0+, iOS 15.0+                                    |
+| Specification           | Details                                  |
+| ----------------------- | ---------------------------------------- |
+| **Operating System**    | Zepp OS 5.0                              |
+| **API Level**           | 4.2                                      |
+| **Device Source IDs**   | `9568512*` (China), `9568513`, `9568515` |
+| **Display**             | 47mm AMOLED, 480 × 480 pixels (round)    |
+| **Physical Keys**       | 2                                        |
+| **Storage**             | 4 GB built-in                            |
+| **Connectivity**        | Wi-Fi 2.4GHz, Bluetooth 5.2 BLE          |
+| **Water Resistance**    | 5 ATM (45m diving certified)             |
+| **Battery Life**        | Up to 21 days typical use                |
+| **GPS**                 | Dual-band (L1 + L5), 6 satellite systems |
+| **Phone Compatibility** | Android 7.0+, iOS 15.0+                  |
 
 ### BioTracker 6.0 Sensor Array
 
@@ -119,11 +119,11 @@ A complete Zepp OS Mini Program consists of three parts:
 
 ### Communication Protocols
 
-| Path                          | Protocol             | Library        | Data Format          |
-| ----------------------------- | -------------------- | -------------- | -------------------- |
-| Device App ↔ Side Service     | Bluetooth Low Energy | ZML (v0.0.9+)  | Binary (JSON bridge) |
-| Side Service ↔ Settings App   | Settings Storage API | Native         | Key-value pairs      |
-| Side Service ↔ External Server | HTTP/HTTPS           | Fetch API      | JSON                 |
+| Path                           | Protocol             | Library       | Data Format          |
+| ------------------------------ | -------------------- | ------------- | -------------------- |
+| Device App ↔ Side Service      | Bluetooth Low Energy | ZML (v0.0.9+) | Binary (JSON bridge) |
+| Side Service ↔ Settings App    | Settings Storage API | Native        | Key-value pairs      |
+| Side Service ↔ External Server | HTTP/HTTPS           | Fetch API     | JSON                 |
 
 ### Critical Constraints
 
@@ -143,29 +143,29 @@ All sensor APIs require appropriate permissions and API Level compatibility.
 
 #### Heart Rate Sensor
 
-| Method                     | Description                                      | API Level |
-| -------------------------- | ------------------------------------------------ | --------- |
-| `getCurrent()`             | Current HR during continuous measurement         | 2.0+      |
-| `getLast()`                | Most recent single measurement                   | 2.0+      |
-| `getToday()`               | Minute-by-minute data (max 1,440 points)         | 2.0+      |
-| `onCurrentChange(cb)`      | Real-time HR updates                             | 2.1+      |
-| `getDailySummary()`        | Daily max HR with timestamp                      | 3.0+      |
-| `getResting()`             | Resting heart rate                               | 3.0+      |
-| `getAFibRecord()`          | Atrial fibrillation detection data               | 3.0+      |
+| Method                | Description                              | API Level |
+| --------------------- | ---------------------------------------- | --------- |
+| `getCurrent()`        | Current HR during continuous measurement | 2.0+      |
+| `getLast()`           | Most recent single measurement           | 2.0+      |
+| `getToday()`          | Minute-by-minute data (max 1,440 points) | 2.0+      |
+| `onCurrentChange(cb)` | Real-time HR updates                     | 2.1+      |
+| `getDailySummary()`   | Daily max HR with timestamp              | 3.0+      |
+| `getResting()`        | Resting heart rate                       | 3.0+      |
+| `getAFibRecord()`     | Atrial fibrillation detection data       | 3.0+      |
 
 **Permission:** `data:user.hd.heart_rate`
 
 ```javascript
-import { HeartRate } from '@zos/sensor'
+import { HeartRate } from '@zos/sensor';
 
-const heartRate = new HeartRate()
-const lastValue = heartRate.getLast()
-const todayData = heartRate.getToday() // Array[1440]
+const heartRate = new HeartRate();
+const lastValue = heartRate.getLast();
+const todayData = heartRate.getToday(); // Array[1440]
 
 const callback = () => {
-  console.log(heartRate.getCurrent())
-}
-heartRate.onCurrentChange(callback)
+  console.log(heartRate.getCurrent());
+};
+heartRate.onCurrentChange(callback);
 ```
 
 #### Sleep Sensor
@@ -182,58 +182,58 @@ heartRate.onCurrentChange(callback)
 **Sleep Stages:** WAKE_STAGE, REM_STAGE, LIGHT_STAGE, DEEP_STAGE
 
 ```javascript
-import { Sleep } from '@zos/sensor'
+import { Sleep } from '@zos/sensor';
 
-const sleep = new Sleep()
-sleep.updateInfo() // Force refresh
+const sleep = new Sleep();
+sleep.updateInfo(); // Force refresh
 
-const info = sleep.getInfo()
+const info = sleep.getInfo();
 // { score, deepTime, startTime, endTime, totalTime }
 
-const stages = sleep.getStage()
+const stages = sleep.getStage();
 // Array[{ model, start, stop }]
 ```
 
 #### Stress Sensor
 
-| Method              | Description                      | API Level |
-| ------------------- | -------------------------------- | --------- |
-| `getCurrent()`      | Current stress + timestamp       | 2.0+      |
-| `getToday()`        | Minute-by-minute (max 1,440)     | 2.0+      |
-| `getTodayByHour()`  | Hourly averages (24 elements)    | 2.0+      |
-| `getLastWeek()`     | Daily averages (7 days)          | 2.0+      |
+| Method                | Description                      | API Level |
+| --------------------- | -------------------------------- | --------- |
+| `getCurrent()`        | Current stress + timestamp       | 2.0+      |
+| `getToday()`          | Minute-by-minute (max 1,440)     | 2.0+      |
+| `getTodayByHour()`    | Hourly averages (24 elements)    | 2.0+      |
+| `getLastWeek()`       | Daily averages (7 days)          | 2.0+      |
 | `getLastWeekByHour()` | Hourly for 7 days (168 elements) | 2.0+      |
-| `onChange(cb)`      | Real-time stress updates         | 2.0+      |
+| `onChange(cb)`        | Real-time stress updates         | 2.0+      |
 
 **Permission:** `data:user.hd.stress`
 
 #### Blood Oxygen Sensor
 
-| Method    | Description              | API Level |
-| --------- | ------------------------ | --------- |
-| `start()` | Begin SpO2 measurement   | 2.0+      |
-| `stop()`  | End SpO2 measurement     | 2.0+      |
+| Method         | Description              | API Level |
+| -------------- | ------------------------ | --------- |
+| `start()`      | Begin SpO2 measurement   | 2.0+      |
+| `stop()`       | End SpO2 measurement     | 2.0+      |
 | `getCurrent()` | Get current SpO2 reading | 2.0+      |
 
 #### Additional Sensors
 
-| Sensor   | Key Methods              | Permission               |
-| -------- | ------------------------ | ------------------------ |
-| Calorie  | `getCurrent()`, `getTarget()` | `data:user.hd.calorie`   |
-| PAI      | `getTotal()`, `getToday()`, `getLastWeek()` | `data:user.hd.pai`       |
-| Step     | `getCurrent()`, `getTarget()` | `data:user.hd.step`      |
-| Distance | `getCurrent()`           | `data:user.hd.distance`  |
-| Workout  | Navigation, real-time data | `data:user.hd.workout`   |
+| Sensor   | Key Methods                                 | Permission              |
+| -------- | ------------------------------------------- | ----------------------- |
+| Calorie  | `getCurrent()`, `getTarget()`               | `data:user.hd.calorie`  |
+| PAI      | `getTotal()`, `getToday()`, `getLastWeek()` | `data:user.hd.pai`      |
+| Step     | `getCurrent()`, `getTarget()`               | `data:user.hd.step`     |
+| Distance | `getCurrent()`                              | `data:user.hd.distance` |
+| Workout  | Navigation, real-time data                  | `data:user.hd.workout`  |
 
 ### Data Access Limitations
 
-| Constraint                   | Impact                                                   |
-| ---------------------------- | -------------------------------------------------------- |
-| **Same-day data only**       | Most health sensors only return current day data         |
-| **No historical export**     | Cannot bulk-export past days                             |
-| **App must run**             | Continuous monitoring requires Mini Program active       |
-| **30-min sleep refresh**     | Sleep data auto-updates every 30 minutes                 |
-| **Permission prompts**       | First-time sensor access requires user approval          |
+| Constraint               | Impact                                             |
+| ------------------------ | -------------------------------------------------- |
+| **Same-day data only**   | Most health sensors only return current day data   |
+| **No historical export** | Cannot bulk-export past days                       |
+| **App must run**         | Continuous monitoring requires Mini Program active |
+| **30-min sleep refresh** | Sleep data auto-updates every 30 minutes           |
+| **Permission prompts**   | First-time sensor access requires user approval    |
 
 ---
 
@@ -274,12 +274,12 @@ const stages = sleep.getStage()
 
 ```javascript
 // Device App: Collect and send
-import { Sleep, HeartRate, Stress } from '@zos/sensor'
+import { Sleep, HeartRate, Stress } from '@zos/sensor';
 
 function collectHealthData() {
-  const sleep = new Sleep()
-  const heartRate = new HeartRate()
-  const stress = new Stress()
+  const sleep = new Sleep();
+  const heartRate = new HeartRate();
+  const stress = new Stress();
 
   const healthData = {
     timestamp: Date.now(),
@@ -287,37 +287,37 @@ function collectHealthData() {
     heartRate: {
       last: heartRate.getLast(),
       resting: heartRate.getResting(),
-      today: heartRate.getToday()
+      today: heartRate.getToday(),
     },
-    stress: stress.getCurrent()
-  }
+    stress: stress.getCurrent(),
+  };
 
   this.request({
     method: 'SYNC_HEALTH_DATA',
-    params: healthData
-  }).then(response => {
-    showToast({ content: `Synced: ${response.status}` })
-  })
+    params: healthData,
+  }).then((response) => {
+    showToast({ content: `Synced: ${response.status}` });
+  });
 }
 
 // Side Service: Relay to IntexuraOS
 async function handleSyncRequest(ctx, request) {
-  const { params } = request
+  const { params } = request;
 
   const response = await fetch({
     url: 'https://api.intexuraos.com/health/sync',
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${getStoredToken()}`
+      Authorization: `Bearer ${getStoredToken()}`,
     },
     body: JSON.stringify({
       deviceType: 'amazfit_balance_2',
-      data: params
-    })
-  })
+      data: params,
+    }),
+  });
 
-  ctx.response({ status: response.status })
+  ctx.response({ status: response.status });
 }
 ```
 
@@ -455,12 +455,12 @@ Leverage existing Zepp integration with Google Fit (Android) or Apple Health (iO
 
 ### Development Effort Matrix
 
-| Option                       | Watch Dev | Phone Dev | Backend Dev | Maintenance | Total Score |
-| ---------------------------- | --------- | --------- | ----------- | ----------- | ----------- |
-| A: Native Mini Program       | High      | Medium    | Low         | Medium      | **7/10**    |
-| B: Terra API                 | None      | None      | Medium      | Low         | **3/10**    |
-| C: Reverse-Engineered API    | None      | None      | High        | High        | **6/10**    |
-| D: Google Fit/Apple Health   | None      | None      | Medium      | Low         | **3/10**    |
+| Option                     | Watch Dev | Phone Dev | Backend Dev | Maintenance | Total Score |
+| -------------------------- | --------- | --------- | ----------- | ----------- | ----------- |
+| A: Native Mini Program     | High      | Medium    | Low         | Medium      | **7/10**    |
+| B: Terra API               | None      | None      | Medium      | Low         | **3/10**    |
+| C: Reverse-Engineered API  | None      | None      | High        | High        | **6/10**    |
+| D: Google Fit/Apple Health | None      | None      | Medium      | Low         | **3/10**    |
 
 ### Feature Comparison
 
@@ -478,12 +478,12 @@ Leverage existing Zepp integration with Google Fit (Android) or Apple Health (iO
 
 ### Risk Assessment
 
-| Option                       | Technical Risk | Legal Risk | Business Risk | Overall |
-| ---------------------------- | -------------- | ---------- | ------------- | ------- |
-| A: Native Mini Program       | Medium         | Low        | Low           | **Low** |
-| B: Terra API                 | Low            | Low        | Medium        | Medium  |
-| C: Reverse-Engineered API    | High           | High       | High          | **High**|
-| D: Google Fit/Apple Health   | Low            | Low        | Medium        | Low     |
+| Option                     | Technical Risk | Legal Risk | Business Risk | Overall  |
+| -------------------------- | -------------- | ---------- | ------------- | -------- |
+| A: Native Mini Program     | Medium         | Low        | Low           | **Low**  |
+| B: Terra API               | Low            | Low        | Medium        | Medium   |
+| C: Reverse-Engineered API  | High           | High       | High          | **High** |
+| D: Google Fit/Apple Health | Low            | Low        | Medium        | Low      |
 
 ---
 
@@ -531,11 +531,11 @@ IntexuraOS already supports Device Authorization Flow via `POST /auth/device/sta
 
 ### Token Storage
 
-| Location        | Security Level | Recommendation |
-| --------------- | -------------- | -------------- |
-| Device App      | Low            | Never store    |
-| Settings Storage| Medium         | Encrypted      |
-| Secure Storage  | High           | Preferred      |
+| Location         | Security Level | Recommendation |
+| ---------------- | -------------- | -------------- |
+| Device App       | Low            | Never store    |
+| Settings Storage | Medium         | Encrypted      |
+| Secure Storage   | High           | Preferred      |
 
 ### Data Protection
 
@@ -609,6 +609,7 @@ As a complementary approach, implementing Google Fit and Apple Health integratio
 4. Test on real device via Developer Mode
 
 **Deliverables:**
+
 - Working PoC syncing heart rate to test server
 - Development environment documentation
 - Technical feasibility report
@@ -640,6 +641,7 @@ As a complementary approach, implementing Google Fit and Apple Health integratio
    - Data validation and storage
 
 **Deliverables:**
+
 - Feature-complete Mini Program
 - IntexuraOS health data API
 - Integration tests
@@ -664,6 +666,7 @@ As a complementary approach, implementing Google Fit and Apple Health integratio
    - API documentation updates
 
 **Deliverables:**
+
 - Published Mini Program in Zepp Store
 - User documentation
 - Support runbook
@@ -735,7 +738,7 @@ As a complementary approach, implementing Google Fit and Apple Health integratio
 interface HealthDataSync {
   deviceType: 'amazfit_balance_2';
   syncedAt: string; // ISO 8601
-  userId: string;   // IntexuraOS user ID
+  userId: string; // IntexuraOS user ID
 
   heartRate?: {
     last: number;
@@ -746,12 +749,12 @@ interface HealthDataSync {
 
   sleep?: {
     score: number;
-    deepTime: number;      // minutes
-    lightTime?: number;    // minutes
-    remTime?: number;      // minutes
-    totalTime: number;     // minutes
-    startTime: string;     // ISO 8601
-    endTime: string;       // ISO 8601
+    deepTime: number; // minutes
+    lightTime?: number; // minutes
+    remTime?: number; // minutes
+    totalTime: number; // minutes
+    startTime: string; // ISO 8601
+    endTime: string; // ISO 8601
     stages?: Array<{
       type: 'WAKE' | 'REM' | 'LIGHT' | 'DEEP';
       startMinute: number;
@@ -782,4 +785,4 @@ interface HealthDataSync {
 
 ---
 
-*Document prepared as part of INT-204 initial design phase.*
+_Document prepared as part of INT-204 initial design phase._

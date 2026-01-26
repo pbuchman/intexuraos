@@ -188,6 +188,7 @@ pnpm build
 **Once implementation is complete, the following steps are MANDATORY and AUTOMATIC.**
 
 ⛔ **FORBIDDEN PATTERN:**
+
 ```
 ❌ "Would you like me to commit these changes now?"
 ❌ "Should I create a PR?"
@@ -196,6 +197,7 @@ pnpm build
 
 **CORRECT PATTERN:**
 After implementation completes, AUTOMATICALLY execute steps 7-10 in sequence:
+
 1. Run CI (`pnpm run ci:tracked`)
 2. If CI passes → Commit all changes
 3. Merge latest base branch

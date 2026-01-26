@@ -43,6 +43,7 @@ Manage Linear issues, branches, and PRs with enforced workflow and cross-linking
 **Every implementation issue (features, bugs, refactors) MUST include test requirements as the FIRST section.**
 
 This applies to:
+
 - Parent issues
 - ALL child issues created during splitting
 - Standalone issues
@@ -54,11 +55,12 @@ This applies to:
 
 **Backend Tests (`apps/<service>/src/__tests__/`):**
 
-| Test | Endpoint/Function | Scenario | Expected |
-|------|-------------------|----------|----------|
-| Name | What is tested | Input/condition | Output/behavior |
+| Test | Endpoint/Function | Scenario        | Expected        |
+| ---- | ----------------- | --------------- | --------------- |
+| Name | What is tested    | Input/condition | Output/behavior |
 
 **Frontend Tests (if applicable):**
+
 - Test case 1
 - Test case 2
 ```

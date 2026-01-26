@@ -741,9 +741,9 @@ describe('TmuxManager', () => {
         mockLogger
       );
 
-      await expect(
-        manager.killSession('task-non-error', false)
-      ).rejects.toThrow('Failed to kill tmux session: Unknown error');
+      await expect(manager.killSession('task-non-error', false)).rejects.toThrow(
+        'Failed to kill tmux session: Unknown error'
+      );
     });
   });
 
@@ -751,9 +751,7 @@ describe('TmuxManager', () => {
     it('should not log error when stderr contains session not found pattern', async () => {
       const mockExec = createMockExec();
       // Return stderr that matches "session not found" pattern
-      mockExec.mockRejectedValue(
-        Object.assign(new Error('no session'), { stderr: 'no session' })
-      );
+      mockExec.mockRejectedValue(Object.assign(new Error('no session'), { stderr: 'no session' }));
 
       const manager = new TmuxManager(
         {

@@ -4,7 +4,22 @@
 # Ensures all buildable packages have dist/ at session start.
 # This prevents the ~2,400 no-unsafe-* lint errors caused by unresolved types.
 
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+LOG_FILE="${SCRIPT_DIR}/sessions.log"
+
 cd "$(dirname "$0")/../.." || exit 0
+
+# Log session start with timestamp
+if command -v gdate &>/dev/null; then
+    TIMESTAMP_ISO=$(gdate -u +%Y-%m-%dT%H:%M:%S.%3NZ)
+elif [[ "$(uname)" == "Darwin" ]]; then
+    TIMESTAMP_ISO=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+else
+    TIMESTAMP_ISO=$(date -u +%Y-%m-%dT%H:%M:%S.%3NZ)
+fi
+echo "[${TIMESTAMP_ISO}] Session started" >> "$LOG_FILE"
 
 # Check if node_modules exists
 if [ ! -d "node_modules" ]; then

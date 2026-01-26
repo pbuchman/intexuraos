@@ -49,11 +49,16 @@ if [[ -f "$PENDING_FILE" ]]; then
         START_NANO=$(cat "$START_FILE")
         DURATION_NANO=$((TIMESTAMP_NANO - START_NANO))
         DURATION_SEC=$(echo "scale=1; $DURATION_NANO / 1000000000" | bc)
+        # bc outputs ".4" instead of "0.4" for values < 1 - fix it
+        [[ "$DURATION_SEC" == .* ]] && DURATION_SEC="0${DURATION_SEC}"
         rm -f "$START_FILE"
     fi
 fi
 
-# Single-line log: [timestamp] duration command
-echo "[${TIMESTAMP_ISO}] ${DURATION_SEC}s ${COMMAND}" >> "$LOG_FILE"
+# Single-line log: [timestamp] duration command (duration right-padded to 6 chars for alignment)
+# Escape newlines in multi-line commands to keep log format intact (show as \n literal)
+# Also truncate to 500 chars to prevent log bloat
+COMMAND_ESCAPED=$(printf '%s' "$COMMAND" | awk 1 ORS='\\n' | sed 's/\\n$//')
+printf "[%s] %6s %s\n" "$TIMESTAMP_ISO" "${DURATION_SEC}s" "${COMMAND_ESCAPED:0:500}" >> "$LOG_FILE"
 
 exit 0

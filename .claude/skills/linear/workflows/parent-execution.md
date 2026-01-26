@@ -36,6 +36,7 @@ Before ANY work:
 **The entire parent execution flow is AUTOMATIC. Never ask for permission.**
 
 ⛔ **FORBIDDEN PATTERNS:**
+
 ```
 ❌ "Would you like me to commit these changes?"
 ❌ "Should I continue with the next child?"
@@ -44,6 +45,7 @@ Before ANY work:
 
 **CORRECT BEHAVIOR:**
 Execute the entire workflow automatically:
+
 1. Create branch → Create PR (draft) → Execute all children → Finalize PR → Update Linear to "In Review"
 2. Only pause on CI failure (fix and continue)
 3. Report completion AFTER everything is done

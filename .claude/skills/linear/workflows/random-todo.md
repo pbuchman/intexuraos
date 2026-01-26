@@ -16,6 +16,7 @@
 **The command is designed for automated/cron usage. It MUST NOT block on user input.**
 
 ⛔ **FORBIDDEN PATTERNS:**
+
 ```
 ❌ "Would you like me to commit these changes?"
 ❌ "Should I create a PR?"

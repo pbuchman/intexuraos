@@ -221,9 +221,17 @@ describe('LogForwarder', () => {
         collection: (
           _path: string
         ): {
-          add: (data: { taskId: string; sequence: number; content: string }) => Promise<{ id: string }>;
+          add: (data: {
+            taskId: string;
+            sequence: number;
+            content: string;
+          }) => Promise<{ id: string }>;
         } => ({
-          add: async (data: { taskId: string; sequence: number; content: string }): Promise<{ id: string }> => {
+          add: async (data: {
+            taskId: string;
+            sequence: number;
+            content: string;
+          }): Promise<{ id: string }> => {
             // After sequence 500 (which is ~4MB with 8KB chunks), we're at the limit
             // But we can't easily simulate this without modifying the internal state
             // For now, just verify the mock is callable
@@ -539,7 +547,10 @@ describe('LogForwarder', () => {
         debug: () => undefined,
       };
 
-      const forwarder = new LogForwarder({ logBasePath, firestore: mockFirestore }, loggerWithError);
+      const forwarder = new LogForwarder(
+        { logBasePath, firestore: mockFirestore },
+        loggerWithError
+      );
 
       const logFile = join(logBasePath, 'task-error.log');
 

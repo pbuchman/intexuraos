@@ -61,10 +61,10 @@ describe('SensitiveFileGuard', () => {
         remaining: [],
         allSensitive: false,
       });
-      expect(mockExecSync).toHaveBeenCalledWith(
-        'git diff --name-only HEAD~1 HEAD',
-        { cwd: '/path/to/worktree', encoding: 'utf-8' },
-      );
+      expect(mockExecSync).toHaveBeenCalledWith('git diff --name-only HEAD~1 HEAD', {
+        cwd: '/path/to/worktree',
+        encoding: 'utf-8',
+      });
     });
 
     it('should revert sensitive files', async () => {
@@ -81,14 +81,12 @@ describe('SensitiveFileGuard', () => {
       expect(result.reverted).toEqual(['.env', 'credentials.json']);
       expect(result.remaining).toEqual(['src/index.ts']);
       expect(result.allSensitive).toBe(false);
-      expect(mockExecSync).toHaveBeenCalledWith(
-        'git checkout HEAD~1 -- ".env"',
-        { cwd: '/path/to/worktree' },
-      );
-      expect(mockExecSync).toHaveBeenCalledWith(
-        'git checkout HEAD~1 -- "credentials.json"',
-        { cwd: '/path/to/worktree' },
-      );
+      expect(mockExecSync).toHaveBeenCalledWith('git checkout HEAD~1 -- ".env"', {
+        cwd: '/path/to/worktree',
+      });
+      expect(mockExecSync).toHaveBeenCalledWith('git checkout HEAD~1 -- "credentials.json"', {
+        cwd: '/path/to/worktree',
+      });
     });
 
     it('should set allSensitive to true when all changed files are reverted', async () => {
@@ -133,7 +131,7 @@ describe('SensitiveFileGuard', () => {
       expect(result.allSensitive).toBe(false);
       expect(errorLogger.error).toHaveBeenCalledWith(
         { file: '.env', error: expect.any(Error) },
-        'Failed to revert sensitive file',
+        'Failed to revert sensitive file'
       );
     });
 
@@ -168,7 +166,7 @@ describe('SensitiveFileGuard', () => {
       expect(result.allSensitive).toBe(false);
       expect(errorLogger.error).toHaveBeenCalledWith(
         { file: 'credentials.json', error: expect.any(Error) },
-        'Failed to revert sensitive file',
+        'Failed to revert sensitive file'
       );
     });
 
@@ -178,14 +176,13 @@ describe('SensitiveFileGuard', () => {
 
       await guard.checkAndRevert('/path/to/worktree', 3);
 
-      expect(mockExecSync).toHaveBeenCalledWith(
-        'git diff --name-only HEAD~3 HEAD',
-        { cwd: '/path/to/worktree', encoding: 'utf-8' },
-      );
-      expect(mockExecSync).toHaveBeenCalledWith(
-        'git checkout HEAD~3 -- ".env"',
-        { cwd: '/path/to/worktree' },
-      );
+      expect(mockExecSync).toHaveBeenCalledWith('git diff --name-only HEAD~3 HEAD', {
+        cwd: '/path/to/worktree',
+        encoding: 'utf-8',
+      });
+      expect(mockExecSync).toHaveBeenCalledWith('git checkout HEAD~3 -- ".env"', {
+        cwd: '/path/to/worktree',
+      });
     });
   });
 });

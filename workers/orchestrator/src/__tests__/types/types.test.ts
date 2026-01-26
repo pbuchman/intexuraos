@@ -5,15 +5,9 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import type {
-  CreateTaskRequest,
-  HealthResponse,
-} from '../../types/api.js';
+import type { CreateTaskRequest, HealthResponse } from '../../types/api.js';
 import type { OrchestratorConfig } from '../../types/config.js';
-import type {
-  OrchestratorState,
-  OrchestratorStatus,
-} from '../../types/state.js';
+import type { OrchestratorState, OrchestratorStatus } from '../../types/state.js';
 import type { Task, TaskStatus } from '../../types/task.js';
 
 describe('Orchestrator Types', () => {
