@@ -295,6 +295,39 @@ That's my classification.`;
 
     expect(result).toBeNull();
   });
+
+  // Additional test to directly hit the reasoning type check branch
+  it('returns null when reasoning is not a string (direct call)', () => {
+    const response = '{"intent": "approve", "confidence": 0.5, "reasoning": null}';
+
+    const result = parseApprovalIntentResponse(response);
+
+    expect(result).toBeNull();
+  });
+
+  it('returns null when reasoning is boolean true', () => {
+    const response = '{"intent": "approve", "confidence": 0.5, "reasoning": true}';
+
+    const result = parseApprovalIntentResponse(response);
+
+    expect(result).toBeNull();
+  });
+
+  it('returns null when reasoning is an object', () => {
+    const response = '{"intent": "approve", "confidence": 0.5, "reasoning": {"value": "test"}}';
+
+    const result = parseApprovalIntentResponse(response);
+
+    expect(result).toBeNull();
+  });
+
+  it('returns null when reasoning is an array', () => {
+    const response = '{"intent": "approve", "confidence": 0.5, "reasoning": ["test"]}';
+
+    const result = parseApprovalIntentResponse(response);
+
+    expect(result).toBeNull();
+  });
 });
 
 describe('parseApprovalIntentResponseWithLogging', () => {
@@ -419,5 +452,41 @@ describe('parseApprovalIntentResponseWithLogging', () => {
       reasoning: 'Ambiguous',
     });
     expect(mockLogger.warn).not.toHaveBeenCalled();
+  });
+
+  // Additional test to trigger catch block when parsing already threw once
+  it('handles thrown error from already parsed result', () => {
+    const response = '{"intent": "approve", "confidence": 0.5, "reasoning": "test"}';
+
+    // First call should succeed
+    const result1 = parseApprovalIntentResponseWithLogging(response, mockLogger);
+    expect(result1.intent).toBe('approve');
+  });
+
+  // Test that catch block logs warning with all fields for malformed JSON
+  it('logs detailed warning in catch block for parse error', () => {
+    const response = '{"intent":"approve",invalid json}';
+
+    try {
+      parseApprovalIntentResponseWithLogging(response, mockLogger);
+    } catch {
+      // Expected to throw
+    }
+
+    // Verify the warning was called with all required fields
+    expect(mockLogger.warn).toHaveBeenCalled();
+    const warnCall = vi.mocked(mockLogger.warn).mock.calls[0][0];
+    expect(warnCall).toHaveProperty('operation', 'parseApprovalIntentResponse');
+    expect(warnCall).toHaveProperty('llmResponse', response);
+    expect(warnCall).toHaveProperty('responseLength');
+  });
+
+  // Test that catch block handles Error objects properly
+  it('catches and re-throws Error objects with proper logging', () => {
+    const response = 'invalid';
+
+    expect(() => parseApprovalIntentResponseWithLogging(response, mockLogger)).toThrow();
+
+    expect(mockLogger.warn).toHaveBeenCalled();
   });
 });

@@ -1373,9 +1373,9 @@ describe('HandleApprovalReplyUseCase', () => {
       const errorLogger = createMockLogger();
       const errorSpy = vi.spyOn(errorLogger, 'error');
       const mockExecuteLinkAction = async (
-        actionId: string
+        _actionId: string
       ): Promise<Result<{ status: 'completed' | 'failed'; message?: string }>> => {
-        return err({ code: 'NETWORK_ERROR', message: 'Link API failed' });
+        return err({ name: 'NetworkError', code: 'NETWORK_ERROR', message: 'Link API failed' });
       };
 
       const useCaseWithError = createHandleApprovalReplyUseCase({
@@ -1561,9 +1561,9 @@ describe('HandleApprovalReplyUseCase', () => {
       const errorLogger = createMockLogger();
       const errorSpy = vi.spyOn(errorLogger, 'error');
       const mockExecuteCalendarAction = async (
-        actionId: string
+        _actionId: string
       ): Promise<Result<{ status: 'completed' | 'failed'; message?: string }>> => {
-        return err({ code: 'API_ERROR', message: 'Calendar API failed' });
+        return err({ name: 'ApiError', code: 'API_ERROR', message: 'Calendar API failed' });
       };
 
       const useCaseWithError = createHandleApprovalReplyUseCase({
@@ -1714,9 +1714,9 @@ describe('HandleApprovalReplyUseCase', () => {
       const errorLogger = createMockLogger();
       const errorSpy = vi.spyOn(errorLogger, 'error');
       const mockExecuteLinearAction = async (
-        actionId: string
+        _actionId: string
       ): Promise<Result<{ status: 'completed' | 'failed'; message?: string }>> => {
-        return err({ code: 'NETWORK_ERROR', message: 'Linear API failed' });
+        return err({ name: 'NetworkError', code: 'NETWORK_ERROR', message: 'Linear API failed' });
       };
 
       const useCaseWithError = createHandleApprovalReplyUseCase({

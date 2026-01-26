@@ -468,7 +468,7 @@ describe('POST /code/cancel', () => {
       // Mock the codeTaskRepo.update to return an error
       const updateSpy = vi.spyOn(codeTaskRepo, 'update').mockResolvedValueOnce({
         ok: false,
-        error: { code: 'INTERNAL_ERROR', message: 'Firestore update failed' },
+        error: { code: 'FIRESTORE_ERROR', message: 'Firestore update failed' },
       });
 
       const response = await app.inject({

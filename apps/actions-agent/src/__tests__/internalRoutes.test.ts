@@ -5,18 +5,22 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { FastifyInstance } from 'fastify';
-import { ok, err } from '@intexuraos/common-core';
+import { err } from '@intexuraos/common-core';
 import { buildServer } from '../server.js';
 import { getServices, resetServices, setServices } from '../services.js';
 import {
   FakeActionRepository,
   FakeActionEventPublisher,
+  FakeActionServiceClient,
+  FakeResearchServiceClient,
+  FakeNotificationSender,
   createFakeServices,
   createFakeHandleApprovalReplyUseCase,
   createFakeRetryPendingActionsUseCase,
 } from './fakes.js';
 import type { ActionCreatedEvent } from '../domain/models/actionEvent.js';
 import type { ApprovalReplyEvent } from '../domain/models/approvalReplyEvent.js';
+import type { Action } from '../domain/models/action.js';
 
 vi.mock('@intexuraos/common-http', async () => {
   const actual = await vi.importActual('@intexuraos/common-http');
@@ -61,6 +65,9 @@ describe('Internal Routes', () => {
 
     setServices(
       createFakeServices({
+        actionServiceClient: new FakeActionServiceClient(),
+        researchServiceClient: new FakeResearchServiceClient(),
+        notificationSender: new FakeNotificationSender(),
         actionRepository: fakeActionRepository,
         actionEventPublisher: fakeActionEventPublisher,
         retryPendingActionsUseCase: createFakeRetryPendingActionsUseCase({
@@ -69,13 +76,14 @@ describe('Internal Routes', () => {
             skipped: 2,
             failed: 1,
             total: 8,
+            skipReasons: {},
           },
         }),
         handleApprovalReplyUseCase: createFakeHandleApprovalReplyUseCase({
           returnResult: {
             matched: true,
             actionId: 'action-1',
-            intent: 'yes',
+            intent: 'approve',
             outcome: 'approved',
           },
         }),
@@ -210,12 +218,15 @@ describe('Internal Routes', () => {
       commandId: 'cmd-1',
       actionType: 'todo',
       title: 'Test Todo',
-      payload: { prompt: 'Test' },
+      payload: { prompt: 'Test', confidence: 0.95 },
       timestamp: new Date().toISOString(),
       ...overrides,
     });
 
-    const createPubSubPayload = (event: ActionCreatedEvent) => ({
+    const createPubSubPayload = (event: ActionCreatedEvent): {
+      message: { data: string; messageId: string; publishTime: string };
+      subscription: string;
+    } => ({
       message: {
         data: Buffer.from(JSON.stringify(event)).toString('base64'),
         messageId: 'msg-1',
@@ -263,7 +274,7 @@ describe('Internal Routes', () => {
     });
 
     it('returns 400 for invalid event type', async () => {
-      const event = createActionEvent({ type: 'invalid.type' as any });
+      const event = createActionEvent({ type: 'invalid.type' as ActionCreatedEvent['type'] });
       const response = await app.inject({
         method: 'POST',
         url: '/internal/actions/todo',
@@ -291,7 +302,7 @@ describe('Internal Routes', () => {
     });
 
     it('returns 400 for unsupported action type', async () => {
-      const event = createActionEvent({ actionType: 'unsupported' as any });
+      const event = createActionEvent({ actionType: 'unsupported' as Action['type'] });
       const response = await app.inject({
         method: 'POST',
         url: '/internal/actions/unsupported',
@@ -355,12 +366,14 @@ describe('Internal Routes', () => {
       commandId: 'cmd-1',
       actionType: 'todo',
       title: 'Test Todo',
-      payload: { prompt: 'Test' },
+      payload: { prompt: 'Test', confidence: 0.95 },
       timestamp: new Date().toISOString(),
       ...overrides,
     });
 
-    const createPubSubPayload = (event: ActionCreatedEvent) => ({
+    const createPubSubPayload = (event: ActionCreatedEvent): {
+      message: { data: string; messageId: string; publishTime: string };
+    } => ({
       message: {
         data: Buffer.from(JSON.stringify(event)).toString('base64'),
         messageId: 'msg-1',
@@ -407,7 +420,7 @@ describe('Internal Routes', () => {
     });
 
     it('returns 400 for invalid event type', async () => {
-      const event = createActionEvent({ type: 'invalid.type' as any });
+      const event = createActionEvent({ type: 'invalid.type' as ActionCreatedEvent['type'] });
       const response = await app.inject({
         method: 'POST',
         url: '/internal/actions/process',
@@ -421,7 +434,7 @@ describe('Internal Routes', () => {
     });
 
     it('returns success with skipped=true when no handler exists', async () => {
-      const event = createActionEvent({ actionType: 'unsupported' as any });
+      const event = createActionEvent({ actionType: 'unsupported' as Action['type'] });
       const response = await app.inject({
         method: 'POST',
         url: '/internal/actions/process',
@@ -542,7 +555,9 @@ describe('Internal Routes', () => {
       ...overrides,
     });
 
-    const createPubSubPayload = (event: ApprovalReplyEvent) => ({
+    const createPubSubPayload = (event: ApprovalReplyEvent): {
+      message: { data: string; messageId: string; publishTime: string };
+    } => ({
       message: {
         data: Buffer.from(JSON.stringify(event)).toString('base64'),
         messageId: 'msg-1',
@@ -602,7 +617,7 @@ describe('Internal Routes', () => {
     });
 
     it('returns 400 for invalid event type', async () => {
-      const event = createApprovalEvent({ type: 'invalid.type' as any });
+      const event = createApprovalEvent({ type: 'invalid.type' as ApprovalReplyEvent['type'] });
       const response = await app.inject({
         method: 'POST',
         url: '/internal/actions/approval-reply',
@@ -617,6 +632,9 @@ describe('Internal Routes', () => {
 
     it('returns 500 when handler fails', async () => {
       const services = createFakeServices({
+        actionServiceClient: new FakeActionServiceClient(),
+        researchServiceClient: new FakeResearchServiceClient(),
+        notificationSender: new FakeNotificationSender(),
         actionRepository: fakeActionRepository,
         actionEventPublisher: fakeActionEventPublisher,
         handleApprovalReplyUseCase: createFakeHandleApprovalReplyUseCase({
@@ -655,7 +673,7 @@ describe('Internal Routes', () => {
       expect(body.success).toBe(true);
       expect(body.matched).toBe(true);
       expect(body.actionId).toBe('action-1');
-      expect(body.intent).toBe('yes');
+      expect(body.intent).toBe('approve');
       expect(body.outcome).toBe('approved');
     });
 
@@ -666,13 +684,16 @@ describe('Internal Routes', () => {
       });
 
       const services = createFakeServices({
+        actionServiceClient: new FakeActionServiceClient(),
+        researchServiceClient: new FakeResearchServiceClient(),
+        notificationSender: new FakeNotificationSender(),
         actionRepository: fakeActionRepository,
         actionEventPublisher: fakeActionEventPublisher,
         handleApprovalReplyUseCase: createFakeHandleApprovalReplyUseCase({
           returnResult: {
             matched: true,
             actionId: 'action-2',
-            intent: 'no',
+            intent: 'reject',
             outcome: 'rejected',
           },
         }),
@@ -696,22 +717,26 @@ describe('Internal Routes', () => {
         success: true,
         matched: true,
         actionId: 'action-2',
-        intent: 'no',
+        intent: 'reject',
         outcome: 'rejected',
       });
     });
 
     it('handles reply without actionId', async () => {
       const event = createApprovalEvent();
-      delete (event as any).actionId;
+      // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
+      delete (event as Partial<ApprovalReplyEvent>).actionId;
 
       const services = createFakeServices({
+        actionServiceClient: new FakeActionServiceClient(),
+        researchServiceClient: new FakeResearchServiceClient(),
+        notificationSender: new FakeNotificationSender(),
         actionRepository: fakeActionRepository,
         actionEventPublisher: fakeActionEventPublisher,
         handleApprovalReplyUseCase: createFakeHandleApprovalReplyUseCase({
           returnResult: {
             matched: true,
-            intent: 'yes',
+            intent: 'approve',
             outcome: 'approved',
           },
         }),

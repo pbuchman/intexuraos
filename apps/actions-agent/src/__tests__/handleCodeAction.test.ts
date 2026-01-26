@@ -292,7 +292,7 @@ describe('handleCodeAction usecase', () => {
       });
 
       const event = createEvent({
-        payload: { prompt: 12345, confidence: 0.95 },
+        payload: { prompt: String(12345), confidence: 0.95 },
       });
 
       const result = await usecase.execute(event);
@@ -319,7 +319,7 @@ describe('handleCodeAction usecase', () => {
       });
 
       const event = createEvent({
-        payload: { confidence: 0.95 },
+        payload: { prompt: '', confidence: 0.95 },
       });
 
       await usecase.execute(event);

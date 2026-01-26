@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { exec } from 'node:child_process';
 import { TaskDispatcher } from '../services/task-dispatcher.js';
 import type { OrchestratorConfig } from '../types/config.js';
 import type { StatePersistence } from '../services/state-persistence.js';
@@ -681,7 +682,7 @@ describe('TaskDispatcher', () => {
       };
 
       // Mock getTask to throw unexpected error during submit
-      const originalGetTask = dispatcher.getTask;
+      const _originalGetTask = dispatcher.getTask;
       vi.spyOn(dispatcher, 'getTask').mockRejectedValueOnce(new Error('Unexpected error'));
 
       // Use a fresh dispatcher to avoid state pollution
@@ -697,7 +698,7 @@ describe('TaskDispatcher', () => {
       );
 
       // Override getTask to throw during submitTask's saveTask call
-      const saveSpy = vi.spyOn(statePersistence, 'save').mockRejectedValueOnce(new Error('DB error'));
+      const _saveSpy = vi.spyOn(statePersistence, 'save').mockRejectedValueOnce(new Error('DB error'));
 
       const result = await errorDispatcher.submitTask(request);
 
@@ -876,7 +877,7 @@ describe('TaskDispatcher', () => {
       await statePersistence.save(state);
 
       // Mock gh pr list to return empty array
-      const execSpy = vi.spyOn(require('node:child_process'), 'exec').mockImplementation(
+      const execSpy = vi.spyOn({ exec }, 'exec').mockImplementation(
         (_command: string, _options: unknown, callback: unknown) => {
           const cb = callback as (
             error: Error | null,
@@ -884,7 +885,7 @@ describe('TaskDispatcher', () => {
             stderr: string
           ) => void;
           cb(null, '[]', '');
-          return require('node:child_process');
+          return { exec } as typeof import('node:child_process');
         }
       );
 
@@ -937,7 +938,7 @@ describe('TaskDispatcher', () => {
       await statePersistence.save(state);
 
       // Mock gh pr list to return invalid JSON
-      const execSpy = vi.spyOn(require('node:child_process'), 'exec').mockImplementation(
+      const execSpy = vi.spyOn({ exec }, 'exec').mockImplementation(
         (_command: string, _options: unknown, callback: unknown) => {
           const cb = callback as (
             error: Error | null,
@@ -945,7 +946,7 @@ describe('TaskDispatcher', () => {
             stderr: string
           ) => void;
           cb(null, 'invalid json {{{', '');
-          return require('node:child_process');
+          return { exec } as typeof import('node:child_process');
         }
       );
 
@@ -991,15 +992,13 @@ describe('TaskDispatcher', () => {
       await resultDispatcher.submitTask(request);
 
       // Mock gh pr list to return a PR
-      let callCount = 0;
-      const execSpy = vi.spyOn(require('node:child_process'), 'exec').mockImplementation(
+      const execSpy = vi.spyOn({ exec }, 'exec').mockImplementation(
         (command: string, _options: unknown, callback: unknown) => {
           const cb = callback as (
             error: Error | null,
             stdout: string,
             stderr: string
           ) => void;
-          callCount++;
 
           if (command.includes('gh pr list')) {
             // Return a PR
@@ -1021,7 +1020,7 @@ describe('TaskDispatcher', () => {
           } else {
             cb(null, '', '');
           }
-          return require('node:child_process');
+          return { exec } as typeof import('node:child_process');
         }
       );
 
