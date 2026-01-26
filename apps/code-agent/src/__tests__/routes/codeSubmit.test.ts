@@ -14,7 +14,7 @@ vi.mock('jose', () => ({
 const mockedJwtVerify = vi.mocked(jose.jwtVerify);
 
 import { buildServer } from '../../server.js';
-import { resetServices, setServices } from '../../services.js';
+import { getServices, resetServices, setServices } from '../../services.js';
 import { createFakeFirestore, resetFirestore, setFirestore } from '@intexuraos/infra-firestore';
 import type { Firestore } from '@google-cloud/firestore';
 import pino from 'pino';
@@ -25,14 +25,18 @@ import { createTaskDispatcherService } from '../../infra/services/taskDispatcher
 import { createWhatsAppNotifier } from '../../infra/services/whatsappNotifierImpl.js';
 import { createFirestoreLogChunkRepository } from '../../infra/repositories/firestoreLogChunkRepository.js';
 import { createActionsAgentClient } from '../../infra/clients/actionsAgentClient.js';
+import { createLinearAgentHttpClient } from '../../infra/http/linearAgentHttpClient.js';
+import { createLinearIssueService } from '../../domain/services/linearIssueService.js';
 import type { LogChunkRepository } from '../../domain/repositories/logChunkRepository.js';
 import type { CodeTaskRepository } from '../../domain/repositories/codeTaskRepository.js';
 import type { TaskDispatcherService } from '../../domain/services/taskDispatcher.js';
 import type { WorkerDiscoveryService } from '../../domain/services/workerDiscovery.js';
 import type { ActionsAgentClient } from '../../infra/clients/actionsAgentClient.js';
 import type { WhatsAppNotifier } from '../../domain/services/whatsappNotifier.js';
+import type { LinearIssueService } from '../../domain/services/linearIssueService.js';
 import { createStatusMirrorService } from '../../infra/services/statusMirrorServiceImpl.js';
 import type { StatusMirrorService } from '../../infra/services/statusMirrorServiceImpl.js';
+
 describe('POST /code/submit', () => {
   let app: Awaited<ReturnType<typeof buildServer>>;
   let fakeFirestore: ReturnType<typeof createFakeFirestore>;
@@ -95,6 +99,17 @@ describe('POST /code/submit', () => {
       logger,
     });
 
+    const linearAgentClient = createLinearAgentHttpClient({
+      baseUrl: 'http://linear-agent:8086',
+      internalAuthToken: 'test-token',
+      timeoutMs: 10000,
+    }, logger);
+
+    const linearIssueService = createLinearIssueService({
+      linearAgentClient,
+      logger,
+    });
+
     setServices({
       firestore: fakeFirestore as unknown as Firestore,
       logger,
@@ -104,6 +119,7 @@ describe('POST /code/submit', () => {
       whatsappNotifier,
       logChunkRepo,
       actionsAgentClient,
+      linearIssueService,
       statusMirrorService: createStatusMirrorService({
         actionsAgentClient,
         logger,
@@ -117,6 +133,7 @@ describe('POST /code/submit', () => {
       logChunkRepo: LogChunkRepository;
       actionsAgentClient: ActionsAgentClient;
       whatsappNotifier: WhatsAppNotifier;
+      linearIssueService: LinearIssueService;
       statusMirrorService: StatusMirrorService;
     });
 
@@ -171,6 +188,15 @@ describe('POST /code/submit', () => {
 
   describe('successful task submission', () => {
     it('creates task with valid request and defaults workerType to auto', async () => {
+      // Mock linearIssueService to create a new Linear issue
+      const linearService = getServices().linearIssueService;
+      vi.spyOn(linearService, 'ensureIssueExists').mockResolvedValueOnce({
+        linearIssueId: 'INT-123',
+        linearIssueTitle: 'Fix the login bug',
+        linearFallback: false,
+      });
+      vi.spyOn(linearService, 'markInProgress').mockResolvedValueOnce(undefined);
+
       // Mock taskDispatcher to succeed
       vi.spyOn(taskDispatcher, 'dispatch').mockResolvedValueOnce({
         ok: true,
@@ -205,6 +231,15 @@ describe('POST /code/submit', () => {
     });
 
     it('uses provided workerType when specified', async () => {
+      // Mock linearIssueService to create a new Linear issue
+      const linearService = getServices().linearIssueService;
+      vi.spyOn(linearService, 'ensureIssueExists').mockResolvedValueOnce({
+        linearIssueId: 'INT-124',
+        linearIssueTitle: 'Fix the login bug',
+        linearFallback: false,
+      });
+      vi.spyOn(linearService, 'markInProgress').mockResolvedValueOnce(undefined);
+
       vi.spyOn(taskDispatcher, 'dispatch').mockResolvedValueOnce({
         ok: true,
         value: {
@@ -236,6 +271,15 @@ describe('POST /code/submit', () => {
     });
 
     it('includes linearIssueId when provided', async () => {
+      // Mock linearIssueService.ensureIssueExists to return the provided issue ID
+      const linearService = getServices().linearIssueService;
+      vi.spyOn(linearService, 'ensureIssueExists').mockResolvedValueOnce({
+        linearIssueId: 'INT-305',
+        linearIssueTitle: 'Fix the login bug',
+        linearFallback: false,
+      });
+      vi.spyOn(linearService, 'markInProgress').mockResolvedValueOnce(undefined);
+
       vi.spyOn(taskDispatcher, 'dispatch').mockResolvedValueOnce({
         ok: true,
         value: {
@@ -367,6 +411,15 @@ describe('POST /code/submit', () => {
     it('returns 409 for duplicate prompt within 5 minutes', async () => {
       const prompt = 'Fix the login bug';
 
+      // Mock linearIssueService to create a new Linear issue
+      const linearService = getServices().linearIssueService;
+      vi.spyOn(linearService, 'ensureIssueExists').mockResolvedValue({
+        linearIssueId: 'INT-123',
+        linearIssueTitle: prompt,
+        linearFallback: false,
+      });
+      vi.spyOn(linearService, 'markInProgress').mockResolvedValue(undefined);
+
       // Mock successful dispatch
       vi.spyOn(taskDispatcher, 'dispatch').mockResolvedValue({
         ok: true,
@@ -421,6 +474,15 @@ describe('POST /code/submit', () => {
 
       const linearIssueId = 'INT-305';
 
+      // Mock linearIssueService.ensureIssueExists
+      const linearService = getServices().linearIssueService;
+      vi.spyOn(linearService, 'ensureIssueExists').mockResolvedValue({
+        linearIssueId,
+        linearIssueTitle: 'First task',
+        linearFallback: false,
+      });
+      vi.spyOn(linearService, 'markInProgress').mockResolvedValue(undefined);
+
       // Create first task with this Linear issue via direct repository call
       await codeTaskRepo.create({
         userId: 'test-user-id',
@@ -457,6 +519,15 @@ describe('POST /code/submit', () => {
 
   describe('error handling', () => {
     it('returns 503 when worker dispatch fails', async () => {
+      // Mock linearIssueService to create a new Linear issue
+      const linearService = getServices().linearIssueService;
+      vi.spyOn(linearService, 'ensureIssueExists').mockResolvedValue({
+        linearIssueId: 'INT-123',
+        linearIssueTitle: 'Fix the bug',
+        linearFallback: false,
+      });
+      vi.spyOn(linearService, 'markInProgress').mockResolvedValue(undefined);
+
       // Mock fetch to return 503 (worker busy/unavailable)
       const mockFetch = vi.fn().mockResolvedValue({
         ok: false,

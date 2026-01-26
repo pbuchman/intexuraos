@@ -25,14 +25,18 @@ import { createTaskDispatcherService } from '../../infra/services/taskDispatcher
 import { createWhatsAppNotifier } from '../../infra/services/whatsappNotifierImpl.js';
 import { createFirestoreLogChunkRepository } from '../../infra/repositories/firestoreLogChunkRepository.js';
 import { createActionsAgentClient } from '../../infra/clients/actionsAgentClient.js';
+import { createLinearAgentHttpClient } from '../../infra/http/linearAgentHttpClient.js';
+import { createLinearIssueService } from '../../domain/services/linearIssueService.js';
 import type { CodeTaskRepository } from '../../domain/repositories/codeTaskRepository.js';
 import type { TaskDispatcherService } from '../../domain/services/taskDispatcher.js';
 import type { LogChunkRepository } from '../../domain/repositories/logChunkRepository.js';
 import type { WorkerDiscoveryService } from '../../domain/services/workerDiscovery.js';
 import type { ActionsAgentClient } from '../../infra/clients/actionsAgentClient.js';
 import type { WhatsAppNotifier } from '../../domain/services/whatsappNotifier.js';
+import type { LinearIssueService } from '../../domain/services/linearIssueService.js';
 import { createStatusMirrorService } from '../../infra/services/statusMirrorServiceImpl.js';
 import type { StatusMirrorService } from '../../infra/services/statusMirrorServiceImpl.js';
+
 describe('POST /code/cancel', () => {
   let app: Awaited<ReturnType<typeof buildServer>>;
   let fakeFirestore: ReturnType<typeof createFakeFirestore>;
@@ -96,6 +100,17 @@ describe('POST /code/cancel', () => {
       logger,
     });
 
+    const linearAgentClient = createLinearAgentHttpClient({
+      baseUrl: 'http://linear-agent:8086',
+      internalAuthToken: 'test-token',
+      timeoutMs: 10000,
+    }, logger);
+
+    const linearIssueService = createLinearIssueService({
+      linearAgentClient,
+      logger,
+    });
+
     // Spy on cancelOnWorker to verify it's called
     cancelOnWorkerSpy = vi.spyOn(taskDispatcher, 'cancelOnWorker' as never).mockResolvedValue(undefined);
 
@@ -108,6 +123,7 @@ describe('POST /code/cancel', () => {
       whatsappNotifier,
       logChunkRepo,
       actionsAgentClient,
+      linearIssueService,
       statusMirrorService: createStatusMirrorService({
         actionsAgentClient,
         logger,
@@ -121,6 +137,7 @@ describe('POST /code/cancel', () => {
       logChunkRepo: LogChunkRepository;
       actionsAgentClient: ActionsAgentClient;
       whatsappNotifier: WhatsAppNotifier;
+      linearIssueService: LinearIssueService;
       statusMirrorService: StatusMirrorService;
     });
 

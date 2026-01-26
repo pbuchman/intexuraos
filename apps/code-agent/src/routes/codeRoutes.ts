@@ -639,7 +639,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         return { success: false, error: { code: 'UNAUTHORIZED', message: 'Unauthorized' } };
       }
 
-      const { codeTaskRepo } = getServices();
+      const { codeTaskRepo, linearIssueService } = getServices();
       const { taskId } = request.params;
       const body = request.body;
 
@@ -668,6 +668,11 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
             message: result.error.message,
           },
         };
+      }
+
+      // If PR was created and task has a Linear issue, transition to In Review
+      if (body.result?.prUrl !== undefined && result.value.linearIssueId !== undefined) {
+        await linearIssueService.markInReview(result.value.linearIssueId);
       }
 
       request.log.info({ taskId, status: result.value.status }, 'Code task updated successfully');
@@ -886,6 +891,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       prompt: string;
       workerType?: 'opus' | 'auto' | 'glm';
       linearIssueId?: string;
+      linearIssueTitle?: string;
     };
   }>(
     '/code/submit',
@@ -902,6 +908,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
             prompt: { type: 'string', minLength: 1, maxLength: 100000 },
             workerType: { type: 'string', enum: ['opus', 'auto', 'glm'] },
             linearIssueId: { type: 'string' },
+            linearIssueTitle: { type: 'string' },
           },
           required: ['prompt'],
         },
@@ -989,11 +996,30 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         includeParams: true,
       });
 
-      const { codeTaskRepo, taskDispatcher } = getServices();
-      const body = request.body;
+      const { codeTaskRepo, taskDispatcher, linearIssueService } = getServices();
+      const body = request.body as {
+        prompt: string;
+        workerType?: 'opus' | 'auto' | 'glm';
+        linearIssueId?: string;
+        linearIssueTitle?: string;
+      };
       const userId = request.user?.userId ?? 'unknown-user';
 
       request.log.info({ userId, promptLength: body.prompt.length }, 'Submitting code task from UI');
+
+      // Ensure Linear issue exists (create if not provided)
+      const ensureParams: {
+        linearIssueId?: string;
+        linearIssueTitle?: string;
+        taskPrompt: string;
+      } = { taskPrompt: body.prompt };
+      if ('linearIssueId' in body && body.linearIssueId !== undefined) {
+        ensureParams.linearIssueId = body.linearIssueId;
+      }
+      if ('linearIssueTitle' in body && body.linearIssueTitle !== undefined) {
+        ensureParams.linearIssueTitle = body.linearIssueTitle;
+      }
+      const issueResult = await linearIssueService.ensureIssueExists(ensureParams);
 
       // Apply rate limiting: 10 tasks per day per user
       const countResult = await codeTaskRepo.countByUserToday(userId);
@@ -1034,6 +1060,8 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         baseBranch: string;
         traceId: string;
         linearIssueId?: string;
+        linearIssueTitle?: string;
+        linearFallback?: boolean;
       } = {
         userId,
         prompt: body.prompt,
@@ -1046,8 +1074,12 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         traceId: `trace_${Date.now()}_${Math.random().toString(36).substring(7)}`,
       };
 
-      if (body.linearIssueId !== undefined) {
-        createInput.linearIssueId = body.linearIssueId;
+      if (issueResult.linearIssueId !== '') {
+        createInput.linearIssueId = issueResult.linearIssueId;
+        createInput.linearIssueTitle = issueResult.linearIssueTitle;
+      }
+      if (issueResult.linearFallback) {
+        createInput.linearFallback = true;
       }
 
       const createResult = await codeTaskRepo.create(createInput);
@@ -1138,6 +1170,11 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
             message: 'Failed to dispatch task to worker',
           },
         };
+      }
+
+      // Mark Linear issue as In Progress after successful dispatch
+      if (issueResult.linearIssueId !== '') {
+        await linearIssueService.markInProgress(issueResult.linearIssueId);
       }
 
       request.log.info({ taskId: task.id, workerLocation: dispatchResult.value.workerLocation }, 'Code task submitted successfully');

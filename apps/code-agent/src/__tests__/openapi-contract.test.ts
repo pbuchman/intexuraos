@@ -20,6 +20,8 @@ import type { Logger } from 'pino';
 import { createFirestoreCodeTaskRepository } from '../infra/repositories/firestoreCodeTaskRepository.js';
 import { createFirestoreLogChunkRepository } from '../infra/repositories/firestoreLogChunkRepository.js';
 import { createActionsAgentClient } from '../infra/clients/actionsAgentClient.js';
+import { createLinearAgentHttpClient } from '../infra/http/linearAgentHttpClient.js';
+import { createLinearIssueService } from '../domain/services/linearIssueService.js';
 import type { CodeTaskRepository } from '../domain/repositories/codeTaskRepository.js';
 import { createWorkerDiscoveryService } from '../infra/services/workerDiscoveryImpl.js';
 import { createTaskDispatcherService } from '../infra/services/taskDispatcherImpl.js';
@@ -30,6 +32,7 @@ import type { TaskDispatcherService } from '../domain/services/taskDispatcher.js
 import type { LogChunkRepository } from '../domain/repositories/logChunkRepository.js';
 import type { ActionsAgentClient } from '../infra/clients/actionsAgentClient.js';
 import type { WhatsAppNotifier } from '../domain/services/whatsappNotifier.js';
+import type { LinearIssueService } from '../domain/services/linearIssueService.js';
 import type { StatusMirrorService } from '../infra/services/statusMirrorServiceImpl.js';
 
 describe('OpenAPI contract', () => {
@@ -85,6 +88,14 @@ describe('OpenAPI contract', () => {
         actionsAgentClient,
         logger,
       }),
+      linearIssueService: createLinearIssueService({
+        linearAgentClient: createLinearAgentHttpClient({
+          baseUrl: 'http://linear-agent:8086',
+          internalAuthToken: 'test-token',
+          timeoutMs: 10000,
+        }, logger),
+        logger,
+      }),
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -94,6 +105,7 @@ describe('OpenAPI contract', () => {
       logChunkRepo: LogChunkRepository;
       actionsAgentClient: ActionsAgentClient;
       whatsappNotifier: WhatsAppNotifier;
+      linearIssueService: LinearIssueService;
       statusMirrorService: StatusMirrorService;
     });
 
