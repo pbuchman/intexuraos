@@ -13,10 +13,8 @@ import type { OrchestratorConfig } from '../../types/config.js';
 import type {
   OrchestratorState,
   OrchestratorStatus,
-  TaskState,
-  TaskStatus,
 } from '../../types/state.js';
-import type { Task } from '../../types/task.js';
+import type { Task, TaskStatus } from '../../types/task.js';
 
 describe('Orchestrator Types', () => {
   describe('API Types', () => {
@@ -54,14 +52,14 @@ describe('Orchestrator Types', () => {
 
     it('validates HealthResponse structure', () => {
       const health: HealthResponse = {
-        status: 'healthy',
+        status: 'ready',
         capacity: 5,
         running: 2,
         available: 3,
         githubTokenExpiresAt: null,
       };
 
-      expect(health.status).toBe('healthy');
+      expect(health.status).toBe('ready');
       expect(health.available).toBe(3);
     });
   });
@@ -87,20 +85,6 @@ describe('Orchestrator Types', () => {
   });
 
   describe('State Types', () => {
-    it('validates TaskState structure', () => {
-      const taskState: TaskState = {
-        id: 'task-123',
-        status: 'running',
-        workerType: 'opus',
-        prompt: 'Test prompt',
-        createdAt: '2025-01-01T00:00:00.000Z',
-        updatedAt: '2025-01-01T00:00:00.000Z',
-      };
-
-      expect(taskState.status).toBe('running');
-      expect(taskState.id).toBe('task-123');
-    });
-
     it('validates OrchestratorState structure', () => {
       const state: OrchestratorState = {
         tasks: {},
@@ -113,60 +97,77 @@ describe('Orchestrator Types', () => {
     });
 
     it('validates all TaskStatus values', () => {
-      const statuses: TaskStatus[] = ['pending', 'running', 'completed', 'failed'];
+      const statuses: TaskStatus[] = [
+        'queued',
+        'running',
+        'completed',
+        'failed',
+        'interrupted',
+        'cancelled',
+      ];
 
-      expect(statuses).toHaveLength(4);
+      expect(statuses).toHaveLength(6);
       expect(statuses).toContain('running');
       expect(statuses).toContain('failed');
     });
 
     it('validates all OrchestratorStatus values', () => {
-      const statuses: OrchestratorStatus[] = ['healthy', 'degraded', 'unhealthy'];
+      const statuses: OrchestratorStatus[] = [
+        'initializing',
+        'recovering',
+        'ready',
+        'degraded',
+        'auth_degraded',
+        'shutting_down',
+      ];
 
-      expect(statuses).toHaveLength(3);
-      expect(statuses).toContain('healthy');
+      expect(statuses).toHaveLength(6);
+      expect(statuses).toContain('ready');
     });
   });
 
   describe('Task Types', () => {
     it('validates Task structure', () => {
       const task: Task = {
-        id: 'task-123',
-        status: 'pending',
+        taskId: 'task-123',
+        status: 'queued',
         workerType: 'opus',
         prompt: 'Test prompt',
         repository: 'intexuraos/intexuraos-2',
-        branch: 'feature/test',
-        createdAt: '2025-01-01T00:00:00.000Z',
-        updatedAt: '2025-01-01T00:00:00.000Z',
+        baseBranch: 'main',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        tmuxSession: 'session-123',
+        worktreePath: '/tmp/worktrees/task-123',
+        startedAt: '2025-01-01T00:00:00.000Z',
       };
 
-      expect(task.id).toBe('task-123');
-      expect(task.status).toBe('pending');
+      expect(task.taskId).toBe('task-123');
+      expect(task.status).toBe('queued');
     });
 
     it('validates Task with all optional fields', () => {
       const task: Task = {
-        id: 'task-456',
+        taskId: 'task-456',
         status: 'running',
         workerType: 'auto',
         prompt: 'Full test prompt',
         repository: 'intexuraos/intexuraos-2',
         baseBranch: 'main',
-        branch: 'feature/test',
         webhookUrl: 'https://example.com/webhook',
         webhookSecret: 'secret',
+        tmuxSession: 'session-456',
+        worktreePath: '/tmp/worktrees/task-456',
+        startedAt: '2025-01-01T00:00:00.000Z',
         actionId: 'action-123',
         linearIssueId: 'INT-456',
-        createdAt: '2025-01-01T00:00:00.000Z',
-        updatedAt: '2025-01-01T00:00:00.000Z',
-        startedAt: '2025-01-01T00:01:00.000Z',
-        completedAt: null,
-        error: null,
+        linearIssueTitle: 'Test issue',
+        slug: 'test-slug',
+        completedAt: '2025-01-01T00:30:00.000Z',
       };
 
       expect(task.linearIssueId).toBe('INT-456');
-      expect(task.startedAt).toBe('2025-01-01T00:01:00.000Z');
+      expect(task.startedAt).toBe('2025-01-01T00:00:00.000Z');
     });
   });
 });

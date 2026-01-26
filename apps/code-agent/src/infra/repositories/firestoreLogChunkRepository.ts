@@ -5,7 +5,7 @@
  * Design reference: Lines 2027-2033
  */
 
-import type { Logger } from 'pino';
+import type { Logger } from '@intexuraos/common-core';
 import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
 import type { LogChunkRepository, RepositoryError } from '../../domain/repositories/logChunkRepository.js';
 import type { LogChunk } from '../../domain/models/logChunk.js';

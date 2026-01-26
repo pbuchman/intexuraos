@@ -5,7 +5,6 @@ import { join, dirname } from 'node:path';
 import { StatePersistence } from '../services/state-persistence.js';
 import type { OrchestratorState } from '../types/index.js';
 import type { Logger } from '@intexuraos/common-core';
-import * as childProcess from 'node:child_process';
 
 const mockLogger: Logger = {
   info: () => undefined,
@@ -14,10 +13,29 @@ const mockLogger: Logger = {
   debug: () => undefined,
 };
 
+// Create mock for exec with promisify.custom support using vi.hoisted
+// to ensure these are available when the hoisted vi.mock runs
+// Use Symbol.for directly since promisify.custom is just a well-known symbol
+const { mockExecPromisified, mockExec } = vi.hoisted(() => {
+  const mockExecPromisified = vi.fn();
+  const mockExec = vi.fn() as ReturnType<typeof vi.fn> &
+    Record<symbol, ReturnType<typeof vi.fn>>;
+  mockExec[Symbol.for('nodejs.util.promisify.custom')] = mockExecPromisified;
+  return { mockExecPromisified, mockExec };
+});
+
 // Mock child_process exec
 vi.mock('node:child_process', () => ({
-  exec: vi.fn(),
+  exec: mockExec,
 }));
+
+const mockExecWithOutput = (stdout: string): void => {
+  mockExecPromisified.mockResolvedValue({ stdout, stderr: '' });
+};
+
+const mockExecWithError = (error: Error): void => {
+  mockExecPromisified.mockRejectedValue(error);
+};
 
 describe('StatePersistence', () => {
   const tempDir = mkdtempSync(join(tmpdir(), 'orchestrator-test-'));
@@ -205,48 +223,50 @@ describe('StatePersistence', () => {
   });
 
   describe('detectOrphanWorktrees', () => {
-    const mockExecFn = vi.mocked(childProcess.exec);
-
     beforeEach(() => {
-      mockExecFn.mockClear();
+      mockExecPromisified.mockClear();
     });
 
     it('should return orphan worktrees not in active state', async () => {
       const persistence = new StatePersistence(stateFilePath, mockLogger);
 
       // Save state with one active task
+      const task1 = mockState.tasks['task-1'];
+      if (!task1) throw new Error('mockState.tasks["task-1"] should exist');
       await persistence.save({
         ...mockState,
         tasks: {
           'task-1': {
-            ...mockState.tasks['task-1'],
+            ...task1,
             worktreePath: '/active/worktree',
           },
         },
       });
 
       // Mock git worktree list output with multiple worktrees
-      mockExecFn.mockImplementation((_cmd, _options, callback) => {
-        callback(null, { stdout: 'worktree /active/worktree\nworktree /orphan/worktree\nworktree /another/orphan\n' });
-      });
+      mockExecWithOutput(
+        'worktree /active/worktree\nworktree /orphan/worktree\nworktree /another/orphan\n'
+      );
 
       const orphans = await persistence.detectOrphanWorktrees('/repo/path');
 
       expect(orphans).toEqual(['/orphan/worktree', '/another/orphan']);
-      expect(mockExecFn).toHaveBeenCalledWith('git worktree list --porcelain', {
+      expect(mockExecPromisified).toHaveBeenCalledWith('git worktree list --porcelain', {
         cwd: '/repo/path',
-      }, expect.any(Function));
+      });
     });
 
     it('should return empty array when all worktrees are active', async () => {
       const persistence = new StatePersistence(stateFilePath, mockLogger);
 
       // Save state with two active tasks
+      const task1 = mockState.tasks['task-1'];
+      if (!task1) throw new Error('mockState.tasks["task-1"] should exist');
       await persistence.save({
         ...mockState,
         tasks: {
           'task-1': {
-            ...mockState.tasks['task-1'],
+            ...task1,
             worktreePath: '/active/one',
           },
           'task-2': {
@@ -265,9 +285,7 @@ describe('StatePersistence', () => {
         },
       });
 
-      mockExecFn.mockImplementation((_cmd, _options, callback) => {
-        callback(null, { stdout: 'worktree /active/one\nworktree /active/two\n' });
-      });
+      mockExecWithOutput('worktree /active/one\nworktree /active/two\n');
 
       const orphans = await persistence.detectOrphanWorktrees('/repo/path');
 
@@ -278,9 +296,7 @@ describe('StatePersistence', () => {
       const persistence = new StatePersistence(stateFilePath, mockLogger);
       await persistence.save(mockState);
 
-      mockExecFn.mockImplementation((_cmd, _options, callback) => {
-        callback(null, { stdout: '' });
-      });
+      mockExecWithOutput('');
 
       const orphans = await persistence.detectOrphanWorktrees('/repo/path');
 
@@ -291,9 +307,7 @@ describe('StatePersistence', () => {
       const persistence = new StatePersistence(stateFilePath, mockLogger);
       const errorSpy = vi.spyOn(mockLogger, 'error');
 
-      mockExecFn.mockImplementation((_cmd, _options, callback) => {
-        callback(new Error('Git command failed'), null);
-      });
+      mockExecWithError(new Error('Git command failed'));
 
       const orphans = await persistence.detectOrphanWorktrees('/repo/path');
 
@@ -315,9 +329,9 @@ describe('StatePersistence', () => {
       });
 
       // Porcelain format has additional metadata lines
-      mockExecFn.mockImplementation((_cmd, _options, callback) => {
-        callback(null, { stdout: 'worktree /path/one\nHEAD abcd123\nbranch refs/heads/main\nworktree /path/two\nHEAD dcba456\ndetached\n' });
-      });
+      mockExecWithOutput(
+        'worktree /path/one\nHEAD abcd123\nbranch refs/heads/main\nworktree /path/two\nHEAD dcba456\ndetached\n'
+      );
 
       const orphans = await persistence.detectOrphanWorktrees('/repo/path');
 
@@ -333,9 +347,7 @@ describe('StatePersistence', () => {
         pendingWebhooks: [],
       });
 
-      mockExecFn.mockImplementation((_cmd, _options, callback) => {
-        callback(null, { stdout: 'worktree /path with spaces/tree\n' });
-      });
+      mockExecWithOutput('worktree /path with spaces/tree\n');
 
       const orphans = await persistence.detectOrphanWorktrees('/repo/path');
 

@@ -182,8 +182,13 @@ You are an elite service architecture specialist for the IntexuraOS monorepo. Yo
 
 - Run `npx prettier --write .`
 - Run `pnpm run ci` and verify it passes
-- Run `tf fmt -check -recursive && tf validate` from `/terraform`
-- Instruct user to run `terraform apply` in `terraform/environments/dev/`
+- Run terraform validation (hook enforces env var clearing):
+  ```bash
+  STORAGE_EMULATOR_HOST= FIRESTORE_EMULATOR_HOST= PUBSUB_EMULATOR_HOST= \
+  GOOGLE_APPLICATION_CREDENTIALS=$HOME/personal/gcloud-claude-code-dev.json \
+  terraform fmt -check -recursive && terraform validate
+  ```
+- Instruct user to run `terraform apply` in `terraform/environments/dev/` (with same env vars)
 - Wait for confirmation that service is created in Cloud Run
 - Trigger Cloud Build to deploy initial scaffold
 - Verify deployment succeeds and service is healthy

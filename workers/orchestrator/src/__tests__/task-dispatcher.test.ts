@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { exec } from 'node:child_process';
+import { exec, type ChildProcess } from 'node:child_process';
 import { TaskDispatcher } from '../services/task-dispatcher.js';
 import type { OrchestratorConfig } from '../types/config.js';
 import type { StatePersistence } from '../services/state-persistence.js';
@@ -11,6 +11,41 @@ import type { GitHubTokenService } from '../github/token-service.js';
 import type { Logger } from '@intexuraos/common-core';
 import type { CreateTaskRequest } from '../types/api.js';
 import type { OrchestratorState } from '../types/state.js';
+
+const createMockChildProcess = (): ChildProcess => ({
+  pid: 12345,
+  stdin: null,
+  stdout: null,
+  stderr: null,
+  stdio: [null, null, null],
+  killed: false,
+  exitCode: null,
+  signalCode: null,
+  spawnargs: [],
+  spawnfile: '',
+  connected: false,
+  kill: vi.fn(),
+  send: vi.fn(),
+  disconnect: vi.fn(),
+  unref: vi.fn(),
+  ref: vi.fn(),
+  addListener: vi.fn(),
+  emit: vi.fn(),
+  on: vi.fn(),
+  once: vi.fn(),
+  prependListener: vi.fn(),
+  prependOnceListener: vi.fn(),
+  removeListener: vi.fn(),
+  off: vi.fn(),
+  removeAllListeners: vi.fn(),
+  setMaxListeners: vi.fn(),
+  getMaxListeners: vi.fn(() => 10),
+  listeners: vi.fn(() => []),
+  rawListeners: vi.fn(() => []),
+  listenerCount: vi.fn(() => 0),
+  eventNames: vi.fn(() => []),
+  [Symbol.dispose]: vi.fn(),
+}) as unknown as ChildProcess;
 
 describe('TaskDispatcher', () => {
   // Mock config
@@ -682,7 +717,6 @@ describe('TaskDispatcher', () => {
       };
 
       // Mock getTask to throw unexpected error during submit
-      const _originalGetTask = dispatcher.getTask;
       vi.spyOn(dispatcher, 'getTask').mockRejectedValueOnce(new Error('Unexpected error'));
 
       // Use a fresh dispatcher to avoid state pollution
@@ -698,7 +732,7 @@ describe('TaskDispatcher', () => {
       );
 
       // Override getTask to throw during submitTask's saveTask call
-      const _saveSpy = vi.spyOn(statePersistence, 'save').mockRejectedValueOnce(new Error('DB error'));
+      vi.spyOn(statePersistence, 'save').mockRejectedValueOnce(new Error('DB error'));
 
       const result = await errorDispatcher.submitTask(request);
 
@@ -885,7 +919,7 @@ describe('TaskDispatcher', () => {
             stderr: string
           ) => void;
           cb(null, '[]', '');
-          return { exec } as typeof import('node:child_process');
+          return createMockChildProcess();
         }
       );
 
@@ -946,7 +980,7 @@ describe('TaskDispatcher', () => {
             stderr: string
           ) => void;
           cb(null, 'invalid json {{{', '');
-          return { exec } as typeof import('node:child_process');
+          return createMockChildProcess();
         }
       );
 
@@ -1020,7 +1054,7 @@ describe('TaskDispatcher', () => {
           } else {
             cb(null, '', '');
           }
-          return { exec } as typeof import('node:child_process');
+          return createMockChildProcess();
         }
       );
 
