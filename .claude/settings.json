@@ -27,9 +27,7 @@
       },
       {
         "matcher": "Edit|Write",
-        "hooks": [
-          { "type": "command", "command": ".claude/hooks/validate-coverage-config.sh" }
-        ]
+        "hooks": [{ "type": "command", "command": ".claude/hooks/validate-coverage-config.sh" }]
       }
     ]
   }

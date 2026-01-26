@@ -18,8 +18,7 @@ const mockLogger: Logger = {
 // Use Symbol.for directly since promisify.custom is just a well-known symbol
 const { mockExecPromisified, mockExec } = vi.hoisted(() => {
   const mockExecPromisified = vi.fn();
-  const mockExec = vi.fn() as ReturnType<typeof vi.fn> &
-    Record<symbol, ReturnType<typeof vi.fn>>;
+  const mockExec = vi.fn() as ReturnType<typeof vi.fn> & Record<symbol, ReturnType<typeof vi.fn>>;
   mockExec[Symbol.for('nodejs.util.promisify.custom')] = mockExecPromisified;
   return { mockExecPromisified, mockExec };
 });

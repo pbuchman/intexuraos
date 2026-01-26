@@ -41,32 +41,32 @@ This document analyzes the design and implementation options for creating a nati
 
 ### Amazfit Balance 2 Specifications
 
-| Category          | Specification                                                    |
-| ----------------- | ---------------------------------------------------------------- |
-| **Display**       | 47mm AMOLED touchscreen with sapphire glass                      |
-| **OS**            | Zepp OS (custom embedded Linux)                                  |
-| **Processor**     | Not publicly disclosed (ARM-based)                               |
-| **Storage**       | 4GB built-in                                                     |
-| **Connectivity**  | Bluetooth 5.2 BLE, Wi-Fi 2.4GHz                                  |
-| **GPS**           | Dual-Band (L1 + L5) with 6 satellite systems                     |
-| **Water Rating**  | 45m dive certified                                               |
-| **Battery**       | Up to 21 days typical use                                        |
-| **Compatibility** | Android 7.0+, iOS 15.0+                                          |
-| **API Level**     | Zepp OS 4.2 (latest as of 2026)                                  |
+| Category          | Specification                                |
+| ----------------- | -------------------------------------------- |
+| **Display**       | 47mm AMOLED touchscreen with sapphire glass  |
+| **OS**            | Zepp OS (custom embedded Linux)              |
+| **Processor**     | Not publicly disclosed (ARM-based)           |
+| **Storage**       | 4GB built-in                                 |
+| **Connectivity**  | Bluetooth 5.2 BLE, Wi-Fi 2.4GHz              |
+| **GPS**           | Dual-Band (L1 + L5) with 6 satellite systems |
+| **Water Rating**  | 45m dive certified                           |
+| **Battery**       | Up to 21 days typical use                    |
+| **Compatibility** | Android 7.0+, iOS 15.0+                      |
+| **API Level**     | Zepp OS 4.2 (latest as of 2026)              |
 
 ### Sensor Array (BioTracker 6.0)
 
 The Amazfit Balance 2 features Amazfit's latest BioTracker 6.0 PPG biometric sensor with an 8-point sensor array (8PD + 2LED):
 
-| Sensor Type            | Capabilities                                        |
-| ---------------------- | --------------------------------------------------- |
-| PPG Biometric          | Heart rate, HRV, SpO2, stress                       |
-| Accelerometer          | Movement, steps, activity detection                 |
-| Gyroscope              | Orientation, rotation, gesture detection            |
-| Geomagnetic            | Compass, navigation                                 |
-| Barometric Altimeter   | Elevation, floors climbed                           |
-| Ambient Light          | Auto-brightness, sleep detection                    |
-| Skin Temperature       | Body temperature monitoring                         |
+| Sensor Type          | Capabilities                             |
+| -------------------- | ---------------------------------------- |
+| PPG Biometric        | Heart rate, HRV, SpO2, stress            |
+| Accelerometer        | Movement, steps, activity detection      |
+| Gyroscope            | Orientation, rotation, gesture detection |
+| Geomagnetic          | Compass, navigation                      |
+| Barometric Altimeter | Elevation, floors climbed                |
+| Ambient Light        | Auto-brightness, sleep detection         |
+| Skin Temperature     | Body temperature monitoring              |
 
 ---
 
@@ -110,22 +110,22 @@ Zepp OS is a lightweight operating system designed for wearable devices. It supp
 
 A complete Zepp OS Mini Program consists of three parts:
 
-| Component        | Location        | Purpose                                    | Network Access |
-| ---------------- | --------------- | ------------------------------------------ | -------------- |
-| **Device App**   | Watch           | UI rendering, sensor access, user input    | No (BLE only)  |
-| **Side Service** | Phone (Zepp)    | Network requests, background processing    | Yes (fetch)    |
-| **Settings App** | Phone (Zepp)    | Configuration UI, user preferences         | Yes (fetch)    |
+| Component        | Location     | Purpose                                 | Network Access |
+| ---------------- | ------------ | --------------------------------------- | -------------- |
+| **Device App**   | Watch        | UI rendering, sensor access, user input | No (BLE only)  |
+| **Side Service** | Phone (Zepp) | Network requests, background processing | Yes (fetch)    |
+| **Settings App** | Phone (Zepp) | Configuration UI, user preferences      | Yes (fetch)    |
 
 **Critical Constraint:** The Device App running on the watch **cannot make HTTP requests directly**. All network communication must be relayed through the Side Service running on the companion smartphone.
 
 ### Development Tools
 
-| Tool              | Purpose                                              |
-| ----------------- | ---------------------------------------------------- |
-| **Zeus CLI**      | Project scaffolding, building, deployment            |
-| **Zepp Console**  | App registration, management, analytics              |
-| **Developer Mode**| Sideloading via QR code scanning                     |
-| **Simulator**     | Desktop testing (limited sensor simulation)          |
+| Tool               | Purpose                                     |
+| ------------------ | ------------------------------------------- |
+| **Zeus CLI**       | Project scaffolding, building, deployment   |
+| **Zepp Console**   | App registration, management, analytics     |
+| **Developer Mode** | Sideloading via QR code scanning            |
+| **Simulator**      | Desktop testing (limited sensor simulation) |
 
 ### Communication Protocol
 
@@ -143,8 +143,8 @@ messageBuilder.request({
   params: {
     heartRate: hrData,
     sleep: sleepData,
-    stress: stressData
-  }
+    stress: stressData,
+  },
 });
 ```
 
@@ -157,8 +157,8 @@ messageBuilder.on('request', (ctx) => {
     // Forward to IntexuraOS API
     fetch('https://api.intexuraos.com/v1/health/sync', {
       method: 'POST',
-      headers: { 'Authorization': `Bearer ${token}` },
-      body: JSON.stringify(ctx.request.params)
+      headers: { Authorization: `Bearer ${token}` },
+      body: JSON.stringify(ctx.request.params),
     });
   }
 });
@@ -166,11 +166,11 @@ messageBuilder.on('request', (ctx) => {
 
 ### App Distribution Options
 
-| Method               | Requirements                        | Use Case                     |
-| -------------------- | ----------------------------------- | ---------------------------- |
-| **Zepp App Store**   | Review approval, privacy policy     | Public distribution          |
-| **Developer Mode**   | QR code scanning, manual install    | Testing, private use         |
-| **Enterprise**       | Contact Zepp for arrangements       | Organization-wide deployment |
+| Method             | Requirements                     | Use Case                     |
+| ------------------ | -------------------------------- | ---------------------------- |
+| **Zepp App Store** | Review approval, privacy policy  | Public distribution          |
+| **Developer Mode** | QR code scanning, manual install | Testing, private use         |
+| **Enterprise**     | Contact Zepp for arrangements    | Organization-wide deployment |
 
 ---
 
@@ -182,61 +182,61 @@ The Zepp OS SDK provides comprehensive APIs for accessing health and fitness dat
 
 #### Heart Rate (`@zos/sensor` HeartRate)
 
-| Method              | Returns                                           | Granularity        |
-| ------------------- | ------------------------------------------------- | ------------------ |
-| `getCurrent()`      | Current HR value (in callback)                    | Real-time          |
-| `getLast()`         | Most recent HR measurement                        | Single value       |
-| `getToday()`        | HR data from 00:00 to now                         | Per-minute (1440)  |
-| `getResting()`      | Resting heart rate                                | Daily average      |
-| `onCurrentChange()` | Callback for continuous monitoring                | Real-time stream   |
+| Method              | Returns                            | Granularity       |
+| ------------------- | ---------------------------------- | ----------------- |
+| `getCurrent()`      | Current HR value (in callback)     | Real-time         |
+| `getLast()`         | Most recent HR measurement         | Single value      |
+| `getToday()`        | HR data from 00:00 to now          | Per-minute (1440) |
+| `getResting()`      | Resting heart rate                 | Daily average     |
+| `onCurrentChange()` | Callback for continuous monitoring | Real-time stream  |
 
 #### Sleep (`@zos/sensor` Sleep)
 
-| Method               | Returns                                          | Data Points        |
-| -------------------- | ------------------------------------------------ | ------------------ |
-| `getBasicInfo()`     | Score, deep sleep, start/end times               | Per sleep session  |
-| `getTotalTime()`     | Total sleep duration                             | Minutes            |
-| `getSleepStageData()`| Detailed sleep stage breakdown                   | Per-stage          |
-| `getHeartRate()`     | HR during sleep (per-minute array)               | Per-minute         |
+| Method                | Returns                            | Data Points       |
+| --------------------- | ---------------------------------- | ----------------- |
+| `getBasicInfo()`      | Score, deep sleep, start/end times | Per sleep session |
+| `getTotalTime()`      | Total sleep duration               | Minutes           |
+| `getSleepStageData()` | Detailed sleep stage breakdown     | Per-stage         |
+| `getHeartRate()`      | HR during sleep (per-minute array) | Per-minute        |
 
 #### Stress (`@zos/sensor` Stress)
 
-| Method               | Returns                                          | Granularity        |
-| -------------------- | ------------------------------------------------ | ------------------ |
-| `getCurrent()`       | Current stress value + timestamp                 | Real-time          |
-| `getToday()`         | Stress data for today (per-minute)               | 1440 max entries   |
-| `getTodayByHour()`   | Hourly averages for today                        | 24 entries         |
-| `getLastWeek()`      | Daily averages for past 7 days                   | 7 entries          |
-| `getLastWeekByHour()`| Hourly data for past 7 days                      | 168 entries        |
+| Method                | Returns                            | Granularity      |
+| --------------------- | ---------------------------------- | ---------------- |
+| `getCurrent()`        | Current stress value + timestamp   | Real-time        |
+| `getToday()`          | Stress data for today (per-minute) | 1440 max entries |
+| `getTodayByHour()`    | Hourly averages for today          | 24 entries       |
+| `getLastWeek()`       | Daily averages for past 7 days     | 7 entries        |
+| `getLastWeekByHour()` | Hourly data for past 7 days        | 168 entries      |
 
 #### Blood Oxygen (`@zos/sensor` BloodOxygen)
 
-| Method         | Returns                                               | Notes              |
-| -------------- | ----------------------------------------------------- | ------------------ |
-| `getCurrent()` | Current SpO2 value                                    | Requires `start()` |
-| `getLast()`    | Most recent SpO2 measurement                          | Single value       |
-| `start()`      | Begin SpO2 measurement                                | User-initiated     |
-| `stop()`       | Stop measurement                                      | Cleanup            |
+| Method         | Returns                      | Notes              |
+| -------------- | ---------------------------- | ------------------ |
+| `getCurrent()` | Current SpO2 value           | Requires `start()` |
+| `getLast()`    | Most recent SpO2 measurement | Single value       |
+| `start()`      | Begin SpO2 measurement       | User-initiated     |
+| `stop()`       | Stop measurement             | Cleanup            |
 
 #### Activity & Fitness
 
-| Sensor      | Key Methods                                            | Data Types                    |
-| ----------- | ------------------------------------------------------ | ----------------------------- |
-| **Calorie** | `getCurrent()`, `getTarget()`, `onChange()`            | Daily calories burned         |
-| **Step**    | `getCurrent()`, `getTarget()`, `onChange()`            | Daily step count              |
-| **Distance**| `getCurrent()`                                         | Daily distance (meters)       |
-| **PAI**     | `getToday()`, `getTotal()`, `getLastWeek()`            | Personal Activity Intelligence|
-| **Workout** | `getStatus()`, Navigation info (API 3.6+)              | Active workout data           |
+| Sensor       | Key Methods                                 | Data Types                     |
+| ------------ | ------------------------------------------- | ------------------------------ |
+| **Calorie**  | `getCurrent()`, `getTarget()`, `onChange()` | Daily calories burned          |
+| **Step**     | `getCurrent()`, `getTarget()`, `onChange()` | Daily step count               |
+| **Distance** | `getCurrent()`                              | Daily distance (meters)        |
+| **PAI**      | `getToday()`, `getTotal()`, `getLastWeek()` | Personal Activity Intelligence |
+| **Workout**  | `getStatus()`, Navigation info (API 3.6+)   | Active workout data            |
 
 #### Additional Sensors
 
-| Sensor           | Data Available                                        | API Level |
-| ---------------- | ----------------------------------------------------- | --------- |
-| **BodyTemp**     | Current body temperature                              | 3.0+      |
-| **Weather**      | Current conditions, forecast                          | 2.0+      |
-| **Geolocation**  | GPS coordinates, altitude                             | 2.0+      |
-| **Barometer**    | Air pressure, altitude                                | 2.0+      |
-| **Compass**      | Heading direction                                     | 2.0+      |
+| Sensor          | Data Available               | API Level |
+| --------------- | ---------------------------- | --------- |
+| **BodyTemp**    | Current body temperature     | 3.0+      |
+| **Weather**     | Current conditions, forecast | 2.0+      |
+| **Geolocation** | GPS coordinates, altitude    | 2.0+      |
+| **Barometer**   | Air pressure, altitude       | 2.0+      |
+| **Compass**     | Heading direction            | 2.0+      |
 
 ### Data Permissions
 
@@ -297,13 +297,13 @@ Each sensor requires explicit permission declaration in `app.json`:
 
 **Description:** Collect data on watch, store locally, rely on Zepp's cloud sync, then poll Zepp's API from IntexuraOS.
 
-| Aspect          | Assessment                                                      |
-| --------------- | --------------------------------------------------------------- |
-| **Complexity**  | Low (watch app simple)                                          |
-| **Reliability** | Low (depends on Zepp cloud availability and API access)         |
-| **Latency**     | High (cloud sync delays + polling intervals)                    |
-| **Data Control**| Low (data passes through Zepp's servers)                        |
-| **Privacy**     | Moderate concern (third-party data handling)                    |
+| Aspect           | Assessment                                              |
+| ---------------- | ------------------------------------------------------- |
+| **Complexity**   | Low (watch app simple)                                  |
+| **Reliability**  | Low (depends on Zepp cloud availability and API access) |
+| **Latency**      | High (cloud sync delays + polling intervals)            |
+| **Data Control** | Low (data passes through Zepp's servers)                |
+| **Privacy**      | Moderate concern (third-party data handling)            |
 
 **Verdict:** Not recommended. Relies on undocumented/unofficial Zepp cloud APIs that may change or be restricted.
 
@@ -341,13 +341,13 @@ Each sensor requires explicit permission declaration in `app.json`:
 
 **Description:** Device App collects sensor data, sends via BLE to Side Service on phone, which makes HTTP requests to IntexuraOS API.
 
-| Aspect          | Assessment                                                      |
-| --------------- | --------------------------------------------------------------- |
-| **Complexity**  | Medium (full Mini Program with all 3 components)                |
-| **Reliability** | High (direct HTTP to own infrastructure)                        |
-| **Latency**     | Low-Medium (BLE hop + HTTP, near real-time possible)            |
-| **Data Control**| High (direct control of data pipeline)                          |
-| **Privacy**     | High (data flows directly to own servers)                       |
+| Aspect           | Assessment                                           |
+| ---------------- | ---------------------------------------------------- |
+| **Complexity**   | Medium (full Mini Program with all 3 components)     |
+| **Reliability**  | High (direct HTTP to own infrastructure)             |
+| **Latency**      | Low-Medium (BLE hop + HTTP, near real-time possible) |
+| **Data Control** | High (direct control of data pipeline)               |
+| **Privacy**      | High (data flows directly to own servers)            |
 
 **Verdict:** Recommended. Follows Zepp OS best practices, provides full control, and enables real-time sync.
 
@@ -387,13 +387,13 @@ Each sensor requires explicit permission declaration in `app.json`:
 
 **Description:** Same as Option B, but with offline buffering on both watch and phone for resilience.
 
-| Aspect          | Assessment                                                      |
-| --------------- | --------------------------------------------------------------- |
-| **Complexity**  | High (buffer management, conflict resolution, retry logic)      |
-| **Reliability** | Very High (handles offline scenarios gracefully)                |
-| **Latency**     | Variable (immediate when online, deferred when offline)         |
-| **Data Control**| High (direct control)                                           |
-| **Privacy**     | High (direct data flow)                                         |
+| Aspect           | Assessment                                                 |
+| ---------------- | ---------------------------------------------------------- |
+| **Complexity**   | High (buffer management, conflict resolution, retry logic) |
+| **Reliability**  | Very High (handles offline scenarios gracefully)           |
+| **Latency**      | Variable (immediate when online, deferred when offline)    |
+| **Data Control** | High (direct control)                                      |
+| **Privacy**      | High (direct data flow)                                    |
 
 **Verdict:** Best for production-grade reliability. Recommended as evolution of Option B after MVP.
 
@@ -433,13 +433,13 @@ Each sensor requires explicit permission declaration in `app.json`:
 
 **Description:** Use Zepp OS Workout Extension API to integrate with native workout tracking for real-time exercise data sync.
 
-| Aspect          | Assessment                                                      |
-| --------------- | --------------------------------------------------------------- |
-| **Complexity**  | Medium-High (specialized API, limited to workouts)              |
-| **Reliability** | High (leverages native workout infrastructure)                  |
-| **Latency**     | Very Low (real-time during workouts)                            |
-| **Data Control**| Medium (constrained to workout context)                         |
-| **Privacy**     | High (direct data flow)                                         |
+| Aspect           | Assessment                                         |
+| ---------------- | -------------------------------------------------- |
+| **Complexity**   | Medium-High (specialized API, limited to workouts) |
+| **Reliability**  | High (leverages native workout infrastructure)     |
+| **Latency**      | Very Low (real-time during workouts)               |
+| **Data Control** | Medium (constrained to workout context)            |
+| **Privacy**      | High (direct data flow)                            |
 
 **Verdict:** Complementary option for workout-specific scenarios. Should be combined with Option B/C for complete coverage.
 
@@ -459,24 +459,28 @@ Each sensor requires explicit permission declaration in `app.json`:
 ### Technical Challenges by Option
 
 #### Option A Challenges
+
 - Undocumented Zepp Cloud API (may break without notice)
 - No official support for third-party API access
 - Rate limiting and access restrictions unknown
 - Data format may change without warning
 
 #### Option B Challenges
+
 - BLE message size limitations (~4KB per message)
 - MessageBuilder learning curve
 - Phone app must be running for sync
 - Battery impact from frequent BLE communication
 
 #### Option C Challenges (in addition to B)
+
 - Buffer overflow management
 - Conflict resolution for delayed syncs
 - Storage limitations on watch (4GB shared)
 - Complex state management across devices
 
 #### Option D Challenges
+
 - Only works during active workouts
 - API Level 3.6+ requirement
 - Limited to SPORT_DATA widget types
@@ -484,13 +488,13 @@ Each sensor requires explicit permission declaration in `app.json`:
 
 ### Zepp OS Specific Constraints
 
-| Constraint                    | Impact                                       | Mitigation                          |
-| ----------------------------- | -------------------------------------------- | ----------------------------------- |
-| No direct HTTP from watch     | Must use Side Service for all network I/O    | Accept as platform design           |
-| BLE message fragmentation     | Large payloads need chunking                 | Use MessageBuilder's built-in       |
-| Phone dependency              | Sync fails if phone unavailable              | Local buffering (Option C)          |
-| Permission model              | Each sensor requires explicit permission     | Clear UX explaining permissions     |
-| App Store review              | May reject apps with certain data usage      | Thorough privacy policy             |
+| Constraint                | Impact                                    | Mitigation                      |
+| ------------------------- | ----------------------------------------- | ------------------------------- |
+| No direct HTTP from watch | Must use Side Service for all network I/O | Accept as platform design       |
+| BLE message fragmentation | Large payloads need chunking              | Use MessageBuilder's built-in   |
+| Phone dependency          | Sync fails if phone unavailable           | Local buffering (Option C)      |
+| Permission model          | Each sensor requires explicit permission  | Clear UX explaining permissions |
+| App Store review          | May reject apps with certain data usage   | Thorough privacy policy         |
 
 ---
 
@@ -532,24 +536,24 @@ Each sensor requires explicit permission declaration in `app.json`:
 
 ### Security Requirements
 
-| Requirement              | Implementation                                           |
-| ------------------------ | -------------------------------------------------------- |
-| **Token Storage**        | Use Zepp's SecureStorage API, never plain localStorage   |
-| **Transport Security**   | HTTPS only, certificate pinning recommended              |
-| **Token Refresh**        | Implement refresh token flow, handle expiry gracefully   |
-| **Scope Limitation**     | Request minimal API scopes needed                        |
-| **Data Minimization**    | Only sync data actively configured by user               |
-| **Audit Logging**        | Log sync events for debugging (not sensitive data)       |
+| Requirement            | Implementation                                         |
+| ---------------------- | ------------------------------------------------------ |
+| **Token Storage**      | Use Zepp's SecureStorage API, never plain localStorage |
+| **Transport Security** | HTTPS only, certificate pinning recommended            |
+| **Token Refresh**      | Implement refresh token flow, handle expiry gracefully |
+| **Scope Limitation**   | Request minimal API scopes needed                      |
+| **Data Minimization**  | Only sync data actively configured by user             |
+| **Audit Logging**      | Log sync events for debugging (not sensitive data)     |
 
 ### Privacy Considerations
 
-| Data Type         | Sensitivity | Handling                                        |
-| ----------------- | ----------- | ----------------------------------------------- |
-| Heart Rate        | High        | Encrypt at rest, user consent required          |
-| Sleep Data        | High        | Aggregate when possible, clear retention policy |
-| Location/GPS      | High        | Explicit opt-in, don't store raw coordinates    |
-| Activity Data     | Medium      | Standard protection, user-visible controls      |
-| Device Identifiers| Medium      | Hash before transmission, rotate periodically   |
+| Data Type          | Sensitivity | Handling                                        |
+| ------------------ | ----------- | ----------------------------------------------- |
+| Heart Rate         | High        | Encrypt at rest, user consent required          |
+| Sleep Data         | High        | Aggregate when possible, clear retention policy |
+| Location/GPS       | High        | Explicit opt-in, don't store raw coordinates    |
+| Activity Data      | Medium      | Standard protection, user-visible controls      |
+| Device Identifiers | Medium      | Hash before transmission, rotate periodically   |
 
 ---
 
@@ -578,13 +582,13 @@ Side Service Relay  →   + Offline Buffering    →   + Workout Extension
 
 ### Recommended Data Sync Strategy
 
-| Data Type      | Sync Frequency      | Trigger                        |
-| -------------- | ------------------- | ------------------------------ |
-| Heart Rate     | Every 5 minutes     | Timer + significant change     |
-| Sleep          | On wake detection   | Sleep session complete         |
-| Stress         | Every 15 minutes    | Timer + high stress event      |
-| Activity       | Every 30 minutes    | Timer + workout complete       |
-| SpO2           | On measurement      | User-initiated measurement     |
+| Data Type  | Sync Frequency    | Trigger                    |
+| ---------- | ----------------- | -------------------------- |
+| Heart Rate | Every 5 minutes   | Timer + significant change |
+| Sleep      | On wake detection | Sleep session complete     |
+| Stress     | Every 15 minutes  | Timer + high stress event  |
+| Activity   | Every 30 minutes  | Timer + workout complete   |
+| SpO2       | On measurement    | User-initiated measurement |
 
 ---
 
@@ -592,42 +596,42 @@ Side Service Relay  →   + Offline Buffering    →   + Workout Extension
 
 ### Phase 1: Foundation (2-3 weeks)
 
-| Task                                  | Deliverable                              |
-| ------------------------------------- | ---------------------------------------- |
-| Set up Zepp OS development environment| Zeus CLI, console registration           |
-| Create Mini Program scaffold          | Device App + Side Service + Settings     |
-| Implement basic sensor reading        | Heart rate, steps proof of concept       |
-| BLE communication setup               | MessageBuilder integration               |
-| IntexuraOS health API design          | OpenAPI spec for `/health/sync`          |
+| Task                                   | Deliverable                          |
+| -------------------------------------- | ------------------------------------ |
+| Set up Zepp OS development environment | Zeus CLI, console registration       |
+| Create Mini Program scaffold           | Device App + Side Service + Settings |
+| Implement basic sensor reading         | Heart rate, steps proof of concept   |
+| BLE communication setup                | MessageBuilder integration           |
+| IntexuraOS health API design           | OpenAPI spec for `/health/sync`      |
 
 ### Phase 2: Core Features (3-4 weeks)
 
-| Task                                  | Deliverable                              |
-| ------------------------------------- | ---------------------------------------- |
-| Full sensor integration               | All health metrics from sensor APIs      |
-| Authentication flow                   | OAuth2 PKCE via Settings App             |
-| Data sync implementation              | Side Service HTTP to IntexuraOS          |
-| Watch UI for sync status              | Visual feedback on Device App            |
-| Error handling & retry                | Robust failure recovery                  |
+| Task                     | Deliverable                         |
+| ------------------------ | ----------------------------------- |
+| Full sensor integration  | All health metrics from sensor APIs |
+| Authentication flow      | OAuth2 PKCE via Settings App        |
+| Data sync implementation | Side Service HTTP to IntexuraOS     |
+| Watch UI for sync status | Visual feedback on Device App       |
+| Error handling & retry   | Robust failure recovery             |
 
 ### Phase 3: Polish & Distribution (2-3 weeks)
 
-| Task                                  | Deliverable                              |
-| ------------------------------------- | ---------------------------------------- |
-| User preferences UI                   | Configurable sync options                |
-| Privacy policy & permissions          | App Store compliance                     |
-| Testing on physical device            | Real-world validation                    |
-| App Store submission                  | Published Mini Program                   |
-| Documentation                         | User guide, troubleshooting              |
+| Task                         | Deliverable                 |
+| ---------------------------- | --------------------------- |
+| User preferences UI          | Configurable sync options   |
+| Privacy policy & permissions | App Store compliance        |
+| Testing on physical device   | Real-world validation       |
+| App Store submission         | Published Mini Program      |
+| Documentation                | User guide, troubleshooting |
 
 ### Phase 4: Production Hardening (Future)
 
-| Task                                  | Deliverable                              |
-| ------------------------------------- | ---------------------------------------- |
-| Offline buffering (Option C)          | Resilient sync with local queue          |
-| Workout Extension (Option D)          | Real-time workout data                   |
-| Battery optimization                  | Efficient sync scheduling                |
-| Analytics & monitoring                | Usage metrics, error tracking            |
+| Task                         | Deliverable                     |
+| ---------------------------- | ------------------------------- |
+| Offline buffering (Option C) | Resilient sync with local queue |
+| Workout Extension (Option D) | Real-time workout data          |
+| Battery optimization         | Efficient sync scheduling       |
+| Analytics & monitoring       | Usage metrics, error tracking   |
 
 ---
 

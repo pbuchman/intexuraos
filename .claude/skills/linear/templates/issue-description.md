@@ -9,12 +9,13 @@ Standard template for Linear issues created via `/linear <task description>`.
 
 **Backend Tests (`apps/<service>/src/__tests__/`):**
 
-| Test | Endpoint/Function | Scenario | Expected |
-|------|-------------------|----------|----------|
-| <test name> | <what is tested> | <input/condition> | <output/behavior> |
-| ... | ... | ... | ... |
+| Test        | Endpoint/Function | Scenario          | Expected          |
+| ----------- | ----------------- | ----------------- | ----------------- |
+| <test name> | <what is tested>  | <input/condition> | <output/behavior> |
+| ...         | ...               | ...               | ...               |
 
 **Frontend Tests (if applicable - optional per CLAUDE.md):**
+
 - <test case 1>
 - <test case 2>
 
@@ -56,15 +57,15 @@ _This is the original user instruction, transcribed verbatim. May include typos 
 
 ## Mandatory Sections
 
-| Section                   | Required | Purpose                                      |
-| ------------------------- | -------- | -------------------------------------------- |
-| Test Requirements         | Yes      | **QUALITY GATE** - exact tests to implement  |
-| Original User Instruction | Yes      | Preserves verbatim user request              |
-| Summary                   | Yes      | Quick overview                               |
-| Requirements              | Yes      | What needs to be done                        |
-| Acceptance Criteria       | Yes      | How to verify completion (includes tests)    |
-| Technical Context         | Optional | Background info for implementation           |
-| Related                   | Optional | Cross-references                             |
+| Section                   | Required | Purpose                                     |
+| ------------------------- | -------- | ------------------------------------------- |
+| Test Requirements         | Yes      | **QUALITY GATE** - exact tests to implement |
+| Original User Instruction | Yes      | Preserves verbatim user request             |
+| Summary                   | Yes      | Quick overview                              |
+| Requirements              | Yes      | What needs to be done                       |
+| Acceptance Criteria       | Yes      | How to verify completion (includes tests)   |
+| Technical Context         | Optional | Background info for implementation          |
+| Related                   | Optional | Cross-references                            |
 
 ## Test Requirements Rules
 
@@ -83,12 +84,12 @@ _This is the original user instruction, transcribed verbatim. May include typos 
 
 **Backend Tests (`apps/linear-agent/src/__tests__/`):**
 
-| Test | Endpoint | Scenario | Expected |
-|------|----------|----------|----------|
-| DELETE success | `DELETE /items/:id` | Valid ID, user owns item | 204 No Content |
-| DELETE not found | `DELETE /items/:id` | Non-existent ID | 404 Not Found |
-| DELETE unauthorized | `DELETE /items/:id` | User doesn't own item | 404 Not Found |
-| DELETE no auth | `DELETE /items/:id` | Missing auth token | 401 Unauthorized |
+| Test                | Endpoint            | Scenario                 | Expected         |
+| ------------------- | ------------------- | ------------------------ | ---------------- |
+| DELETE success      | `DELETE /items/:id` | Valid ID, user owns item | 204 No Content   |
+| DELETE not found    | `DELETE /items/:id` | Non-existent ID          | 404 Not Found    |
+| DELETE unauthorized | `DELETE /items/:id` | User doesn't own item    | 404 Not Found    |
+| DELETE no auth      | `DELETE /items/:id` | Missing auth token       | 401 Unauthorized |
 ```
 
 ## Original User Instruction Rules

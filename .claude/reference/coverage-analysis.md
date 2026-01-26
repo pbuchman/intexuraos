@@ -3,11 +3,13 @@
 ## Required Pattern
 
 1. Run tests with JSON reporter:
+
    ```bash
    pnpm run test:coverage --coverage.reporter=json-summary
    ```
 
 2. Parse with jq:
+
    ```bash
    # Total coverage
    jq '.total.branches.pct' coverage/coverage-summary.json

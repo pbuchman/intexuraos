@@ -34,12 +34,13 @@ This issue is part of **parent issue execution**. The workflow:
 
 **Backend Tests (`apps/<service>/src/__tests__/`):**
 
-| Test | Endpoint/Function | Scenario | Expected |
-|------|-------------------|----------|----------|
-| <test name> | <what is tested> | <input/condition> | <output/behavior> |
-| ... | ... | ... | ... |
+| Test        | Endpoint/Function | Scenario          | Expected          |
+| ----------- | ----------------- | ----------------- | ----------------- |
+| <test name> | <what is tested>  | <input/condition> | <output/behavior> |
+| ...         | ...               | ...               | ...               |
 
 **Frontend Tests (if applicable):**
+
 - <test case 1>
 - <test case 2>
 

@@ -1246,7 +1246,6 @@ describe('POST /internal/logs', () => {
       logger,
     });
 
-<<<<<<< HEAD
     const rateLimitService: RateLimitService = {
       async checkLimits() {
         return ok(undefined);
@@ -1258,7 +1257,7 @@ describe('POST /internal/logs', () => {
         return;
       },
     };
-=======
+
     const linearAgentClient = createLinearAgentHttpClient({
       baseUrl: 'http://linear-agent:8086',
       internalAuthToken: 'test-token',
@@ -1269,7 +1268,11 @@ describe('POST /internal/logs', () => {
       linearAgentClient,
       logger,
     });
->>>>>>> origin/development
+
+    const statusMirrorService = createStatusMirrorService({
+      actionsAgentClient,
+      logger,
+    });
 
     setServices({
       firestore: fakeFirestore as unknown as Firestore,
@@ -1279,15 +1282,9 @@ describe('POST /internal/logs', () => {
       workerDiscovery,
       taskDispatcher,
       actionsAgentClient,
-<<<<<<< HEAD
       rateLimitService,
-=======
       linearIssueService,
-      statusMirrorService: createStatusMirrorService({
-        actionsAgentClient,
-        logger,
-      }),
->>>>>>> origin/development
+      statusMirrorService,
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -1297,12 +1294,9 @@ describe('POST /internal/logs', () => {
       taskDispatcher: TaskDispatcherService;
       actionsAgentClient: ActionsAgentClient;
       whatsappNotifier: WhatsAppNotifier;
-<<<<<<< HEAD
       rateLimitService: RateLimitService;
-=======
       linearIssueService: LinearIssueService;
       statusMirrorService: StatusMirrorService;
->>>>>>> origin/development
     });
 
     app = await buildServer();

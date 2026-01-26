@@ -14,7 +14,9 @@ describe('WebhookClient', () => {
     };
 
     return {
-      load: vi.fn((): Promise<OrchestratorState> => Promise.resolve(JSON.parse(JSON.stringify(state)))),
+      load: vi.fn(
+        (): Promise<OrchestratorState> => Promise.resolve(JSON.parse(JSON.stringify(state)))
+      ),
       save: vi.fn(async (newState: OrchestratorState) => {
         Object.assign(state, newState);
       }),

@@ -686,7 +686,6 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       if (body.result?.prUrl !== undefined && result.value.linearIssueId !== undefined) {
         await linearIssueService.markInReview(result.value.linearIssueId);
       }
-      }
 
       request.log.info({ taskId, status: result.value.status }, 'Code task updated successfully');
 
@@ -1049,16 +1048,6 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         ensureParams.linearIssueTitle = body.linearIssueTitle;
       }
       const issueResult = await linearIssueService.ensureIssueExists(ensureParams);
-        reply.status(429);
-        return {
-          success: false,
-          error: {
-            code: error.code,
-            message: error.message,
-            retryAfter: error.retryAfter,
-          },
-        };
-      }
 
       // Create task with prompt deduplication (Layer 2 only - no actionId/approvalEventId)
       const createInput: {

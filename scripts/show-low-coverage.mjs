@@ -29,5 +29,7 @@ const results = Object.entries(data)
 
 console.log('\n5 files with lowest branch coverage:\n');
 results.forEach((r, i) => {
-  console.log(`${i + 1}. ${r.pkg}/${r.filename} - branch: ${r.branch.toFixed(2)}%, lines: ${r.lines.toFixed(2)}%`);
+  console.log(
+    `${i + 1}. ${r.pkg}/${r.filename} - branch: ${r.branch.toFixed(2)}%, lines: ${r.lines.toFixed(2)}%`
+  );
 });

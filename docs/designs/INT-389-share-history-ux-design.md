@@ -10,25 +10,25 @@ Fix Share History UX issues including status display consolidation, automatic sy
 
 ## Requirements Summary
 
-| # | Requirement | Solution |
-|---|-------------|----------|
-| 1 | Combine status badge + footer info | Remove badge, show status in footer only |
-| 2 | Investigate sync failure paths | Documented below; fix auto-recovery |
-| 3 | Resync failed items | Automatic recovery, no manual button |
-| 4 | Replace Clear with dropdown | NOT NEEDED - keep single Clear button |
-| 5 | Per-item status instead of global | Footer shows item-specific status |
-| 6 | Fix long link overflow | CSS `break-all line-clamp-2` |
+| #   | Requirement                        | Solution                                 |
+| --- | ---------------------------------- | ---------------------------------------- |
+| 1   | Combine status badge + footer info | Remove badge, show status in footer only |
+| 2   | Investigate sync failure paths     | Documented below; fix auto-recovery      |
+| 3   | Resync failed items                | Automatic recovery, no manual button     |
+| 4   | Replace Clear with dropdown        | NOT NEEDED - keep single Clear button    |
+| 5   | Per-item status instead of global  | Footer shows item-specific status        |
+| 6   | Fix long link overflow             | CSS `break-all line-clamp-2`             |
 
 ---
 
 ## Files to Modify
 
-| File | Purpose |
-|------|---------|
-| `apps/web/src/pages/ShareHistoryPage.tsx` | UI layout changes |
-| `apps/web/src/services/shareQueue.ts` | Remove markAsFailed, add helpers |
-| `apps/web/src/context/SyncQueueContext.tsx` | Sync logic fixes |
-| `apps/web/src/components/Header.tsx` | Update sync indicator |
+| File                                        | Purpose                          |
+| ------------------------------------------- | -------------------------------- |
+| `apps/web/src/pages/ShareHistoryPage.tsx`   | UI layout changes                |
+| `apps/web/src/services/shareQueue.ts`       | Remove markAsFailed, add helpers |
+| `apps/web/src/context/SyncQueueContext.tsx` | Sync logic fixes                 |
+| `apps/web/src/components/Header.tsx`        | Update sync indicator            |
 
 ---
 
@@ -54,9 +54,7 @@ function StatusBadge({ status }: { status: ShareStatus }): React.JSX.Element {
 ```tsx
 <div key={item.id} className="py-4">
   {/* Content preview with overflow fix */}
-  <p className="text-sm text-slate-900 break-all line-clamp-2">
-    {item.contentPreview}
-  </p>
+  <p className="text-sm text-slate-900 break-all line-clamp-2">{item.contentPreview}</p>
 
   {/* Unified footer with status */}
   <div className="mt-2 flex items-center gap-2 text-xs">
@@ -203,7 +201,7 @@ export interface ShareHistoryItem {
   syncedAt?: string;
   commandId?: string;
   lastError?: string;
-  nextRetryAt?: string;  // ADD THIS
+  nextRetryAt?: string; // ADD THIS
 }
 ```
 
@@ -409,8 +407,8 @@ const value = useMemo(
     addShare,
     refreshHistory,
     isSyncing,
-    isOnline,     // ADD
-    authFailed,   // ADD
+    isOnline, // ADD
+    authFailed, // ADD
   }),
   [pendingCount, history, addShare, refreshHistory, isSyncing, isOnline, authFailed]
 );
@@ -427,8 +425,8 @@ interface SyncQueueContextValue {
   addShare: (content: string) => void;
   refreshHistory: () => void;
   isSyncing: boolean;
-  isOnline: boolean;     // ADD
-  authFailed: boolean;   // ADD
+  isOnline: boolean; // ADD
+  authFailed: boolean; // ADD
 }
 ```
 
@@ -443,9 +441,9 @@ import {
   calculateNextRetryDelay,
   getHistory,
   getQueue,
-  isClientError,  // REMOVE
+  isClientError, // REMOVE
   isRetryDue,
-  markAsFailed,   // REMOVE
+  markAsFailed, // REMOVE
   markAsSynced,
   updateHistoryStatus,
   updateQueueItem,
@@ -488,42 +486,46 @@ const { pendingCount, isSyncing, isOnline, authFailed } = useSyncQueue();
 
 ```tsx
 // FROM
-{pendingCount > 0 && (
-  <Link
-    to="/settings/share-history"
-    className="flex items-center justify-center rounded-lg p-2 text-sm transition-colors hover:bg-slate-100"
-    title={`${String(pendingCount)} pending - click to view history`}
-  >
-    <RefreshCw
-      className={`h-4 w-4 text-amber-500 ${isSyncing ? 'animate-spin' : 'animate-pulse'}`}
-    />
-  </Link>
-)}
+{
+  pendingCount > 0 && (
+    <Link
+      to="/settings/share-history"
+      className="flex items-center justify-center rounded-lg p-2 text-sm transition-colors hover:bg-slate-100"
+      title={`${String(pendingCount)} pending - click to view history`}
+    >
+      <RefreshCw
+        className={`h-4 w-4 text-amber-500 ${isSyncing ? 'animate-spin' : 'animate-pulse'}`}
+      />
+    </Link>
+  );
+}
 
 // TO
-{pendingCount > 0 && (
-  <Link
-    to="/settings/share-history"
-    className="flex items-center justify-center rounded-lg p-2 text-sm transition-colors hover:bg-slate-100"
-    title={
-      !isOnline
-        ? 'Offline - click to view history'
-        : authFailed
-          ? 'Sign in to sync - click to view history'
-          : `${String(pendingCount)} pending - click to view history`
-    }
-  >
-    <RefreshCw
-      className={`h-4 w-4 ${
-        !isOnline || authFailed
-          ? 'text-slate-400'
-          : isSyncing
-            ? 'text-amber-500 animate-spin'
-            : 'text-amber-500 animate-pulse'
-      }`}
-    />
-  </Link>
-)}
+{
+  pendingCount > 0 && (
+    <Link
+      to="/settings/share-history"
+      className="flex items-center justify-center rounded-lg p-2 text-sm transition-colors hover:bg-slate-100"
+      title={
+        !isOnline
+          ? 'Offline - click to view history'
+          : authFailed
+            ? 'Sign in to sync - click to view history'
+            : `${String(pendingCount)} pending - click to view history`
+      }
+    >
+      <RefreshCw
+        className={`h-4 w-4 ${
+          !isOnline || authFailed
+            ? 'text-slate-400'
+            : isSyncing
+              ? 'text-amber-500 animate-spin'
+              : 'text-amber-500 animate-pulse'
+        }`}
+      />
+    </Link>
+  );
+}
 ```
 
 ---
@@ -536,24 +538,24 @@ N/A - no backend changes.
 
 ### Frontend Tests (`apps/web/src/__tests__/`)
 
-| Test File | Test Case | Scenario | Expected |
-|-----------|-----------|----------|----------|
-| `shareQueue.test.ts` | updateQueueItem updates history | Call with nextRetryAt | History item gets nextRetryAt |
-| `shareQueue.test.ts` | ShareStatus type | Type check | No 'failed' status |
-| `SyncQueueContext.test.tsx` | 401 sets authFailed | Mock 401 response | authFailed becomes true, queue stops |
-| `SyncQueueContext.test.tsx` | Re-auth clears authFailed | isAuthenticated after authFailed | authFailed becomes false |
-| `SyncQueueContext.test.tsx` | Offline skips sync | navigator.onLine = false | processQueue returns early |
-| `SyncQueueContext.test.tsx` | Non-401 error reports to Sentry | Mock 500 response | Sentry.captureException called |
-| `SyncQueueContext.test.tsx` | Context exposes isOnline | Render provider | isOnline in context value |
-| `SyncQueueContext.test.tsx` | Context exposes authFailed | Render provider | authFailed in context value |
-| `ShareHistoryPage.test.tsx` | StatusText shows "Synced" | item.status = 'synced' | Green text with checkmark |
-| `ShareHistoryPage.test.tsx` | StatusText shows "Syncing" | item.status = 'syncing' | Blue text with spinner |
-| `ShareHistoryPage.test.tsx` | StatusText shows "Retry in X" | Pending with future nextRetryAt | Amber text with time |
-| `ShareHistoryPage.test.tsx` | StatusText shows "Waiting for connection" | isOnline = false | Slate text |
-| `ShareHistoryPage.test.tsx` | StatusText shows "Sign in to sync" | authFailed = true | Red text |
-| `ShareHistoryPage.test.tsx` | Long URL doesn't overflow | Render long URL | Has break-all class |
-| `Header.test.tsx` | Sync icon grey when offline | isOnline = false | text-slate-400 class |
-| `Header.test.tsx` | Sync icon grey when authFailed | authFailed = true | text-slate-400 class |
+| Test File                   | Test Case                                 | Scenario                         | Expected                             |
+| --------------------------- | ----------------------------------------- | -------------------------------- | ------------------------------------ |
+| `shareQueue.test.ts`        | updateQueueItem updates history           | Call with nextRetryAt            | History item gets nextRetryAt        |
+| `shareQueue.test.ts`        | ShareStatus type                          | Type check                       | No 'failed' status                   |
+| `SyncQueueContext.test.tsx` | 401 sets authFailed                       | Mock 401 response                | authFailed becomes true, queue stops |
+| `SyncQueueContext.test.tsx` | Re-auth clears authFailed                 | isAuthenticated after authFailed | authFailed becomes false             |
+| `SyncQueueContext.test.tsx` | Offline skips sync                        | navigator.onLine = false         | processQueue returns early           |
+| `SyncQueueContext.test.tsx` | Non-401 error reports to Sentry           | Mock 500 response                | Sentry.captureException called       |
+| `SyncQueueContext.test.tsx` | Context exposes isOnline                  | Render provider                  | isOnline in context value            |
+| `SyncQueueContext.test.tsx` | Context exposes authFailed                | Render provider                  | authFailed in context value          |
+| `ShareHistoryPage.test.tsx` | StatusText shows "Synced"                 | item.status = 'synced'           | Green text with checkmark            |
+| `ShareHistoryPage.test.tsx` | StatusText shows "Syncing"                | item.status = 'syncing'          | Blue text with spinner               |
+| `ShareHistoryPage.test.tsx` | StatusText shows "Retry in X"             | Pending with future nextRetryAt  | Amber text with time                 |
+| `ShareHistoryPage.test.tsx` | StatusText shows "Waiting for connection" | isOnline = false                 | Slate text                           |
+| `ShareHistoryPage.test.tsx` | StatusText shows "Sign in to sync"        | authFailed = true                | Red text                             |
+| `ShareHistoryPage.test.tsx` | Long URL doesn't overflow                 | Render long URL                  | Has break-all class                  |
+| `Header.test.tsx`           | Sync icon grey when offline               | isOnline = false                 | text-slate-400 class                 |
+| `Header.test.tsx`           | Sync icon grey when authFailed            | authFailed = true                | text-slate-400 class                 |
 
 ---
 

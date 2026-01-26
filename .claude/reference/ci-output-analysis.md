@@ -13,12 +13,12 @@ pnpm run ci:tracked 2>&1 | tee /tmp/ci-output-${BRANCH}-$(date +%Y%m%d-%H%M%S).t
 
 **Tool Priority (use first available):**
 
-| Tool   | Command                                 | Why                                        |
-| ------ | --------------------------------------- | ------------------------------------------ |
-| `bat`  | `bat /tmp/ci-output-*.txt`              | Syntax highlighting, line numbers, paging  |
-| `rg`   | `rg "error\|FAIL" /tmp/ci-*.txt -C3`    | Fast, smart regex, context lines           |
-| `jq`   | For JSON files only (coverage-summary)  | Structured data parsing                    |
-| `grep` | `grep -E "error\|FAIL" /tmp/ci-*.txt`   | Fallback only                              |
+| Tool   | Command                                | Why                                       |
+| ------ | -------------------------------------- | ----------------------------------------- |
+| `bat`  | `bat /tmp/ci-output-*.txt`             | Syntax highlighting, line numbers, paging |
+| `rg`   | `rg "error\|FAIL" /tmp/ci-*.txt -C3`   | Fast, smart regex, context lines          |
+| `jq`   | For JSON files only (coverage-summary) | Structured data parsing                   |
+| `grep` | `grep -E "error\|FAIL" /tmp/ci-*.txt`  | Fallback only                             |
 
 ### Examples
 
