@@ -186,15 +186,19 @@ Without explicit instruction, assume responsibility for everything encountered.
 
 Thinking "this failure isn't mine" = ownership violation. See [Ownership Mindset](#ownership-mindset-mandatory).
 
-### Step 1: Capture and Categorize
+### Step 1: Capture and Analyze
 
 ```bash
 BRANCH=$(git branch --show-current | sed 's/\//-/g')
 pnpm run ci:tracked 2>&1 | tee /tmp/ci-output-${BRANCH}-$(date +%Y%m%d-%H%M%S).txt
-grep -E "(error|Error|ERROR|FAIL)" /tmp/ci-output-${BRANCH}-*.txt
 ```
 
-Use wildcard `${BRANCH}-*.txt` to find latest capture. Never re-run CI just to grep — see [CI Efficiency](#ci-efficiency-mandatory).
+Then analyze with proper tools (in priority order):
+1. `bat /tmp/ci-output-*.txt` — syntax highlighting
+2. `rg "error|FAIL" /tmp/ci-*.txt -C3` — fast search with context
+3. For coverage: `jq '.total.branches.pct' coverage/coverage-summary.json`
+
+**⚠️ Hook enforced:** CI commands without tee capture are blocked. See `.claude/reference/ci-output-analysis.md`.
 
 ### Step 2: Fix or Ask (No Skipping, No Committing)
 
@@ -260,17 +264,22 @@ pnpm run ci:tracked            # MUST pass before task completion
 # 1. Check if terraform files changed (ALWAYS RUN THIS)
 git diff --name-only HEAD~1 | grep -E "^terraform/" && echo "TERRAFORM CHANGED" || echo "No terraform changes"
 
-# 2. IF terraform changed, run validation:
-tf fmt -check -recursive
-tf validate
+# 2. IF terraform changed, run validation (with env var clearing):
+STORAGE_EMULATOR_HOST= FIRESTORE_EMULATOR_HOST= PUBSUB_EMULATOR_HOST= \
+GOOGLE_APPLICATION_CREDENTIALS=$HOME/personal/gcloud-claude-code-dev.json \
+terraform fmt -check -recursive
+
+STORAGE_EMULATOR_HOST= FIRESTORE_EMULATOR_HOST= PUBSUB_EMULATOR_HOST= \
+GOOGLE_APPLICATION_CREDENTIALS=$HOME/personal/gcloud-claude-code-dev.json \
+terraform validate
 ```
 
-**IMPORTANT:** Use `tf` alias instead of `terraform` — clears emulator env vars. See `.claude/reference/infrastructure.md`.
+**⚠️ Hook enforced:** Running `terraform` without env var clearing is blocked. See `.claude/hooks/validate-terraform.sh`.
 
 ### Step 5: Document Verification Result
 
 - ✅ "Verified: No terraform files changed"
-- ✅ "Terraform changed. Ran `tf fmt` and `tf validate` — both passed"
+- ✅ "Terraform changed. Ran `terraform fmt` and `terraform validate` — both passed"
 
 ```
 ❌ WRONG: Assume "probably didn't change" → Skip checks → Hope
@@ -292,24 +301,6 @@ Auto-generated CI failure logs enable `/analyze-ci-failures` to identify pattern
 ✅ RIGHT: See .claude/ci-failures/ in git status → Stage → Commit with your changes
 ```
 
-### CI Efficiency (MANDATORY)
-
-**RULE:** NEVER re-run `pnpm run ci:tracked` to grep for patterns. ALWAYS use captured output.
-
-CI runs take 3-5 minutes. Parallel runs overwrite files. Rerunning wastes compute, delays feedback.
-
-```bash
-# Capture once
-BRANCH=$(git branch --show-current | sed 's/\//-/g')
-pnpm run ci:tracked 2>&1 | tee /tmp/ci-output-${BRANCH}-$(date +%Y%m%d-%H%M%S).txt
-
-# Reuse many times
-grep -E "(error|Error|ERROR)" /tmp/ci-output-${BRANCH}-*.txt
-grep -E "Coverage for" /tmp/ci-output-${BRANCH}-*.txt
-```
-
-**Helper script:** Use `./scripts/ci-capture.sh` for automatic branch-safe naming.
-
 ### Verification Ownership
 
 **All failures are YOUR responsibility.** See [Ownership Mindset](#ownership-mindset-mandatory).
@@ -325,8 +316,19 @@ grep -E "Coverage for" /tmp/ci-output-${BRANCH}-*.txt
 **Quick commands:**
 
 - GCloud CLI: `gcloud auth activate-service-account --key-file=$HOME/personal/gcloud-claude-code-dev.json`
-- Terraform: Use `tf` alias (sets credentials + clears emulator vars)
 - New service image: `./scripts/push-missing-images.sh`
+
+### Running Terraform
+
+**Always clear emulator env vars and set credentials:**
+
+```bash
+STORAGE_EMULATOR_HOST= FIRESTORE_EMULATOR_HOST= PUBSUB_EMULATOR_HOST= \
+GOOGLE_APPLICATION_CREDENTIALS=$HOME/personal/gcloud-claude-code-dev.json \
+terraform plan
+```
+
+**⚠️ Hook enforced:** `.claude/hooks/validate-terraform.sh` blocks bare `terraform` commands.
 
 ### Terraform-Only Resource Creation
 
@@ -348,8 +350,10 @@ grep -E "Coverage for" /tmp/ci-output-${BRANCH}-*.txt
 
 ```
 ❌ WRONG: Need a bucket → gsutil mb gs://my-bucket → Done
-✅ RIGHT: Need a bucket → Add to terraform/ → tf plan → tf apply → PR
+✅ RIGHT: Need a bucket → Add to terraform/ → terraform plan → terraform apply → PR
 ```
+
+**⚠️ Hook enforced:** `.claude/hooks/validate-gcloud-resources.sh` blocks direct CLI resource creation.
 
 **Exception:** Truly ephemeral resources for debugging. Never new named resources.
 
@@ -528,24 +532,6 @@ const result = await repo.find(id);
 if (!result.ok) return result;
 return result.value;
 ```
-
-### Before Running Terraform
-
-**ALWAYS** use the `tf` alias, not `terraform`:
-
-```bash
-# ❌ WRONG - will fail without credentials or with emulator env vars
-terraform init
-terraform plan
-
-# ✅ RIGHT - sets credentials and clears emulator vars
-tf init
-tf plan
-```
-
-`tf` alias sets credentials and clears emulator vars. Without it: permission errors or emulator usage.
-
-**Full reference:** `.claude/reference/infrastructure.md`
 
 ---
 
