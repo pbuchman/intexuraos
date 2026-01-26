@@ -137,15 +137,6 @@ resource "google_secret_manager_secret_iam_member" "user_service_secrets" {
   member    = "serviceAccount:${google_service_account.user_service.email}"
 }
 
-# PromptVault service: Secret Manager access
-resource "google_secret_manager_secret_iam_member" "promptvault_service_secrets" {
-  for_each = var.secret_ids
-
-  secret_id = each.value
-  role      = "roles/secretmanager.secretAccessor"
-  member    = "serviceAccount:${google_service_account.promptvault_service.email}"
-}
-
 # Notion service: Secret Manager access
 resource "google_secret_manager_secret_iam_member" "notion_service_secrets" {
   for_each = var.secret_ids
@@ -300,13 +291,6 @@ resource "google_secret_manager_secret_iam_member" "api_docs_hub_secrets" {
 }
 
 
-# PromptVault service: Firestore access
-resource "google_project_iam_member" "promptvault_service_firestore" {
-  project = var.project_id
-  role    = "roles/datastore.user"
-  member  = "serviceAccount:${google_service_account.promptvault_service.email}"
-}
-
 # Notion service: Firestore access
 resource "google_project_iam_member" "notion_service_firestore" {
   project = var.project_id
@@ -439,12 +423,6 @@ resource "google_project_iam_member" "user_service_logging" {
   project = var.project_id
   role    = "roles/logging.logWriter"
   member  = "serviceAccount:${google_service_account.user_service.email}"
-}
-
-resource "google_project_iam_member" "promptvault_service_logging" {
-  project = var.project_id
-  role    = "roles/logging.logWriter"
-  member  = "serviceAccount:${google_service_account.promptvault_service.email}"
 }
 
 # Notion service: Cloud Logging
