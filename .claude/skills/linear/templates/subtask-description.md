@@ -30,6 +30,21 @@ This issue is part of **parent issue execution**. The workflow:
 ## Template
 
 ````markdown
+## Test Requirements (MANDATORY - implement first)
+
+**Backend Tests (`apps/<service>/src/__tests__/`):**
+
+| Test | Endpoint/Function | Scenario | Expected |
+|------|-------------------|----------|----------|
+| <test name> | <what is tested> | <input/condition> | <output/behavior> |
+| ... | ... | ... | ... |
+
+**Frontend Tests (if applicable):**
+- <test case 1>
+- <test case 2>
+
+---
+
 ## 🚨 MANDATORY EXECUTION RULES (NON-NEGOTIABLE)
 
 ### Branch Creation — TASK FAILS WITHOUT THIS
@@ -54,11 +69,11 @@ If you start working on `development` or `main`, **THE TASK HAS FAILED BY DEFINI
 
 ### Test Coverage — 95% is MINIMUM, Not Target
 
-- You MUST implement ALL required tests listed in this issue
+- You MUST implement ALL required tests listed in this issue's Test Requirements table
 - 95% branch coverage is the MINIMUM acceptable threshold
 - Do NOT simplify work to save tokens or time
 - Do NOT skip edge cases or "nice to have" tests
-- Every test scenario mentioned MUST be implemented
+- Every test scenario in the Test Requirements table MUST be implemented
 
 ### Continuation — MANDATORY
 
@@ -87,6 +102,7 @@ Tier: X | Sequence: Y
 
 ## Acceptance Criteria
 
+- [ ] All tests in Test Requirements table pass
 - [ ] <Criterion 1>
 - [ ] <Criterion 2>
 - [ ] <Criterion 3>
@@ -173,17 +189,19 @@ describe('featureName', () => {
 
 ## Mandatory Sections
 
-| Section                  | Required     | Purpose                                    |
-| ------------------------ | ------------ | ------------------------------------------ |
-| Context                  | Yes          | Links to parent, shows tier/sequence       |
-| Scope                    | Yes          | What this specific task covers             |
-| Requirements             | Yes          | Specific deliverables                      |
-| Acceptance Criteria      | Yes          | How to verify completion                   |
-| Dependencies             | Yes          | What blocks this / what this blocks        |
-| Verification             | Yes          | Commands to run                            |
-| Implementation Suggestions | Conditional | Required for code changes (see below)     |
-| Testing Scenarios        | Conditional  | Required when tests are expected           |
-| Continuation             | Varies       | Include for all except final task          |
+| Section                    | Required    | Purpose                                       |
+| -------------------------- | ----------- | --------------------------------------------- |
+| Test Requirements          | Yes         | **QUALITY GATE** - exact tests to implement   |
+| Mandatory Execution Rules  | Yes         | Branch, CI, coverage, continuation rules      |
+| Context                    | Yes         | Links to parent, shows tier/sequence          |
+| Scope                      | Yes         | What this specific task covers                |
+| Requirements               | Yes         | Specific deliverables                         |
+| Acceptance Criteria        | Yes         | How to verify completion (includes tests)     |
+| Dependencies               | Yes         | What blocks this / what this blocks           |
+| Verification               | Yes         | Commands to run                               |
+| Implementation Suggestions | Conditional | Required for code changes (see below)         |
+| Testing Scenarios          | Conditional | Additional test details if needed             |
+| Continuation               | Varies      | Include for all except final task             |
 
 ## When to Include Implementation Suggestions
 

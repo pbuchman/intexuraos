@@ -23,17 +23,50 @@ Manage Linear issues, branches, and PRs with enforced workflow and cross-linking
 
 ## Core Mandates
 
-1. **Branch First**: EVERY task MUST start with branch creation from `origin/development`. Task FAILS if work starts on `development` or `main`.
-2. **Fail Fast**: If Linear, GitHub CLI, or GCloud are unavailable, STOP immediately
-3. **No Guessing**: When issue type is ambiguous, ASK the user
-4. **Cross-Linking**: Every issue MUST link between systems (Linear <-> GitHub <-> Sentry)
-5. **CI Gate**: `pnpm run ci:tracked` MUST pass before PR creation — NON-NEGOTIABLE, no shortcuts
-6. **State Management (MANDATORY)**: EVERY issue MUST transition through states: Backlog → In Progress (when starting) → In Review (when PR created). NEVER skip or delay state updates.
-7. **One Issue at a Time**: Complete verification, commit, and PR for EACH issue before starting the next
-8. **Checkpoint Pattern**: After completing an issue, STOP and wait for user instruction before proceeding
-9. **Done Forbidden**: Never move issues to Done — maximum agent-controlled state is QA
-10. **95% Coverage MINIMUM**: All tests listed in issues MUST be implemented. Do NOT simplify work.
-11. **Parent Execution Mode**: When working on parent issues with children, execute ALL children continuously without stopping between them. Single branch and single PR for the parent.
+1. **Test Requirements First (QUALITY GATE)**: EVERY implementation issue MUST start with a "Test Requirements" section listing exact test cases in a table format. Issues without explicit test specifications are incomplete — do NOT create them.
+2. **Branch First**: EVERY task MUST start with branch creation from `origin/development`. Task FAILS if work starts on `development` or `main`.
+3. **Fail Fast**: If Linear, GitHub CLI, or GCloud are unavailable, STOP immediately
+4. **No Guessing**: When issue type is ambiguous, ASK the user
+5. **Cross-Linking**: Every issue MUST link between systems (Linear <-> GitHub <-> Sentry)
+6. **CI Gate**: `pnpm run ci:tracked` MUST pass before PR creation — NON-NEGOTIABLE, no shortcuts
+7. **State Management (MANDATORY)**: EVERY issue MUST transition through states: Backlog → In Progress (when starting) → In Review (when PR created). NEVER skip or delay state updates.
+8. **One Issue at a Time**: Complete verification, commit, and PR for EACH issue before starting the next
+9. **Checkpoint Pattern**: After completing an issue, STOP and wait for user instruction before proceeding
+10. **Done Forbidden**: Never move issues to Done — maximum agent-controlled state is QA
+11. **95% Coverage MINIMUM**: All tests listed in issues MUST be implemented. Do NOT simplify work.
+12. **Parent Execution Mode**: When working on parent issues with children, execute ALL children continuously without stopping between them. Single branch and single PR for the parent.
+
+## Test Requirements Quality Gate
+
+**Every implementation issue (features, bugs, refactors) MUST include test requirements as the FIRST section.**
+
+This applies to:
+- Parent issues
+- ALL child issues created during splitting
+- Standalone issues
+
+### Required Format
+
+```markdown
+## Test Requirements (MANDATORY - implement first)
+
+**Backend Tests (`apps/<service>/src/__tests__/`):**
+
+| Test | Endpoint/Function | Scenario | Expected |
+|------|-------------------|----------|----------|
+| Name | What is tested | Input/condition | Output/behavior |
+
+**Frontend Tests (if applicable):**
+- Test case 1
+- Test case 2
+```
+
+### Why This Matters
+
+- LLM agents skip tests when not explicitly listed
+- "Add tests" is too vague — specific test cases ensure coverage
+- Test-first thinking catches design issues early
+- Acceptance criteria without test specs are incomplete
 
 ## Invocation Detection
 
