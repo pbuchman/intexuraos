@@ -8,9 +8,8 @@ import {
   FakeWhatsAppSendPublisher,
   FakeCalendarPreviewPublisher,
 } from './fakes.js';
-import pino from 'pino';
 
-const silentLogger = pino({ level: 'silent' });
+import { createMockLogger } from './fakes.js';
 
 describe('handleCalendarAction usecase', () => {
   let fakeActionRepository: FakeActionRepository;
@@ -70,7 +69,7 @@ describe('handleCalendarAction usecase', () => {
       whatsappPublisher: fakeWhatsappPublisher,
       calendarPreviewPublisher: fakeCalendarPreviewPublisher,
       webAppUrl: 'https://app.intexuraos.com',
-      logger: silentLogger,
+      logger: createMockLogger(),
     });
 
     const event = createEvent();
@@ -111,7 +110,7 @@ describe('handleCalendarAction usecase', () => {
       whatsappPublisher: fakeWhatsappPublisher,
       calendarPreviewPublisher: fakeCalendarPreviewPublisher,
       webAppUrl: 'https://app.intexuraos.com',
-      logger: silentLogger,
+      logger: createMockLogger(),
     });
 
     const event = createEvent();
@@ -136,7 +135,7 @@ describe('handleCalendarAction usecase', () => {
       whatsappPublisher: fakeWhatsappPublisher,
       calendarPreviewPublisher: fakeCalendarPreviewPublisher,
       webAppUrl: 'https://app.intexuraos.com',
-      logger: silentLogger,
+      logger: createMockLogger(),
     });
 
     const event = createEvent();
@@ -156,7 +155,7 @@ describe('handleCalendarAction usecase', () => {
       whatsappPublisher: fakeWhatsappPublisher,
       calendarPreviewPublisher: fakeCalendarPreviewPublisher,
       webAppUrl: 'https://app.intexuraos.com',
-      logger: silentLogger,
+      logger: createMockLogger(),
     });
 
     fakeWhatsappPublisher.setFailNext(true, {
@@ -182,7 +181,7 @@ describe('handleCalendarAction usecase', () => {
       whatsappPublisher: fakeWhatsappPublisher,
       calendarPreviewPublisher: fakeCalendarPreviewPublisher,
       webAppUrl: 'https://app.intexuraos.com',
-      logger: silentLogger,
+      logger: createMockLogger(),
     });
 
     await fakeActionRepository.save({
@@ -207,7 +206,7 @@ describe('handleCalendarAction usecase', () => {
       whatsappPublisher: fakeWhatsappPublisher,
       calendarPreviewPublisher: fakeCalendarPreviewPublisher,
       webAppUrl: 'https://app.intexuraos.com',
-      logger: silentLogger,
+      logger: createMockLogger(),
     });
 
     await fakeActionRepository.save({
@@ -232,7 +231,7 @@ describe('handleCalendarAction usecase', () => {
       whatsappPublisher: fakeWhatsappPublisher,
       calendarPreviewPublisher: fakeCalendarPreviewPublisher,
       webAppUrl: 'https://app.intexuraos.com',
-      logger: silentLogger,
+      logger: createMockLogger(),
     });
 
     const event = createEvent();

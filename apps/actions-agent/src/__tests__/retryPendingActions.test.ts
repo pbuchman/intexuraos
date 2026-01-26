@@ -9,10 +9,9 @@ import type { HandleLinkActionUseCase } from '../domain/usecases/handleLinkActio
 import type { HandleCalendarActionUseCase } from '../domain/usecases/handleCalendarAction.js';
 import type { HandleLinearActionUseCase } from '../domain/usecases/handleLinearAction.js';
 import type { HandleCodeActionUseCase } from '../domain/usecases/handleCodeAction.js';
-import pino from 'pino';
 import { ok } from '@intexuraos/common-core';
 
-const silentLogger = pino({ level: 'silent' });
+import { createMockLogger } from './fakes.js';
 
 const createFakeHandler = (): { execute: ReturnType<typeof vi.fn> } => ({
   execute: vi.fn().mockResolvedValue(ok({ actionId: 'test' })),
@@ -70,7 +69,7 @@ describe('retryPendingActions usecase', () => {
       actionRepository: fakeActionRepository,
       actionEventPublisher: fakeActionEventPublisher,
       actionHandlerRegistry: fakeHandlers,
-      logger: silentLogger,
+      logger: createMockLogger(),
     });
 
     const result = await usecase.execute();
@@ -91,7 +90,7 @@ describe('retryPendingActions usecase', () => {
       actionRepository: fakeActionRepository,
       actionEventPublisher: fakeActionEventPublisher,
       actionHandlerRegistry: fakeHandlers,
-      logger: silentLogger,
+      logger: createMockLogger(),
     });
 
     const result = await usecase.execute();
@@ -118,7 +117,7 @@ describe('retryPendingActions usecase', () => {
       actionRepository: fakeActionRepository,
       actionEventPublisher: fakeActionEventPublisher,
       actionHandlerRegistry: fakeHandlers,
-      logger: silentLogger,
+      logger: createMockLogger(),
     });
 
     const result = await usecase.execute();
@@ -142,7 +141,7 @@ describe('retryPendingActions usecase', () => {
       actionRepository: fakeActionRepository,
       actionEventPublisher: fakeActionEventPublisher,
       actionHandlerRegistry: fakeHandlers,
-      logger: silentLogger,
+      logger: createMockLogger(),
     });
 
     const result = await usecase.execute();
@@ -167,7 +166,7 @@ describe('retryPendingActions usecase', () => {
       actionRepository: fakeActionRepository,
       actionEventPublisher: fakeActionEventPublisher,
       actionHandlerRegistry: fakeHandlers,
-      logger: silentLogger,
+      logger: createMockLogger(),
     });
 
     const result = await usecase.execute();

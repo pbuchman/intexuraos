@@ -12,6 +12,9 @@
 import { vi } from 'vitest';
 import nodeFetch from 'node-fetch';
 
+// Set LOG_LEVEL to test the environment variable branch in commandsAgentClient.ts
+process.env['LOG_LEVEL'] = 'debug';
+
 // Mock @notionhq/client globally to prevent any real HTTP calls
 // This mock is hoisted and applied to all test files
 vi.mock('@notionhq/client', () => {

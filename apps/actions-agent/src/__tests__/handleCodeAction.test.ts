@@ -4,12 +4,12 @@ import { createHandleCodeActionUseCase } from '../domain/usecases/handleCodeActi
 import { registerActionHandler } from '../domain/usecases/createIdempotentActionHandler.js';
 import type { ActionCreatedEvent } from '../domain/models/actionEvent.js';
 import type { ActionStatus } from '../domain/models/action.js';
+import type { Logger } from 'pino';
 import {
   FakeActionRepository,
   FakeWhatsAppSendPublisher,
   createFakeExecuteCodeActionUseCaseWithRepo,
 } from './fakes.js';
-import pino from 'pino';
 
 vi.mock('../domain/usecases/shouldAutoExecute.js', () => ({
   shouldAutoExecute: vi.fn(() => false),
@@ -17,7 +17,19 @@ vi.mock('../domain/usecases/shouldAutoExecute.js', () => ({
 
 import { shouldAutoExecute } from '../domain/usecases/shouldAutoExecute.js';
 
-const silentLogger = pino({ level: 'silent' });
+// Create a proper logger mock that actually logs (for coverage)
+const createMockLogger = (): Logger =>
+  ({
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
+    level: 'silent',
+    fatal: vi.fn(),
+    trace: vi.fn(),
+    silent: vi.fn(),
+    msgPrefix: '',
+  }) as unknown as Logger;
 
 describe('handleCodeAction usecase', () => {
   let fakeActionRepository: FakeActionRepository;
@@ -78,7 +90,7 @@ describe('handleCodeAction usecase', () => {
       actionRepository: fakeActionRepository,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.intexuraos.com',
-      logger: silentLogger,
+      logger: createMockLogger(),
     });
 
     const event = createEvent();
@@ -112,7 +124,7 @@ describe('handleCodeAction usecase', () => {
       actionRepository: fakeActionRepository,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.intexuraos.com',
-      logger: silentLogger,
+      logger: createMockLogger(),
     });
 
     const event = createEvent({
@@ -138,7 +150,7 @@ describe('handleCodeAction usecase', () => {
       actionRepository: fakeActionRepository,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.intexuraos.com',
-      logger: silentLogger,
+      logger: createMockLogger(),
     });
 
     const event = createEvent();
@@ -165,7 +177,7 @@ describe('handleCodeAction usecase', () => {
       actionRepository: fakeActionRepository,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.intexuraos.com',
-      logger: silentLogger,
+      logger: createMockLogger(),
       executeCodeAction: fakeExecuteCodeAction,
     });
 
@@ -196,7 +208,7 @@ describe('handleCodeAction usecase', () => {
       actionRepository: fakeActionRepository,
       whatsappPublisher: fakeWhatsappPublisher,
       webAppUrl: 'https://app.intexuraos.com',
-      logger: silentLogger,
+      logger: createMockLogger(),
       executeCodeAction: fakeExecuteCodeAction,
     });
 
@@ -210,6 +222,35 @@ describe('handleCodeAction usecase', () => {
     mockShouldAutoExecute.mockRestore();
   });
 
+  it('returns error when auto-execute fails', async () => {
+    const mockShouldAutoExecute = vi.mocked(shouldAutoExecute);
+    mockShouldAutoExecute.mockReturnValue(true);
+
+    await fakeActionRepository.save(createAction());
+
+    const fakeExecuteCodeAction = createFakeExecuteCodeActionUseCaseWithRepo(fakeActionRepository, {
+      failWithError: new Error('Worker unavailable'),
+    });
+
+    const usecase = registerActionHandler(createHandleCodeActionUseCase, {
+      actionRepository: fakeActionRepository,
+      whatsappPublisher: fakeWhatsappPublisher,
+      webAppUrl: 'https://app.intexuraos.com',
+      logger: createMockLogger(),
+      executeCodeAction: fakeExecuteCodeAction,
+    });
+
+    const event = createEvent();
+    const result = await usecase.execute(event);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.message).toBe('Worker unavailable');
+    }
+
+    mockShouldAutoExecute.mockRestore();
+  });
+
   describe('idempotency', () => {
     it('returns success without sending notification when action already processed (idempotency)', async () => {
       const action = createAction({ status: 'awaiting_approval' });
@@ -219,7 +260,7 @@ describe('handleCodeAction usecase', () => {
         actionRepository: fakeActionRepository,
         whatsappPublisher: fakeWhatsappPublisher,
         webAppUrl: 'https://app.intexuraos.com',
-        logger: silentLogger,
+        logger: createMockLogger(),
       });
 
       const event = createEvent();
@@ -233,6 +274,75 @@ describe('handleCodeAction usecase', () => {
       // Should not send WhatsApp message since action was already processed
       const messages = fakeWhatsappPublisher.getSentMessages();
       expect(messages).toHaveLength(0);
+    });
+  });
+
+  describe('WhatsApp message formatting', () => {
+    it('uses title as prompt fallback when prompt is not a string', async () => {
+      const action = createAction({
+        payload: { prompt: 12345, confidence: 0.95 }, // prompt is not a string
+      });
+      await fakeActionRepository.save(action);
+
+      const usecase = registerActionHandler(createHandleCodeActionUseCase, {
+        actionRepository: fakeActionRepository,
+        whatsappPublisher: fakeWhatsappPublisher,
+        webAppUrl: 'https://app.intexuraos.com',
+        logger: createMockLogger(),
+      });
+
+      const event = createEvent({
+        payload: { prompt: 12345, confidence: 0.95 },
+      });
+
+      const result = await usecase.execute(event);
+
+      expect(isOk(result)).toBe(true);
+
+      const messages = fakeWhatsappPublisher.getSentMessages();
+      expect(messages).toHaveLength(1);
+      // Should use title as fallback since prompt is not a string
+      expect(messages[0]?.message).toContain('Fix authentication bug');
+    });
+
+    it('uses title when prompt is missing from payload', async () => {
+      const action = createAction({
+        payload: { confidence: 0.95 }, // prompt missing
+      });
+      await fakeActionRepository.save(action);
+
+      const usecase = registerActionHandler(createHandleCodeActionUseCase, {
+        actionRepository: fakeActionRepository,
+        whatsappPublisher: fakeWhatsappPublisher,
+        webAppUrl: 'https://app.intexuraos.com',
+        logger: createMockLogger(),
+      });
+
+      const event = createEvent({
+        payload: { confidence: 0.95 },
+      });
+
+      await usecase.execute(event);
+
+      const messages = fakeWhatsappPublisher.getSentMessages();
+      expect(messages[0]?.message).toContain('Fix authentication bug');
+    });
+
+    it('includes estimated cost in approval message', async () => {
+      await fakeActionRepository.save(createAction());
+
+      const usecase = registerActionHandler(createHandleCodeActionUseCase, {
+        actionRepository: fakeActionRepository,
+        whatsappPublisher: fakeWhatsappPublisher,
+        webAppUrl: 'https://app.intexuraos.com',
+        logger: createMockLogger(),
+      });
+
+      const event = createEvent();
+      await usecase.execute(event);
+
+      const messages = fakeWhatsappPublisher.getSentMessages();
+      expect(messages[0]?.message).toContain('Estimated cost: $1-2');
     });
   });
 });

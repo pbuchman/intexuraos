@@ -1,8 +1,13 @@
 /**
  * Tests for approval intent prompt and response parsing.
  */
-import { describe, it, expect } from 'vitest';
-import { approvalIntentPrompt, parseApprovalIntentResponse } from '../approvalIntentPrompt.js';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import {
+  approvalIntentPrompt,
+  parseApprovalIntentResponse,
+  parseApprovalIntentResponseWithLogging,
+} from '../approvalIntentPrompt.js';
+import type { Logger } from 'pino';
 
 describe('approvalIntentPrompt', () => {
   it('builds prompt with user reply', () => {
@@ -289,5 +294,130 @@ That's my classification.`;
     const result = parseApprovalIntentResponse(response);
 
     expect(result).toBeNull();
+  });
+});
+
+describe('parseApprovalIntentResponseWithLogging', () => {
+  let mockLogger: Logger;
+
+  beforeEach(() => {
+    mockLogger = {
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+      debug: vi.fn(),
+    };
+  });
+
+  it('returns parsed result when parsing succeeds', () => {
+    const response = '{"intent": "approve", "confidence": 0.9, "reasoning": "User approved"}';
+
+    const result = parseApprovalIntentResponseWithLogging(response, mockLogger);
+
+    expect(result).toEqual({
+      intent: 'approve',
+      confidence: 0.9,
+      reasoning: 'User approved',
+    });
+    expect(mockLogger.warn).not.toHaveBeenCalled();
+  });
+
+  it('throws and logs when parsing returns null', () => {
+    const response = 'No JSON here';
+
+    expect(() => parseApprovalIntentResponseWithLogging(response, mockLogger)).toThrow(
+      'Failed to parse approval intent'
+    );
+
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        operation: 'parseApprovalIntentResponse',
+        errorMessage: 'Failed to parse approval intent: response does not match expected schema',
+        llmResponse: response,
+      }),
+      expect.stringContaining('LLM parse error')
+    );
+  });
+
+  it('throws and logs when JSON is malformed', () => {
+    const response = '{"intent":"approve",invalid}';
+
+    expect(() => parseApprovalIntentResponseWithLogging(response, mockLogger)).toThrow();
+
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        operation: 'parseApprovalIntentResponse',
+        llmResponse: response,
+      }),
+      expect.stringContaining('LLM parse error')
+    );
+  });
+
+  it('throws and logs when intent is invalid', () => {
+    const response = '{"intent": "invalid", "confidence": 0.5, "reasoning": "test"}';
+
+    expect(() => parseApprovalIntentResponseWithLogging(response, mockLogger)).toThrow();
+
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        operation: 'parseApprovalIntentResponse',
+        llmResponse: response,
+      }),
+      expect.stringContaining('LLM parse error')
+    );
+  });
+
+  it('throws and logs when confidence is out of range', () => {
+    const response = '{"intent": "approve", "confidence": 2.0, "reasoning": "test"}';
+
+    expect(() => parseApprovalIntentResponseWithLogging(response, mockLogger)).toThrow();
+
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        operation: 'parseApprovalIntentResponse',
+        llmResponse: response,
+      }),
+      expect.stringContaining('LLM parse error')
+    );
+  });
+
+  it('throws and logs when reasoning is not a string', () => {
+    const response = '{"intent": "approve", "confidence": 0.5, "reasoning": 123}';
+
+    expect(() => parseApprovalIntentResponseWithLogging(response, mockLogger)).toThrow();
+
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        operation: 'parseApprovalIntentResponse',
+        llmResponse: response,
+      }),
+      expect.stringContaining('LLM parse error')
+    );
+  });
+
+  it('returns parsed result for reject intent', () => {
+    const response = '{"intent": "reject", "confidence": 0.8, "reasoning": "User said no"}';
+
+    const result = parseApprovalIntentResponseWithLogging(response, mockLogger);
+
+    expect(result).toEqual({
+      intent: 'reject',
+      confidence: 0.8,
+      reasoning: 'User said no',
+    });
+    expect(mockLogger.warn).not.toHaveBeenCalled();
+  });
+
+  it('returns parsed result for unclear intent', () => {
+    const response = '{"intent": "unclear", "confidence": 0.5, "reasoning": "Ambiguous"}';
+
+    const result = parseApprovalIntentResponseWithLogging(response, mockLogger);
+
+    expect(result).toEqual({
+      intent: 'unclear',
+      confidence: 0.5,
+      reasoning: 'Ambiguous',
+    });
+    expect(mockLogger.warn).not.toHaveBeenCalled();
   });
 });

@@ -4,9 +4,7 @@ import { registerActionHandler } from '../domain/usecases/createIdempotentAction
 import type { ActionHandler } from '../domain/usecases/actionHandlerRegistry.js';
 import type { ActionRepository, UpdateStatusIfResult } from '../domain/ports/actionRepository.js';
 import type { ActionCreatedEvent } from '../domain/models/actionEvent.js';
-import pino from 'pino';
-
-const silentLogger = pino({ level: 'silent' });
+import { createMockLogger } from './fakes.js';
 
 const createEvent = (overrides: Partial<ActionCreatedEvent> = {}): ActionCreatedEvent => ({
   type: 'action.created',
@@ -45,7 +43,7 @@ describe('registerActionHandler', () => {
   describe('idempotency check', () => {
     it('calls updateStatusIf before executing handler', async () => {
       const factory = (): ActionHandler => mockHandler;
-      const wrapped = registerActionHandler(factory, { actionRepository: mockRepository, logger: silentLogger });
+      const wrapped = registerActionHandler(factory, { actionRepository: mockRepository, logger: createMockLogger() });
       const event = createEvent();
 
       await wrapped.execute(event);
@@ -65,7 +63,7 @@ describe('registerActionHandler', () => {
         currentStatus: 'awaiting_approval',
       });
 
-      const wrapped = registerActionHandler(factory, { actionRepository: mockRepository, logger: silentLogger });
+      const wrapped = registerActionHandler(factory, { actionRepository: mockRepository, logger: createMockLogger() });
       const event = createEvent();
 
       const result = await wrapped.execute(event);
@@ -78,7 +76,7 @@ describe('registerActionHandler', () => {
       const factory = (): ActionHandler => mockHandler;
       vi.mocked(mockRepository.updateStatusIf).mockResolvedValue({ outcome: 'not_found' });
 
-      const wrapped = registerActionHandler(factory, { actionRepository: mockRepository, logger: silentLogger });
+      const wrapped = registerActionHandler(factory, { actionRepository: mockRepository, logger: createMockLogger() });
       const event = createEvent();
 
       const result = await wrapped.execute(event);
@@ -94,7 +92,7 @@ describe('registerActionHandler', () => {
         error: new Error('Firestore error'),
       });
 
-      const wrapped = registerActionHandler(factory, { actionRepository: mockRepository, logger: silentLogger });
+      const wrapped = registerActionHandler(factory, { actionRepository: mockRepository, logger: createMockLogger() });
       const event = createEvent();
 
       const result = await wrapped.execute(event);
@@ -109,7 +107,7 @@ describe('registerActionHandler', () => {
       const factory = (): ActionHandler => mockHandler;
       vi.mocked(mockRepository.updateStatusIf).mockResolvedValue({ outcome: 'updated' });
 
-      const wrapped = registerActionHandler(factory, { actionRepository: mockRepository, logger: silentLogger });
+      const wrapped = registerActionHandler(factory, { actionRepository: mockRepository, logger: createMockLogger() });
       const event = createEvent();
 
       const result = await wrapped.execute(event);
@@ -125,7 +123,7 @@ describe('registerActionHandler', () => {
       });
       vi.mocked(mockRepository.updateStatusIf).mockResolvedValue({ outcome: 'updated' });
 
-      const wrapped = registerActionHandler(factory, { actionRepository: mockRepository, logger: silentLogger });
+      const wrapped = registerActionHandler(factory, { actionRepository: mockRepository, logger: createMockLogger() });
       const event = createEvent();
 
       const result = await wrapped.execute(event);

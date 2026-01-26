@@ -4,8 +4,8 @@ import {
   FakeActionRepository,
   FakeActionTransitionRepository,
   FakeCommandsAgentClient,
+  createMockLogger,
 } from '../fakes.js';
-import pino from 'pino';
 import type { Action } from '../../domain/models/action.js';
 
 describe('ChangeActionTypeUseCase', () => {
@@ -36,7 +36,7 @@ describe('ChangeActionTypeUseCase', () => {
       actionRepository,
       actionTransitionRepository,
       commandsAgentClient,
-      logger: pino({ level: 'silent' }),
+      logger: createMockLogger(),
     });
   });
 
