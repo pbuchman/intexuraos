@@ -397,4 +397,49 @@ describe('executeCodeAction usecase', () => {
       expect(result.value.status).toBe('completed');
     }
   });
+
+  it('returns error for action with archived status', async () => {
+    const action = createAction({ status: 'archived' });
+    await fakeActionRepo.save(action);
+
+    const usecase = createExecuteCodeActionUseCase({
+      actionRepository: fakeActionRepo,
+      codeAgentClient: fakeCodeClient,
+      whatsappPublisher: fakeWhatsappPublisher,
+      webAppUrl: 'https://app.intexuraos.com',
+      logger: silentLogger,
+    });
+
+    const result = await usecase('action-123');
+
+    expect(isErr(result)).toBe(true);
+    if (isErr(result)) {
+      expect(result.error.message).toContain('Cannot execute action with status: archived');
+    }
+  });
+
+  it('returns completed status without existingTaskId when DUPLICATE error has no taskId', async () => {
+    const action = createAction({ status: 'pending' });
+    await fakeActionRepo.save(action);
+    fakeCodeClient.setNextError({
+      code: 'DUPLICATE',
+      message: 'Task already exists for this approval',
+    });
+
+    const usecase = createExecuteCodeActionUseCase({
+      actionRepository: fakeActionRepo,
+      codeAgentClient: fakeCodeClient,
+      whatsappPublisher: fakeWhatsappPublisher,
+      webAppUrl: 'https://app.intexuraos.com',
+      logger: silentLogger,
+    });
+
+    const result = await usecase('action-123');
+
+    expect(isOk(result)).toBe(true);
+    if (isOk(result)) {
+      expect(result.value.status).toBe('completed');
+      expect(result.value.message).toBe('Task already exists');
+    }
+  });
 });

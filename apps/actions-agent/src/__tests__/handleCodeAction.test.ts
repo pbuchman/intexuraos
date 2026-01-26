@@ -235,4 +235,53 @@ describe('handleCodeAction usecase', () => {
       expect(messages).toHaveLength(0);
     });
   });
+
+  describe('error cases', () => {
+    it('returns error when auto-execute fails', async () => {
+      const mockShouldAutoExecute = vi.mocked(shouldAutoExecute);
+      mockShouldAutoExecute.mockReturnValue(true);
+
+      await fakeActionRepository.save(createAction());
+
+      const fakeExecuteCodeAction = createFakeExecuteCodeActionUseCaseWithRepo(fakeActionRepository, {
+        failWithError: new Error('Auto-execution failed: Code worker unavailable'),
+      });
+
+      const usecase = registerActionHandler(createHandleCodeActionUseCase, {
+        actionRepository: fakeActionRepository,
+        whatsappPublisher: fakeWhatsappPublisher,
+        webAppUrl: 'https://app.intexuraos.com',
+        logger: silentLogger,
+        executeCodeAction: fakeExecuteCodeAction,
+      });
+
+      const event = createEvent();
+      const result = await usecase.execute(event);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.message).toContain('Auto-execution failed');
+      }
+
+      mockShouldAutoExecute.mockRestore();
+    });
+
+    it('returns error when action not found in repository', async () => {
+      // Do NOT save the action to repository, simulating "not found"
+      const usecase = createHandleCodeActionUseCase({
+        actionRepository: fakeActionRepository,
+        whatsappPublisher: fakeWhatsappPublisher,
+        webAppUrl: 'https://app.intexuraos.com',
+        logger: silentLogger,
+      });
+
+      const event = createEvent();
+      const result = await usecase.execute(event);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.message).toBe('Action not found');
+      }
+    });
+  });
 });

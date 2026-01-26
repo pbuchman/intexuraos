@@ -122,6 +122,34 @@ describe('createUserServiceClient', () => {
         expect.fail('Expected successful result');
       }
     });
+
+    it('includes all provider keys when all are configured', async () => {
+      const mockKeys = {
+        google: 'google-key',
+        openai: 'openai-key',
+        anthropic: 'anthropic-key',
+        perplexity: 'perplexity-key',
+        zai: 'zai-key',
+      };
+
+      nock('http://localhost:3000')
+        .get('/internal/users/user123/llm-keys')
+        .matchHeader('X-Internal-Auth', 'test-token')
+        .reply(200, mockKeys);
+
+      const client = createUserServiceClient(config);
+      const result = await client.getApiKeys('user123');
+
+      if (result.ok) {
+        expect(result.value.google).toBe('google-key');
+        expect(result.value.openai).toBe('openai-key');
+        expect(result.value.anthropic).toBe('anthropic-key');
+        expect(result.value.perplexity).toBe('perplexity-key');
+        expect(result.value.zai).toBe('zai-key');
+      } else {
+        expect.fail('Expected successful result');
+      }
+    });
   });
 
   describe('getLlmClient', () => {
@@ -303,6 +331,26 @@ describe('createUserServiceClient', () => {
         expect(mockLogger.error).toHaveBeenCalledWith(
           { userId: 'user123', status: 500 },
           'Failed to fetch API keys'
+        );
+      } else {
+        expect.fail('Expected error result');
+      }
+    });
+
+    it('handles network error in getLlmClient', async () => {
+      nock('http://localhost:3000')
+        .get('/internal/users/user123/settings')
+        .matchHeader('X-Internal-Auth', 'test-token')
+        .replyWithError('ECONNREFUSED');
+
+      const client = createUserServiceClient(config);
+      const result = await client.getLlmClient('user123');
+
+      if (!result.ok) {
+        expect(result.error.code).toBe('NETWORK_ERROR');
+        expect(mockLogger.error).toHaveBeenCalledWith(
+          { userId: 'user123', error: expect.any(String) },
+          'Network error while creating LLM client'
         );
       } else {
         expect.fail('Expected error result');

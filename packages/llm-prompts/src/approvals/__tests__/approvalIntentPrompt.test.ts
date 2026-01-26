@@ -1,8 +1,13 @@
 /**
  * Tests for approval intent prompt and response parsing.
  */
-import { describe, it, expect } from 'vitest';
-import { approvalIntentPrompt, parseApprovalIntentResponse } from '../approvalIntentPrompt.js';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import type { Logger } from 'pino';
+import {
+  approvalIntentPrompt,
+  parseApprovalIntentResponse,
+  parseApprovalIntentResponseWithLogging,
+} from '../approvalIntentPrompt.js';
 
 describe('approvalIntentPrompt', () => {
   it('builds prompt with user reply', () => {
@@ -289,5 +294,78 @@ That's my classification.`;
     const result = parseApprovalIntentResponse(response);
 
     expect(result).toBeNull();
+  });
+});
+
+describe('parseApprovalIntentResponseWithLogging', () => {
+  const mockLogger: Logger = {
+    warn: vi.fn(),
+    info: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
+  } as unknown as Logger;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('returns valid response and does not log', () => {
+    const response = '{"intent": "approve", "confidence": 0.95, "reasoning": "User said yes"}';
+
+    const result = parseApprovalIntentResponseWithLogging(response, mockLogger);
+
+    expect(result).toEqual({
+      intent: 'approve',
+      confidence: 0.95,
+      reasoning: 'User said yes',
+    });
+    expect(mockLogger.warn).not.toHaveBeenCalled();
+  });
+
+  it('throws and logs warning when response is null (no valid schema match)', () => {
+    const response = 'This is just text without any JSON';
+
+    expect(() => parseApprovalIntentResponseWithLogging(response, mockLogger)).toThrow(
+      'Failed to parse approval intent'
+    );
+    expect(mockLogger.warn).toHaveBeenCalledTimes(1);
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        operation: 'parseApprovalIntentResponse',
+        llmResponse: response,
+        responseLength: response.length,
+      }),
+      expect.stringContaining('LLM parse error in parseApprovalIntentResponse')
+    );
+  });
+
+  it('throws and logs warning for invalid JSON', () => {
+    const response = '{"intent": "approve", "confidence": }';
+
+    expect(() => parseApprovalIntentResponseWithLogging(response, mockLogger)).toThrow();
+    expect(mockLogger.warn).toHaveBeenCalledTimes(1);
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        operation: 'parseApprovalIntentResponse',
+        errorMessage: expect.any(String),
+      }),
+      expect.stringContaining('LLM parse error in parseApprovalIntentResponse')
+    );
+  });
+
+  it('throws and logs warning for malformed JSON', () => {
+    const response = '{invalid json';
+
+    expect(() => parseApprovalIntentResponseWithLogging(response, mockLogger)).toThrow();
+    expect(mockLogger.warn).toHaveBeenCalledTimes(1);
+  });
+
+  it('throws and logs warning for response with no schema match', () => {
+    const response = '{"intent": "maybe", "confidence": 0.5, "reasoning": "test"}';
+
+    expect(() => parseApprovalIntentResponseWithLogging(response, mockLogger)).toThrow(
+      'Failed to parse approval intent'
+    );
+    expect(mockLogger.warn).toHaveBeenCalledTimes(1);
   });
 });
