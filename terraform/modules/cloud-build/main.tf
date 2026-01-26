@@ -152,7 +152,6 @@ locals {
   # Docker-based services (build + deploy)
   docker_services = [
     "user-service",
-    "promptvault-service",
     "notion-service",
     "whatsapp-service",
     "api-docs-hub",

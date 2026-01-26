@@ -50,7 +50,6 @@ const ROOT_DIR = join(__dirname, '..');
 
 const SERVICES = [
   { name: 'app-settings-service', port: 8122, color: '\x1b[95m' },
-  { name: 'promptvault-service', port: 8111, color: '\x1b[33m' },
   { name: 'notion-service', port: 8112, color: '\x1b[35m' },
   { name: 'whatsapp-service', port: 8113, color: '\x1b[32m' },
   { name: 'mobile-notifications-service', port: 8114, color: '\x1b[34m' },

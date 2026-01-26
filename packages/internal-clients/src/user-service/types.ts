@@ -56,12 +56,8 @@ export interface UserServiceError {
  * Client interface for user-service internal API.
  */
 export interface UserServiceClient {
-  getApiKeys(
-    userId: string
-  ): Promise<Result<DecryptedApiKeys, UserServiceError>>;
-  getLlmClient(
-    userId: string
-  ): Promise<Result<LlmGenerateClient, UserServiceError>>;
+  getApiKeys(userId: string): Promise<Result<DecryptedApiKeys, UserServiceError>>;
+  getLlmClient(userId: string): Promise<Result<LlmGenerateClient, UserServiceError>>;
   reportLlmSuccess(userId: string, provider: LlmProvider): Promise<void>;
   getOAuthToken(
     userId: string,
