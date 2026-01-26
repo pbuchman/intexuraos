@@ -82,11 +82,8 @@ function stripHiddenContent(content: string): string {
 // ============================================================================
 
 function mapExportError(e: NotionError): NotionResearchExportError {
-  // Type assertions are safe: NotionError interface guarantees these properties
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-assignment
-  const code = e.code as NotionError['code'];
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-  const message = e.message as string;
+  const code = e.code;
+  const message = e.message;
 
   switch (code) {
     case 'NOT_FOUND':
@@ -122,7 +119,6 @@ function mapExportError(e: NotionError): NotionResearchExportError {
  *   - Heading: "Sources" (if llmResult.sources exists)
  *   - Bulleted list of source URLs
  */
-/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access -- Notion SDK types are not fully typed */
 export async function exportResearchToNotion(
   research: Research,
   notionToken: string,
@@ -170,9 +166,9 @@ export async function exportResearchToNotion(
       ],
     });
 
-    const mainPageId = mainPageResponse.id as string;
+    const mainPageId = mainPageResponse.id;
     const mainPageUrl =
-      'url' in mainPageResponse && mainPageResponse.url !== undefined
+      'url' in mainPageResponse && mainPageResponse.url
         ? mainPageResponse.url
         : `https://notion.so/${mainPageId}`;
 
@@ -256,12 +252,12 @@ export async function exportResearchToNotion(
       });
 
       const pageUrl =
-        'url' in pageResponse && pageResponse.url !== undefined
+        'url' in pageResponse && pageResponse.url
           ? pageResponse.url
-          : `https://notion.so/${String(pageResponse.id)}`;
+          : `https://notion.so/${pageResponse.id}`;
       llmReportPages.push({
         model: llmResult.model,
-        pageId: String(pageResponse.id),
+        pageId: pageResponse.id,
         pageUrl,
       });
     }
@@ -279,7 +275,6 @@ export async function exportResearchToNotion(
         },
       }));
 
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
       await client.blocks.children.append({
         block_id: mainPageId,
         children: sourceLinks,
