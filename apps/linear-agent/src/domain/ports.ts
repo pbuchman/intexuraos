@@ -58,6 +58,15 @@ export interface FailedIssueRepository {
   /** List failed issues for a user */
   listByUser(userId: string): Promise<Result<FailedLinearIssue[], LinearError>>;
 
+  /** Get a failed issue by ID */
+  getById(id: string): Promise<Result<FailedLinearIssue, LinearError>>;
+
+  /** Update error message and retry timestamp (used after failed retry) */
+  update(
+    id: string,
+    input: { error: string; lastRetryAt: string }
+  ): Promise<Result<void, LinearError>>;
+
   /** Delete a failed issue (after resolution) */
   delete(id: string): Promise<Result<void, LinearError>>;
 }

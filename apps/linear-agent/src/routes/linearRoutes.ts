@@ -227,5 +227,100 @@ export const linearRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
     }
   );
 
+  // Delete a failed issue
+  fastify.delete('/linear/failed-issues/:id', async (request: FastifyRequest, reply: FastifyReply) => {
+    logIncomingRequest(request);
+    const user = await requireAuth(request, reply);
+    if (user === null) {
+      return;
+    }
+
+    const { id } = request.params as { id: string };
+    const { failedIssueRepository } = getServices();
+
+    const issueResult = await failedIssueRepository.getById(id);
+    if (!issueResult.ok) {
+      reply.status(404);
+      return await reply.fail('NOT_FOUND', 'Failed issue not found');
+    }
+
+    const issue = issueResult.value;
+    if (issue.userId !== user.userId) {
+      reply.status(404);
+      return await reply.fail('NOT_FOUND', 'Failed issue not found');
+    }
+
+    const deleteResult = await failedIssueRepository.delete(id);
+    if (!deleteResult.ok) {
+      return await handleLinearError(deleteResult.error, reply);
+    }
+
+    reply.status(204);
+    return await reply.send();
+  });
+
+  // Retry creating a Linear issue from a failed attempt
+  fastify.post('/linear/failed-issues/:id/retry', async (request: FastifyRequest, reply: FastifyReply) => {
+    logIncomingRequest(request);
+    const user = await requireAuth(request, reply);
+    if (user === null) {
+      return;
+    }
+
+    const { id } = request.params as { id: string };
+    const services = getServices();
+    const { failedIssueRepository, linearApiClient, connectionRepository } = services;
+
+    const failedIssueResult = await failedIssueRepository.getById(id);
+    if (!failedIssueResult.ok) {
+      reply.status(404);
+      return await reply.fail('NOT_FOUND', 'Failed issue not found');
+    }
+
+    const failedIssue = failedIssueResult.value;
+    if (failedIssue.userId !== user.userId) {
+      reply.status(404);
+      return await reply.fail('NOT_FOUND', 'Failed issue not found');
+    }
+
+    // Get API key for retrying the Linear creation
+    const apiKeyResult = await connectionRepository.getApiKey(user.userId);
+    if (!apiKeyResult.ok || apiKeyResult.value === null) {
+      reply.status(403);
+      return await handleLinearError(
+        { code: 'NOT_CONNECTED', message: 'Linear not connected' },
+        reply
+      );
+    }
+
+    // Retry Linear creation
+    const createResult = await linearApiClient.createIssue(apiKeyResult.value, {
+      title: failedIssue.extractedTitle ?? 'Untitled Issue',
+      description: failedIssue.reasoning ?? null,
+      priority: failedIssue.extractedPriority ?? 3,
+      teamId: 'TODO', // This should come from connection, but using default for now
+    });
+
+    if (!createResult.ok) {
+      // Update error in Firestore
+      await failedIssueRepository.update(id, {
+        error: createResult.error.message,
+        lastRetryAt: new Date().toISOString(),
+      });
+      return await reply.status(422).send({
+        success: false,
+        error: {
+          code: 'UNPROCESSABLE_ENTITY',
+          message: createResult.error.message,
+        },
+      });
+    }
+
+    // Success - delete the failed issue
+    await failedIssueRepository.delete(id);
+
+    return await reply.ok({ issue: createResult.value });
+  });
+
   done();
 };

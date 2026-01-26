@@ -270,6 +270,8 @@ export class FakeFailedIssueRepository implements FailedIssueRepository {
   private counter = 1;
   private shouldFailListByUser = false;
   private failError: LinearError = { code: 'INTERNAL_ERROR', message: 'Database error' };
+  private shouldFailGetById = false;
+  private shouldFailUpdate = false;
 
   async create(input: {
     userId: string;
@@ -301,9 +303,44 @@ export class FakeFailedIssueRepository implements FailedIssueRepository {
     return ok(userIssues);
   }
 
+  async getById(id: string): Promise<Result<FailedLinearIssue, LinearError>> {
+    if (this.shouldFailGetById) {
+      return err({ code: 'INTERNAL_ERROR', message: 'Failed issue not found' });
+    }
+    const issue = this.failedIssues.find((fi) => fi.id === id);
+    if (!issue) {
+      return err({ code: 'INTERNAL_ERROR', message: 'Failed issue not found' });
+    }
+    return ok(issue);
+  }
+
+  async update(
+    id: string,
+    input: { error: string; lastRetryAt: string }
+  ): Promise<Result<void, LinearError>> {
+    if (this.shouldFailUpdate) {
+      return err({ code: 'INTERNAL_ERROR', message: 'Update failed' });
+    }
+    const issue = this.failedIssues.find((fi) => fi.id === id);
+    if (!issue) {
+      return err({ code: 'INTERNAL_ERROR', message: 'Failed issue not found' });
+    }
+    issue.error = input.error;
+    issue.lastRetryAt = input.lastRetryAt;
+    return ok(undefined);
+  }
+
   setListByUserFailure(fail: boolean, error?: LinearError): void {
     this.shouldFailListByUser = fail;
     if (error) this.failError = error;
+  }
+
+  setGetByIdFailure(fail: boolean): void {
+    this.shouldFailGetById = fail;
+  }
+
+  setUpdateFailure(fail: boolean): void {
+    this.shouldFailUpdate = fail;
   }
 
   async delete(id: string): Promise<Result<void, LinearError>> {
@@ -315,6 +352,8 @@ export class FakeFailedIssueRepository implements FailedIssueRepository {
     this.failedIssues = [];
     this.counter = 1;
     this.shouldFailListByUser = false;
+    this.shouldFailGetById = false;
+    this.shouldFailUpdate = false;
   }
 
   get count(): number {
