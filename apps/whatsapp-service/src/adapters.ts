@@ -22,6 +22,7 @@ import type {
 import {
   countRecentVerificationsByPhone,
   createVerification,
+  createVerificationWithChecks,
   deleteMessage,
   disconnectUserMapping,
   findById,
@@ -202,5 +203,23 @@ export class PhoneVerificationRepositoryAdapter implements PhoneVerificationRepo
     windowStartTime: string
   ): Promise<Result<number, WhatsAppError>> {
     return await countRecentVerificationsByPhone(phoneNumber, windowStartTime);
+  }
+
+  async createWithChecks(
+    params: {
+      userId: string;
+      phoneNumber: string;
+      code: string;
+      expiresAt: number;
+      cooldownSeconds: number;
+      maxRequestsPerHour: number;
+      windowStartTime: string;
+    }
+  ): Promise<Result<{
+    verification: PhoneVerification;
+    cooldownUntil: number;
+    existingPendingId?: string;
+  }, WhatsAppError>> {
+    return await createVerificationWithChecks(params);
   }
 }

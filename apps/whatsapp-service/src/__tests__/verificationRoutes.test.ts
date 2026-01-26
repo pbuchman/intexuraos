@@ -6,7 +6,7 @@
  */
 import { createToken, describe, expect, it, setupTestContext, beforeEach } from './testUtils.js';
 import { FakeMessageSender } from './fakes.js';
-import { setServices, getServices, resetServices } from '../services.js';
+import { setServices, getServices } from '../services.js';
 
 describe('WhatsApp Verification Routes', () => {
   const ctx = setupTestContext();

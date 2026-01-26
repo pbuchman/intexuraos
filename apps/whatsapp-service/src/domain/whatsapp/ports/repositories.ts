@@ -212,4 +212,35 @@ export interface PhoneVerificationRepository {
     phoneNumber: string,
     windowStartTime: string
   ): Promise<Result<number, WhatsAppError>>;
+
+  /**
+   * Atomically create a verification record after checking all constraints.
+   * Uses a transaction to prevent race conditions with concurrent requests.
+   *
+   * Checks performed atomically:
+   * 1. Phone not already verified for user
+   * 2. No pending verification within cooldown window
+   * 3. Rate limit not exceeded
+   *
+   * Returns:
+   * - ok with verification and shouldSendSms=true on success
+   * - err with ALREADY_VERIFIED if phone already verified
+   * - err with COOLDOWN_ACTIVE if pending verification exists within cooldown
+   * - err with RATE_LIMIT_EXCEEDED if max requests per hour exceeded
+   */
+  createWithChecks(
+    params: {
+      userId: string;
+      phoneNumber: string;
+      code: string;
+      expiresAt: number;
+      cooldownSeconds: number;
+      maxRequestsPerHour: number;
+      windowStartTime: string;
+    }
+  ): Promise<Result<{
+    verification: PhoneVerification;
+    cooldownUntil: number;
+    existingPendingId?: string;
+  }, WhatsAppError>>;
 }

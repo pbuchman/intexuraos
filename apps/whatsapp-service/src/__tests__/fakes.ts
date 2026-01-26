@@ -1469,6 +1469,104 @@ export class FakePhoneVerificationRepository implements PhoneVerificationReposit
     return ok(count);
   }
 
+  async createWithChecks(
+    params: {
+      userId: string;
+      phoneNumber: string;
+      code: string;
+      expiresAt: number;
+      cooldownSeconds: number;
+      maxRequestsPerHour: number;
+      windowStartTime: string;
+    }
+  ): Promise<Result<{
+    verification: PhoneVerification;
+    cooldownUntil: number;
+    existingPendingId?: string;
+  }, WhatsAppError>> {
+    if (this.shouldFail || this.shouldFailCreate) {
+      return err(this.failureError);
+    }
+
+    const now = new Date();
+    const nowSeconds = Math.floor(now.getTime() / 1000);
+
+    // Check 1: Phone already verified
+    for (const v of this.verifications.values()) {
+      if (
+        v.userId === params.userId &&
+        v.phoneNumber === params.phoneNumber &&
+        v.status === 'verified'
+      ) {
+        return err({
+          code: 'ALREADY_VERIFIED',
+          message: 'Phone number already verified',
+        });
+      }
+    }
+
+    // Check 2: Pending verification within cooldown
+    if (this.shouldFailFindPending) {
+      return err({ code: 'PERSISTENCE_ERROR', message: 'Failed to find pending verification' });
+    }
+    for (const v of this.verifications.values()) {
+      if (
+        v.userId === params.userId &&
+        v.phoneNumber === params.phoneNumber &&
+        v.status === 'pending' &&
+        v.expiresAt > nowSeconds
+      ) {
+        const createdAtTime = new Date(v.createdAt).getTime();
+        const cooldownEnd = createdAtTime + params.cooldownSeconds * 1000;
+        if (Date.now() < cooldownEnd) {
+          return err({
+            code: 'COOLDOWN_ACTIVE',
+            message: 'Please wait before requesting another code',
+            details: {
+              cooldownUntil: Math.floor(cooldownEnd / 1000),
+              existingPendingId: v.id,
+            },
+          });
+        }
+      }
+    }
+
+    // Check 3: Rate limit
+    if (this.shouldFailCountRecent) {
+      return err({ code: 'PERSISTENCE_ERROR', message: 'Failed to count recent verifications' });
+    }
+    let recentCount = 0;
+    for (const v of this.verifications.values()) {
+      if (v.phoneNumber === params.phoneNumber && v.createdAt >= params.windowStartTime) {
+        recentCount++;
+      }
+    }
+    if (recentCount >= params.maxRequestsPerHour) {
+      return err({
+        code: 'RATE_LIMIT_EXCEEDED',
+        message: 'Too many verification requests. Try again later.',
+      });
+    }
+
+    // Create verification
+    this.idCounter++;
+    const id = `fake-verification-${String(this.idCounter)}`;
+    const verification: PhoneVerification = {
+      id,
+      userId: params.userId,
+      phoneNumber: params.phoneNumber,
+      code: params.code,
+      attempts: 0,
+      status: 'pending',
+      createdAt: now.toISOString(),
+      expiresAt: params.expiresAt,
+    };
+    this.verifications.set(id, verification);
+
+    const cooldownUntil = nowSeconds + params.cooldownSeconds;
+    return ok({ verification, cooldownUntil });
+  }
+
   setVerification(verification: PhoneVerification): void {
     this.verifications.set(verification.id, verification);
   }

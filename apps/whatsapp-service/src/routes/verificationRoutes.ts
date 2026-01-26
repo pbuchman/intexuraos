@@ -138,6 +138,7 @@ export const verificationRoutes: FastifyPluginCallback = (fastify, _opts, done) 
       }
 
       const parseResult = sendRequestSchema.safeParse(request.body);
+      /* v8 ignore start - defense-in-depth: Fastify schema validates first */
       if (!parseResult.success) {
         const errors = parseResult.error.errors.map((e) => ({
           path: e.path.join('.'),
@@ -145,6 +146,7 @@ export const verificationRoutes: FastifyPluginCallback = (fastify, _opts, done) 
         }));
         return await reply.fail('INVALID_REQUEST', 'Validation failed', undefined, { errors });
       }
+      /* v8 ignore stop */
 
       const { phoneNumber } = parseResult.data;
       const validation = validatePhoneNumber(phoneNumber);
@@ -157,77 +159,50 @@ export const verificationRoutes: FastifyPluginCallback = (fastify, _opts, done) 
       const normalizedPhone = validation.normalized;
       const { phoneVerificationRepository, messageSender } = getServices();
 
-      // Check if already verified
-      const verifiedResult = await phoneVerificationRepository.isPhoneVerified(
-        user.userId,
-        normalizedPhone
-      );
-      if (!verifiedResult.ok) {
-        return await reply.fail('DOWNSTREAM_ERROR', verifiedResult.error.message);
-      }
-      if (verifiedResult.value) {
-        return await reply.fail('CONFLICT', 'Phone number already verified', undefined, {
-          phoneNumber: normalizedPhone,
-          alreadyVerified: true,
-        });
-      }
-
-      // Check for existing pending verification (cooldown)
-      const pendingResult = await phoneVerificationRepository.findPendingByUserAndPhone(
-        user.userId,
-        normalizedPhone
-      );
-      if (!pendingResult.ok) {
-        return await reply.fail('DOWNSTREAM_ERROR', pendingResult.error.message);
-      }
-      if (pendingResult.value !== null) {
-        const pending = pendingResult.value;
-        const createdAtTime = new Date(pending.createdAt).getTime();
-        const cooldownEnd = createdAtTime + RESEND_COOLDOWN_SECONDS * 1000;
-        if (Date.now() < cooldownEnd) {
-          return await reply.fail('RATE_LIMITED', 'Please wait before requesting another code', undefined, {
-            cooldownUntil: Math.floor(cooldownEnd / 1000),
-            existingVerificationId: pending.id,
-          });
-        }
-      }
-
-      // Check rate limit (max requests per hour)
-      const windowStartTime = new Date(Date.now() - RATE_LIMIT_WINDOW_MS).toISOString();
-      const countResult = await phoneVerificationRepository.countRecentByPhone(
-        normalizedPhone,
-        windowStartTime
-      );
-      if (!countResult.ok) {
-        return await reply.fail('DOWNSTREAM_ERROR', countResult.error.message);
-      }
-      if (countResult.value >= MAX_REQUESTS_PER_HOUR) {
-        return await reply.fail('RATE_LIMITED', 'Too many verification requests. Try again later.', undefined, {
-          maxRequests: MAX_REQUESTS_PER_HOUR,
-          windowHours: 1,
-        });
-      }
-
-      // Generate code and create verification record
+      // Generate code and calculate expiry
       const code = generateVerificationCode();
       const now = new Date();
       const expiresAt = Math.floor(now.getTime() / 1000) + VERIFICATION_TTL_SECONDS;
+      const windowStartTime = new Date(Date.now() - RATE_LIMIT_WINDOW_MS).toISOString();
 
-      const createResult = await phoneVerificationRepository.create({
+      // Atomically check all constraints and create verification record
+      const createResult = await phoneVerificationRepository.createWithChecks({
         userId: user.userId,
         phoneNumber: normalizedPhone,
         code,
-        attempts: 0,
-        status: 'pending',
-        createdAt: now.toISOString(),
         expiresAt,
+        cooldownSeconds: RESEND_COOLDOWN_SECONDS,
+        maxRequestsPerHour: MAX_REQUESTS_PER_HOUR,
+        windowStartTime,
       });
 
       if (!createResult.ok) {
-        return await reply.fail('DOWNSTREAM_ERROR', createResult.error.message);
+        const error = createResult.error;
+        if (error.code === 'ALREADY_VERIFIED') {
+          return await reply.fail('CONFLICT', 'Phone number already verified', undefined, {
+            phoneNumber: normalizedPhone,
+            alreadyVerified: true,
+          });
+        }
+        if (error.code === 'COOLDOWN_ACTIVE') {
+          const details = error.details as { cooldownUntil?: number; existingPendingId?: string } | undefined;
+          return await reply.fail('RATE_LIMITED', 'Please wait before requesting another code', undefined, {
+            cooldownUntil: details?.cooldownUntil,
+            existingVerificationId: details?.existingPendingId,
+          });
+        }
+        if (error.code === 'RATE_LIMIT_EXCEEDED') {
+          return await reply.fail('RATE_LIMITED', 'Too many verification requests. Try again later.', undefined, {
+            maxRequests: MAX_REQUESTS_PER_HOUR,
+            windowHours: 1,
+          });
+        }
+        return await reply.fail('DOWNSTREAM_ERROR', error.message);
       }
 
-      // Send verification code via WhatsApp
+      const { verification, cooldownUntil } = createResult.value;
+
+      // Send verification code via WhatsApp (outside transaction - idempotent)
       const verificationMessage =
         `Your IntexuraOS verification code is: ${code}\n\n` +
         `This code expires in ${String(VERIFICATION_TTL_SECONDS / 60)} minutes.`;
@@ -239,16 +214,14 @@ export const verificationRoutes: FastifyPluginCallback = (fastify, _opts, done) 
 
       if (!sendResult.ok) {
         // Mark verification as expired since we couldn't send the code
-        await phoneVerificationRepository.updateStatus(createResult.value.id, 'expired');
+        await phoneVerificationRepository.updateStatus(verification.id, 'expired');
         return await reply.fail('DOWNSTREAM_ERROR', 'Failed to send verification code', undefined, {
           reason: sendResult.error.message,
         });
       }
 
-      const cooldownUntil = Math.floor(now.getTime() / 1000) + RESEND_COOLDOWN_SECONDS;
-
       return await reply.ok({
-        verificationId: createResult.value.id,
+        verificationId: verification.id,
         expiresAt,
         cooldownUntil,
       });
@@ -362,6 +335,7 @@ export const verificationRoutes: FastifyPluginCallback = (fastify, _opts, done) 
       }
 
       const parseResult = confirmRequestSchema.safeParse(request.body);
+      /* v8 ignore start - defense-in-depth: Fastify schema validates first */
       if (!parseResult.success) {
         const errors = parseResult.error.errors.map((e) => ({
           path: e.path.join('.'),
@@ -369,6 +343,7 @@ export const verificationRoutes: FastifyPluginCallback = (fastify, _opts, done) 
         }));
         return await reply.fail('INVALID_REQUEST', 'Validation failed', undefined, { errors });
       }
+      /* v8 ignore stop */
 
       const { verificationId, code } = parseResult.data;
       const { phoneVerificationRepository } = getServices();
