@@ -240,6 +240,10 @@ export const linearRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
     const issueResult = await failedIssueRepository.getById(id);
     if (!issueResult.ok) {
+      request.log.error(
+        { error: issueResult.error, failedIssueId: id, userId: user.userId },
+        'Failed to retrieve issue for deletion'
+      );
       reply.status(404);
       return await reply.fail('NOT_FOUND', 'Failed issue not found');
     }
@@ -273,6 +277,10 @@ export const linearRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
     const failedIssueResult = await failedIssueRepository.getById(id);
     if (!failedIssueResult.ok) {
+      request.log.error(
+        { error: failedIssueResult.error, failedIssueId: id, userId: user.userId },
+        'Failed to retrieve issue for retry'
+      );
       reply.status(404);
       return await reply.fail('NOT_FOUND', 'Failed issue not found');
     }
@@ -302,11 +310,17 @@ export const linearRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
     });
 
     if (!createResult.ok) {
-      // Update error in Firestore
-      await failedIssueRepository.update(id, {
+      // Update error in Firestore - log if this fails but don't block response
+      const updateResult = await failedIssueRepository.update(id, {
         error: createResult.error.message,
         lastRetryAt: new Date().toISOString(),
       });
+      if (!updateResult.ok) {
+        request.log.error(
+          { error: updateResult.error, failedIssueId: id },
+          'Failed to update retry metadata in Firestore'
+        );
+      }
       return await reply.status(422).send({
         success: false,
         error: {
@@ -317,7 +331,13 @@ export const linearRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
     }
 
     // Success - delete the failed issue
-    await failedIssueRepository.delete(id);
+    const deleteResult = await failedIssueRepository.delete(id);
+    if (!deleteResult.ok) {
+      request.log.error(
+        { error: deleteResult.error, failedIssueId: id, createdLinearIssueId: createResult.value.id },
+        'Failed to delete resolved failed issue from Firestore'
+      );
+    }
 
     return await reply.ok({ issue: createResult.value });
   });

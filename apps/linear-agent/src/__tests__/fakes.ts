@@ -272,6 +272,7 @@ export class FakeFailedIssueRepository implements FailedIssueRepository {
   private failError: LinearError = { code: 'INTERNAL_ERROR', message: 'Database error' };
   private shouldFailGetById = false;
   private shouldFailUpdate = false;
+  private shouldFailDelete = false;
 
   async create(input: {
     userId: string;
@@ -343,7 +344,14 @@ export class FakeFailedIssueRepository implements FailedIssueRepository {
     this.shouldFailUpdate = fail;
   }
 
+  setDeleteFailure(fail: boolean): void {
+    this.shouldFailDelete = fail;
+  }
+
   async delete(id: string): Promise<Result<void, LinearError>> {
+    if (this.shouldFailDelete) {
+      return err({ code: 'INTERNAL_ERROR', message: 'Delete failed' });
+    }
     this.failedIssues = this.failedIssues.filter((fi) => fi.id !== id);
     return ok(undefined);
   }
@@ -354,6 +362,7 @@ export class FakeFailedIssueRepository implements FailedIssueRepository {
     this.shouldFailListByUser = false;
     this.shouldFailGetById = false;
     this.shouldFailUpdate = false;
+    this.shouldFailDelete = false;
   }
 
   get count(): number {
