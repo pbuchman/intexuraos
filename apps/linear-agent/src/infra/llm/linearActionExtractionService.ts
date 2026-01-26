@@ -10,7 +10,6 @@ import {
   LinearIssueDataSchema,
 } from '@intexuraos/llm-prompts';
 import { formatZodErrors } from '@intexuraos/llm-utils';
-import type { LlmGenerateClient } from '@intexuraos/llm-factory';
 import type { UserServiceClient } from '@intexuraos/internal-clients';
 import type { LinearError } from '../../domain/index.js';
 import type { ExtractedIssueData } from '../../domain/index.js';
@@ -49,7 +48,7 @@ export function createLinearActionExtractionService(
         return err({ code: 'INTERNAL_ERROR', message: error.message });
       }
 
-      const llmClient: LlmGenerateClient = clientResult.value;
+      const llmClient = clientResult.value;
 
       const prompt = linearActionExtractionPrompt.build(
         { text },

@@ -10,10 +10,6 @@
       "owner": "notion-service",
       "description": "Notion OAuth connection tokens and state"
     },
-    "promptvault_settings": {
-      "owner": "promptvault-service",
-      "description": "User's Notion Prompt Vault page ID configuration"
-    },
     "whatsapp_messages": {
       "owner": "whatsapp-service",
       "description": "WhatsApp messages with transcription and link preview metadata"

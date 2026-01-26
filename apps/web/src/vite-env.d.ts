@@ -6,7 +6,6 @@ interface ImportMetaEnv {
   readonly INTEXURAOS_AUTH0_SPA_CLIENT_ID: string;
   readonly INTEXURAOS_AUTH_AUDIENCE: string;
   readonly INTEXURAOS_USER_SERVICE_URL: string;
-  readonly INTEXURAOS_PROMPTVAULT_SERVICE_URL: string;
   readonly INTEXURAOS_WHATSAPP_SERVICE_URL: string;
   readonly INTEXURAOS_BUILD_VERSION: string;
 }

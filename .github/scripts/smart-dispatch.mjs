@@ -17,7 +17,6 @@ import { join } from 'node:path';
 
 const SERVICES = [
   'user-service',
-  'promptvault-service',
   'notion-service',
   'whatsapp-service',
   'api-docs-hub',

@@ -214,7 +214,6 @@ jobs:
               let serviceName = 'Unknown Service';
               if (file.path.includes('user-service')) serviceName = 'User Service';
               else if (file.path.includes('whatsapp-service')) serviceName = 'WhatsApp Service';
-              else if (file.path.includes('promptvault-service')) serviceName = 'PromptVault Service';
               else if (file.path.includes('notion-service')) serviceName = 'Notion Service';
               else if (file.path.includes('mobile-notifications-service')) serviceName = 'Mobile Notifications Service';
               else if (file.path.includes('packages/common')) serviceName = 'Common Package';

@@ -122,13 +122,6 @@ locals {
       min_scale = 0
       max_scale = 1
     }
-    promptvault_service = {
-      name      = "intexuraos-promptvault-service"
-      app_path  = "apps/promptvault-service"
-      port      = 8080
-      min_scale = 0
-      max_scale = 1
-    }
     notion_service = {
       name      = "intexuraos-notion-service"
       app_path  = "apps/notion-service"
@@ -265,7 +258,6 @@ locals {
     INTEXURAOS_ENVIRONMENT                      = var.environment
     INTEXURAOS_GCP_PROJECT_ID                   = var.project_id
     INTEXURAOS_USER_SERVICE_URL                 = "https://${local.services.user_service.name}-${local.cloud_run_url_suffix}"
-    INTEXURAOS_PROMPTVAULT_SERVICE_URL          = "https://${local.services.promptvault_service.name}-${local.cloud_run_url_suffix}"
     INTEXURAOS_NOTION_SERVICE_URL               = "https://${local.services.notion_service.name}-${local.cloud_run_url_suffix}"
     INTEXURAOS_WHATSAPP_SERVICE_URL             = "https://${local.services.whatsapp_service.name}-${local.cloud_run_url_suffix}"
     INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_URL = "https://${local.services.mobile_notifications_service.name}-${local.cloud_run_url_suffix}"
@@ -837,32 +829,6 @@ module "user_service" {
   ]
 }
 
-module "promptvault_service" {
-  source = "../../modules/cloud-run-service"
-
-  project_id      = var.project_id
-  region          = var.region
-  environment     = var.environment
-  service_name    = local.services.promptvault_service.name
-  service_account = module.iam.service_accounts["promptvault_service"]
-  port            = local.services.promptvault_service.port
-  min_scale       = local.services.promptvault_service.min_scale
-  max_scale       = local.services.promptvault_service.max_scale
-  labels          = local.common_labels
-
-  image = "${var.region}-docker.pkg.dev/${var.project_id}/${module.artifact_registry.repository_id}/promptvault-service:latest"
-
-  secrets = local.common_service_secrets
-
-  env_vars = local.common_service_env_vars
-
-  depends_on = [
-    module.artifact_registry,
-    module.iam,
-    module.secret_manager,
-  ]
-}
-
 # Notion Service - Notion integration management and webhooks
 module "notion_service" {
   source = "../../modules/cloud-run-service"
@@ -983,7 +949,6 @@ module "api_docs_hub" {
   # OpenAPI URLs use module outputs (api_docs_hub depends on all services anyway)
   env_vars = merge(local.common_service_env_vars, {
     INTEXURAOS_USER_SERVICE_OPENAPI_URL                 = "${module.user_service.service_url}/openapi.json"
-    INTEXURAOS_PROMPTVAULT_SERVICE_OPENAPI_URL          = "${module.promptvault_service.service_url}/openapi.json"
     INTEXURAOS_NOTION_SERVICE_OPENAPI_URL               = "${module.notion_service.service_url}/openapi.json"
     INTEXURAOS_WHATSAPP_SERVICE_OPENAPI_URL             = "${module.whatsapp_service.service_url}/openapi.json"
     INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_OPENAPI_URL = "${module.mobile_notifications_service.service_url}/openapi.json"
@@ -1004,7 +969,6 @@ module "api_docs_hub" {
     module.iam,
     module.secret_manager,
     module.user_service,
-    module.promptvault_service,
     module.notion_service,
     module.whatsapp_service,
     module.mobile_notifications_service,
@@ -1807,11 +1771,6 @@ output "artifact_registry_url" {
 output "user_service_url" {
   description = "User Service URL"
   value       = module.user_service.service_url
-}
-
-output "promptvault_service_url" {
-  description = "PromptVault Service URL"
-  value       = module.promptvault_service.service_url
 }
 
 output "notion_service_url" {

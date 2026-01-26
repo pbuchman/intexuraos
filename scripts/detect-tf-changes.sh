@@ -13,7 +13,6 @@ HEAD_SHA="${2:-HEAD}"
 # All services in the monorepo
 ALL_SERVICES=(
   "user-service"
-  "promptvault-service"
   "notion-service"
   "whatsapp-service"
   "mobile-notifications-service"

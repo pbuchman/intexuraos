@@ -6,7 +6,6 @@ const services = [
   'research-agent',
   'mobile-notifications-service',
   'notion-service',
-  'promptvault-service',
   'user-service',
   'whatsapp-service',
 ];
