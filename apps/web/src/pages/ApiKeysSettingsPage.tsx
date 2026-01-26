@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { MoreVertical, FlaskConical, Pencil, Trash2 } from 'lucide-react';
 import { Button, Card, Input, Layout } from '@/components';
 import { useLlmKeys } from '@/hooks';
 import type { LlmProvider, LlmTestResult } from '@/services/llmKeysApi.types';
@@ -8,12 +9,10 @@ import type { LlmProvider, LlmTestResult } from '@/services/llmKeysApi.types';
  */
 function formatDate(isoString: string): string {
   const date = new Date(isoString);
-  return date.toLocaleString(undefined, {
+  return date.toLocaleDateString(undefined, {
     year: 'numeric',
     month: 'short',
     day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
   });
 }
 
@@ -189,56 +188,87 @@ function ApiKeyRow({
     }
   };
 
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent): void {
+      if (menuRef.current !== null && !menuRef.current.contains(event.target as Node)) {
+        setIsMenuOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return (): void => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
+
   return (
     <Card>
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0 flex-1">
           <span className="font-medium text-slate-900">{provider.name}</span>
           {isConfigured ? (
-            <code className="rounded bg-slate-100 px-2 py-0.5 font-mono text-xs text-slate-600">
+            <code className="mt-1 block truncate rounded bg-slate-100 px-2 py-0.5 font-mono text-xs text-slate-600">
               {currentValue}
             </code>
           ) : (
-            <span className="text-sm text-slate-400">Not configured</span>
+            <span className="mt-1 block text-sm text-slate-400">Not configured</span>
           )}
         </div>
 
         {!isEditing && !showDeleteConfirm ? (
-          <div className="flex gap-2">
+          <div className="relative flex-shrink-0" ref={menuRef}>
             {isConfigured ? (
               <>
-                <Button
+                <button
                   type="button"
-                  variant="secondary"
-                  size="sm"
                   onClick={(): void => {
-                    void handleTest();
+                    setIsMenuOpen(!isMenuOpen);
                   }}
-                  disabled={isTesting}
-                  isLoading={isTesting}
+                  className="rounded p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
+                  title="Actions"
                 >
-                  Test
-                </Button>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  onClick={(): void => {
-                    setIsEditing(true);
-                  }}
-                >
-                  Update
-                </Button>
-                <Button
-                  type="button"
-                  variant="danger"
-                  size="sm"
-                  onClick={(): void => {
-                    setShowDeleteConfirm(true);
-                  }}
-                >
-                  Delete
-                </Button>
+                  <MoreVertical className="h-5 w-5" />
+                </button>
+                {isMenuOpen && (
+                  <div className="absolute right-0 top-full z-10 mt-1 w-36 rounded-lg border border-slate-200 bg-white py-1 shadow-lg">
+                    <button
+                      type="button"
+                      onClick={(): void => {
+                        setIsMenuOpen(false);
+                        void handleTest();
+                      }}
+                      disabled={isTesting}
+                      className="flex w-full items-center gap-2 px-3 py-2 text-sm text-slate-700 transition-colors hover:bg-slate-100 disabled:opacity-50"
+                    >
+                      <FlaskConical className="h-4 w-4" />
+                      {isTesting ? 'Testing...' : 'Test'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(): void => {
+                        setIsMenuOpen(false);
+                        setIsEditing(true);
+                      }}
+                      className="flex w-full items-center gap-2 px-3 py-2 text-sm text-slate-700 transition-colors hover:bg-slate-100"
+                    >
+                      <Pencil className="h-4 w-4" />
+                      Update
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(): void => {
+                        setIsMenuOpen(false);
+                        setShowDeleteConfirm(true);
+                      }}
+                      className="flex w-full items-center gap-2 px-3 py-2 text-sm text-red-600 transition-colors hover:bg-red-50"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                      Delete
+                    </button>
+                  </div>
+                )}
               </>
             ) : (
               <Button

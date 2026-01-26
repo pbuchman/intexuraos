@@ -66,26 +66,27 @@ export function Header(): React.JSX.Element {
             e.currentTarget.style.display = 'none';
           }}
         />
-        <h1 className="text-xl font-bold">
-          <span className="text-cyan-500">Intexura</span>
-          <span className="text-slate-900">OS</span>
-          <span className="ml-2 text-xs font-normal text-slate-400">
+        <div className="flex flex-col md:flex-row md:items-baseline md:gap-2">
+          <h1 className="text-xl font-bold">
+            <span className="text-cyan-500">Intexura</span>
+            <span className="text-slate-900">OS</span>
+          </h1>
+          <span className="text-[10px] font-normal text-slate-400 md:text-xs">
             ver. {import.meta.env.INTEXURAOS_BUILD_VERSION}
           </span>
-        </h1>
+        </div>
       </div>
 
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-2 md:gap-4">
         {pendingCount > 0 && (
           <Link
             to="/settings/share-history"
-            className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors hover:bg-slate-100"
-            title="Pending shares - click to view history"
+            className="flex items-center justify-center rounded-lg p-2 text-sm transition-colors hover:bg-slate-100"
+            title={`${String(pendingCount)} pending - click to view history`}
           >
             <RefreshCw
-              className={`h-4 w-4 text-amber-500 ${isSyncing ? 'animate-spin' : ''}`}
+              className={`h-4 w-4 text-amber-500 ${isSyncing ? 'animate-spin' : 'animate-pulse'}`}
             />
-            <span className="text-amber-600">{pendingCount} pending</span>
           </Link>
         )}
 

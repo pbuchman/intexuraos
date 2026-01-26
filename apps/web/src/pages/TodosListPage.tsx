@@ -9,13 +9,17 @@ import {
   CheckSquare,
   Circle,
   Edit2,
+  Link2,
   ListTodo,
   Plus,
+  RotateCcw,
   Square,
   Tag,
   Trash2,
   X,
 } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { Button, Card, Input, Layout, RefreshIndicator } from '@/components';
 import { useTodos } from '@/hooks';
 import type {
@@ -31,12 +35,10 @@ import type {
 
 function formatDate(isoString: string): string {
   const date = new Date(isoString);
-  return date.toLocaleString(undefined, {
+  return date.toLocaleDateString(undefined, {
     year: 'numeric',
     month: 'short',
     day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
   });
 }
 
@@ -559,16 +561,25 @@ function TodoModal({
                 </div>
               ) : null}
               {currentTodo.description !== null && currentTodo.description !== '' ? (
-                <div className="whitespace-pre-wrap break-words text-slate-700">
-                  {currentTodo.description}
+                <div className="prose prose-slate prose-sm max-w-none">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                    {currentTodo.description}
+                  </ReactMarkdown>
                 </div>
               ) : null}
-              <div className="text-xs text-slate-400">
-                <span>Created: {formatDate(currentTodo.createdAt)}</span>
-                <span className="mx-2">·</span>
-                <span>Updated: {formatDate(currentTodo.updatedAt)}</span>
-                <span className="mx-2">·</span>
-                <span>Source: {currentTodo.source}</span>
+              <div className="flex flex-wrap items-center gap-3 text-xs text-slate-400">
+                <span className="flex items-center gap-1" title="Created">
+                  <Calendar className="h-3 w-3" />
+                  {formatDate(currentTodo.createdAt)}
+                </span>
+                <span className="flex items-center gap-1" title="Updated">
+                  <RotateCcw className="h-3 w-3" />
+                  {formatDate(currentTodo.updatedAt)}
+                </span>
+                <span className="flex items-center gap-1" title="Source">
+                  <Link2 className="h-3 w-3" />
+                  {currentTodo.source}
+                </span>
               </div>
             </div>
           )}
@@ -1060,8 +1071,8 @@ export function TodosListPage(): React.JSX.Element {
             setShowCreateModal(true);
           }}
         >
-          <Plus className="mr-2 h-4 w-4" />
-          New Todo
+          <Plus className="h-4 w-4 sm:mr-2" />
+          <span className="hidden sm:inline">New Todo</span>
         </Button>
       </div>
 
@@ -1086,8 +1097,8 @@ export function TodosListPage(): React.JSX.Element {
                 setShowCreateModal(true);
               }}
             >
-              <Plus className="mr-2 h-4 w-4" />
-              New Todo
+              <Plus className="h-4 w-4 sm:mr-2" />
+              <span className="hidden sm:inline">New Todo</span>
             </Button>
           </div>
         </Card>

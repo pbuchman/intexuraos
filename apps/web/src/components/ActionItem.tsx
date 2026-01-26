@@ -8,6 +8,7 @@ import {
   ChevronRight,
   Clock,
   Cog,
+  ExternalLink,
   FileText,
   HelpCircle,
   Link,
@@ -200,6 +201,10 @@ export function ActionItem({
   const persistedErrorCode =
     action.status === 'failed' && typeof action.payload['errorCode'] === 'string'
       ? action.payload['errorCode']
+      : null;
+  const persistedResourceUrl =
+    action.status === 'completed' && typeof action.payload['resource_url'] === 'string'
+      ? normalizeResourceUrl(action.payload['resource_url'])
       : null;
 
   const displayError = executionState?.type === 'error' ? executionState : null;
@@ -401,6 +406,26 @@ export function ActionItem({
                 </RouterLink>
               )}
             </div>
+          </div>
+        </div>
+      )}
+
+      {persistedResourceUrl !== null && executionState === null && (
+        <div
+          className="mt-3 rounded-md border border-green-200 bg-green-50 p-3"
+          onClick={(e): void => {
+            e.stopPropagation();
+          }}
+        >
+          <div className="flex items-center gap-2">
+            <CheckCircle className="h-4 w-4 shrink-0 text-green-600" />
+            <RouterLink
+              to={persistedResourceUrl}
+              className="inline-flex items-center gap-1 text-sm font-medium text-green-700 hover:text-green-800"
+            >
+              View {getTypeLabel(action.type)}
+              <ExternalLink className="h-3 w-3" />
+            </RouterLink>
           </div>
         </div>
       )}

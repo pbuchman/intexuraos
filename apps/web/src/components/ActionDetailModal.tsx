@@ -212,6 +212,11 @@ export function ActionDetailModal({
     return url;
   };
 
+  const persistedResourceUrl =
+    action.status === 'completed' && typeof action.payload['resource_url'] === 'string'
+      ? normalizeResourceUrl(action.payload['resource_url'])
+      : null;
+
   const handleResult = (result: ActionExecutionResult, button: ResolvedActionButton): void => {
     // Check for duplicate bookmark conflict
     if (result.existingBookmarkId !== undefined) {
@@ -415,22 +420,33 @@ export function ActionDetailModal({
 
           {/* Status badge */}
           <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-            <span className="text-sm font-medium text-slate-600">
-              Status:{' '}
-              <span
-                className={
-                  action.status === 'completed'
-                    ? 'text-green-600'
-                    : action.status === 'processing'
-                      ? 'text-blue-600'
-                      : action.status === 'failed' || action.status === 'rejected'
-                        ? 'text-red-600'
-                        : 'text-slate-600'
-                }
-              >
-                {action.status.charAt(0).toUpperCase() + action.status.slice(1)}
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-sm font-medium text-slate-600">
+                Status:{' '}
+                <span
+                  className={
+                    action.status === 'completed'
+                      ? 'text-green-600'
+                      : action.status === 'processing'
+                        ? 'text-blue-600'
+                        : action.status === 'failed' || action.status === 'rejected'
+                          ? 'text-red-600'
+                          : 'text-slate-600'
+                  }
+                >
+                  {action.status.charAt(0).toUpperCase() + action.status.slice(1)}
+                </span>
               </span>
-            </span>
+              {persistedResourceUrl !== null && executionResult === null && (
+                <RouterLink
+                  to={persistedResourceUrl}
+                  className="inline-flex items-center gap-1 rounded-lg bg-green-100 px-3 py-1.5 text-sm font-medium text-green-700 transition-colors hover:bg-green-200"
+                >
+                  <ExternalLink className="h-4 w-4" />
+                  View {action.type.charAt(0).toUpperCase() + action.type.slice(1)}
+                </RouterLink>
+              )}
+            </div>
           </div>
 
           {/* Persisted failure reason */}
