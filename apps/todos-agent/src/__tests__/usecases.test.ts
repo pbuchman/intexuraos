@@ -1565,6 +1565,76 @@ describe('updateTodoItem - additional coverage', () => {
       expect(result.error.code).toBe('STORAGE_ERROR');
     }
   });
+
+  it('preserves cancelled status when updating item on cancelled todo', async () => {
+    const createResult = await todoRepository.create({
+      userId: 'user-1',
+      title: 'Test',
+      tags: [],
+      source: 'web',
+      sourceId: 'src-1',
+      items: [{ title: 'Item 1' }, { title: 'Item 2' }],
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) return;
+
+    const todo = createResult.value;
+    todo.status = 'cancelled';
+    await todoRepository.update(todo.id, todo);
+
+    const itemId = createResult.value.items[0]?.id;
+    expect(itemId).toBeDefined();
+    if (itemId === undefined) return;
+
+    const result = await updateTodoItem(
+      { todoRepository, logger: mockLogger },
+      createResult.value.id,
+      itemId,
+      'user-1',
+      { status: 'completed' }
+    );
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.status).toBe('cancelled');
+      expect(result.value.items[0]?.status).toBe('completed');
+    }
+  });
+
+  it('preserves processing status when updating item on processing todo', async () => {
+    const createResult = await todoRepository.create({
+      userId: 'user-1',
+      title: 'Test',
+      tags: [],
+      source: 'web',
+      sourceId: 'src-1',
+      items: [{ title: 'Item 1' }],
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) return;
+
+    const todo = createResult.value;
+    todo.status = 'processing';
+    await todoRepository.update(todo.id, todo);
+
+    const itemId = createResult.value.items[0]?.id;
+    expect(itemId).toBeDefined();
+    if (itemId === undefined) return;
+
+    const result = await updateTodoItem(
+      { todoRepository, logger: mockLogger },
+      createResult.value.id,
+      itemId,
+      'user-1',
+      { title: 'Updated item title' }
+    );
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.status).toBe('processing');
+      expect(result.value.items[0]?.title).toBe('Updated item title');
+    }
+  });
 });
 
 describe('deleteTodoItem - additional coverage', () => {
