@@ -430,6 +430,14 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
 
       request.log.info({ codeTaskId: result.value.codeTaskId }, 'Code action processed successfully');
 
+      // Mirror dispatched status to action (non-fatal)
+      await services.statusMirrorService.mirrorStatus({
+        actionId: body.actionId,
+        taskStatus: 'dispatched',
+        resourceUrl: result.value.resourceUrl,
+        traceId,
+      });
+
       return await reply.send({
         status: 'submitted',
         codeTaskId: result.value.codeTaskId,
@@ -1501,7 +1509,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         includeParams: true,
       });
 
-      const { codeTaskRepo, taskDispatcher } = getServices();
+      const { codeTaskRepo, taskDispatcher, statusMirrorService } = getServices();
       const { taskId } = request.body;
       const userId = request.user?.userId ?? 'unknown-user';
 
@@ -1548,6 +1556,13 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         // Log but don't fail - task is already marked cancelled in Firestore
         request.log.warn({ taskId, error }, 'Failed to notify worker of cancellation');
       }
+
+      // Step 6: Mirror cancelled status to action (non-fatal)
+      await statusMirrorService.mirrorStatus({
+        actionId: task.actionId,
+        taskStatus: 'cancelled',
+        traceId: extractOrGenerateTraceId(request.headers),
+      });
 
       request.log.info({ taskId }, 'Code task cancelled successfully');
 

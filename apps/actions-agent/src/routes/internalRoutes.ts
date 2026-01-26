@@ -794,5 +794,120 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
     }
   );
 
+  // PATCH /internal/actions/:actionId/status - Update resource status from code-agent
+  fastify.patch<{
+    Params: { actionId: string };
+    Body: {
+      resource_status: 'dispatched' | 'running' | 'completed' | 'failed' | 'cancelled';
+      resource_result?: { prUrl?: string; error?: string };
+    };
+  }>(
+    '/internal/actions/:actionId/status',
+    {
+      schema: {
+        operationId: 'updateActionResourceStatus',
+        summary: 'Update action resource status',
+        description: 'Internal endpoint for code-agent to update action resource status (e.g., code task progress).',
+        tags: ['internal'],
+        params: {
+          type: 'object',
+          properties: {
+            actionId: { type: 'string' },
+          },
+          required: ['actionId'],
+        },
+        body: {
+          type: 'object',
+          properties: {
+            resource_status: {
+              type: 'string',
+              enum: ['dispatched', 'running', 'completed', 'failed', 'cancelled'],
+            },
+            resource_result: {
+              type: 'object',
+              properties: {
+                prUrl: { type: 'string' },
+                error: { type: 'string' },
+              },
+            },
+          },
+          required: ['resource_status'],
+        },
+        response: {
+          200: {
+            description: 'Status updated successfully',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [true] },
+            },
+            required: ['success'],
+          },
+          401: {
+            description: 'Unauthorized',
+            type: 'object',
+            properties: {
+              error: { type: 'string' },
+            },
+            required: ['error'],
+          },
+          404: {
+            description: 'Action not found',
+            type: 'object',
+            properties: {
+              error: { type: 'string' },
+            },
+            required: ['error'],
+          },
+        },
+      },
+    },
+    async (request: FastifyRequest<{ Params: { actionId: string }; Body: { resource_status: 'dispatched' | 'running' | 'completed' | 'failed' | 'cancelled'; resource_result?: { prUrl?: string; error?: string } } }>, reply: FastifyReply) => {
+      logIncomingRequest(request, {
+        message: 'Received request to PATCH /internal/actions/:actionId/status',
+        includeParams: true,
+      });
+
+      const authResult = validateInternalAuth(request);
+      if (!authResult.valid) {
+        request.log.warn({ reason: authResult.reason }, 'Internal auth failed for resource status update');
+        reply.status(401);
+        return { error: 'Unauthorized' };
+      }
+
+      const { actionId } = request.params;
+      const body = request.body;
+
+      request.log.info(
+        { actionId, resourceStatus: body.resource_status },
+        'Updating action resource status'
+      );
+
+      const services = getServices();
+      const action = await services.actionRepository.getById(actionId);
+
+      if (action === null) {
+        request.log.warn({ actionId }, 'Action not found for resource status update');
+        reply.status(404);
+        return { error: 'Action not found' };
+      }
+
+      const updatedAction = {
+        ...action,
+        resource_status: body.resource_status,
+        ...(body.resource_result?.prUrl !== undefined && {
+          payload: { ...action.payload, resource_url: body.resource_result.prUrl },
+        }),
+        ...(body.resource_result?.error !== undefined && { resource_error: body.resource_result.error }),
+        updatedAt: new Date().toISOString(),
+      };
+
+      await services.actionRepository.update(updatedAction);
+
+      request.log.info({ actionId, resourceStatus: body.resource_status }, 'Action resource status updated');
+
+      return { success: true };
+    }
+  );
+
   done();
 };

@@ -29,6 +29,8 @@ import type { TaskDispatcherService } from '../../domain/services/taskDispatcher
 import type { LogChunkRepository } from '../../domain/repositories/logChunkRepository.js';
 import type { ActionsAgentClient } from '../../infra/clients/actionsAgentClient.js';
 import type { WhatsAppNotifier } from '../../domain/services/whatsappNotifier.js';
+import { createStatusMirrorService } from '../../infra/services/statusMirrorServiceImpl.js';
+import type { StatusMirrorService } from '../../infra/services/statusMirrorServiceImpl.js';
 describe('codeRoutes', () => {
   let fakeFirestore: ReturnType<typeof createFakeFirestore>;
   let logger: Logger;
@@ -101,6 +103,10 @@ describe('codeRoutes', () => {
       whatsappNotifier,
       logChunkRepo,
       actionsAgentClient,
+      statusMirrorService: createStatusMirrorService({
+        actionsAgentClient,
+        logger,
+      }),
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -110,6 +116,7 @@ describe('codeRoutes', () => {
       logChunkRepo: LogChunkRepository;
       actionsAgentClient: ActionsAgentClient;
       whatsappNotifier: WhatsAppNotifier;
+      statusMirrorService: StatusMirrorService;
     });
 
     server = await buildServer();

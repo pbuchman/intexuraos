@@ -9,6 +9,18 @@ export type ActionStatus =
   | 'archived';
 
 /**
+ * Status of the associated resource (e.g., code task).
+ * Design doc: docs/designs/INT-156-code-action-type.md (lines 309-348)
+ */
+export type ResourceStatus =
+  | 'dispatched'
+  | 'running'
+  | 'completed'
+  | 'failed'
+  | 'cancelled'
+  | 'interrupted';
+
+/**
  * Payload for code actions
  * Based on design doc: docs/designs/INT-156-code-action-type.md
  */
@@ -36,6 +48,10 @@ export interface Action {
   title: string;
   status: ActionStatus;
   payload: Record<string, unknown>;
+  /** Status of the associated resource (e.g., code task) */
+  resource_status?: ResourceStatus;
+  /** Error message from resource execution */
+  resource_error?: string;
   createdAt: string;
   updatedAt: string;
 }

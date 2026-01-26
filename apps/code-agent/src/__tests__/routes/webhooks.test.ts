@@ -33,6 +33,8 @@ import type { WorkerDiscoveryService } from '../../domain/services/workerDiscove
 import crypto from 'node:crypto';
 import { fetchWithAuth } from '@intexuraos/internal-clients';
 import type { WhatsAppNotifier } from '../../domain/services/whatsappNotifier.js';
+import { createStatusMirrorService } from '../../infra/services/statusMirrorServiceImpl.js';
+import type { StatusMirrorService } from '../../infra/services/statusMirrorServiceImpl.js';
 
 // Mock fetchWithAuth
 vi.mock('@intexuraos/internal-clients', async () => ({
@@ -114,6 +116,10 @@ describe('POST /internal/webhooks/task-complete', () => {
       taskDispatcher,
       whatsappNotifier,
       actionsAgentClient,
+      statusMirrorService: createStatusMirrorService({
+        actionsAgentClient,
+        logger,
+      }),
     });
 
     app = await buildServer();
@@ -1219,6 +1225,10 @@ describe('POST /internal/logs', () => {
       workerDiscovery,
       taskDispatcher,
       actionsAgentClient,
+      statusMirrorService: createStatusMirrorService({
+        actionsAgentClient,
+        logger,
+      }),
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -1228,6 +1238,7 @@ describe('POST /internal/logs', () => {
       taskDispatcher: TaskDispatcherService;
       actionsAgentClient: ActionsAgentClient;
       whatsappNotifier: WhatsAppNotifier;
+      statusMirrorService: StatusMirrorService;
     });
 
     app = await buildServer();
@@ -1497,6 +1508,10 @@ describe('POST /internal/webhooks/task-complete - WhatsApp notifications', () =>
       taskDispatcher,
       whatsappNotifier,
       actionsAgentClient,
+      statusMirrorService: createStatusMirrorService({
+        actionsAgentClient,
+        logger,
+      }),
     });
 
     app = await buildServer();

@@ -24,11 +24,13 @@ import type { CodeTaskRepository } from '../domain/repositories/codeTaskReposito
 import { createWorkerDiscoveryService } from '../infra/services/workerDiscoveryImpl.js';
 import { createTaskDispatcherService } from '../infra/services/taskDispatcherImpl.js';
 import { createWhatsAppNotifier } from '../infra/services/whatsappNotifierImpl.js';
+import { createStatusMirrorService } from '../infra/services/statusMirrorServiceImpl.js';
 import type { WorkerDiscoveryService } from '../domain/services/workerDiscovery.js';
 import type { TaskDispatcherService } from '../domain/services/taskDispatcher.js';
 import type { LogChunkRepository } from '../domain/repositories/logChunkRepository.js';
 import type { ActionsAgentClient } from '../infra/clients/actionsAgentClient.js';
 import type { WhatsAppNotifier } from '../domain/services/whatsappNotifier.js';
+import type { StatusMirrorService } from '../infra/services/statusMirrorServiceImpl.js';
 
 describe('OpenAPI contract', () => {
   let app: Awaited<ReturnType<typeof buildServer>>;
@@ -46,6 +48,12 @@ describe('OpenAPI contract', () => {
     const fakeFirestore = createFakeFirestore() as unknown as Firestore;
     setFirestore(fakeFirestore);
     const logger = pino({ name: 'test' }) as unknown as Logger;
+
+    const actionsAgentClient = createActionsAgentClient({
+      baseUrl: 'http://actions-agent',
+      internalAuthToken: 'test-token',
+      logger,
+    });
 
     setServices({
       firestore: fakeFirestore,
@@ -72,9 +80,9 @@ describe('OpenAPI contract', () => {
         firestore: fakeFirestore,
         logger,
       }),
-      actionsAgentClient: createActionsAgentClient({
-        baseUrl: 'http://actions-agent',
-        internalAuthToken: 'test-token',
+      actionsAgentClient,
+      statusMirrorService: createStatusMirrorService({
+        actionsAgentClient,
         logger,
       }),
     } as {
@@ -86,6 +94,7 @@ describe('OpenAPI contract', () => {
       logChunkRepo: LogChunkRepository;
       actionsAgentClient: ActionsAgentClient;
       whatsappNotifier: WhatsAppNotifier;
+      statusMirrorService: StatusMirrorService;
     });
 
     app = await buildServer();
