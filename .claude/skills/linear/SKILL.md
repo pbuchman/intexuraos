@@ -35,6 +35,7 @@ Manage Linear issues, branches, and PRs with enforced workflow and cross-linking
 10. **Done Forbidden**: Never move issues to Done — maximum agent-controlled state is QA
 11. **95% Coverage MINIMUM**: All tests listed in issues MUST be implemented. Do NOT simplify work.
 12. **Parent Execution Mode**: When working on parent issues with children, execute ALL children continuously without stopping between them. Single branch and single PR for the parent.
+13. **PR Continuity Pattern (Parent Issues)**: Create PR early (before first child), then after EACH child: commit → push → update PR description. PR description MUST list all children with status and maintain a progress log.
 
 ## Test Requirements Quality Gate
 
