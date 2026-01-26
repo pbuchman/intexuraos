@@ -9,8 +9,8 @@ COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // ""')
 [[ "$TOOL_NAME" != "Bash" ]] && exit 0
 [[ -z "$COMMAND" ]] && exit 0
 
-# Only check pnpm run ci commands
-if ! echo "$COMMAND" | grep -qE 'pnpm\s+run\s+ci'; then
+# Only check pnpm run ci and verify:workspace commands
+if ! echo "$COMMAND" | grep -qE 'pnpm\s+run\s+(ci|verify:workspace)'; then
     exit 0
 fi
 
