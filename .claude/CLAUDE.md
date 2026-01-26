@@ -104,15 +104,16 @@ After completing any analysis, investigation, or review phase:
 
 **STOP. Before changing ANY Linear issue status, know this rule:**
 
-| Transition                | Allowed?                                   |
-| ------------------------- | ------------------------------------------ |
-| Backlog → In Progress     | ✅ Yes                                     |
-| In Progress → In Review   | ✅ Yes                                     |
-| In Review → QA            | ✅ Yes                                     |
-| QA → Done                 | ❌ **REQUIRES EXPLICIT USER INSTRUCTION** |
-| Any status → Done         | ❌ **REQUIRES EXPLICIT USER INSTRUCTION** |
+| Transition              | Allowed?                                  |
+| ----------------------- | ----------------------------------------- |
+| Backlog → In Progress   | ✅ Yes                                    |
+| In Progress → In Review | ✅ Yes                                    |
+| In Review → QA          | ✅ Yes                                    |
+| QA → Done               | ❌ **REQUIRES EXPLICIT USER INSTRUCTION** |
+| Any status → Done       | ❌ **REQUIRES EXPLICIT USER INSTRUCTION** |
 
 **The "Done" status is NEVER automatic.** Even if:
+
 - PR is merged
 - All tests pass
 - Code is deployed
@@ -122,12 +123,12 @@ You MUST wait for the user to explicitly say "mark as done", "move to done", or 
 
 ### The Rationalization Trap
 
-| Your Thought                                    | Reality                                        |
-| ----------------------------------------------- | ---------------------------------------------- |
-| "The PR is merged, so it's obviously done"      | Merged ≠ Done. User decides when it's Done.    |
-| "All child issues are complete"                 | Complete ≠ Done. User confirms Done.           |
-| "This is just bookkeeping, I'll mark it done"   | Bookkeeping requires permission too.           |
-| "The user will want this marked done"           | Don't assume. Ask or wait.                     |
+| Your Thought                                  | Reality                                     |
+| --------------------------------------------- | ------------------------------------------- |
+| "The PR is merged, so it's obviously done"    | Merged ≠ Done. User decides when it's Done. |
+| "All child issues are complete"               | Complete ≠ Done. User confirms Done.        |
+| "This is just bookkeeping, I'll mark it done" | Bookkeeping requires permission too.        |
+| "The user will want this marked done"         | Don't assume. Ask or wait.                  |
 
 ### Correct Behavior
 

@@ -212,7 +212,15 @@ class TaskDispatcherImpl implements TaskDispatcherService {
       });
     }
 
-    const data = (await response.json()) as WorkerTaskResponse;
+    let data: WorkerTaskResponse;
+    try {
+      data = (await response.json()) as WorkerTaskResponse;
+    } catch {
+      return err({
+        code: 'dispatch_failed',
+        message: 'Worker returned invalid JSON response',
+      });
+    }
 
     return ok(data);
   }

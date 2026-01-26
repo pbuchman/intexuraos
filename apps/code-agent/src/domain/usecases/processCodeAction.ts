@@ -5,6 +5,7 @@
  */
 
 import { err, ok, type Result } from '@intexuraos/common-core';
+import type { Logger } from '@intexuraos/common-core';
 import type { CodeTaskRepository } from '../../domain/repositories/codeTaskRepository.js';
 import type { TaskDispatcherService } from '../../domain/services/taskDispatcher.js';
 import type { WorkerLocation } from '../../domain/models/worker.js';
@@ -62,7 +63,7 @@ export interface ProcessCodeActionError {
 }
 
 export interface ProcessCodeActionDeps {
-  logger: unknown;
+  logger: Logger;
   codeTaskRepo: CodeTaskRepository;
   taskDispatcher: TaskDispatcherService;
 }

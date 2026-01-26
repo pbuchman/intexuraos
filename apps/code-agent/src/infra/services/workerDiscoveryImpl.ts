@@ -115,7 +115,15 @@ class WorkerDiscoveryImpl implements WorkerDiscoveryService {
         });
       }
 
-      const data = (await response.json()) as WorkerHealthResponse;
+      let data: WorkerHealthResponse;
+      try {
+        data = (await response.json()) as WorkerHealthResponse;
+      } catch {
+        return err({
+          code: 'health_check_failed',
+          message: 'Worker returned invalid JSON response',
+        });
+      }
 
       const health: WorkerHealth = {
         location,

@@ -216,7 +216,7 @@ locals {
     code_agent = {
       name      = "intexuraos-code-agent"
       app_path  = "apps/code-agent"
-      port      = 8095
+      port      = 8080
       min_scale = 0
       max_scale = 1
     }
@@ -492,6 +492,7 @@ module "secret_manager" {
     "INTEXURAOS_CF_ACCESS_CLIENT_ID"     = "Cloudflare Access service token client ID"
     "INTEXURAOS_CF_ACCESS_CLIENT_SECRET" = "Cloudflare Access service token client secret"
     "INTEXURAOS_DISPATCH_SIGNING_SECRET" = "HMAC signing secret for code-agent to orchestrator dispatch requests"
+    "INTEXURAOS_WEBHOOK_VERIFY_SECRET"   = "HMAC signing secret for orchestrator webhook callbacks to code-agent"
   }
 
   depends_on = [google_project_service.apis]
@@ -1408,6 +1409,7 @@ module "code_agent" {
     INTEXURAOS_CF_ACCESS_CLIENT_ID     = module.secret_manager.secret_ids["INTEXURAOS_CF_ACCESS_CLIENT_ID"]
     INTEXURAOS_CF_ACCESS_CLIENT_SECRET = module.secret_manager.secret_ids["INTEXURAOS_CF_ACCESS_CLIENT_SECRET"]
     INTEXURAOS_DISPATCH_SIGNING_SECRET = module.secret_manager.secret_ids["INTEXURAOS_DISPATCH_SIGNING_SECRET"]
+    INTEXURAOS_WEBHOOK_VERIFY_SECRET   = module.secret_manager.secret_ids["INTEXURAOS_WEBHOOK_VERIFY_SECRET"]
   })
 
   env_vars = merge(local.common_service_env_vars, {
