@@ -33,6 +33,7 @@ import type { WorkerDiscoveryService } from '../../domain/services/workerDiscove
 import crypto from 'node:crypto';
 import { fetchWithAuth } from '@intexuraos/internal-clients';
 import type { WhatsAppNotifier } from '../../domain/services/whatsappNotifier.js';
+import type { RateLimitService } from '../../domain/services/rateLimitService.js';
 
 // Mock fetchWithAuth
 vi.mock('@intexuraos/internal-clients', async () => ({
@@ -105,6 +106,18 @@ describe('POST /internal/webhooks/task-complete', () => {
     mockFetchWithAuth = fetchWithAuth as ReturnType<typeof vi.fn>;
     mockFetchWithAuth.mockResolvedValue(ok(undefined));
 
+    const rateLimitService: RateLimitService = {
+      async checkLimits() {
+        return ok(undefined);
+      },
+      async recordTaskStart() {
+        return;
+      },
+      async recordTaskComplete() {
+        return;
+      },
+    };
+
     setServices({
       firestore: fakeFirestore as unknown as Firestore,
       logger,
@@ -114,6 +127,7 @@ describe('POST /internal/webhooks/task-complete', () => {
       taskDispatcher,
       whatsappNotifier,
       actionsAgentClient,
+      rateLimitService,
     });
 
     app = await buildServer();
@@ -1211,6 +1225,18 @@ describe('POST /internal/logs', () => {
       logger,
     });
 
+    const rateLimitService: RateLimitService = {
+      async checkLimits() {
+        return ok(undefined);
+      },
+      async recordTaskStart() {
+        return;
+      },
+      async recordTaskComplete() {
+        return;
+      },
+    };
+
     setServices({
       firestore: fakeFirestore as unknown as Firestore,
       logger,
@@ -1219,6 +1245,7 @@ describe('POST /internal/logs', () => {
       workerDiscovery,
       taskDispatcher,
       actionsAgentClient,
+      rateLimitService,
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -1228,6 +1255,7 @@ describe('POST /internal/logs', () => {
       taskDispatcher: TaskDispatcherService;
       actionsAgentClient: ActionsAgentClient;
       whatsappNotifier: WhatsAppNotifier;
+      rateLimitService: RateLimitService;
     });
 
     app = await buildServer();
@@ -1488,6 +1516,18 @@ describe('POST /internal/webhooks/task-complete - WhatsApp notifications', () =>
     mockFetchWithAuth = fetchWithAuth as ReturnType<typeof vi.fn>;
     mockFetchWithAuth.mockResolvedValue(ok(undefined));
 
+    const rateLimitService: RateLimitService = {
+      async checkLimits() {
+        return ok(undefined);
+      },
+      async recordTaskStart() {
+        return;
+      },
+      async recordTaskComplete() {
+        return;
+      },
+    };
+
     setServices({
       firestore: fakeFirestore as unknown as Firestore,
       logger,
@@ -1497,6 +1537,7 @@ describe('POST /internal/webhooks/task-complete - WhatsApp notifications', () =>
       taskDispatcher,
       whatsappNotifier,
       actionsAgentClient,
+      rateLimitService,
     });
 
     app = await buildServer();

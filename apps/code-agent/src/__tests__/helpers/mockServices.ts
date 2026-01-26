@@ -12,10 +12,24 @@ import { createWorkerDiscoveryService } from '../../infra/services/workerDiscove
 import { createTaskDispatcherService } from '../../infra/services/taskDispatcherImpl.js';
 import { createWhatsAppNotifier } from '../../infra/services/whatsappNotifierImpl.js';
 import { createActionsAgentClient } from '../../infra/clients/actionsAgentClient.js';
+import type { RateLimitService } from '../../domain/services/rateLimitService.js';
+import { ok } from '@intexuraos/common-core';
 
 export function setupTestServices({ actionsAgentUrl = 'http://actions-agent' }: { actionsAgentUrl?: string } = {}): void {
   const fakeFirestore = createFakeFirestore() as unknown as Firestore;
   const logger = pino({ name: 'test' });
+
+  const rateLimitService: RateLimitService = {
+    async checkLimits() {
+      return ok(undefined);
+    },
+    async recordTaskStart() {
+      return;
+    },
+    async recordTaskComplete() {
+      return;
+    },
+  };
 
   const container: ServiceContainer = {
     firestore: fakeFirestore,
@@ -47,6 +61,7 @@ export function setupTestServices({ actionsAgentUrl = 'http://actions-agent' }: 
       internalAuthToken: 'test-token',
       logger,
     }),
+    rateLimitService,
   };
 
   setServices(container);

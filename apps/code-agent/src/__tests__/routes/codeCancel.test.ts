@@ -31,6 +31,8 @@ import type { LogChunkRepository } from '../../domain/repositories/logChunkRepos
 import type { WorkerDiscoveryService } from '../../domain/services/workerDiscovery.js';
 import type { ActionsAgentClient } from '../../infra/clients/actionsAgentClient.js';
 import type { WhatsAppNotifier } from '../../domain/services/whatsappNotifier.js';
+import type { RateLimitService } from '../../domain/services/rateLimitService.js';
+import { ok } from '@intexuraos/common-core';
 describe('POST /code/cancel', () => {
   let app: Awaited<ReturnType<typeof buildServer>>;
   let fakeFirestore: ReturnType<typeof createFakeFirestore>;
@@ -97,6 +99,18 @@ describe('POST /code/cancel', () => {
     // Spy on cancelOnWorker to verify it's called
     cancelOnWorkerSpy = vi.spyOn(taskDispatcher, 'cancelOnWorker' as never).mockResolvedValue(undefined);
 
+    const rateLimitService: RateLimitService = {
+      async checkLimits() {
+        return ok(undefined);
+      },
+      async recordTaskStart() {
+        return;
+      },
+      async recordTaskComplete() {
+        return;
+      },
+    };
+
     setServices({
       firestore: fakeFirestore as unknown as Firestore,
       logger,
@@ -106,6 +120,7 @@ describe('POST /code/cancel', () => {
       whatsappNotifier,
       logChunkRepo,
       actionsAgentClient,
+      rateLimitService,
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -115,6 +130,7 @@ describe('POST /code/cancel', () => {
       logChunkRepo: LogChunkRepository;
       actionsAgentClient: ActionsAgentClient;
       whatsappNotifier: WhatsAppNotifier;
+      rateLimitService: RateLimitService;
     });
 
     app = await buildServer();

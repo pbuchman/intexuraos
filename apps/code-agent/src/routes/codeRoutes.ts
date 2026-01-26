@@ -631,7 +631,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         return { success: false, error: { code: 'UNAUTHORIZED', message: 'Unauthorized' } };
       }
 
-      const { codeTaskRepo } = getServices();
+      const { codeTaskRepo, rateLimitService } = getServices();
       const { taskId } = request.params;
       const body = request.body;
 
@@ -660,6 +660,18 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
             message: result.error.message,
           },
         };
+      }
+
+      // Record task completion for rate limiting (decrement concurrent, update cost)
+      // Do this for terminal states: completed, failed, cancelled, interrupted
+      const terminalStatuses = ['completed', 'failed', 'cancelled', 'interrupted'] as const;
+      if (body.status !== undefined && terminalStatuses.includes(body.status)) {
+        const userId = result.value.userId;
+        // Fire and forget - don't await to avoid delaying response
+        // Note: Currently we don't receive actual cost from orchestrator, so we pass undefined
+        rateLimitService.recordTaskComplete(userId, undefined).catch((err) => {
+          request.log.error({ taskId, userId, error: err }, 'Failed to record task completion for rate limiting');
+        });
       }
 
       request.log.info({ taskId, status: result.value.status }, 'Code task updated successfully');
@@ -981,35 +993,24 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         includeParams: true,
       });
 
-      const { codeTaskRepo, taskDispatcher } = getServices();
+      const { codeTaskRepo, taskDispatcher, rateLimitService } = getServices();
       const body = request.body;
       const userId = request.user?.userId ?? 'unknown-user';
 
       request.log.info({ userId, promptLength: body.prompt.length }, 'Submitting code task from UI');
 
-      // Apply rate limiting: 10 tasks per day per user
-      const countResult = await codeTaskRepo.countByUserToday(userId);
-      if (!countResult.ok) {
-        request.log.error({ error: countResult.error }, 'Failed to check rate limit');
-        reply.status(500);
-        return {
-          success: false,
-          error: {
-            code: 'RATE_LIMIT_CHECK_FAILED',
-            message: 'Failed to check rate limit',
-          },
-        };
-      }
-
-      const DAILY_LIMIT = 10;
-      if (countResult.value >= DAILY_LIMIT) {
-        request.log.warn({ userId, count: countResult.value }, 'Rate limit exceeded for code task submission');
+      // Check rate limits (concurrent, hourly, daily/monthly cost, prompt length)
+      const limitCheck = await rateLimitService.checkLimits(userId, body.prompt.length);
+      if (!limitCheck.ok) {
+        const { error } = limitCheck;
+        request.log.warn({ userId, error }, 'Rate limit exceeded');
         reply.status(429);
         return {
           success: false,
           error: {
-            code: 'RATE_LIMIT_EXCEEDED',
-            message: `Maximum ${DAILY_LIMIT} tasks per day`,
+            code: error.code,
+            message: error.message,
+            retryAfter: error.retryAfter,
           },
         };
       }
@@ -1131,6 +1132,9 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           },
         };
       }
+
+      // Record task start for rate limiting
+      await rateLimitService.recordTaskStart(userId);
 
       request.log.info({ taskId: task.id, workerLocation: dispatchResult.value.workerLocation }, 'Code task submitted successfully');
 
@@ -1501,7 +1505,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         includeParams: true,
       });
 
-      const { codeTaskRepo, taskDispatcher } = getServices();
+      const { codeTaskRepo, taskDispatcher, rateLimitService } = getServices();
       const { taskId } = request.body;
       const userId = request.user?.userId ?? 'unknown-user';
 
@@ -1541,7 +1545,12 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         return { error: 'failed_to_cancel' };
       }
 
-      // Step 5: Notify worker to stop (best effort)
+      // Step 5: Record task completion for rate limiting
+      rateLimitService.recordTaskComplete(userId).catch((err) => {
+        request.log.error({ taskId, userId, error: err }, 'Failed to record task completion for rate limiting');
+      });
+
+      // Step 6: Notify worker to stop (best effort)
       try {
         await taskDispatcher.cancelOnWorker(taskId, task.workerLocation);
       } catch (error) {

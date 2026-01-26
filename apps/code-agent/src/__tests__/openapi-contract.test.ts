@@ -29,6 +29,8 @@ import type { TaskDispatcherService } from '../domain/services/taskDispatcher.js
 import type { LogChunkRepository } from '../domain/repositories/logChunkRepository.js';
 import type { ActionsAgentClient } from '../infra/clients/actionsAgentClient.js';
 import type { WhatsAppNotifier } from '../domain/services/whatsappNotifier.js';
+import type { RateLimitService } from '../domain/services/rateLimitService.js';
+import { ok } from '@intexuraos/common-core';
 
 describe('OpenAPI contract', () => {
   let app: Awaited<ReturnType<typeof buildServer>>;
@@ -46,6 +48,18 @@ describe('OpenAPI contract', () => {
     const fakeFirestore = createFakeFirestore() as unknown as Firestore;
     setFirestore(fakeFirestore);
     const logger = pino({ name: 'test' }) as unknown as Logger;
+
+    const rateLimitService: RateLimitService = {
+      async checkLimits() {
+        return ok(undefined);
+      },
+      async recordTaskStart() {
+        return;
+      },
+      async recordTaskComplete() {
+        return;
+      },
+    };
 
     setServices({
       firestore: fakeFirestore,
@@ -77,6 +91,7 @@ describe('OpenAPI contract', () => {
         internalAuthToken: 'test-token',
         logger,
       }),
+      rateLimitService,
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -86,6 +101,7 @@ describe('OpenAPI contract', () => {
       logChunkRepo: LogChunkRepository;
       actionsAgentClient: ActionsAgentClient;
       whatsappNotifier: WhatsAppNotifier;
+      rateLimitService: RateLimitService;
     });
 
     app = await buildServer();

@@ -29,6 +29,8 @@ import type { TaskDispatcherService } from '../../domain/services/taskDispatcher
 import type { LogChunkRepository } from '../../domain/repositories/logChunkRepository.js';
 import type { ActionsAgentClient } from '../../infra/clients/actionsAgentClient.js';
 import type { WhatsAppNotifier } from '../../domain/services/whatsappNotifier.js';
+import type { RateLimitService } from '../../domain/services/rateLimitService.js';
+import { ok } from '@intexuraos/common-core';
 describe('codeRoutes', () => {
   let fakeFirestore: ReturnType<typeof createFakeFirestore>;
   let logger: Logger;
@@ -92,6 +94,18 @@ describe('codeRoutes', () => {
       logger,
     });
 
+    const rateLimitService: RateLimitService = {
+      async checkLimits() {
+        return ok(undefined);
+      },
+      async recordTaskStart() {
+        return;
+      },
+      async recordTaskComplete() {
+        return;
+      },
+    };
+
     setServices({
       firestore: fakeFirestore as unknown as Firestore,
       logger,
@@ -101,6 +115,7 @@ describe('codeRoutes', () => {
       whatsappNotifier,
       logChunkRepo,
       actionsAgentClient,
+      rateLimitService,
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -110,6 +125,7 @@ describe('codeRoutes', () => {
       logChunkRepo: LogChunkRepository;
       actionsAgentClient: ActionsAgentClient;
       whatsappNotifier: WhatsAppNotifier;
+      rateLimitService: RateLimitService;
     });
 
     server = await buildServer();

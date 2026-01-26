@@ -12,12 +12,15 @@ import type { WorkerDiscoveryService } from './domain/services/workerDiscovery.j
 import type { TaskDispatcherService } from './domain/services/taskDispatcher.js';
 import type { WhatsAppNotifier } from './domain/services/whatsappNotifier.js';
 import type { ActionsAgentClient } from './infra/clients/actionsAgentClient.js';
+import type { RateLimitService } from './domain/services/rateLimitService.js';
 import { createFirestoreCodeTaskRepository } from './infra/repositories/firestoreCodeTaskRepository.js';
 import { createFirestoreLogChunkRepository } from './infra/repositories/firestoreLogChunkRepository.js';
 import { createWorkerDiscoveryService } from './infra/services/workerDiscoveryImpl.js';
 import { createTaskDispatcherService } from './infra/services/taskDispatcherImpl.js';
 import { createWhatsAppNotifier } from './infra/services/whatsappNotifierImpl.js';
 import { createActionsAgentClient } from './infra/clients/actionsAgentClient.js';
+import { createUserUsageFirestoreRepository } from './infra/firestore/userUsageFirestoreRepository.js';
+import { createRateLimitService } from './domain/services/rateLimitService.js';
 
 export interface ServiceContainer {
   firestore: Firestore;
@@ -28,6 +31,7 @@ export interface ServiceContainer {
   taskDispatcher: TaskDispatcherService;
   whatsappNotifier: WhatsAppNotifier;
   actionsAgentClient: ActionsAgentClient;
+  rateLimitService: RateLimitService;
 }
 
 // Configuration required to initialize services
@@ -77,6 +81,10 @@ export function initServices(config: ServiceConfig): void {
     actionsAgentClient: createActionsAgentClient({
       baseUrl: config.actionsAgentUrl,
       internalAuthToken: config.internalAuthToken,
+      logger,
+    }),
+    rateLimitService: createRateLimitService({
+      userUsageRepository: createUserUsageFirestoreRepository(firestore, logger),
       logger,
     }),
   };

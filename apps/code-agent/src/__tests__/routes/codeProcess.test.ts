@@ -30,6 +30,8 @@ import type { LogChunkRepository } from '../../domain/repositories/logChunkRepos
 import type { WorkerDiscoveryService } from '../../domain/services/workerDiscovery.js';
 import type { ActionsAgentClient } from '../../infra/clients/actionsAgentClient.js';
 import type { WhatsAppNotifier } from '../../domain/services/whatsappNotifier.js';
+import type { RateLimitService } from '../../domain/services/rateLimitService.js';
+import { ok } from '@intexuraos/common-core';
 
 describe('POST /internal/code/process', () => {
   let app: Awaited<ReturnType<typeof buildServer>>;
@@ -94,6 +96,18 @@ describe('POST /internal/code/process', () => {
       logger,
     });
 
+    const rateLimitService: RateLimitService = {
+      async checkLimits() {
+        return ok(undefined);
+      },
+      async recordTaskStart() {
+        return;
+      },
+      async recordTaskComplete() {
+        return;
+      },
+    };
+
     setServices({
       firestore: fakeFirestore as unknown as Firestore,
       logger,
@@ -103,6 +117,7 @@ describe('POST /internal/code/process', () => {
       whatsappNotifier,
       logChunkRepo: _logChunkRepo,
       actionsAgentClient,
+      rateLimitService,
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -112,6 +127,7 @@ describe('POST /internal/code/process', () => {
       logChunkRepo: LogChunkRepository;
       actionsAgentClient: ActionsAgentClient;
       whatsappNotifier: WhatsAppNotifier;
+      rateLimitService: RateLimitService;
     });
 
     app = await buildServer();
