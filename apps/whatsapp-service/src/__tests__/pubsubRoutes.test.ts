@@ -12,6 +12,7 @@ import {
   FakeMediaStorage,
   FakeMessageSender,
   FakeOutboundMessageRepository,
+  FakePhoneVerificationRepository,
   FakeSpeechTranscriptionPort,
   FakeThumbnailGeneratorPort,
   FakeWhatsAppCloudApiPort,
@@ -91,6 +92,7 @@ describe('Pub/Sub Routes', () => {
       thumbnailGenerator: new FakeThumbnailGeneratorPort(),
       linkPreviewFetcher: new FakeLinkPreviewFetcherPort(),
       outboundMessageRepository: new FakeOutboundMessageRepository(),
+      phoneVerificationRepository: new FakePhoneVerificationRepository(),
     });
 
     process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = INTERNAL_AUTH_TOKEN;
