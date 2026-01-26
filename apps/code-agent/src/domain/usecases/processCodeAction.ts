@@ -32,6 +32,7 @@ export interface ProcessCodeActionRequest {
   linearIssueId?: string;
   repository?: string;
   baseBranch?: string;
+  traceId?: string;
 }
 
 /**
@@ -83,7 +84,7 @@ export async function processCodeAction(
   request: ProcessCodeActionRequest
 ): Promise<Result<ProcessCodeActionResult, ProcessCodeActionError>> {
   const { codeTaskRepo, taskDispatcher } = deps;
-  const { actionId, approvalEventId, userId, prompt, workerType, linearIssueId, repository, baseBranch } =
+  const { actionId, approvalEventId, userId, prompt, workerType, linearIssueId, repository, baseBranch, traceId } =
     request;
 
   // Step 1: Linear issue creation (stub for now - use provided or undefined)
@@ -114,7 +115,7 @@ export async function processCodeAction(
     workerLocation: 'mac', // Default to mac, dispatcher will handle availability
     repository: repository ?? 'pbuchman/intexuraos',
     baseBranch: baseBranch ?? 'development',
-    traceId: `trace-${String(Date.now())}`, // TODO: Use proper trace ID generation
+    traceId: traceId ?? `trace-${String(Date.now())}`, // Use provided traceId or generate one
     actionId,
     approvalEventId,
   };
@@ -160,6 +161,7 @@ export async function processCodeAction(
     workerType: 'opus' | 'auto' | 'glm';
     webhookUrl: string;
     webhookSecret: string;
+    traceId?: string;
   } = {
     taskId: task.id,
     prompt: task.sanitizedPrompt,
@@ -175,6 +177,9 @@ export async function processCodeAction(
   if (task.linearIssueId !== undefined) {
     dispatchRequest.linearIssueId = task.linearIssueId;
   }
+
+  // Include traceId from task
+  dispatchRequest.traceId = task.traceId;
 
   const dispatchResult = await taskDispatcher.dispatch(dispatchRequest);
 

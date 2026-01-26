@@ -150,6 +150,10 @@
     "user_spend": {
       "owner": "code-agent",
       "description": "User cost tracking for rate limiting"
+    },
+    "user_usage": {
+      "owner": "code-agent",
+      "description": "User rate limiting and cost tracking for code tasks (concurrent tasks, hourly limits, daily/monthly cost caps)"
     }
   }
 }
