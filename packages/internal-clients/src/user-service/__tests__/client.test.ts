@@ -337,6 +337,60 @@ describe('createUserServiceClient', () => {
         client.reportLlmSuccess('user123', LlmProviders.Google)
       ).resolves.toBeUndefined();
     });
+
+    it('silently ignores network timeout errors', async () => {
+      nock('http://localhost:3000')
+        .post('/internal/users/user123/llm-keys/Google/last-used')
+        .matchHeader('X-Internal-Auth', 'test-token')
+        .delay(5000)
+        .reply(200);
+
+      const client = createUserServiceClient(config);
+
+      // The function should not throw due to try-catch
+      await expect(
+        client.reportLlmSuccess('user123', LlmProviders.Google)
+      ).resolves.toBeUndefined();
+    });
+
+    it('silently ignores 500 server errors', async () => {
+      nock('http://localhost:3000')
+        .post('/internal/users/user123/llm-keys/Google/last-used')
+        .matchHeader('X-Internal-Auth', 'test-token')
+        .reply(500, { error: 'Internal server error' });
+
+      const client = createUserServiceClient(config);
+
+      await expect(
+        client.reportLlmSuccess('user123', LlmProviders.Google)
+      ).resolves.toBeUndefined();
+    });
+
+    it('silently ignores 404 not found errors', async () => {
+      nock('http://localhost:3000')
+        .post('/internal/users/user123/llm-keys/Google/last-used')
+        .matchHeader('X-Internal-Auth', 'test-token')
+        .reply(404);
+
+      const client = createUserServiceClient(config);
+
+      await expect(
+        client.reportLlmSuccess('user123', LlmProviders.Google)
+      ).resolves.toBeUndefined();
+    });
+
+    it('silently ignores JSON parse errors', async () => {
+      nock('http://localhost:3000')
+        .post('/internal/users/user123/llm-keys/Google/last-used')
+        .matchHeader('X-Internal-Auth', 'test-token')
+        .reply(200, '{ invalid json }');
+
+      const client = createUserServiceClient(config);
+
+      await expect(
+        client.reportLlmSuccess('user123', LlmProviders.Google)
+      ).resolves.toBeUndefined();
+    });
   });
 
   describe('getOAuthToken', () => {

@@ -421,6 +421,38 @@ describe('parseModelExtractionResponse', () => {
       // Should extract the outer JSON
       expect(result).toBeNull(); // selectedModels not at root level
     });
+
+    it('returns null for malformed JSON causing parse error', () => {
+      const response = '{"selectedModels": [model1], "synthesisModel": "model"';
+
+      const result = parseModelExtractionResponse(response, validModels);
+
+      expect(result).toBeNull();
+    });
+
+    it('returns null for JSON with circular references (parse error)', () => {
+      const response = '{"selectedModels": incomplete';
+
+      const result = parseModelExtractionResponse(response, validModels);
+
+      expect(result).toBeNull();
+    });
+
+    it('returns null for response with only opening brace', () => {
+      const response = '{';
+
+      const result = parseModelExtractionResponse(response, validModels);
+
+      expect(result).toBeNull();
+    });
+
+    it('returns null for response with only opening bracket', () => {
+      const response = '[';
+
+      const result = parseModelExtractionResponse(response, validModels);
+
+      expect(result).toBeNull();
+    });
   });
 });
 

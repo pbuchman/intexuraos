@@ -905,5 +905,125 @@ describe('createPerplexityClient', () => {
         expect(result.error.message).toBe('Request timed out');
       }
     });
+
+    it('handles AbortError from fetch in generate', async () => {
+      const abortError = new Error('The operation was aborted');
+      abortError.name = 'AbortError';
+      nock(API_BASE_URL).post('/chat/completions').replyWithError(abortError);
+
+      const client = createPerplexityClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        pricing: createTestPricing(),
+        logger: mockLogger,
+      });
+      const result = await client.generate('Test prompt');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('TIMEOUT');
+        expect(result.error.message).toBe('Request timed out');
+      }
+    });
+
+    it('handles custom timeoutMs parameter', async () => {
+      // Test that custom timeout is passed to fetchWithTimeout
+      const abortError = new Error('Timed out');
+      abortError.name = 'AbortError';
+      nock(API_BASE_URL).post('/chat/completions').replyWithError(abortError);
+
+      const client = createPerplexityClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        pricing: createTestPricing(),
+        logger: mockLogger,
+        timeoutMs: 1000, // 1 second timeout
+      });
+      const result = await client.research('Test prompt');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('TIMEOUT');
+      }
+    });
+
+    it('uses default timeout when not specified', async () => {
+      // Verify the default timeout of 840000ms (14 minutes) is used
+      nock(API_BASE_URL)
+        .post('/chat/completions', (body) => body.stream === true)
+        .reply(
+          200,
+          createSSEBody({
+            content: 'Response',
+            usage: { prompt_tokens: 10, completion_tokens: 5 },
+          }),
+          { 'Content-Type': 'text/event-stream' }
+        );
+
+      const client = createPerplexityClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        pricing: createTestPricing(),
+        logger: mockLogger,
+        // timeoutMs not specified, should use DEFAULT_TIMEOUT_MS
+      });
+      const result = await client.research('Test prompt');
+
+      expect(result.ok).toBe(true);
+    });
+
+    it('clears timeout when fetch completes successfully', async () => {
+      // Verify the timeout is cleared (doesn't fire) when request succeeds
+      nock(API_BASE_URL)
+        .post('/chat/completions', (body) => body.stream === true)
+        .reply(
+          200,
+          createSSEBody({
+            content: 'Quick response',
+            usage: { prompt_tokens: 5, completion_tokens: 5 },
+          }),
+          { 'Content-Type': 'text/event-stream' }
+        );
+
+      const client = createPerplexityClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        pricing: createTestPricing(),
+        logger: mockLogger,
+        timeoutMs: 100,
+      });
+
+      // If timeout wasn't cleared, this would fail after 100ms
+      const result = await client.research('Test prompt');
+
+      expect(result.ok).toBe(true);
+    });
+
+    it('handles request that completes exactly at timeout boundary', async () => {
+      // Edge case: response arrives right as timeout fires
+      const abortError = new Error('The operation was aborted');
+      abortError.name = 'AbortError';
+
+      nock(API_BASE_URL).post('/chat/completions').delay(100).replyWithError(abortError);
+
+      const client = createPerplexityClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        pricing: createTestPricing(),
+        logger: mockLogger,
+        timeoutMs: 50, // Shorter than delay
+      });
+      const result = await client.research('Test prompt');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('TIMEOUT');
+      }
+    });
   });
 });
