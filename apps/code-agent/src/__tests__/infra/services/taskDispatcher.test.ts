@@ -306,6 +306,37 @@ describe('taskDispatcherImpl', () => {
       }
     });
 
+    it('returns dispatch_failed when worker returns invalid JSON', async () => {
+      const service = createTaskDispatcherService(baseDeps);
+      vi.mocked(global.fetch).mockResolvedValueOnce({
+        ok: true,
+        json: async () => {
+          throw new SyntaxError('Unexpected token < in JSON at position 0');
+        },
+        headers: new Headers(),
+        status: 200,
+        statusText: 'OK',
+        url: 'https://test.com',
+      } as unknown as Response);
+
+      const result = await service.dispatch({
+        taskId: 'task-123',
+        prompt: 'Test',
+        systemPromptHash: 'abc123',
+        repository: 'test/repo',
+        baseBranch: 'main',
+        workerType: 'opus',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'whsec_test',
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('dispatch_failed');
+        expect(result.error.message).toContain('invalid JSON');
+      }
+    });
+
     it('returns error when dispatchSigningSecret is empty', async () => {
       const depsWithEmptySecret: TaskDispatcherDeps = {
         ...baseDeps,
