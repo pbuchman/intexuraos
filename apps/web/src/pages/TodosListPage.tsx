@@ -22,6 +22,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Button, Card, Input, Layout, RefreshIndicator } from '@/components';
 import { useTodos } from '@/hooks';
+import { sortTodoItems } from '@/utils/todoItemSort.js';
 import type {
   CreateTodoItemRequest,
   CreateTodoRequest,
@@ -645,10 +646,7 @@ function TodoModal({
 
             {currentTodo.items.length > 0 ? (
               <div className="divide-y divide-slate-100">
-                {currentTodo.items
-                  .slice()
-                  .sort((a, b) => a.position - b.position)
-                  .map((item) => (
+                {sortTodoItems(currentTodo.items).map((item) => (
                     <TodoItemRow
                       key={item.id}
                       item={item}
