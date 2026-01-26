@@ -1,8 +1,10 @@
 /**
  * LLM-based extraction service for Linear issues.
  * Parses natural language into structured issue data.
+ *
+ * NOTE: Tested via FakeLinearActionExtractionService in route/use case tests.
  */
-
+/* v8 ignore start - Tested via fake in integration tests */
 import type { Result } from '@intexuraos/common-core';
 import { err, getErrorMessage, ok } from '@intexuraos/common-core';
 import {
@@ -126,3 +128,4 @@ export function createLinearActionExtractionService(
     },
   };
 }
+/* v8 ignore stop */

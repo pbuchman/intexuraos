@@ -14,6 +14,7 @@ import {
   FakeMediaStorage,
   FakeMessageSender,
   FakeOutboundMessageRepository,
+  FakePhoneVerificationRepository,
   FakeSpeechTranscriptionPort,
   FakeThumbnailGeneratorPort,
   FakeWhatsAppCloudApiPort,
@@ -399,6 +400,7 @@ export interface TestContext {
   eventPublisher: FakeEventPublisher;
   whatsappCloudApi: FakeWhatsAppCloudApiPort;
   outboundMessageRepository: FakeOutboundMessageRepository;
+  phoneVerificationRepository: FakePhoneVerificationRepository;
 }
 
 /**
@@ -414,6 +416,7 @@ export function setupTestContext(): TestContext {
     eventPublisher: null as unknown as FakeEventPublisher,
     whatsappCloudApi: null as unknown as FakeWhatsAppCloudApiPort,
     outboundMessageRepository: null as unknown as FakeOutboundMessageRepository,
+    phoneVerificationRepository: null as unknown as FakePhoneVerificationRepository,
   };
 
   beforeAll(async () => {
@@ -432,6 +435,7 @@ export function setupTestContext(): TestContext {
     context.eventPublisher = new FakeEventPublisher();
     context.whatsappCloudApi = new FakeWhatsAppCloudApiPort();
     context.outboundMessageRepository = new FakeOutboundMessageRepository();
+    context.phoneVerificationRepository = new FakePhoneVerificationRepository();
 
     setServices({
       webhookEventRepository: context.webhookEventRepository,
@@ -445,6 +449,7 @@ export function setupTestContext(): TestContext {
       thumbnailGenerator: new FakeThumbnailGeneratorPort(),
       linkPreviewFetcher: new FakeLinkPreviewFetcherPort(),
       outboundMessageRepository: context.outboundMessageRepository,
+      phoneVerificationRepository: context.phoneVerificationRepository,
     });
 
     clearJwksCache();

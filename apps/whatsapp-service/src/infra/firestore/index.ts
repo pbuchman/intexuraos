@@ -39,4 +39,5 @@ export {
   updateVerificationStatus,
   incrementVerificationAttempts,
   countRecentVerificationsByPhone,
+  createVerificationWithChecks,
 } from './phoneVerificationRepository.js';

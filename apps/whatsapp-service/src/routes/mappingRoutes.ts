@@ -84,6 +84,16 @@ export const mappingRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             },
             required: ['success', 'error'],
           },
+          412: {
+            description: 'Phone number not verified',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+            required: ['success', 'error'],
+          },
           502: {
             description: 'Downstream error (storage failure)',
             type: 'object',
@@ -142,8 +152,27 @@ export const mappingRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         });
       }
 
+      // Verify all phone numbers before allowing connection
+      const { userMappingRepository, phoneVerificationRepository } = getServices();
+      for (const phoneNumber of normalizedPhoneNumbers) {
+        const verifiedResult = await phoneVerificationRepository.isPhoneVerified(
+          user.userId,
+          phoneNumber
+        );
+        if (!verifiedResult.ok) {
+          return await reply.fail('DOWNSTREAM_ERROR', verifiedResult.error.message);
+        }
+        if (!verifiedResult.value) {
+          return await reply.fail(
+            'PRECONDITION_FAILED',
+            `Phone number ${phoneNumber} not verified`,
+            undefined,
+            { phoneNumber }
+          );
+        }
+      }
+
       // Save mapping
-      const { userMappingRepository } = getServices();
       const result = await userMappingRepository.saveMapping(user.userId, normalizedPhoneNumbers);
 
       if (!result.ok) {
