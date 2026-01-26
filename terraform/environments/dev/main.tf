@@ -486,6 +486,12 @@ module "secret_manager" {
     "INTEXURAOS_SENTRY_DSN_WEB" = "Sentry Data Source Name for error tracking (web app)"
     # Crawl4AI Cloud API
     "INTEXURAOS_CRAWL4AI_API_KEY" = "Crawl4AI Cloud API key for web page content extraction"
+    # Cloudflare Zero Trust (INT-156 Code Action)
+    "INTEXURAOS_CF_TUNNEL_TOKEN_MAC"     = "Cloudflare tunnel token for Mac worker"
+    "INTEXURAOS_CF_TUNNEL_TOKEN_VM"      = "Cloudflare tunnel token for VM worker"
+    "INTEXURAOS_CF_ACCESS_CLIENT_ID"     = "Cloudflare Access service token client ID"
+    "INTEXURAOS_CF_ACCESS_CLIENT_SECRET" = "Cloudflare Access service token client secret"
+    "INTEXURAOS_DISPATCH_SIGNING_SECRET" = "HMAC signing secret for code-agent to orchestrator dispatch requests"
   }
 
   depends_on = [google_project_service.apis]
@@ -1382,7 +1388,7 @@ module "app_settings_service" {
   ]
 }
 
-# Code Agent - Code execution service
+# Code Agent - Code execution service (INT-156)
 module "code_agent" {
   source = "../../modules/cloud-run-service"
 
@@ -1398,8 +1404,16 @@ module "code_agent" {
 
   image = "${var.region}-docker.pkg.dev/${var.project_id}/${module.artifact_registry.repository_id}/code-agent:latest"
 
-  secrets  = local.common_service_secrets
-  env_vars = local.common_service_env_vars
+  secrets = merge(local.common_service_secrets, {
+    INTEXURAOS_CF_ACCESS_CLIENT_ID     = module.secret_manager.secret_ids["INTEXURAOS_CF_ACCESS_CLIENT_ID"]
+    INTEXURAOS_CF_ACCESS_CLIENT_SECRET = module.secret_manager.secret_ids["INTEXURAOS_CF_ACCESS_CLIENT_SECRET"]
+    INTEXURAOS_DISPATCH_SIGNING_SECRET = module.secret_manager.secret_ids["INTEXURAOS_DISPATCH_SIGNING_SECRET"]
+  })
+
+  env_vars = merge(local.common_service_env_vars, {
+    INTEXURAOS_ORCHESTRATOR_MAC_URL = "https://cc-mac.intexuraos.cloud"
+    INTEXURAOS_ORCHESTRATOR_VM_URL  = "https://cc-vm.intexuraos.cloud"
+  })
 
   depends_on = [
     module.artifact_registry,

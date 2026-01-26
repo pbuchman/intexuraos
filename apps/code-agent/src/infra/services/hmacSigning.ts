@@ -14,6 +14,7 @@ import * as crypto from 'node:crypto';
  */
 export interface HmacSigningDeps {
   logger: Logger;
+  dispatchSigningSecret: string;
 }
 
 /**
@@ -46,11 +47,11 @@ export function signDispatchRequest(
   deps: HmacSigningDeps,
   params: SignDispatchParams
 ): Result<SignatureResult, SigningError> {
-  const secret = process.env['INTEXURAOS_DISPATCH_SECRET'];
-  if (secret === undefined || secret === '') {
+  const { dispatchSigningSecret } = deps;
+  if (dispatchSigningSecret === '') {
     return err({
       code: 'missing_secret',
-      message: 'INTEXURAOS_DISPATCH_SECRET environment variable is required',
+      message: 'dispatchSigningSecret is required',
     });
   }
 
@@ -58,7 +59,7 @@ export function signDispatchRequest(
     const { body, timestamp } = params;
     const message = `${String(timestamp)}.${body}`;
 
-    const signature = crypto.createHmac('sha256', secret).update(message).digest('hex');
+    const signature = crypto.createHmac('sha256', dispatchSigningSecret).update(message).digest('hex');
 
     deps.logger.debug(
       { timestamp: String(timestamp), signature: signature.substring(0, 8) + '...' },

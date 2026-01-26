@@ -14,13 +14,6 @@ import { createWhatsAppNotifier } from '../../infra/services/whatsappNotifierImp
 import { createActionsAgentClient } from '../../infra/clients/actionsAgentClient.js';
 
 export function setupTestServices({ actionsAgentUrl = 'http://actions-agent' }: { actionsAgentUrl?: string } = {}): void {
-  // Set required env vars for worker discovery
-  process.env['INTEXURAOS_CODE_WORKERS'] =
-    'mac:https://cc-mac.intexuraos.cloud:1,vm:https://cc-vm.intexuraos.cloud:2';
-  process.env['INTEXURAOS_CF_ACCESS_CLIENT_ID'] = 'test-client-id';
-  process.env['INTEXURAOS_CF_ACCESS_CLIENT_SECRET'] = 'test-client-secret';
-  process.env['INTEXURAOS_DISPATCH_SECRET'] = 'test-dispatch-secret';
-
   const fakeFirestore = createFakeFirestore() as unknown as Firestore;
   const logger = pino({ name: 'test' });
 
@@ -36,7 +29,14 @@ export function setupTestServices({ actionsAgentUrl = 'http://actions-agent' }: 
       logger,
     }),
     workerDiscovery: createWorkerDiscoveryService({ logger }),
-    taskDispatcher: createTaskDispatcherService({ logger }),
+    taskDispatcher: createTaskDispatcherService({
+      logger,
+      cfAccessClientId: 'test-client-id',
+      cfAccessClientSecret: 'test-client-secret',
+      dispatchSigningSecret: 'test-dispatch-secret',
+      orchestratorMacUrl: 'https://cc-mac.intexuraos.cloud',
+      orchestratorVmUrl: 'https://cc-vm.intexuraos.cloud',
+    }),
     whatsappNotifier: createWhatsAppNotifier({
       baseUrl: 'http://whatsapp-service',
       internalAuthToken: 'test-token',

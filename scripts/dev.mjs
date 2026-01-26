@@ -433,7 +433,7 @@ const COMMON_SERVICE_URLS = {
   INTEXURAOS_TODOS_AGENT_URL: 'http://localhost:8123',
   INTEXURAOS_BOOKMARKS_AGENT_URL: 'http://localhost:8124',
   INTEXURAOS_CALENDAR_AGENT_URL: 'http://localhost:8125',
-  INTEXURAOS_WEB_AGENT_URL: 'http://localhost:8126',
+  INTEXURAOS_LINEAR_AGENT_URL: 'http://localhost:8126',
   INTEXURAOS_CODE_AGENT_URL: 'http://localhost:8095',
 };
 
@@ -463,14 +463,12 @@ const SERVICE_ENV_MAPPINGS = {
     INTEXURAOS_WEB_APP_URL: process.env.INTEXURAOS_WEB_APP_URL ?? 'http://localhost:3000',
   },
   'code-agent': {
-    INTEXURAOS_CODE_WORKERS: JSON.stringify({
-      mac: { url: 'http://localhost:8199', priority: 1 },
-      vm: { url: 'http://localhost:8198', priority: 2 },
-    }),
-    INTEXURAOS_DISPATCH_SECRET: 'dev-dispatch-secret',
+    INTEXURAOS_DISPATCH_SIGNING_SECRET: 'dev-dispatch-signing-secret',
     INTEXURAOS_WEBHOOK_VERIFY_SECRET: 'dev-webhook-secret',
     INTEXURAOS_CF_ACCESS_CLIENT_ID: 'dev-cf-client-id',
     INTEXURAOS_CF_ACCESS_CLIENT_SECRET: 'dev-cf-client-secret',
+    INTEXURAOS_ORCHESTRATOR_MAC_URL: 'http://localhost:8199',
+    INTEXURAOS_ORCHESTRATOR_VM_URL: 'http://localhost:8198',
   },
 };
 

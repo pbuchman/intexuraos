@@ -4,15 +4,20 @@
 # Stage 1: Build
 FROM node:22-alpine AS builder
 
+# Install pnpm
+RUN corepack enable && corepack prepare pnpm@10 --activate
+
 WORKDIR /app
 
-# Copy all package.json files
+# Copy workspace config and lockfile
+COPY pnpm-workspace.yaml ./
+COPY pnpm-lock.yaml ./
 COPY package*.json ./
 COPY apps/code-agent/package*.json ./apps/code-agent/
-COPY packages/*/package*.json ./packages/
 
+COPY packages/ ./packages/
 # Install dependencies
-RUN pnpm install
+RUN pnpm install --frozen-lockfile
 
 # Copy source files
 COPY tsconfig*.json ./
@@ -21,16 +26,23 @@ COPY packages/ ./packages/
 COPY apps/code-agent/ ./apps/code-agent/
 
 # Build service (esbuild bundles everything into one file)
-RUN pnpm run --filter @intexuraos/code-agent
+RUN pnpm run --filter @intexuraos/code-agent build
 
 # Stage 2: Production
 FROM node:22-alpine
 
+# Install pnpm
+RUN corepack enable && corepack prepare pnpm@10 --activate
+
 WORKDIR /app
+
+# Copy workspace config and lockfile
+COPY pnpm-workspace.yaml ./
+COPY pnpm-lock.yaml ./
 
 # Copy generated production package.json and install deps
 COPY --from=builder /app/apps/code-agent/dist/package.json ./
-RUN pnpm install --omit=dev
+RUN CI=true pnpm install --prod --no-frozen-lockfile
 
 # Copy built file
 COPY --from=builder /app/apps/code-agent/dist/index.js ./dist/

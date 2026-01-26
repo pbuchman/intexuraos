@@ -48,7 +48,14 @@ describe('codeRoutes', () => {
     });
 
     const workerDiscovery = createWorkerDiscoveryService({ logger });
-    const taskDispatcher = createTaskDispatcherService({ logger });
+    const taskDispatcher = createTaskDispatcherService({
+      logger,
+      cfAccessClientId: 'test-client-id',
+      cfAccessClientSecret: 'test-client-secret',
+      dispatchSigningSecret: 'test-dispatch-secret',
+      orchestratorMacUrl: 'https://cc-mac.intexuraos.cloud',
+      orchestratorVmUrl: 'https://cc-vm.intexuraos.cloud',
+    });
     const whatsappNotifier = createWhatsAppNotifier({
       baseUrl: 'http://whatsapp-service',
       internalAuthToken: 'test-token',

@@ -2,16 +2,6 @@
  * Configuration loader for code-agent service.
  */
 
-export interface WorkerConfig {
-  url: string;
-  priority: number;
-}
-
-export interface CodeWorkersConfig {
-  mac?: WorkerConfig;
-  vm?: WorkerConfig;
-}
-
 export interface Config {
   port: number;
   gcpProjectId: string;
@@ -20,11 +10,12 @@ export interface Config {
   whatsappServiceUrl: string;
   linearAgentUrl: string;
   actionsAgentUrl: string;
-  dispatchSecret: string;
+  dispatchSigningSecret: string;
   webhookVerifySecret: string;
   cfAccessClientId: string;
   cfAccessClientSecret: string;
-  codeWorkers: CodeWorkersConfig;
+  orchestratorMacUrl: string;
+  orchestratorVmUrl: string;
 }
 
 export function loadConfig(): Config {
@@ -35,13 +26,12 @@ export function loadConfig(): Config {
   const whatsappServiceUrl = process.env['INTEXURAOS_WHATSAPP_SERVICE_URL'] ?? '';
   const linearAgentUrl = process.env['INTEXURAOS_LINEAR_AGENT_URL'] ?? '';
   const actionsAgentUrl = process.env['INTEXURAOS_ACTIONS_AGENT_URL'] ?? '';
-  const dispatchSecret = process.env['INTEXURAOS_DISPATCH_SECRET'] ?? '';
+  const dispatchSigningSecret = process.env['INTEXURAOS_DISPATCH_SIGNING_SECRET'] ?? '';
   const webhookVerifySecret = process.env['INTEXURAOS_WEBHOOK_VERIFY_SECRET'] ?? '';
   const cfAccessClientId = process.env['INTEXURAOS_CF_ACCESS_CLIENT_ID'] ?? '';
   const cfAccessClientSecret = process.env['INTEXURAOS_CF_ACCESS_CLIENT_SECRET'] ?? '';
-  const codeWorkersJson = process.env['INTEXURAOS_CODE_WORKERS'] ?? '{}';
-
-  const codeWorkers: CodeWorkersConfig = JSON.parse(codeWorkersJson) as CodeWorkersConfig;
+  const orchestratorMacUrl = process.env['INTEXURAOS_ORCHESTRATOR_MAC_URL'] ?? '';
+  const orchestratorVmUrl = process.env['INTEXURAOS_ORCHESTRATOR_VM_URL'] ?? '';
 
   return {
     port,
@@ -51,10 +41,11 @@ export function loadConfig(): Config {
     whatsappServiceUrl,
     linearAgentUrl,
     actionsAgentUrl,
-    dispatchSecret,
+    dispatchSigningSecret,
     webhookVerifySecret,
     cfAccessClientId,
     cfAccessClientSecret,
-    codeWorkers,
+    orchestratorMacUrl,
+    orchestratorVmUrl,
   };
 }

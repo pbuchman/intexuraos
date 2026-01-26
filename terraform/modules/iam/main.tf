@@ -288,6 +288,15 @@ resource "google_secret_manager_secret_iam_member" "linear_agent_secrets" {
   member    = "serviceAccount:${google_service_account.linear_agent.email}"
 }
 
+# Code Agent: Secret Manager access
+resource "google_secret_manager_secret_iam_member" "code_agent_secrets" {
+  for_each = var.secret_ids
+
+  secret_id = each.value
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.code_agent.email}"
+}
+
 # API Docs Hub: Secret Manager access
 resource "google_secret_manager_secret_iam_member" "api_docs_hub_secrets" {
   for_each = var.secret_ids
@@ -424,6 +433,13 @@ resource "google_project_iam_member" "calendar_agent_firestore" {
   member  = "serviceAccount:${google_service_account.calendar_agent.email}"
 }
 
+# Code Agent: Firestore access
+resource "google_project_iam_member" "code_agent_firestore" {
+  project = var.project_id
+  role    = "roles/datastore.user"
+  member  = "serviceAccount:${google_service_account.code_agent.email}"
+}
+
 
 # All services: Cloud Logging (automatic for Cloud Run, but explicit)
 resource "google_project_iam_member" "user_service_logging" {
@@ -555,4 +571,11 @@ resource "google_project_iam_member" "linear_agent_logging" {
   project = var.project_id
   role    = "roles/logging.logWriter"
   member  = "serviceAccount:${google_service_account.linear_agent.email}"
+}
+
+# Code Agent: Cloud Logging
+resource "google_project_iam_member" "code_agent_logging" {
+  project = var.project_id
+  role    = "roles/logging.logWriter"
+  member  = "serviceAccount:${google_service_account.code_agent.email}"
 }

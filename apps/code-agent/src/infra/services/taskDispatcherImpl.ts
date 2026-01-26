@@ -40,11 +40,17 @@ class TaskDispatcherImpl implements TaskDispatcherService {
   private readonly logger: TaskDispatcherDeps['logger'];
   private readonly cfAccessClientId: string;
   private readonly cfAccessClientSecret: string;
+  private readonly dispatchSigningSecret: string;
+  private readonly orchestratorMacUrl: string;
+  private readonly orchestratorVmUrl: string;
 
   constructor(deps: TaskDispatcherDeps) {
     this.logger = deps.logger;
-    this.cfAccessClientId = process.env['INTEXURAOS_CF_ACCESS_CLIENT_ID'] ?? '';
-    this.cfAccessClientSecret = process.env['INTEXURAOS_CF_ACCESS_CLIENT_SECRET'] ?? '';
+    this.cfAccessClientId = deps.cfAccessClientId;
+    this.cfAccessClientSecret = deps.cfAccessClientSecret;
+    this.dispatchSigningSecret = deps.dispatchSigningSecret;
+    this.orchestratorMacUrl = deps.orchestratorMacUrl;
+    this.orchestratorVmUrl = deps.orchestratorVmUrl;
   }
 
   async dispatch(request: DispatchRequest): Promise<Result<DispatchResult, DispatchError>> {
@@ -71,7 +77,10 @@ class TaskDispatcherImpl implements TaskDispatcherService {
     const timestamp = Date.now();
 
     // Generate HMAC signature
-    const signatureResult = signDispatchRequest({ logger: this.logger }, { body, timestamp });
+    const signatureResult = signDispatchRequest(
+      { logger: this.logger, dispatchSigningSecret: this.dispatchSigningSecret },
+      { body, timestamp }
+    );
     if (!signatureResult.ok) {
       return err({
         code: 'dispatch_failed',
@@ -216,43 +225,28 @@ class TaskDispatcherImpl implements TaskDispatcherService {
   }
 
   /**
-   * Get worker configurations from environment.
+   * Get worker configurations from injected URLs.
    *
-   * Parses INTEXURAOS_CODE_WORKERS env var.
-   * Format: "mac:url:priority,vm:url:priority"
+   * Returns workers sorted by priority (mac first, then vm).
    */
   private getWorkerConfigs(): WorkerConfig[] {
-    const envValue = process.env['INTEXURAOS_CODE_WORKERS'];
-    if (envValue === undefined || envValue === '') {
-      return [];
-    }
-
     const workers: WorkerConfig[] = [];
 
-    for (const part of envValue.split(',')) {
-      const firstColonIndex = part.indexOf(':');
-      if (firstColonIndex === -1) continue;
-
-      const location = part.slice(0, firstColonIndex);
-      const rest = part.slice(firstColonIndex + 1);
-
-      const lastColonIndex = rest.lastIndexOf(':');
-      if (lastColonIndex === -1) continue;
-
-      const url = rest.slice(0, lastColonIndex);
-      const priority = rest.slice(lastColonIndex + 1);
-
-      if (location === 'mac' || location === 'vm') {
-        workers.push({
-          location,
-          url,
-          priority: parseInt(priority, 10),
-        });
-      }
+    if (this.orchestratorMacUrl !== '') {
+      workers.push({
+        location: 'mac',
+        url: this.orchestratorMacUrl,
+        priority: 1,
+      });
     }
 
-    // Sort by priority (lower = preferred)
-    workers.sort((a, b) => a.priority - b.priority);
+    if (this.orchestratorVmUrl !== '') {
+      workers.push({
+        location: 'vm',
+        url: this.orchestratorVmUrl,
+        priority: 2,
+      });
+    }
 
     return workers;
   }
