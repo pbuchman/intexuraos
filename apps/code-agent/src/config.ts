@@ -16,6 +16,10 @@ export interface Config {
   cfAccessClientSecret: string;
   orchestratorMacUrl: string;
   orchestratorVmUrl: string;
+  // Auth0 JWT validation
+  auth0Audience: string;
+  auth0Issuer: string;
+  auth0JwksUri: string;
 }
 
 export function loadConfig(): Config {
@@ -32,6 +36,9 @@ export function loadConfig(): Config {
   const cfAccessClientSecret = process.env['INTEXURAOS_CF_ACCESS_CLIENT_SECRET'] ?? '';
   const orchestratorMacUrl = process.env['INTEXURAOS_ORCHESTRATOR_MAC_URL'] ?? '';
   const orchestratorVmUrl = process.env['INTEXURAOS_ORCHESTRATOR_VM_URL'] ?? '';
+  const auth0Audience = process.env['INTEXURAOS_AUTH0_AUDIENCE'] ?? '';
+  const auth0Issuer = process.env['INTEXURAOS_AUTH0_ISSUER'] ?? '';
+  const auth0JwksUri = process.env['INTEXURAOS_AUTH0_JWKS_URI'] ?? '';
 
   return {
     port,
@@ -47,5 +54,8 @@ export function loadConfig(): Config {
     cfAccessClientSecret,
     orchestratorMacUrl,
     orchestratorVmUrl,
+    auth0Audience,
+    auth0Issuer,
+    auth0JwksUri,
   };
 }

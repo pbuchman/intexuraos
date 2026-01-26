@@ -7,6 +7,9 @@ import cors from '@fastify/cors';
 import fastifySwagger from '@fastify/swagger';
 import fastifySwaggerUi from '@fastify/swagger-ui';
 import { registerRoutes } from './routes/index.js';
+import { loadConfig } from './config.js';
+import { getServices } from './services.js';
+import { createJwtValidator } from './infra/auth/jwtValidator.js';
 
 export async function buildServer(): Promise<FastifyInstance> {
   const app = fastify({
@@ -30,7 +33,19 @@ export async function buildServer(): Promise<FastifyInstance> {
     routePrefix: '/docs',
   });
 
-  await registerRoutes(app);
+  // Load config and create JWT validator for public routes
+  const config = loadConfig();
+  const { logger } = getServices();
+  const jwtValidator = createJwtValidator(
+    {
+      audience: config.auth0Audience,
+      issuer: config.auth0Issuer,
+      jwksUri: config.auth0JwksUri,
+    },
+    logger
+  );
+
+  await registerRoutes(app, { jwtValidator });
 
   // Required endpoints for CI verification
   app.get('/openapi.json', async (_req, reply) => {

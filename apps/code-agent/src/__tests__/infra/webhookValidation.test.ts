@@ -283,4 +283,29 @@ describe('validateWebhookSignature', () => {
       expect(result.ok).toBe(true);
     });
   });
+
+  describe('array header handling', () => {
+    it('accepts valid signature when timestamp is an array', async () => {
+      const payload = { taskId: 'task-123', status: 'completed' };
+      const timestamp = String(Math.floor(Date.now() / 1000));
+
+      // Generate signature with the actual timestamp we'll use
+      const rawBody = JSON.stringify(payload);
+      const message = `${timestamp}.${rawBody}`;
+      const signature = crypto.createHmac('sha256', 'test-secret').update(message).digest('hex');
+
+      // Create request with timestamp as array (Fastify can pass headers as arrays)
+      const request = {
+        body: payload,
+        headers: {
+          'x-request-timestamp': [timestamp],
+          'x-request-signature': signature,
+        },
+      } as unknown as FastifyRequest;
+
+      const result = await validateWebhookSignature(request, { getWebhookSecret });
+
+      expect(result.ok).toBe(true);
+    });
+  });
 });

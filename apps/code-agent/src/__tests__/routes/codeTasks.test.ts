@@ -2,7 +2,17 @@
  * Tests for GET /code/tasks and GET /code/tasks/:taskId endpoints
  */
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import * as jose from 'jose';
+
+// Mock jose library for JWT validation
+vi.mock('jose', () => ({
+  createRemoteJWKSet: vi.fn(() => vi.fn()),
+  jwtVerify: vi.fn(),
+}));
+
+const mockedJwtVerify = vi.mocked(jose.jwtVerify);
+
 import { buildServer } from '../../server.js';
 import { resetServices, setServices } from '../../services.js';
 import { createFakeFirestore, resetFirestore, setFirestore } from '@intexuraos/infra-firestore';
@@ -30,6 +40,12 @@ describe('GET /code/tasks endpoints', () => {
   let codeTaskRepo: CodeTaskRepository;
 
   beforeEach(async () => {
+    // Set jwtVerify to resolve by default (simulating valid token)
+    mockedJwtVerify.mockResolvedValue({
+      payload: { sub: 'test-user-id', email: 'test@example.com' },
+      protectedHeader: new Uint8Array(),
+    } as never);
+
     // Set required env vars
     process.env['INTEXURAOS_CODE_WORKERS'] =
       'mac:https://cc-mac.intexuraos.cloud:1,vm:https://cc-vm.intexuraos.cloud:2';
@@ -37,6 +53,9 @@ describe('GET /code/tasks endpoints', () => {
     process.env['INTEXURAOS_CF_ACCESS_CLIENT_SECRET'] = 'test-client-secret';
     process.env['INTEXURAOS_DISPATCH_SECRET'] = 'test-dispatch-secret';
     process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = 'test-internal-token';
+    process.env['INTEXURAOS_AUTH0_AUDIENCE'] = 'https://api.intexuraos.cloud';
+    process.env['INTEXURAOS_AUTH0_ISSUER'] = 'https://intexuraos.eu.auth0.com/';
+    process.env['INTEXURAOS_AUTH0_JWKS_URI'] = 'https://intexuraos.eu.auth0.com/.well-known/jwks.json';
 
     fakeFirestore = createFakeFirestore();
     setFirestore(fakeFirestore as unknown as Firestore);
@@ -104,7 +123,7 @@ describe('GET /code/tasks endpoints', () => {
 
   describe('GET /code/tasks (list)', () => {
     describe('authentication', () => {
-      it('returns 401 without X-Internal-Auth header', async () => {
+      it('returns 401 without Authorization header', async () => {
         const response = await app.inject({
           method: 'GET',
           url: '/code/tasks',
@@ -121,12 +140,15 @@ describe('GET /code/tasks endpoints', () => {
         });
       });
 
-      it('returns 401 with invalid X-Internal-Auth header', async () => {
+      it('returns 401 with invalid token', async () => {
+        // Make jwtVerify reject to simulate invalid token
+        mockedJwtVerify.mockRejectedValueOnce(new Error('Invalid token'));
+
         const response = await app.inject({
           method: 'GET',
           url: '/code/tasks',
           headers: {
-            'x-internal-auth': 'invalid-token',
+            authorization: 'Bearer invalid-token',
           },
         });
 
@@ -136,8 +158,8 @@ describe('GET /code/tasks endpoints', () => {
 
     describe('successful task listing', () => {
       beforeEach(async () => {
-        // Create test tasks for 'unknown-user' (what validateInternalAuth returns)
-        const userId = 'unknown-user';
+        // Create test tasks for 'test-user-id' (what JWT mock returns)
+        const userId = 'test-user-id';
 
         const result1 = await codeTaskRepo.create({
           userId,
@@ -194,15 +216,15 @@ describe('GET /code/tasks endpoints', () => {
           method: 'GET',
           url: '/code/tasks',
           headers: {
-            'x-internal-auth': 'test-internal-token',
+            authorization: 'Bearer test-token',
           },
         });
 
         expect(response.statusCode).toBe(200);
         const body = JSON.parse(response.body);
         expect(body.tasks).toBeDefined();
-        expect(body.tasks.length).toBe(2); // Only unknown-user tasks
-        expect(body.tasks.every((task: CodeTask) => task.userId === 'unknown-user')).toBe(true);
+        expect(body.tasks.length).toBe(2); // Only test-user-id tasks
+        expect(body.tasks.every((task: CodeTask) => task.userId === 'test-user-id')).toBe(true);
       });
 
       it('respects default pagination limit', async () => {
@@ -210,7 +232,7 @@ describe('GET /code/tasks endpoints', () => {
           method: 'GET',
           url: '/code/tasks',
           headers: {
-            'x-internal-auth': 'test-internal-token',
+            authorization: 'Bearer test-token',
           },
         });
 
@@ -224,7 +246,7 @@ describe('GET /code/tasks endpoints', () => {
           method: 'GET',
           url: '/code/tasks?limit=1',
           headers: {
-            'x-internal-auth': 'test-internal-token',
+            authorization: 'Bearer test-token',
           },
         });
 
@@ -238,7 +260,7 @@ describe('GET /code/tasks endpoints', () => {
           method: 'GET',
           url: '/code/tasks',
           headers: {
-            'x-internal-auth': 'test-internal-token',
+            authorization: 'Bearer test-token',
           },
         });
 
@@ -257,7 +279,7 @@ describe('GET /code/tasks endpoints', () => {
 
     describe('status filtering', () => {
       beforeEach(async () => {
-        const userId = 'unknown-user';
+        const userId = 'test-user-id';
 
         // Create tasks with different statuses
         const task1 = await codeTaskRepo.create({
@@ -298,7 +320,7 @@ describe('GET /code/tasks endpoints', () => {
           method: 'GET',
           url: '/code/tasks?status=completed',
           headers: {
-            'x-internal-auth': 'test-internal-token',
+            authorization: 'Bearer test-token',
           },
         });
 
@@ -312,7 +334,7 @@ describe('GET /code/tasks endpoints', () => {
 
   describe('GET /code/tasks/:taskId (get single)', () => {
     describe('authentication', () => {
-      it('returns 401 without X-Internal-Auth header', async () => {
+      it('returns 401 without Authorization header', async () => {
         const response = await app.inject({
           method: 'GET',
           url: '/code/tasks/task-123',
@@ -328,18 +350,6 @@ describe('GET /code/tasks endpoints', () => {
           },
         });
       });
-
-      it('returns 401 with invalid X-Internal-Auth header', async () => {
-        const response = await app.inject({
-          method: 'GET',
-          url: '/code/tasks/task-123',
-          headers: {
-            'x-internal-auth': 'invalid-token',
-          },
-        });
-
-        expect(response.statusCode).toBe(401);
-      });
     });
 
     describe('task retrieval', () => {
@@ -347,9 +357,9 @@ describe('GET /code/tasks endpoints', () => {
       let otherUserIdTaskId: string;
 
       beforeEach(async () => {
-        // Create test task for 'unknown-user'
+        // Create test task - userId must match the JWT mock (test-user-id)
         const task = await codeTaskRepo.create({
-          userId: 'unknown-user',
+          userId: 'test-user-id',
           prompt: 'Test task',
           sanitizedPrompt: 'Test task',
           systemPromptHash: 'default',
@@ -389,14 +399,14 @@ describe('GET /code/tasks endpoints', () => {
           method: 'GET',
           url: `/code/tasks/${testTaskId}`,
           headers: {
-            'x-internal-auth': 'test-internal-token',
+            authorization: 'Bearer test-token',
           },
         });
 
         expect(response.statusCode).toBe(200);
         const task = JSON.parse(response.body);
         expect(task.id).toBe(testTaskId);
-        expect(task.userId).toBe('unknown-user');
+        expect(task.userId).toBe('test-user-id');
         expect(task.prompt).toBe('Test task');
       });
 
@@ -405,7 +415,7 @@ describe('GET /code/tasks endpoints', () => {
           method: 'GET',
           url: '/code/tasks/non-existent-task',
           headers: {
-            'x-internal-auth': 'test-internal-token',
+            authorization: 'Bearer test-token',
           },
         });
 
@@ -425,7 +435,7 @@ describe('GET /code/tasks endpoints', () => {
           method: 'GET',
           url: `/code/tasks/${otherUserIdTaskId}`,
           headers: {
-            'x-internal-auth': 'test-internal-token',
+            authorization: 'Bearer test-token',
           },
         });
 

@@ -3,6 +3,16 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import * as jose from 'jose';
+
+// Mock jose library for JWT validation
+vi.mock('jose', () => ({
+  createRemoteJWKSet: vi.fn(() => vi.fn()),
+  jwtVerify: vi.fn(),
+}));
+
+const mockedJwtVerify = vi.mocked(jose.jwtVerify);
+
 import { buildServer } from '../../server.js';
 import { resetServices, setServices } from '../../services.js';
 import { createFakeFirestore, resetFirestore, setFirestore } from '@intexuraos/infra-firestore';
@@ -30,6 +40,12 @@ describe('POST /code/submit', () => {
   let logChunkRepo: LogChunkRepository;
 
   beforeEach(async () => {
+    // Set jwtVerify to resolve by default (simulating valid token)
+    mockedJwtVerify.mockResolvedValue({
+      payload: { sub: 'test-user-id', email: 'test@example.com' },
+      protectedHeader: new Uint8Array(),
+    } as never);
+
     // Set required env vars
     process.env['INTEXURAOS_CODE_WORKERS'] =
       'mac:https://cc-mac.intexuraos.cloud:1,vm:https://cc-vm.intexuraos.cloud:2';
@@ -37,6 +53,9 @@ describe('POST /code/submit', () => {
     process.env['INTEXURAOS_CF_ACCESS_CLIENT_SECRET'] = 'test-client-secret';
     process.env['INTEXURAOS_DISPATCH_SECRET'] = 'test-dispatch-secret';
     process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = 'test-internal-token';
+    process.env['INTEXURAOS_AUTH0_AUDIENCE'] = 'https://api.intexuraos.cloud';
+    process.env['INTEXURAOS_AUTH0_ISSUER'] = 'https://intexuraos.eu.auth0.com/';
+    process.env['INTEXURAOS_AUTH0_JWKS_URI'] = 'https://intexuraos.eu.auth0.com/.well-known/jwks.json';
 
     fakeFirestore = createFakeFirestore();
     setFirestore(fakeFirestore as unknown as Firestore);
@@ -104,7 +123,7 @@ describe('POST /code/submit', () => {
   });
 
   describe('authentication', () => {
-    it('returns 401 without X-Internal-Auth header', async () => {
+    it('returns 401 without Authorization header', async () => {
       const response = await app.inject({
         method: 'POST',
         url: '/code/submit',
@@ -124,12 +143,15 @@ describe('POST /code/submit', () => {
       });
     });
 
-    it('returns 401 with invalid X-Internal-Auth header', async () => {
+    it('returns 401 with invalid token', async () => {
+      // Make jwtVerify reject to simulate invalid token
+      mockedJwtVerify.mockRejectedValueOnce(new Error('Invalid token'));
+
       const response = await app.inject({
         method: 'POST',
         url: '/code/submit',
         headers: {
-          'x-internal-auth': 'invalid-token',
+          authorization: 'Bearer invalid-token',
         },
         payload: {
           prompt: 'Fix the bug',
@@ -155,7 +177,7 @@ describe('POST /code/submit', () => {
         method: 'POST',
         url: '/code/submit',
         headers: {
-          'x-internal-auth': 'test-internal-token',
+          authorization: 'Bearer test-token',
         },
         payload: {
           prompt: 'Fix the login bug',
@@ -188,7 +210,7 @@ describe('POST /code/submit', () => {
         method: 'POST',
         url: '/code/submit',
         headers: {
-          'x-internal-auth': 'test-internal-token',
+          authorization: 'Bearer test-token',
         },
         payload: {
           prompt: 'Fix the login bug',
@@ -219,7 +241,7 @@ describe('POST /code/submit', () => {
         method: 'POST',
         url: '/code/submit',
         headers: {
-          'x-internal-auth': 'test-internal-token',
+          authorization: 'Bearer test-token',
         },
         payload: {
           prompt: 'Fix the login bug',
@@ -250,11 +272,10 @@ describe('POST /code/submit', () => {
       });
 
       // Create 10 existing tasks for today to hit the limit
-      // Note: We need to use the same userId that validateInternalAuth returns
-      // For now, create tasks with any userId, then check the limit works
+      // Note: Use the same userId that JWT validation returns ('test-user-id')
       for (let i = 0; i < 10; i++) {
         const result = await codeTaskRepo.create({
-          userId: 'unknown-user',  // This is what validateInternalAuth returns when using test-internal-token
+          userId: 'test-user-id',  // This is what JWT validation returns
           prompt: `Task ${i}`,
           sanitizedPrompt: `Task ${i}`,
           systemPromptHash: 'default',
@@ -276,7 +297,7 @@ describe('POST /code/submit', () => {
         method: 'POST',
         url: '/code/submit',
         headers: {
-          'x-internal-auth': 'test-internal-token',
+          authorization: 'Bearer test-token',
         },
         payload: {
           prompt: 'This should exceed the limit',
@@ -324,7 +345,7 @@ describe('POST /code/submit', () => {
         method: 'POST',
         url: '/code/submit',
         headers: {
-          'x-internal-auth': 'test-internal-token',
+          authorization: 'Bearer test-token',
         },
         payload: {
           prompt: 'This should be allowed',
@@ -353,7 +374,7 @@ describe('POST /code/submit', () => {
         method: 'POST',
         url: '/code/submit',
         headers: {
-          'x-internal-auth': 'test-internal-token',
+          authorization: 'Bearer test-token',
         },
         payload: {
           prompt,
@@ -367,7 +388,7 @@ describe('POST /code/submit', () => {
         method: 'POST',
         url: '/code/submit',
         headers: {
-          'x-internal-auth': 'test-internal-token',
+          authorization: 'Bearer test-token',
         },
         payload: {
           prompt,
@@ -412,7 +433,7 @@ describe('POST /code/submit', () => {
         method: 'POST',
         url: '/code/submit',
         headers: {
-          'x-internal-auth': 'test-internal-token',
+          authorization: 'Bearer test-token',
         },
         payload: {
           prompt: 'Second task',
@@ -440,7 +461,7 @@ describe('POST /code/submit', () => {
         method: 'POST',
         url: '/code/submit',
         headers: {
-          'x-internal-auth': 'test-internal-token',
+          authorization: 'Bearer test-token',
         },
         payload: {
           prompt: 'Fix the bug',
@@ -465,7 +486,7 @@ describe('POST /code/submit', () => {
         method: 'POST',
         url: '/code/submit',
         headers: {
-          'x-internal-auth': 'test-internal-token',
+          authorization: 'Bearer test-token',
         },
         payload: {
           // Missing prompt
@@ -480,7 +501,7 @@ describe('POST /code/submit', () => {
         method: 'POST',
         url: '/code/submit',
         headers: {
-          'x-internal-auth': 'test-internal-token',
+          authorization: 'Bearer test-token',
         },
         payload: {
           prompt: '',
@@ -507,7 +528,7 @@ describe('POST /code/submit', () => {
           method: 'POST',
           url: '/code/submit',
           headers: {
-            'x-internal-auth': 'test-internal-token',
+            authorization: 'Bearer test-token',
           },
           payload: {
             prompt: `Fix the bug with ${workerType}`,
@@ -535,7 +556,7 @@ describe('POST /code/submit', () => {
         method: 'POST',
         url: '/code/submit',
         headers: {
-          'x-internal-auth': 'test-internal-token',
+          authorization: 'Bearer test-token',
         },
         payload: {
           prompt: '  Fix    the   bug  ',  // Extra spaces

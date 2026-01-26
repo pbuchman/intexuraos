@@ -8,6 +8,12 @@ import { getServices } from '../services.js';
 import { processCodeAction } from '../domain/usecases/processCodeAction.js';
 import type { TaskStatus } from '../domain/models/codeTask.js';
 
+export type JwtValidator = (request: FastifyRequest, reply: FastifyReply) => Promise<void>;
+
+export interface CodeRoutesOptions {
+  jwtValidator: JwtValidator;
+}
+
 // Response schema for created task
 const codeTaskSchema = {
   type: 'object',
@@ -216,7 +222,8 @@ function taskToApiResponse(task: {
   };
 }
 
-export const codeRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
+export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, opts, done) => {
+  const { jwtValidator } = opts;
   // ============================================================
   // INTERNAL ROUTES (X-Internal-Auth)
   // ============================================================
@@ -278,9 +285,17 @@ export const codeRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             description: 'Unauthorized',
             type: 'object',
             properties: {
-              error: { type: 'string', enum: ['unauthorized'] },
+              success: { type: 'boolean', enum: [false] },
+              error: {
+                type: 'object',
+                properties: {
+                  code: { type: 'string', enum: ['UNAUTHORIZED'] },
+                  message: { type: 'string' },
+                },
+                required: ['code', 'message'],
+              },
             },
-            required: ['error'],
+            required: ['success', 'error'],
           },
           409: {
             description: 'Duplicate task (deduplication triggered)',
@@ -321,7 +336,7 @@ export const codeRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       if (!authResult.valid) {
         request.log.warn({ reason: authResult.reason }, 'Internal auth failed for code process');
         reply.status(401);
-        return { error: 'unauthorized' };
+        return { success: false, error: { code: 'UNAUTHORIZED', message: 'Unauthorized' } };
       }
 
       const services = getServices();
@@ -867,6 +882,7 @@ export const codeRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   }>(
     '/code/submit',
     {
+      onRequest: jwtValidator,
       schema: {
         operationId: 'submitCodeTask',
         summary: 'Submit a code task from the UI',
@@ -965,19 +981,9 @@ export const codeRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         includeParams: true,
       });
 
-      // TODO: Replace with Auth0 JWT validation in INT-254
-      // For now, using internal auth temporarily
-      const authResult = validateInternalAuth(request);
-      if (!authResult.valid) {
-        request.log.warn({ reason: authResult.reason }, 'Auth failed for code task submission');
-        reply.status(401);
-        return { success: false, error: { code: 'UNAUTHORIZED', message: 'Unauthorized' } };
-      }
-
       const { codeTaskRepo, taskDispatcher } = getServices();
       const body = request.body;
-      // TODO: Extract userId from Auth0 JWT in INT-254
-      const userId = 'unknown-user';
+      const userId = request.user?.userId ?? 'unknown-user';
 
       request.log.info({ userId, promptLength: body.prompt.length }, 'Submitting code task from UI');
 
@@ -1145,6 +1151,7 @@ export const codeRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   }>(
     '/code/tasks',
     {
+      onRequest: jwtValidator,
       schema: {
         operationId: 'listCodeTasks',
         summary: 'List user code tasks',
@@ -1221,18 +1228,8 @@ export const codeRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         includeParams: true,
       });
 
-      // TODO: Replace with Auth0 JWT validation in INT-254
-      // For now, using internal auth temporarily
-      const authResult = validateInternalAuth(request);
-      if (!authResult.valid) {
-        request.log.warn({ reason: authResult.reason }, 'Auth failed for code task list');
-        reply.status(401);
-        return { success: false, error: { code: 'UNAUTHORIZED', message: 'Unauthorized' } };
-      }
-
       const { codeTaskRepo } = getServices();
-      // TODO: Extract userId from Auth0 JWT in INT-254
-      const userId = 'unknown-user';
+      const userId = request.user?.userId ?? 'unknown-user';
 
       request.log.info({ userId, status: request.query.status }, 'Listing code tasks');
 
@@ -1281,6 +1278,7 @@ export const codeRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   }>(
     '/code/tasks/:taskId',
     {
+      onRequest: jwtValidator,
       schema: {
         operationId: 'getCodeTask',
         summary: 'Get code task details',
@@ -1391,18 +1389,8 @@ export const codeRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         includeParams: true,
       });
 
-      // TODO: Replace with Auth0 JWT validation in INT-254
-      // For now, using internal auth temporarily
-      const authResult = validateInternalAuth(request);
-      if (!authResult.valid) {
-        request.log.warn({ reason: authResult.reason }, 'Auth failed for code task get');
-        reply.status(401);
-        return { success: false, error: { code: 'UNAUTHORIZED', message: 'Unauthorized' } };
-      }
-
       const { codeTaskRepo } = getServices();
-      // TODO: Extract userId from Auth0 JWT in INT-254
-      const userId = 'unknown-user';
+      const userId = request.user?.userId ?? 'unknown-user';
 
       request.log.info({ userId, taskId: request.params.taskId }, 'Getting code task');
 
@@ -1442,6 +1430,7 @@ export const codeRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   }>(
     '/code/cancel',
     {
+      onRequest: jwtValidator,
       schema: {
         operationId: 'cancelCodeTask',
         summary: 'Cancel a running code task',
@@ -1467,9 +1456,17 @@ export const codeRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             description: 'Unauthorized',
             type: 'object',
             properties: {
-              error: { type: 'string', enum: ['unauthorized'] },
+              success: { type: 'boolean', enum: [false] },
+              error: {
+                type: 'object',
+                properties: {
+                  code: { type: 'string', enum: ['UNAUTHORIZED'] },
+                  message: { type: 'string' },
+                },
+                required: ['code', 'message'],
+              },
             },
-            required: ['error'],
+            required: ['success', 'error'],
           },
           404: {
             description: 'Task not found',
@@ -1504,19 +1501,9 @@ export const codeRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         includeParams: true,
       });
 
-      // TODO: Replace with Auth0 JWT validation in INT-254
-      // For now, using internal auth temporarily
-      const authResult = validateInternalAuth(request);
-      if (!authResult.valid) {
-        request.log.warn({ reason: authResult.reason }, 'Auth failed for code task cancellation');
-        reply.status(401);
-        return { error: 'unauthorized' };
-      }
-
       const { codeTaskRepo, taskDispatcher } = getServices();
       const { taskId } = request.body;
-      // TODO: Extract userId from Auth0 JWT in INT-254
-      const userId = 'unknown-user';
+      const userId = request.user?.userId ?? 'unknown-user';
 
       request.log.info({ userId, taskId }, 'Cancelling code task');
 
