@@ -122,7 +122,45 @@ FOR each child in tier order:
 | QA          | Skip (completed)              |
 | Done        | Skip (completed)              |
 
-### 6. Execute Children Loop (NO CHECKPOINTS)
+### 6. Create PR Early (Before First Child)
+
+**⚠️ CRITICAL: Create the PR BEFORE starting work on children. This enables progressive updates.**
+
+```bash
+# Push branch (even if empty, to establish remote)
+git push -u origin <type>/INT-<parent-id>
+
+# Create draft PR with all planned children listed
+gh pr create --draft --base development \
+  --title "[INT-<parent-id>] <parent-title>" \
+  --body "$(cat <<'EOF'
+## Summary
+<overall feature summary>
+
+## Child Issues
+| Issue | Title | Status |
+|-------|-------|--------|
+| INT-<child-1> | <title> | ⏳ Pending |
+| INT-<child-2> | <title> | ⏳ Pending |
+| INT-<child-3> | <title> | ⏳ Pending |
+
+## Progress Log
+_Updated after each child issue completion_
+
+---
+
+Fixes INT-<parent-id>
+
+🤖 Generated with [Claude Code](https://claude.ai/claude-code)
+EOF
+)"
+```
+
+**Store the PR number** — you'll need it for updates after each child.
+
+---
+
+### 7. Execute Children Loop (NO CHECKPOINTS)
 
 **⚠️ CRITICAL: DO NOT STOP between children. Execute continuously.**
 
@@ -145,6 +183,7 @@ FOR each child starting from resume point:
      - Read requirements from child description
      - Make code changes
      - Follow all CLAUDE.md rules
+     - **REMEMBER: You are on the PARENT branch (feature/INT-<parent>)**
 
   3. Run CI verification (MUST PASS)
      pnpm run ci:tracked
@@ -153,20 +192,31 @@ FOR each child starting from resume point:
        Fix ALL errors (ownership mindset)
        Re-run until passes
 
-  4. Commit changes with child ID
+  4. Commit AND PUSH changes with child ID
      git add -A
      git commit -m "INT-<child-id>: <child-title-summary>"
+     git push
 
-  5. Update child state to "In Review"
+  5. Update PR description (MANDATORY)
+     - Mark child as ✅ Done in Child Issues table
+     - Add entry to Progress Log section
+     - Update title if scope changed
+
+     gh pr edit <pr-number> --body "$(cat <<'EOF'
+     <updated body with child marked done>
+     EOF
+     )"
+
+  6. Update child state to "In Review"
      Call mcp__linear__update_issue(state: "In Review")
 
-  6. Update parent ledger (State Tracking section)
+  7. Update parent ledger (State Tracking section)
      Move child from "Now" to "Done" checklist
 
   // === NO STOP — Continue immediately to next child ===
 ```
 
-### 7. Handle Blocked Children (Circle Back)
+### 8. Handle Blocked Children (Circle Back)
 
 After initial pass, if any children were skipped due to blockers:
 
@@ -180,39 +230,47 @@ FOR each blocked_child:
     Report: "Cannot complete INT-XXX — blocked by INT-YYY (still in progress)"
 ```
 
-### 8. Create Single PR (After ALL Children Complete)
+### 9. Finalize PR (After ALL Children Complete)
 
-**Only create PR when ALL children are in In Review or later:**
+**Mark PR ready for review when ALL children are in In Review or later:**
 
 ```bash
 git fetch origin
 git merge origin/development  # Resolve conflicts if any
+git push
 
-git push -u origin <type>/INT-<parent-id>
+# Mark PR as ready for review (removes draft status)
+gh pr ready <pr-number>
 
-gh pr create --base development \
-  --title "[INT-<parent-id>] <parent-title>" \
-  --body "$(cat <<'EOF'
+# Final PR body update - all children marked done
+gh pr edit <pr-number> --body "$(cat <<'EOF'
 ## Summary
 <summary of all changes across children>
 
 ## Child Issues Completed
-- [x] INT-<child-1>: <title>
-- [x] INT-<child-2>: <title>
-- [x] INT-<child-3>: <title>
+| Issue | Title | Status |
+|-------|-------|--------|
+| INT-<child-1> | <title> | ✅ Done |
+| INT-<child-2> | <title> | ✅ Done |
+| INT-<child-3> | <title> | ✅ Done |
+
+## Progress Log
+- **INT-<child-1>**: <what was done>
+- **INT-<child-2>**: <what was done>
+- **INT-<child-3>**: <what was done>
 
 ## Test Plan
-- [ ] All CI checks pass
+- [x] All CI checks pass
 - [ ] <verification items>
 
 Fixes INT-<parent-id>
 
-🤖 Generated with [Claude Code](https://claude.com/claude-code)
+🤖 Generated with [Claude Code](https://claude.ai/claude-code)
 EOF
 )"
 ```
 
-### 9. Update Parent State to In Review
+### 10. Update Parent State to In Review
 
 ```
 Call mcp__linear__update_issue
@@ -220,7 +278,7 @@ Call mcp__linear__update_issue
 - State: "In Review"
 ```
 
-### 10. Cross-Link Summary
+### 11. Cross-Link Summary
 
 Display completion summary:
 
