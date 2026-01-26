@@ -8,13 +8,6 @@ resource "google_service_account" "user_service" {
   description  = "Service account for user-service Cloud Run deployment"
 }
 
-# Service account for promptvault-service
-resource "google_service_account" "promptvault_service" {
-  account_id   = "intexuraos-pv-svc-${var.environment}"
-  display_name = "IntexuraOS PromptVault Service (${var.environment})"
-  description  = "Service account for promptvault-service Cloud Run deployment"
-}
-
 # Service account for notion-service
 resource "google_service_account" "notion_service" {
   account_id   = "intexuraos-notion-svc-${var.environment}"

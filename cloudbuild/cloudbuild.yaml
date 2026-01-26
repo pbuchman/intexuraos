@@ -15,9 +15,8 @@
 # ┌─────────────────────────────────────────────────────────────────────────┐
 # │ BATCH 1 - Foundation (DB migration + lightweight services)              │
 # │   1. deploy-firestore        (migration - runs first)                   │
-# │   2. promptvault-service                                                │
-# │   3. image-service                                                      │
-# │   4. api-docs-hub                                                       │
+# │   2. image-service                                                      │
+# │   3. api-docs-hub                                                       │
 # ├─────────────────────────────────────────────────────────────────────────┤
 # │ BATCH 2 - Core Services A                                               │
 # │   1. notion-service                                                     │
@@ -102,23 +101,7 @@ steps:
     env:
       - 'PROJECT_ID=$PROJECT_ID'
 
-  # --- Batch 1 Builds (3 parallel) ---
-  - name: 'gcr.io/cloud-builders/docker'
-    id: 'build-push-promptvault-service'
-    waitFor: ['pnpm-install']
-    timeout: 900s
-    entrypoint: 'bash'
-    args:
-      [
-        'cloudbuild/scripts/build-push-monitored.sh',
-        'promptvault-service',
-        'apps/promptvault-service/Dockerfile',
-      ]
-    env:
-      - 'DOCKER_BUILDKIT=1'
-      - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
-      - 'COMMIT_SHA=$COMMIT_SHA'
-
+  # --- Batch 1 Builds (2 parallel) ---
   - name: 'gcr.io/cloud-builders/docker'
     id: 'build-push-image-service'
     waitFor: ['pnpm-install']
@@ -149,17 +132,6 @@ steps:
 
   # --- Batch 1 Deploys (wait for builds + firestore) ---
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
-    id: 'deploy-promptvault-service'
-    waitFor: ['build-push-promptvault-service', 'deploy-firestore']
-    entrypoint: 'bash'
-    args: ['-c', 'bash cloudbuild/scripts/deploy-promptvault-service.sh']
-    env:
-      - 'COMMIT_SHA=$COMMIT_SHA'
-      - 'REGION=${_REGION}'
-      - 'ARTIFACT_REGISTRY_URL=${_ARTIFACT_REGISTRY_URL}'
-      - 'ENVIRONMENT=${_ENVIRONMENT}'
-
-  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     id: 'deploy-image-service'
     waitFor: ['build-push-image-service', 'deploy-firestore']
     entrypoint: 'bash'
@@ -188,7 +160,7 @@ steps:
   # --- Batch 2 Builds (wait for Batch 1 deploys) ---
   - name: 'gcr.io/cloud-builders/docker'
     id: 'build-push-notion-service'
-    waitFor: ['deploy-promptvault-service', 'deploy-image-service', 'deploy-api-docs-hub']
+    waitFor: ['deploy-image-service', 'deploy-api-docs-hub']
     timeout: 900s
     entrypoint: 'bash'
     args:
@@ -204,7 +176,7 @@ steps:
 
   - name: 'gcr.io/cloud-builders/docker'
     id: 'build-push-user-service'
-    waitFor: ['deploy-promptvault-service', 'deploy-image-service', 'deploy-api-docs-hub']
+    waitFor: ['deploy-image-service', 'deploy-api-docs-hub']
     timeout: 900s
     entrypoint: 'bash'
     args:
@@ -216,7 +188,7 @@ steps:
 
   - name: 'gcr.io/cloud-builders/docker'
     id: 'build-push-whatsapp-service'
-    waitFor: ['deploy-promptvault-service', 'deploy-image-service', 'deploy-api-docs-hub']
+    waitFor: ['deploy-image-service', 'deploy-api-docs-hub']
     timeout: 900s
     entrypoint: 'bash'
     args:
@@ -627,7 +599,6 @@ steps:
         # Cloud Run services to fetch URLs for
         CLOUD_RUN_SERVICES=(
           "user-service:USER_SERVICE"
-          "promptvault-service:PROMPTVAULT_SERVICE"
           "whatsapp-service:WHATSAPP_SERVICE"
           "notion-service:NOTION_SERVICE"
           "mobile-notifications-service:MOBILE_NOTIFICATIONS_SERVICE"

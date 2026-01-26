@@ -1,4 +1,4 @@
-import type { Logger } from '@intexuraos/common-core';
+import type { Logger, Result } from '@intexuraos/common-core';
 import type { IPricingContext } from '@intexuraos/llm-pricing';
 import type { LlmGenerateClient } from '@intexuraos/llm-factory';
 import type { LlmProvider } from '@intexuraos/llm-contract';
@@ -58,13 +58,13 @@ export interface UserServiceError {
 export interface UserServiceClient {
   getApiKeys(
     userId: string
-  ): Promise<import('@intexuraos/common-core').Result<DecryptedApiKeys, UserServiceError>>;
+  ): Promise<Result<DecryptedApiKeys, UserServiceError>>;
   getLlmClient(
     userId: string
-  ): Promise<import('@intexuraos/common-core').Result<LlmGenerateClient, UserServiceError>>;
+  ): Promise<Result<LlmGenerateClient, UserServiceError>>;
   reportLlmSuccess(userId: string, provider: LlmProvider): Promise<void>;
   getOAuthToken(
     userId: string,
     provider: OAuthProvider
-  ): Promise<import('@intexuraos/common-core').Result<OAuthTokenResult, UserServiceError>>;
+  ): Promise<Result<OAuthTokenResult, UserServiceError>>;
 }

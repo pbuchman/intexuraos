@@ -14,7 +14,6 @@ export function getConfig(): AppConfig {
     auth0ClientId: getEnvVar('INTEXURAOS_AUTH0_SPA_CLIENT_ID'),
     authAudience: getEnvVar('INTEXURAOS_AUTH_AUDIENCE'),
     authServiceUrl: getEnvVar('INTEXURAOS_USER_SERVICE_URL'),
-    promptVaultServiceUrl: getEnvVar('INTEXURAOS_PROMPTVAULT_SERVICE_URL'),
     whatsappServiceUrl: getEnvVar('INTEXURAOS_WHATSAPP_SERVICE_URL'),
     notionServiceUrl: getEnvVar('INTEXURAOS_NOTION_SERVICE_URL'),
     mobileNotificationsServiceUrl: getEnvVar('INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_URL'),

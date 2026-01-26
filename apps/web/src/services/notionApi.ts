@@ -8,7 +8,6 @@ export async function getNotionStatus(accessToken: string): Promise<NotionStatus
 
 export interface NotionConnectRequest {
   notionToken: string;
-  promptVaultPageId: string;
 }
 
 export async function connectNotion(

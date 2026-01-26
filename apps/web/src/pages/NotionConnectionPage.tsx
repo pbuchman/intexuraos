@@ -6,7 +6,6 @@ import type { NotionStatus } from '@/types';
 
 interface FormState {
   notionToken: string;
-  promptVaultPageId: string;
 }
 
 export function NotionConnectionPage(): React.JSX.Element {
@@ -20,7 +19,6 @@ export function NotionConnectionPage(): React.JSX.Element {
 
   const [form, setForm] = useState<FormState>({
     notionToken: '',
-    promptVaultPageId: '',
   });
 
   const fetchStatus = useCallback(async (): Promise<void> => {
@@ -29,12 +27,6 @@ export function NotionConnectionPage(): React.JSX.Element {
       const token = await getAccessToken();
       const notionStatus = await getNotionStatus(token);
       setStatus(notionStatus);
-      if (notionStatus.promptVaultPageId !== null && notionStatus.promptVaultPageId !== '') {
-        setForm((prev) => ({
-          ...prev,
-          promptVaultPageId: notionStatus.promptVaultPageId ?? '',
-        }));
-      }
     } catch (e) {
       setError(e instanceof ApiError ? e.message : 'Failed to fetch status');
     } finally {
@@ -51,8 +43,8 @@ export function NotionConnectionPage(): React.JSX.Element {
     setError(null);
     setSuccessMessage(null);
 
-    if (!form.notionToken.trim() || !form.promptVaultPageId.trim()) {
-      setError('Both fields are required');
+    if (!form.notionToken.trim()) {
+      setError('Notion token is required');
       return;
     }
 
@@ -61,7 +53,6 @@ export function NotionConnectionPage(): React.JSX.Element {
       const token = await getAccessToken();
       await connectNotion(token, {
         notionToken: form.notionToken.trim(),
-        promptVaultPageId: form.promptVaultPageId.trim(),
       });
       setSuccessMessage('Notion connection saved successfully');
       setForm((prev) => ({ ...prev, notionToken: '' }));
@@ -82,7 +73,7 @@ export function NotionConnectionPage(): React.JSX.Element {
       const token = await getAccessToken();
       await disconnectNotion(token);
       setSuccessMessage('Notion disconnected successfully');
-      setForm({ notionToken: '', promptVaultPageId: '' });
+      setForm({ notionToken: '' });
       await fetchStatus();
     } catch (e) {
       setError(e instanceof ApiError ? e.message : 'Failed to disconnect Notion');
@@ -122,15 +113,6 @@ export function NotionConnectionPage(): React.JSX.Element {
         <Card title="Connection Settings">
           <form onSubmit={(e) => void handleSubmit(e)} className="space-y-4">
             <Input
-              label="PromptVault Page ID"
-              placeholder="Enter your Notion page ID"
-              value={form.promptVaultPageId}
-              onChange={(e) => {
-                setForm((prev) => ({ ...prev, promptVaultPageId: e.target.value }));
-              }}
-            />
-
-            <Input
               label="Notion Integration Token"
               type="password"
               placeholder="secret_..."
@@ -165,10 +147,6 @@ export function NotionConnectionPage(): React.JSX.Element {
               <div className="flex justify-between">
                 <dt className="text-slate-600">Status</dt>
                 <dd className="font-medium text-green-700">Connected</dd>
-              </div>
-              <div className="flex justify-between">
-                <dt className="text-slate-600">Page ID</dt>
-                <dd className="font-mono text-slate-900">{status.promptVaultPageId}</dd>
               </div>
               {status.updatedAt !== null ? (
                 <div className="flex justify-between">

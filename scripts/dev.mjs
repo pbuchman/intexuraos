@@ -388,7 +388,6 @@ function validateEnvVars() {
 
 const API_DOCS_HUB_ENV = {
   INTEXURAOS_USER_SERVICE_OPENAPI_URL: 'http://localhost:8110/openapi.json',
-  INTEXURAOS_PROMPTVAULT_SERVICE_OPENAPI_URL: 'http://localhost:8111/openapi.json',
   INTEXURAOS_NOTION_SERVICE_OPENAPI_URL: 'http://localhost:8112/openapi.json',
   INTEXURAOS_WHATSAPP_SERVICE_OPENAPI_URL: 'http://localhost:8113/openapi.json',
   INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_OPENAPI_URL: 'http://localhost:8114/openapi.json',
@@ -419,7 +418,6 @@ const COMMON_SERVICE_ENV = {
 // All services get all URLs so they can call each other
 const COMMON_SERVICE_URLS = {
   INTEXURAOS_USER_SERVICE_URL: 'http://localhost:8110',
-  INTEXURAOS_PROMPTVAULT_SERVICE_URL: 'http://localhost:8111',
   INTEXURAOS_NOTION_SERVICE_URL: 'http://localhost:8112',
   INTEXURAOS_WHATSAPP_SERVICE_URL: 'http://localhost:8113',
   INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_URL: 'http://localhost:8114',
