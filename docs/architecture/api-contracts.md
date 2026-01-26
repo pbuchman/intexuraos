@@ -202,7 +202,6 @@ IntexuraOS provides a central API documentation hub (`api-docs-hub`) that aggreg
 │  Fetches specs at runtime from:                                 │
 │  ┌─────────────────────────────────────────────────────────────┐│
 │  │ INTEXURAOS_USER_SERVICE_OPENAPI_URL → User Service /openapi.json       ││
-│  │ INTEXURAOS_PROMPTVAULT_SERVICE_OPENAPI_URL → PromptVault /openapi.json ││
 │  │ INTEXURAOS_NOTION_SERVICE_OPENAPI_URL → Notion Service /openapi.json   ││
 │  │ INTEXURAOS_WHATSAPP_SERVICE_OPENAPI_URL → WhatsApp Service /openapi.json│
 │  └─────────────────────────────────────────────────────────────┘│
@@ -219,12 +218,11 @@ IntexuraOS provides a central API documentation hub (`api-docs-hub`) that aggreg
 
 #### Environment Variables
 
-| Variable                                     | Description                             |
-| -------------------------------------------- | --------------------------------------- |
-| `INTEXURAOS_USER_SERVICE_OPENAPI_URL`        | URL to user-service OpenAPI JSON        |
-| `INTEXURAOS_PROMPTVAULT_SERVICE_OPENAPI_URL` | URL to promptvault-service OpenAPI JSON |
-| `INTEXURAOS_NOTION_SERVICE_OPENAPI_URL`      | URL to notion-service OpenAPI JSON      |
-| `INTEXURAOS_WHATSAPP_SERVICE_OPENAPI_URL`    | URL to whatsapp-service OpenAPI JSON    |
+| Variable                                  | Description                          |
+| ----------------------------------------- | ------------------------------------ |
+| `INTEXURAOS_USER_SERVICE_OPENAPI_URL`     | URL to user-service OpenAPI JSON     |
+| `INTEXURAOS_NOTION_SERVICE_OPENAPI_URL`   | URL to notion-service OpenAPI JSON   |
+| `INTEXURAOS_WHATSAPP_SERVICE_OPENAPI_URL` | URL to whatsapp-service OpenAPI JSON |
 
 These values are constructed by Terraform from Cloud Run service URLs and injected as plain environment variables (not secrets).
 

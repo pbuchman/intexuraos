@@ -13,7 +13,6 @@ steps:
         # Add new services here - URLs are auto-generated from Cloud Run API
         CLOUD_RUN_SERVICES=(
           "user-service:USER_SERVICE"
-          "promptvault-service:PROMPTVAULT_SERVICE"
           "whatsapp-service:WHATSAPP_SERVICE"
           "notion-service:NOTION_SERVICE"
           "mobile-notifications-service:MOBILE_NOTIFICATIONS_SERVICE"
