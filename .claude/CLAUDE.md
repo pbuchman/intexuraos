@@ -100,6 +100,50 @@ After completing any analysis, investigation, or review phase:
 
 ---
 
+## ⛔ Linear State Transition Gate (READ BEFORE UPDATING ISSUES)
+
+**STOP. Before changing ANY Linear issue status, know this rule:**
+
+| Transition              | Allowed?                                  |
+| ----------------------- | ----------------------------------------- |
+| Backlog → In Progress   | ✅ Yes                                    |
+| In Progress → In Review | ✅ Yes                                    |
+| In Review → QA          | ✅ Yes                                    |
+| QA → Done               | ❌ **REQUIRES EXPLICIT USER INSTRUCTION** |
+| Any status → Done       | ❌ **REQUIRES EXPLICIT USER INSTRUCTION** |
+
+**The "Done" status is NEVER automatic.** Even if:
+
+- PR is merged
+- All tests pass
+- Code is deployed
+- Everything looks complete
+
+You MUST wait for the user to explicitly say "mark as done", "move to done", or similar.
+
+### The Rationalization Trap
+
+| Your Thought                                  | Reality                                     |
+| --------------------------------------------- | ------------------------------------------- |
+| "The PR is merged, so it's obviously done"    | Merged ≠ Done. User decides when it's Done. |
+| "All child issues are complete"               | Complete ≠ Done. User confirms Done.        |
+| "This is just bookkeeping, I'll mark it done" | Bookkeeping requires permission too.        |
+| "The user will want this marked done"         | Don't assume. Ask or wait.                  |
+
+### Correct Behavior
+
+```
+❌ WRONG: "PR #600 merged. Marking INT-245 as Done."
+✅ RIGHT: "PR #600 merged. INT-245 should move to QA. Mark as Done?"
+
+❌ WRONG: "All tasks complete. Transitioning 16 issues to Done."
+✅ RIGHT: "All tasks complete. Should I mark these 16 issues as Done?"
+```
+
+**Why this matters:** The user may want to verify deployment, check production, or defer closing until a release. "Done" is a business decision, not a technical one.
+
+---
+
 ## Ownership Mindset (MANDATORY)
 
 _Inspired by "Extreme Ownership" by Jocko Willink and Leif Babin_
@@ -909,7 +953,7 @@ Use the `/linear` skill for issue tracking and workflow management.
 1. All bugs/features must have corresponding Linear issues
 2. PR descriptions must link to Linear issues (`Fixes INT-XXX`)
 3. Reasoning belongs in PR descriptions, not code comments
-4. State transitions: Backlog → In Progress → In Review → QA (Done requires explicit instruction)
+4. **State transitions: See [Linear State Transition Gate](#-linear-state-transition-gate-read-before-updating-issues) — Done requires explicit user instruction**
 5. `pnpm run ci:tracked` MUST pass before PR creation
 
 **Auto-Splitting:** For complex multi-step tasks, the skill automatically detects and offers to split into tiered child issues. See [Linear-Based Continuity Pattern](../docs/patterns/linear-continuity.md).
