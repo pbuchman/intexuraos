@@ -82,15 +82,23 @@ function stripHiddenContent(content: string): string {
 // ============================================================================
 
 function mapExportError(e: NotionError): NotionResearchExportError {
-  switch (e.code) {
+  // Type assertions are safe: NotionError interface guarantees these properties
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-assignment
+  const code = e.code as NotionError['code'];
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+  const message = e.message as string;
+
+  switch (code) {
     case 'NOT_FOUND':
-      return { code: 'NOT_FOUND', message: e.message };
+      return { code: 'NOT_FOUND', message };
     case 'UNAUTHORIZED':
-      return { code: 'UNAUTHORIZED', message: e.message };
+      return { code: 'UNAUTHORIZED', message };
     case 'RATE_LIMITED':
-      return { code: 'RATE_LIMITED', message: e.message };
-    default:
-      return { code: 'INTERNAL_ERROR', message: e.message };
+      return { code: 'RATE_LIMITED', message };
+    case 'VALIDATION_ERROR':
+      return { code: 'INTERNAL_ERROR', message };
+    case 'INTERNAL_ERROR':
+      return { code: 'INTERNAL_ERROR', message };
   }
 }
 
@@ -114,6 +122,7 @@ function mapExportError(e: NotionError): NotionResearchExportError {
  *   - Heading: "Sources" (if llmResult.sources exists)
  *   - Bulleted list of source URLs
  */
+/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access -- Notion SDK types are not fully typed */
 export async function exportResearchToNotion(
   research: Research,
   notionToken: string,
@@ -161,8 +170,11 @@ export async function exportResearchToNotion(
       ],
     });
 
-    const mainPageId = mainPageResponse.id;
-    const mainPageUrl = 'url' in mainPageResponse ? mainPageResponse.url : `https://notion.so/${mainPageId}`;
+    const mainPageId = mainPageResponse.id as string;
+    const mainPageUrl =
+      'url' in mainPageResponse && mainPageResponse.url !== undefined
+        ? mainPageResponse.url
+        : `https://notion.so/${mainPageId}`;
 
     const llmReportPages: { model: string; pageId: string; pageUrl: string }[] = [];
 
@@ -243,10 +255,13 @@ export async function exportResearchToNotion(
         children: childBlocks,
       });
 
-      const pageUrl = 'url' in pageResponse ? pageResponse.url : `https://notion.so/${pageResponse.id}`;
+      const pageUrl =
+        'url' in pageResponse && pageResponse.url !== undefined
+          ? pageResponse.url
+          : `https://notion.so/${String(pageResponse.id)}`;
       llmReportPages.push({
         model: llmResult.model,
-        pageId: pageResponse.id,
+        pageId: String(pageResponse.id),
         pageUrl,
       });
     }
@@ -264,6 +279,7 @@ export async function exportResearchToNotion(
         },
       }));
 
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
       await client.blocks.children.append({
         block_id: mainPageId,
         children: sourceLinks,

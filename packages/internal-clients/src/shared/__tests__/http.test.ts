@@ -51,6 +51,27 @@ describe('fetchWithAuth', () => {
       }
     });
 
+    it('sends request body when provided', async () => {
+      const mockData = { success: true };
+      const requestBody = JSON.stringify({ foo: 'bar' });
+
+      nock('http://localhost:3000')
+        .post('/test', requestBody)
+        .matchHeader('X-Internal-Auth', 'test-token')
+        .reply(200, mockData);
+
+      const result = await fetchWithAuth(config, '/test', {
+        method: 'POST',
+        body: requestBody,
+      });
+
+      if (result.ok) {
+        expect(result.value).toEqual(mockData);
+      } else {
+        expect.fail('Expected successful result');
+      }
+    });
+
     it('includes X-Trace-Id header when traceId is provided', async () => {
       const mockData = { message: 'success' };
       const traceId = 'test-trace-id-123';
