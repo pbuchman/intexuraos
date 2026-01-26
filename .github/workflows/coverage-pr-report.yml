@@ -83,4 +83,5 @@ jobs:
           threshold-icons: "{94: '🔴', 95: '🟠', 96: '🟢'}"
           github-token: ${{ secrets.PAT_TOKEN }}
           file-coverage-mode: all
+          comment-on: 'commit'
           json-summary-compare-path: ${{ steps.check-base-coverage.outputs.exists == 'true' && 'coverage-base/coverage-summary.json' || '' }}
