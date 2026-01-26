@@ -2,6 +2,16 @@
  * Tests for code routes.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import * as jose from 'jose';
+
+// Mock jose library for JWT validation
+vi.mock('jose', () => ({
+  createRemoteJWKSet: vi.fn(() => vi.fn()),
+  jwtVerify: vi.fn(),
+}));
+
+const mockedJwtVerify = vi.mocked(jose.jwtVerify);
+
 import { buildServer } from '../../server.js';
 import { resetServices, setServices, getServices } from '../../services.js';
 import { createFakeFirestore, resetFirestore, setFirestore } from '@intexuraos/infra-firestore';
@@ -25,12 +35,21 @@ describe('codeRoutes', () => {
   let server: Awaited<ReturnType<typeof buildServer>>;
 
   beforeEach(async () => {
+    // Set jwtVerify to resolve by default (simulating valid token)
+    mockedJwtVerify.mockResolvedValue({
+      payload: { sub: 'test-user-id', email: 'test@example.com' },
+      protectedHeader: new Uint8Array(),
+    } as never);
+
     // Set required env vars for worker discovery
     process.env['INTEXURAOS_CODE_WORKERS'] =
       'mac:https://cc-mac.intexuraos.cloud:1,vm:https://cc-vm.intexuraos.cloud:2';
     process.env['INTEXURAOS_CF_ACCESS_CLIENT_ID'] = 'test-client-id';
     process.env['INTEXURAOS_CF_ACCESS_CLIENT_SECRET'] = 'test-client-secret';
     process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = 'test-internal-token';
+    process.env['INTEXURAOS_AUTH0_AUDIENCE'] = 'https://api.intexuraos.cloud';
+    process.env['INTEXURAOS_AUTH0_ISSUER'] = 'https://intexuraos.eu.auth0.com/';
+    process.env['INTEXURAOS_AUTH0_JWKS_URI'] = 'https://intexuraos.eu.auth0.com/.well-known/jwks.json';
 
     fakeFirestore = createFakeFirestore();
     setFirestore(fakeFirestore as unknown as Firestore);
@@ -115,7 +134,7 @@ describe('codeRoutes', () => {
 
       // Create a task
       const created = await repo.create({
-        userId: 'unknown-user',
+        userId: 'test-user-id',
         prompt: 'Fix login bug',
         sanitizedPrompt: 'fix login bug',
         systemPromptHash: 'abc123',
@@ -132,7 +151,7 @@ describe('codeRoutes', () => {
         method: 'GET',
         url: `/code/tasks/${created.value.id}`,
         headers: {
-          'X-Internal-Auth': 'test-internal-token',
+          authorization: 'Bearer test-token',
         },
       });
 
@@ -166,7 +185,7 @@ describe('codeRoutes', () => {
         method: 'GET',
         url: `/code/tasks/${created.value.id}`,
         headers: {
-          'X-Internal-Auth': 'test-internal-token',
+          authorization: 'Bearer test-token',
         },
       });
 
@@ -180,7 +199,7 @@ describe('codeRoutes', () => {
         method: 'GET',
         url: '/code/tasks/non-existent',
         headers: {
-          'X-Internal-Auth': 'test-internal-token',
+          authorization: 'Bearer test-token',
         },
       });
 
@@ -230,7 +249,7 @@ describe('codeRoutes', () => {
         method: 'GET',
         url: '/internal/code-tasks/zombies?staleThresholdMinutes=5',
         headers: {
-          'X-Internal-Auth': 'test-internal-token',
+          'x-internal-auth': 'test-internal-token',
         },
       });
 
@@ -245,7 +264,7 @@ describe('codeRoutes', () => {
         method: 'GET',
         url: '/internal/code-tasks/zombies?staleThresholdMinutes=5',
         headers: {
-          'X-Internal-Auth': 'test-internal-token',
+          'x-internal-auth': 'test-internal-token',
         },
       });
 
@@ -272,9 +291,9 @@ describe('codeRoutes', () => {
         logger,
       });
 
-      // Create tasks for 'unknown-user' (what validateInternalAuth returns)
+      // Create tasks for 'test-user-id' (what validateInternalAuth returns)
       const task1 = await repo.create({
-        userId: 'unknown-user',
+        userId: 'test-user-id',
         prompt: 'Task 1',
         sanitizedPrompt: 'task 1',
         systemPromptHash: 'abc123',
@@ -287,7 +306,7 @@ describe('codeRoutes', () => {
       expect(task1.ok).toBe(true);
 
       const task2 = await repo.create({
-        userId: 'unknown-user',
+        userId: 'test-user-id',
         prompt: 'Task 2',
         sanitizedPrompt: 'task 2',
         systemPromptHash: 'def456',
@@ -315,7 +334,7 @@ describe('codeRoutes', () => {
         method: 'GET',
         url: '/code/tasks',
         headers: {
-          'X-Internal-Auth': 'test-internal-token',
+          authorization: 'Bearer test-token',
         },
       });
 
@@ -333,7 +352,7 @@ describe('codeRoutes', () => {
 
       // Create tasks with different statuses
       const task1 = await repo.create({
-        userId: 'unknown-user',
+        userId: 'test-user-id',
         prompt: 'Completed task',
         sanitizedPrompt: 'completed task',
         systemPromptHash: 'abc123',
@@ -349,7 +368,7 @@ describe('codeRoutes', () => {
       }
 
       await repo.create({
-        userId: 'unknown-user',
+        userId: 'test-user-id',
         prompt: 'Dispatched task',
         sanitizedPrompt: 'dispatched task',
         systemPromptHash: 'def456',
@@ -364,7 +383,7 @@ describe('codeRoutes', () => {
         method: 'GET',
         url: '/code/tasks?status=completed',
         headers: {
-          'X-Internal-Auth': 'test-internal-token',
+          authorization: 'Bearer test-token',
         },
       });
 
@@ -383,7 +402,7 @@ describe('codeRoutes', () => {
       // Create multiple tasks
       for (let i = 0; i < 5; i++) {
         await repo.create({
-          userId: 'unknown-user',
+          userId: 'test-user-id',
           prompt: `Task ${i}`,
           sanitizedPrompt: `task ${i}`,
           systemPromptHash: `hash${i}`,
@@ -399,7 +418,7 @@ describe('codeRoutes', () => {
         method: 'GET',
         url: '/code/tasks?limit=2',
         headers: {
-          'X-Internal-Auth': 'test-internal-token',
+          authorization: 'Bearer test-token',
         },
       });
 
@@ -414,7 +433,7 @@ describe('codeRoutes', () => {
         method: 'GET',
         url: '/code/tasks',
         headers: {
-          'X-Internal-Auth': 'test-internal-token',
+          authorization: 'Bearer test-token',
         },
       });
 
@@ -451,7 +470,7 @@ describe('codeRoutes', () => {
         method: 'GET',
         url: '/code/tasks?userId=user-123',
         headers: {
-          'X-Internal-Auth': 'test-internal-token',
+          authorization: 'Bearer test-token',
         },
       });
 
@@ -482,7 +501,7 @@ describe('codeRoutes', () => {
         method: 'GET',
         url: '/internal/code-tasks/zombies?staleThresholdMinutes=5',
         headers: {
-          'X-Internal-Auth': 'test-internal-token',
+          'x-internal-auth': 'test-internal-token',
         },
       });
 
@@ -523,7 +542,7 @@ describe('codeRoutes', () => {
         method: 'GET',
         url: '/internal/code-tasks/linear/INT-123/active',
         headers: {
-          'X-Internal-Auth': 'test-internal-token',
+          'x-internal-auth': 'test-internal-token',
         },
       });
 
@@ -539,7 +558,7 @@ describe('codeRoutes', () => {
         method: 'GET',
         url: '/internal/code-tasks/linear/INT-999/active',
         headers: {
-          'X-Internal-Auth': 'test-internal-token',
+          'x-internal-auth': 'test-internal-token',
         },
       });
 
@@ -579,7 +598,7 @@ describe('codeRoutes', () => {
         method: 'GET',
         url: '/internal/code-tasks/linear/INT-456/active',
         headers: {
-          'X-Internal-Auth': 'test-internal-token',
+          'x-internal-auth': 'test-internal-token',
         },
       });
 
@@ -617,7 +636,7 @@ describe('codeRoutes', () => {
         method: 'GET',
         url: '/internal/code-tasks/linear/INT-123/active',
         headers: {
-          'X-Internal-Auth': 'test-internal-token',
+          'x-internal-auth': 'test-internal-token',
         },
       });
 
@@ -654,7 +673,7 @@ describe('codeRoutes', () => {
         method: 'PATCH',
         url: `/internal/code-tasks/${created.value.id}`,
         headers: {
-          'X-Internal-Auth': 'test-internal-token',
+          'x-internal-auth': 'test-internal-token',
         },
         payload: {
           status: 'completed',
@@ -677,7 +696,7 @@ describe('codeRoutes', () => {
         method: 'PATCH',
         url: '/internal/code-tasks/non-existent-task',
         headers: {
-          'X-Internal-Auth': 'test-internal-token',
+          'x-internal-auth': 'test-internal-token',
         },
         payload: {
           status: 'completed',
@@ -719,7 +738,7 @@ describe('codeRoutes', () => {
         method: 'PATCH',
         url: '/internal/code-tasks/task-123',
         headers: {
-          'X-Internal-Auth': 'test-internal-token',
+          'x-internal-auth': 'test-internal-token',
         },
         payload: {
           status: 'completed',
@@ -749,7 +768,7 @@ describe('codeRoutes', () => {
         method: 'POST',
         url: '/internal/code/process',
         headers: {
-          'X-Internal-Auth': 'test-internal-token',
+          'x-internal-auth': 'test-internal-token',
         },
         payload: {
           actionId: 'action-123',
