@@ -21,6 +21,9 @@ import { createWhatsAppNotifier } from './infra/services/whatsappNotifierImpl.js
 import { createActionsAgentClient } from './infra/clients/actionsAgentClient.js';
 import { createUserUsageFirestoreRepository } from './infra/firestore/userUsageFirestoreRepository.js';
 import { createRateLimitService } from './domain/services/rateLimitService.js';
+import { createLinearAgentHttpClient } from './infra/http/linearAgentHttpClient.js';
+import { createLinearIssueService, type LinearIssueService } from './domain/services/linearIssueService.js';
+import { createStatusMirrorService, type StatusMirrorService } from './infra/services/statusMirrorServiceImpl.js';
 
 export interface ServiceContainer {
   firestore: Firestore;
@@ -32,6 +35,8 @@ export interface ServiceContainer {
   whatsappNotifier: WhatsAppNotifier;
   actionsAgentClient: ActionsAgentClient;
   rateLimitService: RateLimitService;
+  linearIssueService: LinearIssueService;
+  statusMirrorService: StatusMirrorService;
 }
 
 // Configuration required to initialize services
@@ -59,6 +64,23 @@ export function initServices(config: ServiceConfig): void {
   const firestore = getFirestore();
   const logger = pino({ name: 'code-agent' });
 
+  const linearAgentClient = createLinearAgentHttpClient({
+    baseUrl: config.linearAgentUrl,
+    internalAuthToken: config.internalAuthToken,
+    timeoutMs: 10000,
+  }, logger);
+
+  const linearIssueService = createLinearIssueService({
+    linearAgentClient,
+    logger,
+  });
+
+  const actionsAgentClient = createActionsAgentClient({
+    baseUrl: config.actionsAgentUrl,
+    internalAuthToken: config.internalAuthToken,
+    logger,
+  });
+
   container = {
     firestore,
     logger,
@@ -78,15 +100,16 @@ export function initServices(config: ServiceConfig): void {
       internalAuthToken: config.internalAuthToken,
       logger,
     }),
-    actionsAgentClient: createActionsAgentClient({
-      baseUrl: config.actionsAgentUrl,
-      internalAuthToken: config.internalAuthToken,
+    actionsAgentClient,
+    statusMirrorService: createStatusMirrorService({
+      actionsAgentClient,
       logger,
     }),
     rateLimitService: createRateLimitService({
       userUsageRepository: createUserUsageFirestoreRepository(firestore, logger),
       logger,
     }),
+    linearIssueService,
   };
 }
 

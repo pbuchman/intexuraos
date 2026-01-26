@@ -20,10 +20,13 @@ import type { Logger } from 'pino';
 import { createFirestoreCodeTaskRepository } from '../infra/repositories/firestoreCodeTaskRepository.js';
 import { createFirestoreLogChunkRepository } from '../infra/repositories/firestoreLogChunkRepository.js';
 import { createActionsAgentClient } from '../infra/clients/actionsAgentClient.js';
+import { createLinearAgentHttpClient } from '../infra/http/linearAgentHttpClient.js';
+import { createLinearIssueService } from '../domain/services/linearIssueService.js';
 import type { CodeTaskRepository } from '../domain/repositories/codeTaskRepository.js';
 import { createWorkerDiscoveryService } from '../infra/services/workerDiscoveryImpl.js';
 import { createTaskDispatcherService } from '../infra/services/taskDispatcherImpl.js';
 import { createWhatsAppNotifier } from '../infra/services/whatsappNotifierImpl.js';
+import { createStatusMirrorService } from '../infra/services/statusMirrorServiceImpl.js';
 import type { WorkerDiscoveryService } from '../domain/services/workerDiscovery.js';
 import type { TaskDispatcherService } from '../domain/services/taskDispatcher.js';
 import type { LogChunkRepository } from '../domain/repositories/logChunkRepository.js';
@@ -31,6 +34,8 @@ import type { ActionsAgentClient } from '../infra/clients/actionsAgentClient.js'
 import type { WhatsAppNotifier } from '../domain/services/whatsappNotifier.js';
 import type { RateLimitService } from '../domain/services/rateLimitService.js';
 import { ok } from '@intexuraos/common-core';
+import type { LinearIssueService } from '../domain/services/linearIssueService.js';
+import type { StatusMirrorService } from '../infra/services/statusMirrorServiceImpl.js';
 
 describe('OpenAPI contract', () => {
   let app: Awaited<ReturnType<typeof buildServer>>;
@@ -61,6 +66,12 @@ describe('OpenAPI contract', () => {
       },
     };
 
+    const actionsAgentClient = createActionsAgentClient({
+      baseUrl: 'http://actions-agent',
+      internalAuthToken: 'test-token',
+      logger,
+    });
+
     setServices({
       firestore: fakeFirestore,
       logger,
@@ -86,9 +97,17 @@ describe('OpenAPI contract', () => {
         firestore: fakeFirestore,
         logger,
       }),
-      actionsAgentClient: createActionsAgentClient({
-        baseUrl: 'http://actions-agent',
-        internalAuthToken: 'test-token',
+      actionsAgentClient,
+      statusMirrorService: createStatusMirrorService({
+        actionsAgentClient,
+        logger,
+      }),
+      linearIssueService: createLinearIssueService({
+        linearAgentClient: createLinearAgentHttpClient({
+          baseUrl: 'http://linear-agent:8086',
+          internalAuthToken: 'test-token',
+          timeoutMs: 10000,
+        }, logger),
         logger,
       }),
       rateLimitService,
@@ -102,6 +121,8 @@ describe('OpenAPI contract', () => {
       actionsAgentClient: ActionsAgentClient;
       whatsappNotifier: WhatsAppNotifier;
       rateLimitService: RateLimitService;
+      linearIssueService: LinearIssueService;
+      statusMirrorService: StatusMirrorService;
     });
 
     app = await buildServer();

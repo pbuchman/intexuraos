@@ -2177,4 +2177,227 @@ describe('Research Agent Routes', () => {
       expect(typeof body.total).toBe('number');
     });
   });
+
+  describe('PATCH /internal/actions/:actionId/status', () => {
+    beforeEach(async () => {
+      app = await buildServer();
+      const fakeServices = createFakeServices({
+        actionServiceClient: fakeActionClient,
+        researchServiceClient: fakeResearchClient,
+        notificationSender: fakeNotificationSender,
+        actionRepository: fakeActionRepository,
+        actionEventPublisher: fakeActionEventPublisher,
+        actionTransitionRepository: fakeActionTransitionRepository,
+        commandsAgentClient: fakeCommandsAgentClient,
+      });
+      fakeActionRepository = fakeServices.actionRepository as FakeActionRepository;
+      setServices(fakeServices);
+    });
+
+    it('should update resource_status on action', async () => {
+      await fakeActionRepository.save({
+        id: 'action-123',
+        userId: 'user-123',
+        commandId: 'cmd-1',
+        type: 'code',
+        confidence: 0.95,
+        title: 'Test Code Action',
+        status: 'processing',
+        payload: { prompt: 'Test prompt' },
+        createdAt: '2025-01-01T00:00:00.000Z',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      });
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/internal/actions/action-123/status',
+        headers: {
+          'x-internal-auth': INTERNAL_AUTH_TOKEN,
+        },
+        payload: { resource_status: 'running' },
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const body = JSON.parse(response.body) as { success: boolean };
+      expect(body.success).toBe(true);
+
+      const updated = await fakeActionRepository.getById('action-123');
+      expect(updated?.resource_status).toBe('running');
+    });
+
+    it('should return 404 for unknown action', async () => {
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/internal/actions/unknown-id/status',
+        headers: {
+          'x-internal-auth': INTERNAL_AUTH_TOKEN,
+        },
+        payload: { resource_status: 'running' },
+      });
+
+      expect(response.statusCode).toBe(404);
+    });
+
+    it('should store resource_url in payload when completed with PR URL', async () => {
+      await fakeActionRepository.save({
+        id: 'action-123',
+        userId: 'user-123',
+        commandId: 'cmd-1',
+        type: 'code',
+        confidence: 0.95,
+        title: 'Test Code Action',
+        status: 'processing',
+        payload: { prompt: 'Test prompt' },
+        createdAt: '2025-01-01T00:00:00.000Z',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      });
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/internal/actions/action-123/status',
+        headers: {
+          'x-internal-auth': INTERNAL_AUTH_TOKEN,
+        },
+        payload: {
+          resource_status: 'completed',
+          resource_result: { prUrl: 'https://github.com/pr/123' },
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const updated = await fakeActionRepository.getById('action-123');
+      expect(updated?.resource_status).toBe('completed');
+      expect(updated?.payload['resource_url']).toBe('https://github.com/pr/123');
+    });
+
+    it('should store error_message in resource_error when failed', async () => {
+      await fakeActionRepository.save({
+        id: 'action-123',
+        userId: 'user-123',
+        commandId: 'cmd-1',
+        type: 'code',
+        confidence: 0.95,
+        title: 'Test Code Action',
+        status: 'processing',
+        payload: { prompt: 'Test prompt' },
+        createdAt: '2025-01-01T00:00:00.000Z',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      });
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/internal/actions/action-123/status',
+        headers: {
+          'x-internal-auth': INTERNAL_AUTH_TOKEN,
+        },
+        payload: {
+          resource_status: 'failed',
+          resource_result: { error: 'CI failed' },
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const updated = await fakeActionRepository.getById('action-123');
+      expect(updated?.resource_status).toBe('failed');
+      expect(updated?.resource_error).toBe('CI failed');
+    });
+
+    it('should return 401 without internal auth', async () => {
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/internal/actions/action-123/status',
+        payload: { resource_status: 'running' },
+      });
+
+      expect(response.statusCode).toBe(401);
+    });
+
+    it('should update updatedAt timestamp', async () => {
+      await fakeActionRepository.save({
+        id: 'action-123',
+        userId: 'user-123',
+        commandId: 'cmd-1',
+        type: 'code',
+        confidence: 0.95,
+        title: 'Test Code Action',
+        status: 'processing',
+        payload: { prompt: 'Test prompt' },
+        createdAt: '2025-01-01T00:00:00.000Z',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      });
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/internal/actions/action-123/status',
+        headers: {
+          'x-internal-auth': INTERNAL_AUTH_TOKEN,
+        },
+        payload: { resource_status: 'completed' },
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const updated = await fakeActionRepository.getById('action-123');
+      expect(updated?.updatedAt).not.toBe('2025-01-01T00:00:00.000Z');
+    });
+
+    it('should handle dispatched status', async () => {
+      await fakeActionRepository.save({
+        id: 'action-123',
+        userId: 'user-123',
+        commandId: 'cmd-1',
+        type: 'code',
+        confidence: 0.95,
+        title: 'Test Code Action',
+        status: 'processing',
+        payload: { prompt: 'Test prompt' },
+        createdAt: '2025-01-01T00:00:00.000Z',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      });
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/internal/actions/action-123/status',
+        headers: {
+          'x-internal-auth': INTERNAL_AUTH_TOKEN,
+        },
+        payload: { resource_status: 'dispatched' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const updated = await fakeActionRepository.getById('action-123');
+      expect(updated?.resource_status).toBe('dispatched');
+    });
+
+    it('should handle cancelled status', async () => {
+      await fakeActionRepository.save({
+        id: 'action-123',
+        userId: 'user-123',
+        commandId: 'cmd-1',
+        type: 'code',
+        confidence: 0.95,
+        title: 'Test Code Action',
+        status: 'processing',
+        payload: { prompt: 'Test prompt' },
+        createdAt: '2025-01-01T00:00:00.000Z',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      });
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/internal/actions/action-123/status',
+        headers: {
+          'x-internal-auth': INTERNAL_AUTH_TOKEN,
+        },
+        payload: { resource_status: 'cancelled' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const updated = await fakeActionRepository.getById('action-123');
+      expect(updated?.resource_status).toBe('cancelled');
+    });
+  });
 });

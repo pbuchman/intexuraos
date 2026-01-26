@@ -26,6 +26,8 @@ import { createWorkerDiscoveryService } from '../../infra/services/workerDiscove
 import { createTaskDispatcherService } from '../../infra/services/taskDispatcherImpl.js';
 import { createWhatsAppNotifier } from '../../infra/services/whatsappNotifierImpl.js';
 import { createActionsAgentClient, type ActionsAgentClient } from '../../infra/clients/actionsAgentClient.js';
+import { createLinearAgentHttpClient } from '../../infra/http/linearAgentHttpClient.js';
+import { createLinearIssueService } from '../../domain/services/linearIssueService.js';
 import type { CodeTaskRepository } from '../../domain/repositories/codeTaskRepository.js';
 import type { TaskDispatcherService } from '../../domain/services/taskDispatcher.js';
 import type { LogChunkRepository } from '../../domain/repositories/logChunkRepository.js';
@@ -34,6 +36,9 @@ import crypto from 'node:crypto';
 import { fetchWithAuth } from '@intexuraos/internal-clients';
 import type { WhatsAppNotifier } from '../../domain/services/whatsappNotifier.js';
 import type { RateLimitService } from '../../domain/services/rateLimitService.js';
+import type { LinearIssueService } from '../../domain/services/linearIssueService.js';
+import { createStatusMirrorService } from '../../infra/services/statusMirrorServiceImpl.js';
+import type { StatusMirrorService } from '../../infra/services/statusMirrorServiceImpl.js';
 
 // Mock fetchWithAuth
 vi.mock('@intexuraos/internal-clients', async () => ({
@@ -103,6 +108,17 @@ describe('POST /internal/webhooks/task-complete', () => {
       logger,
     });
 
+    const linearAgentClient = createLinearAgentHttpClient({
+      baseUrl: 'http://linear-agent:8086',
+      internalAuthToken: 'test-token',
+      timeoutMs: 10000,
+    }, logger);
+
+    const linearIssueService = createLinearIssueService({
+      linearAgentClient,
+      logger,
+    });
+
     mockFetchWithAuth = fetchWithAuth as ReturnType<typeof vi.fn>;
     mockFetchWithAuth.mockResolvedValue(ok(undefined));
 
@@ -128,6 +144,11 @@ describe('POST /internal/webhooks/task-complete', () => {
       whatsappNotifier,
       actionsAgentClient,
       rateLimitService,
+      linearIssueService,
+      statusMirrorService: createStatusMirrorService({
+        actionsAgentClient,
+        logger,
+      }),
     });
 
     app = await buildServer();
@@ -1225,6 +1246,7 @@ describe('POST /internal/logs', () => {
       logger,
     });
 
+<<<<<<< HEAD
     const rateLimitService: RateLimitService = {
       async checkLimits() {
         return ok(undefined);
@@ -1236,6 +1258,18 @@ describe('POST /internal/logs', () => {
         return;
       },
     };
+=======
+    const linearAgentClient = createLinearAgentHttpClient({
+      baseUrl: 'http://linear-agent:8086',
+      internalAuthToken: 'test-token',
+      timeoutMs: 10000,
+    }, logger);
+
+    const linearIssueService = createLinearIssueService({
+      linearAgentClient,
+      logger,
+    });
+>>>>>>> origin/development
 
     setServices({
       firestore: fakeFirestore as unknown as Firestore,
@@ -1245,7 +1279,15 @@ describe('POST /internal/logs', () => {
       workerDiscovery,
       taskDispatcher,
       actionsAgentClient,
+<<<<<<< HEAD
       rateLimitService,
+=======
+      linearIssueService,
+      statusMirrorService: createStatusMirrorService({
+        actionsAgentClient,
+        logger,
+      }),
+>>>>>>> origin/development
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -1255,7 +1297,12 @@ describe('POST /internal/logs', () => {
       taskDispatcher: TaskDispatcherService;
       actionsAgentClient: ActionsAgentClient;
       whatsappNotifier: WhatsAppNotifier;
+<<<<<<< HEAD
       rateLimitService: RateLimitService;
+=======
+      linearIssueService: LinearIssueService;
+      statusMirrorService: StatusMirrorService;
+>>>>>>> origin/development
     });
 
     app = await buildServer();
@@ -1513,6 +1560,17 @@ describe('POST /internal/webhooks/task-complete - WhatsApp notifications', () =>
       logger,
     });
 
+    const linearAgentClient = createLinearAgentHttpClient({
+      baseUrl: 'http://linear-agent:8086',
+      internalAuthToken: 'test-token',
+      timeoutMs: 10000,
+    }, logger);
+
+    const linearIssueService = createLinearIssueService({
+      linearAgentClient,
+      logger,
+    });
+
     mockFetchWithAuth = fetchWithAuth as ReturnType<typeof vi.fn>;
     mockFetchWithAuth.mockResolvedValue(ok(undefined));
 
@@ -1538,6 +1596,11 @@ describe('POST /internal/webhooks/task-complete - WhatsApp notifications', () =>
       whatsappNotifier,
       actionsAgentClient,
       rateLimitService,
+      linearIssueService,
+      statusMirrorService: createStatusMirrorService({
+        actionsAgentClient,
+        logger,
+      }),
     });
 
     app = await buildServer();

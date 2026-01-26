@@ -430,6 +430,14 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
 
       request.log.info({ codeTaskId: result.value.codeTaskId }, 'Code action processed successfully');
 
+      // Mirror dispatched status to action (non-fatal)
+      await services.statusMirrorService.mirrorStatus({
+        actionId: body.actionId,
+        taskStatus: 'dispatched',
+        resourceUrl: result.value.resourceUrl,
+        traceId,
+      });
+
       return await reply.send({
         status: 'submitted',
         codeTaskId: result.value.codeTaskId,
@@ -631,7 +639,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         return { success: false, error: { code: 'UNAUTHORIZED', message: 'Unauthorized' } };
       }
 
-      const { codeTaskRepo, rateLimitService } = getServices();
+      const { codeTaskRepo, linearIssueService, rateLimitService } = getServices();
       const { taskId } = request.params;
       const body = request.body;
 
@@ -672,6 +680,12 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         rateLimitService.recordTaskComplete(userId, undefined).catch((err) => {
           request.log.error({ taskId, userId, error: err }, 'Failed to record task completion for rate limiting');
         });
+      }
+
+      // If PR was created and task has a Linear issue, transition to In Review
+      if (body.result?.prUrl !== undefined && result.value.linearIssueId !== undefined) {
+        await linearIssueService.markInReview(result.value.linearIssueId);
+      }
       }
 
       request.log.info({ taskId, status: result.value.status }, 'Code task updated successfully');
@@ -890,6 +904,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       prompt: string;
       workerType?: 'opus' | 'auto' | 'glm';
       linearIssueId?: string;
+      linearIssueTitle?: string;
     };
   }>(
     '/code/submit',
@@ -906,6 +921,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
             prompt: { type: 'string', minLength: 1, maxLength: 100000 },
             workerType: { type: 'string', enum: ['opus', 'auto', 'glm'] },
             linearIssueId: { type: 'string' },
+            linearIssueTitle: { type: 'string' },
           },
           required: ['prompt'],
         },
@@ -993,8 +1009,13 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         includeParams: true,
       });
 
-      const { codeTaskRepo, taskDispatcher, rateLimitService } = getServices();
-      const body = request.body;
+      const { codeTaskRepo, taskDispatcher, rateLimitService, linearIssueService } = getServices();
+      const body = request.body as {
+        prompt: string;
+        workerType?: 'opus' | 'auto' | 'glm';
+        linearIssueId?: string;
+        linearIssueTitle?: string;
+      };
       const userId = request.user?.userId ?? 'unknown-user';
 
       request.log.info({ userId, promptLength: body.prompt.length }, 'Submitting code task from UI');
@@ -1004,6 +1025,30 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       if (!limitCheck.ok) {
         const { error } = limitCheck;
         request.log.warn({ userId, error }, 'Rate limit exceeded');
+        reply.status(429);
+        return {
+          success: false,
+          error: {
+            code: error.code,
+            message: error.message,
+            retryAfter: error.retryAfter,
+          },
+        };
+      }
+
+      // Ensure Linear issue exists (create if not provided)
+      const ensureParams: {
+        linearIssueId?: string;
+        linearIssueTitle?: string;
+        taskPrompt: string;
+      } = { taskPrompt: body.prompt };
+      if ('linearIssueId' in body && body.linearIssueId !== undefined) {
+        ensureParams.linearIssueId = body.linearIssueId;
+      }
+      if ('linearIssueTitle' in body && body.linearIssueTitle !== undefined) {
+        ensureParams.linearIssueTitle = body.linearIssueTitle;
+      }
+      const issueResult = await linearIssueService.ensureIssueExists(ensureParams);
         reply.status(429);
         return {
           success: false,
@@ -1027,6 +1072,8 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         baseBranch: string;
         traceId: string;
         linearIssueId?: string;
+        linearIssueTitle?: string;
+        linearFallback?: boolean;
       } = {
         userId,
         prompt: body.prompt,
@@ -1039,8 +1086,12 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         traceId: `trace_${Date.now()}_${Math.random().toString(36).substring(7)}`,
       };
 
-      if (body.linearIssueId !== undefined) {
-        createInput.linearIssueId = body.linearIssueId;
+      if (issueResult.linearIssueId !== '') {
+        createInput.linearIssueId = issueResult.linearIssueId;
+        createInput.linearIssueTitle = issueResult.linearIssueTitle;
+      }
+      if (issueResult.linearFallback) {
+        createInput.linearFallback = true;
       }
 
       const createResult = await codeTaskRepo.create(createInput);
@@ -1135,6 +1186,11 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
 
       // Record task start for rate limiting
       await rateLimitService.recordTaskStart(userId);
+
+      // Mark Linear issue as In Progress after successful dispatch
+      if (issueResult.linearIssueId !== '') {
+        await linearIssueService.markInProgress(issueResult.linearIssueId);
+      }
 
       request.log.info({ taskId: task.id, workerLocation: dispatchResult.value.workerLocation }, 'Code task submitted successfully');
 
@@ -1505,7 +1561,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         includeParams: true,
       });
 
-      const { codeTaskRepo, taskDispatcher, rateLimitService } = getServices();
+      const { codeTaskRepo, taskDispatcher, rateLimitService, statusMirrorService } = getServices();
       const { taskId } = request.body;
       const userId = request.user?.userId ?? 'unknown-user';
 
@@ -1557,6 +1613,13 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         // Log but don't fail - task is already marked cancelled in Firestore
         request.log.warn({ taskId, error }, 'Failed to notify worker of cancellation');
       }
+
+      // Step 6: Mirror cancelled status to action (non-fatal)
+      await statusMirrorService.mirrorStatus({
+        actionId: task.actionId,
+        taskStatus: 'cancelled',
+        traceId: extractOrGenerateTraceId(request.headers),
+      });
 
       request.log.info({ taskId }, 'Code task cancelled successfully');
 

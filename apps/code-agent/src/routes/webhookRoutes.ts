@@ -419,10 +419,25 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         };
       }
 
-      const { logChunkRepo } = getServices();
+      const { logChunkRepo, codeTaskRepo, statusMirrorService } = getServices();
       const { taskId, chunks } = request.body;
 
       request.log.debug({ taskId, count: chunks.length }, 'Storing log chunks');
+
+      // If this is the first log chunk (sequence 0), task might still be dispatched
+      // Update to running and mirror to action
+      if (chunks.some((c) => c.sequence === 0)) {
+        const taskResult = await codeTaskRepo.findById(taskId);
+        if (taskResult.ok && taskResult.value.status === 'dispatched') {
+          await codeTaskRepo.update(taskId, { status: 'running' });
+          // Mirror running status to action (non-fatal)
+          await statusMirrorService.mirrorStatus({
+            actionId: taskResult.value.actionId,
+            taskStatus: 'running',
+            traceId: extractOrGenerateTraceId(request.headers),
+          });
+        }
+      }
 
       // Step 3: Store chunks in Firestore subcollection
       const logChunks = chunks.map((chunk) => ({
