@@ -10,6 +10,7 @@ import pino from 'pino';
 import type { Logger } from 'pino';
 import { createFirestoreCodeTaskRepository } from '../../infra/repositories/firestoreCodeTaskRepository.js';
 import { createTaskDispatcherService } from '../../infra/services/taskDispatcherImpl.js';
+import { createWhatsAppNotifier } from '../../infra/services/whatsappNotifierImpl.js';
 import { createFirestoreLogChunkRepository } from '../../infra/repositories/firestoreLogChunkRepository.js';
 import { createWorkerDiscoveryService } from '../../infra/services/workerDiscoveryImpl.js';
 import { createActionsAgentClient } from '../../infra/clients/actionsAgentClient.js';
@@ -18,6 +19,7 @@ import type { TaskDispatcherService } from '../../domain/services/taskDispatcher
 import type { LogChunkRepository } from '../../domain/repositories/logChunkRepository.js';
 import type { WorkerDiscoveryService } from '../../domain/services/workerDiscovery.js';
 import type { ActionsAgentClient } from '../../infra/clients/actionsAgentClient.js';
+import type { WhatsAppNotifier } from '../../domain/services/whatsappNotifier.js';
 
 describe('POST /internal/code/process', () => {
   let app: Awaited<ReturnType<typeof buildServer>>;
@@ -61,6 +63,12 @@ describe('POST /internal/code/process', () => {
     });
     _workerDiscovery = createWorkerDiscoveryService({ logger });
 
+    const whatsappNotifier = createWhatsAppNotifier({
+      baseUrl: 'http://whatsapp-service',
+      internalAuthToken: 'test-token',
+      logger,
+    });
+
     const actionsAgentClient = createActionsAgentClient({
       baseUrl: 'http://actions-agent',
       internalAuthToken: 'test-token',
@@ -73,6 +81,7 @@ describe('POST /internal/code/process', () => {
       codeTaskRepo,
       taskDispatcher,
       workerDiscovery: _workerDiscovery,
+      whatsappNotifier,
       logChunkRepo: _logChunkRepo,
       actionsAgentClient,
     } as {
@@ -83,6 +92,7 @@ describe('POST /internal/code/process', () => {
       workerDiscovery: WorkerDiscoveryService;
       logChunkRepo: LogChunkRepository;
       actionsAgentClient: ActionsAgentClient;
+      whatsappNotifier: WhatsAppNotifier;
     });
 
     app = await buildServer();

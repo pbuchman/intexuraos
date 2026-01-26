@@ -12,6 +12,7 @@ import type { Logger } from 'pino';
 import { createFirestoreCodeTaskRepository } from '../../infra/repositories/firestoreCodeTaskRepository.js';
 import { createWorkerDiscoveryService } from '../../infra/services/workerDiscoveryImpl.js';
 import { createTaskDispatcherService } from '../../infra/services/taskDispatcherImpl.js';
+import { createWhatsAppNotifier } from '../../infra/services/whatsappNotifierImpl.js';
 import { createFirestoreLogChunkRepository } from '../../infra/repositories/firestoreLogChunkRepository.js';
 import { createActionsAgentClient } from '../../infra/clients/actionsAgentClient.js';
 import type { CodeTaskRepository } from '../../domain/repositories/codeTaskRepository.js';
@@ -19,6 +20,7 @@ import type { TaskDispatcherService } from '../../domain/services/taskDispatcher
 import type { LogChunkRepository } from '../../domain/repositories/logChunkRepository.js';
 import type { WorkerDiscoveryService } from '../../domain/services/workerDiscovery.js';
 import type { ActionsAgentClient } from '../../infra/clients/actionsAgentClient.js';
+import type { WhatsAppNotifier } from '../../domain/services/whatsappNotifier.js';
 describe('POST /code/cancel', () => {
   let app: Awaited<ReturnType<typeof buildServer>>;
   let fakeFirestore: ReturnType<typeof createFakeFirestore>;
@@ -56,6 +58,12 @@ describe('POST /code/cancel', () => {
       orchestratorVmUrl: 'https://cc-vm.intexuraos.cloud',
     });
 
+    const whatsappNotifier = createWhatsAppNotifier({
+      baseUrl: 'http://whatsapp-service',
+      internalAuthToken: 'test-token',
+      logger,
+    });
+
     logChunkRepo = createFirestoreLogChunkRepository({
       firestore: fakeFirestore as unknown as Firestore,
       logger,
@@ -76,6 +84,7 @@ describe('POST /code/cancel', () => {
       codeTaskRepo,
       workerDiscovery,
       taskDispatcher,
+      whatsappNotifier,
       logChunkRepo,
       actionsAgentClient,
     } as {
@@ -86,6 +95,7 @@ describe('POST /code/cancel', () => {
       taskDispatcher: TaskDispatcherService;
       logChunkRepo: LogChunkRepository;
       actionsAgentClient: ActionsAgentClient;
+      whatsappNotifier: WhatsAppNotifier;
     });
 
     app = await buildServer();

@@ -202,7 +202,7 @@ function setupShutdownHandlers(handlers: ShutdownHandlers): void {
     await handlers.statePersistence.save(await handlers.statePersistence.load());
 
     // Close server
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition, @typescript-eslint/strict-boolean-expressions
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
     if (serviceState?.server) {
       serviceState.server.close();
     }

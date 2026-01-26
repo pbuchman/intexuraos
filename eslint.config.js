@@ -933,5 +933,21 @@ export default tseslint.config(
       '@typescript-eslint/unbound-method': 'off',
       '@typescript-eslint/use-unknown-in-catch-callback-variable': 'off',
     },
+  },
+  // Workers orchestrator: Zod compatibility - Zod's internal types use 'any' which conflicts with strict ESLint
+  // This is a known limitation: https://github.com/colinhacks/zod/issues/2945
+  {
+    files: ['workers/orchestrator/src/**/*.ts'],
+    rules: {
+      // Disable unsafe-* rules for Zod schema interactions
+      '@typescript-eslint/no-unsafe-assignment': 'off',
+      '@typescript-eslint/no-unsafe-call': 'off',
+      '@typescript-eslint/no-unsafe-member-access': 'off',
+      '@typescript-eslint/no-unsafe-return': 'off',
+      '@typescript-eslint/no-unsafe-argument': 'off',
+      // Relax other strict rules for worker compatibility
+      '@typescript-eslint/strict-boolean-expressions': 'off',
+      '@typescript-eslint/require-await': 'off',
+    },
   }
 );

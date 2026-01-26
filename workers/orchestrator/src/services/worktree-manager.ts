@@ -107,7 +107,6 @@ export class WorktreeManager {
     }
   }
 
-  // eslint-disable-next-line @typescript-eslint/require-await
   async worktreeExists(taskId: string): Promise<boolean> {
     const worktreePath = join(this.config.worktreeBasePath, taskId);
     return existsSync(worktreePath);

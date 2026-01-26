@@ -10,6 +10,7 @@ import { createFirestoreCodeTaskRepository } from '../../infra/repositories/fire
 import { createFirestoreLogChunkRepository } from '../../infra/repositories/firestoreLogChunkRepository.js';
 import { createWorkerDiscoveryService } from '../../infra/services/workerDiscoveryImpl.js';
 import { createTaskDispatcherService } from '../../infra/services/taskDispatcherImpl.js';
+import { createWhatsAppNotifier } from '../../infra/services/whatsappNotifierImpl.js';
 import { createActionsAgentClient } from '../../infra/clients/actionsAgentClient.js';
 
 export function setupTestServices({ actionsAgentUrl = 'http://actions-agent' }: { actionsAgentUrl?: string } = {}): void {
@@ -35,6 +36,11 @@ export function setupTestServices({ actionsAgentUrl = 'http://actions-agent' }: 
       dispatchSigningSecret: 'test-dispatch-secret',
       orchestratorMacUrl: 'https://cc-mac.intexuraos.cloud',
       orchestratorVmUrl: 'https://cc-vm.intexuraos.cloud',
+    }),
+    whatsappNotifier: createWhatsAppNotifier({
+      baseUrl: 'http://whatsapp-service',
+      internalAuthToken: 'test-token',
+      logger,
     }),
     actionsAgentClient: createActionsAgentClient({
       baseUrl: actionsAgentUrl,

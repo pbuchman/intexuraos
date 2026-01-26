@@ -14,6 +14,7 @@ import { createFirestoreCodeTaskRepository } from '../../infra/repositories/fire
 import { createFirestoreLogChunkRepository } from '../../infra/repositories/firestoreLogChunkRepository.js';
 import { createWorkerDiscoveryService } from '../../infra/services/workerDiscoveryImpl.js';
 import { createTaskDispatcherService } from '../../infra/services/taskDispatcherImpl.js';
+import { createWhatsAppNotifier } from '../../infra/services/whatsappNotifierImpl.js';
 import { createActionsAgentClient, type ActionsAgentClient } from '../../infra/clients/actionsAgentClient.js';
 import type { CodeTaskRepository } from '../../domain/repositories/codeTaskRepository.js';
 import type { TaskDispatcherService } from '../../domain/services/taskDispatcher.js';
@@ -21,6 +22,7 @@ import type { LogChunkRepository } from '../../domain/repositories/logChunkRepos
 import type { WorkerDiscoveryService } from '../../domain/services/workerDiscovery.js';
 import crypto from 'node:crypto';
 import { fetchWithAuth } from '@intexuraos/internal-clients';
+import type { WhatsAppNotifier } from '../../domain/services/whatsappNotifier.js';
 
 // Mock fetchWithAuth
 vi.mock('@intexuraos/internal-clients', async () => ({
@@ -69,6 +71,11 @@ describe('POST /internal/webhooks/task-complete', () => {
       orchestratorMacUrl: 'https://cc-mac.intexuraos.cloud',
       orchestratorVmUrl: 'https://cc-vm.intexuraos.cloud',
     });
+    const whatsappNotifier = createWhatsAppNotifier({
+      baseUrl: 'http://whatsapp-service',
+      internalAuthToken: 'test-token',
+      logger,
+    });
 
     actionsAgentClient = createActionsAgentClient({
       baseUrl: 'http://actions-agent',
@@ -86,6 +93,7 @@ describe('POST /internal/webhooks/task-complete', () => {
       logChunkRepo,
       workerDiscovery,
       taskDispatcher,
+      whatsappNotifier,
       actionsAgentClient,
     });
 
@@ -620,8 +628,16 @@ describe('POST /internal/webhooks/task-complete', () => {
 
       expect(response.statusCode).toBe(200);
 
-      // Verify actions-agent was NOT called
-      expect(mockFetchWithAuth).not.toHaveBeenCalled();
+      // Verify WhatsApp notification was sent (but not actions-agent)
+      expect(mockFetchWithAuth).toHaveBeenCalledTimes(1);
+      expect(mockFetchWithAuth).toHaveBeenCalledWith(
+        expect.any(Object),
+        '/internal/messages/send',
+        expect.objectContaining({
+          method: 'POST',
+          body: expect.stringContaining('userId'),
+        })
+      );
     });
 
     it('calls actions-agent for completed task without prUrl', async () => {
@@ -1183,6 +1199,7 @@ describe('POST /internal/logs', () => {
       workerDiscovery: WorkerDiscoveryService;
       taskDispatcher: TaskDispatcherService;
       actionsAgentClient: ActionsAgentClient;
+      whatsappNotifier: WhatsAppNotifier;
     });
 
     app = await buildServer();
@@ -1384,5 +1401,293 @@ describe('POST /internal/logs', () => {
     });
 
     expect(response.statusCode).toBe(401);
+  });
+});
+
+describe('POST /internal/webhooks/task-complete - WhatsApp notifications', () => {
+  let app: Awaited<ReturnType<typeof buildServer>>;
+  let fakeFirestore: ReturnType<typeof createFakeFirestore>;
+  let logger: Logger;
+  let codeTaskRepo: CodeTaskRepository;
+  let taskDispatcher: TaskDispatcherService;
+  let logChunkRepo: LogChunkRepository;
+  let actionsAgentClient: ActionsAgentClient;
+  let mockFetchWithAuth: ReturnType<typeof vi.fn>;
+
+  beforeEach(async () => {
+    process.env['INTEXURAOS_CODE_WORKERS'] =
+      'mac:https://cc-mac.intexuraos.cloud:1,vm:https://cc-vm.intexuraos.cloud:2';
+    process.env['INTEXURAOS_CF_ACCESS_CLIENT_ID'] = 'test-client-id';
+    process.env['INTEXURAOS_CF_ACCESS_CLIENT_SECRET'] = 'test-client-secret';
+    process.env['INTEXURAOS_DISPATCH_SECRET'] = 'test-dispatch-secret';
+    process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = 'test-internal-token';
+
+    fakeFirestore = createFakeFirestore();
+    setFirestore(fakeFirestore as unknown as Firestore);
+    logger = pino({ name: 'test' }) as unknown as Logger;
+
+    codeTaskRepo = createFirestoreCodeTaskRepository({
+      firestore: fakeFirestore as unknown as Firestore,
+      logger,
+    });
+
+    logChunkRepo = createFirestoreLogChunkRepository({
+      firestore: fakeFirestore as unknown as Firestore,
+      logger,
+    });
+
+    const workerDiscovery = createWorkerDiscoveryService({ logger });
+    taskDispatcher = createTaskDispatcherService({
+      logger,
+      cfAccessClientId: 'test-client-id',
+      cfAccessClientSecret: 'test-client-secret',
+      dispatchSigningSecret: 'test-dispatch-secret',
+      orchestratorMacUrl: 'https://cc-mac.intexuraos.cloud',
+      orchestratorVmUrl: 'https://cc-vm.intexuraos.cloud',
+    });
+    const whatsappNotifier = createWhatsAppNotifier({
+      baseUrl: 'http://whatsapp-service',
+      internalAuthToken: 'test-token',
+      logger,
+    });
+
+    actionsAgentClient = createActionsAgentClient({
+      baseUrl: 'http://actions-agent',
+      internalAuthToken: 'test-token',
+      logger,
+    });
+
+    mockFetchWithAuth = fetchWithAuth as ReturnType<typeof vi.fn>;
+    mockFetchWithAuth.mockResolvedValue(ok(undefined));
+
+    setServices({
+      firestore: fakeFirestore as unknown as Firestore,
+      logger,
+      codeTaskRepo,
+      logChunkRepo,
+      workerDiscovery,
+      taskDispatcher,
+      whatsappNotifier,
+      actionsAgentClient,
+    });
+
+    app = await buildServer();
+  });
+
+  afterEach(() => {
+    resetServices();
+    resetFirestore();
+    vi.clearAllMocks();
+  });
+
+  function generateWebhookSignature(body: object, secret: string): { timestamp: string; signature: string } {
+    const timestamp = String(Math.floor(Date.now() / 1000));
+    const rawBody = JSON.stringify(body);
+    const message = `${timestamp}.${rawBody}`;
+    const signature = crypto.createHmac('sha256', secret).update(message).digest('hex');
+
+    return { timestamp, signature };
+  }
+
+  it('sends WhatsApp notification on task completion', async () => {
+    const createResult = await codeTaskRepo.create({
+      userId: 'user-123',
+      prompt: 'Fix the login bug',
+      sanitizedPrompt: 'Fix the login bug',
+      systemPromptHash: 'default',
+      workerType: 'auto',
+      workerLocation: 'mac',
+      repository: 'pbuchman/intexuraos',
+      baseBranch: 'development',
+      traceId: 'trace_123',
+      webhookSecret: 'test-webhook-secret',
+    });
+
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) throw new Error('Failed to create task');
+    const task = createResult.value;
+
+    const payload = {
+      taskId: task.id,
+      status: 'completed' as const,
+      result: {
+        branch: 'fix/login-bug',
+        commits: 3,
+        summary: 'Fixed login redirect handling',
+        prUrl: 'https://github.com/pbuchman/intexuraos/pull/123',
+      },
+    };
+
+    const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/internal/webhooks/task-complete',
+      headers: {
+        'x-internal-auth': 'test-internal-token',
+        'x-request-timestamp': timestamp,
+        'x-request-signature': signature,
+      },
+      payload,
+    });
+
+    expect(response.statusCode).toBe(200);
+
+    const whatsappCalls = mockFetchWithAuth.mock.calls.filter(
+      (call) => call[1] === '/internal/messages/send'
+    );
+    expect(whatsappCalls.length).toBe(1);
+    const firstCall = whatsappCalls[0];
+    if (!firstCall) throw new Error('No WhatsApp calls');
+    const body = JSON.parse(String(firstCall[2].body));
+    expect(body.userId).toBe('user-123');
+    expect(body.type).toBe('code_task_complete');
+  });
+
+  it('sends WhatsApp notification on task failure', async () => {
+    const createResult = await codeTaskRepo.create({
+      userId: 'user-123',
+      prompt: 'Fix the login bug',
+      sanitizedPrompt: 'Fix the login bug',
+      systemPromptHash: 'default',
+      workerType: 'auto',
+      workerLocation: 'mac',
+      repository: 'pbuchman/intexuraos',
+      baseBranch: 'development',
+      traceId: 'trace_123',
+      webhookSecret: 'test-webhook-secret',
+    });
+
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) throw new Error('Failed to create task');
+    const task = createResult.value;
+
+    const payload = {
+      taskId: task.id,
+      status: 'failed' as const,
+      error: {
+        code: 'TEST_ERROR',
+        message: 'Test error occurred',
+      },
+    };
+
+    const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/internal/webhooks/task-complete',
+      headers: {
+        'x-internal-auth': 'test-internal-token',
+        'x-request-timestamp': timestamp,
+        'x-request-signature': signature,
+      },
+      payload,
+    });
+
+    expect(response.statusCode).toBe(200);
+
+    const whatsappCalls = mockFetchWithAuth.mock.calls.filter(
+      (call) => call[1] === '/internal/messages/send'
+    );
+    expect(whatsappCalls.length).toBe(1);
+    const firstCall = whatsappCalls[0];
+    if (!firstCall) throw new Error('No WhatsApp calls');
+    const body = JSON.parse(String(firstCall[2].body));
+    expect(body.userId).toBe('user-123');
+    expect(body.type).toBe('code_task_failed');
+  });
+
+  it('does not send notification on interrupted status', async () => {
+    const createResult = await codeTaskRepo.create({
+      userId: 'user-123',
+      prompt: 'Fix the login bug',
+      sanitizedPrompt: 'Fix the login bug',
+      systemPromptHash: 'default',
+      workerType: 'auto',
+      workerLocation: 'mac',
+      repository: 'pbuchman/intexuraos',
+      baseBranch: 'development',
+      traceId: 'trace_123',
+      webhookSecret: 'test-webhook-secret',
+    });
+
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) throw new Error('Failed to create task');
+    const task = createResult.value;
+
+    const payload = {
+      taskId: task.id,
+      status: 'interrupted' as const,
+    };
+
+    const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/internal/webhooks/task-complete',
+      headers: {
+        'x-internal-auth': 'test-internal-token',
+        'x-request-timestamp': timestamp,
+        'x-request-signature': signature,
+      },
+      payload,
+    });
+
+    expect(response.statusCode).toBe(200);
+
+    const whatsappCalls = mockFetchWithAuth.mock.calls.filter(
+      (call) => call[1] === '/internal/messages/send'
+    );
+    expect(whatsappCalls.length).toBe(0);
+  });
+
+  it('continues even if WhatsApp notification fails', async () => {
+    const createResult = await codeTaskRepo.create({
+      userId: 'user-123',
+      prompt: 'Fix the login bug',
+      sanitizedPrompt: 'Fix the login bug',
+      systemPromptHash: 'default',
+      workerType: 'auto',
+      workerLocation: 'mac',
+      repository: 'pbuchman/intexuraos',
+      baseBranch: 'development',
+      traceId: 'trace_123',
+      webhookSecret: 'test-webhook-secret',
+    });
+
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) throw new Error('Failed to create task');
+    const task = createResult.value;
+
+    const payload = {
+      taskId: task.id,
+      status: 'completed' as const,
+      result: {
+        branch: 'fix/login-bug',
+        commits: 3,
+        summary: 'Fixed login redirect handling',
+      },
+    };
+
+    const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+
+    // Mock WhatsApp notification to fail
+    mockFetchWithAuth.mockImplementationOnce(
+      () => Promise.resolve(err({ code: 'NETWORK_ERROR', message: 'Connection failed', status: 503 }))
+    );
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/internal/webhooks/task-complete',
+      headers: {
+        'x-internal-auth': 'test-internal-token',
+        'x-request-timestamp': timestamp,
+        'x-request-signature': signature,
+      },
+      payload,
+    });
+
+    // Webhook should still succeed even if notification fails
+    expect(response.statusCode).toBe(200);
   });
 });
