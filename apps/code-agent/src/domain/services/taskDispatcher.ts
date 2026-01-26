@@ -20,6 +20,7 @@ export interface DispatchRequest {
   workerType: 'opus' | 'auto' | 'glm';
   webhookUrl: string;
   webhookSecret: string;
+  traceId?: string;
 }
 
 /**

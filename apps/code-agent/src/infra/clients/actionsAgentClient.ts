@@ -17,12 +17,14 @@ export interface ActionsAgentClient {
    * @param actionId - The action ID to update
    * @param status - New status (completed, failed, or cancelled)
    * @param result - Optional result object with PR URL or error message
+   * @param traceId - Optional trace ID for distributed tracing
    * @returns Ok(undefined) on success, Err on failure
    */
   updateActionStatus(
     actionId: string,
     status: 'completed' | 'failed' | 'cancelled',
-    result?: { prUrl?: string; error?: string }
+    result?: { prUrl?: string; error?: string },
+    traceId?: string
   ): Promise<Result<void, ClientError>>;
 }
 
@@ -34,21 +36,33 @@ export function createActionsAgentClient(config: ServiceClientConfig): ActionsAg
     async updateActionStatus(
       actionId: string,
       status: 'completed' | 'failed' | 'cancelled',
-      result?: { prUrl?: string; error?: string }
+      result?: { prUrl?: string; error?: string },
+      traceId?: string
     ): Promise<Result<void, ClientError>> {
+      const options: {
+        method: string;
+        headers: { 'Content-Type': string };
+        body: string;
+        traceId?: string;
+      } = {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          resource_status: status,
+          resource_result: result,
+        }),
+      };
+
+      if (traceId !== undefined) {
+        options.traceId = traceId;
+      }
+
       const response = await fetchWithAuth(
         config,
         `/internal/actions/${actionId}/status`,
-        {
-          method: 'PATCH',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            resource_status: status,
-            resource_result: result,
-          }),
-        }
+        options
       );
 
       return response as Result<void, ClientError>;
