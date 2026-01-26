@@ -181,6 +181,37 @@ pnpm build
 - Execute the task described in issue
 - Make commits with clear messages
 
+---
+
+## 🚨 CRITICAL: Task Completion Sequence (AUTOMATIC - NO ASKING)
+
+**Once implementation is complete, the following steps are MANDATORY and AUTOMATIC.**
+
+⛔ **FORBIDDEN PATTERN:**
+
+```
+❌ "Would you like me to commit these changes now?"
+❌ "Should I create a PR?"
+❌ "Do you want me to push?"
+```
+
+**CORRECT PATTERN:**
+After implementation completes, AUTOMATICALLY execute steps 7-10 in sequence:
+
+1. Run CI (`pnpm run ci:tracked`)
+2. If CI passes → Commit all changes
+3. Merge latest base branch
+4. Push to remote
+5. Create PR with issue ID in title
+6. Update Linear state to "In Review"
+7. Report completion with cross-link summary
+
+**The only stopping point is CI failure** — fix errors and retry.
+
+**This sequence is NON-NEGOTIABLE.** A task that ends with "Would you like me to commit?" is an INCOMPLETE task.
+
+---
+
 ### 7. CI Gate (MANDATORY - BLOCKS PR CREATION)
 
 ⛔ **STOP: You MUST NOT push or create a PR until `pnpm run ci:tracked` passes.**

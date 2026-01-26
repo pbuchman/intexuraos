@@ -80,3 +80,7 @@ CLAUDE.md
 # Hook logs (for analyzing false positives)
 .claude/hooks/*.log
 
+# CI failure tracking (local analysis only)
+.claude/ci-failures/*.jsonl
+
+.claude/hooks/commands.log

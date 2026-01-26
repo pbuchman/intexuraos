@@ -15,6 +15,16 @@
 
 **The command is designed for automated/cron usage. It MUST NOT block on user input.**
 
+⛔ **FORBIDDEN PATTERNS:**
+
+```
+❌ "Would you like me to commit these changes?"
+❌ "Should I create a PR?"
+❌ "Ready to push?"
+```
+
+**CORRECT BEHAVIOR:** Execute steps 1-9 automatically without pausing. Only pause on CI failure (fix and retry). Report completion AFTER PR is created and Linear is updated to "In Review".
+
 ## Selection Algorithm
 
 ```
