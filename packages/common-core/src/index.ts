@@ -34,3 +34,6 @@ export {
 
 // Service error codes
 export { ServiceErrorCodes, type ServiceErrorCode } from './serviceErrorCodes.js';
+
+// Tracing utilities for distributed tracing
+export * from './tracing/index.js';

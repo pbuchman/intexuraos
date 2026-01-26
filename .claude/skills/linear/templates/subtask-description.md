@@ -30,18 +30,44 @@ This issue is part of **parent issue execution**. The workflow:
 ## Template
 
 ````markdown
+## Test Requirements (MANDATORY - implement first)
+
+**Backend Tests (`apps/<service>/src/__tests__/`):**
+
+| Test | Endpoint/Function | Scenario | Expected |
+|------|-------------------|----------|----------|
+| <test name> | <what is tested> | <input/condition> | <output/behavior> |
+| ... | ... | ... | ... |
+
+**Frontend Tests (if applicable):**
+- <test case 1>
+- <test case 2>
+
+---
+
 ## 🚨 MANDATORY EXECUTION RULES (NON-NEGOTIABLE)
 
-### Branch Creation — TASK FAILS WITHOUT THIS
+### Parent Branch Requirement — CRITICAL
 
-**YOU MUST CREATE A NEW BRANCH BEFORE ANY WORK.** This is not optional.
+**This is a CHILD ISSUE of a parent issue.** You MUST work on the **PARENT BRANCH**, not create a new branch.
 
 ```bash
+# Check you're on the parent branch
+git branch --show-current  # Should show: feature/INT-<PARENT> or similar
+
+# If NOT on parent branch, switch to it:
 git fetch origin
-git checkout -b feature/INT-XXX origin/development
+git checkout feature/INT-<PARENT>  # Use the PARENT issue ID, not this child's ID
 ```
 
-If you start working on `development` or `main`, **THE TASK HAS FAILED BY DEFINITION**. Stop immediately and create the branch.
+**⚠️ FORBIDDEN:** Creating a branch named after THIS child issue (e.g., `feature/INT-<THIS-CHILD>`).
+**✅ REQUIRED:** Working on the PARENT issue branch (e.g., `feature/INT-<PARENT>`).
+
+All child issues share ONE branch. All commits go to ONE PR. This enables continuity and proper review.
+
+### Branch Verification — TASK FAILS WITHOUT THIS
+
+If you start working on `development` or `main`, **THE TASK HAS FAILED BY DEFINITION**. Stop immediately and switch to the parent branch.
 
 ### Full CI Verification — NON-NEGOTIABLE
 
@@ -54,11 +80,22 @@ If you start working on `development` or `main`, **THE TASK HAS FAILED BY DEFINI
 
 ### Test Coverage — 95% is MINIMUM, Not Target
 
-- You MUST implement ALL required tests listed in this issue
+- You MUST implement ALL required tests listed in this issue's Test Requirements table
 - 95% branch coverage is the MINIMUM acceptable threshold
 - Do NOT simplify work to save tokens or time
 - Do NOT skip edge cases or "nice to have" tests
-- Every test scenario mentioned MUST be implemented
+- Every test scenario in the Test Requirements table MUST be implemented
+
+### Commit, Push, Update PR — MANDATORY CYCLE
+
+**After completing this task's implementation:**
+
+1. **Commit** with this child's issue ID: `git commit -m "INT-<THIS-CHILD>: <summary>"`
+2. **Push** to the parent branch: `git push`
+3. **Update PR description** to mark this child as ✅ Done and add to Progress Log
+4. **Then** continue to the next child issue
+
+This cycle ensures reviewers can see incremental progress and the PR stays current.
 
 ### Continuation — MANDATORY
 
@@ -67,7 +104,7 @@ If you start working on `development` or `main`, **THE TASK HAS FAILED BY DEFINI
 - Do NOT wait for user input
 - Do NOT stop to ask if you should continue
 - Do NOT claim you need a break or fresh context
-- Commit, verify CI passes, then MOVE ON to the next issue
+- Commit, push, update PR, then MOVE ON to the next issue
 
 ---
 
@@ -87,6 +124,7 @@ Tier: X | Sequence: Y
 
 ## Acceptance Criteria
 
+- [ ] All tests in Test Requirements table pass
 - [ ] <Criterion 1>
 - [ ] <Criterion 2>
 - [ ] <Criterion 3>
@@ -165,25 +203,29 @@ describe('featureName', () => {
 
 1. ✅ Verify `pnpm run ci:tracked` passes (NON-NEGOTIABLE)
 2. ✅ Commit all changes with message: `INT-XXX <task description>`
-3. ✅ **IMMEDIATELY proceed to INT-YYY** — DO NOT STOP
+3. ✅ Push to parent branch: `git push`
+4. ✅ Update PR description: mark this child ✅ Done, add to Progress Log
+5. ✅ **IMMEDIATELY proceed to INT-YYY** — DO NOT STOP
 
-**DO NOT STOP.** After completing this task and committing, immediately proceed to the next unblocked task without waiting for user input.
+**DO NOT STOP.** After completing this task, committing, pushing, and updating PR, immediately proceed to the next unblocked task without waiting for user input.
 
 ````
 
 ## Mandatory Sections
 
-| Section                  | Required     | Purpose                                    |
-| ------------------------ | ------------ | ------------------------------------------ |
-| Context                  | Yes          | Links to parent, shows tier/sequence       |
-| Scope                    | Yes          | What this specific task covers             |
-| Requirements             | Yes          | Specific deliverables                      |
-| Acceptance Criteria      | Yes          | How to verify completion                   |
-| Dependencies             | Yes          | What blocks this / what this blocks        |
-| Verification             | Yes          | Commands to run                            |
-| Implementation Suggestions | Conditional | Required for code changes (see below)     |
-| Testing Scenarios        | Conditional  | Required when tests are expected           |
-| Continuation             | Varies       | Include for all except final task          |
+| Section                    | Required    | Purpose                                       |
+| -------------------------- | ----------- | --------------------------------------------- |
+| Test Requirements          | Yes         | **QUALITY GATE** - exact tests to implement   |
+| Mandatory Execution Rules  | Yes         | Branch, CI, coverage, continuation rules      |
+| Context                    | Yes         | Links to parent, shows tier/sequence          |
+| Scope                      | Yes         | What this specific task covers                |
+| Requirements               | Yes         | Specific deliverables                         |
+| Acceptance Criteria        | Yes         | How to verify completion (includes tests)     |
+| Dependencies               | Yes         | What blocks this / what this blocks           |
+| Verification               | Yes         | Commands to run                               |
+| Implementation Suggestions | Conditional | Required for code changes (see below)         |
+| Testing Scenarios          | Conditional | Additional test details if needed             |
+| Continuation               | Varies      | Include for all except final task             |
 
 ## When to Include Implementation Suggestions
 

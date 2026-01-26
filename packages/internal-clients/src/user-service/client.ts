@@ -62,11 +62,14 @@ export function createUserServiceClient(config: UserServiceConfig): UserServiceC
   return {
     async getApiKeys(userId: string): Promise<Result<DecryptedApiKeys, UserServiceError>> {
       try {
-        const response = await fetch(`${config.baseUrl}/internal/users/${userId}/llm-keys`, {
-          headers: {
-            'X-Internal-Auth': config.internalAuthToken,
-          },
-        });
+        const response = await fetch(
+          `${config.baseUrl}/internal/users/${encodeURIComponent(userId)}/llm-keys`,
+          {
+            headers: {
+              'X-Internal-Auth': config.internalAuthToken,
+            },
+          }
+        );
 
         if (!response.ok) {
           return err({
@@ -117,7 +120,7 @@ export function createUserServiceClient(config: UserServiceConfig): UserServiceC
       try {
         // Step 1: Fetch user settings to get default model
         const settingsResponse = await fetch(
-          `${config.baseUrl}/internal/users/${userId}/settings`,
+          `${config.baseUrl}/internal/users/${encodeURIComponent(userId)}/settings`,
           {
             headers: {
               'X-Internal-Auth': config.internalAuthToken,
@@ -160,11 +163,14 @@ export function createUserServiceClient(config: UserServiceConfig): UserServiceC
         const provider = getProviderForModel(defaultModel);
         const keyField = providerToKeyField(provider);
 
-        const keysResponse = await fetch(`${config.baseUrl}/internal/users/${userId}/llm-keys`, {
-          headers: {
-            'X-Internal-Auth': config.internalAuthToken,
-          },
-        });
+        const keysResponse = await fetch(
+          `${config.baseUrl}/internal/users/${encodeURIComponent(userId)}/llm-keys`,
+          {
+            headers: {
+              'X-Internal-Auth': config.internalAuthToken,
+            },
+          }
+        );
 
         if (!keysResponse.ok) {
           logger.error({ userId, status: keysResponse.status }, 'Failed to fetch API keys');
@@ -218,12 +224,15 @@ export function createUserServiceClient(config: UserServiceConfig): UserServiceC
 
     async reportLlmSuccess(userId: string, provider: LlmProvider): Promise<void> {
       try {
-        await fetch(`${config.baseUrl}/internal/users/${userId}/llm-keys/${provider}/last-used`, {
-          method: 'POST',
-          headers: {
-            'X-Internal-Auth': config.internalAuthToken,
-          },
-        });
+        await fetch(
+          `${config.baseUrl}/internal/users/${encodeURIComponent(userId)}/llm-keys/${provider}/last-used`,
+          {
+            method: 'POST',
+            headers: {
+              'X-Internal-Auth': config.internalAuthToken,
+            },
+          }
+        );
       } catch /* v8 ignore next -- best effort, silent failure intentional */ {
         // Best effort - don't block on failure
       }
@@ -235,7 +244,7 @@ export function createUserServiceClient(config: UserServiceConfig): UserServiceC
     ): Promise<Result<OAuthTokenResult, UserServiceError>> {
       try {
         const response = await fetch(
-          `${config.baseUrl}/internal/users/${userId}/oauth/${provider}/token`,
+          `${config.baseUrl}/internal/users/${encodeURIComponent(userId)}/oauth/${provider}/token`,
           {
             headers: { 'X-Internal-Auth': config.internalAuthToken },
           }

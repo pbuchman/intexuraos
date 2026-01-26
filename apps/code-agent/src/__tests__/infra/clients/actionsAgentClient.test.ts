@@ -38,7 +38,7 @@ describe('ActionsAgentClient', () => {
 
     const result = await client.updateActionStatus('action-123', 'completed', {
       prUrl: 'https://github.com/pbuchman/intexuraos/pull/123',
-    });
+    }, 'test-trace-id-123');
 
     expect(result.ok).toBe(true);
     expect(mockFetchWithAuth).toHaveBeenCalledWith(
@@ -59,6 +59,7 @@ describe('ActionsAgentClient', () => {
             prUrl: 'https://github.com/pbuchman/intexuraos/pull/123',
           },
         }),
+        traceId: 'test-trace-id-123',
       })
     );
   });

@@ -55,6 +55,12 @@ Examples:
 Look for explicit command phrases that clearly indicate what the user wants to do.
 These phrases OVERRIDE category signals from URL content or incidental keywords.
 
+**CRITICAL: Linear vs Code Distinction**
+- **linear** = DOCUMENT/TRACK/CREATE an issue (save for later, track work)
+- **code** = EXECUTE/IMPLEMENT/DO the work NOW (make code changes)
+
+When ambiguous, prefer "linear" (documenting) unless there's an EXPLICIT execution verb.
+
 **Explicit command phrases (confidence 0.90+):**
 - **link/bookmark**: "save bookmark", "save link", "bookmark this", "save this link", "zapisz link", "dodaj zakładkę", "zapisz zakładkę"
 - **todo**: "create todo", "add todo", "add task", "make todo", "stwórz zadanie", "dodaj zadanie"
@@ -62,8 +68,18 @@ These phrases OVERRIDE category signals from URL content or incidental keywords.
 - **note**: "create note", "save note", "make note", "write note", "stwórz notatkę", "zapisz notatkę"
 - **reminder**: "set reminder", "remind me", "przypomnij mi"
 - **calendar**: "schedule", "add to calendar", "book appointment", "zaplanuj", "dodaj do kalendarza"
-- **linear**: "create issue", "add bug", "report issue", "zgłoś błąd", "stwórz issue", "dodaj do lineara"
-- **code**: "fix", "implement", "build", "refactor", "update the code", "change the", "add a function", "create a component", "modify", "debug", "write code for"
+- **linear** (DOCUMENT intent): "linear issue", "linear task", "create linear", "create linear issue", "create issue", "add issue", "add bug", "report issue", "report bug", "track this", "document this", "log this bug", "zgłoś błąd", "stwórz issue", "dodaj do lineara", "do lineara", "zapisz jako issue"
+- **code** (EXECUTE intent - requires EXPLICIT action verb): "execute this", "implement this now", "fix this bug now", "do this task", "execute linear issue", "implement linear issue", "start working on", "code this", "write the code", "make this change now"
+
+**Linear vs Code disambiguation examples:**
+- "linear issue: fix the login bug" → linear (documenting the bug)
+- "create linear issue for auth bug" → linear (creating a ticket)
+- "fix the login bug" → linear (no explicit "now"/"execute" - assume documenting)
+- "implement dark mode" → linear (no explicit execution command - assume documenting)
+- "execute: fix the login bug" → code (explicit "execute")
+- "implement this now: dark mode" → code (explicit "now")
+- "start working on the auth bug" → code (explicit "start working")
+- "execute linear issue INT-123" → code (explicit "execute linear issue")
 
 Examples:
 - "save bookmark https://research-world.com" → link (explicit "save bookmark" overrides "research" in URL)
@@ -72,22 +88,28 @@ Examples:
 - "save note about the research meeting" → note (explicit "save note" is the command)
 - "research this https://example.com" → research (explicit "research this" overrides URL presence - STEP 2 > STEP 4)
 - "investigate https://competitor.io/pricing" → research (explicit "investigate" overrides URL)
-- "fix the login bug" → code (explicit "fix" indicates execution)
-- "implement dark mode" → code (explicit "implement" indicates execution)
-- "create an issue for the bug" → linear (tracking intent, NOT execution)
-- "refactor the auth module" → code (explicit "refactor" indicates code changes)
+- "create an issue for the bug" → linear (tracking intent, documenting)
+- "linear task: refactor the auth module" → linear (documenting the task)
 - "look into the performance issue" → research (investigation, NOT execution)
+- "execute: refactor the auth module" → code (explicit execution command)
+- "start implementing the new feature" → code (explicit "start implementing")
 
 ## STEP 3: Linear Detection (if no explicit intent match)
-Classify as "linear" when message contains:
-- Linear PM context: "add to linear", "create linear issue", "in linear", "do lineara"
-- Engineering terms: bug, issue, ticket, feature request, PR, pull request
+Classify as "linear" when message describes work to be TRACKED/DOCUMENTED:
+- Linear PM context: "linear issue", "linear task", "add to linear", "create linear issue", "in linear", "do lineara"
+- Engineering terms describing work: bug, issue, ticket, feature request, PR, pull request
+- Implicit task descriptions: "fix X", "implement Y", "add Z", "refactor W" (WITHOUT explicit "execute"/"now"/"start working")
+
+**DEFAULT TO LINEAR for engineering tasks** unless there's an explicit execution command.
+The assumption is: describing work = documenting it for tracking, not executing it immediately.
 
 EXCEPTION: "linear" in math/science context (e.g., "linear regression", "linear algebra") → NOT linear
 
 Examples:
-- "bug: mobile menu broken" → linear
-- "create linear issue for auth" → linear
+- "bug: mobile menu broken" → linear (documenting a bug)
+- "create linear issue for auth" → linear (explicit Linear context)
+- "fix the authentication flow" → linear (task description = documenting)
+- "implement new dashboard" → linear (task description = documenting)
 - "research linear regression" → research (math context)
 
 ## STEP 4: URL Presence Check (BEFORE other category signals)
@@ -122,13 +144,18 @@ Signals: how does, what is, why, find out, learn about, ?
 - "how does OAuth work?" → research
 - "find out about competitor pricing" → research
 
-**code** — User wants Claude to make code changes, fix bugs, implement features, or refactor
-Signals: fix, implement, build, refactor, update the code, change the, add a function, create a component, modify, debug, write code for
-- "fix the login bug" → code
-- "implement dark mode" → code
-- "refactor the auth module" → code
-- "add validation to the form" → code
-- "build a new API endpoint" → code
+**code** — User wants to EXECUTE code changes NOW (requires EXPLICIT execution command)
+Signals (must be EXPLICIT): "execute", "do this now", "start working on", "implement this now", "execute linear issue", "code this", "write the code now"
+WITHOUT explicit execution command → classify as "linear" (documenting work)
+- "execute: fix the login bug" → code (explicit "execute")
+- "start working on dark mode" → code (explicit "start working")
+- "implement this now: new dashboard" → code (explicit "now")
+- "execute linear issue INT-123" → code (explicit execution of tracked issue)
+
+**NOT code (these are LINEAR - documenting work):**
+- "fix the login bug" → linear (no explicit execution = documenting)
+- "implement dark mode" → linear (no explicit execution = documenting)
+- "refactor the auth module" → linear (no explicit execution = documenting)
 
 **note** — Information to store
 Signals: notes, idea, remember that, jot down

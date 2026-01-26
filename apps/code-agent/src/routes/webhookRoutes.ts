@@ -2,6 +2,7 @@
 import type { FastifyPluginCallback, FastifyRequest, FastifyReply } from 'fastify';
 import { Timestamp } from '@google-cloud/firestore';
 import { logIncomingRequest, validateInternalAuth } from '@intexuraos/common-http';
+import { extractOrGenerateTraceId } from '@intexuraos/common-core';
 import { getServices } from '../services.js';
 import { validateWebhookSignature } from '../infra/webhookValidation.js';
 
@@ -142,7 +143,10 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       const { codeTaskRepo, actionsAgentClient, whatsappNotifier } = getServices();
       const { taskId, status, result, error } = request.body;
 
-      request.log.info({ taskId, status }, 'Processing task-complete webhook');
+      // Extract traceId from headers for downstream calls
+      const traceId = extractOrGenerateTraceId(request.headers);
+
+      request.log.info({ taskId, status, traceId }, 'Processing task-complete webhook');
 
       // Get task details first (to check for actionId)
       const taskResult = await codeTaskRepo.findById(taskId);
@@ -184,7 +188,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         if (task.actionId) {
           const actionsResult = await actionsAgentClient.updateActionStatus(task.actionId, 'completed', result.prUrl ? {
             prUrl: result.prUrl,
-          } : undefined);
+          } : undefined, traceId);
 
           if (!actionsResult.ok) {
             request.log.warn(
@@ -228,7 +232,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         if (task.actionId) {
           const actionsResult = await actionsAgentClient.updateActionStatus(task.actionId, 'failed', {
             error: error.message,
-          });
+          }, traceId);
 
           if (!actionsResult.ok) {
             request.log.warn(
@@ -280,7 +284,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         if (task.actionId) {
           const actionsResult = await actionsAgentClient.updateActionStatus(task.actionId, 'failed', {
             error: 'Worker was interrupted during task execution',
-          });
+          }, traceId);
 
           if (!actionsResult.ok) {
             request.log.warn(
