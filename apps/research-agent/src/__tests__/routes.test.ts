@@ -23,8 +23,10 @@ import {
   createFakeTitleGenerator,
   FakeLlmCallPublisher,
   FakeNotificationSender,
+  FakeNotionServiceClient,
   FakeResearchEventPublisher,
   FakeResearchRepository,
+  FakeResearchExportSettings,
   FakeUserServiceClient,
 } from './fakes.js';
 import type { Research } from '../domain/research/index.js';
@@ -83,12 +85,14 @@ describe('Research Routes - Unauthenticated', () => {
     const fakeLlmCallPublisher = new FakeLlmCallPublisher();
     const services: ServiceContainer = {
       researchRepo: fakeRepo,
+      researchExportSettings: new FakeResearchExportSettings(),
       pricingContext: fakePricingContext,
       generateId: (): string => 'generated-id-123',
       researchEventPublisher: fakeResearchEventPublisher,
       llmCallPublisher: fakeLlmCallPublisher,
       userServiceClient: fakeUserServiceClient,
       imageServiceClient: null,
+      notionServiceClient: new FakeNotionServiceClient(),
       notificationSender: fakeNotificationSender,
       shareStorage: null,
       shareConfig: null,
@@ -335,12 +339,14 @@ describe('Research Routes - Authenticated', () => {
     const fakeLlmCallPublisher = new FakeLlmCallPublisher();
     const services: ServiceContainer = {
       researchRepo: fakeRepo,
+      researchExportSettings: new FakeResearchExportSettings(),
       pricingContext: fakePricingContext,
       generateId: (): string => 'generated-id-123',
       researchEventPublisher: fakeResearchEventPublisher,
       llmCallPublisher: fakeLlmCallPublisher,
       userServiceClient: fakeUserServiceClient,
       imageServiceClient: null,
+      notionServiceClient: new FakeNotionServiceClient(),
       notificationSender: fakeNotificationSender,
       shareStorage: null,
       shareConfig: null,
@@ -2020,12 +2026,14 @@ describe('Research Routes - Authenticated', () => {
       const newFakeLlmCallPublisher = new FakeLlmCallPublisher();
       const services: ServiceContainer = {
         researchRepo: newFakeRepo,
+      researchExportSettings: new FakeResearchExportSettings(),
         pricingContext: fakePricingContext,
         generateId: (): string => 'generated-id-123',
         researchEventPublisher: newFakeResearchEventPublisher,
         llmCallPublisher: newFakeLlmCallPublisher,
         userServiceClient: newFakeUserServiceClient,
         imageServiceClient: null,
+      notionServiceClient: new FakeNotionServiceClient(),
         notificationSender: newFakeNotificationSender,
         shareStorage: null,
         shareConfig: null,
@@ -2290,10 +2298,12 @@ describe('Research Routes - Authenticated', () => {
     it('returns 500 when synthesis fails during retry', async () => {
       const services: ServiceContainer = {
         researchRepo: fakeRepo,
+      researchExportSettings: new FakeResearchExportSettings(),
         generateId: () => 'new-id-123',
         researchEventPublisher: new FakeResearchEventPublisher(),
         userServiceClient: fakeUserServiceClient,
         imageServiceClient: null,
+      notionServiceClient: new FakeNotionServiceClient(),
         notificationSender: new FakeNotificationSender(),
         llmCallPublisher: new FakeLlmCallPublisher(),
         pricingContext: fakePricingContext,
@@ -2421,12 +2431,14 @@ describe('Research Routes - Authenticated', () => {
 
       const newServices: ServiceContainer = {
         researchRepo: fakeRepo,
+      researchExportSettings: new FakeResearchExportSettings(),
         pricingContext: fakePricingContext,
         generateId: (): string => 'generated-id-123',
         researchEventPublisher: fakeResearchEventPublisher,
         llmCallPublisher: new FakeLlmCallPublisher(),
         userServiceClient: fakeUserServiceClient,
         imageServiceClient: null,
+      notionServiceClient: new FakeNotionServiceClient(),
         notificationSender: fakeNotificationSender,
         shareStorage: null,
         shareConfig: null,
@@ -2464,12 +2476,14 @@ describe('Research Routes - Authenticated', () => {
         await newApp.close();
         setServices({
           researchRepo: fakeRepo,
+      researchExportSettings: new FakeResearchExportSettings(),
           pricingContext: fakePricingContext,
           generateId: (): string => 'generated-id-123',
           researchEventPublisher: fakeResearchEventPublisher,
           llmCallPublisher: new FakeLlmCallPublisher(),
           userServiceClient: fakeUserServiceClient,
           imageServiceClient: null,
+      notionServiceClient: new FakeNotionServiceClient(),
           notificationSender: fakeNotificationSender,
           shareStorage: null,
           shareConfig: null,
@@ -2506,12 +2520,14 @@ describe('Research Routes - Authenticated', () => {
 
       const newServices: ServiceContainer = {
         researchRepo: fakeRepo,
+      researchExportSettings: new FakeResearchExportSettings(),
         pricingContext: fakePricingContext,
         generateId: (): string => 'generated-id-123',
         researchEventPublisher: fakeResearchEventPublisher,
         llmCallPublisher: new FakeLlmCallPublisher(),
         userServiceClient: fakeUserServiceClient,
         imageServiceClient: null,
+      notionServiceClient: new FakeNotionServiceClient(),
         notificationSender: fakeNotificationSender,
         shareStorage: null,
         shareConfig: null,
@@ -2549,12 +2565,14 @@ describe('Research Routes - Authenticated', () => {
         await newApp.close();
         setServices({
           researchRepo: fakeRepo,
+      researchExportSettings: new FakeResearchExportSettings(),
           pricingContext: fakePricingContext,
           generateId: (): string => 'generated-id-123',
           researchEventPublisher: fakeResearchEventPublisher,
           llmCallPublisher: new FakeLlmCallPublisher(),
           userServiceClient: fakeUserServiceClient,
           imageServiceClient: null,
+      notionServiceClient: new FakeNotionServiceClient(),
           notificationSender: fakeNotificationSender,
           shareStorage: null,
           shareConfig: null,
@@ -2592,12 +2610,14 @@ describe('Research Routes - Authenticated', () => {
 
       const newServices: ServiceContainer = {
         researchRepo: fakeRepo,
+      researchExportSettings: new FakeResearchExportSettings(),
         pricingContext: fakePricingContext,
         generateId: (): string => 'generated-id-123',
         researchEventPublisher: fakeResearchEventPublisher,
         llmCallPublisher: new FakeLlmCallPublisher(),
         userServiceClient: fakeUserServiceClient,
         imageServiceClient: null,
+      notionServiceClient: new FakeNotionServiceClient(),
         notificationSender: fakeNotificationSender,
         shareStorage: null,
         shareConfig: null,
@@ -2635,12 +2655,14 @@ describe('Research Routes - Authenticated', () => {
         await newApp.close();
         setServices({
           researchRepo: fakeRepo,
+      researchExportSettings: new FakeResearchExportSettings(),
           pricingContext: fakePricingContext,
           generateId: (): string => 'generated-id-123',
           researchEventPublisher: fakeResearchEventPublisher,
           llmCallPublisher: new FakeLlmCallPublisher(),
           userServiceClient: fakeUserServiceClient,
           imageServiceClient: null,
+      notionServiceClient: new FakeNotionServiceClient(),
           notificationSender: fakeNotificationSender,
           shareStorage: null,
           shareConfig: null,
@@ -2677,12 +2699,14 @@ describe('Research Routes - Authenticated', () => {
 
       const newServices: ServiceContainer = {
         researchRepo: fakeRepo,
+      researchExportSettings: new FakeResearchExportSettings(),
         pricingContext: fakePricingContext,
         generateId: (): string => 'generated-id-123',
         researchEventPublisher: fakeResearchEventPublisher,
         llmCallPublisher: new FakeLlmCallPublisher(),
         userServiceClient: fakeUserServiceClient,
         imageServiceClient: null,
+      notionServiceClient: new FakeNotionServiceClient(),
         notificationSender: fakeNotificationSender,
         shareStorage: null,
         shareConfig: null,
@@ -2718,12 +2742,14 @@ describe('Research Routes - Authenticated', () => {
         await newApp.close();
         setServices({
           researchRepo: fakeRepo,
+      researchExportSettings: new FakeResearchExportSettings(),
           pricingContext: fakePricingContext,
           generateId: (): string => 'generated-id-123',
           researchEventPublisher: fakeResearchEventPublisher,
           llmCallPublisher: new FakeLlmCallPublisher(),
           userServiceClient: fakeUserServiceClient,
           imageServiceClient: null,
+      notionServiceClient: new FakeNotionServiceClient(),
           notificationSender: fakeNotificationSender,
           shareStorage: null,
           shareConfig: null,
@@ -2837,12 +2863,14 @@ describe('Research Routes - Authenticated', () => {
 
       const newServices: ServiceContainer = {
         researchRepo: fakeRepo,
+      researchExportSettings: new FakeResearchExportSettings(),
         pricingContext: fakePricingContext,
         generateId: (): string => 'generated-id-123',
         researchEventPublisher: fakeResearchEventPublisher,
         llmCallPublisher: new FakeLlmCallPublisher(),
         userServiceClient: fakeUserServiceClient,
         imageServiceClient: null,
+      notionServiceClient: new FakeNotionServiceClient(),
         notificationSender: fakeNotificationSender,
         shareStorage: null,
         shareConfig: null,
@@ -2877,12 +2905,14 @@ describe('Research Routes - Authenticated', () => {
         await newApp.close();
         setServices({
           researchRepo: fakeRepo,
+      researchExportSettings: new FakeResearchExportSettings(),
           pricingContext: fakePricingContext,
           generateId: (): string => 'generated-id-123',
           researchEventPublisher: fakeResearchEventPublisher,
           llmCallPublisher: new FakeLlmCallPublisher(),
           userServiceClient: fakeUserServiceClient,
           imageServiceClient: null,
+      notionServiceClient: new FakeNotionServiceClient(),
           notificationSender: fakeNotificationSender,
           shareStorage: null,
           shareConfig: null,
@@ -3103,12 +3133,14 @@ describe('System Endpoints', () => {
     const fakeLlmCallPublisher = new FakeLlmCallPublisher();
     const services: ServiceContainer = {
       researchRepo: fakeRepo,
+      researchExportSettings: new FakeResearchExportSettings(),
       pricingContext: fakePricingContext,
       generateId: (): string => 'generated-id-123',
       researchEventPublisher: fakeResearchEventPublisher,
       llmCallPublisher: fakeLlmCallPublisher,
       userServiceClient: fakeUserServiceClient,
       imageServiceClient: null,
+      notionServiceClient: new FakeNotionServiceClient(),
       notificationSender: fakeNotificationSender,
       shareStorage: null,
       shareConfig: null,
@@ -3169,12 +3201,14 @@ describe('Internal Routes', () => {
     const fakeLlmCallPublisher = new FakeLlmCallPublisher();
     const services: ServiceContainer = {
       researchRepo: fakeRepo,
+      researchExportSettings: new FakeResearchExportSettings(),
       pricingContext: fakePricingContext,
       generateId: (): string => 'generated-id-123',
       researchEventPublisher: fakeResearchEventPublisher,
       llmCallPublisher: fakeLlmCallPublisher,
       userServiceClient: fakeUserServiceClient,
       imageServiceClient: null,
+      notionServiceClient: new FakeNotionServiceClient(),
       notificationSender: fakeNotificationSender,
       shareStorage: null,
       shareConfig: null,
@@ -3617,12 +3651,14 @@ describe('Internal Routes', () => {
       const fakeLlmCallPublisher = new FakeLlmCallPublisher();
       const services: ServiceContainer = {
         researchRepo: fakeRepo,
+      researchExportSettings: new FakeResearchExportSettings(),
         pricingContext: fakePricingContext,
         generateId: (): string => 'generated-id-123',
         researchEventPublisher: new FakeResearchEventPublisher(),
         llmCallPublisher: fakeLlmCallPublisher,
         userServiceClient: fakeUserServiceClient,
         imageServiceClient: null,
+      notionServiceClient: new FakeNotionServiceClient(),
         notificationSender: fakeNotificationSender,
         shareStorage: null,
         shareConfig: null,
@@ -4176,12 +4212,14 @@ describe('Internal Routes', () => {
       // Override createResearchProvider to return a failing provider
       const services: ServiceContainer = {
         researchRepo: fakeRepo,
+      researchExportSettings: new FakeResearchExportSettings(),
         pricingContext: fakePricingContext,
         generateId: (): string => 'generated-id-123',
         researchEventPublisher: new FakeResearchEventPublisher(),
         llmCallPublisher: new FakeLlmCallPublisher(),
         userServiceClient: fakeUserServiceClient,
         imageServiceClient: null,
+      notionServiceClient: new FakeNotionServiceClient(),
         notificationSender: fakeNotificationSender,
         shareStorage: null,
         shareConfig: null,
@@ -4270,12 +4308,14 @@ describe('Internal Routes', () => {
       fakeUserServiceClient = new FakeUserServiceClient();
       const services: ServiceContainer = {
         researchRepo: fakeRepo,
+      researchExportSettings: new FakeResearchExportSettings(),
         pricingContext: fakePricingContext,
         generateId: (): string => 'generated-id-123',
         researchEventPublisher: new FakeResearchEventPublisher(),
         llmCallPublisher: new FakeLlmCallPublisher(),
         userServiceClient: fakeUserServiceClient,
         imageServiceClient: null,
+      notionServiceClient: new FakeNotionServiceClient(),
         notificationSender: new FakeNotificationSender(),
         shareStorage: null,
         shareConfig: null,
@@ -4332,12 +4372,14 @@ describe('Internal Routes', () => {
       fakeLlmCallPublisher = new FakeLlmCallPublisher();
       const services: ServiceContainer = {
         researchRepo: fakeRepo,
+      researchExportSettings: new FakeResearchExportSettings(),
         pricingContext: fakePricingContext,
         generateId: (): string => 'generated-id-123',
         researchEventPublisher: new FakeResearchEventPublisher(),
         llmCallPublisher: fakeLlmCallPublisher,
         userServiceClient: fakeUserServiceClient,
         imageServiceClient: null,
+      notionServiceClient: new FakeNotionServiceClient(),
         notificationSender: new FakeNotificationSender(),
         shareStorage: null,
         shareConfig: null,
@@ -4419,12 +4461,14 @@ describe('Internal Routes', () => {
       const fakeLlmCallPublisher = new FakeLlmCallPublisher();
       const services: ServiceContainer = {
         researchRepo: fakeRepo,
+      researchExportSettings: new FakeResearchExportSettings(),
         pricingContext: fakePricingContext,
         generateId: (): string => 'generated-id-123',
         researchEventPublisher: new FakeResearchEventPublisher(),
         llmCallPublisher: fakeLlmCallPublisher,
         userServiceClient: fakeUserServiceClient,
         imageServiceClient: null,
+      notionServiceClient: new FakeNotionServiceClient(),
         notificationSender: fakeNotificationSender,
         shareStorage: null,
         shareConfig: null,
@@ -4519,12 +4563,14 @@ describe('Internal Routes', () => {
       const fakeLlmCallPublisher = new FakeLlmCallPublisher();
       const services: ServiceContainer = {
         researchRepo: fakeRepo,
+      researchExportSettings: new FakeResearchExportSettings(),
         pricingContext: fakePricingContext,
         generateId: (): string => 'generated-id-123',
         researchEventPublisher: new FakeResearchEventPublisher(),
         llmCallPublisher: fakeLlmCallPublisher,
         userServiceClient: fakeUserServiceClient,
         imageServiceClient: null,
+      notionServiceClient: new FakeNotionServiceClient(),
         notificationSender: fakeNotificationSender,
         shareStorage: null,
         shareConfig: null,
@@ -4595,12 +4641,14 @@ describe('Internal Routes', () => {
       // Override to have first one succeed, second fail
       const services: ServiceContainer = {
         researchRepo: fakeRepo,
+      researchExportSettings: new FakeResearchExportSettings(),
         pricingContext: fakePricingContext,
         generateId: (): string => 'generated-id-123',
         researchEventPublisher: new FakeResearchEventPublisher(),
         llmCallPublisher: new FakeLlmCallPublisher(),
         userServiceClient: fakeUserServiceClient,
         imageServiceClient: null,
+      notionServiceClient: new FakeNotionServiceClient(),
         notificationSender: fakeNotificationSender,
         shareStorage: null,
         shareConfig: null,
@@ -4740,12 +4788,14 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
 
     const services: ServiceContainer = {
       researchRepo: fakeRepo,
+      researchExportSettings: new FakeResearchExportSettings(),
       pricingContext: fakePricingContext,
       generateId: (): string => 'generated-id-123',
       researchEventPublisher: fakeResearchEventPublisher,
       llmCallPublisher: fakeLlmCallPublisher,
       userServiceClient: fakeUserServiceClient,
       imageServiceClient: null,
+      notionServiceClient: new FakeNotionServiceClient(),
       notificationSender: fakeNotificationSender,
       shareStorage: null,
       shareConfig: null,
@@ -4862,12 +4912,14 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
       // Use a title generator that fails
       const services: ServiceContainer = {
         researchRepo: fakeRepo,
+      researchExportSettings: new FakeResearchExportSettings(),
         pricingContext: fakePricingContext,
         generateId: (): string => 'generated-id-123',
         researchEventPublisher: fakeResearchEventPublisher,
         llmCallPublisher: fakeLlmCallPublisher,
         userServiceClient: fakeUserServiceClient,
         imageServiceClient: null,
+      notionServiceClient: new FakeNotionServiceClient(),
         notificationSender: fakeNotificationSender,
         shareStorage: null,
         shareConfig: null,
@@ -4950,12 +5002,14 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
       // Use a title generator that fails
       const services: ServiceContainer = {
         researchRepo: fakeRepo,
+      researchExportSettings: new FakeResearchExportSettings(),
         pricingContext: fakePricingContext,
         generateId: (): string => 'generated-id-123',
         researchEventPublisher: fakeResearchEventPublisher,
         llmCallPublisher: fakeLlmCallPublisher,
         userServiceClient: fakeUserServiceClient,
         imageServiceClient: null,
+      notionServiceClient: new FakeNotionServiceClient(),
         notificationSender: fakeNotificationSender,
         shareStorage: null,
         shareConfig: null,
@@ -5294,12 +5348,14 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
       // Use a validator that fails
       const services: ServiceContainer = {
         researchRepo: fakeRepo,
+      researchExportSettings: new FakeResearchExportSettings(),
         pricingContext: fakePricingContext,
         generateId: (): string => 'generated-id-123',
         researchEventPublisher: fakeResearchEventPublisher,
         llmCallPublisher: fakeLlmCallPublisher,
         userServiceClient: fakeUserServiceClient,
         imageServiceClient: null,
+      notionServiceClient: new FakeNotionServiceClient(),
         notificationSender: fakeNotificationSender,
         shareStorage: null,
         shareConfig: null,
@@ -5342,12 +5398,14 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
       // Use a validator that returns WEAK_BUT_VALID
       const services: ServiceContainer = {
         researchRepo: fakeRepo,
+      researchExportSettings: new FakeResearchExportSettings(),
         pricingContext: fakePricingContext,
         generateId: (): string => 'generated-id-123',
         researchEventPublisher: fakeResearchEventPublisher,
         llmCallPublisher: fakeLlmCallPublisher,
         userServiceClient: fakeUserServiceClient,
         imageServiceClient: null,
+      notionServiceClient: new FakeNotionServiceClient(),
         notificationSender: fakeNotificationSender,
         shareStorage: null,
         shareConfig: null,
@@ -5446,12 +5504,14 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
       // Use a validator that fails improvement
       const services: ServiceContainer = {
         researchRepo: fakeRepo,
+      researchExportSettings: new FakeResearchExportSettings(),
         pricingContext: fakePricingContext,
         generateId: (): string => 'generated-id-123',
         researchEventPublisher: fakeResearchEventPublisher,
         llmCallPublisher: fakeLlmCallPublisher,
         userServiceClient: fakeUserServiceClient,
         imageServiceClient: null,
+      notionServiceClient: new FakeNotionServiceClient(),
         notificationSender: fakeNotificationSender,
         shareStorage: null,
         shareConfig: null,

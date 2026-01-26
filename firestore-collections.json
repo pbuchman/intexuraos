@@ -14,6 +14,10 @@
       "owner": "promptvault-service",
       "description": "User's Notion Prompt Vault page ID configuration"
     },
+    "research_export_settings": {
+      "owner": "research-agent",
+      "description": "Notion research export page ID configuration per user"
+    },
     "whatsapp_messages": {
       "owner": "whatsapp-service",
       "description": "WhatsApp messages with transcription and link preview metadata"
