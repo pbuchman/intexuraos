@@ -21,6 +21,8 @@ interface ActionDoc {
   title: string;
   status: string;
   payload: Record<string, unknown>;
+  resource_status?: 'dispatched' | 'running' | 'completed' | 'failed' | 'cancelled' | 'interrupted';
+  resource_error?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -35,6 +37,8 @@ function toAction(id: string, doc: ActionDoc): Action {
     title: doc.title,
     status: doc.status as Action['status'],
     payload: doc.payload,
+    ...(doc.resource_status !== undefined && { resource_status: doc.resource_status }),
+    ...(doc.resource_error !== undefined && { resource_error: doc.resource_error }),
     createdAt: doc.createdAt,
     updatedAt: doc.updatedAt,
   };
@@ -49,6 +53,8 @@ function toDoc(action: Action): ActionDoc {
     title: action.title,
     status: action.status,
     payload: action.payload,
+    ...(action.resource_status !== undefined && { resource_status: action.resource_status }),
+    ...(action.resource_error !== undefined && { resource_error: action.resource_error }),
     createdAt: action.createdAt,
     updatedAt: action.updatedAt,
   };

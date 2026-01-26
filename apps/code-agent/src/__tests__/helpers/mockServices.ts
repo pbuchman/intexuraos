@@ -12,10 +12,17 @@ import { createWorkerDiscoveryService } from '../../infra/services/workerDiscove
 import { createTaskDispatcherService } from '../../infra/services/taskDispatcherImpl.js';
 import { createWhatsAppNotifier } from '../../infra/services/whatsappNotifierImpl.js';
 import { createActionsAgentClient } from '../../infra/clients/actionsAgentClient.js';
+import { createStatusMirrorService } from '../../infra/services/statusMirrorServiceImpl.js';
 
 export function setupTestServices({ actionsAgentUrl = 'http://actions-agent' }: { actionsAgentUrl?: string } = {}): void {
   const fakeFirestore = createFakeFirestore() as unknown as Firestore;
   const logger = pino({ name: 'test' });
+
+  const actionsAgentClient = createActionsAgentClient({
+    baseUrl: actionsAgentUrl,
+    internalAuthToken: 'test-token',
+    logger,
+  });
 
   const container: ServiceContainer = {
     firestore: fakeFirestore,
@@ -42,9 +49,9 @@ export function setupTestServices({ actionsAgentUrl = 'http://actions-agent' }: 
       internalAuthToken: 'test-token',
       logger,
     }),
-    actionsAgentClient: createActionsAgentClient({
-      baseUrl: actionsAgentUrl,
-      internalAuthToken: 'test-token',
+    actionsAgentClient,
+    statusMirrorService: createStatusMirrorService({
+      actionsAgentClient,
       logger,
     }),
   };

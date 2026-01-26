@@ -18,6 +18,7 @@ import { createWorkerDiscoveryService } from './infra/services/workerDiscoveryIm
 import { createTaskDispatcherService } from './infra/services/taskDispatcherImpl.js';
 import { createWhatsAppNotifier } from './infra/services/whatsappNotifierImpl.js';
 import { createActionsAgentClient } from './infra/clients/actionsAgentClient.js';
+import { createStatusMirrorService, type StatusMirrorService } from './infra/services/statusMirrorServiceImpl.js';
 
 export interface ServiceContainer {
   firestore: Firestore;
@@ -28,6 +29,7 @@ export interface ServiceContainer {
   taskDispatcher: TaskDispatcherService;
   whatsappNotifier: WhatsAppNotifier;
   actionsAgentClient: ActionsAgentClient;
+  statusMirrorService: StatusMirrorService;
 }
 
 // Configuration required to initialize services
@@ -55,6 +57,12 @@ export function initServices(config: ServiceConfig): void {
   const firestore = getFirestore();
   const logger = pino({ name: 'code-agent' });
 
+  const actionsAgentClient = createActionsAgentClient({
+    baseUrl: config.actionsAgentUrl,
+    internalAuthToken: config.internalAuthToken,
+    logger,
+  });
+
   container = {
     firestore,
     logger,
@@ -74,9 +82,9 @@ export function initServices(config: ServiceConfig): void {
       internalAuthToken: config.internalAuthToken,
       logger,
     }),
-    actionsAgentClient: createActionsAgentClient({
-      baseUrl: config.actionsAgentUrl,
-      internalAuthToken: config.internalAuthToken,
+    actionsAgentClient,
+    statusMirrorService: createStatusMirrorService({
+      actionsAgentClient,
       logger,
     }),
   };

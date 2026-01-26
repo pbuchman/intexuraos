@@ -32,6 +32,8 @@ import type { WorkerDiscoveryService } from '../../domain/services/workerDiscove
 import type { TaskDispatcherService } from '../../domain/services/taskDispatcher.js';
 import type { ActionsAgentClient } from '../../infra/clients/actionsAgentClient.js';
 import type { WhatsAppNotifier } from '../../domain/services/whatsappNotifier.js';
+import { createStatusMirrorService } from '../../infra/services/statusMirrorServiceImpl.js';
+import type { StatusMirrorService } from '../../infra/services/statusMirrorServiceImpl.js';
 
 describe('GET /code/tasks endpoints', () => {
   let app: Awaited<ReturnType<typeof buildServer>>;
@@ -102,6 +104,10 @@ describe('GET /code/tasks endpoints', () => {
       whatsappNotifier,
       logChunkRepo,
       actionsAgentClient,
+      statusMirrorService: createStatusMirrorService({
+        actionsAgentClient,
+        logger,
+      }),
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -111,6 +117,7 @@ describe('GET /code/tasks endpoints', () => {
       logChunkRepo: LogChunkRepository;
       actionsAgentClient: ActionsAgentClient;
       whatsappNotifier: WhatsAppNotifier;
+      statusMirrorService: StatusMirrorService;
     });
 
     app = await buildServer();
