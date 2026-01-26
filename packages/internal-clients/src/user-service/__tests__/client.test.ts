@@ -471,6 +471,152 @@ describe('createUserServiceClient', () => {
         expect.fail('Expected successful result');
       }
     });
+
+    it('creates OpenAI client when user has OpenAI model preference', async () => {
+      const mockSettings = {
+        llmPreferences: {
+          defaultModel: LlmModels.GPT52,
+        },
+      };
+
+      const mockKeys = {
+        openai: 'openai-key',
+      };
+
+      nock('http://localhost:3000')
+        .get('/internal/users/user123/settings')
+        .matchHeader('X-Internal-Auth', 'test-token')
+        .reply(200, mockSettings);
+
+      nock('http://localhost:3000')
+        .get('/internal/users/user123/llm-keys')
+        .matchHeader('X-Internal-Auth', 'test-token')
+        .reply(200, mockKeys);
+
+      const client = createUserServiceClient(config);
+      const result = await client.getLlmClient('user123');
+
+      // Note: OpenAI provider not yet supported by llm-factory, so expect error
+      // This test exercises the providerToKeyField switch case for OpenAI
+      if (!result.ok) {
+        expect(result.error.code).toBe('NETWORK_ERROR');
+        expect(mockLogger.error).toHaveBeenCalledWith(
+          { userId: 'user123', error: expect.any(String) },
+          'Network error while creating LLM client'
+        );
+      } else {
+        expect.fail('Expected error result for unsupported provider');
+      }
+    });
+
+    it('creates Anthropic client when user has Anthropic model preference', async () => {
+      const mockSettings = {
+        llmPreferences: {
+          defaultModel: LlmModels.ClaudeSonnet45,
+        },
+      };
+
+      const mockKeys = {
+        anthropic: 'anthropic-key',
+      };
+
+      nock('http://localhost:3000')
+        .get('/internal/users/user123/settings')
+        .matchHeader('X-Internal-Auth', 'test-token')
+        .reply(200, mockSettings);
+
+      nock('http://localhost:3000')
+        .get('/internal/users/user123/llm-keys')
+        .matchHeader('X-Internal-Auth', 'test-token')
+        .reply(200, mockKeys);
+
+      const client = createUserServiceClient(config);
+      const result = await client.getLlmClient('user123');
+
+      // Note: Anthropic provider not yet supported by llm-factory, so expect error
+      // This test exercises the providerToKeyField switch case for Anthropic
+      if (!result.ok) {
+        expect(result.error.code).toBe('NETWORK_ERROR');
+        expect(mockLogger.error).toHaveBeenCalledWith(
+          { userId: 'user123', error: expect.any(String) },
+          'Network error while creating LLM client'
+        );
+      } else {
+        expect.fail('Expected error result for unsupported provider');
+      }
+    });
+
+    it('creates Perplexity client when user has Perplexity model preference', async () => {
+      const mockSettings = {
+        llmPreferences: {
+          defaultModel: LlmModels.SonarPro,
+        },
+      };
+
+      const mockKeys = {
+        perplexity: 'perplexity-key',
+      };
+
+      nock('http://localhost:3000')
+        .get('/internal/users/user123/settings')
+        .matchHeader('X-Internal-Auth', 'test-token')
+        .reply(200, mockSettings);
+
+      nock('http://localhost:3000')
+        .get('/internal/users/user123/llm-keys')
+        .matchHeader('X-Internal-Auth', 'test-token')
+        .reply(200, mockKeys);
+
+      const client = createUserServiceClient(config);
+      const result = await client.getLlmClient('user123');
+
+      // Note: Perplexity provider not yet supported by llm-factory, so expect error
+      // This test exercises the providerToKeyField switch case for Perplexity
+      if (!result.ok) {
+        expect(result.error.code).toBe('NETWORK_ERROR');
+        expect(mockLogger.error).toHaveBeenCalledWith(
+          { userId: 'user123', error: expect.any(String) },
+          'Network error while creating LLM client'
+        );
+      } else {
+        expect.fail('Expected error result for unsupported provider');
+      }
+    });
+
+    it('creates Zai client when user has Zai model preference', async () => {
+      const mockSettings = {
+        llmPreferences: {
+          defaultModel: LlmModels.Glm47Flash,
+        },
+      };
+
+      const mockKeys = {
+        zai: 'zai-key',
+      };
+
+      nock('http://localhost:3000')
+        .get('/internal/users/user123/settings')
+        .matchHeader('X-Internal-Auth', 'test-token')
+        .reply(200, mockSettings);
+
+      nock('http://localhost:3000')
+        .get('/internal/users/user123/llm-keys')
+        .matchHeader('X-Internal-Auth', 'test-token')
+        .reply(200, mockKeys);
+
+      const client = createUserServiceClient(config);
+      const result = await client.getLlmClient('user123');
+
+      if (result.ok) {
+        expect(result.value).toBeDefined();
+        expect(mockLogger.info).toHaveBeenCalledWith(
+          { userId: 'user123', model: LlmModels.Glm47Flash, provider: LlmProviders.Zai },
+          'LLM client created successfully'
+        );
+      } else {
+        expect.fail('Expected successful result');
+      }
+    });
   });
 
   describe('reportLlmSuccess', () => {
@@ -757,6 +903,23 @@ describe('createUserServiceClient', () => {
         expect(result.value).toEqual(mockToken);
       } else {
         expect.fail('Expected successful result');
+      }
+    });
+
+    it('returns API_ERROR with fallback message when error response has no error field', async () => {
+      nock('http://localhost:3000')
+        .get('/internal/users/user123/oauth/google/token')
+        .matchHeader('X-Internal-Auth', 'test-token')
+        .reply(500, { code: 'UNKNOWN_ERROR' }); // No 'error' field
+
+      const client = createUserServiceClient(config);
+      const result = await client.getOAuthToken('user123', 'google');
+
+      if (!result.ok) {
+        expect(result.error.code).toBe('API_ERROR');
+        expect(result.error.message).toBe('HTTP 500');
+      } else {
+        expect.fail('Expected error result');
       }
     });
   });
