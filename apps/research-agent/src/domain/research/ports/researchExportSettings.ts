@@ -3,6 +3,8 @@
  * Defines the contract for managing research export configuration.
  */
 
+import type { Result } from '@intexuraos/common-core';
+
 export interface ResearchExportSettingsError {
   code: 'INTERNAL_ERROR';
   message: string;
@@ -21,6 +23,3 @@ export interface ResearchExportSettingsPort {
     pageId: string
   ): Promise<Result<ResearchExportSettings, ResearchExportSettingsError>>;
 }
-
-// Import Result type for port interface
-import type { Result } from '@intexuraos/common-core';

@@ -70,7 +70,8 @@ function splitTextIntoChunks(text: string): string[] {
 
 /**
  * Removes content inside <details> HTML tags (hidden content).
- * Uses non-greedy regex to handle multiple/nested details sections.
+ * Uses non-greedy regex to handle multiple details sections.
+ * Note: Does not correctly handle nested <details> tags.
  */
 function stripHiddenContent(content: string): string {
   return content.replace(/<details[\s\S]*?<\/details>/gi, '');

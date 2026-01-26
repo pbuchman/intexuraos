@@ -23,6 +23,7 @@ import type { ShareInfo, AttributionStatus } from '../models/Research.js';
 import type { CoverImageInput, GeneratedByUserInfo } from '../utils/htmlGenerator.js';
 import { generateShareableHtml, slugify, generateShareToken } from '../utils/index.js';
 import type { ImageServiceClient, GeneratedImageData } from '../../../services.js';
+import type { ResearchExportSettingsPort } from '../ports/researchExportSettings.js';
 import { repairAttribution } from './repairAttribution.js';
 
 export interface ShareConfig {
@@ -48,8 +49,10 @@ export interface RunSynthesisDeps {
   reportLlmSuccess?: () => void;
   logger: Logger;
   imageApiKeys?: ImageApiKeys;
+  // NotionServiceClient is from infra layer, typed as unknown to avoid import restriction
+  // Use `as NotionServiceClient` when consuming (e.g., in synthesis export)
   notionServiceClient?: unknown;
-  researchExportSettings?: unknown;
+  researchExportSettings?: ResearchExportSettingsPort | null;
 }
 
 export async function runSynthesis(
@@ -360,8 +363,8 @@ export async function runSynthesis(
     const { exportResearchToNotion: exportToNotion } = await import('../../../infra/notion/exportResearchToNotionUseCase.js');
     void exportToNotion(researchId, userId, {
       researchRepo,
-      notionServiceClient: notionServiceClient as never,
-      researchExportSettings: researchExportSettings as never,
+      notionServiceClient: notionServiceClient as never, // TODO: define port interface for NotionServiceClient
+      researchExportSettings,
       logger,
     });
   }
