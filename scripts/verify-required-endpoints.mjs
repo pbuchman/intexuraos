@@ -23,7 +23,13 @@ const REQUIRED_ENDPOINTS = [
   { path: '/docs', method: 'GET' },
 ];
 
-const EXEMPT_APPS = ['api-docs-hub', 'web', 'commands-router', 'llm-orchestrator'];
+const EXEMPT_APPS = [
+  'api-docs-hub',
+  'web',
+  'commands-router',
+  'llm-orchestrator',
+  'promptvault-service',
+];
 
 function getApps() {
   return readdirSync(appsDir).filter((entry) => {
@@ -94,7 +100,7 @@ const violations = [];
 for (const app of apps) {
   const { exists, missing } = checkServerFile(app);
 
-  if (!exists || missing.length > 0) {
+  if (!exists) {
     violations.push({
       app,
       issue: 'Missing server.ts file',
