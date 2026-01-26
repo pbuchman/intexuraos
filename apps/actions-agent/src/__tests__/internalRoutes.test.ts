@@ -724,7 +724,6 @@ describe('Internal Routes', () => {
 
     it('handles reply without actionId', async () => {
       const event = createApprovalEvent();
-      // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
       delete (event as Partial<ApprovalReplyEvent>).actionId;
 
       const services = createFakeServices({

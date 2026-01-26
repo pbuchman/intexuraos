@@ -179,27 +179,31 @@ describe('parseApprovalIntentResponseWithLogging', () => {
     expect(mockLogger.warn).not.toHaveBeenCalled();
   });
 
-  it('logs warning when parsing fails', () => {
+  it('logs warning and throws when parsing fails', () => {
     const response = 'invalid json';
-    const result = parseApprovalIntentResponseWithLogging(response, mockLogger);
 
-    expect(result).toBeNull();
+    expect(() => parseApprovalIntentResponseWithLogging(response, mockLogger)).toThrow(
+      'Failed to parse approval intent'
+    );
     expect(mockLogger.warn).toHaveBeenCalledWith(
       expect.objectContaining({
-        rawResponse: 'invalid json',
+        llmResponse: 'invalid json',
+        operation: 'parseApprovalIntentResponse',
       }),
-      expect.stringContaining('Failed to parse')
+      expect.stringContaining('LLM parse error')
     );
   });
 
-  it('logs warning with truncated response for long inputs', () => {
+  it('logs warning with full response for long inputs', () => {
     const longResponse = 'x'.repeat(300);
-    const result = parseApprovalIntentResponseWithLogging(longResponse, mockLogger);
 
-    expect(result).toBeNull();
+    expect(() => parseApprovalIntentResponseWithLogging(longResponse, mockLogger)).toThrow(
+      'Failed to parse approval intent'
+    );
     expect(mockLogger.warn).toHaveBeenCalledWith(
       expect.objectContaining({
-        rawResponse: expect.stringMatching(/x{200}\.\.\.$/),
+        llmResponse: longResponse,
+        responseLength: 300,
       }),
       expect.any(String)
     );

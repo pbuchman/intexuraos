@@ -469,9 +469,9 @@ describe('POST /code/cancel', () => {
     });
 
     it('handles Firestore update failure gracefully', async () => {
-      // Create a running task
+      // Create a running task with the same userId as the JWT mock returns
       const createResult = await codeTaskRepo.create({
-        userId: 'unknown-user',
+        userId: 'test-user-id',
         prompt: 'Fix the bug',
         sanitizedPrompt: 'Fix the bug',
         systemPromptHash: 'default',
@@ -498,7 +498,7 @@ describe('POST /code/cancel', () => {
         method: 'POST',
         url: '/code/cancel',
         headers: {
-          'x-internal-auth': 'test-internal-token',
+          authorization: 'Bearer test-token',
         },
         payload: {
           taskId,
@@ -515,9 +515,9 @@ describe('POST /code/cancel', () => {
     });
 
     it('continues cancellation even when worker notification fails', async () => {
-      // Create a running task
+      // Create a running task with the same userId as the JWT mock returns
       const createResult = await codeTaskRepo.create({
-        userId: 'unknown-user',
+        userId: 'test-user-id',
         prompt: 'Fix the bug',
         sanitizedPrompt: 'Fix the bug',
         systemPromptHash: 'default',
@@ -544,7 +544,7 @@ describe('POST /code/cancel', () => {
         method: 'POST',
         url: '/code/cancel',
         headers: {
-          'x-internal-auth': 'test-internal-token',
+          authorization: 'Bearer test-token',
         },
         payload: {
           taskId,
