@@ -4,6 +4,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Client } from '@notionhq/client';
+import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
 import { exportResearchToNotion } from '../../../infra/notion/notionResearchExporter.js';
 import type { Research } from '../../../domain/research/models/Research.js';
 
@@ -56,8 +57,8 @@ describe('exportResearchToNotion', () => {
       userId: 'user-123',
       title: 'Test Research',
       prompt: 'Test prompt',
-      selectedModels: ['gpt-5.2' as const],
-      synthesisModel: 'gpt-5.2' as const,
+      selectedModels: [LlmModels.GPT52],
+      synthesisModel: LlmModels.GPT52,
       status: 'completed',
       llmResults: [],
       startedAt: '2024-01-01T00:00:00Z',
@@ -135,8 +136,8 @@ describe('exportResearchToNotion', () => {
         synthesizedResult: 'Test synthesis.',
         llmResults: [
           {
-            provider: 'openai',
-            model: 'gpt-5.2',
+            provider: LlmProviders.OpenAI,
+            model: LlmModels.GPT52,
             status: 'completed',
             result: 'GPT result here.',
             sources: ['https://example.com/1'],
@@ -144,16 +145,16 @@ describe('exportResearchToNotion', () => {
             completedAt: '2024-01-01T00:05:00Z',
           },
           {
-            provider: 'anthropic',
-            model: 'claude-opus-4-5-20251101',
+            provider: LlmProviders.Anthropic,
+            model: LlmModels.ClaudeOpus45,
             status: 'completed',
             result: 'Claude result here.',
             startedAt: '2024-01-01T00:00:00Z',
             completedAt: '2024-01-01T00:05:00Z',
           },
           {
-            provider: 'openai',
-            model: 'gpt-5.2',
+            provider: LlmProviders.OpenAI,
+            model: LlmModels.GPT52,
             status: 'failed',
             error: 'API error',
             startedAt: '2024-01-01T00:00:00Z',
@@ -166,8 +167,8 @@ describe('exportResearchToNotion', () => {
       expect(result.ok).toBe(true);
       if (result.ok) {
         expect(result.value.llmReportPages).toHaveLength(2);
-        expect(result.value.llmReportPages[0]?.model).toBe('gpt-5.2');
-        expect(result.value.llmReportPages[1]?.model).toBe('claude-opus-4-5-20251101');
+        expect(result.value.llmReportPages[0]?.model).toBe(LlmModels.GPT52);
+        expect(result.value.llmReportPages[1]?.model).toBe(LlmModels.ClaudeOpus45);
       }
 
       // Main page + 2 LLM report pages created
@@ -192,8 +193,8 @@ describe('exportResearchToNotion', () => {
         synthesizedResult: 'Test synthesis.',
         llmResults: [
           {
-            provider: 'openai',
-            model: 'gpt-5.2',
+            provider: LlmProviders.OpenAI,
+            model: LlmModels.GPT52,
             status: 'completed',
             result: 'Result content.',
             sources: ['https://example.com/1', 'https://example.com/2'],
@@ -332,8 +333,8 @@ describe('exportResearchToNotion', () => {
         synthesizedResult: 'Test synthesis.',
         llmResults: [
           {
-            provider: 'openai',
-            model: 'gpt-5.2',
+            provider: LlmProviders.OpenAI,
+            model: LlmModels.GPT52,
             status: 'completed',
             result: resultWithDetails,
             startedAt: '2024-01-01T00:00:00Z',
@@ -374,8 +375,8 @@ describe('exportResearchToNotion', () => {
         userId: 'user-123',
         title: 'Test Research',
         prompt: 'Test prompt',
-        selectedModels: ['gpt-5.2' as const],
-        synthesisModel: 'gpt-5.2' as const,
+        selectedModels: [LlmModels.GPT52],
+        synthesisModel: LlmModels.GPT52,
         status: 'completed',
         llmResults: [],
         startedAt: '2024-01-01T00:00:00Z',
@@ -517,8 +518,8 @@ describe('exportResearchToNotion', () => {
         synthesizedResult: 'Test synthesis.',
         llmResults: [
           {
-            provider: 'openai',
-            model: 'gpt-5.2',
+            provider: LlmProviders.OpenAI,
+            model: LlmModels.GPT52,
             status: 'failed',
             error: 'Failed',
             startedAt: '2024-01-01T00:00:00Z',
@@ -549,9 +550,9 @@ describe('exportResearchToNotion', () => {
         } as never);
 
       // Omit 'result' property from LlmResult
-      const llmResultWithoutResult: Omit<{ provider: 'openai'; model: 'gpt-5.2'; status: 'completed'; result: string; startedAt: string; completedAt: string }, 'result'> = {
-        provider: 'openai',
-        model: 'gpt-5.2',
+      const llmResultWithoutResult: Omit<{ provider: typeof LlmProviders.OpenAI; model: typeof LlmModels.GPT52; status: 'completed'; result: string; startedAt: string; completedAt: string }, 'result'> = {
+        provider: LlmProviders.OpenAI,
+        model: LlmModels.GPT52,
         status: 'completed',
         startedAt: '2024-01-01T00:00:00Z',
         completedAt: '2024-01-01T00:05:00Z',

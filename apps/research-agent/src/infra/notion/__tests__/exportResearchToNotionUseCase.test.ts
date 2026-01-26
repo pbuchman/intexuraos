@@ -5,7 +5,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ok, err } from '@intexuraos/common-core';
-import { LlmModels } from '@intexuraos/llm-contract';
+import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
 import type { Logger } from '@intexuraos/common-core';
 import type { RepositoryError } from '../../../domain/research/ports/repository.js';
 import { exportResearchToNotion } from '../exportResearchToNotionUseCase.js';
@@ -59,7 +59,7 @@ function createTestResearch(overrides: Partial<Research> = {}): Research {
     synthesisModel: LlmModels.Gemini25Pro,
     llmResults: [
       {
-        provider: 'google' as const,
+        provider: LlmProviders.Google,
         model: LlmModels.Gemini25Pro,
         status: 'completed',
         result: 'Test result',
@@ -253,8 +253,8 @@ describe('exportResearchToNotion', () => {
           mainPageId: 'notion-page-123',
           mainPageUrl: 'https://notion.so/page-123',
           llmReportPages: [
-            { model: 'gemini-2.5-pro', pageId: 'llm-page-1', pageUrl: 'https://notion.so/llm-1' },
-            { model: 'gpt-4o', pageId: 'llm-page-2', pageUrl: 'https://notion.so/llm-2' },
+            { model: LlmModels.Gemini25Pro, pageId: 'llm-page-1', pageUrl: 'https://notion.so/llm-1' },
+            { model: LlmModels.GPT4o, pageId: 'llm-page-2', pageUrl: 'https://notion.so/llm-2' },
           ],
         })
       );
@@ -267,8 +267,8 @@ describe('exportResearchToNotion', () => {
           mainPageId: 'notion-page-123',
           mainPageUrl: 'https://notion.so/page-123',
           llmReportPageIds: [
-            { model: 'gemini-2.5-pro', pageId: 'llm-page-1' },
-            { model: 'gpt-4o', pageId: 'llm-page-2' },
+            { model: LlmModels.Gemini25Pro, pageId: 'llm-page-1' },
+            { model: LlmModels.GPT4o, pageId: 'llm-page-2' },
           ],
           exportedAt: expect.any(String),
         },
