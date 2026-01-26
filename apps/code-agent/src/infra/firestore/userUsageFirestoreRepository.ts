@@ -7,6 +7,7 @@
 import { Timestamp, FieldValue } from '@google-cloud/firestore';
 import type { Firestore } from '@google-cloud/firestore';
 import type { Logger } from '@intexuraos/common-core';
+import { getErrorMessage } from '@intexuraos/common-core';
 import type { UserUsageRepository } from '../../domain/ports/userUsageRepository.js';
 import type { UserUsage } from '../../domain/models/userUsage.js';
 
@@ -101,17 +102,23 @@ export function createUserUsageFirestoreRepository(
 
   return {
     async getOrCreate(userId: string): Promise<UserUsage> {
-      const ref = firestore.collection(COLLECTION).doc(userId);
-      const doc = await ref.get();
+      try {
+        const ref = firestore.collection(COLLECTION).doc(userId);
+        const doc = await ref.get();
 
-      if (!doc.exists) {
-        const now = Timestamp.now();
-        const defaultUsage = createDefaultUsage(userId, now);
-        await ref.set(defaultUsage);
-        return defaultUsage;
+        if (!doc.exists) {
+          const now = Timestamp.now();
+          const defaultUsage = createDefaultUsage(userId, now);
+          await ref.set(defaultUsage);
+          return defaultUsage;
+        }
+
+        return normalizeUsage(doc.data() as Record<string, unknown>);
+      } catch (error) {
+        const errorMessage = getErrorMessage(error, 'Unknown error');
+        _logger.error({ userId, error: errorMessage }, 'Failed to get or create user usage document');
+        throw error;
       }
-
-      return normalizeUsage(doc.data() as Record<string, unknown>);
     },
 
     async update(usage: UserUsage): Promise<void> {
@@ -121,18 +128,24 @@ export function createUserUsageFirestoreRepository(
 
     async incrementConcurrent(userId: string): Promise<void> {
       const ref = firestore.collection(COLLECTION).doc(userId);
-      await firestore.runTransaction(async (tx) => {
-        const doc = await tx.get(ref);
-        if (!doc.exists) {
-          const now = Timestamp.now();
-          tx.set(ref, { ...createDefaultUsage(userId, now), concurrentTasks: 1 });
-        } else {
-          tx.update(ref, {
-            concurrentTasks: FieldValue.increment(1),
-            updatedAt: FieldValue.serverTimestamp(),
-          });
-        }
-      });
+      try {
+        await firestore.runTransaction(async (tx) => {
+          const doc = await tx.get(ref);
+          if (!doc.exists) {
+            const now = Timestamp.now();
+            tx.set(ref, { ...createDefaultUsage(userId, now), concurrentTasks: 1 });
+          } else {
+            tx.update(ref, {
+              concurrentTasks: FieldValue.increment(1),
+              updatedAt: FieldValue.serverTimestamp(),
+            });
+          }
+        });
+      } catch (error) {
+        const errorMessage = getErrorMessage(error, 'Unknown error');
+        _logger.error({ userId, error: errorMessage }, 'Failed to increment concurrent task counter');
+        throw error;
+      }
     },
 
     async decrementConcurrent(userId: string): Promise<void> {
@@ -198,12 +211,18 @@ export function createUserUsageFirestoreRepository(
       const costDiff = actualCost - estimatedCost;
       if (Math.abs(costDiff) < 0.01) return; // No significant difference
 
-      const ref = firestore.collection(COLLECTION).doc(userId);
-      await ref.update({
-        costToday: FieldValue.increment(costDiff),
-        costThisMonth: FieldValue.increment(costDiff),
-        updatedAt: FieldValue.serverTimestamp(),
-      });
+      try {
+        const ref = firestore.collection(COLLECTION).doc(userId);
+        await ref.update({
+          costToday: FieldValue.increment(costDiff),
+          costThisMonth: FieldValue.increment(costDiff),
+          updatedAt: FieldValue.serverTimestamp(),
+        });
+        _logger.info({ userId, actualCost, estimatedCost, costDiff }, 'Recorded actual cost correction');
+      } catch (error) {
+        const errorMessage = getErrorMessage(error, 'Unknown error');
+        _logger.warn({ userId, error: errorMessage }, 'Failed to record actual cost (non-critical)');
+      }
     },
   };
 }

@@ -604,5 +604,44 @@ describe('POST /code/cancel', () => {
         expect(getResult.value.status).toBe('cancelled');
       }
     });
+
+    it('calls recordTaskComplete when task is cancelled successfully', async () => {
+      // Create a running task
+      const createResult = await codeTaskRepo.create({
+        userId: 'test-user-id',
+        prompt: 'Fix the bug',
+        sanitizedPrompt: 'Fix the bug',
+        systemPromptHash: 'default',
+        workerType: 'auto',
+        workerLocation: 'mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: 'trace_123',
+      });
+
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) throw new Error('Failed to create task');
+      const taskId = createResult.value.id;
+
+      await codeTaskRepo.update(taskId, { status: 'running' });
+
+      const { getServices } = await import('../../services.js');
+      const services = getServices();
+      const recordCompleteSpy = vi.spyOn(services.rateLimitService, 'recordTaskComplete');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/code/cancel',
+        headers: {
+          authorization: 'Bearer test-token',
+        },
+        payload: {
+          taskId,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(recordCompleteSpy).toHaveBeenCalledWith('test-user-id');
+    });
   });
 });

@@ -975,7 +975,27 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
               error: {
                 type: 'object',
                 properties: {
-                  code: { type: 'string', enum: ['RATE_LIMIT_EXCEEDED'] },
+                  code: {
+                    type: 'string',
+                    enum: ['concurrent_limit', 'hourly_limit', 'daily_cost_limit', 'monthly_cost_limit', 'prompt_too_long'],
+                  },
+                  message: { type: 'string' },
+                  retryAfter: { type: 'string' },
+                },
+                required: ['code', 'message'],
+              },
+            },
+            required: ['success', 'error'],
+          },
+          503: {
+            description: 'Service unavailable',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: {
+                type: 'object',
+                properties: {
+                  code: { type: 'string', enum: ['service_unavailable'] },
                   message: { type: 'string' },
                 },
                 required: ['code', 'message'],
@@ -1024,15 +1044,32 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       if (!limitCheck.ok) {
         const { error } = limitCheck;
         request.log.warn({ userId, error }, 'Rate limit exceeded');
-        reply.status(429);
-        return {
+
+        // service_unavailable returns 503, other rate limits return 429
+        const statusCode = error.code === 'service_unavailable' ? 503 : 429;
+        reply.status(statusCode);
+
+        const errorResponse: {
+          success: false;
+          error: {
+            code: string;
+            message: string;
+            retryAfter?: string;
+          };
+        } = {
           success: false,
           error: {
             code: error.code,
             message: error.message,
-            retryAfter: error.retryAfter,
           },
         };
+
+        // Only include retryAfter if it's defined
+        if (error.retryAfter !== undefined) {
+          errorResponse.error.retryAfter = error.retryAfter;
+        }
+
+        return errorResponse;
       }
 
       // Ensure Linear issue exists (create if not provided)
