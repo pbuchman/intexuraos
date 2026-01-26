@@ -2,6 +2,13 @@
 # BLOCK: verify:workspace commands with -- before workspace name
 # Exit 0 = allow, Exit 2 = block with stderr message
 
+HOOK_NAME="validate-verify-workspace"
+LOG_FILE="$(dirname "$0")/${HOOK_NAME}.log"
+
+log_blocked() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] BLOCKED: $1" >> "$LOG_FILE"
+}
+
 INPUT=$(cat)
 TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name // ""')
 COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // ""')
@@ -37,6 +44,7 @@ if echo "$COMMAND" | grep -qE 'verify:workspace[^\|]*--\s+\w'; then
 ║                                                                              ║
 ╚══════════════════════════════════════════════════════════════════════════════╝
 EOF
+    log_blocked "$COMMAND"
     exit 2
 fi
 
