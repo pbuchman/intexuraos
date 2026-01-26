@@ -3,6 +3,7 @@ import { Timestamp } from '@google-cloud/firestore';
 
 import type { FastifyPluginCallback, FastifyRequest, FastifyReply } from 'fastify';
 import { logIncomingRequest, validateInternalAuth } from '@intexuraos/common-http';
+import { extractOrGenerateTraceId } from '@intexuraos/common-core';
 import { getServices } from '../services.js';
 import { processCodeAction } from '../domain/usecases/processCodeAction.js';
 import type { TaskStatus } from '../domain/models/codeTask.js';
@@ -326,12 +327,16 @@ export const codeRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       const services = getServices();
       const body = request.body;
 
+      // Extract or generate traceId from headers
+      const traceId = extractOrGenerateTraceId(request.headers);
+
       request.log.info(
         {
           actionId: body.actionId,
           userId: body.userId,
           workerType: body.payload.workerType,
           repository: body.payload.repository,
+          traceId,
         },
         'Processing code action'
       );
@@ -346,12 +351,14 @@ export const codeRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         linearIssueId?: string;
         repository?: string;
         baseBranch?: string;
+        traceId?: string;
       } = {
         actionId: body.actionId,
         approvalEventId: body.approvalEventId,
         userId: body.userId,
         prompt: body.payload.prompt,
         workerType: body.payload.workerType ?? 'auto',
+        traceId,
       };
 
       // Only include optional fields if they are defined

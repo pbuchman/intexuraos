@@ -468,6 +468,72 @@ describe('taskDispatcherImpl', () => {
       expect(body.linearIssueId).toBeUndefined();
     });
 
+    it('includes traceId in headers when provided', async () => {
+      const service = createTaskDispatcherService(baseDeps);
+      const mockFetch = vi.mocked(global.fetch);
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ status: 'accepted' }),
+      } as Response);
+
+      await service.dispatch({
+        taskId: 'task-123',
+        prompt: 'Test',
+        systemPromptHash: 'abc123',
+        repository: 'test/repo',
+        baseBranch: 'main',
+        workerType: 'opus',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'whsec_test',
+        traceId: 'test-trace-id-123',
+      });
+
+      const fetchCall = mockFetch.mock.calls[0];
+      if (!fetchCall) {
+        throw new Error('Fetch was not called');
+      }
+      const options = fetchCall[1];
+      if (!options) {
+        throw new Error('Fetch options not found');
+      }
+      const headers = options.headers as Record<string, string>;
+
+      expect(headers['X-Trace-Id']).toBe('test-trace-id-123');
+    });
+
+    it('omits traceId header when not provided', async () => {
+      const service = createTaskDispatcherService(baseDeps);
+      const mockFetch = vi.mocked(global.fetch);
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ status: 'accepted' }),
+      } as Response);
+
+      await service.dispatch({
+        taskId: 'task-123',
+        prompt: 'Test',
+        systemPromptHash: 'abc123',
+        repository: 'test/repo',
+        baseBranch: 'main',
+        workerType: 'opus',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'whsec_test',
+        // traceId not provided
+      });
+
+      const fetchCall = mockFetch.mock.calls[0];
+      if (!fetchCall) {
+        throw new Error('Fetch was not called');
+      }
+      const options = fetchCall[1];
+      if (!options) {
+        throw new Error('Fetch options not found');
+      }
+      const headers = options.headers as Record<string, string>;
+
+      expect(headers['X-Trace-Id']).toBeUndefined();
+    });
+
     it('returns network_error on fetch failure', async () => {
       const service = createTaskDispatcherService(baseDeps);
       const mockFetch = vi.mocked(global.fetch);

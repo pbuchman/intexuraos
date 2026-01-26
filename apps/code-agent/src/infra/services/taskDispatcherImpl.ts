@@ -23,6 +23,7 @@ interface WorkerTaskRequest {
   workerType: 'opus' | 'auto' | 'glm';
   webhookUrl: string;
   webhookSecret: string;
+  traceId?: string;
 }
 
 /**
@@ -71,6 +72,11 @@ class TaskDispatcherImpl implements TaskDispatcherService {
     // Only add linearIssueId if provided
     if (request.linearIssueId !== undefined) {
       taskRequest.linearIssueId = request.linearIssueId;
+    }
+
+    // Only add traceId if provided
+    if (request.traceId !== undefined) {
+      taskRequest.traceId = request.traceId;
     }
 
     const body = JSON.stringify(taskRequest);
@@ -180,16 +186,23 @@ class TaskDispatcherImpl implements TaskDispatcherService {
       `Attempting dispatch to ${worker.location}`
     );
 
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'CF-Access-Client-Id': this.cfAccessClientId,
+      'CF-Access-Client-Secret': this.cfAccessClientSecret,
+      'X-Dispatch-Timestamp': String(timestamp),
+      'X-Dispatch-Signature': signature,
+      'X-Dispatch-Nonce': nonce,
+    };
+
+    // Include traceId in headers if present
+    if (taskRequest.traceId !== undefined) {
+      headers['X-Trace-Id'] = taskRequest.traceId;
+    }
+
     const response = await this.fetchWithTimeout(worker.url + '/tasks', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'CF-Access-Client-Id': this.cfAccessClientId,
-        'CF-Access-Client-Secret': this.cfAccessClientSecret,
-        'X-Dispatch-Timestamp': String(timestamp),
-        'X-Dispatch-Signature': signature,
-        'X-Dispatch-Nonce': nonce,
-      },
+      headers,
       body,
       signal: AbortSignal.timeout(30000), // 30 second timeout
     });
