@@ -2611,4 +2611,116 @@ describe('processTodoCreated', () => {
       expect(result.value.items[3]?.title).toBe('Extracted 1');
     }
   });
+
+  it('returns error when update fails after successful item extraction', async () => {
+    const createResult = await todoRepository.create({
+      userId: 'user-1',
+      title: 'Test',
+      tags: [],
+      source: 'web',
+      sourceId: 'src-1',
+      status: 'processing',
+      description: 'Tasks to extract',
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) return;
+
+    context.todoItemExtractionService.extractItemsResult = {
+      ok: true,
+      value: [
+        {
+          title: 'Extracted task',
+          priority: 'high',
+          dueDate: null,
+          reasoning: 'Test',
+        },
+      ],
+    };
+
+    todoRepository.simulateMethodError('update', {
+      code: 'STORAGE_ERROR',
+      message: 'Update failed',
+    });
+
+    const result = await processTodoCreated(
+      { todoRepository, logger: mockLogger, todoItemExtractionService: context.todoItemExtractionService },
+      createResult.value.id
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('STORAGE_ERROR');
+      expect(result.error.message).toBe('Update failed');
+    }
+  });
+
+  it('returns error when update fails after empty extraction result', async () => {
+    const createResult = await todoRepository.create({
+      userId: 'user-1',
+      title: 'Test',
+      tags: [],
+      source: 'web',
+      sourceId: 'src-1',
+      status: 'processing',
+      description: 'No actionable tasks',
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) return;
+
+    context.todoItemExtractionService.extractItemsResult = { ok: true, value: [] };
+
+    todoRepository.simulateMethodError('update', {
+      code: 'STORAGE_ERROR',
+      message: 'Update failed',
+    });
+
+    const result = await processTodoCreated(
+      { todoRepository, logger: mockLogger, todoItemExtractionService: context.todoItemExtractionService },
+      createResult.value.id
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('STORAGE_ERROR');
+      expect(result.error.message).toBe('Update failed');
+    }
+  });
+
+  it('returns error when update fails after extraction service failure', async () => {
+    const createResult = await todoRepository.create({
+      userId: 'user-1',
+      title: 'Test',
+      tags: [],
+      source: 'web',
+      sourceId: 'src-1',
+      status: 'processing',
+      description: 'Tasks to extract',
+    });
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) return;
+
+    context.todoItemExtractionService.extractItemsResult = {
+      ok: false,
+      error: {
+        code: 'GENERATION_ERROR',
+        message: 'LLM failed',
+      },
+    };
+
+    todoRepository.simulateMethodError('update', {
+      code: 'STORAGE_ERROR',
+      message: 'Update failed',
+    });
+
+    const result = await processTodoCreated(
+      { todoRepository, logger: mockLogger, todoItemExtractionService: context.todoItemExtractionService },
+      createResult.value.id
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('STORAGE_ERROR');
+      expect(result.error.message).toBe('Update failed');
+    }
+  });
 });
