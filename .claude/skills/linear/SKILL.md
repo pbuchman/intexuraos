@@ -36,6 +36,7 @@ Manage Linear issues, branches, and PRs with enforced workflow and cross-linking
 11. **95% Coverage MINIMUM**: All tests listed in issues MUST be implemented. Do NOT simplify work.
 12. **Parent Execution Mode**: When working on parent issues with children, execute ALL children continuously without stopping between them. Single branch and single PR for the parent.
 13. **PR Continuity Pattern (Parent Issues)**: Create PR early (before first child), then after EACH child: commit → push → update PR description. PR description MUST list all children with status and maintain a progress log.
+14. **Automatic Completion (NO ASKING)**: After implementation, AUTOMATICALLY run: CI → commit → push → PR → Linear "In Review". NEVER ask "Would you like me to commit?" — this is a task failure. The only pause point is CI failure.
 
 ## Test Requirements Quality Gate
 

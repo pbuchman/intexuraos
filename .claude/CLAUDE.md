@@ -290,17 +290,6 @@ terraform validate
 
 **NEVER modify `vitest.config.ts` coverage exclusions or thresholds. Write tests instead.**
 
-### CI Failure Tracking (MANDATORY)
-
-**RULE:** ALWAYS commit `.claude/ci-failures/*` files with your changes.
-
-Auto-generated CI failure logs enable `/analyze-ci-failures` to identify patterns.
-
-```
-❌ WRONG: See .claude/ci-failures/ in git status → Ignore → Commit only "real" changes
-✅ RIGHT: See .claude/ci-failures/ in git status → Stage → Commit with your changes
-```
-
 ### Verification Ownership
 
 **All failures are YOUR responsibility.** See [Ownership Mindset](#ownership-mindset-mandatory).
@@ -592,11 +581,6 @@ return result.value;
 ---
 
 ## Git & PR Workflow
-
-**RULE: NEVER push without explicit instruction.**
-
-- `"commit"` → local only, no push
-- `"commit and push"` → push once
 
 **RULE: NEVER commit without `pnpm run ci:tracked` passing first.**
 

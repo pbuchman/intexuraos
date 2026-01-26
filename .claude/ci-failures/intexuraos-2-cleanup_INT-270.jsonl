@@ -1,2 +1,0 @@
-{"ts":"2026-01-25T01:59:47.201Z","project":"intexuraos-2","branch":"cleanup/INT-270","workspace":"--","runNumber":1,"passed":false,"durationMs":376,"failureCount":0,"failures":[]}
-{"ts":"2026-01-25T02:00:53.532Z","project":"intexuraos-2","branch":"cleanup/INT-270","workspace":"web","runNumber":2,"passed":true,"durationMs":60668,"failureCount":0,"failures":[]}
