@@ -22,13 +22,12 @@ All internal endpoints follow the pattern:
 
 ### Service Prefixes
 
-| Service               | Prefix        | Description                     |
-| --------------------- | ------------- | ------------------------------- |
-| `notion-service`      | `notion`      | Notion integration operations   |
-| `user-service`        | `user`        | User management and settings    |
-| `promptvault-service` | `promptvault` | PromptVault operations (future) |
-| `whatsapp-service`    | `whatsapp`    | WhatsApp operations (future)    |
-| `llm-orchestrator`    | `llm`         | LLM orchestration (future)      |
+| Service            | Prefix     | Description                   |
+| ------------------ | ---------- | ----------------------------- |
+| `notion-service`   | `notion`   | Notion integration operations |
+| `user-service`     | `user`     | User management and settings  |
+| `whatsapp-service` | `whatsapp` | WhatsApp operations           |
+| `llm-orchestrator` | `llm`      | LLM orchestration (future)    |
 
 ## Authentication
 
@@ -136,7 +135,7 @@ X-Internal-Auth: <token>
 }
 ```
 
-**Purpose:** Allows other services (e.g., promptvault-service) to retrieve Notion API tokens without direct Firestore access.
+**Purpose:** Allows other services to retrieve Notion API tokens without direct Firestore access.
 
 ### user-service
 
@@ -491,5 +490,5 @@ const llmResult = await client.getLlmClient(userId);
 
 - [Internal Routes Implementation (notion-service)](../../apps/notion-service/src/routes/internalRoutes.ts)
 - [Internal Routes Implementation (user-service)](../../apps/user-service/src/routes/internalRoutes.ts)
-- [Service Client Example (notionServiceClient)](../../apps/promptvault-service/src/infra/notion/notionServiceClient.ts)
+- [Service Client Example](../../packages/internal-clients/src/user-service/client.ts)
 - [Shared User Service Client](../../packages/internal-clients/src/user-service/client.ts)
