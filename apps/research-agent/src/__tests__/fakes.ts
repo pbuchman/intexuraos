@@ -712,6 +712,17 @@ export class FakeResearchExportSettings {
     return ok(settings);
   }
 
+  setResearchPageId(userId: string, researchPageId: string): void {
+    const now = new Date().toISOString();
+    const existing = this.settings.get(userId);
+    const settings: ResearchExportSettings = {
+      researchPageId,
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+    };
+    this.settings.set(userId, settings);
+  }
+
   clear(): void {
     this.settings.clear();
   }
