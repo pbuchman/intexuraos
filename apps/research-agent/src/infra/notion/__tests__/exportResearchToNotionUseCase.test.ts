@@ -28,6 +28,7 @@ const mockLogger: Logger = {
 function createMockDeps() {
   const mockResearchRepo = {
     findById: vi.fn(),
+    update: vi.fn(),
   };
 
   const mockNotionServiceClient = {
@@ -118,6 +119,29 @@ describe('exportResearchToNotion', () => {
         expect(result.error.message).toBe('Database error');
       }
       expect(mockLogger.error).toHaveBeenCalled();
+    });
+  });
+
+  describe('when research is already exported to Notion', () => {
+    it('should silently skip duplicate export and return ok', async () => {
+      const researchWithExport = createTestResearch({
+        notionExportInfo: {
+          mainPageId: 'notion-page-existing',
+          mainPageUrl: 'https://notion.so/page-existing',
+          llmReportPageIds: [],
+          exportedAt: '2024-01-01T10:00:00Z',
+        },
+      });
+      deps.researchRepo.findById.mockResolvedValue(ok(researchWithExport));
+
+      const result = await exportResearchToNotion('research-1', 'user-1', deps);
+
+      expect(result.ok).toBe(true);
+      expect(deps.researchExportSettings.getResearchPageId).not.toHaveBeenCalled();
+      expect(mockLogger.debug).toHaveBeenCalledWith(
+        { researchId: 'research-1', mainPageUrl: 'https://notion.so/page-existing' },
+        expect.stringContaining('already exported to Notion')
+      );
     });
   });
 
@@ -214,9 +238,52 @@ describe('exportResearchToNotion', () => {
   });
 
   describe('when export succeeds', () => {
-    it('should return ok and log success', async () => {
+    it('should save notionExportInfo and log success', async () => {
       const research = createTestResearch();
       deps.researchRepo.findById.mockResolvedValue(ok(research));
+      deps.researchRepo.update.mockResolvedValue(ok(undefined));
+      deps.researchExportSettings.getResearchPageId.mockResolvedValue(ok('page-123'));
+      deps.notionServiceClient.getNotionToken.mockResolvedValue(
+        ok({ connected: true, token: 'token-abc' })
+      );
+
+      // Mock the actual export function
+      vi.mocked(notionExporter.exportResearchToNotion).mockResolvedValue(
+        ok({
+          mainPageId: 'notion-page-123',
+          mainPageUrl: 'https://notion.so/page-123',
+          llmReportPages: [
+            { model: 'gemini-2.5-pro', pageId: 'llm-page-1', pageUrl: 'https://notion.so/llm-1' },
+            { model: 'gpt-4o', pageId: 'llm-page-2', pageUrl: 'https://notion.so/llm-2' },
+          ],
+        })
+      );
+
+      const result = await exportResearchToNotion('research-1', 'user-1', deps);
+
+      expect(result.ok).toBe(true);
+      expect(deps.researchRepo.update).toHaveBeenCalledWith('research-1', {
+        notionExportInfo: {
+          mainPageId: 'notion-page-123',
+          mainPageUrl: 'https://notion.so/page-123',
+          llmReportPageIds: [
+            { model: 'gemini-2.5-pro', pageId: 'llm-page-1' },
+            { model: 'gpt-4o', pageId: 'llm-page-2' },
+          ],
+          exportedAt: expect.any(String),
+        },
+      });
+      expect(mockLogger.info).toHaveBeenCalled();
+    });
+
+    it('should log error but return ok when update fails after successful export', async () => {
+      const research = createTestResearch();
+      const repoError: RepositoryError = {
+        code: 'FIRESTORE_ERROR',
+        message: 'Update failed',
+      };
+      deps.researchRepo.findById.mockResolvedValue(ok(research));
+      deps.researchRepo.update.mockResolvedValue(err(repoError));
       deps.researchExportSettings.getResearchPageId.mockResolvedValue(ok('page-123'));
       deps.notionServiceClient.getNotionToken.mockResolvedValue(
         ok({ connected: true, token: 'token-abc' })
@@ -233,8 +300,16 @@ describe('exportResearchToNotion', () => {
 
       const result = await exportResearchToNotion('research-1', 'user-1', deps);
 
+      // Export succeeded, so result should be ok even though metadata save failed
       expect(result.ok).toBe(true);
-      expect(mockLogger.info).toHaveBeenCalled();
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        { researchId: 'research-1', error: 'Update failed' },
+        expect.stringContaining('Failed to save Notion export info')
+      );
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        { researchId: 'research-1', url: 'https://notion.so/page-123' },
+        expect.stringContaining('Successfully exported')
+      );
     });
   });
 });

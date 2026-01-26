@@ -14,7 +14,7 @@ import type {
 } from './notionServiceClient.js';
 import type { ResearchExportSettingsPort } from '../../domain/research/ports/researchExportSettings.js';
 import { exportResearchToNotion as exportToNotion } from './notionResearchExporter.js';
-import type { Research } from '../../domain/research/models/Research.js';
+import type { Research, NotionExportInfo } from '../../domain/research/models/Research.js';
 import type { RepositoryError } from '../../domain/research/ports/repository.js';
 
 // ============================================================================
@@ -35,6 +35,7 @@ export interface ExportResearchToNotionError {
 
 export interface ResearchRepository {
   findById(id: string): Promise<Result<Research | null, RepositoryError>>;
+  update(id: string, data: Partial<Research>): Promise<Result<Research, RepositoryError>>;
 }
 
 // ============================================================================
@@ -62,13 +63,15 @@ function hasValidNotionToken(tokenContext: NotionTokenContext): boolean {
  *
  * Flow:
  * 1. Fetch research from repository
- * 2. Check if research has synthesizedResult (skip if not)
- * 3. Get user's Notion page ID configuration
- * 4. If no page ID configured → silently skip
- * 5. Get user's Notion token
- * 6. If not connected → silently skip
- * 7. Call exportResearchToNotion() from infra layer
- * 8. Log success/failure, return ok regardless
+ * 2. Check if already exported to Notion (skip to avoid duplicate)
+ * 3. Check if research has synthesizedResult (skip if not)
+ * 4. Get user's Notion page ID configuration
+ * 5. If no page ID configured → silently skip
+ * 6. Get user's Notion token
+ * 7. If not connected → silently skip
+ * 8. Call exportResearchToNotion() from infra layer
+ * 9. Save notionExportInfo to research document
+ * 10. Log success/failure, return ok regardless
  *
  * @param researchId - The ID of the research to export
  * @param userId - The user ID who owns the research
@@ -96,13 +99,19 @@ export async function exportResearchToNotion(
       return err({ code: 'NOT_FOUND', message: `Research ${researchId} not found` });
     }
 
-    // 2. Check if synthesis is complete
+    // 2. Check if already exported to Notion (skip to avoid duplicate)
+    if (research.notionExportInfo !== undefined) {
+      logger.debug({ researchId, mainPageUrl: research.notionExportInfo.mainPageUrl }, `Research ${researchId} already exported to Notion, skipping duplicate export`);
+      return ok(undefined);
+    }
+
+    // 3. Check if synthesis is complete
     if (research.synthesizedResult === undefined || research.synthesizedResult === '') {
       logger.debug({ researchId }, `Research ${researchId} has no synthesis yet, skipping Notion export`);
       return ok(undefined);
     }
 
-    // 3. Get user's Notion page ID configuration
+    // 4. Get user's Notion page ID configuration
     const pageIdResult = await researchExportSettings.getResearchPageId(userId);
     if (!pageIdResult.ok) {
       logger.warn({ userId, error: pageIdResult.error.message }, `Failed to get Notion page ID for user ${userId}, skipping export`);
@@ -115,7 +124,7 @@ export async function exportResearchToNotion(
       return ok(undefined);
     }
 
-    // 4. Get user's Notion token
+    // 5. Get user's Notion token
     const tokenResult = await notionServiceClient.getNotionToken(userId);
     if (!tokenResult.ok) {
       logger.warn({ userId, error: tokenResult.error.message }, `Failed to get Notion token for user ${userId}, skipping export`);
@@ -128,7 +137,7 @@ export async function exportResearchToNotion(
       return ok(undefined);
     }
 
-    // 5. Export to Notion
+    // 6. Export to Notion
     const notionLogger = {
       info: (msg: string): void => {
         logger.info({ msg });
@@ -154,7 +163,25 @@ export async function exportResearchToNotion(
       return err(error);
     }
 
-    const { mainPageUrl } = exportResult.value;
+    const { mainPageUrl, mainPageId, llmReportPages } = exportResult.value;
+
+    // 7. Save notionExportInfo to research document
+    const notionExportInfo: NotionExportInfo = {
+      mainPageId,
+      mainPageUrl,
+      llmReportPageIds: llmReportPages.map((p) => ({
+        model: p.model,
+        pageId: p.pageId,
+      })),
+      exportedAt: new Date().toISOString(),
+    };
+
+    const saveResult = await researchRepo.update(researchId, { notionExportInfo });
+    if (!saveResult.ok) {
+      logger.error({ researchId, error: saveResult.error.message }, `Failed to save Notion export info for research ${researchId}`);
+      // Continue anyway - export succeeded, just metadata save failed
+    }
+
     logger.info({ researchId, url: mainPageUrl }, `Successfully exported research ${researchId} to Notion`);
 
     return ok(undefined);
