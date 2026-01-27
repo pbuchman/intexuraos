@@ -242,6 +242,14 @@ export function ActionDetailModal({
         linkLabel,
       });
 
+      // Update parent state with resource_url in payload for persistence
+      onActionUpdated?.({
+        ...action,
+        status: 'completed',
+        payload: { ...action.payload, resource_url: normalizedUrl },
+        updatedAt: new Date().toISOString(),
+      });
+
       setExecutionResult({
         actionId: result.actionId,
         status: result.status,

@@ -191,7 +191,7 @@ describe('handleResearchAction usecase', () => {
       await fakeActionRepository.save(createAction());
 
       const fakeExecuteResearchAction = vi.fn().mockResolvedValue(
-        ok({ status: 'completed' as const, resource_url: '/#/research/research-123' })
+        ok({ status: 'completed' as const, resourceUrl: '/#/research/research-123' })
       );
 
       const usecase = registerActionHandler(createHandleResearchActionUseCase, {

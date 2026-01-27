@@ -171,7 +171,7 @@ describe('handleTodoAction usecase', () => {
       await fakeActionRepository.save(createAction());
 
       const fakeExecuteTodoAction = vi.fn().mockResolvedValue(
-        ok({ status: 'completed' as const, resource_url: '/#/todos/todo-123' })
+        ok({ status: 'completed' as const, resourceUrl: '/#/todos/todo-123' })
       );
 
       const usecase = registerActionHandler(createHandleTodoActionUseCase, {
