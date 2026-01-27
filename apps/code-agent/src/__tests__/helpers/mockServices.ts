@@ -17,6 +17,8 @@ import { ok } from '@intexuraos/common-core';
 import { createLinearAgentHttpClient } from '../../infra/http/linearAgentHttpClient.js';
 import { createLinearIssueService } from '../../domain/services/linearIssueService.js';
 import { createStatusMirrorService } from '../../infra/services/statusMirrorServiceImpl.js';
+import { createProcessHeartbeatUseCase } from '../../domain/usecases/processHeartbeat.js';
+import { createDetectZombieTasksUseCase } from '../../domain/usecases/detectZombieTasks.js';
 
 export function setupTestServices({ actionsAgentUrl = 'http://actions-agent' }: { actionsAgentUrl?: string } = {}): void {
   const fakeFirestore = createFakeFirestore() as unknown as Firestore;
@@ -83,6 +85,20 @@ export function setupTestServices({ actionsAgentUrl = 'http://actions-agent' }: 
     }),
     rateLimitService,
     linearIssueService,
+    processHeartbeat: createProcessHeartbeatUseCase({
+      codeTaskRepository: createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore,
+        logger,
+      }),
+      logger,
+    }),
+    detectZombieTasks: createDetectZombieTasksUseCase({
+      codeTaskRepository: createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore,
+        logger,
+      }),
+      logger,
+    }),
   };
 
   setServices(container);

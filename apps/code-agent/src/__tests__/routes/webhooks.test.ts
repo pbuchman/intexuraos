@@ -39,7 +39,8 @@ import type { RateLimitService } from '../../domain/services/rateLimitService.js
 import type { LinearIssueService } from '../../domain/services/linearIssueService.js';
 import { createStatusMirrorService } from '../../infra/services/statusMirrorServiceImpl.js';
 import type { StatusMirrorService } from '../../infra/services/statusMirrorServiceImpl.js';
-
+import { createProcessHeartbeatUseCase } from '../../domain/usecases/processHeartbeat.js';
+import { createDetectZombieTasksUseCase } from '../../domain/usecases/detectZombieTasks.js';
 // Mock fetchWithAuth
 vi.mock('@intexuraos/internal-clients', async () => ({
   fetchWithAuth: vi.fn(),
@@ -149,6 +150,28 @@ describe('POST /internal/webhooks/task-complete', () => {
         actionsAgentClient,
         logger,
       }),
+      processHeartbeat: createProcessHeartbeatUseCase({
+        codeTaskRepository: codeTaskRepo,
+        logger,
+      }),
+      detectZombieTasks: createDetectZombieTasksUseCase({
+        codeTaskRepository: codeTaskRepo,
+        logger,
+      }),
+    } as {
+      firestore: Firestore;
+      logger: Logger;
+      codeTaskRepo: CodeTaskRepository;
+      logChunkRepo: LogChunkRepository;
+      workerDiscovery: WorkerDiscoveryService;
+      taskDispatcher: TaskDispatcherService;
+      actionsAgentClient: ActionsAgentClient;
+      whatsappNotifier: WhatsAppNotifier;
+      rateLimitService: RateLimitService;
+      linearIssueService: LinearIssueService;
+      statusMirrorService: StatusMirrorService;
+      processHeartbeat: import('../../domain/usecases/processHeartbeat.js').ProcessHeartbeatUseCase;
+      detectZombieTasks: import('../../domain/usecases/detectZombieTasks.js').DetectZombieTasksUseCase;
     });
 
     app = await buildServer();
@@ -1285,6 +1308,14 @@ describe('POST /internal/logs', () => {
       rateLimitService,
       linearIssueService,
       statusMirrorService,
+      processHeartbeat: createProcessHeartbeatUseCase({
+        codeTaskRepository: codeTaskRepo,
+        logger,
+      }),
+      detectZombieTasks: createDetectZombieTasksUseCase({
+        codeTaskRepository: codeTaskRepo,
+        logger,
+      }),
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -1297,6 +1328,8 @@ describe('POST /internal/logs', () => {
       rateLimitService: RateLimitService;
       linearIssueService: LinearIssueService;
       statusMirrorService: StatusMirrorService;
+      processHeartbeat: import('../../domain/usecases/processHeartbeat.js').ProcessHeartbeatUseCase;
+      detectZombieTasks: import('../../domain/usecases/detectZombieTasks.js').DetectZombieTasksUseCase;
     });
 
     app = await buildServer();
@@ -1595,6 +1628,28 @@ describe('POST /internal/webhooks/task-complete - WhatsApp notifications', () =>
         actionsAgentClient,
         logger,
       }),
+      processHeartbeat: createProcessHeartbeatUseCase({
+        codeTaskRepository: codeTaskRepo,
+        logger,
+      }),
+      detectZombieTasks: createDetectZombieTasksUseCase({
+        codeTaskRepository: codeTaskRepo,
+        logger,
+      }),
+    } as {
+      firestore: Firestore;
+      logger: Logger;
+      codeTaskRepo: CodeTaskRepository;
+      logChunkRepo: LogChunkRepository;
+      workerDiscovery: WorkerDiscoveryService;
+      taskDispatcher: TaskDispatcherService;
+      actionsAgentClient: ActionsAgentClient;
+      whatsappNotifier: WhatsAppNotifier;
+      rateLimitService: RateLimitService;
+      linearIssueService: LinearIssueService;
+      statusMirrorService: StatusMirrorService;
+      processHeartbeat: import('../../domain/usecases/processHeartbeat.js').ProcessHeartbeatUseCase;
+      detectZombieTasks: import('../../domain/usecases/detectZombieTasks.js').DetectZombieTasksUseCase;
     });
 
     app = await buildServer();

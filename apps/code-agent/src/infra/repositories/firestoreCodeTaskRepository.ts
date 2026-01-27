@@ -264,9 +264,14 @@ export const createFirestoreCodeTaskRepository = (deps: {
           });
         }
 
-        const updateData: Record<string, unknown> = {
-          ['updatedAt']: Timestamp.fromDate(new Date()),
-        };
+        const updateData: Record<string, unknown> = {};
+
+        // Allow explicit updatedAt for heartbeat (INT-372), otherwise use current time
+        if (input.updatedAt !== undefined) {
+          updateData['updatedAt'] = Timestamp.fromDate(input.updatedAt);
+        } else {
+          updateData['updatedAt'] = Timestamp.fromDate(new Date());
+        }
 
         if (input.status !== undefined) {
           updateData['status'] = input.status;
@@ -291,6 +296,9 @@ export const createFirestoreCodeTaskRepository = (deps: {
         }
         if (input.logChunksDropped !== undefined) {
           updateData['logChunksDropped'] = input.logChunksDropped;
+        }
+        if (input.lastHeartbeat !== undefined) {
+          updateData['lastHeartbeat'] = Timestamp.fromDate(input.lastHeartbeat);
         }
 
         await docRef.update(updateData);
