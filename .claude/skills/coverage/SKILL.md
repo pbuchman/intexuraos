@@ -8,10 +8,11 @@ Analyze branch coverage gaps and convert them into Linear issues or documented e
 ## Usage
 
 ```
-/coverage                    # Full audit: all apps + packages
+/coverage                    # Full audit: all apps + packages + workers
 /coverage apps               # Category audit: all apps
 /coverage packages           # Category audit: all packages
-/coverage <name>             # Targeted audit: specific app or package
+/coverage workers            # Category audit: all workers
+/coverage <name>             # Targeted audit: specific app, package, or worker
 ```
 
 ## Scope Boundary — Analysis Only
@@ -34,17 +35,18 @@ Analyze branch coverage gaps and convert them into Linear issues or documented e
 
 ## Invocation Detection
 
-| Input Pattern | Workflow | Scope |
-|---------------|----------|-------|
-| `/coverage` | [full-audit.md](workflows/full-audit.md) | All apps + all packages |
-| `/coverage apps` | [category-audit.md](workflows/category-audit.md) | All directories in `apps/` |
+| Input Pattern      | Workflow                                          | Scope                           |
+| ------------------ | ------------------------------------------------- | ------------------------------- |
+| `/coverage`        | [full-audit.md](workflows/full-audit.md)          | All apps + packages + workers   |
+| `/coverage apps`   | [category-audit.md](workflows/category-audit.md)  | All directories in `apps/`      |
 | `/coverage packages` | [category-audit.md](workflows/category-audit.md) | All directories in `packages/` |
-| `/coverage <name>` | [targeted-audit.md](workflows/targeted-audit.md) | Single app or package |
+| `/coverage workers` | [category-audit.md](workflows/category-audit.md) | All directories in `workers/`  |
+| `/coverage <name>` | [targeted-audit.md](workflows/targeted-audit.md)  | Single app, package, or worker  |
 
 **Auto-detection logic:**
-1. No args → full audit
-2. Arg is `apps` or `packages` → category audit
-3. Arg matches directory in `apps/` or `packages/` → targeted audit
+1. No args → full audit (apps + packages + workers)
+2. Arg is `apps`, `packages`, or `workers` → category audit
+3. Arg matches directory in `apps/`, `packages/`, or `workers/` → targeted audit
 4. Arg doesn't match → error with suggestions
 
 ## Mandatory Rules

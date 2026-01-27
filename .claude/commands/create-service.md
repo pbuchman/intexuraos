@@ -1,18 +1,29 @@
 # Create New Service
 
-Create a new backend service in the IntexuraOS monorepo.
+Create a new backend service (app or worker) in the IntexuraOS monorepo.
+
+## Service Types
+
+| Type   | Deploy Target   | Use Case                                        |
+| ------ | --------------- | ----------------------------------------------- |
+| App    | Cloud Run       | Persistent HTTP server, full DI, routes, domain |
+| Worker | Cloud Functions | Event-driven processing, scale-to-zero          |
 
 ## Usage
 
 ```
-/create-service <service-name>
+/create-service <service-name>              # Creates an app (default)
+/create-service <worker-name> --worker      # Creates a worker
 ```
 
-Example: `/create-service web-agent`
+Examples:
+
+- `/create-service web-agent` — Creates a Cloud Run app
+- `/create-service log-cleanup --worker` — Creates a Cloud Function worker
 
 ---
 
-## Required Steps
+## App Creation Steps
 
 ### 1. Create App Directory Structure
 
@@ -724,7 +735,211 @@ This ensures `/create-domain-docs` can generate documentation for your service's
 
 ---
 
-## Service Requirements Checklist
+## Worker Creation Steps
+
+**Use these steps when creating a worker with `--worker` flag.**
+
+### 1. Create Worker Directory Structure
+
+```
+workers/<worker-name>/
+├── src/
+│   ├── index.ts          # Cloud Functions Framework entry point
+│   ├── main.ts           # Business logic
+│   └── logger.ts         # Pino logger setup
+├── __tests__/            # Unit tests
+├── package.json
+├── tsconfig.json
+└── vitest.config.ts
+```
+
+### 2. Create package.json
+
+```json
+{
+  "name": "@intexuraos/<worker-name>",
+  "version": "0.0.4",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "start": "node dist/index.js",
+    "dev": "node --watch --experimental-strip-types src/index.ts",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@google-cloud/functions-framework": "^3.0.0",
+    "pino": "^9.6.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "typescript": "^5.7.3",
+    "vitest": "^4.0.16"
+  }
+}
+```
+
+### 3. Create src/index.ts (Pub/Sub Trigger)
+
+```typescript
+import * as functions from '@google-cloud/functions-framework';
+import { handleEvent } from './main.js';
+
+functions.cloudEvent('handlerName', handleEvent);
+```
+
+**Or for HTTP trigger:**
+
+```typescript
+import * as functions from '@google-cloud/functions-framework';
+import { handleRequest } from './main.js';
+
+functions.http('handlerName', handleRequest);
+```
+
+### 4. Create src/main.ts
+
+```typescript
+import type { CloudEvent } from '@google-cloud/functions-framework';
+import { createLogger } from './logger.js';
+
+interface PubSubData {
+  message: {
+    data: string;
+    attributes?: Record<string, string>;
+  };
+}
+
+const logger = createLogger();
+
+export async function handleEvent(event: CloudEvent<PubSubData>): Promise<void> {
+  logger.info({ eventId: event.id }, 'Processing event');
+
+  // Business logic here
+
+  logger.info('Event processed successfully');
+}
+```
+
+### 5. Create src/logger.ts
+
+```typescript
+import pino from 'pino';
+
+export function createLogger() {
+  return pino({
+    name: '<worker-name>',
+    level: process.env['LOG_LEVEL'] ?? 'info',
+  });
+}
+```
+
+### 6. Add Terraform Configuration
+
+Workers use the `cloud-function` module (NOT `cloud-run-service`).
+
+**In `terraform/environments/dev/main.tf`:**
+
+```hcl
+module "<worker_name>" {
+  source = "../../modules/cloud-function"
+
+  project_id      = var.project_id
+  region          = var.region
+  environment     = var.environment
+  function_name   = "intexuraos-<worker-name>"
+  service_account = module.iam.service_accounts["<worker_name>"]
+
+  # Trigger configuration (choose one)
+  trigger_type    = "pubsub"  # or "http" or "scheduler"
+  pubsub_topic    = google_pubsub_topic.<topic_name>.id
+
+  # Resources
+  memory          = "256Mi"
+  timeout_seconds = 60
+  max_instances   = 10
+
+  labels = local.common_labels
+}
+```
+
+### 7. Create Cloud Build Deploy Script
+
+Create `cloudbuild/scripts/deploy-<worker-name>.sh`:
+
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${SCRIPT_DIR}/lib.sh"
+
+WORKER="<worker-name>"
+FUNCTION_NAME="intexuraos-<worker-name>"
+
+require_env_vars REGION
+
+log "Deploying ${WORKER} to Cloud Functions"
+
+# Build and zip
+cd workers/${WORKER}
+pnpm run build
+zip -r function.zip dist/ package.json
+
+# Upload to GCS
+gsutil cp function.zip gs://cloud-functions-source/${WORKER}/function.zip
+
+# Deploy
+gcloud functions deploy ${FUNCTION_NAME} \
+  --gen2 \
+  --region=${REGION} \
+  --source=gs://cloud-functions-source/${WORKER}/function.zip \
+  --quiet
+
+log "Deployment complete for ${WORKER}"
+```
+
+### 8. Add to Root tsconfig.json
+
+```json
+{
+  "references": [{ "path": "./workers/<worker-name>" }]
+}
+```
+
+### 9. Run Verification
+
+```bash
+pnpm install
+pnpm run ci:tracked
+STORAGE_EMULATOR_HOST= FIRESTORE_EMULATOR_HOST= PUBSUB_EMULATOR_HOST= \
+GOOGLE_APPLICATION_CREDENTIALS=$HOME/personal/gcloud-claude-code-dev.json \
+terraform fmt -check -recursive && terraform validate
+```
+
+---
+
+## Worker Requirements Checklist
+
+- [ ] Worker directory created in `workers/`
+- [ ] `package.json` with Cloud Functions Framework dependency
+- [ ] Entry point uses `functions.cloudEvent()` or `functions.http()`
+- [ ] Service account in IAM module
+- [ ] Terraform `cloud-function` module configured
+- [ ] Deploy script created
+- [ ] Added to root tsconfig.json
+- [ ] `pnpm run ci:tracked` passes
+- [ ] `terraform validate` passes
+
+---
+
+## App Requirements Checklist
 
 - [ ] OpenAPI spec at `/openapi.json`
 - [ ] Swagger UI at `/docs`

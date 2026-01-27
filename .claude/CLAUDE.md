@@ -358,12 +358,28 @@ apps/<app>/src/
   infra/      → Adapters (Firestore, APIs, etc.)
   routes/     → HTTP transport
   services.ts → DI container
+workers/<worker>/src/
+  index.ts    → Cloud Functions Framework entry point
+  main.ts     → Business logic
+  logger.ts   → Pino logger
 packages/
   common-*/   → Leaf packages (Result types, HTTP helpers)
   infra-*/    → External service wrappers
 terraform/    → Infrastructure as code
 docs/         → Documentation
 ```
+
+### Apps vs Workers
+
+| Aspect      | Apps                          | Workers                                  |
+| ----------- | ----------------------------- | ---------------------------------------- |
+| Deploy      | Cloud Run                     | Cloud Functions                          |
+| Framework   | Fastify                       | Cloud Functions Framework                |
+| Scaling     | Min 0, persistent connections | Scale to zero, event-driven              |
+| Entry Point | `server.ts`                   | `index.ts` with `functions.cloudEvent()` |
+| DI Pattern  | Full `services.ts` container  | Lightweight, direct dependency injection |
+| Dockerfile  | Yes (multi-stage esbuild)     | No (zip deployment)                      |
+| Coverage    | 95% required                  | 95% required                             |
 
 ### Import Rules
 

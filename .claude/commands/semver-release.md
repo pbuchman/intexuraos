@@ -220,7 +220,7 @@ Update the "Current Version" line at the top of CHANGELOG.md:
 ### 10. Commit Release
 
 ```bash
-git add CHANGELOG.md package.json package-lock.json apps/*/package.json packages/*/package.json workers/*/package.json
+git add CHANGELOG.md package.json pnpm-lock.yaml apps/*/package.json packages/*/package.json workers/*/package.json
 git commit -m "Release vNEW_VERSION"
 ```
 

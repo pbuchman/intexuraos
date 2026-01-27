@@ -1,16 +1,17 @@
 # Category Audit Workflow
 
-**Trigger:** `/coverage apps` or `/coverage packages`
+**Trigger:** `/coverage apps`, `/coverage packages`, or `/coverage workers`
 **Scope:** All directories in the specified category
 
 ## Execution Steps
 
 ### Phase 1: Determine Category
 
-| Input | Category | Directory |
-|-------|----------|-----------|
-| `/coverage apps` | apps | `apps/` |
-| `/coverage packages` | packages | `packages/` |
+| Input               | Category | Directory   |
+| ------------------- | -------- | ----------- |
+| `/coverage apps`    | apps     | `apps/`     |
+| `/coverage packages`| packages | `packages/` |
+| `/coverage workers` | workers  | `workers/`  |
 
 ### Phase 2: List Targets
 
@@ -20,6 +21,9 @@ ls -d apps/*/ | xargs -n1 basename
 
 # For packages
 ls -d packages/*/ | xargs -n1 basename
+
+# For workers
+ls -d workers/*/ | xargs -n1 basename
 ```
 
 ### Phase 3: Run Coverage
@@ -35,6 +39,7 @@ pnpm run test:coverage --coverage.reporter=json-summary 2>&1 | tee /tmp/coverage
 3. Filter to ONLY files matching the category:
    - If `apps` → only `apps/**/*`
    - If `packages` → only `packages/**/*`
+   - If `workers` → only `workers/**/*`
 
 ### Phase 5: Process Each Target
 
