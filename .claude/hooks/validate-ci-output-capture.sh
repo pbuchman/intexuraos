@@ -16,9 +16,9 @@ COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // ""')
 [[ "$TOOL_NAME" != "Bash" ]] && exit 0
 [[ -z "$COMMAND" ]] && exit 0
 
-# Check pnpm ci, verify:workspace, and test commands
-# Matches: pnpm run ci, pnpm run ci:tracked, pnpm run verify:workspace, pnpm run test, pnpm test, etc.
-if ! echo "$COMMAND" | grep -qE 'pnpm\s+(run\s+(ci(:tracked)?|verify:workspace(:tracked)?|test)|test|--filter\s+\S+\s+test)'; then
+# Check pnpm ci, verify:workspace, test commands, and direct vitest invocations
+# Matches: pnpm run ci, pnpm run ci:tracked, pnpm run verify:workspace, pnpm run test, pnpm test, pnpm vitest, etc.
+if ! echo "$COMMAND" | grep -qE 'pnpm\s+(run\s+(ci(:tracked)?|verify:workspace(:tracked)?|test)|test|vitest|--filter\s+\S+\s+(test|vitest))'; then
     exit 0
 fi
 
@@ -34,6 +34,7 @@ BLOCKED: Piping test output to grep/tail loses context and wastes ~80s per run.
 
 INSTEAD: Capture first, then analyze:
   pnpm run test 2>&1 | tee /tmp/ci-output-$(date +%H%M%S).txt
+  pnpm vitest run 2>&1 | tee /tmp/ci-output-$(date +%H%M%S).txt
   rg "error|FAIL" /tmp/ci-output-*.txt -C3
 
 Or read the test file directly to find the test name you need.
