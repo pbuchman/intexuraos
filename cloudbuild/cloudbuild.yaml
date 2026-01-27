@@ -65,18 +65,6 @@ steps:
   # ===========================================================================
   # PREP
   # ===========================================================================
-  - name: 'ubuntu'
-    id: 'diagnose-start'
-    entrypoint: 'bash'
-    args:
-      - '-c'
-      - |
-        echo "=== INITIAL DISK USAGE ==="
-        df -h
-        echo "=== REPO SIZE ==="
-        du -sh .
-        chmod +x cloudbuild/scripts/build-push-monitored.sh
-
   - name: 'node:22-slim'
     id: 'pnpm-install'
     entrypoint: 'bash'
