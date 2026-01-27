@@ -1,5 +1,5 @@
 #!/bin/bash
-# BLOCK: CI commands without proper tee output capture
+# BLOCK: CI and test commands without proper tee output capture
 # Exit 0 = allow, Exit 2 = block with stderr message
 
 HOOK_NAME="validate-ci-output-capture"
@@ -16,8 +16,8 @@ COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // ""')
 [[ "$TOOL_NAME" != "Bash" ]] && exit 0
 [[ -z "$COMMAND" ]] && exit 0
 
-# Only check pnpm run ci and verify:workspace commands
-if ! echo "$COMMAND" | grep -qE 'pnpm\s+run\s+(ci|verify:workspace)'; then
+# Check pnpm ci, verify:workspace, and test commands
+if ! echo "$COMMAND" | grep -qE 'pnpm\s+(run\s+(ci|verify:workspace)|test|--filter\s+\S+\s+test)'; then
     exit 0
 fi
 
@@ -34,13 +34,17 @@ if echo "$COMMAND" | grep -qE '\|\s*(grep|tail|head|awk|sed)'; then
 ╠══════════════════════════════════════════════════════════════════════════════╣
 ║                                                                              ║
 ║  WHAT'S WRONG:                                                               ║
-║  You are piping CI output directly to grep/tail/head without capturing it.   ║
+║  You are piping CI/test output to grep/tail/head without capturing first.    ║
 ║  This loses the full output and makes debugging impossible.                  ║
 ║                                                                              ║
 ║  CORRECT APPROACH - Capture with tee first:                                  ║
 ║                                                                              ║
+║  For CI:                                                                     ║
 ║    BRANCH=$(git branch --show-current | sed 's/\//-/g')                      ║
 ║    pnpm run ci:tracked 2>&1 | tee /tmp/ci-output-${BRANCH}-$(date +%Y%m%d-%H%M%S).txt
+║                                                                              ║
+║  For tests:                                                                  ║
+║    pnpm test 2>&1 | tee /tmp/ci-output-test-$(date +%Y%m%d-%H%M%S).txt       ║
 ║                                                                              ║
 ║  THEN analyze the saved file using proper tools:                             ║
 ║                                                                              ║
