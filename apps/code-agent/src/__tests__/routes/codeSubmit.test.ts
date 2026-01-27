@@ -360,6 +360,130 @@ describe('POST /code/submit', () => {
       expect(body.error.message).toContain('tasks per hour');
     });
 
+    it('returns 429 when concurrent limit exceeded', async () => {
+      const { getServices } = await import('../../services.js');
+      const services = getServices();
+
+      vi.spyOn(services.rateLimitService, 'checkLimits').mockResolvedValueOnce({
+        ok: false,
+        error: {
+          code: 'concurrent_limit',
+          message: 'Maximum 3 concurrent tasks allowed',
+          retryAfter: 'when a task completes',
+        },
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/code/submit',
+        headers: { authorization: 'Bearer test-token' },
+        payload: { prompt: 'Test prompt' },
+      });
+
+      expect(response.statusCode).toBe(429);
+      const body = JSON.parse(response.body);
+      expect(body.error.code).toBe('concurrent_limit');
+      expect(body.error.retryAfter).toBe('when a task completes');
+    });
+
+    it('returns 429 when daily cost limit exceeded', async () => {
+      const { getServices } = await import('../../services.js');
+      const services = getServices();
+
+      vi.spyOn(services.rateLimitService, 'checkLimits').mockResolvedValueOnce({
+        ok: false,
+        error: {
+          code: 'daily_cost_limit',
+          message: 'Daily cost limit of $20 reached ($15 spent today)',
+          retryAfter: 'tomorrow',
+        },
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/code/submit',
+        headers: { authorization: 'Bearer test-token' },
+        payload: { prompt: 'Test prompt' },
+      });
+
+      expect(response.statusCode).toBe(429);
+      const body = JSON.parse(response.body);
+      expect(body.error.code).toBe('daily_cost_limit');
+    });
+
+    it('returns 429 when monthly cost limit exceeded', async () => {
+      const { getServices } = await import('../../services.js');
+      const services = getServices();
+
+      vi.spyOn(services.rateLimitService, 'checkLimits').mockResolvedValueOnce({
+        ok: false,
+        error: {
+          code: 'monthly_cost_limit',
+          message: 'Monthly cost limit of $200 reached',
+          retryAfter: 'next month',
+        },
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/code/submit',
+        headers: { authorization: 'Bearer test-token' },
+        payload: { prompt: 'Test prompt' },
+      });
+
+      expect(response.statusCode).toBe(429);
+      const body = JSON.parse(response.body);
+      expect(body.error.code).toBe('monthly_cost_limit');
+    });
+
+    it('returns 429 when prompt too long', async () => {
+      const { getServices } = await import('../../services.js');
+      const services = getServices();
+
+      vi.spyOn(services.rateLimitService, 'checkLimits').mockResolvedValueOnce({
+        ok: false,
+        error: {
+          code: 'prompt_too_long',
+          message: 'Prompt exceeds maximum length of 10000 characters',
+        },
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/code/submit',
+        headers: { authorization: 'Bearer test-token' },
+        payload: { prompt: 'Test prompt' },
+      });
+
+      expect(response.statusCode).toBe(429);
+      const body = JSON.parse(response.body);
+      expect(body.error.code).toBe('prompt_too_long');
+    });
+
+    it('returns 503 when service unavailable', async () => {
+      const { getServices } = await import('../../services.js');
+      const services = getServices();
+
+      vi.spyOn(services.rateLimitService, 'checkLimits').mockResolvedValueOnce({
+        ok: false,
+        error: {
+          code: 'service_unavailable',
+          message: 'Unable to verify rate limits. Please try again.',
+        },
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/code/submit',
+        headers: { authorization: 'Bearer test-token' },
+        payload: { prompt: 'Test prompt' },
+      });
+
+      expect(response.statusCode).toBe(503);
+      const body = JSON.parse(response.body);
+      expect(body.error.code).toBe('service_unavailable');
+    });
+
     it('allows submissions when within limits', async () => {
       // Mock successful dispatch
       vi.spyOn(taskDispatcher, 'dispatch').mockResolvedValueOnce({
@@ -382,6 +506,57 @@ describe('POST /code/submit', () => {
       });
 
       expect(response.statusCode).toBe(200);
+    });
+
+    it('does not create Linear issue when rate limit exceeded', async () => {
+      const { getServices } = await import('../../services.js');
+      const services = getServices();
+
+      vi.spyOn(services.rateLimitService, 'checkLimits').mockResolvedValueOnce({
+        ok: false,
+        error: {
+          code: 'concurrent_limit',
+          message: 'Maximum 3 concurrent tasks allowed',
+        },
+      });
+
+      const linearSpy = vi.spyOn(services.linearIssueService, 'ensureIssueExists');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/code/submit',
+        headers: { authorization: 'Bearer test-token' },
+        payload: { prompt: 'Test prompt', linearIssueId: 'INT-123' },
+      });
+
+      expect(response.statusCode).toBe(429);
+      expect(linearSpy).not.toHaveBeenCalled();
+    });
+
+    it('calls recordTaskStart when task is submitted successfully', async () => {
+      const { getServices } = await import('../../services.js');
+      const services = getServices();
+
+      const recordStartSpy = vi.spyOn(services.rateLimitService, 'recordTaskStart');
+
+      // Mock successful dispatch
+      vi.spyOn(taskDispatcher, 'dispatch').mockResolvedValueOnce({
+        ok: true,
+        value: {
+          dispatched: true,
+          workerLocation: 'mac',
+        },
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/code/submit',
+        headers: { authorization: 'Bearer test-token' },
+        payload: { prompt: 'Test prompt' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(recordStartSpy).toHaveBeenCalledTimes(1);
     });
   });
 

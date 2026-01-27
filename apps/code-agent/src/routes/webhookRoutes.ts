@@ -140,7 +140,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         };
       }
 
-      const { codeTaskRepo, actionsAgentClient, whatsappNotifier } = getServices();
+      const { codeTaskRepo, actionsAgentClient, whatsappNotifier, rateLimitService } = getServices();
       const { taskId, status, result, error } = request.body;
 
       // Extract traceId from headers for downstream calls
@@ -202,6 +202,11 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         // Send WhatsApp notification
         await whatsappNotifier.notifyTaskComplete(task.userId, task);
 
+        // Record task completion for rate limiting (fire and forget)
+        rateLimitService.recordTaskComplete(task.userId).catch((err) => {
+          request.log.error({ taskId, userId: task.userId, error: err }, 'Failed to record task completion for rate limiting');
+        });
+
         request.log.info({ taskId, result }, 'Task marked as completed');
         return reply.send({ received: true });
       }
@@ -253,6 +258,11 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           }
         );
 
+        // Record task completion for rate limiting (fire and forget)
+        rateLimitService.recordTaskComplete(task.userId).catch((err) => {
+          request.log.error({ taskId, userId: task.userId, error: err }, 'Failed to record task completion for rate limiting');
+        });
+
         request.log.info({ taskId, error }, 'Task marked as failed');
         return reply.send({ received: true });
       }
@@ -294,6 +304,11 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             // Don't fail the webhook - task update succeeded
           }
         }
+
+        // Record task completion for rate limiting (fire and forget)
+        rateLimitService.recordTaskComplete(task.userId).catch((err) => {
+          request.log.error({ taskId, userId: task.userId, error: err }, 'Failed to record task completion for rate limiting');
+        });
 
         request.log.info({ taskId }, 'Task marked as interrupted');
         return reply.send({ received: true });

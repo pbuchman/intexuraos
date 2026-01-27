@@ -5,11 +5,12 @@
 import type { Result } from '@intexuraos/common-core';
 import { ok, err } from '@intexuraos/common-core';
 import type { Logger } from '@intexuraos/common-core';
+import { getErrorMessage } from '@intexuraos/common-core';
 import type { UserUsageRepository } from '../ports/userUsageRepository.js';
 import { DEFAULT_LIMITS, ESTIMATED_COST_PER_TASK } from '../models/userUsage.js';
 
 export interface RateLimitError {
-  code: 'concurrent_limit' | 'hourly_limit' | 'daily_cost_limit' | 'monthly_cost_limit' | 'prompt_too_long';
+  code: 'concurrent_limit' | 'hourly_limit' | 'daily_cost_limit' | 'monthly_cost_limit' | 'prompt_too_long' | 'service_unavailable';
   message: string;
   retryAfter?: string;
 }
@@ -44,7 +45,17 @@ export function createRateLimitService(deps: RateLimitServiceDeps): RateLimitSer
         });
       }
 
-      const usage = await userUsageRepository.getOrCreate(userId);
+      let usage;
+      try {
+        usage = await userUsageRepository.getOrCreate(userId);
+      } catch (error) {
+        const errorMessage = getErrorMessage(error, 'Unknown error');
+        logger.error({ userId, error: errorMessage }, 'Failed to fetch user usage for rate limiting');
+        return err({
+          code: 'service_unavailable',
+          message: 'Unable to verify rate limits. Please try again.',
+        });
+      }
 
       logger.debug(
         { userId, usage: { concurrent: usage.concurrentTasks, hourly: usage.tasksThisHour, costToday: usage.costToday } },
