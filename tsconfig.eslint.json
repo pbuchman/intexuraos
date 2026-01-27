@@ -11,6 +11,8 @@
     "apps/**/src/**/*.ts",
     "apps/**/src/**/*.tsx",
     "apps/**/src/**/*.test.ts",
-    "apps/**/*.config.ts"
+    "apps/**/*.config.ts",
+    "workers/**/src/**/*.ts",
+    "workers/**/src/**/*.test.ts"
   ]
 }

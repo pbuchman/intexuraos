@@ -296,6 +296,8 @@ resource "google_project_service" "apis" {
     "compute.googleapis.com",
     "cloudscheduler.googleapis.com",
     "calendar-json.googleapis.com",
+    "cloudfunctions.googleapis.com",
+    "eventarc.googleapis.com",
   ])
 
   project            = var.project_id
@@ -1753,6 +1755,283 @@ resource "google_secret_manager_secret_version" "firebase_project_id" {
 }
 
 # -----------------------------------------------------------------------------
+# Cloud Functions - Source Bucket
+# -----------------------------------------------------------------------------
+
+resource "google_storage_bucket" "cloud_functions_source" {
+  name          = "intexuraos-functions-source-${var.environment}"
+  project       = var.project_id
+  location      = var.region
+  force_destroy = true
+
+  uniform_bucket_level_access = true
+
+  labels = local.common_labels
+
+  depends_on = [google_project_service.apis]
+}
+
+# Placeholder source for initial deployment (will be replaced by Cloud Build)
+resource "google_storage_bucket_object" "function_placeholder" {
+  name    = "placeholder/function.zip"
+  bucket  = google_storage_bucket.cloud_functions_source.name
+  content = "placeholder"
+}
+
+# -----------------------------------------------------------------------------
+# Cloud Functions - Service Account
+# -----------------------------------------------------------------------------
+
+resource "google_service_account" "cloud_functions" {
+  account_id   = "intexuraos-functions-${var.environment}"
+  display_name = "Cloud Functions Service Account"
+  description  = "Service account for Cloud Functions (vm-lifecycle, log-cleanup)"
+
+  depends_on = [google_project_service.apis]
+}
+
+# Grant Cloud Functions SA permission to read Firestore
+resource "google_project_iam_member" "functions_firestore" {
+  project = var.project_id
+  role    = "roles/datastore.user"
+  member  = "serviceAccount:${google_service_account.cloud_functions.email}"
+}
+
+# Grant Cloud Functions SA permission to manage Compute Engine VMs
+resource "google_project_iam_member" "functions_compute" {
+  project = var.project_id
+  role    = "roles/compute.instanceAdmin.v1"
+  member  = "serviceAccount:${google_service_account.cloud_functions.email}"
+}
+
+# Grant Cloud Functions SA permission to receive Eventarc events
+resource "google_project_iam_member" "functions_eventarc" {
+  project = var.project_id
+  role    = "roles/eventarc.eventReceiver"
+  member  = "serviceAccount:${google_service_account.cloud_functions.email}"
+}
+
+# -----------------------------------------------------------------------------
+# Cloud Functions - VM Lifecycle (Start/Stop)
+# -----------------------------------------------------------------------------
+
+module "function_vm_start" {
+  source = "../../modules/cloud-function"
+
+  project_id    = var.project_id
+  region        = var.region
+  environment   = var.environment
+  function_name = "intexuraos-vm-start-${var.environment}"
+  description   = "Start a GCE VM instance"
+  entry_point   = "startVm"
+  runtime       = "nodejs22"
+
+  source_bucket   = google_storage_bucket.cloud_functions_source.name
+  source_object   = "vm-lifecycle/function.zip"
+  service_account = google_service_account.cloud_functions.email
+
+  trigger_type     = "http"
+  invoker_members  = ["serviceAccount:${google_service_account.cloud_scheduler.email}"]
+  timeout_seconds  = 120
+  available_memory = "256M"
+
+  env_vars = {
+    INTEXURAOS_ENVIRONMENT    = var.environment
+    INTEXURAOS_GCP_PROJECT_ID = var.project_id
+  }
+
+  labels = local.common_labels
+
+  depends_on = [
+    google_project_service.apis,
+    google_storage_bucket_object.function_placeholder,
+    google_service_account.cloud_functions,
+  ]
+}
+
+module "function_vm_stop" {
+  source = "../../modules/cloud-function"
+
+  project_id    = var.project_id
+  region        = var.region
+  environment   = var.environment
+  function_name = "intexuraos-vm-stop-${var.environment}"
+  description   = "Stop a GCE VM instance"
+  entry_point   = "stopVm"
+  runtime       = "nodejs22"
+
+  source_bucket   = google_storage_bucket.cloud_functions_source.name
+  source_object   = "vm-lifecycle/function.zip"
+  service_account = google_service_account.cloud_functions.email
+
+  trigger_type     = "http"
+  invoker_members  = ["serviceAccount:${google_service_account.cloud_scheduler.email}"]
+  timeout_seconds  = 120
+  available_memory = "256M"
+
+  env_vars = {
+    INTEXURAOS_ENVIRONMENT    = var.environment
+    INTEXURAOS_GCP_PROJECT_ID = var.project_id
+  }
+
+  labels = local.common_labels
+
+  depends_on = [
+    google_project_service.apis,
+    google_storage_bucket_object.function_placeholder,
+    google_service_account.cloud_functions,
+  ]
+}
+
+# Cloud Scheduler - Start VM at 7 AM Poland time (Mon-Fri)
+resource "google_cloud_scheduler_job" "vm_start" {
+  name        = "intexuraos-vm-start-${var.environment}"
+  description = "Start VM instances at 7 AM Poland time on weekdays"
+  schedule    = "0 7 * * 1-5"
+  time_zone   = "Europe/Warsaw"
+  region      = var.region
+
+  http_target {
+    uri         = module.function_vm_start.function_uri
+    http_method = "POST"
+    body        = base64encode(jsonencode({ trigger = "scheduled" }))
+
+    oidc_token {
+      service_account_email = google_service_account.cloud_scheduler.email
+      audience              = module.function_vm_start.function_uri
+    }
+  }
+
+  retry_config {
+    retry_count          = 3
+    max_retry_duration   = "60s"
+    min_backoff_duration = "5s"
+    max_backoff_duration = "30s"
+  }
+
+  depends_on = [
+    google_project_service.apis,
+    module.function_vm_start,
+  ]
+}
+
+# Cloud Scheduler - Stop VM at 11 PM Poland time (daily)
+resource "google_cloud_scheduler_job" "vm_stop" {
+  name        = "intexuraos-vm-stop-${var.environment}"
+  description = "Stop VM instances at 11 PM Poland time daily"
+  schedule    = "0 23 * * *"
+  time_zone   = "Europe/Warsaw"
+  region      = var.region
+
+  http_target {
+    uri         = module.function_vm_stop.function_uri
+    http_method = "POST"
+    body        = base64encode(jsonencode({ trigger = "scheduled" }))
+
+    oidc_token {
+      service_account_email = google_service_account.cloud_scheduler.email
+      audience              = module.function_vm_stop.function_uri
+    }
+  }
+
+  retry_config {
+    retry_count          = 3
+    max_retry_duration   = "60s"
+    min_backoff_duration = "5s"
+    max_backoff_duration = "30s"
+  }
+
+  depends_on = [
+    google_project_service.apis,
+    module.function_vm_stop,
+  ]
+}
+
+# -----------------------------------------------------------------------------
+# Cloud Functions - Log Cleanup (90-day retention)
+# -----------------------------------------------------------------------------
+
+# Pub/Sub topic for log cleanup trigger
+resource "google_pubsub_topic" "log_cleanup" {
+  name    = "intexuraos-log-cleanup-${var.environment}"
+  project = var.project_id
+  labels  = local.common_labels
+
+  depends_on = [google_project_service.apis]
+}
+
+# Grant Cloud Scheduler permission to publish to the topic
+resource "google_pubsub_topic_iam_member" "scheduler_publishes_log_cleanup" {
+  project = var.project_id
+  topic   = google_pubsub_topic.log_cleanup.name
+  role    = "roles/pubsub.publisher"
+  member  = "serviceAccount:${google_service_account.cloud_scheduler.email}"
+}
+
+module "function_log_cleanup" {
+  source = "../../modules/cloud-function"
+
+  project_id    = var.project_id
+  region        = var.region
+  environment   = var.environment
+  function_name = "intexuraos-log-cleanup-${var.environment}"
+  description   = "Clean up old execution logs (90-day retention)"
+  entry_point   = "cleanupLogs"
+  runtime       = "nodejs22"
+
+  source_bucket   = google_storage_bucket.cloud_functions_source.name
+  source_object   = "log-cleanup/function.zip"
+  service_account = google_service_account.cloud_functions.email
+
+  trigger_type = "pubsub"
+  pubsub_topic = google_pubsub_topic.log_cleanup.id
+
+  timeout_seconds  = 540
+  available_memory = "512M"
+
+  env_vars = {
+    INTEXURAOS_ENVIRONMENT    = var.environment
+    INTEXURAOS_GCP_PROJECT_ID = var.project_id
+  }
+
+  labels = local.common_labels
+
+  depends_on = [
+    google_project_service.apis,
+    google_storage_bucket_object.function_placeholder,
+    google_service_account.cloud_functions,
+    google_pubsub_topic.log_cleanup,
+  ]
+}
+
+# Cloud Scheduler - Trigger log cleanup at 3 AM UTC daily
+resource "google_cloud_scheduler_job" "log_cleanup" {
+  name        = "intexuraos-log-cleanup-${var.environment}"
+  description = "Trigger log cleanup at 3 AM UTC daily"
+  schedule    = "0 3 * * *"
+  time_zone   = "UTC"
+  region      = var.region
+
+  pubsub_target {
+    topic_name = google_pubsub_topic.log_cleanup.id
+    data       = base64encode(jsonencode({ trigger = "scheduled" }))
+  }
+
+  retry_config {
+    retry_count          = 1
+    max_retry_duration   = "60s"
+    min_backoff_duration = "5s"
+    max_backoff_duration = "30s"
+  }
+
+  depends_on = [
+    google_project_service.apis,
+    google_pubsub_topic.log_cleanup,
+    google_pubsub_topic_iam_member.scheduler_publishes_log_cleanup,
+  ]
+}
+
+# -----------------------------------------------------------------------------
 # Outputs
 # -----------------------------------------------------------------------------
 
@@ -1931,4 +2210,29 @@ output "monitoring_dashboard_id" {
 output "claude_code_dev_service_account" {
   description = "Claude Code dev service account email for local development"
   value       = module.claude_code_dev.service_account_email
+}
+
+output "cloud_functions_source_bucket" {
+  description = "GCS bucket for Cloud Functions source code"
+  value       = google_storage_bucket.cloud_functions_source.name
+}
+
+output "function_vm_start_uri" {
+  description = "VM Start Cloud Function HTTP endpoint"
+  value       = module.function_vm_start.function_uri
+}
+
+output "function_vm_stop_uri" {
+  description = "VM Stop Cloud Function HTTP endpoint"
+  value       = module.function_vm_stop.function_uri
+}
+
+output "function_log_cleanup_name" {
+  description = "Log Cleanup Cloud Function name"
+  value       = module.function_log_cleanup.function_name
+}
+
+output "pubsub_log_cleanup_topic" {
+  description = "Pub/Sub topic for log cleanup trigger"
+  value       = google_pubsub_topic.log_cleanup.name
 }
