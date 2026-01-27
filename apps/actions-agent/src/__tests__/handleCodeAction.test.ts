@@ -30,6 +30,9 @@ const createMockLogger = (): Logger =>
     msgPrefix: '',
   }) as unknown as Logger;
 
+// Helper to check if a string is a 4-char hex nonce
+const isHexNonce = (value: string): boolean => /^[a-f0-9]{4}$/.test(value);
+
 describe('handleCodeAction usecase', () => {
   let fakeActionRepository: FakeActionRepository;
   let fakeWhatsappPublisher: FakeWhatsAppSendPublisher;
@@ -82,7 +85,7 @@ describe('handleCodeAction usecase', () => {
     fakeWhatsappPublisher = new FakeWhatsAppSendPublisher();
   });
 
-  it('sets action to awaiting_approval and publishes WhatsApp notification', async () => {
+  it('sets action to awaiting_approval and publishes WhatsApp notification with interactive buttons', async () => {
     await fakeActionRepository.save(createAction());
 
     const usecase = registerActionHandler(createHandleCodeActionUseCase, {
@@ -103,13 +106,34 @@ describe('handleCodeAction usecase', () => {
     const action = await fakeActionRepository.getById('action-123');
     expect(action?.status).toBe('awaiting_approval');
 
+    // Verify nonce fields are set
+    expect(action?.approvalNonce).toBeDefined();
+    expect(isHexNonce(action?.approvalNonce ?? '')).toBe(true);
+    expect(action?.approvalNonceExpiresAt).toBeDefined();
+
     const messages = fakeWhatsappPublisher.getSentMessages();
     expect(messages).toHaveLength(1);
     expect(messages[0]?.userId).toBe('user-456');
     expect(messages[0]?.message).toContain('Code task:');
     expect(messages[0]?.message).toContain('Fix the login bug');
     expect(messages[0]?.message).toContain('Estimated cost: $1-2');
+    expect(messages[0]?.message).toContain('Estimated time: 30-60 min');
     expect(messages[0]?.message).toContain('https://app.intexuraos.com/#/inbox?action=action-123');
+
+    // Verify interactive buttons
+    expect(messages[0]?.buttons).toHaveLength(3);
+    const approveButton = messages[0]?.buttons?.find((b) => b.reply.title.startsWith('Approve:'));
+    expect(approveButton).toBeDefined();
+    expect(approveButton?.reply.id).toBe(`approve:action-123:${action?.approvalNonce}`);
+    expect(approveButton?.reply.title).toBe(`Approve: ${action?.approvalNonce}`);
+
+    const cancelButton = messages[0]?.buttons?.find((b) => b.reply.title === 'Cancel');
+    expect(cancelButton).toBeDefined();
+    expect(cancelButton?.reply.id).toBe('cancel:action-123');
+
+    const convertButton = messages[0]?.buttons?.find((b) => b.reply.title === 'Convert to Issue');
+    expect(convertButton).toBeDefined();
+    expect(convertButton?.reply.id).toBe('convert:action-123');
   });
 
   it('truncates prompt preview when prompt is longer than 100 characters', async () => {
@@ -327,7 +351,7 @@ describe('handleCodeAction usecase', () => {
       expect(messages[0]?.message).toContain('Fix authentication bug');
     });
 
-    it('includes estimated cost in approval message', async () => {
+    it('includes estimated cost and time in approval message', async () => {
       await fakeActionRepository.save(createAction());
 
       const usecase = registerActionHandler(createHandleCodeActionUseCase, {
@@ -342,6 +366,7 @@ describe('handleCodeAction usecase', () => {
 
       const messages = fakeWhatsappPublisher.getSentMessages();
       expect(messages[0]?.message).toContain('Estimated cost: $1-2');
+      expect(messages[0]?.message).toContain('Estimated time: 30-60 min');
     });
   });
 

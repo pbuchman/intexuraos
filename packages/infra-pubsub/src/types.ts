@@ -12,6 +12,17 @@ export interface PublishError {
 }
 
 /**
+ * WhatsApp interactive button for reply messages.
+ */
+export interface WhatsAppInteractiveButton {
+  type: 'reply';
+  reply: {
+    id: string;
+    title: string;
+  };
+}
+
+/**
  * Event to send a WhatsApp message.
  * This is the payload format expected by whatsapp-service's Pub/Sub handler.
  * Phone number lookup is done internally by whatsapp-service using userId.
@@ -36,6 +47,11 @@ export interface SendMessageEvent {
    * Optional: WhatsApp message ID to reply to.
    */
   replyToMessageId?: string;
+
+  /**
+   * Optional: Interactive buttons for the message.
+   */
+  buttons?: WhatsAppInteractiveButton[];
 
   /**
    * Correlation ID for tracing across services.

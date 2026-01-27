@@ -62,6 +62,7 @@ import type { LlmGenerateClient } from '@intexuraos/llm-factory';
 import type { Services } from '../services.js';
 import type {
   PublishError,
+  WhatsAppInteractiveButton,
   WhatsAppSendPublisher,
   CalendarPreviewPublisher,
 } from '@intexuraos/infra-pubsub';
@@ -367,6 +368,8 @@ export class FakeWhatsAppSendPublisher implements WhatsAppSendPublisher {
     userId: string;
     message: string;
     correlationId: string;
+    replyToMessageId?: string;
+    buttons?: import('@intexuraos/infra-pubsub').WhatsAppInteractiveButton[];
   }[] = [];
   private failNext = false;
   private failError: PublishError | null = null;
@@ -384,17 +387,31 @@ export class FakeWhatsAppSendPublisher implements WhatsAppSendPublisher {
     userId: string;
     message: string;
     replyToMessageId?: string;
+    buttons?: import('@intexuraos/infra-pubsub').WhatsAppInteractiveButton[];
     correlationId?: string;
   }): Promise<Result<void, PublishError>> {
     if (this.failNext) {
       this.failNext = false;
       return err(this.failError ?? { code: 'PUBLISH_FAILED', message: 'Simulated failure' });
     }
-    this.sentMessages.push({
+    const messageEntry: {
+      userId: string;
+      message: string;
+      correlationId: string;
+      replyToMessageId?: string;
+      buttons?: WhatsAppInteractiveButton[];
+    } = {
       userId: params.userId,
       message: params.message,
       correlationId: params.correlationId ?? '',
-    });
+    };
+    if (params.replyToMessageId !== undefined) {
+      messageEntry.replyToMessageId = params.replyToMessageId;
+    }
+    if (params.buttons !== undefined) {
+      messageEntry.buttons = params.buttons;
+    }
+    this.sentMessages.push(messageEntry);
     return ok(undefined);
   }
 }

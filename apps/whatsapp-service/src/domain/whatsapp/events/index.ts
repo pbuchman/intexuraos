@@ -12,4 +12,5 @@ export type {
   TranscriptionCompletedEvent,
   WebhookProcessEvent,
   WhatsAppEvent,
+  WhatsAppInteractiveButton,
 } from './events.js';

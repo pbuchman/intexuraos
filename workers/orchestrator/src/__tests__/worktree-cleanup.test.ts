@@ -172,6 +172,28 @@ describe('worktree-cleanup', () => {
     expect(result.removed).toBe(1);
   });
 
+  it('should use default 24 hour threshold when staleAgeHours not provided', async () => {
+    vi.mocked(existsSync).mockReturnValue(true);
+    vi.mocked(readdir).mockResolvedValue(['task-1']);
+    // 25 hours ago - stale for default 24 hour threshold
+    const twentyFiveHoursAgo = new Date(Date.now() - 25 * 60 * 60 * 1000);
+    vi.mocked(stat).mockResolvedValue({
+      mtime: twentyFiveHoursAgo,
+    } as unknown as ReturnType<typeof stat>);
+
+    const result = await cleanupStaleWorktrees(
+      {
+        repositoryPath: repoPath,
+        worktreeBasePath,
+        // staleAgeHours not provided - should default to 24
+      },
+      logger
+    );
+
+    expect(result.total).toBe(1);
+    expect(result.removed).toBe(1);
+  });
+
   it('should handle readdir errors gracefully', async () => {
     vi.mocked(existsSync).mockReturnValue(true);
     vi.mocked(readdir).mockRejectedValue(new Error('Permission denied'));

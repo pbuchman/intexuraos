@@ -2024,4 +2024,1518 @@ describe('HandleApprovalReplyUseCase', () => {
       expect(action?.status).toBe('rejected');
     });
   });
+
+  describe('button response handling', () => {
+    const actionWithNonce: Action = {
+      id: 'action-nonce-1',
+      userId: 'user-1',
+      commandId: 'cmd-1',
+      type: 'todo',
+      confidence: 0.85,
+      title: 'Test todo with nonce',
+      status: 'awaiting_approval',
+      payload: {},
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+      approvalNonce: 'abcd',
+      approvalNonceExpiresAt: new Date(Date.now() + 3600000).toISOString(), // 1 hour from now
+    };
+
+    describe('approve button with valid nonce', () => {
+      it('approves action when button has valid nonce', async () => {
+        await actionRepository.save(actionWithNonce);
+
+        const result = await useCase({
+          replyToWamid: 'wamid-123',
+          replyText: '',
+          userId: 'user-1',
+          actionId: 'action-nonce-1',
+          buttonId: 'approve:action-nonce-1:abcd',
+          buttonTitle: 'Approve',
+        });
+
+        expect(result.ok).toBe(true);
+        if (result.ok) {
+          expect(result.value.matched).toBe(true);
+          expect(result.value.actionId).toBe('action-nonce-1');
+          expect(result.value.intent).toBe('approve');
+          expect(result.value.outcome).toBe('approved');
+        }
+
+        // Action should be updated to pending
+        const action = await actionRepository.getById('action-nonce-1');
+        expect(action?.status).toBe('pending');
+        // Nonce should be cleared after approval
+        expect(action?.approvalNonce).toBeUndefined();
+      });
+
+      it('sends approval confirmation message', async () => {
+        await actionRepository.save(actionWithNonce);
+
+        await useCase({
+          replyToWamid: 'wamid-123',
+          replyText: '',
+          userId: 'user-1',
+          actionId: 'action-nonce-1',
+          buttonId: 'approve:action-nonce-1:abcd',
+          buttonTitle: 'Approve',
+        });
+
+        const messages = whatsappPublisher.getSentMessages();
+        expect(messages).toHaveLength(1);
+        expect(messages[0]?.message).toContain('Approved!');
+        expect(messages[0]?.message).toContain('todo');
+      });
+    });
+
+    describe('approve button with invalid nonce', () => {
+      it('returns error when nonce is missing from button', async () => {
+        await actionRepository.save(actionWithNonce);
+
+        const result = await useCase({
+          replyToWamid: 'wamid-123',
+          replyText: '',
+          userId: 'user-1',
+          actionId: 'action-nonce-1',
+          buttonId: 'approve:action-nonce-1', // Missing nonce
+          buttonTitle: 'Approve',
+        });
+
+        expect(result.ok).toBe(false);
+        if (!result.ok) {
+          expect(result.error.message).toBe('Approve button missing nonce');
+        }
+
+        // Should send error message
+        const messages = whatsappPublisher.getSentMessages();
+        expect(messages).toHaveLength(1);
+        expect(messages[0]?.message).toContain('missing security code');
+      });
+
+      it('returns error when action has no nonce configured', async () => {
+        const { approvalNonce: _n, approvalNonceExpiresAt: _e, ...baseAction } = actionWithNonce;
+        const actionWithoutNonce: Action = {
+          ...baseAction,
+          id: 'action-no-nonce',
+        };
+        await actionRepository.save(actionWithoutNonce);
+
+        const result = await useCase({
+          replyToWamid: 'wamid-123',
+          replyText: '',
+          userId: 'user-1',
+          actionId: 'action-no-nonce',
+          buttonId: 'approve:action-no-nonce:abcd',
+          buttonTitle: 'Approve',
+        });
+
+        expect(result.ok).toBe(false);
+        if (!result.ok) {
+          expect(result.error.message).toBe('Action has no nonce configured');
+        }
+
+        const messages = whatsappPublisher.getSentMessages();
+        expect(messages).toHaveLength(1);
+        expect(messages[0]?.message).toContain('expired');
+      });
+
+      it('returns error when nonce is expired', async () => {
+        const expiredAction: Action = {
+          ...actionWithNonce,
+          id: 'action-expired-nonce',
+          approvalNonceExpiresAt: new Date(Date.now() - 3600000).toISOString(), // 1 hour ago
+        };
+        await actionRepository.save(expiredAction);
+
+        const result = await useCase({
+          replyToWamid: 'wamid-123',
+          replyText: '',
+          userId: 'user-1',
+          actionId: 'action-expired-nonce',
+          buttonId: 'approve:action-expired-nonce:abcd',
+          buttonTitle: 'Approve',
+        });
+
+        expect(result.ok).toBe(false);
+        if (!result.ok) {
+          expect(result.error.message).toBe('Approval nonce expired');
+        }
+      });
+
+      it('returns error when nonce does not match', async () => {
+        await actionRepository.save(actionWithNonce);
+
+        const result = await useCase({
+          replyToWamid: 'wamid-123',
+          replyText: '',
+          userId: 'user-1',
+          actionId: 'action-nonce-1',
+          buttonId: 'approve:action-nonce-1:wxyz', // Wrong nonce
+          buttonTitle: 'Approve',
+        });
+
+        expect(result.ok).toBe(false);
+        if (!result.ok) {
+          expect(result.error.message).toBe('Nonce mismatch');
+        }
+
+        const messages = whatsappPublisher.getSentMessages();
+        expect(messages).toHaveLength(1);
+        expect(messages[0]?.message).toContain('Invalid approval code');
+      });
+    });
+
+    describe('cancel button', () => {
+      it('rejects action when cancel button clicked', async () => {
+        await actionRepository.save(testAction);
+
+        const result = await useCase({
+          replyToWamid: 'wamid-123',
+          replyText: '',
+          userId: 'user-1',
+          actionId: 'action-1',
+          buttonId: 'cancel:action-1',
+          buttonTitle: 'Cancel',
+        });
+
+        expect(result.ok).toBe(true);
+        if (result.ok) {
+          expect(result.value.matched).toBe(true);
+          expect(result.value.intent).toBe('reject');
+          expect(result.value.outcome).toBe('rejected');
+        }
+
+        // Action should be rejected
+        const action = await actionRepository.getById('action-1');
+        expect(action?.status).toBe('rejected');
+
+        // Should send cancellation message
+        const messages = whatsappPublisher.getSentMessages();
+        expect(messages).toHaveLength(1);
+        expect(messages[0]?.message).toContain('Cancelled');
+      });
+    });
+
+    describe('convert button', () => {
+      it('rejects action with convert message when convert button clicked', async () => {
+        await actionRepository.save(testAction);
+
+        const result = await useCase({
+          replyToWamid: 'wamid-123',
+          replyText: '',
+          userId: 'user-1',
+          actionId: 'action-1',
+          buttonId: 'convert:action-1',
+          buttonTitle: 'Convert to Linear',
+        });
+
+        expect(result.ok).toBe(true);
+        if (result.ok) {
+          expect(result.value.matched).toBe(true);
+          expect(result.value.intent).toBe('reject');
+          expect(result.value.outcome).toBe('rejected');
+        }
+
+        // Should send convert message
+        const messages = whatsappPublisher.getSentMessages();
+        expect(messages).toHaveLength(1);
+        expect(messages[0]?.message).toContain('Converting');
+        expect(messages[0]?.message).toContain('Linear');
+      });
+    });
+
+    describe('invalid button ID', () => {
+      it('returns error for invalid button ID format', async () => {
+        await actionRepository.save(testAction);
+
+        const result = await useCase({
+          replyToWamid: 'wamid-123',
+          replyText: '',
+          userId: 'user-1',
+          actionId: 'action-1',
+          buttonId: 'invalid', // No colon separator
+          buttonTitle: 'Invalid',
+        });
+
+        expect(result.ok).toBe(false);
+        if (!result.ok) {
+          expect(result.error.message).toBe('Invalid button ID format');
+        }
+      });
+
+      it('returns error for unknown button intent', async () => {
+        await actionRepository.save(testAction);
+
+        const result = await useCase({
+          replyToWamid: 'wamid-123',
+          replyText: '',
+          userId: 'user-1',
+          actionId: 'action-1',
+          buttonId: 'unknown:action-1',
+          buttonTitle: 'Unknown',
+        });
+
+        expect(result.ok).toBe(false);
+        if (!result.ok) {
+          expect(result.error.message).toBe('Unknown button intent');
+        }
+      });
+
+      it('returns error when button action ID does not match', async () => {
+        await actionRepository.save(testAction);
+
+        const result = await useCase({
+          replyToWamid: 'wamid-123',
+          replyText: '',
+          userId: 'user-1',
+          actionId: 'action-1',
+          buttonId: 'cancel:different-action-id',
+          buttonTitle: 'Cancel',
+        });
+
+        expect(result.ok).toBe(false);
+        if (!result.ok) {
+          expect(result.error.message).toBe('Button action ID mismatch');
+        }
+      });
+    });
+
+    describe('race condition prevention for button responses', () => {
+      it('handles race condition when action already processed during approval', async () => {
+        await actionRepository.save(actionWithNonce);
+        actionRepository.setUpdateStatusIfResult('action-nonce-1', {
+          outcome: 'status_mismatch',
+          currentStatus: 'pending',
+        });
+
+        const result = await useCase({
+          replyToWamid: 'wamid-123',
+          replyText: '',
+          userId: 'user-1',
+          actionId: 'action-nonce-1',
+          buttonId: 'approve:action-nonce-1:abcd',
+          buttonTitle: 'Approve',
+        });
+
+        expect(result.ok).toBe(true);
+        if (result.ok) {
+          expect(result.value.matched).toBe(true);
+          expect(result.value.intent).toBeUndefined();
+        }
+      });
+
+      it('handles race condition when action already processed during cancellation', async () => {
+        await actionRepository.save(testAction);
+        actionRepository.setUpdateStatusIfResult('action-1', {
+          outcome: 'status_mismatch',
+          currentStatus: 'pending',
+        });
+
+        const result = await useCase({
+          replyToWamid: 'wamid-123',
+          replyText: '',
+          userId: 'user-1',
+          actionId: 'action-1',
+          buttonId: 'cancel:action-1',
+          buttonTitle: 'Cancel',
+        });
+
+        expect(result.ok).toBe(true);
+        if (result.ok) {
+          expect(result.value.matched).toBe(true);
+        }
+      });
+
+      it('returns error when action not found during button approval', async () => {
+        await actionRepository.save(actionWithNonce);
+        actionRepository.setUpdateStatusIfResult('action-nonce-1', {
+          outcome: 'not_found',
+        });
+
+        const result = await useCase({
+          replyToWamid: 'wamid-123',
+          replyText: '',
+          userId: 'user-1',
+          actionId: 'action-nonce-1',
+          buttonId: 'approve:action-nonce-1:abcd',
+          buttonTitle: 'Approve',
+        });
+
+        expect(result.ok).toBe(false);
+        if (!result.ok) {
+          expect(result.error.message).toBe('Action not found');
+        }
+      });
+
+      it('returns error when update fails during button approval', async () => {
+        await actionRepository.save(actionWithNonce);
+        actionRepository.setUpdateStatusIfResult('action-nonce-1', {
+          outcome: 'error',
+          error: new Error('Database error'),
+        });
+
+        const result = await useCase({
+          replyToWamid: 'wamid-123',
+          replyText: '',
+          userId: 'user-1',
+          actionId: 'action-nonce-1',
+          buttonId: 'approve:action-nonce-1:abcd',
+          buttonTitle: 'Approve',
+        });
+
+        expect(result.ok).toBe(false);
+        if (!result.ok) {
+          expect(result.error.message).toBe('Failed to update action status');
+        }
+      });
+
+      it('returns error when action not found during button cancel', async () => {
+        await actionRepository.save(testAction);
+        actionRepository.setUpdateStatusIfResult('action-1', {
+          outcome: 'not_found',
+        });
+
+        const result = await useCase({
+          replyToWamid: 'wamid-123',
+          replyText: '',
+          userId: 'user-1',
+          actionId: 'action-1',
+          buttonId: 'cancel:action-1',
+          buttonTitle: 'Cancel',
+        });
+
+        expect(result.ok).toBe(false);
+        if (!result.ok) {
+          expect(result.error.message).toBe('Action not found');
+        }
+      });
+
+      it('returns error when update fails during button cancel', async () => {
+        await actionRepository.save(testAction);
+        actionRepository.setUpdateStatusIfResult('action-1', {
+          outcome: 'error',
+          error: new Error('Database error'),
+        });
+
+        const result = await useCase({
+          replyToWamid: 'wamid-123',
+          replyText: '',
+          userId: 'user-1',
+          actionId: 'action-1',
+          buttonId: 'cancel:action-1',
+          buttonTitle: 'Cancel',
+        });
+
+        expect(result.ok).toBe(false);
+        if (!result.ok) {
+          expect(result.error.message).toBe('Failed to update action status');
+        }
+      });
+    });
+
+    describe('nonce clearing failure', () => {
+      it('logs warning but continues when clearing nonce fails', async () => {
+        await actionRepository.save(actionWithNonce);
+
+        // Make update fail after first successful updateStatusIf
+        const originalUpdate = actionRepository.update.bind(actionRepository);
+        vi.spyOn(actionRepository, 'update').mockImplementationOnce(async () => {
+          throw new Error('Failed to clear nonce');
+        });
+
+        const result = await useCase({
+          replyToWamid: 'wamid-123',
+          replyText: '',
+          userId: 'user-1',
+          actionId: 'action-nonce-1',
+          buttonId: 'approve:action-nonce-1:abcd',
+          buttonTitle: 'Approve',
+        });
+
+        // Should still succeed
+        expect(result.ok).toBe(true);
+        if (result.ok) {
+          expect(result.value.outcome).toBe('approved');
+        }
+
+        // Restore original
+        vi.mocked(actionRepository.update).mockImplementation(originalUpdate);
+      });
+    });
+
+    describe('button approval with execute functions', () => {
+      it('executes action directly via button approval', async () => {
+        const noteActionWithNonce: Action = {
+          ...actionWithNonce,
+          id: 'note-btn-1',
+          type: 'note',
+        };
+        await actionRepository.save(noteActionWithNonce);
+
+        const executeCalls: string[] = [];
+        const mockExecuteNoteAction = async (
+          actionId: string
+        ): Promise<Result<{ status: 'completed' | 'failed'; message?: string }>> => {
+          executeCalls.push(actionId);
+          return ok({ status: 'completed' as const });
+        };
+
+        const useCaseWithExecute = createHandleApprovalReplyUseCase({
+          actionRepository,
+          approvalMessageRepository,
+          approvalIntentClassifierFactory: classifierFactory,
+          whatsappPublisher,
+          actionEventPublisher,
+          logger: createMockLogger(),
+          executeNoteAction: mockExecuteNoteAction,
+        });
+
+        const result = await useCaseWithExecute({
+          replyToWamid: 'wamid-123',
+          replyText: '',
+          userId: 'user-1',
+          actionId: 'note-btn-1',
+          buttonId: 'approve:note-btn-1:abcd',
+          buttonTitle: 'Approve',
+        });
+
+        expect(result.ok).toBe(true);
+        expect(executeCalls).toHaveLength(1);
+        expect(executeCalls[0]).toBe('note-btn-1');
+      });
+    });
+  });
+
+  describe('text-based nonce fallback', () => {
+    const actionWithNonce: Action = {
+      id: 'action-text-nonce',
+      userId: 'user-1',
+      commandId: 'cmd-1',
+      type: 'todo',
+      confidence: 0.85,
+      title: 'Test todo with nonce',
+      status: 'awaiting_approval',
+      payload: {},
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+      approvalNonce: 'abcd',
+      approvalNonceExpiresAt: new Date(Date.now() + 3600000).toISOString(),
+    };
+
+    it('approves action when user types "approve XXXX" with valid nonce', async () => {
+      await actionRepository.save(actionWithNonce);
+
+      const result = await useCase({
+        replyToWamid: 'wamid-123',
+        replyText: 'approve abcd',
+        userId: 'user-1',
+        actionId: 'action-text-nonce',
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.matched).toBe(true);
+        expect(result.value.intent).toBe('approve');
+        expect(result.value.outcome).toBe('approved');
+      }
+
+      const action = await actionRepository.getById('action-text-nonce');
+      expect(action?.status).toBe('pending');
+    });
+
+    it('handles case-insensitive nonce', async () => {
+      await actionRepository.save(actionWithNonce);
+
+      const result = await useCase({
+        replyToWamid: 'wamid-123',
+        replyText: 'approve ABCD',
+        userId: 'user-1',
+        actionId: 'action-text-nonce',
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.outcome).toBe('approved');
+      }
+    });
+
+    it('falls through to LLM when action has no nonce', async () => {
+      const { approvalNonce: _n, approvalNonceExpiresAt: _e, ...baseAction } = actionWithNonce;
+      const actionNoNonce: Action = {
+        ...baseAction,
+        id: 'action-no-nonce-text',
+      };
+      await actionRepository.save(actionNoNonce);
+
+      classifierFactory.getClassifier().setResult({
+        intent: 'approve',
+        confidence: 0.95,
+        reasoning: 'User approved',
+      });
+
+      const result = await useCase({
+        replyToWamid: 'wamid-123',
+        replyText: 'approve 1234',
+        userId: 'user-1',
+        actionId: 'action-no-nonce-text',
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.outcome).toBe('approved');
+      }
+    });
+
+    it('returns rejected when nonce is expired via text', async () => {
+      const expiredAction: Action = {
+        ...actionWithNonce,
+        id: 'action-expired-text',
+        approvalNonceExpiresAt: new Date(Date.now() - 3600000).toISOString(),
+      };
+      await actionRepository.save(expiredAction);
+
+      const result = await useCase({
+        replyToWamid: 'wamid-123',
+        replyText: 'approve abcd',
+        userId: 'user-1',
+        actionId: 'action-expired-text',
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.outcome).toBe('rejected');
+      }
+
+      const messages = whatsappPublisher.getSentMessages();
+      expect(messages).toHaveLength(1);
+      expect(messages[0]?.message).toContain('expired');
+    });
+
+    it('returns rejected when nonce does not match via text', async () => {
+      await actionRepository.save(actionWithNonce);
+
+      // Use a valid 4-hex-digit nonce (1234) that doesn't match stored 'abcd'
+      const result = await useCase({
+        replyToWamid: 'wamid-123',
+        replyText: 'approve 1234',
+        userId: 'user-1',
+        actionId: 'action-text-nonce',
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.outcome).toBe('rejected');
+      }
+
+      const messages = whatsappPublisher.getSentMessages();
+      expect(messages).toHaveLength(1);
+      expect(messages[0]?.message).toContain('Invalid approval code');
+    });
+
+    it('handles race condition in text nonce approval', async () => {
+      await actionRepository.save(actionWithNonce);
+      actionRepository.setUpdateStatusIfResult('action-text-nonce', {
+        outcome: 'status_mismatch',
+        currentStatus: 'pending',
+      });
+
+      const result = await useCase({
+        replyToWamid: 'wamid-123',
+        replyText: 'approve abcd',
+        userId: 'user-1',
+        actionId: 'action-text-nonce',
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.matched).toBe(true);
+      }
+    });
+
+    it('returns error when action not found during text nonce approval', async () => {
+      await actionRepository.save(actionWithNonce);
+      actionRepository.setUpdateStatusIfResult('action-text-nonce', {
+        outcome: 'not_found',
+      });
+
+      const result = await useCase({
+        replyToWamid: 'wamid-123',
+        replyText: 'approve abcd',
+        userId: 'user-1',
+        actionId: 'action-text-nonce',
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.message).toBe('Action not found');
+      }
+    });
+
+    it('returns error when update fails during text nonce approval', async () => {
+      await actionRepository.save(actionWithNonce);
+      actionRepository.setUpdateStatusIfResult('action-text-nonce', {
+        outcome: 'error',
+        error: new Error('Database error'),
+      });
+
+      const result = await useCase({
+        replyToWamid: 'wamid-123',
+        replyText: 'approve abcd',
+        userId: 'user-1',
+        actionId: 'action-text-nonce',
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.message).toBe('Failed to update action status');
+      }
+    });
+
+    it('logs warning but continues when clearing nonce fails in text approval', async () => {
+      await actionRepository.save(actionWithNonce);
+
+      const originalUpdate = actionRepository.update.bind(actionRepository);
+      vi.spyOn(actionRepository, 'update').mockImplementationOnce(async () => {
+        throw new Error('Failed to clear nonce');
+      });
+
+      const result = await useCase({
+        replyToWamid: 'wamid-123',
+        replyText: 'approve abcd',
+        userId: 'user-1',
+        actionId: 'action-text-nonce',
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.outcome).toBe('approved');
+      }
+
+      vi.mocked(actionRepository.update).mockImplementation(originalUpdate);
+    });
+
+    it('logs warning when nonce mismatch error notification fails', async () => {
+      await actionRepository.save(actionWithNonce);
+
+      // Make the whatsapp publish fail for nonce mismatch notification
+      whatsappPublisher.setFailNext(true, { code: 'PUBLISH_FAILED', message: 'Network error' });
+
+      const result = await useCase({
+        replyToWamid: 'wamid-123',
+        replyText: 'approve 1234', // Wrong nonce (should be abcd)
+        userId: 'user-1',
+        actionId: 'action-text-nonce',
+      });
+
+      // Should still return rejected even if notification fails
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.outcome).toBe('rejected');
+      }
+    });
+
+    it('logs warning when approval confirmation fails via text', async () => {
+      await actionRepository.save(actionWithNonce);
+
+      // Use a fresh use case with a failing publisher just for the confirmation
+      let callCount = 0;
+      const failingPublisher = {
+        async publishSendMessage(): Promise<{ ok: false; error: { code: string; message: string } }> {
+          callCount++;
+          return { ok: false, error: { code: 'PUBLISH_FAILED', message: 'Failed to send' } };
+        },
+        getSentMessages: (): never[] => [],
+        setFailNext: (): void => { /* no-op */ },
+      };
+
+      const useCaseWithFailingPublisher = createHandleApprovalReplyUseCase({
+        actionRepository,
+        approvalMessageRepository,
+        approvalIntentClassifierFactory: classifierFactory,
+        whatsappPublisher: failingPublisher as unknown as typeof whatsappPublisher,
+        actionEventPublisher,
+        logger: createMockLogger(),
+      });
+
+      const result = await useCaseWithFailingPublisher({
+        replyToWamid: 'wamid-123',
+        replyText: 'approve abcd',
+        userId: 'user-1',
+        actionId: 'action-text-nonce',
+      });
+
+      // Should still succeed even if confirmation notification fails
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.outcome).toBe('approved');
+      }
+      expect(callCount).toBeGreaterThan(0);
+    });
+
+    it('logs warning when approval message cleanup fails via text', async () => {
+      await actionRepository.save(actionWithNonce);
+
+      // Make approval message cleanup fail
+      approvalMessageRepository.setFailNext(true, { code: 'PERSISTENCE_ERROR', message: 'DB error' });
+
+      const result = await useCase({
+        replyToWamid: 'wamid-123',
+        replyText: 'approve abcd',
+        userId: 'user-1',
+        actionId: 'action-text-nonce',
+      });
+
+      // Should still succeed even if cleanup fails
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.outcome).toBe('approved');
+      }
+    });
+  });
+
+  describe('execute action by type (button path)', () => {
+    const createActionWithNonce = (type: Action['type'], id: string): Action => ({
+      id,
+      userId: 'user-1',
+      commandId: 'cmd-1',
+      type,
+      confidence: 0.85,
+      title: `Test ${type}`,
+      status: 'awaiting_approval',
+      payload: {},
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+      approvalNonce: 'abcd',
+      approvalNonceExpiresAt: new Date(Date.now() + 3600000).toISOString(),
+    });
+
+    it('executes todo action via button', async () => {
+      await actionRepository.save(createActionWithNonce('todo', 'todo-btn-1'));
+
+      const executeCalls: string[] = [];
+      const useCaseWithExecute = createHandleApprovalReplyUseCase({
+        actionRepository,
+        approvalMessageRepository,
+        approvalIntentClassifierFactory: classifierFactory,
+        whatsappPublisher,
+        actionEventPublisher,
+        logger: createMockLogger(),
+        executeTodoAction: async (id: string) => {
+          executeCalls.push(id);
+          return ok({ status: 'completed' as const });
+        },
+      });
+
+      await useCaseWithExecute({
+        replyToWamid: 'wamid-123',
+        replyText: '',
+        userId: 'user-1',
+        actionId: 'todo-btn-1',
+        buttonId: 'approve:todo-btn-1:abcd',
+      });
+
+      expect(executeCalls).toContain('todo-btn-1');
+    });
+
+    it('executes research action via button', async () => {
+      await actionRepository.save(createActionWithNonce('research', 'research-btn-1'));
+
+      const executeCalls: string[] = [];
+      const useCaseWithExecute = createHandleApprovalReplyUseCase({
+        actionRepository,
+        approvalMessageRepository,
+        approvalIntentClassifierFactory: classifierFactory,
+        whatsappPublisher,
+        actionEventPublisher,
+        logger: createMockLogger(),
+        executeResearchAction: async (id: string) => {
+          executeCalls.push(id);
+          return ok({ status: 'completed' as const });
+        },
+      });
+
+      await useCaseWithExecute({
+        replyToWamid: 'wamid-123',
+        replyText: '',
+        userId: 'user-1',
+        actionId: 'research-btn-1',
+        buttonId: 'approve:research-btn-1:abcd',
+      });
+
+      expect(executeCalls).toContain('research-btn-1');
+    });
+
+    it('executes link action via button', async () => {
+      await actionRepository.save(createActionWithNonce('link', 'link-btn-1'));
+
+      const executeCalls: string[] = [];
+      const useCaseWithExecute = createHandleApprovalReplyUseCase({
+        actionRepository,
+        approvalMessageRepository,
+        approvalIntentClassifierFactory: classifierFactory,
+        whatsappPublisher,
+        actionEventPublisher,
+        logger: createMockLogger(),
+        executeLinkAction: async (id: string) => {
+          executeCalls.push(id);
+          return ok({ status: 'completed' as const });
+        },
+      });
+
+      await useCaseWithExecute({
+        replyToWamid: 'wamid-123',
+        replyText: '',
+        userId: 'user-1',
+        actionId: 'link-btn-1',
+        buttonId: 'approve:link-btn-1:abcd',
+      });
+
+      expect(executeCalls).toContain('link-btn-1');
+    });
+
+    it('executes calendar action via button', async () => {
+      await actionRepository.save(createActionWithNonce('calendar', 'calendar-btn-1'));
+
+      const executeCalls: string[] = [];
+      const useCaseWithExecute = createHandleApprovalReplyUseCase({
+        actionRepository,
+        approvalMessageRepository,
+        approvalIntentClassifierFactory: classifierFactory,
+        whatsappPublisher,
+        actionEventPublisher,
+        logger: createMockLogger(),
+        executeCalendarAction: async (id: string) => {
+          executeCalls.push(id);
+          return ok({ status: 'completed' as const });
+        },
+      });
+
+      await useCaseWithExecute({
+        replyToWamid: 'wamid-123',
+        replyText: '',
+        userId: 'user-1',
+        actionId: 'calendar-btn-1',
+        buttonId: 'approve:calendar-btn-1:abcd',
+      });
+
+      expect(executeCalls).toContain('calendar-btn-1');
+    });
+
+    it('executes linear action via button', async () => {
+      await actionRepository.save(createActionWithNonce('linear', 'linear-btn-1'));
+
+      const executeCalls: string[] = [];
+      const useCaseWithExecute = createHandleApprovalReplyUseCase({
+        actionRepository,
+        approvalMessageRepository,
+        approvalIntentClassifierFactory: classifierFactory,
+        whatsappPublisher,
+        actionEventPublisher,
+        logger: createMockLogger(),
+        executeLinearAction: async (id: string) => {
+          executeCalls.push(id);
+          return ok({ status: 'completed' as const });
+        },
+      });
+
+      await useCaseWithExecute({
+        replyToWamid: 'wamid-123',
+        replyText: '',
+        userId: 'user-1',
+        actionId: 'linear-btn-1',
+        buttonId: 'approve:linear-btn-1:abcd',
+      });
+
+      expect(executeCalls).toContain('linear-btn-1');
+    });
+
+    it('executes code action via button', async () => {
+      await actionRepository.save(createActionWithNonce('code', 'code-btn-1'));
+
+      const executeCalls: string[] = [];
+      const useCaseWithExecute = createHandleApprovalReplyUseCase({
+        actionRepository,
+        approvalMessageRepository,
+        approvalIntentClassifierFactory: classifierFactory,
+        whatsappPublisher,
+        actionEventPublisher,
+        logger: createMockLogger(),
+        executeCodeAction: async (id: string) => {
+          executeCalls.push(id);
+          return ok({ status: 'completed' as const });
+        },
+      });
+
+      await useCaseWithExecute({
+        replyToWamid: 'wamid-123',
+        replyText: '',
+        userId: 'user-1',
+        actionId: 'code-btn-1',
+        buttonId: 'approve:code-btn-1:abcd',
+      });
+
+      expect(executeCalls).toContain('code-btn-1');
+    });
+
+    it('falls back to event for reminder action via button', async () => {
+      await actionRepository.save(createActionWithNonce('reminder', 'reminder-btn-1'));
+
+      await useCase({
+        replyToWamid: 'wamid-123',
+        replyText: '',
+        userId: 'user-1',
+        actionId: 'reminder-btn-1',
+        buttonId: 'approve:reminder-btn-1:abcd',
+      });
+
+      const events = actionEventPublisher.getPublishedEvents();
+      expect(events).toHaveLength(1);
+      expect(events[0]?.actionType).toBe('reminder');
+    });
+
+    it('logs error when execute function fails via button', async () => {
+      await actionRepository.save(createActionWithNonce('note', 'note-fail-btn'));
+
+      const errorLogger = createMockLogger();
+      const errorSpy = vi.spyOn(errorLogger, 'error');
+
+      const useCaseWithError = createHandleApprovalReplyUseCase({
+        actionRepository,
+        approvalMessageRepository,
+        approvalIntentClassifierFactory: classifierFactory,
+        whatsappPublisher,
+        actionEventPublisher,
+        logger: errorLogger,
+        executeNoteAction: async () => err(new Error('Execute failed')),
+      });
+
+      const result = await useCaseWithError({
+        replyToWamid: 'wamid-123',
+        replyText: '',
+        userId: 'user-1',
+        actionId: 'note-fail-btn',
+        buttonId: 'approve:note-fail-btn:abcd',
+      });
+
+      expect(result.ok).toBe(true);
+      expect(errorSpy).toHaveBeenCalled();
+    });
+
+    it('logs error when todo execute fails via button', async () => {
+      await actionRepository.save(createActionWithNonce('todo', 'todo-fail-btn'));
+
+      const errorLogger = createMockLogger();
+      const errorSpy = vi.spyOn(errorLogger, 'error');
+
+      const useCaseWithError = createHandleApprovalReplyUseCase({
+        actionRepository,
+        approvalMessageRepository,
+        approvalIntentClassifierFactory: classifierFactory,
+        whatsappPublisher,
+        actionEventPublisher,
+        logger: errorLogger,
+        executeTodoAction: async () => err(new Error('Todo failed')),
+      });
+
+      await useCaseWithError({
+        replyToWamid: 'wamid-123',
+        replyText: '',
+        userId: 'user-1',
+        actionId: 'todo-fail-btn',
+        buttonId: 'approve:todo-fail-btn:abcd',
+      });
+
+      expect(errorSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ actionId: 'todo-fail-btn' }),
+        'Failed to execute todo action after approval'
+      );
+    });
+
+    it('logs error when research execute fails via button', async () => {
+      await actionRepository.save(createActionWithNonce('research', 'research-fail-btn'));
+
+      const errorLogger = createMockLogger();
+      const errorSpy = vi.spyOn(errorLogger, 'error');
+
+      const useCaseWithError = createHandleApprovalReplyUseCase({
+        actionRepository,
+        approvalMessageRepository,
+        approvalIntentClassifierFactory: classifierFactory,
+        whatsappPublisher,
+        actionEventPublisher,
+        logger: errorLogger,
+        executeResearchAction: async () => err(new Error('Research failed')),
+      });
+
+      await useCaseWithError({
+        replyToWamid: 'wamid-123',
+        replyText: '',
+        userId: 'user-1',
+        actionId: 'research-fail-btn',
+        buttonId: 'approve:research-fail-btn:abcd',
+      });
+
+      expect(errorSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ actionId: 'research-fail-btn' }),
+        'Failed to execute research action after approval'
+      );
+    });
+
+    it('logs error when calendar execute fails via button', async () => {
+      await actionRepository.save(createActionWithNonce('calendar', 'cal-fail-btn'));
+
+      const errorLogger = createMockLogger();
+      const errorSpy = vi.spyOn(errorLogger, 'error');
+
+      const useCaseWithError = createHandleApprovalReplyUseCase({
+        actionRepository,
+        approvalMessageRepository,
+        approvalIntentClassifierFactory: classifierFactory,
+        whatsappPublisher,
+        actionEventPublisher,
+        logger: errorLogger,
+        executeCalendarAction: async () => err(new Error('Calendar failed')),
+      });
+
+      await useCaseWithError({
+        replyToWamid: 'wamid-123',
+        replyText: '',
+        userId: 'user-1',
+        actionId: 'cal-fail-btn',
+        buttonId: 'approve:cal-fail-btn:abcd',
+      });
+
+      expect(errorSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ actionId: 'cal-fail-btn' }),
+        'Failed to execute calendar action after approval'
+      );
+    });
+
+    it('logs error when linear execute fails via button', async () => {
+      await actionRepository.save(createActionWithNonce('linear', 'lin-fail-btn'));
+
+      const errorLogger = createMockLogger();
+      const errorSpy = vi.spyOn(errorLogger, 'error');
+
+      const useCaseWithError = createHandleApprovalReplyUseCase({
+        actionRepository,
+        approvalMessageRepository,
+        approvalIntentClassifierFactory: classifierFactory,
+        whatsappPublisher,
+        actionEventPublisher,
+        logger: errorLogger,
+        executeLinearAction: async () => err(new Error('Linear failed')),
+      });
+
+      await useCaseWithError({
+        replyToWamid: 'wamid-123',
+        replyText: '',
+        userId: 'user-1',
+        actionId: 'lin-fail-btn',
+        buttonId: 'approve:lin-fail-btn:abcd',
+      });
+
+      expect(errorSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ actionId: 'lin-fail-btn' }),
+        'Failed to execute linear action after approval'
+      );
+    });
+
+    it('logs error when code execute fails via button', async () => {
+      await actionRepository.save(createActionWithNonce('code', 'code-fail-btn'));
+
+      const errorLogger = createMockLogger();
+      const errorSpy = vi.spyOn(errorLogger, 'error');
+
+      const useCaseWithError = createHandleApprovalReplyUseCase({
+        actionRepository,
+        approvalMessageRepository,
+        approvalIntentClassifierFactory: classifierFactory,
+        whatsappPublisher,
+        actionEventPublisher,
+        logger: errorLogger,
+        executeCodeAction: async () => err(new Error('Code failed')),
+      });
+
+      await useCaseWithError({
+        replyToWamid: 'wamid-123',
+        replyText: '',
+        userId: 'user-1',
+        actionId: 'code-fail-btn',
+        buttonId: 'approve:code-fail-btn:abcd',
+      });
+
+      expect(errorSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ actionId: 'code-fail-btn' }),
+        'Failed to execute code action after approval'
+      );
+    });
+
+    it('logs error when link execute fails via button', async () => {
+      await actionRepository.save(createActionWithNonce('link', 'link-fail-btn'));
+
+      const errorLogger = createMockLogger();
+      const errorSpy = vi.spyOn(errorLogger, 'error');
+
+      const useCaseWithError = createHandleApprovalReplyUseCase({
+        actionRepository,
+        approvalMessageRepository,
+        approvalIntentClassifierFactory: classifierFactory,
+        whatsappPublisher,
+        actionEventPublisher,
+        logger: errorLogger,
+        executeLinkAction: async () => err(new Error('Link failed')),
+      });
+
+      await useCaseWithError({
+        replyToWamid: 'wamid-123',
+        replyText: '',
+        userId: 'user-1',
+        actionId: 'link-fail-btn',
+        buttonId: 'approve:link-fail-btn:abcd',
+      });
+
+      expect(errorSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ actionId: 'link-fail-btn' }),
+        'Failed to execute link action after approval'
+      );
+    });
+
+    it('falls back to event when no execute function for action type via button', async () => {
+      await actionRepository.save(createActionWithNonce('link', 'link-no-exec'));
+
+      const result = await useCase({
+        replyToWamid: 'wamid-123',
+        replyText: '',
+        userId: 'user-1',
+        actionId: 'link-no-exec',
+        buttonId: 'approve:link-no-exec:abcd',
+      });
+
+      expect(result.ok).toBe(true);
+      const events = actionEventPublisher.getPublishedEvents();
+      expect(events).toHaveLength(1);
+      expect(events[0]?.actionType).toBe('link');
+    });
+
+    it('logs error when event publish fails via button', async () => {
+      await actionRepository.save(createActionWithNonce('link', 'link-event-fail'));
+      actionEventPublisher.setFailNext(true);
+
+      const errorLogger = createMockLogger();
+      const errorSpy = vi.spyOn(errorLogger, 'error');
+
+      const useCaseWithLogger = createHandleApprovalReplyUseCase({
+        actionRepository,
+        approvalMessageRepository,
+        approvalIntentClassifierFactory: classifierFactory,
+        whatsappPublisher,
+        actionEventPublisher,
+        logger: errorLogger,
+      });
+
+      const result = await useCaseWithLogger({
+        replyToWamid: 'wamid-123',
+        replyText: '',
+        userId: 'user-1',
+        actionId: 'link-event-fail',
+        buttonId: 'approve:link-event-fail:abcd',
+      });
+
+      expect(result.ok).toBe(true);
+      expect(errorSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ actionId: 'link-event-fail' }),
+        'Failed to publish action.created event after approval'
+      );
+    });
+  });
+
+  describe('WhatsApp publish failures in button handling', () => {
+    const actionWithNonce: Action = {
+      id: 'action-wa-fail',
+      userId: 'user-1',
+      commandId: 'cmd-1',
+      type: 'todo',
+      confidence: 0.85,
+      title: 'Test',
+      status: 'awaiting_approval',
+      payload: {},
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+      approvalNonce: 'abcd',
+      approvalNonceExpiresAt: new Date(Date.now() + 3600000).toISOString(),
+    };
+
+    it('continues when nonce error notification fails', async () => {
+      await actionRepository.save(actionWithNonce);
+      whatsappPublisher.setFailNext(true);
+
+      const result = await useCase({
+        replyToWamid: 'wamid-123',
+        replyText: '',
+        userId: 'user-1',
+        actionId: 'action-wa-fail',
+        buttonId: 'approve:action-wa-fail', // Missing nonce
+      });
+
+      expect(result.ok).toBe(false);
+    });
+
+    it('continues when approval confirmation fails', async () => {
+      await actionRepository.save(actionWithNonce);
+      whatsappPublisher.setFailNext(true);
+
+      const result = await useCase({
+        replyToWamid: 'wamid-123',
+        replyText: '',
+        userId: 'user-1',
+        actionId: 'action-wa-fail',
+        buttonId: 'approve:action-wa-fail:abcd',
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.outcome).toBe('approved');
+      }
+    });
+
+    it('continues when cancellation confirmation fails', async () => {
+      const { approvalNonce: _n, approvalNonceExpiresAt: _e, ...baseAction } = actionWithNonce;
+      await actionRepository.save(baseAction);
+      whatsappPublisher.setFailNext(true);
+
+      const result = await useCase({
+        replyToWamid: 'wamid-123',
+        replyText: '',
+        userId: 'user-1',
+        actionId: 'action-wa-fail',
+        buttonId: 'cancel:action-wa-fail',
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.outcome).toBe('rejected');
+      }
+    });
+  });
+
+  describe('approval message cleanup failures in button handling', () => {
+    const actionWithNonce: Action = {
+      id: 'action-cleanup-fail',
+      userId: 'user-1',
+      commandId: 'cmd-1',
+      type: 'todo',
+      confidence: 0.85,
+      title: 'Test',
+      status: 'awaiting_approval',
+      payload: {},
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+      approvalNonce: 'abcd',
+      approvalNonceExpiresAt: new Date(Date.now() + 3600000).toISOString(),
+    };
+
+    it('continues when cleanup fails after button approval', async () => {
+      await actionRepository.save(actionWithNonce);
+      approvalMessageRepository.setMessage({
+        id: 'approval-1',
+        wamid: 'wamid-123',
+        actionId: 'action-cleanup-fail',
+        actionType: 'todo',
+        actionTitle: 'Test',
+        userId: 'user-1',
+        sentAt: '2026-01-01T00:00:00.000Z',
+      });
+
+      vi.spyOn(approvalMessageRepository, 'deleteByActionId').mockResolvedValueOnce(
+        err({ code: 'PERSISTENCE_ERROR', message: 'Cleanup failed' })
+      );
+
+      const result = await useCase({
+        replyToWamid: 'wamid-123',
+        replyText: '',
+        userId: 'user-1',
+        actionId: 'action-cleanup-fail',
+        buttonId: 'approve:action-cleanup-fail:abcd',
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.outcome).toBe('approved');
+      }
+    });
+
+    it('continues when cleanup fails after button cancel', async () => {
+      const { approvalNonce: _n, approvalNonceExpiresAt: _e, ...baseAction } = actionWithNonce;
+      await actionRepository.save({
+        ...baseAction,
+        id: 'action-cancel-cleanup-fail',
+      });
+
+      vi.spyOn(approvalMessageRepository, 'deleteByActionId').mockResolvedValueOnce(
+        err({ code: 'PERSISTENCE_ERROR', message: 'Cleanup failed' })
+      );
+
+      const result = await useCase({
+        replyToWamid: 'wamid-123',
+        replyText: '',
+        userId: 'user-1',
+        actionId: 'action-cancel-cleanup-fail',
+        buttonId: 'cancel:action-cancel-cleanup-fail',
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.outcome).toBe('rejected');
+      }
+    });
+  });
+
+  describe('execute action success logging via button', () => {
+    const createActionWithNonce = (type: Action['type'], id: string): Action => ({
+      id,
+      userId: 'user-1',
+      commandId: 'cmd-1',
+      type,
+      confidence: 0.85,
+      title: `Test ${type}`,
+      status: 'awaiting_approval',
+      payload: {},
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+      approvalNonce: 'abcd',
+      approvalNonceExpiresAt: new Date(Date.now() + 3600000).toISOString(),
+    });
+
+    it('logs success when linear action executes successfully via button', async () => {
+      await actionRepository.save(createActionWithNonce('linear', 'linear-success-btn'));
+
+      const successLogger = createMockLogger();
+      const infoSpy = vi.spyOn(successLogger, 'info');
+
+      const useCaseWithLogger = createHandleApprovalReplyUseCase({
+        actionRepository,
+        approvalMessageRepository,
+        approvalIntentClassifierFactory: classifierFactory,
+        whatsappPublisher,
+        actionEventPublisher,
+        logger: successLogger,
+        executeLinearAction: async () => ok({ status: 'completed' as const }),
+      });
+
+      await useCaseWithLogger({
+        replyToWamid: 'wamid-123',
+        replyText: '',
+        userId: 'user-1',
+        actionId: 'linear-success-btn',
+        buttonId: 'approve:linear-success-btn:abcd',
+      });
+
+      expect(infoSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ actionId: 'linear-success-btn' }),
+        'Linear action executed successfully after approval'
+      );
+    });
+
+    it('logs success when code action executes successfully via button', async () => {
+      await actionRepository.save(createActionWithNonce('code', 'code-success-btn'));
+
+      const successLogger = createMockLogger();
+      const infoSpy = vi.spyOn(successLogger, 'info');
+
+      const useCaseWithLogger = createHandleApprovalReplyUseCase({
+        actionRepository,
+        approvalMessageRepository,
+        approvalIntentClassifierFactory: classifierFactory,
+        whatsappPublisher,
+        actionEventPublisher,
+        logger: successLogger,
+        executeCodeAction: async () => ok({ status: 'completed' as const }),
+      });
+
+      await useCaseWithLogger({
+        replyToWamid: 'wamid-123',
+        replyText: '',
+        userId: 'user-1',
+        actionId: 'code-success-btn',
+        buttonId: 'approve:code-success-btn:abcd',
+      });
+
+      expect(infoSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ actionId: 'code-success-btn' }),
+        'Code action executed successfully after approval'
+      );
+    });
+
+    it('falls back to event when no executeLinearAction provided via button', async () => {
+      await actionRepository.save(createActionWithNonce('linear', 'linear-no-exec'));
+
+      const result = await useCase({
+        replyToWamid: 'wamid-123',
+        replyText: '',
+        userId: 'user-1',
+        actionId: 'linear-no-exec',
+        buttonId: 'approve:linear-no-exec:abcd',
+      });
+
+      expect(result.ok).toBe(true);
+      const events = actionEventPublisher.getPublishedEvents();
+      expect(events).toHaveLength(1);
+      expect(events[0]?.actionType).toBe('linear');
+    });
+
+    it('falls back to event when no executeCodeAction provided via button', async () => {
+      await actionRepository.save(createActionWithNonce('code', 'code-no-exec'));
+
+      const result = await useCase({
+        replyToWamid: 'wamid-123',
+        replyText: '',
+        userId: 'user-1',
+        actionId: 'code-no-exec',
+        buttonId: 'approve:code-no-exec:abcd',
+      });
+
+      expect(result.ok).toBe(true);
+      const events = actionEventPublisher.getPublishedEvents();
+      expect(events).toHaveLength(1);
+      expect(events[0]?.actionType).toBe('code');
+    });
+  });
+
+  describe('text-based nonce expired notification failures', () => {
+    const expiredAction: Action = {
+      id: 'action-text-expired',
+      userId: 'user-1',
+      commandId: 'cmd-1',
+      type: 'todo',
+      confidence: 0.85,
+      title: 'Test todo with expired nonce',
+      status: 'awaiting_approval',
+      payload: {},
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+      approvalNonce: 'abcd',
+      approvalNonceExpiresAt: new Date(Date.now() - 3600000).toISOString(), // Expired
+    };
+
+    it('logs warning when expired nonce notification fails via text', async () => {
+      await actionRepository.save(expiredAction);
+
+      // Make the whatsapp publish fail for expired notification
+      whatsappPublisher.setFailNext(true, { code: 'PUBLISH_FAILED', message: 'Network error' });
+
+      const result = await useCase({
+        replyToWamid: 'wamid-123',
+        replyText: 'approve abcd',
+        userId: 'user-1',
+        actionId: 'action-text-expired',
+      });
+
+      // Should still return rejected even if notification fails
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.outcome).toBe('rejected');
+      }
+    });
+  });
 });

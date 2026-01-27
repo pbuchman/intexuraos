@@ -391,6 +391,72 @@ export function createReactionWebhookPayload(options: {
   };
 }
 
+/**
+ * Create a WhatsApp button response webhook payload.
+ * Used to test button-based approval handling from interactive messages.
+ *
+ * Button ID format: "approve:{actionId}:{nonce}" | "cancel:{actionId}" | "convert:{actionId}"
+ */
+export function createButtonWebhookPayload(options: {
+  buttonId: string;
+  buttonTitle: string;
+  replyToWamid: string;
+  messageId?: string;
+}): object {
+  const messageId =
+    options.messageId ?? 'wamid.button.HBgNMTU1NTEyMzQ1Njc4FQIAEhgUM0VCMDRBNzYwREQ0RjMwMjYzMDcA';
+
+  return {
+    object: 'whatsapp_business_account',
+    entry: [
+      {
+        id: '102290129340398',
+        changes: [
+          {
+            field: 'messages',
+            value: {
+              messaging_product: 'whatsapp',
+              metadata: {
+                display_phone_number: '15551234567',
+                phone_number_id: '123456789012345',
+              },
+              contacts: [
+                {
+                  wa_id: '15551234567',
+                  profile: {
+                    name: 'Test User',
+                  },
+                },
+              ],
+              messages: [
+                {
+                  from: '15551234567',
+                  id: messageId,
+                  timestamp: '1234567890',
+                  type: 'button',
+                  context: {
+                    from: '15550987654',
+                    id: options.replyToWamid,
+                  },
+                  interactive: {
+                    type: 'button',
+                    list: [
+                      {
+                        id: options.buttonId,
+                        title: options.buttonTitle,
+                      },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    ],
+  };
+}
+
 export interface TestContext {
   app: FastifyInstance;
   webhookEventRepository: FakeWhatsAppWebhookEventRepository;

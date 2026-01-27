@@ -22,6 +22,7 @@ import {
 } from '../domain/whatsapp/index.js';
 import {
   extractAudioMedia,
+  extractButtonResponse,
   extractDisplayPhoneNumber,
   extractImageMedia,
   extractMessageId,
@@ -330,6 +331,7 @@ export async function processWebhookEvent(
     const imageMedia = extractImageMedia(request.body);
     const audioMedia = extractAudioMedia(request.body);
     const reactionData = extractReactionData(request.body);
+    const buttonResponse = extractButtonResponse(request.body);
 
     request.log.info(
       {
@@ -341,12 +343,14 @@ export async function processWebhookEvent(
         hasAudio: audioMedia !== null,
         hasReaction: reactionData !== null,
         reactionEmoji: reactionData?.emoji,
+        hasButton: buttonResponse !== null,
+        buttonId: buttonResponse?.buttonId,
       },
       'Extracted message details from webhook payload'
     );
 
     // Validate message type
-    const supportedTypes = ['text', 'image', 'audio', 'reaction'];
+    const supportedTypes = ['text', 'image', 'audio', 'reaction', 'button'];
     if (messageType === null || !supportedTypes.includes(messageType)) {
       request.log.info(
         { eventId: savedEvent.id, messageType },
@@ -355,7 +359,7 @@ export async function processWebhookEvent(
       await webhookEventRepository.updateEventStatus(savedEvent.id, 'ignored', {
         ignoredReason: {
           code: 'UNSUPPORTED_MESSAGE_TYPE',
-          message: `Only text, image, audio, and reaction messages are supported. Received: ${messageType ?? 'unknown'}`,
+          message: `Only text, image, audio, reaction, and button messages are supported. Received: ${messageType ?? 'unknown'}`,
           details: { messageType },
         },
       });
@@ -402,6 +406,17 @@ export async function processWebhookEvent(
         ignoredReason: {
           code: 'NO_REACTION_DATA',
           message: 'Reaction message has no data',
+        },
+      });
+      return;
+    }
+
+    if (messageType === 'button' && buttonResponse === null) {
+      request.log.info({ eventId: savedEvent.id }, 'Ignoring button message without data');
+      await webhookEventRepository.updateEventStatus(savedEvent.id, 'ignored', {
+        ignoredReason: {
+          code: 'NO_BUTTON_DATA',
+          message: 'Button message has no data',
         },
       });
       return;
@@ -516,6 +531,11 @@ export async function processWebhookEvent(
 
     if (messageType === 'reaction' && reactionData !== null) {
       await handleReactionMessage(request, savedEvent, services, userId, reactionData);
+      return;
+    }
+
+    if (messageType === 'button' && buttonResponse !== null) {
+      await handleButtonMessage(request, savedEvent, services, userId, buttonResponse);
       return;
     }
 
@@ -804,6 +824,139 @@ async function handleReactionMessage(
       intent,
     },
     'Published approval reply event from reaction'
+  );
+
+  await webhookEventRepository.updateEventStatus(savedEvent.id, 'completed', {});
+}
+
+/**
+ * Handle button message for action approval/rejection.
+ *
+ * Button responses come from interactive messages with action-specific nonces.
+ * Button ID format: "approve:{actionId}:{nonce}" | "cancel:{actionId}" | "convert:{actionId}"
+ */
+async function handleButtonMessage(
+  request: FastifyRequest<{ Body: WebhookPayload }>,
+  savedEvent: { id: string },
+  services: ReturnType<typeof getServices>,
+  userId: string,
+  buttonResponse: { buttonId: string; buttonTitle: string; replyToWamid: string }
+): Promise<void> {
+  const { webhookEventRepository, eventPublisher } = services;
+
+  request.log.info(
+    {
+      eventId: savedEvent.id,
+      userId,
+      buttonId: buttonResponse.buttonId,
+      buttonTitle: buttonResponse.buttonTitle,
+      replyToWamid: buttonResponse.replyToWamid,
+    },
+    'Processing button message'
+  );
+
+  // Parse button ID to extract action and intent
+  // Format: "approve:{actionId}:{nonce}" | "cancel:{actionId}" | "convert:{actionId}"
+  const parts = buttonResponse.buttonId.split(':');
+
+  if (parts.length < 2) {
+    request.log.warn(
+      { eventId: savedEvent.id, buttonId: buttonResponse.buttonId },
+      'Invalid button ID format'
+    );
+    await webhookEventRepository.updateEventStatus(savedEvent.id, 'ignored', {
+      ignoredReason: {
+        code: 'INVALID_BUTTON_FORMAT',
+        message: 'Button ID does not match expected format',
+        details: { buttonId: buttonResponse.buttonId },
+      },
+    });
+    return;
+  }
+
+  const [intent, actionId, nonce] = parts;
+
+  // Validate intent
+  if (intent !== 'approve' && intent !== 'cancel' && intent !== 'convert') {
+    request.log.warn(
+      { eventId: savedEvent.id, intent },
+      'Unknown button intent'
+    );
+    await webhookEventRepository.updateEventStatus(savedEvent.id, 'ignored', {
+      ignoredReason: {
+        code: 'UNKNOWN_BUTTON_INTENT',
+        message: `Unknown button intent: ${String(intent)}`,
+        details: { intent, buttonId: buttonResponse.buttonId },
+      },
+    });
+    return;
+  }
+
+  // Approve intent requires a nonce for security
+  if (intent === 'approve' && nonce === undefined) {
+    request.log.warn(
+      { eventId: savedEvent.id, buttonId: buttonResponse.buttonId },
+      'Approve button missing nonce'
+    );
+    await webhookEventRepository.updateEventStatus(savedEvent.id, 'ignored', {
+      ignoredReason: {
+        code: 'MISSING_NONCE',
+        message: 'Approve button requires nonce for security',
+        details: { buttonId: buttonResponse.buttonId },
+      },
+    });
+    return;
+  }
+
+  request.log.info(
+    {
+      eventId: savedEvent.id,
+      userId,
+      actionId,
+      intent,
+      hasNonce: nonce !== undefined,
+    },
+    'Button response parsed successfully, publishing approval reply event'
+  );
+
+  // Publish approval reply event with button data
+  const approvalReplyEvent: Parameters<typeof eventPublisher.publishApprovalReply>[0] = {
+    type: 'action.approval.reply',
+    replyToWamid: buttonResponse.replyToWamid,
+    replyText: intent === 'approve' ? 'yes' : intent === 'cancel' ? 'no' : 'convert',
+    userId,
+    timestamp: new Date().toISOString(),
+    actionId: actionId ?? '', // actionId is guaranteed to be defined after parsing above
+    buttonId: buttonResponse.buttonId,
+    buttonTitle: buttonResponse.buttonTitle,
+  };
+
+  const approvalPublishResult = await eventPublisher.publishApprovalReply(approvalReplyEvent);
+
+  if (!approvalPublishResult.ok) {
+    request.log.error(
+      {
+        eventId: savedEvent.id,
+        error: approvalPublishResult.error,
+        replyToWamid: buttonResponse.replyToWamid,
+      },
+      'Failed to publish approval reply event'
+    );
+    await webhookEventRepository.updateEventStatus(savedEvent.id, 'failed', {
+      failureDetails: `Failed to publish approval reply: ${approvalPublishResult.error.message}`,
+    });
+    return;
+  }
+
+  request.log.info(
+    {
+      eventId: savedEvent.id,
+      userId,
+      replyToWamid: buttonResponse.replyToWamid,
+      actionId,
+      intent,
+    },
+    'Published approval reply event from button response'
   );
 
   await webhookEventRepository.updateEventStatus(savedEvent.id, 'completed', {});

@@ -58,6 +58,8 @@ export type { EventPublisherPort } from './ports/eventPublisher.js';
 
 export type { WhatsAppMessageSender } from './ports/messageSender.js';
 
+export type { TextMessageSendResult } from './ports/messageSender.js';
+
 export type {
   SpeechTranscriptionPort,
   TranscriptionJobInput,
@@ -75,8 +77,6 @@ export type {
   OutboundMessageRepository,
 } from './ports/outboundMessageRepository.js';
 
-export type { TextMessageSendResult } from './ports/messageSender.js';
-
 // Events
 export type {
   ApprovalReplyEvent,
@@ -89,6 +89,7 @@ export type {
   TranscriptionCompletedEvent,
   WebhookProcessEvent,
   WhatsAppEvent,
+  WhatsAppInteractiveButton,
 } from './events/index.js';
 
 // Use cases
