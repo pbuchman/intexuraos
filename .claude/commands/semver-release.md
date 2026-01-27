@@ -189,6 +189,11 @@ for app in apps/*/package.json; do
   jq ".version = \"$NEW_VERSION\"" "$app" > tmp.json && mv tmp.json "$app"
 done
 
+# Update all workers
+for worker in workers/*/package.json; do
+  jq ".version = \"$NEW_VERSION\"" "$worker" > tmp.json && mv tmp.json "$worker"
+done
+
 # Update all packages
 for pkg in packages/*/package.json; do
   jq ".version = \"$NEW_VERSION\"" "$pkg" > tmp.json && mv tmp.json "$pkg"
@@ -209,7 +214,7 @@ Update the "Current Version" line at the top of CHANGELOG.md:
 ### 10. Commit Release
 
 ```bash
-git add CHANGELOG.md package.json package-lock.json apps/*/package.json packages/*/package.json
+git add CHANGELOG.md package.json pnpm-lock.yaml apps/*/package.json workers/*/package.json packages/*/package.json
 git commit -m "Release vNEW_VERSION"
 ```
 

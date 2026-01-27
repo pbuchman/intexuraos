@@ -11,12 +11,16 @@ Show available services and their documentation status so users can choose what 
 ### Step 1: Scan Services
 
 ```bash
+# Scan apps (excluding web frontend)
 ls -1 apps/ | grep -v "^web$" | sort
+
+# Scan workers
+ls -1 workers/ | sort
 ```
 
 ### Step 2: Check Documentation Status
 
-For each service:
+For each app and worker:
 
 ```bash
 # Check if docs exist
@@ -33,29 +37,27 @@ grep -h "^## .* — <service-name>" docs/documentation-runs.md | tail -1 | sed '
 ```
 Available services to document:
 
-Services WITH existing docs:
+Apps WITH existing docs:
   ✓ user-service          (last: 2025-01-10)
   ✓ whatsapp-service      (last: 2025-01-08)
   ✓ todos-service         (last: 2025-01-05)
 
-Services WITHOUT docs:
+Apps WITHOUT docs:
     actions-agent
     bookmarks-service
     calendar-service
-    data-insights-service
-    llm-orchestrator
-    notifications-service
-    places-service
-    research-agent
-    scraper-service
-    share-service
-    subscriptions-service
-    triggers-service
-    webhooks-service
+    ...
+
+Workers WITH existing docs:
+  ✓ log-cleanup           (last: 2025-01-15)
+
+Workers WITHOUT docs:
+    orchestrator
+    vm-lifecycle
 
 Website status:
-  Marketing pages:  3/14 services documented
-  Developer docs:   3/14 services documented
+  Marketing pages:  3/21 services documented
+  Developer docs:   3/21 services documented
 
 Run: /document-service <service-name>
 ```
@@ -71,8 +73,11 @@ Run: /document-service <service-name>
 Compare git commit date for service vs last documentation run:
 
 ```bash
-# Last service commit
+# Last app commit
 git log -1 --format="%ci" apps/<service-name>/
+
+# Last worker commit
+git log -1 --format="%ci" workers/<worker-name>/
 
 # Last documentation run
 grep -h "^## .* — <service-name>" docs/documentation-runs.md | tail -1

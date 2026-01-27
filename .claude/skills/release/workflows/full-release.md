@@ -48,8 +48,16 @@ gh pr list --state merged --base development --json number,title,body,mergedAt,a
 ```bash
 # Find apps changed since last tag (excluding web app)
 LAST_TAG=$(git tag -l "v*" --sort=-v:refname | head -1)
-MODIFIED_SERVICES=$(git diff --name-only $LAST_TAG..HEAD -- apps/ | cut -d'/' -f2 | sort -u | grep -v web)
-echo "Modified services: $MODIFIED_SERVICES"
+MODIFIED_APPS=$(git diff --name-only $LAST_TAG..HEAD -- apps/ | cut -d'/' -f2 | sort -u | grep -v web)
+echo "Modified apps: $MODIFIED_APPS"
+
+# Find workers changed since last tag
+MODIFIED_WORKERS=$(git diff --name-only $LAST_TAG..HEAD -- workers/ | cut -d'/' -f2 | sort -u)
+echo "Modified workers: $MODIFIED_WORKERS"
+
+# Combined list for documentation
+MODIFIED_SERVICES="$MODIFIED_APPS $MODIFIED_WORKERS"
+echo "All modified services: $MODIFIED_SERVICES"
 ```
 
 ### 1.5 Determine Version Bump

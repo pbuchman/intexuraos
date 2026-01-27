@@ -1,12 +1,12 @@
 ---
 name: document-service
-description: Generate professional documentation for IntexuraOS services. Produces 5 doc files per service plus updates aggregated site content. Supports interactive mode (asks questions) and autonomous mode (infers from code). Use when documenting services, generating docs, or updating service documentation.
+description: Generate professional documentation for IntexuraOS services (apps and workers). Produces 5 doc files per service plus updates aggregated site content. Supports interactive mode (asks questions) and autonomous mode (infers from code). Use when documenting services, generating docs, or updating service documentation.
 argument-hint: '[service-name]'
 ---
 
 # Document Service
 
-Generate comprehensive documentation for IntexuraOS services.
+Generate comprehensive documentation for IntexuraOS services (apps and workers).
 
 ## Usage
 
