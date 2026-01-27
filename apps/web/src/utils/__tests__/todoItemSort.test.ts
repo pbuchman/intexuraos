@@ -44,10 +44,11 @@ describe('sortTodoItems', () => {
 
     const result = sortTodoItems(items);
 
+    // Unprioritized items sort between medium and low
     expect(result[0].id).toBe('2'); // high
     expect(result[1].id).toBe('1'); // medium
-    expect(result[2].id).toBe('3'); // low
-    expect(result[3].id).toBe('4'); // none
+    expect(result[2].id).toBe('4'); // none (between medium and low)
+    expect(result[3].id).toBe('3'); // low
   });
 
   it('places urgent priority above high', () => {
@@ -62,6 +63,22 @@ describe('sortTodoItems', () => {
     expect(result[0].id).toBe('1'); // urgent, position 1
     expect(result[1].id).toBe('3'); // urgent, position 3
     expect(result[2].id).toBe('2'); // high
+  });
+
+  it('places unprioritized items between medium and low priority', () => {
+    const items = [
+      createMockItem({ id: '1', status: 'pending', priority: 'low', position: 1 }),
+      createMockItem({ id: '2', status: 'pending', priority: null, position: 2 }),
+      createMockItem({ id: '3', status: 'pending', priority: 'medium', position: 3 }),
+      createMockItem({ id: '4', status: 'pending', priority: null, position: 4 }),
+    ];
+
+    const result = sortTodoItems(items);
+
+    expect(result[0].id).toBe('3'); // medium
+    expect(result[1].id).toBe('2'); // none (between medium and low, position 2)
+    expect(result[2].id).toBe('4'); // none (between medium and low, position 4)
+    expect(result[3].id).toBe('1'); // low
   });
 
   it('maintains original position order within same priority and status', () => {
@@ -103,10 +120,10 @@ describe('sortTodoItems', () => {
 
     const result = sortTodoItems(items);
 
-    // Pending group first, ordered by priority: high > low > none
+    // Pending group first, ordered by priority: high > none > low
     expect(result[0].id).toBe('3'); // pending high
-    expect(result[1].id).toBe('2'); // pending low
-    expect(result[2].id).toBe('5'); // pending none
+    expect(result[1].id).toBe('5'); // pending none (between medium and low)
+    expect(result[2].id).toBe('2'); // pending low
 
     // Completed group after, ordered by priority: high > medium
     expect(result[3].id).toBe('1'); // completed high
