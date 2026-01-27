@@ -33,6 +33,7 @@ import {
 } from '@/components';
 import { useAuth } from '@/context';
 import { useLlmKeys, useResearch } from '@/hooks';
+import { stripMarkdown } from '@/utils';
 import {
   approveResearch,
   confirmPartialFailure,
@@ -75,22 +76,6 @@ function formatElapsedTime(isoDate: string): string {
     return `${String(diffMinutes)}m ago`;
   }
   return 'just now';
-}
-
-/**
- * Strip markdown formatting from text for clean display.
- * Handles bold, italic, headers, code markers, and surrounding quotes.
- */
-function stripMarkdown(text: string): string {
-  return text
-    .replace(/\*\*/g, '') // Remove bold markers
-    .replace(/__/g, '') // Remove bold (underscore)
-    .replace(/(?<!\*)\*(?!\*)/g, '') // Remove italic markers (single asterisk)
-    .replace(/(?<!_)_(?!_)/g, '') // Remove italic (single underscore)
-    .replace(/^#+\s*/gm, '') // Remove headers
-    .replace(/`/g, '') // Remove code markers
-    .replace(/^["']|["']$/g, '') // Remove surrounding quotes
-    .trim();
 }
 
 interface StatusBadgeProps {
