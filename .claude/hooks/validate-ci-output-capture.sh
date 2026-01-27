@@ -17,7 +17,8 @@ COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // ""')
 [[ -z "$COMMAND" ]] && exit 0
 
 # Check pnpm ci, verify:workspace, and test commands
-if ! echo "$COMMAND" | grep -qE 'pnpm\s+(run\s+(ci|verify:workspace)|test|--filter\s+\S+\s+test)'; then
+# Matches: pnpm run ci, pnpm run ci:tracked, pnpm run verify:workspace, pnpm run test, pnpm test, etc.
+if ! echo "$COMMAND" | grep -qE 'pnpm\s+(run\s+(ci(:tracked)?|verify:workspace(:tracked)?|test)|test|--filter\s+\S+\s+test)'; then
     exit 0
 fi
 
@@ -29,40 +30,13 @@ fi
 # BLOCK: CI commands piped to grep/tail/head/awk/sed (without tee)
 if echo "$COMMAND" | grep -qE '\|\s*(grep|tail|head|awk|sed)'; then
     cat >&2 << 'EOF'
-╔══════════════════════════════════════════════════════════════════════════════╗
-║  ❌ CI OUTPUT CAPTURE VIOLATION                                              ║
-╠══════════════════════════════════════════════════════════════════════════════╣
-║                                                                              ║
-║  WHAT'S WRONG:                                                               ║
-║  You are piping CI/test output to grep/tail/head without capturing first.    ║
-║  This loses the full output and makes debugging impossible.                  ║
-║                                                                              ║
-║  CORRECT APPROACH - Capture with tee first:                                  ║
-║                                                                              ║
-║  For CI:                                                                     ║
-║    BRANCH=$(git branch --show-current | sed 's/\//-/g')                      ║
-║    pnpm run ci:tracked 2>&1 | tee /tmp/ci-output-${BRANCH}-$(date +%Y%m%d-%H%M%S).txt
-║                                                                              ║
-║  For tests:                                                                  ║
-║    pnpm test 2>&1 | tee /tmp/ci-output-test-$(date +%Y%m%d-%H%M%S).txt       ║
-║                                                                              ║
-║  THEN analyze the saved file using proper tools:                             ║
-║                                                                              ║
-║  PREFERRED TOOLS (in order):                                                 ║
-║    1. bat /tmp/ci-output-*.txt           # Syntax highlighting, paging       ║
-║    2. rg "error|Error|FAIL" /tmp/ci-*    # Ripgrep - fast, smart search      ║
-║    3. jq (for JSON files like coverage-summary.json)                         ║
-║    4. grep (fallback only if above unavailable)                              ║
-║                                                                              ║
-║  EXAMPLE - Find errors with ripgrep:                                         ║
-║    rg -i "error|fail" /tmp/ci-output-*.txt --context 3                       ║
-║                                                                              ║
-║  EXAMPLE - View with syntax highlighting:                                    ║
-║    bat /tmp/ci-output-*.txt --paging=never | head -100                       ║
-║                                                                              ║
-║  REFERENCE: .claude/reference/ci-output-analysis.md                          ║
-║                                                                              ║
-╚══════════════════════════════════════════════════════════════════════════════╝
+BLOCKED: Piping test output to grep/tail loses context and wastes ~80s per run.
+
+INSTEAD: Capture first, then analyze:
+  pnpm run test 2>&1 | tee /tmp/ci-output-$(date +%H%M%S).txt
+  rg "error|FAIL" /tmp/ci-output-*.txt -C3
+
+Or read the test file directly to find the test name you need.
 EOF
     log_blocked "$COMMAND"
     exit 2

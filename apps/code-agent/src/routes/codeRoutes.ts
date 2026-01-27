@@ -1653,5 +1653,92 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
     }
   );
 
+  // GET /code/workers/status - Get worker health status (public, Auth0 JWT)
+  fastify.get(
+    '/code/workers/status',
+    {
+      onRequest: jwtValidator,
+      schema: {
+        operationId: 'getWorkersStatus',
+        summary: 'Get worker health status',
+        description: 'Public endpoint for checking Mac and VM worker health. Requires Auth0 JWT.',
+        tags: ['public'],
+        response: {
+          200: {
+            description: 'Worker status',
+            type: 'object',
+            properties: {
+              mac: {
+                type: 'object',
+                properties: {
+                  healthy: { type: 'boolean' },
+                  capacity: { type: 'number' },
+                  checkedAt: { type: 'string', format: 'date-time' },
+                },
+                required: ['healthy', 'capacity', 'checkedAt'],
+              },
+              vm: {
+                type: 'object',
+                properties: {
+                  healthy: { type: 'boolean' },
+                  capacity: { type: 'number' },
+                  checkedAt: { type: 'string', format: 'date-time' },
+                },
+                required: ['healthy', 'capacity', 'checkedAt'],
+              },
+            },
+            required: ['mac', 'vm'],
+          },
+          401: {
+            description: 'Unauthorized',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: {
+                type: 'object',
+                properties: {
+                  code: { type: 'string', enum: ['UNAUTHORIZED'] },
+                  message: { type: 'string' },
+                },
+                required: ['code', 'message'],
+              },
+            },
+            required: ['success', 'error'],
+          },
+        },
+      },
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      logIncomingRequest(request, {
+        message: 'Received request to GET /code/workers/status',
+      });
+
+      const { workerDiscovery } = getServices();
+
+      const [macResult, vmResult] = await Promise.all([
+        workerDiscovery.checkHealth('mac'),
+        workerDiscovery.checkHealth('vm'),
+      ]);
+
+      const macStatus = macResult.ok
+        ? {
+            healthy: macResult.value.healthy,
+            capacity: macResult.value.capacity,
+            checkedAt: macResult.value.checkedAt.toISOString(),
+          }
+        : { healthy: false, capacity: 0, checkedAt: new Date().toISOString() };
+
+      const vmStatus = vmResult.ok
+        ? {
+            healthy: vmResult.value.healthy,
+            capacity: vmResult.value.capacity,
+            checkedAt: vmResult.value.checkedAt.toISOString(),
+          }
+        : { healthy: false, capacity: 0, checkedAt: new Date().toISOString() };
+
+      return reply.status(200).send({ mac: macStatus, vm: vmStatus });
+    }
+  );
+
   done();
 };

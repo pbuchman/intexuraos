@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 type CardVariant = 'default' | 'success' | 'warning' | 'error';
 
 interface CardProps {
-  title?: string;
+  title?: ReactNode;
   variant?: CardVariant;
   children: ReactNode;
   className?: string;
@@ -24,7 +24,7 @@ export function Card({
 }: CardProps): React.JSX.Element {
   return (
     <div className={`rounded-xl border p-6 shadow-sm ${variantStyles[variant]} ${className}`}>
-      {title !== undefined && title !== '' ? (
+      {title !== null && title !== undefined ? (
         <h3 className="mb-4 text-lg font-semibold text-slate-900">{title}</h3>
       ) : null}
       {children}

@@ -176,6 +176,7 @@ export interface AppConfig {
   bookmarksAgentUrl: string;
   calendarAgentUrl: string;
   linearAgentUrl: string;
+  codeAgentUrl: string;
   appSettingsServiceUrl: string;
   firebaseProjectId: string;
   firebaseApiKey: string;
@@ -1017,4 +1018,122 @@ export interface CalendarPreview {
   error?: string;
   reasoning?: string;
   generatedAt: string;
+}
+
+/**
+ * Worker type determines which model Claude uses.
+ */
+export type CodeTaskWorkerType = 'opus' | 'auto' | 'glm';
+
+/**
+ * Worker location for routing.
+ */
+export type CodeTaskWorkerLocation = 'mac' | 'vm';
+
+/**
+ * Task status lifecycle.
+ */
+export type CodeTaskStatus =
+  | 'dispatched'
+  | 'running'
+  | 'completed'
+  | 'failed'
+  | 'interrupted'
+  | 'cancelled';
+
+/**
+ * Task result on successful completion.
+ */
+export interface CodeTaskResult {
+  prUrl?: string;
+  branch: string;
+  commits: number;
+  summary: string;
+  ciFailed?: boolean;
+  partialWork?: boolean;
+  rebaseResult?: 'success' | 'conflict' | 'skipped';
+}
+
+/**
+ * Task error on failure.
+ */
+export interface CodeTaskError {
+  code: string;
+  message: string;
+  remediation?: {
+    retryAfter?: number;
+    manualSteps?: string;
+    supportLink?: string;
+  };
+}
+
+/**
+ * Code task from code-agent
+ */
+export interface CodeTask {
+  id: string;
+  userId: string;
+  prompt: string;
+  sanitizedPrompt: string;
+  systemPromptHash: string;
+  workerType: CodeTaskWorkerType;
+  workerLocation: CodeTaskWorkerLocation;
+  repository: string;
+  baseBranch: string;
+  traceId: string;
+  status: CodeTaskStatus;
+  dedupKey: string;
+  callbackReceived: boolean;
+  createdAt: string;
+  updatedAt: string;
+  actionId?: string;
+  approvalEventId?: string;
+  linearIssueId?: string;
+  linearIssueTitle?: string;
+  linearFallback?: boolean;
+  result?: CodeTaskResult;
+  error?: CodeTaskError;
+}
+
+/**
+ * Request to submit a code task
+ */
+export interface SubmitCodeTaskRequest {
+  prompt: string;
+  workerType?: CodeTaskWorkerType;
+  linearIssueId?: string;
+  linearIssueTitle?: string;
+}
+
+/**
+ * Response from submitting a code task
+ */
+export interface SubmitCodeTaskResponse {
+  status: 'submitted';
+  codeTaskId: string;
+}
+
+/**
+ * Response from listing code tasks
+ */
+export interface ListCodeTasksResponse {
+  tasks: CodeTask[];
+  nextCursor?: string;
+}
+
+/**
+ * Worker health status for a single worker
+ */
+export interface WorkerStatus {
+  healthy: boolean;
+  capacity: number;
+  checkedAt: string;
+}
+
+/**
+ * Response from worker status endpoint
+ */
+export interface WorkersStatusResponse {
+  mac: WorkerStatus;
+  vm: WorkerStatus;
 }

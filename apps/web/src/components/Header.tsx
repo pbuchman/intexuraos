@@ -2,15 +2,19 @@ import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth, useSyncQueue } from '@/context';
 import { usePWA } from '@/context/pwa-context';
-import { ChevronDown, LogOut, User, RefreshCw, RotateCcw } from 'lucide-react';
+import { useWorkersStatus } from '@/hooks';
+import { ChevronDown, LogOut, User, RefreshCw, RotateCcw, Server } from 'lucide-react';
 
 export function Header(): React.JSX.Element {
-  const { user, logout } = useAuth();
+  const { user, logout, isAuthenticated } = useAuth();
   const { pendingCount, isSyncing } = useSyncQueue();
   const { isInstalled } = usePWA();
+  const { status: workersStatus } = useWorkersStatus();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isWorkersOpen, setIsWorkersOpen] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const workersRef = useRef<HTMLDivElement>(null);
 
   const handleForceRefresh = (): void => {
     setIsRefreshing(true);
@@ -42,6 +46,9 @@ export function Header(): React.JSX.Element {
     function handleClickOutside(event: MouseEvent): void {
       if (menuRef.current !== null && !menuRef.current.contains(event.target as Node)) {
         setIsMenuOpen(false);
+      }
+      if (workersRef.current !== null && !workersRef.current.contains(event.target as Node)) {
+        setIsWorkersOpen(false);
       }
     }
 
@@ -78,6 +85,82 @@ export function Header(): React.JSX.Element {
       </div>
 
       <div className="flex items-center gap-2 md:gap-4">
+        {/* Worker Status Indicator */}
+        {isAuthenticated && workersStatus !== null && (
+          <div className="relative" ref={workersRef}>
+            <button
+              onClick={(): void => {
+                setIsWorkersOpen(!isWorkersOpen);
+              }}
+              className="flex items-center gap-1 rounded-lg p-2 text-sm transition-colors hover:bg-slate-100"
+              title="Worker status"
+            >
+              <Server className="h-4 w-4 text-slate-500" />
+              <span
+                className={`h-2 w-2 rounded-full ${
+                  workersStatus.mac.healthy || workersStatus.vm.healthy
+                    ? 'bg-green-500'
+                    : 'bg-red-500'
+                }`}
+              />
+            </button>
+
+            {isWorkersOpen ? (
+              <div className="absolute right-0 top-full mt-1 w-64 rounded-lg border border-slate-200 bg-white py-2 shadow-lg">
+                <div className="px-4 py-1 text-xs font-medium uppercase text-slate-400">
+                  Code Workers
+                </div>
+
+                {/* Mac Worker */}
+                <div className="flex items-center justify-between px-4 py-2 text-sm">
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`h-2 w-2 rounded-full ${
+                        workersStatus.mac.healthy ? 'bg-green-500' : 'bg-red-500'
+                      }`}
+                    />
+                    <span className="font-medium text-slate-700">Mac</span>
+                  </div>
+                  <div className="text-slate-500">
+                    {workersStatus.mac.healthy
+                      ? `${String(workersStatus.mac.capacity)} slots`
+                      : 'Offline'}
+                  </div>
+                </div>
+
+                {/* VM Worker */}
+                <div className="flex items-center justify-between px-4 py-2 text-sm">
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`h-2 w-2 rounded-full ${
+                        workersStatus.vm.healthy ? 'bg-green-500' : 'bg-red-500'
+                      }`}
+                    />
+                    <span className="font-medium text-slate-700">VM</span>
+                  </div>
+                  <div className="text-slate-500">
+                    {workersStatus.vm.healthy
+                      ? `${String(workersStatus.vm.capacity)} slots`
+                      : 'Offline'}
+                  </div>
+                </div>
+
+                <div className="mt-1 border-t border-slate-100 px-4 py-2">
+                  <Link
+                    to="/code-tasks"
+                    onClick={(): void => {
+                      setIsWorkersOpen(false);
+                    }}
+                    className="block text-sm text-blue-600 hover:underline"
+                  >
+                    View Code Tasks →
+                  </Link>
+                </div>
+              </div>
+            ) : null}
+          </div>
+        )}
+
         {pendingCount > 0 && (
           <Link
             to="/settings/share-history"

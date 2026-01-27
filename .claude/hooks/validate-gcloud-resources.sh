@@ -23,28 +23,10 @@ check_pattern() {
 
     if echo "$COMMAND" | grep -qE "$pattern"; then
         cat >&2 << EOF
-╔══════════════════════════════════════════════════════════════════════════════╗
-║  ❌ TERRAFORM-ONLY RESOURCE CREATION                                         ║
-╠══════════════════════════════════════════════════════════════════════════════╣
-║                                                                              ║
-║  WHAT'S WRONG:                                                               ║
-║  Direct GCloud CLI resource creation is FORBIDDEN.                           ║
-║  CLI-created resources are invisible to infrastructure-as-code.              ║
-║                                                                              ║
-║  DETECTED COMMAND PATTERN: $pattern
-║  TERRAFORM RESOURCE TYPE:  $tf_resource
-║                                                                              ║
-║  CORRECT APPROACH:                                                           ║
-║  1. Add resource to terraform/environments/dev/main.tf                       ║
-║  2. Run: terraform plan (with env var clearing)                              ║
-║  3. Review plan output                                                       ║
-║  4. Run: terraform apply                                                     ║
-║  5. Commit terraform changes to PR                                           ║
-║                                                                              ║
-║  REFERENCE: .claude/reference/infrastructure.md                              ║
-║  TERRAFORM DIR: terraform/environments/dev/                                  ║
-║                                                                              ║
-╚══════════════════════════════════════════════════════════════════════════════╝
+BLOCKED: Direct gcloud resource creation forbidden. Use Terraform.
+
+Detected: $pattern
+Use instead: $tf_resource in terraform/environments/dev/main.tf
 EOF
         log_blocked "$COMMAND"
         exit 2

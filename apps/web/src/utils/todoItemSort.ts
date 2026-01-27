@@ -4,14 +4,14 @@ type PriorityKey = TodoPriority | 'null';
 
 /**
  * Priority order for sorting (highest to lowest).
- * Items with no priority (null) sort last within their completion group.
+ * Items with no priority (null) sort between medium and low.
  */
 const PRIORITY_ORDER: Readonly<Record<PriorityKey, number>> = {
   urgent: 4,
   high: 3,
   medium: 2,
+  null: 1.5,
   low: 1,
-  null: 0,
 } as const;
 
 /**
@@ -26,7 +26,7 @@ function getPriorityScore(item: TodoItem): number {
  *
  * Sort key (in order of precedence):
  * 1. Pending first - uncompleted items above completed
- * 2. Priority descending - urgent > high > medium > low > none
+ * 2. Priority descending - urgent > high > medium > none > low
  * 3. Original position - maintain insertion order within same priority
  */
 function compareTodoItems(a: TodoItem, b: TodoItem): number {
@@ -53,7 +53,7 @@ function compareTodoItems(a: TodoItem, b: TodoItem): number {
 /**
  * Sort todo items with the proper sort key:
  * 1. Pending first (uncompleted above completed)
- * 2. Priority descending (urgent > high > medium > low > none)
+ * 2. Priority descending (urgent > high > medium > none > low)
  * 3. Original position within same priority
  *
  * @param items - Todo items to sort
