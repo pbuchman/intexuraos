@@ -36,5 +36,7 @@ export async function up(context) {
 }
 
 export async function down(context) {
-  console.log('  Removing additional code_tasks indexes requires manual deletion via Firebase console');
+  console.log(
+    '  Removing additional code_tasks indexes requires manual deletion via Firebase console'
+  );
 }

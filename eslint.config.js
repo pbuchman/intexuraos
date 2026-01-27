@@ -949,5 +949,18 @@ export default tseslint.config(
       '@typescript-eslint/strict-boolean-expressions': 'off',
       '@typescript-eslint/require-await': 'off',
     },
+  },
+  // Cloud Function workers: GCP SDK types are complex and cause false positives
+  // These workers use @google-cloud/compute, @google-cloud/functions-framework, firebase-admin
+  {
+    files: ['workers/vm-lifecycle/src/**/*.ts', 'workers/log-cleanup/src/**/*.ts'],
+    rules: {
+      '@typescript-eslint/no-unsafe-assignment': 'off',
+      '@typescript-eslint/no-unsafe-call': 'off',
+      '@typescript-eslint/no-unsafe-member-access': 'off',
+      '@typescript-eslint/no-unsafe-return': 'off',
+      '@typescript-eslint/no-unsafe-argument': 'off',
+      '@typescript-eslint/strict-boolean-expressions': 'off',
+    },
   }
 );
