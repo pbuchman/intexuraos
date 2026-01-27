@@ -33,6 +33,9 @@ export interface UpdateTaskInput {
   dispatchedAt?: Date;
   completedAt?: Date;
   logChunksDropped?: number;
+  // Heartbeat fields for zombie detection (INT-372)
+  updatedAt?: Date;
+  lastHeartbeat?: Date;
 }
 
 export interface ListTasksInput {

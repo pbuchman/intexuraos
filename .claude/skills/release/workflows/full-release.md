@@ -417,7 +417,63 @@ Wait for each to complete before starting the next.
 
 ## Phase 6: Finalize
 
-### 6.1 CI Gate (MANDATORY)
+### 6.1 Update All Package Versions (MANDATORY)
+
+**CRITICAL:** All package.json files must have the same version. This ensures the monorepo stays in sync.
+
+```bash
+NEW_VERSION="X.Y.Z"  # From Phase 1 calculation
+
+# Update root package.json
+jq ".version = \"$NEW_VERSION\"" package.json > tmp.json && mv tmp.json package.json
+
+# Update all apps (excluding dist directories)
+for app in apps/*/package.json; do
+  if [[ ! "$app" == *"/dist/"* ]]; then
+    jq ".version = \"$NEW_VERSION\"" "$app" > tmp.json && mv tmp.json "$app"
+  fi
+done
+
+# Update all packages (excluding dist directories)
+for pkg in packages/*/package.json; do
+  if [[ ! "$pkg" == *"/dist/"* ]]; then
+    jq ".version = \"$NEW_VERSION\"" "$pkg" > tmp.json && mv tmp.json "$pkg"
+  fi
+done
+
+# Update all workers (excluding dist directories)
+for worker in workers/*/package.json; do
+  if [[ ! "$worker" == *"/dist/"* ]]; then
+    jq ".version = \"$NEW_VERSION\"" "$worker" > tmp.json && mv tmp.json "$worker"
+  fi
+done
+
+# Verify all versions are updated
+echo "Verifying all package.json versions..."
+MISMATCH=0
+for f in package.json apps/*/package.json packages/*/package.json workers/*/package.json; do
+  if [[ ! "$f" == *"/dist/"* ]]; then
+    version=$(jq -r '.version' "$f")
+    if [[ "$version" != "$NEW_VERSION" ]]; then
+      echo "MISMATCH: $f has version $version"
+      MISMATCH=1
+    fi
+  fi
+done
+if [[ $MISMATCH -eq 1 ]]; then
+  echo "ERROR: Version mismatch detected. Fix before proceeding."
+  exit 1
+fi
+echo "All package.json files updated to $NEW_VERSION"
+```
+
+**Why all packages?** In a monorepo, version consistency ensures:
+
+- Clear release tracking across all services
+- Deployment scripts can rely on consistent versioning
+- No confusion about which service is at which version
+
+### 6.2 CI Gate (MANDATORY)
 
 ```bash
 pnpm run ci:tracked
@@ -430,14 +486,14 @@ pnpm run ci:tracked
 3. Re-run CI
 4. Do NOT proceed until CI passes
 
-### 6.2 Stage All Changes
+### 6.3 Stage All Changes
 
 ```bash
 git status
 git add -A
 ```
 
-### 6.3 Commit Release
+### 6.4 Commit Release
 
 ```bash
 NEW_VERSION="X.Y.Z"  # From Phase 1
@@ -445,6 +501,7 @@ NEW_VERSION="X.Y.Z"  # From Phase 1
 git commit -m "$(cat <<'EOF'
 Release vX.Y.Z
 
+- Bumped all package.json versions to X.Y.Z
 - Updated service documentation
 - Updated docs/overview.md
 - Updated README "What's New" section
@@ -455,14 +512,14 @@ EOF
 )"
 ```
 
-### 6.4 Create and Push Tag
+### 6.5 Create and Push Tag
 
 ```bash
 git tag -a "v$NEW_VERSION" -m "Release v$NEW_VERSION"
 git push origin "v$NEW_VERSION"
 ```
 
-### 6.5 Display Summary
+### 6.6 Display Summary
 
 Use template from [`templates/release-summary.md`](../templates/release-summary.md).
 

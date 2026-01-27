@@ -36,7 +36,8 @@ import type { RateLimitService } from '../domain/services/rateLimitService.js';
 import { ok } from '@intexuraos/common-core';
 import type { LinearIssueService } from '../domain/services/linearIssueService.js';
 import type { StatusMirrorService } from '../infra/services/statusMirrorServiceImpl.js';
-
+import { createProcessHeartbeatUseCase } from '../domain/usecases/processHeartbeat.js';
+import { createDetectZombieTasksUseCase } from '../domain/usecases/detectZombieTasks.js';
 describe('OpenAPI contract', () => {
   let app: Awaited<ReturnType<typeof buildServer>>;
 
@@ -72,13 +73,15 @@ describe('OpenAPI contract', () => {
       logger,
     });
 
+    const codeTaskRepo = createFirestoreCodeTaskRepository({
+      firestore: fakeFirestore,
+      logger,
+    });
+
     setServices({
       firestore: fakeFirestore,
       logger,
-      codeTaskRepo: createFirestoreCodeTaskRepository({
-        firestore: fakeFirestore,
-        logger,
-      }),
+      codeTaskRepo,
       workerDiscovery: createWorkerDiscoveryService({ logger }),
       taskDispatcher: createTaskDispatcherService({
         logger,
@@ -102,6 +105,14 @@ describe('OpenAPI contract', () => {
         actionsAgentClient,
         logger,
       }),
+      processHeartbeat: createProcessHeartbeatUseCase({
+        codeTaskRepository: codeTaskRepo,
+        logger,
+      }),
+      detectZombieTasks: createDetectZombieTasksUseCase({
+        codeTaskRepository: codeTaskRepo,
+        logger,
+      }),
       linearIssueService: createLinearIssueService({
         linearAgentClient: createLinearAgentHttpClient({
           baseUrl: 'http://linear-agent:8086',
@@ -123,6 +134,8 @@ describe('OpenAPI contract', () => {
       rateLimitService: RateLimitService;
       linearIssueService: LinearIssueService;
       statusMirrorService: StatusMirrorService;
+      processHeartbeat: import('../domain/usecases/processHeartbeat.js').ProcessHeartbeatUseCase;
+      detectZombieTasks: import('../domain/usecases/detectZombieTasks.js').DetectZombieTasksUseCase;
     });
 
     app = await buildServer();

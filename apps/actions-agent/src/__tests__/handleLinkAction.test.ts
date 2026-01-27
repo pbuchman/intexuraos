@@ -178,7 +178,7 @@ describe('handleLinkAction usecase', () => {
       await fakeActionRepository.save(createAction());
 
       const fakeExecuteLinkAction = vi.fn().mockResolvedValue(
-        ok({ status: 'completed' as const, resource_url: '/#/bookmarks/bookmark-123' })
+        ok({ status: 'completed' as const, resourceUrl: '/#/bookmarks/bookmark-123' })
       );
 
       const usecase = registerActionHandler(createHandleLinkActionUseCase, {
@@ -253,7 +253,7 @@ describe('handleLinkAction usecase', () => {
       await fakeActionRepository.save(createAction());
 
       const fakeExecuteLinkAction = vi.fn().mockResolvedValue(
-        ok({ status: 'completed' as const, resource_url: '/#/bookmarks/bookmark-123' })
+        ok({ status: 'completed' as const, resourceUrl: '/#/bookmarks/bookmark-123' })
       );
 
       const usecase = registerActionHandler(createHandleLinkActionUseCase, {

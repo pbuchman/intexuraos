@@ -788,6 +788,11 @@ export function InboxPage(): React.JSX.Element {
                       void fetchData(true);
                     }
                   }}
+                  onActionUpdated={(updatedAction: Action): void => {
+                    setActions((prev) =>
+                      prev.map((a) => (a.id === updatedAction.id ? updatedAction : a))
+                    );
+                  }}
                   onDismiss={handleDismissAction}
                 />
               ))

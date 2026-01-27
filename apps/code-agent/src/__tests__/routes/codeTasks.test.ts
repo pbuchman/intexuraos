@@ -39,6 +39,8 @@ import { ok } from '@intexuraos/common-core';
 import type { LinearIssueService } from '../../domain/services/linearIssueService.js';
 import { createStatusMirrorService } from '../../infra/services/statusMirrorServiceImpl.js';
 import type { StatusMirrorService } from '../../infra/services/statusMirrorServiceImpl.js';
+import { createProcessHeartbeatUseCase } from '../../domain/usecases/processHeartbeat.js';
+import { createDetectZombieTasksUseCase } from '../../domain/usecases/detectZombieTasks.js';
 
 describe('GET /code/tasks endpoints', () => {
   let app: Awaited<ReturnType<typeof buildServer>>;
@@ -138,6 +140,14 @@ describe('GET /code/tasks endpoints', () => {
         actionsAgentClient,
         logger,
       }),
+      processHeartbeat: createProcessHeartbeatUseCase({
+        codeTaskRepository: codeTaskRepo,
+        logger,
+      }),
+      detectZombieTasks: createDetectZombieTasksUseCase({
+        codeTaskRepository: codeTaskRepo,
+        logger,
+      }),
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -150,6 +160,8 @@ describe('GET /code/tasks endpoints', () => {
       rateLimitService: RateLimitService;
       linearIssueService: LinearIssueService;
       statusMirrorService: StatusMirrorService;
+      processHeartbeat: import('../../domain/usecases/processHeartbeat.js').ProcessHeartbeatUseCase;
+      detectZombieTasks: import('../../domain/usecases/detectZombieTasks.js').DetectZombieTasksUseCase;
     });
 
     app = await buildServer();

@@ -191,7 +191,7 @@ describe('handleNoteAction usecase', () => {
       await fakeActionRepository.save(createAction());
 
       const fakeExecuteNoteAction = vi.fn().mockResolvedValue(
-        ok({ status: 'completed' as const, resource_url: '/#/notes/note-123' })
+        ok({ status: 'completed' as const, resourceUrl: '/#/notes/note-123' })
       );
 
       const usecase = registerActionHandler(createHandleNoteActionUseCase, {

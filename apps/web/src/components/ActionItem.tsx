@@ -38,6 +38,7 @@ interface ActionItemProps {
   action: Action;
   onClick: () => void;
   onActionSuccess: (button: ResolvedActionButton) => void;
+  onActionUpdated?: (action: Action) => void;
   onDismiss: (actionId: string) => Promise<void>;
   isDismissing?: boolean;
 }
@@ -117,6 +118,7 @@ export function ActionItem({
   action,
   onClick,
   onActionSuccess,
+  onActionUpdated,
   onDismiss,
   isDismissing = false,
 }: ActionItemProps): React.JSX.Element {
@@ -150,16 +152,24 @@ export function ActionItem({
   ): void => {
     closeDropdown?.();
     if (result.status === 'completed') {
+      const normalizedUrl =
+        result.resourceUrl !== undefined ? normalizeResourceUrl(result.resourceUrl) : undefined;
       setExecutionState({
         type: 'success',
         message: button.onSuccess?.message ?? 'Action completed!',
-        ...(result.resourceUrl !== undefined && {
-          resourceUrl: normalizeResourceUrl(result.resourceUrl),
-        }),
+        ...(normalizedUrl !== undefined && { resourceUrl: normalizedUrl }),
         ...(button.onSuccess?.linkLabel !== undefined && {
           linkLabel: button.onSuccess.linkLabel,
         }),
       });
+      if (normalizedUrl !== undefined) {
+        onActionUpdated?.({
+          ...action,
+          status: 'completed',
+          payload: { ...action.payload, resource_url: normalizedUrl },
+          updatedAt: new Date().toISOString(),
+        });
+      }
     } else {
       setExecutionState({
         type: 'error',

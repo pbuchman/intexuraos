@@ -24,6 +24,8 @@ import { createRateLimitService } from './domain/services/rateLimitService.js';
 import { createLinearAgentHttpClient } from './infra/http/linearAgentHttpClient.js';
 import { createLinearIssueService, type LinearIssueService } from './domain/services/linearIssueService.js';
 import { createStatusMirrorService, type StatusMirrorService } from './infra/services/statusMirrorServiceImpl.js';
+import { createProcessHeartbeatUseCase, type ProcessHeartbeatUseCase } from './domain/usecases/processHeartbeat.js';
+import { createDetectZombieTasksUseCase, type DetectZombieTasksUseCase } from './domain/usecases/detectZombieTasks.js';
 
 export interface ServiceContainer {
   firestore: Firestore;
@@ -37,6 +39,8 @@ export interface ServiceContainer {
   rateLimitService: RateLimitService;
   linearIssueService: LinearIssueService;
   statusMirrorService: StatusMirrorService;
+  processHeartbeat: ProcessHeartbeatUseCase;
+  detectZombieTasks: DetectZombieTasksUseCase;
 }
 
 // Configuration required to initialize services
@@ -110,6 +114,14 @@ export function initServices(config: ServiceConfig): void {
       logger,
     }),
     linearIssueService,
+    processHeartbeat: createProcessHeartbeatUseCase({
+      codeTaskRepository: createFirestoreCodeTaskRepository({ firestore, logger }),
+      logger,
+    }),
+    detectZombieTasks: createDetectZombieTasksUseCase({
+      codeTaskRepository: createFirestoreCodeTaskRepository({ firestore, logger }),
+      logger,
+    }),
   };
 }
 

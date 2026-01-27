@@ -1740,5 +1740,158 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
     }
   );
 
+  // POST /internal/code/heartbeat - Process heartbeats from orchestrator (INT-372)
+  fastify.post(
+    '/internal/code/heartbeat',
+    {
+      schema: {
+        description: 'Process heartbeats from orchestrator to keep tasks fresh for zombie detection',
+        tags: ['internal'],
+        body: {
+          type: 'object',
+          properties: {
+            taskIds: {
+              type: 'array',
+              items: { type: 'string' },
+              minItems: 1,
+              maxItems: 100,
+            },
+          },
+          required: ['taskIds'],
+        },
+        response: {
+          200: {
+            description: 'Heartbeat processed successfully',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [true] },
+              data: {
+                type: 'object',
+                properties: {
+                  processed: { type: 'number' },
+                  notFound: { type: 'array', items: { type: 'string' } },
+                },
+                required: ['processed', 'notFound'],
+              },
+            },
+            required: ['success', 'data'],
+          },
+        },
+      },
+    },
+    async (
+      request: FastifyRequest<{
+        Body: { taskIds: string[] };
+      }>,
+      reply: FastifyReply
+    ) => {
+      logIncomingRequest(request, {
+        message: 'Received request to POST /internal/code/heartbeat',
+      });
+
+      // Validate internal auth
+      const authResult = validateInternalAuth(request);
+      if (!authResult.valid) {
+        request.log.warn({ reason: authResult.reason }, 'Internal auth failed for heartbeat');
+        reply.status(401);
+        return { success: false, error: { code: 'UNAUTHORIZED', message: 'Unauthorized' } };
+      }
+
+      const { processHeartbeat } = getServices();
+      const { taskIds } = request.body;
+
+      request.log.info({ taskCount: taskIds.length }, 'Processing heartbeat for tasks');
+
+      const result = await processHeartbeat(taskIds);
+
+      if (!result.ok) {
+        request.log.error({ error: result.error }, 'Heartbeat processing failed');
+        reply.status(500);
+        return {
+          success: false,
+          error: { code: 'INTERNAL_ERROR', message: 'Failed to process heartbeat' },
+        };
+      }
+
+      return reply.status(200).send({ success: true, data: result.value });
+    }
+  );
+
+  // POST /internal/code/detect-zombies - Cron endpoint for zombie detection (INT-371)
+  fastify.post(
+    '/internal/code/detect-zombies',
+    {
+      schema: {
+        description: 'Detect and interrupt zombie tasks (cron endpoint)',
+        tags: ['internal'],
+        response: {
+          200: {
+            description: 'Zombie detection completed',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [true] },
+              data: {
+                type: 'object',
+                properties: {
+                  detected: { type: 'number' },
+                  interrupted: { type: 'number' },
+                  errors: { type: 'array', items: { type: 'string' } },
+                },
+                required: ['detected', 'interrupted', 'errors'],
+              },
+            },
+            required: ['success', 'data'],
+          },
+          401: {
+            description: 'Unauthorized',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: {
+                type: 'object',
+                properties: {
+                  code: { type: 'string', enum: ['UNAUTHORIZED'] },
+                  message: { type: 'string' },
+                },
+                required: ['code', 'message'],
+              },
+            },
+            required: ['success', 'error'],
+          },
+        },
+      },
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      logIncomingRequest(request, {
+        message: 'Received request to POST /internal/code/detect-zombies',
+      });
+
+      // Validate internal auth
+      const authResult = validateInternalAuth(request);
+      if (!authResult.valid) {
+        request.log.warn({ reason: authResult.reason }, 'Internal auth failed for zombie detection');
+        reply.status(401);
+        return { success: false, error: { code: 'UNAUTHORIZED', message: 'Unauthorized' } };
+      }
+
+      const { detectZombieTasks } = getServices();
+
+      request.log.info('Starting zombie task detection');
+
+      const result = await detectZombieTasks();
+
+      if (!result.ok) {
+        request.log.error({ error: result.error }, 'Zombie detection failed');
+        reply.status(500);
+        return {
+          success: false,
+          error: { code: 'INTERNAL_ERROR', message: 'Failed to detect zombie tasks' },
+        };
+      }
+
+      return reply.status(200).send({ success: true, data: result.value });
+    }
+  );
+
   done();
 };
