@@ -26,3 +26,6 @@ export { ShareTargetPage } from './ShareTargetPage.js';
 export { TodosListPage } from './TodosListPage.js';
 export { LlmPricingPage } from './LlmPricingPage.js';
 export { LlmCostsPage } from './LlmCostsPage.js';
+export { CodeTasksPage } from './CodeTasksPage.js';
+export { CodeTaskDetailPage } from './CodeTaskDetailPage.js';
+export { CodeTaskNewPage } from './CodeTaskNewPage.js';

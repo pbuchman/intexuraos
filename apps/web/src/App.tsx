@@ -18,6 +18,9 @@ import {
   ApiKeysSettingsPage,
   BookmarksListPage,
   CalendarPage,
+  CodeTaskDetailPage,
+  CodeTaskNewPage,
+  CodeTasksPage,
   CompositeFeedFormPage,
   CompositeFeedsListPage,
   DataInsightsPage,
@@ -196,6 +199,31 @@ function AppRoutes(): React.JSX.Element {
         element={
           <ProtectedRoute>
             <ShareHistoryPage />
+          </ProtectedRoute>
+        }
+      />
+      {/* Code Tasks routes */}
+      <Route
+        path="/code-tasks"
+        element={
+          <ProtectedRoute>
+            <CodeTasksPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/code-tasks/new"
+        element={
+          <ProtectedRoute>
+            <CodeTaskNewPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/code-tasks/:id"
+        element={
+          <ProtectedRoute>
+            <CodeTaskDetailPage />
           </ProtectedRoute>
         }
       />
