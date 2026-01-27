@@ -13,6 +13,7 @@ import {
   useState,
   type ReactNode,
 } from 'react';
+import * as Sentry from '@sentry/react';
 import { useAuth } from './AuthContext.js';
 import { createCommand } from '../services/commandsApi.js';
 import {
@@ -20,9 +21,7 @@ import {
   calculateNextRetryDelay,
   getHistory,
   getQueue,
-  isClientError,
   isRetryDue,
-  markAsFailed,
   markAsSynced,
   updateHistoryStatus,
   updateQueueItem,
@@ -35,6 +34,8 @@ interface SyncQueueContextValue {
   addShare: (content: string) => void;
   refreshHistory: () => void;
   isSyncing: boolean;
+  isOnline: boolean;
+  authFailed: boolean;
 }
 
 const SyncQueueContext = createContext<SyncQueueContextValue | null>(null);
@@ -43,11 +44,25 @@ interface SyncQueueProviderProps {
   children: ReactNode;
 }
 
+function getStatusCode(error: unknown): number | null {
+  if (
+    error !== null &&
+    typeof error === 'object' &&
+    'status' in error &&
+    typeof (error as { status: unknown }).status === 'number'
+  ) {
+    return (error as { status: number }).status;
+  }
+  return null;
+}
+
 export function SyncQueueProvider({ children }: SyncQueueProviderProps): React.JSX.Element {
   const { isAuthenticated, getAccessToken } = useAuth();
   const [pendingCount, setPendingCount] = useState(0);
   const [history, setHistory] = useState<ShareHistoryItem[]>([]);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [authFailed, setAuthFailed] = useState(false);
   const syncIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const isSyncingRef = useRef(false);
 
@@ -57,7 +72,7 @@ export function SyncQueueProvider({ children }: SyncQueueProviderProps): React.J
   }, []);
 
   const processQueue = useCallback(async (): Promise<void> => {
-    if (!isAuthenticated || isSyncingRef.current) return;
+    if (!isAuthenticated || isSyncingRef.current || !navigator.onLine || authFailed) return;
 
     const queue = getQueue();
     if (queue.length === 0) return;
@@ -86,18 +101,33 @@ export function SyncQueueProvider({ children }: SyncQueueProviderProps): React.J
           refreshHistory();
         } catch (err) {
           const errorMessage = err instanceof Error ? err.message : 'Sync failed';
+          const statusCode = getStatusCode(err);
 
-          if (isClientError(err)) {
-            markAsFailed(item.id, errorMessage);
-          } else {
-            const nextRetryDelay = calculateNextRetryDelay(item.retryCount);
-            updateQueueItem(item.id, {
-              retryCount: item.retryCount + 1,
-              nextRetryAt: new Date(Date.now() + nextRetryDelay).toISOString(),
-              lastError: errorMessage,
-            });
+          // 401: Stop processing, wait for re-auth
+          if (statusCode === 401) {
+            setAuthFailed(true);
             updateHistoryStatus(item.id, 'pending');
+            refreshHistory();
+            return; // Stop processing entire queue
           }
+
+          // All other errors: Report to Sentry, retry with backoff
+          Sentry.captureException(err, {
+            tags: { feature: 'share-sync' },
+            extra: {
+              itemId: item.id,
+              retryCount: item.retryCount,
+              contentPreview: item.content.slice(0, 50),
+            },
+          });
+
+          const nextRetryDelay = calculateNextRetryDelay(item.retryCount);
+          updateQueueItem(item.id, {
+            retryCount: item.retryCount + 1,
+            nextRetryAt: new Date(Date.now() + nextRetryDelay).toISOString(),
+            lastError: errorMessage,
+          });
+          updateHistoryStatus(item.id, 'pending');
           refreshHistory();
         }
       }
@@ -107,7 +137,7 @@ export function SyncQueueProvider({ children }: SyncQueueProviderProps): React.J
       isSyncingRef.current = false;
       setIsSyncing(false);
     }
-  }, [isAuthenticated, getAccessToken, refreshHistory]);
+  }, [isAuthenticated, getAccessToken, refreshHistory, authFailed]);
 
   const addShare = useCallback(
     (content: string): void => {
@@ -123,6 +153,29 @@ export function SyncQueueProvider({ children }: SyncQueueProviderProps): React.J
   }, [refreshHistory]);
 
   useEffect(() => {
+    const handleOnline = (): void => {
+      setIsOnline(true);
+    };
+    const handleOffline = (): void => {
+      setIsOnline(false);
+    };
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return (): void => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (isAuthenticated && authFailed) {
+      setAuthFailed(false);
+    }
+  }, [isAuthenticated, authFailed]);
+
+  useEffect(() => {
     if (!isAuthenticated) return;
 
     void processQueue();
@@ -131,17 +184,10 @@ export function SyncQueueProvider({ children }: SyncQueueProviderProps): React.J
       void processQueue();
     }, 5000);
 
-    const handleOnline = (): void => {
-      void processQueue();
-    };
-
-    window.addEventListener('online', handleOnline);
-
     return (): void => {
       if (syncIntervalRef.current !== null) {
         clearInterval(syncIntervalRef.current);
       }
-      window.removeEventListener('online', handleOnline);
     };
   }, [isAuthenticated, processQueue]);
 
@@ -152,8 +198,10 @@ export function SyncQueueProvider({ children }: SyncQueueProviderProps): React.J
       addShare,
       refreshHistory,
       isSyncing,
+      isOnline,
+      authFailed,
     }),
-    [pendingCount, history, addShare, refreshHistory, isSyncing]
+    [pendingCount, history, addShare, refreshHistory, isSyncing, isOnline, authFailed]
   );
 
   return <SyncQueueContext.Provider value={value}>{children}</SyncQueueContext.Provider>;
