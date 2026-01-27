@@ -16,6 +16,19 @@ COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // ""')
 [[ "$TOOL_NAME" != "Bash" ]] && exit 0
 [[ -z "$COMMAND" ]] && exit 0
 
+# BLOCK: Direct script execution (must use pnpm script)
+# Only match at command start (not in heredocs/strings)
+if echo "$COMMAND" | grep -qE '^node[[:space:]]+scripts/verify-workspace'; then
+    cat >&2 << 'EOF'
+BLOCKED: Use pnpm script instead of direct node execution.
+
+WRONG:  node scripts/verify-workspace-tracked.mjs <name>
+RIGHT:  pnpm run verify:workspace:tracked <name>
+EOF
+    log_blocked "$COMMAND"
+    exit 2
+fi
+
 # Only check verify:workspace commands
 if ! echo "$COMMAND" | grep -qE 'verify:workspace'; then
     exit 0
