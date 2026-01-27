@@ -23,17 +23,18 @@ Orchestrate a comprehensive 6-phase release workflow with checkpoints for user c
 3. **CI Gate**: `pnpm run ci:tracked` MUST pass before Phase 6 commits anything
 4. **Tag Push**: Phase 6 creates AND pushes the version tag to remote
 5. **Three Suggestions Only**: Phase 5 website audit produces EXACTLY 3 improvement suggestions
+6. **Monorepo Version Sync**: Phase 6 MUST update ALL package.json files (root, apps/\*, packages/\*, workers/\*) to the new version — not just the root
 
 ## Phase Overview
 
-| Phase | Name            | Interaction    | Key Actions                                   |
-| ----- | --------------- | -------------- | --------------------------------------------- |
-| 1     | Kickoff         | User Input     | Run semver analysis, detect modified services |
-| 2     | Service Docs    | Silent Batch   | Spawn service-scribe agents in parallel       |
-| 3     | High-Level Docs | **Checkpoint** | Propose docs/overview.md updates, wait        |
-| 4     | README          | **Checkpoint** | Propose "What's New" section, wait            |
-| 5     | Website         | **Checkpoint** | RecentUpdatesSection + 3 suggestions          |
-| 6     | Finalize        | Automatic      | CI check, commit, tag push, summary           |
+| Phase | Name            | Interaction    | Key Actions                                       |
+| ----- | --------------- | -------------- | ------------------------------------------------- |
+| 1     | Kickoff         | User Input     | Run semver analysis, detect modified services     |
+| 2     | Service Docs    | Silent Batch   | Spawn service-scribe agents in parallel           |
+| 3     | High-Level Docs | **Checkpoint** | Propose docs/overview.md updates, wait            |
+| 4     | README          | **Checkpoint** | Propose "What's New" section, wait                |
+| 5     | Website         | **Checkpoint** | RecentUpdatesSection + 3 suggestions              |
+| 6     | Finalize        | Automatic      | **Bump ALL versions**, CI check, commit, tag push |
 
 ## Tool Verification (Fail Fast)
 
@@ -199,12 +200,13 @@ When releasing a NEW major version (e.g., v3.0.0):
 
 ### Phase 6: Finalize
 
-1. Run `pnpm run ci:tracked` — MUST pass
-2. Stage all changes
-3. Commit with release message
-4. Create version tag
-5. Push tag to remote
-6. Display release summary
+1. **Update ALL package.json versions** — root, apps/\*, packages/\*, workers/\* (CRITICAL)
+2. Run `pnpm run ci:tracked` — MUST pass
+3. Stage all changes
+4. Commit with release message
+5. Create version tag
+6. Push tag to remote
+7. Display release summary
 
 ## Checkpoint Pattern
 

@@ -184,14 +184,25 @@ NEW_VERSION="X.Y.Z"
 # Update root package.json
 pnpm version $NEW_VERSION --no-git-tag-version
 
-# Update all apps
+# Update all apps (excluding dist directories)
 for app in apps/*/package.json; do
-  jq ".version = \"$NEW_VERSION\"" "$app" > tmp.json && mv tmp.json "$app"
+  if [[ ! "$app" == *"/dist/"* ]]; then
+    jq ".version = \"$NEW_VERSION\"" "$app" > tmp.json && mv tmp.json "$app"
+  fi
 done
 
-# Update all packages
+# Update all packages (excluding dist directories)
 for pkg in packages/*/package.json; do
-  jq ".version = \"$NEW_VERSION\"" "$pkg" > tmp.json && mv tmp.json "$pkg"
+  if [[ ! "$pkg" == *"/dist/"* ]]; then
+    jq ".version = \"$NEW_VERSION\"" "$pkg" > tmp.json && mv tmp.json "$pkg"
+  fi
+done
+
+# Update all workers (excluding dist directories)
+for worker in workers/*/package.json; do
+  if [[ ! "$worker" == *"/dist/"* ]]; then
+    jq ".version = \"$NEW_VERSION\"" "$worker" > tmp.json && mv tmp.json "$worker"
+  fi
 done
 
 # Regenerate lock file
@@ -209,7 +220,7 @@ Update the "Current Version" line at the top of CHANGELOG.md:
 ### 10. Commit Release
 
 ```bash
-git add CHANGELOG.md package.json package-lock.json apps/*/package.json packages/*/package.json
+git add CHANGELOG.md package.json package-lock.json apps/*/package.json packages/*/package.json workers/*/package.json
 git commit -m "Release vNEW_VERSION"
 ```
 
