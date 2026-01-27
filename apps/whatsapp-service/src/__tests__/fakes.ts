@@ -45,6 +45,7 @@ import type {
   WebhookProcessEvent,
   WebhookProcessingStatus,
   WhatsAppCloudApiPort,
+  WhatsAppInteractiveButton,
   WhatsAppMessage,
   WhatsAppMessageRepository,
   WhatsAppMessageSender,
@@ -708,7 +709,7 @@ export class FakeEventPublisher implements EventPublisherPort {
  * Fake message sender for testing.
  */
 export class FakeMessageSender implements WhatsAppMessageSender {
-  private sentMessages: { phoneNumber: string; message: string }[] = [];
+  private sentMessages: { phoneNumber: string; message: string; buttons?: WhatsAppInteractiveButton[] }[] = [];
   private shouldFail = false;
   private shouldThrow = false;
   private failError: WhatsAppError = { code: 'INTERNAL_ERROR', message: 'Simulated send failure' };
@@ -724,7 +725,7 @@ export class FakeMessageSender implements WhatsAppMessageSender {
     this.shouldThrow = shouldThrow;
   }
 
-  sendTextMessage(
+  async sendTextMessage(
     phoneNumber: string,
     message: string
   ): Promise<Result<TextMessageSendResult, WhatsAppError>> {
@@ -739,7 +740,23 @@ export class FakeMessageSender implements WhatsAppMessageSender {
     return Promise.resolve(ok({ wamid }));
   }
 
-  getSentMessages(): { phoneNumber: string; message: string }[] {
+  async sendInteractiveMessage(
+    phoneNumber: string,
+    message: string,
+    buttons: WhatsAppInteractiveButton[]
+  ): Promise<Result<TextMessageSendResult, WhatsAppError>> {
+    if (this.shouldThrow) {
+      throw new Error('Unexpected send error');
+    }
+    if (this.shouldFail) {
+      return Promise.resolve(err(this.failError));
+    }
+    this.sentMessages.push({ phoneNumber, message, buttons });
+    const wamid = `fake-wamid-${String(Date.now())}-${randomUUID().slice(0, 8)}`;
+    return Promise.resolve(ok({ wamid }));
+  }
+
+  getSentMessages(): { phoneNumber: string; message: string; buttons?: WhatsAppInteractiveButton[] }[] {
     return [...this.sentMessages];
   }
 

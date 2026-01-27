@@ -19,6 +19,7 @@ export interface WhatsAppSendPublisher {
     userId: string;
     message: string;
     replyToMessageId?: string;
+    buttons?: import('./types.js').WhatsAppInteractiveButton[];
     correlationId?: string;
   }): Promise<Result<void, PublishError>>;
 }
@@ -38,6 +39,7 @@ class WhatsAppSendPublisherImpl extends BasePubSubPublisher implements WhatsAppS
     userId: string;
     message: string;
     replyToMessageId?: string;
+    buttons?: import('./types.js').WhatsAppInteractiveButton[];
     correlationId?: string;
   }): Promise<Result<void, PublishError>> {
     const correlationId = params.correlationId ?? crypto.randomUUID();
@@ -52,6 +54,10 @@ class WhatsAppSendPublisherImpl extends BasePubSubPublisher implements WhatsAppS
 
     if (params.replyToMessageId !== undefined) {
       event.replyToMessageId = params.replyToMessageId;
+    }
+
+    if (params.buttons !== undefined) {
+      event.buttons = params.buttons;
     }
 
     return await this.publishToTopic(

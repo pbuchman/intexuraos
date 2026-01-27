@@ -166,6 +166,13 @@ interface WebhookValue {
       message_id?: string;
       emoji?: string;
     };
+    interactive?: {
+      type?: string;
+      list?: {
+        id?: string;
+        title?: string;
+      }[];
+    };
     context?: {
       from?: string;
       id?: string;
@@ -486,5 +493,59 @@ export function extractReactionData(payload: unknown): ReactionInfo | null {
   return {
     emoji: reaction.emoji,
     messageId: reaction.message_id,
+  };
+}
+
+/**
+ * Interactive button response info from webhook payload.
+ */
+export interface ButtonResponseInfo {
+  /** The button ID that was clicked (format: "approve:actionId:nonce" or "cancel:actionId" or "convert:actionId") */
+  buttonId: string;
+  /** The title of the button that was clicked */
+  buttonTitle: string;
+  /** The wamid of the message that contained the button */
+  replyToWamid: string;
+}
+
+/**
+ * Extract interactive button response from webhook payload.
+ *
+ * When a user clicks an interactive button, WhatsApp sends a message with type="button".
+ * The button response is in the interactive field.
+ *
+ * Path: entry[0].changes[0].value.messages[0].interactive
+ *
+ * @see https://developers.facebook.com/docs/whatsapp/cloud-api/webhooks/components#button-object
+ */
+export function extractButtonResponse(payload: unknown): ButtonResponseInfo | null {
+  const value = extractFirstValue(payload);
+  const message = value?.messages?.[0];
+  if (message === undefined) return null;
+  const interactive = message.interactive;
+  if (interactive === undefined) return null;
+
+  // Check if this is a button response
+  if (interactive.type !== 'button' || typeof interactive.list !== 'object') {
+    return null;
+  }
+
+  // Extract button response info
+  const buttonReply = interactive.list[0];
+  if (buttonReply === undefined) return null;
+  if (typeof buttonReply.id !== 'string' || typeof buttonReply.title !== 'string') {
+    return null;
+  }
+
+  // Get the context to find which message this is responding to
+  const context = message.context;
+  if (context === undefined || typeof context.id !== 'string') {
+    return null;
+  }
+
+  return {
+    buttonId: buttonReply.id,
+    buttonTitle: buttonReply.title,
+    replyToWamid: context.id,
   };
 }

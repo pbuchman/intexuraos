@@ -7,6 +7,7 @@
 export type {
   PublishError,
   SendMessageEvent,
+  WhatsAppInteractiveButton,
   WhatsAppSendPublisherConfig,
   TodoProcessingEvent,
   TodosProcessingPublisherConfig,

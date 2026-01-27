@@ -202,7 +202,19 @@ export function createPubsubRoutes(config: Config): FastifyPluginCallback {
         );
 
         const { messageSender, outboundMessageRepository } = getServices();
-        const result = await messageSender.sendTextMessage(phoneNumber, eventData.message);
+
+        let result;
+        if (eventData.buttons && eventData.buttons.length > 0) {
+          // Send interactive message with buttons
+          result = await messageSender.sendInteractiveMessage(
+            phoneNumber,
+            eventData.message,
+            eventData.buttons
+          );
+        } else {
+          // Send plain text message
+          result = await messageSender.sendTextMessage(phoneNumber, eventData.message);
+        }
 
         if (!result.ok) {
           request.log.error(

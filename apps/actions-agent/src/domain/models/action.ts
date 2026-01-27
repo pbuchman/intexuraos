@@ -52,6 +52,10 @@ export interface Action {
   resource_status?: ResourceStatus;
   /** Error message from resource execution */
   resource_error?: string;
+  /** Approval nonce for code actions (4-char hex) */
+  approvalNonce?: string;
+  /** When the approval nonce expires (ISO 8601 timestamp) */
+  approvalNonceExpiresAt?: string;
   createdAt: string;
   updatedAt: string;
 }
