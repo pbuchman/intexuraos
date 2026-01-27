@@ -5,6 +5,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Button, Card, Input, Layout, RefreshIndicator } from '@/components';
 import { useNotes } from '@/hooks';
+import { stripMarkdown } from '@/utils';
 import type { Note, UpdateNoteRequest } from '@/types';
 
 function formatDate(isoString: string): string {
@@ -17,10 +18,11 @@ function formatDate(isoString: string): string {
 }
 
 function truncateContent(content: string, maxLength = 150): string {
-  if (content.length <= maxLength) {
-    return content;
+  const cleanText = stripMarkdown(content);
+  if (cleanText.length <= maxLength) {
+    return cleanText;
   }
-  return content.slice(0, maxLength).trim() + '...';
+  return cleanText.slice(0, maxLength).trim() + '...';
 }
 
 interface NoteModalProps {

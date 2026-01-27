@@ -4,28 +4,13 @@ import { CheckCircle, Plus, Star, Trash2, XCircle } from 'lucide-react';
 import { Button, Card, Layout, RefreshIndicator } from '@/components';
 import { useAuth } from '@/context';
 import { useResearches } from '@/hooks';
+import { stripMarkdown } from '@/utils';
 import { toggleResearchFavourite } from '@/services/researchAgentApi';
 import {
   getProviderForModel,
   type Research,
   type ResearchStatus,
 } from '@/services/researchAgentApi.types';
-
-/**
- * Strip markdown formatting from text for clean display.
- * Handles bold, italic, headers, code markers, and surrounding quotes.
- */
-function stripMarkdown(text: string): string {
-  return text
-    .replace(/\*\*/g, '') // Remove bold markers
-    .replace(/__/g, '') // Remove bold (underscore)
-    .replace(/(?<!\*)\*(?!\*)/g, '') // Remove italic markers (single asterisk)
-    .replace(/(?<!_)_(?!_)/g, '') // Remove italic (single underscore)
-    .replace(/^#+\s*/gm, '') // Remove headers
-    .replace(/`/g, '') // Remove code markers
-    .replace(/^["']|["']$/g, '') // Remove surrounding quotes
-    .trim();
-}
 
 interface StatusStyle {
   bg: string;
