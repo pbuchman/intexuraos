@@ -34,34 +34,11 @@ COVERAGE_TOOL_PATTERN='(vitest\s+.*--coverage|pnpm\s+(run\s+)?(test:)?coverage|n
 if echo "$COMMAND" | grep -qE "$COVERAGE_TOOL_PATTERN" && \
    echo "$COMMAND" | grep -qE '\|\s*(grep|tail|head|awk|sed)'; then
     cat >&2 << 'EOF'
-╔══════════════════════════════════════════════════════════════════════════════╗
-║  ❌ COVERAGE ANALYSIS VIOLATION                                               ║
-╠══════════════════════════════════════════════════════════════════════════════╣
-║                                                                              ║
-║  WHAT'S WRONG:                                                               ║
-║  You are using grep/tail/head/awk/sed to parse coverage output.              ║
-║  This causes truncation and parsing errors.                                  ║
-║                                                                              ║
-║  CORRECT APPROACH:                                                           ║
-║  1. Run: pnpm run test:coverage --coverage.reporter=json-summary             ║
-║  2. Parse: jq '.total.branches.pct' coverage/coverage-summary.json           ║
-║  3. Filter files: jq 'to_entries | map(select(.value.branches.pct < 100))'   ║
-║                                                                              ║
-║  EXAMPLE - Check if coverage passes 95%:                                     ║
-║    BRANCHES=$(jq '.total.branches.pct' coverage/coverage-summary.json)       ║
-║    if (( $(echo "$BRANCHES < 95" | bc -l) )); then                           ║
-║      echo "Coverage failed: $BRANCHES%"                                      ║
-║    fi                                                                        ║
-║                                                                              ║
-║  EXAMPLE - Find files below threshold:                                       ║
-║    jq -r 'to_entries[]                                                       ║
-║      | select(.key != "total")                                               ║
-║      | select(.value.branches.pct < 100)                                     ║
-║      | "\(.key): \(.value.branches.pct)%"' coverage/coverage-summary.json    ║
-║                                                                              ║
-║  REFERENCE: .claude/skills/coverage/workflows/targeted-audit.md              ║
-║                                                                              ║
-╚══════════════════════════════════════════════════════════════════════════════╝
+BLOCKED: Parsing coverage output with grep/tail causes truncation errors.
+
+INSTEAD: Use jq on the JSON summary:
+  jq '.total.branches.pct' coverage/coverage-summary.json
+  jq -r 'to_entries[] | select(.value.branches.pct < 100) | .key' coverage/coverage-summary.json
 EOF
     log_blocked "$COMMAND"
     exit 2

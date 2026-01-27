@@ -24,25 +24,10 @@ fi
 # BLOCK: verify:workspace with -- before workspace name
 if echo "$COMMAND" | grep -qE 'verify:workspace[^\|]*--\s+\w'; then
     cat >&2 << 'EOF'
-╔══════════════════════════════════════════════════════════════════════════════╗
-║  ❌ VERIFY WORKSPACE SYNTAX ERROR                                            ║
-╠══════════════════════════════════════════════════════════════════════════════╣
-║                                                                              ║
-║  WHAT'S WRONG:                                                               ║
-║  You used "--" before the workspace name. This script interprets "--" as     ║
-║  the workspace name itself, causing it to look for "apps/--/src".            ║
-║                                                                              ║
-║  WRONG:                                                                      ║
-║    pnpm -w run verify:workspace:tracked -- code-agent                        ║
-║                                         ^^                                   ║
-║                                                                              ║
-║  CORRECT:                                                                    ║
-║    pnpm -w run verify:workspace:tracked code-agent                           ║
-║                                                                              ║
-║  The workspace name is a positional argument, not an option.                 ║
-║  No "--" separator is needed.                                                ║
-║                                                                              ║
-╚══════════════════════════════════════════════════════════════════════════════╝
+BLOCKED: Don't use "--" before workspace name.
+
+WRONG:  pnpm run verify:workspace:tracked -- code-agent
+CORRECT: pnpm run verify:workspace:tracked code-agent
 EOF
     log_blocked "$COMMAND"
     exit 2
