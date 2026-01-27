@@ -120,6 +120,8 @@ export const researchSchema = {
     sourceActionId: { type: 'string', nullable: true },
     sourceResearchId: { type: 'string', nullable: true },
     favourite: { type: 'boolean', nullable: true },
+    userName: { type: 'string', nullable: true },
+    userEmail: { type: 'string', nullable: true },
   },
   required: [
     'id',
