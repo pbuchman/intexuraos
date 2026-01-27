@@ -31,11 +31,10 @@ export const indexes = [
 ];
 
 export async function up(context) {
-  console.log('  Creating additional code_tasks indexes...');
-  console.log('  Note: Firestore indexes are created via Firebase console or gcloud CLI');
+  console.log('  Deploying additional code_tasks indexes...');
+  await context.deployIndexes();
 }
 
 export async function down(context) {
-  console.log('  Removing additional code_tasks indexes...');
-  console.log('  Note: Firestore indexes must be deleted via Firebase console or gcloud CLI');
+  console.log('  Removing additional code_tasks indexes requires manual deletion via Firebase console');
 }

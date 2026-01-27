@@ -30,11 +30,10 @@ export const indexes = [
 ];
 
 export async function up(context) {
-  console.log('  Creating whatsapp phone verification composite index...');
-  console.log('  Note: Firestore indexes are created via Firebase console or gcloud CLI');
+  console.log('  Deploying whatsapp phone verification composite index...');
+  await context.deployIndexes();
 }
 
 export async function down(context) {
-  console.log('  Removing whatsapp phone verification composite index...');
-  console.log('  Note: Firestore indexes must be deleted via Firebase console or gcloud CLI');
+  console.log('  Removing whatsapp phone verification index requires manual deletion via Firebase console');
 }

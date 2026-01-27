@@ -73,12 +73,10 @@ export const indexes = [
 export const collections = ['code_tasks', 'user_spend'];
 
 export async function up(context) {
-  console.log('  Creating code_tasks indexes...');
-  console.log('  Note: Firestore indexes are created via Firebase console or gcloud CLI');
-  console.log('  Run: gcloud firestore indexes composite create --collection-group=code_tasks ...');
+  console.log('  Deploying code_tasks indexes...');
+  await context.deployIndexes();
 }
 
 export async function down(context) {
-  console.log('  Removing code_tasks indexes...');
-  console.log('  Note: Firestore indexes must be deleted via Firebase console or gcloud CLI');
+  console.log('  Removing code_tasks indexes requires manual deletion via Firebase console');
 }

@@ -1840,6 +1840,10 @@ module "function_vm_start" {
     INTEXURAOS_GCP_PROJECT_ID = var.project_id
   }
 
+  secrets = {
+    INTEXURAOS_INTERNAL_AUTH_TOKEN = module.secret_manager.secret_ids["INTEXURAOS_INTERNAL_AUTH_TOKEN"]
+  }
+
   labels = local.common_labels
 
   depends_on = [
@@ -1872,6 +1876,10 @@ module "function_vm_stop" {
   env_vars = {
     INTEXURAOS_ENVIRONMENT    = var.environment
     INTEXURAOS_GCP_PROJECT_ID = var.project_id
+  }
+
+  secrets = {
+    INTEXURAOS_INTERNAL_AUTH_TOKEN = module.secret_manager.secret_ids["INTEXURAOS_INTERNAL_AUTH_TOKEN"]
   }
 
   labels = local.common_labels
