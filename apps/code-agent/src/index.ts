@@ -12,6 +12,7 @@ const REQUIRED_ENV = [
   'INTEXURAOS_GCP_PROJECT_ID',
   'INTEXURAOS_INTERNAL_AUTH_TOKEN',
   'INTEXURAOS_WHATSAPP_SERVICE_URL',
+  'INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC',
   'INTEXURAOS_LINEAR_AGENT_URL',
   'INTEXURAOS_ACTIONS_AGENT_URL',
   'INTEXURAOS_DISPATCH_SIGNING_SECRET',
@@ -43,9 +44,11 @@ async function main(): Promise<void> {
 
   // Initialize services with config BEFORE building server
   initServices({
+    gcpProjectId: config.gcpProjectId,
     internalAuthToken: config.internalAuthToken,
     firestoreProjectId: config.firestoreProjectId,
     whatsappServiceUrl: config.whatsappServiceUrl,
+    whatsappSendTopic: config.whatsappSendTopic,
     linearAgentUrl: config.linearAgentUrl,
     actionsAgentUrl: config.actionsAgentUrl,
     dispatchSigningSecret: config.dispatchSigningSecret,

@@ -763,6 +763,8 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         replyText: eventData.replyText,
         userId: eventData.userId,
         ...(eventData.actionId !== undefined && { actionId: eventData.actionId }),
+        ...(eventData.buttonId !== undefined && { buttonId: eventData.buttonId }),
+        ...(eventData.buttonTitle !== undefined && { buttonTitle: eventData.buttonTitle }),
       });
 
       if (!result.ok) {

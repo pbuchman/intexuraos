@@ -877,7 +877,10 @@ async function handleButtonMessage(
   const [intent, actionId, nonce] = parts;
 
   // Validate intent
-  if (intent !== 'approve' && intent !== 'cancel' && intent !== 'convert') {
+  // Action approval intents: approve, cancel, convert
+  // Code task intents: cancel-task (INT-379), view-task (INT-379)
+  const validIntents = ['approve', 'cancel', 'convert', 'cancel-task', 'view-task'];
+  if (!validIntents.includes(intent ?? '')) {
     request.log.warn(
       { eventId: savedEvent.id, intent },
       'Unknown button intent'
@@ -920,13 +923,24 @@ async function handleButtonMessage(
   );
 
   // Publish approval reply event with button data
+  // replyText is a human-readable indicator of the intent
+  const getReplyText = (intentType: string): string => {
+    switch (intentType) {
+      case 'approve': return 'yes';
+      case 'cancel': return 'no';
+      case 'convert': return 'convert';
+      case 'cancel-task': return 'cancel-task';
+      case 'view-task': return 'view-task';
+      default: return intentType;
+    }
+  };
   const approvalReplyEvent: Parameters<typeof eventPublisher.publishApprovalReply>[0] = {
     type: 'action.approval.reply',
     replyToWamid: buttonResponse.replyToWamid,
-    replyText: intent === 'approve' ? 'yes' : intent === 'cancel' ? 'no' : 'convert',
+    replyText: getReplyText(intent ?? ''),
     userId,
     timestamp: new Date().toISOString(),
-    actionId: actionId ?? '', // actionId is guaranteed to be defined after parsing above
+    actionId: actionId ?? '', // For cancel-task/view-task, this is the taskId
     buttonId: buttonResponse.buttonId,
     buttonTitle: buttonResponse.buttonTitle,
   };

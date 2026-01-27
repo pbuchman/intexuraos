@@ -35,7 +35,7 @@ import type {
   ForceRefreshBookmarkResponse,
 } from '../domain/ports/bookmarksServiceClient.js';
 import type { LinearAgentClient } from '../domain/ports/linearAgentClient.js';
-import type { CodeAgentClient } from '../domain/ports/codeAgentClient.js';
+import type { CodeAgentClient, CancelTaskWithNonceInput, CancelTaskWithNonceOutput, CancelTaskError } from '../domain/ports/codeAgentClient.js';
 import type { Action } from '../domain/models/action.js';
 import type { ActionTransition } from '../domain/models/actionTransition.js';
 import type { ActionCreatedEvent } from '../domain/models/actionEvent.js';
@@ -746,6 +746,8 @@ export class FakeCodeAgentClient implements CodeAgentClient {
     existingTaskId?: string;
   } | null = null;
   private failNext = false;
+  private cancelledTasks: CancelTaskWithNonceInput[] = [];
+  private nextCancelError: CancelTaskError | null = null;
 
   getSubmittedTasks(): typeof this.submittedTasks {
     return this.submittedTasks;
@@ -811,6 +813,38 @@ export class FakeCodeAgentClient implements CodeAgentClient {
     return {
       ok: true,
       value: this.nextResponse,
+    };
+  }
+
+  getCancelledTasks(): CancelTaskWithNonceInput[] {
+    return this.cancelledTasks;
+  }
+
+  setNextCancelError(error: CancelTaskError): void {
+    this.nextCancelError = error;
+  }
+
+  async cancelTaskWithNonce(input: CancelTaskWithNonceInput): Promise<{
+    ok: true;
+    value: CancelTaskWithNonceOutput;
+  } | {
+    ok: false;
+    error: CancelTaskError;
+  }> {
+    this.cancelledTasks.push(input);
+
+    if (this.nextCancelError !== null) {
+      const error = this.nextCancelError;
+      this.nextCancelError = null;
+      return {
+        ok: false,
+        error,
+      };
+    }
+
+    return {
+      ok: true,
+      value: { cancelled: true },
     };
   }
 }

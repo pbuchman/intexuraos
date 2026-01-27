@@ -442,6 +442,7 @@ export async function initServices(config: ServiceConfig): Promise<void> {
     executeCalendarAction: executeCalendarActionUseCase,
     executeLinearAction: executeLinearActionUseCase,
     executeCodeAction: executeCodeActionUseCase,
+    codeAgentClient,
   });
 
   container = {

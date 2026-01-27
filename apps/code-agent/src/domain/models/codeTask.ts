@@ -146,4 +146,8 @@ export interface CodeTask {
 
   // Deduplication key
   dedupKey: string;             // sha256(userId + prompt)[0:16] (design line 1547)
+
+  // WhatsApp cancel nonce (INT-379)
+  cancelNonce?: string;           // 4-char hex nonce for WhatsApp cancel button
+  cancelNonceExpiresAt?: string;  // ISO timestamp (15 min TTL)
 }

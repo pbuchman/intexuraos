@@ -6,6 +6,7 @@ import { logIncomingRequest, validateInternalAuth } from '@intexuraos/common-htt
 import { extractOrGenerateTraceId } from '@intexuraos/common-core';
 import { getServices } from '../services.js';
 import { processCodeAction } from '../domain/usecases/processCodeAction.js';
+import { cancelTaskWithNonce } from '../domain/usecases/cancelTaskWithNonce.js';
 import type { TaskStatus } from '../domain/models/codeTask.js';
 
 export type JwtValidator = (request: FastifyRequest, reply: FastifyReply) => Promise<void>;
@@ -392,6 +393,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           logger: services.logger,
           codeTaskRepo: services.codeTaskRepo,
           taskDispatcher: services.taskDispatcher,
+          whatsappNotifier: services.whatsappNotifier,
         },
         processRequest
       );
@@ -1890,6 +1892,168 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       }
 
       return reply.status(200).send({ success: true, data: result.value });
+    }
+  );
+
+  // POST /internal/code/cancel-with-nonce - Cancel task via WhatsApp button (INT-379)
+  fastify.post<{
+    Body: {
+      taskId: string;
+      nonce: string;
+      userId: string;
+    };
+  }>(
+    '/internal/code/cancel-with-nonce',
+    {
+      schema: {
+        operationId: 'cancelCodeTaskWithNonce',
+        summary: 'Cancel a task using nonce validation',
+        description: 'Internal endpoint for canceling tasks via WhatsApp button callback. Validates nonce, ownership, and expiration.',
+        tags: ['internal'],
+        body: {
+          type: 'object',
+          properties: {
+            taskId: { type: 'string' },
+            nonce: { type: 'string' },
+            userId: { type: 'string' },
+          },
+          required: ['taskId', 'nonce', 'userId'],
+        },
+        response: {
+          200: {
+            description: 'Task cancelled successfully',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [true] },
+              data: {
+                type: 'object',
+                properties: {
+                  cancelled: { type: 'boolean', enum: [true] },
+                },
+                required: ['cancelled'],
+              },
+            },
+            required: ['success', 'data'],
+          },
+          401: {
+            description: 'Unauthorized',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: {
+                type: 'object',
+                properties: {
+                  code: { type: 'string', enum: ['UNAUTHORIZED'] },
+                  message: { type: 'string' },
+                },
+                required: ['code', 'message'],
+              },
+            },
+            required: ['success', 'error'],
+          },
+          400: {
+            description: 'Bad request (invalid nonce, expired, or task not cancellable)',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: {
+                type: 'object',
+                properties: {
+                  code: {
+                    type: 'string',
+                    enum: ['invalid_nonce', 'nonce_expired', 'not_owner', 'task_not_cancellable'],
+                  },
+                  message: { type: 'string' },
+                },
+                required: ['code', 'message'],
+              },
+            },
+            required: ['success', 'error'],
+          },
+          404: {
+            description: 'Task not found',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: {
+                type: 'object',
+                properties: {
+                  code: { type: 'string', enum: ['task_not_found'] },
+                  message: { type: 'string' },
+                },
+                required: ['code', 'message'],
+              },
+            },
+            required: ['success', 'error'],
+          },
+          500: {
+            description: 'Internal server error',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: {
+                type: 'object',
+                properties: {
+                  code: { type: 'string', enum: ['internal_error'] },
+                  message: { type: 'string' },
+                },
+                required: ['code', 'message'],
+              },
+            },
+            required: ['success', 'error'],
+          },
+        },
+      },
+    },
+    async (
+      request: FastifyRequest<{
+        Body: { taskId: string; nonce: string; userId: string };
+      }>,
+      reply: FastifyReply
+    ) => {
+      logIncomingRequest(request, {
+        message: 'Received request to POST /internal/code/cancel-with-nonce',
+      });
+
+      // Validate internal auth
+      const authResult = validateInternalAuth(request);
+      if (!authResult.valid) {
+        request.log.warn({ reason: authResult.reason }, 'Internal auth failed for cancel-with-nonce');
+        reply.status(401);
+        return { success: false, error: { code: 'UNAUTHORIZED', message: 'Unauthorized' } };
+      }
+
+      const services = getServices();
+      const { taskId, nonce, userId } = request.body;
+
+      request.log.info({ taskId, userId }, 'Processing cancel-with-nonce request');
+
+      const result = await cancelTaskWithNonce(
+        {
+          logger: services.logger,
+          codeTaskRepo: services.codeTaskRepo,
+          taskDispatcher: services.taskDispatcher,
+        },
+        { taskId, nonce, userId }
+      );
+
+      if (!result.ok) {
+        const error = result.error;
+        request.log.warn({ taskId, errorCode: error.code, errorMessage: error.message }, 'Cancel-with-nonce failed');
+
+        if (error.code === 'task_not_found') {
+          reply.status(404);
+        } else if (error.code === 'internal_error') {
+          reply.status(500);
+        } else {
+          reply.status(400);
+        }
+
+        return { success: false, error: { code: error.code, message: error.message } };
+      }
+
+      request.log.info({ taskId }, 'Task cancelled via nonce successfully');
+      return reply.status(200).send({ success: true, data: { cancelled: true } });
     }
   );
 

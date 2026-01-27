@@ -36,6 +36,7 @@ import type { ActionsAgentClient } from '../../infra/clients/actionsAgentClient.
 import type { WhatsAppNotifier } from '../../domain/services/whatsappNotifier.js';
 import type { RateLimitService } from '../../domain/services/rateLimitService.js';
 import { ok } from '@intexuraos/common-core';
+import type { WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
 import type { LinearIssueService } from '../../domain/services/linearIssueService.js';
 import { createStatusMirrorService } from '../../infra/services/statusMirrorServiceImpl.js';
 import type { StatusMirrorService } from '../../infra/services/statusMirrorServiceImpl.js';
@@ -86,9 +87,9 @@ describe('GET /code/tasks endpoints', () => {
     });
 
     const whatsappNotifier = createWhatsAppNotifier({
-      baseUrl: 'http://whatsapp-service',
-      internalAuthToken: 'test-token',
-      logger,
+      whatsappPublisher: {
+        publishSendMessage: async () => ok(undefined),
+      } as unknown as WhatsAppSendPublisher,
     });
 
     const logChunkRepo = createFirestoreLogChunkRepository({

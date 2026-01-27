@@ -36,6 +36,10 @@ export interface UpdateTaskInput {
   // Heartbeat fields for zombie detection (INT-372)
   updatedAt?: Date;
   lastHeartbeat?: Date;
+  // Cancel nonce fields (INT-379)
+  // Use null to explicitly clear the field, undefined means "don't change"
+  cancelNonce?: string | null;
+  cancelNonceExpiresAt?: string | null;
 }
 
 export interface ListTasksInput {

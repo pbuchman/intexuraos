@@ -35,6 +35,7 @@ import type { WorkerDiscoveryService } from '../../domain/services/workerDiscove
 import crypto from 'node:crypto';
 import { fetchWithAuth } from '@intexuraos/internal-clients';
 import type { WhatsAppNotifier } from '../../domain/services/whatsappNotifier.js';
+import type { WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
 import type { RateLimitService } from '../../domain/services/rateLimitService.js';
 import type { LinearIssueService } from '../../domain/services/linearIssueService.js';
 import { createStatusMirrorService } from '../../infra/services/statusMirrorServiceImpl.js';
@@ -55,6 +56,7 @@ describe('POST /internal/webhooks/task-complete', () => {
   let logChunkRepo: LogChunkRepository;
   let actionsAgentClient: ActionsAgentClient;
   let mockFetchWithAuth: ReturnType<typeof vi.fn>;
+  let mockWhatsAppPublisher: { publishSendMessage: ReturnType<typeof vi.fn> };
 
   beforeEach(async () => {
     // Set jwtVerify to resolve by default (simulating valid token)
@@ -97,10 +99,11 @@ describe('POST /internal/webhooks/task-complete', () => {
       orchestratorMacUrl: 'https://cc-mac.intexuraos.cloud',
       orchestratorVmUrl: 'https://cc-vm.intexuraos.cloud',
     });
+    mockWhatsAppPublisher = {
+      publishSendMessage: vi.fn().mockResolvedValue(ok(undefined)),
+    };
     const whatsappNotifier = createWhatsAppNotifier({
-      baseUrl: 'http://whatsapp-service',
-      internalAuthToken: 'test-token',
-      logger,
+      whatsappPublisher: mockWhatsAppPublisher as unknown as WhatsAppSendPublisher,
     });
 
     actionsAgentClient = createActionsAgentClient({
@@ -706,13 +709,10 @@ describe('POST /internal/webhooks/task-complete', () => {
       expect(response.statusCode).toBe(200);
 
       // Verify WhatsApp notification was sent (but not actions-agent)
-      expect(mockFetchWithAuth).toHaveBeenCalledTimes(1);
-      expect(mockFetchWithAuth).toHaveBeenCalledWith(
-        expect.any(Object),
-        '/internal/messages/send',
+      expect(mockWhatsAppPublisher.publishSendMessage).toHaveBeenCalledTimes(1);
+      expect(mockWhatsAppPublisher.publishSendMessage).toHaveBeenCalledWith(
         expect.objectContaining({
-          method: 'POST',
-          body: expect.stringContaining('userId'),
+          userId: 'user-123',
         })
       );
     });
@@ -1542,7 +1542,7 @@ describe('POST /internal/webhooks/task-complete - WhatsApp notifications', () =>
   let taskDispatcher: TaskDispatcherService;
   let logChunkRepo: LogChunkRepository;
   let actionsAgentClient: ActionsAgentClient;
-  let mockFetchWithAuth: ReturnType<typeof vi.fn>;
+  let mockWhatsAppPublisher: { publishSendMessage: ReturnType<typeof vi.fn> };
 
   beforeEach(async () => {
     process.env['INTEXURAOS_CODE_WORKERS'] =
@@ -1575,10 +1575,11 @@ describe('POST /internal/webhooks/task-complete - WhatsApp notifications', () =>
       orchestratorMacUrl: 'https://cc-mac.intexuraos.cloud',
       orchestratorVmUrl: 'https://cc-vm.intexuraos.cloud',
     });
+    mockWhatsAppPublisher = {
+      publishSendMessage: vi.fn().mockResolvedValue(ok(undefined)),
+    };
     const whatsappNotifier = createWhatsAppNotifier({
-      baseUrl: 'http://whatsapp-service',
-      internalAuthToken: 'test-token',
-      logger,
+      whatsappPublisher: mockWhatsAppPublisher as unknown as WhatsAppSendPublisher,
     });
 
     actionsAgentClient = createActionsAgentClient({
@@ -1597,9 +1598,6 @@ describe('POST /internal/webhooks/task-complete - WhatsApp notifications', () =>
       linearAgentClient,
       logger,
     });
-
-    mockFetchWithAuth = fetchWithAuth as ReturnType<typeof vi.fn>;
-    mockFetchWithAuth.mockResolvedValue(ok(undefined));
 
     const rateLimitService: RateLimitService = {
       async checkLimits() {
@@ -1714,15 +1712,12 @@ describe('POST /internal/webhooks/task-complete - WhatsApp notifications', () =>
 
     expect(response.statusCode).toBe(200);
 
-    const whatsappCalls = mockFetchWithAuth.mock.calls.filter(
-      (call) => call[1] === '/internal/messages/send'
-    );
-    expect(whatsappCalls.length).toBe(1);
-    const firstCall = whatsappCalls[0];
-    if (!firstCall) throw new Error('No WhatsApp calls');
-    const body = JSON.parse(String(firstCall[2].body));
-    expect(body.userId).toBe('user-123');
-    expect(body.type).toBe('code_task_complete');
+    expect(mockWhatsAppPublisher.publishSendMessage).toHaveBeenCalledTimes(1);
+    const publishCall = mockWhatsAppPublisher.publishSendMessage.mock.calls[0];
+    expect(publishCall).toBeDefined();
+    const params = publishCall?.[0] as { userId: string; message: string } | undefined;
+    expect(params?.userId).toBe('user-123');
+    expect(params?.message).toContain('completed');
   });
 
   it('sends WhatsApp notification on task failure', async () => {
@@ -1767,15 +1762,12 @@ describe('POST /internal/webhooks/task-complete - WhatsApp notifications', () =>
 
     expect(response.statusCode).toBe(200);
 
-    const whatsappCalls = mockFetchWithAuth.mock.calls.filter(
-      (call) => call[1] === '/internal/messages/send'
-    );
-    expect(whatsappCalls.length).toBe(1);
-    const firstCall = whatsappCalls[0];
-    if (!firstCall) throw new Error('No WhatsApp calls');
-    const body = JSON.parse(String(firstCall[2].body));
-    expect(body.userId).toBe('user-123');
-    expect(body.type).toBe('code_task_failed');
+    expect(mockWhatsAppPublisher.publishSendMessage).toHaveBeenCalledTimes(1);
+    const publishCall = mockWhatsAppPublisher.publishSendMessage.mock.calls[0];
+    expect(publishCall).toBeDefined();
+    const params = publishCall?.[0] as { userId: string; message: string } | undefined;
+    expect(params?.userId).toBe('user-123');
+    expect(params?.message).toContain('failed');
   });
 
   it('does not send notification on interrupted status', async () => {
@@ -1816,10 +1808,7 @@ describe('POST /internal/webhooks/task-complete - WhatsApp notifications', () =>
 
     expect(response.statusCode).toBe(200);
 
-    const whatsappCalls = mockFetchWithAuth.mock.calls.filter(
-      (call) => call[1] === '/internal/messages/send'
-    );
-    expect(whatsappCalls.length).toBe(0);
+    expect(mockWhatsAppPublisher.publishSendMessage).not.toHaveBeenCalled();
   });
 
   it('continues even if WhatsApp notification fails', async () => {
@@ -1853,8 +1842,8 @@ describe('POST /internal/webhooks/task-complete - WhatsApp notifications', () =>
     const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
 
     // Mock WhatsApp notification to fail
-    mockFetchWithAuth.mockImplementationOnce(
-      () => Promise.resolve(err({ code: 'NETWORK_ERROR', message: 'Connection failed', status: 503 }))
+    mockWhatsAppPublisher.publishSendMessage.mockResolvedValueOnce(
+      err({ code: 'NETWORK_ERROR', message: 'Connection failed' })
     );
 
     const response = await app.inject({

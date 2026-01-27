@@ -428,4 +428,237 @@ describe('codeAgentHttpClient', () => {
       }
     });
   });
+
+  describe('cancelTaskWithNonce', () => {
+    const cancelInput = {
+      taskId: 'task-123',
+      nonce: 'abcd1234',
+      userId: 'user-789',
+    };
+
+    describe('successful responses', () => {
+      it('returns cancelled true on 200 response', async () => {
+        const scope = nock(baseUrl)
+          .post('/internal/code/cancel-with-nonce', {
+            taskId: 'task-123',
+            nonce: 'abcd1234',
+            userId: 'user-789',
+          })
+          .matchHeader('X-Internal-Auth', internalAuthToken)
+          .reply(200, { cancelled: true });
+
+        const client = createClient();
+        const result = await client.cancelTaskWithNonce(cancelInput);
+
+        expect(scope.isDone()).toBe(true);
+        expect(isOk(result)).toBe(true);
+        if (isOk(result)) {
+          expect(result.value.cancelled).toBe(true);
+        }
+      });
+
+      it('sends correct headers (Content-Type, X-Internal-Auth)', async () => {
+        const scope = nock(baseUrl)
+          .post('/internal/code/cancel-with-nonce')
+          .matchHeader('Content-Type', 'application/json')
+          .matchHeader('X-Internal-Auth', internalAuthToken)
+          .reply(200, { cancelled: true });
+
+        const client = createClient();
+        await client.cancelTaskWithNonce(cancelInput);
+
+        expect(scope.isDone()).toBe(true);
+      });
+    });
+
+    describe('error responses', () => {
+      it('returns TASK_NOT_FOUND error on 404 response', async () => {
+        const scope = nock(baseUrl)
+          .post('/internal/code/cancel-with-nonce')
+          .matchHeader('X-Internal-Auth', internalAuthToken)
+          .reply(404, { error: { code: 'task_not_found', message: 'Task not found' } });
+
+        const client = createClient();
+        const result = await client.cancelTaskWithNonce(cancelInput);
+
+        expect(scope.isDone()).toBe(true);
+        expect(isErr(result)).toBe(true);
+        if (isErr(result)) {
+          expect(result.error.code).toBe('TASK_NOT_FOUND');
+          expect(result.error.message).toBe('Task not found');
+        }
+      });
+
+      it('returns INVALID_NONCE error on 400 with invalid_nonce code', async () => {
+        const scope = nock(baseUrl)
+          .post('/internal/code/cancel-with-nonce')
+          .matchHeader('X-Internal-Auth', internalAuthToken)
+          .reply(400, { error: { code: 'invalid_nonce', message: 'Nonce does not match' } });
+
+        const client = createClient();
+        const result = await client.cancelTaskWithNonce(cancelInput);
+
+        expect(scope.isDone()).toBe(true);
+        expect(isErr(result)).toBe(true);
+        if (isErr(result)) {
+          expect(result.error.code).toBe('INVALID_NONCE');
+          expect(result.error.message).toBe('Nonce does not match');
+        }
+      });
+
+      it('returns NONCE_EXPIRED error on 400 with nonce_expired code', async () => {
+        const scope = nock(baseUrl)
+          .post('/internal/code/cancel-with-nonce')
+          .matchHeader('X-Internal-Auth', internalAuthToken)
+          .reply(400, { error: { code: 'nonce_expired', message: 'Nonce has expired' } });
+
+        const client = createClient();
+        const result = await client.cancelTaskWithNonce(cancelInput);
+
+        expect(scope.isDone()).toBe(true);
+        expect(isErr(result)).toBe(true);
+        if (isErr(result)) {
+          expect(result.error.code).toBe('NONCE_EXPIRED');
+          expect(result.error.message).toBe('Nonce has expired');
+        }
+      });
+
+      it('returns NOT_OWNER error on 400 with not_owner code', async () => {
+        const scope = nock(baseUrl)
+          .post('/internal/code/cancel-with-nonce')
+          .matchHeader('X-Internal-Auth', internalAuthToken)
+          .reply(400, { error: { code: 'not_owner', message: 'User does not own task' } });
+
+        const client = createClient();
+        const result = await client.cancelTaskWithNonce(cancelInput);
+
+        expect(scope.isDone()).toBe(true);
+        expect(isErr(result)).toBe(true);
+        if (isErr(result)) {
+          expect(result.error.code).toBe('NOT_OWNER');
+          expect(result.error.message).toBe('User does not own task');
+        }
+      });
+
+      it('returns TASK_NOT_CANCELLABLE error on 400 with task_not_cancellable code', async () => {
+        const scope = nock(baseUrl)
+          .post('/internal/code/cancel-with-nonce')
+          .matchHeader('X-Internal-Auth', internalAuthToken)
+          .reply(400, { error: { code: 'task_not_cancellable', message: 'Task already completed' } });
+
+        const client = createClient();
+        const result = await client.cancelTaskWithNonce(cancelInput);
+
+        expect(scope.isDone()).toBe(true);
+        expect(isErr(result)).toBe(true);
+        if (isErr(result)) {
+          expect(result.error.code).toBe('TASK_NOT_CANCELLABLE');
+          expect(result.error.message).toBe('Task already completed');
+        }
+      });
+
+      it('returns UNKNOWN error on 400 with unrecognized code', async () => {
+        const scope = nock(baseUrl)
+          .post('/internal/code/cancel-with-nonce')
+          .matchHeader('X-Internal-Auth', internalAuthToken)
+          .reply(400, { error: { code: 'some_other_error', message: 'Unexpected error' } });
+
+        const client = createClient();
+        const result = await client.cancelTaskWithNonce(cancelInput);
+
+        expect(scope.isDone()).toBe(true);
+        expect(isErr(result)).toBe(true);
+        if (isErr(result)) {
+          expect(result.error.code).toBe('UNKNOWN');
+          expect(result.error.message).toBe('Unexpected error');
+        }
+      });
+
+      it('returns UNKNOWN error for unexpected HTTP status', async () => {
+        const scope = nock(baseUrl)
+          .post('/internal/code/cancel-with-nonce')
+          .matchHeader('X-Internal-Auth', internalAuthToken)
+          .reply(500, { error: 'Internal server error' });
+
+        const client = createClient();
+        const result = await client.cancelTaskWithNonce(cancelInput);
+
+        expect(scope.isDone()).toBe(true);
+        expect(isErr(result)).toBe(true);
+        if (isErr(result)) {
+          expect(result.error.code).toBe('UNKNOWN');
+          expect(result.error.message).toBe('Unexpected response: 500');
+        }
+      });
+
+      it('handles invalid JSON in error response gracefully', async () => {
+        const scope = nock(baseUrl)
+          .post('/internal/code/cancel-with-nonce')
+          .matchHeader('X-Internal-Auth', internalAuthToken)
+          .reply(400, 'not valid json', { 'Content-Type': 'text/plain' });
+
+        const client = createClient();
+        const result = await client.cancelTaskWithNonce(cancelInput);
+
+        expect(scope.isDone()).toBe(true);
+        expect(isErr(result)).toBe(true);
+        if (isErr(result)) {
+          expect(result.error.code).toBe('UNKNOWN');
+          expect(result.error.message).toBe('Unknown error');
+        }
+      });
+
+      it('handles empty error response on 404', async () => {
+        const scope = nock(baseUrl)
+          .post('/internal/code/cancel-with-nonce')
+          .matchHeader('X-Internal-Auth', internalAuthToken)
+          .reply(404);
+
+        const client = createClient();
+        const result = await client.cancelTaskWithNonce(cancelInput);
+
+        expect(scope.isDone()).toBe(true);
+        expect(isErr(result)).toBe(true);
+        if (isErr(result)) {
+          expect(result.error.code).toBe('TASK_NOT_FOUND');
+          expect(result.error.message).toBe('Unknown error');
+        }
+      });
+    });
+
+    describe('network failures', () => {
+      it('returns NETWORK_ERROR on connection failure', async () => {
+        nock(baseUrl)
+          .post('/internal/code/cancel-with-nonce')
+          .matchHeader('X-Internal-Auth', internalAuthToken)
+          .replyWithError({ code: 'ECONNREFUSED', message: 'Connection refused' });
+
+        const client = createClient();
+        const result = await client.cancelTaskWithNonce(cancelInput);
+
+        expect(isErr(result)).toBe(true);
+        if (isErr(result)) {
+          expect(result.error.code).toBe('NETWORK_ERROR');
+          expect(result.error.message).toContain('Failed to call code-agent');
+          expect(result.error.message).toContain('Connection refused');
+        }
+      });
+
+      it('returns NETWORK_ERROR on timeout', async () => {
+        nock(baseUrl)
+          .post('/internal/code/cancel-with-nonce')
+          .matchHeader('X-Internal-Auth', internalAuthToken)
+          .replyWithError({ name: 'AbortError', message: 'The operation was aborted' });
+
+        const client = createClient();
+        const result = await client.cancelTaskWithNonce(cancelInput);
+
+        expect(isErr(result)).toBe(true);
+        if (isErr(result)) {
+          expect(result.error.code).toBe('NETWORK_ERROR');
+          expect(result.error.message).toContain('aborted');
+        }
+      });
+    });
+  });
 });

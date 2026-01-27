@@ -8,6 +8,7 @@ export interface Config {
   internalAuthToken: string;
   firestoreProjectId: string;
   whatsappServiceUrl: string;
+  whatsappSendTopic: string;
   linearAgentUrl: string;
   actionsAgentUrl: string;
   dispatchSigningSecret: string;
@@ -28,6 +29,7 @@ export function loadConfig(): Config {
   const internalAuthToken = process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] ?? '';
   const firestoreProjectId = process.env['INTEXURAOS_GCP_PROJECT_ID'] ?? '';
   const whatsappServiceUrl = process.env['INTEXURAOS_WHATSAPP_SERVICE_URL'] ?? '';
+  const whatsappSendTopic = process.env['INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC'] ?? '';
   const linearAgentUrl = process.env['INTEXURAOS_LINEAR_AGENT_URL'] ?? '';
   const actionsAgentUrl = process.env['INTEXURAOS_ACTIONS_AGENT_URL'] ?? '';
   const dispatchSigningSecret = process.env['INTEXURAOS_DISPATCH_SIGNING_SECRET'] ?? '';
@@ -46,6 +48,7 @@ export function loadConfig(): Config {
     internalAuthToken,
     firestoreProjectId,
     whatsappServiceUrl,
+    whatsappSendTopic,
     linearAgentUrl,
     actionsAgentUrl,
     dispatchSigningSecret,

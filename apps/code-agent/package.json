@@ -21,6 +21,7 @@
     "@intexuraos/http-contracts": "workspace:*",
     "@intexuraos/http-server": "workspace:*",
     "@intexuraos/infra-firestore": "workspace:*",
+    "@intexuraos/infra-pubsub": "workspace:*",
     "@intexuraos/infra-sentry": "workspace:*",
     "@intexuraos/internal-clients": "workspace:*",
     "fastify": "^5.1.0",

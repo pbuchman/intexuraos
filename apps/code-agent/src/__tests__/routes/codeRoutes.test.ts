@@ -33,6 +33,7 @@ import type { ActionsAgentClient } from '../../infra/clients/actionsAgentClient.
 import type { WhatsAppNotifier } from '../../domain/services/whatsappNotifier.js';
 import type { RateLimitService } from '../../domain/services/rateLimitService.js';
 import { ok } from '@intexuraos/common-core';
+import type { WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
 import type { LinearIssueService } from '../../domain/services/linearIssueService.js';
 import { createStatusMirrorService } from '../../infra/services/statusMirrorServiceImpl.js';
 import type { StatusMirrorService } from '../../infra/services/statusMirrorServiceImpl.js';
@@ -84,9 +85,9 @@ import { createDetectZombieTasksUseCase } from '../../domain/usecases/detectZomb
       orchestratorVmUrl: 'https://cc-vm.intexuraos.cloud',
     });
     const whatsappNotifier = createWhatsAppNotifier({
-      baseUrl: 'http://whatsapp-service',
-      internalAuthToken: 'test-token',
-      logger,
+      whatsappPublisher: {
+        publishSendMessage: async () => ok(undefined),
+      } as unknown as WhatsAppSendPublisher,
     });
 
     const logChunkRepo = createFirestoreLogChunkRepository({
@@ -875,6 +876,320 @@ import { createDetectZombieTasksUseCase } from '../../domain/usecases/detectZomb
       expect(response.statusCode).toBe(500);
       const body = JSON.parse(response.body);
       expect(body.error).toBe('Database connection failed');
+    });
+  });
+
+  describe('POST /internal/code/cancel-with-nonce', () => {
+    it('returns 401 when missing auth header', async () => {
+      const response = await server.inject({
+        method: 'POST',
+        url: '/internal/code/cancel-with-nonce',
+        payload: {
+          taskId: 'task-123',
+          nonce: 'abcd',
+          userId: 'user-123',
+        },
+      });
+
+      expect(response.statusCode).toBe(401);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('UNAUTHORIZED');
+    });
+
+    it('returns 404 when task not found', async () => {
+      const response = await server.inject({
+        method: 'POST',
+        url: '/internal/code/cancel-with-nonce',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+        },
+        payload: {
+          taskId: 'non-existent-task',
+          nonce: 'abcd',
+          userId: 'user-123',
+        },
+      });
+
+      expect(response.statusCode).toBe(404);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('task_not_found');
+    });
+
+    it('returns 400 when nonce does not match', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const created = await repo.create({
+        userId: 'user-123',
+        prompt: 'Fix bug',
+        sanitizedPrompt: 'fix bug',
+        systemPromptHash: 'abc123',
+        workerType: 'opus',
+        workerLocation: 'mac',
+        repository: 'test/repo',
+        baseBranch: 'main',
+        traceId: 'trace-123',
+      });
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+
+      await repo.update(created.value.id, {
+        status: 'running',
+        cancelNonce: 'abcd',
+        cancelNonceExpiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
+      });
+
+      const response = await server.inject({
+        method: 'POST',
+        url: '/internal/code/cancel-with-nonce',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+        },
+        payload: {
+          taskId: created.value.id,
+          nonce: 'wrong',
+          userId: 'user-123',
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('invalid_nonce');
+    });
+
+    it('returns 400 when nonce is expired', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const created = await repo.create({
+        userId: 'user-123',
+        prompt: 'Fix bug',
+        sanitizedPrompt: 'fix bug',
+        systemPromptHash: 'abc123',
+        workerType: 'opus',
+        workerLocation: 'mac',
+        repository: 'test/repo',
+        baseBranch: 'main',
+        traceId: 'trace-123',
+      });
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+
+      await repo.update(created.value.id, {
+        status: 'running',
+        cancelNonce: 'abcd',
+        cancelNonceExpiresAt: new Date(Date.now() - 1000).toISOString(),
+      });
+
+      const response = await server.inject({
+        method: 'POST',
+        url: '/internal/code/cancel-with-nonce',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+        },
+        payload: {
+          taskId: created.value.id,
+          nonce: 'abcd',
+          userId: 'user-123',
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('nonce_expired');
+    });
+
+    it('returns 400 when user does not own task', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const created = await repo.create({
+        userId: 'owner-user',
+        prompt: 'Fix bug',
+        sanitizedPrompt: 'fix bug',
+        systemPromptHash: 'abc123',
+        workerType: 'opus',
+        workerLocation: 'mac',
+        repository: 'test/repo',
+        baseBranch: 'main',
+        traceId: 'trace-123',
+      });
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+
+      await repo.update(created.value.id, {
+        status: 'running',
+        cancelNonce: 'abcd',
+        cancelNonceExpiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
+      });
+
+      const response = await server.inject({
+        method: 'POST',
+        url: '/internal/code/cancel-with-nonce',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+        },
+        payload: {
+          taskId: created.value.id,
+          nonce: 'abcd',
+          userId: 'different-user',
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('not_owner');
+    });
+
+    it('returns 400 when task is not cancellable', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const created = await repo.create({
+        userId: 'user-123',
+        prompt: 'Fix bug',
+        sanitizedPrompt: 'fix bug',
+        systemPromptHash: 'abc123',
+        workerType: 'opus',
+        workerLocation: 'mac',
+        repository: 'test/repo',
+        baseBranch: 'main',
+        traceId: 'trace-123',
+      });
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+
+      await repo.update(created.value.id, {
+        status: 'completed',
+        cancelNonce: 'abcd',
+        cancelNonceExpiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
+      });
+
+      const response = await server.inject({
+        method: 'POST',
+        url: '/internal/code/cancel-with-nonce',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+        },
+        payload: {
+          taskId: created.value.id,
+          nonce: 'abcd',
+          userId: 'user-123',
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('task_not_cancellable');
+    });
+
+    it('cancels task successfully with valid nonce', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const created = await repo.create({
+        userId: 'user-123',
+        prompt: 'Fix bug',
+        sanitizedPrompt: 'fix bug',
+        systemPromptHash: 'abc123',
+        workerType: 'opus',
+        workerLocation: 'mac',
+        repository: 'test/repo',
+        baseBranch: 'main',
+        traceId: 'trace-123',
+      });
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+
+      await repo.update(created.value.id, {
+        status: 'running',
+        cancelNonce: 'abcd',
+        cancelNonceExpiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
+      });
+
+      const response = await server.inject({
+        method: 'POST',
+        url: '/internal/code/cancel-with-nonce',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+        },
+        payload: {
+          taskId: created.value.id,
+          nonce: 'abcd',
+          userId: 'user-123',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(true);
+      expect(body.data.cancelled).toBe(true);
+
+      const updatedTask = await repo.findById(created.value.id);
+      expect(updatedTask.ok).toBe(true);
+      if (updatedTask.ok) {
+        expect(updatedTask.value.status).toBe('cancelled');
+        expect(updatedTask.value.cancelNonce).toBeUndefined();
+      }
+    });
+
+    it('returns 500 when repository update fails', async () => {
+      const mockRepo = {
+        findById: vi.fn().mockResolvedValue({
+          ok: true,
+          value: {
+            id: 'task-123',
+            userId: 'user-123',
+            status: 'running',
+            workerLocation: 'mac',
+            cancelNonce: 'abcd',
+            cancelNonceExpiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
+          },
+        }),
+        update: vi.fn().mockResolvedValue({
+          ok: false,
+          error: { code: 'FIRESTORE_ERROR', message: 'Update failed' },
+        }),
+      } as unknown as CodeTaskRepository;
+
+      setServices({
+        ...getServices(),
+        codeTaskRepo: mockRepo,
+      });
+
+      const response = await server.inject({
+        method: 'POST',
+        url: '/internal/code/cancel-with-nonce',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+        },
+        payload: {
+          taskId: 'task-123',
+          nonce: 'abcd',
+          userId: 'user-123',
+        },
+      });
+
+      expect(response.statusCode).toBe(500);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('internal_error');
     });
   });
 });

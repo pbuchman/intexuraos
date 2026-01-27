@@ -6,6 +6,7 @@
 import pino from 'pino';
 import type { Firestore } from '@google-cloud/firestore';
 import { getFirestore } from '@intexuraos/infra-firestore';
+import { createWhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
 import type { CodeTaskRepository } from './domain/repositories/codeTaskRepository.js';
 import type { LogChunkRepository } from './domain/repositories/logChunkRepository.js';
 import type { WorkerDiscoveryService } from './domain/services/workerDiscovery.js';
@@ -45,9 +46,11 @@ export interface ServiceContainer {
 
 // Configuration required to initialize services
 export interface ServiceConfig {
+  gcpProjectId: string;
   internalAuthToken: string;
   firestoreProjectId: string;
   whatsappServiceUrl: string;
+  whatsappSendTopic: string;
   linearAgentUrl: string;
   actionsAgentUrl: string;
   dispatchSigningSecret: string;
@@ -100,9 +103,11 @@ export function initServices(config: ServiceConfig): void {
       orchestratorVmUrl: config.orchestratorVmUrl,
     }),
     whatsappNotifier: createWhatsAppNotifier({
-      baseUrl: config.whatsappServiceUrl,
-      internalAuthToken: config.internalAuthToken,
-      logger,
+      whatsappPublisher: createWhatsAppSendPublisher({
+        projectId: config.gcpProjectId,
+        topicName: config.whatsappSendTopic,
+        logger: pino({ name: 'whatsapp-publisher' }),
+      }),
     }),
     actionsAgentClient,
     statusMirrorService: createStatusMirrorService({

@@ -7,7 +7,7 @@
  */
 
 import { ok, err, type Result, getErrorMessage } from '@intexuraos/common-core';
-import type { CodeAgentClient, CodeAgentError } from '../../domain/ports/codeAgentClient.js';
+import type { CodeAgentClient, CodeAgentError, CancelTaskError, CancelTaskWithNonceInput, CancelTaskWithNonceOutput } from '../../domain/ports/codeAgentClient.js';
 import type { CodeActionPayload } from '../../domain/models/action.js';
 import pino, { type Logger } from 'pino';
 
@@ -150,6 +150,92 @@ export function createCodeAgentHttpClient(
       logger.error(
         { httpStatus: response.status, statusText: response.statusText },
         'Unexpected response from code-agent'
+      );
+      return err({
+        code: 'UNKNOWN',
+        message: `Unexpected response: ${String(response.status)}`,
+      });
+    },
+
+    async cancelTaskWithNonce(input: CancelTaskWithNonceInput): Promise<Result<CancelTaskWithNonceOutput, CancelTaskError>> {
+      const url = `${config.baseUrl}/internal/code/cancel-with-nonce`;
+      const timeoutMs = 30_000; // 30 second timeout
+
+      logger.info(
+        { url, taskId: input.taskId, userId: input.userId },
+        'Calling code-agent cancel-with-nonce'
+      );
+
+      let response: Response;
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => {
+          controller.abort();
+        }, timeoutMs);
+
+        response = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Internal-Auth': config.internalAuthToken,
+          },
+          body: JSON.stringify({
+            taskId: input.taskId,
+            nonce: input.nonce,
+            userId: input.userId,
+          }),
+          signal: controller.signal,
+        });
+
+        clearTimeout(timeoutId);
+      } catch (error) {
+        logger.error({ error: getErrorMessage(error), taskId: input.taskId }, 'Failed to call code-agent cancel-with-nonce');
+        return err({
+          code: 'NETWORK_ERROR',
+          message: `Failed to call code-agent: ${getErrorMessage(error)}`,
+        });
+      }
+
+      // Success response (200)
+      if (response.status === 200) {
+        logger.info({ taskId: input.taskId }, 'Task cancelled successfully via nonce');
+        return ok({ cancelled: true });
+      }
+
+      // Parse error response
+      let errorBody: { error?: { code?: string; message?: string } } = {};
+      try {
+        errorBody = (await response.json()) as typeof errorBody;
+      } catch {
+        // Ignore JSON parsing errors, use status-based defaults
+      }
+
+      const errorCode = errorBody.error?.code ?? '';
+      const errorMessage = errorBody.error?.message ?? 'Unknown error';
+
+      // Map HTTP status to error codes
+      if (response.status === 404) {
+        logger.info({ taskId: input.taskId }, 'Task not found for cancellation');
+        return err({ code: 'TASK_NOT_FOUND', message: errorMessage });
+      }
+
+      if (response.status === 400) {
+        // Map specific error codes from response
+        const codeMap: Record<string, CancelTaskError['code']> = {
+          'invalid_nonce': 'INVALID_NONCE',
+          'nonce_expired': 'NONCE_EXPIRED',
+          'not_owner': 'NOT_OWNER',
+          'task_not_cancellable': 'TASK_NOT_CANCELLABLE',
+        };
+        const mappedCode = codeMap[errorCode] ?? 'UNKNOWN';
+        logger.warn({ taskId: input.taskId, errorCode, errorMessage }, 'Cancel-with-nonce validation failed');
+        return err({ code: mappedCode, message: errorMessage });
+      }
+
+      // Unknown error
+      logger.error(
+        { httpStatus: response.status, statusText: response.statusText, taskId: input.taskId },
+        'Unexpected response from code-agent cancel-with-nonce'
       );
       return err({
         code: 'UNKNOWN',

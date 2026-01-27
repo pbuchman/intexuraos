@@ -1,15 +1,19 @@
 /**
  * WhatsApp notifier implementation.
  *
- * Sends notifications via whatsapp-service internal API.
+ * Sends notifications via Pub/Sub to whatsapp-service.
  * Design reference: docs/designs/INT-156-code-action-type.md lines 97-100
  */
 
 import type { Result } from '@intexuraos/common-core';
 import { ok, err } from '@intexuraos/common-core';
-import { fetchWithAuth, type ServiceClientConfig } from '@intexuraos/internal-clients';
+import type { WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
 import type { WhatsAppNotifier, NotificationError } from '../../domain/services/whatsappNotifier.js';
 import type { CodeTask, TaskError } from '../../domain/models/codeTask.js';
+
+export interface WhatsAppNotifierConfig {
+  whatsappPublisher: WhatsAppSendPublisher;
+}
 
 /**
  * Format completion notification message.
@@ -55,9 +59,23 @@ Error: ${error.message}${remedation}${fallbackWarning}`;
 }
 
 /**
+ * Format task started notification message.
+ */
+function formatStartedMessage(task: CodeTask): string {
+  const title = task.linearIssueTitle ?? task.prompt.slice(0, 50);
+  return `🚀 Code task started: ${title}
+
+Task ID: ${task.id}
+Repository: ${task.repository}
+Branch: ${task.baseBranch}`;
+}
+
+/**
  * Factory function to create WhatsAppNotifier.
  */
-export function createWhatsAppNotifier(config: ServiceClientConfig): WhatsAppNotifier {
+export function createWhatsAppNotifier(config: WhatsAppNotifierConfig): WhatsAppNotifier {
+  const { whatsappPublisher } = config;
+
   return {
     async notifyTaskComplete(
       userId: string,
@@ -65,26 +83,16 @@ export function createWhatsAppNotifier(config: ServiceClientConfig): WhatsAppNot
     ): Promise<Result<void, NotificationError>> {
       const message = formatCompletionMessage(task);
 
-      const response = await fetchWithAuth(
-        config,
-        '/internal/messages/send',
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            userId,
-            message,
-            type: 'code_task_complete',
-          }),
-        }
-      );
+      const result = await whatsappPublisher.publishSendMessage({
+        userId,
+        message,
+        correlationId: task.traceId,
+      });
 
-      if (!response.ok) {
+      if (!result.ok) {
         return err({
           code: 'notification_failed',
-          message: response.error.message,
+          message: result.error.message,
         });
       }
 
@@ -98,26 +106,61 @@ export function createWhatsAppNotifier(config: ServiceClientConfig): WhatsAppNot
     ): Promise<Result<void, NotificationError>> {
       const message = formatFailureMessage(task, error);
 
-      const response = await fetchWithAuth(
-        config,
-        '/internal/messages/send',
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            userId,
-            message,
-            type: 'code_task_failed',
-          }),
-        }
-      );
+      const result = await whatsappPublisher.publishSendMessage({
+        userId,
+        message,
+        correlationId: task.traceId,
+      });
 
-      if (!response.ok) {
+      if (!result.ok) {
         return err({
           code: 'notification_failed',
-          message: response.error.message,
+          message: result.error.message,
+        });
+      }
+
+      return ok(undefined);
+    },
+
+    async notifyTaskStarted(
+      userId: string,
+      task: CodeTask
+    ): Promise<Result<void, NotificationError>> {
+      const message = formatStartedMessage(task);
+
+      // Build interactive buttons for task management (INT-379)
+      // Cancel button includes nonce for security validation
+      const buttons: { type: 'reply'; reply: { id: string; title: string } }[] = [];
+
+      if (task.cancelNonce !== undefined) {
+        buttons.push({
+          type: 'reply',
+          reply: {
+            id: `cancel-task:${task.id}:${task.cancelNonce}`,
+            title: '❌ Cancel Task',
+          },
+        });
+      }
+
+      buttons.push({
+        type: 'reply',
+        reply: {
+          id: `view-task:${task.id}`,
+          title: '👁️ View Progress',
+        },
+      });
+
+      const result = await whatsappPublisher.publishSendMessage({
+        userId,
+        message,
+        buttons,
+        correlationId: task.traceId,
+      });
+
+      if (!result.ok) {
+        return err({
+          code: 'notification_failed',
+          message: result.error.message,
         });
       }
 

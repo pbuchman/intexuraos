@@ -470,6 +470,8 @@ const SERVICE_ENV_MAPPINGS = {
     INTEXURAOS_AUTH0_AUDIENCE: 'https://api.intexuraos.cloud',
     INTEXURAOS_AUTH0_ISSUER: 'https://intexuraos.eu.auth0.com/',
     INTEXURAOS_AUTH0_JWKS_URI: 'https://intexuraos.eu.auth0.com/.well-known/jwks.json',
+    INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC:
+      process.env.INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC ?? 'whatsapp-send-message',
   },
 };
 

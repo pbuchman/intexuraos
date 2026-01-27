@@ -8,6 +8,7 @@ import { err, ok, type Result } from '@intexuraos/common-core';
 import type { Logger } from '@intexuraos/common-core';
 import type { CodeTaskRepository } from '../../domain/repositories/codeTaskRepository.js';
 import type { TaskDispatcherService } from '../../domain/services/taskDispatcher.js';
+import type { WhatsAppNotifier } from '../../domain/services/whatsappNotifier.js';
 import type { WorkerLocation } from '../../domain/models/worker.js';
 import { randomBytes } from 'node:crypto';
 
@@ -19,6 +20,20 @@ function generateWebhookSecret(): string {
   const buffer = randomBytes(24);
   return `whsec_${buffer.toString('hex')}`;
 }
+
+/**
+ * Generate a cancel nonce for task cancellation (INT-379).
+ * Format: 4 hex characters (2 bytes)
+ */
+function generateCancelNonce(): string {
+  const buffer = randomBytes(2);
+  return buffer.toString('hex');
+}
+
+/**
+ * Cancel nonce TTL in milliseconds (15 minutes).
+ */
+const CANCEL_NONCE_TTL_MS = 15 * 60 * 1000;
 
 /**
  * Request to process a code action.
@@ -67,6 +82,7 @@ export interface ProcessCodeActionDeps {
   logger: Logger;
   codeTaskRepo: CodeTaskRepository;
   taskDispatcher: TaskDispatcherService;
+  whatsappNotifier: WhatsAppNotifier;
 }
 
 /**
@@ -83,7 +99,7 @@ export async function processCodeAction(
   deps: ProcessCodeActionDeps,
   request: ProcessCodeActionRequest
 ): Promise<Result<ProcessCodeActionResult, ProcessCodeActionError>> {
-  const { codeTaskRepo, taskDispatcher } = deps;
+  const { logger, codeTaskRepo, taskDispatcher, whatsappNotifier } = deps;
   const { actionId, approvalEventId, userId, prompt, workerType, linearIssueId, repository, baseBranch, traceId } =
     request;
 
@@ -199,8 +215,28 @@ export async function processCodeAction(
     });
   }
 
-  // Step 5: Return success
   const dispatchValue = dispatchResult.value;
+
+  // Step 5: Generate cancel nonce and send task started notification (INT-379)
+  const cancelNonce = generateCancelNonce();
+  const cancelNonceExpiresAt = new Date(Date.now() + CANCEL_NONCE_TTL_MS).toISOString();
+
+  const updateResult = await codeTaskRepo.update(task.id, {
+    cancelNonce,
+    cancelNonceExpiresAt,
+  });
+
+  if (updateResult.ok) {
+    const updatedTask = updateResult.value;
+    const notifyResult = await whatsappNotifier.notifyTaskStarted(userId, updatedTask);
+    if (!notifyResult.ok) {
+      logger.warn({ taskId: task.id, error: notifyResult.error }, 'Failed to send task started notification');
+    }
+  } else {
+    logger.warn({ taskId: task.id, error: updateResult.error }, 'Failed to update task with cancel nonce');
+  }
+
+  // Step 6: Return success
   return ok({
     codeTaskId: task.id,
     resourceUrl: `/#/code-tasks/${task.id}`,

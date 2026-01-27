@@ -3538,4 +3538,293 @@ describe('HandleApprovalReplyUseCase', () => {
       }
     });
   });
+
+  describe('cancel-task button (INT-379)', () => {
+    it('returns error when codeAgentClient is not configured', async () => {
+      const result = await useCase({
+        replyToWamid: 'wamid-123',
+        replyText: '',
+        userId: 'user-1',
+        buttonId: 'cancel-task:task-123:abcd',
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.message).toBe('Code agent client not configured');
+      }
+
+      const messages = whatsappPublisher.getSentMessages();
+      expect(messages).toHaveLength(1);
+      expect(messages[0]?.message).toContain('service temporarily unavailable');
+    });
+
+    it('returns error when nonce is missing from button ID', async () => {
+      const { FakeCodeAgentClient } = await import('../fakes.js');
+      const codeAgentClient = new FakeCodeAgentClient();
+
+      const useCaseWithClient = createHandleApprovalReplyUseCase({
+        actionRepository,
+        approvalMessageRepository,
+        approvalIntentClassifierFactory: classifierFactory,
+        whatsappPublisher,
+        actionEventPublisher,
+        codeAgentClient,
+        logger: createMockLogger(),
+      });
+
+      const result = await useCaseWithClient({
+        replyToWamid: 'wamid-123',
+        replyText: '',
+        userId: 'user-1',
+        buttonId: 'cancel-task:task-123', // Missing nonce
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.message).toBe('Cancel-task button missing nonce');
+      }
+
+      const messages = whatsappPublisher.getSentMessages();
+      expect(messages).toHaveLength(1);
+      expect(messages[0]?.message).toContain('missing security code');
+    });
+
+    it('sends success message when task is cancelled', async () => {
+      const { FakeCodeAgentClient } = await import('../fakes.js');
+      const codeAgentClient = new FakeCodeAgentClient();
+
+      const useCaseWithClient = createHandleApprovalReplyUseCase({
+        actionRepository,
+        approvalMessageRepository,
+        approvalIntentClassifierFactory: classifierFactory,
+        whatsappPublisher,
+        actionEventPublisher,
+        codeAgentClient,
+        logger: createMockLogger(),
+      });
+
+      const result = await useCaseWithClient({
+        replyToWamid: 'wamid-123',
+        replyText: '',
+        userId: 'user-1',
+        buttonId: 'cancel-task:task-123:validnonce',
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.matched).toBe(true);
+        expect(result.value.outcome).toBe('rejected');
+      }
+
+      const messages = whatsappPublisher.getSentMessages();
+      expect(messages).toHaveLength(1);
+      expect(messages[0]?.message).toContain('cancellation requested');
+
+      const cancelled = codeAgentClient.getCancelledTasks();
+      expect(cancelled).toHaveLength(1);
+      expect(cancelled[0]).toMatchObject({
+        taskId: 'task-123',
+        nonce: 'validnonce',
+        userId: 'user-1',
+      });
+    });
+
+    it('sends error message when task not found', async () => {
+      const { FakeCodeAgentClient } = await import('../fakes.js');
+      const codeAgentClient = new FakeCodeAgentClient();
+      codeAgentClient.setNextCancelError({ code: 'TASK_NOT_FOUND', message: 'Not found' });
+
+      const useCaseWithClient = createHandleApprovalReplyUseCase({
+        actionRepository,
+        approvalMessageRepository,
+        approvalIntentClassifierFactory: classifierFactory,
+        whatsappPublisher,
+        actionEventPublisher,
+        codeAgentClient,
+        logger: createMockLogger(),
+      });
+
+      const result = await useCaseWithClient({
+        replyToWamid: 'wamid-123',
+        replyText: '',
+        userId: 'user-1',
+        buttonId: 'cancel-task:task-123:abcd',
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.matched).toBe(true);
+        expect(result.value.outcome).toBe('rejected');
+      }
+
+      const messages = whatsappPublisher.getSentMessages();
+      expect(messages).toHaveLength(1);
+      expect(messages[0]?.message).toBe('Task not found.');
+    });
+
+    it('sends error message when nonce is invalid', async () => {
+      const { FakeCodeAgentClient } = await import('../fakes.js');
+      const codeAgentClient = new FakeCodeAgentClient();
+      codeAgentClient.setNextCancelError({ code: 'INVALID_NONCE', message: 'Invalid' });
+
+      const useCaseWithClient = createHandleApprovalReplyUseCase({
+        actionRepository,
+        approvalMessageRepository,
+        approvalIntentClassifierFactory: classifierFactory,
+        whatsappPublisher,
+        actionEventPublisher,
+        codeAgentClient,
+        logger: createMockLogger(),
+      });
+
+      const result = await useCaseWithClient({
+        replyToWamid: 'wamid-123',
+        replyText: '',
+        userId: 'user-1',
+        buttonId: 'cancel-task:task-123:wrongnonce',
+      });
+
+      expect(result.ok).toBe(true);
+
+      const messages = whatsappPublisher.getSentMessages();
+      expect(messages).toHaveLength(1);
+      expect(messages[0]?.message).toContain('Invalid cancel code');
+    });
+
+    it('sends error message when nonce is expired', async () => {
+      const { FakeCodeAgentClient } = await import('../fakes.js');
+      const codeAgentClient = new FakeCodeAgentClient();
+      codeAgentClient.setNextCancelError({ code: 'NONCE_EXPIRED', message: 'Expired' });
+
+      const useCaseWithClient = createHandleApprovalReplyUseCase({
+        actionRepository,
+        approvalMessageRepository,
+        approvalIntentClassifierFactory: classifierFactory,
+        whatsappPublisher,
+        actionEventPublisher,
+        codeAgentClient,
+        logger: createMockLogger(),
+      });
+
+      const result = await useCaseWithClient({
+        replyToWamid: 'wamid-123',
+        replyText: '',
+        userId: 'user-1',
+        buttonId: 'cancel-task:task-123:expirednonce',
+      });
+
+      expect(result.ok).toBe(true);
+
+      const messages = whatsappPublisher.getSentMessages();
+      expect(messages).toHaveLength(1);
+      expect(messages[0]?.message).toBe('Cancel link has expired.');
+    });
+
+    it('sends error message when user is not owner', async () => {
+      const { FakeCodeAgentClient } = await import('../fakes.js');
+      const codeAgentClient = new FakeCodeAgentClient();
+      codeAgentClient.setNextCancelError({ code: 'NOT_OWNER', message: 'Not owner' });
+
+      const useCaseWithClient = createHandleApprovalReplyUseCase({
+        actionRepository,
+        approvalMessageRepository,
+        approvalIntentClassifierFactory: classifierFactory,
+        whatsappPublisher,
+        actionEventPublisher,
+        codeAgentClient,
+        logger: createMockLogger(),
+      });
+
+      const result = await useCaseWithClient({
+        replyToWamid: 'wamid-123',
+        replyText: '',
+        userId: 'user-1',
+        buttonId: 'cancel-task:task-123:abcd',
+      });
+
+      expect(result.ok).toBe(true);
+
+      const messages = whatsappPublisher.getSentMessages();
+      expect(messages).toHaveLength(1);
+      expect(messages[0]?.message).toBe('You are not the owner of this task.');
+    });
+
+    it('sends error message when task is not cancellable', async () => {
+      const { FakeCodeAgentClient } = await import('../fakes.js');
+      const codeAgentClient = new FakeCodeAgentClient();
+      codeAgentClient.setNextCancelError({ code: 'TASK_NOT_CANCELLABLE', message: 'Already done' });
+
+      const useCaseWithClient = createHandleApprovalReplyUseCase({
+        actionRepository,
+        approvalMessageRepository,
+        approvalIntentClassifierFactory: classifierFactory,
+        whatsappPublisher,
+        actionEventPublisher,
+        codeAgentClient,
+        logger: createMockLogger(),
+      });
+
+      const result = await useCaseWithClient({
+        replyToWamid: 'wamid-123',
+        replyText: '',
+        userId: 'user-1',
+        buttonId: 'cancel-task:task-123:abcd',
+      });
+
+      expect(result.ok).toBe(true);
+
+      const messages = whatsappPublisher.getSentMessages();
+      expect(messages).toHaveLength(1);
+      expect(messages[0]?.message).toContain('cannot be cancelled');
+    });
+
+    it('sends generic error message for unknown error codes', async () => {
+      const { FakeCodeAgentClient } = await import('../fakes.js');
+      const codeAgentClient = new FakeCodeAgentClient();
+      codeAgentClient.setNextCancelError({ code: 'UNKNOWN', message: 'Something went wrong' });
+
+      const useCaseWithClient = createHandleApprovalReplyUseCase({
+        actionRepository,
+        approvalMessageRepository,
+        approvalIntentClassifierFactory: classifierFactory,
+        whatsappPublisher,
+        actionEventPublisher,
+        codeAgentClient,
+        logger: createMockLogger(),
+      });
+
+      const result = await useCaseWithClient({
+        replyToWamid: 'wamid-123',
+        replyText: '',
+        userId: 'user-1',
+        buttonId: 'cancel-task:task-123:abcd',
+      });
+
+      expect(result.ok).toBe(true);
+
+      const messages = whatsappPublisher.getSentMessages();
+      expect(messages).toHaveLength(1);
+      expect(messages[0]?.message).toBe('Unable to cancel task.');
+    });
+  });
+
+  describe('view-task button (INT-379)', () => {
+    it('sends task URL message on view-task button', async () => {
+      const result = await useCase({
+        replyToWamid: 'wamid-123',
+        replyText: '',
+        userId: 'user-1',
+        buttonId: 'view-task:task-abc',
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.matched).toBe(true);
+      }
+
+      const messages = whatsappPublisher.getSentMessages();
+      expect(messages).toHaveLength(1);
+      expect(messages[0]?.message).toContain('https://app.intexuraos.cloud/#/tasks/task-abc');
+    });
+  });
 });

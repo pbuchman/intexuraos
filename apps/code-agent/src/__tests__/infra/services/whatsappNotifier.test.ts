@@ -4,32 +4,20 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Timestamp } from '@google-cloud/firestore';
-import type { Logger } from '@intexuraos/common-core';
-import { createWhatsAppNotifier } from '../../../infra/services/whatsappNotifierImpl.js';
+import { ok, err } from '@intexuraos/common-core';
+import type { WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
+import { createWhatsAppNotifier, type WhatsAppNotifierConfig } from '../../../infra/services/whatsappNotifierImpl.js';
 import type { CodeTask, TaskError, TaskResult } from '../../../domain/models/codeTask.js';
-import * as InternalClients from '@intexuraos/internal-clients';
-
-// Mock fetchWithAuth
-vi.mock('@intexuraos/internal-clients', async () => {
-  const actual = await vi.importActual('@intexuraos/internal-clients');
-  return {
-    ...actual,
-    fetchWithAuth: vi.fn(),
-  };
-});
 
 describe('WhatsAppNotifier', () => {
-  let logger: Logger;
-  let mockFetchWithAuth: ReturnType<typeof vi.fn>;
+  let mockPublisher: WhatsAppSendPublisher;
+  let publishSendMessageMock: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
-    logger = {
-      info: vi.fn(),
-      warn: vi.fn(),
-      error: vi.fn(),
-      debug: vi.fn(),
+    publishSendMessageMock = vi.fn();
+    mockPublisher = {
+      publishSendMessage: publishSendMessageMock,
     };
-    mockFetchWithAuth = vi.mocked(InternalClients.fetchWithAuth);
   });
 
   afterEach(() => {
@@ -55,10 +43,8 @@ describe('WhatsAppNotifier', () => {
     ...overrides,
   });
 
-  const createMockConfig = (): { baseUrl: string; internalAuthToken: string; logger: Logger } => ({
-    baseUrl: 'http://localhost:3001',
-    internalAuthToken: 'test-token',
-    logger,
+  const createMockConfig = (): WhatsAppNotifierConfig => ({
+    whatsappPublisher: mockPublisher,
   });
 
   const createMockResult = (overrides?: Partial<TaskResult>): TaskResult => ({
@@ -78,29 +64,23 @@ describe('WhatsAppNotifier', () => {
       });
 
       const notifier = createWhatsAppNotifier(createMockConfig());
-
-      mockFetchWithAuth.mockResolvedValueOnce({
-        ok: true,
-        value: undefined,
-      });
+      publishSendMessageMock.mockResolvedValueOnce(ok(undefined));
 
       await notifier.notifyTaskComplete('user-123', task);
 
-      expect(mockFetchWithAuth).toHaveBeenCalledWith(
-        expect.anything(),
-        '/internal/messages/send',
+      expect(publishSendMessageMock).toHaveBeenCalledWith(
         expect.objectContaining({
-          body: expect.stringContaining('✅ Code task completed: Fix login bug'),
+          userId: 'user-123',
+          message: expect.stringContaining('✅ Code task completed: Fix login bug'),
+          correlationId: 'trace-123',
         })
       );
 
-      const body = JSON.parse(
-        (vi.mocked(mockFetchWithAuth).mock.calls[0]?.[2] as RequestInit).body as string
-      );
-      expect(body.message).toContain('PR: https://github.com/pbuchman/intexuraos/pull/123');
-      expect(body.message).toContain('Branch: fix/login-bug');
-      expect(body.message).toContain('Commits: 3');
-      expect(body.message).toContain('Fixed login redirect handling');
+      const callArgs = publishSendMessageMock.mock.calls[0]?.[0];
+      expect(callArgs.message).toContain('PR: https://github.com/pbuchman/intexuraos/pull/123');
+      expect(callArgs.message).toContain('Branch: fix/login-bug');
+      expect(callArgs.message).toContain('Commits: 3');
+      expect(callArgs.message).toContain('Fixed login redirect handling');
     });
 
     it('formats completion message without PR URL', async () => {
@@ -112,20 +92,14 @@ describe('WhatsAppNotifier', () => {
       });
 
       const notifier = createWhatsAppNotifier(createMockConfig());
-
-      mockFetchWithAuth.mockResolvedValueOnce({
-        ok: true,
-        value: undefined,
-      });
+      publishSendMessageMock.mockResolvedValueOnce(ok(undefined));
 
       await notifier.notifyTaskComplete('user-123', task);
 
-      const body = JSON.parse(
-        (vi.mocked(mockFetchWithAuth).mock.calls[0]?.[2] as RequestInit).body as string
-      );
-      expect(body.message).not.toContain('PR:');
-      expect(body.message).toContain('Branch: fix/login-bug');
-      expect(body.message).toContain('Commits: 3');
+      const callArgs = publishSendMessageMock.mock.calls[0]?.[0];
+      expect(callArgs.message).not.toContain('PR:');
+      expect(callArgs.message).toContain('Branch: fix/login-bug');
+      expect(callArgs.message).toContain('Commits: 3');
     });
 
     it('formats completion message with empty PR URL string', async () => {
@@ -137,47 +111,36 @@ describe('WhatsAppNotifier', () => {
       });
 
       const notifier = createWhatsAppNotifier(createMockConfig());
-
-      mockFetchWithAuth.mockResolvedValueOnce({
-        ok: true,
-        value: undefined,
-      });
+      publishSendMessageMock.mockResolvedValueOnce(ok(undefined));
 
       await notifier.notifyTaskComplete('user-123', task);
 
-      const body = JSON.parse(
-        (vi.mocked(mockFetchWithAuth).mock.calls[0]?.[2] as RequestInit).body as string
-      );
-      expect(body.message).not.toContain('PR:');
+      const callArgs = publishSendMessageMock.mock.calls[0]?.[0];
+      expect(callArgs.message).not.toContain('PR:');
     });
 
     it('truncates long prompt when Linear title is missing', async () => {
-      const longPrompt = 'Fix the bug in the authentication system that causes issues when users try to log in with invalid credentials';
+      const longPrompt =
+        'Fix the bug in the authentication system that causes issues when users try to log in with invalid credentials';
       const task = createMockTask({
         prompt: longPrompt,
-        // Omit linearIssueTitle to test undefined branch
         result: createMockResult({
           branch: 'fix/auth-bug',
           commits: 2,
           summary: 'Fixed auth bug',
         }),
       });
-      // Remove linearIssueTitle by destructuring
       const { linearIssueTitle: _, ...taskWithoutLinearTitle } = task;
 
       const notifier = createWhatsAppNotifier(createMockConfig());
-
-      mockFetchWithAuth.mockResolvedValueOnce({
-        ok: true,
-        value: undefined,
-      });
+      publishSendMessageMock.mockResolvedValueOnce(ok(undefined));
 
       await notifier.notifyTaskComplete('user-123', taskWithoutLinearTitle);
 
-      const body = JSON.parse(
-        (vi.mocked(mockFetchWithAuth).mock.calls[0]?.[2] as RequestInit).body as string
+      const callArgs = publishSendMessageMock.mock.calls[0]?.[0];
+      expect(callArgs.message).toContain(
+        '✅ Code task completed: Fix the bug in the authentication system that caus'
       );
-      expect(body.message).toContain('✅ Code task completed: Fix the bug in the authentication system that caus');
     });
 
     it('includes Linear fallback warning when linearFallback is true', async () => {
@@ -188,18 +151,12 @@ describe('WhatsAppNotifier', () => {
       });
 
       const notifier = createWhatsAppNotifier(createMockConfig());
-
-      mockFetchWithAuth.mockResolvedValueOnce({
-        ok: true,
-        value: undefined,
-      });
+      publishSendMessageMock.mockResolvedValueOnce(ok(undefined));
 
       await notifier.notifyTaskComplete('user-123', task);
 
-      const body = JSON.parse(
-        (vi.mocked(mockFetchWithAuth).mock.calls[0]?.[2] as RequestInit).body as string
-      );
-      expect(body.message).toContain('⚠️ (Linear unavailable - no issue tracking)');
+      const callArgs = publishSendMessageMock.mock.calls[0]?.[0];
+      expect(callArgs.message).toContain('⚠️ (Linear unavailable - no issue tracking)');
     });
 
     it('omits Linear fallback warning when linearFallback is false', async () => {
@@ -210,18 +167,12 @@ describe('WhatsAppNotifier', () => {
       });
 
       const notifier = createWhatsAppNotifier(createMockConfig());
-
-      mockFetchWithAuth.mockResolvedValueOnce({
-        ok: true,
-        value: undefined,
-      });
+      publishSendMessageMock.mockResolvedValueOnce(ok(undefined));
 
       await notifier.notifyTaskComplete('user-123', task);
 
-      const body = JSON.parse(
-        (vi.mocked(mockFetchWithAuth).mock.calls[0]?.[2] as RequestInit).body as string
-      );
-      expect(body.message).not.toContain('⚠️ (Linear unavailable');
+      const callArgs = publishSendMessageMock.mock.calls[0]?.[0];
+      expect(callArgs.message).not.toContain('⚠️ (Linear unavailable');
     });
 
     it('uses Linear title when available', async () => {
@@ -236,42 +187,29 @@ describe('WhatsAppNotifier', () => {
       });
 
       const notifier = createWhatsAppNotifier(createMockConfig());
-
-      mockFetchWithAuth.mockResolvedValueOnce({
-        ok: true,
-        value: undefined,
-      });
+      publishSendMessageMock.mockResolvedValueOnce(ok(undefined));
 
       await notifier.notifyTaskComplete('user-123', task);
 
-      const body = JSON.parse(
-        (vi.mocked(mockFetchWithAuth).mock.calls[0]?.[2] as RequestInit).body as string
-      );
-      expect(body.message).toContain('✅ Code task completed: INT-123 Fix auth bug');
-      expect(body.message).not.toContain('Fix the bug in the authentication system');
+      const callArgs = publishSendMessageMock.mock.calls[0]?.[0];
+      expect(callArgs.message).toContain('✅ Code task completed: INT-123 Fix auth bug');
+      expect(callArgs.message).not.toContain('Fix the bug in the authentication system');
     });
 
     it('handles completion without result', async () => {
       const task = createMockTask({
         linearIssueTitle: 'Fix login bug',
-        // result omitted to test undefined branch
       } as Partial<CodeTask> as CodeTask);
 
       const notifier = createWhatsAppNotifier(createMockConfig());
-
-      mockFetchWithAuth.mockResolvedValueOnce({
-        ok: true,
-        value: undefined,
-      });
+      publishSendMessageMock.mockResolvedValueOnce(ok(undefined));
 
       await notifier.notifyTaskComplete('user-123', task);
 
-      const body = JSON.parse(
-        (vi.mocked(mockFetchWithAuth).mock.calls[0]?.[2] as RequestInit).body as string
-      );
-      expect(body.message).toBe('✅ Code task completed: Fix login bug');
-      expect(body.message).not.toContain('Branch:');
-      expect(body.message).not.toContain('Commits:');
+      const callArgs = publishSendMessageMock.mock.calls[0]?.[0];
+      expect(callArgs.message).toBe('✅ Code task completed: Fix login bug');
+      expect(callArgs.message).not.toContain('Branch:');
+      expect(callArgs.message).not.toContain('Commits:');
     });
   });
 
@@ -290,19 +228,13 @@ describe('WhatsAppNotifier', () => {
       const error = createMockError();
 
       const notifier = createWhatsAppNotifier(createMockConfig());
-
-      mockFetchWithAuth.mockResolvedValueOnce({
-        ok: true,
-        value: undefined,
-      });
+      publishSendMessageMock.mockResolvedValueOnce(ok(undefined));
 
       await notifier.notifyTaskFailed('user-123', task, error);
 
-      const body = JSON.parse(
-        (vi.mocked(mockFetchWithAuth).mock.calls[0]?.[2] as RequestInit).body as string
-      );
-      expect(body.message).toContain('❌ Code task failed: Fix login bug');
-      expect(body.message).toContain('Error: Test error occurred');
+      const callArgs = publishSendMessageMock.mock.calls[0]?.[0];
+      expect(callArgs.message).toContain('❌ Code task failed: Fix login bug');
+      expect(callArgs.message).toContain('Error: Test error occurred');
     });
 
     it('includes remediation suggestion when available', async () => {
@@ -318,18 +250,12 @@ describe('WhatsAppNotifier', () => {
       });
 
       const notifier = createWhatsAppNotifier(createMockConfig());
-
-      mockFetchWithAuth.mockResolvedValueOnce({
-        ok: true,
-        value: undefined,
-      });
+      publishSendMessageMock.mockResolvedValueOnce(ok(undefined));
 
       await notifier.notifyTaskFailed('user-123', task, error);
 
-      const body = JSON.parse(
-        (vi.mocked(mockFetchWithAuth).mock.calls[0]?.[2] as RequestInit).body as string
-      );
-      expect(body.message).toContain('Suggestion: Check the logs');
+      const callArgs = publishSendMessageMock.mock.calls[0]?.[0];
+      expect(callArgs.message).toContain('Suggestion: Check the logs');
     });
 
     it('omits remediation when manualSteps is empty string', async () => {
@@ -345,18 +271,12 @@ describe('WhatsAppNotifier', () => {
       });
 
       const notifier = createWhatsAppNotifier(createMockConfig());
-
-      mockFetchWithAuth.mockResolvedValueOnce({
-        ok: true,
-        value: undefined,
-      });
+      publishSendMessageMock.mockResolvedValueOnce(ok(undefined));
 
       await notifier.notifyTaskFailed('user-123', task, error);
 
-      const body = JSON.parse(
-        (vi.mocked(mockFetchWithAuth).mock.calls[0]?.[2] as RequestInit).body as string
-      );
-      expect(body.message).not.toContain('Suggestion:');
+      const callArgs = publishSendMessageMock.mock.calls[0]?.[0];
+      expect(callArgs.message).not.toContain('Suggestion:');
     });
 
     it('omits remediation when remediation itself is undefined', async () => {
@@ -366,23 +286,16 @@ describe('WhatsAppNotifier', () => {
       });
       const error = createMockError({
         message: 'Test error occurred',
-        // Omit remediation to test undefined branch
       });
       const { remediation: _, ...errorWithoutRemediation } = error;
 
       const notifier = createWhatsAppNotifier(createMockConfig());
-
-      mockFetchWithAuth.mockResolvedValueOnce({
-        ok: true,
-        value: undefined,
-      });
+      publishSendMessageMock.mockResolvedValueOnce(ok(undefined));
 
       await notifier.notifyTaskFailed('user-123', task, errorWithoutRemediation);
 
-      const body = JSON.parse(
-        (vi.mocked(mockFetchWithAuth).mock.calls[0]?.[2] as RequestInit).body as string
-      );
-      expect(body.message).not.toContain('Suggestion:');
+      const callArgs = publishSendMessageMock.mock.calls[0]?.[0];
+      expect(callArgs.message).not.toContain('Suggestion:');
     });
 
     it('includes Linear fallback warning when linearFallback is true', async () => {
@@ -394,18 +307,12 @@ describe('WhatsAppNotifier', () => {
       const error = createMockError();
 
       const notifier = createWhatsAppNotifier(createMockConfig());
-
-      mockFetchWithAuth.mockResolvedValueOnce({
-        ok: true,
-        value: undefined,
-      });
+      publishSendMessageMock.mockResolvedValueOnce(ok(undefined));
 
       await notifier.notifyTaskFailed('user-123', task, error);
 
-      const body = JSON.parse(
-        (vi.mocked(mockFetchWithAuth).mock.calls[0]?.[2] as RequestInit).body as string
-      );
-      expect(body.message).toContain('⚠️ (Linear unavailable - no issue tracking)');
+      const callArgs = publishSendMessageMock.mock.calls[0]?.[0];
+      expect(callArgs.message).toContain('⚠️ (Linear unavailable - no issue tracking)');
     });
 
     it('omits Linear fallback warning when linearFallback is false', async () => {
@@ -417,43 +324,33 @@ describe('WhatsAppNotifier', () => {
       const error = createMockError();
 
       const notifier = createWhatsAppNotifier(createMockConfig());
-
-      mockFetchWithAuth.mockResolvedValueOnce({
-        ok: true,
-        value: undefined,
-      });
+      publishSendMessageMock.mockResolvedValueOnce(ok(undefined));
 
       await notifier.notifyTaskFailed('user-123', task, error);
 
-      const body = JSON.parse(
-        (vi.mocked(mockFetchWithAuth).mock.calls[0]?.[2] as RequestInit).body as string
-      );
-      expect(body.message).not.toContain('⚠️ (Linear unavailable');
+      const callArgs = publishSendMessageMock.mock.calls[0]?.[0];
+      expect(callArgs.message).not.toContain('⚠️ (Linear unavailable');
     });
 
     it('truncates long prompt when Linear title is missing', async () => {
-      const longPrompt = 'Fix the bug in the authentication system that causes issues when users try to log in with invalid credentials';
+      const longPrompt =
+        'Fix the bug in the authentication system that causes issues when users try to log in with invalid credentials';
       const task = createMockTask({
         prompt: longPrompt,
         status: 'failed',
       });
-      // Remove linearIssueTitle to test undefined branch
       const { linearIssueTitle: _, ...taskWithoutLinearTitle } = task;
       const error = createMockError();
 
       const notifier = createWhatsAppNotifier(createMockConfig());
-
-      mockFetchWithAuth.mockResolvedValueOnce({
-        ok: true,
-        value: undefined,
-      });
+      publishSendMessageMock.mockResolvedValueOnce(ok(undefined));
 
       await notifier.notifyTaskFailed('user-123', taskWithoutLinearTitle, error);
 
-      const body = JSON.parse(
-        (vi.mocked(mockFetchWithAuth).mock.calls[0]?.[2] as RequestInit).body as string
+      const callArgs = publishSendMessageMock.mock.calls[0]?.[0];
+      expect(callArgs.message).toContain(
+        '❌ Code task failed: Fix the bug in the authentication system that caus'
       );
-      expect(body.message).toContain('❌ Code task failed: Fix the bug in the authentication system that caus');
     });
 
     it('uses Linear title when available for failure', async () => {
@@ -465,57 +362,34 @@ describe('WhatsAppNotifier', () => {
       const error = createMockError();
 
       const notifier = createWhatsAppNotifier(createMockConfig());
-
-      mockFetchWithAuth.mockResolvedValueOnce({
-        ok: true,
-        value: undefined,
-      });
+      publishSendMessageMock.mockResolvedValueOnce(ok(undefined));
 
       await notifier.notifyTaskFailed('user-123', task, error);
 
-      const body = JSON.parse(
-        (vi.mocked(mockFetchWithAuth).mock.calls[0]?.[2] as RequestInit).body as string
-      );
-      expect(body.message).toContain('❌ Code task failed: INT-123 Fix auth bug');
-      expect(body.message).not.toContain('Fix the bug in the authentication system');
+      const callArgs = publishSendMessageMock.mock.calls[0]?.[0];
+      expect(callArgs.message).toContain('❌ Code task failed: INT-123 Fix auth bug');
+      expect(callArgs.message).not.toContain('Fix the bug in the authentication system');
     });
   });
 
   describe('notifyTaskComplete', () => {
-    it('sends notification with correct message type', async () => {
+    it('sends notification with correlationId from traceId', async () => {
       const task = createMockTask({
         result: createMockResult(),
+        traceId: 'test-trace-id',
       });
 
       const notifier = createWhatsAppNotifier(createMockConfig());
-
-      mockFetchWithAuth.mockResolvedValueOnce({
-        ok: true,
-        value: undefined,
-      });
+      publishSendMessageMock.mockResolvedValueOnce(ok(undefined));
 
       const result = await notifier.notifyTaskComplete('user-123', task);
 
       expect(result.ok).toBe(true);
-      expect(mockFetchWithAuth).toHaveBeenCalledWith(
-        expect.objectContaining({
-          baseUrl: 'http://localhost:3001',
-          internalAuthToken: 'test-token',
-        }),
-        '/internal/messages/send',
-        expect.objectContaining({
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-        })
-      );
-
-      const body = JSON.parse(
-        (vi.mocked(mockFetchWithAuth).mock.calls[0]?.[2] as RequestInit).body as string
-      );
-      expect(body.userId).toBe('user-123');
-      expect(body.type).toBe('code_task_complete');
+      expect(publishSendMessageMock).toHaveBeenCalledWith({
+        userId: 'user-123',
+        message: expect.any(String),
+        correlationId: 'test-trace-id',
+      });
     });
 
     it('returns error when notification fails', async () => {
@@ -524,11 +398,9 @@ describe('WhatsAppNotifier', () => {
       });
 
       const notifier = createWhatsAppNotifier(createMockConfig());
-
-      mockFetchWithAuth.mockResolvedValueOnce({
-        ok: false,
-        error: { message: 'Service unavailable', code: 'API_ERROR' },
-      });
+      publishSendMessageMock.mockResolvedValueOnce(
+        err({ code: 'PUBLISH_ERROR', message: 'Service unavailable' })
+      );
 
       const result = await notifier.notifyTaskComplete('user-123', task);
 
@@ -541,9 +413,10 @@ describe('WhatsAppNotifier', () => {
   });
 
   describe('notifyTaskFailed', () => {
-    it('sends failure notification with correct message type', async () => {
+    it('sends failure notification with correlationId', async () => {
       const task = createMockTask({
         status: 'failed',
+        traceId: 'test-trace-id',
       });
       const error: TaskError = {
         code: 'test_error',
@@ -551,20 +424,16 @@ describe('WhatsAppNotifier', () => {
       };
 
       const notifier = createWhatsAppNotifier(createMockConfig());
-
-      mockFetchWithAuth.mockResolvedValueOnce({
-        ok: true,
-        value: undefined,
-      });
+      publishSendMessageMock.mockResolvedValueOnce(ok(undefined));
 
       const result = await notifier.notifyTaskFailed('user-123', task, error);
 
       expect(result.ok).toBe(true);
-      const body = JSON.parse(
-        (vi.mocked(mockFetchWithAuth).mock.calls[0]?.[2] as RequestInit).body as string
-      );
-      expect(body.userId).toBe('user-123');
-      expect(body.type).toBe('code_task_failed');
+      expect(publishSendMessageMock).toHaveBeenCalledWith({
+        userId: 'user-123',
+        message: expect.any(String),
+        correlationId: 'test-trace-id',
+      });
     });
 
     it('returns error when failure notification fails', async () => {
@@ -577,13 +446,127 @@ describe('WhatsAppNotifier', () => {
       };
 
       const notifier = createWhatsAppNotifier(createMockConfig());
-
-      mockFetchWithAuth.mockResolvedValueOnce({
-        ok: false,
-        error: { message: 'Service unavailable', code: 'API_ERROR' },
-      });
+      publishSendMessageMock.mockResolvedValueOnce(
+        err({ code: 'PUBLISH_ERROR', message: 'Service unavailable' })
+      );
 
       const result = await notifier.notifyTaskFailed('user-123', task, error);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('notification_failed');
+        expect(result.error.message).toBe('Service unavailable');
+      }
+    });
+  });
+
+  describe('notifyTaskStarted', () => {
+    it('sends started notification with task details', async () => {
+      const task = createMockTask({
+        linearIssueTitle: 'Fix login bug',
+        status: 'running',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: 'test-trace-id',
+      });
+
+      const notifier = createWhatsAppNotifier(createMockConfig());
+      publishSendMessageMock.mockResolvedValueOnce(ok(undefined));
+
+      const result = await notifier.notifyTaskStarted('user-123', task);
+
+      expect(result.ok).toBe(true);
+      const callArgs = publishSendMessageMock.mock.calls[0]?.[0];
+      expect(callArgs.message).toContain('🚀 Code task started: Fix login bug');
+      expect(callArgs.message).toContain('Task ID: task-123');
+      expect(callArgs.message).toContain('Repository: pbuchman/intexuraos');
+      expect(callArgs.message).toContain('Branch: development');
+      expect(callArgs.correlationId).toBe('test-trace-id');
+    });
+
+    it('sends notification with Cancel and View buttons when cancelNonce is set', async () => {
+      const task = createMockTask({
+        linearIssueTitle: 'Fix login bug',
+        status: 'running',
+        cancelNonce: 'a1b2',
+      });
+
+      const notifier = createWhatsAppNotifier(createMockConfig());
+      publishSendMessageMock.mockResolvedValueOnce(ok(undefined));
+
+      await notifier.notifyTaskStarted('user-123', task);
+
+      const callArgs = publishSendMessageMock.mock.calls[0]?.[0];
+      expect(callArgs.buttons).toHaveLength(2);
+      expect(callArgs.buttons[0]).toEqual({
+        type: 'reply',
+        reply: {
+          id: 'cancel-task:task-123:a1b2',
+          title: '❌ Cancel Task',
+        },
+      });
+      expect(callArgs.buttons[1]).toEqual({
+        type: 'reply',
+        reply: {
+          id: 'view-task:task-123',
+          title: '👁️ View Progress',
+        },
+      });
+    });
+
+    it('sends notification with only View button when cancelNonce is not set', async () => {
+      const task = createMockTask({
+        linearIssueTitle: 'Fix login bug',
+        status: 'running',
+      });
+
+      const notifier = createWhatsAppNotifier(createMockConfig());
+      publishSendMessageMock.mockResolvedValueOnce(ok(undefined));
+
+      await notifier.notifyTaskStarted('user-123', task);
+
+      const callArgs = publishSendMessageMock.mock.calls[0]?.[0];
+      expect(callArgs.buttons).toHaveLength(1);
+      expect(callArgs.buttons[0]).toEqual({
+        type: 'reply',
+        reply: {
+          id: 'view-task:task-123',
+          title: '👁️ View Progress',
+        },
+      });
+    });
+
+    it('truncates long prompt when Linear title is missing', async () => {
+      const longPrompt =
+        'Fix the bug in the authentication system that causes issues when users try to log in with invalid credentials';
+      const task = createMockTask({
+        prompt: longPrompt,
+        status: 'running',
+      });
+      const { linearIssueTitle: _, ...taskWithoutLinearTitle } = task;
+
+      const notifier = createWhatsAppNotifier(createMockConfig());
+      publishSendMessageMock.mockResolvedValueOnce(ok(undefined));
+
+      await notifier.notifyTaskStarted('user-123', taskWithoutLinearTitle);
+
+      const callArgs = publishSendMessageMock.mock.calls[0]?.[0];
+      expect(callArgs.message).toContain(
+        '🚀 Code task started: Fix the bug in the authentication system that caus'
+      );
+    });
+
+    it('returns error when notification fails', async () => {
+      const task = createMockTask({
+        status: 'running',
+      });
+
+      const notifier = createWhatsAppNotifier(createMockConfig());
+      publishSendMessageMock.mockResolvedValueOnce(
+        err({ code: 'PUBLISH_ERROR', message: 'Service unavailable' })
+      );
+
+      const result = await notifier.notifyTaskStarted('user-123', task);
 
       expect(result.ok).toBe(false);
       if (!result.ok) {

@@ -27,13 +27,14 @@ import { createWorkerDiscoveryService } from '../infra/services/workerDiscoveryI
 import { createTaskDispatcherService } from '../infra/services/taskDispatcherImpl.js';
 import { createWhatsAppNotifier } from '../infra/services/whatsappNotifierImpl.js';
 import { createStatusMirrorService } from '../infra/services/statusMirrorServiceImpl.js';
+import type { WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
+import { ok } from '@intexuraos/common-core';
 import type { WorkerDiscoveryService } from '../domain/services/workerDiscovery.js';
 import type { TaskDispatcherService } from '../domain/services/taskDispatcher.js';
 import type { LogChunkRepository } from '../domain/repositories/logChunkRepository.js';
 import type { ActionsAgentClient } from '../infra/clients/actionsAgentClient.js';
 import type { WhatsAppNotifier } from '../domain/services/whatsappNotifier.js';
 import type { RateLimitService } from '../domain/services/rateLimitService.js';
-import { ok } from '@intexuraos/common-core';
 import type { LinearIssueService } from '../domain/services/linearIssueService.js';
 import type { StatusMirrorService } from '../infra/services/statusMirrorServiceImpl.js';
 import { createProcessHeartbeatUseCase } from '../domain/usecases/processHeartbeat.js';
@@ -92,9 +93,9 @@ describe('OpenAPI contract', () => {
         orchestratorVmUrl: 'https://cc-vm.intexuraos.cloud',
       }),
       whatsappNotifier: createWhatsAppNotifier({
-        baseUrl: 'http://whatsapp-service',
-        internalAuthToken: 'test-token',
-        logger,
+        whatsappPublisher: {
+          publishSendMessage: async () => ok(undefined),
+        } as unknown as WhatsAppSendPublisher,
       }),
       logChunkRepo: createFirestoreLogChunkRepository({
         firestore: fakeFirestore,

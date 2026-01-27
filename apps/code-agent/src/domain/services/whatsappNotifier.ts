@@ -48,4 +48,17 @@ export interface WhatsAppNotifier {
     task: CodeTask,
     error: TaskError
   ): Promise<Result<void, NotificationError>>;
+
+  /**
+   * Send notification when task starts with interactive cancel/view buttons.
+   * Design reference: INT-379
+   *
+   * @param userId - User ID to send notification to
+   * @param task - Started task with cancelNonce set
+   * @returns Ok(undefined) on success, Err on failure
+   */
+  notifyTaskStarted(
+    userId: string,
+    task: CodeTask
+  ): Promise<Result<void, NotificationError>>;
 }

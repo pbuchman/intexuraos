@@ -19,6 +19,7 @@ import { createLinearIssueService } from '../../domain/services/linearIssueServi
 import { createStatusMirrorService } from '../../infra/services/statusMirrorServiceImpl.js';
 import { createProcessHeartbeatUseCase } from '../../domain/usecases/processHeartbeat.js';
 import { createDetectZombieTasksUseCase } from '../../domain/usecases/detectZombieTasks.js';
+import type { WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
 
 export function setupTestServices({ actionsAgentUrl = 'http://actions-agent' }: { actionsAgentUrl?: string } = {}): void {
   const fakeFirestore = createFakeFirestore() as unknown as Firestore;
@@ -74,9 +75,9 @@ export function setupTestServices({ actionsAgentUrl = 'http://actions-agent' }: 
       orchestratorVmUrl: 'https://cc-vm.intexuraos.cloud',
     }),
     whatsappNotifier: createWhatsAppNotifier({
-      baseUrl: 'http://whatsapp-service',
-      internalAuthToken: 'test-token',
-      logger,
+      whatsappPublisher: {
+        publishSendMessage: async () => ok(undefined),
+      } as unknown as WhatsAppSendPublisher,
     }),
     actionsAgentClient,
     statusMirrorService: createStatusMirrorService({

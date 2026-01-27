@@ -12,7 +12,7 @@
 /* eslint-disable @typescript-eslint/dot-notation */
 
 import type { Firestore } from '@google-cloud/firestore';
-import { Timestamp } from '@google-cloud/firestore';
+import { FieldValue, Timestamp } from '@google-cloud/firestore';
 import { createHash, randomUUID } from 'node:crypto';
 import type { Result } from '@intexuraos/common-core';
 import type { Logger } from '@intexuraos/common-core';
@@ -299,6 +299,16 @@ export const createFirestoreCodeTaskRepository = (deps: {
         }
         if (input.lastHeartbeat !== undefined) {
           updateData['lastHeartbeat'] = Timestamp.fromDate(input.lastHeartbeat);
+        }
+        if (input.cancelNonce !== undefined) {
+          updateData['cancelNonce'] = input.cancelNonce === null
+            ? FieldValue.delete()
+            : input.cancelNonce;
+        }
+        if (input.cancelNonceExpiresAt !== undefined) {
+          updateData['cancelNonceExpiresAt'] = input.cancelNonceExpiresAt === null
+            ? FieldValue.delete()
+            : input.cancelNonceExpiresAt;
         }
 
         await docRef.update(updateData);

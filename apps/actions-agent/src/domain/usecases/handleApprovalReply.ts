@@ -19,6 +19,7 @@ import type { ExecuteLinkActionUseCase } from './executeLinkAction.js';
 import type { ExecuteCalendarActionUseCase } from './executeCalendarAction.js';
 import type { ExecuteLinearActionUseCase } from './executeLinearAction.js';
 import type { ExecuteCodeActionUseCase } from './executeCodeAction.js';
+import type { CodeAgentClient } from '../ports/codeAgentClient.js';
 
 export interface HandleApprovalReplyDeps {
   actionRepository: ActionRepository;
@@ -41,6 +42,8 @@ export interface HandleApprovalReplyDeps {
   executeLinearAction?: ExecuteLinearActionUseCase;
   /** Optional: If provided, code actions will be executed directly (skipping event publishing). */
   executeCodeAction?: ExecuteCodeActionUseCase;
+  /** Optional: If provided, enables cancel-task button handling (INT-379). */
+  codeAgentClient?: CodeAgentClient;
 }
 
 export interface ApprovalReplyInput {
@@ -90,6 +93,7 @@ export function createHandleApprovalReplyUseCase(
     executeCalendarAction,
     executeLinearAction,
     executeCodeAction,
+    codeAgentClient,
   } = deps;
 
   return async (input: ApprovalReplyInput): Promise<Result<ApprovalReplyResult>> => {
@@ -106,6 +110,29 @@ export function createHandleApprovalReplyUseCase(
       },
       'Handling approval reply'
     );
+
+    // Handle code task buttons (INT-379) early - these don't require an action lookup
+    if (buttonId !== undefined) {
+      const parts = buttonId.split(':');
+      const intent = parts[0];
+
+      if (intent === 'cancel-task') {
+        const [, taskId, nonce] = parts;
+        return await handleCancelTaskButton(
+          taskId ?? '',
+          nonce,
+          userId,
+          whatsappPublisher,
+          codeAgentClient,
+          logger
+        );
+      }
+
+      if (intent === 'view-task') {
+        const [, taskId] = parts;
+        return await handleViewTaskButton(taskId ?? '', userId, whatsappPublisher, logger);
+      }
+    }
 
     // Determine the action ID - either provided directly or looked up by wamid
     let targetActionId: string | undefined = providedActionId;
@@ -194,6 +221,7 @@ export function createHandleApprovalReplyUseCase(
         buttonTitle,
         action,
         replyText,
+        userId,
         actionRepository,
         whatsappPublisher,
         approvalMessageRepository,
@@ -619,16 +647,19 @@ export function createHandleApprovalReplyUseCase(
 /**
  * Handle button response with nonce validation.
  *
- * Button ID format: "approve:{actionId}:{nonce}" | "cancel:{actionId}" | "convert:{actionId}"
+ * Button ID formats:
+ * - Action buttons: "approve:{actionId}:{nonce}" | "cancel:{actionId}" | "convert:{actionId}"
+ * - Code task buttons (INT-379): "cancel-task:{taskId}:{nonce}" | "view-task:{taskId}"
  *
  * This function handles deterministic button responses, bypassing the LLM classifier.
- * For approve actions, it validates the nonce to prevent replay attacks.
+ * For approve/cancel-task actions, it validates the nonce to prevent replay attacks.
  */
 async function handleButtonResponse(
   buttonId: string,
   _buttonTitle: string | undefined,
-  action: Action,
+  action: Action | null,
   _replyText: string,
+  _userId: string,
   actionRepository: ActionRepository,
   whatsappPublisher: HandleApprovalReplyDeps['whatsappPublisher'],
   approvalMessageRepository: HandleApprovalReplyDeps['approvalMessageRepository'],
@@ -642,7 +673,7 @@ async function handleButtonResponse(
   executeLinearAction?: HandleApprovalReplyDeps['executeLinearAction'],
   executeCodeAction?: HandleApprovalReplyDeps['executeCodeAction']
 ): Promise<Result<ApprovalReplyResult>> {
-  // Parse button ID: "intent:actionId[:nonce]"
+  // Parse button ID: "intent:id[:nonce]"
   const parts = buttonId.split(':');
 
   if (parts.length < 2) {
@@ -650,12 +681,18 @@ async function handleButtonResponse(
     return err(new Error('Invalid button ID format'));
   }
 
-  const [intent, actionIdFromButton, nonce] = parts;
+  const [intent, idFromButton, nonce] = parts;
+
+  // For action-related buttons, verify we have an action
+  if (action === null) {
+    logger.warn({ buttonId, intent }, 'Action-related button received but no action found');
+    return err(new Error('Action not found for button'));
+  }
 
   // Verify the actionId from button matches the action we're processing
-  if (actionIdFromButton !== action.id) {
+  if (idFromButton !== action.id) {
     logger.warn(
-      { buttonActionId: actionIdFromButton, actionId: action.id },
+      { buttonActionId: idFromButton, actionId: action.id },
       'Button action ID mismatch'
     );
     return err(new Error('Button action ID mismatch'));
@@ -1292,5 +1329,110 @@ async function handleNonceTextFallback(
     actionId: action.id,
     intent: 'approve' as ApprovalIntent,
     outcome: 'approved',
+  });
+}
+
+/**
+ * Handle cancel-task button (INT-379).
+ *
+ * This button is sent with running code tasks to allow users to cancel them via WhatsApp.
+ * Button ID format: "cancel-task:{taskId}:{nonce}"
+ */
+async function handleCancelTaskButton(
+  taskId: string,
+  nonce: string | undefined,
+  userId: string,
+  whatsappPublisher: HandleApprovalReplyDeps['whatsappPublisher'],
+  codeAgentClient: HandleApprovalReplyDeps['codeAgentClient'],
+  logger: Logger
+): Promise<Result<ApprovalReplyResult>> {
+  logger.info({ taskId, userId, hasNonce: nonce !== undefined }, 'Handling cancel-task button');
+
+  if (codeAgentClient === undefined) {
+    logger.error({ taskId }, 'Code agent client not configured for cancel-task');
+    await whatsappPublisher.publishSendMessage({
+      userId,
+      message: 'Unable to cancel task: service temporarily unavailable.',
+      correlationId: `cancel-task-error-${taskId}`,
+    });
+    return err(new Error('Code agent client not configured'));
+  }
+
+  if (nonce === undefined) {
+    logger.warn({ taskId }, 'Cancel-task button missing nonce');
+    await whatsappPublisher.publishSendMessage({
+      userId,
+      message: 'Unable to cancel task: missing security code.',
+      correlationId: `cancel-task-error-${taskId}`,
+    });
+    return err(new Error('Cancel-task button missing nonce'));
+  }
+
+  const result = await codeAgentClient.cancelTaskWithNonce({ taskId, nonce, userId });
+
+  if (!result.ok) {
+    const errorMessages: Record<string, string> = {
+      'TASK_NOT_FOUND': 'Task not found.',
+      'INVALID_NONCE': 'Invalid cancel code. The code may have already been used.',
+      'NONCE_EXPIRED': 'Cancel link has expired.',
+      'NOT_OWNER': 'You are not the owner of this task.',
+      'TASK_NOT_CANCELLABLE': 'Task cannot be cancelled (it may have already completed).',
+    };
+    const message = errorMessages[result.error.code] ?? 'Unable to cancel task.';
+
+    logger.warn(
+      { taskId, errorCode: result.error.code, errorMessage: result.error.message },
+      'Failed to cancel task with nonce'
+    );
+
+    await whatsappPublisher.publishSendMessage({
+      userId,
+      message,
+      correlationId: `cancel-task-error-${taskId}`,
+    });
+
+    return ok({
+      matched: true,
+      outcome: 'rejected',
+    });
+  }
+
+  logger.info({ taskId }, 'Task cancelled successfully via button');
+
+  await whatsappPublisher.publishSendMessage({
+    userId,
+    message: 'Task cancellation requested.',
+    correlationId: `cancel-task-success-${taskId}`,
+  });
+
+  return ok({
+    matched: true,
+    outcome: 'rejected',
+  });
+}
+
+/**
+ * Handle view-task button (INT-379).
+ *
+ * This button allows users to view task details/logs.
+ * For now, we just acknowledge the click and suggest visiting the web app.
+ * Button ID format: "view-task:{taskId}"
+ */
+async function handleViewTaskButton(
+  taskId: string,
+  userId: string,
+  whatsappPublisher: HandleApprovalReplyDeps['whatsappPublisher'],
+  logger: Logger
+): Promise<Result<ApprovalReplyResult>> {
+  logger.info({ taskId, userId }, 'Handling view-task button');
+
+  await whatsappPublisher.publishSendMessage({
+    userId,
+    message: `View task details at: https://app.intexuraos.cloud/#/tasks/${taskId}`,
+    correlationId: `view-task-${taskId}`,
+  });
+
+  return ok({
+    matched: true,
   });
 }
