@@ -311,5 +311,23 @@ describe('exportResearchToNotion', () => {
         expect.stringContaining('Successfully exported')
       );
     });
+
+    it('catches unexpected errors during export and returns err', async () => {
+      deps.researchRepo.findById.mockImplementation(() => {
+        throw new Error('Unexpected database connection loss');
+      });
+
+      const result = await exportResearchToNotion('research-1', 'user-1', deps);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('INTERNAL_ERROR');
+        expect(result.error.message).toBe('Unexpected database connection loss');
+      }
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        { researchId: 'research-1', error: 'Unexpected database connection loss' },
+        expect.stringContaining('Unexpected error exporting research')
+      );
+    });
   });
 });
