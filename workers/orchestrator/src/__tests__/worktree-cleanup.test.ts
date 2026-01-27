@@ -2,33 +2,31 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import type { Logger } from 'pino';
 
 // Track command execution for test assertions
-let gitRemoveCalls: string[] = [];
-let rmRfCalls: string[] = [];
-let throwOnExec = false;
-let execError: Error | string | null = null;
-let execStderr = '';
+let gitRemoveCalls: { cmd: string; args: string[] }[] = [];
+let rmCalls: string[] = [];
+let throwOnExecFile = false;
+let execFileError: Error | string | null = null;
+let execFileStderr = '';
 
 // Mock node:fs/promises and node:fs
 vi.mock('node:fs/promises');
 vi.mock('node:fs');
 
-// Mock node:util with an inline implementation that can access module-level variables
+// Mock node:util with an inline implementation for execFile
 vi.mock('node:util', () => ({
-  promisify: vi.fn((_cmd: unknown) => {
+  promisify: vi.fn((_fn: unknown) => {
+    // Return a mock for execFile that tracks calls
     return async (
-      command: string,
+      cmd: string,
+      args: string[],
       _options: { cwd?: string }
     ): Promise<{ stdout: string; stderr: string }> => {
-      gitRemoveCalls.push(command);
-      if (throwOnExec && execError !== null) {
-        throw execError;
+      gitRemoveCalls.push({ cmd, args });
+      if (throwOnExecFile && execFileError !== null) {
+        throw execFileError;
       }
-      if (command.includes('git worktree remove')) {
-        return { stdout: '', stderr: execStderr };
-      }
-      if (command.includes('rm -rf')) {
-        rmRfCalls.push(command);
-        return { stdout: '', stderr: '' };
+      if (cmd === 'git' && args[0] === 'worktree') {
+        return { stdout: '', stderr: execFileStderr };
       }
       return { stdout: '', stderr: '' };
     };
@@ -36,7 +34,7 @@ vi.mock('node:util', () => ({
 }));
 
 // Import after mocks are set up
-import { readdir, stat } from 'node:fs/promises';
+import { readdir, stat, rm } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { cleanupStaleWorktrees } from '../worktree-cleanup.js';
 
@@ -62,10 +60,15 @@ describe('worktree-cleanup', () => {
 
     vi.clearAllMocks();
     gitRemoveCalls = [];
-    rmRfCalls = [];
-    throwOnExec = false;
-    execError = null;
-    execStderr = '';
+    rmCalls = [];
+    throwOnExecFile = false;
+    execFileError = null;
+    execFileStderr = '';
+
+    // Mock rm to track calls
+    vi.mocked(rm).mockImplementation(async (path: Parameters<typeof rm>[0]) => {
+      rmCalls.push(String(path));
+    });
 
     // Create fresh logger for each test
     logger = createFakeLogger(loggerCalls);
@@ -217,7 +220,7 @@ describe('worktree-cleanup', () => {
     } as unknown as ReturnType<typeof stat>);
 
     // Set stderr to trigger manual removal
-    execStderr = 'Failed to remove worktree';
+    execFileStderr = 'Failed to remove worktree';
 
     const result = await cleanupStaleWorktrees(
       {
@@ -230,7 +233,7 @@ describe('worktree-cleanup', () => {
 
     expect(result.total).toBe(1);
     expect(result.removed).toBe(1);
-    expect(rmRfCalled()).toBe(true);
+    expect(rmCalls.length).toBeGreaterThan(0);
     expect(loggerCalls.filter((c) => c.level === 'warn').length).toBeGreaterThan(0);
     const warnCall = loggerCalls.find((c) => c.level === 'warn');
     expect(warnCall?.data).toHaveProperty('stderr', 'Failed to remove worktree');
@@ -245,7 +248,7 @@ describe('worktree-cleanup', () => {
     } as unknown as ReturnType<typeof stat>);
 
     // Set stderr to "not a valid worktree" - should NOT fall back to manual removal
-    execStderr = 'not a valid worktree';
+    execFileStderr = 'not a valid worktree';
 
     const result = await cleanupStaleWorktrees(
       {
@@ -258,7 +261,7 @@ describe('worktree-cleanup', () => {
 
     expect(result.total).toBe(1);
     expect(result.removed).toBe(1);
-    expect(rmRfCalled()).toBe(false);
+    expect(rmCalls.length).toBe(0);
     expect(loggerCalls.filter((c) => c.level === 'warn').length).toBe(0);
   });
 
@@ -271,8 +274,8 @@ describe('worktree-cleanup', () => {
     } as unknown as ReturnType<typeof stat>);
 
     // Set error to throw
-    throwOnExec = true;
-    execError = new Error('Git command failed');
+    throwOnExecFile = true;
+    execFileError = new Error('Git command failed');
 
     const result = await cleanupStaleWorktrees(
       {
@@ -300,8 +303,8 @@ describe('worktree-cleanup', () => {
     } as unknown as ReturnType<typeof stat>);
 
     // Set non-Error to throw
-    throwOnExec = true;
-    execError = 'string error';
+    throwOnExecFile = true;
+    execFileError = 'string error';
 
     const result = await cleanupStaleWorktrees(
       {
@@ -348,8 +351,3 @@ describe('worktree-cleanup', () => {
     expect(result.removed).toBe(2); // Only stale tasks removed
   });
 });
-
-// Helper function to check if rm -rf was called
-function rmRfCalled(): boolean {
-  return rmRfCalls.some((call) => call.includes('rm -rf'));
-}

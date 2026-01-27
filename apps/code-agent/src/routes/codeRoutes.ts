@@ -1753,6 +1753,8 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
             taskIds: {
               type: 'array',
               items: { type: 'string' },
+              minItems: 1,
+              maxItems: 100,
             },
           },
           required: ['taskIds'],

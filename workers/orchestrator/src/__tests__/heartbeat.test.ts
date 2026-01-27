@@ -6,6 +6,9 @@ import type { Logger } from 'pino';
 const mockFetch = vi.fn();
 global.fetch = mockFetch as typeof global.fetch;
 
+// Set env var for internal auth
+process.env['INTEXURAOS_INTERNAL_AUTH_SECRET'] = 'test-internal-auth-secret';
+
 describe('HeartbeatManager', () => {
   let manager: HeartbeatManager;
   let logger: Logger;
@@ -35,7 +38,6 @@ describe('HeartbeatManager', () => {
     manager = createHeartbeatManager(
       {
         codeAgentUrl: 'https://code-agent.test',
-        webhookSecret: 'test-secret',
         intervalMs: 60_000,
       },
       logger
@@ -88,7 +90,7 @@ describe('HeartbeatManager', () => {
         method: 'POST',
         headers: expect.objectContaining({
           'Content-Type': 'application/json',
-          'X-Webhook-Signature': expect.any(String),
+          'X-Internal-Auth': 'test-internal-auth-secret',
         }),
       })
     );
@@ -113,12 +115,12 @@ describe('HeartbeatManager', () => {
     expect(mockFetch).not.toHaveBeenCalled();
   });
 
-  it('should include HMAC signature in headers', async () => {
-    let capturedSignature: string | undefined;
+  it('should include internal auth header', async () => {
+    let capturedAuthHeader: string | undefined;
 
     mockFetch.mockImplementation(async (_url: string, options?: RequestInit) => {
       const headers = options?.headers as Record<string, string>;
-      capturedSignature = headers?.['X-Webhook-Signature'];
+      capturedAuthHeader = headers?.['X-Internal-Auth'];
       return {
         ok: true,
         json: async () => ({}),
@@ -130,9 +132,7 @@ describe('HeartbeatManager', () => {
 
     await vi.advanceTimersByTimeAsync(60_000);
 
-    expect(capturedSignature).toBeDefined();
-    expect(typeof capturedSignature).toBe('string');
-    expect(capturedSignature?.length).toBeGreaterThan(0);
+    expect(capturedAuthHeader).toBe('test-internal-auth-secret');
   });
 
   it('should handle fetch errors gracefully', async () => {

@@ -1,9 +1,7 @@
-import { createHash } from 'node:crypto';
 import type { Logger } from 'pino';
 
 export interface HeartbeatConfig {
   codeAgentUrl: string;
-  webhookSecret: string;
   intervalMs: number;
 }
 
@@ -35,13 +33,13 @@ export function createHeartbeatManager(config: HeartbeatConfig, logger: Logger):
 
     try {
       const payload = { taskIds };
-      const signature = generateSignature(taskIds, config.webhookSecret);
+      const internalAuthSecret = process.env['INTEXURAOS_INTERNAL_AUTH_SECRET'] ?? '';
 
       const response = await fetch(`${config.codeAgentUrl}/internal/code/heartbeat`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-Webhook-Signature': signature,
+          'X-Internal-Auth': internalAuthSecret,
         },
         body: JSON.stringify(payload),
         signal: AbortSignal.timeout(30_000),
@@ -88,12 +86,4 @@ export function createHeartbeatManager(config: HeartbeatConfig, logger: Logger):
       logger.debug({ taskId, count: runningTasks.size }, 'Task unregistered from heartbeat');
     },
   };
-}
-
-/**
- * Generates HMAC-SHA256 signature for heartbeat payload.
- */
-function generateSignature(taskIds: string[], secret: string): string {
-  const payload = JSON.stringify({ taskIds });
-  return createHash('sha256').update(payload).update(secret).digest('hex');
 }

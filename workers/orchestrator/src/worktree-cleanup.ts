@@ -1,11 +1,11 @@
-import { readdir, stat } from 'node:fs/promises';
+import { readdir, stat, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { existsSync } from 'node:fs';
-import { exec } from 'node:child_process';
+import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import type { Logger } from 'pino';
 
-const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 export interface WorktreeCleanupConfig {
   repositoryPath: string;
@@ -100,9 +100,13 @@ export async function cleanupStaleWorktrees(
       );
 
       // Remove worktree using git worktree remove
-      const { stderr } = await execAsync(`git worktree remove "${worktreePath}" --force`, {
-        cwd: config.repositoryPath,
-      });
+      const { stderr } = await execFileAsync(
+        'git',
+        ['worktree', 'remove', worktreePath, '--force'],
+        {
+          cwd: config.repositoryPath,
+        }
+      );
 
       if (stderr && !stderr.includes('not a valid worktree')) {
         // Git worktree remove may fail for corrupted worktrees, try manual removal
@@ -110,7 +114,7 @@ export async function cleanupStaleWorktrees(
           { worktree: dirName, stderr },
           'Git worktree remove failed, attempting manual removal'
         );
-        await execAsync(`rm -rf "${worktreePath}"`);
+        await rm(worktreePath, { recursive: true, force: true });
       }
 
       result.removed++;
