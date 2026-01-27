@@ -638,6 +638,7 @@ export class FakeEventPublisher implements EventPublisherPort {
   private transcribeAudioEvents: TranscribeAudioEvent[] = [];
   private extractLinkPreviewsEvents: ExtractLinkPreviewsEvent[] = [];
   private approvalReplyEvents: ApprovalReplyEvent[] = [];
+  private approvalReplyFailureMessage: string | null = null;
 
   publishMediaCleanup(event: MediaCleanupEvent): Promise<Result<void, WhatsAppError>> {
     this.mediaCleanupEvents.push(event);
@@ -667,8 +668,17 @@ export class FakeEventPublisher implements EventPublisherPort {
   }
 
   publishApprovalReply(event: ApprovalReplyEvent): Promise<Result<void, WhatsAppError>> {
+    if (this.approvalReplyFailureMessage !== null) {
+      return Promise.resolve(
+        err({ code: 'INTERNAL_ERROR' as const, message: this.approvalReplyFailureMessage })
+      );
+    }
     this.approvalReplyEvents.push(event);
     return Promise.resolve(ok(undefined));
+  }
+
+  setApprovalReplyFailure(message: string): void {
+    this.approvalReplyFailureMessage = message;
   }
 
   getMediaCleanupEvents(): MediaCleanupEvent[] {
@@ -702,6 +712,7 @@ export class FakeEventPublisher implements EventPublisherPort {
     this.transcribeAudioEvents = [];
     this.extractLinkPreviewsEvents = [];
     this.approvalReplyEvents = [];
+    this.approvalReplyFailureMessage = null;
   }
 }
 
