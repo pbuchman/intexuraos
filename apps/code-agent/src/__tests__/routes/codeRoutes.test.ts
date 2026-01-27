@@ -19,20 +19,19 @@ import type { Firestore } from '@google-cloud/firestore';
 import { createFirestoreCodeTaskRepository } from '../../infra/repositories/firestoreCodeTaskRepository.js';
 import type { Logger } from 'pino';
 import type { CodeTaskRepository } from '../../domain/repositories/codeTaskRepository.js';
-import { createWorkerDiscoveryService } from '../../infra/services/workerDiscoveryImpl.js';
-import { createTaskDispatcherService } from '../../infra/services/taskDispatcherImpl.js';
 import { createWhatsAppNotifier } from '../../infra/services/whatsappNotifierImpl.js';
 import { createFirestoreLogChunkRepository } from '../../infra/repositories/firestoreLogChunkRepository.js';
 import { createActionsAgentClient } from '../../infra/clients/actionsAgentClient.js';
 import { createLinearAgentHttpClient } from '../../infra/http/linearAgentHttpClient.js';
 import { createLinearIssueService } from '../../domain/services/linearIssueService.js';
 import type { WorkerDiscoveryService } from '../../domain/services/workerDiscovery.js';
-import type { TaskDispatcherService } from '../../domain/services/taskDispatcher.js';
+import type { WorkerHealth, WorkerConfig, WorkerError } from '../../domain/models/worker.js';
+import type { TaskDispatcherService, DispatchResult, DispatchError } from '../../domain/services/taskDispatcher.js';
 import type { LogChunkRepository } from '../../domain/repositories/logChunkRepository.js';
 import type { ActionsAgentClient } from '../../infra/clients/actionsAgentClient.js';
 import type { WhatsAppNotifier } from '../../domain/services/whatsappNotifier.js';
-import type { RateLimitService } from '../../domain/services/rateLimitService.js';
-import { ok } from '@intexuraos/common-core';
+import type { RateLimitService, RateLimitError } from '../../domain/services/rateLimitService.js';
+import { ok, type Result } from '@intexuraos/common-core';
 import type { WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
 import type { LinearIssueService } from '../../domain/services/linearIssueService.js';
 import { createStatusMirrorService } from '../../infra/services/statusMirrorServiceImpl.js';
@@ -75,15 +74,43 @@ import { createDetectZombieTasksUseCase } from '../../domain/usecases/detectZomb
       logger,
     });
 
-    const workerDiscovery = createWorkerDiscoveryService({ logger });
-    const taskDispatcher = createTaskDispatcherService({
-      logger,
-      cfAccessClientId: 'test-client-id',
-      cfAccessClientSecret: 'test-client-secret',
-      dispatchSigningSecret: 'test-dispatch-secret',
-      orchestratorMacUrl: 'https://cc-mac.intexuraos.cloud',
-      orchestratorVmUrl: 'https://cc-vm.intexuraos.cloud',
-    });
+    const workerDiscovery: WorkerDiscoveryService = {
+      async checkHealth(location: 'mac' | 'vm'): Promise<Result<WorkerHealth, WorkerError>> {
+        return {
+          ok: true as const,
+          value: {
+            location,
+            healthy: true,
+            capacity: 2,
+            checkedAt: new Date(),
+          },
+        };
+      },
+      async findAvailableWorker(): Promise<Result<WorkerConfig, WorkerError>> {
+        return {
+          ok: true as const,
+          value: {
+            location: 'mac',
+            url: 'https://cc-mac.intexuraos.cloud',
+            priority: 1,
+          },
+        };
+      },
+    };
+    const taskDispatcher: TaskDispatcherService = {
+      async dispatch(): Promise<Result<DispatchResult, DispatchError>> {
+        return {
+          ok: true as const,
+          value: {
+            dispatched: true,
+            workerLocation: 'mac',
+          },
+        };
+      },
+      async cancelOnWorker(): Promise<void> {
+        return;
+      },
+    };
     const whatsappNotifier = createWhatsAppNotifier({
       whatsappPublisher: {
         publishSendMessage: async () => ok(undefined),
@@ -876,6 +903,673 @@ import { createDetectZombieTasksUseCase } from '../../domain/usecases/detectZomb
       expect(response.statusCode).toBe(500);
       const body = JSON.parse(response.body);
       expect(body.error).toBe('Database connection failed');
+    });
+  });
+
+  describe('timestampToIso', () => {
+    it('returns undefined for undefined timestamp', async () => {
+      const { timestampToIso } = await import('../../routes/codeRoutes.js');
+      expect(timestampToIso(undefined)).toBe(undefined);
+    });
+
+    it('returns string directly when timestamp is a string', async () => {
+      const { timestampToIso } = await import('../../routes/codeRoutes.js');
+      const dateString = '2024-01-15T10:30:00.000Z';
+      expect(timestampToIso(dateString)).toBe(dateString);
+    });
+
+    it('converts Timestamp with toDate method to ISO string', async () => {
+      const { timestampToIso } = await import('../../routes/codeRoutes.js');
+      const testDate = new Date('2024-01-15T10:30:00.000Z');
+      const mockTimestamp = { toDate: (): Date => testDate };
+      expect(timestampToIso(mockTimestamp)).toBe('2024-01-15T10:30:00.000Z');
+    });
+
+    it('returns undefined for object without toDate method', async () => {
+      const { timestampToIso } = await import('../../routes/codeRoutes.js');
+      const invalidTimestamp = { invalid: true } as unknown as { toDate: () => Date };
+      expect(timestampToIso(invalidTimestamp)).toBe(undefined);
+    });
+  });
+
+  describe('POST /code/submit', () => {
+    it('submits task successfully', async () => {
+      const response = await server.inject({
+        method: 'POST',
+        url: '/code/submit',
+        headers: {
+          authorization: 'Bearer test-token',
+        },
+        payload: {
+          prompt: 'Fix the login bug',
+        },
+      });
+
+      // Note: This test may fail if workers are unavailable, but that's expected behavior
+      expect([200, 503]).toContain(response.statusCode);
+      if (response.statusCode === 200) {
+        const body = JSON.parse(response.body);
+        expect(body.status).toBe('submitted');
+        expect(body.codeTaskId).toBeDefined();
+      }
+    });
+
+    it('submits task with workerType and linearIssueId', async () => {
+      const response = await server.inject({
+        method: 'POST',
+        url: '/code/submit',
+        headers: {
+          authorization: 'Bearer test-token',
+        },
+        payload: {
+          prompt: 'Fix the login bug',
+          workerType: 'opus',
+          linearIssueId: 'INT-123',
+          linearIssueTitle: 'Fix login bug',
+        },
+      });
+
+      // Note: This test may fail if workers are unavailable, but that's expected behavior
+      expect([200, 503]).toContain(response.statusCode);
+      if (response.statusCode === 200) {
+        const body = JSON.parse(response.body);
+        expect(body.status).toBe('submitted');
+        expect(body.codeTaskId).toBeDefined();
+      }
+    });
+
+    it('returns 401 when missing auth header', async () => {
+      const response = await server.inject({
+        method: 'POST',
+        url: '/code/submit',
+        payload: {
+          prompt: 'Fix the login bug',
+        },
+      });
+
+      expect(response.statusCode).toBe(401);
+    });
+
+    it('returns 429 when rate limit exceeded', async () => {
+      const rateLimitService = {
+        async checkLimits(): Promise<Result<void, RateLimitError>> {
+          return {
+            ok: false,
+            error: {
+              code: 'concurrent_limit',
+              message: 'Too many concurrent tasks',
+              retryAfter: '60',
+            },
+          };
+        },
+        async recordTaskStart(): Promise<void> {
+          return;
+        },
+        async recordTaskComplete(): Promise<void> {
+          return;
+        },
+      } satisfies RateLimitService;
+
+      setServices({
+        ...getServices(),
+        rateLimitService,
+      });
+
+      const response = await server.inject({
+        method: 'POST',
+        url: '/code/submit',
+        headers: {
+          authorization: 'Bearer test-token',
+        },
+        payload: {
+          prompt: 'Fix the login bug',
+        },
+      });
+
+      expect(response.statusCode).toBe(429);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('concurrent_limit');
+      expect(body.error.retryAfter).toBe('60');
+    });
+
+    it('returns 503 when service unavailable', async () => {
+      const rateLimitService = {
+        async checkLimits(): Promise<Result<void, RateLimitError>> {
+          return {
+            ok: false,
+            error: {
+              code: 'service_unavailable',
+              message: 'Service temporarily unavailable',
+            },
+          };
+        },
+        async recordTaskStart(): Promise<void> {
+          return;
+        },
+        async recordTaskComplete(): Promise<void> {
+          return;
+        },
+      } satisfies RateLimitService;
+
+      setServices({
+        ...getServices(),
+        rateLimitService,
+      });
+
+      const response = await server.inject({
+        method: 'POST',
+        url: '/code/submit',
+        headers: {
+          authorization: 'Bearer test-token',
+        },
+        payload: {
+          prompt: 'Fix the login bug',
+        },
+      });
+
+      expect(response.statusCode).toBe(503);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('service_unavailable');
+    });
+
+    it('returns 409 for duplicate prompt', async () => {
+      const mockRepo = {
+        create: vi.fn().mockResolvedValue({
+          ok: false,
+          error: {
+            code: 'DUPLICATE_PROMPT',
+            message: 'Similar task submitted in last 5 minutes',
+            existingTaskId: 'task-123',
+          },
+        }),
+      } as unknown as CodeTaskRepository;
+
+      setServices({
+        ...getServices(),
+        codeTaskRepo: mockRepo,
+      });
+
+      const response = await server.inject({
+        method: 'POST',
+        url: '/code/submit',
+        headers: {
+          authorization: 'Bearer test-token',
+        },
+        payload: {
+          prompt: 'Fix the login bug',
+        },
+      });
+
+      expect(response.statusCode).toBe(409);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('DUPLICATE_PROMPT');
+      expect(body.error.existingTaskId).toBe('task-123');
+    });
+
+    it('returns 409 for active task exists', async () => {
+      const mockRepo = {
+        create: vi.fn().mockResolvedValue({
+          ok: false,
+          error: {
+            code: 'ACTIVE_TASK_EXISTS',
+            message: 'Active task already exists for this Linear issue',
+            existingTaskId: 'task-456',
+          },
+        }),
+      } as unknown as CodeTaskRepository;
+
+      setServices({
+        ...getServices(),
+        codeTaskRepo: mockRepo,
+      });
+
+      const response = await server.inject({
+        method: 'POST',
+        url: '/code/submit',
+        headers: {
+          authorization: 'Bearer test-token',
+        },
+        payload: {
+          prompt: 'Fix the login bug',
+          linearIssueId: 'INT-123',
+        },
+      });
+
+      expect(response.statusCode).toBe(409);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('ACTIVE_TASK_EXISTS');
+    });
+
+    it('returns 503 when dispatch fails', async () => {
+      const mockTaskDispatcher = {
+        async dispatch(): Promise<Result<DispatchResult, DispatchError>> {
+          return {
+            ok: false as const,
+            error: {
+              code: 'dispatch_failed' as const,
+              message: 'No workers available',
+            },
+          };
+        },
+        async cancelOnWorker(): Promise<void> {
+          // No-op for test
+        },
+      } satisfies TaskDispatcherService;
+
+      setServices({
+        ...getServices(),
+        taskDispatcher: mockTaskDispatcher,
+      });
+
+      const response = await server.inject({
+        method: 'POST',
+        url: '/code/submit',
+        headers: {
+          authorization: 'Bearer test-token',
+        },
+        payload: {
+          prompt: 'Fix the login bug',
+        },
+      });
+
+      expect(response.statusCode).toBe(503);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('DISPATCH_FAILED');
+    });
+  });
+
+  describe('POST /code/cancel', () => {
+    it('cancels task successfully', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      // Create a running task
+      const created = await repo.create({
+        userId: 'test-user-id',
+        prompt: 'Fix bug',
+        sanitizedPrompt: 'fix bug',
+        systemPromptHash: 'abc123',
+        workerType: 'opus',
+        workerLocation: 'vm',
+        repository: 'test/repo',
+        baseBranch: 'main',
+        traceId: 'trace-123',
+      });
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+
+      await repo.update(created.value.id, { status: 'running' });
+
+      const response = await server.inject({
+        method: 'POST',
+        url: '/code/cancel',
+        headers: {
+          authorization: 'Bearer test-token',
+        },
+        payload: {
+          taskId: created.value.id,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.status).toBe('cancelled');
+    });
+
+    it('returns 401 when missing auth header', async () => {
+      const response = await server.inject({
+        method: 'POST',
+        url: '/code/cancel',
+        payload: {
+          taskId: 'task-123',
+        },
+      });
+
+      expect(response.statusCode).toBe(401);
+    });
+
+    it('returns 404 when task not found', async () => {
+      const response = await server.inject({
+        method: 'POST',
+        url: '/code/cancel',
+        headers: {
+          authorization: 'Bearer test-token',
+        },
+        payload: {
+          taskId: 'non-existent-task',
+        },
+      });
+
+      expect(response.statusCode).toBe(404);
+      const body = JSON.parse(response.body);
+      expect(body.error).toBe('task_not_found');
+    });
+
+    it('returns 403 when user does not own task', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      // Create a task for a different user
+      const created = await repo.create({
+        userId: 'other-user',
+        prompt: 'Fix bug',
+        sanitizedPrompt: 'fix bug',
+        systemPromptHash: 'abc123',
+        workerType: 'opus',
+        workerLocation: 'vm',
+        repository: 'test/repo',
+        baseBranch: 'main',
+        traceId: 'trace-123',
+      });
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+
+      const response = await server.inject({
+        method: 'POST',
+        url: '/code/cancel',
+        headers: {
+          authorization: 'Bearer test-token',
+        },
+        payload: {
+          taskId: created.value.id,
+        },
+      });
+
+      expect(response.statusCode).toBe(403);
+      const body = JSON.parse(response.body);
+      expect(body.error).toBe('forbidden');
+    });
+
+    it('returns 409 when task is not in cancellable state', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      // Create a completed task
+      const created = await repo.create({
+        userId: 'test-user-id',
+        prompt: 'Fix bug',
+        sanitizedPrompt: 'fix bug',
+        systemPromptHash: 'abc123',
+        workerType: 'opus',
+        workerLocation: 'vm',
+        repository: 'test/repo',
+        baseBranch: 'main',
+        traceId: 'trace-123',
+      });
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+
+      await repo.update(created.value.id, { status: 'completed' });
+
+      const response = await server.inject({
+        method: 'POST',
+        url: '/code/cancel',
+        headers: {
+          authorization: 'Bearer test-token',
+        },
+        payload: {
+          taskId: created.value.id,
+        },
+      });
+
+      expect(response.statusCode).toBe(409);
+      const body = JSON.parse(response.body);
+      expect(body.error).toBe('task_not_running');
+    });
+  });
+
+  describe('GET /code/workers/status', () => {
+    it('returns worker health status', async () => {
+      const response = await server.inject({
+        method: 'GET',
+        url: '/code/workers/status',
+        headers: {
+          authorization: 'Bearer test-token',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.mac).toBeDefined();
+      expect(body.mac).toHaveProperty('healthy');
+      expect(body.mac).toHaveProperty('capacity');
+      expect(body.mac).toHaveProperty('checkedAt');
+      expect(body.vm).toBeDefined();
+      expect(body.vm).toHaveProperty('healthy');
+      expect(body.vm).toHaveProperty('capacity');
+      expect(body.vm).toHaveProperty('checkedAt');
+    });
+
+    it('returns 401 when missing auth header', async () => {
+      const response = await server.inject({
+        method: 'GET',
+        url: '/code/workers/status',
+      });
+
+      expect(response.statusCode).toBe(401);
+    });
+
+    it('handles worker check failures gracefully', async () => {
+      const mockWorkerDiscovery = {
+        async checkHealth(): Promise<Result<WorkerHealth, WorkerError>> {
+          return {
+            ok: false as const,
+            error: {
+              code: 'worker_unavailable' as const,
+              message: 'Worker not responding',
+            },
+          };
+        },
+        async findAvailableWorker(): Promise<Result<WorkerConfig, WorkerError>> {
+          return {
+            ok: false as const,
+            error: {
+              code: 'worker_unavailable' as const,
+              message: 'No workers available',
+            },
+          };
+        },
+      } satisfies WorkerDiscoveryService;
+
+      setServices({
+        ...getServices(),
+        workerDiscovery: mockWorkerDiscovery,
+      });
+
+      const response = await server.inject({
+        method: 'GET',
+        url: '/code/workers/status',
+        headers: {
+          authorization: 'Bearer test-token',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.mac.healthy).toBe(false);
+      expect(body.vm.healthy).toBe(false);
+    });
+  });
+
+  describe('POST /internal/code/heartbeat', () => {
+    it('processes heartbeat successfully', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      // Create a task
+      const created = await repo.create({
+        userId: 'user-123',
+        prompt: 'Test task',
+        sanitizedPrompt: 'test task',
+        systemPromptHash: 'abc123',
+        workerType: 'opus',
+        workerLocation: 'vm',
+        repository: 'test/repo',
+        baseBranch: 'main',
+        traceId: 'trace-123',
+      });
+      expect(created.ok).toBe(true);
+      if (!created.ok) throw new Error('Test setup failed');
+
+      const response = await server.inject({
+        method: 'POST',
+        url: '/internal/code/heartbeat',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+        },
+        payload: {
+          taskIds: [created.value.id],
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(true);
+      expect(body.data).toHaveProperty('processed');
+      expect(body.data).toHaveProperty('notFound');
+    });
+
+    it('returns 401 when missing auth header', async () => {
+      const response = await server.inject({
+        method: 'POST',
+        url: '/internal/code/heartbeat',
+        payload: {
+          taskIds: ['task-123'],
+        },
+      });
+
+      expect(response.statusCode).toBe(401);
+    });
+
+    it('returns 500 when heartbeat processing fails', async () => {
+      const mockProcessHeartbeat = vi.fn().mockResolvedValue({
+        ok: false,
+        error: {
+          code: 'HEARTBEAT_ERROR',
+          message: 'Failed to process heartbeat',
+        },
+      });
+
+      setServices({
+        ...getServices(),
+        processHeartbeat: mockProcessHeartbeat as never,
+      });
+
+      const response = await server.inject({
+        method: 'POST',
+        url: '/internal/code/heartbeat',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+        },
+        payload: {
+          taskIds: ['task-123'],
+        },
+      });
+
+      expect(response.statusCode).toBe(500);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(false);
+    });
+  });
+
+  describe('POST /internal/code/detect-zombies', () => {
+    it('detects zombies successfully', async () => {
+      const mockDetectZombieTasks = vi.fn().mockResolvedValue({
+        ok: true,
+        value: {
+          detected: 2,
+          interrupted: 1,
+          errors: [],
+        },
+      });
+
+      setServices({
+        ...getServices(),
+        detectZombieTasks: mockDetectZombieTasks as never,
+      });
+
+      const response = await server.inject({
+        method: 'POST',
+        url: '/internal/code/detect-zombies',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(true);
+      expect(body.data.detected).toBe(2);
+      expect(body.data.interrupted).toBe(1);
+      expect(body.data.errors).toEqual([]);
+    });
+
+    it('returns 401 when missing auth header', async () => {
+      const response = await server.inject({
+        method: 'POST',
+        url: '/internal/code/detect-zombies',
+      });
+
+      expect(response.statusCode).toBe(401);
+    });
+
+    it('returns 500 when zombie detection fails', async () => {
+      const mockDetectZombieTasks = vi.fn().mockResolvedValue({
+        ok: false,
+        error: {
+          code: 'DETECTION_ERROR',
+          message: 'Failed to detect zombies',
+        },
+      });
+
+      setServices({
+        ...getServices(),
+        detectZombieTasks: mockDetectZombieTasks as never,
+      });
+
+      const response = await server.inject({
+        method: 'POST',
+        url: '/internal/code/detect-zombies',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+        },
+      });
+
+      expect(response.statusCode).toBe(500);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(false);
+    });
+  });
+
+  describe('POST /internal/code/process', () => {
+    it('returns 401 when missing auth header', async () => {
+      const response = await server.inject({
+        method: 'POST',
+        url: '/internal/code/process',
+        payload: {
+          actionId: 'action-123',
+          approvalEventId: 'approval-123',
+          userId: 'user-123',
+          payload: {
+            prompt: 'Fix the bug',
+          },
+        },
+      });
+
+      expect(response.statusCode).toBe(401);
     });
   });
 

@@ -35,7 +35,7 @@ import type { TaskDispatcherService } from '../../domain/services/taskDispatcher
 import type { ActionsAgentClient } from '../../infra/clients/actionsAgentClient.js';
 import type { WhatsAppNotifier } from '../../domain/services/whatsappNotifier.js';
 import type { RateLimitService } from '../../domain/services/rateLimitService.js';
-import { ok } from '@intexuraos/common-core';
+import { ok, err } from '@intexuraos/common-core';
 import type { WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
 import type { LinearIssueService } from '../../domain/services/linearIssueService.js';
 import { createStatusMirrorService } from '../../infra/services/statusMirrorServiceImpl.js';
@@ -382,6 +382,22 @@ describe('GET /code/tasks endpoints', () => {
         expect(body.tasks.every((task: CodeTask) => task.status === 'completed')).toBe(true);
       });
     });
+
+    describe('pagination', () => {
+      it('accepts cursor parameter for pagination', async () => {
+        const response = await app.inject({
+          method: 'GET',
+          url: '/code/tasks?cursor=task_abc123',
+          headers: {
+            authorization: 'Bearer test-token',
+          },
+        });
+
+        expect(response.statusCode).toBe(200);
+        const body = JSON.parse(response.body);
+        expect(body.tasks).toBeDefined();
+      });
+    });
   });
 
   describe('GET /code/tasks/:taskId (get single)', () => {
@@ -495,6 +511,27 @@ describe('GET /code/tasks endpoints', () => {
         const body = JSON.parse(response.body);
         expect(body.success).toBe(false);
         expect(body.error.code).toBe('NOT_FOUND');
+      });
+
+      it('returns 500 on repository error', async () => {
+        const findByIdForUserSpy = vi.spyOn(codeTaskRepo, 'findByIdForUser').mockResolvedValueOnce(
+          err({ code: 'FIRESTORE_ERROR', message: 'Database unavailable' })
+        );
+
+        const response = await app.inject({
+          method: 'GET',
+          url: '/code/tasks/task-123',
+          headers: {
+            authorization: 'Bearer test-token',
+          },
+        });
+
+        expect(response.statusCode).toBe(500);
+        const body = JSON.parse(response.body);
+        expect(body.success).toBe(false);
+        expect(body.error.code).toBe('FIRESTORE_ERROR');
+
+        findByIdForUserSpy.mockRestore();
       });
     });
   });

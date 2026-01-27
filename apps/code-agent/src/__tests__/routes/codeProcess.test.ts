@@ -232,6 +232,12 @@ describe('POST /internal/code/process', () => {
   });
 
   it('returns 409 for duplicate approvalEventId', async () => {
+    // Mock dispatch to succeed for the first request
+    vi.spyOn(taskDispatcher, 'dispatch').mockResolvedValue({
+      ok: true,
+      value: { dispatched: true, workerLocation: 'mac' },
+    });
+
     // First request
     await app.inject({
       method: 'POST',
@@ -273,6 +279,12 @@ describe('POST /internal/code/process', () => {
   });
 
   it('returns 409 for duplicate actionId', async () => {
+    // Mock dispatch to succeed for the first request
+    vi.spyOn(taskDispatcher, 'dispatch').mockResolvedValue({
+      ok: true,
+      value: { dispatched: true, workerLocation: 'mac' },
+    });
+
     // First request
     await app.inject({
       method: 'POST',
@@ -348,6 +360,12 @@ describe('POST /internal/code/process', () => {
   });
 
   it('returns 409 for duplicate_approval even with different linearIssueId', async () => {
+    // Mock dispatch to succeed for the first request
+    vi.spyOn(taskDispatcher, 'dispatch').mockResolvedValue({
+      ok: true,
+      value: { dispatched: true, workerLocation: 'mac' },
+    });
+
     // First request with linearIssueId
     await app.inject({
       method: 'POST',

@@ -288,6 +288,73 @@ export function createReplyWebhookPayload(options: {
 }
 
 /**
+ * Create a WhatsApp button response webhook payload.
+ * Used to test approval button handling (approve/cancel/convert buttons).
+ *
+ * Button ID format: "intent:actionId[:nonce]"
+ * - approve: "approve:action-123:a3f2" (requires nonce)
+ * - cancel: "cancel:action-123"
+ * - convert: "convert:action-123"
+ */
+export function createButtonWebhookPayload(options: {
+  replyToWamid: string;
+  buttonId: string;
+  buttonTitle?: string;
+  messageId?: string;
+}): object {
+  const buttonTitle = options.buttonTitle ?? 'Approve';
+  const messageId = options.messageId ?? 'wamid.button.HBgNMTU1NTEyMzQ1Njc4FQIAEhgUM0VCMDRBNzYwREQ0RjMwMjYzMDcA';
+
+  return {
+    object: 'whatsapp_business_account',
+    entry: [
+      {
+        id: '102290129340398',
+        changes: [
+          {
+            field: 'messages',
+            value: {
+              messaging_product: 'whatsapp',
+              metadata: {
+                display_phone_number: '15551234567',
+                phone_number_id: '123456789012345',
+              },
+              contacts: [
+                {
+                  wa_id: '15551234567',
+                  profile: {
+                    name: 'Test User',
+                  },
+                },
+              ],
+              messages: [
+                {
+                  from: '15551234567',
+                  id: messageId,
+                  timestamp: '1234567890',
+                  type: 'button',
+                  interactive: {
+                    type: 'button',
+                    button_reply: {
+                      id: options.buttonId,
+                      title: buttonTitle,
+                    },
+                  },
+                  context: {
+                    from: '15550987654',
+                    id: options.replyToWamid,
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    ],
+  };
+}
+
+/**
  * Create a WhatsApp audio message webhook payload.
  * Uses IDs that match testConfig.allowedWabaIds and testConfig.allowedPhoneNumberIds.
  */
@@ -380,72 +447,6 @@ export function createReactionWebhookPayload(options: {
                   reaction: {
                     emoji: options.emoji,
                     message_id: options.messageId,
-                  },
-                },
-              ],
-            },
-          },
-        ],
-      },
-    ],
-  };
-}
-
-/**
- * Create a WhatsApp button response webhook payload.
- * Used to test button-based approval handling from interactive messages.
- *
- * Button ID format: "approve:{actionId}:{nonce}" | "cancel:{actionId}" | "convert:{actionId}"
- */
-export function createButtonWebhookPayload(options: {
-  buttonId: string;
-  buttonTitle: string;
-  replyToWamid: string;
-  messageId?: string;
-}): object {
-  const messageId =
-    options.messageId ?? 'wamid.button.HBgNMTU1NTEyMzQ1Njc4FQIAEhgUM0VCMDRBNzYwREQ0RjMwMjYzMDcA';
-
-  return {
-    object: 'whatsapp_business_account',
-    entry: [
-      {
-        id: '102290129340398',
-        changes: [
-          {
-            field: 'messages',
-            value: {
-              messaging_product: 'whatsapp',
-              metadata: {
-                display_phone_number: '15551234567',
-                phone_number_id: '123456789012345',
-              },
-              contacts: [
-                {
-                  wa_id: '15551234567',
-                  profile: {
-                    name: 'Test User',
-                  },
-                },
-              ],
-              messages: [
-                {
-                  from: '15551234567',
-                  id: messageId,
-                  timestamp: '1234567890',
-                  type: 'button',
-                  context: {
-                    from: '15550987654',
-                    id: options.replyToWamid,
-                  },
-                  interactive: {
-                    type: 'button',
-                    list: [
-                      {
-                        id: options.buttonId,
-                        title: options.buttonTitle,
-                      },
-                    ],
                   },
                 },
               ],

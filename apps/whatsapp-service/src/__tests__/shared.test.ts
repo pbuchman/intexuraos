@@ -4,6 +4,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   extractAudioMedia,
+  extractButtonResponse,
   extractDisplayPhoneNumber,
   extractImageMedia,
   extractMessageId,
@@ -1021,6 +1022,227 @@ describe('shared utilities', () => {
         ],
       };
       expect(extractReactionData(payload)).toBeNull();
+    });
+  });
+
+  describe('extractButtonResponse', () => {
+    const validButtonPayload = {
+      entry: [
+        {
+          changes: [
+            {
+              value: {
+                messages: [
+                  {
+                    interactive: {
+                      type: 'button',
+                      button_reply: {
+                        id: 'approve-action',
+                        title: 'Approve',
+                      },
+                    },
+                    context: {
+                      id: 'wamid.123',
+                    },
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      ],
+    };
+
+    it('extracts button response from valid webhook payload', () => {
+      const result = extractButtonResponse(validButtonPayload);
+      expect(result).toEqual({
+        buttonId: 'approve-action',
+        buttonTitle: 'Approve',
+        replyToWamid: 'wamid.123',
+      });
+    });
+
+    it('returns null when interactive field is missing', () => {
+      const payload = {
+        entry: [
+          {
+            changes: [
+              {
+                value: {
+                  messages: [{ type: 'text' }],
+                },
+              },
+            ],
+          },
+        ],
+      };
+      expect(extractButtonResponse(payload)).toBeNull();
+    });
+
+    it('returns null when interactive type is not button', () => {
+      const payload = {
+        entry: [
+          {
+            changes: [
+              {
+                value: {
+                  messages: [
+                    {
+                      interactive: {
+                        type: 'list',
+                        button_reply: {
+                          id: 'approve-action',
+                          title: 'Approve',
+                        },
+                      },
+                    },
+                  ],
+                },
+              },
+            ],
+          },
+        ],
+      };
+      expect(extractButtonResponse(payload)).toBeNull();
+    });
+
+    it('returns null when button_reply is missing', () => {
+      const payload = {
+        entry: [
+          {
+            changes: [
+              {
+                value: {
+                  messages: [
+                    {
+                      interactive: {
+                        type: 'button',
+                      },
+                      context: {
+                        id: 'wamid.123',
+                      },
+                    },
+                  ],
+                },
+              },
+            ],
+          },
+        ],
+      };
+      expect(extractButtonResponse(payload)).toBeNull();
+    });
+
+    it('returns null when button_reply.id is missing', () => {
+      const payload = {
+        entry: [
+          {
+            changes: [
+              {
+                value: {
+                  messages: [
+                    {
+                      interactive: {
+                        type: 'button',
+                        button_reply: {
+                          title: 'Approve',
+                        },
+                      },
+                      context: {
+                        id: 'wamid.123',
+                      },
+                    },
+                  ],
+                },
+              },
+            ],
+          },
+        ],
+      };
+      expect(extractButtonResponse(payload)).toBeNull();
+    });
+
+    it('returns null when button_reply.title is missing', () => {
+      const payload = {
+        entry: [
+          {
+            changes: [
+              {
+                value: {
+                  messages: [
+                    {
+                      interactive: {
+                        type: 'button',
+                        button_reply: {
+                          id: 'approve-action',
+                        },
+                      },
+                      context: {
+                        id: 'wamid.123',
+                      },
+                    },
+                  ],
+                },
+              },
+            ],
+          },
+        ],
+      };
+      expect(extractButtonResponse(payload)).toBeNull();
+    });
+
+    it('returns null when context is missing', () => {
+      const payload = {
+        entry: [
+          {
+            changes: [
+              {
+                value: {
+                  messages: [
+                    {
+                      interactive: {
+                        type: 'button',
+                        button_reply: {
+                          id: 'approve-action',
+                          title: 'Approve',
+                        },
+                      },
+                    },
+                  ],
+                },
+              },
+            ],
+          },
+        ],
+      };
+      expect(extractButtonResponse(payload)).toBeNull();
+    });
+
+    it('returns null when context.id is missing', () => {
+      const payload = {
+        entry: [
+          {
+            changes: [
+              {
+                value: {
+                  messages: [
+                    {
+                      interactive: {
+                        type: 'button',
+                        button_reply: {
+                          id: 'approve-action',
+                          title: 'Approve',
+                        },
+                      },
+                      context: {},
+                    },
+                  ],
+                },
+              },
+            ],
+          },
+        ],
+      };
+      expect(extractButtonResponse(payload)).toBeNull();
     });
   });
 });

@@ -639,6 +639,7 @@ export class FakeEventPublisher implements EventPublisherPort {
   private extractLinkPreviewsEvents: ExtractLinkPreviewsEvent[] = [];
   private approvalReplyEvents: ApprovalReplyEvent[] = [];
   private approvalReplyFailureMessage: string | null = null;
+  private extractLinkPreviewsFailureMessage: string | null = null;
 
   publishMediaCleanup(event: MediaCleanupEvent): Promise<Result<void, WhatsAppError>> {
     this.mediaCleanupEvents.push(event);
@@ -663,8 +664,17 @@ export class FakeEventPublisher implements EventPublisherPort {
   publishExtractLinkPreviews(
     event: ExtractLinkPreviewsEvent
   ): Promise<Result<void, WhatsAppError>> {
+    if (this.extractLinkPreviewsFailureMessage !== null) {
+      return Promise.resolve(
+        err({ code: 'INTERNAL_ERROR' as const, message: this.extractLinkPreviewsFailureMessage })
+      );
+    }
     this.extractLinkPreviewsEvents.push(event);
     return Promise.resolve(ok(undefined));
+  }
+
+  setExtractLinkPreviewsFailure(message: string): void {
+    this.extractLinkPreviewsFailureMessage = message;
   }
 
   publishApprovalReply(event: ApprovalReplyEvent): Promise<Result<void, WhatsAppError>> {
@@ -713,6 +723,7 @@ export class FakeEventPublisher implements EventPublisherPort {
     this.extractLinkPreviewsEvents = [];
     this.approvalReplyEvents = [];
     this.approvalReplyFailureMessage = null;
+    this.extractLinkPreviewsFailureMessage = null;
   }
 }
 

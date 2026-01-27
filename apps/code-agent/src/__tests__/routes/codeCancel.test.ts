@@ -655,5 +655,54 @@ import { createDetectZombieTasksUseCase } from '../../domain/usecases/detectZomb
       expect(response.statusCode).toBe(200);
       expect(recordCompleteSpy).toHaveBeenCalledWith('test-user-id');
     });
+
+    it('continues cancellation even when recordTaskComplete fails', async () => {
+      const createResult = await codeTaskRepo.create({
+        userId: 'test-user-id',
+        prompt: 'Fix the bug',
+        sanitizedPrompt: 'Fix the bug',
+        systemPromptHash: 'default',
+        workerType: 'auto',
+        workerLocation: 'mac',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: 'trace_123',
+      });
+
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) throw new Error('Failed to create task');
+      const taskId = createResult.value.id;
+
+      await codeTaskRepo.update(taskId, { status: 'running' });
+
+      const { getServices } = await import('../../services.js');
+      const services = getServices();
+      vi.spyOn(services.rateLimitService, 'recordTaskComplete').mockRejectedValueOnce(
+        new Error('Rate limit service unavailable')
+      );
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/code/cancel',
+        headers: {
+          authorization: 'Bearer test-token',
+        },
+        payload: {
+          taskId,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body).toEqual({
+        status: 'cancelled',
+      });
+
+      const getResult = await codeTaskRepo.findById(taskId);
+      expect(getResult.ok).toBe(true);
+      if (getResult.ok) {
+        expect(getResult.value.status).toBe('cancelled');
+      }
+    });
   });
 });

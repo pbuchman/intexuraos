@@ -94,8 +94,9 @@ const codeTaskSchema = {
 
 /**
  * Convert Firestore Timestamp to ISO string for JSON serialization
+ * Exported for testing
  */
-function timestampToIso(
+export function timestampToIso(
   timestamp: { toDate: () => Date } | string | undefined
 ): string | undefined {
   if (timestamp === undefined) {

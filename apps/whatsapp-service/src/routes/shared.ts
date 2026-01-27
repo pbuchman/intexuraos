@@ -168,10 +168,15 @@ interface WebhookValue {
     };
     interactive?: {
       type?: string;
-      list?: {
+      button_reply?: {
         id?: string;
         title?: string;
-      }[];
+      };
+      list_reply?: {
+        id?: string;
+        title?: string;
+        description?: string;
+      };
     };
     context?: {
       from?: string;
@@ -526,13 +531,15 @@ export function extractButtonResponse(payload: unknown): ButtonResponseInfo | nu
   if (interactive === undefined) return null;
 
   // Check if this is a button response
-  if (interactive.type !== 'button' || typeof interactive.list !== 'object') {
+  if (interactive.type !== 'button' || typeof interactive.button_reply !== 'object') {
     return null;
   }
 
   // Extract button response info
-  const buttonReply = interactive.list[0];
-  if (buttonReply === undefined) return null;
+  const buttonReply = interactive.button_reply;
+  if (buttonReply.id === undefined || buttonReply.title === undefined) {
+    return null;
+  }
   if (typeof buttonReply.id !== 'string' || typeof buttonReply.title !== 'string') {
     return null;
   }

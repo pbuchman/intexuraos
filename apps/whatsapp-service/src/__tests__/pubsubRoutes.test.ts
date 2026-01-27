@@ -390,6 +390,69 @@ describe('Pub/Sub Routes', () => {
       const responseBody = JSON.parse(response.body) as { error: string };
       expect(responseBody.error).toBe('Failed to look up phone number');
     });
+
+    it('sends interactive message with buttons when buttons are provided', async () => {
+      await userMappingRepository.saveMapping('user-buttons', ['+48987654321']);
+
+      const buttons = [
+        { type: 'reply', reply: { id: 'approve:action-123:a3f2', title: 'Approve' } },
+        { type: 'reply', reply: { id: 'cancel:action-123', title: 'Cancel' } },
+        { type: 'reply', reply: { id: 'convert:action-123', title: 'Convert' } },
+      ];
+
+      const body = createPubSubBody({
+        type: 'whatsapp.message.send',
+        userId: 'user-buttons',
+        message: 'Please approve this action',
+        buttons,
+        correlationId: 'corr-buttons',
+        timestamp: new Date().toISOString(),
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/send-message',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: body,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const responseBody = JSON.parse(response.body) as { success: boolean };
+      expect(responseBody.success).toBe(true);
+
+      const sentMessages = messageSender.getSentMessages();
+      expect(sentMessages).toHaveLength(1);
+      expect(sentMessages[0]?.phoneNumber).toBe('48987654321');
+      expect(sentMessages[0]?.message).toBe('Please approve this action');
+      expect(sentMessages[0]?.buttons).toEqual(buttons);
+    });
+
+    it('returns 500 when sendInteractiveMessage fails', async () => {
+      await userMappingRepository.saveMapping('user-fail-buttons', ['+48987654321']);
+      messageSender.setFail(true, { code: 'INTERNAL_ERROR', message: 'WhatsApp API error for buttons' });
+
+      const buttons = [{ type: 'reply', reply: { id: 'btn-1', title: 'Test' } }];
+
+      const body = createPubSubBody({
+        type: 'whatsapp.message.send',
+        userId: 'user-fail-buttons',
+        message: 'Test message',
+        buttons,
+        correlationId: 'corr-fail',
+        timestamp: new Date().toISOString(),
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/send-message',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: body,
+      });
+
+      expect(response.statusCode).toBe(500);
+      const responseBody = JSON.parse(response.body) as { error: string };
+      expect(responseBody.error).toBe('WhatsApp API error for buttons');
+    });
   });
 
   describe('POST /internal/whatsapp/pubsub/media-cleanup', () => {
