@@ -10,7 +10,7 @@ const MAX_BACKOFF_RETRIES = 10;
 const INITIAL_RETRY_DELAY_MS = 1000;
 const MAX_RETRY_DELAY_MS = INITIAL_RETRY_DELAY_MS * Math.pow(2, MAX_BACKOFF_RETRIES);
 
-export type ShareStatus = 'pending' | 'syncing' | 'synced' | 'failed';
+export type ShareStatus = 'pending' | 'syncing' | 'synced';
 
 export interface ShareQueueItem {
   id: string;
@@ -31,6 +31,7 @@ export interface ShareHistoryItem {
   syncedAt?: string;
   commandId?: string;
   lastError?: string;
+  nextRetryAt?: string;
 }
 
 function generateId(): string {
@@ -111,6 +112,25 @@ export function updateQueueItem(id: string, updates: Partial<ShareQueueItem>): v
   if (index !== -1 && queue[index] !== undefined) {
     queue[index] = { ...queue[index], ...updates };
     saveQueue(queue);
+
+    // Also update history with nextRetryAt and lastError
+    if (updates.nextRetryAt !== undefined || updates.lastError !== undefined) {
+      const history = getHistory();
+      const historyIndex = history.findIndex((item) => item.id === id);
+      if (historyIndex !== -1 && history[historyIndex] !== undefined) {
+        const updatedItem: ShareHistoryItem = {
+          ...history[historyIndex],
+        };
+        if (updates.nextRetryAt !== undefined) {
+          updatedItem.nextRetryAt = updates.nextRetryAt;
+        }
+        if (updates.lastError !== undefined) {
+          updatedItem.lastError = updates.lastError;
+        }
+        history[historyIndex] = updatedItem;
+        saveHistory(history);
+      }
+    }
   }
 }
 
@@ -125,21 +145,6 @@ export function markAsSynced(id: string, commandId: string): void {
       status: 'synced',
       syncedAt: new Date().toISOString(),
       commandId,
-    };
-    saveHistory(history);
-  }
-}
-
-export function markAsFailed(id: string, error: string): void {
-  removeFromQueue(id);
-
-  const history = getHistory();
-  const index = history.findIndex((item) => item.id === id);
-  if (index !== -1 && history[index] !== undefined) {
-    history[index] = {
-      ...history[index],
-      status: 'failed',
-      lastError: error,
     };
     saveHistory(history);
   }
@@ -169,17 +174,4 @@ export function getPendingCount(): number {
 
 export function clearHistory(): void {
   localStorage.removeItem(HISTORY_KEY);
-}
-
-export function isClientError(error: unknown): boolean {
-  if (
-    error !== null &&
-    typeof error === 'object' &&
-    'status' in error &&
-    typeof (error as { status: unknown }).status === 'number'
-  ) {
-    const status = (error as { status: number }).status;
-    return status >= 400 && status < 500;
-  }
-  return false;
 }

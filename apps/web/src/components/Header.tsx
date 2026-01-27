@@ -7,7 +7,7 @@ import { ChevronDown, LogOut, User, RefreshCw, RotateCcw, Server } from 'lucide-
 
 export function Header(): React.JSX.Element {
   const { user, logout, isAuthenticated } = useAuth();
-  const { pendingCount, isSyncing } = useSyncQueue();
+  const { pendingCount, isSyncing, isOnline, authFailed } = useSyncQueue();
   const { isInstalled } = usePWA();
   const { status: workersStatus } = useWorkersStatus();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -165,10 +165,22 @@ export function Header(): React.JSX.Element {
           <Link
             to="/settings/share-history"
             className="flex items-center justify-center rounded-lg p-2 text-sm transition-colors hover:bg-slate-100"
-            title={`${String(pendingCount)} pending - click to view history`}
+            title={
+              !isOnline
+                ? 'Offline - click to view history'
+                : authFailed
+                  ? 'Sign in to sync - click to view history'
+                  : `${String(pendingCount)} pending - click to view history`
+            }
           >
             <RefreshCw
-              className={`h-4 w-4 text-amber-500 ${isSyncing ? 'animate-spin' : 'animate-pulse'}`}
+              className={`h-4 w-4 ${
+                !isOnline || authFailed
+                  ? 'text-slate-400'
+                  : isSyncing
+                    ? 'text-amber-500 animate-spin'
+                    : 'text-amber-500 animate-pulse'
+              }`}
             />
           </Link>
         )}
