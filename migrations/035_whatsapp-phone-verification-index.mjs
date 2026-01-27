@@ -35,5 +35,7 @@ export async function up(context) {
 }
 
 export async function down(context) {
-  console.log('  Removing whatsapp phone verification index requires manual deletion via Firebase console');
+  console.log(
+    '  Removing whatsapp phone verification index requires manual deletion via Firebase console'
+  );
 }

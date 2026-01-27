@@ -1,6 +1,6 @@
 {
   "name": "@intexuraos/log-cleanup",
-  "version": "1.0.0",
+  "version": "2.1.0",
   "private": true,
   "type": "module",
   "main": "dist/index.js",

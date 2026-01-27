@@ -39,7 +39,7 @@ export async function startVm(): Promise<StartVmResult> {
           startupDurationMs: Date.now() - startTime,
         };
       }
-      logger.warn('VM running but unhealthy, restarting');
+      logger.warn({}, 'VM running but unhealthy, restarting');
       await instancesClient.stop({
         project: VM_CONFIG.PROJECT_ID,
         zone: VM_CONFIG.ZONE,
@@ -57,7 +57,7 @@ export async function startVm(): Promise<StartVmResult> {
     logger.info({ operationId: operation.name }, 'Start operation initiated');
 
     await waitForState(instancesClient, 'RUNNING');
-    logger.info('VM reached RUNNING state');
+    logger.info({}, 'VM reached RUNNING state');
 
     const healthy = await pollHealth();
 
@@ -120,7 +120,7 @@ async function pollHealth(): Promise<boolean> {
       if (response.ok) {
         const data = (await response.json()) as { status: string };
         if (data.status === 'ready') {
-          logger.info('VM health check passed');
+          logger.info({}, 'VM health check passed');
           return true;
         }
       }
@@ -128,11 +128,11 @@ async function pollHealth(): Promise<boolean> {
       // Expected during startup - VM not yet responding
     }
 
-    logger.debug('Health check failed, retrying...');
+    logger.debug({}, 'Health check failed, retrying...');
     await sleep(VM_CONFIG.HEALTH_POLL_INTERVAL_MS);
   }
 
-  logger.error('Health check timed out');
+  logger.error({}, 'Health check timed out');
   return false;
 }
 

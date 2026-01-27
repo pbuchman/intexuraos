@@ -135,6 +135,9 @@ export interface CodeTask {
   callbackReceived: boolean;
   webhookSecret?: string;     // Per-task secret for HMAC signature validation (design lines 1634-1636)
 
+  // Heartbeat for zombie detection
+  lastHeartbeat?: Timestamp;   // Last heartbeat received from orchestrator (INT-372)
+
   // Log streaming health
   logChunksDropped?: number;    // Count of failed uploads (design line 1004)
 

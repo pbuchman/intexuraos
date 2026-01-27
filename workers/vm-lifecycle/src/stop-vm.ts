@@ -55,7 +55,7 @@ export async function stopVm(): Promise<StopVmResult> {
         }
       }
     } catch {
-      logger.warn('Orchestrator unresponsive, proceeding with forced shutdown');
+      logger.warn({}, 'Orchestrator unresponsive, proceeding with forced shutdown');
     }
 
     const [operation] = await instancesClient.stop({
@@ -95,21 +95,21 @@ async function waitForTasksToComplete(): Promise<void> {
         const data = (await response.json()) as { running: number; status: string };
 
         if (data.running === 0 || data.status === 'shutting_down') {
-          logger.info('All tasks completed or orchestrator shutting down');
+          logger.info({}, 'All tasks completed or orchestrator shutting down');
           return;
         }
 
         logger.info({ running: data.running }, 'Tasks still running, waiting...');
       }
     } catch {
-      logger.info('Orchestrator no longer responding, proceeding');
+      logger.info({}, 'Orchestrator no longer responding, proceeding');
       return;
     }
 
     await sleep(VM_CONFIG.SHUTDOWN_POLL_INTERVAL_MS);
   }
 
-  logger.warn('Grace period expired, proceeding with shutdown despite running tasks');
+  logger.warn({}, 'Grace period expired, proceeding with shutdown despite running tasks');
 }
 
 function sleep(ms: number): Promise<void> {

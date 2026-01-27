@@ -1,4 +1,4 @@
-import { cloudEvent } from '@google-cloud/functions-framework';
+import * as functions from '@google-cloud/functions-framework';
 import type { CloudEvent } from '@google-cloud/functions-framework';
 import { logger } from './logger.js';
 import { cleanupOldLogs } from './cleanup.js';
@@ -10,7 +10,7 @@ interface PubSubData {
   };
 }
 
-cloudEvent('cleanupLogs', async (event: CloudEvent<PubSubData>) => {
+async function handleCleanupLogs(event: CloudEvent<PubSubData>): Promise<void> {
   const traceId = event.id;
 
   logger.info(
@@ -37,4 +37,6 @@ cloudEvent('cleanupLogs', async (event: CloudEvent<PubSubData>) => {
     );
     throw new Error(result.message);
   }
-});
+}
+
+functions.cloudEvent('cleanupLogs', handleCleanupLogs);

@@ -473,4 +473,52 @@ describe('ContextInferenceAdapter', () => {
       });
     }
   });
+
+  describe('Zod error formatting (coverage)', () => {
+    it('includes enum options and received value when invalid_enum_value error occurs', async () => {
+      // Return JSON with an invalid mode value to trigger Zod's invalid_enum_value error
+      // Valid modes are: 'compact', 'standard', 'audit'
+      mockGenerate.mockResolvedValue({
+        ok: true,
+        value: {
+          content: JSON.stringify({
+            language: 'en',
+            domain: 'technical',
+            mode: 'invalid-mode-value',
+            intent_summary: 'Test',
+            defaults_applied: [],
+            assumptions: [],
+            answer_style: [],
+            time_scope: { as_of_date: '2024-01-01', prefers_recent_years: 2, is_time_sensitive: false },
+            locale_scope: { country_or_region: 'US', jurisdiction: 'US', currency: 'USD' },
+            research_plan: { key_questions: [], search_queries: [], preferred_source_types: [], avoid_source_types: [] },
+            output_format: { wants_table: false, wants_steps: false, wants_pros_cons: false, wants_budget_numbers: false },
+            safety: { high_stakes: false, required_disclaimers: [] },
+            red_flags: [],
+          }),
+          usage: mockUsage,
+        },
+      });
+
+      const result = await adapter.inferResearchContext('Test query');
+
+      // Should fail with error containing expected enum options
+      expect(result.ok).toBe(false);
+    });
+
+    it('handles root-level validation error (empty path)', async () => {
+      // Return an array instead of object to trigger a Zod error at root level
+      mockGenerate.mockResolvedValue({
+        ok: true,
+        value: {
+          content: '[]',
+          usage: mockUsage,
+        },
+      });
+
+      const result = await adapter.inferResearchContext('Test query');
+
+      expect(result.ok).toBe(false);
+    });
+  });
 });

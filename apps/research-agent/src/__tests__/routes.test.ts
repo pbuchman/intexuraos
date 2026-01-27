@@ -274,8 +274,8 @@ describe('Research Routes - Authenticated', () => {
   let fakeResearchEventPublisher: FakeResearchEventPublisher;
   let fakeNotificationSender: FakeNotificationSender;
 
-  async function createToken(sub: string): Promise<string> {
-    const builder = new jose.SignJWT({ sub })
+  async function createToken(sub: string, claims?: Record<string, unknown>): Promise<string> {
+    const builder = new jose.SignJWT({ sub, ...claims })
       .setProtectedHeader({ alg: 'RS256', kid: 'test-key-1' })
       .setIssuedAt()
       .setIssuer(issuer)
@@ -4720,8 +4720,8 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
   let fakeNotificationSender: FakeNotificationSender;
   let fakeLlmCallPublisher: import('./fakes.js').FakeLlmCallPublisher;
 
-  async function createToken(sub: string): Promise<string> {
-    const builder = new jose.SignJWT({ sub })
+  async function createToken(sub: string, claims?: Record<string, unknown>): Promise<string> {
+    const builder = new jose.SignJWT({ sub, ...claims })
       .setProtectedHeader({ alg: 'RS256', kid: 'test-key-1' })
       .setIssuedAt()
       .setIssuer(issuer)
@@ -5597,6 +5597,37 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
       expect(body.error.code).toBe('MISCONFIGURED');
       expect(body.error.message).toContain('API key required for synthesis');
     });
+
+    it('succeeds when has no models but has inputContexts (line 771)', async () => {
+      const token = await createToken(TEST_USER_ID);
+      const research = createTestResearch({
+        id: 'draft-123',
+        status: 'draft',
+        selectedModels: [],
+        inputContexts: [
+          {
+            id: 'ctx-1',
+            content: 'Input context content',
+            addedAt: '2024-01-01T00:00:00Z',
+            label: 'Context Label',
+          },
+        ],
+        synthesisModel: LlmModels.Gemini25Pro,
+        skipSynthesis: true,
+      });
+      fakeRepo.addResearch(research);
+      fakeUserServiceClient.setApiKeys(TEST_USER_ID, { google: 'test-key' });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/research/draft-123/approve',
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as { success: boolean; data: Research };
+      expect(body.success).toBe(true);
+    });
   });
 
   describe('POST /research/:id/enhance - Uncovered branches (additional)', () => {
@@ -5617,6 +5648,155 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
       const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
       expect(body.success).toBe(false);
       expect(body.error.code).toBe('NOT_FOUND');
+    });
+  });
+
+  describe('POST /research - JWT claims coverage (lines 105-114)', () => {
+    it('stores generatedBy with name claim when JWT contains name', async () => {
+      const token = await createToken(TEST_USER_ID, { name: 'Test User' });
+      fakeUserServiceClient.setApiKeys(TEST_USER_ID, { google: 'test-key' });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/research',
+        headers: { authorization: `Bearer ${token}` },
+        payload: {
+          prompt: 'Test prompt for JWT name claim',
+          selectedModels: [LlmModels.Gemini25Flash],
+        },
+      });
+
+      expect(response.statusCode).toBe(201);
+      const body = JSON.parse(response.body) as { success: boolean; data: Research };
+      expect(body.success).toBe(true);
+      expect(body.data.userName).toBe('Test User');
+      expect(body.data.userEmail).toBeUndefined();
+    });
+
+    it('stores generatedBy with email claim when JWT contains email', async () => {
+      const token = await createToken(TEST_USER_ID, { email: 'test@example.com' });
+      fakeUserServiceClient.setApiKeys(TEST_USER_ID, { google: 'test-key' });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/research',
+        headers: { authorization: `Bearer ${token}` },
+        payload: {
+          prompt: 'Test prompt for JWT email claim',
+          selectedModels: [LlmModels.Gemini25Flash],
+        },
+      });
+
+      expect(response.statusCode).toBe(201);
+      const body = JSON.parse(response.body) as { success: boolean; data: Research };
+      expect(body.success).toBe(true);
+      expect(body.data.userEmail).toBe('test@example.com');
+      expect(body.data.userName).toBeUndefined();
+    });
+
+    it('stores generatedBy with both name and email claims when JWT contains both', async () => {
+      const token = await createToken(TEST_USER_ID, {
+        name: 'Test User',
+        email: 'test@example.com',
+      });
+      fakeUserServiceClient.setApiKeys(TEST_USER_ID, { google: 'test-key' });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/research',
+        headers: { authorization: `Bearer ${token}` },
+        payload: {
+          prompt: 'Test prompt for JWT both claims',
+          selectedModels: [LlmModels.Gemini25Flash],
+        },
+      });
+
+      expect(response.statusCode).toBe(201);
+      const body = JSON.parse(response.body) as { success: boolean; data: Research };
+      expect(body.success).toBe(true);
+      expect(body.data.userName).toBe('Test User');
+      expect(body.data.userEmail).toBe('test@example.com');
+    });
+
+    it('stores generatedBy as undefined when JWT has no name or email claims', async () => {
+      const token = await createToken(TEST_USER_ID); // No claims
+      fakeUserServiceClient.setApiKeys(TEST_USER_ID, { google: 'test-key' });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/research',
+        headers: { authorization: `Bearer ${token}` },
+        payload: {
+          prompt: 'Test prompt without JWT claims',
+          selectedModels: [LlmModels.Gemini25Flash],
+        },
+      });
+
+      expect(response.statusCode).toBe(201);
+      const body = JSON.parse(response.body) as { success: boolean; data: Research };
+      expect(body.success).toBe(true);
+      expect(body.data.userName).toBeUndefined();
+      expect(body.data.userEmail).toBeUndefined();
+    });
+
+    it('uses selectedModels[0] as synthesisModel when synthesisModel not provided (line 175)', async () => {
+      const token = await createToken(TEST_USER_ID);
+      fakeUserServiceClient.setApiKeys(TEST_USER_ID, {
+        google: 'test-key',
+        openai: 'test-openai-key',
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/research',
+        headers: { authorization: `Bearer ${token}` },
+        payload: {
+          prompt: 'Test prompt for synthesisModel fallback',
+          selectedModels: [LlmModels.O4MiniDeepResearch, LlmModels.Gemini25Pro],
+          // synthesisModel not provided - should use selectedModels[0]
+        },
+      });
+
+      expect(response.statusCode).toBe(201);
+      const body = JSON.parse(response.body) as { success: boolean; data: Research };
+      expect(body.success).toBe(true);
+      expect(body.data.synthesisModel).toBe(LlmModels.O4MiniDeepResearch);
+    });
+  });
+
+  describe('POST /research/:id/retry - Action fallback (line 3868)', () => {
+    it('returns already_completed message when research is already completed', async () => {
+      const token = await createToken(TEST_USER_ID);
+      const research = createTestResearch({
+        id: 'research-123',
+        status: 'completed',
+        llmResults: [
+          {
+            provider: LlmProviders.Google,
+            model: LlmModels.Gemini25Pro,
+            status: 'completed',
+            result: 'Completed result',
+          },
+        ],
+        completedAt: new Date().toISOString(),
+      });
+      fakeRepo.addResearch(research);
+      fakeUserServiceClient.setApiKeys(TEST_USER_ID, { google: 'test-key' });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/research/research-123/retry',
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: { action: string; message: string }
+      };
+      expect(body.success).toBe(true);
+      expect(body.data.action).toBe('already_completed');
+      expect(body.data.message).toBe('Research is already completed');
     });
   });
 });
