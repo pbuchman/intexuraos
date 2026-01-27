@@ -200,8 +200,6 @@ Then analyze with proper tools (in priority order):
 2. `rg "error|FAIL" /tmp/ci-*.txt -C3` — fast search with context
 3. For coverage: `jq '.total.branches.pct' coverage/coverage-summary.json`
 
-**⚠️ Hook enforced:** CI commands without tee capture are blocked. See `.claude/reference/ci-output-analysis.md`.
-
 ### Step 2: Fix or Ask (No Skipping, No Committing)
 
 | Failure Location    | Action                                                                     |
@@ -276,8 +274,6 @@ GOOGLE_APPLICATION_CREDENTIALS=$HOME/personal/gcloud-claude-code-dev.json \
 terraform validate
 ```
 
-**⚠️ Hook enforced:** Running `terraform` without env var clearing is blocked. See `.claude/hooks/validate-terraform.sh`.
-
 ### Step 5: Document Verification Result
 
 - ✅ "Verified: No terraform files changed"
@@ -319,8 +315,6 @@ GOOGLE_APPLICATION_CREDENTIALS=$HOME/personal/gcloud-claude-code-dev.json \
 terraform plan
 ```
 
-**⚠️ Hook enforced:** `.claude/hooks/validate-terraform.sh` blocks bare `terraform` commands.
-
 ### Terraform-Only Resource Creation
 
 **RULE: ALL persistent infrastructure MUST be created via Terraform. Direct CLI resource creation is FORBIDDEN.**
@@ -343,8 +337,6 @@ terraform plan
 ❌ WRONG: Need a bucket → gsutil mb gs://my-bucket → Done
 ✅ RIGHT: Need a bucket → Add to terraform/ → terraform plan → terraform apply → PR
 ```
-
-**⚠️ Hook enforced:** `.claude/hooks/validate-gcloud-resources.sh` blocks direct CLI resource creation.
 
 **Exception:** Truly ephemeral resources for debugging. Never new named resources.
 
