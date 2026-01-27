@@ -37,6 +37,11 @@ function aggregateIndexes(migrations) {
 
   for (const migration of migrations) {
     for (const index of migration.indexes ?? []) {
+      // Skip single-field indexes - Firestore creates them automatically
+      // Composite indexes require 2+ fields
+      if ((index.fields?.length ?? 0) < 2) {
+        continue;
+      }
       const key = JSON.stringify(index);
       if (!seenIndexes.has(key)) {
         seenIndexes.add(key);
