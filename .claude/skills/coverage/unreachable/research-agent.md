@@ -115,3 +115,12 @@ All documented branches are either:
 3. **researchRoutes.ts** branches (13 branches - see above)
 
 These branches represent defensive programming practices, source map alignment issues, or structural guarantees and should not be covered by tests.
+
+## completionHandlers.ts (2 uncovered branches)
+
+### Lines 115-116: Logger wrapper defensive type checks
+**Branches:**
+- `typeof msg === 'string'` false branch → `typeof obj === 'string'`
+- `typeof obj === 'string'` true branch → `{}`
+**Reason:** The logger wrapper `error` method has signature `(obj: object, msg?: string)`. The type signature guarantees `obj` is an object. The uncovered branches handle the defensive case where `obj` might be a string, which would violate the type contract.
+**Proof:** The function signature explicitly types `obj: object`. To reach these branches, you'd need to cast a string to `object` type, which goes against the type system.
