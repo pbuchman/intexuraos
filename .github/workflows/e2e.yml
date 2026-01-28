@@ -120,6 +120,7 @@ jobs:
           REPO_PATH: ${{ github.workspace }}
           GITHUB_TOKEN: ${{ env.GITHUB_TOKEN }}
           LOG_LEVEL: debug
+          INTEXURAOS_INTERNAL_AUTH_TOKEN: test-secret
 
       - name: Test mock-claude POST /tasks endpoint
         run: |

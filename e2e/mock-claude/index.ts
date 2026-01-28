@@ -65,6 +65,7 @@ app.use((req, _res, next) => {
 const PORT = Number.parseInt(process.env['PORT'] ?? '8090', 10);
 const REPO_PATH = process.env['REPO_PATH'] ?? '/workspace';
 const GITHUB_TOKEN = process.env['GITHUB_TOKEN'] ?? '';
+const INTERNAL_AUTH_TOKEN = process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] ?? 'test-secret';
 
 // Track running tasks for cancellation
 const runningTasks = new Map<string, NodeJS.Timeout>();
@@ -121,6 +122,7 @@ async function sendWebhook(url: string, secret: string, payload: MockResult): Pr
       'Content-Type': 'application/json',
       'X-Request-Timestamp': String(timestamp),
       'X-Request-Signature': signature,
+      'X-Internal-Auth': INTERNAL_AUTH_TOKEN,
     },
     body,
   });
@@ -137,8 +139,9 @@ async function sendWebhook(url: string, secret: string, payload: MockResult): Pr
 
 /**
  * Create a git branch.
+ * Note: Prefixed with _ as it's kept for potential future use but currently unused.
  */
-function createBranch(branchName: string, baseBranch: string): void {
+function _createBranch(branchName: string, baseBranch: string): void {
   logger.info({ branchName, baseBranch }, 'Creating git branch');
 
   try {
@@ -155,8 +158,9 @@ function createBranch(branchName: string, baseBranch: string): void {
 
 /**
  * Make a commit with a test file.
+ * Note: Prefixed with _ as it's kept for potential future use but currently unused.
  */
-async function makeCommit(
+async function _makeCommit(
   branchName: string,
   fileName: string,
   content: string,
@@ -185,8 +189,9 @@ async function makeCommit(
 
 /**
  * Create a pull request using gh CLI.
+ * Note: Prefixed with _ as it's kept for potential future use but currently unused.
  */
-function createPR(branchName: string, baseBranch: string, title: string, body?: string): string {
+function _createPR(branchName: string, baseBranch: string, title: string, body?: string): string {
   logger.info({ branchName, baseBranch, title }, 'Creating pull request');
 
   const bodyArg = body ? `--body "${body}"` : '--body "Mock PR for E2E testing"';
@@ -231,7 +236,7 @@ async function scenarioSuccess(): Promise<MockResult> {
 
   return {
     status: 'completed',
-    prUrl: `https://github.com/mock/repo/pull/${timestamp}`,
+    prUrl: `https://github.com/mock/repo/pull/${String(timestamp)}`,
     branch: branchName,
     commits: 1,
     summary: 'E2E mock: Successfully simulated PR creation',
@@ -295,7 +300,7 @@ async function scenarioSlowSuccess(): Promise<MockResult> {
 
   return {
     status: 'completed',
-    prUrl: `https://github.com/mock/repo/pull/${timestamp}`,
+    prUrl: `https://github.com/mock/repo/pull/${String(timestamp)}`,
     branch: branchName,
     commits: 1,
     summary: 'E2E mock: Successfully completed slow task',
@@ -317,7 +322,7 @@ async function scenarioCIFailure(): Promise<MockResult> {
 
   return {
     status: 'completed',
-    prUrl: `https://github.com/mock/repo/pull/${timestamp}`,
+    prUrl: `https://github.com/mock/repo/pull/${String(timestamp)}`,
     branch: branchName,
     commits: 1,
     summary: 'E2E mock: Simulated PR with CI failure',
@@ -387,6 +392,7 @@ app.post(['/tasks', '/execute'], (req, res): void => {
 
         // Send failure webhook
         await sendWebhook(webhookUrl, webhookSecret, {
+          taskId,
           status: 'failed',
           error: {
             code: 'execution_error',

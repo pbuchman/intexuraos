@@ -15,26 +15,15 @@ const REQUIRED_ENV = [
   'INTEXURAOS_ORCHESTRATOR_VM_URL',
 ];
 
-// Optional env vars - used but not strictly required (for E2E or conditional features)
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-const OPTIONAL_ENV = [
-  // E2E testing mode flags
-  'E2E_MODE',
-  'E2E_TEST_USER_ID',
-  // Production services (mocked in E2E mode)
-  'INTEXURAOS_WHATSAPP_SERVICE_URL',
-  'INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC',
-  'INTEXURAOS_LINEAR_AGENT_URL',
-  'INTEXURAOS_ACTIONS_AGENT_URL',
-  'INTEXURAOS_CF_ACCESS_CLIENT_ID',
-  'INTEXURAOS_CF_ACCESS_CLIENT_SECRET',
-  'INTEXURAOS_CODE_WORKERS',
-  'INTEXURAOS_SERVICE_URL',
-  // Auth0 JWT validation for public routes (standard names from Secret Manager)
-  'INTEXURAOS_AUTH_AUDIENCE',
-  'INTEXURAOS_AUTH_ISSUER',
-  'INTEXURAOS_AUTH_JWKS_URL',
-];
+/**
+ * Optional env vars - used but not strictly required (for E2E or conditional features):
+ * - E2E_MODE, E2E_TEST_USER_ID: E2E testing mode flags
+ * - INTEXURAOS_WHATSAPP_SERVICE_URL, INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC: WhatsApp integration
+ * - INTEXURAOS_LINEAR_AGENT_URL, INTEXURAOS_ACTIONS_AGENT_URL: Service integrations
+ * - INTEXURAOS_CF_ACCESS_CLIENT_ID, INTEXURAOS_CF_ACCESS_CLIENT_SECRET: Cloudflare Access
+ * - INTEXURAOS_CODE_WORKERS, INTEXURAOS_SERVICE_URL: Worker configuration
+ * - INTEXURAOS_AUTH_AUDIENCE, INTEXURAOS_AUTH_ISSUER, INTEXURAOS_AUTH_JWKS_URL: Auth0 JWT
+ */
 
 // Additional env vars required in production but optional in E2E mode
 const PRODUCTION_ONLY_ENV = [
