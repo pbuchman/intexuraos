@@ -505,6 +505,263 @@ describe('exportResearchToNotion', () => {
     });
   });
 
+  describe('cover image handling', () => {
+    beforeEach(() => {
+      // Set up the environment variable for image public base URL
+      process.env['INTEXURAOS_IMAGE_PUBLIC_BASE_URL'] = 'https://example.intexuraos.com';
+    });
+
+    afterEach(() => {
+      delete process.env['INTEXURAOS_IMAGE_PUBLIC_BASE_URL'];
+    });
+
+    it('adds image block when research has coverImageId', async () => {
+      const mockPagesCreate = vi.mocked(mockClient.pages.create);
+
+      mockPagesCreate.mockResolvedValueOnce({
+        id: 'main-page-123',
+      } as never);
+
+      const research = createMockResearch({
+        synthesizedResult: 'Test synthesis.',
+        shareInfo: {
+          shareToken: 'token-123',
+          slug: 'test-slug',
+          shareUrl: 'https://example.com/share/test-slug',
+          sharedAt: '2024-01-01T00:00:00Z',
+          gcsPath: 'shares/test-slug.html',
+          coverImageId: 'cover-abc-123',
+        },
+      });
+
+      await exportResearchToNotion(research, mockNotionToken, mockTargetPageId, mockLogger);
+
+      const mainPageCall = mockPagesCreate.mock.calls[0];
+      if (mainPageCall === undefined) {
+        throw new Error('mainPageCall is undefined');
+      }
+      const children = mainPageCall[0].children;
+      if (children === undefined) {
+        throw new Error('children is undefined');
+      }
+
+      // Should have image block, then synthesis heading
+      expect(children[0]).toEqual({
+        object: 'block',
+        type: 'image',
+        image: {
+          type: 'external',
+          external: { url: 'https://example.intexuraos.com/images/cover-abc-123/full.png' },
+        },
+      });
+      expect(children[1]).toEqual({
+        object: 'block',
+        type: 'heading_2',
+        heading_2: { rich_text: [{ type: 'text', text: { content: 'Synthesis' } }] },
+      });
+    });
+
+    it('does not add image block when shareInfo is undefined', async () => {
+      const mockPagesCreate = vi.mocked(mockClient.pages.create);
+
+      mockPagesCreate.mockResolvedValueOnce({
+        id: 'main-page-123',
+      } as never);
+
+      const research = createMockResearch({
+        synthesizedResult: 'Test synthesis.',
+        // shareInfo undefined
+      });
+
+      await exportResearchToNotion(research, mockNotionToken, mockTargetPageId, mockLogger);
+
+      const mainPageCall = mockPagesCreate.mock.calls[0];
+      if (mainPageCall === undefined) {
+        throw new Error('mainPageCall is undefined');
+      }
+      const children = mainPageCall[0].children;
+      if (children === undefined) {
+        throw new Error('children is undefined');
+      }
+
+      // First child should be synthesis heading, not image
+      expect(children[0]).toEqual({
+        object: 'block',
+        type: 'heading_2',
+        heading_2: { rich_text: [{ type: 'text', text: { content: 'Synthesis' } }] },
+      });
+    });
+
+    it('does not add image block when coverImageId is undefined', async () => {
+      const mockPagesCreate = vi.mocked(mockClient.pages.create);
+
+      mockPagesCreate.mockResolvedValueOnce({
+        id: 'main-page-123',
+      } as never);
+
+      const research = createMockResearch({
+        synthesizedResult: 'Test synthesis.',
+        shareInfo: {
+          shareToken: 'token-123',
+          slug: 'test-slug',
+          shareUrl: 'https://example.com/share/test-slug',
+          sharedAt: '2024-01-01T00:00:00Z',
+          gcsPath: 'shares/test-slug.html',
+          // coverImageId undefined
+        },
+      });
+
+      await exportResearchToNotion(research, mockNotionToken, mockTargetPageId, mockLogger);
+
+      const mainPageCall = mockPagesCreate.mock.calls[0];
+      if (mainPageCall === undefined) {
+        throw new Error('mainPageCall is undefined');
+      }
+      const children = mainPageCall[0].children;
+      if (children === undefined) {
+        throw new Error('children is undefined');
+      }
+
+      // First child should be synthesis heading, not image
+      expect(children[0]).toEqual({
+        object: 'block',
+        type: 'heading_2',
+        heading_2: { rich_text: [{ type: 'text', text: { content: 'Synthesis' } }] },
+      });
+    });
+
+    it('does not add image block when coverImageId is empty string', async () => {
+      const mockPagesCreate = vi.mocked(mockClient.pages.create);
+
+      mockPagesCreate.mockResolvedValueOnce({
+        id: 'main-page-123',
+      } as never);
+
+      const research = createMockResearch({
+        synthesizedResult: 'Test synthesis.',
+        shareInfo: {
+          shareToken: 'token-123',
+          slug: 'test-slug',
+          shareUrl: 'https://example.com/share/test-slug',
+          sharedAt: '2024-01-01T00:00:00Z',
+          gcsPath: 'shares/test-slug.html',
+          coverImageId: '',
+        },
+      });
+
+      await exportResearchToNotion(research, mockNotionToken, mockTargetPageId, mockLogger);
+
+      const mainPageCall = mockPagesCreate.mock.calls[0];
+      if (mainPageCall === undefined) {
+        throw new Error('mainPageCall is undefined');
+      }
+      const children = mainPageCall[0].children;
+      if (children === undefined) {
+        throw new Error('children is undefined');
+      }
+
+      // First child should be synthesis heading, not image
+      expect(children[0]).toEqual({
+        object: 'block',
+        type: 'heading_2',
+        heading_2: { rich_text: [{ type: 'text', text: { content: 'Synthesis' } }] },
+      });
+    });
+
+    it('does not add image block when coverImageId is whitespace only', async () => {
+      const mockPagesCreate = vi.mocked(mockClient.pages.create);
+
+      mockPagesCreate.mockResolvedValueOnce({
+        id: 'main-page-123',
+      } as never);
+
+      const research = createMockResearch({
+        synthesizedResult: 'Test synthesis.',
+        shareInfo: {
+          shareToken: 'token-123',
+          slug: 'test-slug',
+          shareUrl: 'https://example.com/share/test-slug',
+          sharedAt: '2024-01-01T00:00:00Z',
+          gcsPath: 'shares/test-slug.html',
+          coverImageId: '   ',
+        },
+      });
+
+      await exportResearchToNotion(research, mockNotionToken, mockTargetPageId, mockLogger);
+
+      const mainPageCall = mockPagesCreate.mock.calls[0];
+      if (mainPageCall === undefined) {
+        throw new Error('mainPageCall is undefined');
+      }
+      const children = mainPageCall[0].children;
+      if (children === undefined) {
+        throw new Error('children is undefined');
+      }
+
+      // First child should be synthesis heading, not image
+      expect(children[0]).toEqual({
+        object: 'block',
+        type: 'heading_2',
+        heading_2: { rich_text: [{ type: 'text', text: { content: 'Synthesis' } }] },
+      });
+    });
+
+    it('logs info when including cover image', async () => {
+      const mockPagesCreate = vi.mocked(mockClient.pages.create);
+
+      mockPagesCreate.mockResolvedValueOnce({
+        id: 'main-page-123',
+      } as never);
+
+      const research = createMockResearch({
+        synthesizedResult: 'Test synthesis.',
+        shareInfo: {
+          shareToken: 'token-123',
+          slug: 'test-slug',
+          shareUrl: 'https://example.com/share/test-slug',
+          sharedAt: '2024-01-01T00:00:00Z',
+          gcsPath: 'shares/test-slug.html',
+          coverImageId: 'cover-xyz-789',
+        },
+      });
+
+      await exportResearchToNotion(research, mockNotionToken, mockTargetPageId, mockLogger);
+
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        'Including cover image in Notion export',
+        {
+          coverImageId: 'cover-xyz-789',
+          coverImageUrl: 'https://example.intexuraos.com/images/cover-xyz-789/full.png',
+        }
+      );
+    });
+
+    it('throws error when INTEXURAOS_IMAGE_PUBLIC_BASE_URL is not set', async () => {
+      // Clear the env var to test error behavior
+      delete process.env['INTEXURAOS_IMAGE_PUBLIC_BASE_URL'];
+
+      const research = createMockResearch({
+        synthesizedResult: 'Test synthesis.',
+        shareInfo: {
+          shareToken: 'token-123',
+          slug: 'test-slug',
+          shareUrl: 'https://example.com/share/test-slug',
+          sharedAt: '2024-01-01T00:00:00Z',
+          gcsPath: 'shares/test-slug.html',
+          coverImageId: 'cover-def-456',
+        },
+      });
+
+      const result = await exportResearchToNotion(research, mockNotionToken, mockTargetPageId, mockLogger);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('INTERNAL_ERROR');
+        expect(result.error.message).toContain('INTEXURAOS_IMAGE_PUBLIC_BASE_URL');
+      }
+    });
+  });
+
   describe('edge cases', () => {
     it('handles research with no completed LLM results', async () => {
       const mockPagesCreate = vi.mocked(mockClient.pages.create);

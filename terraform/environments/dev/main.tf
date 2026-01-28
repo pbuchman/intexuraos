@@ -1014,6 +1014,7 @@ module "research_agent" {
     INTEXURAOS_SHARED_CONTENT_BUCKET         = module.shared_content.bucket_name
     INTEXURAOS_SHARE_BASE_URL                = "https://${var.web_app_domain}/share/research"
     INTEXURAOS_NOTION_SERVICE_URL            = module.notion_service.service_url
+    INTEXURAOS_IMAGE_PUBLIC_BASE_URL         = "https://${var.web_app_domain}"
   })
 
   depends_on = [

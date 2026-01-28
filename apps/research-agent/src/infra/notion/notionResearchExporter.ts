@@ -78,6 +78,19 @@ function stripHiddenContent(content: string): string {
 }
 
 // ============================================================================
+// Cover image URL generation
+// ============================================================================
+
+// Image path pattern must match image-service's GCS structure: /images/{id}/full.png
+function getCoverImageUrl(coverImageId: string): string {
+  const publicBaseUrl = process.env['INTEXURAOS_IMAGE_PUBLIC_BASE_URL'];
+  if (publicBaseUrl === undefined) {
+    throw new Error('INTEXURAOS_IMAGE_PUBLIC_BASE_URL environment variable is required');
+  }
+  return `${publicBaseUrl}/images/${coverImageId}/full.png`;
+}
+
+// ============================================================================
 // Error mapping
 // ============================================================================
 
@@ -119,6 +132,7 @@ function mapExportError(e: LocalNotionError): NotionResearchExportError {
  *
  * Structure:
  * - Main Research Page (child of targetPageId)
+ *   - Image: cover image (if shareInfo.coverImageId exists)
  *   - Heading: "Synthesis"
  *   - Content: research.synthesizedResult (chunked into code blocks)
  *   - Heading: "Sources"
@@ -147,6 +161,32 @@ export async function exportResearchToNotion(
     // Filter completed LLM results
     const completedResults = research.llmResults.filter((r) => r.status === 'completed');
 
+    // Build cover image block if cover image exists
+    const coverImageId = research.shareInfo?.coverImageId;
+    const trimmedCoverImageId = coverImageId?.trim();
+    const hasCoverImage = trimmedCoverImageId !== undefined && trimmedCoverImageId !== '';
+
+    const coverImageBlock = hasCoverImage
+      ? [
+          {
+            object: 'block' as const,
+            type: 'image' as const,
+            image: {
+              type: 'external' as const,
+              external: { url: getCoverImageUrl(trimmedCoverImageId) },
+            },
+          },
+        ]
+      : [];
+
+    if (hasCoverImage) {
+      const coverImageUrl = getCoverImageUrl(trimmedCoverImageId);
+      logger.info(
+        'Including cover image in Notion export',
+        { coverImageId: trimmedCoverImageId, coverImageUrl }
+      );
+    }
+
     // Create main research page
     const synthesisChunks = splitTextIntoChunks(stripHiddenContent(research.synthesizedResult));
     const synthesisCodeBlocks = synthesisChunks.map((chunk) => ({
@@ -165,6 +205,7 @@ export async function exportResearchToNotion(
         title: { title: [{ text: { content: research.title || 'Research' } }] },
       },
       children: [
+        ...coverImageBlock,
         {
           object: 'block' as const,
           type: 'heading_2' as const,
