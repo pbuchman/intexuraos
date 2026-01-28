@@ -411,6 +411,8 @@ const COMMON_SERVICE_ENV = {
   INTEXURAOS_AUTH0_DOMAIN: process.env.INTEXURAOS_AUTH0_DOMAIN ?? '',
   INTEXURAOS_AUTH0_CLIENT_ID: process.env.INTEXURAOS_AUTH0_CLIENT_ID ?? '',
   INTEXURAOS_INTERNAL_AUTH_TOKEN: process.env.INTEXURAOS_INTERNAL_AUTH_TOKEN ?? 'local-dev-token',
+  INTEXURAOS_GCP_PROJECT_ID: process.env.INTEXURAOS_GCP_PROJECT_ID ?? 'intexuraos-dev',
+  INTEXURAOS_WEB_APP_URL: process.env.INTEXURAOS_WEB_APP_URL ?? 'http://localhost:3000',
   FIREBASE_AUTH_EMULATOR_HOST: 'localhost:8104',
 };
 
@@ -442,7 +444,14 @@ const SERVICE_ENV_MAPPINGS = {
   'research-agent': {
     INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC:
       process.env.INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC ?? 'whatsapp-send-message',
-    INTEXURAOS_IMAGE_PUBLIC_BASE_URL: process.env.INTEXURAOS_IMAGE_PUBLIC_BASE_URL ?? 'http://localhost:3000',
+    INTEXURAOS_IMAGE_PUBLIC_BASE_URL:
+      process.env.INTEXURAOS_IMAGE_PUBLIC_BASE_URL ?? 'http://localhost:3000',
+    INTEXURAOS_SHARED_CONTENT_BUCKET:
+      process.env.INTEXURAOS_SHARED_CONTENT_BUCKET ?? 'intexuraos-shared-content',
+    INTEXURAOS_SHARE_BASE_URL: process.env.INTEXURAOS_SHARE_BASE_URL ?? 'http://localhost:3000',
+    INTEXURAOS_PUBSUB_RESEARCH_PROCESS_TOPIC:
+      process.env.INTEXURAOS_PUBSUB_RESEARCH_PROCESS_TOPIC ?? 'research-process',
+    INTEXURAOS_PUBSUB_LLM_CALL_TOPIC: process.env.INTEXURAOS_PUBSUB_LLM_CALL_TOPIC ?? 'llm-call',
   },
   'whatsapp-service': {
     INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC:
@@ -453,6 +462,22 @@ const SERVICE_ENV_MAPPINGS = {
       process.env.INTEXURAOS_PUBSUB_MEDIA_CLEANUP_TOPIC ?? 'whatsapp-media-cleanup',
     INTEXURAOS_PUBSUB_COMMANDS_INGEST_TOPIC:
       process.env.INTEXURAOS_PUBSUB_COMMANDS_INGEST_TOPIC ?? 'commands-ingest',
+    INTEXURAOS_WHATSAPP_ACCESS_TOKEN: process.env.INTEXURAOS_WHATSAPP_ACCESS_TOKEN ?? '',
+    INTEXURAOS_WHATSAPP_APP_SECRET: process.env.INTEXURAOS_WHATSAPP_APP_SECRET ?? '',
+    INTEXURAOS_WHATSAPP_WABA_ID: process.env.INTEXURAOS_WHATSAPP_WABA_ID ?? '',
+    INTEXURAOS_WHATSAPP_PHONE_NUMBER_ID: process.env.INTEXURAOS_WHATSAPP_PHONE_NUMBER_ID ?? '',
+    INTEXURAOS_WHATSAPP_VERIFY_TOKEN: process.env.INTEXURAOS_WHATSAPP_VERIFY_TOKEN ?? 'test-token',
+    INTEXURAOS_WHATSAPP_MEDIA_BUCKET:
+      process.env.INTEXURAOS_WHATSAPP_MEDIA_BUCKET ?? 'whatsapp-media',
+    INTEXURAOS_PUBSUB_MEDIA_CLEANUP_SUBSCRIPTION:
+      process.env.INTEXURAOS_PUBSUB_MEDIA_CLEANUP_SUBSCRIPTION ?? 'whatsapp-media-cleanup-sub',
+    INTEXURAOS_SPEECHMATICS_API_KEY: process.env.INTEXURAOS_SPEECHMATICS_API_KEY ?? '',
+    INTEXURAOS_PUBSUB_WEBHOOK_PROCESS_TOPIC:
+      process.env.INTEXURAOS_PUBSUB_WEBHOOK_PROCESS_TOPIC ?? 'whatsapp-webhook-process',
+    INTEXURAOS_PUBSUB_TRANSCRIPTION_TOPIC:
+      process.env.INTEXURAOS_PUBSUB_TRANSCRIPTION_TOPIC ?? 'whatsapp-transcription',
+    INTEXURAOS_PUBSUB_APPROVAL_REPLY_TOPIC:
+      process.env.INTEXURAOS_PUBSUB_APPROVAL_REPLY_TOPIC ?? 'approval-reply',
   },
   'actions-agent': {
     INTEXURAOS_PUBSUB_ACTIONS_QUEUE: process.env.INTEXURAOS_PUBSUB_ACTIONS_QUEUE ?? 'actions-queue',
@@ -475,6 +500,44 @@ const SERVICE_ENV_MAPPINGS = {
     INTEXURAOS_AUTH0_JWKS_URI: 'https://intexuraos.eu.auth0.com/.well-known/jwks.json',
     INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC:
       process.env.INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC ?? 'whatsapp-send-message',
+  },
+  'bookmarks-agent': {
+    INTEXURAOS_PUBSUB_BOOKMARK_ENRICH:
+      process.env.INTEXURAOS_PUBSUB_BOOKMARK_ENRICH ?? 'bookmark-enrich',
+    INTEXURAOS_PUBSUB_BOOKMARK_SUMMARIZE:
+      process.env.INTEXURAOS_PUBSUB_BOOKMARK_SUMMARIZE ?? 'bookmark-summarize',
+    INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC:
+      process.env.INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC ?? 'whatsapp-send-message',
+  },
+  'image-service': {
+    INTEXURAOS_IMAGE_BUCKET: process.env.INTEXURAOS_IMAGE_BUCKET ?? 'intexuraos-images',
+    INTEXURAOS_IMAGE_PUBLIC_BASE_URL:
+      process.env.INTEXURAOS_IMAGE_PUBLIC_BASE_URL ?? 'http://localhost:3000',
+  },
+  // Services with only common env vars (no service-specific configuration)
+  'api-docs-hub': {},
+  'app-settings-service': {},
+  'calendar-agent': {},
+  'commands-agent': {
+    INTEXURAOS_PUBSUB_ACTIONS_QUEUE: process.env.INTEXURAOS_PUBSUB_ACTIONS_QUEUE ?? 'actions-queue',
+  },
+  'data-insights-agent': {},
+  'linear-agent': {},
+  'mobile-notifications-service': {},
+  'notes-agent': {},
+  'notion-service': {},
+  'todos-agent': {
+    INTEXURAOS_TODOS_PROCESSING_TOPIC:
+      process.env.INTEXURAOS_TODOS_PROCESSING_TOPIC ?? 'todos-processing',
+  },
+  'user-service': {
+    INTEXURAOS_TOKEN_ENCRYPTION_KEY: process.env.INTEXURAOS_TOKEN_ENCRYPTION_KEY ?? '',
+    INTEXURAOS_ENCRYPTION_KEY: process.env.INTEXURAOS_ENCRYPTION_KEY ?? '',
+    INTEXURAOS_GOOGLE_OAUTH_CLIENT_ID: process.env.INTEXURAOS_GOOGLE_OAUTH_CLIENT_ID ?? '',
+    INTEXURAOS_GOOGLE_OAUTH_CLIENT_SECRET: process.env.INTEXURAOS_GOOGLE_OAUTH_CLIENT_SECRET ?? '',
+  },
+  'web-agent': {
+    INTEXURAOS_CRAWL4AI_API_KEY: process.env.INTEXURAOS_CRAWL4AI_API_KEY ?? '',
   },
 };
 
