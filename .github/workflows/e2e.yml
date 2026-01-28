@@ -100,7 +100,8 @@ jobs:
           echo "=== Before mock-claude ==="
           grep "test:e2e" package.json && echo "✓ test:e2e exists" || echo "✗ test:e2e MISSING!"
           cd e2e/mock-claude
-          npx tsx index.ts > /tmp/mock-claude.log 2>&1 &
+          # Use pnpm instead of npx to avoid package.json modifications
+          pnpm tsx index.ts > /tmp/mock-claude.log 2>&1 &
           echo $! > /tmp/mock-claude.pid
           sleep 5
           # Verify mock-claude is responding
@@ -158,7 +159,7 @@ jobs:
           INTEXURAOS_CODE_WORKERS="mac:http://localhost:8090:1,vm:http://localhost:8090:1" \
           FIRESTORE_EMULATOR_HOST=localhost:8081 \
           PUBSUB_EMULATOR_HOST=localhost:8085 \
-          npx tsx src/index.ts > /tmp/code-agent.log 2>&1 &
+          pnpm tsx src/index.ts > /tmp/code-agent.log 2>&1 &
           echo $! > /tmp/code-agent.pid
 
           echo "=== Immediately after starting (still in apps/code-agent) ==="
