@@ -157,8 +157,8 @@ jobs:
           INTEXURAOS_ORCHESTRATOR_VM_URL=http://localhost:8090 \
           INTEXURAOS_SERVICE_URL=http://localhost:8128 \
           INTEXURAOS_CODE_WORKERS="mac:http://localhost:8090:1,vm:http://localhost:8090:1" \
-          FIRESTORE_EMULATOR_HOST=localhost:8081 \
-          PUBSUB_EMULATOR_HOST=localhost:8085 \
+          FIRESTORE_EMULATOR_HOST=127.0.0.1:8081 \
+          PUBSUB_EMULATOR_HOST=127.0.0.1:8085 \
           pnpm tsx src/index.ts > /tmp/code-agent.log 2>&1 &
           echo $! > /tmp/code-agent.pid
 
@@ -222,8 +222,8 @@ jobs:
           E2E_INTERNAL_AUTH_TOKEN: test-secret
           E2E_TEST_USER_ID: e2e-ci-test
           INTEXURAOS_GCP_PROJECT_ID: test-project
-          FIRESTORE_EMULATOR_HOST: localhost:8081
-          PUBSUB_EMULATOR_HOST: localhost:8085
+          FIRESTORE_EMULATOR_HOST: 127.0.0.1:8081
+          PUBSUB_EMULATOR_HOST: 127.0.0.1:8085
 
       - name: Show service logs
         if: always()
