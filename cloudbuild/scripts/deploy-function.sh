@@ -34,19 +34,12 @@ if [[ ! -d "${WORKER_DIR}/dist" ]]; then
   exit 1
 fi
 
-log "Generating production package.json..."
-node -e "
-  const fs = require('fs');
-  const pkg = JSON.parse(fs.readFileSync('${WORKER_DIR}/package.json', 'utf-8'));
-  const prod = {
-    name: pkg.name.replace('@intexuraos/', '') + '-prod',
-    version: '1.0.0',
-    type: 'module',
-    main: 'index.js',
-    dependencies: pkg.dependencies || {}
-  };
-  fs.writeFileSync('${WORKER_DIR}/dist/package.json', JSON.stringify(prod, null, 2));
-"
+# Check if production package.json exists (generated during build step)
+if [[ ! -f "${WORKER_DIR}/dist/package.json" ]]; then
+  log "ERROR: package.json not found in dist/. Run build step first."
+  exit 1
+fi
+log "Found production package.json in dist/"
 
 log "Creating function.zip..."
 cd "${WORKER_DIR}/dist"
