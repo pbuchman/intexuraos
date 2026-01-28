@@ -14,7 +14,7 @@ jobs:
     timeout-minutes: 30
 
     env:
-      NODE_VERSION: '20'
+      NODE_VERSION: '22'
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     steps:
@@ -27,9 +27,9 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
 
       - name: Install pnpm
-        uses: pnpm/action-setup@v2
+        uses: pnpm/action-setup@v4
         with:
-          version: 8
+          version: 9
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
