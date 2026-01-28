@@ -13,7 +13,7 @@ resource "google_monitoring_alert_policy" "code_task_high_failure_rate" {
   conditions {
     display_name = "Failure rate > 20%"
     condition_threshold {
-      filter          = "metric.type=\"custom.googleapis.com/intexuraos/code_tasks_completed\" AND metric.labels.status=\"failed\""
+      filter          = "resource.type=\"global\" AND metric.type=\"custom.googleapis.com/intexuraos/code_tasks_completed\" AND metric.labels.status=\"failed\""
       comparison      = "COMPARISON_GT"
       threshold_value = 0.2
       duration        = "300s"
@@ -96,7 +96,7 @@ resource "google_monitoring_alert_policy" "code_task_high_daily_cost" {
   conditions {
     display_name = "Daily cost > $50"
     condition_threshold {
-      filter          = "metric.type=\"custom.googleapis.com/intexuraos/code_tasks_cost_dollars\""
+      filter          = "resource.type=\"global\" AND metric.type=\"custom.googleapis.com/intexuraos/code_tasks_cost_dollars\""
       comparison      = "COMPARISON_GT"
       threshold_value = 50
       duration        = "0s"
@@ -137,7 +137,7 @@ resource "google_monitoring_alert_policy" "code_task_capacity_exhausted" {
   conditions {
     display_name = "Active tasks near capacity for 10+ min"
     condition_threshold {
-      filter          = "metric.type=\"custom.googleapis.com/intexuraos/code_tasks_active\""
+      filter          = "resource.type=\"global\" AND metric.type=\"custom.googleapis.com/intexuraos/code_tasks_active\""
       comparison      = "COMPARISON_GT"
       threshold_value = 9
       duration        = "600s"
