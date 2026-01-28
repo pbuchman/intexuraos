@@ -46,7 +46,11 @@
 # │ BATCH 7 - Code Agent (add new services HERE)                            │
 # │   1. code-agent                                                         │
 # ├─────────────────────────────────────────────────────────────────────────┤
-# │ BATCH 8 - Web Frontend                                                  │
+# │ BATCH 8 - Cloud Functions Workers (parallel with Batch 1-7)             │
+# │   1. vm-lifecycle                                                       │
+# │   2. log-cleanup                                                        │
+# ├─────────────────────────────────────────────────────────────────────────┤
+# │ BATCH 9 - Web Frontend                                                  │
 # │   1. web (frontend - after all services deployed)                       │
 # └─────────────────────────────────────────────────────────────────────────┘
 #
@@ -602,12 +606,58 @@ steps:
       - 'ENVIRONMENT=${_ENVIRONMENT}'
 
   # ===========================================================================
-  # BATCH 8 - Web Frontend (after all services deployed)
+  # BATCH 8 - Cloud Functions Workers (can run in parallel)
+  # ===========================================================================
+
+  # --- Build and deploy vm-lifecycle worker ---
+  - name: 'node:22-slim'
+    id: 'build-vm-lifecycle'
+    waitFor: ['pnpm-install']
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        corepack enable
+        pnpm --filter @intexuraos/vm-lifecycle build
+
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    id: 'deploy-vm-lifecycle'
+    waitFor: ['build-vm-lifecycle']
+    entrypoint: 'bash'
+    args: ['cloudbuild/scripts/deploy-function.sh', 'vm-lifecycle']
+    env:
+      - 'REGION=${_REGION}'
+      - 'ENVIRONMENT=${_ENVIRONMENT}'
+      - 'FUNCTIONS_SOURCE_BUCKET=${_FUNCTIONS_SOURCE_BUCKET}'
+
+  # --- Build and deploy log-cleanup worker ---
+  - name: 'node:22-slim'
+    id: 'build-log-cleanup'
+    waitFor: ['pnpm-install']
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        corepack enable
+        pnpm --filter @intexuraos/log-cleanup build
+
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    id: 'deploy-log-cleanup'
+    waitFor: ['build-log-cleanup']
+    entrypoint: 'bash'
+    args: ['cloudbuild/scripts/deploy-function.sh', 'log-cleanup']
+    env:
+      - 'REGION=${_REGION}'
+      - 'ENVIRONMENT=${_ENVIRONMENT}'
+      - 'FUNCTIONS_SOURCE_BUCKET=${_FUNCTIONS_SOURCE_BUCKET}'
+
+  # ===========================================================================
+  # BATCH 9 - Web Frontend (after all services deployed)
   # ===========================================================================
 
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     id: 'fetch-web-config'
-    waitFor: ['deploy-code-agent']
+    waitFor: ['deploy-code-agent', 'deploy-vm-lifecycle', 'deploy-log-cleanup']
     entrypoint: 'bash'
     args:
       - '-c'

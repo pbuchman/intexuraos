@@ -113,6 +113,13 @@ resource "google_project_iam_member" "cloud_build_firebase_admin" {
   member  = "serviceAccount:${google_service_account.cloud_build.email}"
 }
 
+# Cloud Build needs to deploy Cloud Functions
+resource "google_project_iam_member" "cloud_build_functions_developer" {
+  project = var.project_id
+  role    = "roles/cloudfunctions.developer"
+  member  = "serviceAccount:${google_service_account.cloud_build.email}"
+}
+
 # -----------------------------------------------------------------------------
 # Cloud Build Trigger (invoked by GitHub Actions)
 # -----------------------------------------------------------------------------
@@ -133,9 +140,10 @@ resource "google_cloudbuild_trigger" "manual_main" {
   filename = "cloudbuild/cloudbuild.yaml"
 
   substitutions = {
-    _REGION                = var.region
-    _ARTIFACT_REGISTRY_URL = var.artifact_registry_url
-    _ENVIRONMENT           = var.environment
+    _REGION                  = var.region
+    _ARTIFACT_REGISTRY_URL   = var.artifact_registry_url
+    _ENVIRONMENT             = var.environment
+    _FUNCTIONS_SOURCE_BUCKET = var.functions_source_bucket
   }
 
   service_account = google_service_account.cloud_build.id

@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# deploy-function.sh - Deploy a Cloud Function worker to GCS
+# deploy-function.sh - Deploy a Cloud Function worker to GCS and redeploy functions
 #
-# This script packages and uploads a Cloud Function worker to GCS.
-# It generates a production package.json, creates a zip file, and uploads it.
+# This script packages and uploads a Cloud Function worker to GCS,
+# then redeploys all Cloud Functions that use that worker's source.
 #
 # Usage:
 #   ./cloudbuild/scripts/deploy-function.sh <worker-name>
@@ -57,5 +57,32 @@ DEST_PATH="gs://${FUNCTIONS_SOURCE_BUCKET}/${WORKER}/function.zip"
 log "Uploading to ${DEST_PATH}..."
 gsutil cp function.zip "${DEST_PATH}"
 
-log "Deployment complete for ${WORKER}"
 log "Source uploaded to: ${DEST_PATH}"
+
+# Redeploy Cloud Functions that use this worker's source
+log "Redeploying Cloud Functions for worker: ${WORKER}"
+
+case "${WORKER}" in
+  vm-lifecycle)
+    FUNCTIONS=("intexuraos-vm-start-${ENVIRONMENT}" "intexuraos-vm-stop-${ENVIRONMENT}")
+    ;;
+  log-cleanup)
+    FUNCTIONS=("intexuraos-log-cleanup-${ENVIRONMENT}")
+    ;;
+  *)
+    log "WARNING: No function mapping found for worker: ${WORKER}"
+    log "Source uploaded but functions not redeployed"
+    exit 0
+    ;;
+esac
+
+for FUNC in "${FUNCTIONS[@]}"; do
+  log "Redeploying function: ${FUNC}"
+  gcloud functions deploy "${FUNC}" \
+    --region="${REGION}" \
+    --source="${DEST_PATH}" \
+    --gen2 \
+    --quiet
+done
+
+log "Deployment complete for ${WORKER}"
