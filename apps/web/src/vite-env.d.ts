@@ -8,6 +8,9 @@ interface ImportMetaEnv {
   readonly INTEXURAOS_USER_SERVICE_URL: string;
   readonly INTEXURAOS_WHATSAPP_SERVICE_URL: string;
   readonly INTEXURAOS_BUILD_VERSION: string;
+  readonly INTEXURAOS_COMMIT_SHA: string;
+  readonly INTEXURAOS_COMMIT_MESSAGE: string;
+  readonly INTEXURAOS_BUILD_DATE: string;
 }
 
 interface ImportMeta {
