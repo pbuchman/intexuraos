@@ -145,18 +145,14 @@ function ResearchCard({ research, onDelete, onToggleFavourite, updatingFavourite
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const status = STATUS_STYLES[research.status];
   const isDraft = research.status === 'draft';
-  const isCompleted = research.status === 'completed';
   const deleteLabel = isDraft ? 'Discard' : 'Delete';
 
   const handleCardClick = (): void => {
     void navigate(`/research/${research.id}`);
   };
 
-  const getDateLabel = (): string => {
-    if (isDraft) {
-      return `Draft saved: ${formatDateTime(research.startedAt)}`;
-    }
-    return `Research started: ${formatDateTime(research.startedAt)}`;
+  const getCreationDate = (): string => {
+    return formatDateTime(research.startedAt);
   };
 
   return (
@@ -184,27 +180,23 @@ function ResearchCard({ research, onDelete, onToggleFavourite, updatingFavourite
           </h3>
           <p className="mt-1 line-clamp-2 text-sm text-slate-600">{research.prompt}</p>
         </div>
+      </div>
+
+      <div className="mt-3 flex items-center justify-between">
         <span
-          className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${status.bg} ${status.text} flex-shrink-0`}
+          className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${status.bg} ${status.text}`}
         >
           {status.label}
         </span>
+        <span className="text-sm text-slate-500">{getCreationDate()}</span>
       </div>
 
-      <div className="mt-4 flex items-center justify-between text-sm text-slate-500">
-        <div className="flex gap-4">
-          <span>{getDateLabel()}</span>
-          {isCompleted && research.completedAt !== undefined ? (
-            <span>Completed: {formatDateTime(research.completedAt)}</span>
-          ) : null}
-        </div>
-        <div className="flex gap-2">
-          {[...new Set(research.selectedModels.map(getProviderForModel))].map((provider) => (
-            <span key={provider} className="rounded bg-slate-100 px-2 py-0.5 text-xs">
-              {provider}
-            </span>
-          ))}
-        </div>
+      <div className="mt-2 flex flex-wrap gap-2">
+        {[...new Set(research.selectedModels.map(getProviderForModel))].map((provider) => (
+          <span key={provider} className="rounded bg-slate-100 px-2 py-0.5 text-xs text-slate-600">
+            {provider}
+          </span>
+        ))}
       </div>
 
       <div className="mt-3 flex justify-end">
