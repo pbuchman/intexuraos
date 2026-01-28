@@ -109,7 +109,13 @@ jobs:
           curl -sf http://localhost:8128/health || (echo "code-agent health check failed" && cat /tmp/code-agent.log && exit 1)
 
       - name: Run E2E tests
-        run: pnpm run test:e2e
+        run: |
+          echo "Current directory: $(pwd)"
+          echo "Package.json scripts:"
+          cat package.json | grep -A50 '"scripts"' | head -60
+          echo ""
+          echo "Running test:e2e..."
+          pnpm run test:e2e
         env:
           E2E_API_URL: http://localhost:8128
           E2E_AUTH_TOKEN: test-token
