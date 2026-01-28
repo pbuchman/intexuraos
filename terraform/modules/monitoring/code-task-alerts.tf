@@ -103,7 +103,7 @@ resource "google_monitoring_alert_policy" "code_task_high_daily_cost" {
 
       aggregations {
         alignment_period     = "86400s"
-        per_series_aligner   = "ALIGN_SUM"
+        per_series_aligner   = "ALIGN_DELTA"
         cross_series_reducer = "REDUCE_SUM"
       }
 
