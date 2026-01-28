@@ -6,25 +6,54 @@ import { resolve } from 'path';
 import { execSync } from 'child_process';
 import { readFileSync } from 'fs';
 
-function getBuildVersion(): string {
+interface BuildInfo {
+  version: string;
+  shortSha: string;
+  fullSha: string;
+  commitMessage: string;
+  buildDate: string;
+}
+
+function getBuildInfo(): BuildInfo {
   const pkg = JSON.parse(readFileSync(resolve(__dirname, 'package.json'), 'utf-8')) as {
     version: string;
   };
-  let sha = 'unknown';
 
-  // First try COMMIT_SHA from Cloud Build environment
+  let shortSha = 'unknown';
+  let fullSha = 'unknown';
+  let commitMessage = 'Unknown commit';
+
   if (process.env['COMMIT_SHA'] !== undefined && process.env['COMMIT_SHA'] !== '') {
-    sha = process.env['COMMIT_SHA'].slice(0, 7);
-  } else {
-    // Fallback to git for local development
-    try {
-      sha = execSync('git rev-parse --short HEAD', { encoding: 'utf-8' }).trim();
-    } catch {
-      // Git not available or not a git repo
-    }
+    fullSha = process.env['COMMIT_SHA'];
+    shortSha = fullSha.slice(0, 7);
   }
 
-  return `${pkg.version}-${sha}`;
+  if (process.env['COMMIT_MESSAGE'] !== undefined && process.env['COMMIT_MESSAGE'] !== '') {
+    commitMessage = process.env['COMMIT_MESSAGE'];
+  }
+
+  // Fallback to git for local development or missing env vars
+  try {
+    if (shortSha === 'unknown') {
+      shortSha = execSync('git rev-parse --short HEAD', { encoding: 'utf-8' }).trim();
+    }
+    if (fullSha === 'unknown') {
+      fullSha = execSync('git rev-parse HEAD', { encoding: 'utf-8' }).trim();
+    }
+    if (commitMessage === 'Unknown commit') {
+      commitMessage = execSync('git log -1 --pretty=%s', { encoding: 'utf-8' }).trim();
+    }
+  } catch {
+    // Git not available or not a git repo
+  }
+
+  return {
+    version: pkg.version,
+    shortSha,
+    fullSha,
+    commitMessage,
+    buildDate: new Date().toISOString(),
+  };
 }
 
 export default defineConfig(({ mode }) => {
@@ -42,7 +71,8 @@ export default defineConfig(({ mode }) => {
   // Merge: file env takes precedence over shell env
   const env = { ...shellEnv, ...fileEnv };
 
-  const buildVersion = getBuildVersion();
+  const buildInfo = getBuildInfo();
+  const buildVersion = `${buildInfo.version}-${buildInfo.shortSha}`;
 
   return {
     plugins: [
@@ -153,6 +183,9 @@ export default defineConfig(({ mode }) => {
         Object.entries(env).map(([key, value]) => [`import.meta.env.${key}`, JSON.stringify(value)])
       ),
       'import.meta.env.INTEXURAOS_BUILD_VERSION': JSON.stringify(buildVersion),
+      'import.meta.env.INTEXURAOS_COMMIT_SHA': JSON.stringify(buildInfo.fullSha),
+      'import.meta.env.INTEXURAOS_COMMIT_MESSAGE': JSON.stringify(buildInfo.commitMessage),
+      'import.meta.env.INTEXURAOS_BUILD_DATE': JSON.stringify(buildInfo.buildDate),
     },
     resolve: {
       alias: {
