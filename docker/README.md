@@ -7,7 +7,7 @@ Container configurations for local development.
 The easiest way to run all services locally with hot-reload:
 
 ```bash
-# Start everything (emulators + all 7 services with hot-reload)
+# Start everything (emulators + all services with hot-reload)
 pnpm run dev
 
 # Start only emulators (if you want to run services manually)
@@ -32,18 +32,6 @@ pnpm run emulators:stop
 # View emulator logs
 pnpm run emulators:logs
 ```
-
-## Services & Ports
-
-| Service                      | Port | Health Check                 |
-| ---------------------------- | ---- | ---------------------------- |
-| user-service                 | 8110 | http://localhost:8110/health |
-| promptvault-service          | 8111 | http://localhost:8111/health |
-| notion-service               | 8112 | http://localhost:8112/health |
-| whatsapp-service             | 8113 | http://localhost:8113/health |
-| mobile-notifications-service | 8114 | http://localhost:8114/health |
-| api-docs-hub                 | 8115 | http://localhost:8115/docs   |
-| research-agent               | 8116 | http://localhost:8116/health |
 
 ### Emulator Ports
 
@@ -78,16 +66,7 @@ The `.envrc.local` file overrides cloud service URLs with localhost URLs for loc
 
 | File                        | Purpose                                  |
 | --------------------------- | ---------------------------------------- |
-| `docker-compose.yaml`       | Full containerized services (legacy)     |
 | `docker-compose.local.yaml` | Emulators only (Firestore, Pub/Sub, GCS) |
-
-## Legacy: Full Docker Build
-
-If you prefer running services in containers (slower iteration):
-
-```bash
-docker compose -f docker/docker-compose.yaml up --build
-```
 
 ## Testing
 

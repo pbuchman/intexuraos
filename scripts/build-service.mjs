@@ -14,15 +14,15 @@ if (!service) {
 }
 
 /**
- * Recursively collect all npm dependencies from workspace packages.
- * @intexuraos/* packages are bundled, their npm deps must be external.
+ * Recursively collect all pnpm dependencies from workspace packages.
+ * @intexuraos/* packages are bundled, their pnpm deps must be external.
  */
 function collectExternalDeps(pkgName, visited = new Set()) {
   if (visited.has(pkgName)) return new Set();
   visited.add(pkgName);
 
   if (!pkgName.startsWith('@intexuraos/')) {
-    return new Set(); // npm package - not our concern
+    return new Set(); // pnpm package - not our concern
   }
 
   // Determine package path - check apps first, then workers, then packages
@@ -48,7 +48,7 @@ function collectExternalDeps(pkgName, visited = new Set()) {
       const subExternals = collectExternalDeps(dep, visited);
       subExternals.forEach((e) => externals.add(e));
     } else {
-      // npm package - must be external
+      // pnpm package - must be external
       externals.add(dep);
     }
   }
@@ -57,7 +57,7 @@ function collectExternalDeps(pkgName, visited = new Set()) {
 }
 
 /**
- * Recursively collect all npm dependencies WITH versions from workspace packages.
+ * Recursively collect all pnpm dependencies WITH versions from workspace packages.
  * Returns a Map of package name -> version for generating production package.json.
  */
 function collectExternalDepsWithVersions(pkgName, visited = new Set()) {
@@ -94,7 +94,7 @@ function collectExternalDepsWithVersions(pkgName, visited = new Set()) {
   return externals;
 }
 
-// Collect all external npm deps (including transitive from workspace packages)
+// Collect all external pnpm deps (including transitive from workspace packages)
 const externalPackages = [...collectExternalDeps(`@intexuraos/${service}`)];
 
 // Detect service directory (apps, workers, or packages)
@@ -124,7 +124,7 @@ const result = await esbuild.build({
   metafile: true,
 });
 
-// Detect npm packages that were bundled instead of marked external.
+// Detect pnpm packages that were bundled instead of marked external.
 // This catches missing dependency declarations that cause runtime errors.
 const bundledNpmPackages = new Set();
 for (const inputPath of Object.keys(result.metafile.inputs)) {
@@ -138,7 +138,7 @@ for (const inputPath of Object.keys(result.metafile.inputs)) {
 }
 
 if (bundledNpmPackages.size > 0) {
-  console.error('\nERROR: npm packages bundled instead of external:');
+  console.error('\nERROR: pnpm packages bundled instead of external:');
   for (const pkg of bundledNpmPackages) {
     console.error(`  - ${pkg}`);
   }
@@ -146,7 +146,7 @@ if (bundledNpmPackages.size > 0) {
   process.exit(1);
 }
 
-// Generate production package.json with all npm dependencies (including transitive)
+// Generate production package.json with all pnpm dependencies (including transitive)
 const depsWithVersions = collectExternalDepsWithVersions(`@intexuraos/${service}`);
 const prodPackageJson = {
   name: `@intexuraos/${service}-prod`,

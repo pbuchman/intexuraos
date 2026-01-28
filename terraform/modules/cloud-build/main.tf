@@ -204,7 +204,7 @@ resource "google_cloudbuild_trigger" "service" {
   }
 }
 
-# Web trigger (special: npm build + secrets)
+# Web trigger (special: pnpm build + secrets)
 resource "google_cloudbuild_trigger" "web" {
   name        = "web"
   description = "Deploy web frontend only"

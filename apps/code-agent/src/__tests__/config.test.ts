@@ -25,9 +25,9 @@ describe('loadConfig', () => {
   });
 
   describe('port', () => {
-    it('returns default port 8095 when PORT not set', () => {
+    it('returns default port 8128 when PORT not set', () => {
       const config = loadConfig();
-      expect(config.port).toBe(8095);
+      expect(config.port).toBe(8128);
     });
 
     it('parses custom PORT from env', () => {

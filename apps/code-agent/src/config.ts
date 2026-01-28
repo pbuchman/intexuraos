@@ -24,7 +24,7 @@ export interface Config {
 }
 
 export function loadConfig(): Config {
-  const port = parseInt(process.env['PORT'] ?? '8095', 10);
+  const port = parseInt(process.env['PORT'] ?? '8128', 10);
   const gcpProjectId = process.env['INTEXURAOS_GCP_PROJECT_ID'] ?? '';
   const internalAuthToken = process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] ?? '';
   const firestoreProjectId = process.env['INTEXURAOS_GCP_PROJECT_ID'] ?? '';

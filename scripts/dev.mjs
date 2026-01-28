@@ -16,10 +16,10 @@
  *   - .envrc.local configured (cp .envrc.local.example .envrc.local)
  *
  * Usage:
- *   npm run dev             # Start all with TUI
- *   npm run dev -- --no-tui # Start all with plain log output
- *   npm run dev:emulators   # Start only emulators (no TUI)
- *   npm run dev:services    # Start only services (assumes emulators running)
+ *   pnpm run dev             # Start all with TUI
+ *   pnpm run dev -- --no-tui # Start all with plain log output
+ *   pnpm run dev:emulators   # Start only emulators (no TUI)
+ *   pnpm run dev:services    # Start only services (assumes emulators running)
  *
  * TUI Controls:
  *   q, Escape, Ctrl+C - Quit
@@ -61,6 +61,7 @@ const SERVICES = [
   { name: 'calendar-agent', port: 8125, color: '\x1b[38;5;220m' },
   { name: 'linear-agent', port: 8126, color: '\x1b[95m' },
   { name: 'code-agent', port: 8095, color: '\x1b[38;5;214m' },
+  { name: 'web-agent', port: 8127, color: '\x1b[38;5;159m' },
 
   // these services depend on app-settings-service, so start them after
   { name: 'user-service', port: 8110, color: '\x1b[36m' },
@@ -150,7 +151,7 @@ function logEmulator(message) {
   log('[emulators]', message, '\x1b[90m');
 }
 
-function logResearchAgent(message) {
+function logService(message) {
   log('[dev]', message, `${BOLD}\x1b[97m`);
 }
 
@@ -192,7 +193,7 @@ async function checkPortInUse(port) {
  * @throws {Error} If any port is already in use
  */
 async function checkPortsAvailable() {
-  logResearchAgent('Checking for port conflicts...');
+  logService('Checking for port conflicts...');
 
   const allPorts = [
     ...SERVICES.map((s) => ({ name: s.name, port: s.port, type: 'service' })),
@@ -244,7 +245,7 @@ async function checkPortsAvailable() {
     throw new Error('Port conflicts detected. Please resolve the conflicts above and try again.');
   }
 
-  logResearchAgent('All ports are available.');
+  logService('All ports are available.');
 }
 
 async function checkDockerRunning() {
@@ -257,19 +258,19 @@ async function checkDockerRunning() {
 }
 
 async function generateFirestoreConfig() {
-  logResearchAgent('Generating Firestore config from migrations...');
+  logService('Generating Firestore config from migrations...');
   const generatorPath = join(ROOT_DIR, 'scripts', 'generate-firestore-config.mjs');
   const module = await import(pathToFileURL(generatorPath).href);
   if (module.generate) {
     const stats = await module.generate(true);
-    logResearchAgent(
+    logService(
       `Generated ${stats.indexCount} indexes, ${stats.collectionCount} collection rules`
     );
   }
 }
 
 async function syncFirestore() {
-  logResearchAgent('Syncing Firestore data from GCP...');
+  logService('Syncing Firestore data from GCP...');
 
   const syncScript = join(ROOT_DIR, 'scripts', 'sync-firestore.sh');
   if (!existsSync(syncScript)) {
@@ -300,14 +301,14 @@ async function syncFirestore() {
     },
   });
 
-  logResearchAgent('Firestore sync completed');
+  logService('Firestore sync completed');
 }
 
 async function startEmulators() {
   // Sync Firestore data from GCP first
   await syncFirestore();
 
-  logResearchAgent('Starting emulators...');
+  logService('Starting emulators...');
 
   const composeFile = join(ROOT_DIR, 'docker', 'docker-compose.local.yaml');
   if (!existsSync(composeFile)) {
@@ -400,6 +401,8 @@ const API_DOCS_HUB_ENV = {
   INTEXURAOS_TODOS_AGENT_OPENAPI_URL: 'http://localhost:8123/openapi.json',
   INTEXURAOS_BOOKMARKS_AGENT_OPENAPI_URL: 'http://localhost:8124/openapi.json',
   INTEXURAOS_CALENDAR_AGENT_OPENAPI_URL: 'http://localhost:8125/openapi.json',
+  INTEXURAOS_LINEAR_AGENT_OPENAPI_URL: 'http://localhost:8126/openapi.json',
+  INTEXURAOS_WEB_AGENT_OPENAPI_URL: 'http://localhost:8127/openapi.json',
 };
 
 // Common auth secrets for all services (mirrors Terraform local.common_service_secrets)
@@ -432,6 +435,7 @@ const COMMON_SERVICE_URLS = {
   INTEXURAOS_CALENDAR_AGENT_URL: 'http://localhost:8125',
   INTEXURAOS_LINEAR_AGENT_URL: 'http://localhost:8126',
   INTEXURAOS_CODE_AGENT_URL: 'http://localhost:8095',
+  INTEXURAOS_WEB_AGENT_URL: 'http://localhost:8127',
 };
 
 // Service-specific env vars (Pub/Sub topics, non-URL config)
@@ -543,7 +547,7 @@ function startWebApp() {
     NODE_ENV: 'development',
   };
 
-  const child = spawn('npm', ['run', 'dev'], {
+  const child = spawn('pnpm', ['run', 'dev'], {
     cwd: webDir,
     env,
     stdio: ['ignore', 'pipe', 'pipe'],
@@ -622,23 +626,23 @@ async function startAllServices() {
     initUI(SERVICES, WEB_APP);
   }
 
-  logResearchAgent('Following docker container logs...');
+  logService('Following docker container logs...');
   for (const dockerService of DOCKER_LOG_SERVICES) {
     followDockerLogs(dockerService);
   }
 
-  logResearchAgent('Starting services...');
+  logService('Starting services...');
 
   for (const service of SERVICES) {
     startService(service);
     await new Promise((resolve) => setTimeout(resolve, 500));
   }
 
-  logResearchAgent('Starting web app...');
+  logService('Starting web app...');
   startWebApp();
   await new Promise((resolve) => setTimeout(resolve, 1000));
 
-  logResearchAgent(`All ${String(SERVICES.length)} services + web app started!`);
+  logService(`All ${String(SERVICES.length)} services + web app started!`);
 
   if (useTUI) {
     healthPollInterval = setInterval(() => {
@@ -646,18 +650,18 @@ async function startAllServices() {
     }, 3000);
     void pollHealth(SERVICES, WEB_APP);
   } else {
-    logResearchAgent('');
+    logService('');
     console.log(`  Web App:          ${BOLD}http://localhost:${String(WEB_APP.port)}${RESET}`);
     console.log(`  API Docs:         ${BOLD}http://localhost:8115/docs${RESET}`);
     console.log(`  Firebase UI:      http://localhost:8100`);
     console.log(`  Pub/Sub UI:       ${BOLD}http://localhost:8105${RESET}`);
-    logResearchAgent('');
-    logResearchAgent('Press Ctrl+C to stop all services');
+    logService('');
+    logService('Press Ctrl+C to stop all services');
   }
 }
 
 async function stopEmulators() {
-  logResearchAgent('Stopping emulators...');
+  logService('Stopping emulators...');
   const composeFile = join(ROOT_DIR, 'docker', 'docker-compose.local.yaml');
   try {
     execSync(`docker compose -f "${composeFile}" down`, {
@@ -734,8 +738,8 @@ async function main() {
   useTUI = !noTUI && !emulatorsOnly && process.stdout.isTTY;
 
   if (!useTUI) {
-    logResearchAgent('IntexuraOS Local Development Environment');
-    logResearchAgent('');
+    logService('IntexuraOS Local Development Environment');
+    logService('');
   }
 
   if (!(await checkDockerRunning())) {
@@ -751,12 +755,12 @@ async function main() {
 
     if (servicesOnly) {
       // Assume emulators are already running
-      logResearchAgent('Starting services only (emulators should be running)...');
+      logService('Starting services only (emulators should be running)...');
       await startAllServices();
     } else if (emulatorsOnly) {
       // Start only emulators
       await startEmulators();
-      logResearchAgent('Emulators started. Press Ctrl+C to stop.');
+      logService('Emulators started. Press Ctrl+C to stop.');
     } else {
       // Full startup: emulators + services
       await startEmulators();
