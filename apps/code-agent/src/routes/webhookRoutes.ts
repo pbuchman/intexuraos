@@ -146,7 +146,10 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       // Extract traceId from headers for downstream calls
       const traceId = extractOrGenerateTraceId(request.headers);
 
-      request.log.info({ taskId, status, traceId }, 'Processing task-complete webhook');
+      request.log.info(
+        { taskId, status, traceId, hasResult: result !== undefined, resultKeys: result ? Object.keys(result) : [] },
+        'Processing task-complete webhook'
+      );
 
       // Get task details first (to check for actionId)
       const taskResult = await codeTaskRepo.findById(taskId);
@@ -217,7 +220,10 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           });
         }
 
-        request.log.info({ taskId, result }, 'Task marked as completed');
+        request.log.info(
+          { taskId, resultKeys: result ? Object.keys(result) : [], prUrl: result?.prUrl, branch: result?.branch },
+          'Task marked as completed with result'
+        );
         return reply.send({ received: true });
       }
 
