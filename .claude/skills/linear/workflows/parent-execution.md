@@ -181,9 +181,9 @@ EOF
 
 ---
 
-### 7. Execute Children Loop (NO CHECKPOINTS)
+### 7. Execute Children Loop (CONTINUOUS EXECUTION)
 
-**⚠️ CRITICAL: DO NOT STOP between children. Execute continuously.**
+**⚠️ CRITICAL: Execute all children in sequence. Your next tool call after completing each child MUST be starting the next child.**
 
 ```
 FOR each child starting from resume point:
@@ -234,8 +234,24 @@ FOR each child starting from resume point:
   7. Update parent ledger (State Tracking section)
      Move child from "Now" to "Done" checklist
 
-  // === NO STOP — Continue immediately to next child ===
+  // === YOUR NEXT ACTION: Start the next child ===
+  // Do NOT output "Next Step: INT-YYY" — execute it directly
 ```
+
+### ⚠️ FORBIDDEN: Transition Announcements
+
+**NEVER output messages like:**
+
+- "Next Step: Proceed to INT-YYY"
+- "Moving on to the next child issue"
+- "Now I'll work on INT-YYY"
+
+**These announcements end your turn without executing.** Instead, your very next tool call after completing step 7 must be either:
+
+- `mcp__linear__update_issue` to start the next child, OR
+- Implementation code for the next child
+
+**The correct behavior is SILENT TRANSITION** — finish one child, immediately start the next.
 
 ### 8. Handle Blocked Children (Circle Back)
 

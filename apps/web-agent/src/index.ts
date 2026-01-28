@@ -9,6 +9,8 @@ import { initServices } from './services.js';
 const REQUIRED_ENV = [
   'INTEXURAOS_INTERNAL_AUTH_TOKEN',
   'INTEXURAOS_CRAWL4AI_API_KEY',
+  'INTEXURAOS_USER_SERVICE_URL',
+  'INTEXURAOS_APP_SETTINGS_SERVICE_URL',
 ];
 
 validateRequiredEnv(REQUIRED_ENV);

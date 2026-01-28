@@ -37,6 +37,7 @@ Manage Linear issues, branches, and PRs with enforced workflow and cross-linking
 12. **Parent Execution Mode**: When working on parent issues with children, execute ALL children continuously without stopping between them. Single branch and single PR for the parent.
 13. **PR Continuity Pattern (Parent Issues)**: Create PR early (before first child), then after EACH child: commit → push → update PR description. PR description MUST list all children with status and maintain a progress log.
 14. **Automatic Completion (NO ASKING)**: After implementation, AUTOMATICALLY run: CI → commit → push → PR → Linear "In Review". NEVER ask "Would you like me to commit?" — this is a task failure. The only pause point is CI failure.
+15. **Silent Child Transitions**: When moving between child issues in parent execution mode, do NOT output "Next Step: INT-YYY" or similar announcements. These end your turn without executing. Your next tool call after completing a child MUST be starting the next child directly.
 
 ## Test Requirements Quality Gate
 

@@ -7,8 +7,6 @@ import { initServices } from './services.js';
 
 // Fail-fast startup validation - crashes immediately if required vars are missing
 const REQUIRED_ENV = [
-  'NODE_ENV',
-  'PORT',
   'INTEXURAOS_GCP_PROJECT_ID',
   'INTEXURAOS_INTERNAL_AUTH_TOKEN',
   'INTEXURAOS_WHATSAPP_SERVICE_URL',
@@ -21,6 +19,8 @@ const REQUIRED_ENV = [
   'INTEXURAOS_CF_ACCESS_CLIENT_SECRET',
   'INTEXURAOS_ORCHESTRATOR_MAC_URL',
   'INTEXURAOS_ORCHESTRATOR_VM_URL',
+  'INTEXURAOS_CODE_WORKERS',
+  'INTEXURAOS_SERVICE_URL',
   // Auth0 JWT validation for public routes
   'INTEXURAOS_AUTH0_AUDIENCE',
   'INTEXURAOS_AUTH0_ISSUER',

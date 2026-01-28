@@ -434,6 +434,13 @@ Pattern: `/internal/{resource-name}` with `X-Internal-Auth` header. Use `validat
 | 2    | `terraform/environments/dev/main.tf` | Add to service's `env_vars` or `secrets`                                      |
 | 3    | `scripts/dev.mjs`                    | Add to `COMMON_SERVICE_ENV`, `COMMON_SERVICE_URLS`, or `SERVICE_ENV_MAPPINGS` |
 
+**CI Enforcement:**
+
+- `scripts/verify-env-vars.mjs` automatically validates all three locations
+- Runs in Static Validation phase of CI pipeline
+- Fails immediately if any location is missing
+- Error format: `file:line: Undeclared env var 'VAR_NAME' used. Add to REQUIRED_ENV or OPTIONAL_ENV in src/index.ts.`
+
 **Failure to update all three causes:**
 
 - Missing in Terraform → **Startup probe failure** (22% of build failures)

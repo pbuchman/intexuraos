@@ -98,14 +98,16 @@ If you start working on `development` or `main`, **THE TASK HAS FAILED BY DEFINI
 
 This cycle ensures reviewers can see incremental progress and the PR stays current.
 
-### Continuation — MANDATORY
+### Continuation — YOUR NEXT ACTION
 
-**After completing this task, you MUST IMMEDIATELY proceed to the next task.**
+**After completing this task (commit, push, update PR), execute the next child issue.**
 
-- Do NOT wait for user input
-- Do NOT stop to ask if you should continue
-- Do NOT claim you need a break or fresh context
-- Commit, push, update PR, then MOVE ON to the next issue
+Your next tool call MUST be one of:
+
+- `mcp__linear__update_issue` to mark next child "In Progress"
+- Code edit to begin implementing the next child
+
+**FORBIDDEN:** Outputting "Next Step: INT-YYY" or similar announcements. These end your turn without executing. Silent transition only.
 
 ---
 
@@ -200,15 +202,15 @@ describe('featureName', () => {
 
 ---
 
-## 🚨 AFTER COMPLETION — MANDATORY NEXT STEPS
+## 🚨 AFTER COMPLETION — YOUR NEXT ACTIONS
 
 1. ✅ Verify `pnpm run ci:tracked` passes (NON-NEGOTIABLE)
 2. ✅ Commit all changes with message: `INT-XXX <task description>`
 3. ✅ Push to parent branch: `git push`
 4. ✅ Update PR description: mark this child ✅ Done, add to Progress Log
-5. ✅ **IMMEDIATELY proceed to INT-YYY** — DO NOT STOP
+5. ✅ **YOUR NEXT TOOL CALL:** Start INT-YYY implementation
 
-**DO NOT STOP.** After completing this task, committing, pushing, and updating PR, immediately proceed to the next unblocked task without waiting for user input.
+**SILENT TRANSITION REQUIRED.** After step 4, your very next action must be starting the next child. Do not output "Next Step: ..." — that ends your turn without executing. Just start the next task.
 
 ````
 

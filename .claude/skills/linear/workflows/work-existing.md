@@ -296,7 +296,10 @@ Show table of created artifacts.
 
 When working on multiple related issues (e.g., epic children), follow these rules:
 
-### One-at-a-Time Enforcement
+**⚠️ EXCEPTION: Parent Execution Mode**
+If you were redirected here from a parent issue with children (via Step 2.5), these checkpoint rules DO NOT APPLY. See [parent-execution.md](parent-execution.md) for continuous execution without checkpoints.
+
+### One-at-a-Time Enforcement (Standalone Issues Only)
 
 1. **Complete ONE issue fully** before starting the next:
    - All code changes committed
