@@ -30,7 +30,8 @@ fi
 # BLOCK: CI commands piped to grep/tail/head/awk/sed (without tee)
 if echo "$COMMAND" | grep -qE '\|\s*(grep|tail|head|awk|sed)'; then
     cat >&2 << 'EOF'
-BLOCKED: Piping test output to grep/tail loses context and wastes ~80s per run.
+
+BLOCKED: Piping output to grep/tail loses context and wastes time.
 
 INSTEAD: Capture first, then analyze:
   pnpm run test 2>&1 | tee /tmp/ci-output-$(date +%H%M%S).txt

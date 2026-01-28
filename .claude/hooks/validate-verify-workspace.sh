@@ -20,6 +20,7 @@ COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // ""')
 # Only match at command start (not in heredocs/strings)
 if echo "$COMMAND" | grep -qE '^node[[:space:]]+scripts/verify-workspace'; then
     cat >&2 << 'EOF'
+
 BLOCKED: Use pnpm script instead of direct node execution.
 
 WRONG:  node scripts/verify-workspace-tracked.mjs <name>

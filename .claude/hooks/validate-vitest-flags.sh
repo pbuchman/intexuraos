@@ -21,6 +21,7 @@ COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // ""')
 if echo "$COMMAND" | grep -qE '(vitest|pnpm[[:space:]]+(run[[:space:]]+)?test)' && \
    echo "$COMMAND" | grep -q -- '--coverage.reporter='; then
     cat >&2 << 'EOF'
+
 BLOCKED: Redundant --coverage.reporter flag.
 
 Coverage reporters are already configured in vitest.config.ts:

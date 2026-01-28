@@ -24,7 +24,7 @@ if echo "$LAST_RESPONSE" | grep -iq "pre-existing"; then
   cat << 'EOF'
 {
   "decision": "block",
-  "reason": "⚠️ OWNERSHIP VIOLATION: You said 'pre-existing'. You are WRONG.\n\nThis is YOUR problem now. Fix it.\n\nRequired loop:\n1. Investigate the reason for failure\n2. Implement the fix\n3. Run verification (pnpm run ci:tracked)\n4. If CI passes → done\n5. If CI fails → go to step 1\n\nDo not stop until CI passes."
+  "reason": "\n⚠️ OWNERSHIP VIOLATION: You said 'pre-existing'. You are WRONG.\n\nThis is YOUR problem now. Fix it.\n\nRequired loop:\n1. Investigate the reason for failure\n2. Implement the fix\n3. Run verification (pnpm run ci:tracked)\n4. If CI passes → done\n5. If CI fails → go to step 1\n\nDo not stop until CI passes."
 }
 EOF
   exit 0
