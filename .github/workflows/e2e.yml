@@ -71,6 +71,12 @@ jobs:
       - name: Create test workspace directory
         run: mkdir -p /tmp/e2e-workspace
 
+      - name: Setup Java 21 for Firebase emulators
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
       - name: Install Firebase CLI and start emulators
         run: |
           echo "=== Before Firebase setup ==="
