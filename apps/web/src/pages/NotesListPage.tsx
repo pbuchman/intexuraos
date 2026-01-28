@@ -5,17 +5,9 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Button, Card, Input, Layout, RefreshIndicator } from '@/components';
 import { useNotes } from '@/hooks';
+import { formatDate } from '@/utils/dateFormat';
 import { stripMarkdown } from '@/utils';
 import type { Note, UpdateNoteRequest } from '@/types';
-
-function formatDate(isoString: string): string {
-  const date = new Date(isoString);
-  return date.toLocaleDateString(undefined, {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-  });
-}
 
 function truncateContent(content: string, maxLength = 150): string {
   const cleanText = stripMarkdown(content);

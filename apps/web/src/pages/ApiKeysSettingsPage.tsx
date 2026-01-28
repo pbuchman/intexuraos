@@ -2,19 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { MoreVertical, FlaskConical, Pencil, Trash2 } from 'lucide-react';
 import { Button, Card, Input, Layout } from '@/components';
 import { useLlmKeys } from '@/hooks';
+import { formatDateTime } from '@/utils/dateFormat';
 import type { LlmProvider, LlmTestResult } from '@/services/llmKeysApi.types';
-
-/**
- * Format a date as human-readable string.
- */
-function formatDate(isoString: string): string {
-  const date = new Date(isoString);
-  return date.toLocaleDateString(undefined, {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-  });
-}
 
 interface ProviderConfig {
   id: LlmProvider;
@@ -306,8 +295,8 @@ function ApiKeyRow({
             }`}
           >
             {savedTestResult.status === 'success'
-              ? `LLM Response (${formatDate(savedTestResult.testedAt)}):`
-              : `API Key Error (${formatDate(savedTestResult.testedAt)}):`}
+              ? `LLM Response (${formatDateTime(savedTestResult.testedAt)}):`
+              : `API Key Error (${formatDateTime(savedTestResult.testedAt)}):`}
           </p>
           <p
             className={`text-sm ${savedTestResult.status === 'success' ? 'text-green-700' : 'text-red-700'}`}

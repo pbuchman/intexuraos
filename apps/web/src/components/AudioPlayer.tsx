@@ -5,6 +5,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AlertCircle, Loader2, Pause, Play } from 'lucide-react';
 import { ApiError, getMessageMediaUrl } from '@/services';
+import { formatDuration } from '@/utils/dateFormat';
 
 interface AudioPlayerProps {
   messageId: string;
@@ -73,12 +74,6 @@ export function AudioPlayer({ messageId, accessToken }: AudioPlayerProps): React
     setProgress(0);
   };
 
-  const formatTime = (time: number): string => {
-    const minutes = Math.floor(time / 60);
-    const seconds = Math.floor(time % 60);
-    return `${String(minutes)}:${String(seconds).padStart(2, '0')}`;
-  };
-
   if (isLoading) {
     return (
       <div className="flex items-center gap-2 rounded-lg bg-slate-100 p-3">
@@ -145,8 +140,8 @@ export function AudioPlayer({ messageId, accessToken }: AudioPlayerProps): React
           aria-label="Audio progress"
         />
         <div className="flex justify-between text-xs text-slate-500">
-          <span>{formatTime(progress)}</span>
-          <span>{formatTime(duration)}</span>
+          <span>{formatDuration(progress)}</span>
+          <span>{formatDuration(duration)}</span>
         </div>
       </div>
     </div>

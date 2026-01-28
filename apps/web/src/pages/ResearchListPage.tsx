@@ -4,6 +4,7 @@ import { CheckCircle, Plus, Star, Trash2, XCircle } from 'lucide-react';
 import { Button, Card, Layout, RefreshIndicator } from '@/components';
 import { useAuth } from '@/context';
 import { useResearches } from '@/hooks';
+import { formatDateTime } from '@/utils/dateFormat';
 import { stripMarkdown } from '@/utils';
 import { toggleResearchFavourite } from '@/services/researchAgentApi';
 import {
@@ -147,25 +148,15 @@ function ResearchCard({ research, onDelete, onToggleFavourite, updatingFavourite
   const isCompleted = research.status === 'completed';
   const deleteLabel = isDraft ? 'Discard' : 'Delete';
 
-  const formatDate = (dateString: string): string => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-  };
-
   const handleCardClick = (): void => {
     void navigate(`/research/${research.id}`);
   };
 
   const getDateLabel = (): string => {
     if (isDraft) {
-      return `Draft saved: ${formatDate(research.startedAt)}`;
+      return `Draft saved: ${formatDateTime(research.startedAt)}`;
     }
-    return `Research started: ${formatDate(research.startedAt)}`;
+    return `Research started: ${formatDateTime(research.startedAt)}`;
   };
 
   return (
@@ -204,7 +195,7 @@ function ResearchCard({ research, onDelete, onToggleFavourite, updatingFavourite
         <div className="flex gap-4">
           <span>{getDateLabel()}</span>
           {isCompleted && research.completedAt !== undefined ? (
-            <span>Completed: {formatDate(research.completedAt)}</span>
+            <span>Completed: {formatDateTime(research.completedAt)}</span>
           ) : null}
         </div>
         <div className="flex gap-2">

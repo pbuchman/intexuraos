@@ -3,16 +3,8 @@ import { Link } from 'react-router-dom';
 import { Database, Layers, Plus, Trash2 } from 'lucide-react';
 import { Button, Card, Layout, RefreshIndicator } from '@/components';
 import { useDataSources } from '@/hooks';
+import { formatDate } from '@/utils/dateFormat';
 import type { DataSource } from '@/types';
-
-function formatDate(isoString: string): string {
-  const date = new Date(isoString);
-  return date.toLocaleDateString(undefined, {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-  });
-}
 
 function truncateContent(content: string, maxLength = 150): string {
   if (content.length <= maxLength) {

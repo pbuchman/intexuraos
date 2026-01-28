@@ -22,6 +22,7 @@ import {
 import type { Action, CommandType } from '@/types';
 import type { ResolvedActionButton, ActionExecutionResult } from '@/types/actionConfig';
 import { useActionConfig } from '@/hooks/useActionConfig';
+import { formatDateTime } from '@/utils/dateFormat';
 import { ConfigurableActionButton } from './ConfigurableActionButton.js';
 
 export interface ExecutionState {
@@ -87,16 +88,6 @@ function getStatusIcon(status: string): React.JSX.Element {
     default:
       return <HelpCircle className={`${iconClass} text-slate-400`} />;
   }
-}
-
-function formatDate(isoDate: string): string {
-  const date = new Date(isoDate);
-  return date.toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
 }
 
 /**
@@ -253,7 +244,7 @@ export function ActionItem({
               {action.status}
             </span>
             <span>{String(Math.round(action.confidence * 100))}% confidence</span>
-            <span>{formatDate(action.createdAt)}</span>
+            <span>{formatDateTime(action.createdAt)}</span>
           </div>
         </div>
         <div

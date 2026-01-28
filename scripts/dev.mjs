@@ -60,7 +60,7 @@ const SERVICES = [
   { name: 'bookmarks-agent', port: 8124, color: '\x1b[38;5;141m' },
   { name: 'calendar-agent', port: 8125, color: '\x1b[38;5;220m' },
   { name: 'linear-agent', port: 8126, color: '\x1b[95m' },
-  { name: 'code-agent', port: 8095, color: '\x1b[38;5;214m' },
+  { name: 'code-agent', port: 8128, color: '\x1b[38;5;214m' },
   { name: 'web-agent', port: 8127, color: '\x1b[38;5;159m' },
 
   // these services depend on app-settings-service, so start them after
@@ -434,7 +434,7 @@ const COMMON_SERVICE_URLS = {
   INTEXURAOS_BOOKMARKS_AGENT_URL: 'http://localhost:8124',
   INTEXURAOS_CALENDAR_AGENT_URL: 'http://localhost:8125',
   INTEXURAOS_LINEAR_AGENT_URL: 'http://localhost:8126',
-  INTEXURAOS_CODE_AGENT_URL: 'http://localhost:8095',
+  INTEXURAOS_CODE_AGENT_URL: 'http://localhost:8128',
   INTEXURAOS_WEB_AGENT_URL: 'http://localhost:8127',
 };
 
@@ -488,6 +488,7 @@ const SERVICE_ENV_MAPPINGS = {
     INTEXURAOS_WEB_APP_URL: process.env.INTEXURAOS_WEB_APP_URL ?? 'http://localhost:3000',
   },
   'code-agent': {
+    INTEXURAOS_SERVICE_URL: 'http://localhost:8128',
     INTEXURAOS_DISPATCH_SIGNING_SECRET: 'dev-dispatch-signing-secret',
     INTEXURAOS_WEBHOOK_VERIFY_SECRET: 'dev-webhook-secret',
     INTEXURAOS_CF_ACCESS_CLIENT_ID: 'dev-cf-client-id',
@@ -495,9 +496,6 @@ const SERVICE_ENV_MAPPINGS = {
     INTEXURAOS_ORCHESTRATOR_MAC_URL: 'http://localhost:8199',
     INTEXURAOS_ORCHESTRATOR_VM_URL: 'http://localhost:8198',
     INTEXURAOS_CODE_WORKERS: 'mac:http://localhost:8199:1,vm:http://localhost:8198:2',
-    INTEXURAOS_AUTH0_AUDIENCE: 'https://api.intexuraos.cloud',
-    INTEXURAOS_AUTH0_ISSUER: 'https://intexuraos.eu.auth0.com/',
-    INTEXURAOS_AUTH0_JWKS_URI: 'https://intexuraos.eu.auth0.com/.well-known/jwks.json',
     INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC:
       process.env.INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC ?? 'whatsapp-send-message',
   },

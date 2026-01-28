@@ -30,10 +30,10 @@ const OPTIONAL_ENV = [
   'INTEXURAOS_CF_ACCESS_CLIENT_SECRET',
   'INTEXURAOS_CODE_WORKERS',
   'INTEXURAOS_SERVICE_URL',
-  // Auth0 JWT validation for public routes
-  'INTEXURAOS_AUTH0_AUDIENCE',
-  'INTEXURAOS_AUTH0_ISSUER',
-  'INTEXURAOS_AUTH0_JWKS_URI',
+  // Auth0 JWT validation for public routes (standard names from Secret Manager)
+  'INTEXURAOS_AUTH_AUDIENCE',
+  'INTEXURAOS_AUTH_ISSUER',
+  'INTEXURAOS_AUTH_JWKS_URL',
 ];
 
 // Additional env vars required in production but optional in E2E mode

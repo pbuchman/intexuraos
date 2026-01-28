@@ -20,6 +20,7 @@ import type { Action, ActionStatus, Command, CommandType } from '@/types';
 import type { ResolvedActionButton } from '@/types/actionConfig';
 import { useActionChanges } from '@/hooks/useActionChanges';
 import { useCommandChanges } from '@/hooks/useCommandChanges';
+import { formatDate } from '@/utils/dateFormat';
 import {
   Archive,
   Bell,
@@ -110,14 +111,6 @@ function getStatusIcon(status: string): React.JSX.Element {
     default:
       return <HelpCircle className={`${iconClass} text-slate-400`} />;
   }
-}
-
-function formatDate(isoDate: string): string {
-  const date = new Date(isoDate);
-  return date.toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-  });
 }
 
 interface CommandItemProps {

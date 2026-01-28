@@ -11,6 +11,7 @@ import {
   getNotificationFilters,
 } from '@/services';
 import type { MobileNotification, SavedNotificationFilter } from '@/types';
+import { formatRelative } from '@/utils/dateFormat';
 import { Bell, Check, ChevronDown, Filter, RefreshCw, Save, Trash2, X } from 'lucide-react';
 
 /**
@@ -25,37 +26,6 @@ interface ActiveFilters {
 
 /** Animation duration for delete transitions in milliseconds */
 const DELETE_ANIMATION_MS = 300;
-
-/**
- * Format relative time (e.g., "2h ago", "5m ago")
- */
-function formatRelativeTime(dateString: string): string {
-  const date = new Date(dateString);
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffSec = Math.floor(diffMs / 1000);
-  const diffMin = Math.floor(diffSec / 60);
-  const diffHour = Math.floor(diffMin / 60);
-  const diffDay = Math.floor(diffHour / 24);
-
-  if (diffSec < 60) {
-    return 'just now';
-  }
-  if (diffMin < 60) {
-    return `${String(diffMin)}m ago`;
-  }
-  if (diffHour < 24) {
-    return `${String(diffHour)}h ago`;
-  }
-  if (diffDay < 7) {
-    return `${String(diffDay)}d ago`;
-  }
-
-  return date.toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-  });
-}
 
 /**
  * Pill badge for notification metadata.
@@ -134,7 +104,7 @@ function NotificationCard({
           <Badge>{notification.source}</Badge>
         </div>
         <span className="text-xs text-slate-400">
-          {formatRelativeTime(notification.receivedAt)}
+          {formatRelative(notification.receivedAt)}
         </span>
       </div>
 

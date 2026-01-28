@@ -38,9 +38,9 @@ export function loadConfig(): Config {
   const cfAccessClientSecret = process.env['INTEXURAOS_CF_ACCESS_CLIENT_SECRET'] ?? '';
   const orchestratorMacUrl = process.env['INTEXURAOS_ORCHESTRATOR_MAC_URL'] ?? '';
   const orchestratorVmUrl = process.env['INTEXURAOS_ORCHESTRATOR_VM_URL'] ?? '';
-  const auth0Audience = process.env['INTEXURAOS_AUTH0_AUDIENCE'] ?? '';
-  const auth0Issuer = process.env['INTEXURAOS_AUTH0_ISSUER'] ?? '';
-  const auth0JwksUri = process.env['INTEXURAOS_AUTH0_JWKS_URI'] ?? '';
+  const auth0Audience = process.env['INTEXURAOS_AUTH_AUDIENCE'] ?? '';
+  const auth0Issuer = process.env['INTEXURAOS_AUTH_ISSUER'] ?? '';
+  const auth0JwksUri = process.env['INTEXURAOS_AUTH_JWKS_URL'] ?? '';
 
   return {
     port,

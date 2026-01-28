@@ -176,6 +176,7 @@ locals {
     "calendar-agent",
     "linear-agent",
     "web-agent",
+    "code-agent",
   ]
 
   # Cloud Function workers (zip + upload to GCS)

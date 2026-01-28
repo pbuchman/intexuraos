@@ -1,35 +1,11 @@
 import { Calendar, Clock, MapPin, FileText, AlertCircle, Loader2 } from 'lucide-react';
 import type { CalendarPreview } from '@/types';
+import { formatDateTime, formatFullDay } from '@/utils/dateFormat';
 
 interface CalendarPreviewCardProps {
   preview: CalendarPreview | null;
   isLoading: boolean;
   error: string | null;
-}
-
-function formatDateTime(dateTime: string | undefined, isAllDay?: boolean): string {
-  if (dateTime === undefined) return 'Not specified';
-
-  const date = new Date(dateTime);
-
-  if (isAllDay === true) {
-    return date.toLocaleDateString('en-US', {
-      weekday: 'long',
-      month: 'long',
-      day: 'numeric',
-      year: 'numeric',
-    });
-  }
-
-  return date.toLocaleString('en-US', {
-    weekday: 'short',
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-    hour12: true,
-  });
 }
 
 export function CalendarPreviewCard({
@@ -106,10 +82,17 @@ export function CalendarPreviewCard({
             <div className="flex items-center gap-2 text-sm text-slate-600">
               <Clock className="h-3.5 w-3.5 text-slate-400" />
               <span>
-                {formatDateTime(preview.start, preview.isAllDay)}
+                {preview.isAllDay === true
+                  ? preview.start !== undefined
+                    ? formatFullDay(preview.start)
+                    : 'All day'
+                  : preview.start !== undefined
+                    ? formatDateTime(preview.start)
+                    : 'Not specified'}
                 {preview.end !== null &&
                   preview.end !== undefined &&
-                  ` - ${formatDateTime(preview.end, preview.isAllDay)}`}
+                  preview.isAllDay !== true &&
+                  ` - ${formatDateTime(preview.end)}`}
               </span>
             </div>
 

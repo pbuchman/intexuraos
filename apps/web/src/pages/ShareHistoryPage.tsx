@@ -2,27 +2,12 @@ import { useSyncQueue } from '@/context';
 import { Layout, Card } from '@/components';
 import { Share2, CheckCircle2, Clock, AlertCircle, RefreshCw, Trash2 } from 'lucide-react';
 import { clearHistory, type ShareHistoryItem } from '@/services/shareQueue';
+import { formatRelative } from '@/utils/dateFormat';
 
 interface StatusTextProps {
   item: ShareHistoryItem;
   isOnline: boolean;
   authFailed: boolean;
-}
-
-function formatDate(isoString: string): string {
-  const date = new Date(isoString);
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffMins = Math.floor(diffMs / 60000);
-  const diffHours = Math.floor(diffMins / 60);
-  const diffDays = Math.floor(diffHours / 24);
-
-  if (diffMins < 1) return 'Just now';
-  if (diffMins < 60) return `${String(diffMins)} min ago`;
-  if (diffHours < 24) return `${String(diffHours)} hr ago`;
-  if (diffDays < 7) return `${String(diffDays)} days ago`;
-
-  return date.toLocaleDateString();
 }
 
 function getTimeUntilRetry(nextRetryAt: string): number {
@@ -44,7 +29,7 @@ function StatusText({ item, isOnline, authFailed }: StatusTextProps): React.JSX.
     return (
       <span className="flex items-center gap-1 text-green-600">
         <CheckCircle2 className="h-3 w-3" />
-        Synced {formatDate(item.syncedAt)}
+        Synced {formatRelative(item.syncedAt)}
       </span>
     );
   }
@@ -158,7 +143,7 @@ export function ShareHistoryPage(): React.JSX.Element {
 
                     {/* Unified footer with status */}
                     <div className="mt-2 flex items-center gap-2 text-xs">
-                      <span className="text-slate-500">{formatDate(item.createdAt)}</span>
+                      <span className="text-slate-500">{formatRelative(item.createdAt)}</span>
                       <span className="text-slate-400">·</span>
                       <StatusText item={item} isOnline={isOnline} authFailed={authFailed} />
                     </div>

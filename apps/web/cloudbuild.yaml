@@ -25,6 +25,7 @@ steps:
           "bookmarks-agent:BOOKMARKS_AGENT"
           "calendar-agent:CALENDAR_AGENT"
           "linear-agent:LINEAR_AGENT"
+          "code-agent:CODE_AGENT"
           "app-settings-service:APP_SETTINGS_SERVICE"
         )
 

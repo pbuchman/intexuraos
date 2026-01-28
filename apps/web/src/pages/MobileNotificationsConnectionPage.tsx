@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Button, Card, Layout } from '@/components';
 import { useAuth } from '@/context';
 import { ApiError, connectMobileNotifications, getMobileNotificationsStatus } from '@/services';
+import { formatRelative } from '@/utils/dateFormat';
 import { Bell, Check, Copy, ExternalLink, RefreshCw, Smartphone } from 'lucide-react';
 
 export function MobileNotificationsConnectionPage(): React.JSX.Element {
@@ -91,35 +92,6 @@ export function MobileNotificationsConnectionPage(): React.JSX.Element {
     } catch {
       setError('Failed to copy to clipboard');
     }
-  };
-
-  const formatRelativeTime = (dateString: string): string => {
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffSec = Math.floor(diffMs / 1000);
-    const diffMin = Math.floor(diffSec / 60);
-    const diffHour = Math.floor(diffMin / 60);
-    const diffDay = Math.floor(diffHour / 24);
-
-    if (diffSec < 60) {
-      return 'just now';
-    }
-    if (diffMin < 60) {
-      return `${String(diffMin)} minute${diffMin === 1 ? '' : 's'} ago`;
-    }
-    if (diffHour < 24) {
-      return `${String(diffHour)} hour${diffHour === 1 ? '' : 's'} ago`;
-    }
-    if (diffDay < 7) {
-      return `${String(diffDay)} day${diffDay === 1 ? '' : 's'} ago`;
-    }
-
-    return date.toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-    });
   };
 
   if (isLoading) {
@@ -232,7 +204,7 @@ export function MobileNotificationsConnectionPage(): React.JSX.Element {
               <dt className="text-slate-600">Last Notification</dt>
               <dd className="text-slate-900">
                 {lastNotificationAt !== null
-                  ? formatRelativeTime(lastNotificationAt)
+                  ? formatRelative(lastNotificationAt)
                   : 'No notifications yet'}
               </dd>
             </div>
