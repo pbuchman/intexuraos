@@ -315,8 +315,9 @@ const SCENARIOS: Record<string, () => Promise<MockResult>> = {
   'ci-failure': scenarioCIFailure,
 };
 
-// POST /execute - Main entry point (matches orchestrator expectations)
-app.post('/execute', async (req, res) => {
+// POST /tasks - Main entry point (matches code-agent taskDispatcher expectations)
+// Also handles /execute for backwards compatibility
+app.post(['/tasks', '/execute'], async (req, res) => {
   const request = req.body as MockClaudeRequest;
   const { taskId, prompt, webhookUrl, webhookSecret } = request;
 
