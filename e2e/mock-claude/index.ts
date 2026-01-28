@@ -380,8 +380,10 @@ app.post(['/tasks', '/execute'], (req, res): void => {
         await sendWebhook(webhookUrl, webhookSecret, { taskId, ...result });
 
         runningTasks.delete(taskId);
-      } catch {
-        logger.error({ taskId }, 'Scenario execution failed');
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        const errorStack = error instanceof Error ? error.stack : undefined;
+        logger.error({ taskId, errorMessage, errorStack }, 'Scenario execution failed');
 
         // Send failure webhook
         await sendWebhook(webhookUrl, webhookSecret, {
@@ -391,8 +393,10 @@ app.post(['/tasks', '/execute'], (req, res): void => {
             message: 'Mock execution failed',
           },
           duration: 0,
-        }).catch((webhookError) => {
-          logger.error({ taskId, webhookError }, 'Failed to send failure webhook');
+        }).catch((webhookErr) => {
+          const webhookErrMsg = webhookErr instanceof Error ? webhookErr.message : String(webhookErr);
+          const webhookErrStack = webhookErr instanceof Error ? webhookErr.stack : undefined;
+          logger.error({ taskId, webhookErrMsg, webhookErrStack }, 'Failed to send failure webhook');
         });
 
         runningTasks.delete(taskId);
