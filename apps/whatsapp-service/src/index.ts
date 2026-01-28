@@ -25,12 +25,16 @@ const REQUIRED_ENV = [
   'INTEXURAOS_PUBSUB_MEDIA_CLEANUP_SUBSCRIPTION',
   'INTEXURAOS_SPEECHMATICS_API_KEY',
   'INTEXURAOS_WEB_AGENT_URL',
-  // Optional Pub/Sub topics (have safe defaults in config.ts Zod schema)
   'INTEXURAOS_PUBSUB_COMMANDS_INGEST_TOPIC',
-  'INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC',
   'INTEXURAOS_PUBSUB_WEBHOOK_PROCESS_TOPIC',
   'INTEXURAOS_PUBSUB_TRANSCRIPTION_TOPIC',
   'INTEXURAOS_PUBSUB_APPROVAL_REPLY_TOPIC',
+];
+
+// Declared for env-vars verification - these have Zod defaults in config.ts
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const OPTIONAL_ENV = [
+  'INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC',
 ];
 
 validateRequiredEnv(REQUIRED_ENV);
