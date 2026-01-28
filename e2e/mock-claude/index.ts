@@ -13,9 +13,6 @@
  */
 
 import { createHmac } from 'node:crypto';
-import { execSync } from 'node:child_process';
-import { promises as fs } from 'node:fs';
-import path from 'node:path';
 import express from 'express';
 import { pino } from 'pino';
 
@@ -63,8 +60,6 @@ app.use((req, _res, next) => {
 
 // Configuration
 const PORT = Number.parseInt(process.env['PORT'] ?? '8090', 10);
-const REPO_PATH = process.env['REPO_PATH'] ?? '/workspace';
-const GITHUB_TOKEN = process.env['GITHUB_TOKEN'] ?? '';
 const INTERNAL_AUTH_TOKEN = process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] ?? 'test-secret';
 
 // Track running tasks for cancellation
@@ -86,12 +81,14 @@ interface MockClaudeRequest {
 
 interface MockResult {
   taskId?: string;
-  status: 'completed' | 'failed' | 'cancelled';
-  prUrl?: string;
-  branch?: string;
-  commits?: number;
-  summary?: string;
-  ciFailed?: boolean;
+  status: 'completed' | 'failed' | 'interrupted';
+  result?: {
+    prUrl?: string;
+    branch: string;
+    commits: number;
+    summary: string;
+    ciFailed?: boolean;
+  };
   error?: { code: string; message: string };
   duration?: number;
 }
@@ -138,85 +135,6 @@ async function sendWebhook(url: string, secret: string, payload: MockResult): Pr
 }
 
 /**
- * Create a git branch.
- * Note: Prefixed with _ as it's kept for potential future use but currently unused.
- */
-function _createBranch(branchName: string, baseBranch: string): void {
-  logger.info({ branchName, baseBranch }, 'Creating git branch');
-
-  try {
-    execSync(`git fetch origin ${baseBranch}`, { cwd: REPO_PATH, stdio: 'pipe' });
-    execSync(`git checkout -b ${branchName} origin/${baseBranch}`, {
-      cwd: REPO_PATH,
-      stdio: 'pipe',
-    });
-  } catch {
-    logger.error({ branchName, baseBranch }, 'Failed to create branch');
-    throw new Error(`Failed to create branch ${branchName}`);
-  }
-}
-
-/**
- * Make a commit with a test file.
- * Note: Prefixed with _ as it's kept for potential future use but currently unused.
- */
-async function _makeCommit(
-  branchName: string,
-  fileName: string,
-  content: string,
-  message: string
-): Promise<void> {
-  logger.info({ branchName, fileName }, 'Making commit');
-
-  // Ensure we're on the branch
-  execSync(`git checkout ${branchName}`, { cwd: REPO_PATH, stdio: 'pipe' });
-
-  // Create temp directory for test files
-  const tempDir = path.join(REPO_PATH, 'e2e-test-files');
-  await fs.mkdir(tempDir, { recursive: true });
-
-  // Write test file
-  const filePath = path.join(tempDir, fileName);
-  await fs.writeFile(filePath, content);
-
-  // Commit
-  execSync(`git add ${filePath}`, { cwd: REPO_PATH, stdio: 'pipe' });
-  execSync(`git commit -m "${message}"`, { cwd: REPO_PATH, stdio: 'pipe' });
-  execSync(`git push -u origin ${branchName}`, { cwd: REPO_PATH, stdio: 'pipe' });
-
-  logger.info({ branchName, fileName }, 'Commit created and pushed');
-}
-
-/**
- * Create a pull request using gh CLI.
- * Note: Prefixed with _ as it's kept for potential future use but currently unused.
- */
-function _createPR(branchName: string, baseBranch: string, title: string, body?: string): string {
-  logger.info({ branchName, baseBranch, title }, 'Creating pull request');
-
-  const bodyArg = body ? `--body "${body}"` : '--body "Mock PR for E2E testing"';
-
-  try {
-    const result = execSync(
-      `gh pr create --base ${baseBranch} --head ${branchName} --title "${title}" ${bodyArg}`,
-      {
-        cwd: REPO_PATH,
-        stdio: 'pipe',
-        env: { ...process.env, GITHUB_TOKEN },
-      }
-    );
-
-    const prUrl = result.toString().trim();
-    logger.info({ prUrl }, 'Pull request created');
-
-    return prUrl;
-  } catch {
-    logger.error({ branchName, baseBranch, title }, 'Failed to create PR');
-    throw new Error(`Failed to create PR for ${branchName}`);
-  }
-}
-
-/**
  * Scenario: Success - Simulates branch, commit, and PR creation.
  *
  * NOTE: In E2E mode, we skip actual git operations to avoid:
@@ -236,10 +154,12 @@ async function scenarioSuccess(): Promise<MockResult> {
 
   return {
     status: 'completed',
-    prUrl: `https://github.com/mock/repo/pull/${String(timestamp)}`,
-    branch: branchName,
-    commits: 1,
-    summary: 'E2E mock: Successfully simulated PR creation',
+    result: {
+      prUrl: `https://github.com/mock/repo/pull/${String(timestamp)}`,
+      branch: branchName,
+      commits: 1,
+      summary: 'E2E mock: Successfully simulated PR creation',
+    },
     duration: 1,
   };
 }
@@ -276,10 +196,12 @@ async function scenarioTimeout(): Promise<MockResult> {
 
   return {
     status: 'completed',
-    prUrl: '',
-    branch: '',
-    commits: 0,
-    summary: 'Task completed after timeout',
+    result: {
+      prUrl: '',
+      branch: '',
+      commits: 0,
+      summary: 'Task completed after timeout',
+    },
     duration: timeoutMinutes,
   };
 }
@@ -300,10 +222,12 @@ async function scenarioSlowSuccess(): Promise<MockResult> {
 
   return {
     status: 'completed',
-    prUrl: `https://github.com/mock/repo/pull/${String(timestamp)}`,
-    branch: branchName,
-    commits: 1,
-    summary: 'E2E mock: Successfully completed slow task',
+    result: {
+      prUrl: `https://github.com/mock/repo/pull/${String(timestamp)}`,
+      branch: branchName,
+      commits: 1,
+      summary: 'E2E mock: Successfully completed slow task',
+    },
     duration: 10,
   };
 }
@@ -322,11 +246,13 @@ async function scenarioCIFailure(): Promise<MockResult> {
 
   return {
     status: 'completed',
-    prUrl: `https://github.com/mock/repo/pull/${String(timestamp)}`,
-    branch: branchName,
-    commits: 1,
-    summary: 'E2E mock: Simulated PR with CI failure',
-    ciFailed: true,
+    result: {
+      prUrl: `https://github.com/mock/repo/pull/${String(timestamp)}`,
+      branch: branchName,
+      commits: 1,
+      summary: 'E2E mock: Simulated PR with CI failure',
+      ciFailed: true,
+    },
     duration: 1,
   };
 }
