@@ -495,6 +495,7 @@ export default tseslint.config(
   // Dependency direction: Routes → Domain → Infra (never Infra → Routes)
   {
     files: ['apps/*/src/infra/**/*.ts'],
+    ignores: ['apps/*/src/infra/**/__tests__/**'],
     rules: {
       'no-restricted-imports': [
         'error',

@@ -1,6 +1,6 @@
 /**
  * Firestore repository for Research Export settings.
- * Owned by research-agent - manages researchPageId for Notion export.
+ * Owned by research-agent - manages researchPageId, pageTitle, and pageUrl for Notion export.
  */
 import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
 import { getFirestore } from '@intexuraos/infra-firestore';
@@ -12,6 +12,8 @@ export interface ResearchExportSettingsError {
 
 export interface ResearchExportSettings {
   researchPageId: string;
+  researchPageTitle: string;
+  researchPageUrl: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -19,6 +21,8 @@ export interface ResearchExportSettings {
 interface ResearchExportSettingsDoc {
   userId: string;
   researchPageId: string;
+  researchPageTitle: string;
+  researchPageUrl: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -26,12 +30,12 @@ interface ResearchExportSettingsDoc {
 const COLLECTION_NAME = 'research_export_settings';
 
 /**
- * Get researchPageId for a user.
+ * Get research export settings for a user.
  * Returns null if not configured.
  */
-export async function getResearchPageId(
+export async function getResearchSettings(
   userId: string
-): Promise<Result<string | null, ResearchExportSettingsError>> {
+): Promise<Result<ResearchExportSettings | null, ResearchExportSettingsError>> {
   try {
     const db = getFirestore();
     const doc = await db.collection(COLLECTION_NAME).doc(userId).get();
@@ -41,21 +45,52 @@ export async function getResearchPageId(
     }
 
     const data = doc.data() as ResearchExportSettingsDoc | undefined;
-    return ok(data?.researchPageId ?? null);
+    const pageId = data?.researchPageId ?? '';
+    if (pageId === '' || data === undefined) {
+      return ok(null);
+    }
+
+    return ok({
+      researchPageId: data.researchPageId,
+      researchPageTitle: data.researchPageTitle,
+      researchPageUrl: data.researchPageUrl,
+      createdAt: data.createdAt,
+      updatedAt: data.updatedAt,
+    });
   } catch (error) {
     return err({
       code: 'INTERNAL_ERROR',
-      message: `Failed to get research page ID: ${getErrorMessage(error)}`,
+      message: `Failed to get research settings: ${getErrorMessage(error)}`,
     });
   }
 }
 
 /**
- * Save researchPageId for a user.
+ * Get researchPageId for a user.
+ * Returns null if not configured.
+ * @deprecated Use getResearchSettings instead.
  */
-export async function saveResearchPageId(
+export async function getResearchPageId(
+  userId: string
+): Promise<Result<string | null, ResearchExportSettingsError>> {
+  const result = await getResearchSettings(userId);
+  if (!result.ok) {
+    return result;
+  }
+  if (result.value === null) {
+    return ok(null);
+  }
+  return ok(result.value.researchPageId);
+}
+
+/**
+ * Save research export settings for a user.
+ */
+export async function saveResearchSettings(
   userId: string,
-  researchPageId: string
+  researchPageId: string,
+  researchPageTitle: string,
+  researchPageUrl: string
 ): Promise<Result<ResearchExportSettings, ResearchExportSettingsError>> {
   try {
     const db = getFirestore();
@@ -70,6 +105,8 @@ export async function saveResearchPageId(
     const settingsDoc: ResearchExportSettingsDoc = {
       userId,
       researchPageId,
+      researchPageTitle,
+      researchPageUrl,
       createdAt,
       updatedAt: now,
     };
@@ -78,13 +115,27 @@ export async function saveResearchPageId(
 
     return ok({
       researchPageId,
+      researchPageTitle,
+      researchPageUrl,
       createdAt,
       updatedAt: now,
     });
   } catch (error) {
     return err({
       code: 'INTERNAL_ERROR',
-      message: `Failed to save research page ID: ${getErrorMessage(error)}`,
+      message: `Failed to save research settings: ${getErrorMessage(error)}`,
     });
   }
+}
+
+/**
+ * Save researchPageId for a user.
+ * @deprecated Use saveResearchSettings instead.
+ */
+export async function saveResearchPageId(
+  userId: string,
+  researchPageId: string
+): Promise<Result<ResearchExportSettings, ResearchExportSettingsError>> {
+  // For backwards compatibility, provide default values for title and url
+  return await saveResearchSettings(userId, researchPageId, '', '');
 }
