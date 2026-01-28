@@ -97,12 +97,17 @@ jobs:
 
       - name: Start mock-claude
         run: |
+          echo "=== Before mock-claude ==="
+          grep "test:e2e" package.json && echo "✓ test:e2e exists" || echo "✗ test:e2e MISSING!"
           cd e2e/mock-claude
           npx tsx index.ts > /tmp/mock-claude.log 2>&1 &
           echo $! > /tmp/mock-claude.pid
           sleep 5
           # Verify mock-claude is responding
           curl -sf http://localhost:8090/health || (echo "mock-claude health check failed" && exit 1)
+          cd ../..
+          echo "=== After mock-claude start ==="
+          grep "test:e2e" package.json && echo "✓ test:e2e exists" || echo "✗ test:e2e MISSING!"
         env:
           PORT: 8090
           REPO_PATH: ${{ github.workspace }}
@@ -123,6 +128,8 @@ jobs:
 
       - name: Start code-agent service
         run: |
+          echo "=== Before code-agent ==="
+          grep "test:e2e" package.json && echo "✓ test:e2e exists" || echo "✗ test:e2e MISSING!"
           cd apps/code-agent
           E2E_MODE=true \
           E2E_TEST_USER_ID=e2e-ci-test \
@@ -142,6 +149,9 @@ jobs:
           sleep 15
           # Verify code-agent is responding
           curl -sf http://localhost:8128/health || (echo "code-agent health check failed" && cat /tmp/code-agent.log && exit 1)
+          cd ../..
+          echo "=== After code-agent start ==="
+          grep "test:e2e" package.json && echo "✓ test:e2e exists" || echo "✗ test:e2e MISSING!"
 
       - name: Run E2E tests
         run: |
