@@ -160,38 +160,19 @@ function ResearchCard({ research, onDelete, onToggleFavourite, updatingFavourite
       onClick={handleCardClick}
       className="cursor-pointer rounded-lg border border-slate-200 bg-white p-4 transition-shadow hover:shadow-md"
     >
-      <div className="flex items-start gap-3">
-        <button
-          onClick={(e): void => {
-            e.stopPropagation();
-            onToggleFavourite(research.id, !(research.favourite ?? false));
-          }}
-          disabled={updatingFavourite === research.id}
-          className="p-1 rounded hover:bg-slate-100 transition-colors disabled:opacity-50 flex-shrink-0"
-          aria-label={research.favourite === true ? 'Unfavourite' : 'Favourite'}
-        >
-          <Star
-            className={`h-5 w-5 ${research.favourite === true ? 'text-amber-400 fill-amber-400' : 'text-slate-300'}`}
-          />
-        </button>
-        <div className="flex-1 min-w-0">
-          <h3 className="text-lg font-semibold text-slate-900 hover:text-blue-600">
-            {research.title !== '' ? stripMarkdown(research.title) : 'Untitled Research'}
-          </h3>
-          <p className="mt-1 line-clamp-2 text-sm text-slate-600">{research.prompt}</p>
-        </div>
+      <div className="flex-1 min-w-0">
+        <h3 className="text-lg font-semibold text-slate-900 hover:text-blue-600">
+          {research.title !== '' ? stripMarkdown(research.title) : 'Untitled Research'}
+        </h3>
+        <p className="mt-1 line-clamp-2 text-sm text-slate-600">{research.prompt}</p>
       </div>
 
-      <div className="mt-3 flex items-center justify-between">
+      <div className="mt-3 flex items-center gap-2 flex-wrap">
         <span
           className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${status.bg} ${status.text}`}
         >
           {status.label}
         </span>
-        <span className="text-sm text-slate-500">{getCreationDate()}</span>
-      </div>
-
-      <div className="mt-2 flex flex-wrap gap-2">
         {[...new Set(research.selectedModels.map(getProviderForModel))].map((provider) => (
           <span key={provider} className="rounded bg-slate-100 px-2 py-0.5 text-xs text-slate-600">
             {provider}
@@ -199,40 +180,56 @@ function ResearchCard({ research, onDelete, onToggleFavourite, updatingFavourite
         ))}
       </div>
 
-      <div className="mt-3 flex justify-end">
-        {showDeleteConfirm ? (
-          <div
-            className="flex gap-2"
-            onClick={(e): void => {
-              e.stopPropagation();
-            }}
-          >
-            <Button variant="danger" onClick={onDelete}>
-              <CheckCircle className="h-4 w-4 sm:mr-2" />
-              <span className="hidden sm:inline">Confirm {deleteLabel}</span>
-            </Button>
-            <Button
-              variant="secondary"
-              onClick={(): void => {
-                setShowDeleteConfirm(false);
-              }}
-            >
-              <XCircle className="h-4 w-4 sm:mr-2" />
-              <span className="hidden sm:inline">Cancel</span>
-            </Button>
-          </div>
-        ) : (
+      <div className="mt-3 flex items-center justify-between">
+        <span className="text-sm text-slate-500">{getCreationDate()}</span>
+        <div className="flex items-center gap-2">
           <button
             onClick={(e): void => {
               e.stopPropagation();
-              setShowDeleteConfirm(true);
+              onToggleFavourite(research.id, !(research.favourite ?? false));
             }}
-            className="text-sm text-slate-400 hover:text-red-600 flex items-center gap-1"
+            disabled={updatingFavourite === research.id}
+            className="p-1 rounded hover:bg-slate-100 transition-colors disabled:opacity-50"
+            aria-label={research.favourite === true ? 'Unfavourite' : 'Favourite'}
           >
-            <Trash2 className="h-4 w-4" />
-            <span className="hidden sm:inline">{deleteLabel}</span>
+            <Star
+              className={`h-5 w-5 ${research.favourite === true ? 'text-amber-400 fill-amber-400' : 'text-slate-300'}`}
+            />
           </button>
-        )}
+          {showDeleteConfirm ? (
+            <div
+              className="flex gap-2"
+              onClick={(e): void => {
+                e.stopPropagation();
+              }}
+            >
+              <Button variant="danger" onClick={onDelete}>
+                <CheckCircle className="h-4 w-4 sm:mr-2" />
+                <span className="hidden sm:inline">Confirm {deleteLabel}</span>
+              </Button>
+              <Button
+                variant="secondary"
+                onClick={(): void => {
+                  setShowDeleteConfirm(false);
+                }}
+              >
+                <XCircle className="h-4 w-4 sm:mr-2" />
+                <span className="hidden sm:inline">Cancel</span>
+              </Button>
+            </div>
+          ) : (
+            <button
+              onClick={(e): void => {
+                e.stopPropagation();
+                setShowDeleteConfirm(true);
+              }}
+              className="text-sm text-slate-400 hover:text-red-600 flex items-center gap-1"
+            >
+              <Trash2 className="h-4 w-4" />
+              <span className="hidden sm:inline">{deleteLabel}</span>
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );
