@@ -439,7 +439,7 @@ Pattern: `/internal/{resource-name}` with `X-Internal-Auth` header. Use `validat
 - `scripts/verify-env-vars.mjs` automatically validates all three locations
 - Runs in Static Validation phase of CI pipeline
 - Fails immediately if any location is missing
-- Error format: `file:line: Undeclared env var 'VAR_NAME' used. Add to REQUIRED_ENV or OPTIONAL_ENV in src/index.ts.`
+- Error format: `file:line: Undeclared env var 'VAR_NAME' used. Add to REQUIRED_ENV in src/index.ts.`
 
 **Failure to update all three causes:**
 

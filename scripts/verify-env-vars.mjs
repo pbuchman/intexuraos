@@ -5,7 +5,7 @@
  * Ensures all services properly declare their required environment variables.
  *
  * Checks:
- * 1. All process.env usage is declared in REQUIRED_ENV or OPTIONAL_ENV
+ * 1. All process.env usage is declared in REQUIRED_ENV (or is globally optional)
  * 2. All REQUIRED_ENV vars are registered in scripts/dev.mjs
  *
  * Usage:
@@ -81,28 +81,6 @@ function extractRequiredEnv(indexContent) {
   }
 
   // Extract string literals from the array
-  const vars = [];
-  const stringPattern = /'([^']+)'/g;
-  let stringMatch;
-
-  while ((stringMatch = stringPattern.exec(match[1])) !== null) {
-    vars.push(stringMatch[1]);
-  }
-
-  return vars;
-}
-
-/**
- * Extract OPTIONAL_ENV array from a service's index.ts file.
- */
-function extractOptionalEnv(indexContent) {
-  const optionalEnvPattern = /const\s+OPTIONAL_ENV\s*=\s*\[([\s\S]*?)\];?/;
-  const match = indexContent.match(optionalEnvPattern);
-
-  if (!match) {
-    return [];
-  }
-
   const vars = [];
   const stringPattern = /'([^']+)'/g;
   let stringMatch;
@@ -216,7 +194,7 @@ function checkService(serviceName, serviceDir) {
 
   const indexContent = readFileSync(indexPath, 'utf8');
   const requiredEnv = new Set(extractRequiredEnv(indexContent));
-  const optionalEnv = new Set([...extractOptionalEnv(indexContent), ...COMMON_OPTIONAL_ENV]);
+  const optionalEnv = COMMON_OPTIONAL_ENV;
 
   // Find all TypeScript files in the service
   const srcDir = join(serviceDir, 'src');
@@ -249,7 +227,7 @@ function checkService(serviceName, serviceDir) {
       continue;
     }
 
-    // Check if declared in REQUIRED_ENV or OPTIONAL_ENV
+    // Check if declared in REQUIRED_ENV or globally optional
     if (requiredEnv.has(varName) || optionalEnv.has(varName)) {
       continue;
     }
@@ -258,7 +236,7 @@ function checkService(serviceName, serviceDir) {
     for (const loc of locations) {
       errors.push(
         `${loc.file}:${loc.line}: Undeclared env var '${varName}' used. ` +
-          `Add to REQUIRED_ENV or OPTIONAL_ENV in src/index.ts.`
+          `Add to REQUIRED_ENV in src/index.ts.`
       );
     }
   }
@@ -364,7 +342,7 @@ function main() {
     console.log(`Environment variable verification failed with ${String(errors.length)} error(s).`);
     console.log('');
     console.log('To fix:');
-    console.log("  1. Add missing vars to REQUIRED_ENV or OPTIONAL_ENV in the service's index.ts");
+    console.log("  1. Add missing vars to REQUIRED_ENV in the service's index.ts");
     console.log('  2. Add service-specific vars to SERVICE_ENV_MAPPINGS in scripts/dev.mjs');
     process.exit(1);
   }

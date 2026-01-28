@@ -892,6 +892,7 @@ module "whatsapp_service" {
     INTEXURAOS_PUBSUB_WEBHOOK_PROCESS_TOPIC      = module.pubsub_whatsapp_webhook_process.topic_name
     INTEXURAOS_PUBSUB_TRANSCRIPTION_TOPIC        = module.pubsub_whatsapp_transcription.topic_name
     INTEXURAOS_PUBSUB_APPROVAL_REPLY_TOPIC       = module.pubsub_approval_reply.topic_name
+    INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC        = "intexuraos-whatsapp-send-${var.environment}"
   })
 
   depends_on = [

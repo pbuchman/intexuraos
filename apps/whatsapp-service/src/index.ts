@@ -29,11 +29,6 @@ const REQUIRED_ENV = [
   'INTEXURAOS_PUBSUB_WEBHOOK_PROCESS_TOPIC',
   'INTEXURAOS_PUBSUB_TRANSCRIPTION_TOPIC',
   'INTEXURAOS_PUBSUB_APPROVAL_REPLY_TOPIC',
-];
-
-// Declared for env-vars verification - these have Zod defaults in config.ts
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-const OPTIONAL_ENV = [
   'INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC',
 ];
 
