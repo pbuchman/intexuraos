@@ -49,11 +49,13 @@ export function createLinearIssueService(deps: LinearIssueServiceDeps): LinearIs
     async ensureIssueExists(params): Promise<EnsureIssueResult> {
       const { linearIssueId, linearIssueTitle, taskPrompt } = params;
 
-      if (linearIssueId !== undefined && linearIssueTitle !== undefined) {
+      // If linearIssueId provided, use existing issue (title optional - use fallback if missing)
+      if (linearIssueId !== undefined) {
+        const title = linearIssueTitle ?? `Linked issue ${linearIssueId}`;
         logger.info({ linearIssueId }, 'Using existing Linear issue');
         return {
           linearIssueId,
-          linearIssueTitle,
+          linearIssueTitle: title,
           linearFallback: false,
         };
       }

@@ -86,12 +86,13 @@ function createE2eWhatsAppPublisher(): WhatsAppSendPublisher {
 function createE2eLinearAgentClient(logger: pino.Logger): LinearAgentClient {
   return {
     createIssue(request): ReturnType<LinearAgentClient['createIssue']> {
+      const issueNum = Date.now() % 10000;
       logger.info({ title: request.title }, '[E2E] Mock Linear issue creation');
       return Promise.resolve(ok({
-        issueId: `e2e-issue-${String(Date.now())}`,
-        issueIdentifier: 'INT-E2E',
+        issueId: `INT-${String(issueNum)}`,
+        issueIdentifier: `INT-${String(issueNum)}`,
         issueTitle: request.title,
-        issueUrl: 'https://linear.app/e2e-test-issue',
+        issueUrl: `https://linear.app/intexura/issue/INT-${String(issueNum)}`,
       }));
     },
     updateIssueState(request): ReturnType<LinearAgentClient['updateIssueState']> {

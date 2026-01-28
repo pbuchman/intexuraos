@@ -48,6 +48,26 @@ describe('linearIssueService', () => {
       );
     });
 
+    it('should return existing issue with fallback title when only linearIssueId provided', async () => {
+      const service = createLinearIssueService({ linearAgentClient: mockClient, logger: mockLogger });
+
+      const result = await service.ensureIssueExists({
+        linearIssueId: 'INT-999',
+        taskPrompt: 'Work on existing issue',
+      });
+
+      expect(result).toEqual({
+        linearIssueId: 'INT-999',
+        linearIssueTitle: 'Linked issue INT-999',
+        linearFallback: false,
+      });
+      expect(mockCreateIssue).not.toHaveBeenCalled();
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        { linearIssueId: 'INT-999' },
+        'Using existing Linear issue'
+      );
+    });
+
     it('should create new issue when linearIssueId not provided', async () => {
       const mockIssueResponse = {
         issueId: 'new-456',
