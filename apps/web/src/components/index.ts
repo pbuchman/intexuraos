@@ -19,4 +19,5 @@ export { MarkdownContent, type MarkdownContentProps } from './MarkdownContent.js
 export { ModelSelector, getSelectedModelsList, PROVIDER_MODELS } from './ModelSelector.js';
 export { VegaChart } from './VegaChart.js';
 export { RefreshIndicator } from './RefreshIndicator.js';
+export { VersionInfoModal } from './VersionInfoModal.js';
 export * from './ui/index.js';

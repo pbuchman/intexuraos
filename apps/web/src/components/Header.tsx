@@ -4,6 +4,7 @@ import { useAuth, useSyncQueue } from '@/context';
 import { usePWA } from '@/context/pwa-context';
 import { useWorkersStatus } from '@/hooks';
 import { ChevronDown, LogOut, User, RefreshCw, RotateCcw, Server } from 'lucide-react';
+import { VersionInfoModal } from './VersionInfoModal';
 
 export function Header(): React.JSX.Element {
   const { user, logout, isAuthenticated } = useAuth();
@@ -13,6 +14,7 @@ export function Header(): React.JSX.Element {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isWorkersOpen, setIsWorkersOpen] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isVersionModalOpen, setIsVersionModalOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const workersRef = useRef<HTMLDivElement>(null);
 
@@ -73,7 +75,12 @@ export function Header(): React.JSX.Element {
             e.currentTarget.style.display = 'none';
           }}
         />
-        <div className="flex flex-col md:flex-row md:items-baseline md:gap-2">
+        <button
+          onClick={(): void => {
+            setIsVersionModalOpen(true);
+          }}
+          className="flex flex-col rounded-md px-1 transition-colors hover:bg-slate-100 md:flex-row md:items-baseline md:gap-2"
+        >
           <h1 className="text-xl font-bold">
             <span className="text-cyan-500">Intexura</span>
             <span className="text-slate-900">OS</span>
@@ -81,7 +88,7 @@ export function Header(): React.JSX.Element {
           <span className="text-[10px] font-normal text-slate-400 md:text-xs">
             ver. {import.meta.env.INTEXURAOS_BUILD_VERSION}
           </span>
-        </div>
+        </button>
       </div>
 
       <div className="flex items-center gap-2 md:gap-4">
@@ -232,6 +239,14 @@ export function Header(): React.JSX.Element {
           ) : null}
         </div>
       </div>
+
+      {isVersionModalOpen && (
+        <VersionInfoModal
+          onClose={(): void => {
+            setIsVersionModalOpen(false);
+          }}
+        />
+      )}
     </header>
   );
 }

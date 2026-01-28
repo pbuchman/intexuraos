@@ -218,8 +218,14 @@ export function ActionDetailModal({
       return;
     }
 
+    // For PATCH/DELETE endpoints (archive, reject, delete), success is indicated by
+    // not throwing an error. These return the updated action, not ActionExecutionResult.
+    // Only POST /execute endpoints return ActionExecutionResult with status field.
+    const isPatchOrDelete =
+      button.endpoint.method === 'PATCH' || button.endpoint.method === 'DELETE';
+
     // Handle success case (completed with resourceUrl)
-    if (result.status === 'completed' && result.resourceUrl !== undefined) {
+    if ((isPatchOrDelete || result.status === 'completed') && result.resourceUrl !== undefined) {
       const normalizedUrl = normalizeResourceUrl(result.resourceUrl);
       const message = button.onSuccess?.message ?? 'Action completed successfully';
       const linkLabel = button.onSuccess?.linkLabel ?? `Open ${action.type}`;
@@ -242,7 +248,7 @@ export function ActionDetailModal({
 
       setExecutionResult({
         actionId: result.actionId,
-        status: result.status,
+        status: 'completed',
         resourceUrl: normalizedUrl,
         message,
         linkLabel,
@@ -250,7 +256,12 @@ export function ActionDetailModal({
       return;
     }
 
-    // Handle failure case
+    // For PATCH/DELETE without resourceUrl, silently succeed (modal will close via onSuccess)
+    if (isPatchOrDelete) {
+      return;
+    }
+
+    // Handle failure case (only for POST endpoints that return status: 'failed')
     if (result.status === 'failed') {
       setExecutionResult({
         actionId: result.actionId,

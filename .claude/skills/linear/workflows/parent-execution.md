@@ -59,13 +59,14 @@ Execute the entire workflow automatically:
 This workflow should only be reached via redirect from `work-existing.md`. Confirm:
 
 - Issue was fetched with `mcp__linear__get_issue`
-- Subissues were detected with `mcp__linear__issue_read(method: "get_sub_issues")`
+- Subissues were detected with `mcp__linear__list_issues(parentId: "<issue-uuid>")`
 - Children array is non-empty
 
 ### 2. Analyze Children Structure
 
 ```
-1. Call mcp__linear__issue_read(method: "get_sub_issues", issueId: "<parent-id>")
+1. Call mcp__linear__list_issues(parentId: "<parent-uuid>", team: "IntexuraOS")
+   Note: Use the full UUID from get_issue response, not the identifier (INT-XXX)
 2. For each child, extract:
    - Issue ID
    - Title (contains [tier-X] prefix)

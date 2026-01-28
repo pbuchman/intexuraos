@@ -9,7 +9,6 @@ import {
 import { useAuth } from '@/context';
 import {
   ApiError,
-  archiveAction,
   archiveCommand,
   batchGetActions,
   deleteCommand,
@@ -483,12 +482,6 @@ export function InboxPage(): React.JSX.Element {
     }
   };
 
-  const handleDismissAction = async (actionId: string): Promise<void> => {
-    const token = await getAccessToken();
-    await archiveAction(token, actionId);
-    setActions((prev) => prev.filter((a) => a.id !== actionId));
-  };
-
   useEffect(() => {
     void fetchData();
   }, [fetchData]);
@@ -786,7 +779,6 @@ export function InboxPage(): React.JSX.Element {
                       prev.map((a) => (a.id === updatedAction.id ? updatedAction : a))
                     );
                   }}
-                  onDismiss={handleDismissAction}
                 />
               ))
             )}
