@@ -815,6 +815,59 @@ describe('Research Agent Routes', () => {
       expect(body.data.actions).toHaveLength(1);
       expect(body.data.actions[0]?.status).toBe('pending');
     });
+
+    it('preserves all payload properties in response (additionalProperties)', async () => {
+      fakeActionRepository.save({
+        id: 'action-1',
+        userId: 'user-123',
+        commandId: 'cmd-1',
+        type: 'note',
+        confidence: 0.95,
+        title: 'Test Note',
+        status: 'completed',
+        payload: {
+          prompt: 'Original prompt text',
+          message: 'Note created successfully',
+          resource_url: '/#/notes/abc123',
+          custom_field: 'custom value',
+        },
+        createdAt: '2025-01-01T00:00:00.000Z',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      });
+
+      const mockToken =
+        'eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyLTEyMyIsImF1ZCI6InRlc3QtYXVkaWVuY2UiLCJpc3MiOiJodHRwczovL2V4YW1wbGUuYXV0aC5jb20vIiwiaWF0IjoxNzA5MjE3NjAwfQ.mock';
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/actions',
+        headers: {
+          authorization: `Bearer ${mockToken}`,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: {
+          actions: {
+            payload: {
+              prompt?: string;
+              message?: string;
+              resource_url?: string;
+              custom_field?: string;
+            };
+          }[];
+        };
+      };
+      expect(body.success).toBe(true);
+      expect(body.data.actions).toHaveLength(1);
+      const payload = body.data.actions[0]?.payload;
+      expect(payload?.prompt).toBe('Original prompt text');
+      expect(payload?.message).toBe('Note created successfully');
+      expect(payload?.resource_url).toBe('/#/notes/abc123');
+      expect(payload?.custom_field).toBe('custom value');
+    });
   });
 
   describe('PATCH /actions/:actionId (update action status)', () => {
