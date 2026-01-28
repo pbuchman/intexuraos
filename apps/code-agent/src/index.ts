@@ -21,10 +21,10 @@ const REQUIRED_ENV = [
   'INTEXURAOS_ORCHESTRATOR_VM_URL',
   'INTEXURAOS_CODE_WORKERS',
   'INTEXURAOS_SERVICE_URL',
-  // Auth0 JWT validation for public routes
-  'INTEXURAOS_AUTH0_AUDIENCE',
-  'INTEXURAOS_AUTH0_ISSUER',
-  'INTEXURAOS_AUTH0_JWKS_URI',
+  // Auth0 JWT validation for public routes (standard names from Secret Manager)
+  'INTEXURAOS_AUTH_AUDIENCE',
+  'INTEXURAOS_AUTH_ISSUER',
+  'INTEXURAOS_AUTH_JWKS_URL',
 ];
 
 validateRequiredEnv(REQUIRED_ENV);

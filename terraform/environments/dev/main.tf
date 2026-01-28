@@ -1391,9 +1391,6 @@ module "code_agent" {
     INTEXURAOS_ORCHESTRATOR_MAC_URL       = "https://cc-mac.intexuraos.cloud"
     INTEXURAOS_ORCHESTRATOR_VM_URL        = "https://cc-vm.intexuraos.cloud"
     INTEXURAOS_CODE_WORKERS               = "mac:https://cc-mac.intexuraos.cloud:1,vm:https://cc-vm.intexuraos.cloud:2"
-    INTEXURAOS_AUTH0_AUDIENCE             = "https://api.intexuraos.cloud"
-    INTEXURAOS_AUTH0_ISSUER               = "https://intexuraos.eu.auth0.com/"
-    INTEXURAOS_AUTH0_JWKS_URI             = "https://intexuraos.eu.auth0.com/.well-known/jwks.json"
     INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC = "intexuraos-whatsapp-send-${var.environment}"
   })
 
