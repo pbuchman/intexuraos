@@ -59,7 +59,7 @@ jobs:
         run: |
           cd e2e/mock-claude
           pnpm install
-          node --import tsx/dist/loader.mjs --conditions=tsx index.ts &
+          npx tsx index.ts &
           sleep 5
         env:
           PORT: 8090
@@ -81,7 +81,7 @@ jobs:
           INTEXURAOS_SERVICE_URL=http://localhost:8128 \
           FIRESTORE_EMULATOR_HOST=localhost:8081 \
           PUBSUB_EMULATOR_HOST=localhost:8085 \
-          node --import tsx/dist/loader.mjs --conditions=tsx src/index.ts &
+          npx tsx src/index.ts &
           sleep 10
 
       - name: Run E2E tests
