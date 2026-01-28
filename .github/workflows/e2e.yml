@@ -106,11 +106,13 @@ jobs:
         if: always()
         run: |
           # Find and close any test PRs created during E2E tests
+          # Test PRs have "Mock" in the title (e.g., "[E2E] Mock Success PR")
+          # and are created from branches with "test/e2e-" prefix
           gh pr list \
             --state open \
-            --search "E2E test" \
-            --json number,title \
-            --jq '.[] | "\(.number)"' \
+            --search "[E2E] Mock" \
+            --json number,title,headRefName \
+            --jq 'map(select(.headRefName | startswith("test/e2e-"))) | .[] | "\(.number)"' \
             | xargs -I {} gh pr close {} --comment "E2E cleanup: Auto-closing test PR"
         env:
           GITHUB_TOKEN: ${{ env.GITHUB_TOKEN }}
