@@ -212,24 +212,30 @@ function createPR(branchName: string, baseBranch: string, title: string, body?: 
 }
 
 /**
- * Scenario: Success - Creates branch, commit, and PR.
+ * Scenario: Success - Simulates branch, commit, and PR creation.
+ *
+ * NOTE: In E2E mode, we skip actual git operations to avoid:
+ * 1. Modifying the working directory (which would break package.json)
+ * 2. Creating real PRs that need cleanup
+ *
+ * This mock simply returns a successful result without doing real git work.
  */
 async function scenarioSuccess(): Promise<MockResult> {
   const timestamp = Date.now();
   const branchName = `test/e2e-success-${String(timestamp)}`;
-  const baseBranch = 'development';
 
-  createBranch(branchName, baseBranch);
-  await makeCommit(branchName, 'test-change.txt', 'E2E test change', 'E2E: Mock success commit');
-  const prUrl = createPR(branchName, baseBranch, '[E2E] Mock Success PR');
+  // Simulate some processing time
+  await new Promise((resolve) => setTimeout(resolve, 500));
+
+  logger.info({ branchName }, 'Simulated successful PR creation (no actual git operations)');
 
   return {
     status: 'completed',
-    prUrl,
+    prUrl: `https://github.com/mock/repo/pull/${timestamp}`,
     branch: branchName,
     commits: 1,
-    summary: 'E2E mock: Successfully created test change',
-    duration: 5,
+    summary: 'E2E mock: Successfully simulated PR creation',
+    duration: 1,
   };
 }
 
@@ -284,15 +290,12 @@ async function scenarioSlowSuccess(): Promise<MockResult> {
 
   const timestamp = Date.now();
   const branchName = `test/e2e-slow-${String(timestamp)}`;
-  const baseBranch = 'development';
 
-  createBranch(branchName, baseBranch);
-  await makeCommit(branchName, 'slow-change.txt', 'Slow E2E test change', 'E2E: Mock slow commit');
-  const prUrl = createPR(branchName, baseBranch, '[E2E] Mock Slow PR');
+  logger.info({ branchName }, 'Simulated slow PR creation (no actual git operations)');
 
   return {
     status: 'completed',
-    prUrl,
+    prUrl: `https://github.com/mock/repo/pull/${timestamp}`,
     branch: branchName,
     commits: 1,
     summary: 'E2E mock: Successfully completed slow task',
@@ -301,31 +304,25 @@ async function scenarioSlowSuccess(): Promise<MockResult> {
 }
 
 /**
- * Scenario: CI Failure - Creates PR with broken code.
+ * Scenario: CI Failure - Simulates PR with broken code.
  */
 async function scenarioCIFailure(): Promise<MockResult> {
   const timestamp = Date.now();
   const branchName = `test/e2e-ci-fail-${String(timestamp)}`;
-  const baseBranch = 'development';
 
-  createBranch(branchName, baseBranch);
-  // Create a file with a type error that will fail CI
-  await makeCommit(
-    branchName,
-    'broken.ts',
-    '// This file has a type error to simulate CI failure\nconst x: number = "string";\n',
-    'E2E: Mock CI failure commit'
-  );
-  const prUrl = createPR(branchName, baseBranch, '[E2E] Mock CI Failure PR');
+  // Simulate some processing time
+  await new Promise((resolve) => setTimeout(resolve, 500));
+
+  logger.info({ branchName }, 'Simulated CI failure PR (no actual git operations)');
 
   return {
     status: 'completed',
-    prUrl,
+    prUrl: `https://github.com/mock/repo/pull/${timestamp}`,
     branch: branchName,
     commits: 1,
-    summary: 'E2E mock: PR created with CI failure',
+    summary: 'E2E mock: Simulated PR with CI failure',
     ciFailed: true,
-    duration: 5,
+    duration: 1,
   };
 }
 
