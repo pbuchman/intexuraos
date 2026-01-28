@@ -42,6 +42,7 @@ import {
   retryFromFailed,
   toggleResearchFavourite,
   unshareResearch,
+  exportToNotion,
 } from '@/services/researchAgentApi';
 import {
   getProviderForModel,
@@ -228,6 +229,9 @@ export function ResearchDetailPage(): React.JSX.Element {
   const [enhancing, setEnhancing] = useState(false);
   const [enhanceError, setEnhanceError] = useState<string | null>(null);
   const [togglingFavourite, setTogglingFavourite] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
+  const [exportSuccess, setExportSuccess] = useState<{ mainPageUrl: string } | null>(null);
   const [enhanceModelSelections, setEnhanceModelSelections] = useState<
     Map<LlmProvider, SupportedModel | null>
   >(() => new Map());
@@ -461,6 +465,35 @@ export function ResearchDetailPage(): React.JSX.Element {
       // Silently fail for now
     } finally {
       setTogglingFavourite(false);
+    }
+  };
+
+  const handleExportToNotion = async (): Promise<void> => {
+    if (id === undefined || id === '') return;
+
+    setExporting(true);
+    setExportError(null);
+    setExportSuccess(null);
+
+    try {
+      const token = await getAccessToken();
+      const updatedResearch = await exportToNotion(token, id);
+
+      if (updatedResearch.notionExportInfo !== undefined) {
+        setExportSuccess({ mainPageUrl: updatedResearch.notionExportInfo.mainPageUrl });
+      }
+      await refresh();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to export to Notion';
+      if (message.includes('NOTION_NOT_CONNECTED')) {
+        setExportError('Please connect Notion first in Settings');
+      } else if (message.includes('PAGE_NOT_CONFIGURED')) {
+        setExportError('Please configure Research Export Page ID in Settings');
+      } else {
+        setExportError(message);
+      }
+    } finally {
+      setExporting(false);
     }
   };
 
@@ -730,15 +763,41 @@ export function ResearchDetailPage(): React.JSX.Element {
               </Button>
             ) : null}
             {research.status === 'completed' ? (
-              <Button
-                onClick={(): void => {
-                  setShowEnhanceModal(true);
-                }}
-                disabled={deleting}
-              >
-                <Plus className="h-4 w-4 sm:mr-2" />
-                <span className="hidden sm:inline">Enhance</span>
-              </Button>
+              <>
+                <Button
+                  onClick={(): void => {
+                    setShowEnhanceModal(true);
+                  }}
+                  disabled={deleting}
+                >
+                  <Plus className="h-4 w-4 sm:mr-2" />
+                  <span className="hidden sm:inline">Enhance</span>
+                </Button>
+                {research.notionExportInfo === undefined &&
+                research.synthesizedResult !== undefined &&
+                research.synthesizedResult !== '' ? (
+                  <Button
+                    onClick={(): void => {
+                      void handleExportToNotion();
+                    }}
+                    disabled={exporting || deleting}
+                    isLoading={exporting}
+                    variant="secondary"
+                  >
+                    {exporting ? (
+                      <>
+                        <RefreshCw className="h-4 w-4 sm:mr-2 animate-spin" />
+                        <span className="hidden sm:inline">Exporting...</span>
+                      </>
+                    ) : (
+                      <>
+                        <ExternalLink className="h-4 w-4 sm:mr-2" />
+                        <span className="hidden sm:inline">Export to Notion</span>
+                      </>
+                    )}
+                  </Button>
+                ) : null}
+              </>
             ) : null}
             {showDeleteConfirm ? (
               <>
@@ -794,6 +853,26 @@ export function ResearchDetailPage(): React.JSX.Element {
         {retryError !== null && retryError !== '' ? (
           <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
             {retryError}
+          </div>
+        ) : null}
+
+        {exportError !== null && exportError !== '' ? (
+          <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+            {exportError}
+          </div>
+        ) : null}
+
+        {exportSuccess !== null ? (
+          <div className="mt-4 rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-700">
+            Research exported to Notion!{' '}
+            <a
+              href={exportSuccess.mainPageUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-medium underline hover:text-green-800"
+            >
+              View in Notion
+            </a>
           </div>
         ) : null}
       </div>

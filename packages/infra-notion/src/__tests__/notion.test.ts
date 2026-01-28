@@ -58,6 +58,7 @@ describe('Notion utilities', () => {
       info: vi.fn(),
       warn: vi.fn(),
       error: vi.fn(),
+      debug: vi.fn(),
     };
   });
 
@@ -288,6 +289,7 @@ describe('Notion utilities', () => {
         info: vi.fn(),
         warn: vi.fn(),
         error: vi.fn(),
+        debug: vi.fn(),
       };
 
       createNotionClient('test-token', logger);
@@ -306,6 +308,7 @@ describe('Notion utilities', () => {
         info: vi.fn(),
         warn: vi.fn(),
         error: vi.fn(),
+        debug: vi.fn(),
       };
 
       createNotionClient('test-token', logger);
@@ -343,6 +346,7 @@ describe('Notion utilities', () => {
         info: vi.fn(),
         warn: vi.fn(),
         error: vi.fn(),
+        debug: vi.fn(),
       };
 
       createNotionClient('test-token', logger);
@@ -371,6 +375,7 @@ describe('Notion utilities', () => {
         info: vi.fn(),
         warn: vi.fn(),
         error: vi.fn(),
+        debug: vi.fn(),
       };
 
       createNotionClient('test-token', logger);
@@ -395,6 +400,7 @@ describe('Notion utilities', () => {
         info: vi.fn(),
         warn: vi.fn(),
         error: vi.fn(),
+        debug: vi.fn(),
       };
 
       createNotionClient('test-token', logger);
@@ -420,6 +426,7 @@ describe('Notion utilities', () => {
         info: vi.fn(),
         warn: vi.fn(),
         error: vi.fn(),
+        debug: vi.fn(),
       };
 
       createNotionClient('test-token', logger);
@@ -443,6 +450,7 @@ describe('Notion utilities', () => {
         info: vi.fn(),
         warn: vi.fn(),
         error: vi.fn(),
+        debug: vi.fn(),
       };
 
       createNotionClient('test-token', logger);
@@ -469,6 +477,7 @@ describe('Notion utilities', () => {
         info: vi.fn(),
         warn: vi.fn(),
         error: vi.fn(),
+        debug: vi.fn(),
       };
 
       createNotionClient('test-token', logger);
@@ -496,6 +505,7 @@ describe('Notion utilities', () => {
         info: vi.fn(),
         warn: vi.fn(),
         error: vi.fn(),
+        debug: vi.fn(),
       };
 
       createNotionClient('test-token', logger);
@@ -524,6 +534,7 @@ describe('Notion utilities', () => {
         info: vi.fn(),
         warn: vi.fn(),
         error: vi.fn(),
+        debug: vi.fn(),
       };
 
       createNotionClient('test-token', logger);
@@ -551,6 +562,7 @@ describe('Notion utilities', () => {
         info: vi.fn(),
         warn: vi.fn(),
         error: vi.fn(),
+        debug: vi.fn(),
       };
 
       createNotionClient('test-token', logger);
@@ -583,6 +595,7 @@ describe('Notion utilities', () => {
         info: vi.fn(),
         warn: vi.fn(),
         error: vi.fn(),
+        debug: vi.fn(),
       };
 
       createNotionClient('test-token', logger);
@@ -616,6 +629,7 @@ describe('Notion utilities', () => {
         info: vi.fn(),
         warn: vi.fn(),
         error: vi.fn(),
+        debug: vi.fn(),
       };
 
       createNotionClient('test-token', logger);
@@ -642,6 +656,7 @@ describe('Notion utilities', () => {
         info: vi.fn(),
         warn: vi.fn(),
         error: vi.fn(),
+        debug: vi.fn(),
       };
 
       createNotionClient('test-token', logger);
@@ -677,6 +692,7 @@ describe('Notion utilities', () => {
         info: vi.fn(),
         warn: vi.fn(),
         error: vi.fn(),
+        debug: vi.fn(),
       };
       mockClientInstance.users.me.mockResolvedValue({ id: 'user-123' });
 
@@ -693,6 +709,7 @@ describe('Notion utilities', () => {
         info: vi.fn(),
         warn: vi.fn(),
         error: vi.fn(),
+        debug: vi.fn(),
       };
       vi.mocked(isNotionClientError).mockReturnValue(true);
       mockClientInstance.users.me.mockRejectedValue({
@@ -713,6 +730,7 @@ describe('Notion utilities', () => {
         info: vi.fn(),
         warn: vi.fn(),
         error: vi.fn(),
+        debug: vi.fn(),
       };
       vi.mocked(isNotionClientError).mockReturnValue(true);
       mockClientInstance.users.me.mockRejectedValue({
@@ -733,6 +751,7 @@ describe('Notion utilities', () => {
         info: vi.fn(),
         warn: vi.fn(),
         error: vi.fn(),
+        debug: vi.fn(),
       };
 
       mockClientInstance.users.me.mockResolvedValue({ id: 'user-123' });
@@ -933,6 +952,7 @@ describe('Notion utilities', () => {
         info: vi.fn(),
         warn: vi.fn(),
         error: vi.fn(),
+        debug: vi.fn(),
       };
 
       mockClientInstance.pages.retrieve.mockResolvedValue({

@@ -1,17 +1,18 @@
 /**
  * Research Routes
  *
- * POST   /research             - Create new research
- * POST   /research/draft       - Save research as draft
- * GET    /research             - List user's researches
- * GET    /research/:id         - Get single research
- * POST   /research/:id/approve - Approve draft research
- * POST   /research/:id/confirm  - Confirm partial failure decision
- * POST   /research/:id/retry    - Retry from failed status
- * POST   /research/:id/enhance  - Create enhanced research from completed
- * DELETE /research/:id          - Delete research
- * DELETE /research/:id/share    - Remove public share access
- * PATCH  /research/:id/favourite - Toggle favourite status
+ * POST   /research                  - Create new research
+ * POST   /research/draft            - Save research as draft
+ * GET    /research                  - List user's researches
+ * GET    /research/:id              - Get single research
+ * POST   /research/:id/approve      - Approve draft research
+ * POST   /research/:id/confirm      - Confirm partial failure decision
+ * POST   /research/:id/retry        - Retry from failed status
+ * POST   /research/:id/enhance      - Create enhanced research from completed
+ * POST   /research/:id/export-notion - Manually export to Notion
+ * DELETE /research/:id              - Delete research
+ * DELETE /research/:id/share        - Remove public share access
+ * PATCH  /research/:id/favourite    - Toggle favourite status
  */
 
 import type { FastifyPluginCallback, FastifyReply, FastifyRequest } from 'fastify';
@@ -49,6 +50,7 @@ import {
   deleteResearchResponseSchema,
   enhanceResearchBodySchema,
   enhanceResearchResponseSchema,
+  exportNotionResponseSchema,
   getResearchResponseSchema,
   listResearchesQuerySchema,
   listResearchesResponseSchema,
@@ -1355,6 +1357,151 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       }
 
       return await reply.ok(result.value);
+    }
+  );
+
+  // POST /research/:id/export-notion
+  fastify.post(
+    '/research/:id/export-notion',
+    {
+      schema: {
+        operationId: 'exportResearchToNotion',
+        summary: 'Manually export research to Notion',
+        description:
+          'Manually trigger export of completed research to Notion. Requires Notion integration to be configured and connected.',
+        tags: ['research'],
+        params: researchIdParamsSchema,
+        response: {
+          200: exportNotionResponseSchema,
+        },
+      },
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      logIncomingRequest(request, {
+        message: 'Received request to POST /research/:id/export-notion',
+      });
+
+      const user = await requireAuth(request, reply);
+      if (user === null) {
+        return;
+      }
+
+      const { id } = request.params as ResearchIdParams;
+      const {
+        researchRepo,
+        notionServiceClient,
+        researchExportSettings,
+        notionExporter,
+      } = getServices();
+
+      // Fetch research
+      const existingResult = await researchRepo.findById(id);
+      if (!existingResult.ok) {
+        return await reply.fail('INTERNAL_ERROR', existingResult.error.message);
+      }
+      if (existingResult.value === null) {
+        return await reply.fail('NOT_FOUND', 'Research not found');
+      }
+      const research = existingResult.value;
+
+      // Check ownership
+      if (research.userId !== user.userId) {
+        return await reply.fail('FORBIDDEN', 'Access denied');
+      }
+
+      // Check if research is completed
+      if (research.status !== 'completed') {
+        return await reply.fail('RESEARCH_NOT_COMPLETED', 'Research must be completed before exporting to Notion');
+      }
+
+      // Check if synthesis exists
+      if (research.synthesizedResult === undefined || research.synthesizedResult === '') {
+        return await reply.fail('NO_SYNTHESIS', 'Research has no synthesis to export');
+      }
+
+      // Check if already exported
+      if (research.notionExportInfo !== undefined) {
+        return await reply.fail('ALREADY_EXPORTED', 'Research has already been exported to Notion');
+      }
+
+      // Get user's Notion token
+      const tokenResult = await notionServiceClient.getNotionToken(user.userId);
+      if (!tokenResult.ok) {
+        return await reply.fail('INTERNAL_ERROR', 'Failed to fetch Notion token');
+      }
+      const tokenContext = tokenResult.value;
+      if (tokenContext.token === null || tokenContext.token === '') {
+        return await reply.fail('NOTION_NOT_CONNECTED', 'Notion is not connected. Please connect your Notion account first.');
+      }
+
+      // Get user's Notion page ID configuration
+      const pageIdResult = await researchExportSettings.getResearchPageId(user.userId);
+      if (!pageIdResult.ok) {
+        return await reply.fail('INTERNAL_ERROR', 'Failed to fetch Notion page configuration');
+      }
+      const targetPageId = pageIdResult.value;
+      if (targetPageId === null || targetPageId === '') {
+        return await reply.fail('PAGE_NOT_CONFIGURED', 'Notion research page is not configured. Please configure it in settings.');
+      }
+
+      // Export to Notion
+      const notionLogger = {
+        info: (msg: string, data?: Record<string, unknown>): void => {
+          request.log.info({ ...data, msg });
+        },
+        warn: (msg: string, data?: Record<string, unknown>): void => {
+          request.log.warn({ ...data, msg });
+        },
+        error: (msg: string, data?: Record<string, unknown>): void => {
+          request.log.error({ ...data, msg });
+        },
+        debug: (msg: string, data?: Record<string, unknown>): void => {
+          request.log.debug({ ...data, msg });
+        },
+      };
+
+      const exportResult = await notionExporter(
+        research,
+        tokenContext.token,
+        targetPageId,
+        notionLogger
+      );
+
+      if (!exportResult.ok) {
+        const error = exportResult.error;
+        switch (error.code) {
+          case 'UNAUTHORIZED':
+            return await reply.code(401).fail('NOTION_UNAUTHORIZED', 'Notion token is invalid or expired. Please reconnect Notion.');
+          case 'RATE_LIMITED':
+            return await reply.code(429).fail('RATE_LIMITED', 'Notion API rate limit exceeded. Please try again later.');
+          default:
+            return await reply.fail('INTERNAL_ERROR', error.message);
+        }
+      }
+
+      const { mainPageUrl, mainPageId, llmReportPages } = exportResult.value;
+
+      // Save notionExportInfo to research document
+      const notionExportInfo = {
+        mainPageId,
+        mainPageUrl,
+        llmReportPageIds: llmReportPages.map((p) => ({
+          model: p.model,
+          pageId: p.pageId,
+        })),
+        exportedAt: new Date().toISOString(),
+      };
+
+      const saveResult = await researchRepo.update(id, { notionExportInfo });
+      if (!saveResult.ok) {
+        request.log.warn({ researchId: id, error: saveResult.error.message }, 'Failed to save Notion export info');
+        // Continue anyway - export succeeded, just metadata save failed
+      }
+
+      return await reply.ok({
+        success: true,
+        notionPageUrl: mainPageUrl,
+      });
     }
   );
 

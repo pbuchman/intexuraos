@@ -12,7 +12,7 @@ import { err, ok, type Result } from '@intexuraos/common-core';
 import { FakePricingContext } from '@intexuraos/llm-pricing';
 import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
 import { buildServer } from '../server.js';
-import { resetServices, type ServiceContainer, setServices } from '../services.js';
+import { getServices, resetServices, type ServiceContainer, setServices } from '../services.js';
 import {
   createFakeContextInferrer,
   createFakeInputValidator,
@@ -21,6 +21,7 @@ import {
   createFailingLlmResearchProvider,
   createFakeSynthesizer,
   createFakeTitleGenerator,
+  createFakeNotionExporter,
   FakeLlmCallPublisher,
   FakeNotificationSender,
   FakeNotionServiceClient,
@@ -102,6 +103,7 @@ describe('Research Routes - Unauthenticated', () => {
       createTitleGenerator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeTitleGenerator(),
       createContextInferrer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeContextInferrer(),
       createInputValidator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeInputValidator(),
+      notionExporter: createFakeNotionExporter(),
     };
     setServices(services);
 
@@ -356,6 +358,7 @@ describe('Research Routes - Authenticated', () => {
       createTitleGenerator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeTitleGenerator(),
       createContextInferrer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeContextInferrer(),
       createInputValidator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeInputValidator(),
+      notionExporter: createFakeNotionExporter(),
     };
     setServices(services);
 
@@ -2043,6 +2046,7 @@ describe('Research Routes - Authenticated', () => {
         createTitleGenerator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeTitleGenerator(),
         createContextInferrer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeContextInferrer(),
       createInputValidator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeInputValidator(),
+        notionExporter: createFakeNotionExporter(),
       };
       setServices(services);
 
@@ -2315,6 +2319,7 @@ describe('Research Routes - Authenticated', () => {
         createTitleGenerator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeTitleGenerator(),
         createContextInferrer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeContextInferrer(),
       createInputValidator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeInputValidator(),
+        notionExporter: createFakeNotionExporter(),
       };
       setServices(services);
 
@@ -2448,6 +2453,7 @@ describe('Research Routes - Authenticated', () => {
         createTitleGenerator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeTitleGenerator(),
         createContextInferrer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeContextInferrer(),
         createInputValidator: (_model, _apiKey, _userId, _pricing, _logger) => weakValidator,
+        notionExporter: createFakeNotionExporter(),
       };
       setServices(newServices);
 
@@ -2493,6 +2499,7 @@ describe('Research Routes - Authenticated', () => {
           createTitleGenerator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeTitleGenerator(),
           createContextInferrer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeContextInferrer(),
           createInputValidator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeInputValidator(),
+          notionExporter: createFakeNotionExporter(),
         });
       }
     });
@@ -2537,6 +2544,7 @@ describe('Research Routes - Authenticated', () => {
         createTitleGenerator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeTitleGenerator(),
         createContextInferrer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeContextInferrer(),
         createInputValidator: (_model, _apiKey, _userId, _pricing, _logger) => weakValidator,
+        notionExporter: createFakeNotionExporter(),
       };
       setServices(newServices);
 
@@ -2582,6 +2590,7 @@ describe('Research Routes - Authenticated', () => {
           createTitleGenerator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeTitleGenerator(),
           createContextInferrer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeContextInferrer(),
           createInputValidator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeInputValidator(),
+          notionExporter: createFakeNotionExporter(),
         });
       }
     });
@@ -2627,6 +2636,7 @@ describe('Research Routes - Authenticated', () => {
         createTitleGenerator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeTitleGenerator(),
         createContextInferrer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeContextInferrer(),
         createInputValidator: (_model, _apiKey, _userId, _pricing, _logger) => weakValidator,
+        notionExporter: createFakeNotionExporter(),
       };
       setServices(newServices);
 
@@ -2672,6 +2682,7 @@ describe('Research Routes - Authenticated', () => {
           createTitleGenerator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeTitleGenerator(),
           createContextInferrer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeContextInferrer(),
           createInputValidator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeInputValidator(),
+          notionExporter: createFakeNotionExporter(),
         });
       }
     });
@@ -2716,6 +2727,7 @@ describe('Research Routes - Authenticated', () => {
         createTitleGenerator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeTitleGenerator(),
         createContextInferrer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeContextInferrer(),
         createInputValidator: (_model, _apiKey, _userId, _pricing, _logger) => failingValidator,
+        notionExporter: createFakeNotionExporter(),
       };
       setServices(newServices);
 
@@ -2759,6 +2771,7 @@ describe('Research Routes - Authenticated', () => {
           createTitleGenerator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeTitleGenerator(),
           createContextInferrer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeContextInferrer(),
           createInputValidator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeInputValidator(),
+          notionExporter: createFakeNotionExporter(),
         });
       }
     });
@@ -2880,6 +2893,7 @@ describe('Research Routes - Authenticated', () => {
         createTitleGenerator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeTitleGenerator(),
         createContextInferrer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeContextInferrer(),
         createInputValidator: (_model, _apiKey, _userId, _pricing, _logger) => failingValidator,
+        notionExporter: createFakeNotionExporter(),
       };
       setServices(newServices);
 
@@ -2922,6 +2936,7 @@ describe('Research Routes - Authenticated', () => {
           createTitleGenerator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeTitleGenerator(),
           createContextInferrer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeContextInferrer(),
           createInputValidator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeInputValidator(),
+          notionExporter: createFakeNotionExporter(),
         });
       }
     });
@@ -3150,6 +3165,7 @@ describe('System Endpoints', () => {
       createTitleGenerator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeTitleGenerator(),
       createContextInferrer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeContextInferrer(),
       createInputValidator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeInputValidator(),
+      notionExporter: createFakeNotionExporter(),
     };
     setServices(services);
 
@@ -3218,6 +3234,7 @@ describe('Internal Routes', () => {
       createTitleGenerator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeTitleGenerator(),
       createContextInferrer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeContextInferrer(),
       createInputValidator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeInputValidator(),
+      notionExporter: createFakeNotionExporter(),
     };
     setServices(services);
 
@@ -3668,6 +3685,7 @@ describe('Internal Routes', () => {
         createTitleGenerator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeTitleGenerator(),
         createContextInferrer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeContextInferrer(),
       createInputValidator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeInputValidator(),
+        notionExporter: createFakeNotionExporter(),
       };
       setServices(services);
     });
@@ -4229,6 +4247,7 @@ describe('Internal Routes', () => {
         createTitleGenerator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeTitleGenerator(),
         createContextInferrer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeContextInferrer(),
       createInputValidator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeInputValidator(),
+        notionExporter: createFakeNotionExporter(),
       };
       setServices(services);
 
@@ -4325,6 +4344,7 @@ describe('Internal Routes', () => {
         createTitleGenerator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeTitleGenerator(),
         createContextInferrer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeContextInferrer(),
         createInputValidator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeInputValidator(),
+        notionExporter: createFakeNotionExporter(),
       };
       setServices(services);
     });
@@ -4389,6 +4409,7 @@ describe('Internal Routes', () => {
         createTitleGenerator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeTitleGenerator(),
         createContextInferrer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeContextInferrer(),
         createInputValidator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeInputValidator(),
+        notionExporter: createFakeNotionExporter(),
       };
       setServices(services);
     });
@@ -4482,6 +4503,7 @@ describe('Internal Routes', () => {
         createTitleGenerator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeTitleGenerator(),
         createContextInferrer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeContextInferrer(),
         createInputValidator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeInputValidator(),
+        notionExporter: createFakeNotionExporter(),
       };
       setServices(services);
     });
@@ -4581,6 +4603,7 @@ describe('Internal Routes', () => {
         createTitleGenerator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeTitleGenerator(),
         createContextInferrer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeContextInferrer(),
         createInputValidator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeInputValidator(),
+        notionExporter: createFakeNotionExporter(),
       };
       setServices(services);
     });
@@ -4661,6 +4684,7 @@ describe('Internal Routes', () => {
         createTitleGenerator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeTitleGenerator(),
         createContextInferrer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeContextInferrer(),
         createInputValidator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeInputValidator(),
+        notionExporter: createFakeNotionExporter(),
       };
       setServices(services);
 
@@ -4806,6 +4830,7 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
       createTitleGenerator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeTitleGenerator(),
       createContextInferrer: (_model, _apiKey, _userId, _pricing, _logger) => createFakeContextInferrer(),
       createInputValidator: (_model, _apiKey, _userId, _pricing, _logger) => createFakeInputValidator(),
+      notionExporter: createFakeNotionExporter(),
     };
     setServices(services);
 
@@ -4935,6 +4960,7 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
         },
         createContextInferrer: () => createFakeContextInferrer(),
         createInputValidator: () => createFakeInputValidator(),
+        notionExporter: createFakeNotionExporter(),
       };
       setServices(services);
 
@@ -5025,6 +5051,7 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
         },
         createContextInferrer: () => createFakeContextInferrer(),
         createInputValidator: () => createFakeInputValidator(),
+        notionExporter: createFakeNotionExporter(),
       };
       setServices(services);
 
@@ -5371,6 +5398,7 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
             err({ code: 'API_ERROR', message: 'Validation service unavailable' });
           return validator;
         },
+        notionExporter: createFakeNotionExporter(),
       };
       setServices(services);
 
@@ -5429,6 +5457,7 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
             });
           return validator;
         },
+        notionExporter: createFakeNotionExporter(),
       };
       setServices(services);
 
@@ -5527,6 +5556,7 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
             err({ code: 'API_ERROR', message: 'Improvement failed' });
           return validator;
         },
+        notionExporter: createFakeNotionExporter(),
       };
       setServices(services);
 
@@ -5798,5 +5828,222 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
       expect(body.data.action).toBe('already_completed');
       expect(body.data.message).toBe('Research is already completed');
     });
+  });
+
+  describe('POST /research/:id/export-notion', () => {
+    let fakeNotionClient: FakeNotionServiceClient;
+    let fakeExportSettings: FakeResearchExportSettings;
+
+    beforeEach(() => {
+      fakeNotionClient = getServices().notionServiceClient as FakeNotionServiceClient;
+      fakeExportSettings = getServices().researchExportSettings as FakeResearchExportSettings;
+
+      // Set up default Notion configuration for successful export
+      fakeNotionClient.setToken('test-notion-token');
+      fakeExportSettings.setResearchPageId(TEST_USER_ID, 'notion-page-123');
+    });
+
+    function createCompletedResearchForExport(overrides?: Partial<Research>): Research {
+      return createTestResearch({
+        status: 'completed' as const,
+        synthesizedResult: 'Synthesized research result with detailed analysis.',
+        llmResults: [
+          {
+            provider: LlmProviders.Google,
+            model: LlmModels.Gemini25Pro,
+            status: 'completed' as const,
+            result: 'LLM result content',
+          },
+        ],
+        completedAt: '2024-01-01T00:05:00Z',
+        ...overrides,
+      });
+    }
+
+    it('exports research to Notion successfully', async () => {
+      const token = await createToken(TEST_USER_ID);
+      const research = createCompletedResearchForExport();
+      fakeRepo.addResearch(research);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/research/${research.id}/export-notion`,
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: { success: boolean; notionPageUrl: string };
+      };
+      expect(body.success).toBe(true);
+      expect(body.data.success).toBe(true);
+      expect(body.data.notionPageUrl).toBe('https://notion.so/test-main-page-id');
+
+      // Verify notionExportInfo was saved
+      const updated = await fakeRepo.findById(research.id);
+      expect(updated.ok).toBe(true);
+      if (updated.ok) {
+        expect(updated.value?.notionExportInfo?.mainPageUrl).toBe('https://notion.so/test-main-page-id');
+      }
+    });
+
+    it('returns 404 for non-existent research', async () => {
+      const token = await createToken(TEST_USER_ID);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/research/non-existent-id/export-notion',
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(404);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('NOT_FOUND');
+    });
+
+    it('returns 403 for research owned by other user', async () => {
+      const token = await createToken(TEST_USER_ID);
+      const research = createCompletedResearchForExport({ userId: OTHER_USER_ID });
+      fakeRepo.addResearch(research);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/research/${research.id}/export-notion`,
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(403);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('FORBIDDEN');
+    });
+
+    it('returns 400 when Notion not connected', async () => {
+      const token = await createToken(TEST_USER_ID);
+      const research = createCompletedResearchForExport();
+      fakeRepo.addResearch(research);
+      fakeNotionClient.setToken(null); // Not connected
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/research/${research.id}/export-notion`,
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('NOTION_NOT_CONNECTED');
+    });
+
+    it('returns 400 when research page not configured', async () => {
+      const token = await createToken(TEST_USER_ID);
+      const research = createCompletedResearchForExport();
+      fakeRepo.addResearch(research);
+      fakeExportSettings.clear(); // No page configured
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/research/${research.id}/export-notion`,
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('PAGE_NOT_CONFIGURED');
+    });
+
+    it('returns 400 when research not completed', async () => {
+      const token = await createToken(TEST_USER_ID);
+      const research = createTestResearch({ status: 'processing' as const });
+      fakeRepo.addResearch(research);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/research/${research.id}/export-notion`,
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('RESEARCH_NOT_COMPLETED');
+    });
+
+    it('returns 400 when research has no synthesis', async () => {
+      const token = await createToken(TEST_USER_ID);
+      const research = createTestResearch({
+        status: 'completed' as const,
+        llmResults: [
+          {
+            provider: LlmProviders.Google,
+            model: LlmModels.Gemini25Pro,
+            status: 'completed' as const,
+            result: 'LLM result',
+          },
+        ],
+        completedAt: '2024-01-01T00:05:00Z',
+      });
+      // Remove synthesizedResult to test the validation
+      const { synthesizedResult: _synthesizedResult, ...researchWithoutSynthesis } = research;
+      fakeRepo.addResearch(researchWithoutSynthesis);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/research/${research.id}/export-notion`,
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('NO_SYNTHESIS');
+    });
+
+    it('returns 409 when already exported', async () => {
+      const token = await createToken(TEST_USER_ID);
+      const research = createCompletedResearchForExport({
+        notionExportInfo: {
+          mainPageId: 'existing-page-id',
+          mainPageUrl: 'https://notion.so/existing-page',
+          llmReportPageIds: [{ model: LlmModels.Gemini25Pro, pageId: 'report-123' }],
+          exportedAt: '2024-01-01T00:00:00Z',
+        },
+      });
+      fakeRepo.addResearch(research);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/research/${research.id}/export-notion`,
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(409);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('ALREADY_EXPORTED');
+    });
+
+    it('returns 401 without auth token', async () => {
+      const research = createCompletedResearchForExport();
+      fakeRepo.addResearch(research);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/research/${research.id}/export-notion`,
+      });
+
+      expect(response.statusCode).toBe(401);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('UNAUTHORIZED');
+    });
+
+    // Note: Testing Notion API errors (rate limiting, unauthorized) requires integration tests
+    // with actual Notion API mocking. The exporter's error handling is tested in
+    // notionResearchExporter.test.ts. These tests focus on route-level validation.
   });
 });

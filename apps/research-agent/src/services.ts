@@ -25,6 +25,7 @@ import {
 import { createUserServiceClient, type UserServiceClient } from '@intexuraos/internal-clients';
 import { createImageServiceClient, type ImageServiceClient } from './infra/image/index.js';
 import { createNotionServiceClient, type NotionServiceClient } from './infra/notion/index.js';
+import { exportResearchToNotion } from './infra/notion/notionResearchExporter.js';
 import {
   getResearchPageId,
   saveResearchPageId,
@@ -116,6 +117,7 @@ export interface ServiceContainer {
     pricing: ModelPricing,
     logger: Logger
   ) => InputValidationProvider;
+  notionExporter: typeof exportResearchToNotion;
 }
 
 let container: ServiceContainer | null = null;
@@ -263,5 +265,6 @@ export function initializeServices(pricingContext: IPricingContext): void {
     createTitleGenerator,
     createContextInferrer,
     createInputValidator,
+    notionExporter: exportResearchToNotion,
   };
 }

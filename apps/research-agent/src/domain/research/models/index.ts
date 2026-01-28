@@ -4,6 +4,7 @@ export {
   type LlmProvider,
   type LlmResult,
   type LlmResultStatus,
+  type NotionExportInfo,
   type PartialFailure,
   type PartialFailureDecision,
   type Research,
