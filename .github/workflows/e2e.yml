@@ -79,6 +79,7 @@ jobs:
           INTEXURAOS_ORCHESTRATOR_MAC_URL=http://localhost:8090 \
           INTEXURAOS_ORCHESTRATOR_VM_URL=http://localhost:8090 \
           INTEXURAOS_SERVICE_URL=http://localhost:8128 \
+          INTEXURAOS_CODE_WORKERS="mac:http://localhost:8090:1,vm:http://localhost:8090:1" \
           FIRESTORE_EMULATOR_HOST=localhost:8081 \
           PUBSUB_EMULATOR_HOST=localhost:8085 \
           npx tsx src/index.ts &
