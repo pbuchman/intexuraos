@@ -2,17 +2,40 @@ import { type FormEvent, useCallback, useEffect, useState } from 'react';
 import { Button, Card, Layout } from '@/components';
 import { PhoneInput } from '@/components/ui';
 import { useAuth } from '@/context';
-import { ApiError, connectWhatsApp, disconnectWhatsApp, getWhatsAppStatus } from '@/services';
+import {
+  ApiError,
+  confirmVerificationCode,
+  connectWhatsApp,
+  disconnectWhatsApp,
+  getVerificationStatus,
+  getWhatsAppStatus,
+  sendVerificationCode,
+} from '@/services';
 import type { WhatsAppStatus } from '@/types';
-import { Plus, X } from 'lucide-react';
+import { Plus, X, Check, Send } from 'lucide-react';
+
+type VerificationState = 'unverified' | 'sending' | 'pending' | 'confirming' | 'verified';
 
 interface PhoneEntry {
   value: string;
   isValid: boolean;
+  verificationState: VerificationState;
+  verificationId?: string | undefined;
+  otpCode: string;
+  error?: string | undefined;
 }
 
 interface FormState {
   phoneNumbers: PhoneEntry[];
+}
+
+function createEmptyPhoneEntry(): PhoneEntry {
+  return {
+    value: '',
+    isValid: false,
+    verificationState: 'unverified',
+    otpCode: '',
+  };
 }
 
 export function WhatsAppConnectionPage(): React.JSX.Element {
@@ -25,7 +48,7 @@ export function WhatsAppConnectionPage(): React.JSX.Element {
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   const [form, setForm] = useState<FormState>({
-    phoneNumbers: [{ value: '', isValid: false }],
+    phoneNumbers: [createEmptyPhoneEntry()],
   });
 
   const fetchStatus = useCallback(async (): Promise<void> => {
@@ -35,15 +58,28 @@ export function WhatsAppConnectionPage(): React.JSX.Element {
       const whatsappStatus = await getWhatsAppStatus(token);
       setStatus(whatsappStatus);
       if (whatsappStatus) {
+        const phoneEntries: PhoneEntry[] = await Promise.all(
+          whatsappStatus.phoneNumbers.map(async (p) => {
+            const phoneValue = p.startsWith('+') ? p : `+${p}`;
+            let verificationState: VerificationState = 'unverified';
+            try {
+              const verifyStatus = await getVerificationStatus(token, phoneValue);
+              if (verifyStatus.verified) {
+                verificationState = 'verified';
+              }
+            } catch {
+              // Ignore - will show as unverified
+            }
+            return {
+              value: phoneValue,
+              isValid: true,
+              verificationState,
+              otpCode: '',
+            };
+          })
+        );
         setForm({
-          phoneNumbers:
-            whatsappStatus.phoneNumbers.length > 0
-              ? whatsappStatus.phoneNumbers.map((p) => ({
-                  // Add + prefix if not present for display
-                  value: p.startsWith('+') ? p : `+${p}`,
-                  isValid: true, // Existing numbers are assumed valid
-                }))
-              : [{ value: '', isValid: false }],
+          phoneNumbers: phoneEntries.length > 0 ? phoneEntries : [createEmptyPhoneEntry()],
         });
       }
     } catch (e) {
@@ -60,7 +96,7 @@ export function WhatsAppConnectionPage(): React.JSX.Element {
   const handleAddPhoneNumber = (): void => {
     setForm((prev) => ({
       ...prev,
-      phoneNumbers: [...prev.phoneNumbers, { value: '', isValid: false }],
+      phoneNumbers: [...prev.phoneNumbers, createEmptyPhoneEntry()],
     }));
   };
 
@@ -74,16 +110,99 @@ export function WhatsAppConnectionPage(): React.JSX.Element {
   const handlePhoneChange = (index: number, value: string, isValid: boolean): void => {
     setForm((prev) => ({
       ...prev,
-      phoneNumbers: prev.phoneNumbers.map((p, i) => (i === index ? { value, isValid } : p)),
+      phoneNumbers: prev.phoneNumbers.map((p, i) =>
+        i === index
+          ? { value, isValid, verificationState: 'unverified' as const, verificationId: undefined, otpCode: '', error: undefined }
+          : p
+      ),
     }));
   };
+
+  const handleOtpChange = (index: number, otpCode: string): void => {
+    setForm((prev) => ({
+      ...prev,
+      phoneNumbers: prev.phoneNumbers.map((p, i) => (i === index ? { ...p, otpCode } : p)),
+    }));
+  };
+
+  const handleSendCode = async (index: number): Promise<void> => {
+    const phone = form.phoneNumbers[index];
+    if (!phone?.isValid) return;
+
+    setForm((prev) => ({
+      ...prev,
+      phoneNumbers: prev.phoneNumbers.map((p, i) =>
+        i === index ? { ...p, verificationState: 'sending', error: undefined } : p
+      ),
+    }));
+
+    try {
+      const token = await getAccessToken();
+      const response = await sendVerificationCode(token, { phoneNumber: phone.value });
+      setForm((prev) => ({
+        ...prev,
+        phoneNumbers: prev.phoneNumbers.map((p, i) =>
+          i === index
+            ? { ...p, verificationState: 'pending', verificationId: response.verificationId }
+            : p
+        ),
+      }));
+    } catch (e) {
+      const errorMessage = e instanceof ApiError ? e.message : 'Failed to send code';
+      setForm((prev) => ({
+        ...prev,
+        phoneNumbers: prev.phoneNumbers.map((p, i) =>
+          i === index ? { ...p, verificationState: 'unverified', error: errorMessage } : p
+        ),
+      }));
+    }
+  };
+
+  const handleConfirmCode = async (index: number): Promise<void> => {
+    const phone = form.phoneNumbers[index];
+    if (!phone?.verificationId || phone.otpCode.length !== 6) return;
+
+    setForm((prev) => ({
+      ...prev,
+      phoneNumbers: prev.phoneNumbers.map((p, i) =>
+        i === index ? { ...p, verificationState: 'confirming', error: undefined } : p
+      ),
+    }));
+
+    try {
+      const token = await getAccessToken();
+      await confirmVerificationCode(token, {
+        verificationId: phone.verificationId,
+        code: phone.otpCode,
+      });
+      setForm((prev) => ({
+        ...prev,
+        phoneNumbers: prev.phoneNumbers.map((p, i) =>
+          i === index ? { ...p, verificationState: 'verified' } : p
+        ),
+      }));
+    } catch (e) {
+      const errorMessage = e instanceof ApiError ? e.message : 'Failed to verify code';
+      setForm((prev) => ({
+        ...prev,
+        phoneNumbers: prev.phoneNumbers.map((p, i) =>
+          i === index ? { ...p, verificationState: 'pending', error: errorMessage } : p
+        ),
+      }));
+    }
+  };
+
+  const allPhonesVerified = form.phoneNumbers
+    .filter((p) => p.value.trim().length > 0)
+    .every((p) => p.verificationState === 'verified');
+
+  const hasValidPhones = form.phoneNumbers.some((p) => p.value.trim().length > 0 && p.isValid);
 
   const handleSubmit = async (e: FormEvent): Promise<void> => {
     e.preventDefault();
     setError(null);
     setSuccessMessage(null);
 
-    // Filter to non-empty phone numbers
     const nonEmptyPhones = form.phoneNumbers.filter((p) => p.value.trim().length > 0);
 
     if (nonEmptyPhones.length === 0) {
@@ -91,14 +210,18 @@ export function WhatsAppConnectionPage(): React.JSX.Element {
       return;
     }
 
-    // Check all non-empty numbers are valid
     const invalidPhones = nonEmptyPhones.filter((p) => !p.isValid);
     if (invalidPhones.length > 0) {
       setError('Please fix invalid phone numbers before saving');
       return;
     }
 
-    // Extract values for API
+    const unverifiedPhones = nonEmptyPhones.filter((p) => p.verificationState !== 'verified');
+    if (unverifiedPhones.length > 0) {
+      setError('All phone numbers must be verified before connecting');
+      return;
+    }
+
     const validPhoneNumbers = nonEmptyPhones.map((p) => p.value);
 
     try {
@@ -125,7 +248,7 @@ export function WhatsAppConnectionPage(): React.JSX.Element {
       const token = await getAccessToken();
       await disconnectWhatsApp(token);
       setSuccessMessage('WhatsApp disconnected successfully');
-      setForm({ phoneNumbers: [{ value: '', isValid: false }] });
+      setForm({ phoneNumbers: [createEmptyPhoneEntry()] });
       setStatus(null);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : 'Failed to disconnect WhatsApp');
@@ -169,28 +292,74 @@ export function WhatsAppConnectionPage(): React.JSX.Element {
             <div className="space-y-3">
               <label className="block text-sm font-medium text-slate-700">Phone Numbers</label>
               <p className="text-sm text-slate-500">
-                Select your country and enter your phone number. Currently supports Poland and USA.
+                Enter your phone number and verify it with a 6-digit code sent via WhatsApp.
               </p>
               {form.phoneNumbers.map((phone, index) => (
-                <div key={index} className="flex gap-2">
-                  <PhoneInput
-                    value={phone.value}
-                    onChange={(value, isValid) => {
-                      handlePhoneChange(index, value, isValid);
-                    }}
-                    className="flex-1"
-                  />
-                  {form.phoneNumbers.length > 1 ? (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        handleRemovePhoneNumber(index);
+                <div key={index} className="space-y-2">
+                  <div className="flex gap-2">
+                    <PhoneInput
+                      value={phone.value}
+                      onChange={(value, isValid) => {
+                        handlePhoneChange(index, value, isValid);
                       }}
-                      className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-red-600"
-                      aria-label="Remove phone number"
-                    >
-                      <X className="h-5 w-5" />
-                    </button>
+                      className="flex-1"
+                      disabled={phone.verificationState === 'verified'}
+                    />
+                    {phone.verificationState === 'verified' ? (
+                      <div className="flex items-center gap-1 rounded-lg bg-green-100 px-3 text-green-700">
+                        <Check className="h-4 w-4" />
+                        <span className="text-sm font-medium">Verified</span>
+                      </div>
+                    ) : phone.verificationState === 'pending' || phone.verificationState === 'confirming' ? (
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={phone.otpCode}
+                          onChange={(e) => {
+                            handleOtpChange(index, e.target.value.replace(/\D/g, '').slice(0, 6));
+                          }}
+                          placeholder="6-digit code"
+                          className="w-28 rounded-lg border border-slate-300 px-3 py-2 text-center font-mono text-lg tracking-widest focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                          maxLength={6}
+                        />
+                        <Button
+                          type="button"
+                          size="sm"
+                          onClick={() => void handleConfirmCode(index)}
+                          disabled={phone.otpCode.length !== 6 || phone.verificationState === 'confirming'}
+                          isLoading={phone.verificationState === 'confirming'}
+                        >
+                          Verify
+                        </Button>
+                      </div>
+                    ) : (
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => void handleSendCode(index)}
+                        disabled={!phone.isValid || phone.verificationState === 'sending'}
+                        isLoading={phone.verificationState === 'sending'}
+                      >
+                        <Send className="mr-1 h-4 w-4" />
+                        Send Code
+                      </Button>
+                    )}
+                    {form.phoneNumbers.length > 1 && phone.verificationState !== 'verified' ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          handleRemovePhoneNumber(index);
+                        }}
+                        className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-red-600"
+                        aria-label="Remove phone number"
+                      >
+                        <X className="h-5 w-5" />
+                      </button>
+                    ) : null}
+                  </div>
+                  {phone.error !== undefined && phone.error !== '' ? (
+                    <p className="text-sm text-red-600">{phone.error}</p>
                   ) : null}
                 </div>
               ))}
@@ -205,7 +374,11 @@ export function WhatsAppConnectionPage(): React.JSX.Element {
             </div>
 
             <div className="flex gap-3 pt-2">
-              <Button type="submit" isLoading={isSaving}>
+              <Button
+                type="submit"
+                isLoading={isSaving}
+                disabled={!allPhonesVerified || !hasValidPhones}
+              >
                 {status?.connected === true ? 'Update Connection' : 'Connect WhatsApp'}
               </Button>
 
@@ -220,6 +393,12 @@ export function WhatsAppConnectionPage(): React.JSX.Element {
                 </Button>
               ) : null}
             </div>
+
+            {hasValidPhones && !allPhonesVerified ? (
+              <p className="text-sm text-amber-600">
+                Please verify all phone numbers before connecting.
+              </p>
+            ) : null}
           </form>
         </Card>
 

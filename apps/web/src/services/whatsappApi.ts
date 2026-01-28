@@ -2,6 +2,74 @@ import { config } from '@/config';
 import { apiRequest } from './apiClient.js';
 import type { WhatsAppConnectResponse, WhatsAppMessagesResponse, WhatsAppStatus } from '@/types';
 
+export interface SendVerificationRequest {
+  phoneNumber: string;
+}
+
+export interface SendVerificationResponse {
+  verificationId: string;
+  expiresAt: number;
+  cooldownUntil?: number;
+}
+
+export interface ConfirmVerificationRequest {
+  verificationId: string;
+  code: string;
+}
+
+export interface ConfirmVerificationResponse {
+  verified: boolean;
+  phoneNumber: string;
+}
+
+export interface VerificationStatusResponse {
+  phoneNumber: string;
+  verified: boolean;
+  verifiedAt?: string;
+}
+
+export async function sendVerificationCode(
+  accessToken: string,
+  request: SendVerificationRequest
+): Promise<SendVerificationResponse> {
+  return await apiRequest<SendVerificationResponse>(
+    config.whatsappServiceUrl,
+    '/whatsapp/verify/send',
+    accessToken,
+    {
+      method: 'POST',
+      body: request,
+    }
+  );
+}
+
+export async function confirmVerificationCode(
+  accessToken: string,
+  request: ConfirmVerificationRequest
+): Promise<ConfirmVerificationResponse> {
+  return await apiRequest<ConfirmVerificationResponse>(
+    config.whatsappServiceUrl,
+    '/whatsapp/verify/confirm',
+    accessToken,
+    {
+      method: 'POST',
+      body: request,
+    }
+  );
+}
+
+export async function getVerificationStatus(
+  accessToken: string,
+  phoneNumber: string
+): Promise<VerificationStatusResponse> {
+  const encodedPhone = encodeURIComponent(phoneNumber.replace(/^\+/, ''));
+  return await apiRequest<VerificationStatusResponse>(
+    config.whatsappServiceUrl,
+    `/whatsapp/verify/status/${encodedPhone}`,
+    accessToken
+  );
+}
+
 export async function getWhatsAppStatus(accessToken: string): Promise<WhatsAppStatus | null> {
   return await apiRequest<WhatsAppStatus | null>(
     config.whatsappServiceUrl,
