@@ -28,7 +28,7 @@ import { createLinearIssueService, type LinearIssueService } from './domain/serv
 import { createStatusMirrorService, type StatusMirrorService } from './infra/services/statusMirrorServiceImpl.js';
 import { createProcessHeartbeatUseCase, type ProcessHeartbeatUseCase } from './domain/usecases/processHeartbeat.js';
 import { createDetectZombieTasksUseCase, type DetectZombieTasksUseCase } from './domain/usecases/detectZombieTasks.js';
-import { createMetricsClient, type MetricsClient } from './infra/metrics.js';
+import { createMetricsClient, createNoOpMetricsClient, type MetricsClient } from './infra/metrics.js';
 import type { LinearAgentClient } from './domain/ports/linearAgentClient.js';
 
 export interface ServiceContainer {
@@ -146,7 +146,7 @@ export function initServices(config: ServiceConfig): void {
         logger,
       });
 
-  const metricsClient = createMetricsClient();
+  const metricsClient = isE2eMode ? createNoOpMetricsClient() : createMetricsClient();
 
   const whatsappPublisher = isE2eMode
     ? createE2eWhatsAppPublisher()

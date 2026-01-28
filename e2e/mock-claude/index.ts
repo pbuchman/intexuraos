@@ -326,9 +326,13 @@ app.post(['/tasks', '/execute'], (req, res): void => {
           },
           duration: 0,
         }).catch((webhookErr) => {
-          const webhookErrMsg = webhookErr instanceof Error ? webhookErr.message : String(webhookErr);
+          const webhookErrMsg =
+            webhookErr instanceof Error ? webhookErr.message : String(webhookErr);
           const webhookErrStack = webhookErr instanceof Error ? webhookErr.stack : undefined;
-          logger.error({ taskId, webhookErrMsg, webhookErrStack }, 'Failed to send failure webhook');
+          logger.error(
+            { taskId, webhookErrMsg, webhookErrStack },
+            'Failed to send failure webhook'
+          );
         });
 
         runningTasks.delete(taskId);
