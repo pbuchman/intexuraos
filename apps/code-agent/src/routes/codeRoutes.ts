@@ -1411,8 +1411,36 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
               updatedAt: { type: 'string', format: 'date-time' },
               dispatchedAt: { type: 'string', format: 'date-time', nullable: true },
               completedAt: { type: 'string', format: 'date-time', nullable: true },
-              result: { type: 'object', nullable: true },
-              error: { type: 'object', nullable: true },
+              result: {
+                type: 'object',
+                nullable: true,
+                properties: {
+                  prUrl: { type: 'string', nullable: true },
+                  branch: { type: 'string' },
+                  commits: { type: 'number' },
+                  summary: { type: 'string' },
+                  ciFailed: { type: 'boolean', nullable: true },
+                  partialWork: { type: 'boolean', nullable: true },
+                  rebaseResult: { type: 'string', nullable: true },
+                },
+              },
+              error: {
+                type: 'object',
+                nullable: true,
+                properties: {
+                  code: { type: 'string' },
+                  message: { type: 'string' },
+                  remediation: {
+                    type: 'object',
+                    nullable: true,
+                    properties: {
+                      retryAfter: { type: 'number', nullable: true },
+                      manualSteps: { type: 'string', nullable: true },
+                      supportLink: { type: 'string', nullable: true },
+                    },
+                  },
+                },
+              },
               statusSummary: { type: 'object', nullable: true },
             },
           },
@@ -1516,17 +1544,21 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         };
       }
 
+      const apiResponse = taskToApiResponse(getResult.value);
+
       logger.info(
         {
           taskId: request.params.taskId,
           status: getResult.value.status,
           hasResult: getResult.value.result !== undefined,
           resultKeys: getResult.value.result ? Object.keys(getResult.value.result) : [],
+          apiResponseHasResult: apiResponse.result !== undefined,
+          apiResponseResultKeys: apiResponse.result ? Object.keys(apiResponse.result) : [],
         },
         'Returning task for GET /code/tasks/:taskId'
       );
 
-      return reply.status(200).send(taskToApiResponse(getResult.value));
+      return reply.status(200).send(apiResponse);
     }
   );
 
