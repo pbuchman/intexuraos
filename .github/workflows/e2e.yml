@@ -111,10 +111,14 @@ jobs:
       - name: Run E2E tests
         run: |
           echo "Current directory: $(pwd)"
-          echo "Package.json scripts:"
-          cat package.json | grep -A50 '"scripts"' | head -60
           echo ""
-          echo "Running test:e2e..."
+          echo "=== E2E scripts in package.json ==="
+          grep -E "(test:e2e|e2e:)" package.json || echo "NO E2E SCRIPTS FOUND!"
+          echo ""
+          echo "=== Lines around ci:report ==="
+          grep -A10 "ci:report" package.json | head -15
+          echo ""
+          echo "=== Running test:e2e ==="
           pnpm run test:e2e
         env:
           E2E_API_URL: http://localhost:8128
