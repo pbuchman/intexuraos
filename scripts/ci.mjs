@@ -120,9 +120,10 @@ async function runCommand(cmd) {
   });
 }
 
-async function runPhase(phase) {
+async function runPhase(phase, phaseNumber) {
   console.log(`\n=== ${phase.name} ===\n`);
 
+  const phaseStart = Date.now();
   let results;
 
   if (phase.parallel) {
@@ -146,6 +147,10 @@ async function runPhase(phase) {
     }
   }
 
+  const phaseDuration = Date.now() - phaseStart;
+  const status = failed ? 'fail' : 'pass';
+  console.log(`@@PHASE_TIMING@@${phase.name}|${phaseNumber}|${status}|${phaseDuration}`);
+
   if (failed) {
     console.log(`\n─── ${failed.name} output ───\n`);
     console.log(failed.output.trim());
@@ -156,8 +161,8 @@ async function runPhase(phase) {
 
 (async () => {
   try {
-    for (const phase of phases) {
-      await runPhase(phase);
+    for (let i = 0; i < phases.length; i++) {
+      await runPhase(phases[i], i + 1);
     }
     console.log('\n✅ CI passed\n');
     process.exit(0);
