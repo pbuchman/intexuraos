@@ -129,8 +129,12 @@ jobs:
       - name: Start code-agent service
         run: |
           echo "=== Before code-agent ==="
+          pwd
           grep "test:e2e" package.json && echo "✓ test:e2e exists" || echo "✗ test:e2e MISSING!"
+
+          echo "=== Starting code-agent (from apps/code-agent) ==="
           cd apps/code-agent
+          pwd
           E2E_MODE=true \
           E2E_TEST_USER_ID=e2e-ci-test \
           PORT=8128 \
@@ -146,11 +150,28 @@ jobs:
           PUBSUB_EMULATOR_HOST=localhost:8085 \
           npx tsx src/index.ts > /tmp/code-agent.log 2>&1 &
           echo $! > /tmp/code-agent.pid
-          sleep 15
+
+          echo "=== Immediately after starting (still in apps/code-agent) ==="
+          pwd
+          grep "test:e2e" ../../package.json && echo "✓ test:e2e exists" || echo "✗ test:e2e MISSING!"
+
+          echo "=== Waiting 5 seconds ==="
+          sleep 5
+          pwd
+          grep "test:e2e" ../../package.json && echo "✓ test:e2e exists" || echo "✗ test:e2e MISSING!"
+
+          echo "=== Waiting 10 more seconds ==="
+          sleep 10
+          pwd
+          grep "test:e2e" ../../package.json && echo "✓ test:e2e exists" || echo "✗ test:e2e MISSING!"
+
           # Verify code-agent is responding
           curl -sf http://localhost:8128/health || (echo "code-agent health check failed" && cat /tmp/code-agent.log && exit 1)
+
+          echo "=== Going back to root ==="
           cd ../..
-          echo "=== After code-agent start ==="
+          pwd
+          echo "=== After code-agent start (back in root) ==="
           grep "test:e2e" package.json && echo "✓ test:e2e exists" || echo "✗ test:e2e MISSING!"
 
       - name: Run E2E tests
