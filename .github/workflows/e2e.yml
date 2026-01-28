@@ -51,7 +51,14 @@ jobs:
           version: 9
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: |
+          echo "=== Before pnpm install ==="
+          grep "test:e2e" package.json && echo "✓ test:e2e exists" || echo "✗ test:e2e MISSING!"
+          echo ""
+          pnpm install --frozen-lockfile
+          echo ""
+          echo "=== After pnpm install ==="
+          grep "test:e2e" package.json && echo "✓ test:e2e exists" || echo "✗ test:e2e MISSING!"
 
       - name: Build all packages
         run: pnpm build
