@@ -26,6 +26,29 @@ export function deleteBranch(branchName: string, repoPath = process.cwd()): void
 }
 
 /**
+ * Get the PR number being tested in CI (if running in CI).
+ * Returns undefined if not in CI or PR number cannot be determined.
+ */
+function getCiPrNumber(): string | undefined {
+  // GitHub Actions: GITHUB_REF = refs/pull/680/merge
+  const githubRef = process.env['GITHUB_REF'];
+  if (githubRef !== undefined) {
+    const match = /refs\/pull\/(\d+)\//.exec(githubRef);
+    if (match !== null) {
+      return match[1];
+    }
+  }
+
+  // CI_PR_NUMBER: Explicit environment variable for CI PR number
+  const ciPrNumber = process.env['CI_PR_NUMBER'];
+  if (ciPrNumber !== undefined) {
+    return ciPrNumber;
+  }
+
+  return undefined;
+}
+
+/**
  * Close a pull request using gh CLI.
  *
  * @param prUrl - Full URL of the PR
@@ -41,6 +64,12 @@ export function closePR(prUrl: string, repoPath = process.cwd()): void {
     }
 
     const prNumber = match[1] ?? '0'; // Fallback if somehow undefined
+
+    // Skip closing the PR that is running the tests
+    const ciPrNumber = getCiPrNumber();
+    if (ciPrNumber !== undefined && prNumber === ciPrNumber) {
+      return;
+    }
 
     // Close PR with comment
     execSync(
