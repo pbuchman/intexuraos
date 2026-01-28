@@ -55,16 +55,18 @@ jobs:
           CLOUDSDK_CORE_PROJECT: test-project
           PUBSUB_PROJECT_ID: test-project
 
-      - name: Build and start mock-claude
+      - name: Start mock-claude
         run: |
           cd e2e/mock-claude
-          pnpm install
           npx tsx index.ts &
           sleep 5
+          # Verify mock-claude is responding
+          curl -sf http://localhost:8090/health || (echo "mock-claude health check failed" && exit 1)
         env:
           PORT: 8090
           REPO_PATH: ${{ github.workspace }}
           GITHUB_TOKEN: ${{ env.GITHUB_TOKEN }}
+          LOG_LEVEL: debug
 
       - name: Start code-agent service
         run: |
@@ -83,7 +85,9 @@ jobs:
           FIRESTORE_EMULATOR_HOST=localhost:8081 \
           PUBSUB_EMULATOR_HOST=localhost:8085 \
           npx tsx src/index.ts &
-          sleep 10
+          sleep 15
+          # Verify code-agent is responding
+          curl -sf http://localhost:8128/health || (echo "code-agent health check failed" && exit 1)
 
       - name: Run E2E tests
         run: pnpm run test:e2e

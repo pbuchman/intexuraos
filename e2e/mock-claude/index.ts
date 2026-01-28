@@ -21,17 +21,6 @@ import { pino } from 'pino';
 
 const logger = pino({
   level: process.env['LOG_LEVEL'] ?? 'info',
-  transport:
-    process.env['NODE_ENV'] !== 'production'
-      ? {
-          target: 'pino-pretty',
-          options: {
-            colorize: true,
-            translateTime: 'HH:MM:ss',
-            ignore: 'pid,hostname',
-          },
-        }
-      : undefined,
 });
 
 const app = express();
@@ -318,8 +307,22 @@ const SCENARIOS: Record<string, () => Promise<MockResult>> = {
 // POST /tasks - Main entry point (matches code-agent taskDispatcher expectations)
 // Also handles /execute for backwards compatibility
 app.post(['/tasks', '/execute'], async (req, res) => {
+  logger.info({ body: typeof req.body, hasBody: req.body !== undefined }, 'Received task request');
+
+  // Validate request body - return 200 with 'rejected' status for dispatcher compatibility
+  if (req.body === undefined || req.body === null) {
+    logger.error('Request body is undefined or null');
+    return res.json({ status: 'rejected', reason: 'Missing request body' });
+  }
+
   const request = req.body as MockClaudeRequest;
   const { taskId, prompt, webhookUrl, webhookSecret } = request;
+
+  // Validate required fields - return 200 with 'rejected' status for dispatcher compatibility
+  if (taskId === undefined || prompt === undefined) {
+    logger.error({ taskId, prompt: typeof prompt }, 'Missing required fields');
+    return res.json({ status: 'rejected', reason: 'Missing required fields: taskId or prompt' });
+  }
 
   logger.info({ taskId, prompt: prompt.substring(0, 100) }, 'Mock Claude received request');
 
