@@ -159,10 +159,10 @@ jobs:
           INTEXURAOS_INTERNAL_AUTH_TOKEN=test-secret \
           INTEXURAOS_DISPATCH_SIGNING_SECRET=test-signing-secret \
           INTEXURAOS_WEBHOOK_VERIFY_SECRET=test-webhook-secret \
-          INTEXURAOS_ORCHESTRATOR_MAC_URL=http://localhost:8090 \
-          INTEXURAOS_ORCHESTRATOR_VM_URL=http://localhost:8090 \
-          INTEXURAOS_SERVICE_URL=http://localhost:8128 \
-          INTEXURAOS_CODE_WORKERS="mac:http://localhost:8090:1,vm:http://localhost:8090:1" \
+          INTEXURAOS_ORCHESTRATOR_MAC_URL=http://127.0.0.1:8090 \
+          INTEXURAOS_ORCHESTRATOR_VM_URL=http://127.0.0.1:8090 \
+          INTEXURAOS_SERVICE_URL=http://127.0.0.1:8128 \
+          INTEXURAOS_CODE_WORKERS="mac:http://127.0.0.1:8090:1,vm:http://127.0.0.1:8090:1" \
           FIRESTORE_EMULATOR_HOST=127.0.0.1:8081 \
           PUBSUB_EMULATOR_HOST=127.0.0.1:8085 \
           pnpm tsx src/index.ts > /tmp/code-agent.log 2>&1 &
