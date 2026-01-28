@@ -63,7 +63,8 @@ jobs:
       - name: Start mock-claude
         run: |
           cd e2e/mock-claude
-          npx tsx index.ts &
+          npx tsx index.ts > /tmp/mock-claude.log 2>&1 &
+          echo $! > /tmp/mock-claude.pid
           sleep 5
           # Verify mock-claude is responding
           curl -sf http://localhost:8090/health || (echo "mock-claude health check failed" && exit 1)
@@ -72,6 +73,18 @@ jobs:
           REPO_PATH: ${{ github.workspace }}
           GITHUB_TOKEN: ${{ env.GITHUB_TOKEN }}
           LOG_LEVEL: debug
+
+      - name: Test mock-claude POST /tasks endpoint
+        run: |
+          echo "Testing POST /tasks endpoint directly..."
+          # Test with a valid task request
+          curl -v -X POST http://localhost:8090/tasks \
+            -H "Content-Type: application/json" \
+            -d '{"taskId":"test-123","prompt":"[test:success] test","webhookUrl":"http://localhost:8128/webhook","webhookSecret":"secret"}' \
+            2>&1 || true
+          echo ""
+          echo "Mock-claude logs after test:"
+          cat /tmp/mock-claude.log || true
 
       - name: Start code-agent service
         run: |
@@ -89,10 +102,11 @@ jobs:
           INTEXURAOS_CODE_WORKERS="mac:http://localhost:8090:1,vm:http://localhost:8090:1" \
           FIRESTORE_EMULATOR_HOST=localhost:8081 \
           PUBSUB_EMULATOR_HOST=localhost:8085 \
-          npx tsx src/index.ts &
+          npx tsx src/index.ts > /tmp/code-agent.log 2>&1 &
+          echo $! > /tmp/code-agent.pid
           sleep 15
           # Verify code-agent is responding
-          curl -sf http://localhost:8128/health || (echo "code-agent health check failed" && exit 1)
+          curl -sf http://localhost:8128/health || (echo "code-agent health check failed" && cat /tmp/code-agent.log && exit 1)
 
       - name: Run E2E tests
         run: pnpm run test:e2e
@@ -104,6 +118,18 @@ jobs:
           INTEXURAOS_GCP_PROJECT_ID: test-project
           FIRESTORE_EMULATOR_HOST: localhost:8081
           PUBSUB_EMULATOR_HOST: localhost:8085
+
+      - name: Show service logs
+        if: always()
+        run: |
+          echo "=== Mock-claude logs ==="
+          cat /tmp/mock-claude.log || echo "No mock-claude logs found"
+          echo ""
+          echo "=== Code-agent logs (last 200 lines) ==="
+          tail -200 /tmp/code-agent.log || echo "No code-agent logs found"
+          echo ""
+          echo "=== Checking if services are still running ==="
+          ps aux | grep -E "(mock-claude|code-agent|tsx)" | grep -v grep || echo "No matching processes"
 
       - name: Upload test results
         if: always()

@@ -131,6 +131,10 @@ export async function waitForTaskInList(
   ).then(async () => {
     const response = await client.get('/code/tasks', { params: { userId } });
     const tasks = response.data.tasks as CodeTask[];
-    return tasks[0];
+    const task = tasks[0];
+    if (task === undefined) {
+      throw new Error('Task list became empty unexpectedly');
+    }
+    return task;
   });
 }

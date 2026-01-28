@@ -24,7 +24,42 @@ const logger = pino({
 });
 
 const app = express();
+
+// Log ALL incoming requests for debugging
+app.use((req, _res, next) => {
+  logger.info(
+    {
+      method: req.method,
+      url: req.url,
+      path: req.path,
+      contentType: req.headers['content-type'],
+      contentLength: req.headers['content-length'],
+      hasBody: req.body !== undefined,
+    },
+    'Incoming request'
+  );
+  next();
+});
+
 app.use(express.json());
+
+// Log body after parsing
+app.use((req, _res, next) => {
+  if (req.method === 'POST') {
+    logger.info(
+      {
+        method: req.method,
+        url: req.url,
+        bodyType: typeof req.body,
+        bodyKeys: req.body !== undefined && req.body !== null ? Object.keys(req.body) : [],
+        hasTaskId: req.body?.taskId !== undefined,
+        hasPrompt: req.body?.prompt !== undefined,
+      },
+      'Request body after parsing'
+    );
+  }
+  next();
+});
 
 // Configuration
 const PORT = Number.parseInt(process.env['PORT'] ?? '8090', 10);
@@ -49,6 +84,7 @@ interface MockClaudeRequest {
 }
 
 interface MockResult {
+  taskId?: string;
   status: 'completed' | 'failed' | 'cancelled';
   prUrl?: string;
   branch?: string;
@@ -306,13 +342,14 @@ const SCENARIOS: Record<string, () => Promise<MockResult>> = {
 
 // POST /tasks - Main entry point (matches code-agent taskDispatcher expectations)
 // Also handles /execute for backwards compatibility
-app.post(['/tasks', '/execute'], async (req, res) => {
+app.post(['/tasks', '/execute'], (req, res): void => {
   logger.info({ body: typeof req.body, hasBody: req.body !== undefined }, 'Received task request');
 
   // Validate request body - return 200 with 'rejected' status for dispatcher compatibility
   if (req.body === undefined || req.body === null) {
     logger.error('Request body is undefined or null');
-    return res.json({ status: 'rejected', reason: 'Missing request body' });
+    res.json({ status: 'rejected', reason: 'Missing request body' });
+    return;
   }
 
   const request = req.body as MockClaudeRequest;
@@ -321,7 +358,8 @@ app.post(['/tasks', '/execute'], async (req, res) => {
   // Validate required fields - return 200 with 'rejected' status for dispatcher compatibility
   if (taskId === undefined || prompt === undefined) {
     logger.error({ taskId, prompt: typeof prompt }, 'Missing required fields');
-    return res.json({ status: 'rejected', reason: 'Missing required fields: taskId or prompt' });
+    res.json({ status: 'rejected', reason: 'Missing required fields: taskId or prompt' });
+    return;
   }
 
   logger.info({ taskId, prompt: prompt.substring(0, 100) }, 'Mock Claude received request');
@@ -331,36 +369,38 @@ app.post(['/tasks', '/execute'], async (req, res) => {
   logger.info({ taskId, scenario }, 'Executing scenario');
 
   // Store task for potential cancellation
-  const taskTimer = setTimeout(async () => {
-    try {
-      const handler = SCENARIOS[scenario];
-      if (handler === undefined) {
-        throw new Error(`Unknown scenario: ${scenario}`);
+  const taskTimer = setTimeout(() => {
+    void (async (): Promise<void> => {
+      try {
+        const handler = SCENARIOS[scenario];
+        if (handler === undefined) {
+          throw new Error(`Unknown scenario: ${scenario}`);
+        }
+
+        const result = await handler();
+
+        // Send webhook callback
+        await sendWebhook(webhookUrl, webhookSecret, { taskId, ...result });
+
+        runningTasks.delete(taskId);
+      } catch {
+        logger.error({ taskId }, 'Scenario execution failed');
+
+        // Send failure webhook
+        await sendWebhook(webhookUrl, webhookSecret, {
+          status: 'failed',
+          error: {
+            code: 'execution_error',
+            message: 'Mock execution failed',
+          },
+          duration: 0,
+        }).catch((webhookError) => {
+          logger.error({ taskId, webhookError }, 'Failed to send failure webhook');
+        });
+
+        runningTasks.delete(taskId);
       }
-
-      const result = await handler();
-
-      // Send webhook callback
-      await sendWebhook(webhookUrl, webhookSecret, { taskId, ...result });
-
-      runningTasks.delete(taskId);
-    } catch {
-      logger.error({ taskId }, 'Scenario execution failed');
-
-      // Send failure webhook
-      await sendWebhook(webhookUrl, webhookSecret, {
-        status: 'failed',
-        error: {
-          code: 'execution_error',
-          message: 'Mock execution failed',
-        },
-        duration: 0,
-      }).catch((webhookError) => {
-        logger.error({ taskId, webhookError }, 'Failed to send failure webhook');
-      });
-
-      runningTasks.delete(taskId);
-    }
+    })();
   }, 100); // Small delay before starting
 
   runningTasks.set(taskId, taskTimer);
@@ -369,13 +409,14 @@ app.post(['/tasks', '/execute'], async (req, res) => {
 });
 
 // DELETE /tasks/:id - Cancel a running task
-app.delete('/tasks/:id', (req, res) => {
+app.delete('/tasks/:id', (req, res): void => {
   const { id } = req.params;
   logger.info({ taskId: id }, 'Cancel request received');
 
   const timer = runningTasks.get(id);
   if (timer === undefined) {
-    return res.status(404).json({ error: 'Task not found or already completed' });
+    res.status(404).json({ error: 'Task not found or already completed' });
+    return;
   }
 
   clearTimeout(timer);

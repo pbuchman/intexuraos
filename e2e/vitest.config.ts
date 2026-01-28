@@ -8,7 +8,11 @@ export default defineConfig({
     teardownTimeout: 60_000,
     globals: true,
     pool: 'forks',
-    singleFork: true, // E2E tests must run sequentially
+    poolOptions: {
+      forks: {
+        singleFork: true, // E2E tests must run sequentially
+      },
+    },
     environment: 'node',
     setupFiles: [],
     include: ['tests/**/*.spec.ts'],
