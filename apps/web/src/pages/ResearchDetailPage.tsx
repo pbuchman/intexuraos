@@ -585,7 +585,7 @@ export function ResearchDetailPage(): React.JSX.Element {
               className={`h-5 w-5 ${research.favourite === true ? 'text-amber-400 fill-amber-400' : 'text-slate-300'}`}
             />
           </button>
-          <span className="text-sm text-slate-500">
+          <span className="text-sm text-slate-500 w-full sm:w-auto">
             {isProcessing || research.status === 'awaiting_confirmation'
               ? `Started ${formatElapsedTime(research.startedAt)}`
               : research.completedAt !== undefined
