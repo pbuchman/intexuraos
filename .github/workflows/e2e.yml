@@ -21,6 +21,25 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Verify package.json has E2E scripts
+        run: |
+          echo "Git status:"
+          git status
+          echo ""
+          echo "Current HEAD:"
+          git log -1 --oneline
+          echo ""
+          echo "Checking for E2E scripts in package.json:"
+          if grep -q "test:e2e" package.json; then
+            echo "✓ test:e2e script found"
+            grep -E "(test:e2e|e2e:)" package.json
+          else
+            echo "✗ test:e2e script NOT found!"
+            echo "Lines around ci:report:"
+            grep -A5 "ci:report" package.json
+            exit 1
+          fi
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
