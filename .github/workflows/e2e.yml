@@ -40,6 +40,11 @@ jobs:
       - name: Create test workspace directory
         run: mkdir -p /tmp/e2e-workspace
 
+      - name: Install GCP emulators
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y google-cloud-cli-firestore-emulator google-cloud-cli-pubsub-emulator
+
       - name: Start Firestore emulator
         run: |
           gcloud emulators firestore start --host-port localhost:8081 --project test-project &
