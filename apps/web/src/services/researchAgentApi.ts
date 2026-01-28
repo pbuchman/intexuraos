@@ -227,6 +227,19 @@ export async function toggleResearchFavourite(
   );
 }
 
+/**
+ * Manually export a completed research to Notion.
+ * Returns the updated research with notionExportInfo populated.
+ */
+export async function exportToNotion(accessToken: string, id: string): Promise<Research> {
+  return await apiRequest<Research>(
+    config.ResearchAgentUrl,
+    `/research/${id}/export-notion`,
+    accessToken,
+    { method: 'POST' }
+  );
+}
+
 export type {
   ConfirmPartialFailureResponse,
   CreateResearchRequest,

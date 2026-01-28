@@ -17,6 +17,7 @@ FILE_PATH=$(echo "$INPUT" | jq -r '.tool_input.file_path // ""')
 
 if echo "$FILE_PATH" | grep -qE 'vitest\.config\.(ts|js)$'; then
     cat >&2 << 'EOF'
+
 WARNING: Editing vitest.config.ts
 
 Changes to coverage thresholds/exclusions require explicit user approval.

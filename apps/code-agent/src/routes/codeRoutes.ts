@@ -395,6 +395,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           codeTaskRepo: services.codeTaskRepo,
           taskDispatcher: services.taskDispatcher,
           whatsappNotifier: services.whatsappNotifier,
+          metricsClient: services.metricsClient,
         },
         processRequest
       );

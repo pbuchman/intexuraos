@@ -23,6 +23,7 @@ check_pattern() {
 
     if echo "$COMMAND" | grep -qE "$pattern"; then
         cat >&2 << EOF
+
 BLOCKED: Direct gcloud resource creation forbidden. Use Terraform.
 
 Detected: $pattern

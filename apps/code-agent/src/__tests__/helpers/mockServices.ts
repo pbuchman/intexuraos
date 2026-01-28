@@ -20,6 +20,7 @@ import { createStatusMirrorService } from '../../infra/services/statusMirrorServ
 import { createProcessHeartbeatUseCase } from '../../domain/usecases/processHeartbeat.js';
 import { createDetectZombieTasksUseCase } from '../../domain/usecases/detectZombieTasks.js';
 import type { WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
+import { createNoOpMetricsClient } from '../../infra/metrics.js';
 
 export function setupTestServices({ actionsAgentUrl = 'http://actions-agent' }: { actionsAgentUrl?: string } = {}): void {
   const fakeFirestore = createFakeFirestore() as unknown as Firestore;
@@ -36,6 +37,8 @@ export function setupTestServices({ actionsAgentUrl = 'http://actions-agent' }: 
       return;
     },
   };
+
+  const metricsClient = createNoOpMetricsClient();
 
   const linearAgentClient = createLinearAgentHttpClient({
     baseUrl: 'http://linear-agent:8086',
@@ -86,6 +89,7 @@ export function setupTestServices({ actionsAgentUrl = 'http://actions-agent' }: 
     }),
     rateLimitService,
     linearIssueService,
+    metricsClient,
     processHeartbeat: createProcessHeartbeatUseCase({
       codeTaskRepository: createFirestoreCodeTaskRepository({
         firestore: fakeFirestore,

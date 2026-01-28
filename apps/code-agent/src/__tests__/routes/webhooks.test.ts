@@ -42,6 +42,8 @@ import { createStatusMirrorService } from '../../infra/services/statusMirrorServ
 import type { StatusMirrorService } from '../../infra/services/statusMirrorServiceImpl.js';
 import { createProcessHeartbeatUseCase } from '../../domain/usecases/processHeartbeat.js';
 import { createDetectZombieTasksUseCase } from '../../domain/usecases/detectZombieTasks.js';
+import { createNoOpMetricsClient, type MetricsClient } from '../../infra/metrics.js';
+
 // Mock fetchWithAuth
 vi.mock('@intexuraos/internal-clients', async () => ({
   fetchWithAuth: vi.fn(),
@@ -149,6 +151,7 @@ describe('POST /internal/webhooks/task-complete', () => {
       actionsAgentClient,
       rateLimitService,
       linearIssueService,
+      metricsClient: createNoOpMetricsClient(),
       statusMirrorService: createStatusMirrorService({
         actionsAgentClient,
         logger,
@@ -173,6 +176,7 @@ describe('POST /internal/webhooks/task-complete', () => {
       rateLimitService: RateLimitService;
       linearIssueService: LinearIssueService;
       statusMirrorService: StatusMirrorService;
+      metricsClient: MetricsClient;
       processHeartbeat: import('../../domain/usecases/processHeartbeat.js').ProcessHeartbeatUseCase;
       detectZombieTasks: import('../../domain/usecases/detectZombieTasks.js').DetectZombieTasksUseCase;
     });
@@ -1214,6 +1218,324 @@ describe('POST /internal/webhooks/task-complete', () => {
   });
 });
 
+describe('POST /internal/webhooks/task-complete - Metrics recording', () => {
+  let app: Awaited<ReturnType<typeof buildServer>>;
+  let fakeFirestore: ReturnType<typeof createFakeFirestore>;
+  let logger: Logger;
+  let codeTaskRepo: CodeTaskRepository;
+  let mockMetricsClient: {
+    incrementTasksCompleted: ReturnType<typeof vi.fn>;
+    recordTaskDuration: ReturnType<typeof vi.fn>;
+  };
+
+  function generateWebhookSignature(body: object, secret: string): { timestamp: string; signature: string } {
+    const timestamp = String(Math.floor(Date.now() / 1000));
+    const rawBody = JSON.stringify(body);
+    const message = `${timestamp}.${rawBody}`;
+    const signature = crypto.createHmac('sha256', secret).update(message).digest('hex');
+    return { timestamp, signature };
+  }
+
+  beforeEach(async () => {
+    mockedJwtVerify.mockResolvedValue({
+      payload: { sub: 'test-user-id', email: 'test@example.com' },
+      protectedHeader: new Uint8Array(),
+    } as never);
+
+    process.env['INTEXURAOS_CODE_WORKERS'] =
+      'mac:https://cc-mac.intexuraos.cloud:1,vm:https://cc-vm.intexuraos.cloud:2';
+    process.env['INTEXURAOS_CF_ACCESS_CLIENT_ID'] = 'test-client-id';
+    process.env['INTEXURAOS_CF_ACCESS_CLIENT_SECRET'] = 'test-client-secret';
+    process.env['INTEXURAOS_DISPATCH_SECRET'] = 'test-dispatch-secret';
+    process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = 'test-internal-token';
+    process.env['INTEXURAOS_AUTH0_AUDIENCE'] = 'https://api.intexuraos.cloud';
+    process.env['INTEXURAOS_AUTH0_ISSUER'] = 'https://intexuraos.eu.auth0.com/';
+    process.env['INTEXURAOS_AUTH0_JWKS_URI'] = 'https://intexuraos.eu.auth0.com/.well-known/jwks.json';
+
+    fakeFirestore = createFakeFirestore();
+    setFirestore(fakeFirestore as unknown as Firestore);
+    logger = pino({ name: 'test' }) as unknown as Logger;
+
+    const actionsAgentClient = createActionsAgentClient({
+      baseUrl: 'http://actions-agent',
+      internalAuthToken: 'test-token',
+      logger,
+    });
+
+    codeTaskRepo = createFirestoreCodeTaskRepository({
+      firestore: fakeFirestore as unknown as Firestore,
+      logger,
+    });
+
+    mockMetricsClient = {
+      incrementTasksCompleted: vi.fn().mockResolvedValue(undefined),
+      recordTaskDuration: vi.fn().mockResolvedValue(undefined),
+    };
+
+    setServices({
+      firestore: fakeFirestore as unknown as Firestore,
+      logger,
+      codeTaskRepo,
+      workerDiscovery: createWorkerDiscoveryService({ logger }),
+      taskDispatcher: createTaskDispatcherService({
+        logger,
+        cfAccessClientId: 'test-client-id',
+        cfAccessClientSecret: 'test-client-secret',
+        dispatchSigningSecret: 'test-dispatch-secret',
+        orchestratorMacUrl: 'https://cc-mac.intexuraos.cloud',
+        orchestratorVmUrl: 'https://cc-vm.intexuraos.cloud',
+      }),
+      whatsappNotifier: createWhatsAppNotifier({
+        whatsappPublisher: {
+          publishSendMessage: async () => ok(undefined),
+        } as unknown as WhatsAppSendPublisher,
+      }),
+      logChunkRepo: createFirestoreLogChunkRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      }),
+      actionsAgentClient,
+      statusMirrorService: createStatusMirrorService({
+        actionsAgentClient,
+        logger,
+      }),
+      processHeartbeat: createProcessHeartbeatUseCase({
+        codeTaskRepository: codeTaskRepo,
+        logger,
+      }),
+      detectZombieTasks: createDetectZombieTasksUseCase({
+        codeTaskRepository: codeTaskRepo,
+        logger,
+      }),
+      linearIssueService: createLinearIssueService({
+        linearAgentClient: createLinearAgentHttpClient({
+          baseUrl: 'http://linear-agent:8086',
+          internalAuthToken: 'test-token',
+          timeoutMs: 10000,
+        }, logger),
+        logger,
+      }),
+      metricsClient: mockMetricsClient as unknown as MetricsClient,
+      rateLimitService: {
+        async checkLimits() {
+          return ok(undefined);
+        },
+        async recordTaskStart() {
+          return;
+        },
+        async recordTaskComplete() {
+          return;
+        },
+      },
+    } as {
+      firestore: Firestore;
+      logger: Logger;
+      codeTaskRepo: CodeTaskRepository;
+      workerDiscovery: WorkerDiscoveryService;
+      taskDispatcher: TaskDispatcherService;
+      logChunkRepo: LogChunkRepository;
+      actionsAgentClient: ActionsAgentClient;
+      whatsappNotifier: WhatsAppNotifier;
+      rateLimitService: RateLimitService;
+      linearIssueService: LinearIssueService;
+      statusMirrorService: StatusMirrorService;
+      metricsClient: MetricsClient;
+      processHeartbeat: import('../../domain/usecases/processHeartbeat.js').ProcessHeartbeatUseCase;
+      detectZombieTasks: import('../../domain/usecases/detectZombieTasks.js').DetectZombieTasksUseCase;
+    });
+
+    app = await buildServer();
+  });
+
+  afterEach(() => {
+    resetServices();
+    resetFirestore();
+    mockMetricsClient.incrementTasksCompleted.mockClear();
+    mockMetricsClient.recordTaskDuration.mockClear();
+  });
+
+  it('records completion metrics when task completes successfully', async () => {
+    const createResult = await codeTaskRepo.create({
+      userId: 'test-user-id',
+      workerType: 'opus',
+      workerLocation: 'mac',
+      prompt: 'test prompt',
+      sanitizedPrompt: 'test prompt',
+      systemPromptHash: 'hash',
+      webhookSecret: 'test-webhook-secret',
+      traceId: 'trace-123',
+      repository: 'pbuchman/intexuraos',
+      baseBranch: 'development',
+    });
+
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) throw new Error('Failed to create task');
+    const task = createResult.value;
+
+    const payload = {
+      taskId: task.id,
+      status: 'completed' as const,
+      result: {
+        branch: 'main',
+        commits: 1,
+        summary: 'Test summary',
+      },
+      duration: 45.5,
+    };
+
+    const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/internal/webhooks/task-complete',
+      headers: {
+        'x-internal-auth': 'test-internal-token',
+        'x-request-timestamp': timestamp,
+        'x-request-signature': signature,
+      },
+      payload,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(mockMetricsClient.incrementTasksCompleted).toHaveBeenCalledWith('opus', 'completed');
+    expect(mockMetricsClient.recordTaskDuration).toHaveBeenCalledWith('opus', 45.5);
+  });
+
+  it('records failure metrics when task fails', async () => {
+    const createResult = await codeTaskRepo.create({
+      userId: 'test-user-id',
+      workerType: 'opus',
+      workerLocation: 'mac',
+      prompt: 'test prompt',
+      sanitizedPrompt: 'test prompt',
+      systemPromptHash: 'hash',
+      webhookSecret: 'test-webhook-secret',
+      traceId: 'trace-123',
+      repository: 'pbuchman/intexuraos',
+      baseBranch: 'development',
+    });
+
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) throw new Error('Failed to create task');
+    const task = createResult.value;
+
+    const payload = {
+      taskId: task.id,
+      status: 'failed' as const,
+      error: {
+        code: 'WORKER_ERROR',
+        message: 'Task failed',
+      },
+      duration: 30.2,
+    };
+
+    const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/internal/webhooks/task-complete',
+      headers: {
+        'x-internal-auth': 'test-internal-token',
+        'x-request-timestamp': timestamp,
+        'x-request-signature': signature,
+      },
+      payload,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(mockMetricsClient.incrementTasksCompleted).toHaveBeenCalledWith('opus', 'failed');
+    expect(mockMetricsClient.recordTaskDuration).toHaveBeenCalledWith('opus', 30.2);
+  });
+
+  it('records interrupted metrics when task is interrupted', async () => {
+    const createResult = await codeTaskRepo.create({
+      userId: 'test-user-id',
+      workerType: 'auto',
+      workerLocation: 'vm',
+      prompt: 'test prompt',
+      sanitizedPrompt: 'test prompt',
+      systemPromptHash: 'hash',
+      webhookSecret: 'test-webhook-secret',
+      traceId: 'trace-123',
+      repository: 'pbuchman/intexuraos',
+      baseBranch: 'development',
+    });
+
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) throw new Error('Failed to create task');
+    const task = createResult.value;
+
+    const payload = {
+      taskId: task.id,
+      status: 'interrupted' as const,
+      duration: 15.0,
+    };
+
+    const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/internal/webhooks/task-complete',
+      headers: {
+        'x-internal-auth': 'test-internal-token',
+        'x-request-timestamp': timestamp,
+        'x-request-signature': signature,
+      },
+      payload,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(mockMetricsClient.incrementTasksCompleted).toHaveBeenCalledWith('auto', 'interrupted');
+    expect(mockMetricsClient.recordTaskDuration).toHaveBeenCalledWith('auto', 15.0);
+  });
+
+  it('does not record duration when not provided in payload', async () => {
+    const createResult = await codeTaskRepo.create({
+      userId: 'test-user-id',
+      workerType: 'opus',
+      workerLocation: 'mac',
+      prompt: 'test prompt',
+      sanitizedPrompt: 'test prompt',
+      systemPromptHash: 'hash',
+      webhookSecret: 'test-webhook-secret',
+      traceId: 'trace-123',
+      repository: 'pbuchman/intexuraos',
+      baseBranch: 'development',
+    });
+
+    expect(createResult.ok).toBe(true);
+    if (!createResult.ok) throw new Error('Failed to create task');
+    const task = createResult.value;
+
+    const payload = {
+      taskId: task.id,
+      status: 'completed' as const,
+      result: {
+        branch: 'main',
+        commits: 1,
+        summary: 'Test summary',
+      },
+    };
+
+    const { timestamp, signature } = generateWebhookSignature(payload, 'test-webhook-secret');
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/internal/webhooks/task-complete',
+      headers: {
+        'x-internal-auth': 'test-internal-token',
+        'x-request-timestamp': timestamp,
+        'x-request-signature': signature,
+      },
+      payload,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(mockMetricsClient.incrementTasksCompleted).toHaveBeenCalledWith('opus', 'completed');
+    expect(mockMetricsClient.recordTaskDuration).not.toHaveBeenCalled();
+  });
+});
+
 describe('POST /internal/logs', () => {
   let app: Awaited<ReturnType<typeof buildServer>>;
   let fakeFirestore: ReturnType<typeof createFakeFirestore>;
@@ -1328,6 +1650,7 @@ describe('POST /internal/logs', () => {
       rateLimitService: RateLimitService;
       linearIssueService: LinearIssueService;
       statusMirrorService: StatusMirrorService;
+      metricsClient: MetricsClient;
       processHeartbeat: import('../../domain/usecases/processHeartbeat.js').ProcessHeartbeatUseCase;
       detectZombieTasks: import('../../domain/usecases/detectZombieTasks.js').DetectZombieTasksUseCase;
     });
@@ -1721,6 +2044,7 @@ describe('POST /internal/webhooks/task-complete - WhatsApp notifications', () =>
       actionsAgentClient,
       rateLimitService,
       linearIssueService,
+      metricsClient: createNoOpMetricsClient(),
       statusMirrorService: createStatusMirrorService({
         actionsAgentClient,
         logger,
@@ -1745,6 +2069,7 @@ describe('POST /internal/webhooks/task-complete - WhatsApp notifications', () =>
       rateLimitService: RateLimitService;
       linearIssueService: LinearIssueService;
       statusMirrorService: StatusMirrorService;
+      metricsClient: MetricsClient;
       processHeartbeat: import('../../domain/usecases/processHeartbeat.js').ProcessHeartbeatUseCase;
       detectZombieTasks: import('../../domain/usecases/detectZombieTasks.js').DetectZombieTasksUseCase;
     });

@@ -346,3 +346,25 @@ export const toggleFavouriteResponseSchema = {
     },
   },
 } as const;
+
+export const exportNotionResponseSchema = {
+  type: 'object',
+  properties: {
+    success: { type: 'boolean' },
+    data: {
+      type: 'object',
+      properties: {
+        success: { type: 'boolean' },
+        notionPageUrl: { type: 'string' },
+      },
+      required: ['success', 'notionPageUrl'],
+    },
+    diagnostics: {
+      type: 'object',
+      properties: {
+        requestId: { type: 'string' },
+        durationMs: { type: 'number' },
+      },
+    },
+  },
+} as const;

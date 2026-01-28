@@ -224,6 +224,9 @@ export async function buildServer(): Promise<FastifyInstance> {
     error: (msg, data) => {
       app.log.error({ notionApi: true, ...data }, msg);
     },
+    debug: (msg, data) => {
+      app.log.debug({ notionApi: true, ...data }, msg);
+    },
   };
 
   // Initialize services with the logger (must be done early, before routes use them)

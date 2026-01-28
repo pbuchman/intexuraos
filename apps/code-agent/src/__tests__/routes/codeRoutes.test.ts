@@ -37,7 +37,10 @@ import type { LinearIssueService } from '../../domain/services/linearIssueServic
 import { createStatusMirrorService } from '../../infra/services/statusMirrorServiceImpl.js';
 import type { StatusMirrorService } from '../../infra/services/statusMirrorServiceImpl.js';
 import { createProcessHeartbeatUseCase } from '../../domain/usecases/processHeartbeat.js';
-import { createDetectZombieTasksUseCase } from '../../domain/usecases/detectZombieTasks.js';describe('codeRoutes', () => {
+import { createDetectZombieTasksUseCase } from '../../domain/usecases/detectZombieTasks.js';
+import { createNoOpMetricsClient, type MetricsClient } from '../../infra/metrics.js';
+
+describe('codeRoutes', () => {
   let fakeFirestore: ReturnType<typeof createFakeFirestore>;
   let logger: Logger;
   let server: Awaited<ReturnType<typeof buildServer>>;
@@ -162,6 +165,7 @@ import { createDetectZombieTasksUseCase } from '../../domain/usecases/detectZomb
       actionsAgentClient,
       rateLimitService,
       linearIssueService,
+      metricsClient: createNoOpMetricsClient(),
       statusMirrorService: createStatusMirrorService({
         actionsAgentClient,
         logger,
@@ -186,6 +190,7 @@ import { createDetectZombieTasksUseCase } from '../../domain/usecases/detectZomb
       rateLimitService: RateLimitService;
       linearIssueService: LinearIssueService;
       statusMirrorService: StatusMirrorService;
+      metricsClient: MetricsClient;
       processHeartbeat: import('../../domain/usecases/processHeartbeat.js').ProcessHeartbeatUseCase;
       detectZombieTasks: import('../../domain/usecases/detectZombieTasks.js').DetectZombieTasksUseCase;
     });

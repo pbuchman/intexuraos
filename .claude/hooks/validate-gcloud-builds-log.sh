@@ -21,6 +21,7 @@ COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // ""')
 if echo "$COMMAND" | grep -qE 'gcloud[[:space:]]+builds[[:space:]]+log[[:space:]]' && \
    echo "$COMMAND" | grep -qE '\|[[:space:]]*(grep|tail|head|awk|sed)'; then
     cat >&2 << 'EOF'
+
 BLOCKED: gcloud builds log piped to grep/tail re-downloads the entire log each time.
 
 Each gcloud builds log call fetches the full log from GCP (3-10s).

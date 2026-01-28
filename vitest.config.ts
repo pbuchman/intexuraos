@@ -83,6 +83,11 @@ export default defineConfig({
         // Route barrel files (re-exports only)
         // JUSTIFIED: Pure re-exports with no runtime behavior
         '**/routes/routes.ts',
+
+        // Cloud Monitoring adapter
+        // JUSTIFIED: Infra adapter to Google Cloud Monitoring API with external dependency
+        // Tests verify contract via mock implementation, actual API requires integration testing
+        'apps/code-agent/src/infra/metrics.ts',
       ],
       thresholds: {
         lines: 95,

@@ -20,6 +20,7 @@ COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // ""')
 if echo "$COMMAND" | grep -qE '\bterraform\s+(init|plan|apply|destroy|import|state|output|refresh)' && \
    ! echo "$COMMAND" | grep -qE 'FIRESTORE_EMULATOR_HOST='; then
     cat >&2 << 'EOF'
+
 BLOCKED: Terraform without clearing emulator env vars will connect to emulators, not GCP.
 
 CORRECT:

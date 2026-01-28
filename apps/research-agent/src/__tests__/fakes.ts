@@ -712,7 +712,12 @@ export class FakeResearchExportSettings {
     return ok(settings);
   }
 
-  setResearchPageId(userId: string, researchPageId: string): void {
+  setResearchPageId(userId: string, researchPageId: string | null): void {
+    if (researchPageId === null) {
+      // Clear the setting by removing it from the map
+      this.settings.delete(userId);
+      return;
+    }
     const now = new Date().toISOString();
     const existing = this.settings.get(userId);
     const settings: ResearchExportSettings = {
@@ -756,4 +761,61 @@ export class FakeNotionServiceClient implements NotionServiceClient {
     this.connected = false;
     this.token = null;
   }
+}
+
+/**
+ * Fake implementation of Notion exporter for testing.
+ */
+export function createFakeNotionExporter(): (
+  research: import('../domain/research/index.js').Research,
+  notionToken: string,
+  targetPageId: string,
+  logger: import('@intexuraos/infra-notion').NotionLogger
+) => Promise<
+  Result<
+    { mainPageId: string; mainPageUrl: string; llmReportPages: { model: string; pageId: string; pageUrl: string }[] },
+    { code: 'NOT_FOUND' | 'UNAUTHORIZED' | 'RATE_LIMITED' | 'INTERNAL_ERROR'; message: string }
+  >
+> {
+  return async function (
+    _research: import('../domain/research/index.js').Research,
+    _notionToken: string,
+    _targetPageId: string,
+    _logger: import('@intexuraos/infra-notion').NotionLogger
+  ) {
+    return ok({
+      mainPageId: 'test-main-page-id',
+      mainPageUrl: 'https://notion.so/test-main-page-id',
+      llmReportPages: [
+        { model: 'gemini-2.0-flash-exp', pageId: 'test-report-page-id', pageUrl: 'https://notion.so/test-report-page-id' },
+      ],
+    });
+  };
+}
+
+/**
+ * Fake Notion exporter that can be configured to fail.
+ */
+export function createFailingNotionExporter(
+  errorCode: 'NOT_FOUND' | 'UNAUTHORIZED' | 'RATE_LIMITED' | 'INTERNAL_ERROR',
+  errorMessage: string
+): (
+  research: import('../domain/research/index.js').Research,
+  notionToken: string,
+  targetPageId: string,
+  logger: import('@intexuraos/infra-notion').NotionLogger
+) => Promise<
+  Result<
+    { mainPageId: string; mainPageUrl: string; llmReportPages: { model: string; pageId: string; pageUrl: string }[] },
+    { code: 'NOT_FOUND' | 'UNAUTHORIZED' | 'RATE_LIMITED' | 'INTERNAL_ERROR'; message: string }
+  >
+> {
+  return async function (
+    _research: import('../domain/research/index.js').Research,
+    _notionToken: string,
+    _targetPageId: string,
+    _logger: import('@intexuraos/infra-notion').NotionLogger
+  ) {
+    return err({ code: errorCode, message: errorMessage });
+  };
 }

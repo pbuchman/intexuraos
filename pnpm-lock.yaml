@@ -7,6 +7,9 @@ settings:
 importers:
   .:
     dependencies:
+      '@google-cloud/monitoring':
+        specifier: ^5.3.1
+        version: 5.3.1
       dotenv:
         specifier: ^17.2.3
         version: 17.2.3
@@ -338,6 +341,9 @@ importers:
       '@fastify/swagger-ui':
         specifier: ^5.2.1
         version: 5.2.4
+      '@google-cloud/monitoring':
+        specifier: ^5.3.1
+        version: 5.3.1
       '@intexuraos/common-core':
         specifier: workspace:*
         version: link:../../packages/common-core
@@ -3889,6 +3895,13 @@ packages:
       }
     engines: { node: '>=10.0.0' }
     hasBin: true
+
+  '@google-cloud/monitoring@5.3.1':
+    resolution:
+      {
+        integrity: sha512-f88LJn4PrzhiDaK0VH5KPxEXZfzJ7X8AGfYnK3KTfZEfH3cyxlvCnpgQQaScNTPhv+zX2MrdW/lJHDOpLsm71Q==,
+      }
+    engines: { node: '>=18' }
 
   '@google-cloud/paginator@5.0.2':
     resolution:
@@ -16235,6 +16248,12 @@ snapshots:
       on-finished: 2.4.1
       read-pkg-up: 7.0.1
       semver: 7.7.3
+    transitivePeerDependencies:
+      - supports-color
+
+  '@google-cloud/monitoring@5.3.1':
+    dependencies:
+      google-gax: 5.0.6
     transitivePeerDependencies:
       - supports-color
 

@@ -48,6 +48,12 @@ describe('Error utilities', () => {
         'DOWNSTREAM_ERROR',
         'INTERNAL_ERROR',
         'MISCONFIGURED',
+        'NOTION_NOT_CONNECTED',
+        'PAGE_NOT_CONFIGURED',
+        'RESEARCH_NOT_COMPLETED',
+        'NO_SYNTHESIS',
+        'ALREADY_EXPORTED',
+        'NOTION_UNAUTHORIZED',
       ];
 
       for (const code of allCodes) {

@@ -34,6 +34,7 @@ COVERAGE_TOOL_PATTERN='(vitest\s+.*--coverage|pnpm\s+(run\s+)?(test:)?coverage|n
 if echo "$COMMAND" | grep -qE "$COVERAGE_TOOL_PATTERN" && \
    echo "$COMMAND" | grep -qE '\|\s*(grep|tail|head|awk|sed)'; then
     cat >&2 << 'EOF'
+
 BLOCKED: Parsing coverage output with grep/tail causes truncation errors.
 
 INSTEAD: Use jq on the JSON summary:

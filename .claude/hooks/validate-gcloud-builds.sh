@@ -21,6 +21,7 @@ COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // ""')
 if echo "$COMMAND" | grep -qE 'gcloud[[:space:]]+builds[[:space:]]+(list|log|describe)' && \
    ! echo "$COMMAND" | grep -q -- '--region'; then
     cat >&2 << 'EOF'
+
 BLOCKED: gcloud builds commands require --region flag.
 
 This project uses regional Cloud Build in europe-central2.
