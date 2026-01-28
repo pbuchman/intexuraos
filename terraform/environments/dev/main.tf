@@ -1491,15 +1491,17 @@ module "cloud_build" {
   github_branch          = var.github_branch
   github_connection_name = var.github_connection_name
 
-  artifact_registry_url = module.artifact_registry.repository_url
-  static_assets_bucket  = module.static_assets.bucket_name
-  web_app_bucket        = module.web_app.bucket_name
+  artifact_registry_url   = module.artifact_registry.repository_url
+  static_assets_bucket    = module.static_assets.bucket_name
+  web_app_bucket          = module.web_app.bucket_name
+  functions_source_bucket = google_storage_bucket.cloud_functions_source.name
 
   depends_on = [
     google_project_service.apis,
     module.artifact_registry,
     module.static_assets,
     module.web_app,
+    google_storage_bucket.cloud_functions_source,
   ]
 }
 
@@ -1810,6 +1812,13 @@ resource "google_project_iam_member" "functions_eventarc" {
   project = var.project_id
   role    = "roles/eventarc.eventReceiver"
   member  = "serviceAccount:${google_service_account.cloud_functions.email}"
+}
+
+# Grant Cloud Functions SA permission to access secrets (for INTEXURAOS_INTERNAL_AUTH_TOKEN)
+resource "google_secret_manager_secret_iam_member" "functions_internal_auth_token" {
+  secret_id = module.secret_manager.secret_ids["INTEXURAOS_INTERNAL_AUTH_TOKEN"]
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.cloud_functions.email}"
 }
 
 # -----------------------------------------------------------------------------

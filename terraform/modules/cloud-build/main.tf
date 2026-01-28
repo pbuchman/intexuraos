@@ -169,6 +169,12 @@ locals {
     "linear-agent",
     "web-agent",
   ]
+
+  # Cloud Function workers (zip + upload to GCS)
+  cloud_function_workers = [
+    "vm-lifecycle",
+    "log-cleanup",
+  ]
 }
 
 # Individual triggers for Docker-based services
@@ -255,6 +261,50 @@ resource "google_cloudbuild_trigger" "firestore" {
     # GCP API normalizes ignored_files=["**"] to null, causing perpetual drift
     ignore_changes = [ignored_files]
   }
+}
+
+# -----------------------------------------------------------------------------
+# Cloud Function Worker Triggers
+# -----------------------------------------------------------------------------
+# Individual triggers for Cloud Function workers (vm-lifecycle, log-cleanup).
+# These deploy function source to GCS without triggering on git push.
+
+resource "google_cloudbuild_trigger" "worker" {
+  for_each = toset(local.cloud_function_workers)
+
+  name        = each.key
+  description = "Deploy ${each.key} Cloud Function"
+  location    = var.region
+
+  source_to_build {
+    repository = google_cloudbuildv2_repository.intexuraos.id
+    ref        = "refs/heads/${var.github_branch}"
+    repo_type  = "GITHUB"
+  }
+
+  ignored_files = ["**"]
+
+  filename = "workers/${each.key}/cloudbuild.yaml"
+
+  substitutions = {
+    _REGION                  = var.region
+    _ENVIRONMENT             = var.environment
+    _FUNCTIONS_SOURCE_BUCKET = var.functions_source_bucket
+  }
+
+  service_account = google_service_account.cloud_build.id
+
+  lifecycle {
+    # GCP API normalizes ignored_files=["**"] to null, causing perpetual drift
+    ignore_changes = [ignored_files]
+  }
+}
+
+# Cloud Build needs to write to functions source bucket
+resource "google_storage_bucket_iam_member" "cloud_build_functions_storage" {
+  bucket = var.functions_source_bucket
+  role   = "roles/storage.objectAdmin"
+  member = "serviceAccount:${google_service_account.cloud_build.email}"
 }
 
 # -----------------------------------------------------------------------------

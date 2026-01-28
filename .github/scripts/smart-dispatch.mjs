@@ -35,6 +35,8 @@ const SERVICES = [
   'web-agent',
 ];
 
+const WORKERS = ['vm-lifecycle', 'log-cleanup'];
+
 const SPECIAL_TARGETS = ['web', 'firestore'];
 
 const GLOBAL_TRIGGERS = [
@@ -69,6 +71,14 @@ function buildDependencyGraph() {
     };
   }
 
+  // Initialize all workers (Cloud Functions)
+  for (const worker of WORKERS) {
+    graph[worker] = {
+      selfPaths: [`workers/${worker}/`],
+      packageDeps: [],
+    };
+  }
+
   // Firestore has special paths
   graph['firestore'] = {
     selfPaths: FIRESTORE_TRIGGERS,
@@ -92,6 +102,28 @@ function buildDependencyGraph() {
       } catch (error) {
         console.warn(
           `[smart-dispatch] Failed to parse dependencies for ${svc} at ${pkgPath}: ${error.message}`
+        );
+      }
+    }
+  }
+
+  // Parse package.json for each worker to find package dependencies
+  for (const worker of WORKERS) {
+    const pkgPath = join(process.cwd(), 'workers', worker, 'package.json');
+    if (existsSync(pkgPath)) {
+      try {
+        const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'));
+        const deps = { ...pkg.dependencies, ...pkg.devDependencies };
+
+        for (const dep of Object.keys(deps)) {
+          if (dep.startsWith('@intexuraos/')) {
+            const pkgName = dep.replace('@intexuraos/', '');
+            graph[worker].packageDeps.push(pkgName);
+          }
+        }
+      } catch (error) {
+        console.warn(
+          `[smart-dispatch] Failed to parse dependencies for worker ${worker} at ${pkgPath}: ${error.message}`
         );
       }
     }
@@ -207,7 +239,7 @@ function analyzeChanges(changedFiles, graph, packageGraph) {
 
   if (globalChange) {
     const globalReason = 'Global infrastructure/config change';
-    for (const svc of [...SERVICES, ...SPECIAL_TARGETS]) {
+    for (const svc of [...SERVICES, ...WORKERS, ...SPECIAL_TARGETS]) {
       addAffected(svc, globalReason);
     }
     return { affected, globalChange: true };
@@ -246,6 +278,15 @@ function analyzeChanges(changedFiles, graph, packageGraph) {
       const svc = appMatch[1];
       if (graph[svc]) {
         addAffected(svc, 'Service source modified');
+      }
+    }
+
+    // Check workers/<worker>/
+    const workerMatch = file.match(/^workers\/([^/]+)\//);
+    if (workerMatch) {
+      const worker = workerMatch[1];
+      if (graph[worker]) {
+        addAffected(worker, 'Worker source modified');
       }
     }
 

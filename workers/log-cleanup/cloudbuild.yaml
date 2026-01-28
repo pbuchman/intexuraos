@@ -1,0 +1,36 @@
+# Manual trigger: Deploy log-cleanup Cloud Function only
+steps:
+  - name: 'node:22-slim'
+    id: 'install'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        corepack enable
+        pnpm install --frozen-lockfile
+
+  - name: 'node:22-slim'
+    id: 'build'
+    waitFor: ['install']
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        corepack enable
+        pnpm --filter @intexuraos/log-cleanup build
+
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    id: 'deploy'
+    waitFor: ['build']
+    entrypoint: 'bash'
+    args: ['cloudbuild/scripts/deploy-function.sh', 'log-cleanup']
+    env:
+      - 'REGION=${_REGION}'
+      - 'ENVIRONMENT=${_ENVIRONMENT}'
+      - 'FUNCTIONS_SOURCE_BUCKET=${_FUNCTIONS_SOURCE_BUCKET}'
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+  machineType: E2_MEDIUM
+
+timeout: '600s'

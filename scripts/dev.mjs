@@ -263,9 +263,7 @@ async function generateFirestoreConfig() {
   const module = await import(pathToFileURL(generatorPath).href);
   if (module.generate) {
     const stats = await module.generate(true);
-    logService(
-      `Generated ${stats.indexCount} indexes, ${stats.collectionCount} collection rules`
-    );
+    logService(`Generated ${stats.indexCount} indexes, ${stats.collectionCount} collection rules`);
   }
 }
 
