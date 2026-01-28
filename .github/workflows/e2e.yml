@@ -1,0 +1,116 @@
+name: E2E Tests
+
+on:
+  pull_request:
+    branches: [development, main]
+  schedule:
+    - cron: '0 6 * * *' # Daily at 6 AM UTC
+  workflow_dispatch:
+
+jobs:
+  e2e:
+    name: E2E Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    env:
+      NODE_VERSION: '20'
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 8
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build all packages
+        run: pnpm build
+
+      - name: Create test workspace directory
+        run: mkdir -p /tmp/e2e-workspace
+
+      - name: Start Firestore emulator
+        run: |
+          gcloud emulators firestore start --host-port localhost:8081 --project test-project &
+          sleep 5
+        env:
+          CLOUDSDK_CORE_PROJECT: test-project
+
+      - name: Start Pub/Sub emulator
+        run: |
+          gcloud beta emulators pubsub start --host-port localhost:8085 --project test-project &
+          sleep 5
+        env:
+          CLOUDSDK_CORE_PROJECT: test-project
+          PUBSUB_PROJECT_ID: test-project
+
+      - name: Build and start mock-claude
+        run: |
+          cd e2e/mock-claude
+          pnpm install
+          node --import tsx/dist/loader.mjs --conditions=tsx index.ts &
+          sleep 5
+        env:
+          PORT: 8090
+          REPO_PATH: ${{ github.workspace }}
+          GITHUB_TOKEN: ${{ env.GITHUB_TOKEN }}
+
+      - name: Start code-agent service
+        run: |
+          cd apps/code-agent
+          PORT=8128 \
+          INTEXURAOS_GCP_PROJECT_ID=test-project \
+          INTEXURAOS_INTERNAL_AUTH_TOKEN=test-secret \
+          INTEXURAOS_DISPATCH_SIGNING_SECRET=test-signing-secret \
+          INTEXURAOS_WEBHOOK_VERIFY_SECRET=test-webhook-secret \
+          INTEXURAOS_ORCHESTRATOR_MAC_URL=http://localhost:8090 \
+          INTEXURAOS_ORCHESTRATOR_VM_URL=http://localhost:8090 \
+          FIRESTORE_EMULATOR_HOST=localhost:8081 \
+          PUBSUB_EMULATOR_HOST=localhost:8085 \
+          node --import tsx/dist/loader.mjs --conditions=tsx index.ts &
+          sleep 10
+
+      - name: Run E2E tests
+        run: pnpm run test:e2e
+        env:
+          E2E_API_URL: http://localhost:8128
+          E2E_AUTH_TOKEN: test-token
+          E2E_INTERNAL_AUTH_TOKEN: test-secret
+          E2E_TEST_USER_ID: e2e-ci-test
+          INTEXURAOS_GCP_PROJECT_ID: test-project
+          FIRESTORE_EMULATOR_HOST: localhost:8081
+          PUBSUB_EMULATOR_HOST: localhost:8085
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-test-results
+          path: |
+            e2e/coverage/
+            e2e/test-results/
+          retention-days: 7
+
+      - name: Cleanup - Close test PRs
+        if: always()
+        run: |
+          # Find and close any test PRs created during E2E tests
+          gh pr list \
+            --state open \
+            --search "E2E test" \
+            --json number,title \
+            --jq '.[] | "\(.number)"' \
+            | xargs -I {} gh pr close {} --comment "E2E cleanup: Auto-closing test PR"
+        env:
+          GITHUB_TOKEN: ${{ env.GITHUB_TOKEN }}

@@ -442,7 +442,8 @@ const SERVICE_ENV_MAPPINGS = {
   'research-agent': {
     INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC:
       process.env.INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC ?? 'whatsapp-send-message',
-    INTEXURAOS_IMAGE_PUBLIC_BASE_URL: process.env.INTEXURAOS_IMAGE_PUBLIC_BASE_URL ?? 'http://localhost:3000',
+    INTEXURAOS_IMAGE_PUBLIC_BASE_URL:
+      process.env.INTEXURAOS_IMAGE_PUBLIC_BASE_URL ?? 'http://localhost:3000',
   },
   'whatsapp-service': {
     INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC:
