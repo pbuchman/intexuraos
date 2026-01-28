@@ -55,29 +55,7 @@ import {
   type SupportedModel,
 } from '@/services/researchAgentApi.types';
 
-/**
- * Format elapsed time in a human-readable format.
- */
-function formatElapsedTime(isoDate: string): string {
-  const date = new Date(isoDate);
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffSeconds = Math.floor(diffMs / 1000);
-  const diffMinutes = Math.floor(diffSeconds / 60);
-  const diffHours = Math.floor(diffMinutes / 60);
-  const diffDays = Math.floor(diffHours / 24);
-
-  if (diffDays > 0) {
-    return `${String(diffDays)}d ago`;
-  }
-  if (diffHours > 0) {
-    return `${String(diffHours)}h ago`;
-  }
-  if (diffMinutes > 0) {
-    return `${String(diffMinutes)}m ago`;
-  }
-  return 'just now';
-}
+import { formatRelative } from '@/utils/dateFormat';
 
 interface StatusBadgeProps {
   status: ResearchStatus;
@@ -587,10 +565,10 @@ export function ResearchDetailPage(): React.JSX.Element {
           </button>
           <span className="text-sm text-slate-500 w-full sm:w-auto">
             {isProcessing || research.status === 'awaiting_confirmation'
-              ? `Started ${formatElapsedTime(research.startedAt)}`
+              ? `Started ${formatRelative(research.startedAt)}`
               : research.completedAt !== undefined
-                ? `Finished ${formatElapsedTime(research.completedAt)}`
-                : `Started ${formatElapsedTime(research.startedAt)}`}
+                ? `Finished ${formatRelative(research.completedAt)}`
+                : `Started ${formatRelative(research.startedAt)}`}
           </span>
         </div>
 
@@ -1387,7 +1365,7 @@ function ProcessingStatus({
     }
     if (result.status === 'processing') {
       if (result.startedAt !== undefined) {
-        return `Started ${formatElapsedTime(result.startedAt)}, processing...`;
+        return `Started ${formatRelative(result.startedAt)}, processing...`;
       }
       return 'Processing...';
     }

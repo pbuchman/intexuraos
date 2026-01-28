@@ -5,18 +5,8 @@ import { getErrorMessage } from '@intexuraos/common-core/errors';
 import { Card, Layout } from '@/components';
 import { useAuth } from '@/context';
 import { getLlmPricing } from '@/services/settingsApi';
+import { formatDateTime } from '@/utils/dateFormat';
 import type { AllProvidersPricing, LlmProvider, ModelPricing, ProviderPricing } from '@/types';
-
-function formatDate(isoString: string): string {
-  const date = new Date(isoString);
-  return date.toLocaleString(undefined, {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
 
 function formatPrice(price: number): string {
   if (price === 0) return '$0.00';
@@ -120,7 +110,7 @@ function ProviderBlock({ provider, pricing }: ProviderBlockProps): React.JSX.Ele
             {modelCount} {modelCount === 1 ? 'model' : 'models'}
           </span>
         </div>
-        <p className="mt-1 text-xs text-slate-500">Updated: {formatDate(pricing.updatedAt)}</p>
+        <p className="mt-1 text-xs text-slate-500">Updated: {formatDateTime(pricing.updatedAt)}</p>
       </div>
       <div className="max-h-96 overflow-y-auto">
         {Object.entries(pricing.models)

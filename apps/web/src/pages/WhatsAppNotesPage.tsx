@@ -15,6 +15,7 @@ import {
   getMessageMediaUrl,
   getWhatsAppMessages,
 } from '@/services';
+import { formatDateTime } from '@/utils/dateFormat';
 import type { WhatsAppMessage } from '@/types';
 import {
   Check,
@@ -93,17 +94,6 @@ function NoteDetailModal({
 }: Omit<NoteDetailModalProps, 'accessToken'>): React.JSX.Element {
   const [copied, setCopied] = useState(false);
 
-  const receivedDate = new Date(message.receivedAt);
-  const formattedDate = receivedDate.toLocaleDateString('pl-PL', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-  });
-  const formattedTime = receivedDate.toLocaleTimeString('pl-PL', {
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-
   const textToCopy = message.caption ?? message.text;
   const hasTextContent = textToCopy !== '';
 
@@ -148,7 +138,7 @@ function NoteDetailModal({
         {/* Header */}
         <div className="sticky top-0 flex items-center justify-between border-b border-slate-200 bg-white p-4">
           <div className="text-sm text-slate-500">
-            {formattedDate} • {formattedTime}
+            {formatDateTime(message.receivedAt)}
           </div>
           <div className="flex items-center gap-2">
             {hasTextContent && (
@@ -221,17 +211,6 @@ function TranscriptionDetailModal({
 }): React.JSX.Element {
   const [copied, setCopied] = useState(false);
 
-  const receivedDate = new Date(message.receivedAt);
-  const formattedDate = receivedDate.toLocaleDateString('pl-PL', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-  });
-  const formattedTime = receivedDate.toLocaleTimeString('pl-PL', {
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-
   const transcriptionText = message.transcription ?? '';
   const hasContent = transcriptionText !== '';
 
@@ -278,9 +257,7 @@ function TranscriptionDetailModal({
           <div className="flex items-center gap-2">
             <Mic className="h-4 w-4 text-slate-500" />
             <span className="text-sm font-medium text-slate-700">Transcription</span>
-            <span className="text-sm text-slate-500">
-              • {formattedDate} • {formattedTime}
-            </span>
+            <span className="text-sm text-slate-500">• {formatDateTime(message.receivedAt)}</span>
           </div>
           <div className="flex items-center gap-2">
             {hasContent && (
@@ -341,17 +318,6 @@ function MessageItem({
   const [copied, setCopied] = useState(false);
   const [copiedTranscription, setCopiedTranscription] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-
-  const receivedDate = new Date(message.receivedAt);
-  const formattedDate = receivedDate.toLocaleDateString('pl-PL', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-  });
-  const formattedTime = receivedDate.toLocaleTimeString('pl-PL', {
-    hour: '2-digit',
-    minute: '2-digit',
-  });
 
   const handleCopy = async (): Promise<void> => {
     const textToCopy = message.caption ?? message.text;
@@ -593,9 +559,7 @@ function MessageItem({
           <LinkPreviewList linkPreview={message.linkPreview} />
 
           <div className="mt-2 flex items-center gap-2 text-sm text-slate-500">
-            <span>{formattedDate}</span>
-            <span>•</span>
-            <span>{formattedTime}</span>
+            <span>{formatDateTime(message.receivedAt)}</span>
             {message.mediaType === 'image' && message.hasMedia && (
               <>
                 <span>•</span>

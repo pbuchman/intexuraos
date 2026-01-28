@@ -1,6 +1,7 @@
 import { RefreshCw, TrendingUp, DollarSign, Zap, BarChart3 } from 'lucide-react';
 import { Card, Layout } from '@/components';
 import { useUsageCosts } from '@/hooks/useUsageCosts';
+import { formatMonth } from '@/utils/dateFormat';
 import type { MonthlyCost, ModelCost, CallTypeCost } from '@/types';
 
 function formatCost(cost: number): string {
@@ -17,13 +18,6 @@ function formatNumber(num: number): string {
     return `${(num / 1_000).toFixed(1)}K`;
   }
   return num.toString();
-}
-
-function formatMonth(monthStr: string): string {
-  const [year, month] = monthStr.split('-');
-  if (year === undefined || month === undefined) return monthStr;
-  const date = new Date(parseInt(year, 10), parseInt(month, 10) - 1);
-  return date.toLocaleDateString(undefined, { month: 'short', year: 'numeric' });
 }
 
 interface ProgressBarProps {

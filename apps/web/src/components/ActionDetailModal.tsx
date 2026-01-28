@@ -17,6 +17,7 @@ import {
   X,
 } from 'lucide-react';
 import { useActionConfig } from '@/hooks/useActionConfig';
+import { formatDateTime } from '@/utils/dateFormat';
 import { ConfigurableActionButton } from './ConfigurableActionButton';
 import { CalendarPreviewCard } from './CalendarPreviewCard';
 import { Button } from './ui/Button';
@@ -70,17 +71,6 @@ function getTypeIcon(type: CommandType): React.JSX.Element {
 
 function getTypeLabel(type: CommandType): string {
   return type.charAt(0).toUpperCase() + type.slice(1);
-}
-
-function formatDate(isoDate: string): string {
-  const date = new Date(isoDate);
-  return date.toLocaleDateString('en-US', {
-    weekday: 'short',
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
 }
 
 export function ActionDetailModal({
@@ -417,11 +407,11 @@ export function ActionDetailModal({
           <div className="flex items-center gap-4 text-xs text-slate-500">
             <div className="flex items-center gap-1">
               <Clock className="h-3.5 w-3.5" />
-              <span>Created {formatDate(action.createdAt)}</span>
+              <span>Created {formatDateTime(action.createdAt)}</span>
             </div>
             {action.updatedAt !== action.createdAt && (
               <div className="flex items-center gap-1">
-                <span>Updated {formatDate(action.updatedAt)}</span>
+                <span>Updated {formatDateTime(action.updatedAt)}</span>
               </div>
             )}
           </div>

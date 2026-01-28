@@ -29,6 +29,7 @@ import {
   isFirebaseAuthenticated,
   initializeFirebase,
 } from '@/services/firebase';
+import { formatDateTime, formatRelative } from '@/utils/dateFormat';
 import type { CodeTask, CodeTaskStatus } from '@/types';
 
 interface LogEntry {
@@ -54,37 +55,6 @@ const STATUS_STYLES: Record<CodeTaskStatus, StatusStyle> = {
   interrupted: { bg: 'bg-amber-100', text: 'text-amber-800', label: 'Interrupted', icon: AlertCircle },
   cancelled: { bg: 'bg-slate-100', text: 'text-slate-600', label: 'Cancelled', icon: XCircle },
 };
-
-function formatDate(dateString: string): string {
-  return new Date(dateString).toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
-
-function formatElapsedTime(isoDate: string): string {
-  const date = new Date(isoDate);
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffSeconds = Math.floor(diffMs / 1000);
-  const diffMinutes = Math.floor(diffSeconds / 60);
-  const diffHours = Math.floor(diffMinutes / 60);
-  const diffDays = Math.floor(diffHours / 24);
-
-  if (diffDays > 0) {
-    return `${String(diffDays)}d ago`;
-  }
-  if (diffHours > 0) {
-    return `${String(diffHours)}h ago`;
-  }
-  if (diffMinutes > 0) {
-    return `${String(diffMinutes)}m ago`;
-  }
-  return 'just now';
-}
 
 export function CodeTaskDetailPage(): React.JSX.Element {
   const { id } = useParams<{ id: string }>();
@@ -171,9 +141,9 @@ export function CodeTaskDetailPage(): React.JSX.Element {
         </div>
 
         <div className="mt-2 flex flex-wrap items-center gap-4 text-sm text-slate-500">
-          <span>Created: {formatDate(task.createdAt)}</span>
+          <span>Created: {formatDateTime(task.createdAt)}</span>
           {task.status !== 'dispatched' && task.status !== 'running' ? (
-            <span>Updated: {formatElapsedTime(task.updatedAt)}</span>
+            <span>Updated: {formatRelative(task.updatedAt)}</span>
           ) : null}
           <span className="rounded bg-slate-100 px-2 py-0.5 text-xs capitalize">
             {task.workerType}

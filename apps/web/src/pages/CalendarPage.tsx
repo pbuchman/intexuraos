@@ -15,18 +15,9 @@ import {
 } from 'lucide-react';
 import { Button, Card, Layout, RefreshIndicator } from '@/components';
 import { useCalendarEvents, useFailedCalendarEvents } from '@/hooks';
-import type { CalendarEvent, CalendarEventDateTime, FailedCalendarEvent } from '@/types';
+import type { CalendarEvent, FailedCalendarEvent } from '@/types';
+import { formatTime, formatWeekRange } from '@/utils/dateFormat';
 import { getCurrentWeekRange } from '@/utils';
-
-function formatTimeOnly(dt: CalendarEventDateTime): string {
-  if (dt.dateTime !== undefined) {
-    return new Date(dt.dateTime).toLocaleTimeString(undefined, {
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-  }
-  return 'All day';
-}
 
 function isAllDayEvent(event: CalendarEvent): boolean {
   return event.start.date !== undefined;
@@ -40,14 +31,6 @@ function getEventDate(event: CalendarEvent): Date {
     return new Date(event.start.date);
   }
   return new Date();
-}
-
-function formatWeekRange(start: Date, end: Date): string {
-  const startStr = start.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-  const lastDayOfWeek = new Date(end);
-  lastDayOfWeek.setDate(lastDayOfWeek.getDate() - 1);
-  const endStr = lastDayOfWeek.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
-  return `${startStr} - ${endStr}`;
 }
 
 function groupEventsByDate(events: CalendarEvent[]): Map<string, CalendarEvent[]> {
@@ -95,11 +78,11 @@ function EventRow({ event }: EventRowProps): React.JSX.Element {
       <div className="flex w-20 shrink-0 flex-col items-center justify-center rounded-lg bg-blue-50 p-2 text-center">
         <Clock className="mb-1 h-4 w-4 text-blue-600" />
         <span className="text-xs font-medium text-blue-700">
-          {allDay ? 'All day' : formatTimeOnly(event.start)}
+          {formatTime(event.start.dateTime ?? undefined, allDay)}
         </span>
         {!allDay && (
           <span className="text-xs text-blue-500">
-            {formatTimeOnly(event.end)}
+            {formatTime(event.end.dateTime ?? undefined, allDay)}
           </span>
         )}
       </div>

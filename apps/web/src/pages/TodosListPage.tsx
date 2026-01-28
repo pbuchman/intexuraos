@@ -22,6 +22,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Button, Card, Input, Layout, RefreshIndicator } from '@/components';
 import { useTodos } from '@/hooks';
+import { formatDate, formatDateForInput } from '@/utils/dateFormat';
 import { sortTodoItems } from '@/utils/todoItemSort.js';
 import type {
   CreateTodoItemRequest,
@@ -33,31 +34,6 @@ import type {
   UpdateTodoItemRequest,
   UpdateTodoRequest,
 } from '@/types';
-
-function formatDate(isoString: string): string {
-  const date = new Date(isoString);
-  return date.toLocaleDateString(undefined, {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-  });
-}
-
-function formatDueDate(isoString: string | null): string {
-  if (isoString === null) return '';
-  const date = new Date(isoString);
-  return date.toLocaleDateString(undefined, {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-  });
-}
-
-function formatDateForInput(isoString: string | null): string {
-  if (isoString === null) return '';
-  const date = new Date(isoString);
-  return date.toISOString().split('T')[0] ?? '';
-}
 
 const PRIORITY_CONFIG: Record<TodoPriority, { label: string; className: string }> = {
   low: { label: 'Low', className: 'bg-slate-100 text-slate-700' },
@@ -251,7 +227,7 @@ function TodoItemRow({ item, isEditing, onUpdate, onDelete }: TodoItemRowProps):
           {item.dueDate !== null ? (
             <span className="flex items-center gap-1">
               <Calendar className="h-3 w-3" />
-              {formatDueDate(item.dueDate)}
+              {formatDate(item.dueDate)}
             </span>
           ) : null}
         </div>
@@ -544,7 +520,7 @@ function TodoModal({
                 {currentTodo.dueDate !== null ? (
                   <span className="flex items-center gap-1 text-sm text-slate-600">
                     <Calendar className="h-4 w-4" />
-                    Due: {formatDueDate(currentTodo.dueDate)}
+                    Due: {formatDate(currentTodo.dueDate)}
                   </span>
                 ) : null}
               </div>
@@ -986,7 +962,7 @@ function TodoRow({ todo, onOpen }: TodoRowProps): React.JSX.Element {
                   ) : (
                     <Calendar className="h-3 w-3" />
                   )}
-                  {formatDueDate(todo.dueDate)}
+                  {formatDate(todo.dueDate)}
                 </span>
               ) : null}
             </div>

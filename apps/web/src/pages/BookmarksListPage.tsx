@@ -23,16 +23,8 @@ import { useBookmarkChanges, useBookmarks } from '@/hooks';
 import { ApiError } from '@/services/apiClient';
 import { getBookmark as getBookmarkApi, type ListBookmarksFilters } from '@/services/bookmarksApi';
 import type { Bookmark as BookmarkType, OgFetchStatus, UpdateBookmarkRequest } from '@/types';
+import { formatDate } from '@/utils/dateFormat';
 import { getProxiedImageUrl } from '@/utils/imageProxy';
-
-function formatDate(isoString: string): string {
-  const date = new Date(isoString);
-  return date.toLocaleDateString(undefined, {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-  });
-}
 
 function truncateText(text: string, maxLength = 100): string {
   if (text.length <= maxLength) {

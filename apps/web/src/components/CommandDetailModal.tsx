@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import type { Command, CommandType } from '@/types';
+import { formatDateTime } from '@/utils/dateFormat';
 import {
   Bell,
   Calendar,
@@ -41,17 +42,6 @@ function getTypeIcon(type: CommandType): React.JSX.Element {
 
 function getTypeLabel(type: CommandType): string {
   return type.charAt(0).toUpperCase() + type.slice(1);
-}
-
-function formatDate(isoDate: string): string {
-  const date = new Date(isoDate);
-  return date.toLocaleDateString('en-US', {
-    weekday: 'short',
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
 }
 
 export function CommandDetailModal({
@@ -158,11 +148,11 @@ export function CommandDetailModal({
           <div className="flex items-center gap-4 text-xs text-slate-500">
             <div className="flex items-center gap-1">
               <Clock className="h-3.5 w-3.5" />
-              <span>Created {formatDate(command.createdAt)}</span>
+              <span>Created {formatDateTime(command.createdAt)}</span>
             </div>
             {command.updatedAt !== command.createdAt && (
               <div className="flex items-center gap-1">
-                <span>Updated {formatDate(command.updatedAt)}</span>
+                <span>Updated {formatDateTime(command.updatedAt)}</span>
               </div>
             )}
           </div>

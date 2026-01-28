@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { Button, Card, Layout, RefreshIndicator } from '@/components';
 import { useCodeTasks } from '@/hooks';
+import { formatDateTime } from '@/utils/dateFormat';
 import type { CodeTask, CodeTaskStatus } from '@/types';
 
 interface StatusStyle {
@@ -115,16 +116,6 @@ function CodeTaskCard({ task }: CodeTaskCardProps): React.JSX.Element {
   const StatusIcon = status.icon;
   const isRunning = task.status === 'running';
 
-  const formatDate = (dateString: string): string => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-  };
-
   const handleCardClick = (): void => {
     void navigate(`/code-tasks/${task.id}`);
   };
@@ -163,9 +154,9 @@ function CodeTaskCard({ task }: CodeTaskCardProps): React.JSX.Element {
 
       <div className="mt-4 flex items-center justify-between text-sm text-slate-500">
         <div className="flex gap-4">
-          <span>Created: {formatDate(task.createdAt)}</span>
+          <span>Created: {formatDateTime(task.createdAt)}</span>
           {task.status === 'completed' ? (
-            <span>Completed: {formatDate(task.updatedAt)}</span>
+            <span>Completed: {formatDateTime(task.updatedAt)}</span>
           ) : null}
         </div>
         <div className="flex gap-2">
