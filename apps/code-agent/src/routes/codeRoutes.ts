@@ -8,6 +8,7 @@ import { getServices } from '../services.js';
 import { processCodeAction } from '../domain/usecases/processCodeAction.js';
 import { cancelTaskWithNonce } from '../domain/usecases/cancelTaskWithNonce.js';
 import type { TaskStatus } from '../domain/models/codeTask.js';
+import { generateWebhookSecret } from '../infra/services/hmacSigning.js';
 
 export type JwtValidator = (request: FastifyRequest, reply: FastifyReply) => Promise<void>;
 
@@ -1090,6 +1091,9 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       }
       const issueResult = await linearIssueService.ensureIssueExists(ensureParams);
 
+      // Generate webhook secret for this task
+      const webhookSecret = generateWebhookSecret();
+
       // Create task with prompt deduplication (Layer 2 only - no actionId/approvalEventId)
       const createInput: {
         userId: string;
@@ -1101,6 +1105,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         repository: string;
         baseBranch: string;
         traceId: string;
+        webhookSecret: string;
         linearIssueId?: string;
         linearIssueTitle?: string;
         linearFallback?: boolean;
@@ -1114,6 +1119,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         repository: 'pbuchman/intexuraos',
         baseBranch: 'development',
         traceId: `trace_${Date.now()}_${Math.random().toString(36).substring(7)}`,
+        webhookSecret,
       };
 
       if (issueResult.linearIssueId !== '') {
@@ -1165,7 +1171,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
 
       const task = createResult.value;
 
-      // Dispatch to worker
+      // Dispatch to worker (use stored webhook secret from task)
       const dispatchInput: {
         taskId: string;
         linearIssueId?: string;
@@ -1184,7 +1190,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         baseBranch: task.baseBranch,
         workerType: task.workerType,
         webhookUrl: `${process.env['INTEXURAOS_SERVICE_URL']}/internal/webhooks/task-complete`,
-        webhookSecret: process.env['INTEXURAOS_WEBHOOK_VERIFY_SECRET'] ?? '',
+        webhookSecret,
       };
 
       if (task.linearIssueId !== undefined) {
