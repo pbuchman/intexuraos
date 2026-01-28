@@ -132,6 +132,16 @@ jobs:
           pwd
           grep "test:e2e" package.json && echo "✓ test:e2e exists" || echo "✗ test:e2e MISSING!"
 
+          echo "=== Starting file watcher for package.json modifications ==="
+          # Install inotify-tools to watch file changes
+          sudo apt-get install -y inotify-tools > /dev/null 2>&1
+          # Start watching package.json in background, logging all modify events with timestamp
+          (inotifywait -m -e modify,create,delete,move package.json 2>&1 | while read line; do
+            echo "[$(date '+%Y-%m-%d %H:%M:%S.%3N')] FILE CHANGE: $line"
+          done) > /tmp/package-json-watcher.log 2>&1 &
+          echo $! > /tmp/watcher.pid
+          echo "File watcher started (PID: $(cat /tmp/watcher.pid))"
+
           echo "=== Starting code-agent (from apps/code-agent) ==="
           cd apps/code-agent
           pwd
@@ -153,12 +163,31 @@ jobs:
 
           echo "=== Immediately after starting (still in apps/code-agent) ==="
           pwd
+          echo "=== DIAGNOSTIC: root package.json modification time BEFORE wait ==="
+          stat ../../package.json | grep Modify || ls -la ../../package.json
           grep "test:e2e" ../../package.json && echo "✓ test:e2e exists" || echo "✗ test:e2e MISSING!"
 
           echo "=== Waiting 5 seconds ==="
           sleep 5
           pwd
-          grep "test:e2e" ../../package.json && echo "✓ test:e2e exists" || echo "✗ test:e2e MISSING!"
+          if grep -q "test:e2e" ../../package.json; then
+            echo "✓ test:e2e exists"
+          else
+            echo "✗ test:e2e MISSING!"
+            echo "=== DIAGNOSTIC: package.json scripts section ==="
+            grep -A 60 '"scripts"' ../../package.json | head -65
+            echo "=== DIAGNOSTIC: package.json file stats ==="
+            ls -la ../../package.json
+            stat ../../package.json
+            echo "=== DIAGNOSTIC: Recent file modifications ==="
+            find ../.. -maxdepth 1 -name "*.json" -mmin -1 -ls
+            echo "=== DIAGNOSTIC: Check for multiple package.json files ==="
+            find ../.. -maxdepth 2 -name "package.json" -ls
+            echo "=== DIAGNOSTIC: File watcher log ==="
+            cat /tmp/package-json-watcher.log || echo "No watcher log"
+            echo "=== DIAGNOSTIC: Running node/npm/pnpm processes ==="
+            ps aux | grep -E "(node|npm|pnpm|tsx)" | grep -v grep || echo "No relevant processes"
+          fi
 
           echo "=== Waiting 10 more seconds ==="
           sleep 10
