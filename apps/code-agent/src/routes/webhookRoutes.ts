@@ -147,7 +147,16 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       const traceId = extractOrGenerateTraceId(request.headers);
 
       request.log.info(
-        { taskId, status, traceId, hasResult: result !== undefined, resultKeys: result ? Object.keys(result) : [] },
+        {
+          taskId,
+          status,
+          traceId,
+          hasResult: result !== undefined,
+          resultKeys: result ? Object.keys(result) : [],
+          resultBranch: result?.branch,
+          resultPrUrl: result?.prUrl,
+          bodyKeys: Object.keys(request.body),
+        },
         'Processing task-complete webhook'
       );
 
@@ -220,8 +229,17 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           });
         }
 
+        // Verify result was stored
+        const verifyResult = await codeTaskRepo.findById(taskId);
         request.log.info(
-          { taskId, resultKeys: result ? Object.keys(result) : [], prUrl: result?.prUrl, branch: result?.branch },
+          {
+            taskId,
+            resultKeys: result ? Object.keys(result) : [],
+            prUrl: result?.prUrl,
+            branch: result?.branch,
+            storedHasResult: verifyResult.ok && verifyResult.value.result !== undefined,
+            storedResultKeys: verifyResult.ok && verifyResult.value.result ? Object.keys(verifyResult.value.result) : [],
+          },
           'Task marked as completed with result'
         );
         return reply.send({ received: true });

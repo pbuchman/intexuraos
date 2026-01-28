@@ -1516,6 +1516,16 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         };
       }
 
+      request.log.info(
+        {
+          taskId: request.params.taskId,
+          status: getResult.value.status,
+          hasResult: getResult.value.result !== undefined,
+          resultKeys: getResult.value.result ? Object.keys(getResult.value.result) : [],
+        },
+        'Returning task for GET /code/tasks/:taskId'
+      );
+
       return reply.status(200).send(taskToApiResponse(getResult.value));
     }
   );
