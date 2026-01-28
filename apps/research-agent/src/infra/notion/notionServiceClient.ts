@@ -85,8 +85,8 @@ export function createNotionServiceClient(config: NotionServiceConfig): NotionSe
         const response = await fetch(url, {
           method: 'GET',
           headers: {
-            'X-Internal-Auth': INTERNAL_AUTH_HEADER,
-            'Content-Type': 'application/json',
+            'x-internal-auth': INTERNAL_AUTH_HEADER,
+            'content-type': 'application/json',
           },
         });
 

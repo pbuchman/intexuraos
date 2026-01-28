@@ -3,6 +3,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import nock from 'nock';
+import type { Logger } from 'pino';
 import { createNotionServiceClient } from '../../notion/notionServiceClient.js';
 import type { NotionServiceError } from '../../notion/notionServiceClient.js';
 import type { Result } from '@intexuraos/common-core';

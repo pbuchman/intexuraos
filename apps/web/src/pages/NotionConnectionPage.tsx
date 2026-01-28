@@ -54,8 +54,13 @@ export function NotionConnectionPage(): React.JSX.Element {
             });
             setValidationState('valid');
           }
-        } catch {
-          // Research settings are optional
+        } catch (e) {
+          // 404 = research settings not configured yet (expected for new users)
+          // Other errors (network, 5xx) are not shown to avoid confusing users on initial load,
+          // but will surface when they try to validate/save
+          if (!(e instanceof ApiError && e.status === 404)) {
+            setValidationError('Could not load existing research settings');
+          }
         }
       } else {
         setState('disconnected');
