@@ -38,6 +38,19 @@ interface WebAgentSummaryResponse {
   error?: string;
 }
 
+// Transient HTTP errors that should trigger retry:
+// 429: Rate limiting - retry after backoff
+// 503: Service unavailable - retry after backoff
+// 504: Gateway timeout - retry after backoff
+// Note: 500 is NOT transient (app bug, won't self-heal)
+function isTransientHttpStatus(status: number): boolean {
+  return status === 429 || status === 503 || status === 504;
+}
+
+function isTransientErrorCode(code: string): boolean {
+  return code === 'TIMEOUT' || code === 'FETCH_FAILED';
+}
+
 function mapErrorCode(code: string): SummaryError['code'] {
   switch (code) {
     case 'NO_CONTENT':
@@ -82,10 +95,11 @@ export function createWebAgentSummaryClient(
           }),
         });
       } catch (error) {
-        logger.error({ error: getErrorMessage(error) }, 'Failed to call web-agent summary');
+        logger.error({ url: content.url, error: getErrorMessage(error) }, 'Failed to call web-agent summary');
         return err({
           code: 'GENERATION_ERROR',
           message: `Failed to call web-agent: ${getErrorMessage(error)}`,
+          transient: true,
         });
       }
 
@@ -97,6 +111,7 @@ export function createWebAgentSummaryClient(
         return err({
           code: 'GENERATION_ERROR',
           message: `HTTP ${String(response.status)}: ${response.statusText}`,
+          transient: isTransientHttpStatus(response.status),
         });
       }
 
@@ -106,6 +121,7 @@ export function createWebAgentSummaryClient(
         return err({
           code: 'GENERATION_ERROR',
           message: body.error ?? 'Invalid response from web-agent',
+          transient: false,
         });
       }
 
@@ -113,14 +129,20 @@ export function createWebAgentSummaryClient(
 
       if (result.status === 'failed') {
         const errorCode = mapErrorCode(result.error?.code ?? 'GENERATION_ERROR');
+        const isTransient = isTransientErrorCode(result.error?.code ?? '');
         return err({
           code: errorCode,
           message: result.error?.message ?? 'Unknown error',
+          transient: isTransient,
         });
       }
 
       if (result.summary === undefined) {
-        return err({ code: 'GENERATION_ERROR', message: 'No summary in successful result' });
+        return err({
+          code: 'GENERATION_ERROR',
+          message: 'No summary in successful result',
+          transient: false,
+        });
       }
 
       logger.info(

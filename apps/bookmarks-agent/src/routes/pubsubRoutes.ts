@@ -162,6 +162,15 @@ export const pubsubRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             },
             required: ['success'],
           },
+          503: {
+            description: 'Transient error - retry with backoff',
+            type: 'object',
+            properties: {
+              error: { type: 'string' },
+              retryable: { type: 'boolean' },
+            },
+            required: ['error', 'retryable'],
+          },
         },
       },
     },
@@ -230,9 +239,18 @@ export const pubsubRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       );
 
       if (!result.ok) {
+        if (result.error.code === 'TRANSIENT_ERROR') {
+          request.log.warn(
+            { bookmarkId: eventData.bookmarkId, error: result.error },
+            'Transient error during summarization - returning 503 for retry'
+          );
+          reply.status(503);
+          return { error: result.error.message, retryable: true };
+        }
+
         request.log.warn(
           { bookmarkId: eventData.bookmarkId, error: result.error },
-          'Bookmark summarization failed'
+          'Bookmark summarization failed (permanent)'
         );
       } else {
         request.log.info(

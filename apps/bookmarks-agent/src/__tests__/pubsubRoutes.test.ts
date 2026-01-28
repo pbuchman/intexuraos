@@ -358,5 +358,93 @@ describe('pubsubRoutes', () => {
 
       expect(response.statusCode).toBe(200);
     });
+
+    it('returns HTTP 503 for transient summarization error', async () => {
+      const createResult = await ctx.bookmarkRepository.create({
+        userId: 'user-1',
+        url: 'https://example.com',
+        source: 'test',
+        sourceId: 'test-1',
+        title: 'Test',
+      });
+
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) return;
+
+      ctx.bookmarkSummaryService.setNextError({
+        code: 'GENERATION_ERROR',
+        message: 'HTTP 429: Too Many Requests',
+        transient: true,
+      });
+
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/internal/bookmarks/pubsub/summarize',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+          'content-type': 'application/json',
+        },
+        payload: {
+          message: {
+            data: Buffer.from(
+              JSON.stringify({
+                type: 'bookmarks.summarize',
+                bookmarkId: createResult.value.id,
+                userId: 'user-1',
+              })
+            ).toString('base64'),
+            messageId: 'msg-1',
+          },
+          subscription: 'test-sub',
+        },
+      });
+
+      expect(response.statusCode).toBe(503);
+      expect(response.json()).toEqual({ error: 'HTTP 429: Too Many Requests', retryable: true });
+    });
+
+    it('returns HTTP 200 for non-transient summarization error', async () => {
+      const createResult = await ctx.bookmarkRepository.create({
+        userId: 'user-1',
+        url: 'https://example.com',
+        source: 'test',
+        sourceId: 'test-1',
+        title: 'Test',
+      });
+
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) return;
+
+      ctx.bookmarkSummaryService.setNextError({
+        code: 'NO_CONTENT',
+        message: 'No content',
+        transient: false,
+      });
+
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/internal/bookmarks/pubsub/summarize',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+          'content-type': 'application/json',
+        },
+        payload: {
+          message: {
+            data: Buffer.from(
+              JSON.stringify({
+                type: 'bookmarks.summarize',
+                bookmarkId: createResult.value.id,
+                userId: 'user-1',
+              })
+            ).toString('base64'),
+            messageId: 'msg-1',
+          },
+          subscription: 'test-sub',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({ success: true });
+    });
   });
 });

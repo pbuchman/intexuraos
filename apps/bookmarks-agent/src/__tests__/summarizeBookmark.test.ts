@@ -376,4 +376,85 @@ describe('summarizeBookmark', () => {
     expect(result.error.code).toBe('STORAGE_ERROR');
     expect(result.error.message).toBe('Database connection failed');
   });
+
+  describe('transient error handling', () => {
+    it('returns TRANSIENT_ERROR when summary service returns transient error', async () => {
+      const createResult = await bookmarkRepository.create({
+        userId: 'user-1',
+        url: 'https://example.com',
+        source: 'test',
+        sourceId: 'test-1',
+        title: 'Test',
+      });
+
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) return;
+
+      bookmarkSummaryService.setNextError({
+        code: 'GENERATION_ERROR',
+        message: 'HTTP 429: Too Many Requests',
+        transient: true,
+      });
+
+      const result = await summarizeBookmark(
+        { bookmarkRepository, bookmarkSummaryService, whatsAppSendPublisher, logger: silentLogger },
+        { bookmarkId: createResult.value.id, userId: 'user-1' }
+      );
+
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error.code).toBe('TRANSIENT_ERROR');
+    });
+
+    it('returns success for non-transient errors (graceful degradation)', async () => {
+      const createResult = await bookmarkRepository.create({
+        userId: 'user-1',
+        url: 'https://example.com',
+        source: 'test',
+        sourceId: 'test-1',
+        title: 'Test',
+      });
+
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) return;
+
+      bookmarkSummaryService.setNextError({
+        code: 'NO_CONTENT',
+        message: 'No content extracted',
+        transient: false,
+      });
+
+      const result = await summarizeBookmark(
+        { bookmarkRepository, bookmarkSummaryService, whatsAppSendPublisher, logger: silentLogger },
+        { bookmarkId: createResult.value.id, userId: 'user-1' }
+      );
+
+      expect(result.ok).toBe(true);
+    });
+
+    it('returns success when transient is undefined (backwards compatibility)', async () => {
+      const createResult = await bookmarkRepository.create({
+        userId: 'user-1',
+        url: 'https://example.com',
+        source: 'test',
+        sourceId: 'test-1',
+        title: 'Test',
+      });
+
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) return;
+
+      bookmarkSummaryService.setNextError({
+        code: 'NO_API_KEY',
+        message: 'No key',
+      });
+
+      const result = await summarizeBookmark(
+        { bookmarkRepository, bookmarkSummaryService, whatsAppSendPublisher, logger: silentLogger },
+        { bookmarkId: createResult.value.id, userId: 'user-1' }
+      );
+
+      expect(result.ok).toBe(true);
+    });
+  });
 });

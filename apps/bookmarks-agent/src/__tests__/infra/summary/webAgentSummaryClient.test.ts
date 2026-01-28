@@ -435,4 +435,273 @@ describe('webAgentSummaryClient', () => {
       expect(result.error.message).toBe('No summary in successful result');
     });
   });
+
+  describe('transient error classification', () => {
+    it('marks network failure as transient', async () => {
+      const client = createWebAgentSummaryClient({
+        baseUrl: TEST_BASE_URL,
+        internalAuthToken: TEST_INTERNAL_TOKEN,
+        logger: silentLogger,
+      });
+
+      nock(TEST_BASE_URL).post('/internal/page-summaries').replyWithError('Network error');
+
+      const result = await client.generateSummary('user-123', {
+        url: 'https://example.com',
+        title: 'Title',
+        description: null,
+      });
+
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error.transient).toBe(true);
+    });
+
+    it('marks HTTP 429 as transient', async () => {
+      const client = createWebAgentSummaryClient({
+        baseUrl: TEST_BASE_URL,
+        internalAuthToken: TEST_INTERNAL_TOKEN,
+        logger: silentLogger,
+      });
+
+      nock(TEST_BASE_URL).post('/internal/page-summaries').reply(429, {});
+
+      const result = await client.generateSummary('user-123', {
+        url: 'https://example.com',
+        title: 'Title',
+        description: null,
+      });
+
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error.transient).toBe(true);
+    });
+
+    it('marks HTTP 503 as transient', async () => {
+      const client = createWebAgentSummaryClient({
+        baseUrl: TEST_BASE_URL,
+        internalAuthToken: TEST_INTERNAL_TOKEN,
+        logger: silentLogger,
+      });
+
+      nock(TEST_BASE_URL).post('/internal/page-summaries').reply(503, {});
+
+      const result = await client.generateSummary('user-123', {
+        url: 'https://example.com',
+        title: 'Title',
+        description: null,
+      });
+
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error.transient).toBe(true);
+    });
+
+    it('marks HTTP 504 as transient', async () => {
+      const client = createWebAgentSummaryClient({
+        baseUrl: TEST_BASE_URL,
+        internalAuthToken: TEST_INTERNAL_TOKEN,
+        logger: silentLogger,
+      });
+
+      nock(TEST_BASE_URL).post('/internal/page-summaries').reply(504, {});
+
+      const result = await client.generateSummary('user-123', {
+        url: 'https://example.com',
+        title: 'Title',
+        description: null,
+      });
+
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error.transient).toBe(true);
+    });
+
+    it('marks HTTP 500 as NOT transient', async () => {
+      const client = createWebAgentSummaryClient({
+        baseUrl: TEST_BASE_URL,
+        internalAuthToken: TEST_INTERNAL_TOKEN,
+        logger: silentLogger,
+      });
+
+      nock(TEST_BASE_URL).post('/internal/page-summaries').reply(500, {});
+
+      const result = await client.generateSummary('user-123', {
+        url: 'https://example.com',
+        title: 'Title',
+        description: null,
+      });
+
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error.transient).toBe(false);
+    });
+
+    it('marks HTTP 400 as NOT transient', async () => {
+      const client = createWebAgentSummaryClient({
+        baseUrl: TEST_BASE_URL,
+        internalAuthToken: TEST_INTERNAL_TOKEN,
+        logger: silentLogger,
+      });
+
+      nock(TEST_BASE_URL).post('/internal/page-summaries').reply(400, {});
+
+      const result = await client.generateSummary('user-123', {
+        url: 'https://example.com',
+        title: 'Title',
+        description: null,
+      });
+
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error.transient).toBe(false);
+    });
+
+    it('marks TIMEOUT error code as transient', async () => {
+      const client = createWebAgentSummaryClient({
+        baseUrl: TEST_BASE_URL,
+        internalAuthToken: TEST_INTERNAL_TOKEN,
+        logger: silentLogger,
+      });
+
+      nock(TEST_BASE_URL)
+        .post('/internal/page-summaries')
+        .reply(200, {
+          success: true,
+          data: {
+            result: {
+              url: 'https://example.com',
+              status: 'failed',
+              error: { code: 'TIMEOUT', message: 'Timed out' },
+            },
+            metadata: { durationMs: 60000 },
+          },
+        });
+
+      const result = await client.generateSummary('user-123', {
+        url: 'https://example.com',
+        title: 'Title',
+        description: null,
+      });
+
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error.transient).toBe(true);
+    });
+
+    it('marks FETCH_FAILED error code as transient', async () => {
+      const client = createWebAgentSummaryClient({
+        baseUrl: TEST_BASE_URL,
+        internalAuthToken: TEST_INTERNAL_TOKEN,
+        logger: silentLogger,
+      });
+
+      nock(TEST_BASE_URL)
+        .post('/internal/page-summaries')
+        .reply(200, {
+          success: true,
+          data: {
+            result: {
+              url: 'https://example.com',
+              status: 'failed',
+              error: { code: 'FETCH_FAILED', message: 'Network error' },
+            },
+            metadata: { durationMs: 1000 },
+          },
+        });
+
+      const result = await client.generateSummary('user-123', {
+        url: 'https://example.com',
+        title: 'Title',
+        description: null,
+      });
+
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error.transient).toBe(true);
+    });
+
+    it('marks NO_CONTENT error code as NOT transient', async () => {
+      const client = createWebAgentSummaryClient({
+        baseUrl: TEST_BASE_URL,
+        internalAuthToken: TEST_INTERNAL_TOKEN,
+        logger: silentLogger,
+      });
+
+      nock(TEST_BASE_URL)
+        .post('/internal/page-summaries')
+        .reply(200, {
+          success: true,
+          data: {
+            result: {
+              url: 'https://example.com',
+              status: 'failed',
+              error: { code: 'NO_CONTENT', message: 'No content' },
+            },
+            metadata: { durationMs: 1000 },
+          },
+        });
+
+      const result = await client.generateSummary('user-123', {
+        url: 'https://example.com',
+        title: 'Title',
+        description: null,
+      });
+
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error.transient).toBe(false);
+    });
+
+    it('marks invalid response as NOT transient', async () => {
+      const client = createWebAgentSummaryClient({
+        baseUrl: TEST_BASE_URL,
+        internalAuthToken: TEST_INTERNAL_TOKEN,
+        logger: silentLogger,
+      });
+
+      nock(TEST_BASE_URL).post('/internal/page-summaries').reply(200, {
+        success: false,
+        error: 'Bad response',
+      });
+
+      const result = await client.generateSummary('user-123', {
+        url: 'https://example.com',
+        title: 'Title',
+        description: null,
+      });
+
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error.transient).toBe(false);
+    });
+
+    it('marks missing summary as NOT transient', async () => {
+      const client = createWebAgentSummaryClient({
+        baseUrl: TEST_BASE_URL,
+        internalAuthToken: TEST_INTERNAL_TOKEN,
+        logger: silentLogger,
+      });
+
+      nock(TEST_BASE_URL)
+        .post('/internal/page-summaries')
+        .reply(200, {
+          success: true,
+          data: {
+            result: { url: 'https://example.com', status: 'success' },
+            metadata: { durationMs: 1000 },
+          },
+        });
+
+      const result = await client.generateSummary('user-123', {
+        url: 'https://example.com',
+        title: 'Title',
+        description: null,
+      });
+
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error.transient).toBe(false);
+    });
+  });
 });

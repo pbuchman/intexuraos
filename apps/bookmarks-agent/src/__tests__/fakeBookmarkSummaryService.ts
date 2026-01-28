@@ -15,7 +15,7 @@ export class FakeBookmarkSummaryService implements BookmarkSummaryService {
     this.defaultSummary = summary;
   }
 
-  setNextError(error: SummaryError): void {
+  setNextError(error: Omit<SummaryError, 'transient'> & { transient?: boolean }): void {
     this.nextError = error;
   }
 

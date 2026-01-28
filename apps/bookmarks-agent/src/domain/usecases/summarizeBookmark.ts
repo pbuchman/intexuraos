@@ -6,10 +6,16 @@ import type { BookmarkSummaryService } from '../ports/bookmarkSummaryService.js'
 import type { WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
 import { updateBookmarkInternal } from './updateBookmarkInternal.js';
 
+export interface TransientError {
+  code: 'TRANSIENT_ERROR';
+  message: string;
+}
+
 interface MinimalLogger {
   info: (obj: object, msg?: string) => void;
   warn: (obj: object, msg?: string) => void;
   error: (obj: object, msg?: string) => void;
+  debug: (obj: object, msg?: string) => void;
 }
 
 export interface SummarizeBookmarkDeps {
@@ -27,7 +33,7 @@ export interface SummarizeBookmarkInput {
 export async function summarizeBookmark(
   deps: SummarizeBookmarkDeps,
   input: SummarizeBookmarkInput
-): Promise<Result<Bookmark, BookmarkError>> {
+): Promise<Result<Bookmark, BookmarkError | TransientError>> {
   const { bookmarkId, userId } = input;
 
   deps.logger.info({ bookmarkId, userId }, 'Starting bookmark summarization');
@@ -74,6 +80,14 @@ export async function summarizeBookmark(
       { bookmarkId, error: summaryResult.error },
       'Failed to generate bookmark summary'
     );
+
+    if (summaryResult.error.transient === true) {
+      return err({
+        code: 'TRANSIENT_ERROR',
+        message: summaryResult.error.message,
+      });
+    }
+    // Continue with existing bookmark (graceful degradation for permanent errors)
     return { ok: true, value: bookmark };
   }
 

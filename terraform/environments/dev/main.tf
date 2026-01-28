@@ -1270,6 +1270,11 @@ module "pubsub_bookmark_summarize" {
   push_audience              = module.bookmarks_agent.service_url
   ack_deadline_seconds       = 120
 
+  # 6-hour retry window for transient Crawl4AI errors
+  retry_minimum_backoff = "30s"
+  retry_maximum_backoff = "600s"
+  max_delivery_attempts = 50
+
   publisher_service_accounts = {
     bookmarks_agent = module.iam.service_accounts["bookmarks_agent"]
   }
