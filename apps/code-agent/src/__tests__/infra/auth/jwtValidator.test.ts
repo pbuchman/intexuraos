@@ -2,8 +2,8 @@
  * Tests for JWT validator middleware
  */
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { createJwtValidator, type JwtValidatorConfig } from '../../../infra/auth/jwtValidator.js';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createJwtValidator, createE2eJwtValidator, type JwtValidatorConfig } from '../../../infra/auth/jwtValidator.js';
 import pino from 'pino';
 import type { Logger } from 'pino';
 import * as jose from 'jose';
@@ -191,6 +191,85 @@ describe('createJwtValidator', () => {
       expect(request.user).toEqual({
         userId: 'auth0|user456',
       });
+    });
+  });
+});
+
+describe('createE2eJwtValidator', () => {
+  let logger: Logger;
+
+  beforeEach(() => {
+    logger = pino({ name: 'test' }) as unknown as Logger;
+    vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    delete process.env['E2E_TEST_USER_ID'];
+  });
+
+  it('should return 401 when Authorization header is missing', async () => {
+    const validator = createE2eJwtValidator(logger);
+    const request: TestRequest = { headers: {}, url: '/code/submit' };
+    const reply = { status: vi.fn().mockReturnThis(), send: vi.fn() };
+
+    await validator(request as unknown as Parameters<typeof validator>[0], reply as unknown as Parameters<typeof validator>[1]);
+
+    expect(reply.status).toHaveBeenCalledWith(401);
+    expect(reply.send).toHaveBeenCalledWith({
+      success: false,
+      error: {
+        code: 'UNAUTHORIZED',
+        message: 'Unauthorized',
+      },
+    });
+  });
+
+  it('should return 401 when Authorization does not start with Bearer', async () => {
+    const validator = createE2eJwtValidator(logger);
+    const request: TestRequest = {
+      headers: { authorization: 'Basic abc123' },
+      url: '/code/submit',
+    };
+    const reply = { status: vi.fn().mockReturnThis(), send: vi.fn() };
+
+    await validator(request as unknown as Parameters<typeof validator>[0], reply as unknown as Parameters<typeof validator>[1]);
+
+    expect(reply.status).toHaveBeenCalledWith(401);
+  });
+
+  it('should accept any Bearer token and set user from E2E_TEST_USER_ID', async () => {
+    process.env['E2E_TEST_USER_ID'] = 'e2e-ci-test';
+
+    const validator = createE2eJwtValidator(logger);
+    const request: TestRequest = {
+      headers: { authorization: 'Bearer any-token-value' },
+      url: '/code/submit',
+    };
+    const reply = { status: vi.fn().mockReturnThis(), send: vi.fn() };
+
+    await validator(request as unknown as Parameters<typeof validator>[0], reply as unknown as Parameters<typeof validator>[1]);
+
+    expect(request.user).toEqual({
+      userId: 'e2e-ci-test',
+      email: undefined,
+    });
+    expect(reply.status).not.toHaveBeenCalled();
+    expect(reply.send).not.toHaveBeenCalled();
+  });
+
+  it('should use default user ID when E2E_TEST_USER_ID is not set', async () => {
+    const validator = createE2eJwtValidator(logger);
+    const request: TestRequest = {
+      headers: { authorization: 'Bearer test-token' },
+      url: '/code/submit',
+    };
+    const reply = { status: vi.fn().mockReturnThis(), send: vi.fn() };
+
+    await validator(request as unknown as Parameters<typeof validator>[0], reply as unknown as Parameters<typeof validator>[1]);
+
+    expect(request.user).toEqual({
+      userId: 'e2e-test-user',
+      email: undefined,
     });
   });
 });

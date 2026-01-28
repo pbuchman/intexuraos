@@ -69,6 +69,8 @@ jobs:
       - name: Start code-agent service
         run: |
           cd apps/code-agent
+          E2E_MODE=true \
+          E2E_TEST_USER_ID=e2e-ci-test \
           PORT=8128 \
           INTEXURAOS_GCP_PROJECT_ID=test-project \
           INTEXURAOS_INTERNAL_AUTH_TOKEN=test-secret \
@@ -76,9 +78,10 @@ jobs:
           INTEXURAOS_WEBHOOK_VERIFY_SECRET=test-webhook-secret \
           INTEXURAOS_ORCHESTRATOR_MAC_URL=http://localhost:8090 \
           INTEXURAOS_ORCHESTRATOR_VM_URL=http://localhost:8090 \
+          INTEXURAOS_SERVICE_URL=http://localhost:8128 \
           FIRESTORE_EMULATOR_HOST=localhost:8081 \
           PUBSUB_EMULATOR_HOST=localhost:8085 \
-          node --import tsx/dist/loader.mjs --conditions=tsx index.ts &
+          node --import tsx/dist/loader.mjs --conditions=tsx src/index.ts &
           sleep 10
 
       - name: Run E2E tests

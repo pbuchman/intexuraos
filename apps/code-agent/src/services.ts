@@ -5,8 +5,9 @@
 
 import pino from 'pino';
 import type { Firestore } from '@google-cloud/firestore';
+import { ok } from '@intexuraos/common-core';
 import { getFirestore } from '@intexuraos/infra-firestore';
-import { createWhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
+import { createWhatsAppSendPublisher, type WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
 import type { CodeTaskRepository } from './domain/repositories/codeTaskRepository.js';
 import type { LogChunkRepository } from './domain/repositories/logChunkRepository.js';
 import type { WorkerDiscoveryService } from './domain/services/workerDiscovery.js';
@@ -28,6 +29,7 @@ import { createStatusMirrorService, type StatusMirrorService } from './infra/ser
 import { createProcessHeartbeatUseCase, type ProcessHeartbeatUseCase } from './domain/usecases/processHeartbeat.js';
 import { createDetectZombieTasksUseCase, type DetectZombieTasksUseCase } from './domain/usecases/detectZombieTasks.js';
 import { createMetricsClient, type MetricsClient } from './infra/metrics.js';
+import type { LinearAgentClient } from './domain/ports/linearAgentClient.js';
 
 export interface ServiceContainer {
   firestore: Firestore;
@@ -65,6 +67,52 @@ export interface ServiceConfig {
 
 let container: ServiceContainer | null = null;
 
+const isE2eMode = process.env['E2E_MODE'] === 'true';
+
+/**
+ * Create a no-op WhatsApp publisher for E2E testing.
+ */
+function createE2eWhatsAppPublisher(): WhatsAppSendPublisher {
+  return {
+    publishSendMessage(): ReturnType<WhatsAppSendPublisher['publishSendMessage']> {
+      return Promise.resolve(ok(undefined));
+    },
+  };
+}
+
+/**
+ * Create a no-op Linear agent client for E2E testing.
+ */
+function createE2eLinearAgentClient(logger: pino.Logger): LinearAgentClient {
+  return {
+    createIssue(request): ReturnType<LinearAgentClient['createIssue']> {
+      logger.info({ title: request.title }, '[E2E] Mock Linear issue creation');
+      return Promise.resolve(ok({
+        issueId: `e2e-issue-${String(Date.now())}`,
+        issueIdentifier: 'INT-E2E',
+        issueTitle: request.title,
+        issueUrl: 'https://linear.app/e2e-test-issue',
+      }));
+    },
+    updateIssueState(request): ReturnType<LinearAgentClient['updateIssueState']> {
+      logger.info({ issueId: request.issueId, state: request.state }, '[E2E] Mock Linear state update');
+      return Promise.resolve(ok(undefined));
+    },
+  };
+}
+
+/**
+ * Create a no-op actions agent client for E2E testing.
+ */
+function createE2eActionsAgentClient(logger: pino.Logger): ActionsAgentClient {
+  return {
+    updateActionStatus(actionId, status): ReturnType<ActionsAgentClient['updateActionStatus']> {
+      logger.info({ actionId, status }, '[E2E] Mock action status update');
+      return Promise.resolve(ok(undefined));
+    },
+  };
+}
+
 /**
  * Initialize services with config. Call this early in server startup.
  * MUST be called before getServices().
@@ -73,24 +121,40 @@ export function initServices(config: ServiceConfig): void {
   const firestore = getFirestore();
   const logger = pino({ name: 'code-agent' });
 
-  const linearAgentClient = createLinearAgentHttpClient({
-    baseUrl: config.linearAgentUrl,
-    internalAuthToken: config.internalAuthToken,
-    timeoutMs: 10000,
-  }, logger);
+  if (isE2eMode) {
+    logger.info('Initializing services in E2E mode with mock external services');
+  }
+
+  const linearAgentClient = isE2eMode
+    ? createE2eLinearAgentClient(logger)
+    : createLinearAgentHttpClient({
+        baseUrl: config.linearAgentUrl,
+        internalAuthToken: config.internalAuthToken,
+        timeoutMs: 10000,
+      }, logger);
 
   const linearIssueService = createLinearIssueService({
     linearAgentClient,
     logger,
   });
 
-  const actionsAgentClient = createActionsAgentClient({
-    baseUrl: config.actionsAgentUrl,
-    internalAuthToken: config.internalAuthToken,
-    logger,
-  });
+  const actionsAgentClient = isE2eMode
+    ? createE2eActionsAgentClient(logger)
+    : createActionsAgentClient({
+        baseUrl: config.actionsAgentUrl,
+        internalAuthToken: config.internalAuthToken,
+        logger,
+      });
 
   const metricsClient = createMetricsClient();
+
+  const whatsappPublisher = isE2eMode
+    ? createE2eWhatsAppPublisher()
+    : createWhatsAppSendPublisher({
+        projectId: config.gcpProjectId,
+        topicName: config.whatsappSendTopic,
+        logger: pino({ name: 'whatsapp-publisher' }),
+      });
 
   container = {
     firestore,
@@ -107,11 +171,7 @@ export function initServices(config: ServiceConfig): void {
       orchestratorVmUrl: config.orchestratorVmUrl,
     }),
     whatsappNotifier: createWhatsAppNotifier({
-      whatsappPublisher: createWhatsAppSendPublisher({
-        projectId: config.gcpProjectId,
-        topicName: config.whatsappSendTopic,
-        logger: pino({ name: 'whatsapp-publisher' }),
-      }),
+      whatsappPublisher,
     }),
     actionsAgentClient,
     statusMirrorService: createStatusMirrorService({

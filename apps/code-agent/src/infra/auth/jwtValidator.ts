@@ -14,10 +14,54 @@ export interface JwtValidatorConfig {
   jwksUri: string;
 }
 
+/**
+ * Create a mock JWT validator for E2E testing.
+ * Accepts any Bearer token and extracts user ID from E2E_TEST_USER_ID env var.
+ */
+export function createE2eJwtValidator(
+  logger: Logger
+): (request: FastifyRequest, reply: FastifyReply) => Promise<void> {
+  return async (
+    request: FastifyRequest,
+    reply: FastifyReply
+  ): Promise<void> => {
+    const authHeader = request.headers.authorization;
+
+    // eslint-disable-next-line @typescript-eslint/prefer-optional-chain
+    if (authHeader === undefined || !authHeader.startsWith('Bearer ')) {
+      logger.warn({ url: request.url }, '[E2E] Missing or invalid Authorization header');
+      reply.status(401).send({
+        success: false,
+        error: {
+          code: 'UNAUTHORIZED',
+          message: 'Unauthorized',
+        },
+      });
+      return;
+    }
+
+    const userId = process.env['E2E_TEST_USER_ID'] ?? 'e2e-test-user';
+
+    // Attach user info to request via module augmentation
+    (request as unknown as { user?: { userId: string; email: string | undefined } }).user = {
+      userId,
+      email: undefined,
+    };
+
+    logger.debug({ userId, url: request.url }, '[E2E] Mock JWT validation passed');
+  };
+}
+
 export function createJwtValidator(
   config: JwtValidatorConfig,
   logger: Logger
 ): (request: FastifyRequest, reply: FastifyReply) => Promise<void> {
+  // In E2E mode, use mock validator that accepts any token
+  if (process.env['E2E_MODE'] === 'true') {
+    logger.info('E2E_MODE enabled - using mock JWT validator');
+    return createE2eJwtValidator(logger);
+  }
+
   const jwks = jose.createRemoteJWKSet(new URL(config.jwksUri));
 
   return async (

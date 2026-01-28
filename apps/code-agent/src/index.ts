@@ -9,16 +9,25 @@ import { initServices } from './services.js';
 const REQUIRED_ENV = [
   'INTEXURAOS_GCP_PROJECT_ID',
   'INTEXURAOS_INTERNAL_AUTH_TOKEN',
+  'INTEXURAOS_DISPATCH_SIGNING_SECRET',
+  'INTEXURAOS_WEBHOOK_VERIFY_SECRET',
+  'INTEXURAOS_ORCHESTRATOR_MAC_URL',
+  'INTEXURAOS_ORCHESTRATOR_VM_URL',
+];
+
+// Optional env vars - used but not strictly required (for E2E or conditional features)
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const OPTIONAL_ENV = [
+  // E2E testing mode flags
+  'E2E_MODE',
+  'E2E_TEST_USER_ID',
+  // Production services (mocked in E2E mode)
   'INTEXURAOS_WHATSAPP_SERVICE_URL',
   'INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC',
   'INTEXURAOS_LINEAR_AGENT_URL',
   'INTEXURAOS_ACTIONS_AGENT_URL',
-  'INTEXURAOS_DISPATCH_SIGNING_SECRET',
-  'INTEXURAOS_WEBHOOK_VERIFY_SECRET',
   'INTEXURAOS_CF_ACCESS_CLIENT_ID',
   'INTEXURAOS_CF_ACCESS_CLIENT_SECRET',
-  'INTEXURAOS_ORCHESTRATOR_MAC_URL',
-  'INTEXURAOS_ORCHESTRATOR_VM_URL',
   'INTEXURAOS_CODE_WORKERS',
   'INTEXURAOS_SERVICE_URL',
   // Auth0 JWT validation for public routes
@@ -27,7 +36,24 @@ const REQUIRED_ENV = [
   'INTEXURAOS_AUTH0_JWKS_URI',
 ];
 
-validateRequiredEnv(REQUIRED_ENV);
+// Additional env vars required in production but optional in E2E mode
+const PRODUCTION_ONLY_ENV = [
+  'INTEXURAOS_WHATSAPP_SERVICE_URL',
+  'INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC',
+  'INTEXURAOS_LINEAR_AGENT_URL',
+  'INTEXURAOS_ACTIONS_AGENT_URL',
+  'INTEXURAOS_CF_ACCESS_CLIENT_ID',
+  'INTEXURAOS_CF_ACCESS_CLIENT_SECRET',
+  'INTEXURAOS_CODE_WORKERS',
+  'INTEXURAOS_SERVICE_URL',
+  'INTEXURAOS_AUTH0_AUDIENCE',
+  'INTEXURAOS_AUTH0_ISSUER',
+  'INTEXURAOS_AUTH0_JWKS_URI',
+];
+
+// In E2E mode, only validate core env vars; others have sensible defaults
+const isE2eMode = process.env['E2E_MODE'] === 'true';
+validateRequiredEnv(isE2eMode ? REQUIRED_ENV : [...REQUIRED_ENV, ...PRODUCTION_ONLY_ENV]);
 
 // Initialize Sentry (required - DSN is validated above)
 const dsn = process.env['INTEXURAOS_SENTRY_DSN'];
