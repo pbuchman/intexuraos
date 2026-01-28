@@ -496,7 +496,7 @@ function startService(service) {
     NODE_ENV: 'development',
   };
 
-  const child = spawn('npx', ['tsx', 'watch', 'src/index.ts'], {
+  const child = spawn('pnpm', ['exec', 'tsx', 'watch', 'src/index.ts'], {
     cwd: serviceDir,
     env,
     stdio: ['ignore', 'pipe', 'pipe'],

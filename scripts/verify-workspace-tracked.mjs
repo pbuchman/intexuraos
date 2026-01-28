@@ -8,9 +8,9 @@
  * Usage: node scripts/verify-workspace-tracked.mjs <workspace-name>
  */
 
-import { spawn, execSync } from 'node:child_process';
-import { resolve, dirname, basename } from 'node:path';
-import { existsSync, mkdirSync, readFileSync, appendFileSync } from 'node:fs';
+import { execSync, spawn } from 'node:child_process';
+import { basename, resolve } from 'node:path';
+import { appendFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
 
 const repoRoot = resolve(import.meta.dirname, '..');
 const failuresDir = resolve(repoRoot, '.claude/ci-failures');

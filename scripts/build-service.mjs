@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 import * as esbuild from 'esbuild';
-import { resolve, dirname } from 'path';
+import { dirname, resolve } from 'path';
 import { fileURLToPath } from 'url';
-import { readFileSync, existsSync, writeFileSync, mkdirSync } from 'fs';
+import { existsSync, readFileSync, writeFileSync } from 'fs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const rootDir = resolve(__dirname, '..');

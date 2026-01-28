@@ -7,7 +7,7 @@
  */
 
 import { spawn } from 'node:child_process';
-import { readFileSync, readdirSync, existsSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 const rootDir = resolve(import.meta.dirname, '..');
