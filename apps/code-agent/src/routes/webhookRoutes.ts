@@ -140,13 +140,13 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         };
       }
 
-      const { codeTaskRepo, actionsAgentClient, whatsappNotifier, rateLimitService, metricsClient } = getServices();
+      const { codeTaskRepo, actionsAgentClient, whatsappNotifier, rateLimitService, metricsClient, logger } = getServices();
       const { taskId, status, result, error } = request.body;
 
       // Extract traceId from headers for downstream calls
       const traceId = extractOrGenerateTraceId(request.headers);
 
-      request.log.info(
+      logger.info(
         {
           taskId,
           status,
@@ -231,7 +231,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
         // Verify result was stored
         const verifyResult = await codeTaskRepo.findById(taskId);
-        request.log.info(
+        logger.info(
           {
             taskId,
             resultKeys: result ? Object.keys(result) : [],

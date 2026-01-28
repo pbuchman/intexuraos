@@ -1485,16 +1485,16 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         includeParams: true,
       });
 
-      const { codeTaskRepo } = getServices();
+      const { codeTaskRepo, logger } = getServices();
       const userId = request.user?.userId ?? 'unknown-user';
 
-      request.log.info({ userId, taskId: request.params.taskId }, 'Getting code task');
+      logger.info({ userId, taskId: request.params.taskId }, 'Getting code task');
 
       const getResult = await codeTaskRepo.findByIdForUser(request.params.taskId, userId);
 
       if (!getResult.ok) {
         if (getResult.error.code === 'NOT_FOUND') {
-          request.log.warn({ taskId: request.params.taskId, userId }, 'Code task not found');
+          logger.warn({ taskId: request.params.taskId, userId }, 'Code task not found');
           reply.status(404);
           return {
             success: false,
@@ -1505,7 +1505,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           };
         }
 
-        request.log.error({ error: getResult.error }, 'Failed to get code task');
+        logger.error({ error: getResult.error }, 'Failed to get code task');
         reply.status(500);
         return {
           success: false,
@@ -1516,7 +1516,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         };
       }
 
-      request.log.info(
+      logger.info(
         {
           taskId: request.params.taskId,
           status: getResult.value.status,
