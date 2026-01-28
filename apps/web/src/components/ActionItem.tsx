@@ -13,7 +13,6 @@ import {
   HelpCircle,
   Link,
   ListTodo,
-  Loader2,
   MoreVertical,
   Search,
   X,
@@ -32,7 +31,6 @@ export interface ExecutionState {
   linkLabel?: string;
   errorCode?: string;
   lastButton?: ResolvedActionButton;
-  isDismissError?: boolean;
 }
 
 interface ActionItemProps {
@@ -40,8 +38,6 @@ interface ActionItemProps {
   onClick: () => void;
   onActionSuccess: (button: ResolvedActionButton) => void;
   onActionUpdated?: (action: Action) => void;
-  onDismiss: (actionId: string) => Promise<void>;
-  isDismissing?: boolean;
 }
 
 function getTypeIcon(type: CommandType): React.JSX.Element {
@@ -110,13 +106,10 @@ export function ActionItem({
   onClick,
   onActionSuccess,
   onActionUpdated,
-  onDismiss,
-  isDismissing = false,
 }: ActionItemProps): React.JSX.Element {
   const { buttons } = useActionConfig(action);
   const [executionState, setExecutionState] = useState<ExecutionState | null>(null);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
-  const [localDismissing, setLocalDismissing] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -142,7 +135,15 @@ export function ActionItem({
     closeDropdown?: () => void
   ): void => {
     closeDropdown?.();
-    if (result.status === 'completed') {
+
+    // For PATCH/DELETE endpoints (archive, reject, delete), success is indicated by
+    // not throwing an error. These return the updated action, not ActionExecutionResult.
+    // Only POST /execute endpoints return ActionExecutionResult with status field.
+    const isPatchOrDelete =
+      button.endpoint.method === 'PATCH' || button.endpoint.method === 'DELETE';
+    const isSuccess = isPatchOrDelete || result.status === 'completed';
+
+    if (isSuccess) {
       const normalizedUrl =
         result.resourceUrl !== undefined ? normalizeResourceUrl(result.resourceUrl) : undefined;
       setExecutionState({
@@ -176,23 +177,6 @@ export function ActionItem({
     setExecutionState(null);
   };
 
-  const handleDismissAction = async (e: React.MouseEvent): Promise<void> => {
-    e.stopPropagation();
-    setLocalDismissing(true);
-    try {
-      await onDismiss(action.id);
-    } catch (err) {
-      setExecutionState({
-        type: 'error',
-        message: err instanceof Error ? err.message : 'Failed to archive action',
-        isDismissError: true,
-      });
-    } finally {
-      setLocalDismissing(false);
-    }
-  };
-
-  const showDismissButton = action.status === 'completed' || action.status === 'failed';
   const isSuccess = executionState?.type === 'success';
 
   const persistedError =
@@ -217,7 +201,6 @@ export function ActionItem({
     persistedErrorCode === 'TOKEN_ERROR' ||
     persistedErrorCode === 'NOT_CONNECTED' ||
     persistedErrorCode === 'UNAUTHORIZED';
-  const actualDismissing = isDismissing || localDismissing;
 
   return (
     <div
@@ -273,7 +256,20 @@ export function ActionItem({
             />
           )}
 
-          {(secondaryButtons.length > 0 || showDismissButton) && (
+          {persistedResourceUrl !== null && executionState === null && (
+            <RouterLink
+              to={persistedResourceUrl}
+              className="hidden items-center gap-1 rounded px-2 py-1.5 text-sm font-medium text-green-700 transition-colors hover:bg-green-50 hover:text-green-800 sm:inline-flex"
+              onClick={(e): void => {
+                e.stopPropagation();
+              }}
+            >
+              <ExternalLink className="h-3.5 w-3.5" />
+              View
+            </RouterLink>
+          )}
+
+          {(secondaryButtons.length > 0 || persistedResourceUrl !== null) && (
             <div className="relative" ref={dropdownRef}>
               <button
                 onClick={(): void => {
@@ -287,6 +283,18 @@ export function ActionItem({
 
               {isDropdownOpen && (
                 <div className="absolute right-0 top-full z-10 mt-1 min-w-[140px] rounded-lg border border-slate-200 bg-white py-1 shadow-lg">
+                  {persistedResourceUrl !== null && executionState === null && (
+                    <RouterLink
+                      to={persistedResourceUrl}
+                      className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-green-700 transition-colors hover:bg-green-50 sm:hidden"
+                      onClick={(): void => {
+                        setIsDropdownOpen(false);
+                      }}
+                    >
+                      <ExternalLink className="h-4 w-4" />
+                      View
+                    </RouterLink>
+                  )}
                   {secondaryButtons.map((button) => (
                     <ConfigurableActionButton
                       key={button.id}
@@ -311,23 +319,6 @@ export function ActionItem({
                       }}
                     />
                   ))}
-                  {showDismissButton && (
-                    <button
-                      onClick={(e): void => {
-                        setIsDropdownOpen(false);
-                        void handleDismissAction(e);
-                      }}
-                      disabled={actualDismissing}
-                      className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-slate-700 transition-colors hover:bg-slate-100 disabled:opacity-50"
-                    >
-                      {actualDismissing ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <Archive className="h-4 w-4" />
-                      )}
-                      Dismiss
-                    </button>
-                  )}
                 </div>
               )}
             </div>
@@ -411,25 +402,6 @@ export function ActionItem({
         </div>
       )}
 
-      {persistedResourceUrl !== null && executionState === null && (
-        <div
-          className="mt-3 rounded-md border border-green-200 bg-green-50 p-3"
-          onClick={(e): void => {
-            e.stopPropagation();
-          }}
-        >
-          <div className="flex items-center gap-2">
-            <CheckCircle className="h-4 w-4 shrink-0 text-green-600" />
-            <RouterLink
-              to={persistedResourceUrl}
-              className="inline-flex items-center gap-1 text-sm font-medium text-green-700 hover:text-green-800"
-            >
-              View {getTypeLabel(action.type)}
-              <ExternalLink className="h-3 w-3" />
-            </RouterLink>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

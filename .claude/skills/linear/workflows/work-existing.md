@@ -71,8 +71,10 @@ Verify Linear, GitHub, GCloud available.
 Check if this issue has child subissues:
 
 ```
-Call mcp__linear__issue_read(method: "get_sub_issues", issueId: "INT-XXX")
+Call mcp__linear__list_issues(parentId: "<issue-uuid>", team: "IntexuraOS")
 ```
+
+Note: Use the full UUID from `mcp__linear__get_issue` response (e.g., `a2336d05-d0cb-427d-a6e2-346eadd25480`), not the issue identifier (`INT-XXX`).
 
 **Routing Decision:**
 

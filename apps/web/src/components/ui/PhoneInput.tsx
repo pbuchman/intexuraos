@@ -86,6 +86,15 @@ function parsePhoneNumber(fullNumber: string): { countryCode: CountryCode; local
     return { countryCode: DEFAULT_COUNTRY.code, localNumber: '' };
   }
 
+  // Check if the input is just a country dial code (no local number yet)
+  // This prevents the dial code from being treated as the local number
+  for (const country of COUNTRIES) {
+    const dialCode = country.dialCode.replace('+', '');
+    if (cleaned === dialCode) {
+      return { countryCode: country.code, localNumber: '' };
+    }
+  }
+
   try {
     const parsed = parsePhoneNumberWithError(`+${cleaned}`);
     if (parsed.country !== undefined) {

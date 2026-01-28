@@ -604,6 +604,8 @@ function startWebApp() {
 
   const env = {
     ...process.env,
+    ...COMMON_SERVICE_ENV,
+    ...COMMON_SERVICE_URLS,
     NODE_ENV: 'development',
   };
 
