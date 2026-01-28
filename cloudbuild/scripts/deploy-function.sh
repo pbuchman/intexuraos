@@ -24,6 +24,12 @@ WORKER_DIR="/workspace/workers/${WORKER}"
 
 log "Deploying Cloud Function worker: ${WORKER}"
 
+# Install zip if not available (cloud-sdk image doesn't have it)
+if ! command -v zip &>/dev/null; then
+  log "Installing zip..."
+  apt-get update -qq && apt-get install -y -qq zip >/dev/null 2>&1
+fi
+
 if [[ ! -d "${WORKER_DIR}" ]]; then
   log "ERROR: Worker directory not found: ${WORKER_DIR}"
   exit 1
