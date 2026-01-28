@@ -541,6 +541,25 @@ return result.value;
 
 ---
 
+## Token Efficiency
+
+**RULE:** Use streaming/watch instead of polling.
+
+```bash
+# ❌ Polling (wastes 2-5x tokens)
+sleep 60 && gh pr checks 682
+sleep 300 && gcloud builds describe <id>
+
+# ✅ Streaming (blocks until done)
+gh pr checks 682 --watch
+gh run watch 12345
+gcloud builds log <id> --stream --region=<region>
+```
+
+**Enforced by:** `.claude/hooks/validate-polling.sh`
+
+---
+
 ## Common LLM Mistakes
 
 **Full reference:** `.claude/reference/common-mistakes.md`
