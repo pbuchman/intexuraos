@@ -10,6 +10,7 @@ import type { CodeTaskRepository } from '../../domain/repositories/codeTaskRepos
 import type { TaskDispatcherService } from '../../domain/services/taskDispatcher.js';
 import type { WhatsAppNotifier } from '../../domain/services/whatsappNotifier.js';
 import type { WorkerLocation } from '../../domain/models/worker.js';
+import type { MetricsClient } from '../../domain/services/metrics.js';
 import { randomBytes } from 'node:crypto';
 
 /**
@@ -48,6 +49,7 @@ export interface ProcessCodeActionRequest {
   repository?: string;
   baseBranch?: string;
   traceId?: string;
+  source?: 'whatsapp' | 'web';
 }
 
 /**
@@ -83,6 +85,7 @@ export interface ProcessCodeActionDeps {
   codeTaskRepo: CodeTaskRepository;
   taskDispatcher: TaskDispatcherService;
   whatsappNotifier: WhatsAppNotifier;
+  metricsClient: MetricsClient;
 }
 
 /**
@@ -216,6 +219,12 @@ export async function processCodeAction(
   }
 
   const dispatchValue = dispatchResult.value;
+
+  // Step 4.5: Record metrics for task submission
+  const source = request.source ?? 'web'; // Default to web if not specified
+  await deps.metricsClient.incrementTasksSubmitted(workerType, source).catch((error: unknown) => {
+    logger.warn({ error, taskId: task.id }, 'Failed to record task submission metric');
+  });
 
   // Step 5: Generate cancel nonce and send task started notification (INT-379)
   const cancelNonce = generateCancelNonce();

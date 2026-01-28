@@ -140,7 +140,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         };
       }
 
-      const { codeTaskRepo, actionsAgentClient, whatsappNotifier, rateLimitService } = getServices();
+      const { codeTaskRepo, actionsAgentClient, whatsappNotifier, rateLimitService, metricsClient } = getServices();
       const { taskId, status, result, error } = request.body;
 
       // Extract traceId from headers for downstream calls
@@ -207,6 +207,16 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           request.log.error({ taskId, userId: task.userId, error: err }, 'Failed to record task completion for rate limiting');
         });
 
+        // Record metrics (fire and forget)
+        metricsClient.incrementTasksCompleted(task.workerType, 'completed').catch((err) => {
+          request.log.warn({ taskId, error: err }, 'Failed to record task completion metric');
+        });
+        if (request.body.duration) {
+          metricsClient.recordTaskDuration(task.workerType, request.body.duration).catch((err) => {
+            request.log.warn({ taskId, error: err }, 'Failed to record task duration metric');
+          });
+        }
+
         request.log.info({ taskId, result }, 'Task marked as completed');
         return reply.send({ received: true });
       }
@@ -263,6 +273,16 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           request.log.error({ taskId, userId: task.userId, error: err }, 'Failed to record task completion for rate limiting');
         });
 
+        // Record metrics (fire and forget)
+        metricsClient.incrementTasksCompleted(task.workerType, 'failed').catch((err) => {
+          request.log.warn({ taskId, error: err }, 'Failed to record task completion metric');
+        });
+        if (request.body.duration) {
+          metricsClient.recordTaskDuration(task.workerType, request.body.duration).catch((err) => {
+            request.log.warn({ taskId, error: err }, 'Failed to record task duration metric');
+          });
+        }
+
         request.log.info({ taskId, error }, 'Task marked as failed');
         return reply.send({ received: true });
       }
@@ -309,6 +329,16 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         rateLimitService.recordTaskComplete(task.userId).catch((err) => {
           request.log.error({ taskId, userId: task.userId, error: err }, 'Failed to record task completion for rate limiting');
         });
+
+        // Record metrics (fire and forget)
+        metricsClient.incrementTasksCompleted(task.workerType, 'interrupted').catch((err) => {
+          request.log.warn({ taskId, error: err }, 'Failed to record task completion metric');
+        });
+        if (request.body.duration) {
+          metricsClient.recordTaskDuration(task.workerType, request.body.duration).catch((err) => {
+            request.log.warn({ taskId, error: err }, 'Failed to record task duration metric');
+          });
+        }
 
         request.log.info({ taskId }, 'Task marked as interrupted');
         return reply.send({ received: true });

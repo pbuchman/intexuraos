@@ -39,6 +39,8 @@ import type { LinearIssueService } from '../domain/services/linearIssueService.j
 import type { StatusMirrorService } from '../infra/services/statusMirrorServiceImpl.js';
 import { createProcessHeartbeatUseCase } from '../domain/usecases/processHeartbeat.js';
 import { createDetectZombieTasksUseCase } from '../domain/usecases/detectZombieTasks.js';
+import { createNoOpMetricsClient, type MetricsClient } from '../infra/metrics.js';
+
 describe('OpenAPI contract', () => {
   let app: Awaited<ReturnType<typeof buildServer>>;
 
@@ -122,6 +124,7 @@ describe('OpenAPI contract', () => {
         }, logger),
         logger,
       }),
+      metricsClient: createNoOpMetricsClient(),
       rateLimitService,
     } as {
       firestore: Firestore;
@@ -135,6 +138,7 @@ describe('OpenAPI contract', () => {
       rateLimitService: RateLimitService;
       linearIssueService: LinearIssueService;
       statusMirrorService: StatusMirrorService;
+      metricsClient: MetricsClient;
       processHeartbeat: import('../domain/usecases/processHeartbeat.js').ProcessHeartbeatUseCase;
       detectZombieTasks: import('../domain/usecases/detectZombieTasks.js').DetectZombieTasksUseCase;
     });

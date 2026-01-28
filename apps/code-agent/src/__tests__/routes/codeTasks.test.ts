@@ -42,6 +42,7 @@ import { createStatusMirrorService } from '../../infra/services/statusMirrorServ
 import type { StatusMirrorService } from '../../infra/services/statusMirrorServiceImpl.js';
 import { createProcessHeartbeatUseCase } from '../../domain/usecases/processHeartbeat.js';
 import { createDetectZombieTasksUseCase } from '../../domain/usecases/detectZombieTasks.js';
+import { createNoOpMetricsClient, type MetricsClient } from '../../infra/metrics.js';
 
 describe('GET /code/tasks endpoints', () => {
   let app: Awaited<ReturnType<typeof buildServer>>;
@@ -137,6 +138,7 @@ describe('GET /code/tasks endpoints', () => {
       actionsAgentClient,
       rateLimitService,
       linearIssueService,
+      metricsClient: createNoOpMetricsClient(),
       statusMirrorService: createStatusMirrorService({
         actionsAgentClient,
         logger,
@@ -161,6 +163,7 @@ describe('GET /code/tasks endpoints', () => {
       rateLimitService: RateLimitService;
       linearIssueService: LinearIssueService;
       statusMirrorService: StatusMirrorService;
+      metricsClient: MetricsClient;
       processHeartbeat: import('../../domain/usecases/processHeartbeat.js').ProcessHeartbeatUseCase;
       detectZombieTasks: import('../../domain/usecases/detectZombieTasks.js').DetectZombieTasksUseCase;
     });

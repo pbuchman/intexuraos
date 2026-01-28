@@ -48,6 +48,98 @@ resource "google_logging_metric" "whatsapp_webhook_errors" {
 }
 
 # =============================================================================
+# CUSTOM METRIC DESCRIPTORS - Code Tasks
+# =============================================================================
+
+resource "google_monitoring_metric_descriptor" "code_tasks_submitted" {
+  description  = "Number of code tasks submitted"
+  display_name = "Code Tasks Submitted"
+  type         = "custom.googleapis.com/intexuraos/code_tasks_submitted"
+  metric_kind  = "CUMULATIVE"
+  value_type   = "INT64"
+
+  labels {
+    key         = "worker_type"
+    value_type  = "STRING"
+    description = "Type of worker (opus, auto, glm)"
+  }
+
+  labels {
+    key         = "source"
+    value_type  = "STRING"
+    description = "Source of submission (whatsapp, web)"
+  }
+}
+
+resource "google_monitoring_metric_descriptor" "code_tasks_completed" {
+  description  = "Number of code tasks completed"
+  display_name = "Code Tasks Completed"
+  type         = "custom.googleapis.com/intexuraos/code_tasks_completed"
+  metric_kind  = "CUMULATIVE"
+  value_type   = "INT64"
+
+  labels {
+    key         = "worker_type"
+    value_type  = "STRING"
+    description = "Type of worker (opus, auto, glm)"
+  }
+
+  labels {
+    key         = "status"
+    value_type  = "STRING"
+    description = "Completion status (completed, failed, cancelled, timeout)"
+  }
+}
+
+resource "google_monitoring_metric_descriptor" "code_tasks_duration_seconds" {
+  description  = "Code task execution duration in seconds"
+  display_name = "Code Task Duration"
+  type         = "custom.googleapis.com/intexuraos/code_tasks_duration_seconds"
+  metric_kind  = "GAUGE"
+  value_type   = "DOUBLE"
+
+  labels {
+    key         = "worker_type"
+    value_type  = "STRING"
+    description = "Type of worker (opus, auto, glm)"
+  }
+}
+
+resource "google_monitoring_metric_descriptor" "code_tasks_active" {
+  description  = "Currently running code tasks"
+  display_name = "Active Code Tasks"
+  type         = "custom.googleapis.com/intexuraos/code_tasks_active"
+  metric_kind  = "GAUGE"
+  value_type   = "INT64"
+
+  labels {
+    key         = "worker_location"
+    value_type  = "STRING"
+    description = "Worker location (mac, vm)"
+  }
+}
+
+resource "google_monitoring_metric_descriptor" "code_tasks_cost_dollars" {
+  description  = "Estimated cost of code tasks in dollars"
+  display_name = "Code Tasks Cost"
+  type         = "custom.googleapis.com/intexuraos/code_tasks_cost_dollars"
+  metric_kind  = "CUMULATIVE"
+  value_type   = "DOUBLE"
+
+  labels {
+    key         = "worker_type"
+    value_type  = "STRING"
+    description = "Type of worker (opus, auto, glm)"
+  }
+
+  labels {
+    key         = "user_id"
+    value_type  = "STRING"
+    description = "User ID for cost attribution"
+  }
+}
+
+# =============================================================================
 # DASHBOARD
 # =============================================================================
 

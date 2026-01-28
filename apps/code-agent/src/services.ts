@@ -27,6 +27,7 @@ import { createLinearIssueService, type LinearIssueService } from './domain/serv
 import { createStatusMirrorService, type StatusMirrorService } from './infra/services/statusMirrorServiceImpl.js';
 import { createProcessHeartbeatUseCase, type ProcessHeartbeatUseCase } from './domain/usecases/processHeartbeat.js';
 import { createDetectZombieTasksUseCase, type DetectZombieTasksUseCase } from './domain/usecases/detectZombieTasks.js';
+import { createMetricsClient, type MetricsClient } from './infra/metrics.js';
 
 export interface ServiceContainer {
   firestore: Firestore;
@@ -42,6 +43,7 @@ export interface ServiceContainer {
   statusMirrorService: StatusMirrorService;
   processHeartbeat: ProcessHeartbeatUseCase;
   detectZombieTasks: DetectZombieTasksUseCase;
+  metricsClient: MetricsClient;
 }
 
 // Configuration required to initialize services
@@ -88,6 +90,8 @@ export function initServices(config: ServiceConfig): void {
     logger,
   });
 
+  const metricsClient = createMetricsClient();
+
   container = {
     firestore,
     logger,
@@ -127,6 +131,7 @@ export function initServices(config: ServiceConfig): void {
       codeTaskRepository: createFirestoreCodeTaskRepository({ firestore, logger }),
       logger,
     }),
+    metricsClient,
   };
 }
 
