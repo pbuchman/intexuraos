@@ -95,10 +95,10 @@ interface MockResult {
 
 /**
  * Extract scenario from prompt.
- * Looks for [test:scenario-name] markers.
+ * Looks for [test:scenario-name] markers (supports hyphens in scenario names).
  */
 function extractScenario(prompt: string): string {
-  const match = prompt.toLowerCase().match(/\[test:(\w+)\]/);
+  const match = prompt.toLowerCase().match(/\[test:([\w-]+)\]/);
   return match?.[1] ?? 'success';
 }
 
