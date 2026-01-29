@@ -350,6 +350,7 @@ export async function runSynthesis(
         sharedAt: now.toISOString(),
         gcsPath: uploadResult.value.gcsPath,
         ...(coverImageId !== undefined && { coverImageId }),
+        ...(coverImage !== undefined && { coverImageUrl: coverImage.fullSizeUrl }),
       };
       logger.info({}, `[4.5.3] HTML uploaded successfully (path: ${uploadResult.value.gcsPath})`);
     } else {
