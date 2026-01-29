@@ -167,4 +167,13 @@ describe('startVm', () => {
     expect(result.success).toBe(false);
     expect(result.message).toContain('Quota exceeded');
   });
+
+  it('should handle non-Error exception objects', async () => {
+    mockGet.mockRejectedValue('string error message');
+
+    const result = await startVm();
+
+    expect(result.success).toBe(false);
+    expect(result.message).toContain('string error message');
+  });
 });

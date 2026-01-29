@@ -9,24 +9,23 @@ import { ok, err } from '@intexuraos/common-core';
 import type { ActionsAgentClient } from '../../../infra/clients/actionsAgentClient.js';
 import type { TaskStatus } from '../../../domain/models/codeTask.js';
 
-// Mock ActionsAgentClient
-const mockActionsAgentClient = {
-  updateActionStatus: vi.fn(),
-} as unknown as ActionsAgentClient;
-
 describe('statusMirrorService', () => {
   const logger = createMockLogger();
-  let mockUpdateActionStatus: ReturnType<typeof vi.fn>;
+  let mockActionsAgentClient: ActionsAgentClient;
 
   beforeEach(() => {
-    mockUpdateActionStatus = vi.fn();
-    (mockActionsAgentClient as ActionsAgentClient).updateActionStatus = mockUpdateActionStatus;
+    mockActionsAgentClient = {
+      updateActionStatus: vi.fn(),
+    } as unknown as ActionsAgentClient;
     vi.clearAllMocks();
   });
 
+  const getMockUpdateActionStatus = (): ReturnType<typeof vi.fn> =>
+    mockActionsAgentClient.updateActionStatus as ReturnType<typeof vi.fn>;
+
   describe('mirrorStatus', () => {
     it('should call actionsAgentClient with correct status mapping', async () => {
-      mockUpdateActionStatus.mockResolvedValue(ok(undefined));
+      getMockUpdateActionStatus().mockResolvedValue(ok(undefined));
 
       const service = createStatusMirrorService({
         actionsAgentClient: mockActionsAgentClient,
@@ -39,7 +38,7 @@ describe('statusMirrorService', () => {
         traceId: 'trace-123',
       });
 
-      expect(mockUpdateActionStatus).toHaveBeenCalledWith(
+      expect(getMockUpdateActionStatus()).toHaveBeenCalledWith(
         'action-123',
         'completed',
         undefined,
@@ -58,7 +57,7 @@ describe('statusMirrorService', () => {
         taskStatus: 'running',
       });
 
-      expect(mockUpdateActionStatus).not.toHaveBeenCalled();
+      expect(getMockUpdateActionStatus()).not.toHaveBeenCalled();
       expect(logger.debug).toHaveBeenCalledWith(
         { taskStatus: 'running' },
         'Skipping status mirror (no actionId)'
@@ -66,7 +65,7 @@ describe('statusMirrorService', () => {
     });
 
     it('should include resourceUrl when provided', async () => {
-      mockUpdateActionStatus.mockResolvedValue(ok(undefined));
+      getMockUpdateActionStatus().mockResolvedValue(ok(undefined));
 
       const service = createStatusMirrorService({
         actionsAgentClient: mockActionsAgentClient,
@@ -79,7 +78,7 @@ describe('statusMirrorService', () => {
         resourceUrl: 'https://github.com/pr/123',
       });
 
-      expect(mockUpdateActionStatus).toHaveBeenCalledWith(
+      expect(getMockUpdateActionStatus()).toHaveBeenCalledWith(
         'action-123',
         'completed',
         { prUrl: 'https://github.com/pr/123' },
@@ -88,7 +87,7 @@ describe('statusMirrorService', () => {
     });
 
     it('should include errorMessage when provided', async () => {
-      mockUpdateActionStatus.mockResolvedValue(ok(undefined));
+      getMockUpdateActionStatus().mockResolvedValue(ok(undefined));
 
       const service = createStatusMirrorService({
         actionsAgentClient: mockActionsAgentClient,
@@ -101,7 +100,7 @@ describe('statusMirrorService', () => {
         errorMessage: 'CI failed',
       });
 
-      expect(mockUpdateActionStatus).toHaveBeenCalledWith(
+      expect(getMockUpdateActionStatus()).toHaveBeenCalledWith(
         'action-123',
         'failed',
         { error: 'CI failed' },
@@ -110,7 +109,7 @@ describe('statusMirrorService', () => {
     });
 
     it('should not throw on client failure (non-fatal)', async () => {
-      mockUpdateActionStatus.mockResolvedValue(
+      getMockUpdateActionStatus().mockResolvedValue(
         err({
           code: 'NETWORK_ERROR' as const,
           message: 'Service down',
@@ -140,7 +139,7 @@ describe('statusMirrorService', () => {
     });
 
     it('should map completed statuses to completed', async () => {
-      mockUpdateActionStatus.mockResolvedValue(ok(undefined));
+      getMockUpdateActionStatus().mockResolvedValue(ok(undefined));
 
       const service = createStatusMirrorService({
         actionsAgentClient: mockActionsAgentClient,
@@ -152,11 +151,11 @@ describe('statusMirrorService', () => {
         taskStatus: 'completed',
       });
 
-      expect(mockUpdateActionStatus).toHaveBeenCalledWith('action-123', 'completed', undefined, undefined);
+      expect(getMockUpdateActionStatus()).toHaveBeenCalledWith('action-123', 'completed', undefined, undefined);
     });
 
     it('should map failed statuses to failed', async () => {
-      mockUpdateActionStatus.mockResolvedValue(ok(undefined));
+      getMockUpdateActionStatus().mockResolvedValue(ok(undefined));
 
       const service = createStatusMirrorService({
         actionsAgentClient: mockActionsAgentClient,
@@ -168,11 +167,11 @@ describe('statusMirrorService', () => {
         taskStatus: 'failed',
       });
 
-      expect(mockUpdateActionStatus).toHaveBeenCalledWith('action-123', 'failed', undefined, undefined);
+      expect(getMockUpdateActionStatus()).toHaveBeenCalledWith('action-123', 'failed', undefined, undefined);
     });
 
     it('should map cancelled status to cancelled', async () => {
-      mockUpdateActionStatus.mockResolvedValue(ok(undefined));
+      getMockUpdateActionStatus().mockResolvedValue(ok(undefined));
 
       const service = createStatusMirrorService({
         actionsAgentClient: mockActionsAgentClient,
@@ -184,11 +183,11 @@ describe('statusMirrorService', () => {
         taskStatus: 'cancelled',
       });
 
-      expect(mockUpdateActionStatus).toHaveBeenCalledWith('action-123', 'cancelled', undefined, undefined);
+      expect(getMockUpdateActionStatus()).toHaveBeenCalledWith('action-123', 'cancelled', undefined, undefined);
     });
 
     it('should map interrupted status to interrupted', async () => {
-      mockUpdateActionStatus.mockResolvedValue(ok(undefined));
+      getMockUpdateActionStatus().mockResolvedValue(ok(undefined));
 
       const service = createStatusMirrorService({
         actionsAgentClient: mockActionsAgentClient,
@@ -200,11 +199,11 @@ describe('statusMirrorService', () => {
         taskStatus: 'interrupted',
       });
 
-      expect(mockUpdateActionStatus).toHaveBeenCalledWith('action-123', 'interrupted', undefined, undefined);
+      expect(getMockUpdateActionStatus()).toHaveBeenCalledWith('action-123', 'interrupted', undefined, undefined);
     });
 
     it('should map dispatched status to dispatched', async () => {
-      mockUpdateActionStatus.mockResolvedValue(ok(undefined));
+      getMockUpdateActionStatus().mockResolvedValue(ok(undefined));
 
       const service = createStatusMirrorService({
         actionsAgentClient: mockActionsAgentClient,
@@ -216,11 +215,11 @@ describe('statusMirrorService', () => {
         taskStatus: 'dispatched',
       });
 
-      expect(mockUpdateActionStatus).toHaveBeenCalledWith('action-123', 'dispatched', undefined, undefined);
+      expect(getMockUpdateActionStatus()).toHaveBeenCalledWith('action-123', 'dispatched', undefined, undefined);
     });
 
     it('should map running status to running', async () => {
-      mockUpdateActionStatus.mockResolvedValue(ok(undefined));
+      getMockUpdateActionStatus().mockResolvedValue(ok(undefined));
 
       const service = createStatusMirrorService({
         actionsAgentClient: mockActionsAgentClient,
@@ -232,7 +231,7 @@ describe('statusMirrorService', () => {
         taskStatus: 'running',
       });
 
-      expect(mockUpdateActionStatus).toHaveBeenCalledWith('action-123', 'running', undefined, undefined);
+      expect(getMockUpdateActionStatus()).toHaveBeenCalledWith('action-123', 'running', undefined, undefined);
     });
 
     it.each([
@@ -243,7 +242,7 @@ describe('statusMirrorService', () => {
       ['cancelled', 'cancelled'],
       ['interrupted', 'interrupted'],
     ])('should map %s to %s', async (taskStatus, expectedResourceStatus) => {
-      mockUpdateActionStatus.mockResolvedValue(ok(undefined));
+      getMockUpdateActionStatus().mockResolvedValue(ok(undefined));
 
       const service = createStatusMirrorService({
         actionsAgentClient: mockActionsAgentClient,
@@ -255,7 +254,7 @@ describe('statusMirrorService', () => {
         taskStatus: taskStatus as TaskStatus,
       });
 
-      expect(mockUpdateActionStatus).toHaveBeenCalledWith('action-123', expectedResourceStatus, undefined, undefined);
+      expect(getMockUpdateActionStatus()).toHaveBeenCalledWith('action-123', expectedResourceStatus, undefined, undefined);
     });
   });
 });
