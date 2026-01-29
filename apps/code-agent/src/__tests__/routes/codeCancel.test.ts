@@ -50,7 +50,7 @@ describe('POST /code/cancel', () => {
   let codeTaskRepo: CodeTaskRepository;
   let taskDispatcher: TaskDispatcherService;
   let logChunkRepo: LogChunkRepository;
-  let cancelOnWorkerSpy: ReturnType<typeof vi.spyOn> | null;
+  let cancelOnWorkerSpy: ReturnType<typeof vi.fn> | null;
 
   beforeEach(async () => {
     // Set jwtVerify to resolve by default (simulating valid token)
@@ -118,8 +118,8 @@ describe('POST /code/cancel', () => {
     });
 
     // Spy on cancelOnWorker to verify it's called
-    cancelOnWorkerSpy = vi.spyOn(taskDispatcher, 'cancelOnWorker');
-    (cancelOnWorkerSpy as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
+    cancelOnWorkerSpy = vi.spyOn(taskDispatcher, 'cancelOnWorker') as ReturnType<typeof vi.fn>;
+    cancelOnWorkerSpy.mockResolvedValue(undefined);
 
     const rateLimitService: RateLimitService = {
       async checkLimits() {
