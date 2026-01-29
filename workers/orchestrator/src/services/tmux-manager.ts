@@ -65,8 +65,9 @@ export class TmuxManager {
     const claudePath = this.config.claudePath ?? 'claude';
     const claudeCommand = `${claudePath} --system-prompt '${escapedPrompt}' --print`;
 
-    // Build tmux command
-    const sessionName = `cc-task-${taskId}`;
+    // Build tmux command (sanitize taskId for shell safety)
+    const sanitizedTaskId = this.sanitizeTaskId(taskId);
+    const sessionName = `cc-task-${sanitizedTaskId}`;
     const tmuxCommand = `tmux new-session -d -s ${sessionName} "cd '${worktreePath}' && ${claudeCommand} 2>&1 | tee '${logFilePath}'"`;
 
     try {
@@ -78,7 +79,8 @@ export class TmuxManager {
   }
 
   async killSession(taskId: string, graceful = true): Promise<void> {
-    const sessionName = `cc-task-${taskId}`;
+    const sanitizedTaskId = this.sanitizeTaskId(taskId);
+    const sessionName = `cc-task-${sanitizedTaskId}`;
 
     try {
       if (graceful) {
@@ -110,7 +112,8 @@ export class TmuxManager {
   }
 
   async isSessionRunning(taskId: string): Promise<boolean> {
-    const sessionName = `cc-task-${taskId}`;
+    const sanitizedTaskId = this.sanitizeTaskId(taskId);
+    const sessionName = `cc-task-${sanitizedTaskId}`;
 
     try {
       await this.execAsync(`tmux has-session -t ${sessionName}`);
@@ -223,5 +226,10 @@ ${sanitizedPrompt}`;
   private escapeForShell(str: string): string {
     // Escape single quotes and backslashes for shell
     return str.replace(/'/g, "'\\''").replace(/\\/g, '\\\\');
+  }
+
+  private sanitizeTaskId(taskId: string): string {
+    // Only allow alphanumeric, hyphens, and underscores (expected format: task_<uuid>)
+    return taskId.replace(/[^a-zA-Z0-9_-]/g, '');
   }
 }

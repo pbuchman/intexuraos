@@ -191,26 +191,30 @@ export function registerRoutes(
   });
 
   // POST /admin/shutdown - Graceful shutdown
-  app.post('/admin/shutdown', async (request, reply) => {
+  app.post('/admin/shutdown', { preHandler: [verifyDispatchSignature] }, async (request, reply) => {
     logger.info({ method: request.method, url: request.url }, 'Admin endpoint called');
     // TODO: Implement graceful shutdown logic
     reply.send({ status: 'shutting_down' });
   });
 
   // POST /admin/refresh-token - Force token refresh
-  app.post('/admin/refresh-token', async (request, reply) => {
-    logger.info({ method: request.method, url: request.url }, 'Admin endpoint called');
-    const refreshResult = await tokenService.refreshToken();
+  app.post(
+    '/admin/refresh-token',
+    { preHandler: [verifyDispatchSignature] },
+    async (request, reply) => {
+      logger.info({ method: request.method, url: request.url }, 'Admin endpoint called');
+      const refreshResult = await tokenService.refreshToken();
 
-    if (!refreshResult.ok) {
-      reply.status(500).send({ error: refreshResult.error.message });
-      return;
+      if (!refreshResult.ok) {
+        reply.status(500).send({ error: refreshResult.error.message });
+        return;
+      }
+
+      const tokenExpiry = tokenService.getExpiresAt();
+      reply.send({
+        status: 'refreshed',
+        tokenExpiresAt: tokenExpiry?.toISOString() ?? null,
+      });
     }
-
-    const tokenExpiry = tokenService.getExpiresAt();
-    reply.send({
-      status: 'refreshed',
-      tokenExpiresAt: tokenExpiry?.toISOString() ?? null,
-    });
-  });
+  );
 }
