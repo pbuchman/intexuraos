@@ -46,22 +46,20 @@ export async function main(
 
   try {
     // Start HTTP server
-    const isDevelopment = process.env['NODE_ENV'] !== 'production';
+    const isProd = process.env['NODE_ENV'] === 'production';
     const app = fastify({
-      logger: isDevelopment
-        ? {
-            level: process.env['LOG_LEVEL'] ?? 'info',
-            transport: { target: 'pino-pretty', options: { colorize: true } },
-          }
+      logger: isProd
+        ? { level: process.env['LOG_LEVEL'] ?? 'info' }
         : {
             level: process.env['LOG_LEVEL'] ?? 'info',
+            transport: { target: 'pino-pretty', options: { colorize: true } },
           },
     });
 
     void app.register(cors);
 
     registerRoutes(
-      app as unknown as import('fastify').FastifyInstance,
+      app as Parameters<typeof registerRoutes>[0],
       dispatcher,
       tokenService,
       config,

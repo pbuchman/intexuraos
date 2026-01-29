@@ -135,6 +135,27 @@ describe('FirestoreNoteRepository', () => {
         expect(result.value.updatedAt).toBeInstanceOf(Date);
       }
     });
+
+    it('defaults status to active when document has no status field', async () => {
+      const docRef = fakeFirestore.collection('notes').doc('legacy-note');
+      await docRef.set({
+        userId: 'user-123',
+        title: 'Legacy Note',
+        content: 'Legacy content',
+        tags: ['legacy'],
+        source: 'whatsapp',
+        sourceId: 'wa-legacy',
+        createdAt: '2024-01-01T00:00:00.000Z',
+        updatedAt: '2024-01-01T00:00:00.000Z',
+      });
+
+      const result = await repository.findById('legacy-note');
+
+      expect(result.ok).toBe(true);
+      if (result.ok && result.value) {
+        expect(result.value.status).toBe('active');
+      }
+    });
   });
 
   describe('findByUserId', () => {

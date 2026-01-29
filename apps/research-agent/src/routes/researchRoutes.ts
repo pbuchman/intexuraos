@@ -1495,13 +1495,19 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       const saveResult = await researchRepo.update(id, { notionExportInfo });
       if (!saveResult.ok) {
         request.log.warn({ researchId: id, error: saveResult.error.message }, 'Failed to save Notion export info');
-        // Continue anyway - export succeeded, just metadata save failed
+        // Return the research with notionExportInfo manually added since save failed
+        return await reply.ok({ ...research, notionExportInfo });
       }
 
-      return await reply.ok({
-        success: true,
-        notionPageUrl: mainPageUrl,
-      });
+      // Return updated research with notionExportInfo populated
+      const updatedResearchResult = await researchRepo.findById(id);
+      if (!updatedResearchResult.ok || updatedResearchResult.value === null) {
+        request.log.warn({ researchId: id }, 'Failed to fetch updated research after Notion export');
+        // Return the original research with notionExportInfo manually added
+        return await reply.ok({ ...research, notionExportInfo });
+      }
+
+      return await reply.ok(updatedResearchResult.value);
     }
   );
 
