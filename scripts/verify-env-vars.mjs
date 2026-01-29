@@ -40,6 +40,26 @@ const COMMON_OPTIONAL_ENV = new Set([
   'INTEXURAOS_SENTRY_DSN',
   'INTEXURAOS_ENVIRONMENT',
   'LOG_LEVEL',
+  // E2E testing env vars (used by code-agent in E2E mode)
+  'E2E_MODE',
+  'E2E_TEST_USER_ID',
+  // Optional service config vars (have E2E defaults or are production-only)
+  'INTEXURAOS_SERVICE_URL',
+  'INTEXURAOS_CODE_WORKERS',
+  'INTEXURAOS_WHATSAPP_SERVICE_URL',
+  'INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC',
+  'INTEXURAOS_LINEAR_AGENT_URL',
+  'INTEXURAOS_ACTIONS_AGENT_URL',
+  'INTEXURAOS_CF_ACCESS_CLIENT_ID',
+  'INTEXURAOS_CF_ACCESS_CLIENT_SECRET',
+  // Auth0 JWT vars (optional in E2E mode)
+  'INTEXURAOS_AUTH0_AUDIENCE',
+  'INTEXURAOS_AUTH0_ISSUER',
+  'INTEXURAOS_AUTH0_JWKS_URI',
+  // Old names (used by some configs, aliased to Auth0 versions)
+  'INTEXURAOS_AUTH_AUDIENCE',
+  'INTEXURAOS_AUTH_ISSUER',
+  'INTEXURAOS_AUTH_JWKS_URL',
 ]);
 
 /**

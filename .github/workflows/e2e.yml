@@ -1,0 +1,270 @@
+name: E2E Tests
+
+on:
+  pull_request:
+    branches: [development, main]
+  schedule:
+    - cron: '0 6 * * *' # Daily at 6 AM UTC
+  workflow_dispatch:
+
+jobs:
+  e2e:
+    name: E2E Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    env:
+      NODE_VERSION: '22'
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Verify package.json has E2E scripts
+        run: |
+          echo "Git status:"
+          git status
+          echo ""
+          echo "Current HEAD:"
+          git log -1 --oneline
+          echo ""
+          echo "Checking for E2E scripts in package.json:"
+          if grep -q "test:e2e" package.json; then
+            echo "✓ test:e2e script found"
+            grep -E "(test:e2e|e2e:)" package.json
+          else
+            echo "✗ test:e2e script NOT found!"
+            echo "Lines around ci:report:"
+            grep -A5 "ci:report" package.json
+            exit 1
+          fi
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Install dependencies
+        run: |
+          echo "=== Before pnpm install ==="
+          grep "test:e2e" package.json && echo "✓ test:e2e exists" || echo "✗ test:e2e MISSING!"
+          echo ""
+          pnpm install --frozen-lockfile
+          echo ""
+          echo "=== After pnpm install ==="
+          grep "test:e2e" package.json && echo "✓ test:e2e exists" || echo "✗ test:e2e MISSING!"
+
+      - name: Build all packages
+        run: |
+          echo "=== Before pnpm build ==="
+          grep "test:e2e" package.json && echo "✓ test:e2e exists" || echo "✗ test:e2e MISSING!"
+          pnpm build
+          echo "=== After pnpm build ==="
+          grep "test:e2e" package.json && echo "✓ test:e2e exists" || echo "✗ test:e2e MISSING!"
+
+      - name: Create test workspace directory
+        run: mkdir -p /tmp/e2e-workspace
+
+      - name: Setup Java 21 for Firebase emulators
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: Install Firebase CLI and start emulators
+        run: |
+          echo "=== Before Firebase setup ==="
+          grep "test:e2e" package.json && echo "✓ test:e2e exists" || echo "✗ test:e2e MISSING!"
+          npm install -g firebase-tools
+          # Create minimal firebase.json for emulators
+          cat > firebase.json <<EOF
+          {
+            "emulators": {
+              "firestore": { "port": 8081, "host": "127.0.0.1" },
+              "pubsub": { "port": 8085, "host": "127.0.0.1" }
+            }
+          }
+          EOF
+          # Start emulators in background
+          firebase emulators:start --only firestore,pubsub --project test-project &
+          sleep 10
+          # Verify emulators are running
+          curl -sf http://127.0.0.1:8081 || echo "Firestore emulator may not be ready yet"
+          echo "=== After Firebase setup ==="
+          grep "test:e2e" package.json && echo "✓ test:e2e exists" || echo "✗ test:e2e MISSING!"
+        env:
+          FIREBASE_EMULATORS_PATH: /tmp/firebase-emulators
+
+      - name: Start mock-claude
+        run: |
+          echo "=== Before mock-claude ==="
+          grep "test:e2e" package.json && echo "✓ test:e2e exists" || echo "✗ test:e2e MISSING!"
+          cd e2e/mock-claude
+          # Use pnpm instead of npx to avoid package.json modifications
+          pnpm tsx index.ts > /tmp/mock-claude.log 2>&1 &
+          echo $! > /tmp/mock-claude.pid
+          sleep 5
+          # Verify mock-claude is responding
+          curl -sf http://localhost:8090/health || (echo "mock-claude health check failed" && exit 1)
+          cd ../..
+          echo "=== After mock-claude start ==="
+          grep "test:e2e" package.json && echo "✓ test:e2e exists" || echo "✗ test:e2e MISSING!"
+        env:
+          PORT: 8090
+          REPO_PATH: ${{ github.workspace }}
+          GITHUB_TOKEN: ${{ env.GITHUB_TOKEN }}
+          LOG_LEVEL: debug
+          INTEXURAOS_INTERNAL_AUTH_TOKEN: test-secret
+
+      - name: Test mock-claude POST /tasks endpoint
+        run: |
+          echo "Testing POST /tasks endpoint directly..."
+          # Test with a valid task request
+          curl -v -X POST http://localhost:8090/tasks \
+            -H "Content-Type: application/json" \
+            -d '{"taskId":"test-123","prompt":"[test:success] test","webhookUrl":"http://localhost:8128/webhook","webhookSecret":"secret"}' \
+            2>&1 || true
+          echo ""
+          echo "Mock-claude logs after test:"
+          cat /tmp/mock-claude.log || true
+
+      - name: Start code-agent service
+        run: |
+          echo "=== Before code-agent ==="
+          pwd
+          grep "test:e2e" package.json && echo "✓ test:e2e exists" || echo "✗ test:e2e MISSING!"
+
+          echo "=== Starting file watcher for package.json modifications ==="
+          # Install inotify-tools to watch file changes
+          sudo apt-get install -y inotify-tools > /dev/null 2>&1
+          # Start watching package.json in background, logging all modify events with timestamp
+          (inotifywait -m -e modify,create,delete,move package.json 2>&1 | while read line; do
+            echo "[$(date '+%Y-%m-%d %H:%M:%S.%3N')] FILE CHANGE: $line"
+          done) > /tmp/package-json-watcher.log 2>&1 &
+          echo $! > /tmp/watcher.pid
+          echo "File watcher started (PID: $(cat /tmp/watcher.pid))"
+
+          echo "=== Starting code-agent (from apps/code-agent) ==="
+          cd apps/code-agent
+          pwd
+          E2E_MODE=true \
+          E2E_TEST_USER_ID=e2e-ci-test \
+          PORT=8128 \
+          INTEXURAOS_GCP_PROJECT_ID=test-project \
+          INTEXURAOS_INTERNAL_AUTH_TOKEN=test-secret \
+          INTEXURAOS_DISPATCH_SIGNING_SECRET=test-signing-secret \
+          INTEXURAOS_WEBHOOK_VERIFY_SECRET=test-webhook-secret \
+          INTEXURAOS_ORCHESTRATOR_MAC_URL=http://127.0.0.1:8090 \
+          INTEXURAOS_ORCHESTRATOR_VM_URL=http://127.0.0.1:8090 \
+          INTEXURAOS_SERVICE_URL=http://127.0.0.1:8128 \
+          INTEXURAOS_CODE_WORKERS="mac:http://127.0.0.1:8090:1,vm:http://127.0.0.1:8090:1" \
+          FIRESTORE_EMULATOR_HOST=127.0.0.1:8081 \
+          PUBSUB_EMULATOR_HOST=127.0.0.1:8085 \
+          pnpm tsx src/index.ts > /tmp/code-agent.log 2>&1 &
+          echo $! > /tmp/code-agent.pid
+
+          echo "=== Immediately after starting (still in apps/code-agent) ==="
+          pwd
+          echo "=== DIAGNOSTIC: root package.json modification time BEFORE wait ==="
+          stat ../../package.json | grep Modify || ls -la ../../package.json
+          grep "test:e2e" ../../package.json && echo "✓ test:e2e exists" || echo "✗ test:e2e MISSING!"
+
+          echo "=== Waiting 5 seconds ==="
+          sleep 5
+          pwd
+          if grep -q "test:e2e" ../../package.json; then
+            echo "✓ test:e2e exists"
+          else
+            echo "✗ test:e2e MISSING!"
+            echo "=== DIAGNOSTIC: package.json scripts section ==="
+            grep -A 60 '"scripts"' ../../package.json | head -65
+            echo "=== DIAGNOSTIC: package.json file stats ==="
+            ls -la ../../package.json
+            stat ../../package.json
+            echo "=== DIAGNOSTIC: Recent file modifications ==="
+            find ../.. -maxdepth 1 -name "*.json" -mmin -1 -ls
+            echo "=== DIAGNOSTIC: Check for multiple package.json files ==="
+            find ../.. -maxdepth 2 -name "package.json" -ls
+            echo "=== DIAGNOSTIC: File watcher log ==="
+            cat /tmp/package-json-watcher.log || echo "No watcher log"
+            echo "=== DIAGNOSTIC: Running node/npm/pnpm processes ==="
+            ps aux | grep -E "(node|npm|pnpm|tsx)" | grep -v grep || echo "No relevant processes"
+          fi
+
+          echo "=== Waiting 10 more seconds ==="
+          sleep 10
+          pwd
+          grep "test:e2e" ../../package.json && echo "✓ test:e2e exists" || echo "✗ test:e2e MISSING!"
+
+          # Verify code-agent is responding
+          curl -sf http://localhost:8128/health || (echo "code-agent health check failed" && cat /tmp/code-agent.log && exit 1)
+
+          echo "=== Going back to root ==="
+          cd ../..
+          pwd
+          echo "=== After code-agent start (back in root) ==="
+          grep "test:e2e" package.json && echo "✓ test:e2e exists" || echo "✗ test:e2e MISSING!"
+
+      - name: Run E2E tests
+        run: |
+          echo "Current directory: $(pwd)"
+          echo ""
+          echo "=== E2E scripts in package.json ==="
+          grep -E "(test:e2e|e2e:)" package.json || echo "NO E2E SCRIPTS FOUND!"
+          echo ""
+          echo "=== Lines around ci:report ==="
+          grep -A10 "ci:report" package.json | head -15
+          echo ""
+          echo "=== Running test:e2e ==="
+          pnpm run test:e2e
+        env:
+          E2E_API_URL: http://localhost:8128
+          E2E_AUTH_TOKEN: test-token
+          E2E_INTERNAL_AUTH_TOKEN: test-secret
+          E2E_TEST_USER_ID: e2e-ci-test
+          INTEXURAOS_GCP_PROJECT_ID: test-project
+          FIRESTORE_EMULATOR_HOST: 127.0.0.1:8081
+          PUBSUB_EMULATOR_HOST: 127.0.0.1:8085
+
+      - name: Show service logs
+        if: always()
+        run: |
+          echo "=== Mock-claude logs ==="
+          cat /tmp/mock-claude.log || echo "No mock-claude logs found"
+          echo ""
+          echo "=== Code-agent logs (last 200 lines) ==="
+          tail -200 /tmp/code-agent.log || echo "No code-agent logs found"
+          echo ""
+          echo "=== Checking if services are still running ==="
+          ps aux | grep -E "(mock-claude|code-agent|tsx)" | grep -v grep || echo "No matching processes"
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-test-results
+          path: |
+            e2e/coverage/
+            e2e/test-results/
+          retention-days: 7
+
+      - name: Cleanup - Close test PRs
+        if: always()
+        run: |
+          # Find and close any test PRs created during E2E tests
+          # Test PRs have "Mock" in the title (e.g., "[E2E] Mock Success PR")
+          # and are created from branches with "test/e2e-" prefix
+          gh pr list \
+            --state open \
+            --search "[E2E] Mock" \
+            --json number,title,headRefName \
+            --jq 'map(select(.headRefName | startswith("test/e2e-"))) | .[] | "\(.number)"' \
+            | xargs -I {} gh pr close {} --comment "E2E cleanup: Auto-closing test PR"
+        env:
+          GITHUB_TOKEN: ${{ env.GITHUB_TOKEN }}

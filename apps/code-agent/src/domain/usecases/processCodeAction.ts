@@ -109,7 +109,10 @@ export async function processCodeAction(
   // Step 1: Linear issue creation (stub for now - use provided or undefined)
   const finalLinearIssueId = linearIssueId;
 
-  // Step 2: Create code task with deduplication
+  // Step 2: Generate webhook secret upfront so it can be stored with the task
+  const webhookSecret = generateWebhookSecret();
+
+  // Step 3: Create code task with deduplication
   const createInput: {
     userId: string;
     prompt: string;
@@ -122,6 +125,7 @@ export async function processCodeAction(
     traceId: string;
     actionId: string;
     approvalEventId: string;
+    webhookSecret: string;
     linearIssueId?: string;
     linearIssueTitle?: string;
     linearFallback?: boolean;
@@ -137,6 +141,7 @@ export async function processCodeAction(
     traceId: traceId ?? `trace-${String(Date.now())}`, // Use provided traceId or generate one
     actionId,
     approvalEventId,
+    webhookSecret,
   };
 
   // Only include linearIssueId if provided
@@ -165,11 +170,11 @@ export async function processCodeAction(
 
   const task = createResult.value;
 
-  // Step 3: Generate webhook URL and secret for this task
-  const webhookUrl = `https://code-agent.intexuraos.cloud/internal/webhooks/worker`;
-  const webhookSecret = generateWebhookSecret(); // Generate per-task secret
+  // Step 4: Build webhook URL for callback (use SERVICE_URL for local/E2E environments)
+  const serviceUrl = process.env['INTEXURAOS_SERVICE_URL'] ?? 'https://code-agent.intexuraos.cloud';
+  const webhookUrl = `${serviceUrl}/internal/webhooks/task-complete`;
 
-  // Step 4: Dispatch to worker
+  // Step 5: Dispatch to worker (webhookSecret was stored in task during creation)
   const dispatchRequest: {
     taskId: string;
     linearIssueId?: string;
@@ -220,13 +225,13 @@ export async function processCodeAction(
 
   const dispatchValue = dispatchResult.value;
 
-  // Step 4.5: Record metrics for task submission
+  // Step 6: Record metrics for task submission
   const source = request.source ?? 'web'; // Default to web if not specified
   await deps.metricsClient.incrementTasksSubmitted(workerType, source).catch((error: unknown) => {
     logger.warn({ error, taskId: task.id }, 'Failed to record task submission metric');
   });
 
-  // Step 5: Generate cancel nonce and send task started notification (INT-379)
+  // Step 7: Generate cancel nonce and send task started notification (INT-379)
   const cancelNonce = generateCancelNonce();
   const cancelNonceExpiresAt = new Date(Date.now() + CANCEL_NONCE_TTL_MS).toISOString();
 
@@ -245,7 +250,7 @@ export async function processCodeAction(
     logger.warn({ taskId: task.id, error: updateResult.error }, 'Failed to update task with cancel nonce');
   }
 
-  // Step 6: Return success
+  // Step 8: Return success
   return ok({
     codeTaskId: task.id,
     resourceUrl: `/#/code-tasks/${task.id}`,

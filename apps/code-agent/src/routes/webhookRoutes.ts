@@ -140,13 +140,25 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         };
       }
 
-      const { codeTaskRepo, actionsAgentClient, whatsappNotifier, rateLimitService, metricsClient } = getServices();
+      const { codeTaskRepo, actionsAgentClient, whatsappNotifier, rateLimitService, metricsClient, logger } = getServices();
       const { taskId, status, result, error } = request.body;
 
       // Extract traceId from headers for downstream calls
       const traceId = extractOrGenerateTraceId(request.headers);
 
-      request.log.info({ taskId, status, traceId }, 'Processing task-complete webhook');
+      logger.info(
+        {
+          taskId,
+          status,
+          traceId,
+          hasResult: result !== undefined,
+          resultKeys: result ? Object.keys(result) : [],
+          resultBranch: result?.branch,
+          resultPrUrl: result?.prUrl,
+          bodyKeys: Object.keys(request.body),
+        },
+        'Processing task-complete webhook'
+      );
 
       // Get task details first (to check for actionId)
       const taskResult = await codeTaskRepo.findById(taskId);
@@ -217,7 +229,19 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           });
         }
 
-        request.log.info({ taskId, result }, 'Task marked as completed');
+        // Verify result was stored
+        const verifyResult = await codeTaskRepo.findById(taskId);
+        logger.info(
+          {
+            taskId,
+            resultKeys: result ? Object.keys(result) : [],
+            prUrl: result?.prUrl,
+            branch: result?.branch,
+            storedHasResult: verifyResult.ok && verifyResult.value.result !== undefined,
+            storedResultKeys: verifyResult.ok && verifyResult.value.result ? Object.keys(verifyResult.value.result) : [],
+          },
+          'Task marked as completed with result'
+        );
         return reply.send({ received: true });
       }
 

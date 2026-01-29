@@ -11,13 +11,21 @@ import type { MetricsClient } from '../domain/services/metrics.js';
 // Re-export the interface for convenience
 export type { MetricsClient } from '../domain/services/metrics.js';
 
-const monitoring = new MetricServiceClient();
+// Lazy initialization to avoid creating client during module import in E2E mode
+let monitoringClient: MetricServiceClient | null = null;
+
+function getMonitoringClient(): MetricServiceClient {
+  monitoringClient ??= new MetricServiceClient();
+  return monitoringClient;
+}
+
 const projectId = process.env['INTEXURAOS_GCP_PROJECT_ID'] ?? 'intexuraos';
 
 /**
  * Create a metrics client that writes to Google Cloud Monitoring.
  */
 export function createMetricsClient(): MetricsClient {
+  const monitoring = getMonitoringClient();
   const projectPath = monitoring.projectPath(projectId);
 
   async function writeTimeSeries(
