@@ -755,5 +755,48 @@ describe('firestoreCodeTaskRepository', () => {
 
       expect(result.value.statusSummary?.message).toBe('Task is in progress');
     });
+
+    it('clears cancelNonce when set to null', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const created = await repo.create(createTaskInput());
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+
+      // First set cancelNonce
+      await repo.update(created.value.id, {
+        cancelNonce: 'nonce-123',
+        cancelNonceExpiresAt: new Date(Date.now() + 60000).toISOString(),
+      });
+
+      // Then clear it by setting to null
+      const result = await repo.update(created.value.id, {
+        cancelNonce: null,
+        cancelNonceExpiresAt: null,
+      });
+
+      expect(result.ok).toBe(true);
+    });
+
+    it('allows explicit updatedAt for heartbeat', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const created = await repo.create(createTaskInput());
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+
+      const customUpdatedAt = new Date('2025-01-15T10:30:00Z');
+      const result = await repo.update(created.value.id, {
+        updatedAt: customUpdatedAt,
+      });
+
+      expect(result.ok).toBe(true);
+    });
   });
 });

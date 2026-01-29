@@ -86,6 +86,44 @@ describe('FirestoreActionRepository', () => {
       expect(result?.confidence).toBe(0.85);
       expect(result?.payload).toEqual({ task: 'Complete this', priority: 'high' });
     });
+
+    it('saves and retrieves action with resource_status', async () => {
+      const action = createTestAction({
+        resource_status: 'running',
+      });
+
+      await repository.save(action);
+
+      const result = await repository.getById(action.id);
+      expect(result?.resource_status).toBe('running');
+    });
+
+    it('saves and retrieves action with resource_error', async () => {
+      const action = createTestAction({
+        resource_status: 'failed',
+        resource_error: 'Task execution failed due to timeout',
+      });
+
+      await repository.save(action);
+
+      const result = await repository.getById(action.id);
+      expect(result?.resource_status).toBe('failed');
+      expect(result?.resource_error).toBe('Task execution failed due to timeout');
+    });
+
+    it('saves action without optional resource fields', async () => {
+      const action = createTestAction();
+      const { resource_status: _resource_status, resource_error: _resource_error, ...actionWithoutResourceFields } = action as Action & {
+        resource_status?: string;
+        resource_error?: string;
+      };
+
+      await repository.save(actionWithoutResourceFields);
+
+      const result = await repository.getById(actionWithoutResourceFields.id);
+      expect(result?.resource_status).toBeUndefined();
+      expect(result?.resource_error).toBeUndefined();
+    });
   });
 
   describe('update', () => {
