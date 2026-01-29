@@ -118,38 +118,7 @@ export function NotionConnectionPage(): React.JSX.Element {
     }
   };
 
-  const handleSaveResearchSettings = async (): Promise<void> => {
-    setError(null);
-    setSuccessMessage(null);
-
-    if (researchPageId.trim() === '') {
-      setError('Research Page ID cannot be empty');
-      return;
-    }
-
-    if (validationState !== 'valid' || !validatedPage) {
-      setError('Please validate the page ID before saving');
-      return;
-    }
-
-    try {
-      setIsSavingResearch(true);
-      const token = await getAccessToken();
-      await saveResearchNotionSettings(
-        token,
-        researchPageId.trim(),
-        validatedPage.title,
-        validatedPage.url
-      );
-      setSuccessMessage('Research export settings saved');
-    } catch (e) {
-      setError(e instanceof ApiError ? e.message : 'Failed to save research settings');
-    } finally {
-      setIsSavingResearch(false);
-    }
-  };
-
-  const handleValidateResearchPage = async (): Promise<void> => {
+  const handleSaveResearchPage = async (): Promise<void> => {
     setError(null);
     setValidationError(null);
     setSuccessMessage(null);
@@ -162,14 +131,23 @@ export function NotionConnectionPage(): React.JSX.Element {
 
     try {
       setValidationState('validating');
+      setIsSavingResearch(true);
       const token = await getAccessToken();
+
+      // Validate the page
       const result = await validateResearchNotionPage(token, pageId);
-      setValidatedPage({ title: result.title, url: result.url });
+      const validated = { title: result.title, url: result.url };
+
+      // Save the settings
+      await saveResearchNotionSettings(token, pageId, validated.title, validated.url);
+
+      setValidatedPage(validated);
       setValidationState('valid');
-      setSuccessMessage('Page validated successfully');
     } catch (e) {
       setValidationState('error');
-      setValidationError(e instanceof ApiError ? e.message : 'Failed to validate page ID');
+      setValidationError(e instanceof ApiError ? e.message : 'Failed to save research settings');
+    } finally {
+      setIsSavingResearch(false);
     }
   };
 
@@ -206,11 +184,11 @@ export function NotionConnectionPage(): React.JSX.Element {
       </div>
 
       <div className="max-w-2xl space-y-6">
-        {error !== null && error !== '' ? (
+        {state !== 'connected' && error !== null && error !== '' ? (
           <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-red-700">{error}</div>
         ) : null}
 
-        {successMessage !== null && successMessage !== '' ? (
+        {state !== 'connected' && successMessage !== null && successMessage !== '' ? (
           <div className="rounded-lg border border-green-200 bg-green-50 p-4 text-green-700">
             {successMessage}
           </div>
@@ -269,12 +247,40 @@ export function NotionConnectionPage(): React.JSX.Element {
               </div>
             </Card>
 
+            {error !== null && error !== '' ? (
+              <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-red-700">{error}</div>
+            ) : null}
+
+            {successMessage !== null && successMessage !== '' ? (
+              <div className="rounded-lg border border-green-200 bg-green-50 p-4 text-green-700">
+                {successMessage}
+              </div>
+            ) : null}
+
             <Card title="Research Export Settings">
               <div className="space-y-4">
                 <p className="text-sm text-slate-500">
-                  Configure a Notion page where completed research will be automatically exported as
-                  child pages.
+                  Configure a Notion page where completed research will be exported.
                 </p>
+
+                <details className="bg-slate-50 rounded-lg">
+                  <summary className="p-4 text-sm font-medium text-slate-900 cursor-pointer hover:bg-slate-100 rounded-lg">
+                    How to get the Page ID
+                  </summary>
+                  <ol className="px-4 pb-4 text-sm text-slate-600 space-y-1 list-decimal list-inside">
+                    <li>Open the target page in Notion</li>
+                    <li>Click "Share" → "Copy link"</li>
+                    <li>The ID is the 32-character string after the page name</li>
+                    <li>Example: notion.so/My-Page-<span className="font-mono text-xs">abc123def456...</span></li>
+                  </ol>
+                </details>
+
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+                  <p className="text-sm text-amber-800">
+                    <span className="font-medium">Important:</span> Make sure the page is shared with
+                    your IntexuraOS integration in Notion (click "..." → "Add connections").
+                  </p>
+                </div>
 
                 <div>
                   <Input
@@ -283,52 +289,23 @@ export function NotionConnectionPage(): React.JSX.Element {
                     value={researchPageId}
                     onChange={(e) => {
                       setResearchPageId(e.target.value);
-                      setValidationState('idle');
-                      setValidatedPage(null);
-                      setValidationError(null);
+                      if (validationState === 'error') {
+                        setValidationState('idle');
+                        setValidationError(null);
+                      }
                     }}
                   />
-                  <div className="mt-2 flex gap-2">
+                  <div className="mt-3">
                     <Button
                       type="button"
-                      variant="secondary"
-                      isLoading={validationState === 'validating'}
-                      onClick={() => void handleValidateResearchPage()}
-                      disabled={researchPageId.trim() === '' || validationState === 'validating'}
+                      isLoading={isSavingResearch}
+                      onClick={() => void handleSaveResearchPage()}
+                      disabled={researchPageId.trim() === '' || isSavingResearch}
                     >
-                      Validate
+                      Save
                     </Button>
                   </div>
                 </div>
-
-                {validationState === 'validating' && (
-                  <div className="rounded-md border border-blue-200 bg-blue-50 p-3 flex items-center gap-2">
-                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-blue-600 border-t-transparent" />
-                    <p className="text-sm text-blue-700">Validating page...</p>
-                  </div>
-                )}
-
-                {validationState === 'valid' && validatedPage !== null && (
-                  <div className="rounded-md border border-green-200 bg-green-50 p-4">
-                    <p className="text-sm font-medium text-green-800 mb-2">✓ Page validated successfully</p>
-                    <div className="text-sm text-green-700 space-y-1">
-                      <p>
-                        <span className="font-medium">Page Title:</span> {validatedPage.title}
-                      </p>
-                      <p>
-                        <span className="font-medium">Page URL:</span>{' '}
-                        <a
-                          href={validatedPage.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-blue-600 hover:underline break-all"
-                        >
-                          {validatedPage.url}
-                        </a>
-                      </p>
-                    </div>
-                  </div>
-                )}
 
                 {validationState === 'error' && validationError !== null && (
                   <div className="rounded-md border border-red-200 bg-red-50 p-3">
@@ -336,43 +313,21 @@ export function NotionConnectionPage(): React.JSX.Element {
                   </div>
                 )}
 
-                <div className="bg-slate-50 rounded-lg p-4">
-                  <h4 className="text-sm font-medium text-slate-900 mb-2">How to get the Page ID:</h4>
-                  <ol className="text-sm text-slate-600 space-y-1 list-decimal list-inside">
-                    <li>Open the target page in Notion</li>
-                    <li>Click "Share" → "Copy link"</li>
-                    <li>The ID is the 32-character string after the page name</li>
-                    <li>Example: notion.so/My-Page-<span className="font-mono text-xs">abc123def456...</span></li>
-                  </ol>
-                </div>
-
-                <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
-                  <p className="text-sm text-amber-800">
-                    <span className="font-medium">Important:</span> Make sure this page is shared with
-                    your IntexuraOS integration in Notion (click "..." → "Add connections"), otherwise
-                    exports will fail.
-                  </p>
-                </div>
-
-                <div className="flex gap-3 pt-2">
-                  <Button
-                    type="button"
-                    isLoading={isSavingResearch}
-                    onClick={() => void handleSaveResearchSettings()}
-                    disabled={validationState !== 'valid'}
-                  >
-                    Save Research Settings
-                  </Button>
-                </div>
-
-                {researchPageId !== '' && validationState === 'valid' && validatedPage !== null ? (
-                  <div className="mt-2 rounded-md border border-green-200 bg-green-50 p-3">
+                {validationState === 'valid' && validatedPage !== null && (
+                  <div className="rounded-md border border-green-200 bg-green-50 p-4">
                     <p className="text-sm text-green-700">
-                      <span className="font-medium">Configured:</span> Research exports will be sent
-                      to <span className="font-medium"> {validatedPage.title}</span>
+                      <span className="font-medium">✓ Configured:</span> Research exports will be sent to{' '}
+                      <a
+                        href={validatedPage.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="font-medium text-blue-600 hover:underline"
+                      >
+                        {validatedPage.title}
+                      </a>
                     </p>
                   </div>
-                ) : null}
+                )}
               </div>
             </Card>
           </>

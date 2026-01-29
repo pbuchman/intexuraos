@@ -1,4 +1,4 @@
-import type { ApiResponse } from '@/types';
+import type { ApiErrorResponse, ApiResponse } from '@/types';
 
 export class ApiError extends Error {
   constructor(
@@ -76,10 +76,26 @@ export async function apiRequest<T>(
     return undefined as T;
   }
 
-  const data = (await response.json()) as ApiResponse<T>;
+  const json: unknown = await response.json();
+
+  // Validate response structure defensively
+  if (
+    typeof json !== 'object' ||
+    json === null ||
+    !('success' in json)
+  ) {
+    throw new ApiError('UNKNOWN', 'Invalid response format', response.status);
+  }
+
+  const data = json as ApiResponse<T>;
 
   if (!data.success) {
-    throw new ApiError(data.error.code, data.error.message, response.status, data.error.details);
+    const errorResponse = json as Partial<ApiErrorResponse>;
+    const error = errorResponse.error;
+    if (error === undefined) {
+      throw new ApiError('UNKNOWN', 'An unexpected error occurred', response.status);
+    }
+    throw new ApiError(error.code, error.message, response.status, error.details);
   }
 
   return data.data;
