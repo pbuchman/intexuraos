@@ -800,11 +800,12 @@ describe('Research Export Routes - Authenticated', () => {
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body) as {
         success: boolean;
-        data: { success: boolean; notionPageUrl: string };
+        data: { id: string; notionExportInfo?: { mainPageUrl: string } };
       };
       expect(body.success).toBe(true);
-      expect(body.data.success).toBe(true);
-      expect(body.data.notionPageUrl).toBeDefined();
+      expect(body.data.id).toBe(researchId);
+      expect(body.data.notionExportInfo).toBeDefined();
+      expect(body.data.notionExportInfo?.mainPageUrl).toBeDefined();
     });
 
     it('returns 401 without authentication', async () => {
@@ -1324,13 +1325,15 @@ describe('Research Export Routes - Authenticated', () => {
       });
 
       // Should still return success even though metadata save failed
+      // The fallback returns the original research merged with notionExportInfo
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body) as {
         success: boolean;
-        data: { success: boolean; notionPageUrl: string };
+        data: { id: string; notionExportInfo?: { mainPageUrl: string } };
       };
       expect(body.success).toBe(true);
-      expect(body.data.notionPageUrl).toBeDefined();
+      expect(body.data.id).toBe(researchId);
+      expect(body.data.notionExportInfo?.mainPageUrl).toBeDefined();
     });
   });
 });

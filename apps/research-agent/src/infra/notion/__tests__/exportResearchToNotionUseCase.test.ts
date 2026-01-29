@@ -33,6 +33,7 @@ function createMockDeps() {
 
   const mockNotionServiceClient = {
     getNotionToken: vi.fn(),
+    getPagePreview: vi.fn(),
   };
 
   const mockResearchExportSettings = {

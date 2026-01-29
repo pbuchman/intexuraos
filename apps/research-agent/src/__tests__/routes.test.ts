@@ -5879,11 +5879,12 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body) as {
         success: boolean;
-        data: { success: boolean; notionPageUrl: string };
+        data: { id: string; notionExportInfo?: { mainPageUrl: string } };
       };
       expect(body.success).toBe(true);
-      expect(body.data.success).toBe(true);
-      expect(body.data.notionPageUrl).toBe('https://notion.so/test-main-page-id');
+      expect(body.data.id).toBe(research.id);
+      expect(body.data.notionExportInfo).toBeDefined();
+      expect(body.data.notionExportInfo?.mainPageUrl).toBe('https://notion.so/test-main-page-id');
 
       // Verify notionExportInfo was saved
       const updated = await fakeRepo.findById(research.id);

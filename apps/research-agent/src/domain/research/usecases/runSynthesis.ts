@@ -358,18 +358,6 @@ export async function runSynthesis(
     }
   }
 
-  // [4.5.4] Fire-and-forget Notion export (non-blocking)
-  if (notionServiceClient !== undefined && notionServiceClient !== null && researchExportSettings !== undefined && researchExportSettings !== null) {
-    logger.info({}, '[4.5.4] Starting fire-and-forget Notion export');
-    const { exportResearchToNotion: exportToNotion } = await import('../../../infra/notion/exportResearchToNotionUseCase.js');
-    void exportToNotion(researchId, userId, {
-      researchRepo,
-      notionServiceClient: notionServiceClient as never, // TODO: define port interface for NotionServiceClient
-      researchExportSettings,
-      logger,
-    });
-  }
-
   logger.info({}, '[4.6] Saving final research result to database');
   await researchRepo.update(researchId, {
     status: 'completed',
@@ -382,6 +370,21 @@ export async function runSynthesis(
     attributionStatus,
     ...(shareInfo !== undefined && { shareInfo }),
   });
+
+  // [4.6.1] Fire-and-forget Notion export (non-blocking)
+  // IMPORTANT: Must happen AFTER database save so the export can read the updated shareInfo
+  // with coverImageUrl. Previously this was before the save, causing a race condition where
+  // the Notion export would read stale data without the cover image.
+  if (notionServiceClient !== undefined && notionServiceClient !== null && researchExportSettings !== undefined && researchExportSettings !== null) {
+    logger.info({}, '[4.6.1] Starting fire-and-forget Notion export');
+    const { exportResearchToNotion: exportToNotion } = await import('../../../infra/notion/exportResearchToNotionUseCase.js');
+    void exportToNotion(researchId, userId, {
+      researchRepo,
+      notionServiceClient: notionServiceClient as never, // TODO: define port interface for NotionServiceClient
+      researchExportSettings,
+      logger,
+    });
+  }
 
   if (reportLlmSuccess !== undefined) {
     reportLlmSuccess();

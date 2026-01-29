@@ -59,6 +59,11 @@ type NotionBlock =
     }
   | {
       object: 'block';
+      type: 'image';
+      image: { type: 'external'; external: { url: string }; caption?: RichTextSegment[] };
+    }
+  | {
+      object: 'block';
       type: 'table';
       table: { table_width: number; has_column_header: boolean; has_row_header: boolean; children: TableRowBlock[] };
     }
@@ -416,6 +421,27 @@ export function markdownToNotionBlocks(markdown: string): NotionBlock[] {
       }
       i++;
       continue;
+    }
+
+    // Image: ![alt](url)
+    const imageMatch = /^!\[([^\]]*)\]\(([^)]+)\)$/.exec(line.trim());
+    if (imageMatch !== null) {
+      const alt = imageMatch[1] ?? '';
+      const url = imageMatch[2] ?? '';
+      if (url !== '') {
+        const imageBlock: NotionBlock = {
+          object: 'block' as const,
+          type: 'image' as const,
+          image: {
+            type: 'external' as const,
+            external: { url },
+            ...(alt !== '' && { caption: [{ type: 'text' as const, text: { content: alt } }] }),
+          },
+        };
+        blocks.push(imageBlock);
+        i++;
+        continue;
+      }
     }
 
     // Regular paragraph

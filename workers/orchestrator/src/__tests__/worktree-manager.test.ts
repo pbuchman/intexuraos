@@ -412,4 +412,45 @@ describe('WorktreeManager - git stderr error handling', () => {
       'Failed to remove worktree'
     );
   });
+
+  it('should not throw when git worktree add returns empty stderr', async () => {
+    // Override mock for this test - return empty stderr for all commands
+    mockExecAsyncImpl = async (
+      _command: string,
+      _options: { cwd?: string; timeout?: number }
+    ): Promise<{ stdout: string; stderr: string }> => {
+      return { stdout: '', stderr: '' };
+    };
+
+    // Clear module cache and reload
+    vi.resetModules();
+    const { WorktreeManager: WM } = await import('../services/worktree-manager.js');
+    const manager = new WM(mockConfig, mockLogger);
+
+    // Should not throw - empty stderr is acceptable
+    await expect(manager.createWorktree('task-empty-stderr', 'feature-branch')).resolves.toBe(
+      join(worktreeBasePath, 'task-empty-stderr')
+    );
+  });
+
+  it('should not throw when git worktree remove returns empty stderr', async () => {
+    // Create worktree directory first
+    mkdirSync(join(worktreeBasePath, 'task-remove-empty'), { recursive: true });
+
+    // Override mock for this test - return empty stderr for all commands
+    mockExecAsyncImpl = async (
+      _command: string,
+      _options: { cwd?: string; timeout?: number }
+    ): Promise<{ stdout: string; stderr: string }> => {
+      return { stdout: '', stderr: '' };
+    };
+
+    // Clear module cache and reload
+    vi.resetModules();
+    const { WorktreeManager: WM } = await import('../services/worktree-manager.js');
+    const manager = new WM(mockConfig, mockLogger);
+
+    // Should not throw - empty stderr is acceptable
+    await expect(manager.removeWorktree('task-remove-empty')).resolves.toBeUndefined();
+  });
 });
