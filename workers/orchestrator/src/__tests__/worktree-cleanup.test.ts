@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, vi, type Mock } from 'vitest';
 import type { Logger } from 'pino';
 
 // Track command execution for test assertions
@@ -37,6 +37,10 @@ vi.mock('node:util', () => ({
 import { readdir, stat, rm } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { cleanupStaleWorktrees } from '../worktree-cleanup.js';
+
+// Type assertions for mocked functions - bypass lib type definitions
+const mockedReaddir = readdir as unknown as Mock<() => Promise<string[]>>;
+const mockedStat = stat as unknown as Mock<() => Promise<{ mtime: Date }>>;
 
 function createFakeLogger(calls: { level: string; data: unknown }[]): Logger {
   return {
@@ -93,7 +97,7 @@ describe('worktree-cleanup', () => {
 
   it('should return empty result when no worktrees exist', async () => {
     vi.mocked(existsSync).mockReturnValue(true);
-    vi.mocked(readdir).mockResolvedValue([]);
+    mockedReaddir.mockResolvedValue([]);
 
     const result = await cleanupStaleWorktrees(
       {
@@ -110,10 +114,10 @@ describe('worktree-cleanup', () => {
 
   it('should skip fresh worktrees', async () => {
     vi.mocked(existsSync).mockReturnValue(true);
-    vi.mocked(readdir).mockResolvedValue(['fresh-task']);
-    vi.mocked(stat).mockResolvedValue({
+    mockedReaddir.mockResolvedValue(['fresh-task']);
+    mockedStat.mockResolvedValue({
       mtime: new Date(), // Now - fresh
-    } as unknown as ReturnType<typeof stat>);
+    });
 
     const result = await cleanupStaleWorktrees(
       {
@@ -130,12 +134,12 @@ describe('worktree-cleanup', () => {
 
   it('should remove stale worktrees', async () => {
     vi.mocked(existsSync).mockReturnValue(true);
-    vi.mocked(readdir).mockResolvedValue(['stale-task']);
+    mockedReaddir.mockResolvedValue(['stale-task']);
     // 25 hours ago - stale
     const staleDate = new Date(Date.now() - 25 * 60 * 60 * 1000);
-    vi.mocked(stat).mockResolvedValue({
+    mockedStat.mockResolvedValue({
       mtime: staleDate,
-    } as unknown as ReturnType<typeof stat>);
+    });
 
     const result = await cleanupStaleWorktrees(
       {
@@ -152,12 +156,12 @@ describe('worktree-cleanup', () => {
 
   it('should use custom stale age threshold', async () => {
     vi.mocked(existsSync).mockReturnValue(true);
-    vi.mocked(readdir).mockResolvedValue(['task-1']);
+    mockedReaddir.mockResolvedValue(['task-1']);
     // 2 hours ago - stale for 1 hour threshold
     const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
-    vi.mocked(stat).mockResolvedValue({
+    mockedStat.mockResolvedValue({
       mtime: twoHoursAgo,
-    } as unknown as ReturnType<typeof stat>);
+    });
 
     const result = await cleanupStaleWorktrees(
       {
@@ -174,12 +178,12 @@ describe('worktree-cleanup', () => {
 
   it('should use default 24 hour threshold when staleAgeHours not provided', async () => {
     vi.mocked(existsSync).mockReturnValue(true);
-    vi.mocked(readdir).mockResolvedValue(['task-1']);
+    mockedReaddir.mockResolvedValue(['task-1']);
     // 25 hours ago - stale for default 24 hour threshold
     const twentyFiveHoursAgo = new Date(Date.now() - 25 * 60 * 60 * 1000);
-    vi.mocked(stat).mockResolvedValue({
+    mockedStat.mockResolvedValue({
       mtime: twentyFiveHoursAgo,
-    } as unknown as ReturnType<typeof stat>);
+    });
 
     const result = await cleanupStaleWorktrees(
       {
@@ -235,11 +239,11 @@ describe('worktree-cleanup', () => {
 
   it('should fall back to manual removal when git worktree remove fails with stderr', async () => {
     vi.mocked(existsSync).mockReturnValue(true);
-    vi.mocked(readdir).mockResolvedValue(['stale-task']);
+    mockedReaddir.mockResolvedValue(['stale-task']);
     const staleDate = new Date(Date.now() - 25 * 60 * 60 * 1000);
-    vi.mocked(stat).mockResolvedValue({
+    mockedStat.mockResolvedValue({
       mtime: staleDate,
-    } as unknown as ReturnType<typeof stat>);
+    });
 
     // Set stderr to trigger manual removal
     execFileStderr = 'Failed to remove worktree';
@@ -263,11 +267,11 @@ describe('worktree-cleanup', () => {
 
   it('should not fall back to manual removal when stderr contains "not a valid worktree"', async () => {
     vi.mocked(existsSync).mockReturnValue(true);
-    vi.mocked(readdir).mockResolvedValue(['invalid-task']);
+    mockedReaddir.mockResolvedValue(['invalid-task']);
     const staleDate = new Date(Date.now() - 25 * 60 * 60 * 1000);
-    vi.mocked(stat).mockResolvedValue({
+    mockedStat.mockResolvedValue({
       mtime: staleDate,
-    } as unknown as ReturnType<typeof stat>);
+    });
 
     // Set stderr to "not a valid worktree" - should NOT fall back to manual removal
     execFileStderr = 'not a valid worktree';
@@ -289,11 +293,11 @@ describe('worktree-cleanup', () => {
 
   it('should handle removal errors gracefully and add to errors list', async () => {
     vi.mocked(existsSync).mockReturnValue(true);
-    vi.mocked(readdir).mockResolvedValue(['error-task']);
+    mockedReaddir.mockResolvedValue(['error-task']);
     const staleDate = new Date(Date.now() - 25 * 60 * 60 * 1000);
-    vi.mocked(stat).mockResolvedValue({
+    mockedStat.mockResolvedValue({
       mtime: staleDate,
-    } as unknown as ReturnType<typeof stat>);
+    });
 
     // Set error to throw
     throwOnExecFile = true;
@@ -318,11 +322,11 @@ describe('worktree-cleanup', () => {
 
   it('should handle non-Error objects in removal catch', async () => {
     vi.mocked(existsSync).mockReturnValue(true);
-    vi.mocked(readdir).mockResolvedValue(['error-task']);
+    mockedReaddir.mockResolvedValue(['error-task']);
     const staleDate = new Date(Date.now() - 25 * 60 * 60 * 1000);
-    vi.mocked(stat).mockResolvedValue({
+    mockedStat.mockResolvedValue({
       mtime: staleDate,
-    } as unknown as ReturnType<typeof stat>);
+    });
 
     // Set non-Error to throw
     throwOnExecFile = true;
@@ -346,7 +350,7 @@ describe('worktree-cleanup', () => {
 
   it('should handle multiple worktrees with mixed states', async () => {
     vi.mocked(existsSync).mockReturnValue(true);
-    vi.mocked(readdir).mockResolvedValue(['fresh-task', 'stale-task-1', 'stale-task-2']);
+    mockedReaddir.mockResolvedValue(['fresh-task', 'stale-task-1', 'stale-task-2']);
 
     let callCount = 0;
     vi.mocked(stat).mockImplementation(async () => {
