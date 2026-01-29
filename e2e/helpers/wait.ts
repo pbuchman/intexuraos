@@ -41,7 +41,8 @@ export async function waitForTaskStatus(
         throw new Error(`Failed to get task status: ${String(response.status)}`);
       }
 
-      const task = response.data as CodeTask;
+      const responseData = response.data as { success: boolean; data: CodeTask };
+      const task = responseData.data;
       lastStatus = task.status;
 
       if (task.status === expectedStatus) {
@@ -122,7 +123,8 @@ export async function waitForTaskInList(
     async () => {
       const response = await client.get('/code/tasks', { params: { userId } });
       if (response.status !== 200) return false;
-      const tasks = response.data.tasks as CodeTask[];
+      const responseData = response.data as { success: boolean; data: { tasks: CodeTask[] } };
+      const tasks = responseData.data.tasks;
       return tasks.length > 0;
     },
     timeoutMs,
@@ -130,7 +132,8 @@ export async function waitForTaskInList(
     'task to appear in list'
   ).then(async () => {
     const response = await client.get('/code/tasks', { params: { userId } });
-    const tasks = response.data.tasks as CodeTask[];
+    const responseData = response.data as { success: boolean; data: { tasks: CodeTask[] } };
+    const tasks = responseData.data.tasks;
     const task = tasks[0];
     if (task === undefined) {
       throw new Error('Task list became empty unexpectedly');

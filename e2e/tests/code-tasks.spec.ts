@@ -26,8 +26,8 @@ describe('Code Tasks E2E', () => {
       const response = await client.get('/code/workers/status');
 
       expect(response.status).toBe(200);
-      expect(response.data).toHaveProperty('mac');
-      expect(response.data).toHaveProperty('vm');
+      expect(response.data.data).toHaveProperty('mac');
+      expect(response.data.data).toHaveProperty('vm');
     });
   });
 
@@ -40,7 +40,7 @@ describe('Code Tasks E2E', () => {
       });
 
       expect(submitResult.status).toBe(200);
-      const { codeTaskId } = submitResult.data;
+      const { codeTaskId } = submitResult.data.data;
       expect(codeTaskId).toBeDefined();
 
       // Wait for task to complete
@@ -66,7 +66,7 @@ describe('Code Tasks E2E', () => {
       });
 
       expect(submitResult.status).toBe(200);
-      const { codeTaskId } = submitResult.data;
+      const { codeTaskId } = submitResult.data.data;
 
       const task = await waitForTaskStatus(client, codeTaskId, 'completed', 60000);
 
@@ -95,7 +95,7 @@ describe('Code Tasks E2E', () => {
       });
 
       expect(submitResult.status).toBe(200);
-      const { codeTaskId } = submitResult.data;
+      const { codeTaskId } = submitResult.data.data;
 
       const task = await waitForTaskStatus(client, codeTaskId, 'completed', 60000);
       expect(task.status).toBe('completed');
@@ -121,7 +121,7 @@ describe('Code Tasks E2E', () => {
       });
 
       expect(submitResult.status).toBe(200);
-      const { codeTaskId } = submitResult.data;
+      const { codeTaskId } = submitResult.data.data;
 
       const task = await waitForTaskStatus(client, codeTaskId, 'failed', 30000);
 
@@ -159,19 +159,19 @@ describe('Code Tasks E2E', () => {
       });
 
       expect(submitResult.status).toBe(200);
-      const { codeTaskId } = submitResult.data;
+      const { codeTaskId } = submitResult.data.data;
 
       // Wait for task to start running
       await sleep(3000);
 
       // Check it's running
       const checkResult = await client.get(`/code/tasks/${codeTaskId}`);
-      expect(checkResult.data.status).toMatch(/^(dispatched|running)$/);
+      expect(checkResult.data.data.status).toMatch(/^(dispatched|running)$/);
 
       // Cancel it
       const cancelResult = await client.post('/code/cancel', { taskId: codeTaskId });
       expect(cancelResult.status).toBe(200);
-      expect(cancelResult.data.status).toBe('cancelled');
+      expect(cancelResult.data.data.status).toBe('cancelled');
 
       // Verify cancelled status
       const task = await waitForTaskStatus(client, codeTaskId, 'cancelled', 30000);
@@ -193,7 +193,7 @@ describe('Code Tasks E2E', () => {
         workerType: 'auto',
       });
 
-      const { codeTaskId } = submitResult.data;
+      const { codeTaskId } = submitResult.data.data;
       await waitForTaskStatus(client, codeTaskId, 'completed', 60000);
 
       // Try to cancel completed task
@@ -211,7 +211,7 @@ describe('Code Tasks E2E', () => {
       });
 
       expect(submitResult.status).toBe(200);
-      const { codeTaskId } = submitResult.data;
+      const { codeTaskId } = submitResult.data.data;
 
       const task = await waitForTaskStatus(client, codeTaskId, 'completed', 60000);
 
@@ -234,8 +234,8 @@ describe('Code Tasks E2E', () => {
       const response = await client.get('/code/tasks');
 
       expect(response.status).toBe(200);
-      expect(response.data).toHaveProperty('tasks');
-      expect(Array.isArray(response.data.tasks)).toBe(true);
+      expect(response.data.data).toHaveProperty('tasks');
+      expect(Array.isArray(response.data.data.tasks)).toBe(true);
     });
 
     it('filters tasks by status', async () => {
@@ -244,10 +244,10 @@ describe('Code Tasks E2E', () => {
       });
 
       expect(response.status).toBe(200);
-      expect(response.data).toHaveProperty('tasks');
+      expect(response.data.data).toHaveProperty('tasks');
 
       // All returned tasks should have the filtered status
-      response.data.tasks.forEach((task: CodeTask) => {
+      response.data.data.tasks.forEach((task: CodeTask) => {
         expect(task.status).toBe('completed');
       });
     });
@@ -258,7 +258,7 @@ describe('Code Tasks E2E', () => {
       });
 
       expect(response.status).toBe(200);
-      expect(response.data.tasks.length).toBeLessThanOrEqual(5);
+      expect(response.data.data.tasks.length).toBeLessThanOrEqual(5);
     });
   });
 
@@ -270,15 +270,15 @@ describe('Code Tasks E2E', () => {
         workerType: 'auto',
       });
 
-      const { codeTaskId } = submitResult.data;
+      const { codeTaskId } = submitResult.data.data;
 
       // Get task details
       const response = await client.get(`/code/tasks/${codeTaskId}`);
 
       expect(response.status).toBe(200);
-      expect(response.data.id).toBe(codeTaskId);
-      expect(response.data).toHaveProperty('status');
-      expect(response.data).toHaveProperty('createdAt');
+      expect(response.data.data.id).toBe(codeTaskId);
+      expect(response.data.data).toHaveProperty('status');
+      expect(response.data.data).toHaveProperty('createdAt');
     });
 
     it('returns 404 for non-existent task', async () => {
@@ -293,14 +293,14 @@ describe('Code Tasks E2E', () => {
       const response = await client.get('/code/workers/status');
 
       expect(response.status).toBe(200);
-      expect(response.data).toHaveProperty('mac');
-      expect(response.data).toHaveProperty('vm');
+      expect(response.data.data).toHaveProperty('mac');
+      expect(response.data.data).toHaveProperty('vm');
 
       // Each worker status should have expected fields
       ['mac', 'vm'].forEach((worker) => {
-        expect(response.data[worker]).toHaveProperty('healthy');
-        expect(response.data[worker]).toHaveProperty('capacity');
-        expect(response.data[worker]).toHaveProperty('checkedAt');
+        expect(response.data.data[worker]).toHaveProperty('healthy');
+        expect(response.data.data[worker]).toHaveProperty('capacity');
+        expect(response.data.data[worker]).toHaveProperty('checkedAt');
       });
     });
   });
@@ -312,7 +312,7 @@ describe('Code Tasks E2E', () => {
         workerType: 'auto',
       });
 
-      const { codeTaskId } = submitResult.data;
+      const { codeTaskId } = submitResult.data.data;
       const task = await waitForTaskStatus(client, codeTaskId, 'completed', 60000);
 
       expect(task.result).toBeDefined();
@@ -338,11 +338,11 @@ describe('Code Tasks E2E', () => {
         workerType: 'auto',
       });
 
-      const { codeTaskId } = submitResult.data;
+      const { codeTaskId } = submitResult.data.data;
 
       // Check initial status (dispatched or running)
       const initialResponse = await client.get(`/code/tasks/${codeTaskId}`);
-      const initialStatus = initialResponse.data.status;
+      const initialStatus = initialResponse.data.data.status;
       expect(['dispatched', 'running']).toContain(initialStatus);
 
       // Wait for completion

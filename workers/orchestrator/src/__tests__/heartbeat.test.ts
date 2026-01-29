@@ -319,4 +319,38 @@ describe('HeartbeatManager', () => {
     await vi.advanceTimersByTimeAsync(60_000);
     expect(mockFetch).toHaveBeenCalled();
   });
+
+  it('should use empty string for internal auth when env var is not set', async () => {
+    const originalEnv = process.env['INTEXURAOS_INTERNAL_AUTH_SECRET'];
+    delete process.env['INTEXURAOS_INTERNAL_AUTH_SECRET'];
+
+    let capturedAuthHeader: string | undefined;
+
+    mockFetch.mockImplementation(async (_url: string, options?: RequestInit) => {
+      const headers = options?.headers as Record<string, string>;
+      capturedAuthHeader = headers?.['X-Internal-Auth'];
+      return {
+        ok: true,
+        json: async () => ({}),
+      } as Response;
+    });
+
+    const noEnvManager = createHeartbeatManager(
+      {
+        codeAgentUrl: 'https://code-agent.test',
+        intervalMs: 60_000,
+      },
+      logger
+    );
+
+    noEnvManager.registerTask('task-1');
+    noEnvManager.start();
+
+    await vi.advanceTimersByTimeAsync(60_000);
+
+    expect(capturedAuthHeader).toBe('');
+
+    noEnvManager.stop();
+    process.env['INTEXURAOS_INTERNAL_AUTH_SECRET'] = originalEnv;
+  });
 });

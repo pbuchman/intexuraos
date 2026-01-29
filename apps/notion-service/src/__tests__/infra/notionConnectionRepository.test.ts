@@ -52,6 +52,24 @@ describe('notionConnectionRepository', () => {
         expect(second.value.createdAt).toBe(firstCreatedAt);
       }
     });
+
+    it('defaults createdAt to now when existing document has no createdAt field', async () => {
+      const docRef = fakeFirestore.collection('notion_connections').doc('legacy-user');
+      await docRef.set({
+        userId: 'legacy-user',
+        notionToken: 'old-token',
+        connected: true,
+        updatedAt: '2024-01-01T00:00:00.000Z',
+      });
+
+      const result = await saveNotionConnection('legacy-user', 'new-token');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.createdAt).toBeDefined();
+        expect(result.value.createdAt).not.toBe('2024-01-01T00:00:00.000Z');
+      }
+    });
   });
 
   describe('getNotionConnection', () => {

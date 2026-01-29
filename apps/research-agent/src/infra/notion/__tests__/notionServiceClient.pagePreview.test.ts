@@ -18,7 +18,12 @@ describe('getPagePreview', () => {
     debug: vi.fn(),
     warn: vi.fn(),
     error: vi.fn(),
-  };
+    fatal: vi.fn(),
+    trace: vi.fn(),
+    silent: vi.fn(),
+    level: 'info',
+    msgPrefix: '',
+  } as unknown as Logger;
 
   beforeEach(() => {
     nock.cleanAll();
@@ -54,7 +59,7 @@ describe('getPagePreview', () => {
         });
 
       const client = createNotionServiceClient({ baseUrl: notionServiceUrl, internalAuthToken });
-      const result = await client.getPagePreview(userId, pageId, mockLogger as unknown as Logger);
+      const result = await client.getPagePreview(userId, pageId, mockLogger);
 
       assertPagePreviewResult(result, 'My Page Title', 'https://notion.so/My-Page-Title-page456');
     });
@@ -86,7 +91,7 @@ describe('getPagePreview', () => {
         });
 
       const client = createNotionServiceClient({ baseUrl: notionServiceUrl, internalAuthToken });
-      const result = await client.getPagePreview(userId, pageId, mockLogger as unknown as Logger);
+      const result = await client.getPagePreview(userId, pageId, mockLogger);
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
@@ -104,7 +109,7 @@ describe('getPagePreview', () => {
         });
 
       const client = createNotionServiceClient({ baseUrl: notionServiceUrl, internalAuthToken });
-      const result = await client.getPagePreview(userId, pageId, mockLogger as unknown as Logger);
+      const result = await client.getPagePreview(userId, pageId, mockLogger);
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
@@ -118,7 +123,7 @@ describe('getPagePreview', () => {
         .replyWithError('Connection refused');
 
       const client = createNotionServiceClient({ baseUrl: notionServiceUrl, internalAuthToken });
-      const result = await client.getPagePreview(userId, pageId, mockLogger as unknown as Logger);
+      const result = await client.getPagePreview(userId, pageId, mockLogger);
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
@@ -135,7 +140,7 @@ describe('getPagePreview', () => {
         });
 
       const client = createNotionServiceClient({ baseUrl: notionServiceUrl, internalAuthToken });
-      const result = await client.getPagePreview(userId, pageId, mockLogger as unknown as Logger);
+      const result = await client.getPagePreview(userId, pageId, mockLogger);
 
       expect(result.ok).toBe(false);
       if (!result.ok) {

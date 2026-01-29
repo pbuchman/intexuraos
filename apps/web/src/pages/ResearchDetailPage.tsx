@@ -6,14 +6,15 @@ import {
   ChevronDown,
   Clock,
   Copy,
-  ExternalLink,
   FileText,
   Link2,
   Link2Off,
   Play,
   Plus,
   RefreshCw,
+  Share2,
   Star,
+  StickyNote,
   Trash2,
   XCircle,
 } from 'lucide-react';
@@ -215,7 +216,9 @@ export function ResearchDetailPage(): React.JSX.Element {
   const [enhanceContexts, setEnhanceContexts] = useState<string[]>([]);
   const [removeContextIds, setRemoveContextIds] = useState<Set<string>>(() => new Set());
   const [enhanceSynthesisModel, setEnhanceSynthesisModel] = useState<SupportedModel | null>(null);
-  const [linksExpanded, setLinksExpanded] = useState(false);
+  const [linksExpanded, setLinksExpanded] = useState(() =>
+    typeof window !== 'undefined' && window.matchMedia('(min-width: 640px)').matches
+  );
 
   const configuredProviders: LlmProvider[] =
     keysLoading || keys === null
@@ -662,17 +665,9 @@ export function ResearchDetailPage(): React.JSX.Element {
                   <Plus className="h-4 w-4 sm:mr-2" />
                   <span className="hidden sm:inline">Enhance</span>
                 </Button>
-                {research.notionExportInfo !== undefined ? (
-                  <Button
-                    variant="secondary"
-                    onClick={(): void => {
-                      window.open(research.notionExportInfo?.mainPageUrl, '_blank', 'noopener,noreferrer');
-                    }}
-                  >
-                    <ExternalLink className="h-4 w-4 sm:mr-2" />
-                    <span className="hidden sm:inline">View in Notion</span>
-                  </Button>
-                ) : research.synthesizedResult !== undefined && research.synthesizedResult !== '' ? (
+                {research.notionExportInfo === undefined &&
+                research.synthesizedResult !== undefined &&
+                research.synthesizedResult !== '' ? (
                   <Button
                     onClick={(): void => {
                       void handleExportToNotion();
@@ -688,7 +683,7 @@ export function ResearchDetailPage(): React.JSX.Element {
                       </>
                     ) : (
                       <>
-                        <ExternalLink className="h-4 w-4 sm:mr-2" />
+                        <StickyNote className="h-4 w-4 sm:mr-2" />
                         <span className="hidden sm:inline">Export to Notion</span>
                       </>
                     )}
@@ -702,8 +697,8 @@ export function ResearchDetailPage(): React.JSX.Element {
                         void handleShare();
                       }}
                     >
-                      <Copy className="h-4 w-4 sm:mr-2" />
-                      <span className="hidden sm:inline">Copy Link</span>
+                      <Share2 className="h-4 w-4 sm:mr-2" />
+                      <span className="hidden sm:inline">Share</span>
                     </Button>
                     {showUnshareConfirm ? (
                       <>
@@ -1162,8 +1157,8 @@ export function ResearchDetailPage(): React.JSX.Element {
       })()}
 
       {showEnhanceModal ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 overflow-y-auto py-8">
-          <div className="mx-4 w-full max-w-2xl rounded-lg bg-white p-6 shadow-xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-2xl max-h-[calc(100vh-2rem)] overflow-y-auto rounded-lg bg-white p-6 shadow-xl">
             <h3 className="mb-4 text-lg font-semibold">Enhance Research</h3>
             <p className="mb-4 text-sm text-slate-600">
               Add more AI models, change synthesis model, or modify context.
