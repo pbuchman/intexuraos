@@ -401,6 +401,21 @@ Pattern: `/internal/{resource-name}` with `X-Internal-Auth` header. Use `validat
 
 **RULE:** Migrations are IMMUTABLE. Never modify or delete existing files. Create new migrations to fix bugs.
 
+### Response Contract
+
+**RULE:** ALL HTTP responses MUST use `reply.ok(data)` or `reply.fail(code, message)`.
+
+Raw `reply.send()` is **FORBIDDEN** unless annotated with `// @allow-raw-send: <reason>`.
+
+| Method           | Returns                                              | Use For               |
+| ---------------- | ---------------------------------------------------- | --------------------- |
+| `reply.ok(data)` | `{ success: true, data: T }`                         | Success responses     |
+| `reply.fail()`   | `{ success: false, error: { code, message } }` + 4xx | Expected error states |
+
+**Verification:** `pnpm run verify:reply-send` (CI Static Validation phase)
+
+**Full documentation:** [docs/patterns/response-contract.md](../docs/patterns/response-contract.md)
+
 ---
 
 ## Apps & Packages

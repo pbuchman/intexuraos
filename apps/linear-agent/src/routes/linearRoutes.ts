@@ -321,13 +321,7 @@ export const linearRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           'Failed to update retry metadata in Firestore'
         );
       }
-      return await reply.status(422).send({
-        success: false,
-        error: {
-          code: 'UNPROCESSABLE_ENTITY',
-          message: createResult.error.message,
-        },
-      });
+      return await reply.fail('UNPROCESSABLE_ENTITY', createResult.error.message);
     }
 
     // Success - delete the failed issue

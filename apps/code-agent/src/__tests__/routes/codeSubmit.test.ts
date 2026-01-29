@@ -251,8 +251,9 @@ describe('POST /code/submit', () => {
 
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body);
-      expect(body.status).toBe('submitted');
-      expect(body.codeTaskId).toBeDefined();
+      expect(body.success).toBe(true);
+      expect(body.data.status).toBe('submitted');
+      expect(body.data.codeTaskId).toBeDefined();
 
       // Verify dispatch was called with default workerType
       expect(taskDispatcher.dispatch).toHaveBeenCalledWith(
@@ -373,7 +374,7 @@ describe('POST /code/submit', () => {
       expect(response.statusCode).toBe(429);
       const body = JSON.parse(response.body);
       expect(body.success).toBe(false);
-      expect(body.error.code).toBe('hourly_limit');
+      expect(body.error.code).toBe('RATE_LIMITED');
       expect(body.error.message).toContain('tasks per hour');
     });
 
@@ -399,8 +400,9 @@ describe('POST /code/submit', () => {
 
       expect(response.statusCode).toBe(429);
       const body = JSON.parse(response.body);
-      expect(body.error.code).toBe('concurrent_limit');
-      expect(body.error.retryAfter).toBe('when a task completes');
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('RATE_LIMITED');
+      expect(body.error.message).toContain('concurrent tasks');
     });
 
     it('returns 429 when daily cost limit exceeded', async () => {
@@ -425,7 +427,9 @@ describe('POST /code/submit', () => {
 
       expect(response.statusCode).toBe(429);
       const body = JSON.parse(response.body);
-      expect(body.error.code).toBe('daily_cost_limit');
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('RATE_LIMITED');
+      expect(body.error.message).toContain('cost limit');
     });
 
     it('returns 429 when monthly cost limit exceeded', async () => {
@@ -450,7 +454,9 @@ describe('POST /code/submit', () => {
 
       expect(response.statusCode).toBe(429);
       const body = JSON.parse(response.body);
-      expect(body.error.code).toBe('monthly_cost_limit');
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('RATE_LIMITED');
+      expect(body.error.message).toContain('cost limit');
     });
 
     it('returns 429 when prompt too long', async () => {
@@ -474,7 +480,9 @@ describe('POST /code/submit', () => {
 
       expect(response.statusCode).toBe(429);
       const body = JSON.parse(response.body);
-      expect(body.error.code).toBe('prompt_too_long');
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('RATE_LIMITED');
+      expect(body.error.message).toContain('maximum length');
     });
 
     it('returns 503 when service unavailable', async () => {
@@ -498,7 +506,9 @@ describe('POST /code/submit', () => {
 
       expect(response.statusCode).toBe(503);
       const body = JSON.parse(response.body);
-      expect(body.error.code).toBe('service_unavailable');
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('MISCONFIGURED');
+      expect(body.error.message).toContain('rate limits');
     });
 
     it('allows submissions when within limits', async () => {
@@ -628,8 +638,7 @@ describe('POST /code/submit', () => {
       expect(response2.statusCode).toBe(409);
       const body = JSON.parse(response2.body);
       expect(body.success).toBe(false);
-      expect(body.error.code).toBe('DUPLICATE_PROMPT');
-      expect(body.error.existingTaskId).toBeDefined();
+      expect(body.error.code).toBe('CONFLICT');
     });
 
     it('returns 409 when active task exists for Linear issue', async () => {
@@ -683,7 +692,7 @@ describe('POST /code/submit', () => {
       expect(response.statusCode).toBe(409);
       const body = JSON.parse(response.body);
       expect(body.success).toBe(false);
-      expect(body.error.code).toBe('ACTIVE_TASK_EXISTS');
+      expect(body.error.code).toBe('CONFLICT');
     });
   });
 
@@ -721,7 +730,7 @@ describe('POST /code/submit', () => {
       expect(body).toEqual({
         success: false,
         error: {
-          code: 'DISPATCH_FAILED',
+          code: 'MISCONFIGURED',
           message: 'Failed to dispatch task to worker',
         },
       });

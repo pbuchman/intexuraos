@@ -235,9 +235,9 @@ describe('POST /code/cancel', () => {
 
       expect(response.statusCode).toBe(404);
       const body = JSON.parse(response.body);
-      expect(body).toEqual({
-        error: 'task_not_found',
-      });
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('NOT_FOUND');
+      expect(body.error.message).toBe('Task not found');
     });
   });
 
@@ -274,9 +274,9 @@ describe('POST /code/cancel', () => {
 
       expect(response.statusCode).toBe(403);
       const body = JSON.parse(response.body);
-      expect(body).toEqual({
-        error: 'forbidden',
-      });
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('FORBIDDEN');
+      expect(body.error.message).toBe('Not authorized to cancel this task');
     });
   });
 
@@ -314,9 +314,9 @@ describe('POST /code/cancel', () => {
 
       expect(response.statusCode).toBe(409);
       const body = JSON.parse(response.body);
-      expect(body).toEqual({
-        error: 'task_not_running',
-      });
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('CONFLICT');
+      expect(body.error.message).toBe('Task is not running');
     });
 
     it('returns 409 for already cancelled task', async () => {
@@ -352,9 +352,9 @@ describe('POST /code/cancel', () => {
 
       expect(response.statusCode).toBe(409);
       const body = JSON.parse(response.body);
-      expect(body).toEqual({
-        error: 'task_not_running',
-      });
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('CONFLICT');
+      expect(body.error.message).toBe('Task is not running');
     });
 
     it('returns 409 for failed task', async () => {
@@ -390,9 +390,9 @@ describe('POST /code/cancel', () => {
 
       expect(response.statusCode).toBe(409);
       const body = JSON.parse(response.body);
-      expect(body).toEqual({
-        error: 'task_not_running',
-      });
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('CONFLICT');
+      expect(body.error.message).toBe('Task is not running');
     });
   });
 
@@ -428,9 +428,8 @@ describe('POST /code/cancel', () => {
 
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body);
-      expect(body).toEqual({
-        status: 'cancelled',
-      });
+      expect(body.success).toBe(true);
+      expect(body.data.status).toBe('cancelled');
 
       // Verify worker was notified
       expect(cancelOnWorkerSpy).toHaveBeenCalledTimes(1);
@@ -477,9 +476,8 @@ describe('POST /code/cancel', () => {
 
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body);
-      expect(body).toEqual({
-        status: 'cancelled',
-      });
+      expect(body.success).toBe(true);
+      expect(body.data.status).toBe('cancelled');
 
       // Verify worker was notified
       expect(cancelOnWorkerSpy).toHaveBeenCalledTimes(1);
@@ -564,9 +562,9 @@ describe('POST /code/cancel', () => {
 
       expect(response.statusCode).toBe(500);
       const body = JSON.parse(response.body);
-      expect(body).toEqual({
-        error: 'failed_to_cancel',
-      });
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INTERNAL_ERROR');
+      expect(body.error.message).toBe('Failed to cancel task');
 
       updateSpy.mockRestore();
     });
@@ -611,9 +609,8 @@ describe('POST /code/cancel', () => {
       // Should still succeed - the task is cancelled in Firestore
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body);
-      expect(body).toEqual({
-        status: 'cancelled',
-      });
+      expect(body.success).toBe(true);
+      expect(body.data.status).toBe('cancelled');
 
       // Verify task was still marked cancelled in Firestore
       const getResult = await codeTaskRepo.findById(taskId);
@@ -700,9 +697,8 @@ describe('POST /code/cancel', () => {
 
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body);
-      expect(body).toEqual({
-        status: 'cancelled',
-      });
+      expect(body.success).toBe(true);
+      expect(body.data.status).toBe('cancelled');
 
       const getResult = await codeTaskRepo.findById(taskId);
       expect(getResult.ok).toBe(true);

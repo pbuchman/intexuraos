@@ -229,10 +229,11 @@ describe('POST /internal/code/process', () => {
     });
 
     expect(response.statusCode).toBe(200);
-    const json = response.json() as { status: string; codeTaskId: string; resourceUrl: string };
-    expect(json.status).toBe('submitted');
-    expect(json.codeTaskId).toBeDefined();
-    expect(json.resourceUrl).toMatch(/^\/#\/code-tasks\/[a-zA-Z0-9_-]+$/);
+    const json = response.json() as { success: boolean; data: { status: string; codeTaskId: string; resourceUrl: string } };
+    expect(json.success).toBe(true);
+    expect(json.data.status).toBe('submitted');
+    expect(json.data.codeTaskId).toBeDefined();
+    expect(json.data.resourceUrl).toMatch(/^\/#\/code-tasks\/[a-zA-Z0-9_-]+$/);
   });
 
   it('returns 409 for duplicate approvalEventId', async () => {
@@ -277,9 +278,9 @@ describe('POST /internal/code/process', () => {
     });
 
     expect(response.statusCode).toBe(409);
-    const json = response.json() as { status: string; existingTaskId: string };
-    expect(json.status).toBe('duplicate');
-    expect(json.existingTaskId).toBeDefined();
+    const json = response.json() as { success: boolean; error: { code: string; message: string } };
+    expect(json.success).toBe(false);
+    expect(json.error.code).toBe('CONFLICT');
   });
 
   it('returns 409 for duplicate actionId', async () => {
@@ -324,9 +325,9 @@ describe('POST /internal/code/process', () => {
     });
 
     expect(response.statusCode).toBe(409);
-    const json = response.json() as { status: string; existingTaskId: string };
-    expect(json.status).toBe('duplicate');
-    expect(json.existingTaskId).toBeDefined();
+    const json = response.json() as { success: boolean; error: { code: string; message: string } };
+    expect(json.success).toBe(false);
+    expect(json.error.code).toBe('CONFLICT');
   });
 
   it('returns 503 when all workers unavailable', async () => {
@@ -356,9 +357,10 @@ describe('POST /internal/code/process', () => {
     });
 
     expect(response.statusCode).toBe(503);
-    const json = response.json() as { status: string; error: string };
-    expect(json.status).toBe('failed');
-    expect(json.error).toBe('worker_unavailable');
+    const json = response.json() as { success: boolean; error: { code: string; message: string } };
+    expect(json.success).toBe(false);
+    expect(json.error.code).toBe('MISCONFIGURED');
+    expect(json.error.message).toBe('Worker unavailable');
 
     mockDispatch.mockRestore();
   });
@@ -407,8 +409,9 @@ describe('POST /internal/code/process', () => {
     });
 
     expect(response.statusCode).toBe(409);
-    const json = response.json() as { status: string; existingTaskId: string };
-    expect(json.status).toBe('duplicate');
+    const json = response.json() as { success: boolean; error: { code: string; message: string } };
+    expect(json.success).toBe(false);
+    expect(json.error.code).toBe('CONFLICT');
   });
 
   it('returns 200 with correct resourceUrl format', async () => {
@@ -438,9 +441,10 @@ describe('POST /internal/code/process', () => {
     });
 
     expect(response.statusCode).toBe(200);
-    const json = response.json() as { status: string; codeTaskId: string; resourceUrl: string };
-    expect(json.resourceUrl).toMatch(/^\/#\/code-tasks\/[a-zA-Z0-9_-]+$/);
+    const json = response.json() as { success: boolean; data: { status: string; codeTaskId: string; resourceUrl: string } };
+    expect(json.success).toBe(true);
+    expect(json.data.resourceUrl).toMatch(/^\/#\/code-tasks\/[a-zA-Z0-9_-]+$/);
     // Verify resourceUrl contains the codeTaskId
-    expect(json.resourceUrl).toContain(json.codeTaskId);
+    expect(json.data.resourceUrl).toContain(json.data.codeTaskId);
   });
 });

@@ -41,18 +41,11 @@ describe('createJwtValidator', () => {
     it('should return 401 when Authorization header is missing', async () => {
       const validator = createJwtValidator(mockConfig, logger);
       const request: TestRequest = { headers: {}, url: '/code/submit' };
-      const reply = { status: vi.fn().mockReturnThis(), send: vi.fn() };
+      const reply = { fail: vi.fn().mockResolvedValue(undefined) };
 
       await validator(request as unknown as Parameters<typeof validator>[0], reply as unknown as Parameters<typeof validator>[1]);
 
-      expect(reply.status).toHaveBeenCalledWith(401);
-      expect(reply.send).toHaveBeenCalledWith({
-        success: false,
-        error: {
-          code: 'UNAUTHORIZED',
-          message: 'Unauthorized',
-        },
-      });
+      expect(reply.fail).toHaveBeenCalledWith('UNAUTHORIZED', 'Unauthorized');
     });
 
     it('should return 401 when Authorization header does not start with Bearer', async () => {
@@ -61,18 +54,11 @@ describe('createJwtValidator', () => {
         headers: { authorization: 'Basic abc123' },
         url: '/code/submit',
       };
-      const reply = { status: vi.fn().mockReturnThis(), send: vi.fn() };
+      const reply = { fail: vi.fn().mockResolvedValue(undefined) };
 
       await validator(request as unknown as Parameters<typeof validator>[0], reply as unknown as Parameters<typeof validator>[1]);
 
-      expect(reply.status).toHaveBeenCalledWith(401);
-      expect(reply.send).toHaveBeenCalledWith({
-        success: false,
-        error: {
-          code: 'UNAUTHORIZED',
-          message: 'Unauthorized',
-        },
-      });
+      expect(reply.fail).toHaveBeenCalledWith('UNAUTHORIZED', 'Unauthorized');
     });
   });
 
@@ -83,18 +69,11 @@ describe('createJwtValidator', () => {
         headers: { authorization: 'Bearer invalid.token.here' },
         url: '/code/submit',
       };
-      const reply = { status: vi.fn().mockReturnThis(), send: vi.fn() };
+      const reply = { fail: vi.fn().mockResolvedValue(undefined) };
 
       await validator(request as unknown as Parameters<typeof validator>[0], reply as unknown as Parameters<typeof validator>[1]);
 
-      expect(reply.status).toHaveBeenCalledWith(401);
-      expect(reply.send).toHaveBeenCalledWith({
-        success: false,
-        error: {
-          code: 'UNAUTHORIZED',
-          message: 'Invalid or expired token',
-        },
-      });
+      expect(reply.fail).toHaveBeenCalledWith('UNAUTHORIZED', 'Invalid or expired token');
     });
   });
 
@@ -110,7 +89,7 @@ describe('createJwtValidator', () => {
         headers: { authorization: 'Bearer valid.token.here' },
         url: '/code/submit',
       };
-      const reply = { status: vi.fn().mockReturnThis(), send: vi.fn() };
+      const reply = { fail: vi.fn().mockResolvedValue(undefined) };
 
       await validator(request as unknown as Parameters<typeof validator>[0], reply as unknown as Parameters<typeof validator>[1]);
 
@@ -118,7 +97,7 @@ describe('createJwtValidator', () => {
         userId: 'auth0|user123',
         email: 'user@example.com',
       });
-      expect(reply.status).not.toHaveBeenCalled();
+      expect(reply.fail).not.toHaveBeenCalled();
     });
 
     it('should return 401 when token is missing sub claim', async () => {
@@ -132,18 +111,11 @@ describe('createJwtValidator', () => {
         headers: { authorization: 'Bearer valid.token.here' },
         url: '/code/submit',
       };
-      const reply = { status: vi.fn().mockReturnThis(), send: vi.fn() };
+      const reply = { fail: vi.fn().mockResolvedValue(undefined) };
 
       await validator(request as unknown as Parameters<typeof validator>[0], reply as unknown as Parameters<typeof validator>[1]);
 
-      expect(reply.status).toHaveBeenCalledWith(401);
-      expect(reply.send).toHaveBeenCalledWith({
-        success: false,
-        error: {
-          code: 'UNAUTHORIZED',
-          message: 'Invalid token: missing user identifier',
-        },
-      });
+      expect(reply.fail).toHaveBeenCalledWith('UNAUTHORIZED', 'Invalid token: missing user identifier');
     });
 
     it('should handle token without email claim', async () => {
@@ -157,7 +129,7 @@ describe('createJwtValidator', () => {
         headers: { authorization: 'Bearer valid.token.here' },
         url: '/code/submit',
       };
-      const reply = { status: vi.fn().mockReturnThis(), send: vi.fn() };
+      const reply = { fail: vi.fn().mockResolvedValue(undefined) };
 
       await validator(request as unknown as Parameters<typeof validator>[0], reply as unknown as Parameters<typeof validator>[1]);
 
@@ -165,7 +137,7 @@ describe('createJwtValidator', () => {
         userId: 'auth0|user123',
         email: undefined,
       });
-      expect(reply.status).not.toHaveBeenCalled();
+      expect(reply.fail).not.toHaveBeenCalled();
     });
   });
 
@@ -184,7 +156,7 @@ describe('createJwtValidator', () => {
         headers: { authorization: 'Bearer my-token' },
         url: '/code/submit',
       };
-      const reply = { status: vi.fn().mockReturnThis(), send: vi.fn() };
+      const reply = { fail: vi.fn().mockResolvedValue(undefined) };
 
       await validator(request as unknown as Parameters<typeof validator>[0], reply as unknown as Parameters<typeof validator>[1]);
 
@@ -210,18 +182,11 @@ describe('createE2eJwtValidator', () => {
   it('should return 401 when Authorization header is missing', async () => {
     const validator = createE2eJwtValidator(logger);
     const request: TestRequest = { headers: {}, url: '/code/submit' };
-    const reply = { status: vi.fn().mockReturnThis(), send: vi.fn() };
+    const reply = { fail: vi.fn().mockResolvedValue(undefined) };
 
     await validator(request as unknown as Parameters<typeof validator>[0], reply as unknown as Parameters<typeof validator>[1]);
 
-    expect(reply.status).toHaveBeenCalledWith(401);
-    expect(reply.send).toHaveBeenCalledWith({
-      success: false,
-      error: {
-        code: 'UNAUTHORIZED',
-        message: 'Unauthorized',
-      },
-    });
+    expect(reply.fail).toHaveBeenCalledWith('UNAUTHORIZED', 'Unauthorized');
   });
 
   it('should return 401 when Authorization does not start with Bearer', async () => {
@@ -230,11 +195,11 @@ describe('createE2eJwtValidator', () => {
       headers: { authorization: 'Basic abc123' },
       url: '/code/submit',
     };
-    const reply = { status: vi.fn().mockReturnThis(), send: vi.fn() };
+    const reply = { fail: vi.fn().mockResolvedValue(undefined) };
 
     await validator(request as unknown as Parameters<typeof validator>[0], reply as unknown as Parameters<typeof validator>[1]);
 
-    expect(reply.status).toHaveBeenCalledWith(401);
+    expect(reply.fail).toHaveBeenCalledWith('UNAUTHORIZED', 'Unauthorized');
   });
 
   it('should accept any Bearer token and set user from E2E_TEST_USER_ID', async () => {
@@ -245,7 +210,7 @@ describe('createE2eJwtValidator', () => {
       headers: { authorization: 'Bearer any-token-value' },
       url: '/code/submit',
     };
-    const reply = { status: vi.fn().mockReturnThis(), send: vi.fn() };
+    const reply = { fail: vi.fn().mockResolvedValue(undefined) };
 
     await validator(request as unknown as Parameters<typeof validator>[0], reply as unknown as Parameters<typeof validator>[1]);
 
@@ -253,8 +218,7 @@ describe('createE2eJwtValidator', () => {
       userId: 'e2e-ci-test',
       email: undefined,
     });
-    expect(reply.status).not.toHaveBeenCalled();
-    expect(reply.send).not.toHaveBeenCalled();
+    expect(reply.fail).not.toHaveBeenCalled();
   });
 
   it('should use default user ID when E2E_TEST_USER_ID is not set', async () => {
@@ -263,7 +227,7 @@ describe('createE2eJwtValidator', () => {
       headers: { authorization: 'Bearer test-token' },
       url: '/code/submit',
     };
-    const reply = { status: vi.fn().mockReturnThis(), send: vi.fn() };
+    const reply = { fail: vi.fn().mockResolvedValue(undefined) };
 
     await validator(request as unknown as Parameters<typeof validator>[0], reply as unknown as Parameters<typeof validator>[1]);
 
