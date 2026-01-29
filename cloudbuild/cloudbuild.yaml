@@ -775,7 +775,7 @@ steps:
 
 options:
   logging: CLOUD_LOGGING_ONLY
-  machineType: E2_MEDIUM
+  machineType: E2_STANDARD_2
   env:
     - 'DOCKER_BUILDKIT=1'
 
