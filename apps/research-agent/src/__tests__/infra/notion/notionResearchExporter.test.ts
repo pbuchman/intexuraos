@@ -108,7 +108,7 @@ describe('exportResearchToNotion', () => {
         },
         children: [
           { object: 'block', type: 'heading_2', heading_2: { rich_text: [{ type: 'text', text: { content: 'Synthesis' } }] } },
-          { object: 'block', type: 'code', code: { rich_text: [{ type: 'text', text: { content: 'Test synthesis result.' } }], language: 'markdown' } },
+          { object: 'block', type: 'paragraph', paragraph: { rich_text: [{ type: 'text', text: { content: 'Test synthesis result.' } }] } },
           { object: 'block', type: 'heading_2', heading_2: { rich_text: [{ type: 'text', text: { content: 'Sources' } }] } },
         ],
       });
@@ -174,8 +174,8 @@ describe('exportResearchToNotion', () => {
       // Main page + 2 LLM report pages created
       expect(mockPagesCreate).toHaveBeenCalledTimes(3);
 
-      // Source links appended
-      expect(mockBlocksAppend).toHaveBeenCalledTimes(1);
+      // Source links are NOT appended as separate blocks - child pages appear as document references automatically
+      expect(mockBlocksAppend).not.toHaveBeenCalled();
     });
 
     it('includes sources section in LLM report when sources exist', async () => {
@@ -215,10 +215,10 @@ describe('exportResearchToNotion', () => {
         throw new Error('children is undefined');
       }
 
-      // Should have Response heading, code block, and Sources heading + list items
+      // Should have Response heading, paragraph block, and Sources heading + list items
       expect(children).toHaveLength(5);
       expect(children[0]).toEqual({ object: 'block', type: 'heading_2', heading_2: { rich_text: [{ type: 'text', text: { content: 'Response' } }] } });
-      expect(children[1]).toEqual({ object: 'block', type: 'code', code: { rich_text: [{ type: 'text', text: { content: 'Result content.' } }], language: 'markdown' } });
+      expect(children[1]).toEqual({ object: 'block', type: 'paragraph', paragraph: { rich_text: [{ type: 'text', text: { content: 'Result content.' } }] } });
       expect(children[2]).toEqual({ object: 'block', type: 'heading_2', heading_2: { rich_text: [{ type: 'text', text: { content: 'Sources' } }] } });
       expect(children[3]).toEqual({
         object: 'block',
@@ -255,9 +255,9 @@ describe('exportResearchToNotion', () => {
         throw new Error('children is undefined');
       }
 
-      // Should have heading + multiple code blocks + sources heading
-      const codeBlocks = children.filter((b: unknown) => (b as { type: string }).type === 'code');
-      expect(codeBlocks.length).toBeGreaterThan(1);
+      // Should have heading + multiple paragraph blocks + sources heading
+      const paragraphBlocks = children.filter((b: unknown) => (b as { type: string }).type === 'paragraph');
+      expect(paragraphBlocks.length).toBeGreaterThan(1);
     });
   });
 
@@ -294,17 +294,19 @@ describe('exportResearchToNotion', () => {
       if (children === undefined) {
         throw new Error('children is undefined');
       }
-      const codeBlock = children.find((b: unknown) => (b as { type: string }).type === 'code');
-      if (codeBlock === undefined) {
-        throw new Error('codeBlock is undefined');
-      }
+      const paragraphBlocks = children.filter((b: unknown) => (b as { type: string }).type === 'paragraph');
+      expect(paragraphBlocks.length).toBeGreaterThan(0);
 
-      // Use unknown to safely narrow to the expected block type
-      const codeBlockWithType = codeBlock as unknown as { code: { rich_text: { text: { content: string } }[] } };
-      const blockContent = codeBlockWithType.code.rich_text[0]?.text.content ?? '';
-      expect(blockContent).not.toContain('<details>');
-      expect(blockContent).toContain('Visible content');
-      expect(blockContent).toContain('More visible content');
+      // Check all paragraph content combined doesn't contain details tags
+      const allContent = paragraphBlocks
+        .map((b: unknown) => {
+          const block = b as { paragraph: { rich_text: { text: { content: string } }[] } };
+          return block.paragraph.rich_text[0]?.text.content ?? '';
+        })
+        .join(' ');
+      expect(allContent).not.toContain('<details>');
+      expect(allContent).toContain('Visible content');
+      expect(allContent).toContain('More visible content');
     });
 
     it('strips <details> tags from LLM result content', async () => {
@@ -353,17 +355,19 @@ describe('exportResearchToNotion', () => {
       if (children === undefined) {
         throw new Error('children is undefined');
       }
-      const codeBlock = children.find((b: unknown) => (b as { type: string }).type === 'code');
-      if (codeBlock === undefined) {
-        throw new Error('codeBlock is undefined');
-      }
+      const paragraphBlocks = children.filter((b: unknown) => (b as { type: string }).type === 'paragraph');
+      expect(paragraphBlocks.length).toBeGreaterThan(0);
 
-      // Use unknown to safely narrow to the expected block type
-      const codeBlockWithType = codeBlock as unknown as { code: { rich_text: { text: { content: string } }[] } };
-      const blockContent = codeBlockWithType.code.rich_text[0]?.text.content ?? '';
-      expect(blockContent).not.toContain('<details>');
-      expect(blockContent).toContain('Answer here');
-      expect(blockContent).toContain('More answer');
+      // Check all paragraph content combined doesn't contain details tags
+      const allContent = paragraphBlocks
+        .map((b: unknown) => {
+          const block = b as { paragraph: { rich_text: { text: { content: string } }[] } };
+          return block.paragraph.rich_text[0]?.text.content ?? '';
+        })
+        .join(' ');
+      expect(allContent).not.toContain('<details>');
+      expect(allContent).toContain('Answer here');
+      expect(allContent).toContain('More answer');
     });
   });
 
