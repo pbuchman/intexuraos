@@ -138,13 +138,12 @@ function parseInlineFormatting(text: string): RichTextSegment[] {
     }
 
     // Single special character that's not part of formatting
-    const char = remaining[0];
-    if (char !== undefined) {
-      segments.push({
-        type: 'text',
-        text: { content: char },
-      });
-    }
+    // Loop condition guarantees remaining has at least 1 character
+    const char = remaining[0] ?? '';
+    segments.push({
+      type: 'text',
+      text: { content: char },
+    });
     remaining = remaining.slice(1);
   }
 
@@ -156,50 +155,43 @@ function parseInlineFormatting(text: string): RichTextSegment[] {
 // ============================================================================
 
 function parseTable(lines: string[]): { block: NotionBlock; linesConsumed: number } | null {
+  // Need at least header + separator
   if (lines.length < 2) return null;
 
+  // Length check guarantees these exist
   const firstLine = lines[0];
-  if (firstLine === undefined) return null;
-  if (!firstLine.includes('|')) return null;
-
-  // Check for separator line (---|---|---)
   const secondLine = lines[1];
-  if (secondLine === undefined || !/^\|?[\s-:|]+\|?$/.test(secondLine)) return null;
+  if (firstLine === undefined || secondLine === undefined) return null;
 
-  const tableLines: string[] = [];
-  let i = 0;
+  // Check separator format
+  if (!/^\|?[\s-:|]+\|?$/.test(secondLine)) return null;
 
-  // Collect all table lines
-  for (; i < lines.length; i++) {
+  // Collect table lines: header at 0, skip separator at 1, data rows from 2+
+  const tableLines: string[] = [firstLine];
+  let linesConsumed = 2; // header + separator
+  for (let i = 2; i < lines.length; i++) {
     const line = lines[i];
     if (line === undefined) break;
     if (!line.includes('|')) break;
-    // Skip separator line
-    if (i === 1 && /^\|?[\s-:|]+\|?$/.test(line)) continue;
     tableLines.push(line);
+    linesConsumed++;
   }
 
-  if (tableLines.length === 0) return null;
-
-  // Parse cells
+  // Parse cells from each table line
   const rows: RichTextSegment[][][] = tableLines.map((line) => {
-    const cells = line
-      .split('|')
+    // For lines with leading |, split and take middle cells
+    // For lines without leading |, split directly
+    const rawCells = line.startsWith('|')
+      ? line.split('|').slice(1, -1)
+      : line.split('|');
+
+    return rawCells
       .map((cell) => cell.trim())
-      .filter((_, idx, arr) => idx > 0 && idx < arr.length - 1 || (arr.length === 2 && idx === 0));
-
-    // Handle case where line doesn't start/end with |
-    const cleanedCells = line.startsWith('|')
-      ? cells
-      : line.split('|').map((c) => c.trim());
-
-    return cleanedCells
-      .filter((cell) => cell !== '' || cleanedCells.length === 1)
+      .filter((cell) => cell !== '')
       .map((cell) => parseInlineFormatting(cell));
   });
 
-  if (rows.length === 0) return null;
-
+  // rows is mapped from tableLines which has at least 1 element
   const firstRow = rows[0];
   if (firstRow === undefined) return null;
 
@@ -230,7 +222,7 @@ function parseTable(lines: string[]): { block: NotionBlock; linesConsumed: numbe
         children,
       },
     },
-    linesConsumed: i,
+    linesConsumed,
   };
 }
 
