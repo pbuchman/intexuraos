@@ -33,6 +33,7 @@ const SERVICES = [
   'calendar-agent',
   'linear-agent',
   'web-agent',
+  'code-agent',
 ];
 
 const WORKERS = ['vm-lifecycle', 'log-cleanup'];
