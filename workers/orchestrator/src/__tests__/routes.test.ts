@@ -375,9 +375,13 @@ describe('Routes', () => {
 
   describe('POST /admin/refresh-token', () => {
     it('should refresh token', async () => {
+      const { headers, body } = createSignedRequest({});
+
       const response = await app.inject({
         method: 'POST',
         url: '/admin/refresh-token',
+        headers,
+        body,
       });
 
       expect(response.statusCode).toBe(200);
@@ -387,9 +391,13 @@ describe('Routes', () => {
     it('should return null token expiry after refresh when not set', async () => {
       vi.mocked(tokenService.getExpiresAt).mockReturnValueOnce(undefined);
 
+      const { headers, body } = createSignedRequest({});
+
       const response = await app.inject({
         method: 'POST',
         url: '/admin/refresh-token',
+        headers,
+        body,
       });
 
       expect(response.statusCode).toBe(200);
@@ -748,9 +756,13 @@ describe('Routes', () => {
         error: { code: 'REFRESH_FAILED', message: 'Token refresh failed' },
       });
 
+      const { headers, body } = createSignedRequest({});
+
       const response = await app.inject({
         method: 'POST',
         url: '/admin/refresh-token',
+        headers,
+        body,
       });
 
       expect(response.statusCode).toBe(500);
@@ -764,9 +776,13 @@ describe('Routes', () => {
     it('should return shutdown status', async () => {
       const infoSpy = vi.spyOn(mockLogger, 'info');
 
+      const { headers, body } = createSignedRequest({});
+
       const response = await app.inject({
         method: 'POST',
         url: '/admin/shutdown',
+        headers,
+        body,
       });
 
       expect(response.statusCode).toBe(200);

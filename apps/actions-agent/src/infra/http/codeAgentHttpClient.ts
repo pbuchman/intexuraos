@@ -57,12 +57,12 @@ export function createCodeAgentHttpClient(
       );
 
       let response: Response;
-      try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => {
-          controller.abort();
-        }, timeoutMs);
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => {
+        controller.abort();
+      }, timeoutMs);
 
+      try {
         // Design line 1591: Authentication via X-Internal-Auth header
         response = await fetch(url, {
           method: 'POST',
@@ -80,6 +80,7 @@ export function createCodeAgentHttpClient(
 
         clearTimeout(timeoutId);
       } catch (error) {
+        clearTimeout(timeoutId);
         logger.error({ error: getErrorMessage(error) }, 'Failed to call code-agent');
         return err({
           code: 'NETWORK_ERROR',
@@ -167,12 +168,12 @@ export function createCodeAgentHttpClient(
       );
 
       let response: Response;
-      try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => {
-          controller.abort();
-        }, timeoutMs);
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => {
+        controller.abort();
+      }, timeoutMs);
 
+      try {
         response = await fetch(url, {
           method: 'POST',
           headers: {
@@ -189,6 +190,7 @@ export function createCodeAgentHttpClient(
 
         clearTimeout(timeoutId);
       } catch (error) {
+        clearTimeout(timeoutId);
         logger.error({ error: getErrorMessage(error), taskId: input.taskId }, 'Failed to call code-agent cancel-with-nonce');
         return err({
           code: 'NETWORK_ERROR',
