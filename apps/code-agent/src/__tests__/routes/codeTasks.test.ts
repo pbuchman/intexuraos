@@ -277,9 +277,10 @@ describe('GET /code/tasks endpoints', () => {
 
         expect(response.statusCode).toBe(200);
         const body = JSON.parse(response.body);
-        expect(body.tasks).toBeDefined();
-        expect(body.tasks.length).toBe(2); // Only test-user-id tasks
-        expect(body.tasks.every((task: CodeTask) => task.userId === 'test-user-id')).toBe(true);
+        expect(body.success).toBe(true);
+        expect(body.data.tasks).toBeDefined();
+        expect(body.data.tasks.length).toBe(2); // Only test-user-id tasks
+        expect(body.data.tasks.every((task: CodeTask) => task.userId === 'test-user-id')).toBe(true);
       });
 
       it('respects default pagination limit', async () => {
@@ -293,7 +294,8 @@ describe('GET /code/tasks endpoints', () => {
 
         expect(response.statusCode).toBe(200);
         const body = JSON.parse(response.body);
-        expect(body.tasks.length).toBeLessThanOrEqual(20); // Default limit
+        expect(body.success).toBe(true);
+        expect(body.data.tasks.length).toBeLessThanOrEqual(20); // Default limit
       });
 
       it('respects custom limit parameter', async () => {
@@ -307,7 +309,8 @@ describe('GET /code/tasks endpoints', () => {
 
         expect(response.statusCode).toBe(200);
         const body = JSON.parse(response.body);
-        expect(body.tasks.length).toBe(1);
+        expect(body.success).toBe(true);
+        expect(body.data.tasks.length).toBe(1);
       });
 
       it('returns tasks ordered by createdAt descending', async () => {
@@ -321,7 +324,8 @@ describe('GET /code/tasks endpoints', () => {
 
         expect(response.statusCode).toBe(200);
         const body = JSON.parse(response.body);
-        const timestamps = body.tasks.map((task: unknown) => {
+        expect(body.success).toBe(true);
+        const timestamps = body.data.tasks.map((task: unknown) => {
           // In JSON response, Timestamp is serialized as ISO string
           const createdAt = (task as { createdAt: unknown }).createdAt;
           return new Date(createdAt as string).getTime();
@@ -381,8 +385,9 @@ describe('GET /code/tasks endpoints', () => {
 
         expect(response.statusCode).toBe(200);
         const body = JSON.parse(response.body);
-        expect(body.tasks).toBeDefined();
-        expect(body.tasks.every((task: CodeTask) => task.status === 'completed')).toBe(true);
+        expect(body.success).toBe(true);
+        expect(body.data.tasks).toBeDefined();
+        expect(body.data.tasks.every((task: CodeTask) => task.status === 'completed')).toBe(true);
       });
     });
 
@@ -398,7 +403,8 @@ describe('GET /code/tasks endpoints', () => {
 
         expect(response.statusCode).toBe(200);
         const body = JSON.parse(response.body);
-        expect(body.tasks).toBeDefined();
+        expect(body.success).toBe(true);
+        expect(body.data.tasks).toBeDefined();
       });
     });
   });
@@ -475,10 +481,11 @@ describe('GET /code/tasks endpoints', () => {
         });
 
         expect(response.statusCode).toBe(200);
-        const task = JSON.parse(response.body);
-        expect(task.id).toBe(testTaskId);
-        expect(task.userId).toBe('test-user-id');
-        expect(task.prompt).toBe('Test task');
+        const body = JSON.parse(response.body);
+        expect(body.success).toBe(true);
+        expect(body.data.id).toBe(testTaskId);
+        expect(body.data.userId).toBe('test-user-id');
+        expect(body.data.prompt).toBe('Test task');
       });
 
       it('returns 404 for non-existent task', async () => {
@@ -532,7 +539,8 @@ describe('GET /code/tasks endpoints', () => {
         expect(response.statusCode).toBe(500);
         const body = JSON.parse(response.body);
         expect(body.success).toBe(false);
-        expect(body.error.code).toBe('FIRESTORE_ERROR');
+        expect(body.error.code).toBe('INTERNAL_ERROR');
+        expect(body.error.message).toBe('Database unavailable');
 
         findByIdForUserSpy.mockRestore();
       });

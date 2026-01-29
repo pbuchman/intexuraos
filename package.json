@@ -43,6 +43,7 @@
     "verify:workspace-deps": "node scripts/verify-workspace-deps.mjs",
     "verify:migrations": "node scripts/verify-migrations.mjs",
     "verify:no-console": "node scripts/verify-no-console.mjs",
+    "verify:reply-send": "node scripts/verify-reply-send.mjs",
     "verify:llm-architecture": "pnpm tsx scripts/verify-llm-architecture.ts",
     "verify:workspace": "./scripts/verify-workspace.sh",
     "verify:workspace:tracked": "node scripts/verify-workspace-tracked.mjs",

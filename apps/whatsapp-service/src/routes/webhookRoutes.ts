@@ -252,6 +252,7 @@ export function createWebhookRoutes(config: Config): FastifyPluginCallback {
           request.log.error({ error: saveResult.error }, 'Failed to persist webhook event');
           // Return 500 so WhatsApp retries the webhook delivery
           reply.status(500);
+          // @allow-raw-send: WhatsApp Meta webhook error contract
           return await reply.send({ success: false, error: 'Failed to persist webhook event' });
         }
 
@@ -277,6 +278,7 @@ export function createWebhookRoutes(config: Config): FastifyPluginCallback {
           });
           // Return 500 so WhatsApp retries
           reply.status(500);
+          // @allow-raw-send: WhatsApp Meta webhook error contract
           return await reply.send({
             success: false,
             error: 'Failed to queue webhook for processing',

@@ -30,13 +30,7 @@ export function createE2eJwtValidator(
     // eslint-disable-next-line @typescript-eslint/prefer-optional-chain
     if (authHeader === undefined || !authHeader.startsWith('Bearer ')) {
       logger.warn({ url: request.url }, '[E2E] Missing or invalid Authorization header');
-      reply.status(401).send({
-        success: false,
-        error: {
-          code: 'UNAUTHORIZED',
-          message: 'Unauthorized',
-        },
-      });
+      await reply.fail('UNAUTHORIZED', 'Unauthorized');
       return;
     }
 
@@ -73,13 +67,7 @@ export function createJwtValidator(
     // eslint-disable-next-line @typescript-eslint/prefer-optional-chain
     if (authHeader === undefined || !authHeader.startsWith('Bearer ')) {
       logger.warn({ url: request.url }, 'Missing or invalid Authorization header');
-      reply.status(401).send({
-        success: false,
-        error: {
-          code: 'UNAUTHORIZED',
-          message: 'Unauthorized',
-        },
-      });
+      await reply.fail('UNAUTHORIZED', 'Unauthorized');
       return;
     }
 
@@ -94,13 +82,7 @@ export function createJwtValidator(
       const userId = payload.sub;
       if (userId === undefined) {
         logger.warn({ url: request.url }, 'JWT missing sub claim');
-        reply.status(401).send({
-          success: false,
-          error: {
-            code: 'UNAUTHORIZED',
-            message: 'Invalid token: missing user identifier',
-          },
-        });
+        await reply.fail('UNAUTHORIZED', 'Invalid token: missing user identifier');
         return;
       }
 
@@ -113,13 +95,7 @@ export function createJwtValidator(
       logger.debug({ userId, url: request.url }, 'JWT validated successfully');
     } catch (error) {
       logger.warn({ url: request.url, error }, 'JWT validation failed');
-      reply.status(401).send({
-        success: false,
-        error: {
-          code: 'UNAUTHORIZED',
-          message: 'Invalid or expired token',
-        },
-      });
+      await reply.fail('UNAUTHORIZED', 'Invalid or expired token');
     }
   };
 }

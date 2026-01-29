@@ -239,8 +239,9 @@ describe('codeRoutes', () => {
       });
 
       expect(response.statusCode).toBe(200);
-      const task = JSON.parse(response.body);
-      expect(task.id).toBe(created.value.id);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(true);
+      expect(body.data.id).toBe(created.value.id);
     });
 
     it('returns 404 for other user\'s task', async () => {
@@ -423,8 +424,9 @@ describe('codeRoutes', () => {
 
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body);
-      expect(body.tasks).toBeInstanceOf(Array);
-      expect(body.tasks.length).toBe(2);
+      expect(body.success).toBe(true);
+      expect(body.data.tasks).toBeInstanceOf(Array);
+      expect(body.data.tasks.length).toBe(2);
     });
 
     it('filters tasks by status', async () => {
@@ -472,8 +474,9 @@ describe('codeRoutes', () => {
 
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body);
-      expect(body.tasks.length).toBe(1);
-      expect(body.tasks[0].status).toBe('completed');
+      expect(body.success).toBe(true);
+      expect(body.data.tasks.length).toBe(1);
+      expect(body.data.tasks[0].status).toBe('completed');
     });
 
     it('paginates results with limit', async () => {
@@ -507,8 +510,9 @@ describe('codeRoutes', () => {
 
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body);
-      expect(body.tasks.length).toBe(2);
-      expect(body.nextCursor).toBeDefined();
+      expect(body.success).toBe(true);
+      expect(body.data.tasks.length).toBe(2);
+      expect(body.data.nextCursor).toBeDefined();
     });
 
     it('returns empty array for user with no tasks', async () => {
@@ -522,7 +526,8 @@ describe('codeRoutes', () => {
 
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body);
-      expect(body.tasks).toEqual([]);
+      expect(body.success).toBe(true);
+      expect(body.data.tasks).toEqual([]);
     });
 
     it('returns 401 when missing auth header', async () => {
@@ -560,7 +565,7 @@ describe('codeRoutes', () => {
       expect(response.statusCode).toBe(500);
       const body = JSON.parse(response.body);
       expect(body.success).toBe(false);
-      expect(body.error.code).toBe('FIRESTORE_ERROR');
+      expect(body.error.code).toBe('INTERNAL_ERROR');
     });
   });
 
@@ -591,7 +596,7 @@ describe('codeRoutes', () => {
       expect(response.statusCode).toBe(500);
       const body = JSON.parse(response.body);
       expect(body.success).toBe(false);
-      expect(body.error.code).toBe('FIRESTORE_ERROR');
+      expect(body.error.code).toBe('INTERNAL_ERROR');
     });
   });
 
@@ -726,7 +731,7 @@ describe('codeRoutes', () => {
       expect(response.statusCode).toBe(500);
       const body = JSON.parse(response.body);
       expect(body.success).toBe(false);
-      expect(body.error.code).toBe('FIRESTORE_ERROR');
+      expect(body.error.code).toBe('INTERNAL_ERROR');
     });
   });
 
@@ -907,7 +912,9 @@ describe('codeRoutes', () => {
 
       expect(response.statusCode).toBe(500);
       const body = JSON.parse(response.body);
-      expect(body.error).toBe('Database connection failed');
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INTERNAL_ERROR');
+      expect(body.error.message).toBe('Database connection failed');
     });
   });
 
@@ -954,8 +961,9 @@ describe('codeRoutes', () => {
       expect([200, 503]).toContain(response.statusCode);
       if (response.statusCode === 200) {
         const body = JSON.parse(response.body);
-        expect(body.status).toBe('submitted');
-        expect(body.codeTaskId).toBeDefined();
+        expect(body.success).toBe(true);
+        expect(body.data.status).toBe('submitted');
+        expect(body.data.codeTaskId).toBeDefined();
       }
     });
 
@@ -978,8 +986,9 @@ describe('codeRoutes', () => {
       expect([200, 503]).toContain(response.statusCode);
       if (response.statusCode === 200) {
         const body = JSON.parse(response.body);
-        expect(body.status).toBe('submitted');
-        expect(body.codeTaskId).toBeDefined();
+        expect(body.success).toBe(true);
+        expect(body.data.status).toBe('submitted');
+        expect(body.data.codeTaskId).toBeDefined();
       }
     });
 
@@ -1034,8 +1043,8 @@ describe('codeRoutes', () => {
       expect(response.statusCode).toBe(429);
       const body = JSON.parse(response.body);
       expect(body.success).toBe(false);
-      expect(body.error.code).toBe('concurrent_limit');
-      expect(body.error.retryAfter).toBe('60');
+      expect(body.error.code).toBe('RATE_LIMITED');
+      expect(body.error.message).toContain('concurrent');
     });
 
     it('returns 503 when service unavailable', async () => {
@@ -1076,7 +1085,7 @@ describe('codeRoutes', () => {
       expect(response.statusCode).toBe(503);
       const body = JSON.parse(response.body);
       expect(body.success).toBe(false);
-      expect(body.error.code).toBe('service_unavailable');
+      expect(body.error.code).toBe('MISCONFIGURED');
     });
 
     it('returns 409 for duplicate prompt', async () => {
@@ -1110,8 +1119,7 @@ describe('codeRoutes', () => {
       expect(response.statusCode).toBe(409);
       const body = JSON.parse(response.body);
       expect(body.success).toBe(false);
-      expect(body.error.code).toBe('DUPLICATE_PROMPT');
-      expect(body.error.existingTaskId).toBe('task-123');
+      expect(body.error.code).toBe('CONFLICT');
     });
 
     it('returns 409 for active task exists', async () => {
@@ -1146,7 +1154,7 @@ describe('codeRoutes', () => {
       expect(response.statusCode).toBe(409);
       const body = JSON.parse(response.body);
       expect(body.success).toBe(false);
-      expect(body.error.code).toBe('ACTIVE_TASK_EXISTS');
+      expect(body.error.code).toBe('CONFLICT');
     });
 
     it('returns 503 when dispatch fails', async () => {
@@ -1184,7 +1192,7 @@ describe('codeRoutes', () => {
       expect(response.statusCode).toBe(503);
       const body = JSON.parse(response.body);
       expect(body.success).toBe(false);
-      expect(body.error.code).toBe('DISPATCH_FAILED');
+      expect(body.error.code).toBe('MISCONFIGURED');
     });
   });
 
@@ -1225,7 +1233,8 @@ describe('codeRoutes', () => {
 
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body);
-      expect(body.status).toBe('cancelled');
+      expect(body.success).toBe(true);
+      expect(body.data.status).toBe('cancelled');
     });
 
     it('returns 401 when missing auth header', async () => {
@@ -1254,7 +1263,8 @@ describe('codeRoutes', () => {
 
       expect(response.statusCode).toBe(404);
       const body = JSON.parse(response.body);
-      expect(body.error).toBe('task_not_found');
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('NOT_FOUND');
     });
 
     it('returns 403 when user does not own task', async () => {
@@ -1291,7 +1301,8 @@ describe('codeRoutes', () => {
 
       expect(response.statusCode).toBe(403);
       const body = JSON.parse(response.body);
-      expect(body.error).toBe('forbidden');
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('FORBIDDEN');
     });
 
     it('returns 409 when task is not in cancellable state', async () => {
@@ -1330,7 +1341,8 @@ describe('codeRoutes', () => {
 
       expect(response.statusCode).toBe(409);
       const body = JSON.parse(response.body);
-      expect(body.error).toBe('task_not_running');
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('CONFLICT');
     });
   });
 
@@ -1346,14 +1358,15 @@ describe('codeRoutes', () => {
 
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body);
-      expect(body.mac).toBeDefined();
-      expect(body.mac).toHaveProperty('healthy');
-      expect(body.mac).toHaveProperty('capacity');
-      expect(body.mac).toHaveProperty('checkedAt');
-      expect(body.vm).toBeDefined();
-      expect(body.vm).toHaveProperty('healthy');
-      expect(body.vm).toHaveProperty('capacity');
-      expect(body.vm).toHaveProperty('checkedAt');
+      expect(body.success).toBe(true);
+      expect(body.data.mac).toBeDefined();
+      expect(body.data.mac).toHaveProperty('healthy');
+      expect(body.data.mac).toHaveProperty('capacity');
+      expect(body.data.mac).toHaveProperty('checkedAt');
+      expect(body.data.vm).toBeDefined();
+      expect(body.data.vm).toHaveProperty('healthy');
+      expect(body.data.vm).toHaveProperty('capacity');
+      expect(body.data.vm).toHaveProperty('checkedAt');
     });
 
     it('returns 401 when missing auth header', async () => {
@@ -1402,8 +1415,9 @@ describe('codeRoutes', () => {
 
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body);
-      expect(body.mac.healthy).toBe(false);
-      expect(body.vm.healthy).toBe(false);
+      expect(body.success).toBe(true);
+      expect(body.data.mac.healthy).toBe(false);
+      expect(body.data.vm.healthy).toBe(false);
     });
   });
 
@@ -1613,7 +1627,7 @@ describe('codeRoutes', () => {
       expect(response.statusCode).toBe(404);
       const body = JSON.parse(response.body);
       expect(body.success).toBe(false);
-      expect(body.error.code).toBe('task_not_found');
+      expect(body.error.code).toBe('NOT_FOUND');
     });
 
     it('returns 400 when nonce does not match', async () => {
@@ -1658,7 +1672,7 @@ describe('codeRoutes', () => {
       expect(response.statusCode).toBe(400);
       const body = JSON.parse(response.body);
       expect(body.success).toBe(false);
-      expect(body.error.code).toBe('invalid_nonce');
+      expect(body.error.code).toBe('INVALID_REQUEST');
     });
 
     it('returns 400 when nonce is expired', async () => {
@@ -1703,7 +1717,7 @@ describe('codeRoutes', () => {
       expect(response.statusCode).toBe(400);
       const body = JSON.parse(response.body);
       expect(body.success).toBe(false);
-      expect(body.error.code).toBe('nonce_expired');
+      expect(body.error.code).toBe('INVALID_REQUEST');
     });
 
     it('returns 400 when user does not own task', async () => {
@@ -1748,7 +1762,7 @@ describe('codeRoutes', () => {
       expect(response.statusCode).toBe(400);
       const body = JSON.parse(response.body);
       expect(body.success).toBe(false);
-      expect(body.error.code).toBe('not_owner');
+      expect(body.error.code).toBe('INVALID_REQUEST');
     });
 
     it('returns 400 when task is not cancellable', async () => {
@@ -1793,7 +1807,7 @@ describe('codeRoutes', () => {
       expect(response.statusCode).toBe(400);
       const body = JSON.parse(response.body);
       expect(body.success).toBe(false);
-      expect(body.error.code).toBe('task_not_cancellable');
+      expect(body.error.code).toBe('INVALID_REQUEST');
     });
 
     it('cancels task successfully with valid nonce', async () => {
@@ -1888,7 +1902,7 @@ describe('codeRoutes', () => {
       expect(response.statusCode).toBe(500);
       const body = JSON.parse(response.body);
       expect(body.success).toBe(false);
-      expect(body.error.code).toBe('internal_error');
+      expect(body.error.code).toBe('INTERNAL_ERROR');
     });
   });
 });

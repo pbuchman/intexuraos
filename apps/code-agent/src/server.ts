@@ -6,6 +6,7 @@ import fastify, { type FastifyInstance } from 'fastify';
 import cors from '@fastify/cors';
 import fastifySwagger from '@fastify/swagger';
 import fastifySwaggerUi from '@fastify/swagger-ui';
+import { intexuraFastifyPlugin } from '@intexuraos/common-http';
 import { registerRoutes } from './routes/index.js';
 import { loadConfig } from './config.js';
 import { getServices } from './services.js';
@@ -19,6 +20,8 @@ export async function buildServer(): Promise<FastifyInstance> {
   await app.register(cors, {
     origin: true,
   });
+
+  await app.register(intexuraFastifyPlugin);
 
   await app.register(fastifySwagger, {
     openapi: {

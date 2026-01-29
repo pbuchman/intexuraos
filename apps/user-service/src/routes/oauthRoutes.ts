@@ -85,6 +85,7 @@ export const oauthRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
     async (request, reply) => {
       const config = loadAuth0Config();
       if (config === null) {
+        // @allow-raw-send: OAuth2 spec requires flat { error, error_description } response
         return await reply.status(400).send({
           error: 'server_error',
           error_description: 'Auth0 is not configured',
@@ -94,6 +95,7 @@ export const oauthRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       const parseResult = oauthTokenRequestSchema.safeParse(request.body);
       if (!parseResult.success) {
         const details = parseResult.error.errors.map((e) => e.message).join(', ');
+        // @allow-raw-send: OAuth2 spec requires flat { error, error_description } response
         return await reply.status(400).send({
           error: 'invalid_request',
           error_description: details,
@@ -121,12 +123,14 @@ export const oauthRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       if (grant_type === 'authorization_code') {
         if (code === undefined || code === '') {
+          // @allow-raw-send: OAuth2 spec requires flat { error, error_description } response
           return await reply.status(400).send({
             error: 'invalid_request',
             error_description: 'code is required for authorization_code grant',
           });
         }
         if (redirect_uri === undefined || redirect_uri === '') {
+          // @allow-raw-send: OAuth2 spec requires flat { error, error_description } response
           return await reply.status(400).send({
             error: 'invalid_request',
             error_description: 'redirect_uri is required for authorization_code grant',
@@ -140,6 +144,7 @@ export const oauthRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       } else {
         // grant_type === 'refresh_token'
         if (refresh_token === undefined || refresh_token === '') {
+          // @allow-raw-send: OAuth2 spec requires flat { error, error_description } response
           return await reply.status(400).send({
             error: 'invalid_request',
             error_description: 'refresh_token is required for refresh_token grant',
@@ -157,11 +162,13 @@ export const oauthRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         if (httpRes.status < 200 || httpRes.status >= 300) {
           if (isAuth0Error(responseBody)) {
             const statusCode = httpRes.status === 401 ? 401 : 400;
+            // @allow-raw-send: OAuth2 spec requires flat { error, error_description } response
             return await reply.status(statusCode).send({
               error: responseBody.error,
               error_description: responseBody.error_description ?? responseBody.error,
             });
           }
+          // @allow-raw-send: OAuth2 spec requires flat { error, error_description } response
           return await reply.status(400).send({
             error: 'server_error',
             error_description: 'Token exchange failed',
@@ -170,6 +177,7 @@ export const oauthRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
         // Return OAuth2-compliant response (flat structure, not wrapped)
         const data = responseBody as TokenResponse;
+        // @allow-raw-send: OAuth2 spec requires flat token response
         return await reply.status(200).send({
           access_token: data.access_token,
           token_type: data.token_type,
@@ -179,6 +187,7 @@ export const oauthRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           id_token: data.id_token,
         });
       } catch (error) {
+        // @allow-raw-send: OAuth2 spec requires flat { error, error_description } response
         return await reply.status(400).send({
           error: 'server_error',
           error_description: getErrorMessage(error),
@@ -227,6 +236,7 @@ export const oauthRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
     async (request, reply) => {
       const config = loadAuth0Config();
       if (config === null) {
+        // @allow-raw-send: OAuth2 spec requires flat { error, error_description } response
         return await reply.status(400).send({
           error: 'server_error',
           error_description: 'Auth0 is not configured',
@@ -242,6 +252,7 @@ export const oauthRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       const audience = query['audience'] ?? config.audience;
 
       if (redirectUri === undefined || redirectUri === '') {
+        // @allow-raw-send: OAuth2 spec requires flat { error, error_description } response
         return await reply.status(400).send({
           error: 'invalid_request',
           error_description: 'redirect_uri is required',
