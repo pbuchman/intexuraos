@@ -505,7 +505,6 @@ steps:
 
 options:
   logging: CLOUD_LOGGING_ONLY
-  machineType: E2_STANDARD_2
 
 timeout: '600s'
 ```
