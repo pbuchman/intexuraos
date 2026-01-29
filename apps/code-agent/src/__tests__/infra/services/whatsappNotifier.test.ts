@@ -11,14 +11,15 @@ import type { CodeTask, TaskError, TaskResult } from '../../../domain/models/cod
 
 describe('WhatsAppNotifier', () => {
   let mockPublisher: WhatsAppSendPublisher;
-  let publishSendMessageMock: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
-    publishSendMessageMock = vi.fn();
     mockPublisher = {
-      publishSendMessage: publishSendMessageMock,
-    };
+      publishSendMessage: vi.fn(),
+    } as unknown as WhatsAppSendPublisher;
   });
+
+  const getPublishSendMessageMock = (): ReturnType<typeof vi.fn> =>
+    mockPublisher.publishSendMessage as ReturnType<typeof vi.fn>;
 
   afterEach(() => {
     vi.clearAllMocks();
@@ -64,11 +65,11 @@ describe('WhatsAppNotifier', () => {
       });
 
       const notifier = createWhatsAppNotifier(createMockConfig());
-      publishSendMessageMock.mockResolvedValueOnce(ok(undefined));
+      getPublishSendMessageMock().mockResolvedValueOnce(ok(undefined));
 
       await notifier.notifyTaskComplete('user-123', task);
 
-      expect(publishSendMessageMock).toHaveBeenCalledWith(
+      expect(getPublishSendMessageMock()).toHaveBeenCalledWith(
         expect.objectContaining({
           userId: 'user-123',
           message: expect.stringContaining('✅ Code task completed: Fix login bug'),
@@ -76,7 +77,7 @@ describe('WhatsAppNotifier', () => {
         })
       );
 
-      const callArgs = publishSendMessageMock.mock.calls[0]?.[0];
+      const callArgs = getPublishSendMessageMock().mock.calls[0]?.[0];
       expect(callArgs.message).toContain('PR: https://github.com/pbuchman/intexuraos/pull/123');
       expect(callArgs.message).toContain('Branch: fix/login-bug');
       expect(callArgs.message).toContain('Commits: 3');
@@ -92,11 +93,11 @@ describe('WhatsAppNotifier', () => {
       });
 
       const notifier = createWhatsAppNotifier(createMockConfig());
-      publishSendMessageMock.mockResolvedValueOnce(ok(undefined));
+      getPublishSendMessageMock().mockResolvedValueOnce(ok(undefined));
 
       await notifier.notifyTaskComplete('user-123', task);
 
-      const callArgs = publishSendMessageMock.mock.calls[0]?.[0];
+      const callArgs = getPublishSendMessageMock().mock.calls[0]?.[0];
       expect(callArgs.message).not.toContain('PR:');
       expect(callArgs.message).toContain('Branch: fix/login-bug');
       expect(callArgs.message).toContain('Commits: 3');
@@ -111,11 +112,11 @@ describe('WhatsAppNotifier', () => {
       });
 
       const notifier = createWhatsAppNotifier(createMockConfig());
-      publishSendMessageMock.mockResolvedValueOnce(ok(undefined));
+      getPublishSendMessageMock().mockResolvedValueOnce(ok(undefined));
 
       await notifier.notifyTaskComplete('user-123', task);
 
-      const callArgs = publishSendMessageMock.mock.calls[0]?.[0];
+      const callArgs = getPublishSendMessageMock().mock.calls[0]?.[0];
       expect(callArgs.message).not.toContain('PR:');
     });
 
@@ -133,11 +134,11 @@ describe('WhatsAppNotifier', () => {
       const { linearIssueTitle: _, ...taskWithoutLinearTitle } = task;
 
       const notifier = createWhatsAppNotifier(createMockConfig());
-      publishSendMessageMock.mockResolvedValueOnce(ok(undefined));
+      getPublishSendMessageMock().mockResolvedValueOnce(ok(undefined));
 
       await notifier.notifyTaskComplete('user-123', taskWithoutLinearTitle);
 
-      const callArgs = publishSendMessageMock.mock.calls[0]?.[0];
+      const callArgs = getPublishSendMessageMock().mock.calls[0]?.[0];
       expect(callArgs.message).toContain(
         '✅ Code task completed: Fix the bug in the authentication system that caus'
       );
@@ -151,11 +152,11 @@ describe('WhatsAppNotifier', () => {
       });
 
       const notifier = createWhatsAppNotifier(createMockConfig());
-      publishSendMessageMock.mockResolvedValueOnce(ok(undefined));
+      getPublishSendMessageMock().mockResolvedValueOnce(ok(undefined));
 
       await notifier.notifyTaskComplete('user-123', task);
 
-      const callArgs = publishSendMessageMock.mock.calls[0]?.[0];
+      const callArgs = getPublishSendMessageMock().mock.calls[0]?.[0];
       expect(callArgs.message).toContain('⚠️ (Linear unavailable - no issue tracking)');
     });
 
@@ -167,11 +168,11 @@ describe('WhatsAppNotifier', () => {
       });
 
       const notifier = createWhatsAppNotifier(createMockConfig());
-      publishSendMessageMock.mockResolvedValueOnce(ok(undefined));
+      getPublishSendMessageMock().mockResolvedValueOnce(ok(undefined));
 
       await notifier.notifyTaskComplete('user-123', task);
 
-      const callArgs = publishSendMessageMock.mock.calls[0]?.[0];
+      const callArgs = getPublishSendMessageMock().mock.calls[0]?.[0];
       expect(callArgs.message).not.toContain('⚠️ (Linear unavailable');
     });
 
@@ -187,11 +188,11 @@ describe('WhatsAppNotifier', () => {
       });
 
       const notifier = createWhatsAppNotifier(createMockConfig());
-      publishSendMessageMock.mockResolvedValueOnce(ok(undefined));
+      getPublishSendMessageMock().mockResolvedValueOnce(ok(undefined));
 
       await notifier.notifyTaskComplete('user-123', task);
 
-      const callArgs = publishSendMessageMock.mock.calls[0]?.[0];
+      const callArgs = getPublishSendMessageMock().mock.calls[0]?.[0];
       expect(callArgs.message).toContain('✅ Code task completed: INT-123 Fix auth bug');
       expect(callArgs.message).not.toContain('Fix the bug in the authentication system');
     });
@@ -202,11 +203,11 @@ describe('WhatsAppNotifier', () => {
       } as Partial<CodeTask> as CodeTask);
 
       const notifier = createWhatsAppNotifier(createMockConfig());
-      publishSendMessageMock.mockResolvedValueOnce(ok(undefined));
+      getPublishSendMessageMock().mockResolvedValueOnce(ok(undefined));
 
       await notifier.notifyTaskComplete('user-123', task);
 
-      const callArgs = publishSendMessageMock.mock.calls[0]?.[0];
+      const callArgs = getPublishSendMessageMock().mock.calls[0]?.[0];
       expect(callArgs.message).toBe('✅ Code task completed: Fix login bug');
       expect(callArgs.message).not.toContain('Branch:');
       expect(callArgs.message).not.toContain('Commits:');
@@ -228,11 +229,11 @@ describe('WhatsAppNotifier', () => {
       const error = createMockError();
 
       const notifier = createWhatsAppNotifier(createMockConfig());
-      publishSendMessageMock.mockResolvedValueOnce(ok(undefined));
+      getPublishSendMessageMock().mockResolvedValueOnce(ok(undefined));
 
       await notifier.notifyTaskFailed('user-123', task, error);
 
-      const callArgs = publishSendMessageMock.mock.calls[0]?.[0];
+      const callArgs = getPublishSendMessageMock().mock.calls[0]?.[0];
       expect(callArgs.message).toContain('❌ Code task failed: Fix login bug');
       expect(callArgs.message).toContain('Error: Test error occurred');
     });
@@ -250,11 +251,11 @@ describe('WhatsAppNotifier', () => {
       });
 
       const notifier = createWhatsAppNotifier(createMockConfig());
-      publishSendMessageMock.mockResolvedValueOnce(ok(undefined));
+      getPublishSendMessageMock().mockResolvedValueOnce(ok(undefined));
 
       await notifier.notifyTaskFailed('user-123', task, error);
 
-      const callArgs = publishSendMessageMock.mock.calls[0]?.[0];
+      const callArgs = getPublishSendMessageMock().mock.calls[0]?.[0];
       expect(callArgs.message).toContain('Suggestion: Check the logs');
     });
 
@@ -271,11 +272,11 @@ describe('WhatsAppNotifier', () => {
       });
 
       const notifier = createWhatsAppNotifier(createMockConfig());
-      publishSendMessageMock.mockResolvedValueOnce(ok(undefined));
+      getPublishSendMessageMock().mockResolvedValueOnce(ok(undefined));
 
       await notifier.notifyTaskFailed('user-123', task, error);
 
-      const callArgs = publishSendMessageMock.mock.calls[0]?.[0];
+      const callArgs = getPublishSendMessageMock().mock.calls[0]?.[0];
       expect(callArgs.message).not.toContain('Suggestion:');
     });
 
@@ -290,11 +291,11 @@ describe('WhatsAppNotifier', () => {
       const { remediation: _, ...errorWithoutRemediation } = error;
 
       const notifier = createWhatsAppNotifier(createMockConfig());
-      publishSendMessageMock.mockResolvedValueOnce(ok(undefined));
+      getPublishSendMessageMock().mockResolvedValueOnce(ok(undefined));
 
       await notifier.notifyTaskFailed('user-123', task, errorWithoutRemediation);
 
-      const callArgs = publishSendMessageMock.mock.calls[0]?.[0];
+      const callArgs = getPublishSendMessageMock().mock.calls[0]?.[0];
       expect(callArgs.message).not.toContain('Suggestion:');
     });
 
@@ -307,11 +308,11 @@ describe('WhatsAppNotifier', () => {
       const error = createMockError();
 
       const notifier = createWhatsAppNotifier(createMockConfig());
-      publishSendMessageMock.mockResolvedValueOnce(ok(undefined));
+      getPublishSendMessageMock().mockResolvedValueOnce(ok(undefined));
 
       await notifier.notifyTaskFailed('user-123', task, error);
 
-      const callArgs = publishSendMessageMock.mock.calls[0]?.[0];
+      const callArgs = getPublishSendMessageMock().mock.calls[0]?.[0];
       expect(callArgs.message).toContain('⚠️ (Linear unavailable - no issue tracking)');
     });
 
@@ -324,11 +325,11 @@ describe('WhatsAppNotifier', () => {
       const error = createMockError();
 
       const notifier = createWhatsAppNotifier(createMockConfig());
-      publishSendMessageMock.mockResolvedValueOnce(ok(undefined));
+      getPublishSendMessageMock().mockResolvedValueOnce(ok(undefined));
 
       await notifier.notifyTaskFailed('user-123', task, error);
 
-      const callArgs = publishSendMessageMock.mock.calls[0]?.[0];
+      const callArgs = getPublishSendMessageMock().mock.calls[0]?.[0];
       expect(callArgs.message).not.toContain('⚠️ (Linear unavailable');
     });
 
@@ -343,11 +344,11 @@ describe('WhatsAppNotifier', () => {
       const error = createMockError();
 
       const notifier = createWhatsAppNotifier(createMockConfig());
-      publishSendMessageMock.mockResolvedValueOnce(ok(undefined));
+      getPublishSendMessageMock().mockResolvedValueOnce(ok(undefined));
 
       await notifier.notifyTaskFailed('user-123', taskWithoutLinearTitle, error);
 
-      const callArgs = publishSendMessageMock.mock.calls[0]?.[0];
+      const callArgs = getPublishSendMessageMock().mock.calls[0]?.[0];
       expect(callArgs.message).toContain(
         '❌ Code task failed: Fix the bug in the authentication system that caus'
       );
@@ -362,11 +363,11 @@ describe('WhatsAppNotifier', () => {
       const error = createMockError();
 
       const notifier = createWhatsAppNotifier(createMockConfig());
-      publishSendMessageMock.mockResolvedValueOnce(ok(undefined));
+      getPublishSendMessageMock().mockResolvedValueOnce(ok(undefined));
 
       await notifier.notifyTaskFailed('user-123', task, error);
 
-      const callArgs = publishSendMessageMock.mock.calls[0]?.[0];
+      const callArgs = getPublishSendMessageMock().mock.calls[0]?.[0];
       expect(callArgs.message).toContain('❌ Code task failed: INT-123 Fix auth bug');
       expect(callArgs.message).not.toContain('Fix the bug in the authentication system');
     });
@@ -380,12 +381,12 @@ describe('WhatsAppNotifier', () => {
       });
 
       const notifier = createWhatsAppNotifier(createMockConfig());
-      publishSendMessageMock.mockResolvedValueOnce(ok(undefined));
+      getPublishSendMessageMock().mockResolvedValueOnce(ok(undefined));
 
       const result = await notifier.notifyTaskComplete('user-123', task);
 
       expect(result.ok).toBe(true);
-      expect(publishSendMessageMock).toHaveBeenCalledWith({
+      expect(getPublishSendMessageMock()).toHaveBeenCalledWith({
         userId: 'user-123',
         message: expect.any(String),
         correlationId: 'test-trace-id',
@@ -398,7 +399,7 @@ describe('WhatsAppNotifier', () => {
       });
 
       const notifier = createWhatsAppNotifier(createMockConfig());
-      publishSendMessageMock.mockResolvedValueOnce(
+      getPublishSendMessageMock().mockResolvedValueOnce(
         err({ code: 'PUBLISH_ERROR', message: 'Service unavailable' })
       );
 
@@ -424,12 +425,12 @@ describe('WhatsAppNotifier', () => {
       };
 
       const notifier = createWhatsAppNotifier(createMockConfig());
-      publishSendMessageMock.mockResolvedValueOnce(ok(undefined));
+      getPublishSendMessageMock().mockResolvedValueOnce(ok(undefined));
 
       const result = await notifier.notifyTaskFailed('user-123', task, error);
 
       expect(result.ok).toBe(true);
-      expect(publishSendMessageMock).toHaveBeenCalledWith({
+      expect(getPublishSendMessageMock()).toHaveBeenCalledWith({
         userId: 'user-123',
         message: expect.any(String),
         correlationId: 'test-trace-id',
@@ -446,7 +447,7 @@ describe('WhatsAppNotifier', () => {
       };
 
       const notifier = createWhatsAppNotifier(createMockConfig());
-      publishSendMessageMock.mockResolvedValueOnce(
+      getPublishSendMessageMock().mockResolvedValueOnce(
         err({ code: 'PUBLISH_ERROR', message: 'Service unavailable' })
       );
 
@@ -471,12 +472,12 @@ describe('WhatsAppNotifier', () => {
       });
 
       const notifier = createWhatsAppNotifier(createMockConfig());
-      publishSendMessageMock.mockResolvedValueOnce(ok(undefined));
+      getPublishSendMessageMock().mockResolvedValueOnce(ok(undefined));
 
       const result = await notifier.notifyTaskStarted('user-123', task);
 
       expect(result.ok).toBe(true);
-      const callArgs = publishSendMessageMock.mock.calls[0]?.[0];
+      const callArgs = getPublishSendMessageMock().mock.calls[0]?.[0];
       expect(callArgs.message).toContain('🚀 Code task started: Fix login bug');
       expect(callArgs.message).toContain('Task ID: task-123');
       expect(callArgs.message).toContain('Repository: pbuchman/intexuraos');
@@ -492,11 +493,11 @@ describe('WhatsAppNotifier', () => {
       });
 
       const notifier = createWhatsAppNotifier(createMockConfig());
-      publishSendMessageMock.mockResolvedValueOnce(ok(undefined));
+      getPublishSendMessageMock().mockResolvedValueOnce(ok(undefined));
 
       await notifier.notifyTaskStarted('user-123', task);
 
-      const callArgs = publishSendMessageMock.mock.calls[0]?.[0];
+      const callArgs = getPublishSendMessageMock().mock.calls[0]?.[0];
       expect(callArgs.buttons).toHaveLength(2);
       expect(callArgs.buttons[0]).toEqual({
         type: 'reply',
@@ -521,11 +522,11 @@ describe('WhatsAppNotifier', () => {
       });
 
       const notifier = createWhatsAppNotifier(createMockConfig());
-      publishSendMessageMock.mockResolvedValueOnce(ok(undefined));
+      getPublishSendMessageMock().mockResolvedValueOnce(ok(undefined));
 
       await notifier.notifyTaskStarted('user-123', task);
 
-      const callArgs = publishSendMessageMock.mock.calls[0]?.[0];
+      const callArgs = getPublishSendMessageMock().mock.calls[0]?.[0];
       expect(callArgs.buttons).toHaveLength(1);
       expect(callArgs.buttons[0]).toEqual({
         type: 'reply',
@@ -546,11 +547,11 @@ describe('WhatsAppNotifier', () => {
       const { linearIssueTitle: _, ...taskWithoutLinearTitle } = task;
 
       const notifier = createWhatsAppNotifier(createMockConfig());
-      publishSendMessageMock.mockResolvedValueOnce(ok(undefined));
+      getPublishSendMessageMock().mockResolvedValueOnce(ok(undefined));
 
       await notifier.notifyTaskStarted('user-123', taskWithoutLinearTitle);
 
-      const callArgs = publishSendMessageMock.mock.calls[0]?.[0];
+      const callArgs = getPublishSendMessageMock().mock.calls[0]?.[0];
       expect(callArgs.message).toContain(
         '🚀 Code task started: Fix the bug in the authentication system that caus'
       );
@@ -562,7 +563,7 @@ describe('WhatsAppNotifier', () => {
       });
 
       const notifier = createWhatsAppNotifier(createMockConfig());
-      publishSendMessageMock.mockResolvedValueOnce(
+      getPublishSendMessageMock().mockResolvedValueOnce(
         err({ code: 'PUBLISH_ERROR', message: 'Service unavailable' })
       );
 
