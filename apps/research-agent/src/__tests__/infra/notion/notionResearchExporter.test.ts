@@ -262,6 +262,116 @@ describe('exportResearchToNotion', () => {
   });
 
   describe('content filtering', () => {
+    it('strips attribution lines from synthesis content', async () => {
+      const mockPagesCreate = vi.mocked(mockClient.pages.create);
+
+      mockPagesCreate.mockResolvedValueOnce({
+        id: 'main-page-123',
+      } as never);
+
+      const contentWithAttribution = `
+## Section One
+
+Content here.
+
+Attribution: Primary=S1,S2; Secondary=; Constraints=; UNK=false
+
+## Section Two
+
+More content.
+
+Attribution: Primary=S3; Secondary=U1; Constraints=; UNK=true
+      `;
+
+      const research = createMockResearch({
+        synthesizedResult: contentWithAttribution,
+      });
+
+      await exportResearchToNotion(research, mockNotionToken, mockTargetPageId, mockLogger);
+
+      const mainPageCall = mockPagesCreate.mock.calls[0];
+      if (mainPageCall === undefined) {
+        throw new Error('mainPageCall is undefined');
+      }
+      const children = mainPageCall[0].children;
+      if (children === undefined) {
+        throw new Error('children is undefined');
+      }
+
+      // Collect all content from paragraphs
+      const allContent = children
+        .filter((b: unknown) => (b as { type: string }).type === 'paragraph')
+        .map((b: unknown) => {
+          const block = b as { paragraph: { rich_text: { text: { content: string } }[] } };
+          return block.paragraph.rich_text[0]?.text.content ?? '';
+        })
+        .join(' ');
+
+      // Should not contain Attribution lines
+      expect(allContent).not.toContain('Attribution:');
+      expect(allContent).not.toContain('Primary=');
+      expect(allContent).toContain('Content here');
+      expect(allContent).toContain('More content');
+    });
+
+    it('strips attribution lines from LLM result content', async () => {
+      const mockPagesCreate = vi.mocked(mockClient.pages.create);
+
+      mockPagesCreate
+        .mockResolvedValueOnce({
+          id: 'main-page-123',
+        } as never)
+        .mockResolvedValueOnce({
+          id: 'llm-page-123',
+        } as never);
+
+      const llmResultWithAttribution = `
+## Analysis
+
+Analysis content here.
+
+Attribution: Primary=S1; Secondary=; Constraints=; UNK=false
+      `;
+
+      const research = createMockResearch({
+        synthesizedResult: 'Test synthesis.',
+        llmResults: [
+          {
+            provider: LlmProviders.OpenAI,
+            model: LlmModels.GPT52,
+            status: 'completed',
+            result: llmResultWithAttribution,
+            startedAt: '2024-01-01T00:00:00Z',
+            completedAt: '2024-01-01T00:05:00Z',
+          },
+        ],
+      });
+
+      await exportResearchToNotion(research, mockNotionToken, mockTargetPageId, mockLogger);
+
+      const llmPageCall = mockPagesCreate.mock.calls[1];
+      if (llmPageCall === undefined) {
+        throw new Error('llmPageCall is undefined');
+      }
+      const children = llmPageCall[0].children;
+      if (children === undefined) {
+        throw new Error('children is undefined');
+      }
+
+      // Collect all content from paragraphs
+      const allContent = children
+        .filter((b: unknown) => (b as { type: string }).type === 'paragraph')
+        .map((b: unknown) => {
+          const block = b as { paragraph: { rich_text: { text: { content: string } }[] } };
+          return block.paragraph.rich_text[0]?.text.content ?? '';
+        })
+        .join(' ');
+
+      // Should not contain Attribution lines
+      expect(allContent).not.toContain('Attribution:');
+      expect(allContent).toContain('Analysis content here');
+    });
+
     it('strips <details> tags from synthesis content', async () => {
       const mockPagesCreate = vi.mocked(mockClient.pages.create);
 
@@ -732,6 +842,164 @@ describe('exportResearchToNotion', () => {
       );
     });
 
+  });
+
+  describe('block batching', () => {
+    it('creates page with batched blocks when exceeding 100 block limit', async () => {
+      const mockPagesCreate = vi.mocked(mockClient.pages.create);
+      const mockBlocksAppend = vi.mocked(mockClient.blocks.children.append);
+
+      mockPagesCreate.mockResolvedValueOnce({
+        id: 'main-page-123',
+        url: 'https://notion.so/main-page-123',
+      } as never);
+
+      mockBlocksAppend.mockResolvedValue({} as never);
+
+      // Create content that generates more than 100 blocks
+      // Each paragraph is one block, plus we have 2 headings (Synthesis, Sources)
+      // So we need ~102+ paragraphs to exceed the limit
+      const paragraphs = Array.from({ length: 110 }, (_, i) => `Paragraph ${String(i + 1)}.`).join('\n\n');
+      const research = createMockResearch({
+        synthesizedResult: paragraphs,
+      });
+
+      const result = await exportResearchToNotion(research, mockNotionToken, mockTargetPageId, mockLogger);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.mainPageId).toBe('main-page-123');
+      }
+
+      // pages.create should be called with at most 100 blocks
+      expect(mockPagesCreate).toHaveBeenCalledTimes(1);
+      const createCall = mockPagesCreate.mock.calls[0];
+      if (createCall === undefined) {
+        throw new Error('createCall is undefined');
+      }
+      const children = createCall[0].children;
+      if (children === undefined) {
+        throw new Error('children is undefined');
+      }
+      expect(children.length).toBeLessThanOrEqual(100);
+
+      // blocks.children.append should be called for remaining blocks
+      expect(mockBlocksAppend).toHaveBeenCalled();
+      const appendCall = mockBlocksAppend.mock.calls[0];
+      if (appendCall === undefined) {
+        throw new Error('appendCall is undefined');
+      }
+      expect(appendCall[0].block_id).toBe('main-page-123');
+    });
+
+    it('does not call append when blocks are under 100 limit', async () => {
+      const mockPagesCreate = vi.mocked(mockClient.pages.create);
+      const mockBlocksAppend = vi.mocked(mockClient.blocks.children.append);
+
+      mockPagesCreate.mockResolvedValueOnce({
+        id: 'main-page-123',
+        url: 'https://notion.so/main-page-123',
+      } as never);
+
+      const research = createMockResearch({
+        synthesizedResult: 'Short content that generates few blocks.',
+      });
+
+      const result = await exportResearchToNotion(research, mockNotionToken, mockTargetPageId, mockLogger);
+
+      expect(result.ok).toBe(true);
+
+      // blocks.children.append should NOT be called
+      expect(mockBlocksAppend).not.toHaveBeenCalled();
+    });
+
+    it('handles multiple append batches for very large content (250+ blocks)', async () => {
+      const mockPagesCreate = vi.mocked(mockClient.pages.create);
+      const mockBlocksAppend = vi.mocked(mockClient.blocks.children.append);
+
+      mockPagesCreate.mockResolvedValueOnce({
+        id: 'main-page-123',
+        url: 'https://notion.so/main-page-123',
+      } as never);
+
+      mockBlocksAppend.mockResolvedValue({} as never);
+
+      // Create content that generates ~252 blocks (250 paragraphs + 2 headings)
+      const paragraphs = Array.from({ length: 250 }, (_, i) => `Paragraph ${String(i + 1)}.`).join('\n\n');
+      const research = createMockResearch({
+        synthesizedResult: paragraphs,
+      });
+
+      const result = await exportResearchToNotion(research, mockNotionToken, mockTargetPageId, mockLogger);
+
+      expect(result.ok).toBe(true);
+
+      // Should call append twice: once for blocks 101-200, once for blocks 201-252
+      expect(mockBlocksAppend).toHaveBeenCalledTimes(2);
+
+      // Verify each append call has at most 100 blocks
+      for (const call of mockBlocksAppend.mock.calls) {
+        if (call === undefined) continue;
+        const appendChildren = call[0].children;
+        if (appendChildren !== undefined) {
+          expect(appendChildren.length).toBeLessThanOrEqual(100);
+        }
+      }
+    });
+
+    it('batches LLM child page blocks when exceeding limit', async () => {
+      const mockPagesCreate = vi.mocked(mockClient.pages.create);
+      const mockBlocksAppend = vi.mocked(mockClient.blocks.children.append);
+
+      mockPagesCreate
+        .mockResolvedValueOnce({
+          id: 'main-page-123',
+          url: 'https://notion.so/main-page-123',
+        } as never)
+        .mockResolvedValueOnce({
+          id: 'llm-page-123',
+          url: 'https://notion.so/llm-page-123',
+        } as never);
+
+      mockBlocksAppend.mockResolvedValue({} as never);
+
+      // Create LLM result with >100 blocks
+      const llmParagraphs = Array.from({ length: 110 }, (_, i) => `LLM paragraph ${String(i + 1)}.`).join('\n\n');
+      const research = createMockResearch({
+        synthesizedResult: 'Short synthesis.',
+        llmResults: [
+          {
+            provider: LlmProviders.OpenAI,
+            model: LlmModels.GPT52,
+            status: 'completed',
+            result: llmParagraphs,
+            startedAt: '2024-01-01T00:00:00Z',
+            completedAt: '2024-01-01T00:05:00Z',
+          },
+        ],
+      });
+
+      const result = await exportResearchToNotion(research, mockNotionToken, mockTargetPageId, mockLogger);
+
+      expect(result.ok).toBe(true);
+
+      // Check LLM page create call has at most 100 blocks
+      const llmPageCall = mockPagesCreate.mock.calls[1];
+      if (llmPageCall === undefined) {
+        throw new Error('llmPageCall is undefined');
+      }
+      const llmChildren = llmPageCall[0].children;
+      if (llmChildren === undefined) {
+        throw new Error('llmChildren is undefined');
+      }
+      expect(llmChildren.length).toBeLessThanOrEqual(100);
+
+      // blocks.children.append should be called for LLM page overflow
+      const appendCalls = mockBlocksAppend.mock.calls.filter(
+        (call) => call !== undefined && call[0].block_id === 'llm-page-123'
+      );
+      expect(appendCalls.length).toBeGreaterThan(0);
+    });
   });
 
   describe('edge cases', () => {
