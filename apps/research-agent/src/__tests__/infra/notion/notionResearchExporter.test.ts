@@ -108,7 +108,7 @@ describe('exportResearchToNotion', () => {
         },
         children: [
           { object: 'block', type: 'heading_2', heading_2: { rich_text: [{ type: 'text', text: { content: 'Synthesis' } }] } },
-          { object: 'block', type: 'code', code: { rich_text: [{ type: 'text', text: { content: 'Test synthesis result.' } }], language: 'markdown' } },
+          { object: 'block', type: 'paragraph', paragraph: { rich_text: [{ type: 'text', text: { content: 'Test synthesis result.' } }] } },
           { object: 'block', type: 'heading_2', heading_2: { rich_text: [{ type: 'text', text: { content: 'Sources' } }] } },
         ],
       });
@@ -174,8 +174,8 @@ describe('exportResearchToNotion', () => {
       // Main page + 2 LLM report pages created
       expect(mockPagesCreate).toHaveBeenCalledTimes(3);
 
-      // Source links appended
-      expect(mockBlocksAppend).toHaveBeenCalledTimes(1);
+      // Source links are NOT appended as separate blocks - child pages appear as document references automatically
+      expect(mockBlocksAppend).not.toHaveBeenCalled();
     });
 
     it('includes sources section in LLM report when sources exist', async () => {
@@ -215,10 +215,10 @@ describe('exportResearchToNotion', () => {
         throw new Error('children is undefined');
       }
 
-      // Should have Response heading, code block, and Sources heading + list items
+      // Should have Response heading, paragraph block, and Sources heading + list items
       expect(children).toHaveLength(5);
       expect(children[0]).toEqual({ object: 'block', type: 'heading_2', heading_2: { rich_text: [{ type: 'text', text: { content: 'Response' } }] } });
-      expect(children[1]).toEqual({ object: 'block', type: 'code', code: { rich_text: [{ type: 'text', text: { content: 'Result content.' } }], language: 'markdown' } });
+      expect(children[1]).toEqual({ object: 'block', type: 'paragraph', paragraph: { rich_text: [{ type: 'text', text: { content: 'Result content.' } }] } });
       expect(children[2]).toEqual({ object: 'block', type: 'heading_2', heading_2: { rich_text: [{ type: 'text', text: { content: 'Sources' } }] } });
       expect(children[3]).toEqual({
         object: 'block',
@@ -255,9 +255,9 @@ describe('exportResearchToNotion', () => {
         throw new Error('children is undefined');
       }
 
-      // Should have heading + multiple code blocks + sources heading
-      const codeBlocks = children.filter((b: unknown) => (b as { type: string }).type === 'code');
-      expect(codeBlocks.length).toBeGreaterThan(1);
+      // Should have heading + multiple paragraph blocks + sources heading
+      const paragraphBlocks = children.filter((b: unknown) => (b as { type: string }).type === 'paragraph');
+      expect(paragraphBlocks.length).toBeGreaterThan(1);
     });
   });
 
@@ -294,17 +294,19 @@ describe('exportResearchToNotion', () => {
       if (children === undefined) {
         throw new Error('children is undefined');
       }
-      const codeBlock = children.find((b: unknown) => (b as { type: string }).type === 'code');
-      if (codeBlock === undefined) {
-        throw new Error('codeBlock is undefined');
-      }
+      const paragraphBlocks = children.filter((b: unknown) => (b as { type: string }).type === 'paragraph');
+      expect(paragraphBlocks.length).toBeGreaterThan(0);
 
-      // Use unknown to safely narrow to the expected block type
-      const codeBlockWithType = codeBlock as unknown as { code: { rich_text: { text: { content: string } }[] } };
-      const blockContent = codeBlockWithType.code.rich_text[0]?.text.content ?? '';
-      expect(blockContent).not.toContain('<details>');
-      expect(blockContent).toContain('Visible content');
-      expect(blockContent).toContain('More visible content');
+      // Check all paragraph content combined doesn't contain details tags
+      const allContent = paragraphBlocks
+        .map((b: unknown) => {
+          const block = b as { paragraph: { rich_text: { text: { content: string } }[] } };
+          return block.paragraph.rich_text[0]?.text.content ?? '';
+        })
+        .join(' ');
+      expect(allContent).not.toContain('<details>');
+      expect(allContent).toContain('Visible content');
+      expect(allContent).toContain('More visible content');
     });
 
     it('strips <details> tags from LLM result content', async () => {
@@ -353,17 +355,19 @@ describe('exportResearchToNotion', () => {
       if (children === undefined) {
         throw new Error('children is undefined');
       }
-      const codeBlock = children.find((b: unknown) => (b as { type: string }).type === 'code');
-      if (codeBlock === undefined) {
-        throw new Error('codeBlock is undefined');
-      }
+      const paragraphBlocks = children.filter((b: unknown) => (b as { type: string }).type === 'paragraph');
+      expect(paragraphBlocks.length).toBeGreaterThan(0);
 
-      // Use unknown to safely narrow to the expected block type
-      const codeBlockWithType = codeBlock as unknown as { code: { rich_text: { text: { content: string } }[] } };
-      const blockContent = codeBlockWithType.code.rich_text[0]?.text.content ?? '';
-      expect(blockContent).not.toContain('<details>');
-      expect(blockContent).toContain('Answer here');
-      expect(blockContent).toContain('More answer');
+      // Check all paragraph content combined doesn't contain details tags
+      const allContent = paragraphBlocks
+        .map((b: unknown) => {
+          const block = b as { paragraph: { rich_text: { text: { content: string } }[] } };
+          return block.paragraph.rich_text[0]?.text.content ?? '';
+        })
+        .join(' ');
+      expect(allContent).not.toContain('<details>');
+      expect(allContent).toContain('Answer here');
+      expect(allContent).toContain('More answer');
     });
   });
 
@@ -506,16 +510,7 @@ describe('exportResearchToNotion', () => {
   });
 
   describe('cover image handling', () => {
-    beforeEach(() => {
-      // Set up the environment variable for image public base URL
-      process.env['INTEXURAOS_IMAGE_PUBLIC_BASE_URL'] = 'https://example.intexuraos.com';
-    });
-
-    afterEach(() => {
-      delete process.env['INTEXURAOS_IMAGE_PUBLIC_BASE_URL'];
-    });
-
-    it('adds image block when research has coverImageId', async () => {
+    it('adds image block when research has coverImageUrl', async () => {
       const mockPagesCreate = vi.mocked(mockClient.pages.create);
 
       mockPagesCreate.mockResolvedValueOnce({
@@ -531,6 +526,7 @@ describe('exportResearchToNotion', () => {
           sharedAt: '2024-01-01T00:00:00Z',
           gcsPath: 'shares/test-slug.html',
           coverImageId: 'cover-abc-123',
+          coverImageUrl: 'https://intexuraos.cloud/images/cover-abc-123-my-research-title.png',
         },
       });
 
@@ -551,7 +547,7 @@ describe('exportResearchToNotion', () => {
         type: 'image',
         image: {
           type: 'external',
-          external: { url: 'https://example.intexuraos.com/images/cover-abc-123/full.png' },
+          external: { url: 'https://intexuraos.cloud/images/cover-abc-123-my-research-title.png' },
         },
       });
       expect(children[1]).toEqual({
@@ -592,7 +588,7 @@ describe('exportResearchToNotion', () => {
       });
     });
 
-    it('does not add image block when coverImageId is undefined', async () => {
+    it('does not add image block when coverImageUrl is undefined', async () => {
       const mockPagesCreate = vi.mocked(mockClient.pages.create);
 
       mockPagesCreate.mockResolvedValueOnce({
@@ -607,7 +603,7 @@ describe('exportResearchToNotion', () => {
           shareUrl: 'https://example.com/share/test-slug',
           sharedAt: '2024-01-01T00:00:00Z',
           gcsPath: 'shares/test-slug.html',
-          // coverImageId undefined
+          // coverImageUrl undefined
         },
       });
 
@@ -630,7 +626,7 @@ describe('exportResearchToNotion', () => {
       });
     });
 
-    it('does not add image block when coverImageId is empty string', async () => {
+    it('does not add image block when coverImageUrl is empty string', async () => {
       const mockPagesCreate = vi.mocked(mockClient.pages.create);
 
       mockPagesCreate.mockResolvedValueOnce({
@@ -645,7 +641,7 @@ describe('exportResearchToNotion', () => {
           shareUrl: 'https://example.com/share/test-slug',
           sharedAt: '2024-01-01T00:00:00Z',
           gcsPath: 'shares/test-slug.html',
-          coverImageId: '',
+          coverImageUrl: '',
         },
       });
 
@@ -668,7 +664,7 @@ describe('exportResearchToNotion', () => {
       });
     });
 
-    it('does not add image block when coverImageId is whitespace only', async () => {
+    it('does not add image block when coverImageUrl is whitespace only', async () => {
       const mockPagesCreate = vi.mocked(mockClient.pages.create);
 
       mockPagesCreate.mockResolvedValueOnce({
@@ -683,7 +679,7 @@ describe('exportResearchToNotion', () => {
           shareUrl: 'https://example.com/share/test-slug',
           sharedAt: '2024-01-01T00:00:00Z',
           gcsPath: 'shares/test-slug.html',
-          coverImageId: '   ',
+          coverImageUrl: '   ',
         },
       });
 
@@ -722,6 +718,7 @@ describe('exportResearchToNotion', () => {
           sharedAt: '2024-01-01T00:00:00Z',
           gcsPath: 'shares/test-slug.html',
           coverImageId: 'cover-xyz-789',
+          coverImageUrl: 'https://intexuraos.cloud/images/cover-xyz-789-my-slug.png',
         },
       });
 
@@ -730,36 +727,11 @@ describe('exportResearchToNotion', () => {
       expect(mockLogger.info).toHaveBeenCalledWith(
         'Including cover image in Notion export',
         {
-          coverImageId: 'cover-xyz-789',
-          coverImageUrl: 'https://example.intexuraos.com/images/cover-xyz-789/full.png',
+          coverImageUrl: 'https://intexuraos.cloud/images/cover-xyz-789-my-slug.png',
         }
       );
     });
 
-    it('throws error when INTEXURAOS_IMAGE_PUBLIC_BASE_URL is not set', async () => {
-      // Clear the env var to test error behavior
-      delete process.env['INTEXURAOS_IMAGE_PUBLIC_BASE_URL'];
-
-      const research = createMockResearch({
-        synthesizedResult: 'Test synthesis.',
-        shareInfo: {
-          shareToken: 'token-123',
-          slug: 'test-slug',
-          shareUrl: 'https://example.com/share/test-slug',
-          sharedAt: '2024-01-01T00:00:00Z',
-          gcsPath: 'shares/test-slug.html',
-          coverImageId: 'cover-def-456',
-        },
-      });
-
-      const result = await exportResearchToNotion(research, mockNotionToken, mockTargetPageId, mockLogger);
-
-      expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error.code).toBe('INTERNAL_ERROR');
-        expect(result.error.message).toContain('INTEXURAOS_IMAGE_PUBLIC_BASE_URL');
-      }
-    });
   });
 
   describe('edge cases', () => {
