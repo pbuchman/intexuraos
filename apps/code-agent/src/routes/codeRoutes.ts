@@ -8,6 +8,7 @@ import { getServices } from '../services.js';
 import { processCodeAction } from '../domain/usecases/processCodeAction.js';
 import { cancelTaskWithNonce } from '../domain/usecases/cancelTaskWithNonce.js';
 import type { TaskStatus } from '../domain/models/codeTask.js';
+import { generateWebhookSecret } from '../infra/services/hmacSigning.js';
 
 export type JwtValidator = (request: FastifyRequest, reply: FastifyReply) => Promise<void>;
 
@@ -1090,6 +1091,9 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       }
       const issueResult = await linearIssueService.ensureIssueExists(ensureParams);
 
+      // Generate webhook secret for this task
+      const webhookSecret = generateWebhookSecret();
+
       // Create task with prompt deduplication (Layer 2 only - no actionId/approvalEventId)
       const createInput: {
         userId: string;
@@ -1101,6 +1105,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         repository: string;
         baseBranch: string;
         traceId: string;
+        webhookSecret: string;
         linearIssueId?: string;
         linearIssueTitle?: string;
         linearFallback?: boolean;
@@ -1114,6 +1119,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         repository: 'pbuchman/intexuraos',
         baseBranch: 'development',
         traceId: `trace_${Date.now()}_${Math.random().toString(36).substring(7)}`,
+        webhookSecret,
       };
 
       if (issueResult.linearIssueId !== '') {
@@ -1165,7 +1171,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
 
       const task = createResult.value;
 
-      // Dispatch to worker
+      // Dispatch to worker (use stored webhook secret from task)
       const dispatchInput: {
         taskId: string;
         linearIssueId?: string;
@@ -1184,7 +1190,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         baseBranch: task.baseBranch,
         workerType: task.workerType,
         webhookUrl: `${process.env['INTEXURAOS_SERVICE_URL']}/internal/webhooks/task-complete`,
-        webhookSecret: process.env['INTEXURAOS_WEBHOOK_VERIFY_SECRET'] ?? '',
+        webhookSecret,
       };
 
       if (task.linearIssueId !== undefined) {
@@ -1405,8 +1411,36 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
               updatedAt: { type: 'string', format: 'date-time' },
               dispatchedAt: { type: 'string', format: 'date-time', nullable: true },
               completedAt: { type: 'string', format: 'date-time', nullable: true },
-              result: { type: 'object', nullable: true },
-              error: { type: 'object', nullable: true },
+              result: {
+                type: 'object',
+                nullable: true,
+                properties: {
+                  prUrl: { type: 'string', nullable: true },
+                  branch: { type: 'string' },
+                  commits: { type: 'number' },
+                  summary: { type: 'string' },
+                  ciFailed: { type: 'boolean', nullable: true },
+                  partialWork: { type: 'boolean', nullable: true },
+                  rebaseResult: { type: 'string', nullable: true },
+                },
+              },
+              error: {
+                type: 'object',
+                nullable: true,
+                properties: {
+                  code: { type: 'string' },
+                  message: { type: 'string' },
+                  remediation: {
+                    type: 'object',
+                    nullable: true,
+                    properties: {
+                      retryAfter: { type: 'number', nullable: true },
+                      manualSteps: { type: 'string', nullable: true },
+                      supportLink: { type: 'string', nullable: true },
+                    },
+                  },
+                },
+              },
               statusSummary: { type: 'object', nullable: true },
             },
           },
@@ -1479,16 +1513,16 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         includeParams: true,
       });
 
-      const { codeTaskRepo } = getServices();
+      const { codeTaskRepo, logger } = getServices();
       const userId = request.user?.userId ?? 'unknown-user';
 
-      request.log.info({ userId, taskId: request.params.taskId }, 'Getting code task');
+      logger.info({ userId, taskId: request.params.taskId }, 'Getting code task');
 
       const getResult = await codeTaskRepo.findByIdForUser(request.params.taskId, userId);
 
       if (!getResult.ok) {
         if (getResult.error.code === 'NOT_FOUND') {
-          request.log.warn({ taskId: request.params.taskId, userId }, 'Code task not found');
+          logger.warn({ taskId: request.params.taskId, userId }, 'Code task not found');
           reply.status(404);
           return {
             success: false,
@@ -1499,7 +1533,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           };
         }
 
-        request.log.error({ error: getResult.error }, 'Failed to get code task');
+        logger.error({ error: getResult.error }, 'Failed to get code task');
         reply.status(500);
         return {
           success: false,
@@ -1510,7 +1544,21 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         };
       }
 
-      return reply.status(200).send(taskToApiResponse(getResult.value));
+      const apiResponse = taskToApiResponse(getResult.value);
+
+      logger.info(
+        {
+          taskId: request.params.taskId,
+          status: getResult.value.status,
+          hasResult: getResult.value.result !== undefined,
+          resultKeys: getResult.value.result ? Object.keys(getResult.value.result) : [],
+          apiResponseHasResult: apiResponse.result !== undefined,
+          apiResponseResultKeys: apiResponse.result ? Object.keys(apiResponse.result) : [],
+        },
+        'Returning task for GET /code/tasks/:taskId'
+      );
+
+      return reply.status(200).send(apiResponse);
     }
   );
 
