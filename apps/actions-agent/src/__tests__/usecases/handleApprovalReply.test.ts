@@ -2534,4 +2534,215 @@ describe('HandleApprovalReplyUseCase', () => {
       expect(messages[0]?.message).toContain('https://app.intexuraos.cloud/#/tasks/task-abc');
     });
   });
+
+  describe('text-based nonce approval ("approve XXXX" pattern)', () => {
+    const actionWithNonce: Action = {
+      ...testAction,
+      approvalNonce: 'a1b2',
+      approvalNonceExpiresAt: new Date(Date.now() + 60 * 60 * 1000).toISOString(), // 1 hour from now
+    };
+
+    it('should fall through to LLM classifier when action has no nonce configured', async () => {
+      approvalMessageRepository.setMessage(testApprovalMessage);
+      await actionRepository.save(testAction); // No nonce on action
+      classifierFactory.getClassifier().setResult({
+        intent: 'approve',
+        confidence: 0.95,
+        reasoning: 'User expressed approval',
+      });
+
+      const result = await useCase({
+        replyToWamid: 'wamid-123',
+        replyText: 'approve a1b2',
+        userId: 'user-1',
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.matched).toBe(true);
+        expect(result.value.intent).toBe('approve');
+        expect(result.value.outcome).toBe('approved');
+      }
+    });
+
+    it('should reject with error when nonce has expired', async () => {
+      const expiredAction: Action = {
+        ...testAction,
+        approvalNonce: 'a1b2',
+        approvalNonceExpiresAt: new Date(Date.now() - 60 * 1000).toISOString(), // Expired 1 min ago
+      };
+      approvalMessageRepository.setMessage(testApprovalMessage);
+      await actionRepository.save(expiredAction);
+
+      const result = await useCase({
+        replyToWamid: 'wamid-123',
+        replyText: 'approve a1b2',
+        userId: 'user-1',
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.matched).toBe(true);
+        expect(result.value.outcome).toBe('rejected');
+      }
+
+      const messages = whatsappPublisher.getSentMessages();
+      expect(messages).toHaveLength(1);
+      expect(messages[0]?.message).toContain('expired');
+    });
+
+    it('should reject with error when nonce does not match', async () => {
+      approvalMessageRepository.setMessage(testApprovalMessage);
+      await actionRepository.save(actionWithNonce);
+
+      const result = await useCase({
+        replyToWamid: 'wamid-123',
+        replyText: 'approve 0000', // Valid hex format but wrong nonce (action has 'a1b2')
+        userId: 'user-1',
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.matched).toBe(true);
+        expect(result.value.outcome).toBe('rejected');
+      }
+
+      const messages = whatsappPublisher.getSentMessages();
+      expect(messages).toHaveLength(1);
+      expect(messages[0]?.message).toContain('Invalid approval code');
+    });
+
+    it('should approve when valid nonce is provided via text', async () => {
+      approvalMessageRepository.setMessage(testApprovalMessage);
+      await actionRepository.save(actionWithNonce);
+
+      const result = await useCase({
+        replyToWamid: 'wamid-123',
+        replyText: 'approve a1b2',
+        userId: 'user-1',
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.matched).toBe(true);
+        expect(result.value.intent).toBe('approve');
+        expect(result.value.outcome).toBe('approved');
+      }
+
+      const messages = whatsappPublisher.getSentMessages();
+      expect(messages.length).toBeGreaterThanOrEqual(1);
+      expect(messages.some((m) => m.message.includes('Approved'))).toBe(true);
+    });
+
+    it('should handle status mismatch (race condition) during text-based nonce approval', async () => {
+      approvalMessageRepository.setMessage(testApprovalMessage);
+      const alreadyPendingAction: Action = {
+        ...actionWithNonce,
+        status: 'pending',
+      };
+      await actionRepository.save(alreadyPendingAction);
+
+      const result = await useCase({
+        replyToWamid: 'wamid-123',
+        replyText: 'approve a1b2',
+        userId: 'user-1',
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.matched).toBe(true);
+        expect(result.value.intent).toBeUndefined();
+        expect(result.value.outcome).toBeUndefined();
+      }
+    });
+
+    it('should return error when action not found during text-based nonce approval update', async () => {
+      approvalMessageRepository.setMessage(testApprovalMessage);
+      await actionRepository.save(actionWithNonce);
+
+      // Make updateStatusIf return not_found
+      vi.spyOn(actionRepository, 'updateStatusIf').mockResolvedValueOnce({
+        outcome: 'not_found',
+      });
+
+      const result = await useCase({
+        replyToWamid: 'wamid-123',
+        replyText: 'approve a1b2',
+        userId: 'user-1',
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.message).toContain('Action not found');
+      }
+    });
+
+    it('should return error when status update fails during text-based nonce approval', async () => {
+      approvalMessageRepository.setMessage(testApprovalMessage);
+      await actionRepository.save(actionWithNonce);
+
+      // Make updateStatusIf return error
+      vi.spyOn(actionRepository, 'updateStatusIf').mockResolvedValueOnce({
+        outcome: 'error',
+        error: new Error('DB connection failed'),
+      });
+
+      const result = await useCase({
+        replyToWamid: 'wamid-123',
+        replyText: 'approve a1b2',
+        userId: 'user-1',
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.message).toContain('Failed to update action status');
+      }
+    });
+
+    it('should continue even if clearing nonce fails after text-based approval', async () => {
+      approvalMessageRepository.setMessage(testApprovalMessage);
+      await actionRepository.save(actionWithNonce);
+
+      // Make the update (for clearing nonce) throw an error
+      const originalUpdate = actionRepository.update.bind(actionRepository);
+      let callCount = 0;
+      vi.spyOn(actionRepository, 'update').mockImplementation(async (action) => {
+        callCount++;
+        if (callCount === 1) {
+          // First call is to clear nonce - make it fail
+          throw new Error('DB timeout');
+        }
+        return originalUpdate(action);
+      });
+
+      const result = await useCase({
+        replyToWamid: 'wamid-123',
+        replyText: 'approve a1b2',
+        userId: 'user-1',
+      });
+
+      // Should still succeed despite nonce clearing failure
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.matched).toBe(true);
+      }
+    });
+
+    it('should handle case-insensitive nonce matching', async () => {
+      approvalMessageRepository.setMessage(testApprovalMessage);
+      await actionRepository.save(actionWithNonce); // Nonce is 'a1b2'
+
+      const result = await useCase({
+        replyToWamid: 'wamid-123',
+        replyText: 'approve A1B2', // Uppercase
+        userId: 'user-1',
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.matched).toBe(true);
+        expect(result.value.intent).toBe('approve');
+      }
+    });
+  });
 });

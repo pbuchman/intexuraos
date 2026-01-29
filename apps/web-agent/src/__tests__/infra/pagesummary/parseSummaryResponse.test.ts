@@ -197,6 +197,14 @@ describe('parseSummaryResponse', () => {
         expect(result.value.summary).toBe('The content follows');
       }
     });
+
+    it('handles prefix that covers entire content (returns empty)', () => {
+      const result = parseSummaryResponse("Here's");
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('EMPTY');
+      }
+    });
   });
 
   describe('empty content validation', () => {

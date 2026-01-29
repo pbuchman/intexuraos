@@ -74,9 +74,9 @@ describe('POST /internal/webhooks/task-complete', () => {
     process.env['INTEXURAOS_CF_ACCESS_CLIENT_SECRET'] = 'test-client-secret';
     process.env['INTEXURAOS_DISPATCH_SECRET'] = 'test-dispatch-secret';
     process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = 'test-internal-token';
-    process.env['INTEXURAOS_AUTH0_AUDIENCE'] = 'https://api.intexuraos.cloud';
-    process.env['INTEXURAOS_AUTH0_ISSUER'] = 'https://intexuraos.eu.auth0.com/';
-    process.env['INTEXURAOS_AUTH0_JWKS_URI'] = 'https://intexuraos.eu.auth0.com/.well-known/jwks.json';
+    process.env['INTEXURAOS_AUTH_AUDIENCE'] = 'https://api.intexuraos.cloud';
+    process.env['INTEXURAOS_AUTH_ISSUER'] = 'https://intexuraos.eu.auth0.com/';
+    process.env['INTEXURAOS_AUTH_JWKS_URL'] = 'https://intexuraos.eu.auth0.com/.well-known/jwks.json';
 
     fakeFirestore = createFakeFirestore();
     setFirestore(fakeFirestore as unknown as Firestore);
@@ -1248,9 +1248,9 @@ describe('POST /internal/webhooks/task-complete - Metrics recording', () => {
     process.env['INTEXURAOS_CF_ACCESS_CLIENT_SECRET'] = 'test-client-secret';
     process.env['INTEXURAOS_DISPATCH_SECRET'] = 'test-dispatch-secret';
     process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = 'test-internal-token';
-    process.env['INTEXURAOS_AUTH0_AUDIENCE'] = 'https://api.intexuraos.cloud';
-    process.env['INTEXURAOS_AUTH0_ISSUER'] = 'https://intexuraos.eu.auth0.com/';
-    process.env['INTEXURAOS_AUTH0_JWKS_URI'] = 'https://intexuraos.eu.auth0.com/.well-known/jwks.json';
+    process.env['INTEXURAOS_AUTH_AUDIENCE'] = 'https://api.intexuraos.cloud';
+    process.env['INTEXURAOS_AUTH_ISSUER'] = 'https://intexuraos.eu.auth0.com/';
+    process.env['INTEXURAOS_AUTH_JWKS_URL'] = 'https://intexuraos.eu.auth0.com/.well-known/jwks.json';
 
     fakeFirestore = createFakeFirestore();
     setFirestore(fakeFirestore as unknown as Firestore);
@@ -1558,9 +1558,9 @@ describe('POST /internal/logs', () => {
     process.env['INTEXURAOS_CF_ACCESS_CLIENT_SECRET'] = 'test-client-secret';
     process.env['INTEXURAOS_DISPATCH_SECRET'] = 'test-dispatch-secret';
     process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = 'test-internal-token';
-    process.env['INTEXURAOS_AUTH0_AUDIENCE'] = 'https://api.intexuraos.cloud';
-    process.env['INTEXURAOS_AUTH0_ISSUER'] = 'https://intexuraos.eu.auth0.com/';
-    process.env['INTEXURAOS_AUTH0_JWKS_URI'] = 'https://intexuraos.eu.auth0.com/.well-known/jwks.json';
+    process.env['INTEXURAOS_AUTH_AUDIENCE'] = 'https://api.intexuraos.cloud';
+    process.env['INTEXURAOS_AUTH_ISSUER'] = 'https://intexuraos.eu.auth0.com/';
+    process.env['INTEXURAOS_AUTH_JWKS_URL'] = 'https://intexuraos.eu.auth0.com/.well-known/jwks.json';
 
     fakeFirestore = createFakeFirestore();
     setFirestore(fakeFirestore as unknown as Firestore);
