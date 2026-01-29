@@ -46,7 +46,15 @@ export async function main(
 
   try {
     // Start HTTP server
-    const app = fastify();
+    const app = fastify({
+      logger: {
+        level: process.env['LOG_LEVEL'] ?? 'info',
+        transport:
+          process.env['NODE_ENV'] !== 'production'
+            ? { target: 'pino-pretty', options: { colorize: true } }
+            : undefined,
+      },
+    });
 
     void app.register(cors);
 
