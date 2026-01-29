@@ -60,7 +60,13 @@ export async function main(
 
     void app.register(cors);
 
-    registerRoutes(app as unknown as import('fastify').FastifyInstance, dispatcher, tokenService, config, logger);
+    registerRoutes(
+      app as unknown as import('fastify').FastifyInstance,
+      dispatcher,
+      tokenService,
+      config,
+      logger
+    );
 
     await app.listen({ port: config.port, host: '0.0.0.0' });
 
