@@ -13,7 +13,6 @@ import {
   Play,
   Plus,
   RefreshCw,
-  Share2,
   Star,
   Trash2,
   XCircle,
@@ -216,6 +215,7 @@ export function ResearchDetailPage(): React.JSX.Element {
   const [enhanceContexts, setEnhanceContexts] = useState<string[]>([]);
   const [removeContextIds, setRemoveContextIds] = useState<Set<string>>(() => new Set());
   const [enhanceSynthesisModel, setEnhanceSynthesisModel] = useState<SupportedModel | null>(null);
+  const [linksExpanded, setLinksExpanded] = useState(false);
 
   const configuredProviders: LlmProvider[] =
     keysLoading || keys === null
@@ -572,95 +572,6 @@ export function ResearchDetailPage(): React.JSX.Element {
           </span>
         </div>
 
-        {research.shareInfo !== undefined ? (
-          <div className="mt-4 flex flex-wrap items-center gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
-            <Link2 className="h-4 w-4 text-slate-500" />
-            <span className="flex-1 truncate text-sm text-slate-600">
-              {research.shareInfo.shareUrl}
-            </span>
-            <Button
-              variant="secondary"
-              onClick={(): void => {
-                window.open(research.shareInfo?.shareUrl, '_blank', 'noopener,noreferrer');
-              }}
-            >
-              <ExternalLink className="h-4 w-4 sm:mr-2" />
-              <span className="hidden sm:inline">Open</span>
-            </Button>
-            <Button
-              variant="secondary"
-              onClick={(): void => {
-                void handleCopyShareUrl();
-              }}
-            >
-              <Copy className="h-4 w-4 sm:mr-2" />
-              <span className="hidden sm:inline">Copy</span>
-            </Button>
-            <Button
-              variant="secondary"
-              onClick={(): void => {
-                void handleShare();
-              }}
-            >
-              <Share2 className="h-4 w-4 sm:mr-2" />
-              <span className="hidden sm:inline">Share</span>
-            </Button>
-            {showUnshareConfirm ? (
-              <>
-                <Button
-                  variant="danger"
-                  onClick={(): void => {
-                    void handleUnshare();
-                  }}
-                  disabled={unsharing}
-                  isLoading={unsharing}
-                >
-                  <span className="hidden sm:inline">Confirm</span>
-                  <CheckCircle className="h-4 w-4 sm:hidden" />
-                </Button>
-                <Button
-                  variant="secondary"
-                  onClick={(): void => {
-                    setShowUnshareConfirm(false);
-                  }}
-                  disabled={unsharing}
-                >
-                  <span className="hidden sm:inline">Cancel</span>
-                  <XCircle className="h-4 w-4 sm:hidden" />
-                </Button>
-              </>
-            ) : (
-              <Button
-                variant="secondary"
-                onClick={(): void => {
-                  setShowUnshareConfirm(true);
-                }}
-              >
-                <Link2Off className="h-4 w-4 sm:mr-2" />
-                <span className="hidden sm:inline">Unshare</span>
-              </Button>
-            )}
-          </div>
-        ) : null}
-
-        {research.notionExportInfo !== undefined ? (
-          <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-purple-200 bg-purple-50 px-3 py-2">
-            <span className="text-sm text-purple-700">Exported to Notion</span>
-            <a
-              href={research.notionExportInfo.mainPageUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 text-sm font-medium text-blue-600 hover:text-blue-800 hover:underline"
-            >
-              View in Notion
-              <ExternalLink className="h-3 w-3" />
-            </a>
-            <span className="text-xs text-slate-400">
-              {new Date(research.notionExportInfo.exportedAt).toLocaleDateString()}
-            </span>
-          </div>
-        ) : null}
-
         {unshareError !== null && unshareError !== '' ? (
           <div className="mt-2 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
             {unshareError}
@@ -751,9 +662,17 @@ export function ResearchDetailPage(): React.JSX.Element {
                   <Plus className="h-4 w-4 sm:mr-2" />
                   <span className="hidden sm:inline">Enhance</span>
                 </Button>
-                {research.notionExportInfo === undefined &&
-                research.synthesizedResult !== undefined &&
-                research.synthesizedResult !== '' ? (
+                {research.notionExportInfo !== undefined ? (
+                  <Button
+                    variant="secondary"
+                    onClick={(): void => {
+                      window.open(research.notionExportInfo?.mainPageUrl, '_blank', 'noopener,noreferrer');
+                    }}
+                  >
+                    <ExternalLink className="h-4 w-4 sm:mr-2" />
+                    <span className="hidden sm:inline">View in Notion</span>
+                  </Button>
+                ) : research.synthesizedResult !== undefined && research.synthesizedResult !== '' ? (
                   <Button
                     onClick={(): void => {
                       void handleExportToNotion();
@@ -774,6 +693,54 @@ export function ResearchDetailPage(): React.JSX.Element {
                       </>
                     )}
                   </Button>
+                ) : null}
+                {research.shareInfo !== undefined ? (
+                  <>
+                    <Button
+                      variant="secondary"
+                      onClick={(): void => {
+                        void handleShare();
+                      }}
+                    >
+                      <Copy className="h-4 w-4 sm:mr-2" />
+                      <span className="hidden sm:inline">Copy Link</span>
+                    </Button>
+                    {showUnshareConfirm ? (
+                      <>
+                        <Button
+                          variant="danger"
+                          onClick={(): void => {
+                            void handleUnshare();
+                          }}
+                          disabled={unsharing}
+                          isLoading={unsharing}
+                        >
+                          <span className="hidden sm:inline">Confirm Unshare</span>
+                          <CheckCircle className="h-4 w-4 sm:hidden" />
+                        </Button>
+                        <Button
+                          variant="secondary"
+                          onClick={(): void => {
+                            setShowUnshareConfirm(false);
+                          }}
+                          disabled={unsharing}
+                        >
+                          <span className="hidden sm:inline">Cancel</span>
+                          <XCircle className="h-4 w-4 sm:hidden" />
+                        </Button>
+                      </>
+                    ) : (
+                      <Button
+                        variant="secondary"
+                        onClick={(): void => {
+                          setShowUnshareConfirm(true);
+                        }}
+                      >
+                        <Link2Off className="h-4 w-4 sm:mr-2" />
+                        <span className="hidden sm:inline">Unshare</span>
+                      </Button>
+                    )}
+                  </>
                 ) : null}
               </>
             ) : null}
@@ -851,6 +818,84 @@ export function ResearchDetailPage(): React.JSX.Element {
             >
               View in Notion
             </a>
+          </div>
+        ) : null}
+
+        {/* Collapsible Links Section */}
+        {(research.shareInfo !== undefined || research.notionExportInfo !== undefined) &&
+        research.status === 'completed' ? (
+          <div className="mt-4">
+            <button
+              type="button"
+              onClick={(): void => {
+                setLinksExpanded(!linksExpanded);
+              }}
+              className="flex w-full items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600 hover:bg-slate-100 transition-colors"
+            >
+              <span className="flex items-center gap-2">
+                <Link2 className="h-4 w-4" />
+                Links
+              </span>
+              <ChevronDown
+                className={`h-4 w-4 transition-transform ${linksExpanded ? 'rotate-180' : ''}`}
+              />
+            </button>
+            {linksExpanded ? (
+              <div className="mt-2 space-y-2 rounded-lg border border-slate-200 bg-white p-3">
+                {research.shareInfo !== undefined ? (
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-medium text-slate-500 w-16">Share:</span>
+                    <a
+                      href={research.shareInfo.shareUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex-1 truncate text-sm text-blue-600 hover:underline"
+                    >
+                      {research.shareInfo.shareUrl}
+                    </a>
+                    <button
+                      type="button"
+                      onClick={(): void => {
+                        void handleCopyShareUrl();
+                      }}
+                      className="p-1 rounded hover:bg-slate-100"
+                      title="Copy link"
+                    >
+                      <Copy className="h-3.5 w-3.5 text-slate-400" />
+                    </button>
+                  </div>
+                ) : null}
+                {research.notionExportInfo !== undefined ? (
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-medium text-slate-500 w-16">Notion:</span>
+                    <a
+                      href={research.notionExportInfo.mainPageUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex-1 truncate text-sm text-blue-600 hover:underline"
+                    >
+                      {research.notionExportInfo.mainPageUrl}
+                    </a>
+                    <button
+                      type="button"
+                      onClick={(): void => {
+                        void navigator.clipboard.writeText(
+                          research.notionExportInfo?.mainPageUrl ?? ''
+                        );
+                        setShareToast('Notion link copied');
+                        setTimeout(() => {
+                          setShareToast(null);
+                        }, 2000);
+                      }}
+                      className="p-1 rounded hover:bg-slate-100"
+                      title="Copy link"
+                    >
+                      <Copy className="h-3.5 w-3.5 text-slate-400" />
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
           </div>
         ) : null}
       </div>
