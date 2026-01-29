@@ -1,5 +1,5 @@
 import { useSyncQueue } from '@/context';
-import { Layout, Card } from '@/components';
+import { Button, Card, Layout } from '@/components';
 import { Share2, CheckCircle2, Clock, AlertCircle, RefreshCw, Trash2 } from 'lucide-react';
 import { clearHistory, type ShareHistoryItem } from '@/services/shareQueue';
 import { formatRelative } from '@/utils/dateFormat';
@@ -27,9 +27,9 @@ function StatusText({ item, isOnline, authFailed }: StatusTextProps): React.JSX.
   // Synced state
   if (item.status === 'synced' && item.syncedAt !== undefined) {
     return (
-      <span className="flex items-center gap-1 text-green-600">
+      <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-800">
         <CheckCircle2 className="h-3 w-3" />
-        Synced {formatRelative(item.syncedAt)}
+        Synced
       </span>
     );
   }
@@ -37,9 +37,9 @@ function StatusText({ item, isOnline, authFailed }: StatusTextProps): React.JSX.
   // Syncing state
   if (item.status === 'syncing') {
     return (
-      <span className="flex items-center gap-1 text-blue-600">
+      <span className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-medium text-blue-800">
         <RefreshCw className="h-3 w-3 animate-spin" />
-        Syncing...
+        Syncing
       </span>
     );
   }
@@ -47,18 +47,18 @@ function StatusText({ item, isOnline, authFailed }: StatusTextProps): React.JSX.
   // Pending states
   if (!isOnline) {
     return (
-      <span className="flex items-center gap-1 text-slate-500">
+      <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-800">
         <Clock className="h-3 w-3" />
-        Waiting for connection
+        Offline
       </span>
     );
   }
 
   if (authFailed) {
     return (
-      <span className="flex items-center gap-1 text-red-600">
+      <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-medium text-red-800">
         <AlertCircle className="h-3 w-3" />
-        Sign in to sync
+        Auth Required
       </span>
     );
   }
@@ -68,9 +68,9 @@ function StatusText({ item, isOnline, authFailed }: StatusTextProps): React.JSX.
     const timeUntil = getTimeUntilRetry(item.nextRetryAt);
     if (timeUntil > 0) {
       return (
-        <span className="flex items-center gap-1 text-amber-600">
+        <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-800">
           <Clock className="h-3 w-3" />
-          Retry in {formatDuration(timeUntil)}
+          Retry {formatDuration(timeUntil)}
         </span>
       );
     }
@@ -78,7 +78,7 @@ function StatusText({ item, isOnline, authFailed }: StatusTextProps): React.JSX.
 
   // Default pending
   return (
-    <span className="flex items-center gap-1 text-amber-600">
+    <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-800">
       <Clock className="h-3 w-3" />
       Pending
     </span>
@@ -93,67 +93,65 @@ export function ShareHistoryPage(): React.JSX.Element {
     refreshHistory();
   };
 
+  const getSubtitle = (): string => {
+    if (!isOnline) return 'Offline - waiting for connection';
+    if (authFailed) return 'Sign in to sync';
+    return 'Content shared from your device';
+  };
+
   return (
     <Layout>
-      <div className="p-4 md:p-6">
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-bold text-slate-900">Share History</h2>
+          <p className={`text-slate-600 ${!isOnline ? 'text-amber-600' : authFailed ? 'text-red-600' : ''}`}>
+            {getSubtitle()}
+          </p>
+        </div>
+        {history.length > 0 && (
+          <Button variant="secondary" onClick={handleClearHistory}>
+            <Trash2 className="h-4 w-4 sm:mr-2" />
+            <span className="hidden sm:inline">Clear</span>
+          </Button>
+        )}
+      </div>
+
+      {history.length === 0 ? (
         <Card>
-          <div className="p-4 sm:p-6">
-            <div className="mb-4 flex items-center justify-between gap-3">
-              <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-100">
-                  <Share2 className="h-5 w-5 text-blue-600" />
-                </div>
-                <div>
-                  <h1 className="text-xl font-semibold text-slate-900">Share History</h1>
-                  <p className="text-sm text-slate-500">
-                    {!isOnline ? (
-                      <span className="text-amber-600">Offline</span>
-                    ) : authFailed ? (
-                      <span className="text-red-600">Sign in to sync</span>
-                    ) : null}
-                  </p>
-                </div>
-              </div>
-              {history.length > 0 && (
-                <button
-                  onClick={handleClearHistory}
-                  className="flex items-center gap-1 rounded-lg px-3 py-2 text-sm text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700"
-                  title="Clear history"
-                >
-                  <Trash2 className="h-4 w-4" />
-                  Clear
-                </button>
-              )}
-            </div>
-
-            {history.length === 0 ? (
-              <div className="py-8 text-center text-slate-500">
-                <Share2 className="mx-auto mb-2 h-10 w-10 text-slate-300" />
-                <p>No shared content yet</p>
-                <p className="mt-1 text-sm">
-                  Use your device&apos;s share menu to send content here
-                </p>
-              </div>
-            ) : (
-              <div className="divide-y divide-slate-100">
-                {history.map((item) => (
-                  <div key={item.id} className="py-3 first:pt-0 last:pb-0">
-                    {/* Content preview with overflow fix */}
-                    <p className="text-sm text-slate-900 break-all line-clamp-2">{item.contentPreview}</p>
-
-                    {/* Unified footer with status */}
-                    <div className="mt-2 flex items-center gap-2 text-xs">
-                      <span className="text-slate-500">{formatRelative(item.createdAt)}</span>
-                      <span className="text-slate-400">·</span>
-                      <StatusText item={item} isOnline={isOnline} authFailed={authFailed} />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
+          <div className="py-12 text-center">
+            <Share2 className="mx-auto mb-4 h-10 w-10 text-slate-300" />
+            <p className="mb-2 text-slate-600">No shared content yet</p>
+            <p className="text-sm text-slate-500">
+              Use your device&apos;s share menu to send content here
+            </p>
           </div>
         </Card>
-      </div>
+      ) : (
+        <div className="space-y-4">
+          {history.map((item) => (
+            <ShareHistoryCard key={item.id} item={item} isOnline={isOnline} authFailed={authFailed} />
+          ))}
+        </div>
+      )}
     </Layout>
+  );
+}
+
+interface ShareHistoryCardProps {
+  item: ShareHistoryItem;
+  isOnline: boolean;
+  authFailed: boolean;
+}
+
+function ShareHistoryCard({ item, isOnline, authFailed }: ShareHistoryCardProps): React.JSX.Element {
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white p-4 transition-shadow hover:shadow-md">
+      <p className="text-sm text-slate-900 break-all line-clamp-2">{item.contentPreview}</p>
+
+      <div className="mt-3 flex items-center justify-between">
+        <span className="text-sm text-slate-500">{formatRelative(item.createdAt)}</span>
+        <StatusText item={item} isOnline={isOnline} authFailed={authFailed} />
+      </div>
+    </div>
   );
 }
