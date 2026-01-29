@@ -8,12 +8,10 @@ import {
   Copy,
   ExternalLink,
   FileText,
-  Link2,
   Link2Off,
   Play,
   Plus,
   RefreshCw,
-  Share2,
   Star,
   Trash2,
   XCircle,
@@ -572,95 +570,6 @@ export function ResearchDetailPage(): React.JSX.Element {
           </span>
         </div>
 
-        {research.shareInfo !== undefined ? (
-          <div className="mt-4 flex flex-wrap items-center gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
-            <Link2 className="h-4 w-4 text-slate-500" />
-            <span className="flex-1 truncate text-sm text-slate-600">
-              {research.shareInfo.shareUrl}
-            </span>
-            <Button
-              variant="secondary"
-              onClick={(): void => {
-                window.open(research.shareInfo?.shareUrl, '_blank', 'noopener,noreferrer');
-              }}
-            >
-              <ExternalLink className="h-4 w-4 sm:mr-2" />
-              <span className="hidden sm:inline">Open</span>
-            </Button>
-            <Button
-              variant="secondary"
-              onClick={(): void => {
-                void handleCopyShareUrl();
-              }}
-            >
-              <Copy className="h-4 w-4 sm:mr-2" />
-              <span className="hidden sm:inline">Copy</span>
-            </Button>
-            <Button
-              variant="secondary"
-              onClick={(): void => {
-                void handleShare();
-              }}
-            >
-              <Share2 className="h-4 w-4 sm:mr-2" />
-              <span className="hidden sm:inline">Share</span>
-            </Button>
-            {showUnshareConfirm ? (
-              <>
-                <Button
-                  variant="danger"
-                  onClick={(): void => {
-                    void handleUnshare();
-                  }}
-                  disabled={unsharing}
-                  isLoading={unsharing}
-                >
-                  <span className="hidden sm:inline">Confirm</span>
-                  <CheckCircle className="h-4 w-4 sm:hidden" />
-                </Button>
-                <Button
-                  variant="secondary"
-                  onClick={(): void => {
-                    setShowUnshareConfirm(false);
-                  }}
-                  disabled={unsharing}
-                >
-                  <span className="hidden sm:inline">Cancel</span>
-                  <XCircle className="h-4 w-4 sm:hidden" />
-                </Button>
-              </>
-            ) : (
-              <Button
-                variant="secondary"
-                onClick={(): void => {
-                  setShowUnshareConfirm(true);
-                }}
-              >
-                <Link2Off className="h-4 w-4 sm:mr-2" />
-                <span className="hidden sm:inline">Unshare</span>
-              </Button>
-            )}
-          </div>
-        ) : null}
-
-        {research.notionExportInfo !== undefined ? (
-          <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-purple-200 bg-purple-50 px-3 py-2">
-            <span className="text-sm text-purple-700">Exported to Notion</span>
-            <a
-              href={research.notionExportInfo.mainPageUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 text-sm font-medium text-blue-600 hover:text-blue-800 hover:underline"
-            >
-              View in Notion
-              <ExternalLink className="h-3 w-3" />
-            </a>
-            <span className="text-xs text-slate-400">
-              {new Date(research.notionExportInfo.exportedAt).toLocaleDateString()}
-            </span>
-          </div>
-        ) : null}
-
         {unshareError !== null && unshareError !== '' ? (
           <div className="mt-2 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
             {unshareError}
@@ -751,9 +660,17 @@ export function ResearchDetailPage(): React.JSX.Element {
                   <Plus className="h-4 w-4 sm:mr-2" />
                   <span className="hidden sm:inline">Enhance</span>
                 </Button>
-                {research.notionExportInfo === undefined &&
-                research.synthesizedResult !== undefined &&
-                research.synthesizedResult !== '' ? (
+                {research.notionExportInfo !== undefined ? (
+                  <Button
+                    variant="secondary"
+                    onClick={(): void => {
+                      window.open(research.notionExportInfo?.mainPageUrl, '_blank', 'noopener,noreferrer');
+                    }}
+                  >
+                    <ExternalLink className="h-4 w-4 sm:mr-2" />
+                    <span className="hidden sm:inline">View in Notion</span>
+                  </Button>
+                ) : research.synthesizedResult !== undefined && research.synthesizedResult !== '' ? (
                   <Button
                     onClick={(): void => {
                       void handleExportToNotion();
@@ -774,6 +691,54 @@ export function ResearchDetailPage(): React.JSX.Element {
                       </>
                     )}
                   </Button>
+                ) : null}
+                {research.shareInfo !== undefined ? (
+                  <>
+                    <Button
+                      variant="secondary"
+                      onClick={(): void => {
+                        void handleShare();
+                      }}
+                    >
+                      <Copy className="h-4 w-4 sm:mr-2" />
+                      <span className="hidden sm:inline">Copy Link</span>
+                    </Button>
+                    {showUnshareConfirm ? (
+                      <>
+                        <Button
+                          variant="danger"
+                          onClick={(): void => {
+                            void handleUnshare();
+                          }}
+                          disabled={unsharing}
+                          isLoading={unsharing}
+                        >
+                          <span className="hidden sm:inline">Confirm Unshare</span>
+                          <CheckCircle className="h-4 w-4 sm:hidden" />
+                        </Button>
+                        <Button
+                          variant="secondary"
+                          onClick={(): void => {
+                            setShowUnshareConfirm(false);
+                          }}
+                          disabled={unsharing}
+                        >
+                          <span className="hidden sm:inline">Cancel</span>
+                          <XCircle className="h-4 w-4 sm:hidden" />
+                        </Button>
+                      </>
+                    ) : (
+                      <Button
+                        variant="secondary"
+                        onClick={(): void => {
+                          setShowUnshareConfirm(true);
+                        }}
+                      >
+                        <Link2Off className="h-4 w-4 sm:mr-2" />
+                        <span className="hidden sm:inline">Unshare</span>
+                      </Button>
+                    )}
+                  </>
                 ) : null}
               </>
             ) : null}
