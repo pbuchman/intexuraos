@@ -125,7 +125,10 @@ export async function processCalendarAction(
     });
   }
 
-  const currentDate = new Date().toISOString().substring(0, 10);
+  // Include day of week so LLM can calculate relative dates like "następny czwartek"
+  const now = new Date();
+  const dayOfWeek = now.toLocaleDateString('en-US', { weekday: 'long' });
+  const currentDate = `${now.toISOString().substring(0, 10)} ${dayOfWeek}`;
 
   // Check for existing preview - if ready, use its data instead of LLM extraction
   const previewResult = await calendarPreviewRepository.getByActionId(actionId);
