@@ -354,18 +354,13 @@ export class TaskDispatcher {
     const result = await this.checkForResult(task);
 
     // Determine final status
+    // Note: result.ciFailed is informational only (sent in webhook payload)
+    // PR created = completed, regardless of CI status
     let finalStatus: TaskStatus;
     let error: TaskError | undefined;
 
     if (result?.prUrl !== undefined) {
       finalStatus = 'completed';
-    } else if (result?.ciFailed === true) {
-      finalStatus = 'failed';
-      error = {
-        code: 'CI_FAILED',
-        message: 'Task completed but CI failed',
-        remediation: { action: 'fix_code', worktreePath: task.worktreePath },
-      };
     } else {
       finalStatus = 'failed';
       error = {
