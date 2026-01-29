@@ -29,6 +29,8 @@ import { exportResearchToNotion } from './infra/notion/notionResearchExporter.js
 import {
   getResearchPageId,
   saveResearchPageId,
+  getResearchSettings,
+  saveResearchSettings,
   type ResearchExportSettingsError,
   type ResearchExportSettings,
 } from './infra/firestore/researchExportSettingsRepository.js';
@@ -62,9 +64,16 @@ export interface ShareConfig {
  */
 export interface ResearchExportSettingsPort {
   getResearchPageId(userId: string): Promise<Result<string | null, ResearchExportSettingsError>>;
+  getResearchSettings(userId: string): Promise<Result<ResearchExportSettings | null, ResearchExportSettingsError>>;
   saveResearchPageId(
     userId: string,
     pageId: string
+  ): Promise<Result<ResearchExportSettings, ResearchExportSettingsError>>;
+  saveResearchSettings(
+    userId: string,
+    researchPageId: string,
+    researchPageTitle: string,
+    researchPageUrl: string
   ): Promise<Result<ResearchExportSettings, ResearchExportSettingsError>>;
 }
 
@@ -248,6 +257,8 @@ export function initializeServices(pricingContext: IPricingContext): void {
     researchExportSettings: {
       getResearchPageId,
       saveResearchPageId,
+      getResearchSettings,
+      saveResearchSettings,
     },
     pricingContext,
     generateId: (): string => crypto.randomUUID(),

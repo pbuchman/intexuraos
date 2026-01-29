@@ -6,6 +6,16 @@ import { apiRequest } from './apiClient.js';
  */
 export interface ResearchNotionSettings {
   researchPageId: string | null;
+  researchPageTitle: string | null;
+  researchPageUrl: string | null;
+}
+
+/**
+ * Validated Notion page preview result
+ */
+export interface ValidatedNotionPage {
+  title: string;
+  url: string;
 }
 
 /**
@@ -13,12 +23,14 @@ export interface ResearchNotionSettings {
  */
 export interface SavedResearchNotionSettings {
   researchPageId: string;
+  researchPageTitle: string;
+  researchPageUrl: string;
   createdAt: string;
   updatedAt: string;
 }
 
 /**
- * Get the current research export Notion page ID setting.
+ * Get the current research export Notion page settings.
  */
 export async function getResearchNotionSettings(
   accessToken: string
@@ -31,11 +43,32 @@ export async function getResearchNotionSettings(
 }
 
 /**
- * Save the research export Notion page ID setting.
+ * Validate a Notion page ID format and check if the page is accessible.
+ * Returns the page title and URL if valid.
+ */
+export async function validateResearchNotionPage(
+  accessToken: string,
+  researchPageId: string
+): Promise<ValidatedNotionPage> {
+  return await apiRequest<ValidatedNotionPage>(
+    config.ResearchAgentUrl,
+    '/research/settings/notion/validate',
+    accessToken,
+    {
+      method: 'POST',
+      body: { researchPageId },
+    }
+  );
+}
+
+/**
+ * Save the research export Notion page settings.
  */
 export async function saveResearchNotionSettings(
   accessToken: string,
-  researchPageId: string
+  researchPageId: string,
+  researchPageTitle: string,
+  researchPageUrl: string
 ): Promise<SavedResearchNotionSettings> {
   return await apiRequest<SavedResearchNotionSettings>(
     config.ResearchAgentUrl,
@@ -43,7 +76,7 @@ export async function saveResearchNotionSettings(
     accessToken,
     {
       method: 'POST',
-      body: { researchPageId },
+      body: { researchPageId, researchPageTitle, researchPageUrl },
     }
   );
 }

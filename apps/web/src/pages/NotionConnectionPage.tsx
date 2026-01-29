@@ -8,10 +8,13 @@ import {
   getNotionStatus,
   getResearchNotionSettings,
   saveResearchNotionSettings,
+  validateResearchNotionPage,
 } from '@/services';
 import type { NotionStatus } from '@/types';
 
 type ConnectionState = 'loading' | 'disconnected' | 'connected' | 'configuring';
+
+type ValidationState = 'idle' | 'validating' | 'valid' | 'error';
 
 export function NotionConnectionPage(): React.JSX.Element {
   const { getAccessToken } = useAuth();
@@ -27,6 +30,11 @@ export function NotionConnectionPage(): React.JSX.Element {
   const [isDisconnecting, setIsDisconnecting] = useState(false);
   const [isSavingResearch, setIsSavingResearch] = useState(false);
 
+  // Validation state
+  const [validationState, setValidationState] = useState<ValidationState>('idle');
+  const [validatedPage, setValidatedPage] = useState<{ title: string; url: string } | null>(null);
+  const [validationError, setValidationError] = useState<string | null>(null);
+
   const fetchStatus = useCallback(async (): Promise<void> => {
     try {
       const token = await getAccessToken();
@@ -39,8 +47,20 @@ export function NotionConnectionPage(): React.JSX.Element {
         try {
           const researchSettings = await getResearchNotionSettings(token);
           setResearchPageId(researchSettings.researchPageId ?? '');
-        } catch {
-          // Research settings are optional
+          if (researchSettings.researchPageId && researchSettings.researchPageTitle) {
+            setValidatedPage({
+              title: researchSettings.researchPageTitle,
+              url: researchSettings.researchPageUrl ?? '',
+            });
+            setValidationState('valid');
+          }
+        } catch (e) {
+          // 404 = research settings not configured yet (expected for new users)
+          // Other errors (network, 5xx) are not shown to avoid confusing users on initial load,
+          // but will surface when they try to validate/save
+          if (!(e instanceof ApiError && e.status === 404)) {
+            setValidationError('Could not load existing research settings');
+          }
         }
       } else {
         setState('disconnected');
@@ -107,15 +127,49 @@ export function NotionConnectionPage(): React.JSX.Element {
       return;
     }
 
+    if (validationState !== 'valid' || !validatedPage) {
+      setError('Please validate the page ID before saving');
+      return;
+    }
+
     try {
       setIsSavingResearch(true);
       const token = await getAccessToken();
-      await saveResearchNotionSettings(token, researchPageId.trim());
+      await saveResearchNotionSettings(
+        token,
+        researchPageId.trim(),
+        validatedPage.title,
+        validatedPage.url
+      );
       setSuccessMessage('Research export settings saved');
     } catch (e) {
       setError(e instanceof ApiError ? e.message : 'Failed to save research settings');
     } finally {
       setIsSavingResearch(false);
+    }
+  };
+
+  const handleValidateResearchPage = async (): Promise<void> => {
+    setError(null);
+    setValidationError(null);
+    setSuccessMessage(null);
+
+    const pageId = researchPageId.trim();
+    if (pageId === '') {
+      setValidationError('Please enter a Page ID');
+      return;
+    }
+
+    try {
+      setValidationState('validating');
+      const token = await getAccessToken();
+      const result = await validateResearchNotionPage(token, pageId);
+      setValidatedPage({ title: result.title, url: result.url });
+      setValidationState('valid');
+      setSuccessMessage('Page validated successfully');
+    } catch (e) {
+      setValidationState('error');
+      setValidationError(e instanceof ApiError ? e.message : 'Failed to validate page ID');
     }
   };
 
@@ -222,14 +276,65 @@ export function NotionConnectionPage(): React.JSX.Element {
                   child pages.
                 </p>
 
-                <Input
-                  label="Research Export Page ID"
-                  placeholder="Enter your Notion page ID"
-                  value={researchPageId}
-                  onChange={(e) => {
-                    setResearchPageId(e.target.value);
-                  }}
-                />
+                <div>
+                  <Input
+                    label="Research Export Page ID"
+                    placeholder="Enter your Notion page ID (32 characters or UUID format)"
+                    value={researchPageId}
+                    onChange={(e) => {
+                      setResearchPageId(e.target.value);
+                      setValidationState('idle');
+                      setValidatedPage(null);
+                      setValidationError(null);
+                    }}
+                  />
+                  <div className="mt-2 flex gap-2">
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      isLoading={validationState === 'validating'}
+                      onClick={() => void handleValidateResearchPage()}
+                      disabled={researchPageId.trim() === '' || validationState === 'validating'}
+                    >
+                      Validate
+                    </Button>
+                  </div>
+                </div>
+
+                {validationState === 'validating' && (
+                  <div className="rounded-md border border-blue-200 bg-blue-50 p-3 flex items-center gap-2">
+                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-blue-600 border-t-transparent" />
+                    <p className="text-sm text-blue-700">Validating page...</p>
+                  </div>
+                )}
+
+                {validationState === 'valid' && validatedPage !== null && (
+                  <div className="rounded-md border border-green-200 bg-green-50 p-4">
+                    <p className="text-sm font-medium text-green-800 mb-2">✓ Page validated successfully</p>
+                    <div className="text-sm text-green-700 space-y-1">
+                      <p>
+                        <span className="font-medium">Page Title:</span> {validatedPage.title}
+                      </p>
+                      <p>
+                        <span className="font-medium">Page URL:</span>{' '}
+                        <a
+                          href={validatedPage.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-blue-600 hover:underline break-all"
+                        >
+                          {validatedPage.url}
+                        </a>
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {validationState === 'error' && validationError !== null && (
+                  <div className="rounded-md border border-red-200 bg-red-50 p-3">
+                    <p className="text-sm text-red-700">{validationError}</p>
+                  </div>
+                )}
 
                 <div className="bg-slate-50 rounded-lg p-4">
                   <h4 className="text-sm font-medium text-slate-900 mb-2">How to get the Page ID:</h4>
@@ -254,16 +359,17 @@ export function NotionConnectionPage(): React.JSX.Element {
                     type="button"
                     isLoading={isSavingResearch}
                     onClick={() => void handleSaveResearchSettings()}
+                    disabled={validationState !== 'valid'}
                   >
                     Save Research Settings
                   </Button>
                 </div>
 
-                {researchPageId !== '' ? (
+                {researchPageId !== '' && validationState === 'valid' && validatedPage !== null ? (
                   <div className="mt-2 rounded-md border border-green-200 bg-green-50 p-3">
                     <p className="text-sm text-green-700">
                       <span className="font-medium">Configured:</span> Research exports will be sent
-                      to page <span className="font-mono">{researchPageId}</span>
+                      to <span className="font-medium"> {validatedPage.title}</span>
                     </p>
                   </div>
                 ) : null}

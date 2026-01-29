@@ -3,5 +3,6 @@ export type {
   NotionServiceConfig,
   NotionTokenContext,
   NotionServiceError,
+  PagePreview,
 } from './notionServiceClient.js';
 export { createNotionServiceClient } from './notionServiceClient.js';

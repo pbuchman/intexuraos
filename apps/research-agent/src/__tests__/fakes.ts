@@ -46,6 +46,8 @@ import type { NotificationSender } from '../domain/research/index.js';
 import type {
   NotionServiceClient,
   NotionTokenContext,
+  PagePreview,
+  NotionServiceError,
 } from '../infra/notion/index.js';
 import type { ResearchExportSettingsError, ResearchExportSettings } from '../infra/firestore/researchExportSettingsRepository.js';
 
@@ -697,6 +699,14 @@ export class FakeResearchExportSettings {
     return ok(setting?.researchPageId ?? null);
   }
 
+  async getResearchSettings(userId: string): Promise<Result<ResearchExportSettings | null, ResearchExportSettingsError>> {
+    const setting = this.settings.get(userId);
+    if (setting === undefined) {
+      return ok(null);
+    }
+    return ok(setting);
+  }
+
   async saveResearchPageId(
     userId: string,
     researchPageId: string
@@ -705,6 +715,27 @@ export class FakeResearchExportSettings {
     const existing = this.settings.get(userId);
     const settings: ResearchExportSettings = {
       researchPageId,
+      researchPageTitle: existing?.researchPageTitle ?? '',
+      researchPageUrl: existing?.researchPageUrl ?? '',
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+    };
+    this.settings.set(userId, settings);
+    return ok(settings);
+  }
+
+  async saveResearchSettings(
+    userId: string,
+    researchPageId: string,
+    researchPageTitle: string,
+    researchPageUrl: string
+  ): Promise<Result<ResearchExportSettings, ResearchExportSettingsError>> {
+    const now = new Date().toISOString();
+    const existing = this.settings.get(userId);
+    const settings: ResearchExportSettings = {
+      researchPageId,
+      researchPageTitle,
+      researchPageUrl,
       createdAt: existing?.createdAt ?? now,
       updatedAt: now,
     };
@@ -722,6 +753,8 @@ export class FakeResearchExportSettings {
     const existing = this.settings.get(userId);
     const settings: ResearchExportSettings = {
       researchPageId,
+      researchPageTitle: existing?.researchPageTitle ?? '',
+      researchPageUrl: existing?.researchPageUrl ?? '',
       createdAt: existing?.createdAt ?? now,
       updatedAt: now,
     };
@@ -739,12 +772,32 @@ export class FakeResearchExportSettings {
 export class FakeNotionServiceClient implements NotionServiceClient {
   private connected = false;
   private token: string | null = null;
+  private pagePreviews = new Map<string, { title: string; url: string }>();
+  private nextError: NotionServiceError | null = null;
 
   async getNotionToken(_userId: string): Promise<Result<NotionTokenContext, never>> {
     return ok({
       connected: this.connected,
       token: this.token,
     });
+  }
+
+  async getPagePreview(
+    _userId: string,
+    pageId: string,
+    _logger: unknown
+  ): Promise<Result<PagePreview, NotionServiceError>> {
+    if (this.nextError !== null) {
+      const error = this.nextError;
+      this.nextError = null;
+      return err(error);
+    }
+
+    const preview = this.pagePreviews.get(pageId);
+    if (preview === undefined) {
+      return err({ code: 'NOT_FOUND', message: 'Page not found' });
+    }
+    return ok(preview);
   }
 
   // Test helpers
@@ -757,9 +810,19 @@ export class FakeNotionServiceClient implements NotionServiceClient {
     this.connected = token !== null;
   }
 
+  setPagePreview(pageId: string, title: string, url: string): void {
+    this.pagePreviews.set(pageId, { title, url });
+  }
+
+  setNextError(error: NotionServiceError): void {
+    this.nextError = error;
+  }
+
   clear(): void {
     this.connected = false;
     this.token = null;
+    this.pagePreviews.clear();
+    this.nextError = null;
   }
 }
 

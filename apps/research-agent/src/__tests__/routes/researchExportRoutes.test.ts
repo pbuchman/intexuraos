@@ -90,6 +90,8 @@ describe('Research Export Routes - Unauthenticated', () => {
       url: '/research/settings/notion',
       payload: {
         researchPageId: 'notion-page-123',
+        researchPageTitle: 'Test',
+        researchPageUrl: 'https://notion.so/test',
       },
     });
 
@@ -97,6 +99,20 @@ describe('Research Export Routes - Unauthenticated', () => {
     const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
     expect(body.success).toBe(false);
     expect(body.error.code).toBe('UNAUTHORIZED');
+  });
+
+  it('POST /research/settings/notion/validate returns 401 without auth', async () => {
+    const response = await app.inject({
+      method: 'POST',
+      url: '/research/settings/notion/validate',
+      payload: {
+        researchPageId: 'abc123',
+      },
+    });
+
+    // Returns 401 from auth middleware
+    expect(response.statusCode).toBe(401);
+    // The response body format depends on the auth middleware
   });
 });
 
@@ -210,7 +226,7 @@ describe('Research Export Routes - Authenticated', () => {
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body) as {
         success: boolean;
-        data: { researchPageId: string | null };
+        data: { researchPageId: string | null; researchPageTitle: string | null; researchPageUrl: string | null };
       };
       expect(body.success).toBe(true);
       expect(body.data.researchPageId).toBe(testPageId);
@@ -229,10 +245,12 @@ describe('Research Export Routes - Authenticated', () => {
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body) as {
         success: boolean;
-        data: { researchPageId: string | null };
+        data: { researchPageId: string | null; researchPageTitle: string | null; researchPageUrl: string | null };
       };
       expect(body.success).toBe(true);
       expect(body.data.researchPageId).toBeNull();
+      expect(body.data.researchPageTitle).toBeNull();
+      expect(body.data.researchPageUrl).toBeNull();
     });
 
     it('returns INTERNAL_ERROR when service returns error', async () => {
@@ -242,7 +260,15 @@ describe('Research Export Routes - Authenticated', () => {
           return err({ code: 'INTERNAL_ERROR', message: 'Database connection failed' });
         }
 
+        async getResearchSettings(): Promise<Result<null, ResearchExportSettingsError>> {
+          return err({ code: 'INTERNAL_ERROR', message: 'Database connection failed' });
+        }
+
         async saveResearchPageId(): Promise<Result<never, ResearchExportSettingsError>> {
+          return err({ code: 'INTERNAL_ERROR', message: 'Not implemented' });
+        }
+
+        async saveResearchSettings(): Promise<Result<never, ResearchExportSettingsError>> {
           return err({ code: 'INTERNAL_ERROR', message: 'Not implemented' });
         }
       }
@@ -294,6 +320,174 @@ describe('Research Export Routes - Authenticated', () => {
     });
   });
 
+  describe('POST /research/settings/notion/validate', () => {
+    let fakeNotionServiceClient: FakeNotionServiceClient;
+
+    beforeEach(async () => {
+      clearJwksCache();
+      process.env['INTEXURAOS_AUTH_JWKS_URL'] = `${jwksUrl}/.well-known/jwks.json`;
+      process.env['INTEXURAOS_AUTH_ISSUER'] = issuer;
+      process.env['INTEXURAOS_AUTH_AUDIENCE'] = INTEXURAOS_AUTH_AUDIENCE;
+      process.env['INTEXURAOS_WEB_APP_URL'] = 'https://app.example.com';
+
+      fakeNotionServiceClient = new FakeNotionServiceClient();
+
+      const services: ServiceContainer = {
+        researchRepo: new FakeResearchRepository(),
+        researchExportSettings: new FakeResearchExportSettings(),
+        pricingContext: new FakePricingContext(),
+        generateId: (): string => 'generated-id-123',
+        researchEventPublisher: new FakeResearchEventPublisher(),
+        llmCallPublisher: new FakeLlmCallPublisher(),
+        userServiceClient: new FakeUserServiceClient(),
+        imageServiceClient: null,
+        notionServiceClient: fakeNotionServiceClient,
+        notificationSender: new FakeNotificationSender(),
+        shareStorage: null,
+        shareConfig: null,
+        webAppUrl: 'https://app.example.com',
+        createResearchProvider: vi.fn(),
+        createSynthesizer: vi.fn(),
+        createTitleGenerator: vi.fn(),
+        createContextInferrer: vi.fn(),
+        createInputValidator: vi.fn(),
+        notionExporter: createFakeNotionExporter(),
+      };
+      setServices(services);
+
+      app = await buildServer();
+    });
+
+    afterEach(async () => {
+      await app.close();
+      resetServices();
+      clearJwksCache();
+    });
+
+    it('returns page title and url when page is valid and accessible', async () => {
+      const pageId = 'abc123def4567890abc123def4567890';
+      fakeNotionServiceClient.setPagePreview(pageId, 'My Research Page', 'https://notion.so/page');
+
+      const token = await generateJwt(TEST_USER_ID);
+      const response = await app.inject({
+        method: 'POST',
+        url: '/research/settings/notion/validate',
+        headers: { authorization: `Bearer ${token}` },
+        payload: { researchPageId: pageId },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: { title: string; url: string };
+      };
+      expect(body.success).toBe(true);
+      expect(body.data.title).toBe('My Research Page');
+      expect(body.data.url).toBe('https://notion.so/page');
+    });
+
+    it('accepts UUID format with dashes', async () => {
+      const pageId = 'abc123de-4567-890a-bcde-1234567890ab';
+      fakeNotionServiceClient.setPagePreview(
+        'abc123de4567890abcde1234567890ab',
+        'My Page',
+        'https://notion.so/page'
+      );
+
+      const token = await generateJwt(TEST_USER_ID);
+      const response = await app.inject({
+        method: 'POST',
+        url: '/research/settings/notion/validate',
+        headers: { authorization: `Bearer ${token}` },
+        payload: { researchPageId: pageId },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as { success: boolean; data: { title: string } };
+      expect(body.success).toBe(true);
+    });
+
+    it('returns 400 when page ID format is invalid (too short)', async () => {
+      const token = await generateJwt(TEST_USER_ID);
+      const response = await app.inject({
+        method: 'POST',
+        url: '/research/settings/notion/validate',
+        headers: { authorization: `Bearer ${token}` },
+        payload: { researchPageId: 'abc' },
+      });
+
+      // Format validation happens in our handler, so we expect our custom error
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string; message: string };
+      };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INVALID_REQUEST');
+      expect(body.error.message).toContain('Invalid page ID format');
+    });
+
+    it('returns 400 when page ID format is invalid (invalid characters)', async () => {
+      const token = await generateJwt(TEST_USER_ID);
+      const response = await app.inject({
+        method: 'POST',
+        url: '/research/settings/notion/validate',
+        headers: { authorization: `Bearer ${token}` },
+        payload: { researchPageId: 'gggg1234567890123456789012345678' }, // contains 'g'
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string; message: string };
+      };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INVALID_REQUEST');
+    });
+
+    it('returns 404 when page is not accessible', async () => {
+      const pageId = 'abc123def4567890abc123def4567890';
+      // Don't set up a page preview - will return NOT_FOUND
+
+      const token = await generateJwt(TEST_USER_ID);
+      const response = await app.inject({
+        method: 'POST',
+        url: '/research/settings/notion/validate',
+        headers: { authorization: `Bearer ${token}` },
+        payload: { researchPageId: pageId },
+      });
+
+      expect(response.statusCode).toBe(404);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string; message: string };
+      };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('NOT_FOUND');
+    });
+
+    it('returns DOWNSTREAM_ERROR on service error', async () => {
+      const pageId = 'abc123def4567890abc123def4567890';
+      fakeNotionServiceClient.setNextError({ code: 'INTERNAL_ERROR', message: 'Service error' });
+
+      const token = await generateJwt(TEST_USER_ID);
+      const response = await app.inject({
+        method: 'POST',
+        url: '/research/settings/notion/validate',
+        headers: { authorization: `Bearer ${token}` },
+        payload: { researchPageId: pageId },
+      });
+
+      expect(response.statusCode).toBe(502);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string; message: string };
+      };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('DOWNSTREAM_ERROR');
+    });
+  });
+
   describe('POST /research/settings/notion', () => {
     let fakeResearchExportSettings: FakeResearchExportSettings;
 
@@ -340,6 +534,8 @@ describe('Research Export Routes - Authenticated', () => {
 
     it('saves research page ID successfully', async () => {
       const testPageId = 'notion-page-456';
+      const testPageTitle = 'My Research Page';
+      const testPageUrl = 'https://notion.so/notion-page-456';
       const token = await generateJwt(TEST_USER_ID);
       const response = await app.inject({
         method: 'POST',
@@ -349,6 +545,8 @@ describe('Research Export Routes - Authenticated', () => {
         },
         payload: {
           researchPageId: testPageId,
+          researchPageTitle: testPageTitle,
+          researchPageUrl: testPageUrl,
         },
       });
 
@@ -357,12 +555,16 @@ describe('Research Export Routes - Authenticated', () => {
         success: boolean;
         data: {
           researchPageId: string;
+          researchPageTitle: string;
+          researchPageUrl: string;
           createdAt: string;
           updatedAt: string;
         };
       };
       expect(body.success).toBe(true);
       expect(body.data.researchPageId).toBe(testPageId);
+      expect(body.data.researchPageTitle).toBe(testPageTitle);
+      expect(body.data.researchPageUrl).toBe(testPageUrl);
       expect(body.data.createdAt).toBeDefined();
       expect(body.data.updatedAt).toBeDefined();
     });
@@ -376,7 +578,9 @@ describe('Research Export Routes - Authenticated', () => {
           authorization: `Bearer ${token}`,
         },
         payload: {
-          // researchPageId is missing
+          // All fields are missing - should fail schema validation
+          researchPageTitle: 'Test',
+          researchPageUrl: 'https://notion.so/test',
         },
       });
 
@@ -397,6 +601,8 @@ describe('Research Export Routes - Authenticated', () => {
         },
         payload: {
           researchPageId: '',
+          researchPageTitle: 'Test',
+          researchPageUrl: 'https://notion.so/test',
         },
       });
 
@@ -422,6 +628,8 @@ describe('Research Export Routes - Authenticated', () => {
         },
         payload: {
           researchPageId: 12345, // number gets coerced to string "12345"
+          researchPageTitle: 'Test',
+          researchPageUrl: 'https://notion.so/test',
         },
       });
 
@@ -442,7 +650,15 @@ describe('Research Export Routes - Authenticated', () => {
           return ok(null);
         }
 
+        async getResearchSettings(): Promise<Result<null, ResearchExportSettingsError>> {
+          return ok(null);
+        }
+
         async saveResearchPageId(): Promise<Result<never, ResearchExportSettingsError>> {
+          return err({ code: 'INTERNAL_ERROR', message: 'Failed to save to database' });
+        }
+
+        async saveResearchSettings(): Promise<Result<never, ResearchExportSettingsError>> {
           return err({ code: 'INTERNAL_ERROR', message: 'Failed to save to database' });
         }
       }
@@ -484,6 +700,8 @@ describe('Research Export Routes - Authenticated', () => {
         },
         payload: {
           researchPageId: testPageId,
+          researchPageTitle: 'Test',
+          researchPageUrl: 'https://notion.so/test',
         },
       });
 

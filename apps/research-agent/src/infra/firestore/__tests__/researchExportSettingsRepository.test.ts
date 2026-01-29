@@ -1,7 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { setFirestore } from '@intexuraos/infra-firestore';
 import { isErr, isOk } from '@intexuraos/common-core';
-import { getResearchPageId, saveResearchPageId } from '../researchExportSettingsRepository.js';
+import {
+  getResearchPageId,
+  saveResearchPageId,
+  getResearchSettings,
+  saveResearchSettings,
+} from '../researchExportSettingsRepository.js';
 
 interface DocumentSnapshot {
   exists: boolean;
@@ -78,6 +83,8 @@ describe('ResearchExportSettingsRepository', () => {
       collection.set(userId, {
         userId,
         researchPageId: pageId,
+        researchPageTitle: 'My Page',
+        researchPageUrl: 'https://notion.so/page',
         createdAt: '2025-01-01T00:00:00.000Z',
         updatedAt: '2025-01-01T00:00:00.000Z',
       });
@@ -122,6 +129,29 @@ describe('ResearchExportSettingsRepository', () => {
       }
     });
 
+    it('returns null when researchPageId is an empty string', async () => {
+      const userId = 'user-empty';
+
+      // Pre-populate with empty researchPageId
+      const collection = new Map();
+      collection.set(userId, {
+        userId,
+        researchPageId: '',
+        researchPageTitle: '',
+        researchPageUrl: '',
+        createdAt: '2025-01-01T00:00:00.000Z',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      });
+      store.set('research_export_settings', collection);
+
+      const result = await getResearchPageId(userId);
+
+      expect(isOk(result)).toBe(true);
+      if (isOk(result)) {
+        expect(result.value).toBe(null);
+      }
+    });
+
     it('returns error when Firestore operation fails', async () => {
       const errorFirestore = {
         collection(): { doc(): { get(): Promise<never> } } {
@@ -144,7 +174,7 @@ describe('ResearchExportSettingsRepository', () => {
       expect(isErr(result)).toBe(true);
       if (isErr(result)) {
         expect(result.error.code).toBe('INTERNAL_ERROR');
-        expect(result.error.message).toContain('Failed to get research page ID');
+        expect(result.error.message).toContain('Failed to get research settings');
       }
     });
   });
@@ -167,7 +197,14 @@ describe('ResearchExportSettingsRepository', () => {
       const collection = store.get('research_export_settings');
       expect(collection).toBeDefined();
       const doc = collection?.get(userId) as
-        | { userId: string; researchPageId: string; createdAt: string; updatedAt: string }
+        | {
+            userId: string;
+            researchPageId: string;
+            researchPageTitle: string;
+            researchPageUrl: string;
+            createdAt: string;
+            updatedAt: string;
+          }
         | undefined;
       expect(doc).toBeDefined();
       expect(doc?.researchPageId).toBe(pageId);
@@ -184,6 +221,8 @@ describe('ResearchExportSettingsRepository', () => {
       collection.set(userId, {
         userId,
         researchPageId: oldPageId,
+        researchPageTitle: 'Old Title',
+        researchPageUrl: 'https://notion.so/old',
         createdAt,
         updatedAt: '2025-01-01T00:00:00.000Z',
       });
@@ -215,6 +254,8 @@ describe('ResearchExportSettingsRepository', () => {
       collection.set(userId, {
         userId,
         researchPageId: 'page-old',
+        researchPageTitle: '',
+        researchPageUrl: '',
         updatedAt: '2025-01-01T00:00:00.000Z',
       });
       store.set('research_export_settings', collection);
@@ -253,7 +294,116 @@ describe('ResearchExportSettingsRepository', () => {
       expect(isErr(result)).toBe(true);
       if (isErr(result)) {
         expect(result.error.code).toBe('INTERNAL_ERROR');
-        expect(result.error.message).toContain('Failed to save research page ID');
+        expect(result.error.message).toContain('Failed to save research settings');
+      }
+    });
+  });
+
+  describe('getResearchSettings', () => {
+    it('returns full settings including title and url', async () => {
+      const userId = 'user-123';
+      const pageId = 'page-abc';
+      const pageTitle = 'My Research Page';
+      const pageUrl = 'https://notion.so/page-abc';
+
+      // Pre-populate store
+      const collection = new Map();
+      collection.set(userId, {
+        userId,
+        researchPageId: pageId,
+        researchPageTitle: pageTitle,
+        researchPageUrl: pageUrl,
+        createdAt: '2025-01-01T00:00:00.000Z',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      });
+      store.set('research_export_settings', collection);
+
+      const result = await getResearchSettings(userId);
+
+      expect(isOk(result)).toBe(true);
+      if (isOk(result) && result.value !== null) {
+        expect(result.value.researchPageId).toBe(pageId);
+        expect(result.value.researchPageTitle).toBe(pageTitle);
+        expect(result.value.researchPageUrl).toBe(pageUrl);
+        expect(result.value.createdAt).toBeDefined();
+        expect(result.value.updatedAt).toBeDefined();
+      }
+    });
+
+    it('returns null when user has no settings', async () => {
+      const userId = 'user-456';
+
+      const result = await getResearchSettings(userId);
+
+      expect(isOk(result)).toBe(true);
+      if (isOk(result)) {
+        expect(result.value).toBeNull();
+      }
+    });
+  });
+
+  describe('saveResearchSettings', () => {
+    it('saves all fields including title and url', async () => {
+      const userId = 'user-new';
+      const pageId = 'page-xyz';
+      const pageTitle = 'My Research Page';
+      const pageUrl = 'https://notion.so/page-xyz';
+
+      const result = await saveResearchSettings(userId, pageId, pageTitle, pageUrl);
+
+      expect(isOk(result)).toBe(true);
+      if (isOk(result)) {
+        expect(result.value.researchPageId).toBe(pageId);
+        expect(result.value.researchPageTitle).toBe(pageTitle);
+        expect(result.value.researchPageUrl).toBe(pageUrl);
+        expect(result.value.createdAt).toBeDefined();
+        expect(result.value.updatedAt).toBeDefined();
+      }
+
+      // Verify stored in Firestore
+      const collection = store.get('research_export_settings');
+      expect(collection).toBeDefined();
+      const doc = collection?.get(userId) as
+        | {
+            userId: string;
+            researchPageId: string;
+            researchPageTitle: string;
+            researchPageUrl: string;
+            createdAt: string;
+            updatedAt: string;
+          }
+        | undefined;
+      expect(doc).toBeDefined();
+      expect(doc?.researchPageId).toBe(pageId);
+      expect(doc?.researchPageTitle).toBe(pageTitle);
+      expect(doc?.researchPageUrl).toBe(pageUrl);
+    });
+
+    it('preserves createdAt when updating existing settings', async () => {
+      const userId = 'user-existing';
+      const newPageId = 'page-new';
+      const newTitle = 'New Title';
+      const newUrl = 'https://notion.so/page-new';
+      const createdAt = '2025-01-01T00:00:00.000Z';
+
+      // Pre-populate with existing settings
+      const collection = new Map();
+      collection.set(userId, {
+        userId,
+        researchPageId: 'page-old',
+        researchPageTitle: 'Old Title',
+        researchPageUrl: 'https://notion.so/old',
+        createdAt,
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      });
+      store.set('research_export_settings', collection);
+
+      const result = await saveResearchSettings(userId, newPageId, newTitle, newUrl);
+
+      expect(isOk(result)).toBe(true);
+      if (isOk(result)) {
+        expect(result.value.createdAt).toBe(createdAt); // Preserved
+        expect(result.value.updatedAt).not.toBe(createdAt); // Updated
       }
     });
   });
