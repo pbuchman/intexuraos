@@ -8,7 +8,7 @@ import type { PromptBuilder, PromptDeps } from '../types.js';
 export interface CalendarEventExtractionPromptInput {
   /** The user message to extract calendar event from */
   text: string;
-  /** Current date in ISO-8601 format (YYYY-MM-DD) for relative date calculations */
+  /** Current date with day of week for relative date calculations (e.g., "2026-01-29 Wednesday") */
   currentDate: string;
 }
 
@@ -59,9 +59,19 @@ export const calendarActionExtractionPrompt: PromptBuilder<
         ? `\n\n⚠️ IMPORTANT: Text was truncated to first ${String(maxLength)} characters.\n`
         : '';
 
+    // Extract date part from "YYYY-MM-DD DayOfWeek" format for template literal examples
+    const parts = input.currentDate.split(' ');
+    const datePart = parts[0] ?? input.currentDate;
+
     return `Extract calendar event information from the user's message.
 
 CURRENT DATE: ${input.currentDate}
+
+IMPORTANT: The current date includes the DAY OF WEEK. Use this to calculate relative dates.
+Example: If current date is "2026-01-29 Wednesday", then:
+- "jutro" (tomorrow) = 2026-01-30 Thursday
+- "w następny czwartek" (next Thursday) = 2026-01-30 Thursday (same week)
+- "w nastepny poniedzialek" (next Monday) = 2026-02-02 Monday (next week)
 
 TASK: Parse the message and extract a structured calendar event.
 
@@ -71,13 +81,24 @@ RULES:
    - Polish message → Polish summary/description
 
 2. DATE/TIME PARSING (from current date ${input.currentDate}):
-   - "today" / "dziś" → ${input.currentDate}
+   RELATIVE DATES (calculate from current date, including day of week):
+   - "today" / "dziś" → ${datePart}
    - "tomorrow" / "jutro" → current date + 1 day
-   - "in 2 days" / "za 2 dni" → current date + 2 days
-   - "next Monday" / "następny poniedziałek" → next Monday
-   - "on Friday" / "w piątek" → next or current Friday depending on context
-   - "at 3pm" / "o 15:00" → append to the date
-   - "3pm tomorrow" / "jutro o 15" → tomorrow at 15:00
+   - "day after tomorrow" / "pojutrze" → current date + 2 days
+   - "in X days" / "za X dni" → current date + X days
+   - "next [day]" / "następny [dzień]" → next occurrence of that weekday
+     * "next Monday" / "następny poniedziałek" → find next Monday
+     * "on Thursday" / "w czwartek" → this Thursday if upcoming, else next Thursday
+   - "w nastepny [dzień tygodnia]" → same as "następny [dzień]"
+
+   POLISH MONTH NAMES (you MUST recognize these):
+   - stycznia = January, lutego = February, marca = March, kwietnia = April
+   - maja = May, czerwca = June, lipca = July, sierpnia = August
+   - września = September, października = October, listopada = November, grudnia = December
+
+   TIME FORMATS:
+   - "at 3pm" / "o 15:00" / "o 15 30" → parse as 24-hour time
+   - "3pm tomorrow" / "jutro o 15" / "jutro o 15:30" → combine date + time
    - If no time specified → use 09:00 as default start time
    - If no end time specified → assume 1 hour duration
 
@@ -98,7 +119,7 @@ RULES:
 6. VALIDATION:
    - valid = true ONLY if summary and start are both present and parseable
    - valid = false if missing critical information (what/when)
-   - error: Brief explanation of what's missing when invalid
+   - error: Brief explanation of what's missing when invalid (in same language as input)
 
 EXAMPLES (ENGLISH):
 
@@ -156,7 +177,35 @@ Output:
   "reasoning": "Wyodrębniono tytuł, datę (jutro) i godzinę (15:00)"
 }
 
+Input: "fizjoterapia Myśliwska w nastepny czwartek o 15 30"
+Current date: "2026-01-29 Thursday"
+Output:
+{
+  "summary": "Fizjoterapia Myśliwska",
+  "start": "2026-01-30T15:30:00",
+  "end": "2026-01-30T16:30:00",
+  "location": "Myśliwska",
+  "description": null,
+  "valid": true,
+  "error": null,
+  "reasoning": "Wyodrębniono tytuł, lokalizację (Myśliwska), datę (następny czwartek = 2026-01-30) i godzinę (15:30)"
+}
+
+Input: "fizjoterapia myśliwska o 15 30 5 lutego 2026"
+Output:
+{
+  "summary": "Fizjoterapia Myśliwska",
+  "start": "2026-02-05T15:30:00",
+  "end": "2026-02-05T16:30:00",
+  "location": "Myśliwska",
+  "description": null,
+  "valid": true,
+  "error": null,
+  "reasoning": "Wyodrębniono tytuł, lokalizację, datę (5 lutego 2026 = 2026-02-05) i godzinę (15:30)"
+}
+
 Input: "Obiad u mamy w niedzielę o 14"
+Current date: "2024-01-17 Wednesday"
 Output:
 {
   "summary": "Obiad u mamy",
@@ -166,7 +215,7 @@ Output:
   "description": null,
   "valid": true,
   "error": null,
-  "reasoning": "Lokalizacja wyodrębniona jako 'u mamy', niedziela jako data"
+  "reasoning": "Lokalizacja wyodrębniona jako 'u mamy', niedziela jako data (2024-01-21)"
 }
 
 Input: "Wizyta lekarska"

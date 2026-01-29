@@ -41,7 +41,10 @@ export function createHandleCalendarActionUseCase(
       );
 
       // Trigger preview generation asynchronously via Pub/Sub
-      const currentDate = new Date().toISOString().substring(0, 10);
+      // Include day of week so LLM can calculate relative dates like "następny czwartek" (next Thursday)
+      const now = new Date();
+      const dayOfWeek = now.toLocaleDateString('en-US', { weekday: 'long' });
+      const currentDate = `${now.toISOString().substring(0, 10)} ${dayOfWeek}`;
       const previewResult = await calendarPreviewPublisher.publishGeneratePreview({
         actionId: event.actionId,
         userId: event.userId,
