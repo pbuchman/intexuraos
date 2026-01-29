@@ -1,10 +1,13 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { createHmac } from 'node:crypto';
-import { registerRoutes } from '../routes.js';
+import { registerRoutes, cleanUpExpiredNonces } from '../routes.js';
 import type { TaskDispatcher } from '../services/task-dispatcher.js';
 import type { GitHubTokenService } from '../github/token-service.js';
 import type { Logger } from '@intexuraos/common-core';
+
+// Helper type for nonce cache (same as in routes.ts)
+type NonceCache = Record<string, number>;
 
 describe('Routes', () => {
   let app: FastifyInstance;
@@ -548,13 +551,122 @@ describe('Routes', () => {
       expect(response.statusCode).toBe(202);
     });
 
-    it('should clean up old nonce entries when cache exceeds 10000 entries', async () => {
-      // This code path is difficult to test without performance impact
-      // The cleanup logic only triggers at 10000+ nonce entries
-      // Testing this would require sending thousands of requests which slows down CI
-      // The logic is straightforward: iterate and delete old entries
-      // Skipping practical test for this edge case
-      expect(true).toBe(true);
+    describe('cleanUpExpiredNonces function', () => {
+      const now = 1000000;
+      const ttlMs = 10 * 60 * 1000; // 10 minutes (same as NONCE_CACHE_TTL_MS)
+      const expiredTime = now - ttlMs - 1000; // 11 minutes ago (expired)
+      const validTime = now - 5 * 60 * 1000; // 5 minutes ago (still valid)
+
+      it('should not delete entries when cache size is at or below threshold', () => {
+        const cache: NonceCache = {
+          'nonce-1': expiredTime,
+          'nonce-2': validTime,
+        };
+
+        cleanUpExpiredNonces(cache, now, 5);
+
+        // Nothing should be deleted since we're below threshold
+        expect(cache).toHaveProperty('nonce-1');
+        expect(cache).toHaveProperty('nonce-2');
+      });
+
+      it('should delete expired entries when cache exceeds threshold', () => {
+        const cache: NonceCache = {
+          'nonce-expired-1': expiredTime,
+          'nonce-expired-2': expiredTime,
+          'nonce-valid-1': validTime,
+          'nonce-valid-2': validTime,
+        };
+
+        // Threshold of 3, we have 4 entries → cleanup should run
+        cleanUpExpiredNonces(cache, now, 3);
+
+        // Expired entries should be deleted
+        expect(cache).not.toHaveProperty('nonce-expired-1');
+        expect(cache).not.toHaveProperty('nonce-expired-2');
+
+        // Valid entries should remain
+        expect(cache).toHaveProperty('nonce-valid-1');
+        expect(cache).toHaveProperty('nonce-valid-2');
+      });
+
+      it('should handle all entries expired', () => {
+        const cache: NonceCache = {
+          'nonce-1': expiredTime,
+          'nonce-2': expiredTime,
+          'nonce-3': expiredTime,
+          'nonce-4': expiredTime,
+        };
+
+        cleanUpExpiredNonces(cache, now, 3);
+
+        // All should be deleted
+        expect(Object.keys(cache)).toHaveLength(0);
+      });
+
+      it('should handle all entries valid', () => {
+        const cache: NonceCache = {
+          'nonce-1': validTime,
+          'nonce-2': validTime,
+          'nonce-3': validTime,
+          'nonce-4': validTime,
+        };
+
+        const initialSize = Object.keys(cache).length;
+        cleanUpExpiredNonces(cache, now, 3);
+
+        // None should be deleted
+        expect(Object.keys(cache)).toHaveLength(initialSize);
+        expect(cache).toHaveProperty('nonce-1');
+        expect(cache).toHaveProperty('nonce-2');
+        expect(cache).toHaveProperty('nonce-3');
+        expect(cache).toHaveProperty('nonce-4');
+      });
+
+      it('should handle mixed entries with some at exact cutoff boundary', () => {
+        const exactCutoff = now - ttlMs; // Exactly at cutoff (not expired yet)
+
+        const cache: NonceCache = {
+          'nonce-expired': expiredTime,
+          'nonce-exact-cutoff': exactCutoff,
+          'nonce-valid': validTime,
+        };
+
+        cleanUpExpiredNonces(cache, now, 2);
+
+        // Only the truly expired entry should be deleted
+        expect(cache).not.toHaveProperty('nonce-expired');
+        expect(cache).toHaveProperty('nonce-exact-cutoff'); // Not < cutoff, so stays
+        expect(cache).toHaveProperty('nonce-valid');
+      });
+
+      it('should use default threshold when not specified', () => {
+        const cache: NonceCache = {
+          'nonce-1': expiredTime,
+          'nonce-2': validTime,
+        };
+
+        // Default threshold is 10000, so with only 2 entries, no cleanup
+        cleanUpExpiredNonces(cache, now);
+
+        expect(cache).toHaveProperty('nonce-1');
+        expect(cache).toHaveProperty('nonce-2');
+      });
+
+      it('should handle undefined timestamp values in cache', () => {
+        const cache: NonceCache = {
+          'nonce-1': expiredTime,
+          'nonce-2': validTime,
+          'nonce-3': undefined as unknown as number, // Simulate undefined entry
+        };
+
+        cleanUpExpiredNonces(cache, now, 2);
+
+        // Undefined should not cause deletion
+        expect(cache).not.toHaveProperty('nonce-1');
+        expect(cache).toHaveProperty('nonce-2');
+        expect(cache).toHaveProperty('nonce-3');
+      });
     });
   });
 

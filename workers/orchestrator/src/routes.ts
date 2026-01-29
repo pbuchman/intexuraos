@@ -15,8 +15,36 @@ type TaskBodyRequest = FastifyRequest<{ Body: unknown }>;
 
 const NONCE_CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
 const TIMESTAMP_TOLERANCE_MS = 5 * 60 * 1000; // 5 minutes
+const NONCE_CACHE_CLEANUP_THRESHOLD = 10000; // Clean up when cache exceeds this size
 
 type NonceCache = Record<string, number>;
+
+/**
+ * Removes expired nonce entries from the cache when it exceeds the threshold.
+ * Extracted for testability — allows testing cleanup logic with small thresholds.
+ *
+ * @param nonceCache - The cache to clean up (modified in place)
+ * @param now - Current timestamp in milliseconds
+ * @param cleanupThreshold - Minimum cache size to trigger cleanup
+ */
+export function cleanUpExpiredNonces(
+  nonceCache: NonceCache,
+  now: number,
+  cleanupThreshold = NONCE_CACHE_CLEANUP_THRESHOLD
+): void {
+  const nonceKeys = Object.keys(nonceCache);
+  if (nonceKeys.length <= cleanupThreshold) {
+    return;
+  }
+
+  const cutoff = now - NONCE_CACHE_TTL_MS;
+  for (const key of nonceKeys) {
+    const cachedTimestamp = nonceCache[key];
+    if (cachedTimestamp !== undefined && cachedTimestamp < cutoff) {
+      Reflect.deleteProperty(nonceCache, key);
+    }
+  }
+}
 
 export function registerRoutes(
   app: FastifyInstance,
@@ -71,16 +99,7 @@ export function registerRoutes(
     nonceCache[nonce] = timestampNum;
 
     // Clean up old nonces periodically
-    const nonceKeys = Object.keys(nonceCache);
-    if (nonceKeys.length > 10000) {
-      const cutoff = now - NONCE_CACHE_TTL_MS;
-      for (const key of nonceKeys) {
-        const cachedTimestamp = nonceCache[key];
-        if (cachedTimestamp !== undefined && cachedTimestamp < cutoff) {
-          Reflect.deleteProperty(nonceCache, key);
-        }
-      }
-    }
+    cleanUpExpiredNonces(nonceCache, now);
   };
 
   // POST /tasks - Submit new task
