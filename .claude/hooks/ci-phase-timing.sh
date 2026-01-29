@@ -9,14 +9,15 @@ PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$(cd "$SCRIPT_DIR/../.." && pwd)}"
 LOG_FILE="${SCRIPT_DIR}/ci-phases.log"
 
 INPUT=$(cat)
-TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name // ""')
+TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name // ""' 2>/dev/null || echo "")
 
 [[ "$TOOL_NAME" != "Bash" ]] && exit 0
 
-COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // ""')
+COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // ""' 2>/dev/null || echo "")
 [[ "$COMMAND" != *"ci:tracked"* ]] && exit 0
 
-TOOL_OUTPUT=$(echo "$INPUT" | jq -r '.tool_result // ""')
+# tool_response.stdout contains the command output
+TOOL_OUTPUT=$(echo "$INPUT" | jq -r '.tool_response.stdout // ""' 2>/dev/null || echo "")
 [[ -z "$TOOL_OUTPUT" ]] && exit 0
 
 PHASE_TIMINGS=$(echo "$TOOL_OUTPUT" | grep -o '@@PHASE_TIMING@@.*' || true)
