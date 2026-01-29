@@ -135,6 +135,40 @@ describe('HeartbeatManager', () => {
     expect(capturedAuthHeader).toBe('test-internal-auth-secret');
   });
 
+  it('should use empty string when internal auth env var is not set', async () => {
+    let capturedAuthHeader: string | undefined;
+
+    mockFetch.mockImplementation(async (_url: string, options?: RequestInit) => {
+      const headers = options?.headers as Record<string, string>;
+      capturedAuthHeader = headers?.['X-Internal-Auth'];
+      return {
+        ok: true,
+        json: async () => ({}),
+      } as Response;
+    });
+
+    // Delete env var and create new manager
+    delete process.env['INTEXURAOS_INTERNAL_AUTH_SECRET'];
+    const noAuthManager = createHeartbeatManager(
+      {
+        codeAgentUrl: 'https://code-agent.test',
+        intervalMs: 60_000,
+      },
+      logger
+    );
+
+    noAuthManager.registerTask('task-1');
+    noAuthManager.start();
+
+    await vi.advanceTimersByTimeAsync(60_000);
+
+    expect(capturedAuthHeader).toBe('');
+
+    // Restore env var for other tests
+    process.env['INTEXURAOS_INTERNAL_AUTH_SECRET'] = 'test-internal-auth-secret';
+    noAuthManager.stop();
+  });
+
   it('should handle fetch errors gracefully', async () => {
     mockFetch.mockRejectedValue(new Error('Network error'));
 
@@ -144,7 +178,7 @@ describe('HeartbeatManager', () => {
     await vi.advanceTimersByTimeAsync(60_000);
 
     // Should not throw, just log error
-    const errorCalls = loggerCalls.filter((call) => call.level === 'error');
+    const errorCalls = loggerCalls.filter((call) => call['level'] === 'error');
     expect(errorCalls.length).toBeGreaterThan(0);
   });
 
@@ -160,7 +194,7 @@ describe('HeartbeatManager', () => {
     await vi.advanceTimersByTimeAsync(60_000);
 
     // Should not throw, just log warning
-    const warnCalls = loggerCalls.filter((call) => call.level === 'warn');
+    const warnCalls = loggerCalls.filter((call) => call['level'] === 'warn');
     expect(warnCalls.length).toBeGreaterThan(0);
   });
 
@@ -240,10 +274,10 @@ describe('HeartbeatManager', () => {
     await vi.advanceTimersByTimeAsync(60_000);
 
     // Should not throw, just log error
-    const errorCalls = loggerCalls.filter((call) => call.level === 'error');
+    const errorCalls = loggerCalls.filter((call) => call['level'] === 'error');
     expect(errorCalls.length).toBeGreaterThan(0);
     const stringErrorCall = errorCalls.find(
-      (call) => typeof call.data === 'object' && call.data !== null && 'error' in call.data
+      (call) => typeof call['data'] === 'object' && call['data'] !== null && 'error' in call['data']
     );
     expect(stringErrorCall).toBeDefined();
   });
@@ -262,7 +296,7 @@ describe('HeartbeatManager', () => {
     await vi.advanceTimersByTimeAsync(60_000);
 
     // Should not throw, just log error
-    const errorCalls = loggerCalls.filter((call) => call.level === 'error');
+    const errorCalls = loggerCalls.filter((call) => call['level'] === 'error');
     expect(errorCalls.length).toBeGreaterThan(0);
   });
 
@@ -277,7 +311,7 @@ describe('HeartbeatManager', () => {
     manager.stop();
 
     // Should not throw, just log debug message
-    const debugCalls = loggerCalls.filter((call) => call.level === 'debug');
+    const debugCalls = loggerCalls.filter((call) => call['level'] === 'debug');
     expect(debugCalls.length).toBeGreaterThan(0);
 
     // Now start and verify it works
