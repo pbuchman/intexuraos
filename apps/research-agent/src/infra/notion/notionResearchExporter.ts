@@ -12,8 +12,15 @@ import {
   type NotionClient,
   type NotionLogger,
 } from '@intexuraos/infra-notion';
+import { stripAttributionLines } from '@intexuraos/llm-prompts';
 import type { Research } from '../../domain/research/models/Research.js';
 import { markdownToNotionBlocks } from './markdownToNotionBlocks.js';
+
+// ============================================================================
+// Constants
+// ============================================================================
+
+const NOTION_BLOCK_LIMIT = 100;
 
 // ============================================================================
 // Types
@@ -59,6 +66,39 @@ interface LocalNotionError {
   code: LocalNotionErrorCode;
   message: string;
 }
+
+// ============================================================================
+// Block types for batching
+// ============================================================================
+
+type AppendableBlockArray = Parameters<NotionClient['blocks']['children']['append']>[0]['children'];
+
+// ============================================================================
+// Batch append helper
+// ============================================================================
+
+async function appendBlocksInBatches(
+  client: NotionClient,
+  pageId: string,
+  blocks: AppendableBlockArray,
+  logger: NotionLogger
+): Promise<void> {
+  for (let i = 0; i < blocks.length; i += NOTION_BLOCK_LIMIT) {
+    const batch = blocks.slice(i, i + NOTION_BLOCK_LIMIT);
+    logger.debug(
+      'Appending block batch',
+      { pageId, batchStart: i, batchSize: batch.length }
+    );
+    await client.blocks.children.append({
+      block_id: pageId,
+      children: batch,
+    });
+  }
+}
+
+// ============================================================================
+// Error mapping
+// ============================================================================
 
 function mapExportError(e: LocalNotionError): NotionResearchExportError {
   const code = e.code;
@@ -140,7 +180,9 @@ export async function exportResearchToNotion(
     }
 
     // Create main research page - convert markdown to Notion blocks
-    const synthesisBlocks = markdownToNotionBlocks(stripHiddenContent(research.synthesizedResult));
+    // Strip hidden content and attribution lines (like HTML export)
+    const cleanedSynthesis = stripAttributionLines(stripHiddenContent(research.synthesizedResult));
+    const synthesisBlocks = markdownToNotionBlocks(cleanedSynthesis);
 
     // Notion SDK types are strict but our blocks are compatible
     const mainPageChildren = [
@@ -158,18 +200,30 @@ export async function exportResearchToNotion(
       },
     ];
 
+    // Batch blocks: Notion API limits pages.create to 100 children
+    const firstBatch = mainPageChildren.slice(0, NOTION_BLOCK_LIMIT);
+    const remainingBlocks = mainPageChildren.slice(NOTION_BLOCK_LIMIT);
+
     const mainPageResponse = await client.pages.create({
       parent: { page_id: targetPageId },
       properties: {
         title: { title: [{ text: { content: research.title || 'Research' } }] },
       },
       // Our block types are compatible with Notion SDK's BlockObjectRequest
-      children: mainPageChildren as NonNullable<Parameters<typeof client.pages.create>[0]['children']>,
+      children: firstBatch as NonNullable<Parameters<typeof client.pages.create>[0]['children']>,
     });
 
-     
     const mainPageId = mainPageResponse.id;
-     
+
+    // Append remaining blocks in batches if any
+    if (remainingBlocks.length > 0) {
+      logger.info(
+        'Appending additional blocks to main page',
+        { remainingBlocks: remainingBlocks.length }
+      );
+      await appendBlocksInBatches(client, mainPageId, remainingBlocks as AppendableBlockArray, logger);
+    }
+
     const mainPageUrl =
       'url' in mainPageResponse && typeof mainPageResponse.url === 'string'
         ? mainPageResponse.url
@@ -181,10 +235,12 @@ export async function exportResearchToNotion(
     // Create child pages for each completed LLM result
     for (const llmResult of completedResults) {
       // Convert LLM result markdown to Notion blocks
-      const resultBlocks =
+      // Strip hidden content and attribution lines (like HTML export)
+      const cleanedResult =
         llmResult.result !== undefined && llmResult.result !== ''
-          ? markdownToNotionBlocks(stripHiddenContent(llmResult.result))
-          : [];
+          ? stripAttributionLines(stripHiddenContent(llmResult.result))
+          : '';
+      const resultBlocks = cleanedResult !== '' ? markdownToNotionBlocks(cleanedResult) : [];
 
       // Build source list items if available
       const sourceBlocks =
@@ -218,17 +274,30 @@ export async function exportResearchToNotion(
         ...sourceBlocks,
       ];
 
+      // Batch blocks for LLM child pages too
+      const childFirstBatch = childBlocks.slice(0, NOTION_BLOCK_LIMIT);
+      const childRemainingBlocks = childBlocks.slice(NOTION_BLOCK_LIMIT);
+
       const pageResponse = await client.pages.create({
         parent: { page_id: mainPageId },
         properties: {
           title: { title: [{ text: { content: `[${llmResult.model}] Report` } }] },
         },
         // Our block types are compatible with Notion SDK's BlockObjectRequest
-        children: childBlocks as NonNullable<Parameters<typeof client.pages.create>[0]['children']>,
+        children: childFirstBatch as NonNullable<Parameters<typeof client.pages.create>[0]['children']>,
       });
 
       const pageId = pageResponse.id;
-       
+
+      // Append remaining blocks in batches if any
+      if (childRemainingBlocks.length > 0) {
+        logger.info(
+          'Appending additional blocks to LLM report page',
+          { model: llmResult.model, remainingBlocks: childRemainingBlocks.length }
+        );
+        await appendBlocksInBatches(client, pageId, childRemainingBlocks as AppendableBlockArray, logger);
+      }
+
       const pageUrl =
         'url' in pageResponse && typeof pageResponse.url === 'string'
           ? pageResponse.url
