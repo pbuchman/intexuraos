@@ -5,6 +5,7 @@
  * Based on design doc: docs/designs/INT-156-code-action-type.md lines 1454-1469
  */
 
+import type { Result } from '@intexuraos/common-core';
 import type { CodeActionPayload } from '../models/action.js';
 
 export interface CodeAgentClient {
@@ -46,5 +47,3 @@ export interface CancelTaskError {
   code: 'TASK_NOT_FOUND' | 'INVALID_NONCE' | 'NONCE_EXPIRED' | 'NOT_OWNER' | 'TASK_NOT_CANCELLABLE' | 'NETWORK_ERROR' | 'UNKNOWN';
   message: string;
 }
-
-import type { Result } from '@intexuraos/common-core';
