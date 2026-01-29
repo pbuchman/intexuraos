@@ -1,7 +1,8 @@
 /* eslint-disable @typescript-eslint/unbound-method */
 
 import { readFile } from 'node:fs/promises';
-import { sign } from 'jsonwebtoken';
+import jwt from 'jsonwebtoken';
+const { sign } = jwt;
 import type { Result } from '@intexuraos/common-core';
 
 export interface TokenError {

@@ -487,6 +487,10 @@ module "secret_manager" {
     "INTEXURAOS_CF_ACCESS_CLIENT_SECRET" = "Cloudflare Access service token client secret"
     "INTEXURAOS_DISPATCH_SIGNING_SECRET" = "HMAC signing secret for code-agent to orchestrator dispatch requests"
     "INTEXURAOS_WEBHOOK_VERIFY_SECRET"   = "HMAC signing secret for orchestrator webhook callbacks to code-agent"
+    # GitHub App for code worker PRs (INT-156)
+    "INTEXURAOS_GITHUB_APP_PRIVATE_KEY"  = "GitHub App private key (PEM format) for code worker authentication"
+    "INTEXURAOS_GITHUB_APP_ID"           = "GitHub App ID for code worker"
+    "INTEXURAOS_GITHUB_INSTALLATION_ID"  = "GitHub App installation ID for pbuchman/intexuraos"
   }
 
   depends_on = [google_project_service.apis]

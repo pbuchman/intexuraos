@@ -4,8 +4,11 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { GitHubTokenService } from '../github/token-service.js';
 
-// Mock the jsonwebtoken module
+// Mock the jsonwebtoken module (default export for ESM compatibility)
 vi.mock('jsonwebtoken', () => ({
+  default: {
+    sign: vi.fn(() => 'mock_jwt_token'),
+  },
   sign: vi.fn(() => 'mock_jwt_token'),
 }));
 
