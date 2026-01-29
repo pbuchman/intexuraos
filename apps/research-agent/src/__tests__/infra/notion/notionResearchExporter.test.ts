@@ -506,16 +506,7 @@ describe('exportResearchToNotion', () => {
   });
 
   describe('cover image handling', () => {
-    beforeEach(() => {
-      // Set up the environment variable for image public base URL
-      process.env['INTEXURAOS_IMAGE_PUBLIC_BASE_URL'] = 'https://example.intexuraos.com';
-    });
-
-    afterEach(() => {
-      delete process.env['INTEXURAOS_IMAGE_PUBLIC_BASE_URL'];
-    });
-
-    it('adds image block when research has coverImageId', async () => {
+    it('adds image block when research has coverImageUrl', async () => {
       const mockPagesCreate = vi.mocked(mockClient.pages.create);
 
       mockPagesCreate.mockResolvedValueOnce({
@@ -531,6 +522,7 @@ describe('exportResearchToNotion', () => {
           sharedAt: '2024-01-01T00:00:00Z',
           gcsPath: 'shares/test-slug.html',
           coverImageId: 'cover-abc-123',
+          coverImageUrl: 'https://intexuraos.cloud/images/cover-abc-123-my-research-title.png',
         },
       });
 
@@ -551,7 +543,7 @@ describe('exportResearchToNotion', () => {
         type: 'image',
         image: {
           type: 'external',
-          external: { url: 'https://example.intexuraos.com/images/cover-abc-123/full.png' },
+          external: { url: 'https://intexuraos.cloud/images/cover-abc-123-my-research-title.png' },
         },
       });
       expect(children[1]).toEqual({
@@ -592,7 +584,7 @@ describe('exportResearchToNotion', () => {
       });
     });
 
-    it('does not add image block when coverImageId is undefined', async () => {
+    it('does not add image block when coverImageUrl is undefined', async () => {
       const mockPagesCreate = vi.mocked(mockClient.pages.create);
 
       mockPagesCreate.mockResolvedValueOnce({
@@ -607,7 +599,7 @@ describe('exportResearchToNotion', () => {
           shareUrl: 'https://example.com/share/test-slug',
           sharedAt: '2024-01-01T00:00:00Z',
           gcsPath: 'shares/test-slug.html',
-          // coverImageId undefined
+          // coverImageUrl undefined
         },
       });
 
@@ -630,7 +622,7 @@ describe('exportResearchToNotion', () => {
       });
     });
 
-    it('does not add image block when coverImageId is empty string', async () => {
+    it('does not add image block when coverImageUrl is empty string', async () => {
       const mockPagesCreate = vi.mocked(mockClient.pages.create);
 
       mockPagesCreate.mockResolvedValueOnce({
@@ -645,7 +637,7 @@ describe('exportResearchToNotion', () => {
           shareUrl: 'https://example.com/share/test-slug',
           sharedAt: '2024-01-01T00:00:00Z',
           gcsPath: 'shares/test-slug.html',
-          coverImageId: '',
+          coverImageUrl: '',
         },
       });
 
@@ -668,7 +660,7 @@ describe('exportResearchToNotion', () => {
       });
     });
 
-    it('does not add image block when coverImageId is whitespace only', async () => {
+    it('does not add image block when coverImageUrl is whitespace only', async () => {
       const mockPagesCreate = vi.mocked(mockClient.pages.create);
 
       mockPagesCreate.mockResolvedValueOnce({
@@ -683,7 +675,7 @@ describe('exportResearchToNotion', () => {
           shareUrl: 'https://example.com/share/test-slug',
           sharedAt: '2024-01-01T00:00:00Z',
           gcsPath: 'shares/test-slug.html',
-          coverImageId: '   ',
+          coverImageUrl: '   ',
         },
       });
 
@@ -722,6 +714,7 @@ describe('exportResearchToNotion', () => {
           sharedAt: '2024-01-01T00:00:00Z',
           gcsPath: 'shares/test-slug.html',
           coverImageId: 'cover-xyz-789',
+          coverImageUrl: 'https://intexuraos.cloud/images/cover-xyz-789-my-slug.png',
         },
       });
 
@@ -730,36 +723,11 @@ describe('exportResearchToNotion', () => {
       expect(mockLogger.info).toHaveBeenCalledWith(
         'Including cover image in Notion export',
         {
-          coverImageId: 'cover-xyz-789',
-          coverImageUrl: 'https://example.intexuraos.com/images/cover-xyz-789/full.png',
+          coverImageUrl: 'https://intexuraos.cloud/images/cover-xyz-789-my-slug.png',
         }
       );
     });
 
-    it('throws error when INTEXURAOS_IMAGE_PUBLIC_BASE_URL is not set', async () => {
-      // Clear the env var to test error behavior
-      delete process.env['INTEXURAOS_IMAGE_PUBLIC_BASE_URL'];
-
-      const research = createMockResearch({
-        synthesizedResult: 'Test synthesis.',
-        shareInfo: {
-          shareToken: 'token-123',
-          slug: 'test-slug',
-          shareUrl: 'https://example.com/share/test-slug',
-          sharedAt: '2024-01-01T00:00:00Z',
-          gcsPath: 'shares/test-slug.html',
-          coverImageId: 'cover-def-456',
-        },
-      });
-
-      const result = await exportResearchToNotion(research, mockNotionToken, mockTargetPageId, mockLogger);
-
-      expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error.code).toBe('INTERNAL_ERROR');
-        expect(result.error.message).toContain('INTEXURAOS_IMAGE_PUBLIC_BASE_URL');
-      }
-    });
   });
 
   describe('edge cases', () => {
