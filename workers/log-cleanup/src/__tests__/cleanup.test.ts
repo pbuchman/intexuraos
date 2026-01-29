@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, Mock } from 'vitest';
+import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
 
 vi.mock('../logger.js', () => ({
   logger: {
@@ -350,5 +350,98 @@ describe('cleanupOldLogs', () => {
 
     expect(result.success).toBe(false);
     expect(result.message).toBe('Non-error rejection');
+  });
+
+  it('should not commit an empty batch when logs are exactly a multiple of BATCH_SIZE', async () => {
+    const logsArray: MockLogDoc[] = Array.from({ length: 500 }, (_, i) => ({
+      ref: { path: `logs/${String(i)}` },
+    }));
+
+    const mockUpdate = vi.fn().mockResolvedValue(undefined);
+    const mockLogsGet = vi.fn().mockResolvedValue({ docs: logsArray });
+
+    const mockTaskDoc: MockTaskDoc = {
+      id: 'task-exact-batch',
+      ref: {
+        update: mockUpdate,
+        collection: vi.fn().mockReturnValue({ get: mockLogsGet }),
+      },
+      data: () => ({
+        completedAt: { toDate: () => new Date('2024-01-01') },
+        logsArchived: false,
+      }),
+    };
+
+    let queryCallCount = 0;
+    firestoreMocks.mockGet.mockImplementation(() => {
+      queryCallCount++;
+      if (queryCallCount === 1) {
+        return Promise.resolve({
+          empty: false,
+          docs: [mockTaskDoc],
+        });
+      }
+      return Promise.resolve({
+        empty: true,
+        docs: [],
+      });
+    });
+
+    const result = await cleanupOldLogs();
+
+    expect(result.success).toBe(true);
+    expect(result.logsDeleted).toBe(500);
+    expect(firestoreMocks.mockBatchCommit).toHaveBeenCalledTimes(1);
+  });
+
+  it('should continue pagination when exactly TASKS_PER_RUN tasks are returned', async () => {
+    const mockUpdate = vi.fn().mockResolvedValue(undefined);
+    const mockLogsGet = vi.fn().mockResolvedValue({
+      docs: [{ ref: { path: 'logs/1' } }] as MockLogDoc[],
+    });
+
+    const createTaskDoc = (id: string): MockTaskDoc => ({
+      id,
+      ref: {
+        update: mockUpdate,
+        collection: vi.fn().mockReturnValue({ get: mockLogsGet }),
+      },
+      data: () => ({
+        completedAt: { toDate: () => new Date('2024-01-01') },
+        logsArchived: false,
+      }),
+    });
+
+    const firstBatch = Array.from({ length: 100 }, (_, i) =>
+      createTaskDoc(`task-batch1-${String(i)}`)
+    );
+    const secondBatch = [createTaskDoc('task-batch2-0')];
+
+    let queryCallCount = 0;
+    firestoreMocks.mockGet.mockImplementation(() => {
+      queryCallCount++;
+      if (queryCallCount === 1) {
+        return Promise.resolve({
+          empty: false,
+          docs: firstBatch,
+        });
+      }
+      if (queryCallCount === 2) {
+        return Promise.resolve({
+          empty: false,
+          docs: secondBatch,
+        });
+      }
+      return Promise.resolve({
+        empty: true,
+        docs: [],
+      });
+    });
+
+    const result = await cleanupOldLogs();
+
+    expect(result.success).toBe(true);
+    expect(result.tasksProcessed).toBe(101);
+    expect(result.logsDeleted).toBe(101);
   });
 });

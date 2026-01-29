@@ -351,14 +351,7 @@ export const exportNotionResponseSchema = {
   type: 'object',
   properties: {
     success: { type: 'boolean' },
-    data: {
-      type: 'object',
-      properties: {
-        success: { type: 'boolean' },
-        notionPageUrl: { type: 'string' },
-      },
-      required: ['success', 'notionPageUrl'],
-    },
+    data: researchSchema,
     diagnostics: {
       type: 'object',
       properties: {

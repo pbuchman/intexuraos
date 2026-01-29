@@ -209,6 +209,34 @@ describe('FirestoreBookmarkRepository', () => {
         expect(result.value.aiSummarizedAt).toBeNull();
       }
     });
+
+    it('defaults status to active when document has no status field', async () => {
+      const docRef = fakeFirestore.collection('bookmarks').doc('legacy-bookmark');
+      await docRef.set({
+        userId: 'user-123',
+        url: 'https://legacy.com',
+        title: 'Legacy Bookmark',
+        description: null,
+        tags: [],
+        ogPreview: null,
+        ogFetchedAt: null,
+        ogFetchStatus: 'pending',
+        aiSummary: null,
+        aiSummarizedAt: null,
+        source: 'web',
+        sourceId: 'legacy-web',
+        archived: false,
+        createdAt: '2024-01-01T00:00:00.000Z',
+        updatedAt: '2024-01-01T00:00:00.000Z',
+      });
+
+      const result = await repository.findById('legacy-bookmark');
+
+      expect(result.ok).toBe(true);
+      if (result.ok && result.value) {
+        expect(result.value.status).toBe('active');
+      }
+    });
   });
 
   describe('findByUserId', () => {

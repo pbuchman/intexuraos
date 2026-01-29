@@ -139,6 +139,28 @@ describe('createJwtValidator', () => {
       });
       expect(reply.fail).not.toHaveBeenCalled();
     });
+
+    it('should handle token with non-string email claim', async () => {
+      mockedJwtVerify.mockResolvedValue({
+        payload: { sub: 'auth0|user123', email: 12345 },
+        protectedHeader: new Uint8Array(),
+      } as never);
+
+      const validator = createJwtValidator(mockConfig, logger);
+      const request: TestRequest = {
+        headers: { authorization: 'Bearer valid.token.here' },
+        url: '/code/submit',
+      };
+      const reply = { status: vi.fn().mockReturnThis(), send: vi.fn() };
+
+      await validator(request as unknown as Parameters<typeof validator>[0], reply as unknown as Parameters<typeof validator>[1]);
+
+      expect(request.user).toEqual({
+        userId: 'auth0|user123',
+        email: undefined,
+      });
+      expect(reply.status).not.toHaveBeenCalled();
+    });
   });
 
   describe('token extraction', () => {

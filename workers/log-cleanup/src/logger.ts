@@ -1,6 +1,7 @@
 import pino from 'pino';
 
 export interface Logger {
+  level: string;
   info(obj: object, msg?: string): void;
   warn(obj: object, msg?: string): void;
   error(obj: object, msg?: string): void;
