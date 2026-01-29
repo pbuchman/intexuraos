@@ -665,17 +665,9 @@ export function ResearchDetailPage(): React.JSX.Element {
                   <Plus className="h-4 w-4 sm:mr-2" />
                   <span className="hidden sm:inline">Enhance</span>
                 </Button>
-                {research.notionExportInfo !== undefined ? (
-                  <Button
-                    variant="secondary"
-                    onClick={(): void => {
-                      window.open(research.notionExportInfo?.mainPageUrl, '_blank', 'noopener,noreferrer');
-                    }}
-                  >
-                    <StickyNote className="h-4 w-4 sm:mr-2" />
-                    <span className="hidden sm:inline">View in Notion</span>
-                  </Button>
-                ) : research.synthesizedResult !== undefined && research.synthesizedResult !== '' ? (
+                {research.notionExportInfo === undefined &&
+                research.synthesizedResult !== undefined &&
+                research.synthesizedResult !== '' ? (
                   <Button
                     onClick={(): void => {
                       void handleExportToNotion();

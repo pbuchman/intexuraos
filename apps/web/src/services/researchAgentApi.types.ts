@@ -83,6 +83,8 @@ export interface ShareInfo {
   shareUrl: string;
   sharedAt: string;
   gcsPath: string;
+  coverImageId?: string;
+  coverImageUrl?: string;
 }
 
 /**
