@@ -2,7 +2,6 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { mkdtempSync, rmSync, readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { WorktreeManager } from '../services/worktree-manager.js';
 import type { Logger } from '@intexuraos/common-core';
 
 const mockLogger: Logger = {
@@ -10,6 +9,50 @@ const mockLogger: Logger = {
   warn: () => undefined,
   error: () => undefined,
   debug: () => undefined,
+};
+
+// Default successful implementation
+const defaultExecAsync = async (
+  command: string,
+  _options: { cwd?: string; timeout?: number }
+): Promise<{ stdout: string; stderr: string }> => {
+  if (command.includes('git worktree add')) {
+    return { stdout: '', stderr: 'Preparing worktree' };
+  }
+  if (command.includes('git worktree remove')) {
+    return { stdout: '', stderr: '' };
+  }
+  if (command.includes('git worktree list')) {
+    return { stdout: '', stderr: '' };
+  }
+  if (command.includes('pnpm install')) {
+    return { stdout: '', stderr: '' };
+  }
+  return { stdout: '', stderr: '' };
+};
+
+// Initialize with default - this must be before the mock
+let mockExecAsyncImpl = defaultExecAsync;
+
+vi.mock('node:util', async () => {
+  const actual = await vi.importActual<typeof import('node:util')>('node:util');
+  return {
+    ...actual,
+    promisify: vi.fn((_fn: unknown) => mockExecAsyncImpl),
+  };
+});
+
+// Import after mock is set up
+let WorktreeManager: (typeof import('../services/worktree-manager.js'))['WorktreeManager'];
+
+const loadWorktreeManager = async (): Promise<
+  (typeof import('../services/worktree-manager.js'))['WorktreeManager']
+> => {
+  if (!WorktreeManager) {
+    const module = await import('../services/worktree-manager.js');
+    WorktreeManager = module.WorktreeManager;
+  }
+  return WorktreeManager;
 };
 
 describe('WorktreeManager', () => {
@@ -24,7 +67,10 @@ describe('WorktreeManager', () => {
     mcpConfigTemplatePath,
   };
 
-  beforeEach(() => {
+  beforeEach(async () => {
+    // Reset to default implementation
+    mockExecAsyncImpl = defaultExecAsync;
+
     // Ensure temp directory exists
     mkdirSync(tempDir, { recursive: true });
     mkdirSync(repoPath, { recursive: true });
@@ -35,42 +81,17 @@ describe('WorktreeManager', () => {
       sentry: { authToken: '{{SENTRY_AUTH_TOKEN}}' },
     });
     writeFileSync(mcpConfigTemplatePath, template, 'utf-8');
-
-    // Mock exec to succeed
-    vi.mock('node:util', () => ({
-      promisify: vi.fn((_cmd: unknown) => {
-        return async (
-          command: string,
-          _options: { cwd?: string; timeout?: number }
-        ): Promise<{ stdout: string; stderr: string }> => {
-          // Mock successful git commands
-          if (command.includes('git worktree add')) {
-            return { stdout: '', stderr: 'Preparing worktree' };
-          }
-          if (command.includes('git worktree remove')) {
-            return { stdout: '', stderr: '' };
-          }
-          if (command.includes('git worktree list')) {
-            // Return empty list
-            return { stdout: '', stderr: '' };
-          }
-          if (command.includes('pnpm install')) {
-            return { stdout: '', stderr: '' };
-          }
-          return { stdout: '', stderr: '' };
-        };
-      }),
-    }));
   });
 
   afterEach(() => {
-    vi.clearAllMocks();
+    vi.restoreAllMocks();
     rmSync(tempDir, { recursive: true, force: true });
   });
 
   describe('createWorktree', () => {
     it('should create a new worktree', async () => {
-      const manager = new WorktreeManager(mockConfig, mockLogger);
+      const WM = await loadWorktreeManager();
+      const manager = new WM(mockConfig, mockLogger);
 
       const worktreePath = await manager.createWorktree('task-123', 'feature-branch');
 
@@ -78,7 +99,8 @@ describe('WorktreeManager', () => {
     });
 
     it('should create base directory if it does not exist', async () => {
-      const manager = new WorktreeManager(mockConfig, mockLogger);
+      const WM = await loadWorktreeManager();
+      const manager = new WM(mockConfig, mockLogger);
 
       await manager.createWorktree('task-456', 'feature-branch');
 
@@ -86,7 +108,8 @@ describe('WorktreeManager', () => {
     });
 
     it('should throw if worktree already exists', async () => {
-      const manager = new WorktreeManager(mockConfig, mockLogger);
+      const WM = await loadWorktreeManager();
+      const manager = new WM(mockConfig, mockLogger);
 
       // First call succeeds
       await manager.createWorktree('task-789', 'feature-branch');
@@ -101,7 +124,8 @@ describe('WorktreeManager', () => {
       process.env['LINEAR_API_KEY'] = 'test-linear-key';
       process.env['SENTRY_AUTH_TOKEN'] = 'test-sentry-token';
 
-      const manager = new WorktreeManager(mockConfig, mockLogger);
+      const WM = await loadWorktreeManager();
+      const manager = new WM(mockConfig, mockLogger);
 
       await manager.createWorktree('task-mcp', 'feature-branch');
 
@@ -117,7 +141,8 @@ describe('WorktreeManager', () => {
     });
 
     it('should handle missing env vars gracefully', async () => {
-      const manager = new WorktreeManager(mockConfig, mockLogger);
+      const WM = await loadWorktreeManager();
+      const manager = new WM(mockConfig, mockLogger);
 
       await manager.createWorktree('task-no-env', 'feature-branch');
 
@@ -128,7 +153,8 @@ describe('WorktreeManager', () => {
     });
 
     it('should skip MCP config if template does not exist', async () => {
-      const manager = new WorktreeManager(
+      const WM = await loadWorktreeManager();
+      const manager = new WM(
         {
           ...mockConfig,
           mcpConfigTemplatePath: join(tempDir, 'non-existent.json'),
@@ -147,7 +173,8 @@ describe('WorktreeManager', () => {
 
       const warnSpy = vi.spyOn(mockLogger, 'warn');
 
-      const manager = new WorktreeManager(mockConfig, mockLogger);
+      const WM = await loadWorktreeManager();
+      const manager = new WM(mockConfig, mockLogger);
 
       await manager.createWorktree('task-missing-env', 'feature-branch');
 
@@ -158,7 +185,8 @@ describe('WorktreeManager', () => {
 
   describe('removeWorktree', () => {
     it('should remove an existing worktree', async () => {
-      const manager = new WorktreeManager(mockConfig, mockLogger);
+      const WM = await loadWorktreeManager();
+      const manager = new WM(mockConfig, mockLogger);
 
       // Create worktree first
       await manager.createWorktree('task-remove', 'feature-branch');
@@ -168,7 +196,8 @@ describe('WorktreeManager', () => {
     });
 
     it('should throw if worktree does not exist', async () => {
-      const manager = new WorktreeManager(mockConfig, mockLogger);
+      const WM = await loadWorktreeManager();
+      const manager = new WM(mockConfig, mockLogger);
 
       await expect(manager.removeWorktree('non-existent')).rejects.toThrow('does not exist');
     });
@@ -176,7 +205,8 @@ describe('WorktreeManager', () => {
 
   describe('listWorktrees', () => {
     it('should return empty array when no worktrees exist', async () => {
-      const manager = new WorktreeManager(mockConfig, mockLogger);
+      const WM = await loadWorktreeManager();
+      const manager = new WM(mockConfig, mockLogger);
 
       const worktrees = await manager.listWorktrees();
 
@@ -184,7 +214,8 @@ describe('WorktreeManager', () => {
     });
 
     it('should list all worktrees under base path', async () => {
-      const manager = new WorktreeManager(mockConfig, mockLogger);
+      const WM = await loadWorktreeManager();
+      const manager = new WM(mockConfig, mockLogger);
 
       // Our mock returns empty list, so we just verify the method runs
       const worktrees = await manager.listWorktrees();
@@ -195,7 +226,8 @@ describe('WorktreeManager', () => {
 
   describe('worktreeExists', () => {
     it('should return false for non-existent worktree', async () => {
-      const manager = new WorktreeManager(mockConfig, mockLogger);
+      const WM = await loadWorktreeManager();
+      const manager = new WM(mockConfig, mockLogger);
 
       const exists = await manager.worktreeExists('non-existent');
 
@@ -203,7 +235,8 @@ describe('WorktreeManager', () => {
     });
 
     it('should return true for existing worktree', async () => {
-      const manager = new WorktreeManager(mockConfig, mockLogger);
+      const WM = await loadWorktreeManager();
+      const manager = new WM(mockConfig, mockLogger);
 
       await manager.createWorktree('task-exists', 'feature-branch');
 
@@ -215,7 +248,8 @@ describe('WorktreeManager', () => {
 
   describe('error handling', () => {
     it('should throw error when trying to remove non-existent worktree', async () => {
-      const manager = new WorktreeManager(mockConfig, mockLogger);
+      const WM = await loadWorktreeManager();
+      const manager = new WM(mockConfig, mockLogger);
 
       await expect(manager.removeWorktree('non-existent')).rejects.toThrow('does not exist');
     });
@@ -226,8 +260,9 @@ describe('WorktreeManager', () => {
       process.env['LINEAR_API_KEY'] = 'test-key';
       process.env['SENTRY_AUTH_TOKEN'] = 'test-token';
 
+      const WM = await loadWorktreeManager();
       // Create a worktree without MCP config template to test error path
-      const managerWithoutTemplate = new WorktreeManager(
+      const managerWithoutTemplate = new WM(
         {
           ...mockConfig,
           mcpConfigTemplatePath: join(tempDir, 'non-existent.json'),
@@ -247,7 +282,8 @@ describe('WorktreeManager', () => {
 
   describe('list worktrees error handling', () => {
     it('should return empty array when git command fails', async () => {
-      const manager = new WorktreeManager(mockConfig, mockLogger);
+      const WM = await loadWorktreeManager();
+      const manager = new WM(mockConfig, mockLogger);
 
       // The mock in beforeEach always succeeds, but we can verify
       // that the function doesn't throw when it receives empty output
@@ -258,8 +294,8 @@ describe('WorktreeManager', () => {
 
   describe('installDependencies edge cases', () => {
     it('should handle worktree without pnpm-lock.yaml', async () => {
-      // Create a manager with a config that points to a worktree without lock file
-      const manager = new WorktreeManager(mockConfig, mockLogger);
+      const WM = await loadWorktreeManager();
+      const manager = new WM(mockConfig, mockLogger);
 
       // Create a worktree - the mock exec succeeds regardless of lock file
       // The installDependencies function checks for pnpm-lock.yaml with access()
@@ -272,13 +308,108 @@ describe('WorktreeManager', () => {
 
   describe('listWorktrees filtering', () => {
     it('should filter worktrees by base path', async () => {
-      // Create a new manager instance in a separate test with modified mock
-      // We need to test the filter branch in listWorktrees
-      const manager = new WorktreeManager(mockConfig, mockLogger);
+      const WM = await loadWorktreeManager();
+      const manager = new WM(mockConfig, mockLogger);
 
       // The mock returns empty output, so we just verify the function works
       const worktrees = await manager.listWorktrees();
       expect(Array.isArray(worktrees)).toBe(true);
     });
+  });
+});
+
+// Separate test suite for git stderr error handling with custom mock
+describe('WorktreeManager - git stderr error handling', () => {
+  const tempDir = mkdtempSync(join(tmpdir(), 'worktree-error-test-'));
+  const repoPath = join(tempDir, 'repo');
+  const worktreeBasePath = join(tempDir, 'worktrees');
+  const mcpConfigTemplatePath = join(tempDir, 'mcp-template.json');
+
+  const mockConfig = {
+    repositoryPath: repoPath,
+    worktreeBasePath,
+    mcpConfigTemplatePath,
+  };
+
+  beforeEach(async () => {
+    // Ensure temp directory exists
+    mkdirSync(tempDir, { recursive: true });
+    mkdirSync(repoPath, { recursive: true });
+
+    // Create MCP config template
+    const template = JSON.stringify({
+      linear: { apiKey: '{{LINEAR_API_KEY}}' },
+      sentry: { authToken: '{{SENTRY_AUTH_TOKEN}}' },
+    });
+    writeFileSync(mcpConfigTemplatePath, template, 'utf-8');
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  it('should throw error when git worktree add returns unexpected stderr', async () => {
+    // Override mock for this test
+    mockExecAsyncImpl = async (
+      _command: string,
+      _options: { cwd?: string; timeout?: number }
+    ): Promise<{ stdout: string; stderr: string }> => {
+      return { stdout: '', stderr: 'fatal: Invalid branch name' };
+    };
+
+    // Clear module cache and reload
+    vi.resetModules();
+    const { WorktreeManager: WM } = await import('../services/worktree-manager.js');
+    const manager = new WM(mockConfig, mockLogger);
+
+    await expect(manager.createWorktree('task-error', 'feature-branch')).rejects.toThrow(
+      'Failed to create worktree'
+    );
+  });
+
+  it('should not throw when git worktree add returns "Preparing worktree" stderr', async () => {
+    // Override mock for this test
+    mockExecAsyncImpl = async (
+      _command: string,
+      _options: { cwd?: string; timeout?: number }
+    ): Promise<{ stdout: string; stderr: string }> => {
+      return { stdout: '', stderr: 'Preparing worktree (detached HEAD)' };
+    };
+
+    // Clear module cache and reload
+    vi.resetModules();
+    const { WorktreeManager: WM } = await import('../services/worktree-manager.js');
+    const manager = new WM(mockConfig, mockLogger);
+
+    // Should not throw
+    await expect(manager.createWorktree('task-prepare', 'feature-branch')).resolves.toBe(
+      join(worktreeBasePath, 'task-prepare')
+    );
+  });
+
+  it('should throw error when git worktree remove returns stderr', async () => {
+    // Create worktree directory first
+    mkdirSync(join(worktreeBasePath, 'task-remove-error'), { recursive: true });
+
+    // Override mock for this test
+    mockExecAsyncImpl = async (
+      command: string,
+      _options: { cwd?: string; timeout?: number }
+    ): Promise<{ stdout: string; stderr: string }> => {
+      if (command.includes('git worktree remove')) {
+        return { stdout: '', stderr: 'fatal: not a valid worktree' };
+      }
+      return { stdout: '', stderr: 'Preparing worktree' };
+    };
+
+    // Clear module cache and reload
+    vi.resetModules();
+    const { WorktreeManager: WM } = await import('../services/worktree-manager.js');
+    const manager = new WM(mockConfig, mockLogger);
+
+    await expect(manager.removeWorktree('task-remove-error')).rejects.toThrow(
+      'Failed to remove worktree'
+    );
   });
 });
