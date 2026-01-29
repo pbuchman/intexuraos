@@ -95,10 +95,10 @@ export function ShareHistoryPage(): React.JSX.Element {
 
   return (
     <Layout>
-      <div className="mx-auto max-w-2xl px-4 py-8">
+      <div className="p-4 md:p-6">
         <Card>
-          <div className="p-6">
-            <div className="mb-6 flex items-center justify-between">
+          <div className="p-4 sm:p-6">
+            <div className="mb-4 flex items-center justify-between gap-3">
               <div className="flex items-center gap-3">
                 <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-100">
                   <Share2 className="h-5 w-5 text-blue-600" />
@@ -127,8 +127,8 @@ export function ShareHistoryPage(): React.JSX.Element {
             </div>
 
             {history.length === 0 ? (
-              <div className="py-12 text-center text-slate-500">
-                <Share2 className="mx-auto mb-3 h-12 w-12 text-slate-300" />
+              <div className="py-8 text-center text-slate-500">
+                <Share2 className="mx-auto mb-2 h-10 w-10 text-slate-300" />
                 <p>No shared content yet</p>
                 <p className="mt-1 text-sm">
                   Use your device&apos;s share menu to send content here
@@ -137,7 +137,7 @@ export function ShareHistoryPage(): React.JSX.Element {
             ) : (
               <div className="divide-y divide-slate-100">
                 {history.map((item) => (
-                  <div key={item.id} className="py-4">
+                  <div key={item.id} className="py-3 first:pt-0 last:pb-0">
                     {/* Content preview with overflow fix */}
                     <p className="text-sm text-slate-900 break-all line-clamp-2">{item.contentPreview}</p>
 
