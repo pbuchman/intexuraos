@@ -667,7 +667,7 @@ INTEXURAOS_WEB_APP_URL=https://predev.intexura.com
 
 | Aspect               | Local (`pnpm run dev`)          | Pre-Dev (GCP VM)                    |
 | -------------------- | ------------------------------- | ----------------------------------- |
-| Entry point          | `scripts/dev.mjs`               | `systemd` + startup script          |
+| Entry point          | `ecosystem.config.cjs` (PM2)    | `systemd` + startup script          |
 | URL                  | `http://localhost:3000`         | `https://predev.intexura.com`       |
 | TLS                  | None                            | Caddy auto-TLS                      |
 | External APIs        | Often stubbed                   | Real credentials from Secret Manager|

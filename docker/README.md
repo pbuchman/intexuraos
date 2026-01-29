@@ -4,33 +4,62 @@ Container configurations for local development.
 
 ## Quick Start (Recommended)
 
-The easiest way to run all services locally with hot-reload:
-
 ```bash
-# Start everything (emulators + all services with hot-reload)
+# Start emulators (uses existing local data)
+pnpm run emulators:start
+
+# Start all services via PM2
+pnpm run services:start
+
+# Or combined (emulators + services, no sync)
 pnpm run dev
 
-# Start only emulators (if you want to run services manually)
-ppnpm run dev:emulators
+# Full sync from GCP + start everything
+pnpm run dev:sync
 ```
 
 This starts:
 
-- Firebase Emulator (Firestore + Pub/Sub)
+- Firebase Emulator (Firestore + Pub/Sub + Auth)
 - Fake GCS Server
-- All 7 services with `node --watch` (instant restart on file changes)
+- All 18 services via PM2 with auto-restart
 
 ## Emulator Management
 
 ```bash
-# Start emulators only
+# Start emulators (no sync)
 pnpm run emulators:start
+
+# Sync from GCP then start emulators
+pnpm run emulators:sync
 
 # Stop emulators
 pnpm run emulators:stop
 
 # View emulator logs
 pnpm run emulators:logs
+```
+
+## Service Management (PM2)
+
+```bash
+# Start all services
+pnpm run services:start
+
+# Stop all services
+pnpm run services:stop
+
+# View service status
+pnpm run services:status
+
+# View logs (live tail)
+pnpm run services:logs
+
+# Interactive monitoring TUI
+pnpm run services:monit
+
+# Restart all services
+pnpm run services:restart
 ```
 
 ### Emulator Ports

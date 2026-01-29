@@ -3,6 +3,7 @@ import { Auth0Provider } from '@auth0/auth0-react';
 import { AuthProvider, SyncQueueProvider, useAuth } from '@/context';
 import { PWAProvider } from '@/context/pwa-context';
 import { AndroidInstallBanner, IOSInstallBanner, UpdateBanner } from '@/components/pwa-banners';
+import { DevBar } from '@/components/DevBar';
 import { config } from '@/config';
 
 
@@ -438,6 +439,7 @@ export function App(): React.JSX.Element {
               <UpdateBanner />
               <IOSInstallBanner />
               <AndroidInstallBanner />
+              <DevBar />
             </SyncQueueProvider>
           </AuthProvider>
         </HashRouter>

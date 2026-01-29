@@ -6,7 +6,7 @@
  *
  * Checks:
  * 1. All process.env usage is declared in REQUIRED_ENV (or is globally optional)
- * 2. All REQUIRED_ENV vars are registered in scripts/dev.mjs
+ * 2. All REQUIRED_ENV vars are registered in ecosystem.config.cjs SERVICE_ENV_MAPPINGS
  *
  * Usage:
  *   node scripts/verify-env-vars.mjs
@@ -18,7 +18,7 @@ import { fileURLToPath } from 'node:url';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const appsDir = join(repoRoot, 'apps');
-const devMjsPath = join(repoRoot, 'scripts', 'dev.mjs');
+const ecosystemConfigPath = join(repoRoot, 'ecosystem.config.cjs');
 
 const errors = [];
 const warnings = [];
@@ -160,15 +160,15 @@ function findEnvAccesses(content) {
 }
 
 /**
- * Parse dev.mjs to extract SERVICE_ENV_MAPPINGS.
+ * Parse ecosystem.config.cjs to extract SERVICE_ENV_MAPPINGS.
  */
-function parseDevMjsMappings() {
-  if (!existsSync(devMjsPath)) {
-    errors.push('scripts/dev.mjs not found');
+function parseEcosystemConfigMappings() {
+  if (!existsSync(ecosystemConfigPath)) {
+    errors.push('ecosystem.config.cjs not found');
     return {};
   }
 
-  const content = readFileSync(devMjsPath, 'utf8');
+  const content = readFileSync(ecosystemConfigPath, 'utf8');
 
   // Extract SERVICE_ENV_MAPPINGS object
   const mappingsPattern = /const\s+SERVICE_ENV_MAPPINGS\s*=\s*\{([\s\S]*?)\n\};/;
@@ -261,12 +261,12 @@ function checkService(serviceName, serviceDir) {
     }
   }
 
-  // Check if all REQUIRED_ENV vars are in dev.mjs mappings
-  const devMappings = parseDevMjsMappings();
-  const serviceMappings = devMappings[serviceName];
+  // Check if all REQUIRED_ENV vars are in ecosystem.config.cjs mappings
+  const ecosystemMappings = parseEcosystemConfigMappings();
+  const serviceMappings = ecosystemMappings[serviceName];
 
   if (!serviceMappings) {
-    warnings.push(`${serviceName}/: No entry in scripts/dev.mjs SERVICE_ENV_MAPPINGS`);
+    warnings.push(`${serviceName}/: No entry in ecosystem.config.cjs SERVICE_ENV_MAPPINGS`);
   } else {
     for (const varName of requiredEnv) {
       // Skip common vars provided by COMMON_SERVICE_ENV and COMMON_SERVICE_URLS
@@ -276,7 +276,7 @@ function checkService(serviceName, serviceDir) {
 
       if (!serviceMappings.has(varName)) {
         errors.push(
-          `${serviceName}/src/index.ts: REQUIRED_ENV var '${varName}' not in scripts/dev.mjs SERVICE_ENV_MAPPINGS`
+          `${serviceName}/src/index.ts: REQUIRED_ENV var '${varName}' not in ecosystem.config.cjs SERVICE_ENV_MAPPINGS`
         );
       }
     }
@@ -363,7 +363,7 @@ function main() {
     console.log('');
     console.log('To fix:');
     console.log("  1. Add missing vars to REQUIRED_ENV in the service's index.ts");
-    console.log('  2. Add service-specific vars to SERVICE_ENV_MAPPINGS in scripts/dev.mjs');
+    console.log('  2. Add service-specific vars to SERVICE_ENV_MAPPINGS in ecosystem.config.cjs');
     process.exit(1);
   }
 
