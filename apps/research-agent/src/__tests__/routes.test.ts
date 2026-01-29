@@ -3192,6 +3192,11 @@ describe('System Endpoints', () => {
       url: '/openapi.json',
     });
 
+    if (response.statusCode !== 200) {
+      const body = JSON.parse(response.body);
+      // Error details are in the body for debugging
+      void body;
+    }
     expect(response.statusCode).toBe(200);
     const body = JSON.parse(response.body) as { openapi: string };
     expect(body.openapi).toBeDefined();
