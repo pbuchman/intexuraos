@@ -118,7 +118,8 @@ describe('POST /code/cancel', () => {
     });
 
     // Spy on cancelOnWorker to verify it's called
-    cancelOnWorkerSpy = vi.spyOn(taskDispatcher, 'cancelOnWorker' as never).mockResolvedValue(undefined);
+    cancelOnWorkerSpy = vi.spyOn(taskDispatcher, 'cancelOnWorker');
+    (cancelOnWorkerSpy as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
 
     const rateLimitService: RateLimitService = {
       async checkLimits() {

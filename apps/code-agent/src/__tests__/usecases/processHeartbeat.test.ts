@@ -176,4 +176,26 @@ describe('processHeartbeat', () => {
       expect(result.value.notFound).toHaveLength(0);
     }
   });
+
+  it('should handle update failure and continue processing', async () => {
+    const task1 = createFakeCodeTask({ id: 'task-1', status: 'running' });
+    const task2 = createFakeCodeTask({ id: 'task-2', status: 'running' });
+    findByIdMock
+      .mockResolvedValueOnce(ok(task1))
+      .mockResolvedValueOnce(ok(task2));
+    updateMock
+      .mockResolvedValueOnce({ ok: false, error: { code: 'UPDATE_ERROR', message: 'Update failed' } })
+      .mockResolvedValueOnce(ok({}));
+
+    const result = await useCase(['task-1', 'task-2']);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.processed).toBe(1);
+    }
+    expect(deps.logger.error).toHaveBeenCalledWith(
+      { taskId: 'task-1', error: 'Update failed' },
+      'Failed to update task heartbeat'
+    );
+  });
 });
