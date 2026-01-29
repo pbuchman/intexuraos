@@ -147,7 +147,7 @@ This changelog provides a comprehensive record of IntexuraOS development.
 
 - Migrated from `@zai-claude` to `@zaiclaude` trigger in GitHub workflows
 - Added `--cpu-throttling` option to prevent billing drift (INT-194)
-- Applied E2_MEDIUM machine type project-wide for Cloud Build (INT-243)
+- Applied E2_STANDARD_2 machine type project-wide for Cloud Build (INT-243)
 - Test coverage improvements across 12 services (INT-153, INT-155, INT-166, INT-167, INT-168, INT-169, INT-170, INT-171, INT-172, INT-173)
 - Mobile-only icons for research view buttons
 - Processing status added to default inbox filters
