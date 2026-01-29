@@ -352,6 +352,25 @@ describe('Routes', () => {
       });
       expect(json).toHaveProperty('githubTokenExpiresAt');
     });
+
+    it('should return health status with null token expiry when not set', async () => {
+      vi.mocked(tokenService.getExpiresAt).mockReturnValueOnce(undefined);
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/health',
+      });
+
+      expect(response.statusCode).toBe(200);
+      const json = response.json();
+      expect(json).toMatchObject({
+        status: 'ready',
+        capacity: 5,
+        running: 0,
+        available: 5,
+        githubTokenExpiresAt: null,
+      });
+    });
   });
 
   describe('POST /admin/refresh-token', () => {
@@ -363,6 +382,22 @@ describe('Routes', () => {
 
       expect(response.statusCode).toBe(200);
       expect(response.json()).toHaveProperty('tokenExpiresAt');
+    });
+
+    it('should return null token expiry after refresh when not set', async () => {
+      vi.mocked(tokenService.getExpiresAt).mockReturnValueOnce(undefined);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/admin/refresh-token',
+      });
+
+      expect(response.statusCode).toBe(200);
+      const json = response.json();
+      expect(json).toMatchObject({
+        status: 'refreshed',
+        tokenExpiresAt: null,
+      });
     });
   });
 
@@ -744,6 +779,96 @@ describe('Routes', () => {
       );
 
       infoSpy.mockRestore();
+    });
+  });
+
+  describe('POST /tasks - coverage for optional fields and success paths', () => {
+    it('should accept task with all optional fields defined', async () => {
+      const taskPayload = {
+        taskId: 'test-task-with-optional',
+        workerType: 'auto' as const,
+        prompt: 'Test prompt',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        linearIssueId: 'INT-123',
+        linearIssueTitle: 'Test issue',
+        slug: 'test-slug',
+        actionId: 'action-456',
+      };
+
+      const { headers, body } = createSignedRequest(taskPayload);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/tasks',
+        headers,
+        body,
+      });
+
+      expect(response.statusCode).toBe(202);
+      expect(response.json()).toMatchObject({
+        taskId: 'test-task-with-optional',
+        status: 'queued',
+      });
+
+      // Verify dispatcher was called with the full payload including optional fields
+      expect(dispatcher.submitTask).toHaveBeenCalledWith(
+        expect.objectContaining({
+          repository: 'pbuchman/intexuraos',
+          baseBranch: 'development',
+          linearIssueId: 'INT-123',
+          linearIssueTitle: 'Test issue',
+          slug: 'test-slug',
+          actionId: 'action-456',
+        })
+      );
+    });
+
+    it('should accept task with partial optional fields', async () => {
+      const taskPayload = {
+        taskId: 'test-task-partial-optional',
+        workerType: 'auto' as const,
+        prompt: 'Test prompt',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+        // Only some optional fields
+        repository: 'pbuchman/intexuraos',
+        linearIssueId: 'INT-456',
+      };
+
+      const { headers, body } = createSignedRequest(taskPayload);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/tasks',
+        headers,
+        body,
+      });
+
+      expect(response.statusCode).toBe(202);
+      expect(response.json()).toMatchObject({
+        taskId: 'test-task-partial-optional',
+        status: 'queued',
+      });
+
+      // Verify dispatcher was called with partial optional fields
+      expect(dispatcher.submitTask).toHaveBeenCalledWith(
+        expect.objectContaining({
+          repository: 'pbuchman/intexuraos',
+          linearIssueId: 'INT-456',
+        })
+      );
+
+      // These fields should not be present
+      expect(dispatcher.submitTask).toHaveBeenCalledWith(
+        expect.not.objectContaining({
+          baseBranch: expect.anything(),
+          slug: expect.anything(),
+          actionId: expect.anything(),
+        })
+      );
     });
   });
 });
