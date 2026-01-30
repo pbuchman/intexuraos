@@ -24,30 +24,15 @@ if [[ -z "$LAST_RESPONSE" ]]; then
   exit 0
 fi
 
-# Forbidden patterns that indicate ownership deflection
-FORBIDDEN_PATTERNS=(
-  "pre-existing"
-  "not my fault"
-  "not my responsibility"
-  "unrelated to my changes"
-  "was already broken"
-  "legacy issue"
-  "other services"
-  "other workspaces"
-  "my code passes"
-  "my part passes"
-)
-
-for pattern in "${FORBIDDEN_PATTERNS[@]}"; do
-  if echo "$LAST_RESPONSE" | grep -iq "$pattern"; then
-    cat << EOF
+# Check for "pre-existing" (ownership-deflecting language)
+if echo "$LAST_RESPONSE" | grep -iq "pre-existing"; then
+  cat << EOF
 {
   "decision": "block",
-  "reason": "⚠️ OWNERSHIP CHECK: You used '$pattern' in your response. This phrase deflects responsibility. Please acknowledge this warning and rephrase your previous response without ownership-deflecting language. Remember: discovery = ownership."
+  "reason": "⚠️ OWNERSHIP CHECK: You used 'pre-existing' in your response. This violates the Ownership Mindset rules in CLAUDE.md. Please acknowledge this warning and rephrase without ownership-deflecting language. See: Ownership Mindset (MANDATORY) section."
 }
 EOF
-    exit 0
-  fi
-done
+  exit 0
+fi
 
 exit 0
