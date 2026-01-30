@@ -40,6 +40,8 @@ import type { StatusMirrorService } from '../infra/services/statusMirrorServiceI
 import { createProcessHeartbeatUseCase } from '../domain/usecases/processHeartbeat.js';
 import { createDetectZombieTasksUseCase } from '../domain/usecases/detectZombieTasks.js';
 import { createNoOpMetricsClient, type MetricsClient } from '../infra/metrics.js';
+import { createWorkerSettingsRepository } from '../infra/firestore/workerSettingsRepository.js';
+import type { WorkerSettingsRepository } from '../domain/ports/workerSettingsRepository.js';
 
 describe('OpenAPI contract', () => {
   let app: Awaited<ReturnType<typeof buildServer>>;
@@ -81,19 +83,18 @@ describe('OpenAPI contract', () => {
       logger,
     });
 
+    const workerSettingsRepo = createWorkerSettingsRepository({
+      firestore: fakeFirestore,
+      logger,
+    });
+
     setServices({
       firestore: fakeFirestore,
       logger,
       codeTaskRepo,
       workerDiscovery: createWorkerDiscoveryService({ logger }),
-      taskDispatcher: createTaskDispatcherService({
-        logger,
-        cfAccessClientId: 'test-client-id',
-        cfAccessClientSecret: 'test-client-secret',
-        dispatchSigningSecret: 'test-dispatch-secret',
-        orchestratorMacUrl: 'https://cc-mac.intexuraos.cloud',
-        orchestratorVmUrl: 'https://cc-vm.intexuraos.cloud',
-      }),
+      taskDispatcher: createTaskDispatcherService({ logger }),
+      workerSettingsRepo,
       whatsappNotifier: createWhatsAppNotifier({
         whatsappPublisher: {
           publishSendMessage: async () => ok(undefined),
@@ -139,6 +140,7 @@ describe('OpenAPI contract', () => {
       linearIssueService: LinearIssueService;
       statusMirrorService: StatusMirrorService;
       metricsClient: MetricsClient;
+      workerSettingsRepo: WorkerSettingsRepository;
       processHeartbeat: import('../domain/usecases/processHeartbeat.js').ProcessHeartbeatUseCase;
       detectZombieTasks: import('../domain/usecases/detectZombieTasks.js').DetectZombieTasksUseCase;
     });

@@ -39,6 +39,8 @@ import type { StatusMirrorService } from '../../infra/services/statusMirrorServi
 import { createProcessHeartbeatUseCase } from '../../domain/usecases/processHeartbeat.js';
 import { createDetectZombieTasksUseCase } from '../../domain/usecases/detectZombieTasks.js';
 import { createNoOpMetricsClient, type MetricsClient } from '../../infra/metrics.js';
+import { createWorkerSettingsRepository } from '../../infra/firestore/workerSettingsRepository.js';
+import type { WorkerSettingsRepository } from '../../domain/ports/workerSettingsRepository.js';
 
 describe('codeRoutes', () => {
   let fakeFirestore: ReturnType<typeof createFakeFirestore>;
@@ -178,6 +180,10 @@ describe('codeRoutes', () => {
         codeTaskRepository: codeTaskRepo,
         logger,
       }),
+      workerSettingsRepo: createWorkerSettingsRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      }),
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -193,6 +199,17 @@ describe('codeRoutes', () => {
       metricsClient: MetricsClient;
       processHeartbeat: import('../../domain/usecases/processHeartbeat.js').ProcessHeartbeatUseCase;
       detectZombieTasks: import('../../domain/usecases/detectZombieTasks.js').DetectZombieTasksUseCase;
+      workerSettingsRepo: WorkerSettingsRepository;
+    });
+
+    // Set up worker settings for the test user
+    const services = getServices();
+    await services.workerSettingsRepo.updateWorkerConfig('test-user-id', 'mac', {
+      url: 'https://cc-mac.intexuraos.cloud',
+      cfAccessClientId: 'test-client-id',
+      cfAccessClientSecret: 'test-client-secret',
+      dispatchSigningSecret: 'test-dispatch-secret',
+      enabled: true,
     });
 
     server = await buildServer();
@@ -887,9 +904,29 @@ describe('codeRoutes', () => {
         }),
       } as unknown as CodeTaskRepository;
 
+      // Mock workerSettingsRepo to return valid settings for user-123
+      const mockWorkerSettingsRepo = {
+        getSettings: vi.fn().mockResolvedValue({
+          ok: true,
+          value: {
+            userId: 'user-123',
+            mac: {
+              url: 'https://cc-mac.intexuraos.cloud',
+              cfAccessClientId: 'test-client-id',
+              cfAccessClientSecret: 'test-client-secret',
+              dispatchSigningSecret: 'test-dispatch-secret',
+              enabled: true,
+            },
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          },
+        }),
+      } as unknown as WorkerSettingsRepository;
+
       setServices({
         ...getServices(),
         codeTaskRepo: mockRepo,
+        workerSettingsRepo: mockWorkerSettingsRepo,
       });
 
       const response = await server.inject({

@@ -10,6 +10,7 @@ import type { WhatsAppNotifier } from '../../../domain/services/whatsappNotifier
 import type { Logger } from 'pino';
 import type { MetricsClient } from '../../../infra/metrics.js';
 import { processCodeAction } from '../../../domain/usecases/processCodeAction.js';
+import type { WorkerSettingsRepository } from '../../../domain/ports/workerSettingsRepository.js';
 
 describe('processCodeAction', () => {
   let logger: Logger;
@@ -17,6 +18,7 @@ describe('processCodeAction', () => {
   let taskDispatcher: TaskDispatcherService;
   let whatsappNotifier: WhatsAppNotifier;
   let metricsClient: MetricsClient;
+  let workerSettingsRepo: WorkerSettingsRepository;
 
   beforeEach(() => {
     logger = {
@@ -50,6 +52,25 @@ describe('processCodeAction', () => {
       setActiveTasks: vi.fn().mockResolvedValue(undefined),
       recordCost: vi.fn().mockResolvedValue(undefined),
     } as unknown as MetricsClient;
+
+    workerSettingsRepo = {
+      getSettings: vi.fn().mockResolvedValue(ok({
+        userId: 'user-789',
+        mac: {
+          url: 'https://cc-mac.intexuraos.cloud',
+          cfAccessClientId: 'test-client-id',
+          cfAccessClientSecret: 'test-client-secret',
+          dispatchSigningSecret: 'test-dispatch-secret',
+          enabled: true,
+        },
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      })),
+      getWorkerConfig: vi.fn(),
+      updateWorkerConfig: vi.fn(),
+      deleteWorkerConfig: vi.fn(),
+      updateTestResult: vi.fn(),
+    } as unknown as WorkerSettingsRepository;
   });
 
   it('returns internal_error for non-duplication repository errors', async () => {
@@ -58,7 +79,7 @@ describe('processCodeAction', () => {
     );
 
     const result = await processCodeAction(
-      { logger, codeTaskRepo, taskDispatcher, whatsappNotifier, metricsClient },
+      { logger, codeTaskRepo, taskDispatcher, whatsappNotifier, metricsClient, workerSettingsRepo },
       {
         actionId: 'action-123',
         approvalEventId: 'approval-456',
@@ -85,7 +106,7 @@ describe('processCodeAction', () => {
     );
 
     const result = await processCodeAction(
-      { logger, codeTaskRepo, taskDispatcher, whatsappNotifier, metricsClient },
+      { logger, codeTaskRepo, taskDispatcher, whatsappNotifier, metricsClient, workerSettingsRepo },
       {
         actionId: 'action-123',
         approvalEventId: 'approval-456',
@@ -112,7 +133,7 @@ describe('processCodeAction', () => {
     );
 
     const result = await processCodeAction(
-      { logger, codeTaskRepo, taskDispatcher, whatsappNotifier, metricsClient },
+      { logger, codeTaskRepo, taskDispatcher, whatsappNotifier, metricsClient, workerSettingsRepo },
       {
         actionId: 'action-123',
         approvalEventId: 'approval-456',
@@ -185,7 +206,7 @@ describe('processCodeAction', () => {
     );
 
     const result = await processCodeAction(
-      { logger, codeTaskRepo, taskDispatcher, whatsappNotifier, metricsClient },
+      { logger, codeTaskRepo, taskDispatcher, whatsappNotifier, metricsClient, workerSettingsRepo },
       {
         actionId: 'action-123',
         approvalEventId: 'approval-456',
@@ -243,7 +264,7 @@ describe('processCodeAction', () => {
     );
 
     const result = await processCodeAction(
-      { logger, codeTaskRepo, taskDispatcher, whatsappNotifier, metricsClient },
+      { logger, codeTaskRepo, taskDispatcher, whatsappNotifier, metricsClient, workerSettingsRepo },
       {
         actionId: 'action-123',
         approvalEventId: 'approval-456',
@@ -326,7 +347,7 @@ describe('processCodeAction', () => {
     );
 
     const result = await processCodeAction(
-      { logger, codeTaskRepo, taskDispatcher, whatsappNotifier, metricsClient },
+      { logger, codeTaskRepo, taskDispatcher, whatsappNotifier, metricsClient, workerSettingsRepo },
       {
         actionId: 'action-123',
         approvalEventId: 'approval-456',
@@ -400,7 +421,7 @@ describe('processCodeAction', () => {
     );
 
     const result = await processCodeAction(
-      { logger, codeTaskRepo, taskDispatcher, whatsappNotifier, metricsClient },
+      { logger, codeTaskRepo, taskDispatcher, whatsappNotifier, metricsClient, workerSettingsRepo },
       {
         actionId: 'action-123',
         approvalEventId: 'approval-456',
@@ -453,7 +474,7 @@ describe('processCodeAction', () => {
     );
 
     const result = await processCodeAction(
-      { logger, codeTaskRepo, taskDispatcher, whatsappNotifier, metricsClient },
+      { logger, codeTaskRepo, taskDispatcher, whatsappNotifier, metricsClient, workerSettingsRepo },
       {
         actionId: 'action-123',
         approvalEventId: 'approval-456',
@@ -535,7 +556,7 @@ describe('processCodeAction', () => {
     );
 
     const result = await processCodeAction(
-      { logger, codeTaskRepo, taskDispatcher, whatsappNotifier, metricsClient },
+      { logger, codeTaskRepo, taskDispatcher, whatsappNotifier, metricsClient, workerSettingsRepo },
       {
         actionId: 'action-123',
         approvalEventId: 'approval-456',

@@ -102,6 +102,7 @@ const SERVICE_ENV_MAPPINGS = {
     INTEXURAOS_CODE_WORKERS: 'mac:http://localhost:8199:1,vm:http://localhost:8198:2',
     INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC:
       process.env.INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC ?? 'whatsapp-send-message',
+    INTEXURAOS_TOKEN_ENCRYPTION_KEY: process.env.INTEXURAOS_TOKEN_ENCRYPTION_KEY ?? '',
   },
   'bookmarks-agent': {
     INTEXURAOS_PUBSUB_BOOKMARK_ENRICH:

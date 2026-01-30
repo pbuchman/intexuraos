@@ -42,6 +42,8 @@ import type { StatusMirrorService } from '../../infra/services/statusMirrorServi
 import { createProcessHeartbeatUseCase } from '../../domain/usecases/processHeartbeat.js';
 import { createDetectZombieTasksUseCase } from '../../domain/usecases/detectZombieTasks.js';
 import { createNoOpMetricsClient, type MetricsClient } from '../../infra/metrics.js';
+import { createWorkerSettingsRepository } from '../../infra/firestore/workerSettingsRepository.js';
+import type { WorkerSettingsRepository } from '../../domain/ports/workerSettingsRepository.js';
 
 describe('POST /code/submit', () => {
   let app: Awaited<ReturnType<typeof buildServer>>;
@@ -81,11 +83,6 @@ describe('POST /code/submit', () => {
     const workerDiscovery = createWorkerDiscoveryService({ logger });
     taskDispatcher = createTaskDispatcherService({
       logger,
-      cfAccessClientId: 'test-client-id',
-      cfAccessClientSecret: 'test-client-secret',
-      dispatchSigningSecret: 'test-dispatch-secret',
-      orchestratorMacUrl: 'https://cc-mac.intexuraos.cloud',
-      orchestratorVmUrl: 'https://cc-vm.intexuraos.cloud',
     });
 
     const whatsappNotifier = createWhatsAppNotifier({
@@ -152,6 +149,10 @@ describe('POST /code/submit', () => {
         codeTaskRepository: codeTaskRepo,
         logger,
       }),
+      workerSettingsRepo: createWorkerSettingsRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      }),
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -167,6 +168,17 @@ describe('POST /code/submit', () => {
       metricsClient: MetricsClient;
       processHeartbeat: import('../../domain/usecases/processHeartbeat.js').ProcessHeartbeatUseCase;
       detectZombieTasks: import('../../domain/usecases/detectZombieTasks.js').DetectZombieTasksUseCase;
+      workerSettingsRepo: WorkerSettingsRepository;
+    });
+
+    // Set up worker settings for the test user
+    const services = getServices();
+    await services.workerSettingsRepo.updateWorkerConfig('test-user-id', 'mac', {
+      url: 'https://cc-mac.intexuraos.cloud',
+      cfAccessClientId: 'test-client-id',
+      cfAccessClientSecret: 'test-client-secret',
+      dispatchSigningSecret: 'test-dispatch-secret',
+      enabled: true,
     });
 
     app = await buildServer();

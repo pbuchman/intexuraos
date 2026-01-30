@@ -43,6 +43,8 @@ import type { StatusMirrorService } from '../../infra/services/statusMirrorServi
 import { createProcessHeartbeatUseCase } from '../../domain/usecases/processHeartbeat.js';
 import { createDetectZombieTasksUseCase } from '../../domain/usecases/detectZombieTasks.js';
 import { createNoOpMetricsClient, type MetricsClient } from '../../infra/metrics.js';
+import { createWorkerSettingsRepository } from '../../infra/firestore/workerSettingsRepository.js';
+import type { WorkerSettingsRepository } from '../../domain/ports/workerSettingsRepository.js';
 
 // Mock fetchWithAuth
 vi.mock('@intexuraos/internal-clients', async () => ({
@@ -93,13 +95,10 @@ describe('POST /internal/webhooks/task-complete', () => {
     });
 
     const workerDiscovery = createWorkerDiscoveryService({ logger });
-    taskDispatcher = createTaskDispatcherService({
+    taskDispatcher = createTaskDispatcherService({ logger });
+    const workerSettingsRepo = createWorkerSettingsRepository({
+      firestore: fakeFirestore as unknown as Firestore,
       logger,
-      cfAccessClientId: 'test-client-id',
-      cfAccessClientSecret: 'test-client-secret',
-      dispatchSigningSecret: 'test-dispatch-secret',
-      orchestratorMacUrl: 'https://cc-mac.intexuraos.cloud',
-      orchestratorVmUrl: 'https://cc-vm.intexuraos.cloud',
     });
     mockWhatsAppPublisher = {
       publishSendMessage: vi.fn().mockResolvedValue(ok(undefined)),
@@ -147,6 +146,7 @@ describe('POST /internal/webhooks/task-complete', () => {
       logChunkRepo,
       workerDiscovery,
       taskDispatcher,
+      workerSettingsRepo,
       whatsappNotifier,
       actionsAgentClient,
       rateLimitService,
@@ -171,6 +171,7 @@ describe('POST /internal/webhooks/task-complete', () => {
       logChunkRepo: LogChunkRepository;
       workerDiscovery: WorkerDiscoveryService;
       taskDispatcher: TaskDispatcherService;
+      workerSettingsRepo: WorkerSettingsRepository;
       actionsAgentClient: ActionsAgentClient;
       whatsappNotifier: WhatsAppNotifier;
       rateLimitService: RateLimitService;
@@ -1277,13 +1278,10 @@ describe('POST /internal/webhooks/task-complete - Metrics recording', () => {
       logger,
       codeTaskRepo,
       workerDiscovery: createWorkerDiscoveryService({ logger }),
-      taskDispatcher: createTaskDispatcherService({
+      taskDispatcher: createTaskDispatcherService({ logger }),
+      workerSettingsRepo: createWorkerSettingsRepository({
+        firestore: fakeFirestore as unknown as Firestore,
         logger,
-        cfAccessClientId: 'test-client-id',
-        cfAccessClientSecret: 'test-client-secret',
-        dispatchSigningSecret: 'test-dispatch-secret',
-        orchestratorMacUrl: 'https://cc-mac.intexuraos.cloud',
-        orchestratorVmUrl: 'https://cc-vm.intexuraos.cloud',
       }),
       whatsappNotifier: createWhatsAppNotifier({
         whatsappPublisher: {
@@ -1333,6 +1331,7 @@ describe('POST /internal/webhooks/task-complete - Metrics recording', () => {
       codeTaskRepo: CodeTaskRepository;
       workerDiscovery: WorkerDiscoveryService;
       taskDispatcher: TaskDispatcherService;
+      workerSettingsRepo: WorkerSettingsRepository;
       logChunkRepo: LogChunkRepository;
       actionsAgentClient: ActionsAgentClient;
       whatsappNotifier: WhatsAppNotifier;
@@ -1577,13 +1576,10 @@ describe('POST /internal/logs', () => {
     });
 
     const workerDiscovery = createWorkerDiscoveryService({ logger });
-    taskDispatcher = createTaskDispatcherService({
+    taskDispatcher = createTaskDispatcherService({ logger });
+    const workerSettingsRepo = createWorkerSettingsRepository({
+      firestore: fakeFirestore as unknown as Firestore,
       logger,
-      cfAccessClientId: 'test-client-id',
-      cfAccessClientSecret: 'test-client-secret',
-      dispatchSigningSecret: 'test-dispatch-secret',
-      orchestratorMacUrl: 'https://cc-mac.intexuraos.cloud',
-      orchestratorVmUrl: 'https://cc-vm.intexuraos.cloud',
     });
     const actionsAgentClient = createActionsAgentClient({
       baseUrl: 'http://actions-agent',
@@ -1626,6 +1622,7 @@ describe('POST /internal/logs', () => {
       logChunkRepo,
       workerDiscovery,
       taskDispatcher,
+      workerSettingsRepo,
       actionsAgentClient,
       rateLimitService,
       linearIssueService,
@@ -1645,6 +1642,7 @@ describe('POST /internal/logs', () => {
       logChunkRepo: LogChunkRepository;
       workerDiscovery: WorkerDiscoveryService;
       taskDispatcher: TaskDispatcherService;
+      workerSettingsRepo: WorkerSettingsRepository;
       actionsAgentClient: ActionsAgentClient;
       whatsappNotifier: WhatsAppNotifier;
       rateLimitService: RateLimitService;
@@ -1989,13 +1987,10 @@ describe('POST /internal/webhooks/task-complete - WhatsApp notifications', () =>
     });
 
     const workerDiscovery = createWorkerDiscoveryService({ logger });
-    taskDispatcher = createTaskDispatcherService({
+    taskDispatcher = createTaskDispatcherService({ logger });
+    const workerSettingsRepo = createWorkerSettingsRepository({
+      firestore: fakeFirestore as unknown as Firestore,
       logger,
-      cfAccessClientId: 'test-client-id',
-      cfAccessClientSecret: 'test-client-secret',
-      dispatchSigningSecret: 'test-dispatch-secret',
-      orchestratorMacUrl: 'https://cc-mac.intexuraos.cloud',
-      orchestratorVmUrl: 'https://cc-vm.intexuraos.cloud',
     });
     mockWhatsAppPublisher = {
       publishSendMessage: vi.fn().mockResolvedValue(ok(undefined)),
@@ -2040,6 +2035,7 @@ describe('POST /internal/webhooks/task-complete - WhatsApp notifications', () =>
       logChunkRepo,
       workerDiscovery,
       taskDispatcher,
+      workerSettingsRepo,
       whatsappNotifier,
       actionsAgentClient,
       rateLimitService,
@@ -2064,6 +2060,7 @@ describe('POST /internal/webhooks/task-complete - WhatsApp notifications', () =>
       logChunkRepo: LogChunkRepository;
       workerDiscovery: WorkerDiscoveryService;
       taskDispatcher: TaskDispatcherService;
+      workerSettingsRepo: WorkerSettingsRepository;
       actionsAgentClient: ActionsAgentClient;
       whatsappNotifier: WhatsAppNotifier;
       rateLimitService: RateLimitService;

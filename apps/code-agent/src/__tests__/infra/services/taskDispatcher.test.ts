@@ -1,15 +1,22 @@
 /**
  * Tests for Task Dispatcher service with HMAC signing and worker fallback.
+ *
+ * Note: With per-user credentials, the dispatcher no longer stores credentials.
+ * Instead, each dispatch call receives credentials via workerCredentials.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Logger } from '@intexuraos/common-core';
-import type { TaskDispatcherDeps } from '../../../domain/services/taskDispatcher.js';
+import type {
+  TaskDispatcherDeps,
+  DispatchWorkerCredentials,
+} from '../../../domain/services/taskDispatcher.js';
 import { createTaskDispatcherService } from '../../../infra/services/taskDispatcherImpl.js';
 import { generateNonce, generateWebhookSecret, signDispatchRequest } from '../../../infra/services/hmacSigning.js';
 
 describe('taskDispatcherImpl', () => {
   let logger: Logger;
   let baseDeps: TaskDispatcherDeps;
+  let testWorkerCredentials: DispatchWorkerCredentials;
 
   beforeEach(() => {
     logger = {
@@ -21,11 +28,22 @@ describe('taskDispatcherImpl', () => {
 
     baseDeps = {
       logger,
-      cfAccessClientId: 'test-client-id',
-      cfAccessClientSecret: 'test-client-secret',
-      dispatchSigningSecret: 'test-dispatch-secret',
-      orchestratorMacUrl: 'https://cc-mac.intexuraos.cloud',
-      orchestratorVmUrl: 'https://cc-vm.intexuraos.cloud',
+    };
+
+    testWorkerCredentials = {
+      mac: {
+        url: 'https://cc-mac.intexuraos.cloud',
+        cfAccessClientId: 'test-client-id',
+        cfAccessClientSecret: 'test-client-secret',
+        dispatchSigningSecret: 'test-dispatch-secret',
+      },
+      vm: {
+        url: 'https://cc-vm.intexuraos.cloud',
+        cfAccessClientId: 'test-client-id',
+        cfAccessClientSecret: 'test-client-secret',
+        dispatchSigningSecret: 'test-dispatch-secret',
+      },
+      priority: ['mac', 'vm'],
     };
 
     // Mock global fetch
@@ -54,6 +72,7 @@ describe('taskDispatcherImpl', () => {
         workerType: 'opus',
         webhookUrl: 'https://example.com/webhook',
         webhookSecret: 'whsec_test123',
+        workerCredentials: testWorkerCredentials,
       });
 
       expect(result.ok).toBe(true);
@@ -96,6 +115,7 @@ describe('taskDispatcherImpl', () => {
         workerType: 'opus' as const,
         webhookUrl: 'https://example.com/webhook',
         webhookSecret: 'whsec_test123',
+        workerCredentials: testWorkerCredentials,
       };
 
       await service.dispatch(dispatchRequest);
@@ -118,7 +138,9 @@ describe('taskDispatcherImpl', () => {
 
       // Verify signature is deterministic for same timestamp
       const timestamp = headers['X-Dispatch-Timestamp'];
-      const body = JSON.stringify(dispatchRequest);
+      // Body excludes workerCredentials (not sent to worker)
+      const { workerCredentials: _, ...requestWithoutCredentials } = dispatchRequest;
+      const body = JSON.stringify(requestWithoutCredentials);
       const crypto = await import('node:crypto');
       const message = `${timestamp}.${body}`;
       const expectedSignature = crypto
@@ -145,6 +167,7 @@ describe('taskDispatcherImpl', () => {
         workerType: 'opus',
         webhookUrl: 'https://example.com/webhook',
         webhookSecret: 'whsec_test',
+        workerCredentials: testWorkerCredentials,
       });
 
       const fetchCall = vi.mocked(global.fetch).mock.calls[0];
@@ -188,6 +211,7 @@ describe('taskDispatcherImpl', () => {
         workerType: 'opus',
         webhookUrl: 'https://example.com/webhook',
         webhookSecret: 'whsec_test',
+        workerCredentials: testWorkerCredentials,
       });
 
       expect(result.ok).toBe(true);
@@ -216,6 +240,7 @@ describe('taskDispatcherImpl', () => {
         workerType: 'opus',
         webhookUrl: 'https://example.com/webhook',
         webhookSecret: 'whsec_test',
+        workerCredentials: testWorkerCredentials,
       });
 
       expect(result.ok).toBe(false);
@@ -246,6 +271,7 @@ describe('taskDispatcherImpl', () => {
         workerType: 'opus',
         webhookUrl: 'https://example.com/webhook',
         webhookSecret: 'whsec_test',
+        workerCredentials: testWorkerCredentials,
       });
 
       expect(result.ok).toBe(false);
@@ -271,6 +297,7 @@ describe('taskDispatcherImpl', () => {
         workerType: 'opus',
         webhookUrl: 'https://example.com/webhook',
         webhookSecret: 'whsec_test',
+        workerCredentials: testWorkerCredentials,
       });
 
       expect(result.ok).toBe(false);
@@ -297,6 +324,7 @@ describe('taskDispatcherImpl', () => {
         workerType: 'opus',
         webhookUrl: 'https://example.com/webhook',
         webhookSecret: 'whsec_test',
+        workerCredentials: testWorkerCredentials,
       });
 
       expect(result.ok).toBe(false);
@@ -328,6 +356,7 @@ describe('taskDispatcherImpl', () => {
         workerType: 'opus',
         webhookUrl: 'https://example.com/webhook',
         webhookSecret: 'whsec_test',
+        workerCredentials: testWorkerCredentials,
       });
 
       expect(result.ok).toBe(false);
@@ -338,12 +367,17 @@ describe('taskDispatcherImpl', () => {
     });
 
     it('returns error when dispatchSigningSecret is empty', async () => {
-      const depsWithEmptySecret: TaskDispatcherDeps = {
-        ...baseDeps,
-        dispatchSigningSecret: '',
+      const service = createTaskDispatcherService(baseDeps);
+      const credentialsWithEmptySecret: DispatchWorkerCredentials = {
+        mac: {
+          url: 'https://cc-mac.intexuraos.cloud',
+          cfAccessClientId: 'test-client-id',
+          cfAccessClientSecret: 'test-client-secret',
+          dispatchSigningSecret: '',
+        },
+        priority: ['mac'],
       };
 
-      const service = createTaskDispatcherService(depsWithEmptySecret);
       vi.mocked(global.fetch).mockResolvedValueOnce({
         ok: true,
         json: async () => ({ status: 'accepted' }),
@@ -358,12 +392,14 @@ describe('taskDispatcherImpl', () => {
         workerType: 'opus',
         webhookUrl: 'https://example.com/webhook',
         webhookSecret: 'whsec_test',
+        workerCredentials: credentialsWithEmptySecret,
       });
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
-        expect(result.error.code).toBe('dispatch_failed');
-        expect(result.error.message).toContain('dispatchSigningSecret is required');
+        // When signing fails for all workers, they're all skipped and treated as unavailable
+        expect(result.error.code).toBe('worker_unavailable');
+        expect(result.error.message).toContain('all rejected or busy');
       }
     });
 
@@ -394,6 +430,7 @@ describe('taskDispatcherImpl', () => {
         workerType: 'opus',
         webhookUrl: 'https://example.com/webhook',
         webhookSecret: 'whsec_test',
+        workerCredentials: testWorkerCredentials,
       });
 
       expect(result.ok).toBe(true);
@@ -420,6 +457,7 @@ describe('taskDispatcherImpl', () => {
         webhookUrl: 'https://example.com/webhook',
         webhookSecret: 'whsec_test',
         linearIssueId: 'INT-123',
+        workerCredentials: testWorkerCredentials,
       });
 
       const fetchCall = mockFetch.mock.calls[0];
@@ -453,6 +491,7 @@ describe('taskDispatcherImpl', () => {
         webhookUrl: 'https://example.com/webhook',
         webhookSecret: 'whsec_test',
         // linearIssueId not provided
+        workerCredentials: testWorkerCredentials,
       });
 
       const fetchCall = mockFetch.mock.calls[0];
@@ -486,6 +525,7 @@ describe('taskDispatcherImpl', () => {
         webhookUrl: 'https://example.com/webhook',
         webhookSecret: 'whsec_test',
         traceId: 'test-trace-id-123',
+        workerCredentials: testWorkerCredentials,
       });
 
       const fetchCall = mockFetch.mock.calls[0];
@@ -519,6 +559,7 @@ describe('taskDispatcherImpl', () => {
         webhookUrl: 'https://example.com/webhook',
         webhookSecret: 'whsec_test',
         // traceId not provided
+        workerCredentials: testWorkerCredentials,
       });
 
       const fetchCall = mockFetch.mock.calls[0];
@@ -550,6 +591,7 @@ describe('taskDispatcherImpl', () => {
         workerType: 'opus',
         webhookUrl: 'https://example.com/webhook',
         webhookSecret: 'whsec_test',
+        workerCredentials: testWorkerCredentials,
       });
 
       expect(result.ok).toBe(false);
@@ -561,13 +603,17 @@ describe('taskDispatcherImpl', () => {
     });
 
     it('uses empty string for missing CF credentials', async () => {
-      const depsWithEmptyCF: TaskDispatcherDeps = {
-        ...baseDeps,
-        cfAccessClientId: '',
-        cfAccessClientSecret: '',
+      const service = createTaskDispatcherService(baseDeps);
+      const credentialsWithEmptyCF: DispatchWorkerCredentials = {
+        mac: {
+          url: 'https://cc-mac.intexuraos.cloud',
+          cfAccessClientId: '',
+          cfAccessClientSecret: '',
+          dispatchSigningSecret: 'test-dispatch-secret',
+        },
+        priority: ['mac'],
       };
 
-      const service = createTaskDispatcherService(depsWithEmptyCF);
       const mockFetch = vi.mocked(global.fetch);
       mockFetch.mockResolvedValueOnce({
         ok: true,
@@ -583,6 +629,7 @@ describe('taskDispatcherImpl', () => {
         workerType: 'opus',
         webhookUrl: 'https://example.com/webhook',
         webhookSecret: 'whsec_test',
+        workerCredentials: credentialsWithEmptyCF,
       });
 
       const fetchCall = mockFetch.mock.calls[0];
@@ -600,15 +647,13 @@ describe('taskDispatcherImpl', () => {
     });
   });
 
-  describe('getWorkerConfigs', () => {
-    it('returns empty array when no orchestrator URLs configured', async () => {
-      const depsWithNoWorkers: TaskDispatcherDeps = {
-        ...baseDeps,
-        orchestratorMacUrl: '',
-        orchestratorVmUrl: '',
+  describe('getWorkerConfigsFromCredentials', () => {
+    it('returns error when no workers configured in credentials', async () => {
+      const service = createTaskDispatcherService(baseDeps);
+      const emptyCredentials: DispatchWorkerCredentials = {
+        priority: ['mac', 'vm'],
+        // No mac or vm credentials
       };
-
-      const service = createTaskDispatcherService(depsWithNoWorkers);
 
       const result = await service.dispatch({
         taskId: 'task-123',
@@ -619,22 +664,28 @@ describe('taskDispatcherImpl', () => {
         workerType: 'opus',
         webhookUrl: 'https://example.com/webhook',
         webhookSecret: 'whsec_test',
+        workerCredentials: emptyCredentials,
       });
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
         expect(result.error.code).toBe('worker_unavailable');
-        expect(result.error.message).toContain('No workers available');
+        expect(result.error.message).toContain('No workers configured for this user');
       }
     });
 
-    it('uses only mac worker when vm URL not configured', async () => {
-      const depsWithMacOnly: TaskDispatcherDeps = {
-        ...baseDeps,
-        orchestratorVmUrl: '',
+    it('uses only mac worker when vm not in credentials', async () => {
+      const service = createTaskDispatcherService(baseDeps);
+      const macOnlyCredentials: DispatchWorkerCredentials = {
+        mac: {
+          url: 'https://cc-mac.intexuraos.cloud',
+          cfAccessClientId: 'test-client-id',
+          cfAccessClientSecret: 'test-client-secret',
+          dispatchSigningSecret: 'test-dispatch-secret',
+        },
+        priority: ['mac'],
       };
 
-      const service = createTaskDispatcherService(depsWithMacOnly);
       vi.mocked(global.fetch).mockResolvedValueOnce({
         ok: true,
         json: async () => ({ status: 'accepted' }),
@@ -649,6 +700,7 @@ describe('taskDispatcherImpl', () => {
         workerType: 'opus',
         webhookUrl: 'https://example.com/webhook',
         webhookSecret: 'whsec_test',
+        workerCredentials: macOnlyCredentials,
       });
 
       expect(result.ok).toBe(true);
@@ -660,13 +712,18 @@ describe('taskDispatcherImpl', () => {
       expect(vi.mocked(global.fetch)).toHaveBeenCalledTimes(1);
     });
 
-    it('uses only vm worker when mac URL not configured', async () => {
-      const depsWithVmOnly: TaskDispatcherDeps = {
-        ...baseDeps,
-        orchestratorMacUrl: '',
+    it('uses only vm worker when mac not in credentials', async () => {
+      const service = createTaskDispatcherService(baseDeps);
+      const vmOnlyCredentials: DispatchWorkerCredentials = {
+        vm: {
+          url: 'https://cc-vm.intexuraos.cloud',
+          cfAccessClientId: 'test-client-id',
+          cfAccessClientSecret: 'test-client-secret',
+          dispatchSigningSecret: 'test-dispatch-secret',
+        },
+        priority: ['vm'],
       };
 
-      const service = createTaskDispatcherService(depsWithVmOnly);
       vi.mocked(global.fetch).mockResolvedValueOnce({
         ok: true,
         json: async () => ({ status: 'accepted' }),
@@ -681,12 +738,60 @@ describe('taskDispatcherImpl', () => {
         workerType: 'opus',
         webhookUrl: 'https://example.com/webhook',
         webhookSecret: 'whsec_test',
+        workerCredentials: vmOnlyCredentials,
       });
 
       expect(result.ok).toBe(true);
       if (result.ok) {
         expect(result.value.workerLocation).toBe('vm');
       }
+    });
+
+    it('respects priority order in credentials', async () => {
+      const service = createTaskDispatcherService(baseDeps);
+      const vmFirstCredentials: DispatchWorkerCredentials = {
+        mac: {
+          url: 'https://cc-mac.intexuraos.cloud',
+          cfAccessClientId: 'test-client-id',
+          cfAccessClientSecret: 'test-client-secret',
+          dispatchSigningSecret: 'test-dispatch-secret',
+        },
+        vm: {
+          url: 'https://cc-vm.intexuraos.cloud',
+          cfAccessClientId: 'test-client-id',
+          cfAccessClientSecret: 'test-client-secret',
+          dispatchSigningSecret: 'test-dispatch-secret',
+        },
+        priority: ['vm', 'mac'],
+      };
+
+      vi.mocked(global.fetch).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ status: 'accepted' }),
+      } as Response);
+
+      const result = await service.dispatch({
+        taskId: 'task-123',
+        prompt: 'Test',
+        systemPromptHash: 'abc123',
+        repository: 'test/repo',
+        baseBranch: 'main',
+        workerType: 'opus',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'whsec_test',
+        workerCredentials: vmFirstCredentials,
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.workerLocation).toBe('vm');
+      }
+
+      // Should have called VM first due to priority
+      expect(vi.mocked(global.fetch)).toHaveBeenCalledWith(
+        'https://cc-vm.intexuraos.cloud/tasks',
+        expect.any(Object)
+      );
     });
   });
 
@@ -769,6 +874,73 @@ describe('taskDispatcherImpl', () => {
       if (result1.ok && result2.ok) {
         expect(result1.value.signature).not.toBe(result2.value.signature);
       }
+    });
+  });
+
+  describe('cancelOnWorker', () => {
+    it('sends DELETE request to worker with credentials', async () => {
+      const service = createTaskDispatcherService(baseDeps);
+      const mockFetch = vi.mocked(global.fetch);
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({}),
+      } as Response);
+
+      const credentials = {
+        url: 'https://cc-mac.intexuraos.cloud',
+        cfAccessClientId: 'test-client-id',
+        cfAccessClientSecret: 'test-client-secret',
+        dispatchSigningSecret: 'test-dispatch-secret',
+      };
+
+      await service.cancelOnWorker('task-123', 'mac', credentials);
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        'https://cc-mac.intexuraos.cloud/tasks/task-123',
+        expect.objectContaining({
+          method: 'DELETE',
+          headers: expect.objectContaining({
+            'CF-Access-Client-Id': 'test-client-id',
+            'CF-Access-Client-Secret': 'test-client-secret',
+          }),
+        })
+      );
+    });
+
+    it('skips cancellation when no credentials provided', async () => {
+      const service = createTaskDispatcherService(baseDeps);
+      const mockFetch = vi.mocked(global.fetch);
+
+      await service.cancelOnWorker('task-123', 'mac');
+
+      expect(mockFetch).not.toHaveBeenCalled();
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ taskId: 'task-123' }),
+        expect.stringContaining('No credentials')
+      );
+    });
+
+    it('logs warning on cancellation failure', async () => {
+      const service = createTaskDispatcherService(baseDeps);
+      const mockFetch = vi.mocked(global.fetch);
+      mockFetch.mockRejectedValueOnce(new Error('Network error'));
+
+      const credentials = {
+        url: 'https://cc-mac.intexuraos.cloud',
+        cfAccessClientId: 'test-client-id',
+        cfAccessClientSecret: 'test-client-secret',
+        dispatchSigningSecret: 'test-dispatch-secret',
+      };
+
+      await service.cancelOnWorker('task-123', 'mac', credentials);
+
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          taskId: 'task-123',
+          error: expect.stringContaining('Network error'),
+        }),
+        expect.any(String)
+      );
     });
   });
 });
