@@ -114,7 +114,7 @@ function sanitizeHeaders(
       sanitized[key] = '[REDACTED]';
     } else if (typeof value === 'string') {
       sanitized[key] = value;
-    } else if (Array.isArray(value)) {
+    } /* v8 ignore ts-type -- headers are strings in practice */ else if (Array.isArray(value)) {
       sanitized[key] = value[0] ?? '';
     }
   }

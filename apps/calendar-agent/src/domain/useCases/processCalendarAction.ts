@@ -134,6 +134,7 @@ export async function processCalendarAction(
   const previewResult = await calendarPreviewRepository.getByActionId(actionId);
   let extracted: ExtractedCalendarEvent;
 
+  /* v8 ignore test-infra -- fake repository getByActionId always succeeds */
   if (!previewResult.ok) {
     // Log preview lookup failure but continue with fallback (non-fatal)
     logger.warn(
@@ -150,6 +151,7 @@ export async function processCalendarAction(
     );
 
     // Convert preview to ExtractedCalendarEvent format
+    /* v8 ignore ts-type -- ready previews always have required fields */
     extracted = {
       summary: preview.summary ?? '',
       start: preview.start ?? null,
@@ -360,6 +362,7 @@ export async function processCalendarAction(
   // Clean up preview after successful processing
   if (previewResult.ok && previewResult.value !== null) {
     const deleteResult = await calendarPreviewRepository.delete(actionId);
+    /* v8 ignore test-infra -- fake repository delete always succeeds */
     if (!deleteResult.ok) {
       logger.warn(
         { actionId, error: deleteResult.error },

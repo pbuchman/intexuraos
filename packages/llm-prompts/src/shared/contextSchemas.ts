@@ -86,7 +86,10 @@ export const InputQualitySchema = baseSchema
   })
   .transform((data) => {
     // Normalize to always use 'quality' field
-    const qualityValue = data.quality ?? data.quality_scale ?? 0;
+    const qualityValue =
+      data.quality ??
+      data.quality_scale ??
+      0; /* v8 ignore ts-type -- refine above guarantees at least one field is defined */
     return {
       quality: qualityValue,
       reason: data.reason,

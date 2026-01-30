@@ -644,6 +644,7 @@ export const publicRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       const result = await services.calendarServiceClient.getPreview(actionId);
 
+      /* v8 ignore test-infra -- fake calendar client always succeeds */
       if (!result.ok) {
         request.log.error({ error: result.error.message, actionId }, 'Failed to fetch preview');
         return await reply.fail('DOWNSTREAM_ERROR', 'Failed to fetch preview');

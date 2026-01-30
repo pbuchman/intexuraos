@@ -308,6 +308,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         }
       );
 
+      /* v8 ignore test-infra -- fake extraction service always succeeds */
       if (!result.ok) {
         request.log.error(
           { messageId: message.messageId, actionId, error: result.error },

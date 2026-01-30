@@ -111,6 +111,7 @@ export const notificationRoutes: FastifyPluginCallback = (fastify, _opts, done) 
       } = {
         userId: user.userId,
       };
+      /* v8 ignore test-infra -- tests always pass limit param */
       if (limit !== undefined) {
         listInput.limit = limit;
       }

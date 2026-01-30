@@ -38,7 +38,9 @@ export const calendarActionExtractionPrompt: PromptBuilder<
 
     // Extract date part from "YYYY-MM-DD DayOfWeek" format for template literal examples
     const parts = input.currentDate.split(' ');
-    const datePart = parts[0] ?? input.currentDate;
+    const datePart =
+      parts[0] ??
+      input.currentDate; /* v8 ignore ts-type -- split() always returns at least one element, fallback is defensive */
 
     return `Extract calendar event information from the user's message.
 

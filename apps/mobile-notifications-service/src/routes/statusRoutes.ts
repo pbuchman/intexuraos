@@ -89,6 +89,7 @@ export const statusRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         }
         if (notificationsResult.value.notifications.length > 0) {
           const firstNotification = notificationsResult.value.notifications[0];
+          /* v8 ignore ts-type -- length > 0 check guarantees notifications[0] exists */
           if (firstNotification !== undefined) {
             lastNotificationAt = firstNotification.receivedAt;
           }

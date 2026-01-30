@@ -72,6 +72,7 @@ export function decryptToken(encryptedData: string): string {
   const authTagPart = parts[1];
   const encryptedPart = parts[2];
 
+  /* v8 ignore ts-type -- parts.length === 3 check on line 67 guarantees these exist */
   if (ivPart === undefined || authTagPart === undefined || encryptedPart === undefined) {
     throw new Error('Invalid encrypted data format');
   }

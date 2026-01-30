@@ -160,6 +160,7 @@ export function createCalendarServiceHttpClient(
       }
 
       if (!response.ok) {
+        /* v8 ignore ts-type -- API always returns error object with message */
         const errorMessage = body.error?.message ?? `HTTP ${String(response.status)}: ${response.statusText}`;
         logger.error(
           { httpStatus: response.status, statusText: response.statusText, errorMessage, actionId },
