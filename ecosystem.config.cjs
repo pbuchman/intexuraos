@@ -137,13 +137,12 @@ const SERVICE_ENV_MAPPINGS = {
 /**
  * Create a service configuration for PM2
  */
-function createServiceConfig(name, port) {
-  return {
+function createServiceConfig(name, port, options = {}) {
+  const { startupDelay = 0 } = options;
+
+  const baseConfig = {
     name,
-    script: 'pnpm',
-    args: ['exec', 'tsx', 'watch', 'src/index.ts'],
     cwd: `./apps/${name}`,
-    interpreter: 'none', // pnpm is the script itself
     env: {
       ...process.env,
       ...COMMON_SERVICE_ENV,
@@ -156,6 +155,22 @@ function createServiceConfig(name, port) {
     restart_delay: 5000,
     watch: false, // tsx watch handles file watching
     log_date_format: 'YYYY-MM-DD HH:mm:ss',
+  };
+
+  if (startupDelay > 0) {
+    return {
+      ...baseConfig,
+      script: 'bash',
+      args: ['-c', `sleep ${startupDelay} && pnpm exec tsx watch src/index.ts`],
+      interpreter: 'none',
+    };
+  }
+
+  return {
+    ...baseConfig,
+    script: 'pnpm',
+    args: ['exec', 'tsx', 'watch', 'src/index.ts'],
+    interpreter: 'none', // pnpm is the script itself
   };
 }
 
@@ -171,16 +186,17 @@ module.exports = {
     createServiceConfig('notes-agent', 8121),
     createServiceConfig('todos-agent', 8123),
     createServiceConfig('bookmarks-agent', 8124),
-    createServiceConfig('calendar-agent', 8125),
-    createServiceConfig('linear-agent', 8126),
     createServiceConfig('code-agent', 8128),
-    createServiceConfig('web-agent', 8127),
 
-    // Services that depend on app-settings-service
-    createServiceConfig('user-service', 8110),
-    createServiceConfig('research-agent', 8116),
-    createServiceConfig('data-insights-agent', 8119),
-    createServiceConfig('image-service', 8120),
+    // Services that depend on app-settings-service (fetch pricing at startup)
+    // Startup delay allows app-settings-service to be ready
+    createServiceConfig('user-service', 8110, { startupDelay: 5 }),
+    createServiceConfig('research-agent', 8116, { startupDelay: 5 }),
+    createServiceConfig('data-insights-agent', 8119, { startupDelay: 5 }),
+    createServiceConfig('image-service', 8120, { startupDelay: 5 }),
+    createServiceConfig('calendar-agent', 8125, { startupDelay: 5 }),
+    createServiceConfig('linear-agent', 8126, { startupDelay: 5 }),
+    createServiceConfig('web-agent', 8127, { startupDelay: 5 }),
 
     // Web app (Vite dev server)
     {
@@ -199,6 +215,24 @@ module.exports = {
       autorestart: true,
       max_restarts: 5,
       restart_delay: 2000,
+      watch: false,
+      log_date_format: 'YYYY-MM-DD HH:mm:ss',
+    },
+
+    // Log server for DevBar (streams PM2 logs via SSE, similar to pubsub-ui)
+    {
+      name: 'log-server',
+      script: 'node',
+      args: ['server.mjs'],
+      cwd: './tools/log-server',
+      interpreter: 'none',
+      env: {
+        PORT: '8106',
+        NODE_ENV: 'development',
+      },
+      autorestart: true,
+      max_restarts: 3,
+      restart_delay: 1000,
       watch: false,
       log_date_format: 'YYYY-MM-DD HH:mm:ss',
     },

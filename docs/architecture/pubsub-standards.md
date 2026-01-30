@@ -108,6 +108,51 @@ All topic configuration uses `INTEXURAOS_PUBSUB_*` prefix:
 4. **Optional topics** - Gracefully handles null topic names (skips publish)
 5. **Silent test mode** - Suppresses logs when `NODE_ENV=test`
 
+## Local Development
+
+### Architecture
+
+In production, GCP Pub/Sub automatically pushes messages to Cloud Run service endpoints. Locally, the **pubsub-ui** Docker container bridges this gap:
+
+```
+Service (publisher) → Pub/Sub Emulator (:8102) → pubsub-ui (:8105) → Service (handler)
+```
+
+**pubsub-ui** pulls messages from the emulator and POSTs them to local service endpoints (e.g., `http://localhost:8118/internal/actions/process`).
+
+### Starting Local Pub/Sub
+
+```bash
+# Start all Docker containers (includes pubsub-ui)
+pnpm run dev
+
+# Or just emulators
+pnpm run emulators:start
+```
+
+### Monitoring Dashboard
+
+Open http://localhost:8105 to view the Pub/Sub monitoring dashboard:
+
+- Real-time event stream
+- Topic filtering
+- Message payload inspection
+
+### Common Issues
+
+**"Topic not found" errors**: The pubsub-ui container creates topics on startup. If PM2 services started before pubsub-ui, restart them:
+
+```bash
+pnpm exec pm2 restart all
+```
+
+**Messages not processing**: Verify pubsub-ui is running:
+
+```bash
+docker compose -f docker/docker-compose.local.yaml ps
+curl http://localhost:8105/health | jq '.topics | length'  # Should be 14
+```
+
 ## Verification
 
 A verification script ensures all publishers extend `BasePubSubPublisher`:

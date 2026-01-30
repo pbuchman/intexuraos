@@ -230,6 +230,60 @@ alias tf='STORAGE_EMULATOR_HOST= FIRESTORE_EMULATOR_HOST= PUBSUB_EMULATOR_HOST= 
 
 Then use `tf init`, `tf plan`, `tf apply` instead of `terraform`.
 
+### Pub/Sub messages not being processed locally
+
+**Symptom:** Actions stay in `pending` status, commands don't trigger processing.
+
+**Cause:** The `pubsub-ui` Docker container isn't running. This container bridges Pub/Sub emulator to local services.
+
+**Verify:**
+
+```bash
+# Check all 3 containers are running
+docker compose -f docker/docker-compose.local.yaml ps
+
+# Expected: firebase-emulator, fake-gcs, pubsub-ui all "Up"
+```
+
+**Fix:**
+
+```bash
+# Restart all Docker containers
+docker compose -f docker/docker-compose.local.yaml up -d --build
+
+# Verify pubsub-ui is forwarding messages
+curl http://localhost:8105/health | jq '.topics | length'
+# Should return 14
+```
+
+### "Topic not found" errors
+
+**Symptom:** Service logs show `5 NOT_FOUND: Topic not found` when publishing to Pub/Sub.
+
+**Cause:** pubsub-ui creates topics on startup. If PM2 services started before pubsub-ui was ready, topics don't exist.
+
+**Fix:** Restart services after pubsub-ui is fully running:
+
+```bash
+pnpm exec pm2 restart all
+```
+
+### Verifying end-to-end Pub/Sub flow
+
+```bash
+# 1. Create an action via actions-agent
+curl -X POST http://localhost:8118/internal/actions \
+  -H "Content-Type: application/json" \
+  -H "X-Internal-Auth: local-dev-token" \
+  -d '{"userId":"test","commandId":"test","type":"todo","title":"Test","confidence":0.9}'
+
+# 2. Check pubsub-ui logs for forwarding (should show 200 OK)
+docker compose -f docker/docker-compose.local.yaml logs pubsub-ui --tail 10
+
+# 3. Verify action status changed in Firestore
+# Open http://localhost:8100 → Firestore → actions collection
+```
+
 ## Summary
 
 After completing these steps, you can:

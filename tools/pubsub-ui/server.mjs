@@ -24,8 +24,9 @@ const TOPICS = [
   'llm-call',
   'bookmark-enrich',
   'bookmark-summarize',
-  'todos-processing-local',
+  'todos-processing',
   'calendar-preview',
+  'snapshot-refresh',
 ];
 
 const TOPIC_ENDPOINTS = {
@@ -44,13 +45,24 @@ const TOPIC_ENDPOINTS = {
   'llm-call': 'http://host.docker.internal:8116/internal/llm/pubsub/process-llm-call',
   'bookmark-enrich': 'http://host.docker.internal:8124/internal/bookmarks/pubsub/enrich',
   'bookmark-summarize': 'http://host.docker.internal:8124/internal/bookmarks/pubsub/summarize',
-  'todos-processing-local':
-    'http://host.docker.internal:8123/internal/todos/pubsub/todos-processing',
+  'todos-processing': 'http://host.docker.internal:8123/internal/todos/pubsub/todos-processing',
   'calendar-preview': 'http://host.docker.internal:8125/internal/calendar/generate-preview',
+  'snapshot-refresh': 'http://host.docker.internal:8119/internal/snapshots/refresh',
 };
 
 const app = express();
 app.use(express.json());
+
+app.use((req, res, next) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(200);
+  }
+  next();
+});
+
 const clients = new Set();
 
 const pubsub = new PubSub({ projectId: PROJECT_ID });

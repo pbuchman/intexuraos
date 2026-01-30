@@ -134,6 +134,7 @@ async function checkPortsAvailable() {
     { name: 'GCS Emulator', port: 8103, type: 'emulator' },
     { name: 'Firebase Auth Emulator', port: 8104, type: 'emulator' },
     { name: 'Pub/Sub UI', port: 8105, type: 'emulator' },
+    { name: 'Log Server', port: 8106, type: 'emulator' },
     { name: 'Firebase UI', port: 8100, type: 'emulator' },
   ];
 
@@ -202,7 +203,7 @@ async function startEmulators() {
   }
 
   try {
-    execSync(`docker compose -f "${composeFile}" up -d`, {
+    execSync(`docker compose -f "${composeFile}" up -d --build`, {
       cwd: ROOT_DIR,
       stdio: 'inherit',
     });
@@ -210,9 +211,52 @@ async function startEmulators() {
     throw new Error(`Failed to start emulators: ${error.message}`);
   }
 
+  log('Verifying all Docker services are running...');
+  await verifyDockerServices(composeFile);
+
   log('Waiting for emulators to be healthy...');
   await waitForEmulators();
   logSuccess('All emulators are ready');
+}
+
+async function verifyDockerServices(composeFile) {
+  const requiredServices = ['firebase-emulator', 'fake-gcs', 'pubsub-ui'];
+
+  try {
+    const output = execSync(`docker compose -f "${composeFile}" ps --format json`, {
+      encoding: 'utf-8',
+      stdio: 'pipe',
+    });
+
+    const lines = output.trim().split('\n').filter(Boolean);
+    const runningServices = new Set();
+
+    for (const line of lines) {
+      try {
+        const container = JSON.parse(line);
+        if (container.State === 'running') {
+          runningServices.add(container.Service);
+        }
+      } catch {
+        // Skip non-JSON lines
+      }
+    }
+
+    const missing = requiredServices.filter((s) => !runningServices.has(s));
+    if (missing.length > 0) {
+      throw new Error(
+        `Required Docker services not running: ${missing.join(', ')}\n` +
+          'Try: docker compose -f docker/docker-compose.local.yaml up -d --build'
+      );
+    }
+
+    log(`  All ${requiredServices.length} Docker services are running`);
+  } catch (error) {
+    if (error.message.includes('Required Docker services')) {
+      throw error;
+    }
+    throw new Error(`Failed to verify Docker services: ${error.message}`);
+  }
 }
 
 async function waitForEmulators() {
@@ -277,6 +321,9 @@ async function main() {
   console.log('  Firebase UI:      http://localhost:8100');
   console.log('  Firestore:        http://localhost:8101');
   console.log('  Pub/Sub UI:       http://localhost:8105');
+  console.log('');
+  console.log('Dev tools (start with PM2):');
+  console.log('  Log Server:       http://localhost:8106 (DevBar Logs tab)');
   console.log('');
 }
 
