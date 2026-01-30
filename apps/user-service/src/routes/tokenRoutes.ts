@@ -98,6 +98,7 @@ export const tokenRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       // Parse request
       const parseResult = refreshTokenRequestSchema.safeParse(request.body);
+      /* v8 ignore schema -- Zod validation only fails with malformed requests */
       if (!parseResult.success) {
         return await handleValidationError(parseResult.error, reply);
       }

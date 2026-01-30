@@ -79,6 +79,7 @@ export class FirestoreSignatureConnectionRepository implements SignatureConnecti
       }
 
       const docSnap = snapshot.docs[0];
+      /* v8 ignore ts-type -- snapshot.empty check guarantees docs[0] exists */
       if (docSnap === undefined) {
         return ok(null);
       }

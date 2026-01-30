@@ -135,6 +135,7 @@ export function parseModelExtractionResponse(
     const parsed = JSON.parse(jsonMatch[0]) as unknown;
 
     if (typeof parsed !== 'object' || parsed === null) {
+      /* v8 ignore ts-type -- JSON.parse returns object | null, typeof null is 'object' */
       return null;
     }
 

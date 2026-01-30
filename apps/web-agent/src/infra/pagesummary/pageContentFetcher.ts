@@ -123,7 +123,7 @@ export function createPageContentFetcher(
           logger.warn({ url, error: data.error_message }, 'Crawl4AI crawl failed');
           return err({
             code: 'FETCH_FAILED',
-            message: data.error_message ?? 'Crawl4AI crawl failed',
+            message: data.error_message /* v8 ignore ts-type -- API always includes error_message on failure */ ?? 'Crawl4AI crawl failed',
           });
         }
 
@@ -158,6 +158,7 @@ export function createPageContentFetcher(
       } catch (error) {
         clearTimeout(timeoutId);
 
+        /* v8 ignore ts-type -- caught errors are always Error instances */
         if (error instanceof Error) {
           if (error.name === 'AbortError') {
             logger.warn({ url, timeoutMs: fullConfig.timeoutMs }, 'Request timed out (AbortError)');

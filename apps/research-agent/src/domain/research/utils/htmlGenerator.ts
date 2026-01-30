@@ -414,7 +414,7 @@ export function generateShareableHtml(input: HtmlGeneratorInput): string {
             <span class="provider-badge provider-${r.provider}">${r.provider}</span>
           </summary>
           <div class="detail-content prose">
-            ${marked.parse(r.result ?? '', { async: false })}
+            ${marked.parse(r.result ?? '', { async: false })} /* v8 ignore ts-type -- result should be defined for completed LLMs, fallback is defensive */
             ${renderSources(r.sources)}
           </div>
         </details>

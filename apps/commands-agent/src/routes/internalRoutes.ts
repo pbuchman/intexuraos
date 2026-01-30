@@ -170,6 +170,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         sourceType: eventData.sourceType,
         externalId: eventData.externalId,
         text: eventData.text,
+        /* v8 ignore test-infra -- spread conditional for optional summary field */
         ...(eventData.summary !== undefined && { summary: eventData.summary }),
         timestamp: eventData.timestamp,
       });

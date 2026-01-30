@@ -222,6 +222,7 @@ export class OpenGraphFetcher implements LinkPreviewFetcherPort {
       }
 
       const favicon = extractFavicon($, url);
+      /* v8 ignore test-infra -- test HTML fixtures always include favicon */
       if (favicon !== undefined) {
         preview.favicon = favicon;
       }

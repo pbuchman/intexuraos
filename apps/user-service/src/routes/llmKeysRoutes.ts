@@ -559,7 +559,7 @@ export const llmKeysRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         return await reply.fail('INTERNAL_ERROR', deleteResult.error.message);
       }
 
-      return await reply.ok(undefined);
+      return await reply.ok({});
     }
   );
 
