@@ -106,7 +106,7 @@ class WorkerDiscoveryImpl implements WorkerDiscoveryService {
       });
 
       if (!response.ok) {
-        this.logger.warn(
+        this.logger.info(
           { location, status: response.status },
           'Worker health check failed'
         );
@@ -178,7 +178,7 @@ class WorkerDiscoveryImpl implements WorkerDiscoveryService {
       const healthResult = await this.checkHealth(config.location);
 
       if (!healthResult.ok) {
-        this.logger.warn(
+        this.logger.info(
           { location: config.location, error: healthResult.error },
           'Worker health check failed, trying next worker'
         );
