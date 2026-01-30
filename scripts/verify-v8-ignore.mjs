@@ -435,7 +435,8 @@ function findFiles(directories) {
 
 // Legacy pattern: matches /* v8 ignore next <N>? -/-- explanation? */ or /* v8 ignore start -/-- explanation? */
 // Strict pattern - ONLY accepts valid categories from VALID_CATEGORIES
-const V8_IGNORE_STRICT_REGEX = /\/\*\s*v8\s+ignore\s+(ts-type|regex|module-init|async-timing|test-infra|upstream|module-mock|schema|source-map|auth-guard)\s+--\s*(.+?)\s*\*\//;
+const V8_IGNORE_STRICT_REGEX =
+  /\/\*\s*v8\s+ignore\s+(ts-type|regex|module-init|async-timing|test-infra|upstream|module-mock|schema|source-map|auth-guard)\s+--\s*(.+?)\s*\*\//;
 
 function findV8IgnoreComments(files) {
   const comments = [];

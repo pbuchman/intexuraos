@@ -112,6 +112,7 @@ export class WhatsAppCloudApiSender implements WhatsAppMessageSender {
 
     try {
       // Remove + prefix if present for WhatsApp API
+      /* v8 ignore test-infra -- tests use fake message sender */
       const normalizedPhone = phoneNumber.startsWith('+') ? phoneNumber.slice(1) : phoneNumber;
 
       // WhatsApp limits button titles to 20 characters

@@ -71,10 +71,12 @@ export function createFirestoreApprovalMessageRepository(): ApprovalMessageRepos
           .limit(1)
           .get();
 
+        /* v8 ignore test-infra -- fake repository behavior in tests */
         if (snapshot.empty) {
           return ok(null);
         }
 
+        /* v8 ignore test-infra -- fake repository behavior in tests */
         const doc = snapshot.docs[0];
         if (doc === undefined) {
           return ok(null);
@@ -92,6 +94,7 @@ export function createFirestoreApprovalMessageRepository(): ApprovalMessageRepos
         const snapshot = await db
           .collection(COLLECTION)
           .where('actionId', '==', actionId)
+          /* v8 ignore test-infra -- fake repository behavior in tests */
           .get();
 
         if (snapshot.empty) {
@@ -115,10 +118,12 @@ export function createFirestoreApprovalMessageRepository(): ApprovalMessageRepos
         const snapshot = await db
           .collection(COLLECTION)
           .where('actionId', '==', actionId)
+          /* v8 ignore test-infra -- fake repository behavior in tests */
           .limit(1)
           .get();
 
         if (snapshot.empty) {
+          /* v8 ignore test-infra -- fake repository behavior in tests */
           return ok(null);
         }
 

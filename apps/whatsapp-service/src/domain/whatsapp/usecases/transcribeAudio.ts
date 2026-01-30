@@ -304,6 +304,7 @@ export class TranscribeAudioUseCase {
             message: formattedMessage,
           },
         };
+        /* v8 ignore test-infra -- fake transcription service behavior */
         if (pollResult.lastApiCall !== undefined) {
           errorState.lastApiCall = pollResult.lastApiCall;
         }

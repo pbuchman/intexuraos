@@ -114,7 +114,6 @@ export function parseApprovalIntentResponse(response: string): ApprovalIntentRes
     if (typeof parsed !== 'object' || parsed === null) {
       return null;
     }
-    
 
     const obj = parsed as Record<string, unknown>;
 
