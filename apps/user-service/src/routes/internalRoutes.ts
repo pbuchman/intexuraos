@@ -38,19 +38,30 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             description: 'Decrypted LLM API keys',
             type: 'object',
             properties: {
-              google: { type: 'string', nullable: true },
-              openai: { type: 'string', nullable: true },
-              anthropic: { type: 'string', nullable: true },
-              perplexity: { type: 'string', nullable: true },
-              zai: { type: 'string', nullable: true },
+              success: { type: 'boolean', const: true },
+              data: {
+                type: 'object',
+                properties: {
+                  google: { type: 'string', nullable: true },
+                  openai: { type: 'string', nullable: true },
+                  anthropic: { type: 'string', nullable: true },
+                  perplexity: { type: 'string', nullable: true },
+                  zai: { type: 'string', nullable: true },
+                },
+              },
+              diagnostics: { $ref: 'Diagnostics#' },
             },
+            required: ['success', 'data'],
           },
           401: {
             description: 'Unauthorized',
             type: 'object',
             properties: {
-              error: { type: 'string' },
+              success: { type: 'boolean', const: false },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
             },
+            required: ['success', 'error'],
           },
         },
       },
@@ -69,8 +80,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           { reason: authResult.reason },
           'Internal auth failed for users/:uid/llm-keys endpoint'
         );
-        reply.status(401);
-        return { error: 'Unauthorized' };
+        return await reply.fail('UNAUTHORIZED', 'Internal auth failed for users/:uid/llm-keys endpoint');
       }
 
       const params = request.params as { uid: string };
@@ -79,11 +89,13 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       const result = await userSettingsRepository.getSettings(params.uid);
 
       if (!result.ok) {
-        return {
+        return await reply.ok({
           google: null,
           openai: null,
           anthropic: null,
-        };
+          perplexity: null,
+          zai: null,
+        });
       }
 
       const settings = result.value;
@@ -99,13 +111,13 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         return decrypted.value;
       };
 
-      return {
+      return await reply.ok({
         google: getDecryptedKey('google'),
         openai: getDecryptedKey('openai'),
         anthropic: getDecryptedKey('anthropic'),
         perplexity: getDecryptedKey('perplexity'),
         zai: getDecryptedKey('zai'),
-      };
+      });
     }
   );
 
@@ -140,8 +152,11 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             description: 'Unauthorized',
             type: 'object',
             properties: {
-              error: { type: 'string' },
+              success: { type: 'boolean', const: false },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
             },
+            required: ['success', 'error'],
           },
         },
       },
@@ -160,8 +175,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           { reason: authResult.reason },
           'Internal auth failed for llm-keys/:provider/last-used endpoint'
         );
-        reply.status(401);
-        return { error: 'Unauthorized' };
+        return await reply.fail('UNAUTHORIZED', 'Internal auth failed for llm-keys/:provider/last-used endpoint');
       }
 
       const params = request.params as { uid: string; provider: LlmProvider };
@@ -196,32 +210,48 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             description: 'Valid OAuth access token',
             type: 'object',
             properties: {
-              accessToken: { type: 'string' },
-              email: { type: 'string' },
+              success: { type: 'boolean', const: true },
+              data: {
+                type: 'object',
+                properties: {
+                  accessToken: { type: 'string' },
+                  email: { type: 'string' },
+                },
+                required: ['accessToken', 'email'],
+              },
+              diagnostics: { $ref: 'Diagnostics#' },
             },
+            required: ['success', 'data'],
           },
           401: {
             description: 'Unauthorized',
             type: 'object',
             properties: {
-              error: { type: 'string' },
+              success: { type: 'boolean', const: false },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
             },
+            required: ['success', 'error'],
           },
           404: {
             description: 'No OAuth connection found',
             type: 'object',
             properties: {
-              error: { type: 'string' },
-              code: { type: 'string' },
+              success: { type: 'boolean', const: false },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
             },
+            required: ['success', 'error'],
           },
-          500: {
-            description: 'Internal error',
+          503: {
+            description: 'Service misconfigured',
             type: 'object',
             properties: {
-              error: { type: 'string' },
-              code: { type: 'string' },
+              success: { type: 'boolean', const: false },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
             },
+            required: ['success', 'error'],
           },
         },
       },
@@ -239,16 +269,14 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           { reason: authResult.reason },
           'Internal auth failed for oauth/google/token endpoint'
         );
-        reply.status(401);
-        return { error: 'Unauthorized' };
+        return await reply.fail('UNAUTHORIZED', 'Internal auth failed for oauth/google/token endpoint');
       }
 
       const params = request.params as { uid: string };
       const { oauthConnectionRepository, googleOAuthClient } = getServices();
 
       if (googleOAuthClient === null) {
-        reply.status(500);
-        return { error: 'Google OAuth is not configured', code: 'CONFIGURATION_ERROR' };
+        return await reply.fail('MISCONFIGURED', 'Google OAuth is not configured');
       }
 
       const result = await getValidAccessToken(
@@ -258,17 +286,15 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       if (!result.ok) {
         if (result.error.code === 'CONNECTION_NOT_FOUND') {
-          reply.status(404);
-          return { error: result.error.message, code: result.error.code };
+          return await reply.fail('NOT_FOUND', result.error.message);
         }
-        reply.status(500);
-        return { error: result.error.message, code: result.error.code };
+        return await reply.fail('DOWNSTREAM_ERROR', result.error.message);
       }
 
-      return {
+      return await reply.ok({
         accessToken: result.value.accessToken,
         email: result.value.email,
-      };
+      });
     }
   );
 
@@ -294,20 +320,31 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             description: 'User LLM preferences',
             type: 'object',
             properties: {
-              llmPreferences: {
+              success: { type: 'boolean', const: true },
+              data: {
                 type: 'object',
                 properties: {
-                  defaultModel: { type: 'string' },
+                  llmPreferences: {
+                    type: 'object',
+                    properties: {
+                      defaultModel: { type: 'string' },
+                    },
+                  },
                 },
               },
+              diagnostics: { $ref: 'Diagnostics#' },
             },
+            required: ['success', 'data'],
           },
           401: {
             description: 'Unauthorized',
             type: 'object',
             properties: {
-              error: { type: 'string' },
+              success: { type: 'boolean', const: false },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
             },
+            required: ['success', 'error'],
           },
         },
       },
@@ -325,8 +362,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           { reason: authResult.reason },
           'Internal auth failed for users/:uid/settings endpoint'
         );
-        reply.status(401);
-        return { error: 'Unauthorized' };
+        return await reply.fail('UNAUTHORIZED', 'Internal auth failed for users/:uid/settings endpoint');
       }
 
       const params = request.params as { uid: string };
@@ -340,13 +376,13 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           'Failed to fetch user settings'
         );
         // Return empty preferences on error instead of failing
-        return { llmPreferences: undefined };
+        return await reply.ok({ llmPreferences: undefined });
       }
 
       const settings = result.value;
-      return {
+      return await reply.ok({
         llmPreferences: settings?.llmPreferences,
-      };
+      });
     }
   );
 

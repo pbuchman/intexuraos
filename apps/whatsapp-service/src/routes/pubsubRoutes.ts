@@ -77,22 +77,28 @@ export function createPubsubRoutes(config: Config): FastifyPluginCallback {
               description: 'Invalid message format',
               type: 'object',
               properties: {
-                error: { type: 'string' },
+                success: { type: 'boolean', const: false },
+                error: { $ref: 'ErrorBody#' },
               },
+              required: ['success', 'error'],
             },
             401: {
               description: 'Unauthorized',
               type: 'object',
               properties: {
-                error: { type: 'string' },
+                success: { type: 'boolean', const: false },
+                error: { $ref: 'ErrorBody#' },
               },
+              required: ['success', 'error'],
             },
             500: {
               description: 'Send failed',
               type: 'object',
               properties: {
-                error: { type: 'string' },
+                success: { type: 'boolean', const: false },
+                error: { $ref: 'ErrorBody#' },
               },
+              required: ['success', 'error'],
             },
           },
         },
@@ -127,8 +133,7 @@ export function createPubsubRoutes(config: Config): FastifyPluginCallback {
               { reason: authResult.reason },
               'Internal auth failed for pubsub/send-message endpoint'
             );
-            reply.status(401);
-            return { error: 'Unauthorized' };
+            return await reply.fail('UNAUTHORIZED', 'Internal auth failed for pubsub/send-message endpoint');
           }
         }
 
@@ -143,15 +148,13 @@ export function createPubsubRoutes(config: Config): FastifyPluginCallback {
             { messageId: body.message.messageId },
             'Failed to decode PubSub message'
           );
-          reply.status(400);
-          return { error: 'Invalid message format' };
+          return await reply.fail('INVALID_REQUEST', 'Failed to decode PubSub message');
         }
 
         const parsedType = eventData.type as string;
         if (parsedType !== 'whatsapp.message.send') {
           request.log.warn({ type: parsedType }, 'Unexpected event type');
-          reply.status(400);
-          return { error: 'Invalid event type' };
+          return await reply.fail('INVALID_REQUEST', 'Unexpected event type');
         }
 
         request.log.info(
@@ -175,8 +178,7 @@ export function createPubsubRoutes(config: Config): FastifyPluginCallback {
             },
             'Failed to look up phone number for user'
           );
-          reply.status(500);
-          return { error: 'Failed to look up phone number' };
+          return await reply.fail('INTERNAL_ERROR', 'Failed to look up phone number');
         }
 
         if (phoneResult.value === null) {
@@ -188,7 +190,7 @@ export function createPubsubRoutes(config: Config): FastifyPluginCallback {
             },
             'User not connected to WhatsApp, skipping message'
           );
-          return { success: true };
+          return await reply.ok({});
         }
 
         const phoneNumber = phoneResult.value;
@@ -226,8 +228,7 @@ export function createPubsubRoutes(config: Config): FastifyPluginCallback {
             },
             'Failed to send WhatsApp message'
           );
-          reply.status(500);
-          return { error: result.error.message };
+          return await reply.fail('DOWNSTREAM_ERROR', result.error.message);
         }
 
         const { wamid } = result.value;
@@ -273,7 +274,7 @@ export function createPubsubRoutes(config: Config): FastifyPluginCallback {
           );
         }
 
-        return { success: true };
+        return await reply.ok({});
       }
     );
 
@@ -307,31 +308,43 @@ export function createPubsubRoutes(config: Config): FastifyPluginCallback {
               description: 'Cleanup completed',
               type: 'object',
               properties: {
-                success: { type: 'boolean' },
-                deletedCount: { type: 'number' },
+                success: { type: 'boolean', const: true },
+                data: {
+                  type: 'object',
+                  properties: {
+                    deletedCount: { type: 'number' },
+                  },
+                  required: ['deletedCount'],
+                },
               },
-              required: ['success'],
+              required: ['success', 'data'],
             },
             400: {
               description: 'Invalid message format',
               type: 'object',
               properties: {
-                error: { type: 'string' },
+                success: { type: 'boolean', const: false },
+                error: { $ref: 'ErrorBody#' },
               },
+              required: ['success', 'error'],
             },
             401: {
               description: 'Unauthorized',
               type: 'object',
               properties: {
-                error: { type: 'string' },
+                success: { type: 'boolean', const: false },
+                error: { $ref: 'ErrorBody#' },
               },
+              required: ['success', 'error'],
             },
             500: {
               description: 'Cleanup failed',
               type: 'object',
               properties: {
-                error: { type: 'string' },
+                success: { type: 'boolean', const: false },
+                error: { $ref: 'ErrorBody#' },
               },
+              required: ['success', 'error'],
             },
           },
         },
@@ -366,8 +379,7 @@ export function createPubsubRoutes(config: Config): FastifyPluginCallback {
               { reason: authResult.reason },
               'Internal auth failed for pubsub/media-cleanup endpoint'
             );
-            reply.status(401);
-            return { error: 'Unauthorized' };
+            return await reply.fail('UNAUTHORIZED', 'Internal auth failed for pubsub/media-cleanup endpoint');
           }
         }
 
@@ -382,15 +394,13 @@ export function createPubsubRoutes(config: Config): FastifyPluginCallback {
             { messageId: body.message.messageId },
             'Failed to decode PubSub message'
           );
-          reply.status(400);
-          return { error: 'Invalid message format' };
+          return await reply.fail('INVALID_REQUEST', 'Failed to decode PubSub message');
         }
 
         const parsedType = eventData.type as string;
         if (parsedType !== 'whatsapp.media.cleanup') {
           request.log.warn({ type: parsedType }, 'Unexpected event type');
-          reply.status(400);
-          return { error: 'Invalid event type' };
+          return await reply.fail('INVALID_REQUEST', 'Unexpected event type');
         }
 
         request.log.info(
@@ -434,7 +444,7 @@ export function createPubsubRoutes(config: Config): FastifyPluginCallback {
             'Completed media cleanup'
           );
 
-          return { success: true, deletedCount };
+          return await reply.ok({ deletedCount });
         } catch (error) {
           request.log.error(
             {
@@ -444,8 +454,7 @@ export function createPubsubRoutes(config: Config): FastifyPluginCallback {
             },
             'Unexpected error during media cleanup'
           );
-          reply.status(500);
-          return { error: 'Cleanup failed' };
+          return await reply.fail('INTERNAL_ERROR', 'Cleanup failed');
         }
       }
     );
@@ -508,8 +517,7 @@ export function createPubsubRoutes(config: Config): FastifyPluginCallback {
               { reason: authResult.reason },
               'Internal auth failed for pubsub/transcribe-audio endpoint'
             );
-            reply.status(401);
-            return { error: 'Unauthorized' };
+            return await reply.fail('UNAUTHORIZED', 'Internal auth failed for pubsub/transcribe-audio endpoint');
           }
         }
 
@@ -524,13 +532,13 @@ export function createPubsubRoutes(config: Config): FastifyPluginCallback {
             { messageId: body.message.messageId },
             'Failed to decode PubSub message'
           );
-          return { success: true };
+          return await reply.ok({});
         }
 
         const parsedType = eventData.type as string;
         if (parsedType !== 'whatsapp.audio.transcribe') {
           request.log.warn({ type: parsedType }, 'Unexpected event type');
-          return { success: true };
+          return await reply.ok({});
         }
 
         request.log.info(
@@ -577,7 +585,7 @@ export function createPubsubRoutes(config: Config): FastifyPluginCallback {
           );
         }
 
-        return { success: true };
+        return await reply.ok({});
       }
     );
 
@@ -639,8 +647,7 @@ export function createPubsubRoutes(config: Config): FastifyPluginCallback {
               { reason: authResult.reason },
               'Internal auth failed for pubsub/process-webhook endpoint'
             );
-            reply.status(401);
-            return { error: 'Unauthorized' };
+            return await reply.fail('UNAUTHORIZED', 'Internal auth failed for pubsub/process-webhook endpoint');
           }
         }
 
@@ -655,7 +662,7 @@ export function createPubsubRoutes(config: Config): FastifyPluginCallback {
             { messageId: body.message.messageId },
             'Failed to decode PubSub message'
           );
-          return { success: true };
+          return await reply.ok({});
         }
 
         const parsedType = eventData.type as string;
@@ -688,7 +695,7 @@ export function createPubsubRoutes(config: Config): FastifyPluginCallback {
             );
           }
 
-          return { success: true };
+          return await reply.ok({});
         }
 
         if (parsedType === 'whatsapp.linkpreview.extract') {
@@ -730,11 +737,11 @@ export function createPubsubRoutes(config: Config): FastifyPluginCallback {
             );
           }
 
-          return { success: true };
+          return await reply.ok({});
         }
 
         request.log.warn({ type: parsedType }, 'Unexpected event type');
-        return { success: true };
+        return await reply.ok({});
       }
     );
 

@@ -9,16 +9,24 @@
 import { ok, err, type Result, getErrorMessage } from '@intexuraos/common-core';
 import type { CodeAgentClient, CodeAgentError, CancelTaskError, CancelTaskWithNonceInput, CancelTaskWithNonceOutput } from '../../domain/ports/codeAgentClient.js';
 import type { CodeActionPayload } from '../../domain/models/action.js';
-import type { Logger } from 'pino';
 import { createAppLogger } from '@intexuraos/infra-sentry';
+
+type LogMethod = (obj: unknown, msg?: string) => void;
+
+interface HttpLogger {
+  info: LogMethod;
+  warn: LogMethod;
+  error: LogMethod;
+  debug: LogMethod;
+}
 
 export interface CodeAgentHttpClientConfig {
   baseUrl: string;
   internalAuthToken: string;
-  logger?: Logger;
+  logger?: HttpLogger;
 }
 
-const defaultLogger = createAppLogger({ name: 'codeAgentHttpClient' });
+const defaultLogger = createAppLogger({ name: 'codeAgentHttpClient' }) as unknown as HttpLogger;
 
 interface ApiResponse {
   codeTaskId: string;

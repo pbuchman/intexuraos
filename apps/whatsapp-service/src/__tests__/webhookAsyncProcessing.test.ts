@@ -332,7 +332,7 @@ describe('Webhook async processing', () => {
       expect(response.statusCode).toBe(500);
       const body = JSON.parse(response.body) as {
         success: boolean;
-        error: string;
+        error: string; // WhatsApp webhook uses string error, not object
       };
       expect(body.success).toBe(false);
       expect(body.error).toBe('Failed to persist webhook event');

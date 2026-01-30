@@ -106,8 +106,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       const authResult = validateInternalAuth(request);
       if (!authResult.valid) {
         request.log.warn({ reason: authResult.reason }, 'Internal auth failed for create todo');
-        reply.status(401);
-        return { error: 'Unauthorized' };
+        return await reply.fail('UNAUTHORIZED', 'Internal auth failed for create todo');
       }
 
       const { todoRepository, todosProcessingPublisher } = getServices();

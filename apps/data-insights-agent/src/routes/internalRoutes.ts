@@ -75,15 +75,21 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             description: 'Unauthorized',
             type: 'object',
             properties: {
-              error: { type: 'string' },
+              success: { type: 'boolean', const: false },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
             },
+            required: ['success', 'error'],
           },
           500: {
             description: 'Refresh failed',
             type: 'object',
             properties: {
-              error: { type: 'string' },
+              success: { type: 'boolean', const: false },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
             },
+            required: ['success', 'error'],
           },
         },
       },
@@ -112,8 +118,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             { reason: authResult.reason },
             'Internal auth failed for /internal/snapshots/refresh'
           );
-          reply.status(401);
-          return { error: 'Unauthorized' };
+          return await reply.fail('UNAUTHORIZED', 'Internal auth failed for /internal/snapshots/refresh');
         }
       }
 
@@ -155,8 +160,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           },
           'Snapshot refresh failed'
         );
-        reply.status(500);
-        return { error: result.error };
+        return await reply.fail('INTERNAL_ERROR', result.error);
       }
 
       const { refreshed, failed, errors } = result.value;
@@ -182,15 +186,12 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         );
       }
 
-      return {
-        success: true,
-        data: {
-          refreshed,
-          failed,
-          errors,
-          durationMs,
-        },
-      };
+      return await reply.ok({
+        refreshed,
+        failed,
+        errors,
+        durationMs,
+      });
     }
   );
 

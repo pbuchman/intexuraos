@@ -61,7 +61,11 @@ interface HealthResponse {
 }
 
 interface ErrorResponse {
-  error: string;
+  success: boolean;
+  error: {
+    code: string;
+    message: string;
+  };
 }
 
 describe('Internal Routes', () => {
@@ -119,7 +123,7 @@ describe('Internal Routes', () => {
 
       expect(response.statusCode).toBe(401);
       const body = JSON.parse(response.payload) as ErrorResponse;
-      expect(body.error).toBe('Unauthorized');
+      expect(body.error.message).toContain('auth failed');
     });
 
     it('returns 401 when X-Internal-Auth header has wrong value', async () => {
@@ -446,7 +450,7 @@ describe('Internal Routes', () => {
 
       expect(response.statusCode).toBe(401);
       const body = JSON.parse(response.payload) as ErrorResponse;
-      expect(body.error).toBe('Unauthorized');
+      expect(body.error.message).toContain('auth failed');
     });
 
     it('returns 401 when X-Internal-Auth header has wrong value', async () => {

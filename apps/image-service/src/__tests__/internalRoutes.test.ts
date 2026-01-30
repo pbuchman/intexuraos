@@ -495,8 +495,8 @@ describe('Internal Routes', () => {
       });
 
       expect(response.statusCode).toBe(401);
-      const body = JSON.parse(response.body) as { error: string };
-      expect(body.error).toBe('Unauthorized');
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
+      expect(body.error.message).toContain('auth failed');
     });
 
     it('returns 401 when X-Internal-Auth header has wrong value', async () => {

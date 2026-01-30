@@ -328,7 +328,7 @@ describe('Internal Routes', () => {
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body);
       expect(body.success).toBe(true);
-      expect(body.actionId).toBe('action-1');
+      expect(body.data.actionId).toBe('action-1');
     });
   });
 
@@ -423,8 +423,8 @@ describe('Internal Routes', () => {
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body);
       expect(body.success).toBe(true);
-      expect(body.skipped).toBe(true);
-      expect(body.reason).toBe('no_handler');
+      expect(body.data.skipped).toBe(true);
+      expect(body.data.reason).toBe('no_handler');
     });
 
     it('returns 500 when handler fails', async () => {
@@ -462,7 +462,7 @@ describe('Internal Routes', () => {
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body);
       expect(body.success).toBe(true);
-      expect(body.actionId).toBe('action-1');
+      expect(body.data.actionId).toBe('action-1');
     });
   });
 
@@ -512,10 +512,10 @@ describe('Internal Routes', () => {
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body);
       expect(body.success).toBe(true);
-      expect(body.processed).toBe(5);
-      expect(body.skipped).toBe(2);
-      expect(body.failed).toBe(1);
-      expect(body.total).toBe(8);
+      expect(body.data.processed).toBe(5);
+      expect(body.data.skipped).toBe(2);
+      expect(body.data.failed).toBe(1);
+      expect(body.data.total).toBe(8);
     });
   });
 
@@ -647,10 +647,10 @@ describe('Internal Routes', () => {
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body);
       expect(body.success).toBe(true);
-      expect(body.matched).toBe(true);
-      expect(body.actionId).toBe('action-1');
-      expect(body.intent).toBe('approve');
-      expect(body.outcome).toBe('approved');
+      expect(body.data.matched).toBe(true);
+      expect(body.data.actionId).toBe('action-1');
+      expect(body.data.intent).toBe('approve');
+      expect(body.data.outcome).toBe('approved');
     });
 
     it('processes approval reply with actionId in event', async () => {
@@ -691,10 +691,12 @@ describe('Internal Routes', () => {
       expect(response.statusCode).toBe(200);
       expect(response.json()).toMatchObject({
         success: true,
-        matched: true,
-        actionId: 'action-2',
-        intent: 'reject',
-        outcome: 'rejected',
+        data: {
+          matched: true,
+          actionId: 'action-2',
+          intent: 'reject',
+          outcome: 'rejected',
+        },
       });
     });
 

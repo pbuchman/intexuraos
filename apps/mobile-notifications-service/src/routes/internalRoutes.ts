@@ -92,15 +92,21 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             description: 'Unauthorized',
             type: 'object',
             properties: {
-              error: { type: 'string' },
+              success: { type: 'boolean', const: false },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
             },
+            required: ['success', 'error'],
           },
           500: {
             description: 'Internal error',
             type: 'object',
             properties: {
-              error: { type: 'string' },
+              success: { type: 'boolean', const: false },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
             },
+            required: ['success', 'error'],
           },
         },
       },
@@ -117,8 +123,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           { reason: authResult.reason },
           'Internal auth failed for query notifications'
         );
-        reply.status(401);
-        return { error: 'Unauthorized' };
+        return await reply.fail('UNAUTHORIZED', 'Internal auth failed for query notifications');
       }
 
       const { userId, filter, limit = 50 } = request.body;
@@ -144,8 +149,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       const result = await listNotifications(input, getServices().notificationRepository);
 
       if (!result.ok) {
-        reply.status(500);
-        return { error: result.error.message };
+        return await reply.fail('INTERNAL_ERROR', result.error.message);
       }
 
       const notifications = result.value.notifications.map((n) => ({
@@ -157,12 +161,9 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         source: n.source,
       }));
 
-      return {
-        success: true,
-        data: {
-          notifications,
-        },
-      };
+      return await reply.ok({
+        notifications,
+      });
     }
   );
 

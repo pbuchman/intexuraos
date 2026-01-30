@@ -122,14 +122,17 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             description: 'Unauthorized',
             type: 'object',
             properties: {
-              error: { type: 'string' },
+              success: { type: 'boolean', const: false },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
             },
+            required: ['success', 'error'],
           },
           500: {
             description: 'Internal Server Error',
             type: 'object',
             properties: {
-              success: { type: 'boolean', enum: [true] },
+              success: { type: 'boolean', const: true },
               data: {
                 type: 'object',
                 required: ['status', 'message'],
@@ -141,6 +144,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
               },
               diagnostics: { $ref: 'Diagnostics#' },
             },
+            required: ['success', 'data'],
           },
         },
       },
@@ -157,8 +161,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           { reason: authResult.reason },
           'Internal auth failed for research/draft endpoint'
         );
-        reply.status(401);
-        return { error: 'Unauthorized' };
+        return await reply.fail('UNAUTHORIZED', 'Internal auth failed for research/draft endpoint');
       }
 
       const body = request.body as CreateDraftResearchBody;
@@ -286,19 +289,39 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         response: {
           200: {
             description: 'Message acknowledged',
-            type: 'object',
-            properties: {
-              success: { type: 'boolean' },
-              error: { type: 'string' },
-            },
-            required: ['success'],
+            oneOf: [
+              {
+                type: 'object',
+                properties: {
+                  success: { type: 'boolean', const: true },
+                  data: {
+                    type: 'object',
+                    properties: {},
+                    additionalProperties: true,
+                  },
+                  diagnostics: { $ref: 'Diagnostics#' },
+                },
+                required: ['success'],
+              },
+              {
+                type: 'object',
+                properties: {
+                  success: { type: 'boolean', const: false },
+                  error: { type: 'string' },
+                },
+                required: ['success'],
+              },
+            ],
           },
           401: {
             description: 'Unauthorized',
             type: 'object',
             properties: {
-              error: { type: 'string' },
+              success: { type: 'boolean', const: false },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
             },
+            required: ['success', 'error'],
           },
         },
       },
@@ -321,8 +344,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             { reason: authResult.reason },
             'Internal auth failed for process-research endpoint'
           );
-          reply.status(401);
-          return { error: 'Unauthorized' };
+          return await reply.fail('UNAUTHORIZED', 'Internal auth failed for process-research endpoint');
         }
       }
 
@@ -343,12 +365,14 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
               ? (parsed as { type: unknown }).type
               : 'unknown';
           request.log.warn({ type: eventType }, 'Unexpected event type');
-          return { success: false, error: 'Unexpected event type' };
+          // PubSub ack pattern: always return 200 OK, errors logged separately
+          return await reply.ok({});
         }
         event = parsed as ResearchProcessEvent;
       } catch {
         request.log.error({ messageId: body.message.messageId }, 'Failed to decode PubSub message');
-        return { success: false, error: 'Invalid message format' };
+        // PubSub ack pattern: always return 200 OK, errors logged separately
+        return await reply.ok({});
       }
 
       request.log.info(
@@ -368,7 +392,8 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         const researchResult = await researchRepo.findById(event.researchId);
         if (!researchResult.ok || researchResult.value === null) {
           request.log.error({ researchId: event.researchId }, 'Research not found');
-          return { success: false, error: 'Research not found' };
+          // PubSub ack pattern: always return 200 OK, errors logged separately
+          return await reply.ok({});
         }
         const research = researchResult.value;
 
@@ -387,7 +412,8 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             { researchId: event.researchId, model: synthesisModel },
             'API key missing for synthesis'
           );
-          return { success: false, error: 'API key missing' };
+          // PubSub ack pattern: always return 200 OK, errors logged separately
+          return await reply.ok({});
         }
 
         const { synthesizer, contextInferrer } = createSynthesisProviders(
@@ -465,13 +491,13 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         }
 
         request.log.info({ researchId: event.researchId }, 'Research processed successfully');
-        return { success: true };
+        return await reply.ok({});
       } catch (error) {
         request.log.error(
           { researchId: event.researchId, error: getErrorMessage(error) },
           'Research processing failed'
         );
-        return { success: false, error: getErrorMessage(error) };
+        return await reply.fail('INTERNAL_ERROR', getErrorMessage(error));
       }
     }
   );
@@ -504,18 +530,39 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         response: {
           200: {
             description: 'Message acknowledged',
-            type: 'object',
-            properties: {
-              success: { type: 'boolean' },
-            },
-            required: ['success'],
+            oneOf: [
+              {
+                type: 'object',
+                properties: {
+                  success: { type: 'boolean', const: true },
+                  data: {
+                    type: 'object',
+                    properties: {},
+                    additionalProperties: true,
+                  },
+                  diagnostics: { $ref: 'Diagnostics#' },
+                },
+                required: ['success'],
+              },
+              {
+                type: 'object',
+                properties: {
+                  success: { type: 'boolean', const: false },
+                  error: { type: 'string' },
+                },
+                required: ['success'],
+              },
+            ],
           },
           401: {
             description: 'Unauthorized',
             type: 'object',
             properties: {
-              error: { type: 'string' },
+              success: { type: 'boolean', const: false },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
             },
+            required: ['success', 'error'],
           },
         },
       },
@@ -538,8 +585,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             { reason: authResult.reason },
             'Internal auth failed for report-analytics endpoint'
           );
-          reply.status(401);
-          return { error: 'Unauthorized' };
+          return await reply.fail('UNAUTHORIZED', 'Internal auth failed for report-analytics endpoint');
         }
       }
 
@@ -560,7 +606,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
               ? (parsed as { type: unknown }).type
               : 'unknown';
           request.log.warn({ type: eventType }, 'Unexpected analytics event type');
-          return { success: false };
+          return await reply.ok({});
         }
         event = parsed as LlmAnalyticsEvent;
       } catch {
@@ -568,7 +614,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           { messageId: body.message.messageId },
           'Failed to decode analytics message'
         );
-        return { success: false };
+        return await reply.ok({});
       }
 
       const { userServiceClient } = getServices();
@@ -583,7 +629,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         );
       }
 
-      return { success: true };
+      return await reply.ok({});
     }
   );
 
@@ -615,19 +661,39 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         response: {
           200: {
             description: 'Message acknowledged',
-            type: 'object',
-            properties: {
-              success: { type: 'boolean' },
-              error: { type: 'string' },
-            },
-            required: ['success'],
+            oneOf: [
+              {
+                type: 'object',
+                properties: {
+                  success: { type: 'boolean', const: true },
+                  data: {
+                    type: 'object',
+                    properties: {},
+                    additionalProperties: true,
+                  },
+                  diagnostics: { $ref: 'Diagnostics#' },
+                },
+                required: ['success'],
+              },
+              {
+                type: 'object',
+                properties: {
+                  success: { type: 'boolean', const: false },
+                  error: { type: 'string' },
+                },
+                required: ['success'],
+              },
+            ],
           },
           401: {
             description: 'Unauthorized',
             type: 'object',
             properties: {
-              error: { type: 'string' },
+              success: { type: 'boolean', const: false },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
             },
+            required: ['success', 'error'],
           },
         },
       },
@@ -650,8 +716,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             { reason: authResult.reason },
             'Internal auth failed for process-llm-call endpoint'
           );
-          reply.status(401);
-          return { error: 'Unauthorized' };
+          return await reply.fail('UNAUTHORIZED', 'Internal auth failed for process-llm-call endpoint');
         }
       }
 
@@ -672,7 +737,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
               ? (parsed as { type: unknown }).type
               : 'unknown';
           request.log.warn({ type: eventType }, 'Unexpected LLM call event type');
-          return { success: false, error: 'Unexpected event type' };
+          return await reply.ok({});
         }
         event = parsed as LlmCallEvent;
       } catch {
@@ -680,7 +745,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           { messageId: body.message.messageId },
           'Failed to decode LLM call message'
         );
-        return { success: false, error: 'Invalid message format' };
+        return await reply.ok({});
       }
 
       request.log.info(
@@ -706,7 +771,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         const researchResult = await researchRepo.findById(event.researchId);
         if (!researchResult.ok || researchResult.value === null) {
           request.log.error({ researchId: event.researchId }, '[3.1.1] Research not found');
-          return { success: false, error: 'Research not found' };
+          return await reply.ok({});
         }
         const research = researchResult.value;
 
@@ -720,7 +785,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             },
             '[3.1.2] LLM call already processed, skipping (idempotency)'
           );
-          return { success: true };
+          return await reply.ok({});
         }
 
         request.log.info(
@@ -738,7 +803,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             error: 'Failed to fetch API keys',
             completedAt: new Date().toISOString(),
           });
-          return { success: false, error: 'Failed to fetch API keys' };
+          return await reply.ok({});
         }
 
         const apiKey = apiKeysResult.value[modelProvider];
@@ -768,7 +833,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             '[3.5] LLM completion check after API key missing failure'
           );
 
-          return { success: false, error: 'API key missing' };
+          return await reply.ok({});
         }
 
         const startedAt = new Date().toISOString();
@@ -828,7 +893,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             '[3.5] LLM completion check after failure'
           );
 
-          return { success: true };
+          return await reply.ok({});
         }
 
         const usage = llmResult.value.usage;
@@ -916,7 +981,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             break;
         }
 
-        return { success: true };
+        return await reply.ok({});
       } catch (error) {
         request.log.error(
           { researchId: event.researchId, model: event.model, error: getErrorMessage(error) },
@@ -927,7 +992,8 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           error: getErrorMessage(error),
           completedAt: new Date().toISOString(),
         });
-        return { success: false, error: getErrorMessage(error) };
+        // PubSub ack pattern: always return 200 OK, errors logged separately
+        return await reply.ok({});
       }
     }
   );

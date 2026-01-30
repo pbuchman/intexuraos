@@ -186,9 +186,9 @@ describe('Research Agent Routes', () => {
         });
 
         expect(response.statusCode).toBe(200);
-        const body = JSON.parse(response.body) as { success: boolean; actionId: string };
+        const body = JSON.parse(response.body) as { success: boolean; data: { actionId: string } };
         expect(body.success).toBe(true);
-        expect(body.actionId).toBe('action-123');
+        expect(body.data.actionId).toBe('action-123');
       });
 
       it('rejects direct calls without x-internal-auth or Pub/Sub from header', async () => {
@@ -223,8 +223,8 @@ describe('Research Agent Routes', () => {
       });
 
       expect(response.statusCode).toBe(400);
-      const body = JSON.parse(response.body) as { error: string };
-      expect(body.error).toBe('Invalid message format');
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
+      expect(body.error.message).toBe('Failed to decode PubSub message');
     });
 
     it('returns 400 when message is missing', async () => {
@@ -267,8 +267,8 @@ describe('Research Agent Routes', () => {
       });
 
       expect(response.statusCode).toBe(400);
-      const body = JSON.parse(response.body) as { error: string };
-      expect(body.error).toBe('Invalid event type');
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
+      expect(body.error.message).toBe('Unexpected event type');
     });
 
     it('returns 400 when action type is not research', async () => {
@@ -298,8 +298,8 @@ describe('Research Agent Routes', () => {
       });
 
       expect(response.statusCode).toBe(400);
-      const body = JSON.parse(response.body) as { error: string };
-      expect(body.error).toBe('Action type mismatch');
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
+      expect(body.error.message).toContain('Action type mismatch');
     });
 
     it('processes valid research action and returns 200', async () => {
@@ -326,9 +326,9 @@ describe('Research Agent Routes', () => {
       });
 
       expect(response.statusCode).toBe(200);
-      const body = JSON.parse(response.body) as { success: boolean; actionId: string };
+      const body = JSON.parse(response.body) as { success: boolean; data: { actionId: string } };
       expect(body.success).toBe(true);
-      expect(body.actionId).toBe('action-123');
+      expect(body.data.actionId).toBe('action-123');
 
       const updatedAction = await fakeActionRepository.getById('action-123');
       expect(updatedAction?.status).toBe('awaiting_approval');
@@ -358,9 +358,9 @@ describe('Research Agent Routes', () => {
       });
 
       expect(response.statusCode).toBe(200);
-      const body = JSON.parse(response.body) as { success: boolean; actionId: string };
+      const body = JSON.parse(response.body) as { success: boolean; data: { actionId: string } };
       expect(body.success).toBe(true);
-      expect(body.actionId).toBe('action-123');
+      expect(body.data.actionId).toBe('action-123');
 
       const action = await fakeActionRepository.getById('action-123');
       expect(action?.status).toBe('awaiting_approval');
@@ -395,8 +395,8 @@ describe('Research Agent Routes', () => {
       });
 
       expect(response.statusCode).toBe(400);
-      const body = JSON.parse(response.body) as { error: string };
-      expect(body.error).toBe('Unsupported action type: unknown_type');
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
+      expect(body.error.message).toBe('Unsupported action type: unknown_type');
     });
 
     it('returns 500 when handler execution fails', async () => {
@@ -437,8 +437,9 @@ describe('Research Agent Routes', () => {
       });
 
       expect(response.statusCode).toBe(500);
-      const body = JSON.parse(response.body) as { error: string };
-      expect(body.error).toContain('Failed to update action status');
+      const body = JSON.parse(response.body) as { success: false; error: { code: string; message: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.message).toContain('Failed to update action status');
     });
   });
 
@@ -587,8 +588,8 @@ describe('Research Agent Routes', () => {
       });
 
       expect(response.statusCode).toBe(500);
-      const body = JSON.parse(response.body) as { error: string };
-      expect(body.error).toBe('Failed to create action');
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
+      expect(body.error.message).toBe('Failed to create action');
     });
 
     it('continues successfully even when event publishing fails', async () => {
@@ -2027,9 +2028,9 @@ describe('Research Agent Routes', () => {
       });
 
       expect(response.statusCode).toBe(200);
-      const body = JSON.parse(response.body) as { success: boolean; actionId: string };
+      const body = JSON.parse(response.body) as { success: boolean; data: { actionId: string } };
       expect(body.success).toBe(true);
-      expect(body.actionId).toBe('action-123');
+      expect(body.data.actionId).toBe('action-123');
     });
 
     it('skips action type without handler and returns 200', async () => {
@@ -2045,12 +2046,14 @@ describe('Research Agent Routes', () => {
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body) as {
         success: boolean;
-        skipped: boolean;
-        reason: string;
+        data: {
+          skipped: boolean;
+          reason: string;
+        };
       };
       expect(body.success).toBe(true);
-      expect(body.skipped).toBe(true);
-      expect(body.reason).toBe('no_handler');
+      expect(body.data.skipped).toBe(true);
+      expect(body.data.reason).toBe('no_handler');
     });
 
     it('returns 400 for invalid message format', async () => {
@@ -2120,10 +2123,10 @@ describe('Research Agent Routes', () => {
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body) as {
         success: boolean;
-        actionId: string;
+        data: { actionId: string };
       };
       expect(body.success).toBe(true);
-      expect(body.actionId).toBe('action-123');
+      expect(body.data.actionId).toBe('action-123');
     });
 
     it('returns 500 when handler execution fails with other error', async () => {
@@ -2164,8 +2167,9 @@ describe('Research Agent Routes', () => {
       });
 
       expect(response.statusCode).toBe(500);
-      const body = JSON.parse(response.body) as { error: string };
-      expect(body.error).toContain('Failed to update action status');
+      const body = JSON.parse(response.body) as { success: false; error: { code: string; message: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.message).toContain('Failed to update action status');
     });
   });
 
@@ -2215,16 +2219,18 @@ describe('Research Agent Routes', () => {
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body) as {
         success: boolean;
-        processed: number;
-        skipped: number;
-        failed: number;
-        total: number;
+        data: {
+          processed: number;
+          skipped: number;
+          failed: number;
+          total: number;
+        };
       };
       expect(body.success).toBe(true);
-      expect(typeof body.processed).toBe('number');
-      expect(typeof body.skipped).toBe('number');
-      expect(typeof body.failed).toBe('number');
-      expect(typeof body.total).toBe('number');
+      expect(typeof body.data.processed).toBe('number');
+      expect(typeof body.data.skipped).toBe('number');
+      expect(typeof body.data.failed).toBe('number');
+      expect(typeof body.data.total).toBe('number');
     });
   });
 

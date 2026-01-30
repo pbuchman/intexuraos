@@ -243,7 +243,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           'Task marked as completed with result'
         );
         // @allow-raw-send: external webhook callback - orchestrator expects { received: true }
-        return reply.send({ received: true });
+        return await reply.send({ received: true });
       }
 
       if (status === 'failed' && error) {
@@ -310,7 +310,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
         request.log.info({ taskId, error }, 'Task marked as failed');
         // @allow-raw-send: external webhook callback - orchestrator expects { received: true }
-        return reply.send({ received: true });
+        return await reply.send({ received: true });
       }
 
       if (status === 'interrupted') {
@@ -368,7 +368,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
         request.log.info({ taskId }, 'Task marked as interrupted');
         // @allow-raw-send: external webhook callback - orchestrator expects { received: true }
-        return reply.send({ received: true });
+        return await reply.send({ received: true });
       }
 
       // Should not reach here, but TypeScript needs it
@@ -536,7 +536,7 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       request.log.debug({ taskId, count: chunks.length }, 'Log chunks stored successfully');
       // @allow-raw-send: external webhook callback - orchestrator expects { received: true }
-      return reply.send({ received: true });
+      return await reply.send({ received: true });
     }
   );
 
