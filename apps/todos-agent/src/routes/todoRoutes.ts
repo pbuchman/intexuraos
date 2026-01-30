@@ -316,8 +316,8 @@ export const todoRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
     },
     async (request: FastifyRequest<{ Body: CreateTodoBody }>, reply: FastifyReply) => {
       const user = await requireAuth(request, reply);
-      /* v8 ignore next 3 -- test-infra: tests use valid auth tokens */
       if (user === null) {
+        /* v8 ignore test-infra -- tests use valid auth tokens */
         return;
       }
 
@@ -374,8 +374,8 @@ export const todoRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
     },
     async (request: FastifyRequest<{ Params: TodoParams }>, reply: FastifyReply) => {
       const user = await requireAuth(request, reply);
-      /* v8 ignore next 3 -- test-infra: tests use valid auth tokens */
       if (user === null) {
+        /* v8 ignore test-infra -- tests use valid auth tokens */
         return;
       }
 
@@ -428,8 +428,8 @@ export const todoRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       reply: FastifyReply
     ) => {
       const user = await requireAuth(request, reply);
-      /* v8 ignore next 3 -- test-infra: tests use valid auth tokens */
       if (user === null) {
+        /* v8 ignore test-infra -- tests use valid auth tokens */
         return;
       }
 
@@ -486,8 +486,8 @@ export const todoRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
     },
     async (request: FastifyRequest<{ Params: TodoParams }>, reply: FastifyReply) => {
       const user = await requireAuth(request, reply);
-      /* v8 ignore next 3 -- test-infra: tests use valid auth tokens */
       if (user === null) {
+        /* v8 ignore test-infra -- tests use valid auth tokens */
         return;
       }
 

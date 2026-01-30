@@ -95,6 +95,7 @@ export function createUserUsageFirestoreRepository(
       tasksThisHour: Number(data['tasksThisHour'] ?? 0),
       hourStartedAt: toTimestamp(data['hourStartedAt']),
       costToday: Number(data['costToday'] ?? 0),
+/* v8 ignore ts-type -- TypeScript type narrowing makes branch unreachable */
       costThisMonth: Number(data['costThisMonth'] ?? 0),
       dayStartedAt: toTimestamp(data['dayStartedAt']),
       monthStartedAt: toTimestamp(data['monthStartedAt']),

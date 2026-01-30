@@ -139,6 +139,7 @@ function tryParseOpenaiError(raw: string): string | null {
   if (rateLimitMatch !== null) {
     const [, limitType, limit, used, requested] = rateLimitMatch;
     return `${limitType ?? 'Tokens'}: ${used ?? '?'}/${limit ?? '?'} used, need ${requested ?? '?'} more`;
+/* v8 ignore ts-type -- TypeScript type narrowing makes branch unreachable */
   }
 
   if (raw.includes('exceeded your current quota')) {

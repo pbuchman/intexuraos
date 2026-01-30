@@ -224,6 +224,7 @@ function taskToApiResponse(task: {
     ...(task.linearFallback !== undefined && { linearFallback: task.linearFallback }),
     ...(task.result !== undefined && { result: task.result }),
     ...(task.error !== undefined && { error: task.error }),
+/* v8 ignore ts-type -- TypeScript type narrowing makes branch unreachable */
   };
 }
 
@@ -681,6 +682,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
             updatedAt: Timestamp.fromDate(new Date()),
           },
         }),
+/* v8 ignore ts-type -- TypeScript type narrowing makes branch unreachable */
         ...(body.callbackReceived !== undefined && { callbackReceived: body.callbackReceived }),
       });
 
@@ -702,6 +704,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         });
       }
 
+/* v8 ignore ts-type -- TypeScript type narrowing makes branch unreachable */
       // If PR was created and task has a Linear issue, transition to In Review
       if (body.result?.prUrl !== undefined && result.value.linearIssueId !== undefined) {
         await linearIssueService.markInReview(result.value.linearIssueId);

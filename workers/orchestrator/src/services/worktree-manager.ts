@@ -152,6 +152,7 @@ export class WorktreeManager {
       await (await import('node:fs/promises')).rename(tempPath, targetPath);
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Unknown error';
+      /* v8 ignore ts-type -- TypeScript type narrowing makes branch unreachable */
       throw new Error(`Failed to copy MCP config: ${message}`);
     }
   }

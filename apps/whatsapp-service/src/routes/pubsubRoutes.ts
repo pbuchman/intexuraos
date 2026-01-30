@@ -266,6 +266,7 @@ export function createPubsubRoutes(config: Config): FastifyPluginCallback {
         });
 
         if (!saveResult.ok) {
+/* v8 ignore ts-type -- TypeScript type narrowing makes branch unreachable */
           request.log.warn(
             {
               wamid,

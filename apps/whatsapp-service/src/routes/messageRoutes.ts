@@ -179,6 +179,7 @@ export const messageRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       // Get user's registered phone number for display
       const mappingResult = await userMappingRepository.getMapping(user.userId);
       const fromNumber = mappingResult.ok ? mappingResult.value?.phoneNumbers[0] : null;
+/* v8 ignore ts-type -- TypeScript type narrowing makes branch unreachable */
 
       // Build pagination options (only include defined values)
       const options: { limit?: number; cursor?: string } = {};

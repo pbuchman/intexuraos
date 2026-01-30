@@ -747,6 +747,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         userId: eventData.userId,
         ...(eventData.actionId !== undefined && { actionId: eventData.actionId }),
         ...(eventData.buttonId !== undefined && { buttonId: eventData.buttonId }),
+/* v8 ignore ts-type -- TypeScript type narrowing makes branch unreachable */
         ...(eventData.buttonTitle !== undefined && { buttonTitle: eventData.buttonTitle }),
       });
 

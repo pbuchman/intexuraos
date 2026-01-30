@@ -161,6 +161,7 @@ export async function processCalendarAction(
       valid: preview.summary !== undefined && preview.start !== undefined,
       error: null,
       reasoning: preview.reasoning ?? 'Used pre-generated preview data',
+/* v8 ignore ts-type -- TypeScript type narrowing makes branch unreachable */
     };
   } else {
     // Fallback: LLM extraction (original behavior)

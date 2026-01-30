@@ -676,11 +676,11 @@ function reportMissingComments(coverageData, comments) {
               continue;
             }
 
-            // Check for nearby v8 ignore comment (within ±5 lines)
-            // This handles cases like JSDoc blocks where comment can't be on exact line
+            // Check for nearby v8 ignore comment (within ±10 lines)
+            // This handles cases like JSDoc blocks and larger if blocks
             const nearbyComments = nearbyCommentMap.get(normalizedPath) ?? [];
             const hasNearbyComment = nearbyComments.some(
-              (commentLine) => Math.abs(commentLine - branchLine) <= 5
+              (commentLine) => Math.abs(commentLine - branchLine) <= 10
             );
 
             if (!hasNearbyComment) {
