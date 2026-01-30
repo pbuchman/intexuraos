@@ -435,9 +435,12 @@ function findFiles(directories) {
 
 const V8_IGNORE_WITH_CATEGORY_REGEX = /\/\*\s*v8\s+ignore\s+(\S+)\s*--\s*(.+?)\s*\*\//;
 const V8_IGNORE_LEGACY_REGEX = /\/\*\s*v8\s+ignore\s+(next|start|stop)(?:\s*--\s*(.+?))?\s*\*\//;
+// Looser pattern to catch ANY v8 ignore comment (for validation)
+const V8_IGNORE_ANY_REGEX = /\/\*\s*v8\s+ignore\s+([^\s*]+?)(?:\s*--\s*([^\*]*?))?\s*\*\//;
 
 function findV8IgnoreComments(files) {
   const comments = [];
+  const malformed = [];
 
   for (const file of files) {
     const content = readFileSync(file, 'utf8');
@@ -446,21 +449,7 @@ function findV8IgnoreComments(files) {
     for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
       const line = lines[lineIdx];
 
-      const categoryMatch = V8_IGNORE_WITH_CATEGORY_REGEX.exec(line);
-      if (categoryMatch) {
-        const category = categoryMatch[1];
-        if (!V8_LEGACY_KEYWORDS.includes(category)) {
-          comments.push({
-            file: file.replace(ROOT_DIR + '/', ''),
-            line: lineIdx + 1,
-            category: category,
-            explanation: categoryMatch[2],
-            isLegacy: false,
-          });
-          continue;
-        }
-      }
-
+      // First, check for legacy keywords (next/start/stop) - these are allowed without --
       const legacyMatch = V8_IGNORE_LEGACY_REGEX.exec(line);
       if (legacyMatch) {
         comments.push({
@@ -470,11 +459,42 @@ function findV8IgnoreComments(files) {
           explanation: legacyMatch[2] ?? '',
           isLegacy: true,
         });
+        continue;
+      }
+
+      // Then check for modern format comments
+      const anyMatch = V8_IGNORE_ANY_REGEX.exec(line);
+      if (anyMatch) {
+        const fullComment = anyMatch[0];
+        const category = anyMatch[1]; // The category or keyword
+
+        // If it's not a legacy keyword, it MUST match the proper format with -- and explanation
+        if (!V8_LEGACY_KEYWORDS.includes(category)) {
+          const properMatch = V8_IGNORE_WITH_CATEGORY_REGEX.exec(line);
+          if (!properMatch) {
+            // It's a modern v8 ignore (not legacy keyword) but doesn't match proper format
+            malformed.push({
+              file: file.replace(ROOT_DIR + '/', ''),
+              line: lineIdx + 1,
+              content: fullComment,
+              message: 'Invalid format. Required: /* v8 ignore <CATEGORY> -- <explanation> */',
+            });
+            continue;
+          }
+
+          comments.push({
+            file: file.replace(ROOT_DIR + '/', ''),
+            line: lineIdx + 1,
+            category: properMatch[1],
+            explanation: properMatch[2],
+            isLegacy: false,
+          });
+        }
       }
     }
   }
 
-  return comments;
+  return { comments, malformed };
 }
 
 // ============================================================================
@@ -654,12 +674,16 @@ async function main() {
   if (process.argv.includes('--help') || process.argv.includes('-h')) {
     console.log('v8 Ignore Comment Validator');
     console.log('');
-    console.log('Validates all /* v8 ignore <CATEGORY> -- reason */ comments in the codebase.');
+    console.log('Validates all /* v8 ignore <CATEGORY> -- <explanation> */ comments in the codebase.');
+    console.log('');
+    console.log('Required format: /* v8 ignore <CATEGORY> -- <explanation> */');
     console.log('');
     console.log('Usage: node scripts/verify-v8-ignore.mjs');
     console.log('');
     console.log('Valid categories:');
     VALID_CATEGORIES.forEach((cat) => console.log(`  - ${cat}`));
+    console.log('');
+    console.log('Note: Comments without "-- <explanation>" suffix will be rejected as malformed.');
     process.exit(0);
   }
 
@@ -667,7 +691,17 @@ async function main() {
   const files = findFiles(['apps', 'packages', 'workers']);
 
   // Phase A: Find all v8 ignore comments
-  const comments = findV8IgnoreComments(files);
+  const { comments, malformed: malformedComments } = findV8IgnoreComments(files);
+
+  // Phase A.5: Report malformed comments immediately (these are syntax errors)
+  if (malformedComments.length > 0) {
+    console.log(`\n❌ ${malformedComments.length} malformed v8 ignore comment(s) found:\n`);
+    malformedComments.forEach((m) => {
+      console.log(`  ${m.file}:${m.line}: ${m.message}`);
+      console.log(`    Found: ${m.content}`);
+    });
+    process.exit(1);
+  }
 
   // Phase B: Syntax validation
   const { errors: syntaxErrors, validComments, legacyComments } = validateSyntax(comments);
