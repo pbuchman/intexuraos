@@ -3,7 +3,22 @@ import { config } from '@/config';
 import { useApiClient, ApiError } from '@/hooks/useApiClient';
 import { useAuth } from '@/context';
 
-const IS_LOCAL_DEV = import.meta.env.DEV && window.location.hostname === 'localhost';
+// Detect environment: LOCAL dev vs PRE-DEV (cloud functions)
+function getEnvironment(): 'LOCAL' | 'PRE-DEV' | null {
+  if (typeof window === 'undefined') return null;
+
+  const hostname = window.location.hostname;
+
+  if (import.meta.env.DEV && hostname === 'localhost') {
+    return 'LOCAL';
+  }
+
+  if (hostname.includes('cloudfunctions.net')) {
+    return 'PRE-DEV';
+  }
+
+  return null;
+}
 
 interface CommandResult {
   success: boolean;
@@ -18,6 +33,8 @@ export function DevBar(): React.JSX.Element | null {
   const [results, setResults] = useState<CommandResult[]>([]);
   const { request, isAuthenticated } = useApiClient();
   const { user } = useAuth();
+
+  const environment = getEnvironment();
 
   const handleSubmit = useCallback(async () => {
     if (command.trim() === '' || isSubmitting) return;
@@ -60,7 +77,7 @@ export function DevBar(): React.JSX.Element | null {
     [handleSubmit]
   );
 
-  if (!IS_LOCAL_DEV) return null;
+  if (!environment) return null;
 
   if (!isExpanded) {
     return (
@@ -69,7 +86,7 @@ export function DevBar(): React.JSX.Element | null {
           setIsExpanded(true);
         }}
         className="fixed bottom-4 right-4 z-50 flex h-10 w-10 items-center justify-center rounded-full bg-amber-500 text-white shadow-lg transition-all hover:bg-amber-600 hover:scale-110"
-        title="Open Dev Bar (PM2 Mode)"
+        title={`Open Dev Bar (${environment} Mode)`}
       >
         <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path
@@ -98,7 +115,9 @@ export function DevBar(): React.JSX.Element | null {
           </span>
         </div>
         <div className="flex items-center gap-2">
-          <span className="rounded bg-slate-800 px-2 py-0.5 text-xs text-slate-400">LOCAL</span>
+          <span className={`rounded px-2 py-0.5 text-xs ${environment === 'PRE-DEV' ? 'bg-purple-800 text-purple-300' : 'bg-slate-800 text-slate-400'}`}>
+            {environment}
+          </span>
           <button
             onClick={() => {
               setIsExpanded(false);
