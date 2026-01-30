@@ -607,10 +607,25 @@ function reportMissingComments(coverageData, comments) {
   const missing = [];
   const commentMap = new Map();
 
-  // Build map of files with comments
+  // Normalize file path from coverage data to match comment paths (relative)
+  function normalizePath(filePath) {
+    return filePath.replace(ROOT_DIR + '/', '');
+  }
+
+  // Build map of files with comments (by exact line)
   for (const comment of comments) {
     const key = `${comment.file}:${comment.line}`;
     commentMap.set(key, true);
+  }
+
+  // Build map of files with comments (by nearby lines for cases like JSDoc)
+  const nearbyCommentMap = new Map();
+  for (const comment of comments) {
+    const fileKey = comment.file;
+    if (!nearbyCommentMap.has(fileKey)) {
+      nearbyCommentMap.set(fileKey, []);
+    }
+    nearbyCommentMap.get(fileKey).push(comment.line);
   }
 
   // Find uncovered branches without comments
@@ -622,15 +637,29 @@ function reportMissingComments(coverageData, comments) {
 
     if (!branches) continue;
 
+    const normalizedPath = normalizePath(filePath);
+
     for (const [branchId, range] of Object.entries(branches)) {
       const startLine = range[0] + 1; // Convert to 1-indexed
 
       // Check if branch is uncovered (count 0 or false)
       if (range[4] === 0) {
-        const key = `${filePath}:${startLine}`;
+        const key = `${normalizedPath}:${startLine}`;
 
-        if (!commentMap.has(key)) {
-          missing.push({ file: filePath, line: startLine });
+        // Check exact line match first
+        if (commentMap.has(key)) {
+          continue;
+        }
+
+        // Check for nearby v8 ignore comment (within ±5 lines)
+        // This handles cases like JSDoc blocks where comment can't be on exact line
+        const nearbyComments = nearbyCommentMap.get(normalizedPath) ?? [];
+        const hasNearbyComment = nearbyComments.some(
+          (commentLine) => Math.abs(commentLine - startLine) <= 5
+        );
+
+        if (!hasNearbyComment) {
+          missing.push({ file: normalizedPath, line: startLine });
         }
       }
     }
@@ -712,7 +741,9 @@ async function main() {
       console.log(`  ... and ${missingReport.length - 50} more (run with --all to see all)`);
     }
     console.log(`\nAdd /* v8 ignore <CATEGORY> -- reason */ or write tests.`);
-    console.log(`Valid categories: ts-type, regex, module-init, async-timing, test-infra, upstream, module-mock, schema, source-map, auth-guard`);
+    console.log(
+      `Valid categories: ts-type, regex, module-init, async-timing, test-infra, upstream, module-mock, schema, source-map, auth-guard`
+    );
   }
 
   const hasErrors = allErrors.length > 0;

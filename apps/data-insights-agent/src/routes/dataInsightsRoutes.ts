@@ -2,6 +2,7 @@
  * Data insights routes for composite feeds.
  * Endpoints for analyzing data, generating chart definitions, and previewing visualizations.
  */
+/* v8 ignore source-map -- false positive: v8 reports branch on line 2 (JSDoc comment) */
 
 import type { FastifyPluginCallback, FastifyReply, FastifyRequest } from 'fastify';
 import { logIncomingRequest, requireAuth } from '@intexuraos/common-http';
