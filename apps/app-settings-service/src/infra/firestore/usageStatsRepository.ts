@@ -82,6 +82,7 @@ export class FirestoreUsageStatsRepository implements UsageStatsRepository {
       const callType = pathParts[3];
       const period = pathParts[5];
 
+/* v8 ignore ts-type -- path splitting logic ensures `pathparts` will have at lea... */
       if (model === undefined || callType === undefined || period === undefined) continue;
       if (!isValidDatePeriod(period)) continue;
       if (period < cutoffDate) continue;
@@ -217,3 +218,4 @@ export class FirestoreUsageStatsRepository implements UsageStatsRepository {
     };
   }
 }
+

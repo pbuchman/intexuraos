@@ -1,5 +1,11 @@
 # Verification Methodology
 
+> **DEPRECATED:** This document describes the old 7-category system with external
+> `unreachable/*.md` files. See [canonical-categories.md](canonical-categories.md) for the
+> current 10-category inline comment system.
+
+---
+
 ## Core Principle: Proof by Construction
 
 **A branch is only unreachable if you can explain the SPECIFIC MECHANISM that prevents test access.**

@@ -36,7 +36,9 @@ app.get('/logs', (req, res) => {
         res.write(`data: ${JSON.stringify({ type: 'log', log })}\n\n`);
       } catch {
         if (line.trim()) {
-          res.write(`data: ${JSON.stringify({ type: 'log', log: { message: line, process: { name: 'unknown' } } })}\n\n`);
+          res.write(
+            `data: ${JSON.stringify({ type: 'log', log: { message: line, process: { name: 'unknown' } } })}\n\n`
+          );
         }
       }
     }
@@ -50,7 +52,9 @@ app.get('/logs', (req, res) => {
         res.write(`data: ${JSON.stringify({ type: 'log', log })}\n\n`);
       } catch {
         if (line.trim()) {
-          res.write(`data: ${JSON.stringify({ type: 'log', log: { message: line, process: { name: 'unknown' }, err: true } })}\n\n`);
+          res.write(
+            `data: ${JSON.stringify({ type: 'log', log: { message: line, process: { name: 'unknown' }, err: true } })}\n\n`
+          );
         }
       }
     }

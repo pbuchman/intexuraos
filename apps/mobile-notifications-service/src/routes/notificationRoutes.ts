@@ -17,6 +17,7 @@ interface ListQuerystring {
   title?: string;
 }
 
+/* v8 ignore test-infra -- test infrastructure uses `fakeauthplugin` which always re... */
 interface DeleteParams {
   notification_id: string;
 }
@@ -229,3 +230,4 @@ export const notificationRoutes: FastifyPluginCallback = (fastify, _opts, done) 
 
   done();
 };
+

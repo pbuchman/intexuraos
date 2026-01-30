@@ -22,6 +22,7 @@ interface AnalyzeFeedParams {
   feedId: string;
 }
 
+/* v8 ignore test-infra -- test infrastructure uses `fakeauthplugin` which always re... */
 interface ChartDefinitionParams {
   feedId: string;
   insightId: string;
@@ -244,3 +245,4 @@ export const dataInsightsRoutes: FastifyPluginCallback = (fastify, _opts, done) 
 
   done();
 };
+

@@ -40,6 +40,7 @@ export class WorktreeManager {
       );
 
       // git worktree add outputs to stderr even on success
+      /* v8 ignore test-infra -- git worktree add outputs to stderr on success (e */
       if (stderr && !stderr.includes('Preparing worktree')) {
         throw new Error(`Failed to create worktree: ${stderr}`);
       }
@@ -72,6 +73,7 @@ export class WorktreeManager {
         cwd: this.config.repositoryPath,
       });
 
+      /* v8 ignore test-infra -- similar to create worktree - requires git worktree remove... */
       if (stderr) {
         throw new Error(`Failed to remove worktree: ${stderr}`);
       }

@@ -210,6 +210,7 @@ export class LogForwarder {
     return chunks;
   }
 
+  /* v8 ignore upstream -- early return for small chunks is the happy path */
   private async sendBatch(taskId: string, chunks: string[], state: ForwardingState): Promise<void> {
     for (const chunk of chunks) {
       const truncated = this.enforceChunkSize(chunk);

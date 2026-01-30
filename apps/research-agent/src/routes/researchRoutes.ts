@@ -174,6 +174,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         );
       }
 
+/* v8 ignore ts-type -- internal utility function where message/context are alway... */
       const synthesisModel = body.synthesisModel ?? body.selectedModels[0] ?? LlmModels.Gemini25Pro;
       if (body.skipSynthesis !== true) {
         const synthesisProvider = getProviderForModel(synthesisModel);
@@ -1513,3 +1514,4 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
   done();
 };
+

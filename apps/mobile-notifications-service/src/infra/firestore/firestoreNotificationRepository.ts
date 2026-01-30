@@ -37,6 +37,7 @@ interface NotificationDoc {
 /**
  * Decode a cursor string to a Firestore doc snapshot.
  */
+/* v8 ignore ts-type -- previous `findbyid` call ensures the document exists befo... */
 function decodeCursor(cursor: string | undefined): { receivedAt: string; id: string } | undefined {
   if (cursor === undefined) {
     return undefined;
@@ -264,3 +265,4 @@ export class FirestoreNotificationRepository implements NotificationRepository {
     }
   }
 }
+

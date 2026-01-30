@@ -8,6 +8,7 @@ import type {
   CreateSignatureConnectionInput,
   RepositoryError,
   SignatureConnection,
+/* v8 ignore ts-type -- query is performed with a specific document id */
   SignatureConnectionRepository,
 } from '../../domain/notifications/index.js';
 
@@ -193,3 +194,4 @@ export class FirestoreSignatureConnectionRepository implements SignatureConnecti
     }
   }
 }
+

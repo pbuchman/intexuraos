@@ -9,6 +9,7 @@
 ## Overview
 
 You are implementing a cloud-based development environment that:
+
 1. Runs on a GCP Spot VM (scale 0-1)
 2. Mirrors local `pnpm run dev` using PM2
 3. Auto-starts when user accesses gateway URL
@@ -72,7 +73,7 @@ const SERVICE_PORTS = {
   'linear-agent': 8125,
   'web-agent': 8126,
   'code-agent': 8127,
-  'web': 3000,
+  web: 3000,
 };
 
 // Build service configuration
@@ -143,6 +144,7 @@ module.exports = {
 **File:** `scripts/dev-setup.mjs`
 
 This script should ONLY handle:
+
 1. Starting emulators (Firestore, Pub/Sub, Storage)
 2. Validating environment (.envrc.local exists)
 3. Building packages (`pnpm build`)
@@ -764,6 +766,7 @@ output "predev_webhook_url" {
 ### Step 1.10: Add secrets to secret-manager
 
 Add these to the secret-manager module or create manually:
+
 - `predev-env-vars` - Aggregated environment variables for VM
 - `INTEXURAOS_GITHUB_WEBHOOK_SECRET` - GitHub webhook HMAC secret
 
@@ -1234,6 +1237,7 @@ Copy from `workers/vm-lifecycle/vitest.config.ts`.
 ### Step 2.13: Create tests
 
 Create tests in `workers/predev-lifecycle/src/__tests__/` for:
+
 - `state.test.ts` - StateManager unit tests
 - `vm-control.test.ts` - VmControl unit tests (mocked)
 - `gateway.test.ts` - Gateway function tests
@@ -1608,6 +1612,7 @@ export function DevBar() {
 ### Step 6.4: Complete DevBar UI panels
 
 Implement the "coming soon" panels:
+
 - Logs panel: Use `usePm2Logs` hook, render log entries with level colors
 - Pub/Sub panel: Use `usePubSubEvents` hook, render event cards
 
@@ -1633,18 +1638,22 @@ Before marking complete:
 ## Common Issues
 
 ### VM won't start
+
 - Check MIG target size: `gcloud compute instance-groups managed describe predev-mig-dev --zone=...`
 - Check startup script logs: `gcloud compute instances get-serial-port-output predev-...`
 
 ### Gateway returns 502
+
 - Check VM is running and has external IP
 - Check firewall rules allow traffic on ports 3000, 8105, 8106
 
 ### Webhook signature invalid
+
 - Verify `INTEXURAOS_GITHUB_WEBHOOK_SECRET` matches GitHub webhook secret
 - Check content type is `application/json`
 
 ### SSE disconnects
+
 - Check gateway function timeout is 3600s (60 min)
 - Check Cloud Run request timeout settings
 
@@ -1653,6 +1662,7 @@ Before marking complete:
 ## Files Created/Modified Summary
 
 ### New Files
+
 ```
 ecosystem.config.cjs
 terraform/modules/predev-environment/
@@ -1682,6 +1692,7 @@ cloudbuild/scripts/deploy-all-workers.sh
 ```
 
 ### Modified Files
+
 ```
 scripts/dev-setup.mjs
 package.json (root - scripts)

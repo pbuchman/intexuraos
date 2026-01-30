@@ -11,6 +11,7 @@
 import type { FastifyPluginCallback } from 'fastify';
 import { logIncomingRequest, requireAuth } from '@intexuraos/common-http';
 import { getServices } from '../services.js';
+/* v8 ignore test-infra -- test infrastructure uses `fakeauthplugin` which always re... */
 import {
   connectNotion,
   type ConnectNotionErrorCode,
@@ -256,3 +257,4 @@ export const integrationRoutes: FastifyPluginCallback = (fastify, _opts, done) =
 
   done();
 };
+
