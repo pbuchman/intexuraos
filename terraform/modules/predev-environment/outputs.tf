@@ -22,3 +22,8 @@ output "mig_name" {
   description = "Managed Instance Group name"
   value       = local.mig_name
 }
+
+output "report_ready_url" {
+  description = "Report-ready function URL (VM calls this on startup)"
+  value       = google_cloudfunctions2_function.report_ready.service_config[0].uri
+}

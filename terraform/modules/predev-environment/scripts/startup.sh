@@ -69,8 +69,9 @@ pm2 save
 EXTERNAL_IP=$(curl -s -H "Metadata-Flavor: Google" \
   "http://metadata.google.internal/computeMetadata/v1/instance/network-interfaces/0/access-configs/0/external-ip")
 
-# Get report-ready URL from environment or use default
-REPORT_READY_URL="${REPORT_READY_URL:-}"
+# Get report-ready URL from instance metadata
+REPORT_READY_URL=$(curl -s -H "Metadata-Flavor: Google" \
+  "http://metadata.google.internal/computeMetadata/v1/instance/attributes/report-ready-url" 2>/dev/null || echo "")
 
 if [ -n "$REPORT_READY_URL" ]; then
   log "Reporting ready to: $REPORT_READY_URL"

@@ -32,7 +32,8 @@ resource "google_compute_instance_template" "predev" {
   }
 
   metadata = {
-    startup-script = file("${path.module}/scripts/startup.sh")
+    startup-script   = file("${path.module}/scripts/startup.sh")
+    report-ready-url = google_cloudfunctions2_function.report_ready.service_config[0].uri
   }
 
   service_account {
