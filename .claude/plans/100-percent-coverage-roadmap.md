@@ -9,6 +9,7 @@
 **Plan:** `~/.claude/plans/drifting-enchanting-scone.md`
 
 **What it does:**
+
 - Replace `unreachable/*.md` files with inline `/* v8 ignore <CATEGORY> */` comments
 - Standardize 22+ categories → 10 canonical categories
 - Add `verify-v8-ignore` script to CI (Static Validation phase)
@@ -16,6 +17,7 @@
 - Report uncovered branches without exemptions (informational, no CI fail)
 
 **Outcome:**
+
 - All exemptions are inline, validated, and categorized
 - Phase E report lists all uncovered branches without exemptions
 - Foundation is set for Phase 2
@@ -41,11 +43,13 @@
 ```
 
 **Tracking:**
+
 - Create Linear issue for batch of uncovered branches
 - Use `/coverage <service>` skill to systematically address each service
 - Track progress: `pnpm run verify:v8-ignore | grep "uncovered branches"`
 
 **Outcome:**
+
 - Every branch is either covered by tests OR has valid exemption
 - Phase E report shows 0 missing
 
@@ -60,6 +64,7 @@
 **Changes to make:**
 
 1. **Edit `scripts/verify-v8-ignore.mjs`:**
+
    ```javascript
    // Change Phase E from report-only to fail
    // Before:
@@ -75,12 +80,13 @@
    ```javascript
    if (missingReport.length > 0) {
      console.log(`\n❌ ${missingReport.length} uncovered branches without exemption:\n`);
-     missingReport.forEach(m => console.log(`  ${m.file}:${m.line}`));
+     missingReport.forEach((m) => console.log(`  ${m.file}:${m.line}`));
      console.log(`\nAdd /* v8 ignore <CATEGORY> -- reason */ or write tests.`);
    }
    ```
 
 **Outcome:**
+
 - CI fails if ANY branch is uncovered without exemption
 - No new uncovered code can be merged
 - 100% coverage is locked in
@@ -91,11 +97,11 @@
 
 ## Summary
 
-| Phase | Focus | CI Behavior | Outcome |
-|-------|-------|-------------|---------|
-| 1 | Organize exemptions | Fail invalid, report missing | Clean foundation |
-| 2 | Write tests | Same as Phase 1 | 0 missing branches |
-| 3 | Enforce | Fail invalid AND missing | 100% locked in |
+| Phase | Focus               | CI Behavior                  | Outcome            |
+| ----- | ------------------- | ---------------------------- | ------------------ |
+| 1     | Organize exemptions | Fail invalid, report missing | Clean foundation   |
+| 2     | Write tests         | Same as Phase 1              | 0 missing branches |
+| 3     | Enforce             | Fail invalid AND missing     | 100% locked in     |
 
 ---
 
@@ -116,8 +122,8 @@ pnpm run test:coverage 2>&1 | grep "Branches"
 
 ## Timeline
 
-| Phase | Estimated Effort |
-|-------|------------------|
+| Phase   | Estimated Effort                      |
+| ------- | ------------------------------------- |
 | Phase 1 | 1-2 days (implementation + migration) |
-| Phase 2 | Ongoing (as capacity allows) |
-| Phase 3 | 1 hour (flip the switch when ready) |
+| Phase 2 | Ongoing (as capacity allows)          |
+| Phase 3 | 1 hour (flip the switch when ready)   |

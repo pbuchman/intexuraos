@@ -17,6 +17,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         operationId: 'getInternalNotionContext',
         summary: 'Get Notion connection context (internal)',
         description:
+/* v8 ignore test-infra -- test infrastructure uses `fakeauthplugin` which always re... */
           'Internal endpoint for service-to-service communication. Returns connection state and token.',
         tags: ['internal'],
         params: {
@@ -223,3 +224,4 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
   done();
 };
+

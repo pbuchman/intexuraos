@@ -9,6 +9,7 @@ import { getServices } from '../services.js';
 export interface StatusResponse {
   configured: boolean;
   lastNotificationAt: string | null;
+/* v8 ignore test-infra -- test setup mocks all services as healthy */
 }
 
 export const statusRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
@@ -105,3 +106,4 @@ export const statusRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
   done();
 };
+

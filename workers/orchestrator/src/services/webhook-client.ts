@@ -81,6 +81,7 @@ export class WebhookClient {
 
     this.logger.warn({ taskId }, 'Webhook delivery failed, queued for retry');
 
+    /* v8 ignore upstream -- `lasterror` variable is set in every iteration of the for... */
     if (lastError === null) {
       return { ok: false, error: { type: 'network', message: 'Unknown error' } };
     }

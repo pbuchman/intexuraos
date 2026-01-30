@@ -29,6 +29,7 @@ interface ApiResponse {
   data?: {
     status: 'completed' | 'failed';
     message: string;
+/* v8 ignore test-infra -- test mock for http responses always returns `ok: true` */
     resourceUrl?: string;
     errorCode?: string;
   };
@@ -177,3 +178,4 @@ export function createCalendarServiceHttpClient(
     },
   };
 }
+

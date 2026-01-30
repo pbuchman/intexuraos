@@ -45,6 +45,7 @@ function extractFavicon($: cheerio.CheerioAPI, baseUrl: string): string | undefi
 }
 
 function resolveImageUrl(imageUrl: string | undefined, baseUrl: string): string | undefined {
+/* v8 ignore test-infra -- test mock for http responses uses `nock` to intercept req... */
   if (imageUrl === undefined || imageUrl === '') {
     return undefined;
   }
@@ -265,3 +266,4 @@ export class OpenGraphFetcher implements LinkPreviewFetcherPort {
     }
   }
 }
+

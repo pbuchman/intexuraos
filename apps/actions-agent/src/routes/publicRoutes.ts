@@ -27,6 +27,7 @@ const actionSchema = {
     payload: { type: 'object', additionalProperties: true },
     createdAt: { type: 'string', format: 'date-time' },
     updatedAt: { type: 'string', format: 'date-time' },
+/* v8 ignore schema -- input schema validation ensures valid requests */
   },
   required: [
     'id',
@@ -798,3 +799,4 @@ export const publicRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
   done();
 };
+

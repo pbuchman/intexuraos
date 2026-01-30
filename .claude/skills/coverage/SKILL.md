@@ -21,11 +21,11 @@ Analyze branch coverage gaps and convert them into Linear issues or documented e
 
 100% branch coverage means every uncovered branch is accounted for:
 
-| Category        | What It Means                                   |
-| --------------- | ----------------------------------------------- |
-| **Covered**     | Tests exercise the branch                       |
-| **Unreachable** | Documented in `unreachable/<name>.md` with proof |
-| **Tracked**     | Linear issue exists in ACTIVE status            |
+| Category        | What It Meaning                                              |
+| --------------- | ------------------------------------------------------------ |
+| **Covered**     | Tests exercise the branch                                    |
+| **Exempted**    | Inline `/* v8 ignore <CATEGORY> -- reason */` comment present |
+| **Tracked**     | Linear issue exists in ACTIVE status                         |
 
 **Active Linear statuses that count toward 100%:**
 - Backlog
@@ -41,11 +41,11 @@ Analyze branch coverage gaps and convert them into Linear issues or documented e
 
 **Why 100%?** The 95% CI threshold is a minimum safety net, not the goal. Untracked gaps indicate:
 - Tests that should exist but don't
-- Unreachable code that should be documented
+- Unreachable code that should be exempted
 - Work that should be in the backlog
 
 **An app is "covered" when:** Every branch with `pct < 100` either:
-1. Has a documented exemption, OR
+1. Has an inline v8 ignore comment with valid category, OR
 2. Has an active Linear issue tracking it
 
 ---
@@ -58,9 +58,9 @@ Analyze branch coverage gaps and convert them into Linear issues or documented e
 |------|----------|
 | Run coverage commands | Write test code |
 | Parse coverage reports | Modify source files |
-| Verify existing exemptions | Create branches for fixes |
-| Update/delete stale exemptions | Commit code changes |
-| Add new exemptions for unreachable code | Create PRs |
+| Verify existing inline comments | Create branches for fixes |
+| Update/delete stale inline comments | Commit code changes |
+| Add new inline comments for unreachable code | Create PRs |
 | Create Linear issues for testable gaps | Work on created issues |
 | Generate summary reports | |
 
@@ -86,17 +86,22 @@ Analyze branch coverage gaps and convert them into Linear issues or documented e
 
 ## Mandatory Rules
 
-### Rule 1: Unreachable File Verification
+### Rule 1: Inline Comment Verification
 
 **BEFORE adding any new exemptions**, verify existing entries:
 
-1. Read existing `unreachable/<name>.md` for the target
-2. For EACH existing entry:
-   - Search for **CODE SNIPPET** in current source (NOT line number)
-   - If snippet FOUND at different line → update line reference
-   - If snippet NOT FOUND (deleted/refactored) → DELETE the section
-   - If source file deleted → DELETE all sections for that file
+1. Run `pnpm run verify:v8-ignore` to validate all existing comments
+2. For EACH existing inline comment:
+   - Verify the code pattern still matches the category
+   - If code was refactored → update or remove comment
+   - If comment no longer valid → remove it
 3. Only AFTER verification → add new exemptions
+
+**Comment format:** `/* v8 ignore <CATEGORY> -- <explanation> */`
+
+**Valid categories:** `ts-type`, `regex`, `module-init`, `async-timing`, `test-infra`, `upstream`, `module-mock`, `schema`, `source-map`, `auth-guard`
+
+**Reference:** [canonical-categories.md](reference/canonical-categories.md)
 
 ### Rule 2: Linear Issue Deduplication
 
@@ -124,20 +129,23 @@ the 100% accounting.
 
 Before marking ANY branch as unreachable:
 
-1. Identify one of the 7 valid blocker categories (see [verification-methodology.md](reference/verification-methodology.md))
+1. Identify one of the 10 valid categories (see [canonical-categories.md](reference/canonical-categories.md))
 2. Document the PROOF — the specific mechanism, not just the conclusion
 3. Ask: "Would another engineer agree this is structurally unreachable?"
 
-**Valid blocker categories:**
+**Valid categories:**
 | Category | Example |
 |----------|---------|
-| TypeScript Type System | `noUncheckedIndexedAccess` after length check |
-| Regex Match Guarantees | Capture group guaranteed by `.+` pattern |
-| Module-Level Initialization | Code runs at import before tests |
-| Async Callback Timing | Timeout cancelled before it fires |
-| Test Infrastructure Constraints | Fake has no method to produce state |
-| Upstream Guards | Prior check makes downstream redundant |
-| ES Module Mocking Limitations | SDK internals not mockable |
+| `ts-type` | `noUncheckedIndexedAccess` after length check |
+| `regex` | Capture group guaranteed by `.+` pattern |
+| `module-init` | Code runs at import before tests |
+| `async-timing` | Timeout cancelled before it fires |
+| `test-infra` | Fake has no method to produce state |
+| `upstream` | Prior check makes downstream redundant |
+| `module-mock` | SDK property getters not mockable |
+| `schema` | Zod validation guarantees field exists |
+| `source-map` | Tests cover but v8 doesn't detect |
+| `auth-guard` | Auth failure tested at middleware level |
 
 **INVALID excuses:**
 - "Hard to set up" — difficulty ≠ impossibility
@@ -158,7 +166,7 @@ The skill's job ends when all gaps are either exempted or have Linear issues.
 
 | Type | Location |
 |------|----------|
-| Exemptions | `.claude/skills/coverage/unreachable/<name>.md` |
+| Exemptions | Inline comment: `/* v8 ignore <CATEGORY> -- reason */` |
 | Linear issues | Title: `[coverage][<name>] <filename> <description>` |
 
 ## References
@@ -166,4 +174,4 @@ The skill's job ends when all gaps are either exempted or have Linear issues.
 - Workflows: [`workflows/`](workflows/)
 - Templates: [`templates/`](templates/)
 - Reference: [`reference/`](reference/)
-- Exemptions: [`unreachable/`](unreachable/)
+- Canonical categories: [`reference/canonical-categories.md`](reference/canonical-categories.md)

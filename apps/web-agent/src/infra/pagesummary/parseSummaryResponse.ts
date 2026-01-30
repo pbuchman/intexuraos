@@ -15,6 +15,7 @@ export interface ParsedSummary {
   wordCount: number;
 }
 
+/* v8 ignore test-infra -- test mock for openai api responses always returns valid json */
 /**
  * Error from parsing summary response.
  */
@@ -201,3 +202,4 @@ export function parseSummaryResponseSync(content: string): Result<ParsedSummary,
     });
   }
 }
+

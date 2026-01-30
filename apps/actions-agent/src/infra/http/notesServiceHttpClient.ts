@@ -23,6 +23,7 @@ interface ApiResponse {
   error?: { code: string; message: string };
 }
 
+/* v8 ignore test-infra -- test mock for http responses always returns `ok: true` */
 export function createNotesServiceHttpClient(
   config: NotesServiceHttpClientConfig
 ): NotesServiceClient {
@@ -94,3 +95,4 @@ export function createNotesServiceHttpClient(
     },
   };
 }
+

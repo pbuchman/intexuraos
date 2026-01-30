@@ -44,86 +44,51 @@ title contains "[coverage][actions-agent] client.ts"
 
 ---
 
-## Unreachable Files
+## v8 Ignore Comments
 
-### Location
-
-```
-.claude/skills/coverage/unreachable/<target>.md
-```
-
-### Target Names
-
-Use exact directory name:
-- `actions-agent.md` (not `apps-actions-agent.md`)
-- `infra-claude.md` (not `packages-infra-claude.md`)
-- `common-core.md`
-- `research-agent.md`
-
-### Section Headers
-
-Use relative path from app/package root:
-
-```markdown
-## `src/infra/http/client.ts`
-```
-
-NOT:
-```markdown
-## `apps/actions-agent/src/infra/http/client.ts`
-```
-
-### Line References
-
-Use approximate line with tilde:
-
-```markdown
-### Line ~45: `?? 'info'` fallback
-```
-
-NOT:
-```markdown
-### Line 45: `?? 'info'` fallback
-```
-
----
-
-## Branch Names
-
-When working on coverage issues:
+### Format
 
 ```
-fix/INT-XXX-coverage-<filename>
+/* v8 ignore <CATEGORY> -- <explanation> */
 ```
 
-Examples:
+### Components
+
+| Component | Description | Example |
+|-----------|-------------|---------|
+| `v8 ignore` | Fixed prefix | `v8 ignore` |
+| `<CATEGORY>` | Valid category ID | `ts-type`, `regex`, `module-init`, etc. |
+| `--` | Separator between category and explanation | `--` |
+| `<explanation>` | Brief reason why branch is unreachable | `length check guarantees element exists` |
+
+### Valid Categories
+
+| Category | Description |
+|----------|-------------|
+| `ts-type` | TypeScript type narrowing guarantees branch unreachable |
+| `regex` | Capture group guaranteed by regex pattern |
+| `module-init` | Module-level code runs before tests |
+| `async-timing` | Callback cancelled before it fires in tests |
+| `test-infra` | Fake/mock cannot produce required state |
+| `upstream` | Prior check makes downstream redundant |
+| `module-mock` | SDK property getters not mockable |
+| `schema` | Schema validation makes fallback unreachable |
+| `source-map` | Tests cover but v8 doesn't detect |
+| `auth-guard` | Auth failure paths tested at middleware level |
+
+### Example Comments
+
+```typescript
+/* v8 ignore ts-type -- length check guarantees element exists */
+const first = items[0] ?? fallback;
+
+/* v8 ignore regex -- .+ pattern guarantees group 1 captures */
+const title = match[1] ?? '';
+
+/* v8 ignore test-infra -- FakeAuthPlugin always succeeds */
+if (user === null) { return reply.fail('UNAUTHORIZED'); }
 ```
-fix/INT-301-coverage-executeAction
-fix/INT-302-coverage-client
-fix/INT-303-coverage-researchRoutes
-```
 
----
+### Validation
 
-## Commit Messages
-
-```
-[coverage] <description>
-```
-
-Examples:
-```
-[coverage] Add tests for executeAction error handling
-[coverage] Document unreachable branches in client.ts
-[coverage] Fix actions-agent authentication guard coverage
-```
-
----
-
-## Labels
-
-Use `coverage` label on all coverage-related Linear issues.
-
-Create label if it doesn't exist:
-- Name: `coverage`
-- Color: (your choice, suggest yellow/orange for visibility)
+Run `pnpm run verify:v8-ignore` to validate all inline comments.

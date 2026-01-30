@@ -18,6 +18,7 @@ const DEFAULT_MAX_SENTENCES = 20;
 const DEFAULT_MAX_READING_MINUTES = 3;
 const WORDS_PER_MINUTE = 200;
 
+/* v8 ignore test-infra -- test mock for crawl4ai api responses always returns succe... */
 interface Crawl4AIResponse {
   success: boolean;
   url?: string;
@@ -225,3 +226,4 @@ export function createCrawl4AIClient(
 ): PageSummaryServicePort {
   return new Crawl4AIClient(config, logger);
 }
+
