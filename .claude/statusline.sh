@@ -259,14 +259,16 @@ if [ -n "$api_display" ]; then
   printf '  🌐 %s%s%s' "$(api_color)" "$api_display" "$(rst)"
 fi
 
-# Line 2: Context and session time
+# Line 2: Context and hook metrics (same line)
 line2=""
 if [ -n "$context_pct" ]; then
   context_bar=$(progress_bar "$context_remaining_pct" 10)
-  line2="🧠 $(context_color)Context Remaining: ${context_pct} [${context_bar}]$(rst)"
+  line2="🧠 $(context_color)Context: ${context_pct} [${context_bar}]$(rst)"
+else
+  line2="🧠 $(context_color)Context: TBD$(rst)"
 fi
-if [ -z "$line2" ] && [ -z "$context_pct" ]; then
-  line2="🧠 $(context_color)Context Remaining: TBD$(rst)"
+if [ -n "$hook_metrics" ]; then
+  line2="$line2  $hook_metrics"
 fi
 
 # Line 3: Cost and usage analytics
@@ -302,9 +304,6 @@ if [ -n "$line2" ]; then
 fi
 if [ -n "$line3" ]; then
   printf '\n%s' "$line3"
-fi
-if [ -n "$hook_metrics" ]; then
-  printf '\n%s' "$hook_metrics"
 fi
 printf '\n'
 
