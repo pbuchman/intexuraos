@@ -24,15 +24,28 @@ if [[ -z "$LAST_RESPONSE" ]]; then
   exit 0
 fi
 
-# Check for "pre-existing" (ownership-deflecting language)
-if echo "$LAST_RESPONSE" | grep -iq "pre-existing"; then
-  cat << EOF
+# Forbidden ownership-deflecting patterns
+FORBIDDEN_PATTERNS=(
+  "pre-existing"
+  "already broken"
+  "legacy issue"
+)
+
+for pattern in "${FORBIDDEN_PATTERNS[@]}"; do
+  # Check if pattern exists in response
+  if echo "$LAST_RESPONSE" | grep -iq "$pattern"; then
+    # Skip false positives: pattern inside backticks (code/discussion)
+    if echo "$LAST_RESPONSE" | grep -qE "\`[^\`]*${pattern}[^\`]*\`"; then
+      continue
+    fi
+    cat << EOF
 {
   "decision": "block",
-  "reason": "⚠️ OWNERSHIP CHECK: You used 'pre-existing' in your response. This violates the Ownership Mindset rules in CLAUDE.md. Please acknowledge this warning and rephrase without ownership-deflecting language. See: Ownership Mindset (MANDATORY) section."
+  "reason": "⚠️ OWNERSHIP CHECK: You used '$pattern' in your response. This violates the Ownership Mindset rules in CLAUDE.md. Please acknowledge this warning and rephrase without ownership-deflecting language. See: Ownership Mindset (MANDATORY) section."
 }
 EOF
-  exit 0
-fi
+    exit 0
+  fi
+done
 
 exit 0
