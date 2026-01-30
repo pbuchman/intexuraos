@@ -152,3 +152,16 @@ export function formatDuration(seconds: number): string {
   const secs = Math.floor(seconds % 60);
   return `${String(minutes)}:${String(secs).padStart(2, '0')}`;
 }
+
+/**
+ * Format time only as "14:30:45" (24-hour format with seconds)
+ * Use for: Event logs, DevBar, precise timestamps
+ */
+export function formatTimeOnly(isoDate: string): string {
+  return new Date(isoDate).toLocaleTimeString('en-US', {
+    hour12: false,
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  });
+}

@@ -1623,6 +1623,12 @@ importers:
         specifier: ^3.24.1
         version: 3.25.76
 
+  tools/log-server:
+    dependencies:
+      express:
+        specifier: ^4.18.2
+        version: 4.22.1
+
   workers/log-cleanup:
     dependencies:
       '@google-cloud/functions-framework':

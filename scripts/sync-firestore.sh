@@ -69,21 +69,33 @@ mkdir -p "${EXPORT_DIR}"
 gsutil -m cp -r "${EXPORT_PATH}/*" "${EXPORT_DIR}/"
 
 echo ""
-echo "[3/3] Restarting emulator with imported data..."
+echo "[3/3] Restarting emulators with imported data..."
 cd "${ROOT_DIR}"
-docker compose -f docker/docker-compose.local.yaml stop firebase-emulator || true
-docker compose -f docker/docker-compose.local.yaml up -d firebase-emulator
+docker compose -f docker/docker-compose.local.yaml down || true
+docker compose -f docker/docker-compose.local.yaml up -d --build
 
 echo ""
-echo "Waiting for emulator to be ready..."
-for i in {1..30}; do
-  if curl -sf http://localhost:8100 > /dev/null 2>&1; then
-    break
-  fi
-  sleep 1
+echo "Waiting for all emulators to be ready..."
+SERVICES=("Firestore:8100" "Firestore-API:8101" "Pub/Sub:8102" "GCS:8103" "Firebase-Auth:8104" "Pub/Sub-UI:8105")
+for service in "${SERVICES[@]}"; do
+  NAME="${service%%:*}"
+  PORT="${service##*:}"
+  for i in {1..60}; do
+    if curl -sf "http://localhost:${PORT}" > /dev/null 2>&1 || \
+       curl -sf "http://localhost:${PORT}/health" > /dev/null 2>&1; then
+      echo "  ${NAME} ready on port ${PORT}"
+      break
+    fi
+    if [ $i -eq 60 ]; then
+      echo "ERROR: ${NAME} failed to start on port ${PORT}"
+      exit 1
+    fi
+    sleep 1
+  done
 done
 
 echo ""
 echo "=== Sync Complete ==="
-echo "Firestore UI: http://localhost:8100"
+echo "Firestore UI:  http://localhost:8100"
+echo "Pub/Sub UI:    http://localhost:8105"
 echo "Data imported from: ${EXPORT_PATH}"

@@ -106,37 +106,37 @@ sequenceDiagram
 
 ### Todo
 
-| Field         | Type             | Description                              |
-| ------------- | ---------------- | ---------------------------------------- |
-| `id`          | `string`         | Unique todo identifier                   |
-| `userId`      | `string`         | Owner user ID                            |
-| `title`       | `string`         | Todo title                               |
-| `description` | `string \| null` | Optional description (for AI extraction) |
-| `tags`        | `string[]`       | User-defined tags                        |
-| `priority`    | `TodoPriority`   | low \| medium \| high \| urgent          |
-| `dueDate`     | `Date \| null`   | Deadline                                 |
-| `source`      | `string`         | Source system (whatsapp, manual, etc.)   |
-| `sourceId`    | `string`         | ID in source system                      |
-| `status`      | `TodoStatus`     | Current state                            |
-| `archived`    | `boolean`        | Soft delete flag                         |
-| `items`       | `TodoItem[]`     | Sub-items                                |
-| `completedAt` | `Date \| null`   | When marked completed                    |
-| `createdAt`   | `Date`           | Creation timestamp                       |
-| `updatedAt`   | `Date`           | Last update timestamp                    |
+| Field         | Type           | Description                            |
+| ------------- | -------------- | -------------------------------------- | ---------------------------------------- | ------- | ------ |
+| `id`          | `string`       | Unique todo identifier                 |
+| `userId`      | `string`       | Owner user ID                          |
+| `title`       | `string`       | Todo title                             |
+| `description` | `string \      | null`                                  | Optional description (for AI extraction) |
+| `tags`        | `string[]`     | User-defined tags                      |
+| `priority`    | `TodoPriority` | low \                                  | medium \                                 | high \  | urgent |
+| `dueDate`     | `Date \        | null`                                  | Deadline                                 |
+| `source`      | `string`       | Source system (whatsapp, manual, etc.) |
+| `sourceId`    | `string`       | ID in source system                    |
+| `status`      | `TodoStatus`   | Current state                          |
+| `archived`    | `boolean`      | Soft delete flag                       |
+| `items`       | `TodoItem[]`   | Sub-items                              |
+| `completedAt` | `Date \        | null`                                  | When marked completed                    |
+| `createdAt`   | `Date`         | Creation timestamp                     |
+| `updatedAt`   | `Date`         | Last update timestamp                  |
 
 ### TodoItem
 
-| Field         | Type                   | Description            |
-| ------------- | ---------------------- | ---------------------- |
-| `id`          | `string`               | Unique item identifier |
-| `title`       | `string`               | Item title             |
-| `status`      | `TodoItemStatus`       | pending \| completed   |
-| `priority`    | `TodoPriority \| null` | Item priority          |
-| `dueDate`     | `Date \| null`         | Item deadline          |
-| `position`    | `number`               | Display order          |
-| `completedAt` | `Date \| null`         | Completion time        |
-| `createdAt`   | `Date`                 | Creation timestamp     |
-| `updatedAt`   | `Date`                 | Last update timestamp  |
+| Field         | Type             | Description            |
+| ------------- | ---------------- | ---------------------- | --------------- |
+| `id`          | `string`         | Unique item identifier |
+| `title`       | `string`         | Item title             |
+| `status`      | `TodoItemStatus` | pending \              | completed       |
+| `priority`    | `TodoPriority \  | null`                  | Item priority   |
+| `dueDate`     | `Date \          | null`                  | Item deadline   |
+| `position`    | `number`         | Display order          |
+| `completedAt` | `Date \          | null`                  | Completion time |
+| `createdAt`   | `Date`           | Creation timestamp     |
+| `updatedAt`   | `Date`           | Last update timestamp  |
 
 ### Status Values
 
