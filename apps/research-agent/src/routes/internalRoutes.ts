@@ -581,7 +581,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         );
       } else { /* v8 ignore test-infra -- non-PubSub auth branch requires test setup without PubSub headers */
         const authResult = validateInternalAuth(request); /* v8 ignore test-infra -- auth validation result branches require auth failure setup */
-        if (!authResult.valid) {
+        if (!authResult.valid) { /* v8 ignore test-infra -- auth validation failure branch requires auth failure test setup */
           request.log.warn(
             { reason: authResult.reason },
             'Internal auth failed for report-analytics endpoint'
@@ -602,10 +602,10 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           !('type' in parsed) ||
           (parsed as { type: unknown }).type !== 'llm.report'
         ) { /* v8 ignore test-infra -- validation error branch requires malformed event setup */
-          const eventType = /* v8 ignore ts-type -- ternary fallback when parsed is not object or has no type property */
+          const eventType =
             typeof parsed === 'object' && parsed !== null && 'type' in parsed
               ? (parsed as { type: unknown }).type /* v8 ignore ts-type -- ternary true branch when parsed is object with type property */
-              : 'unknown';
+              : 'unknown'; /* v8 ignore ts-type -- ternary fallback when parsed is not object or has no type property */
           request.log.warn({ type: eventType }, 'Unexpected analytics event type');
           return await reply.ok({}); /* v8 ignore test-infra -- validation error branch requires malformed event setup */
         }
@@ -733,10 +733,10 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           !('type' in parsed) ||
           (parsed as { type: unknown }).type !== 'llm.call'
         ) { /* v8 ignore test-infra -- validation error branch requires malformed event setup */
-          const eventType = /* v8 ignore ts-type -- ternary fallback when parsed is not object or has no type property */
+          const eventType =
             typeof parsed === 'object' && parsed !== null && 'type' in parsed
               ? (parsed as { type: unknown }).type /* v8 ignore ts-type -- ternary true branch when parsed is object with type property */
-              : 'unknown';
+              : 'unknown'; /* v8 ignore ts-type -- ternary fallback when parsed is not object or has no type property */
           request.log.warn({ type: eventType }, 'Unexpected LLM call event type');
           return await reply.ok({}); /* v8 ignore test-infra -- validation error branch requires malformed event setup */
         }

@@ -674,7 +674,9 @@ async function main() {
   if (process.argv.includes('--help') || process.argv.includes('-h')) {
     console.log('v8 Ignore Comment Validator');
     console.log('');
-    console.log('Validates all /* v8 ignore <CATEGORY> -- <explanation> */ comments in the codebase.');
+    console.log(
+      'Validates all /* v8 ignore <CATEGORY> -- <explanation> */ comments in the codebase.'
+    );
     console.log('');
     console.log('Required format: /* v8 ignore <CATEGORY> -- <explanation> */');
     console.log('');

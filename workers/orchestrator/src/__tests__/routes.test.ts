@@ -546,9 +546,7 @@ describe('Routes', () => {
         'valid-1': validTime,
         'valid-2': validTime - 1000,
         // Add enough entries to exceed threshold
-        ...Object.fromEntries(
-          Array.from({ length: 10 }, (_, i) => [`nonce-${i}`, now - i * 1000])
-        ),
+        ...Object.fromEntries(Array.from({ length: 10 }, (_, i) => [`nonce-${i}`, now - i * 1000])),
       };
 
       const initialCount = Object.keys(nonceCache).length;

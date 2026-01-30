@@ -947,8 +947,8 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           if (retryResult.ok) {
             return await reply.ok({
               action: 'retry',
-              message: `Retrying failed models: ${(retryResult.retriedModels ?? []).join(', ')}`,
-            }); /* v8 ignore ts-type -- retriedModels is array but TypeScript can't narrow after ok check */
+              message: `Retrying failed models: ${(retryResult.retriedModels ?? []).join(', ')}`, /* v8 ignore ts-type -- retriedModels is array but TypeScript can't narrow after ok check */
+            });
           }
           return await reply.fail('INTERNAL_ERROR', retryResult.error ?? 'Retry failed'); /* v8 ignore ts-type -- error type has message field but TypeScript can't narrow after !ok check */
         } /* v8 ignore ts-type -- error type has message field but TypeScript can't narrow after !ok check */
@@ -1193,8 +1193,8 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       if (!result.ok) { /* v8 ignore test-infra -- error handling branch requires repository error condition mock */
         switch (result.error.type) {
-          case 'NOT_FOUND':
-            return await reply.fail('NOT_FOUND', 'Research not found'); /* v8 ignore test-infra -- error handling branch requires repository error condition mock */
+          case 'NOT_FOUND': /* v8 ignore test-infra -- error handling branch requires repository error condition mock */
+            return await reply.fail('NOT_FOUND', 'Research not found');
           case 'FORBIDDEN':
             return await reply.fail('FORBIDDEN', 'Access denied');
           case 'INVALID_STATUS':
