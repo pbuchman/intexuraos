@@ -5,7 +5,7 @@
  * Note: LLM usage logging is handled by the clients in packages/infra-*.
  */
 
-import pino from 'pino';
+import { createAppLogger } from '@intexuraos/infra-sentry';
 import { FirestoreResearchRepository } from './infra/research/index.js';
 import {
   createContextInferrer,
@@ -174,7 +174,7 @@ function createNotificationSender(): NotificationSender {
     return new WhatsAppNotificationSender({
       projectId: gcpProjectId,
       topicName: whatsappSendTopic,
-      logger: pino({ name: 'whatsapp-notification-sender' }),
+      logger: createAppLogger({ name: 'whatsapp-notification-sender' }),
     });
   }
 
@@ -219,7 +219,7 @@ export function initializeServices(pricingContext: IPricingContext): void {
     baseUrl: process.env['INTEXURAOS_USER_SERVICE_URL'] ?? 'http://localhost:8081',
     internalAuthToken: process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] ?? '',
     pricingContext,
-    logger: pino({ name: 'user-service-client' }),
+    logger: createAppLogger({ name: 'user-service-client' }),
   });
 
   const notificationSender = createNotificationSender();
@@ -227,13 +227,13 @@ export function initializeServices(pricingContext: IPricingContext): void {
   const researchEventPublisher = createResearchEventPublisher({
     projectId: process.env['INTEXURAOS_GCP_PROJECT_ID'] ?? '',
     topicName: process.env['INTEXURAOS_PUBSUB_RESEARCH_PROCESS_TOPIC'] ?? '',
-    logger: pino({ name: 'research-event-publisher' }),
+    logger: createAppLogger({ name: 'research-event-publisher' }),
   });
 
   const llmCallPublisher = createLlmCallPublisher({
     projectId: process.env['INTEXURAOS_GCP_PROJECT_ID'] ?? '',
     topicName: process.env['INTEXURAOS_PUBSUB_LLM_CALL_TOPIC'] ?? '',
-    logger: pino({ name: 'llm-call-publisher' }),
+    logger: createAppLogger({ name: 'llm-call-publisher' }),
   });
 
   const { shareStorage, shareConfig } = createShareStorageAndConfig();

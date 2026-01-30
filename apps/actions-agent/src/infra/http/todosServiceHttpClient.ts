@@ -4,7 +4,7 @@ import type {
   TodosServiceClient,
   CreateTodoRequest,
 } from '../../domain/ports/todosServiceClient.js';
-import { type Logger } from 'pino';
+import type { Logger } from 'pino';
 
 export interface TodosServiceHttpClientConfig {
   baseUrl: string;

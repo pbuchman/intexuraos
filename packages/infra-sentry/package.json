@@ -16,6 +16,6 @@
     "@intexuraos/common-core": "workspace:*",
     "@sentry/node": "^8.42.0",
     "fastify": "^5.2.0",
-    "pino": "^9.6.0"
+    "pino": "^10.1.0"
   }
 }

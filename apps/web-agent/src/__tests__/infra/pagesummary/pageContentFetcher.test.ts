@@ -159,6 +159,42 @@ describe('PageContentFetcher', () => {
     });
   });
 
+  describe('error handling - HTTP 429 rate limiting', () => {
+    it('returns RATE_LIMITED error code on HTTP 429', async () => {
+      mockFetch.mockResolvedValue({
+        ok: false,
+        status: 429,
+        statusText: 'Too Many Requests',
+      });
+
+      const fetcher = createPageContentFetcher({ apiKey: testApiKey }, logger);
+      const result = await fetcher.fetchPageContent(testUrl);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('RATE_LIMITED');
+        expect(result.error.message).toContain('rate limited');
+        expect(result.error.message).toContain('429');
+      }
+    });
+
+    it('logs warning with 429 status details', async () => {
+      mockFetch.mockResolvedValue({
+        ok: false,
+        status: 429,
+        statusText: 'Too Many Requests',
+      });
+
+      const fetcher = createPageContentFetcher({ apiKey: testApiKey }, logger);
+      await fetcher.fetchPageContent(testUrl);
+
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ url: testUrl, status: 429 }),
+        'Crawl4AI API error response'
+      );
+    });
+  });
+
   describe('error handling - Crawl4AI response', () => {
     it('returns FETCH_FAILED when success=false', async () => {
       mockFetch.mockResolvedValue({

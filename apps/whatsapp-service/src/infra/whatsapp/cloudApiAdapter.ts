@@ -3,7 +3,7 @@
  * Uses @intexuraos/infra-whatsapp for WhatsApp Graph API operations.
  */
 import { err, ok, type Result } from '@intexuraos/common-core';
-import pino from 'pino';
+import { createAppLogger } from '@intexuraos/infra-sentry';
 import { createWhatsAppClient, type WhatsAppClient } from '@intexuraos/infra-whatsapp';
 import type {
   WhatsAppError,
@@ -12,7 +12,7 @@ import type {
   WhatsAppCloudApiPort,
 } from '../../domain/whatsapp/index.js';
 
-const logger = pino({ name: 'whatsapp-cloud-api' });
+const logger = createAppLogger({ name: 'whatsapp-cloud-api' });
 
 /**
  * WhatsApp Cloud API adapter implementation.

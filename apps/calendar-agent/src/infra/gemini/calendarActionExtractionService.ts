@@ -13,7 +13,7 @@ import type {
   ExtractionError,
 } from '../../domain/ports.js';
 import type { ExtractedCalendarEvent } from '../../domain/ports.js';
-import pino from 'pino';
+import type pino from 'pino';
 
 export type { CalendarActionExtractionService, ExtractedCalendarEvent, ExtractionError };
 

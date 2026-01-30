@@ -416,6 +416,26 @@ Raw `reply.send()` is **FORBIDDEN** unless annotated with `// @allow-raw-send: <
 
 **Full documentation:** [docs/patterns/response-contract.md](../docs/patterns/response-contract.md)
 
+### Logging (MANDATORY)
+
+**RULE:** Never use `pino()` directly in `apps/`. Use `createAppLogger()` from `@intexuraos/infra-sentry`.
+
+```typescript
+// WRONG - logs won't reach Sentry
+import pino from 'pino';
+const logger = pino({ name: 'my-service' });
+
+// CORRECT - errors automatically sent to Sentry
+import { createAppLogger } from '@intexuraos/infra-sentry';
+const logger = createAppLogger({ name: 'my-service' });
+```
+
+**Verification:** `pnpm run verify:sentry-logging` (CI Static Validation phase)
+
+**Why:** Direct `pino()` creates loggers without Sentry integration. Errors are silently lost.
+
+**Full documentation:** [docs/patterns/logging.md](../docs/patterns/logging.md)
+
 ---
 
 ## Apps & Packages

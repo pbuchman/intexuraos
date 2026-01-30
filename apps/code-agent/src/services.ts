@@ -3,7 +3,8 @@
  * Provides dependency injection for domain adapters.
  */
 
-import pino from 'pino';
+import { createAppLogger } from '@intexuraos/infra-sentry';
+import type { Logger } from 'pino';
 import type { Firestore } from '@google-cloud/firestore';
 import { ok } from '@intexuraos/common-core';
 import { getFirestore } from '@intexuraos/infra-firestore';
@@ -33,7 +34,7 @@ import type { LinearAgentClient } from './domain/ports/linearAgentClient.js';
 
 export interface ServiceContainer {
   firestore: Firestore;
-  logger: pino.Logger;
+  logger: Logger;
   codeTaskRepo: CodeTaskRepository;
   logChunkRepo: LogChunkRepository;
   workerDiscovery: WorkerDiscoveryService;
@@ -83,7 +84,7 @@ function createE2eWhatsAppPublisher(): WhatsAppSendPublisher {
 /**
  * Create a no-op Linear agent client for E2E testing.
  */
-function createE2eLinearAgentClient(logger: pino.Logger): LinearAgentClient {
+function createE2eLinearAgentClient(logger: Logger): LinearAgentClient {
   return {
     createIssue(request): ReturnType<LinearAgentClient['createIssue']> {
       const issueNum = Date.now() % 10000;
@@ -105,7 +106,7 @@ function createE2eLinearAgentClient(logger: pino.Logger): LinearAgentClient {
 /**
  * Create a no-op actions agent client for E2E testing.
  */
-function createE2eActionsAgentClient(logger: pino.Logger): ActionsAgentClient {
+function createE2eActionsAgentClient(logger: Logger): ActionsAgentClient {
   return {
     updateActionStatus(actionId, status): ReturnType<ActionsAgentClient['updateActionStatus']> {
       logger.info({ actionId, status }, '[E2E] Mock action status update');
@@ -120,7 +121,7 @@ function createE2eActionsAgentClient(logger: pino.Logger): ActionsAgentClient {
  */
 export function initServices(config: ServiceConfig): void {
   const firestore = getFirestore();
-  const logger = pino({ name: 'code-agent' });
+  const logger = createAppLogger({ name: 'code-agent' });
 
   if (isE2eMode) {
     logger.info('Initializing services in E2E mode with mock external services');
@@ -154,7 +155,7 @@ export function initServices(config: ServiceConfig): void {
     : createWhatsAppSendPublisher({
         projectId: config.gcpProjectId,
         topicName: config.whatsappSendTopic,
-        logger: pino({ name: 'whatsapp-publisher' }),
+        logger: createAppLogger({ name: 'whatsapp-publisher' }),
       });
 
   container = {
