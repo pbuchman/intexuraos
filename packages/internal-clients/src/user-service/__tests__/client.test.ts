@@ -37,7 +37,7 @@ describe('createUserServiceClient', () => {
       nock('http://localhost:3000')
         .get('/internal/users/user123/llm-keys')
         .matchHeader('X-Internal-Auth', 'test-token')
-        .reply(200, mockKeys);
+        .reply(200, { success: true, data: mockKeys });
 
       const client = createUserServiceClient(config);
       const result = await client.getApiKeys('user123');
@@ -109,7 +109,7 @@ describe('createUserServiceClient', () => {
       nock('http://localhost:3000')
         .get('/internal/users/user123/llm-keys')
         .matchHeader('X-Internal-Auth', 'test-token')
-        .reply(200, mockKeys);
+        .reply(200, { success: true, data: mockKeys });
 
       const client = createUserServiceClient(config);
       const result = await client.getApiKeys('user123');
@@ -135,7 +135,7 @@ describe('createUserServiceClient', () => {
       nock('http://localhost:3000')
         .get('/internal/users/user123/llm-keys')
         .matchHeader('X-Internal-Auth', 'test-token')
-        .reply(200, mockKeys);
+        .reply(200, { success: true, data: mockKeys });
 
       const client = createUserServiceClient(config);
       const result = await client.getApiKeys('user123');
@@ -158,7 +158,7 @@ describe('createUserServiceClient', () => {
       nock('http://localhost:3000')
         .get(`/internal/users/${encodeURIComponent(userId)}/llm-keys`)
         .matchHeader('X-Internal-Auth', 'test-token')
-        .reply(200, mockKeys);
+        .reply(200, { success: true, data: mockKeys });
 
       const client = createUserServiceClient(config);
       const result = await client.getApiKeys(userId);
@@ -177,7 +177,7 @@ describe('createUserServiceClient', () => {
       nock('http://localhost:3000')
         .get(`/internal/users/${encodeURIComponent(userId)}/llm-keys`)
         .matchHeader('X-Internal-Auth', 'test-token')
-        .reply(200, mockKeys);
+        .reply(200, { success: true, data: mockKeys });
 
       const client = createUserServiceClient(config);
       const result = await client.getApiKeys(userId);
@@ -196,7 +196,7 @@ describe('createUserServiceClient', () => {
       nock('http://localhost:3000')
         .get(`/internal/users/${encodeURIComponent(userId)}/llm-keys`)
         .matchHeader('X-Internal-Auth', 'test-token')
-        .reply(200, mockKeys);
+        .reply(200, { success: true, data: mockKeys });
 
       const client = createUserServiceClient(config);
       const result = await client.getApiKeys(userId);
@@ -224,12 +224,12 @@ describe('createUserServiceClient', () => {
       nock('http://localhost:3000')
         .get('/internal/users/user123/settings')
         .matchHeader('X-Internal-Auth', 'test-token')
-        .reply(200, mockSettings);
+        .reply(200, { success: true, data: mockSettings });
 
       nock('http://localhost:3000')
         .get('/internal/users/user123/llm-keys')
         .matchHeader('X-Internal-Auth', 'test-token')
-        .reply(200, mockKeys);
+        .reply(200, { success: true, data: mockKeys });
 
       const client = createUserServiceClient(config);
       const result = await client.getLlmClient('user123');
@@ -257,12 +257,12 @@ describe('createUserServiceClient', () => {
       nock('http://localhost:3000')
         .get('/internal/users/user123/settings')
         .matchHeader('X-Internal-Auth', 'test-token')
-        .reply(200, mockSettings);
+        .reply(200, { success: true, data: mockSettings });
 
       nock('http://localhost:3000')
         .get('/internal/users/user123/llm-keys')
         .matchHeader('X-Internal-Auth', 'test-token')
-        .reply(200, mockKeys);
+        .reply(200, { success: true, data: mockKeys });
 
       const client = createUserServiceClient(config);
       const result = await client.getLlmClient('user123');
@@ -292,12 +292,12 @@ describe('createUserServiceClient', () => {
       nock('http://localhost:3000')
         .get('/internal/users/user123/settings')
         .matchHeader('X-Internal-Auth', 'test-token')
-        .reply(200, mockSettings);
+        .reply(200, { success: true, data: mockSettings });
 
       nock('http://localhost:3000')
         .get('/internal/users/user123/llm-keys')
         .matchHeader('X-Internal-Auth', 'test-token')
-        .reply(200, mockKeys);
+        .reply(200, { success: true, data: mockKeys });
 
       const client = createUserServiceClient(config);
       const result = await client.getLlmClient('user123');
@@ -324,7 +324,7 @@ describe('createUserServiceClient', () => {
       nock('http://localhost:3000')
         .get('/internal/users/user123/settings')
         .matchHeader('X-Internal-Auth', 'test-token')
-        .reply(200, mockSettings);
+        .reply(200, { success: true, data: mockSettings });
 
       const client = createUserServiceClient(config);
       const result = await client.getLlmClient('user123');
@@ -372,7 +372,7 @@ describe('createUserServiceClient', () => {
       nock('http://localhost:3000')
         .get('/internal/users/user123/settings')
         .matchHeader('X-Internal-Auth', 'test-token')
-        .reply(200, mockSettings);
+        .reply(200, { success: true, data: mockSettings });
 
       nock('http://localhost:3000')
         .get('/internal/users/user123/llm-keys')
@@ -426,12 +426,12 @@ describe('createUserServiceClient', () => {
       nock('http://localhost:3000')
         .get(`/internal/users/${encodeURIComponent(userId)}/settings`)
         .matchHeader('X-Internal-Auth', 'test-token')
-        .reply(200, mockSettings);
+        .reply(200, { success: true, data: mockSettings });
 
       nock('http://localhost:3000')
         .get(`/internal/users/${encodeURIComponent(userId)}/llm-keys`)
         .matchHeader('X-Internal-Auth', 'test-token')
-        .reply(200, mockKeys);
+        .reply(200, { success: true, data: mockKeys });
 
       const client = createUserServiceClient(config);
       const result = await client.getLlmClient(userId);
@@ -455,12 +455,12 @@ describe('createUserServiceClient', () => {
       nock('http://localhost:3000')
         .get(`/internal/users/${encodeURIComponent(userId)}/settings`)
         .matchHeader('X-Internal-Auth', 'test-token')
-        .reply(200, mockSettings);
+        .reply(200, { success: true, data: mockSettings });
 
       nock('http://localhost:3000')
         .get(`/internal/users/${encodeURIComponent(userId)}/llm-keys`)
         .matchHeader('X-Internal-Auth', 'test-token')
-        .reply(200, mockKeys);
+        .reply(200, { success: true, data: mockKeys });
 
       const client = createUserServiceClient(config);
       const result = await client.getLlmClient(userId);
@@ -486,12 +486,12 @@ describe('createUserServiceClient', () => {
       nock('http://localhost:3000')
         .get('/internal/users/user123/settings')
         .matchHeader('X-Internal-Auth', 'test-token')
-        .reply(200, mockSettings);
+        .reply(200, { success: true, data: mockSettings });
 
       nock('http://localhost:3000')
         .get('/internal/users/user123/llm-keys')
         .matchHeader('X-Internal-Auth', 'test-token')
-        .reply(200, mockKeys);
+        .reply(200, { success: true, data: mockKeys });
 
       const client = createUserServiceClient(config);
       const result = await client.getLlmClient('user123');
@@ -523,12 +523,12 @@ describe('createUserServiceClient', () => {
       nock('http://localhost:3000')
         .get('/internal/users/user123/settings')
         .matchHeader('X-Internal-Auth', 'test-token')
-        .reply(200, mockSettings);
+        .reply(200, { success: true, data: mockSettings });
 
       nock('http://localhost:3000')
         .get('/internal/users/user123/llm-keys')
         .matchHeader('X-Internal-Auth', 'test-token')
-        .reply(200, mockKeys);
+        .reply(200, { success: true, data: mockKeys });
 
       const client = createUserServiceClient(config);
       const result = await client.getLlmClient('user123');
@@ -560,12 +560,12 @@ describe('createUserServiceClient', () => {
       nock('http://localhost:3000')
         .get('/internal/users/user123/settings')
         .matchHeader('X-Internal-Auth', 'test-token')
-        .reply(200, mockSettings);
+        .reply(200, { success: true, data: mockSettings });
 
       nock('http://localhost:3000')
         .get('/internal/users/user123/llm-keys')
         .matchHeader('X-Internal-Auth', 'test-token')
-        .reply(200, mockKeys);
+        .reply(200, { success: true, data: mockKeys });
 
       const client = createUserServiceClient(config);
       const result = await client.getLlmClient('user123');
@@ -597,12 +597,12 @@ describe('createUserServiceClient', () => {
       nock('http://localhost:3000')
         .get('/internal/users/user123/settings')
         .matchHeader('X-Internal-Auth', 'test-token')
-        .reply(200, mockSettings);
+        .reply(200, { success: true, data: mockSettings });
 
       nock('http://localhost:3000')
         .get('/internal/users/user123/llm-keys')
         .matchHeader('X-Internal-Auth', 'test-token')
-        .reply(200, mockKeys);
+        .reply(200, { success: true, data: mockKeys });
 
       const client = createUserServiceClient(config);
       const result = await client.getLlmClient('user123');
@@ -744,7 +744,7 @@ describe('createUserServiceClient', () => {
       nock('http://localhost:3000')
         .get('/internal/users/user123/oauth/google/token')
         .matchHeader('X-Internal-Auth', 'test-token')
-        .reply(200, mockToken);
+        .reply(200, { success: true, data: mockToken });
 
       const client = createUserServiceClient(config);
       const result = await client.getOAuthToken('user123', 'google');
@@ -850,7 +850,7 @@ describe('createUserServiceClient', () => {
       nock('http://localhost:3000')
         .get(`/internal/users/${encodeURIComponent(userId)}/oauth/google/token`)
         .matchHeader('X-Internal-Auth', 'test-token')
-        .reply(200, mockToken);
+        .reply(200, { success: true, data: mockToken });
 
       const client = createUserServiceClient(config);
       const result = await client.getOAuthToken(userId, 'google');
@@ -872,7 +872,7 @@ describe('createUserServiceClient', () => {
       nock('http://localhost:3000')
         .get(`/internal/users/${encodeURIComponent(userId)}/oauth/google/token`)
         .matchHeader('X-Internal-Auth', 'test-token')
-        .reply(200, mockToken);
+        .reply(200, { success: true, data: mockToken });
 
       const client = createUserServiceClient(config);
       const result = await client.getOAuthToken(userId, 'google');
@@ -894,7 +894,7 @@ describe('createUserServiceClient', () => {
       nock('http://localhost:3000')
         .get(`/internal/users/${encodeURIComponent(userId)}/oauth/google/token`)
         .matchHeader('X-Internal-Auth', 'test-token')
-        .reply(200, mockToken);
+        .reply(200, { success: true, data: mockToken });
 
       const client = createUserServiceClient(config);
       const result = await client.getOAuthToken(userId, 'google');

@@ -42,6 +42,7 @@ import { createStatusMirrorService } from '../../infra/services/statusMirrorServ
 import type { StatusMirrorService } from '../../infra/services/statusMirrorServiceImpl.js';
 import { createProcessHeartbeatUseCase } from '../../domain/usecases/processHeartbeat.js';
 import { createDetectZombieTasksUseCase } from '../../domain/usecases/detectZombieTasks.js';
+import { createCleanupTaskLogsUseCase } from '../../domain/usecases/cleanupTaskLogs.js';
 import { createNoOpMetricsClient, type MetricsClient } from '../../infra/metrics.js';
 import { createWorkerSettingsRepository } from '../../infra/firestore/workerSettingsRepository.js';
 import type { WorkerSettingsRepository } from '../../domain/ports/workerSettingsRepository.js';
@@ -164,6 +165,10 @@ describe('POST /internal/webhooks/task-complete', () => {
         codeTaskRepository: codeTaskRepo,
         logger,
       }),
+      cleanupTaskLogs: createCleanupTaskLogsUseCase({
+        codeTaskRepository: codeTaskRepo,
+        logger,
+      }),
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -180,6 +185,7 @@ describe('POST /internal/webhooks/task-complete', () => {
       metricsClient: MetricsClient;
       processHeartbeat: import('../../domain/usecases/processHeartbeat.js').ProcessHeartbeatUseCase;
       detectZombieTasks: import('../../domain/usecases/detectZombieTasks.js').DetectZombieTasksUseCase;
+      cleanupTaskLogs: import('../../domain/usecases/cleanupTaskLogs.js').CleanupTaskLogsUseCase;
     });
 
     app = await buildServer();
@@ -1305,6 +1311,10 @@ describe('POST /internal/webhooks/task-complete - Metrics recording', () => {
         codeTaskRepository: codeTaskRepo,
         logger,
       }),
+      cleanupTaskLogs: createCleanupTaskLogsUseCase({
+        codeTaskRepository: codeTaskRepo,
+        logger,
+      }),
       linearIssueService: createLinearIssueService({
         linearAgentClient: createLinearAgentHttpClient({
           baseUrl: 'http://linear-agent:8086',
@@ -1341,6 +1351,7 @@ describe('POST /internal/webhooks/task-complete - Metrics recording', () => {
       metricsClient: MetricsClient;
       processHeartbeat: import('../../domain/usecases/processHeartbeat.js').ProcessHeartbeatUseCase;
       detectZombieTasks: import('../../domain/usecases/detectZombieTasks.js').DetectZombieTasksUseCase;
+      cleanupTaskLogs: import('../../domain/usecases/cleanupTaskLogs.js').CleanupTaskLogsUseCase;
     });
 
     app = await buildServer();
@@ -1635,6 +1646,10 @@ describe('POST /internal/logs', () => {
         codeTaskRepository: codeTaskRepo,
         logger,
       }),
+      cleanupTaskLogs: createCleanupTaskLogsUseCase({
+        codeTaskRepository: codeTaskRepo,
+        logger,
+      }),
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -1651,6 +1666,7 @@ describe('POST /internal/logs', () => {
       metricsClient: MetricsClient;
       processHeartbeat: import('../../domain/usecases/processHeartbeat.js').ProcessHeartbeatUseCase;
       detectZombieTasks: import('../../domain/usecases/detectZombieTasks.js').DetectZombieTasksUseCase;
+      cleanupTaskLogs: import('../../domain/usecases/cleanupTaskLogs.js').CleanupTaskLogsUseCase;
     });
 
     app = await buildServer();
@@ -2053,6 +2069,10 @@ describe('POST /internal/webhooks/task-complete - WhatsApp notifications', () =>
         codeTaskRepository: codeTaskRepo,
         logger,
       }),
+      cleanupTaskLogs: createCleanupTaskLogsUseCase({
+        codeTaskRepository: codeTaskRepo,
+        logger,
+      }),
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -2069,6 +2089,7 @@ describe('POST /internal/webhooks/task-complete - WhatsApp notifications', () =>
       metricsClient: MetricsClient;
       processHeartbeat: import('../../domain/usecases/processHeartbeat.js').ProcessHeartbeatUseCase;
       detectZombieTasks: import('../../domain/usecases/detectZombieTasks.js').DetectZombieTasksUseCase;
+      cleanupTaskLogs: import('../../domain/usecases/cleanupTaskLogs.js').CleanupTaskLogsUseCase;
     });
 
     app = await buildServer();

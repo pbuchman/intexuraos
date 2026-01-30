@@ -30,6 +30,7 @@ import { createLinearIssueService, type LinearIssueService } from './domain/serv
 import { createStatusMirrorService, type StatusMirrorService } from './infra/services/statusMirrorServiceImpl.js';
 import { createProcessHeartbeatUseCase, type ProcessHeartbeatUseCase } from './domain/usecases/processHeartbeat.js';
 import { createDetectZombieTasksUseCase, type DetectZombieTasksUseCase } from './domain/usecases/detectZombieTasks.js';
+import { createCleanupTaskLogsUseCase, type CleanupTaskLogsUseCase } from './domain/usecases/cleanupTaskLogs.js';
 import { createMetricsClient, createNoOpMetricsClient, type MetricsClient } from './infra/metrics.js';
 import type { LinearAgentClient } from './domain/ports/linearAgentClient.js';
 import { createWorkerSettingsRepository } from './infra/firestore/workerSettingsRepository.js';
@@ -48,6 +49,7 @@ export interface ServiceContainer {
   statusMirrorService: StatusMirrorService;
   processHeartbeat: ProcessHeartbeatUseCase;
   detectZombieTasks: DetectZombieTasksUseCase;
+  cleanupTaskLogs: CleanupTaskLogsUseCase;
   metricsClient: MetricsClient;
   workerSettingsRepo: WorkerSettingsRepository;
 }
@@ -188,6 +190,10 @@ export function initServices(config: ServiceConfig): void {
       logger,
     }),
     detectZombieTasks: createDetectZombieTasksUseCase({
+      codeTaskRepository: createFirestoreCodeTaskRepository({ firestore, logger }),
+      logger,
+    }),
+    cleanupTaskLogs: createCleanupTaskLogsUseCase({
       codeTaskRepository: createFirestoreCodeTaskRepository({ firestore, logger }),
       logger,
     }),

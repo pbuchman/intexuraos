@@ -67,7 +67,7 @@ export GOOGLE_APPLICATION_CREDENTIALS=$HOME/personal/gcloud-claude-code-dev.json
 ```bash
 # Create env file from GCP secrets
 cat > ~/.claude-orchestrator/.env << 'EOF'
-PORT=8080
+PORT=8199
 WORKER_CAPACITY=1
 
 # Fetch these from GCP Secret Manager:
@@ -113,9 +113,9 @@ pnpm dev
 
 The dev server:
 
-- Runs on `localhost:8080` (same port as production)
+- Runs on `localhost:8199` (same port as production)
 - Uses `node --watch` for automatic reload on changes
-- Cloudflare Tunnel routes `cc-mac.intexuraos.cloud` → `localhost:8080`
+- Cloudflare Tunnel routes `cc-mac.intexuraos.cloud` → `localhost:8199`
 
 ### Testing Changes
 
@@ -228,7 +228,7 @@ tail -f ~/.claude-orchestrator/logs/orchestrator.err.log
 
 | Variable              | Required | Default | Description                                   |
 | --------------------- | -------- | ------- | --------------------------------------------- |
-| `PORT`                | No       | 8080    | HTTP server port                              |
+| `PORT`                | No       | 8199    | HTTP server port                              |
 | `WORKER_CAPACITY`     | No       | 1       | Max concurrent tasks                          |
 | `DISPATCH_SECRET`     | Yes      | -       | HMAC secret for verifying code-agent requests |
 | `GH_APP_ID`           | Yes      | -       | GitHub App ID                                 |
@@ -267,7 +267,7 @@ mkdir -p ~/.claude-orchestrator/logs ~/claude-workers/worktrees
 # 2. Set up environment (first time only)
 export GOOGLE_APPLICATION_CREDENTIALS=$HOME/personal/gcloud-claude-code-dev.json
 cat > ~/.claude-orchestrator/.env << EOF
-PORT=8080
+PORT=8199
 WORKER_CAPACITY=1
 DISPATCH_SECRET=$(gcloud secrets versions access latest --secret=INTEXURAOS_DISPATCH_SIGNING_SECRET --project=intexuraos-dev-pbuchman)
 GH_APP_ID=$(gcloud secrets versions access latest --secret=INTEXURAOS_GITHUB_APP_ID --project=intexuraos-dev-pbuchman)

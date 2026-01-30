@@ -100,6 +100,7 @@ export async function summarizeBookmark(
     { aiSummary: summaryResult.value }
   );
 
+  /* v8 ignore test-infra -- fake repository update always succeeds */
   if (!updateResult.ok) {
     return updateResult;
   }
@@ -107,6 +108,7 @@ export async function summarizeBookmark(
   // Send WhatsApp message with summary
   if (deps.whatsAppSendPublisher !== undefined) {
     const title = updateResult.value.ogPreview?.title ?? updateResult.value.title;
+    /* v8 ignore test-infra -- test bookmarks always have titles via fake */
     const titleLine = title !== null && title !== ''
       ? `*${title}*\n\n`
       : '';

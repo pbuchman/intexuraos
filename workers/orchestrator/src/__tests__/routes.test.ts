@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { createHmac } from 'node:crypto';
-import { registerRoutes } from '../routes.js';
+import { registerRoutes, cleanUpExpiredNonces } from '../routes.js';
 import type { TaskDispatcher } from '../services/task-dispatcher.js';
 import type { GitHubTokenService } from '../github/token-service.js';
 import type { Logger } from '@intexuraos/common-core';
@@ -516,6 +516,87 @@ describe('Routes', () => {
       expect(response.json()).toMatchObject({
         error: 'Timestamp too old or too new',
       });
+    });
+  });
+
+  describe('cleanUpExpiredNonces function', () => {
+    it('should not clean up when cache size is below threshold', () => {
+      const nonceCache: Record<string, number> = {
+        'nonce-1': Date.now() - 1000,
+        'nonce-2': Date.now() - 2000,
+      };
+      const now = Date.now();
+
+      cleanUpExpiredNonces(nonceCache, now, 10000);
+
+      // Nonces should still exist (cache not large enough)
+      expect(Object.keys(nonceCache)).toHaveLength(2);
+      expect(nonceCache['nonce-1']).toBeDefined();
+      expect(nonceCache['nonce-2']).toBeDefined();
+    });
+
+    it('should clean up expired nonces when cache exceeds threshold', () => {
+      const now = Date.now();
+      const expiredTime = now - 11 * 60 * 1000; // 11 minutes ago (expired - TTL is 10 min)
+      const validTime = now - 5 * 60 * 1000; // 5 minutes ago (still valid)
+
+      const nonceCache: Record<string, number> = {
+        'expired-1': expiredTime,
+        'expired-2': expiredTime - 1000,
+        'valid-1': validTime,
+        'valid-2': validTime - 1000,
+        // Add enough entries to exceed threshold
+        ...Object.fromEntries(Array.from({ length: 10 }, (_, i) => [`nonce-${i}`, now - i * 1000])),
+      };
+
+      const initialCount = Object.keys(nonceCache).length;
+      expect(initialCount).toBeGreaterThan(5);
+
+      cleanUpExpiredNonces(nonceCache, now, 5);
+
+      // Expired nonces should be removed, valid ones should remain
+      expect(nonceCache['expired-1']).toBeUndefined();
+      expect(nonceCache['expired-2']).toBeUndefined();
+      expect(nonceCache['valid-1']).toBeDefined();
+      expect(nonceCache['valid-2']).toBeDefined();
+    });
+
+    it('should handle cache with all expired nonces', () => {
+      const now = Date.now();
+      const expiredTime = now - 15 * 60 * 1000; // 15 minutes ago
+
+      const nonceCache: Record<string, number> = {
+        'expired-1': expiredTime,
+        'expired-2': expiredTime - 1000,
+        'expired-3': expiredTime - 2000,
+        'expired-4': expiredTime - 3000,
+        'expired-5': expiredTime - 4000,
+      };
+
+      cleanUpExpiredNonces(nonceCache, now, 3);
+
+      // All nonces should be removed
+      expect(Object.keys(nonceCache)).toHaveLength(0);
+    });
+
+    it('should handle cache with all valid nonces', () => {
+      const now = Date.now();
+      const validTime = now - 2 * 60 * 1000; // 2 minutes ago
+
+      const nonceCache: Record<string, number> = {
+        'valid-1': validTime,
+        'valid-2': validTime - 1000,
+        'valid-3': validTime - 2000,
+        'valid-4': validTime - 3000,
+        'valid-5': validTime - 4000,
+      };
+
+      const initialKeys = Object.keys(nonceCache);
+
+      cleanUpExpiredNonces(nonceCache, now, 3);
+
+      // All nonces should remain (none expired)
+      expect(Object.keys(nonceCache)).toEqual(initialKeys);
     });
   });
 

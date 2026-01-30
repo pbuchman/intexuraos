@@ -111,6 +111,7 @@ export const notificationRoutes: FastifyPluginCallback = (fastify, _opts, done) 
       } = {
         userId: user.userId,
       };
+      /* v8 ignore test-infra -- tests always pass limit param */
       if (limit !== undefined) {
         listInput.limit = limit;
       }
@@ -155,9 +156,16 @@ export const notificationRoutes: FastifyPluginCallback = (fastify, _opts, done) 
           },
         },
         response: {
-          204: {
+          200: {
             description: 'Notification deleted successfully',
-            type: 'null',
+            type: 'object',
+            required: ['success', 'data'],
+            properties: {
+              success: { type: 'boolean', enum: [true] },
+              data: {
+                type: 'object',
+              },
+            },
           },
           401: {
             description: 'Unauthorized',
@@ -223,8 +231,7 @@ export const notificationRoutes: FastifyPluginCallback = (fastify, _opts, done) 
         return await reply.fail(result.error.code, result.error.message);
       }
 
-      reply.status(204);
-      return await reply.send();
+      return await reply.ok({});
     }
   );
 

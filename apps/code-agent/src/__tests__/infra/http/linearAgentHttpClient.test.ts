@@ -29,10 +29,13 @@ describe('linearAgentHttpClient', () => {
   describe('createIssue', () => {
     it('should create issue successfully', async () => {
       const mockResponse = {
-        id: 'issue-123',
-        identifier: 'INT-123',
-        title: 'Test Issue',
-        url: 'https://linear.app/intexuraos/issue/INT-123',
+        success: true,
+        data: {
+          id: 'issue-123',
+          identifier: 'INT-123',
+          title: 'Test Issue',
+          url: 'https://linear.app/intexuraos/issue/INT-123',
+        },
       };
 
       nock(baseUrl)
@@ -61,10 +64,13 @@ describe('linearAgentHttpClient', () => {
 
     it('should include default label Code Task when labels not provided', async () => {
       const mockResponse = {
-        id: 'issue-456',
-        identifier: 'INT-456',
-        title: 'Test Issue',
-        url: 'https://linear.app/intexuraos/issue/INT-456',
+        success: true,
+        data: {
+          id: 'issue-456',
+          identifier: 'INT-456',
+          title: 'Test Issue',
+          url: 'https://linear.app/intexuraos/issue/INT-456',
+        },
       };
 
       let capturedBody: unknown;
@@ -221,7 +227,7 @@ describe('linearAgentHttpClient', () => {
       nock(baseUrl)
         .patch('/internal/issues/issue-123/state')
         .matchHeader('X-Internal-Auth', internalAuthToken)
-        .reply(200);
+        .reply(200, { success: true, data: {} });
 
       const result = await client.updateIssueState({
         issueId: 'issue-123',
@@ -243,7 +249,7 @@ describe('linearAgentHttpClient', () => {
       nock(baseUrl)
         .patch('/internal/issues/issue-456/state')
         .matchHeader('X-Internal-Auth', internalAuthToken)
-        .reply(200);
+        .reply(200, { success: true, data: {} });
 
       const result = await client.updateIssueState({
         issueId: 'issue-456',
@@ -283,7 +289,7 @@ describe('linearAgentHttpClient', () => {
       nock(baseUrl)
         .patch('/internal/issues/test-issue/state')
         .matchHeader('X-Internal-Auth', internalAuthToken)
-        .reply(200);
+        .reply(200, { success: true, data: {} });
 
       await client.updateIssueState({
         issueId: 'test-issue',

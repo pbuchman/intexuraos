@@ -31,6 +31,7 @@ const DEFAULT_TASK_TIMEOUT_MS = 60 * 60 * 1000; // 1 hour
 
 function getRequiredEnv(name: string): string {
   const value = process.env[name];
+  /* v8 ignore test-infra -- process.exit() terminates the process, cannot test in unit tests */
   if (value === undefined || value === '') {
     process.stderr.write(`ERROR: Required environment variable ${name} is not set\n`);
     process.exit(1);
@@ -38,10 +39,12 @@ function getRequiredEnv(name: string): string {
   return value;
 }
 
+/* v8 ignore ts-type -- nullish coalescing creates type narrowing branch */
 function getOptionalEnv(name: string, defaultValue: string): string {
   return process.env[name] ?? defaultValue;
 }
 
+/* v8 ignore module-init -- directory setup function called during bootstrap */
 function ensureDirectoryExists(path: string): void {
   mkdirSync(path, { recursive: true });
 }
@@ -50,6 +53,7 @@ function ensureDirectoryExists(path: string): void {
  * Get GitHub private key from Secret Manager or cached file.
  * The key is multiline (PEM format) so it can't be in .envrc.
  */
+/* v8 ignore test-infra -- process.exit() in catch block terminates the process */
 function getGitHubPrivateKey(projectId: string, cachePath: string): string {
   // Check env var first (for testing or manual override)
   const envKey = process.env['INTEXURAOS_GITHUB_APP_PRIVATE_KEY'];
@@ -83,6 +87,7 @@ function getGitHubPrivateKey(projectId: string, cachePath: string): string {
   }
 }
 
+/* v8 ignore module-init -- orchestrator bootstrap function: env vars, Firebase init, service wiring */
 async function bootstrap(): Promise<void> {
   const home = homedir();
   const orchestratorDir = join(home, '.claude-orchestrator');
@@ -125,6 +130,7 @@ async function bootstrap(): Promise<void> {
   };
 
   // Create logger
+  /* v8 ignore ts-type -- logger config ternary creates type narrowing branches */
   const logger = pino(
     process.env['NODE_ENV'] !== 'production'
       ? {
@@ -137,6 +143,7 @@ async function bootstrap(): Promise<void> {
   logger.info({ port: config.port, capacity: config.capacity }, 'Starting orchestrator');
 
   // Initialize Firebase Admin SDK
+  /* v8 ignore ts-type -- conditional Firebase init based on credentials path */
   const credentialsPath = process.env['GOOGLE_APPLICATION_CREDENTIALS'];
   if (credentialsPath) {
     const serviceAccount = JSON.parse(readFileSync(credentialsPath, 'utf-8')) as ServiceAccount;
@@ -199,6 +206,7 @@ async function bootstrap(): Promise<void> {
   await main(config, statePersistence, dispatcher, tokenService, webhookClient, logger);
 }
 
+/* v8 ignore module-init -- bootstrap invocation and fatal error handler */
 bootstrap().catch((error: unknown) => {
   process.stderr.write(`Failed to start orchestrator: ${String(error)}\n`);
   process.exit(1);

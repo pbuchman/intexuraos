@@ -33,8 +33,11 @@ describe('codeAgentHttpClient', () => {
         })
         .matchHeader('X-Internal-Auth', internalAuthToken)
         .reply(200, {
-          codeTaskId: 'code-task-456',
-          resourceUrl: 'https://app.intexuraos.com/code-tasks/456',
+          success: true,
+          data: {
+            codeTaskId: 'code-task-456',
+            resourceUrl: 'https://app.intexuraos.com/code-tasks/456',
+          },
         });
 
       const client = createClient();
@@ -61,8 +64,11 @@ describe('codeAgentHttpClient', () => {
         .matchHeader('Content-Type', 'application/json')
         .matchHeader('X-Internal-Auth', internalAuthToken)
         .reply(200, {
-          codeTaskId: 'code-task-789',
-          resourceUrl: 'https://app.intexuraos.com/code-tasks/789',
+          success: true,
+          data: {
+            codeTaskId: 'code-task-789',
+            resourceUrl: 'https://app.intexuraos.com/code-tasks/789',
+          },
         });
 
       const client = createClient();
@@ -92,8 +98,11 @@ describe('codeAgentHttpClient', () => {
         })
         .matchHeader('X-Internal-Auth', internalAuthToken)
         .reply(200, {
-          codeTaskId: 'code-task-999',
-          resourceUrl: 'https://app.intexuraos.com/code-tasks/999',
+          success: true,
+          data: {
+            codeTaskId: 'code-task-999',
+            resourceUrl: 'https://app.intexuraos.com/code-tasks/999',
+          },
         });
 
       const client = createClient();
@@ -118,7 +127,14 @@ describe('codeAgentHttpClient', () => {
         .post('/internal/code/process')
         .matchHeader('X-Internal-Auth', internalAuthToken)
         .reply(409, {
-          existingTaskId: 'existing-task-789',
+          success: false,
+          error: {
+            code: 'DUPLICATE',
+            message: 'Task already exists for this approval',
+            details: {
+              existingTaskId: 'existing-task-789',
+            },
+          },
         });
 
       const client = createClient();
@@ -353,8 +369,11 @@ describe('codeAgentHttpClient', () => {
         })
         .matchHeader('X-Internal-Auth', internalAuthToken)
         .reply(200, {
-          codeTaskId: 'code-task-special',
-          resourceUrl: 'https://app.intexuraos.com/code-tasks/special',
+          success: true,
+          data: {
+            codeTaskId: 'code-task-special',
+            resourceUrl: 'https://app.intexuraos.com/code-tasks/special',
+          },
         });
 
       const client = createClient();
@@ -384,8 +403,11 @@ describe('codeAgentHttpClient', () => {
         })
         .matchHeader('X-Internal-Auth', internalAuthToken)
         .reply(200, {
-          codeTaskId: 'code-task-unicode',
-          resourceUrl: 'https://app.intexuraos.com/code-tasks/unicode',
+          success: true,
+          data: {
+            codeTaskId: 'code-task-unicode',
+            resourceUrl: 'https://app.intexuraos.com/code-tasks/unicode',
+          },
         });
 
       const client = createClient();
@@ -410,8 +432,11 @@ describe('codeAgentHttpClient', () => {
           .post('/internal/code/process')
           .matchHeader('X-Internal-Auth', internalAuthToken)
           .reply(200, {
-            codeTaskId: `code-task-${workerType}`,
-            resourceUrl: 'https://app.intexuraos.com/code-tasks/123',
+            success: true,
+            data: {
+              codeTaskId: `code-task-${workerType}`,
+              resourceUrl: 'https://app.intexuraos.com/code-tasks/123',
+            },
           });
 
         const client = createClient();

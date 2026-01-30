@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { mkdtempSync, rmSync, mkdirSync } from 'node:fs';
+import { mkdtempSync, rmSync, mkdirSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { TmuxManager, type ExecAsync } from '../services/tmux-manager.js';
@@ -151,10 +151,16 @@ describe('TmuxManager', () => {
         machine: 'vm',
       });
 
-      // Verify the command includes the Linear issue in the prompt
+      // Verify the tmux command runs the script file
       const call = mockExec.calls[0]?.[0];
-      expect(call).toContain('Linear Issue: INT-123');
-      expect(call).toContain('You MUST invoke: /linear INT-123');
+      expect(call).toContain('tmux new-session -d -s cc-task-task-2');
+      expect(call).toContain('-run.sh');
+
+      // Verify the system prompt file contains the Linear issue
+      const systemPromptFile = join(logBasePath, 'task-2-system.txt');
+      const systemPrompt = readFileSync(systemPromptFile, 'utf-8');
+      expect(systemPrompt).toContain('Linear Issue: INT-123');
+      expect(systemPrompt).toContain('You MUST invoke: /linear INT-123');
     });
 
     it('should handle errors gracefully', async () => {
@@ -496,9 +502,11 @@ describe('TmuxManager', () => {
         machine: 'mac',
       });
 
-      const call = mockExec.calls[0]?.[0];
-      expect(call).toContain('Linear Issue: INT-456');
-      expect(call).toContain('You MUST invoke: /linear INT-456');
+      // Verify the system prompt file contains the Linear issue
+      const systemPromptFile = join(logBasePath, 'task-linear-system.txt');
+      const systemPrompt = readFileSync(systemPromptFile, 'utf-8');
+      expect(systemPrompt).toContain('Linear Issue: INT-456');
+      expect(systemPrompt).toContain('You MUST invoke: /linear INT-456');
     });
 
     it('should truncate prompt to 4000 characters', async () => {
@@ -525,18 +533,12 @@ describe('TmuxManager', () => {
         machine: 'vm',
       });
 
-      // Verify the prompt was truncated (extracted prompt should be much shorter than input)
-      const call = mockExec.calls[0]?.[0];
-      if (!call) throw new Error('No exec calls');
-      // Extract prompt from command (between --system-prompt ' and ' --print)
-      const promptStart = call.indexOf("--system-prompt '") + 16;
-      const promptEnd = call.indexOf("' --print", promptStart);
-      if (promptStart > 16 && promptEnd > promptStart) {
-        const promptInCall = call.slice(promptStart, promptEnd);
-        // The original prompt was 10000 characters, the extracted should be much less
-        // Note: extracted prompt includes shell escaping, so length > 4000 is possible
-        expect(promptInCall.length).toBeLessThan(5000); // Reasonable upper bound
-      }
+      // Verify the system prompt was truncated
+      const systemPromptFile = join(logBasePath, 'task-long-system.txt');
+      const systemPrompt = readFileSync(systemPromptFile, 'utf-8');
+
+      // The system prompt should be exactly 4000 characters (truncated)
+      expect(systemPrompt.length).toBe(4000);
     });
   });
 
@@ -563,19 +565,19 @@ describe('TmuxManager', () => {
         machine: 'mac',
       });
 
-      // Verify XML tags were removed
-      const call = mockExec.calls[0]?.[0];
-      if (!call) throw new Error('No exec calls');
-      // Extract prompt from command
-      const promptStart = call.indexOf("--system-prompt '") + 16;
-      const promptEnd = call.lastIndexOf("' --print");
-      expect(promptEnd).toBeGreaterThan(promptStart);
-      const prompt = call.slice(promptStart, promptEnd);
-      expect(prompt).not.toContain('<script>');
-      expect(prompt).not.toContain('</script>');
-      expect(prompt).toContain('Fix'); // Content before tag preserved
-      expect(prompt).toContain('alert("xss")'); // Content inside tags preserved
-      expect(prompt).toContain('bug'); // Content after tag preserved
+      // Verify XML tags were removed from the system prompt file
+      const systemPromptFile = join(logBasePath, 'task-xml-system.txt');
+      const systemPrompt = readFileSync(systemPromptFile, 'utf-8');
+
+      // Extract the [TASK] section (user input)
+      const taskSectionStart = systemPrompt.indexOf('[TASK]\n') + 7;
+      const taskSection = systemPrompt.slice(taskSectionStart);
+
+      expect(taskSection).not.toContain('<script>');
+      expect(taskSection).not.toContain('</script>');
+      expect(taskSection).toContain('Fix'); // Content before tag preserved
+      expect(taskSection).toContain('alert("xss")'); // Content inside tags preserved
+      expect(taskSection).toContain('bug'); // Content after tag preserved
     });
 
     it('should remove system instruction keywords', async () => {
@@ -601,18 +603,13 @@ describe('TmuxManager', () => {
         machine: 'vm',
       });
 
-      // Verify keywords were removed from user prompt
-      const call = mockExec.calls[0]?.[0];
-      if (!call) throw new Error('No exec calls');
-      // Extract prompt from command
-      const promptStart = call.indexOf("--system-prompt '") + 16;
-      const promptEnd = call.lastIndexOf("' --print");
-      expect(promptEnd).toBeGreaterThan(promptStart);
-      const prompt = call.slice(promptStart, promptEnd);
+      // Verify keywords were removed from the system prompt file
+      const systemPromptFile = join(logBasePath, 'task-instructions-system.txt');
+      const systemPrompt = readFileSync(systemPromptFile, 'utf-8');
 
       // Extract only the [TASK] section (user input)
-      const taskSectionStart = prompt.indexOf('[TASK]\n') + 7;
-      const taskSection = prompt.slice(taskSectionStart);
+      const taskSectionStart = systemPrompt.indexOf('[TASK]\n') + 7;
+      const taskSection = systemPrompt.slice(taskSectionStart);
 
       expect(taskSection).not.toContain('Ignore');
       expect(taskSection).not.toContain('instructions');

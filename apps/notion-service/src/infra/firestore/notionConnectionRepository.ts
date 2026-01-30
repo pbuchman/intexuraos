@@ -141,7 +141,7 @@ export async function disconnectNotion(
 
     return ok({
       connected: false,
-      createdAt: existingData?.createdAt ?? now,
+      createdAt: existingData?.createdAt /* v8 ignore ts-type -- fallback for new connections */ ?? now,
       updatedAt: now,
     });
   } catch (error) {

@@ -57,11 +57,12 @@ describe('hmacSigning', () => {
   });
 
   describe('signDispatchRequest', () => {
-    it('generates signature with timestamp and body', () => {
+    it('generates signature with timestamp, nonce, and body', () => {
       const body = '{"taskId":"task-123","prompt":"Fix the bug"}';
       const timestamp = 1234567890;
+      const nonce = 'test-nonce-123';
 
-      const result = signDispatchRequest({ logger, dispatchSigningSecret }, { body, timestamp });
+      const result = signDispatchRequest({ logger, dispatchSigningSecret }, { body, timestamp, nonce });
 
       expect(result.ok).toBe(true);
       if (result.ok) {
@@ -74,7 +75,7 @@ describe('hmacSigning', () => {
     it('returns error when dispatchSigningSecret is empty', () => {
       const result = signDispatchRequest(
         { logger, dispatchSigningSecret: '' },
-        { body: '{}', timestamp: Date.now() }
+        { body: '{}', timestamp: Date.now(), nonce: 'test-nonce' }
       );
 
       expect(result.ok).toBe(false);
@@ -87,9 +88,10 @@ describe('hmacSigning', () => {
     it('generates deterministic signature for same input', () => {
       const body = '{"test":"body"}';
       const timestamp = 1234567890;
+      const nonce = 'same-nonce';
 
-      const result1 = signDispatchRequest({ logger, dispatchSigningSecret }, { body, timestamp });
-      const result2 = signDispatchRequest({ logger, dispatchSigningSecret }, { body, timestamp });
+      const result1 = signDispatchRequest({ logger, dispatchSigningSecret }, { body, timestamp, nonce });
+      const result2 = signDispatchRequest({ logger, dispatchSigningSecret }, { body, timestamp, nonce });
 
       expect(result1.ok).toBe(true);
       expect(result2.ok).toBe(true);
@@ -103,9 +105,10 @@ describe('hmacSigning', () => {
 
     it('generates different signatures for different inputs', () => {
       const timestamp = Date.now();
+      const nonce = 'test-nonce';
 
-      const result1 = signDispatchRequest({ logger, dispatchSigningSecret }, { body: '{"test":"body1"}', timestamp });
-      const result2 = signDispatchRequest({ logger, dispatchSigningSecret }, { body: '{"test":"body2"}', timestamp });
+      const result1 = signDispatchRequest({ logger, dispatchSigningSecret }, { body: '{"test":"body1"}', timestamp, nonce });
+      const result2 = signDispatchRequest({ logger, dispatchSigningSecret }, { body: '{"test":"body2"}', timestamp, nonce });
 
       expect(result1.ok).toBe(true);
       expect(result2.ok).toBe(true);
@@ -117,9 +120,25 @@ describe('hmacSigning', () => {
 
     it('generates different signatures for different timestamps', () => {
       const body = '{"test":"body"}';
+      const nonce = 'test-nonce';
 
-      const result1 = signDispatchRequest({ logger, dispatchSigningSecret }, { body, timestamp: 1234567890 });
-      const result2 = signDispatchRequest({ logger, dispatchSigningSecret }, { body, timestamp: 1234567891 });
+      const result1 = signDispatchRequest({ logger, dispatchSigningSecret }, { body, timestamp: 1234567890, nonce });
+      const result2 = signDispatchRequest({ logger, dispatchSigningSecret }, { body, timestamp: 1234567891, nonce });
+
+      expect(result1.ok).toBe(true);
+      expect(result2.ok).toBe(true);
+
+      if (result1.ok && result2.ok) {
+        expect(result1.value.signature).not.toBe(result2.value.signature);
+      }
+    });
+
+    it('generates different signatures for different nonces', () => {
+      const body = '{"test":"body"}';
+      const timestamp = 1234567890;
+
+      const result1 = signDispatchRequest({ logger, dispatchSigningSecret }, { body, timestamp, nonce: 'nonce-1' });
+      const result2 = signDispatchRequest({ logger, dispatchSigningSecret }, { body, timestamp, nonce: 'nonce-2' });
 
       expect(result1.ok).toBe(true);
       expect(result2.ok).toBe(true);

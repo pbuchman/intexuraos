@@ -162,6 +162,10 @@
     "code_worker_settings": {
       "owner": "code-agent",
       "description": "Per-user worker configuration with encrypted credentials (CF Access, dispatch signing) for Mac and VM workers"
+    },
+    "predev-state": {
+      "owner": "predev-lifecycle",
+      "description": "Pre-development environment state tracking (VM status, IP, branch, activity)"
     }
   }
 }

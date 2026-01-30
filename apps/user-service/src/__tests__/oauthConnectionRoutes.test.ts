@@ -536,8 +536,9 @@ describe('OAuth Connection Routes', () => {
       });
 
       expect(response.statusCode).toBe(200);
-      const body = JSON.parse(response.body) as { success: boolean };
+      const body = JSON.parse(response.body) as { success: boolean; data: Record<string, never> };
       expect(body.success).toBe(true);
+      expect(body.data).toEqual({});
 
       const connection = fakeOAuthRepo.getStoredConnection(userId, 'google');
       expect(connection).toBeUndefined();

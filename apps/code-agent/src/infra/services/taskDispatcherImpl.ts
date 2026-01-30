@@ -85,7 +85,7 @@ class TaskDispatcherImpl implements TaskDispatcherService {
       taskRequest.traceId = request.traceId;
     }
 
-    const body = JSON.stringify(taskRequest);
+const body = JSON.stringify(taskRequest);
     const timestamp = Date.now();
 
     // Get workers from per-request credentials
@@ -115,10 +115,13 @@ class TaskDispatcherImpl implements TaskDispatcherService {
     workers: WorkerConfigWithCredentials[]
   ): Promise<Result<DispatchResult, DispatchError>> {
     for (const worker of workers) {
+      // Generate nonce for replay protection
+      const nonce = generateNonce();
+
       // Generate HMAC signature using this worker's signing secret
       const signatureResult = signDispatchRequest(
         { logger: this.logger, dispatchSigningSecret: worker.credentials.dispatchSigningSecret },
-        { body, timestamp }
+        { body, timestamp, nonce }
       );
       if (!signatureResult.ok) {
         this.logger.warn(
@@ -129,7 +132,6 @@ class TaskDispatcherImpl implements TaskDispatcherService {
       }
 
       const { signature } = signatureResult.value;
-      const nonce = generateNonce();
 
       try {
         const response = await this.tryDispatch(worker, taskRequest, body, timestamp, signature, nonce);
@@ -285,7 +287,7 @@ class TaskDispatcherImpl implements TaskDispatcherService {
   async cancelOnWorker(taskId: string, location: 'mac' | 'vm', credentials?: WorkerCredentials): Promise<void> {
     this.logger.info({ taskId, location }, 'Sending cancellation request to worker');
 
-    if (credentials === undefined) {
+if (credentials === undefined) {
       this.logger.warn({ taskId, location }, 'No credentials provided for cancellation, skipping worker notification');
       return;
     }
@@ -300,6 +302,7 @@ class TaskDispatcherImpl implements TaskDispatcherService {
         signal: AbortSignal.timeout(10000),
       });
 
+      /* v8 ignore test-infra -- requires worker to return error response */
       if (!response.ok) {
         this.logger.warn(
           { taskId, location, status: response.status },

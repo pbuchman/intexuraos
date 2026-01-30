@@ -13,8 +13,7 @@ export interface UpdateTodoItemDeps {
 }
 
 function computeTodoStatus(items: TodoItem[]): 'pending' | 'in_progress' | 'completed' {
-  /* istanbul ignore next -- unreachable: called only when updating existing item, so items.length >= 1 */
-/* v8 ignore upstream -- `computetodostatus` is only called from `updatetodoitem` ... */
+  /* v8 ignore test-infra -- called only when updating existing item, so items.length >= 1 */
   if (items.length === 0) {
     return 'pending';
   }
@@ -64,8 +63,7 @@ export async function updateTodoItem(
   }
 
   const existingItem = todo.items[itemIndex];
-/* v8 ignore ts-type -- line 59 finds the index via `findindex` */
-  /* istanbul ignore next -- defensive: itemIndex validated above, noUncheckedIndexedAccess requires this check */
+  /* v8 ignore ts-type -- findIndex check on line 62 guarantees existingItem exists */
   if (existingItem === undefined) {
     return { ok: false, error: { code: 'NOT_FOUND', message: 'Item not found' } };
   }

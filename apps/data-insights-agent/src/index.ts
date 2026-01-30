@@ -62,6 +62,7 @@ async function main(): Promise<void> {
     baseUrl: config.userServiceUrl,
     internalAuthToken: config.internalAuthToken,
     pricingContext,
+    logger,
   });
 
   initServices({

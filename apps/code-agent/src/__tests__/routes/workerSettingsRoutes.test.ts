@@ -36,6 +36,7 @@ import { createLinearIssueService } from '../../domain/services/linearIssueServi
 import { createStatusMirrorService } from '../../infra/services/statusMirrorServiceImpl.js';
 import { createProcessHeartbeatUseCase } from '../../domain/usecases/processHeartbeat.js';
 import { createDetectZombieTasksUseCase } from '../../domain/usecases/detectZombieTasks.js';
+import { createCleanupTaskLogsUseCase } from '../../domain/usecases/cleanupTaskLogs.js';
 import { createNoOpMetricsClient } from '../../infra/metrics.js';
 import { createWorkerSettingsRepository } from '../../infra/firestore/workerSettingsRepository.js';
 import { ok } from '@intexuraos/common-core';
@@ -141,6 +142,10 @@ describe('Worker Settings Routes', () => {
         logger,
       }),
       detectZombieTasks: createDetectZombieTasksUseCase({
+        codeTaskRepository: codeTaskRepo,
+        logger,
+      }),
+      cleanupTaskLogs: createCleanupTaskLogsUseCase({
         codeTaskRepository: codeTaskRepo,
         logger,
       }),

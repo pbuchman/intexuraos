@@ -1,14 +1,12 @@
-import admin from 'firebase-admin';
 import { logger } from './logger.js';
 
-if (admin.apps.length === 0) {
-  admin.initializeApp();
+export interface CleanupConfig {
+  codeAgentUrl: string;
+  internalAuthToken: string;
+  retentionDays?: number;
+  batchSize?: number;
+  tasksPerRun?: number;
 }
-const db = admin.firestore();
-
-const BATCH_SIZE = 500;
-const RETENTION_DAYS = 90;
-const TASKS_PER_RUN = 100;
 
 export interface CleanupResult {
   success: boolean;
@@ -19,90 +17,99 @@ export interface CleanupResult {
   durationMs: number;
 }
 
-export async function cleanupOldLogs(): Promise<CleanupResult> {
+interface ApiResponse {
+  success: boolean;
+  data?: {
+    tasksProcessed: number;
+    tasksFailed: number;
+    logsDeleted: number;
+    durationMs: number;
+  };
+  error?: {
+    code: string;
+    message: string;
+  };
+}
+
+export function loadConfig(): CleanupConfig {
+  const codeAgentUrl = process.env['INTEXURAOS_CODE_AGENT_URL'];
+  const internalAuthToken = process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'];
+
+  if (codeAgentUrl === undefined || codeAgentUrl === '') {
+    throw new Error('INTEXURAOS_CODE_AGENT_URL is required');
+  }
+
+  if (internalAuthToken === undefined || internalAuthToken === '') {
+    throw new Error('INTEXURAOS_INTERNAL_AUTH_TOKEN is required');
+  }
+
+  const retentionDaysStr = process.env['INTEXURAOS_LOG_RETENTION_DAYS'];
+  const batchSizeStr = process.env['INTEXURAOS_LOG_BATCH_SIZE'];
+  const tasksPerRunStr = process.env['INTEXURAOS_LOG_TASKS_PER_RUN'];
+
+  const config: CleanupConfig = {
+    codeAgentUrl,
+    internalAuthToken,
+  };
+
+  if (retentionDaysStr !== undefined) {
+    config.retentionDays = parseInt(retentionDaysStr, 10);
+  }
+  if (batchSizeStr !== undefined) {
+    config.batchSize = parseInt(batchSizeStr, 10);
+  }
+  if (tasksPerRunStr !== undefined) {
+    config.tasksPerRun = parseInt(tasksPerRunStr, 10);
+  }
+
+  return config;
+}
+
+export async function cleanupOldLogs(config?: CleanupConfig): Promise<CleanupResult> {
   const startTime = Date.now();
-  let tasksProcessed = 0;
-  let tasksFailed = 0;
-  let logsDeleted = 0;
+  const resolvedConfig = config ?? loadConfig();
+
+  logger.info(
+    {
+      codeAgentUrl: resolvedConfig.codeAgentUrl,
+      retentionDays: resolvedConfig.retentionDays,
+      batchSize: resolvedConfig.batchSize,
+      tasksPerRun: resolvedConfig.tasksPerRun,
+    },
+    'Starting log cleanup via code-agent API'
+  );
 
   try {
-    const cutoffDate = new Date();
-    cutoffDate.setDate(cutoffDate.getDate() - RETENTION_DAYS);
-    const cutoffTimestamp = admin.firestore.Timestamp.fromDate(cutoffDate);
+    const url = `${resolvedConfig.codeAgentUrl}/internal/tasks/cleanup-logs`;
+    const body: Record<string, number> = {};
 
-    logger.info({ cutoffDate: cutoffDate.toISOString() }, 'Starting log cleanup');
-
-    let hasMoreTasks = true;
-
-    while (hasMoreTasks) {
-      const tasksSnapshot = await db
-        .collection('code_tasks')
-        .where('completedAt', '<', cutoffTimestamp)
-        .where('logsArchived', '==', false)
-        .limit(TASKS_PER_RUN)
-        .get();
-
-      if (tasksSnapshot.empty) {
-        hasMoreTasks = false;
-        break;
-      }
-
-      for (const taskDoc of tasksSnapshot.docs) {
-        try {
-          const taskId = taskDoc.id;
-          logger.debug({ taskId }, 'Processing task for log cleanup');
-
-          const logsSnapshot = await taskDoc.ref.collection('logs').get();
-          const logCount = logsSnapshot.docs.length;
-
-          if (logCount > 0) {
-            let batch = db.batch();
-            let batchCount = 0;
-
-            for (const logDoc of logsSnapshot.docs) {
-              batch.delete(logDoc.ref);
-              batchCount++;
-              logsDeleted++;
-
-              if (batchCount >= BATCH_SIZE) {
-                await batch.commit();
-                batch = db.batch();
-                batchCount = 0;
-              }
-            }
-
-            if (batchCount > 0) {
-              await batch.commit();
-            }
-          }
-
-          await taskDoc.ref.update({
-            logsArchived: true,
-            logCount,
-            archivedAt: admin.firestore.FieldValue.serverTimestamp(),
-          });
-
-          tasksProcessed++;
-          logger.info({ taskId, logCount }, 'Task logs archived');
-        } catch (error) {
-          tasksFailed++;
-          const errorMessage = error instanceof Error ? error.message : String(error);
-          logger.error({ taskId: taskDoc.id, error: errorMessage }, 'Failed to process task');
-        }
-      }
-
-      if (tasksSnapshot.docs.length < TASKS_PER_RUN) {
-        hasMoreTasks = false;
-      }
+    if (resolvedConfig.retentionDays !== undefined) {
+      body['retentionDays'] = resolvedConfig.retentionDays;
     }
+    if (resolvedConfig.batchSize !== undefined) {
+      body['batchSize'] = resolvedConfig.batchSize;
+    }
+    if (resolvedConfig.tasksPerRun !== undefined) {
+      body['tasksPerRun'] = resolvedConfig.tasksPerRun;
+    }
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Internal-Auth': resolvedConfig.internalAuthToken,
+      },
+      body: JSON.stringify(body),
+    });
 
     const durationMs = Date.now() - startTime;
 
-    if (tasksProcessed === 0 && tasksFailed === 0) {
-      logger.info({ durationMs }, 'No tasks require log cleanup');
+    if (!response.ok) {
+      const errorText = await response.text();
+      logger.error({ statusCode: response.status, errorText, durationMs }, 'API request failed');
       return {
-        success: true,
-        message: 'No tasks require log cleanup',
+        success: false,
+        message: `API returned ${String(response.status)}: ${errorText}`,
         tasksProcessed: 0,
         tasksFailed: 0,
         logsDeleted: 0,
@@ -110,28 +117,62 @@ export async function cleanupOldLogs(): Promise<CleanupResult> {
       };
     }
 
-    logger.info({ tasksProcessed, tasksFailed, logsDeleted, durationMs }, 'Log cleanup completed');
+    const apiResponse = (await response.json()) as ApiResponse;
+
+    if (!apiResponse.success) {
+      logger.error({ error: apiResponse.error, durationMs }, 'API returned error response');
+      return {
+        success: false,
+        message: apiResponse.error?.message ?? 'Unknown API error',
+        tasksProcessed: 0,
+        tasksFailed: 0,
+        logsDeleted: 0,
+        durationMs,
+      };
+    }
+
+    const data = apiResponse.data;
+    if (data === undefined) {
+      return {
+        success: false,
+        message: 'API returned success but no data',
+        tasksProcessed: 0,
+        tasksFailed: 0,
+        logsDeleted: 0,
+        durationMs,
+      };
+    }
+
+    logger.info(
+      {
+        tasksProcessed: data.tasksProcessed,
+        tasksFailed: data.tasksFailed,
+        logsDeleted: data.logsDeleted,
+        durationMs: data.durationMs,
+      },
+      'Log cleanup completed successfully'
+    );
 
     return {
       success: true,
-      message: `Processed ${String(tasksProcessed)} tasks, deleted ${String(logsDeleted)} logs`,
-      tasksProcessed,
-      tasksFailed,
-      logsDeleted,
-      durationMs,
+      message: `Processed ${String(data.tasksProcessed)} tasks, deleted ${String(data.logsDeleted)} logs`,
+      tasksProcessed: data.tasksProcessed,
+      tasksFailed: data.tasksFailed,
+      logsDeleted: data.logsDeleted,
+      durationMs: data.durationMs,
     };
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
     const durationMs = Date.now() - startTime;
+    const errorMessage = error instanceof Error ? error.message : String(error);
 
     logger.error({ error: errorMessage, durationMs }, 'Log cleanup failed');
 
     return {
       success: false,
       message: errorMessage,
-      tasksProcessed,
-      tasksFailed,
-      logsDeleted,
+      tasksProcessed: 0,
+      tasksFailed: 0,
+      logsDeleted: 0,
       durationMs,
     };
   }
