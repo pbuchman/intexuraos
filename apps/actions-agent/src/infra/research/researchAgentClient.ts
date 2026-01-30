@@ -1,12 +1,9 @@
 import type { Result, ServiceFeedback } from '@intexuraos/common-core';
 import { err, getErrorMessage, ok } from '@intexuraos/common-core';
 import type { ResearchServiceClient } from '../../domain/ports/researchServiceClient.js';
-import pino from 'pino';
+import { createAppLogger } from '@intexuraos/infra-sentry';
 
-const logger = pino({
-  level: process.env['LOG_LEVEL'] ?? 'info',
-  name: 'ResearchAgentClient',
-});
+const logger = createAppLogger({ name: 'ResearchAgentClient' });
 
 export interface ResearchAgentClientConfig {
   baseUrl: string;

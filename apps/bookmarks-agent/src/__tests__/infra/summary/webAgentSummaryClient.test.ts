@@ -621,6 +621,39 @@ describe('webAgentSummaryClient', () => {
       expect(result.error.transient).toBe(true);
     });
 
+    it('marks RATE_LIMITED error code as transient', async () => {
+      const client = createWebAgentSummaryClient({
+        baseUrl: TEST_BASE_URL,
+        internalAuthToken: TEST_INTERNAL_TOKEN,
+        logger: silentLogger,
+      });
+
+      nock(TEST_BASE_URL)
+        .post('/internal/page-summaries')
+        .reply(200, {
+          success: true,
+          data: {
+            result: {
+              url: 'https://example.com',
+              status: 'failed',
+              error: { code: 'RATE_LIMITED', message: 'Crawl4AI rate limited: HTTP 429' },
+            },
+            metadata: { durationMs: 100 },
+          },
+        });
+
+      const result = await client.generateSummary('user-123', {
+        url: 'https://example.com',
+        title: 'Title',
+        description: null,
+      });
+
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error.transient).toBe(true);
+      expect(result.error.code).toBe('GENERATION_ERROR');
+    });
+
     it('marks NO_CONTENT error code as NOT transient', async () => {
       const client = createWebAgentSummaryClient({
         baseUrl: TEST_BASE_URL,

@@ -1,4 +1,4 @@
-import pino from 'pino';
+import { createAppLogger } from '@intexuraos/infra-sentry';
 import type { BookmarkRepository } from './domain/ports/bookmarkRepository.js';
 import type { LinkPreviewFetcherPort } from './domain/ports/linkPreviewFetcher.js';
 import type { BookmarkSummaryService } from './domain/ports/bookmarkSummaryService.js';
@@ -44,27 +44,27 @@ export function initServices(config: ServiceConfig): void {
     linkPreviewFetcher: createWebAgentClient({
       baseUrl: config.webAgentUrl,
       internalAuthToken: config.internalAuthToken,
-      logger: pino({ name: 'webAgentClient' }),
+      logger: createAppLogger({ name: 'webAgentClient' }),
     }),
     enrichPublisher: createEnrichPublisher({
       projectId: config.gcpProjectId,
       topicName: config.bookmarkEnrichTopic,
-      logger: pino({ name: 'bookmark-enrich-publisher' }),
+      logger: createAppLogger({ name: 'bookmark-enrich-publisher' }),
     }),
     summarizePublisher: createSummarizePublisher({
       projectId: config.gcpProjectId,
       topicName: config.bookmarkSummarizeTopic,
-      logger: pino({ name: 'bookmark-summarize-publisher' }),
+      logger: createAppLogger({ name: 'bookmark-summarize-publisher' }),
     }),
     whatsAppSendPublisher: createWhatsAppSendPublisher({
       projectId: config.gcpProjectId,
       topicName: config.whatsappSendTopic,
-      logger: pino({ name: 'bookmark-whatsapp-send-publisher' }),
+      logger: createAppLogger({ name: 'bookmark-whatsapp-send-publisher' }),
     }),
     bookmarkSummaryService: createWebAgentSummaryClient({
       baseUrl: config.webAgentUrl,
       internalAuthToken: config.internalAuthToken,
-      logger: pino({ name: 'webAgentSummaryClient' }),
+      logger: createAppLogger({ name: 'webAgentSummaryClient' }),
     }),
   };
 }

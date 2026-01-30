@@ -4,9 +4,9 @@
  */
 import type { Result } from '@intexuraos/common-core';
 import type { NotionError, NotionLogger } from '@intexuraos/infra-notion';
-import pino from 'pino';
+import { createAppLogger } from '@intexuraos/infra-sentry';
 
-const defaultNotionLogger: NotionLogger = pino({ level: 'silent' });
+const defaultNotionLogger: NotionLogger = createAppLogger({ name: 'notion-service' });
 import {
   disconnectNotion,
   getNotionConnection,

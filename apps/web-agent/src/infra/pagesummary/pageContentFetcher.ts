@@ -21,7 +21,7 @@ const DEFAULT_CONFIG: Omit<PageContentFetcherConfig, 'apiKey'> = {
  * Error from page content fetching.
  */
 export interface PageContentError {
-  code: 'FETCH_FAILED' | 'TIMEOUT' | 'INVALID_URL' | 'NO_CONTENT' | 'API_ERROR';
+  code: 'FETCH_FAILED' | 'TIMEOUT' | 'INVALID_URL' | 'NO_CONTENT' | 'API_ERROR' | 'RATE_LIMITED';
   message: string;
 }
 
@@ -93,6 +93,14 @@ export function createPageContentFetcher(
             },
             'Crawl4AI API error response'
           );
+
+          if (response.status === 429) {
+            return err({
+              code: 'RATE_LIMITED',
+              message: `Crawl4AI rate limited: HTTP ${String(response.status)}`,
+            });
+          }
+
           return err({
             code: 'API_ERROR',
             message: `Crawl4AI API error: HTTP ${String(response.status)}`,

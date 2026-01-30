@@ -1209,8 +1209,8 @@ importers:
         specifier: ^5.1.0
         version: 5.6.2
       pino:
-        specifier: ^9.5.0
-        version: 9.14.0
+        specifier: ^10.1.0
+        version: 10.1.1
     devDependencies:
       '@types/node':
         specifier: ^22.10.1
@@ -1496,8 +1496,8 @@ importers:
         specifier: workspace:*
         version: link:../common-core
       pino:
-        specifier: ^9.6.0
-        version: 9.14.0
+        specifier: ^10.1.0
+        version: 10.1.1
 
   packages/infra-sentry:
     dependencies:
@@ -1511,8 +1511,8 @@ importers:
         specifier: ^5.2.0
         version: 5.6.2
       pino:
-        specifier: ^9.6.0
-        version: 9.14.0
+        specifier: ^10.1.0
+        version: 10.1.1
 
   packages/infra-whatsapp:
     dependencies:

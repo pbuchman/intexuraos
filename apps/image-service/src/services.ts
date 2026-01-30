@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import pino from 'pino';
+import { createAppLogger } from '@intexuraos/infra-sentry';
 import type { IPricingContext } from '@intexuraos/llm-pricing';
 import { LlmModels, LlmProviders, type Google, type OpenAI } from '@intexuraos/llm-contract';
 import type { Logger } from '@intexuraos/common-core';
@@ -67,7 +67,7 @@ export function initializeServices(pricingContext: IPricingContext): void {
     baseUrl: process.env['INTEXURAOS_USER_SERVICE_URL'] ?? 'http://localhost:8110',
     internalAuthToken: process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] ?? '',
     pricingContext,
-    logger: pino({ name: 'user-service-client' }),
+    logger: createAppLogger({ name: 'user-service-client' }),
   });
 
   // Get pricing for prompt generation models

@@ -48,7 +48,7 @@ function isTransientHttpStatus(status: number): boolean {
 }
 
 function isTransientErrorCode(code: string): boolean {
-  return code === 'TIMEOUT' || code === 'FETCH_FAILED';
+  return code === 'TIMEOUT' || code === 'FETCH_FAILED' || code === 'RATE_LIMITED';
 }
 
 function mapErrorCode(code: string): SummaryError['code'] {
