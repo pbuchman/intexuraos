@@ -173,37 +173,94 @@ if git rev-parse --git-dir >/dev/null 2>&1; then
 fi
 
 # ---- context window calculation (native) ----
-context_pct=""
-context_remaining_pct=""
-context_color() { if [ "$use_color" -eq 1 ]; then printf '\033[1;37m'; fi; }  # default white
+context_used_pct=""
+context_color() { if [ "$use_color" -eq 1 ]; then printf '\033[38;5;158m'; fi; }  # default mint green
 
 if [ "$HAS_JQ" -eq 1 ]; then
-  # Get context window size and current usage from native Claude Code input
   CONTEXT_SIZE=$(echo "$input" | jq -r '.context_window.context_window_size // 200000' 2>/dev/null)
   USAGE=$(echo "$input" | jq '.context_window.current_usage' 2>/dev/null)
 
   if [ "$USAGE" != "null" ] && [ -n "$USAGE" ]; then
-    # Calculate current context from current_usage fields
-    # Formula: input_tokens + cache_creation_input_tokens + cache_read_input_tokens
     CURRENT_TOKENS=$(echo "$USAGE" | jq '(.input_tokens // 0) + (.cache_creation_input_tokens // 0) + (.cache_read_input_tokens // 0)' 2>/dev/null)
 
     if [ -n "$CURRENT_TOKENS" ] && [ "$CURRENT_TOKENS" -gt 0 ] 2>/dev/null; then
       context_used_pct=$(( CURRENT_TOKENS * 100 / CONTEXT_SIZE ))
-      context_remaining_pct=$(( 100 - context_used_pct ))
       # Clamp to valid range
-      (( context_remaining_pct < 0 )) && context_remaining_pct=0
-      (( context_remaining_pct > 100 )) && context_remaining_pct=100
+      (( context_used_pct < 0 )) && context_used_pct=0
+      (( context_used_pct > 100 )) && context_used_pct=100
 
-      # Set color based on remaining percentage
-      if [ "$context_remaining_pct" -le 20 ]; then
+      # Set color based on used percentage (higher = worse)
+      if [ "$context_used_pct" -ge 80 ]; then
         context_color() { if [ "$use_color" -eq 1 ]; then printf '\033[38;5;203m'; fi; }  # coral red
-      elif [ "$context_remaining_pct" -le 40 ]; then
+      elif [ "$context_used_pct" -ge 60 ]; then
         context_color() { if [ "$use_color" -eq 1 ]; then printf '\033[38;5;215m'; fi; }  # peach
-      else
-        context_color() { if [ "$use_color" -eq 1 ]; then printf '\033[38;5;158m'; fi; }  # mint green
       fi
+    fi
+  fi
+fi
 
-      context_pct="${context_remaining_pct}%"
+# ---- hook metrics (executed + blocked commands) ----
+hook_metrics=""
+hooks_dir=""
+
+# Find hooks directory - try CLAUDE_PROJECT_DIR first, then current_dir
+if [ -n "$CLAUDE_PROJECT_DIR" ] && [ -d "$CLAUDE_PROJECT_DIR/.claude/hooks" ]; then
+  hooks_dir="$CLAUDE_PROJECT_DIR/.claude/hooks"
+elif [ -d ".claude/hooks" ]; then
+  hooks_dir=".claude/hooks"
+fi
+
+if [ -n "$hooks_dir" ]; then
+  # Count executed commands
+  executed=0
+  if [ -f "$hooks_dir/commands.log" ]; then
+    executed=$(grep -c "^\[" "$hooks_dir/commands.log" 2>/dev/null || echo 0)
+  fi
+
+  # Count blocked by each hook (short labels)
+  b_vitest=$(grep -c "BLOCKED" "$hooks_dir/validate-vitest-flags.log" 2>/dev/null || echo 0)
+  b_poll=$(grep -c "BLOCKED" "$hooks_dir/validate-polling.log" 2>/dev/null || echo 0)
+  b_poll=$((b_poll + $(grep -c "BLOCKED" "$hooks_dir/validate-gh-polling.log" 2>/dev/null || echo 0)))
+  b_ci=$(grep -c "BLOCKED" "$hooks_dir/validate-ci-output-capture.log" 2>/dev/null || echo 0)
+  b_cov=$(grep -c "BLOCKED" "$hooks_dir/validate-coverage-commands.log" 2>/dev/null || echo 0)
+  b_ws=$(grep -c "BLOCKED" "$hooks_dir/validate-verify-workspace.log" 2>/dev/null || echo 0)
+  b_gcloud=$(grep -c "BLOCKED" "$hooks_dir/validate-gcloud-builds.log" 2>/dev/null || echo 0)
+  b_gcloud=$((b_gcloud + $(grep -c "BLOCKED" "$hooks_dir/validate-gcloud-builds-log.log" 2>/dev/null || echo 0)))
+
+  blocked=$((b_vitest + b_poll + b_ci + b_cov + b_ws + b_gcloud))
+  total=$((executed + blocked))
+
+  if [ "$total" -gt 0 ]; then
+    # Build breakdown string (only show non-zero)
+    breakdown=""
+    [ "$b_vitest" -gt 0 ] && breakdown="${breakdown}vi:${b_vitest} "
+    [ "$b_poll" -gt 0 ] && breakdown="${breakdown}poll:${b_poll} "
+    [ "$b_ci" -gt 0 ] && breakdown="${breakdown}ci:${b_ci} "
+    [ "$b_cov" -gt 0 ] && breakdown="${breakdown}cov:${b_cov} "
+    [ "$b_ws" -gt 0 ] && breakdown="${breakdown}ws:${b_ws} "
+    [ "$b_gcloud" -gt 0 ] && breakdown="${breakdown}gc:${b_gcloud} "
+    breakdown=$(echo "$breakdown" | sed 's/ $//')
+
+    hook_metrics="🛡️ Cmds:${total} | ✗${blocked} (${breakdown})"
+  fi
+fi
+
+# ---- PM2 status ----
+pm2_metrics=""
+if command -v pm2 &>/dev/null || command -v npx &>/dev/null; then
+  pm2_json=$(pm2 jlist 2>/dev/null || npx pm2 jlist 2>/dev/null)
+  if [ -n "$pm2_json" ] && [ "$HAS_JQ" -eq 1 ]; then
+    pm2_online=$(echo "$pm2_json" | jq '[.[] | select(.pm2_env.status == "online")] | length' 2>/dev/null || echo 0)
+    pm2_total=$(echo "$pm2_json" | jq 'length' 2>/dev/null || echo 0)
+    pm2_worktree=$(echo "$pm2_json" | jq -r '.[0].pm2_env.pm_cwd // empty' 2>/dev/null | grep -oE 'intexuraos-[0-9]+' || echo "")
+    if [ "$pm2_total" -gt 0 ]; then
+      wt_suffix=""
+      [ -n "$pm2_worktree" ] && wt_suffix=" (${pm2_worktree})"
+      if [ "$pm2_online" -eq "$pm2_total" ]; then
+        pm2_metrics="⚡ PM2:${pm2_online}/${pm2_total}${wt_suffix}"
+      else
+        pm2_metrics="⚡ PM2:${pm2_online}/${pm2_total}${wt_suffix} ⚠️"
+      fi
     fi
   fi
 fi
@@ -221,21 +278,29 @@ fi
 if [ -n "$cc_version" ] && [ "$cc_version" != "null" ]; then
   printf '  📟 %sv%s%s' "$(cc_version_color)" "$cc_version" "$(rst)"
 fi
-if [ -n "$output_style" ] && [ "$output_style" != "null" ]; then
-  printf '  🎨 %s%s%s' "$(style_color)" "$output_style" "$(rst)"
-fi
 if [ -n "$api_display" ]; then
   printf '  🌐 %s%s%s' "$(api_color)" "$api_display" "$(rst)"
 fi
 
-# Line 2: Context and session time
+# Line 2: Context and hook metrics (same line)
 line2=""
-if [ -n "$context_pct" ]; then
-  context_bar=$(progress_bar "$context_remaining_pct" 10)
-  line2="🧠 $(context_color)Context Remaining: ${context_pct} [${context_bar}]$(rst)"
+if [ -n "$context_used_pct" ]; then
+  line2="🧠 $(context_color)CTX ${context_used_pct}%$(rst)"
+else
+  line2="🧠 $(context_color)CTX -$(rst)"
 fi
-if [ -z "$line2" ] && [ -z "$context_pct" ]; then
-  line2="🧠 $(context_color)Context Remaining: TBD$(rst)"
+if [ -n "$hook_metrics" ]; then
+  line2="$line2  $hook_metrics"
+fi
+if [ -n "$pm2_metrics" ]; then
+  line2="$line2  $pm2_metrics"
+fi
+
+# ---- Orchestrator port check ----
+if lsof -i :8199 -sTCP:LISTEN >/dev/null 2>&1; then
+  line2="$line2  🎭 Orch:✓"
+else
+  line2="$line2  🎭 Orch:✗"
 fi
 
 # Line 3: Cost and usage analytics
