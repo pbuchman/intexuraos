@@ -24,8 +24,11 @@ describe('NotionServiceClient', () => {
         .get(`/internal/notion/users/${userId}/context`)
         .matchHeader('x-internal-auth', internalAuthToken)
         .reply(200, {
-          connected: true,
-          token: 'secret_notion_token',
+          success: true,
+          data: {
+            connected: true,
+            token: 'secret_notion_token',
+          },
         });
 
       const result = await client.getNotionToken(userId);
@@ -42,8 +45,11 @@ describe('NotionServiceClient', () => {
         .get(`/internal/notion/users/${userId}/context`)
         .matchHeader('x-internal-auth', internalAuthToken)
         .reply(200, {
-          connected: false,
-          token: null,
+          success: true,
+          data: {
+            connected: false,
+            token: null,
+          },
         });
 
       const result = await client.getNotionToken(userId);
