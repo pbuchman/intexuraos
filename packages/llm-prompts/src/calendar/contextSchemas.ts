@@ -16,12 +16,15 @@ function isValidDateString(val: string): boolean {
   if (isNaN(date.getTime())) return false;
 
   const datePart = val.split('T')[0];
-  if (datePart === undefined) return false;
+  if (datePart === undefined)
+    return false; /* v8 ignore ts-type -- split() always returns at least one element */
 
   const parts = datePart.split('-');
+  /* v8 ignore schema -- regex pattern above guarantees YYYY-MM-DD format, so split always produces 3 parts */
   if (parts.length !== 3) return false;
 
-  const [yearStr, monthStr, dayStr] = parts;
+  const [yearStr, monthStr, dayStr] =
+    parts; /* v8 ignore ts-type -- length check above guarantees 3 elements exist */
   if (yearStr === undefined || monthStr === undefined || dayStr === undefined) return false;
 
   const inputYear = parseInt(yearStr, 10);

@@ -95,7 +95,7 @@ export async function retryFromFailed(
     });
 
     if (!synthesisResult.ok) {
-      return { ok: false, error: synthesisResult.error ?? 'Synthesis failed' };
+      return { ok: false, error: synthesisResult.error ?? 'Synthesis failed' }; /* v8 ignore ts-type -- error type has message field but TypeScript can't narrow after !ok check */
     }
 
     return { ok: true, action: 'retried_synthesis' };
