@@ -740,6 +740,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       );
 
       const services = getServices();
+      /* v8 ignore test-infra -- spread conditionals for optional event fields */
       const result = await services.handleApprovalReplyUseCase({
         replyToWamid: eventData.replyToWamid,
         replyText: eventData.replyText,

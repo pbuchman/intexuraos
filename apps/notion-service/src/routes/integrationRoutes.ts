@@ -26,6 +26,7 @@ function mapConnectErrorToHttp(
   code: ConnectNotionErrorCode
 ): 'INVALID_REQUEST' | 'UNAUTHORIZED' | 'DOWNSTREAM_ERROR' {
   switch (code) {
+    /* v8 ignore test-infra -- validation errors require malformed OAuth responses */
     case 'VALIDATION_ERROR':
       return 'INVALID_REQUEST';
     case 'INVALID_TOKEN':

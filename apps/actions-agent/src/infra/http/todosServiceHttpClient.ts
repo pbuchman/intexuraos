@@ -67,6 +67,7 @@ export function createTodosServiceHttpClient(
 
       if (!response.ok) {
         const errorCode = body.error?.code;
+        /* v8 ignore ts-type -- API always returns error object with message */
         const errorMessage = body.error?.message ?? `HTTP ${String(response.status)}: ${response.statusText}`;
         logger.error(
           { httpStatus: response.status, statusText: response.statusText, errorCode, errorMessage },

@@ -1,11 +1,13 @@
 # Coverage Agent 1 - Strict Instructions
 
 ## Mission
+
 Cover **97 uncovered branches** across 2 workspaces: `apps/research-agent` (76) and `packages/llm-prompts` (21).
 
 ## Your Scope (DO NOT TOUCH ANYTHING ELSE)
 
 ### apps/research-agent (76 branches)
+
 ```
 src/domain/research/formatLlmError.ts:140
 src/domain/research/usecases/extractModelPreferences.ts:87,132,168
@@ -23,6 +25,7 @@ src/domain/research/utils/htmlGenerator.ts:417
 ```
 
 ### packages/llm-prompts (21 branches)
+
 ```
 src/calendar/calendarActionExtractionPrompt.ts:41
 src/calendar/contextSchemas.ts:19,22,25
@@ -39,10 +42,13 @@ src/shared/contextSchemas.ts:89
 For EACH uncovered branch line, decide:
 
 ### Option A: Write a Test
+
 Use when the branch CAN be triggered via test setup (fake repositories, mock services, etc.)
 
 ### Option B: Add v8 Ignore Comment
+
 Use when the branch CANNOT be tested due to:
+
 - TypeScript type narrowing (`ts-type`)
 - Fake/mock cannot produce required state (`test-infra`)
 - Auth middleware tested elsewhere (`auth-guard`)
@@ -77,12 +83,14 @@ node scripts/verify-v8-ignore.mjs --all 2>&1 | grep -E "apps/research-agent|pack
 ## Exit Criteria (ALL MUST PASS)
 
 1. **Zero uncovered branches in your scope:**
+
    ```bash
    node scripts/verify-v8-ignore.mjs --all 2>&1 | grep -E "apps/research-agent|packages/llm-prompts"
    # Must return empty
    ```
 
 2. **Workspace verification passes:**
+
    ```bash
    pnpm -w run verify:workspace:tracked research-agent
    pnpm -w run verify:workspace:tracked llm-prompts
@@ -113,7 +121,7 @@ node scripts/verify-v8-ignore.mjs --all 2>&1 | grep -E "apps/research-agent|pack
 3. **DO NOT use v8 ignore without valid category**
 4. **DO NOT commit until exit criteria pass**
 5. **DO NOT run full CI** - only verify your workspaces
-6. **DO NOT touch**: apps/*, workers/*, other packages/*
+6. **DO NOT touch**: apps/_, workers/_, other packages/\*
 
 ---
 

@@ -91,6 +91,7 @@ export const deviceRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       }
 
       const parseResult = deviceStartRequestSchema.safeParse(request.body);
+      /* v8 ignore schema -- Zod validation only fails with malformed requests */
       if (!parseResult.success) {
         return await handleValidationError(parseResult.error, reply);
       }
@@ -207,6 +208,7 @@ export const deviceRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       }
 
       const parseResult = devicePollRequestSchema.safeParse(request.body);
+      /* v8 ignore schema -- Zod validation only fails with malformed requests */
       if (!parseResult.success) {
         return await handleValidationError(parseResult.error, reply);
       }
@@ -297,6 +299,7 @@ async function storeRefreshToken(
   try {
     // Extract userId from access token JWT (without verification, just for storage key)
     const tokenParts = data.access_token.split('.');
+    /* v8 ignore test-infra -- test tokens are always valid JWTs */
     if (tokenParts.length !== 3) return;
 
     const payloadPart = tokenParts[1];

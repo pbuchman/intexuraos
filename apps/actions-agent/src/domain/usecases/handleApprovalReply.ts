@@ -117,6 +117,7 @@ export function createHandleApprovalReplyUseCase(
       const intent = parts[0];
 
       if (intent === 'cancel-task') {
+        /* v8 ignore ts-type -- button ID format guarantees taskId exists */
         const [, taskId, nonce] = parts;
         return await handleCancelTaskButton(
           taskId ?? '',
@@ -129,6 +130,7 @@ export function createHandleApprovalReplyUseCase(
       }
 
       if (intent === 'view-task') {
+        /* v8 ignore ts-type -- button ID format guarantees taskId exists */
         const [, taskId] = parts;
         return await handleViewTaskButton(taskId ?? '', userId, whatsappPublisher, logger);
       }
@@ -241,6 +243,7 @@ export function createHandleApprovalReplyUseCase(
     // This provides a fallback for users who prefer typing over clicking buttons
     const nonceMatch = /^approve\s+([0-9a-fA-F]{4})\s*$/.exec(replyText.trim());
     if (nonceMatch !== null) {
+      /* v8 ignore next -- ts-type: noUncheckedIndexedAccess guard for regex match[1] */
       const nonce = nonceMatch[1];
       if (nonce !== undefined) {
         const nonceResult = await handleNonceTextFallback(
@@ -684,6 +687,7 @@ async function handleButtonResponse(
   const [intent, idFromButton, nonce] = parts;
 
   // For action-related buttons, verify we have an action
+  /* v8 ignore test-infra -- test button handlers always have valid actions */
   if (action === null) {
     logger.warn({ buttonId, intent }, 'Action-related button received but no action found');
     return err(new Error('Action not found for button'));

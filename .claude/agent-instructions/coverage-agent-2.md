@@ -1,11 +1,13 @@
 # Coverage Agent 2 - Strict Instructions
 
 ## Mission
+
 Cover **99 uncovered branches** across 2 workspaces: `apps/code-agent` (51) and `workers/orchestrator` (48).
 
 ## Your Scope (DO NOT TOUCH ANYTHING ELSE)
 
 ### apps/code-agent (51 branches)
+
 ```
 src/domain/services/linearIssueService.ts:145
 src/infra/webhookValidation.ts:90
@@ -19,6 +21,7 @@ src/routes/webhookRoutes.ts:124,127,165,237,241,290,316,478,503
 ```
 
 ### workers/orchestrator (48 branches)
+
 ```
 src/main.ts:52,54,220
 src/routes.ts:36,43,120,121,122,123,124,125
@@ -38,10 +41,13 @@ src/services/worktree-manager.ts:58,81,96,99,150,174
 For EACH uncovered branch line, decide:
 
 ### Option A: Write a Test
+
 Use when the branch CAN be triggered via test setup (fake repositories, mock services, etc.)
 
 ### Option B: Add v8 Ignore Comment
+
 Use when the branch CANNOT be tested due to:
+
 - TypeScript type narrowing (`ts-type`)
 - Fake/mock cannot produce required state (`test-infra`)
 - Auth middleware tested elsewhere (`auth-guard`)
@@ -69,6 +75,7 @@ cd apps/code-agent && pnpm vitest run src/__tests__/<file>.test.ts --coverage
 ```
 
 ### Check remaining uncovered branches in your scope
+
 ```bash
 node scripts/verify-v8-ignore.mjs --all 2>&1 > /tmp/v8-check.txt
 rg "apps/code-agent|workers/orchestrator" /tmp/v8-check.txt
@@ -79,6 +86,7 @@ rg "apps/code-agent|workers/orchestrator" /tmp/v8-check.txt
 ## Exit Criteria (ALL MUST PASS)
 
 1. **Zero uncovered branches in your scope:**
+
    ```bash
    node scripts/verify-v8-ignore.mjs --all 2>&1 > /tmp/v8-check.txt
    rg "apps/code-agent|workers/orchestrator" /tmp/v8-check.txt
@@ -86,6 +94,7 @@ rg "apps/code-agent|workers/orchestrator" /tmp/v8-check.txt
    ```
 
 2. **Workspace verification passes:**
+
    ```bash
    pnpm -w run verify:workspace:tracked code-agent
    pnpm -w run verify:workspace:tracked orchestrator

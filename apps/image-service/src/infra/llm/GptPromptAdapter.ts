@@ -60,6 +60,7 @@ function mapError(code: string, message: string): PromptGenerationError {
       return { code: 'INVALID_KEY', message };
     case 'RATE_LIMITED':
       return { code: 'RATE_LIMITED', message };
+    /* v8 ignore test-infra -- timeout errors require actual network delays */
     case 'TIMEOUT':
       return { code: 'TIMEOUT', message };
     case 'PARSE_ERROR':

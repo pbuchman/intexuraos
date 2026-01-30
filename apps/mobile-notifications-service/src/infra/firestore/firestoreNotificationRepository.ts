@@ -199,6 +199,7 @@ export class FirestoreNotificationRepository implements NotificationRepository {
         // Update cursor for next iteration (tracks DB position, not filtered results)
         if (docs.length > 0) {
           const lastDoc = docs[docs.length - 1];
+          /* v8 ignore ts-type -- docs.length > 0 check guarantees lastDoc exists */
           if (lastDoc !== undefined) {
             const lastData = lastDoc.data() as NotificationDoc;
             currentCursor = encodeCursor(lastData.receivedAt, lastDoc.id);
