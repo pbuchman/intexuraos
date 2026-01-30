@@ -158,6 +158,10 @@
     "user_usage": {
       "owner": "code-agent",
       "description": "User rate limiting and cost tracking for code tasks (concurrent tasks, hourly limits, daily/monthly cost caps)"
+    },
+    "predev-state": {
+      "owner": "predev-lifecycle",
+      "description": "Pre-development environment state tracking (VM status, IP, branch, activity)"
     }
   }
 }
