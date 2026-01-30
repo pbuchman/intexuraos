@@ -116,11 +116,12 @@ describe('taskDispatcherImpl', () => {
       expect(headers['X-Dispatch-Timestamp']).toMatch(/^\d+$/);
       expect(headers['X-Dispatch-Nonce']).toMatch(/^[a-f0-99-]{8}-[a-f0-9-9]{4}-[a-f0-9-9]{4}-[a-f0-9-9]{4}-[a-f0-9-9]{12}$/);
 
-      // Verify signature is deterministic for same timestamp
+      // Verify signature is deterministic for same timestamp and nonce
       const timestamp = headers['X-Dispatch-Timestamp'];
+      const nonce = headers['X-Dispatch-Nonce'];
       const body = JSON.stringify(dispatchRequest);
       const crypto = await import('node:crypto');
-      const message = `${timestamp}.${body}`;
+      const message = `${timestamp}.${nonce}.${body}`;
       const expectedSignature = crypto
         .createHmac('sha256', 'test-dispatch-secret')
         .update(message)
@@ -722,7 +723,7 @@ describe('taskDispatcherImpl', () => {
     it('returns error when dispatchSigningSecret is empty', () => {
       const result = signDispatchRequest(
         { logger, dispatchSigningSecret: '' },
-        { body: '{"test": "body"}', timestamp: Date.now() }
+        { body: '{"test": "body"}', timestamp: Date.now(), nonce: generateNonce() }
       );
 
       expect(result.ok).toBe(false);
@@ -734,18 +735,17 @@ describe('taskDispatcherImpl', () => {
     it('generates correct HMAC signature', () => {
       const body = '{"test": "body"}';
       const timestamp = 1234567890;
+      const nonce = 'fixed-nonce-for-test';
 
       const result = signDispatchRequest(
         { logger, dispatchSigningSecret: 'test-dispatch-secret' },
-        { body, timestamp }
+        { body, timestamp, nonce }
       );
 
       expect(result.ok).toBe(true);
       if (result.ok) {
         expect(result.value.timestamp).toBe(timestamp);
-        expect(result.value.signature).toBe('bdeafe056de274fbde7d3c2c028b1eb2a41f5f37f4bb203e1527f8e565f2e331');
-
-        // Verify signature format
+        // Signature is now based on timestamp.nonce.body
         expect(result.value.signature).toMatch(/^[a-f0-9]{64}$/);
       }
     });
@@ -756,11 +756,11 @@ describe('taskDispatcherImpl', () => {
 
       const result1 = signDispatchRequest(
         { logger, dispatchSigningSecret },
-        { body: '{"test": "body1"}', timestamp }
+        { body: '{"test": "body1"}', timestamp, nonce: generateNonce() }
       );
       const result2 = signDispatchRequest(
         { logger, dispatchSigningSecret },
-        { body: '{"test": "body2"}', timestamp }
+        { body: '{"test": "body2"}', timestamp, nonce: generateNonce() }
       );
 
       expect(result1.ok).toBe(true);

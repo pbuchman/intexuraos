@@ -58,17 +58,27 @@ export class TmuxManager {
     };
     const systemPrompt = this.buildSystemPrompt(systemPromptParams);
 
-    // Escape prompt for shell
-    const escapedPrompt = this.escapeForShell(systemPrompt);
+    // Write system prompt and task prompt to files
+    const systemPromptFile = `${this.config.logBasePath}/${taskId}-system.txt`;
+    const taskPromptFile = `${this.config.logBasePath}/${taskId}-task.txt`;
+    const runScriptFile = `${this.config.logBasePath}/${taskId}-run.sh`;
+    const { writeFile } = await import('node:fs/promises');
+    await writeFile(systemPromptFile, systemPrompt, 'utf-8');
+    await writeFile(taskPromptFile, prompt, 'utf-8');
 
-    // Build claude command
+    // Build claude command and write to script file
+    // Using a script file avoids shell quote-nesting issues with command substitution
     const claudePath = this.config.claudePath ?? 'claude';
-    const claudeCommand = `${claudePath} --system-prompt '${escapedPrompt}' --print`;
+    const scriptContent = `#!/bin/bash
+cd '${worktreePath}' || exit 1
+cat '${taskPromptFile}' | ${claudePath} --system-prompt "$(cat '${systemPromptFile}')" --print --dangerously-skip-permissions 2>&1 | tee '${logFilePath}'
+`;
+    await writeFile(runScriptFile, scriptContent, { encoding: 'utf-8', mode: 0o755 });
 
     // Build tmux command (sanitize taskId for shell safety)
     const sanitizedTaskId = this.sanitizeTaskId(taskId);
     const sessionName = `cc-task-${sanitizedTaskId}`;
-    const tmuxCommand = `tmux new-session -d -s ${sessionName} "cd '${worktreePath}' && ${claudeCommand} 2>&1 | tee '${logFilePath}'"`;
+    const tmuxCommand = `tmux new-session -d -s ${sessionName} '${runScriptFile}'`;
 
     try {
       await this.execAsync(tmuxCommand);
