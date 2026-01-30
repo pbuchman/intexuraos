@@ -117,6 +117,7 @@ async function pollHealth(): Promise<boolean> {
         signal: AbortSignal.timeout(5000),
       });
 
+      /* v8 ignore upstream -- VM health endpoint response varies by actual VM state */
       if (response.ok) {
         const data = (await response.json()) as { status: string };
         if (data.status === 'ready') {

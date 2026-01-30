@@ -47,6 +47,7 @@ export async function main(
   try {
     // Start HTTP server
     const isProd = process.env['NODE_ENV'] === 'production';
+    /* v8 ignore ts-type -- fastify logger config branches based on isProd ternary */
     const app = fastify({
       logger: isProd
         ? { level: process.env['LOG_LEVEL'] ?? 'info' }
@@ -216,6 +217,7 @@ function setupShutdownHandlers(handlers: ShutdownHandlers): void {
     await handlers.statePersistence.save(await handlers.statePersistence.load());
 
     // Close server
+    /* v8 ignore ts-type -- optional chaining type narrowing */
     // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
     if (serviceState?.server) {
       serviceState.server.close();

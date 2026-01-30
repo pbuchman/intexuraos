@@ -1,6 +1,7 @@
 import admin from 'firebase-admin';
 import { logger } from './logger.js';
 
+/* v8 ignore module-init -- Firebase initialization runs once at module load */
 if (admin.apps.length === 0) {
   admin.initializeApp();
 }

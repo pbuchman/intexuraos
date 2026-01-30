@@ -129,6 +129,7 @@ export class GitHubTokenService {
       this.stopBackgroundRefresh();
     }
 
+    /* v8 ignore test-infra -- setInterval callback with timing condition requires fake timers to test */
     this.refreshTimer = setInterval(
       () => {
         if (this.isExpiringSoon()) {

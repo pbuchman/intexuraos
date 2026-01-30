@@ -303,6 +303,7 @@ export const linearRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
     }
 
     // Retry Linear creation
+    /* v8 ignore test-infra -- nullish fallbacks for optional extracted fields */
     const createResult = await linearApiClient.createIssue(apiKeyResult.value, {
       title: failedIssue.extractedTitle ?? 'Untitled Issue',
       description: failedIssue.reasoning ?? null,

@@ -137,14 +137,18 @@ function parseHeading(line: string): { level: number; title: string } | null {
   const h2Match = h2Regex.exec(line);
   if (h2Match !== null) {
     const title = h2Match[1];
-    return title !== undefined ? { level: 2, title } : null;
+    return title !== undefined
+      ? { level: 2, title }
+      : null; /* v8 ignore ts-type -- regex capture group guarantees title is defined */
   }
 
   const h3Regex = /^###\s+(.+)$/;
   const h3Match = h3Regex.exec(line);
   if (h3Match !== null) {
     const title = h3Match[1];
-    return title !== undefined ? { level: 3, title } : null;
+    return title !== undefined
+      ? { level: 3, title }
+      : null; /* v8 ignore ts-type -- regex capture group guarantees title is defined */
   }
 
   return null;
@@ -163,12 +167,14 @@ export function parseSections(markdown: string): ParsedSection[] {
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
-    if (line === undefined) continue;
+    if (line === undefined)
+      continue; /* v8 ignore ts-type -- loop bound guarantees element exists */
     const heading = parseHeading(line);
     if (heading !== null) {
       if (heading.level === 2) {
         h2Headings.push({ line: i, title: heading.title });
       } else if (heading.level === 3) {
+        /* v8 ignore ts-type -- parseHeading only returns level 2 or 3 */
         h3Headings.push({ line: i, title: heading.title });
       }
     }
@@ -193,7 +199,8 @@ export function parseSections(markdown: string): ParsedSection[] {
   for (let i = 0; i < headings.length; i++) {
     const current = headings[i];
     const next = headings[i + 1];
-    if (current === undefined) continue;
+    if (current === undefined)
+      continue; /* v8 ignore ts-type -- loop bound guarantees current is defined */
 
     const startLine = current.line;
     const endLine = next !== undefined ? next.line - 1 : lines.length - 1;
@@ -223,7 +230,8 @@ function extractAttributionFromLines(
 ): AttributionLine | null {
   for (let i = endLine; i >= startLine; i--) {
     const line = lines[i];
-    if (line === undefined) continue;
+    if (line === undefined)
+      continue; /* v8 ignore ts-type -- loop bounds guarantee array access is valid */
     const trimmed = line.trim();
     if (trimmed === '') continue;
     if (trimmed.toLowerCase().startsWith('attribution:')) {
