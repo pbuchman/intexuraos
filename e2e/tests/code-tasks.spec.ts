@@ -5,7 +5,7 @@
  * using the mock Claude server.
  */
 
-import { describe, it, expect, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { createTestClient, type CodeTask } from '../helpers/client.js';
 import { waitForTaskStatus, sleep } from '../helpers/wait.js';
 import { cleanupBranches, cleanupPRs } from '../helpers/cleanup.js';
@@ -14,6 +14,23 @@ describe('Code Tasks E2E', () => {
   const client = createTestClient();
   const createdBranches: string[] = [];
   const createdPRs: string[] = [];
+
+  beforeAll(async () => {
+    // Set up worker settings for E2E test user pointing to mock-claude
+    const mockClaudeUrl = 'http://127.0.0.1:8090';
+    const testSigningSecret = 'test-signing-secret';
+
+    const macConfig = await client.patch('/code/worker-settings/mac', {
+      url: mockClaudeUrl,
+      cfAccessClientId: 'test-cf-id',
+      cfAccessClientSecret: 'test-cf-secret',
+      dispatchSigningSecret: testSigningSecret,
+    });
+
+    if (macConfig.status !== 200) {
+      throw new Error(`Failed to configure mac worker: ${JSON.stringify(macConfig.data)}`);
+    }
+  });
 
   afterAll(async () => {
     // Clean up any created resources
