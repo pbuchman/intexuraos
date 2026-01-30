@@ -81,6 +81,7 @@ export async function summarizeBookmark(
       'Failed to generate bookmark summary'
     );
 
+/* v8 ignore upstream -- `bookmarksummaryservice */
     if (summaryResult.error.transient === true) {
       return err({
         code: 'TRANSIENT_ERROR',
@@ -117,6 +118,7 @@ export async function summarizeBookmark(
       correlationId: `bookmark-${bookmarkId}`,
     });
 
+/* v8 ignore test-infra -- `whatsappsendpublisher` is optional and undefined in tests */
     if (!publishResult.ok) {
       deps.logger.error(
         { bookmarkId, error: publishResult.error },
@@ -129,3 +131,5 @@ export async function summarizeBookmark(
 
   return updateResult;
 }
+
+

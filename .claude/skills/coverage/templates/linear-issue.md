@@ -44,9 +44,9 @@
    - Determine if truly unreachable OR testable with proper setup
 
 3. **If truly unreachable:**
-   - Add entry to `.claude/skills/coverage/unreachable/<app-or-package>.md`
-   - Follow the format in that file
-   - Include CODE SNIPPET (not just line numbers)
+   - Add inline comment above uncovered line: `/* v8 ignore <CATEGORY> -- reason */`
+   - Use valid category from [canonical-categories.md](../reference/canonical-categories.md)
+   - Run `pnpm run verify:v8-ignore` to confirm valid
 
 4. **If testable:**
    - Write tests in `<test-file-path>`
@@ -70,7 +70,7 @@
 
 ## Acceptance Criteria
 
-- [ ] Branch is covered by test OR documented in unreachable file
+- [ ] Branch is covered by test OR has inline `/* v8 ignore <CATEGORY> -- reason */` comment
 - [ ] `pnpm run ci:tracked` passes locally
 - [ ] PR CI checks pass
 - [ ] No coverage threshold modifications

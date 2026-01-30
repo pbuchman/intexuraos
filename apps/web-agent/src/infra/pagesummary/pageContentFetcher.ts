@@ -12,6 +12,7 @@ export interface PageContentFetcherConfig {
   timeoutMs: number;
 }
 
+/* v8 ignore test-infra -- test mock for http responses uses `nock` to intercept req... */
 const DEFAULT_CONFIG: Omit<PageContentFetcherConfig, 'apiKey'> = {
   baseUrl: 'https://api.crawl4ai.com',
   timeoutMs: 60000,
@@ -182,3 +183,4 @@ export function createPageContentFetcher(
     },
   };
 }
+

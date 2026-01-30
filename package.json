@@ -52,6 +52,7 @@
     "verify:no-console": "node scripts/verify-no-console.mjs",
     "verify:reply-send": "node scripts/verify-reply-send.mjs",
     "verify:sentry-logging": "node scripts/verify-sentry-logging.mjs",
+    "verify:v8-ignore": "node scripts/verify-v8-ignore.mjs",
     "verify:llm-architecture": "pnpm tsx scripts/verify-llm-architecture.ts",
     "verify:workspace": "./scripts/verify-workspace.sh",
     "verify:workspace:tracked": "node scripts/verify-workspace-tracked.mjs",

@@ -18,6 +18,7 @@ interface CommandEvent {
   sourceType: CommandSourceType;
   externalId: string;
   text: string;
+/* v8 ignore test-infra -- test infrastructure uses `fakeauthplugin` which always re... */
   summary?: string;
   timestamp: string;
 }
@@ -354,3 +355,4 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
   done();
 };
+

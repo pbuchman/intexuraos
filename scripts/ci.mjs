@@ -52,6 +52,7 @@ const phases = [
       { name: 'no-console', script: 'verify-no-console.mjs' },
       { name: 'reply-send', script: 'verify-reply-send.mjs' },
       { name: 'sentry-logging', script: 'verify-sentry-logging.mjs' },
+      { name: 'v8-ignore', script: 'verify-v8-ignore.mjs' },
       { name: 'llm-architecture', run: 'npx tsx scripts/verify-llm-architecture.ts' },
     ],
   },

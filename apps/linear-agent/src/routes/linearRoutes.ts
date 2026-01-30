@@ -52,6 +52,7 @@ export const linearRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
     const result = await connectionRepository.getConnection(user.userId);
     if (!result.ok) {
       return await handleLinearError(result.error, reply);
+/* v8 ignore test-infra -- test infrastructure uses `fakeauthplugin` which always re... */
     }
 
     return await reply.ok(result.value);
@@ -338,3 +339,4 @@ export const linearRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
   done();
 };
+

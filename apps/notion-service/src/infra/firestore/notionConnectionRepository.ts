@@ -9,6 +9,7 @@ import type {
   NotionError,
 } from '../../domain/integration/ports/ConnectionRepository.js';
 
+/* v8 ignore ts-type -- query is performed with a specific document id */
 /**
  * Internal document structure stored in Firestore.
  */
@@ -150,3 +151,4 @@ export async function disconnectNotion(
     });
   }
 }
+

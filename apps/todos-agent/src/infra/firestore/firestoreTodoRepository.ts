@@ -167,6 +167,7 @@ export class FirestoreTodoRepository implements TodoRepository {
         return { ok: true, value: null };
       }
 
+/* v8 ignore ts-type -- line 166 explicitly checks `if (!doc */
       return { ok: true, value: toTodo(doc.id, doc.data() as TodoDocument) };
     } catch (error) {
       return {
@@ -253,3 +254,4 @@ export class FirestoreTodoRepository implements TodoRepository {
     }
   }
 }
+

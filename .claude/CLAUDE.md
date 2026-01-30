@@ -643,6 +643,23 @@ gcloud builds log <id> --stream --region=<region>
 - Routes: integration via `app.inject()`. Domain: unit tests.
 - **Coverage: 95%. NEVER modify thresholds — write tests.**
 
+### Coverage Exemptions
+
+**RULE:** All uncovered branches must have either:
+
+1. A `/* v8 ignore <CATEGORY> -- reason */` comment with valid category, OR
+2. An active Linear issue tracking it
+
+**Valid categories:** `ts-type`, `regex`, `module-init`, `async-timing`, `test-infra`, `upstream`, `module-mock`, `schema`, `source-map`, `auth-guard`
+
+**Format:** `/* v8 ignore <CATEGORY> -- <explanation> */`
+
+**Validation:** `pnpm run verify:v8-ignore` (runs in CI Static Validation phase)
+
+**NEVER** add v8 ignore comments without a valid category. CI will fail.
+
+**Reference:** `.claude/skills/coverage/reference/canonical-categories.md`
+
 ### Web App Exception
 
 - Coverage threshold not enforced (planned refactoring)

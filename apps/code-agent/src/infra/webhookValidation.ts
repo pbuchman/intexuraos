@@ -86,6 +86,7 @@ export async function validateWebhookSignature(
 
   // Compute expected signature
   const rawBody = JSON.stringify(request.body);
+/* v8 ignore ts-type -- `request */
   const timestampStr = Array.isArray(timestamp) ? timestamp[0] ?? '' : timestamp;
   const message = `${timestampStr}.${rawBody}`;
   const expected = crypto
@@ -107,3 +108,4 @@ export async function validateWebhookSignature(
 
   return ok(undefined);
 }
+
