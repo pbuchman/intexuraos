@@ -704,16 +704,20 @@ async function main() {
   }
 
   if (missingReport.length > 0) {
-    console.log(`\n📋 ${missingReport.length} uncovered branch(es) without exemption:\n`);
+    console.log(`\n❌ ${missingReport.length} uncovered branch(es) without exemption:\n`);
     missingReport.slice(0, 50).forEach((m) => {
       console.log(`  ${m.file}:${m.line}`);
     });
     if (missingReport.length > 50) {
-      console.log(`  ... and ${missingReport.length - 50} more`);
+      console.log(`  ... and ${missingReport.length - 50} more (run with --all to see all)`);
     }
+    console.log(`\nAdd /* v8 ignore <CATEGORY> -- reason */ or write tests.`);
+    console.log(`Valid categories: ts-type, regex, module-init, async-timing, test-infra, upstream, module-mock, schema, source-map, auth-guard`);
   }
 
-  process.exit(allErrors.length > 0 ? 1 : 0);
+  const hasErrors = allErrors.length > 0;
+  const hasMissing = missingReport.length > 0;
+  process.exit(hasErrors || hasMissing ? 1 : 0);
 }
 
 main();
