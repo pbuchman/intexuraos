@@ -169,47 +169,6 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         return { error: 'Failed to create action' };
       }
 
-      const promptFromPayload =
-        body.payload !== undefined && typeof body.payload['prompt'] === 'string'
-          ? body.payload['prompt']
-          : body.title;
-
-      const event: ActionCreatedEvent = {
-        type: 'action.created',
-        actionId: action.id,
-        userId: body.userId,
-        commandId: body.commandId,
-        actionType: body.type,
-        title: body.title,
-        payload: {
-          prompt: promptFromPayload,
-          confidence: body.confidence,
-        },
-        timestamp: new Date().toISOString(),
-      };
-
-      request.log.info(
-        {
-          actionId: action.id,
-          actionType: body.type,
-        },
-        'Publishing action.created event'
-      );
-
-      const publishResult = await services.actionEventPublisher.publishActionCreated(event);
-
-      if (!publishResult.ok) {
-        request.log.error(
-          {
-            actionId: action.id,
-            error: publishResult.error.message,
-          },
-          'Failed to publish action.created event'
-        );
-      } else {
-        request.log.info({ actionId: action.id }, 'Action event published successfully');
-      }
-
       reply.status(201);
       return {
         success: true,
