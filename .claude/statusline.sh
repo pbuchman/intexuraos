@@ -241,7 +241,7 @@ if [ -n "$hooks_dir" ]; then
     [ "$b_gcloud" -gt 0 ] && breakdown="${breakdown}gc:${b_gcloud} "
     breakdown=$(echo "$breakdown" | sed 's/ $//')
 
-    hook_metrics="🛡️ ${total} | ✗${blocked} (${breakdown})"
+    hook_metrics="🛡️ Cmds:${total} | ✗${blocked} (${breakdown})"
   fi
 fi
 
@@ -257,9 +257,6 @@ if [ -n "$model_version" ] && [ "$model_version" != "null" ]; then
 fi
 if [ -n "$cc_version" ] && [ "$cc_version" != "null" ]; then
   printf '  📟 %sv%s%s' "$(cc_version_color)" "$cc_version" "$(rst)"
-fi
-if [ -n "$output_style" ] && [ "$output_style" != "null" ]; then
-  printf '  🎨 %s%s%s' "$(style_color)" "$output_style" "$(rst)"
 fi
 if [ -n "$api_display" ]; then
   printf '  🌐 %s%s%s' "$(api_color)" "$api_display" "$(rst)"
