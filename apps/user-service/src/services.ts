@@ -6,7 +6,7 @@ import { LlmModels } from '@intexuraos/llm-contract';
 import { createEncryptor, type Encryptor } from './infra/encryption.js';
 import type { PricingContext } from '@intexuraos/llm-pricing';
 import type { Logger } from '@intexuraos/common-core';
-import pino from 'pino';
+import { createAppLogger } from '@intexuraos/infra-sentry';
 import type { Auth0Client, AuthTokenRepository } from './domain/identity/index.js';
 import type { LlmValidator, UserSettingsRepository } from './domain/settings/index.js';
 import type { OAuthConnectionRepository, GoogleOAuthClient } from './domain/oauth/index.js';
@@ -15,7 +15,7 @@ import type { OAuthConnectionRepository, GoogleOAuthClient } from './domain/oaut
  * Silent logger used when no logger is provided to initializeServices.
  * LLM validation is skipped in production if logger is not available.
  */
-const silentLogger: Logger = pino({ level: 'silent' });
+const silentLogger: Logger = createAppLogger({ name: 'user-service' });
 import {
   FirestoreAuthTokenRepository,
   FirestoreUserSettingsRepository,

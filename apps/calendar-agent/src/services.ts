@@ -16,12 +16,9 @@ import { createCalendarPreviewRepository } from './infra/firestore/calendarPrevi
 import { createCalendarActionExtractionService } from './infra/gemini/calendarActionExtractionService.js';
 import { createUserServiceClient } from '@intexuraos/internal-clients';
 import type { IPricingContext } from '@intexuraos/llm-pricing';
-import pino from 'pino';
+import { createAppLogger } from '@intexuraos/infra-sentry';
 
-const logger = pino({
-  level: process.env['LOG_LEVEL'] ?? 'info',
-  name: 'calendar-agent',
-});
+const logger = createAppLogger({ name: 'calendar-agent' });
 
 export type { IPricingContext as PricingContext };
 

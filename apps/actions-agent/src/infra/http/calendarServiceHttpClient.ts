@@ -5,7 +5,8 @@ import type {
   ProcessCalendarRequest,
   CalendarPreview,
 } from '../../domain/ports/calendarServiceClient.js';
-import pino, { type Logger } from 'pino';
+import type { Logger } from 'pino';
+import { createAppLogger } from '@intexuraos/infra-sentry';
 
 export interface CalendarServiceHttpClientConfig {
   baseUrl: string;
@@ -13,10 +14,7 @@ export interface CalendarServiceHttpClientConfig {
   logger?: Logger;
 }
 
-const defaultLogger = pino({
-  level: process.env['LOG_LEVEL'] ?? 'info',
-  name: 'calendarServiceHttpClient',
-});
+const defaultLogger = createAppLogger({ name: 'calendarServiceHttpClient' });
 
 interface ApiResponse {
   success: boolean;

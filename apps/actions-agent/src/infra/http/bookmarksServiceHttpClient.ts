@@ -7,7 +7,7 @@ import type {
   CreateBookmarkError,
   ForceRefreshBookmarkResponse,
 } from '../../domain/ports/bookmarksServiceClient.js';
-import { type Logger } from 'pino';
+import type { Logger } from 'pino';
 
 export interface BookmarksServiceHttpClientConfig {
   baseUrl: string;

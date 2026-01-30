@@ -13,7 +13,7 @@
  */
 import { BatchClient } from '@speechmatics/batch-client';
 import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
-import pino from 'pino';
+import { createAppLogger } from '@intexuraos/infra-sentry';
 import type {
   SpeechTranscriptionPort,
   TranscriptionApiCall,
@@ -24,7 +24,7 @@ import type {
   TranscriptionTextResult,
 } from '../../domain/whatsapp/index.js';
 
-const logger = pino({ name: 'speechmatics-adapter' });
+const logger = createAppLogger({ name: 'speechmatics-adapter' });
 
 /**
  * Type definitions for Speechmatics json-v2 response.

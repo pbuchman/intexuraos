@@ -2,15 +2,15 @@
  * WhatsApp Cloud API Message Sender.
  * Sends messages using the WhatsApp Business Cloud API.
  */
-import { err, getErrorMessage, getLogLevel, ok, type Result } from '@intexuraos/common-core';
-import pino from 'pino';
+import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
+import { createAppLogger } from '@intexuraos/infra-sentry';
 import type { WhatsAppMessageSender, WhatsAppInteractiveButton } from '../../domain/whatsapp/index.js';
 import type { WhatsAppError } from '../../domain/whatsapp/models/error.js';
 
 const WHATSAPP_API_BASE = 'https://graph.facebook.com/v22.0';
 const REQUEST_TIMEOUT_MS = 30000;
 
-const logger = pino({ name: 'whatsapp-sender', level: getLogLevel() });
+const logger = createAppLogger({ name: 'whatsapp-sender' });
 
 /**
  * WhatsApp Cloud API implementation of message sender.

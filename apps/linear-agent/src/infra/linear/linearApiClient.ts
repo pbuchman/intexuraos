@@ -19,9 +19,9 @@ import type {
   LinearError,
   IssueStateCategory,
 } from '../../domain/index.js';
-import pino from 'pino';
+import { createAppLogger } from '@intexuraos/infra-sentry';
 
-const logger = pino({ name: 'linear-api-client' });
+const logger = createAppLogger({ name: 'linear-api-client' });
 
 const CLIENT_TTL_MS = 5 * 60 * 1000;
 const DEDUP_TTL_MS = 10 * 1000;

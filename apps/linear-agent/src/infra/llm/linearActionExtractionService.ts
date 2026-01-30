@@ -15,7 +15,7 @@ import { formatZodErrors } from '@intexuraos/llm-utils';
 import type { UserServiceClient } from '@intexuraos/internal-clients';
 import type { LinearError } from '../../domain/index.js';
 import type { ExtractedIssueData } from '../../domain/index.js';
-import pino from 'pino';
+import type pino from 'pino';
 
 const MAX_DESCRIPTION_LENGTH = 2000;
 

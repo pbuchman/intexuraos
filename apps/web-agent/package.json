@@ -28,7 +28,7 @@
     "@fastify/swagger-ui": "^5.2.1",
     "cheerio": "^1.0.0",
     "fastify": "^5.1.0",
-    "pino": "^9.5.0"
+    "pino": "^10.1.0"
   },
   "devDependencies": {
     "@types/node": "^22.10.1",
