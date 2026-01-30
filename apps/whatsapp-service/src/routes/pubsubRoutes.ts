@@ -116,7 +116,7 @@ export function createPubsubRoutes(config: Config): FastifyPluginCallback {
         const fromHeader = request.headers.from;
         const isPubSubPush = typeof fromHeader === 'string' && fromHeader === 'noreply@google.com';
 
-        /* v8 ignore start -- test-infra: tests use internal auth header, not Pub/Sub push */
+        /* v8 ignore test-infra -- tests use internal auth header, not Pub/Sub push */
         if (isPubSubPush) {
           // Pub/Sub push: Cloud Run already validated OIDC token before request reached us
           request.log.info(
@@ -127,10 +127,10 @@ export function createPubsubRoutes(config: Config): FastifyPluginCallback {
             'Authenticated Pub/Sub push request (OIDC validated by Cloud Run)'
           );
         } else {
-          /* v8 ignore stop */
+          
           // Direct service call: validate x-internal-auth header
           const authResult = validateInternalAuth(request);
-          /* v8 ignore next 5 -- auth-guard: tests use valid internal auth */
+          /* v8 ignore auth-guard -- tests use valid internal auth */
           if (!authResult.valid) {
             request.log.warn(
               { reason: authResult.reason },
@@ -146,7 +146,7 @@ export function createPubsubRoutes(config: Config): FastifyPluginCallback {
         try {
           const decoded = Buffer.from(body.message.data, 'base64').toString('utf-8');
           eventData = JSON.parse(decoded) as SendMessageEvent;
-        /* v8 ignore next 5 -- test-infra: tests send valid base64 messages */
+        /* v8 ignore test-infra -- tests send valid base64 messages */
         } catch {
           request.log.error(
             { messageId: body.message.messageId },
@@ -156,7 +156,7 @@ export function createPubsubRoutes(config: Config): FastifyPluginCallback {
         }
 
         const parsedType = eventData.type as string;
-        /* v8 ignore next 4 -- test-infra: tests send correct event types */
+        /* v8 ignore test-infra -- tests send correct event types */
         if (parsedType !== 'whatsapp.message.send') {
           request.log.warn({ type: parsedType }, 'Unexpected event type');
           return await reply.fail('INVALID_REQUEST', 'Unexpected event type');
@@ -173,7 +173,7 @@ export function createPubsubRoutes(config: Config): FastifyPluginCallback {
 
         const { userMappingRepository } = getServices();
         const phoneResult = await userMappingRepository.findPhoneByUserId(eventData.userId);
-        /* v8 ignore next 10 -- test-infra: fake repository always succeeds */
+        /* v8 ignore test-infra -- fake repository always succeeds */
         if (!phoneResult.ok) {
           request.log.error(
             {
@@ -224,7 +224,7 @@ export function createPubsubRoutes(config: Config): FastifyPluginCallback {
           result = await messageSender.sendTextMessage(phoneNumber, eventData.message);
         }
 
-        /* v8 ignore next 11 -- test-infra: fake message sender always succeeds */
+        /* v8 ignore test-infra -- fake message sender always succeeds */
         if (!result.ok) {
           request.log.error(
             {
@@ -370,7 +370,7 @@ export function createPubsubRoutes(config: Config): FastifyPluginCallback {
         const fromHeader = request.headers.from;
         const isPubSubPush = typeof fromHeader === 'string' && fromHeader === 'noreply@google.com';
 
-        /* v8 ignore start -- test-infra: tests use internal auth header, not Pub/Sub push */
+        /* v8 ignore test-infra -- tests use internal auth header, not Pub/Sub push */
         if (isPubSubPush) {
           // Pub/Sub push: Cloud Run already validated OIDC token before request reached us
           request.log.info(
@@ -381,10 +381,10 @@ export function createPubsubRoutes(config: Config): FastifyPluginCallback {
             'Authenticated Pub/Sub push request (OIDC validated by Cloud Run)'
           );
         } else {
-          /* v8 ignore stop */
+          
           // Direct service call: validate x-internal-auth header
           const authResult = validateInternalAuth(request);
-          /* v8 ignore next 5 -- auth-guard: tests use valid internal auth */
+          /* v8 ignore auth-guard -- tests use valid internal auth */
           if (!authResult.valid) {
             request.log.warn(
               { reason: authResult.reason },
@@ -400,7 +400,7 @@ export function createPubsubRoutes(config: Config): FastifyPluginCallback {
         try {
           const decoded = Buffer.from(body.message.data, 'base64').toString('utf-8');
           eventData = JSON.parse(decoded) as MediaCleanupEvent;
-        /* v8 ignore next 5 -- test-infra: tests send valid base64 messages */
+        /* v8 ignore test-infra -- tests send valid base64 messages */
         } catch {
           request.log.error(
             { messageId: body.message.messageId },
@@ -410,7 +410,7 @@ export function createPubsubRoutes(config: Config): FastifyPluginCallback {
         }
 
         const parsedType = eventData.type as string;
-        /* v8 ignore next 4 -- test-infra: tests send correct event types */
+        /* v8 ignore test-infra -- tests send correct event types */
         if (parsedType !== 'whatsapp.media.cleanup') {
           request.log.warn({ type: parsedType }, 'Unexpected event type');
           return await reply.fail('INVALID_REQUEST', 'Unexpected event type');
@@ -518,16 +518,16 @@ export function createPubsubRoutes(config: Config): FastifyPluginCallback {
         const fromHeader = request.headers.from;
         const isPubSubPush = typeof fromHeader === 'string' && fromHeader === 'noreply@google.com';
 
-        /* v8 ignore start -- test-infra: tests use internal auth header, not Pub/Sub push */
+        /* v8 ignore test-infra -- tests use internal auth header, not Pub/Sub push */
         if (isPubSubPush) {
           request.log.info(
             { from: fromHeader, userAgent: request.headers['user-agent'] },
             'Authenticated Pub/Sub push request (OIDC validated by Cloud Run)'
           );
         } else {
-          /* v8 ignore stop */
+          
           const authResult = validateInternalAuth(request);
-          /* v8 ignore next 5 -- auth-guard: tests use valid internal auth */
+          /* v8 ignore auth-guard -- tests use valid internal auth */
           if (!authResult.valid) {
             request.log.warn(
               { reason: authResult.reason },
@@ -543,7 +543,7 @@ export function createPubsubRoutes(config: Config): FastifyPluginCallback {
         try {
           const decoded = Buffer.from(body.message.data, 'base64').toString('utf-8');
           eventData = JSON.parse(decoded) as TranscribeAudioEvent;
-        /* v8 ignore next 5 -- test-infra: tests send valid base64 messages */
+        /* v8 ignore test-infra -- tests send valid base64 messages */
         } catch {
           request.log.error(
             { messageId: body.message.messageId },
@@ -553,7 +553,7 @@ export function createPubsubRoutes(config: Config): FastifyPluginCallback {
         }
 
         const parsedType = eventData.type as string;
-        /* v8 ignore next 4 -- test-infra: tests send correct event types */
+        /* v8 ignore test-infra -- tests send correct event types */
         if (parsedType !== 'whatsapp.audio.transcribe') {
           request.log.warn({ type: parsedType }, 'Unexpected event type');
           return await reply.ok({});
@@ -653,16 +653,16 @@ export function createPubsubRoutes(config: Config): FastifyPluginCallback {
         const fromHeader = request.headers.from;
         const isPubSubPush = typeof fromHeader === 'string' && fromHeader === 'noreply@google.com';
 
-        /* v8 ignore start -- test-infra: tests use internal auth header, not Pub/Sub push */
+        /* v8 ignore test-infra -- tests use internal auth header, not Pub/Sub push */
         if (isPubSubPush) {
           request.log.info(
             { from: fromHeader, userAgent: request.headers['user-agent'] },
             'Authenticated Pub/Sub push request (OIDC validated by Cloud Run)'
           );
         } else {
-          /* v8 ignore stop */
+          
           const authResult = validateInternalAuth(request);
-          /* v8 ignore next 5 -- auth-guard: tests use valid internal auth */
+          /* v8 ignore auth-guard -- tests use valid internal auth */
           if (!authResult.valid) {
             request.log.warn(
               { reason: authResult.reason },
@@ -678,7 +678,7 @@ export function createPubsubRoutes(config: Config): FastifyPluginCallback {
         try {
           const decoded = Buffer.from(body.message.data, 'base64').toString('utf-8');
           eventData = JSON.parse(decoded) as WebhookProcessEvent;
-        /* v8 ignore next 5 -- test-infra: tests send valid base64 messages */
+        /* v8 ignore test-infra -- tests send valid base64 messages */
         } catch {
           request.log.error(
             { messageId: body.message.messageId },

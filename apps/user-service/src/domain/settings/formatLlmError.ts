@@ -135,7 +135,7 @@ function tryParseOpenaiError(raw: string): string | null {
     /429.*Rate limit.*on\s+(\w+[^:]*?):\s*Limit\s+(\d+),\s*Used\s+(\d+),\s*Requested\s+(\d+)\./i;
   const rateLimitMatch = rateLimitRegex.exec(raw);
 
-  /* v8 ignore next 3 -- ts-type: destructuring regex match with noUncheckedIndexedAccess */
+  /* v8 ignore ts-type -- destructuring regex match with noUncheckedIndexedAccess */
   if (rateLimitMatch !== null) {
     const [, limitType, limit, used, requested] = rateLimitMatch;
     return `${limitType ?? 'Tokens'}: ${used ?? '?'}/${limit ?? '?'} used, need ${requested ?? '?'} more`;

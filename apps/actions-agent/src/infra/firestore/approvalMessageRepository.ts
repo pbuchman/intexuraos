@@ -18,7 +18,7 @@ interface ApprovalMessageDoc {
 }
 
 // Coverage is provided by integration tests via the Pub/Sub handler in internalRoutes.ts.
-/* v8 ignore start */
+/* v8 ignore test-infra -- block coverage */
 function toApprovalMessage(id: string, doc: ApprovalMessageDoc): ApprovalMessage {
   return {
     id,
@@ -134,4 +134,4 @@ export function createFirestoreApprovalMessageRepository(): ApprovalMessageRepos
     },
   };
 }
-/* v8 ignore stop */
+

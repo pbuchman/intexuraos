@@ -115,7 +115,7 @@ export function createOutboundMessage(params: {
 }): OutboundMessage {
   // Validate required fields are not empty
   // These are defensive checks - in practice, callers always provide valid values
-  /* v8 ignore start */
+  /* v8 ignore test-infra -- block coverage */
   if (params.wamid.trim() === '') {
     throw new Error('wamid is required');
   }
@@ -125,7 +125,7 @@ export function createOutboundMessage(params: {
   if (params.userId.trim() === '') {
     throw new Error('userId is required');
   }
-  /* v8 ignore stop */
+  
 
   const now = new Date();
   const expiresAt = new Date(now.getTime() + TTL_DAYS * 24 * 60 * 60 * 1000);

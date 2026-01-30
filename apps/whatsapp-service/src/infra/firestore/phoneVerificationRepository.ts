@@ -4,7 +4,7 @@
  * NOTE: This file is tested via FakePhoneVerificationRepository in route tests.
  * The real Firestore implementation is not directly tested.
  */
-/* v8 ignore start - Tested via fake repository in route integration tests */
+
 import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
 import { getFirestore } from '@intexuraos/infra-firestore';
 import { randomUUID } from 'node:crypto';
@@ -310,4 +310,4 @@ export async function createVerificationWithChecks(
     });
   }
 }
-/* v8 ignore stop */
+

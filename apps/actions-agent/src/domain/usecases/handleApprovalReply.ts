@@ -243,7 +243,7 @@ export function createHandleApprovalReplyUseCase(
     // This provides a fallback for users who prefer typing over clicking buttons
     const nonceMatch = /^approve\s+([0-9a-fA-F]{4})\s*$/.exec(replyText.trim());
     if (nonceMatch !== null) {
-      /* v8 ignore next -- ts-type: noUncheckedIndexedAccess guard for regex match[1] */
+      /* v8 ignore ts-type -- noUncheckedIndexedAccess guard for regex match[1] */
       const nonce = nonceMatch[1];
       if (nonce !== undefined) {
         const nonceResult = await handleNonceTextFallback(

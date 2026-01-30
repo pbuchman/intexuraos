@@ -91,7 +91,7 @@ function stripUnwantedPrefixes(content: string): string {
         return ''; // Prefix covers entire content
       }
       const nextChar = content.charAt(prefixLength);
-      /* v8 ignore next -- test-infra: test inputs don't cover all prefix format variations */
+      /* v8 ignore test-infra -- test inputs don't cover all prefix format variations */
       if (/^[\s:\n]/.test(nextChar)) {
         return content.slice(prefixLength).trim();
       }

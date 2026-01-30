@@ -168,7 +168,7 @@ export const messageRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       });
 
       const user = await requireAuth(request, reply);
-      /* v8 ignore next 3 -- auth-guard: tests use valid auth tokens */
+      /* v8 ignore test-infra -- tests use valid auth tokens */
       if (!user) {
         return;
       }
@@ -316,7 +316,7 @@ export const messageRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       });
 
       const user = await requireAuth(request, reply);
-      /* v8 ignore next 3 -- auth-guard: tests use valid auth tokens */
+      /* v8 ignore test-infra -- tests use valid auth tokens */
       if (!user) {
         return;
       }
@@ -326,7 +326,7 @@ export const messageRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       const messageResult = await messageRepository.getMessage(messageId);
 
-      /* v8 ignore next 3 -- test-infra: fake repository always succeeds */
+      /* v8 ignore test-infra -- fake repository always succeeds */
       if (!messageResult.ok) {
         return await reply.fail('DOWNSTREAM_ERROR', messageResult.error.message);
       }
@@ -347,7 +347,7 @@ export const messageRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       const ttlSeconds = 900; // 15 minutes
       const urlResult = await mediaStorage.getSignedUrl(gcsPath, ttlSeconds);
 
-      /* v8 ignore next 3 -- test-infra: fake media storage always succeeds */
+      /* v8 ignore test-infra -- fake media storage always succeeds */
       if (!urlResult.ok) {
         return await reply.fail('DOWNSTREAM_ERROR', urlResult.error.message);
       }
@@ -440,7 +440,7 @@ export const messageRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       });
 
       const user = await requireAuth(request, reply);
-      /* v8 ignore next 3 -- auth-guard: tests use valid auth tokens */
+      /* v8 ignore test-infra -- tests use valid auth tokens */
       if (!user) {
         return;
       }
@@ -450,7 +450,7 @@ export const messageRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       const messageResult = await messageRepository.getMessage(messageId);
 
-      /* v8 ignore next 3 -- test-infra: fake repository always succeeds */
+      /* v8 ignore test-infra -- fake repository always succeeds */
       if (!messageResult.ok) {
         return await reply.fail('DOWNSTREAM_ERROR', messageResult.error.message);
       }
@@ -471,7 +471,7 @@ export const messageRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       const ttlSeconds = 900; // 15 minutes
       const urlResult = await mediaStorage.getSignedUrl(thumbnailGcsPath, ttlSeconds);
 
-      /* v8 ignore next 3 -- test-infra: fake media storage always succeeds */
+      /* v8 ignore test-infra -- fake media storage always succeeds */
       if (!urlResult.ok) {
         return await reply.fail('DOWNSTREAM_ERROR', urlResult.error.message);
       }
@@ -552,7 +552,7 @@ export const messageRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
     },
     async (request: FastifyRequest<{ Params: MessageParams }>, reply: FastifyReply) => {
       const user = await requireAuth(request, reply);
-      /* v8 ignore next 3 -- auth-guard: tests use valid auth tokens */
+      /* v8 ignore test-infra -- tests use valid auth tokens */
       if (!user) {
         return;
       }
@@ -563,7 +563,7 @@ export const messageRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       // First, verify the message exists and belongs to the user
       const messageResult = await messageRepository.getMessage(messageId);
 
-      /* v8 ignore next 3 -- test-infra: fake repository always succeeds */
+      /* v8 ignore test-infra -- fake repository always succeeds */
       if (!messageResult.ok) {
         return await reply.fail('DOWNSTREAM_ERROR', messageResult.error.message);
       }
@@ -589,7 +589,7 @@ export const messageRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       // Delete the message from Firestore first
       const deleteResult = await messageRepository.deleteMessage(messageId);
 
-      /* v8 ignore next 3 -- test-infra: fake repository delete always succeeds */
+      /* v8 ignore test-infra -- fake repository delete always succeeds */
       if (!deleteResult.ok) {
         return await reply.fail('DOWNSTREAM_ERROR', deleteResult.error.message);
       }

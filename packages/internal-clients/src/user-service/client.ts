@@ -245,7 +245,7 @@ export function createUserServiceClient(config: UserServiceConfig): UserServiceC
             },
           }
         );
-      } catch /* v8 ignore next -- best effort, silent failure intentional */ {
+      } catch /* v8 ignore test-infra -- best effort, silent failure intentional */ {
         // Best effort - don't block on failure
       }
     },

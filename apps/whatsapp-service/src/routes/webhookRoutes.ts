@@ -382,7 +382,7 @@ export async function processWebhookEvent(
       return;
     }
 
-    /* v8 ignore start -- test-infra: tests always send complete message payloads */
+    /* v8 ignore test-infra -- tests always send complete message payloads */
     if (messageType === 'image' && imageMedia === null) {
       request.log.info({ eventId: savedEvent.id }, 'Ignoring image message without media info');
       await webhookEventRepository.updateEventStatus(savedEvent.id, 'ignored', {
@@ -426,7 +426,7 @@ export async function processWebhookEvent(
       });
       return;
     }
-    /* v8 ignore stop */
+    
 
     // Look up user by phone number
     request.log.info({ eventId: savedEvent.id, fromNumber }, 'Looking up user by phone number');
@@ -467,7 +467,7 @@ export async function processWebhookEvent(
 
     // Check if user mapping is connected
     const mappingResult = await userMappingRepository.getMapping(userId);
-    /* v8 ignore next 13 -- test-infra: tests use connected user mappings */
+    /* v8 ignore test-infra -- tests use connected user mappings */
     if (!mappingResult.ok || mappingResult.value?.connected !== true) {
       request.log.info(
         { eventId: savedEvent.id, userId },

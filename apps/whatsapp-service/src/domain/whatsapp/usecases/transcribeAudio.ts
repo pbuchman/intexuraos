@@ -257,7 +257,7 @@ export class TranscribeAudioUseCase {
           completedAt: new Date().toISOString(),
           error: { code: 'POLL_TIMEOUT', message: 'Transcription polling timed out' },
         };
-        /* v8 ignore next 3 -- test-infra: fake transcription service completes before timeout */
+        /* v8 ignore test-infra -- fake transcription service completes before timeout */
         if (pollResult.lastApiCall !== undefined) {
           errorState.lastApiCall = pollResult.lastApiCall;
         }
@@ -276,7 +276,7 @@ export class TranscribeAudioUseCase {
         return;
       }
 
-      /* v8 ignore start -- test-infra: fake transcription service doesn't reject jobs */
+      /* v8 ignore test-infra -- fake transcription service doesn't reject jobs */
       if (pollResult.status === 'rejected') {
         const rawError = pollResult.error?.message ?? 'Job was rejected';
         const formattedMessage = formatSpeechmaticsError(rawError);
@@ -321,7 +321,7 @@ export class TranscribeAudioUseCase {
         );
         return;
       }
-      /* v8 ignore stop */
+      
 
       logger.info({ event: 'transcription_done', messageId, jobId }, 'Transcription job completed');
 
