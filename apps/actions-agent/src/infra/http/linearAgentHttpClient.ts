@@ -5,7 +5,8 @@
 import { ok, err, type Result, getErrorMessage } from '@intexuraos/common-core';
 import type { ServiceFeedback } from '@intexuraos/common-core';
 import type { LinearAgentClient } from '../../domain/ports/linearAgentClient.js';
-import pino, { type Logger } from 'pino';
+import type { Logger } from 'pino';
+import { createAppLogger } from '@intexuraos/infra-sentry';
 
 export interface LinearAgentHttpClientConfig {
   baseUrl: string;
@@ -13,10 +14,7 @@ export interface LinearAgentHttpClientConfig {
   logger?: Logger;
 }
 
-const defaultLogger = pino({
-  level: process.env['LOG_LEVEL'] ?? 'info',
-  name: 'linearAgentHttpClient',
-});
+const defaultLogger = createAppLogger({ name: 'linearAgentHttpClient' });
 
 interface ApiResponse {
   success: boolean;

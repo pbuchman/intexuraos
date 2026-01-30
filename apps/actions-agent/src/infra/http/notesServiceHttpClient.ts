@@ -4,7 +4,7 @@ import type {
   NotesServiceClient,
   CreateNoteRequest,
 } from '../../domain/ports/notesServiceClient.js';
-import { type Logger } from 'pino';
+import type { Logger } from 'pino';
 
 export interface NotesServiceHttpClientConfig {
   baseUrl: string;

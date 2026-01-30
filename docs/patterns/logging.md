@@ -2,6 +2,36 @@
 
 IntexuraOS uses **pino** for structured logging. This document covers all logging patterns used across the codebase.
 
+## CRITICAL: Logger Creation in Apps
+
+**RULE:** In `apps/` code, NEVER use `pino()` directly. Always use `createAppLogger()`.
+
+| Location                 | Logger Creation                     | Why                     |
+| ------------------------ | ----------------------------------- | ----------------------- |
+| `apps/*/src/services.ts` | `createAppLogger({ name })`         | Sentry integration      |
+| `apps/*/src/infra/*.ts`  | `createAppLogger({ name })`         | Sentry integration      |
+| `apps/*/src/server.ts`   | `createSentryStream(multistream)`   | Fastify integration     |
+| `packages/**`            | Accept `Logger` interface           | No creation in packages |
+| Tests                    | Mock or `pino({ level: 'silent' })` | No Sentry needed        |
+
+**Enforcement:** `pnpm run verify:sentry-logging` fails CI if violated.
+
+```typescript
+// apps/*/src/services.ts or apps/*/src/infra/*.ts
+
+// WRONG - logs won't reach Sentry
+import pino from 'pino';
+const logger = pino({ name: 'my-service' });
+
+// CORRECT - errors automatically sent to Sentry
+import { createAppLogger } from '@intexuraos/infra-sentry';
+const logger = createAppLogger({ name: 'my-service' });
+```
+
+**Why:** Direct `pino()` creates loggers that don't send errors to Sentry. The `UsageLogger` Firestore permission error went unnoticed for 44+ hours because of this.
+
+---
+
 ## Logger Patterns
 
 ### 1. Module-Level Logger (Infra Adapters)
@@ -10,9 +40,9 @@ IntexuraOS uses **pino** for structured logging. This document covers all loggin
 
 ```typescript
 // src/infra/whatsapp/cloudApiAdapter.ts
-import pino from 'pino';
+import { createAppLogger } from '@intexuraos/infra-sentry';
 
-const logger = pino({ name: 'whatsapp-cloud-api' });
+const logger = createAppLogger({ name: 'whatsapp-cloud-api' });
 
 export function getMediaUrl(mediaId: string): Promise<Result<string>> {
   logger.info({ mediaId }, 'Fetching media URL from WhatsApp');
@@ -40,7 +70,8 @@ export function getMediaUrl(mediaId: string): Promise<Result<string>> {
 
 ```typescript
 // src/infra/http/todosServiceHttpClient.ts
-import pino, { type Logger } from 'pino';
+import type { Logger } from 'pino';
+import { createAppLogger } from '@intexuraos/infra-sentry';
 
 export interface TodosServiceHttpClientConfig {
   baseUrl: string;
@@ -48,10 +79,7 @@ export interface TodosServiceHttpClientConfig {
   logger?: Logger; // ← Optional for flexibility
 }
 
-const defaultLogger = pino({
-  level: process.env['LOG_LEVEL'] ?? 'info',
-  name: 'todosServiceHttpClient',
-});
+const defaultLogger = createAppLogger({ name: 'todosServiceHttpClient' });
 
 export function createTodosServiceHttpClient(
   config: TodosServiceHttpClientConfig
@@ -70,12 +98,12 @@ export function createTodosServiceHttpClient(
 **In services.ts:**
 
 ```typescript
-import pino from 'pino';
+import { createAppLogger } from '@intexuraos/infra-sentry';
 
 const todosServiceClient = createTodosServiceHttpClient({
   baseUrl: config.todosAgentUrl,
   internalAuthToken: config.internalAuthToken,
-  logger: pino({ name: 'todosServiceClient' }), // ← Required in production
+  logger: createAppLogger({ name: 'todosServiceClient' }), // ← Required in production
 });
 ```
 
@@ -113,11 +141,11 @@ export class OpenGraphFetcher {
 **In services.ts:**
 
 ```typescript
-import pino from 'pino';
+import { createAppLogger } from '@intexuraos/infra-sentry';
 
 linkPreviewFetcher: new OpenGraphFetcher(
   undefined,
-  pino({ name: 'openGraphFetcher' })
+  createAppLogger({ name: 'openGraphFetcher' })
 ),
 ```
 
@@ -230,13 +258,15 @@ const logger = pino({ name: 'service-test', level: 'silent' });
 
 ## Verification
 
-Run the logging standards check:
+Run the logging standards checks:
 
 ```bash
-pnpm run verify:logging
+pnpm run verify:logging          # Factory functions called with logger
+pnpm run verify:sentry-logging   # No direct pino() in apps/
 ```
 
-This verifies that factory functions accepting `logger?: Logger` are called with a logger in production code.
+- `verify:logging` - Ensures factory functions with `logger?: Logger` are called with a logger
+- `verify:sentry-logging` - Ensures all loggers in `apps/` use `createAppLogger()` for Sentry integration
 
 ---
 

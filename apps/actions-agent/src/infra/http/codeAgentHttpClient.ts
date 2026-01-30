@@ -9,7 +9,8 @@
 import { ok, err, type Result, getErrorMessage } from '@intexuraos/common-core';
 import type { CodeAgentClient, CodeAgentError, CancelTaskError, CancelTaskWithNonceInput, CancelTaskWithNonceOutput } from '../../domain/ports/codeAgentClient.js';
 import type { CodeActionPayload } from '../../domain/models/action.js';
-import pino, { type Logger } from 'pino';
+import type { Logger } from 'pino';
+import { createAppLogger } from '@intexuraos/infra-sentry';
 
 export interface CodeAgentHttpClientConfig {
   baseUrl: string;
@@ -17,10 +18,7 @@ export interface CodeAgentHttpClientConfig {
   logger?: Logger;
 }
 
-const defaultLogger = pino({
-  level: process.env['LOG_LEVEL'] ?? 'info',
-  name: 'codeAgentHttpClient',
-});
+const defaultLogger = createAppLogger({ name: 'codeAgentHttpClient' });
 
 interface ApiResponse {
   codeTaskId: string;

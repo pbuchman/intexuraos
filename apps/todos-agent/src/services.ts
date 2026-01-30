@@ -1,4 +1,4 @@
-import pino from 'pino';
+import { createAppLogger } from '@intexuraos/infra-sentry';
 import type { TodoRepository } from './domain/ports/todoRepository.js';
 import { FirestoreTodoRepository } from './infra/firestore/firestoreTodoRepository.js';
 import {
@@ -48,7 +48,7 @@ export async function initServices(config: ServiceConfig): Promise<void> {
     baseUrl: config.userServiceUrl,
     internalAuthToken: config.internalAuthKey,
     pricingContext,
-    logger: pino({ name: 'userServiceClient' }),
+    logger: createAppLogger({ name: 'userServiceClient' }),
   });
 
   container = {
@@ -56,12 +56,12 @@ export async function initServices(config: ServiceConfig): Promise<void> {
     todosProcessingPublisher: createTodosProcessingPublisher({
       projectId: config.gcpProjectId,
       topicName: config.todosProcessingTopic,
-      logger: pino({ name: 'todos-processing-publisher' }),
+      logger: createAppLogger({ name: 'todos-processing-publisher' }),
     }),
     userServiceClient,
     todoItemExtractionService: createTodoItemExtractionService(
       userServiceClient,
-      pino({ name: 'todoItemExtractionService' })
+      createAppLogger({ name: 'todoItemExtractionService' })
     ),
   };
 }

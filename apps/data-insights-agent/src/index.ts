@@ -1,5 +1,4 @@
-import pino from 'pino';
-import { initSentry } from '@intexuraos/infra-sentry';
+import { initSentry, createAppLogger } from '@intexuraos/infra-sentry';
 import { getErrorMessage } from '@intexuraos/common-core';
 import { validateRequiredEnv } from '@intexuraos/http-server';
 import { fetchAllPricing, createPricingContext } from '@intexuraos/llm-pricing';
@@ -45,10 +44,7 @@ const REQUIRED_MODELS: LLMModel[] = [LlmModels.Gemini25Flash, LlmModels.Glm47, L
 async function main(): Promise<void> {
   const config = loadConfig();
 
-  const logger = pino({
-    name: 'data-insights-agent',
-    level: process.env['LOG_LEVEL'] ?? 'info',
-  });
+  const logger = createAppLogger({ name: 'data-insights-agent' });
 
   // Fetch pricing from app-settings-service
   process.stdout.write(`Fetching pricing from ${config.appSettingsServiceUrl}\n`);

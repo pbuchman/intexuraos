@@ -79,7 +79,7 @@ import {
   createHandleApprovalReplyUseCase,
   type HandleApprovalReplyUseCase,
 } from './domain/usecases/handleApprovalReply.js';
-import pino from 'pino';
+import { createAppLogger } from '@intexuraos/infra-sentry';
 import { createLocalActionServiceClient } from './infra/action/localActionServiceClient.js';
 import { createResearchAgentClient } from './infra/research/researchAgentClient.js';
 import { createWhatsappNotificationSender } from './infra/notification/whatsappNotificationSender.js';
@@ -194,7 +194,7 @@ export async function initServices(config: ServiceConfig): Promise<void> {
   ]);
 
   const actionRepository = createFirestoreActionRepository({
-    logger: pino({ name: 'actionRepository' }),
+    logger: createAppLogger({ name: 'actionRepository' }),
   });
   const actionTransitionRepository = createFirestoreActionTransitionRepository();
   const approvalMessageRepository = createFirestoreApprovalMessageRepository();
@@ -204,7 +204,7 @@ export async function initServices(config: ServiceConfig): Promise<void> {
     baseUrl: config.userServiceUrl,
     internalAuthToken: config.internalAuthToken,
     pricingContext,
-    logger: pino({ name: 'userServiceClient' }),
+    logger: createAppLogger({ name: 'userServiceClient' }),
   });
 
   const approvalIntentClassifierFactory = createApprovalIntentClassifierFactory({
@@ -224,60 +224,60 @@ export async function initServices(config: ServiceConfig): Promise<void> {
   const notificationSender = createWhatsappNotificationSender({
     projectId: config.gcpProjectId,
     topicName: config.whatsappSendTopic,
-    logger: pino({ name: 'whatsapp-notification-sender' }),
+    logger: createAppLogger({ name: 'whatsapp-notification-sender' }),
   });
 
   const actionEventPublisher = createActionEventPublisher({
     projectId: config.gcpProjectId,
-    logger: pino({ name: 'action-event-publisher' }),
+    logger: createAppLogger({ name: 'action-event-publisher' }),
   });
 
   const whatsappPublisher = createWhatsAppSendPublisher({
     projectId: config.gcpProjectId,
     topicName: config.whatsappSendTopic,
-    logger: pino({ name: 'whatsapp-publisher' }),
+    logger: createAppLogger({ name: 'whatsapp-publisher' }),
   });
 
   const calendarPreviewPublisher = createCalendarPreviewPublisher({
     projectId: config.gcpProjectId,
     topicName: config.calendarPreviewTopic,
-    logger: pino({ name: 'calendar-preview-publisher' }),
+    logger: createAppLogger({ name: 'calendar-preview-publisher' }),
   });
 
   const todosServiceClient = createTodosServiceHttpClient({
     baseUrl: config.todosAgentUrl,
     internalAuthToken: config.internalAuthToken,
-    logger: pino({ name: 'todosServiceClient' }),
+    logger: createAppLogger({ name: 'todosServiceClient' }),
   });
 
   const notesServiceClient = createNotesServiceHttpClient({
     baseUrl: config.notesAgentUrl,
     internalAuthToken: config.internalAuthToken,
-    logger: pino({ name: 'notesServiceClient' }),
+    logger: createAppLogger({ name: 'notesServiceClient' }),
   });
 
   const bookmarksServiceClient = createBookmarksServiceHttpClient({
     baseUrl: config.bookmarksAgentUrl,
     internalAuthToken: config.internalAuthToken,
-    logger: pino({ name: 'bookmarksServiceClient' }),
+    logger: createAppLogger({ name: 'bookmarksServiceClient' }),
   });
 
   const calendarServiceClient = createCalendarServiceHttpClient({
     baseUrl: config.calendarAgentUrl,
     internalAuthToken: config.internalAuthToken,
-    logger: pino({ name: 'calendarServiceClient' }),
+    logger: createAppLogger({ name: 'calendarServiceClient' }),
   });
 
   const linearAgentClient = createLinearAgentHttpClient({
     baseUrl: config.linearAgentUrl,
     internalAuthToken: config.internalAuthToken,
-    logger: pino({ name: 'linearAgentClient' }),
+    logger: createAppLogger({ name: 'linearAgentClient' }),
   });
 
   const codeAgentClient = createCodeAgentHttpClient({
     baseUrl: config.codeAgentUrl,
     internalAuthToken: config.internalAuthToken,
-    logger: pino({ name: 'codeAgentClient' }),
+    logger: createAppLogger({ name: 'codeAgentClient' }),
   });
 
   const executeResearchActionUseCase = createExecuteResearchActionUseCase({
@@ -285,7 +285,7 @@ export async function initServices(config: ServiceConfig): Promise<void> {
     researchServiceClient,
     whatsappPublisher,
     webAppUrl: config.webAppUrl,
-    logger: pino({ name: 'executeResearchAction' }),
+    logger: createAppLogger({ name: 'executeResearchAction' }),
   });
 
   const executeTodoActionUseCase = createExecuteTodoActionUseCase({
@@ -293,7 +293,7 @@ export async function initServices(config: ServiceConfig): Promise<void> {
     todosServiceClient,
     whatsappPublisher,
     webAppUrl: config.webAppUrl,
-    logger: pino({ name: 'executeTodoAction' }),
+    logger: createAppLogger({ name: 'executeTodoAction' }),
   });
 
   const executeNoteActionUseCase = createExecuteNoteActionUseCase({
@@ -301,7 +301,7 @@ export async function initServices(config: ServiceConfig): Promise<void> {
     notesServiceClient,
     whatsappPublisher,
     webAppUrl: config.webAppUrl,
-    logger: pino({ name: 'executeNoteAction' }),
+    logger: createAppLogger({ name: 'executeNoteAction' }),
   });
 
   const executeLinkActionUseCase = createExecuteLinkActionUseCase({
@@ -310,7 +310,7 @@ export async function initServices(config: ServiceConfig): Promise<void> {
     commandsAgentClient,
     whatsappPublisher,
     webAppUrl: config.webAppUrl,
-    logger: pino({ name: 'executeLinkAction' }),
+    logger: createAppLogger({ name: 'executeLinkAction' }),
   });
 
   const executeCalendarActionUseCase = createExecuteCalendarActionUseCase({
@@ -318,14 +318,14 @@ export async function initServices(config: ServiceConfig): Promise<void> {
     calendarServiceClient,
     whatsappPublisher,
     webAppUrl: config.webAppUrl,
-    logger: pino({ name: 'executeCalendarAction' }),
+    logger: createAppLogger({ name: 'executeCalendarAction' }),
   });
 
   const executeLinearActionUseCase = createExecuteLinearActionUseCase({
     actionRepository,
     linearAgentClient,
     whatsappPublisher,
-    logger: pino({ name: 'executeLinearAction' }),
+    logger: createAppLogger({ name: 'executeLinearAction' }),
   });
 
   const executeCodeActionUseCase = createExecuteCodeActionUseCase({
@@ -333,7 +333,7 @@ export async function initServices(config: ServiceConfig): Promise<void> {
     codeAgentClient,
     whatsappPublisher,
     webAppUrl: config.webAppUrl,
-    logger: pino({ name: 'executeCodeAction' }),
+    logger: createAppLogger({ name: 'executeCodeAction' }),
   });
 
   const handleResearchActionUseCase = registerActionHandler(
@@ -342,7 +342,7 @@ export async function initServices(config: ServiceConfig): Promise<void> {
       actionRepository,
       whatsappPublisher,
       webAppUrl: config.webAppUrl,
-      logger: pino({ name: 'handleResearchAction' }),
+      logger: createAppLogger({ name: 'handleResearchAction' }),
       executeResearchAction: executeResearchActionUseCase,
     }
   );
@@ -353,7 +353,7 @@ export async function initServices(config: ServiceConfig): Promise<void> {
       actionRepository,
       whatsappPublisher,
       webAppUrl: config.webAppUrl,
-      logger: pino({ name: 'handleTodoAction' }),
+      logger: createAppLogger({ name: 'handleTodoAction' }),
       executeTodoAction: executeTodoActionUseCase,
     }
   );
@@ -364,7 +364,7 @@ export async function initServices(config: ServiceConfig): Promise<void> {
       actionRepository,
       whatsappPublisher,
       webAppUrl: config.webAppUrl,
-      logger: pino({ name: 'handleNoteAction' }),
+      logger: createAppLogger({ name: 'handleNoteAction' }),
       executeNoteAction: executeNoteActionUseCase,
     }
   );
@@ -375,7 +375,7 @@ export async function initServices(config: ServiceConfig): Promise<void> {
       actionRepository,
       whatsappPublisher,
       webAppUrl: config.webAppUrl,
-      logger: pino({ name: 'handleLinkAction' }),
+      logger: createAppLogger({ name: 'handleLinkAction' }),
       executeLinkAction: executeLinkActionUseCase,
     }
   );
@@ -387,7 +387,7 @@ export async function initServices(config: ServiceConfig): Promise<void> {
       whatsappPublisher,
       calendarPreviewPublisher,
       webAppUrl: config.webAppUrl,
-      logger: pino({ name: 'handleCalendarAction' }),
+      logger: createAppLogger({ name: 'handleCalendarAction' }),
     }
   );
 
@@ -395,14 +395,14 @@ export async function initServices(config: ServiceConfig): Promise<void> {
     actionRepository,
     whatsappPublisher,
     webAppUrl: config.webAppUrl,
-    logger: pino({ name: 'handleLinearAction' }),
+    logger: createAppLogger({ name: 'handleLinearAction' }),
   });
 
   const handleCodeActionUseCase = registerActionHandler(createHandleCodeActionUseCase, {
     actionRepository,
     whatsappPublisher,
     webAppUrl: config.webAppUrl,
-    logger: pino({ name: 'handleCodeAction' }),
+    logger: createAppLogger({ name: 'handleCodeAction' }),
     executeCodeAction: executeCodeActionUseCase,
   });
 
@@ -418,14 +418,14 @@ export async function initServices(config: ServiceConfig): Promise<void> {
       linear: handleLinearActionUseCase,
       code: handleCodeActionUseCase,
     },
-    logger: pino({ name: 'retryPendingActions' }),
+    logger: createAppLogger({ name: 'retryPendingActions' }),
   });
 
   const changeActionTypeUseCase = createChangeActionTypeUseCase({
     actionRepository,
     actionTransitionRepository,
     commandsAgentClient,
-    logger: pino({ name: 'changeActionType' }),
+    logger: createAppLogger({ name: 'changeActionType' }),
   });
 
   const handleApprovalReplyUseCase = createHandleApprovalReplyUseCase({
@@ -434,7 +434,7 @@ export async function initServices(config: ServiceConfig): Promise<void> {
     approvalIntentClassifierFactory,
     whatsappPublisher,
     actionEventPublisher,
-    logger: pino({ name: 'handleApprovalReply' }),
+    logger: createAppLogger({ name: 'handleApprovalReply' }),
     executeNoteAction: executeNoteActionUseCase,
     executeTodoAction: executeTodoActionUseCase,
     executeResearchAction: executeResearchActionUseCase,

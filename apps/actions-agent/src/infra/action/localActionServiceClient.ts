@@ -3,12 +3,9 @@ import { err, getErrorMessage, ok } from '@intexuraos/common-core';
 import type { ActionServiceClient } from '../../domain/ports/actionServiceClient.js';
 import type { ActionRepository } from '../../domain/ports/actionRepository.js';
 import type { Action } from '../../domain/models/action.js';
-import pino from 'pino';
+import { createAppLogger } from '@intexuraos/infra-sentry';
 
-const logger = pino({
-  level: process.env['LOG_LEVEL'] ?? 'info',
-  name: 'localActionServiceClient',
-});
+const logger = createAppLogger({ name: 'localActionServiceClient' });
 
 export function createLocalActionServiceClient(
   actionRepository: ActionRepository
