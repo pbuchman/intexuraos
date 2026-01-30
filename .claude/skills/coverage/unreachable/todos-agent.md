@@ -6,8 +6,8 @@
 
 | Metric                   | Count      |
 | ------------------------ | ---------- |
-| Total exempted branches  | 12         |
-| Last verified            | 2026-01-29 |
+| Total exempted branches  | 14         |
+| Last verified            | 2026-01-30 |
 
 ---
 
@@ -183,3 +183,21 @@ if (!result.ok) {
 - **Blocker:** Upstream Guards
 - **Proof:** Same pattern - single test user identity means FORBIDDEN cannot be triggered at route level. Usecase tests cover FORBIDDEN scenarios directly.
 - **Pattern:** Auth guard (tests authenticated)
+
+---
+
+## `src/infra/firestore/firestoreTodoRepository.ts`
+
+### Line ~170: `doc.data()` type assertion after existence check
+
+```typescript
+const doc = await collection.doc(id).get();
+if (!doc.exists) {
+  return ok(null);
+}
+return ok(toTodo(doc.id, doc.data() as TodoDocument));  // ← Unreachable
+```
+
+- **Blocker:** Firestore Contract Guarantees
+- **Proof:** Line 166 explicitly checks `if (!doc.exists)` and returns early if true. The `doc.data()` call on line 170 can only execute if the document exists. TypeScript requires the `as TodoDocument` assertion due to Firestore's generic `DocumentData` type, but structurally the data will always match the expected schema when `doc.exists` is true.
+- **Pattern:** Firestore data access (documents guaranteed to exist when accessed)
