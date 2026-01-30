@@ -69,6 +69,7 @@ async function proxyRequest(vmIp: string, req: any, res: any): Promise<void> {
 
     if (req.method !== 'GET' && req.body !== undefined) {
       requestOptions.body = JSON.stringify(req.body);
+      headers['Content-Type'] = 'application/json';
     }
 
     const response = await fetch(targetUrl, requestOptions);
