@@ -78,13 +78,18 @@ export function createUserServiceClient(config: UserServiceConfig): UserServiceC
           });
         }
 
-        const data = (await response.json()) as {
-          google?: string | null;
-          openai?: string | null;
-          anthropic?: string | null;
-          perplexity?: string | null;
-          zai?: string | null;
+        const body = (await response.json()) as {
+          success: boolean;
+          data: {
+            google?: string | null;
+            openai?: string | null;
+            anthropic?: string | null;
+            perplexity?: string | null;
+            zai?: string | null;
+          };
         };
+
+        const data = body.data;
 
         // Convert null values to undefined (null is used by JSON to distinguish from missing)
         const result: DecryptedApiKeys = {};
@@ -139,14 +144,17 @@ export function createUserServiceClient(config: UserServiceConfig): UserServiceC
           });
         }
 
-        const settingsData = (await settingsResponse.json()) as {
-          llmPreferences?: {
-            defaultModel: string;
+        const settingsBody = (await settingsResponse.json()) as {
+          success: boolean;
+          data: {
+            llmPreferences?: {
+              defaultModel: string;
+            };
           };
         };
 
         // Step 2: Determine model (use user's preference or default)
-        const rawModel = settingsData.llmPreferences?.defaultModel ?? LlmModels.Gemini25Flash;
+        const rawModel = settingsBody.data.llmPreferences?.defaultModel ?? LlmModels.Gemini25Flash;
 
         // Validate that the model is supported
         if (!isValidModel(rawModel)) {
@@ -180,9 +188,12 @@ export function createUserServiceClient(config: UserServiceConfig): UserServiceC
           });
         }
 
-        const keysData = (await keysResponse.json()) as Record<string, string | null | undefined>;
+        const keysBody = (await keysResponse.json()) as {
+          success: boolean;
+          data: Record<string, string | null | undefined>;
+        };
 
-        const apiKey = keysData[keyField];
+        const apiKey = keysBody.data[keyField];
 
         if (apiKey === null || apiKey === undefined) {
           logger.info({ userId, provider }, 'No API key configured for provider');
@@ -270,8 +281,11 @@ export function createUserServiceClient(config: UserServiceConfig): UserServiceC
           });
         }
 
-        const data = (await response.json()) as { accessToken: string; email: string };
-        return ok({ accessToken: data.accessToken, email: data.email });
+        const body = (await response.json()) as {
+          success: boolean;
+          data: { accessToken: string; email: string };
+        };
+        return ok({ accessToken: body.data.accessToken, email: body.data.email });
       } catch (error) {
         return err({ code: 'NETWORK_ERROR', message: getErrorMessage(error) });
       }
