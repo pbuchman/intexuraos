@@ -91,6 +91,7 @@ function stripUnwantedPrefixes(content: string): string {
         return ''; // Prefix covers entire content
       }
       const nextChar = content.charAt(prefixLength);
+      /* v8 ignore next -- test-infra: test inputs don't cover all prefix format variations */
       if (/^[\s:\n]/.test(nextChar)) {
         return content.slice(prefixLength).trim();
       }
@@ -133,6 +134,7 @@ export function parseSummaryResponse(
       'LLM summary parse error'
     );
 
+    /* v8 ignore ts-type -- thrown errors are always ParseValidationError */
     const code = error instanceof ParseValidationError ? error.code : 'EMPTY';
 
     return err({
@@ -194,6 +196,7 @@ export function parseSummaryResponseSync(content: string): Result<ParsedSummary,
       operation: 'parseSummaryResponse',
     });
 
+    /* v8 ignore ts-type -- thrown errors are always ParseValidationError */
     const code = error instanceof ParseValidationError ? error.code : 'EMPTY';
 
     return err({

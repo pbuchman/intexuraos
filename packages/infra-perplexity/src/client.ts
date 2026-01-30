@@ -162,7 +162,8 @@ async function processStreamResponse(
       // Split by newlines to process full SSE messages
       const lines = buffer.split('\n');
       // Keep the last line in the buffer as it might be incomplete
-      buffer = lines.pop() ?? '';
+      buffer =
+        lines.pop() /* v8 ignore ts-type -- split always returns at least one element */ ?? '';
 
       for (const line of lines) {
         const trimmed = line.trim();

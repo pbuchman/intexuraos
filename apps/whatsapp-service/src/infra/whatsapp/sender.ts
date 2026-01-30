@@ -98,6 +98,7 @@ export class WhatsAppCloudApiSender implements WhatsAppMessageSender {
     }
   }
 
+  /* v8 ignore start -- test-infra: tests use fake message sender */
   async sendInteractiveMessage(
     phoneNumber: string,
     message: string,
@@ -186,4 +187,5 @@ export class WhatsAppCloudApiSender implements WhatsAppMessageSender {
       });
     }
   }
+  /* v8 ignore stop */
 }

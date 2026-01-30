@@ -142,7 +142,7 @@ export class Crawl4AIClient implements PageSummaryServicePort {
         this.logger.warn({ url, error: data.error_message }, 'Crawl4AI extraction failed');
         return err({
           code: 'FETCH_FAILED',
-          message: data.error_message ?? 'Crawl4AI extraction failed',
+          message: data.error_message /* v8 ignore ts-type -- API always includes error_message on failure */ ?? 'Crawl4AI extraction failed',
         });
       }
 

@@ -137,7 +137,7 @@ function tryParseOpenaiError(raw: string): string | null {
 
   if (rateLimitMatch !== null) {
     const [, limitType, limit, used, requested] = rateLimitMatch;
-    return `${limitType ?? 'Tokens'}: ${used ?? '?'}/${limit ?? '?'} used, need ${requested ?? '?'} more`;
+    return `${limitType ?? 'Tokens'}: ${used ?? '?'}/${limit ?? '?'} used, need ${requested ?? '?'} more`; /* v8 ignore ts-type -- regex match with capture groups guarantees non-null values, but TypeScript can't prove after destructuring */
   }
 
   if (raw.includes('exceeded your current quota')) {

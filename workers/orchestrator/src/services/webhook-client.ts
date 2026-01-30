@@ -62,6 +62,7 @@ export class WebhookClient {
         }
 
         // Wait before retry (exponential backoff)
+        /* v8 ignore ts-type -- nullish coalescing on array access creates type narrowing branch */
         if (attempt < MAX_RETRIES - 1) {
           const delay = RETRY_DELAYS[attempt] ?? 5000;
           await new Promise((resolve) => setTimeout(resolve, delay));
@@ -123,6 +124,7 @@ export class WebhookClient {
             break; // Don't retry 4xx
           }
 
+          /* v8 ignore ts-type -- nullish coalescing on array access creates type narrowing branch */
           if (attempt < MAX_RETRIES - 1) {
             const delay = RETRY_DELAYS[attempt] ?? 5000;
             await new Promise((resolve) => setTimeout(resolve, delay));
