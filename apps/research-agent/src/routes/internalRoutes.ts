@@ -363,7 +363,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           const eventType =
             typeof parsed === 'object' && parsed !== null && 'type' in parsed
               ? (parsed as { type: unknown }).type
-              : 'unknown'; /* v8 ignore ts-type -- ternary fallback when parsed is not object or has no type property */ /* v8 ignore ts-type -- ternary fallback when parsed is not object or has no type property */
+              : 'unknown'; /* v8 ignore ts-type -- ternary fallback when parsed is not object or has no type property */
           request.log.warn({ type: eventType }, 'Unexpected event type');
           // PubSub ack pattern: always return 200 OK, errors logged separately
           return await reply.ok({});
