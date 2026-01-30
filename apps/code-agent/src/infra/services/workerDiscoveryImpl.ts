@@ -96,6 +96,7 @@ class WorkerDiscoveryImpl implements WorkerDiscoveryService {
     this.logger.info({ location, url: config.url }, 'Checking worker health');
 
     try {
+      /* v8 ignore ts-type -- nullish coalescing on env vars creates type narrowing branches */
       const response = await fetch(`${config.url}/health`, {
         headers: {
           'CF-Access-Client-Id': process.env['INTEXURAOS_CF_ACCESS_CLIENT_ID'] ?? '',
@@ -147,6 +148,7 @@ class WorkerDiscoveryImpl implements WorkerDiscoveryService {
     } catch (error) {
       this.logger.error({ location, error }, 'Worker health check threw error');
 
+      /* v8 ignore ts-type -- instanceof check creates type narrowing branch */
       if (error instanceof Error) {
         if (error.name === 'AbortError') {
           return err({

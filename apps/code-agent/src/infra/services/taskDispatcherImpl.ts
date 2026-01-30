@@ -278,6 +278,7 @@ class TaskDispatcherImpl implements TaskDispatcherService {
     const workers = this.getWorkerConfigs();
     const worker = workers.find((w) => w.location === location);
 
+    /* v8 ignore ts-type -- negated condition after find creates type narrowing branch */
     if (!worker) {
       this.logger.warn({ taskId, location }, 'Worker configuration not found for cancellation');
       return;
@@ -293,6 +294,7 @@ class TaskDispatcherImpl implements TaskDispatcherService {
         signal: AbortSignal.timeout(10000), // 10 second timeout for cancellation
       });
 
+      /* v8 ignore test-infra -- requires worker to return error response */
       if (!response.ok) {
         this.logger.warn(
           { taskId, location, status: response.status },

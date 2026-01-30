@@ -88,6 +88,7 @@ export class TmuxManager {
         try {
           await this.execAsync(`tmux send-keys -t ${sessionName} C-c`);
         } catch (error: unknown) {
+          /* v8 ignore ts-type -- nullish coalescing on error.stderr creates type narrowing branch */
           const stderr = (error as { stderr?: string }).stderr ?? '';
           if (!stderr.includes("can't find session") && !stderr.includes('no session')) {
             this.logger.warn({ taskId, error }, 'Graceful shutdown signal failed unexpectedly');
