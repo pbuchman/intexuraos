@@ -1262,7 +1262,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         return await reply.fail('INTERNAL_ERROR', result.error.message);
       }
 
-      return await reply.ok(null);
+      return await reply.ok({});
     }
   );
 
