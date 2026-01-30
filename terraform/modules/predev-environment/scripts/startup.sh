@@ -39,9 +39,13 @@ else
   cd "$REPO_DIR"
 fi
 
-# Get target branch from instance metadata (default to development)
-TARGET_BRANCH=$(curl -s -H "Metadata-Flavor: Google" \
-  "http://metadata.google.internal/computeMetadata/v1/instance/attributes/target-branch" 2>/dev/null || echo "development")
+# Get target branch from Firestore (set by webhook when VM was started)
+# Falls back to instance metadata, then defaults to 'development'
+TARGET_BRANCH=$(gcloud firestore documents predev-state/current \
+  --format="value(fields.branch.stringValue)" 2>/dev/null || \
+  curl -s -H "Metadata-Flavor: Google" \
+  "http://metadata.google.internal/computeMetadata/v1/instance/attributes/target-branch" 2>/dev/null || \
+  echo "development")
 
 log "Checking out branch: $TARGET_BRANCH"
 git checkout "$TARGET_BRANCH"
