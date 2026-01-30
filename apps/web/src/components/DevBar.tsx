@@ -94,7 +94,7 @@ export function DevBar(): React.JSX.Element | null {
           </div>
           <span className="text-xs text-slate-500">|</span>
           <span className="text-xs text-slate-400">
-            {isAuthenticated ? `${user?.email ?? 'Authenticated'}` : 'Not authenticated'}
+            {isAuthenticated ? (user?.email ?? 'Authenticated') : 'Not authenticated'}
           </span>
         </div>
         <div className="flex items-center gap-2">
@@ -175,7 +175,7 @@ export function DevBar(): React.JSX.Element | null {
             <div className="mt-3 max-h-24 overflow-y-auto rounded border border-slate-700 bg-slate-800/50">
               {results.map((result, i) => (
                 <div
-                  key={`${result.timestamp.getTime()}-${i}`}
+                  key={`${String(result.timestamp.getTime())}-${String(i)}`}
                   className={`flex items-center gap-2 border-b border-slate-700/50 px-3 py-1.5 text-xs last:border-0 ${
                     result.success ? 'text-emerald-400' : 'text-red-400'
                   }`}

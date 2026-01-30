@@ -29,46 +29,46 @@ Migrate local development from custom `scripts/dev.mjs` to PM2 process manager. 
 
 ### What dev.mjs Does
 
-| Feature | Implementation | Keep/Replace |
-|---------|----------------|--------------|
-| Port conflict checking | `checkPortInUse()` | Keep (pre-flight) |
-| Env var validation | `validateEnvVars()` | Keep (pre-flight) |
-| Firestore config generation | `generateFirestoreConfig()` | Keep (pre-flight) |
-| Firestore data sync | `syncFirestore()` | Keep (pre-flight) |
-| Start emulators | `docker compose up -d` | Keep (pre-flight) |
-| Wait for emulators | `waitForEmulators()` | Keep (pre-flight) |
-| Start services | `spawn('pnpm', ['exec', 'tsx', 'watch', ...])` | **Replace with PM2** |
-| Start web app | `spawn('pnpm', ['run', 'dev'])` | **Replace with PM2** |
-| TUI dashboard | blessed library | **Replace with pm2 monit** |
-| Log aggregation | Custom log() function | **Replace with pm2 logs** |
-| Health polling | `pollHealth()` | **Replace with PM2 status** |
-| Graceful shutdown | SIGINT/SIGTERM handlers | **PM2 handles this** |
-| Crash recovery | None (just logs exit) | **PM2 autorestart** |
+| Feature                     | Implementation                                 | Keep/Replace                |
+| --------------------------- | ---------------------------------------------- | --------------------------- |
+| Port conflict checking      | `checkPortInUse()`                             | Keep (pre-flight)           |
+| Env var validation          | `validateEnvVars()`                            | Keep (pre-flight)           |
+| Firestore config generation | `generateFirestoreConfig()`                    | Keep (pre-flight)           |
+| Firestore data sync         | `syncFirestore()`                              | Keep (pre-flight)           |
+| Start emulators             | `docker compose up -d`                         | Keep (pre-flight)           |
+| Wait for emulators          | `waitForEmulators()`                           | Keep (pre-flight)           |
+| Start services              | `spawn('pnpm', ['exec', 'tsx', 'watch', ...])` | **Replace with PM2**        |
+| Start web app               | `spawn('pnpm', ['run', 'dev'])`                | **Replace with PM2**        |
+| TUI dashboard               | blessed library                                | **Replace with pm2 monit**  |
+| Log aggregation             | Custom log() function                          | **Replace with pm2 logs**   |
+| Health polling              | `pollHealth()`                                 | **Replace with PM2 status** |
+| Graceful shutdown           | SIGINT/SIGTERM handlers                        | **PM2 handles this**        |
+| Crash recovery              | None (just logs exit)                          | **PM2 autorestart**         |
 
 ### Services to Migrate
 
 From `scripts/dev.mjs` SERVICES array:
 
-| Service | Port | Notes |
-|---------|------|-------|
-| app-settings-service | 8122 | |
-| notion-service | 8112 | |
-| whatsapp-service | 8113 | |
-| mobile-notifications-service | 8114 | |
-| commands-agent | 8117 | |
-| actions-agent | 8118 | |
-| notes-agent | 8121 | |
-| todos-agent | 8123 | |
-| bookmarks-agent | 8124 | |
-| calendar-agent | 8125 | |
-| linear-agent | 8126 | |
-| code-agent | 8128 | |
-| web-agent | 8127 | |
-| user-service | 8110 | Depends on app-settings |
-| research-agent | 8116 | Depends on app-settings |
-| data-insights-agent | 8119 | Depends on app-settings |
-| image-service | 8120 | Depends on app-settings |
-| **web** | 3000 | Vite dev server |
+| Service                      | Port | Notes                   |
+| ---------------------------- | ---- | ----------------------- |
+| app-settings-service         | 8122 |                         |
+| notion-service               | 8112 |                         |
+| whatsapp-service             | 8113 |                         |
+| mobile-notifications-service | 8114 |                         |
+| commands-agent               | 8117 |                         |
+| actions-agent                | 8118 |                         |
+| notes-agent                  | 8121 |                         |
+| todos-agent                  | 8123 |                         |
+| bookmarks-agent              | 8124 |                         |
+| calendar-agent               | 8125 |                         |
+| linear-agent                 | 8126 |                         |
+| code-agent                   | 8128 |                         |
+| web-agent                    | 8127 |                         |
+| user-service                 | 8110 | Depends on app-settings |
+| research-agent               | 8116 | Depends on app-settings |
+| data-insights-agent          | 8119 | Depends on app-settings |
+| image-service                | 8120 | Depends on app-settings |
+| **web**                      | 3000 | Vite dev server         |
 
 ---
 
@@ -233,7 +233,7 @@ function createServiceConfig(name, port, extraEnv = {}) {
     autorestart: true,
     max_restarts: 10,
     restart_delay: 1000,
-    watch: false,  // tsx watch handles file watching
+    watch: false, // tsx watch handles file watching
     log_date_format: 'HH:mm:ss',
   };
 }
@@ -361,22 +361,23 @@ main().catch((error) => {
 
 ### Step 5: Update Documentation
 
-| File | Required Changes |
-|------|------------------|
-| `README.md` | Update Quick Start section |
-| `docker/README.md` | Update dev commands |
-| `docs/setup/05-local-dev-with-gcp-deps.md` | Update Section 4 (Run Services Locally) |
-| `docs/setup/10-claude-code-cloud-dev.md` | Update Running Services section |
-| `.claude/CLAUDE.md` | Update Environment Variables section - replace dev.mjs patterns |
-| `.claude/commands/create-service.md` | Update Step 13 (Add to Local Dev Setup) |
-| `.claude/reference/env-vars-patterns.md` | Update patterns for ecosystem.config.js |
-| `docs/designs/predev-environment.md` | Add PM2 decision, update VM config |
+| File                                       | Required Changes                                                |
+| ------------------------------------------ | --------------------------------------------------------------- |
+| `README.md`                                | Update Quick Start section                                      |
+| `docker/README.md`                         | Update dev commands                                             |
+| `docs/setup/05-local-dev-with-gcp-deps.md` | Update Section 4 (Run Services Locally)                         |
+| `docs/setup/10-claude-code-cloud-dev.md`   | Update Running Services section                                 |
+| `.claude/CLAUDE.md`                        | Update Environment Variables section - replace dev.mjs patterns |
+| `.claude/commands/create-service.md`       | Update Step 13 (Add to Local Dev Setup)                         |
+| `.claude/reference/env-vars-patterns.md`   | Update patterns for ecosystem.config.js                         |
+| `docs/designs/predev-environment.md`       | Add PM2 decision, update VM config                              |
 
 ### Step 6: Update /create-service Command
 
 In `.claude/commands/create-service.md`, replace Step 13:
 
 **Before:**
+
 ```markdown
 ### 13. Add to Local Dev Setup
 
@@ -384,7 +385,8 @@ Edit `scripts/dev.mjs` — add service to SERVICES array:
 ```
 
 **After:**
-```markdown
+
+````markdown
 ### 13. Add to Local Dev Setup
 
 Edit `ecosystem.config.js` — add service to apps array:
@@ -393,9 +395,11 @@ Edit `ecosystem.config.js` — add service to apps array:
 // In ecosystem.config.js apps array:
 createServiceConfig('<service-name>', 81XX),
 ```
+````
 
-Choose next unused port in range 8110-*.
-```
+Choose next unused port in range 8110-\*.
+
+````
 
 ### Step 7: Delete Deprecated Files
 
@@ -404,7 +408,7 @@ After migration is verified working:
 ```bash
 rm scripts/dev.mjs
 rm scripts/dev-ui.mjs
-```
+````
 
 ---
 
@@ -412,24 +416,24 @@ rm scripts/dev-ui.mjs
 
 ### Functional Tests
 
-| Test | Command | Expected |
-|------|---------|----------|
-| Setup runs | `pnpm run dev:setup` | Emulators started, no errors |
-| Services start | `pm2 start ecosystem.config.js` | All 18 services online |
-| Logs work | `pm2 logs` | Aggregated colored output |
-| Status works | `pm2 status` | Table with all services |
-| Monit works | `pm2 monit` | TUI dashboard |
-| Crash recovery | Kill a service process | PM2 restarts it |
-| Stop works | `pm2 stop all` | All services stopped |
-| Delete works | `pm2 delete all` | PM2 process list cleared |
+| Test           | Command                         | Expected                     |
+| -------------- | ------------------------------- | ---------------------------- |
+| Setup runs     | `pnpm run dev:setup`            | Emulators started, no errors |
+| Services start | `pm2 start ecosystem.config.js` | All 18 services online       |
+| Logs work      | `pm2 logs`                      | Aggregated colored output    |
+| Status works   | `pm2 status`                    | Table with all services      |
+| Monit works    | `pm2 monit`                     | TUI dashboard                |
+| Crash recovery | Kill a service process          | PM2 restarts it              |
+| Stop works     | `pm2 stop all`                  | All services stopped         |
+| Delete works   | `pm2 delete all`                | PM2 process list cleared     |
 
 ### Smoke Tests
 
-| Test | Steps | Expected |
-|------|-------|----------|
-| Web app loads | Open http://localhost:3000 | Login page |
-| API responds | `curl http://localhost:8110/health` | 200 OK |
-| Emulators work | `curl http://localhost:8101` | Firestore UI |
+| Test           | Steps                               | Expected     |
+| -------------- | ----------------------------------- | ------------ |
+| Web app loads  | Open http://localhost:3000          | Login page   |
+| API responds   | `curl http://localhost:8110/health` | 200 OK       |
+| Emulators work | `curl http://localhost:8101`        | Firestore UI |
 
 ---
 

@@ -169,6 +169,11 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         return { error: 'Failed to create action' };
       }
 
+      const promptFromPayload =
+        body.payload !== undefined && typeof body.payload['prompt'] === 'string'
+          ? body.payload['prompt']
+          : body.title;
+
       const event: ActionCreatedEvent = {
         type: 'action.created',
         actionId: action.id,
@@ -177,7 +182,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         actionType: body.type,
         title: body.title,
         payload: {
-          prompt: body.title,
+          prompt: promptFromPayload,
           confidence: body.confidence,
         },
         timestamp: new Date().toISOString(),
