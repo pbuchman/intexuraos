@@ -50,7 +50,7 @@ New action type "code" that allows users to approve an action in the inbox and r
 │  │  MacBook (cc-mac.intexuraos.cloud) — PRIMARY                         │ │
 │  │  ┌─────────────────────────────────────────────────────────────────┐ │ │
 │  │  │  Orchestrator (Node.js)                                         │ │ │
-│  │  │  ├── HTTP API (:8080)                                           │ │ │
+│  │  │  ├── HTTP API (:8199)                                           │ │ │
 │  │  │  ├── Task dispatcher (max 5 concurrent)                         │ │ │
 │  │  │  ├── tmux session manager (session per task)                    │ │ │
 │  │  │  ├── Worktree manager (worktree per task)                       │ │ │

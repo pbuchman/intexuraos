@@ -296,6 +296,13 @@ if [ -n "$pm2_metrics" ]; then
   line2="$line2  $pm2_metrics"
 fi
 
+# ---- Orchestrator port check ----
+if lsof -i :8199 -sTCP:LISTEN >/dev/null 2>&1; then
+  line2="$line2  🎭 Orch:✓"
+else
+  line2="$line2  🎭 Orch:✗"
+fi
+
 # Line 3: Cost and usage analytics
 line3=""
 if [ -n "$cost_usd" ] && [[ "$cost_usd" =~ ^[0-9.]+$ ]]; then
