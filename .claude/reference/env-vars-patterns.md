@@ -41,12 +41,12 @@ module "my_service" {
 
 ---
 
-## dev.mjs Patterns
+## ecosystem.config.cjs Patterns
 
 ### Common URL
 
 ```javascript
-// scripts/dev.mjs - COMMON_SERVICE_URLS
+// ecosystem.config.cjs - COMMON_SERVICE_URLS
 const COMMON_SERVICE_URLS = {
   INTEXURAOS_NEW_SERVICE_URL: 'http://localhost:8XXX',
 };
@@ -55,7 +55,7 @@ const COMMON_SERVICE_URLS = {
 ### Common secret (from .envrc.local)
 
 ```javascript
-// scripts/dev.mjs - COMMON_SERVICE_ENV
+// ecosystem.config.cjs - COMMON_SERVICE_ENV
 const COMMON_SERVICE_ENV = {
   INTEXURAOS_NEW_SECRET: process.env.INTEXURAOS_NEW_SECRET,
 };
@@ -64,7 +64,7 @@ const COMMON_SERVICE_ENV = {
 ### Service-specific
 
 ```javascript
-// scripts/dev.mjs - SERVICE_ENV_MAPPINGS
+// ecosystem.config.cjs - SERVICE_ENV_MAPPINGS
 const SERVICE_ENV_MAPPINGS = {
   'my-service': {
     INTEXURAOS_MY_SERVICE_TOPIC: 'my-topic',

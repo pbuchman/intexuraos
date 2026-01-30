@@ -6,8 +6,8 @@ This document describes how to run IntexuraOS services locally while using GCP F
 
 Local uses:
 
-- **Local services**: Node.js processes via `docker-compose` or `pnpm run dev`
-- **Remote Firestore**: Dev project's Firestore database
+- **Local services**: Node.js processes via PM2 (`pnpm run dev`)
+- **Local emulators**: Firestore, Pub/Sub, GCS via Docker Compose
 - **Remote Secret Manager**: Dev project's secrets (or local .env override)
 
 ## Prerequisites
@@ -85,32 +85,51 @@ LOG_LEVEL=debug
 
 ## 4. Run Services Locally
 
-### Option A: Using pnpm scripts
+### Recommended: PM2 Process Manager
 
 ```bash
-# Terminal 1: Auth service
-cd apps/user-service
+# Start emulators + all services
 pnpm run dev
 
-# Terminal 2: PromptVault service
-cd apps/promptvault-service
-pnpm run dev
+# Or with data sync from GCP
+pnpm run dev:sync
 ```
 
-### Option B: Using Docker Compose
+**Management Commands:**
 
 ```bash
-# Build and start all services
-docker compose -f docker/docker-compose.yaml up --build
+# Emulators only
+pnpm run emulators:start    # Start emulators (use existing data)
+pnpm run emulators:sync     # Sync from GCP then start
+pnpm run emulators:stop     # Stop emulators
 
-# Or in detached mode
-docker compose -f docker/docker-compose.yaml up -d --build
+# Services only
+pnpm run services:start     # Start all services via PM2
+pnpm run services:stop      # Stop all services
+pnpm run services:status    # View service status
+pnpm run services:logs      # View logs (live tail)
+pnpm run services:monit     # Interactive TUI
+pnpm run services:restart   # Restart all services
+```
 
-# View logs
-docker compose -f docker/docker-compose.yaml logs -f
+### Global PM2 Installation (Optional)
 
-# Stop
-docker compose -f docker/docker-compose.yaml down
+For direct PM2 commands from terminal:
+
+```bash
+npm install -g pm2
+pm2 status        # Show all processes
+pm2 logs          # Stream all logs
+pm2 logs web      # Stream logs for specific service
+pm2 monit         # Interactive TUI
+```
+
+### Single Service (Development)
+
+```bash
+# Run a single service with watch mode
+cd apps/user-service
+pnpm run dev
 ```
 
 ## 5. Verify Local Setup
@@ -215,7 +234,7 @@ Then use `tf init`, `tf plan`, `tf apply` instead of `terraform`.
 
 After completing these steps, you can:
 
-- [x] Run services locally with `pnpm run dev` or Docker Compose
+- [x] Run all services locally with `pnpm run dev` (PM2 process manager)
 - [x] Connect to dev Firestore database
 - [x] Access secrets via ADC or direct environment variables
 - [x] Test API endpoints locally

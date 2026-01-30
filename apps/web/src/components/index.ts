@@ -2,6 +2,7 @@ export { ActionDetailModal } from './ActionDetailModal.js';
 export { ActionItem } from './ActionItem.js';
 export type { ExecutionState } from './ActionItem.js';
 export { ChartDefinitionDisplay } from './ChartDefinitionDisplay.js';
+export { DevBar } from './DevBar.js';
 export { ChartPreview } from './ChartPreview.js';
 export { CommandDetailModal } from './CommandDetailModal.js';
 export { ConfigurableActionButton } from './ConfigurableActionButton.js';

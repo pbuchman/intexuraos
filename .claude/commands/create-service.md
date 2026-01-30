@@ -687,16 +687,40 @@ Edit `tsconfig.json`:
 
 ### 13. Add to Local Dev Setup
 
-Edit `scripts/dev.mjs` — add service to SERVICES array:
+Edit `ecosystem.config.cjs`:
+
+**Step 1:** Add to the `apps` array using `createServiceConfig`:
 
 ```javascript
-const SERVICES = [
-  // ... existing services ...
-  { name: '<service-name>', port: 81XX, color: '\x1b[XXm' },
-];
+module.exports = {
+  apps: [
+    // ... existing services ...
+    createServiceConfig('<service-name>', 81XX),
+  ],
+};
 ```
 
-Choose next unused port in range 8110-\* and an ANSI color code.
+**Step 2:** Add service URL to `COMMON_SERVICE_URLS`:
+
+```javascript
+const COMMON_SERVICE_URLS = {
+  // ... existing URLs ...
+  INTEXURAOS_<SERVICE_NAME>_URL: 'http://localhost:81XX',
+};
+```
+
+**Step 3:** If service needs specific env vars, add to `SERVICE_ENV_MAPPINGS`:
+
+```javascript
+const SERVICE_ENV_MAPPINGS = {
+  // ... existing mappings ...
+  '<service-name>': {
+    INTEXURAOS_MY_TOPIC: process.env.INTEXURAOS_MY_TOPIC ?? 'my-topic',
+  },
+};
+```
+
+Choose next unused port in range 8110-8199.
 
 **Also add to `.envrc.local.example`** for local development (use the same port):
 
@@ -958,7 +982,7 @@ terraform fmt -check -recursive && terraform validate
 - [ ] Added to `CLOUD_RUN_SERVICES` in Cloud Build files
 - [ ] Added to `.envrc.local.example`
 - [ ] Added to root tsconfig.json
-- [ ] Added to local dev setup (`scripts/dev.mjs`)
+- [ ] Added to local dev setup (`ecosystem.config.cjs`)
 - [ ] Updated domain docs registry
 - [ ] `pnpm run ci` passes
 - [ ] `terraform validate` passes

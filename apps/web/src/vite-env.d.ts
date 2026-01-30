@@ -11,6 +11,7 @@ interface ImportMetaEnv {
   readonly INTEXURAOS_COMMIT_SHA: string;
   readonly INTEXURAOS_COMMIT_MESSAGE: string;
   readonly INTEXURAOS_BUILD_DATE: string;
+  readonly VITE_PM2_MODE?: string;
 }
 
 interface ImportMeta {
