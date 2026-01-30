@@ -124,7 +124,8 @@ export const gateway: HttpFunction = async (req: any, res: any) => {
   logger.info({ method: req.method, url: req.url }, 'Gateway request');
 
   // Handle DevBar SSE endpoints (public, no auth required for DevBar)
-  if (req.path === '/devbar/logs' || req.path === '/devbar/events') {
+  const pathname = new URL(req.url ?? '/', 'http://localhost').pathname;
+  if (pathname === '/devbar/logs' || pathname === '/devbar/events') {
     const currentState = await state.getState();
 
     if (currentState?.status !== 'running' || currentState.vmIp === null) {
@@ -132,8 +133,8 @@ export const gateway: HttpFunction = async (req: any, res: any) => {
       return;
     }
 
-    const port = req.path === '/devbar/logs' ? 8106 : 8105;
-    const targetPath = req.path === '/devbar/logs' ? '/logs' : '/events';
+    const port = pathname === '/devbar/logs' ? 8106 : 8105;
+    const targetPath = pathname === '/devbar/logs' ? '/logs' : '/events';
 
     await proxySSE(currentState.vmIp, port, targetPath, res);
     return;

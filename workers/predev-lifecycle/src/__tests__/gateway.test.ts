@@ -122,7 +122,7 @@ describe('gateway function', () => {
 
   describe('SSE endpoints', () => {
     it('should return 503 for SSE when VM is not running', async () => {
-      mockReq.path = '/devbar/logs';
+      mockReq.url = '/devbar/logs';
 
       await gateway(mockReq, mockRes);
 
