@@ -6,6 +6,17 @@
 
 import type { Result, Logger } from '@intexuraos/common-core';
 import type { WorkerLocation } from '../models/worker.js';
+import type { WorkerCredentials, WorkerType } from '../models/workerSettings.js';
+
+/**
+ * Per-request worker credentials for dispatch.
+ * Required for user isolation - no global fallback.
+ */
+export interface DispatchWorkerCredentials {
+  mac?: WorkerCredentials;
+  vm?: WorkerCredentials;
+  priority: WorkerType[];
+}
 
 /**
  * Request to dispatch a code task to a worker.
@@ -21,6 +32,7 @@ export interface DispatchRequest {
   webhookUrl: string;
   webhookSecret: string;
   traceId?: string;
+  workerCredentials: DispatchWorkerCredentials;
 }
 
 /**
@@ -46,14 +58,12 @@ export interface DispatchError {
 
 /**
  * Dependencies for task dispatcher service.
+ *
+ * Note: Credentials are now per-request via DispatchRequest.workerCredentials.
+ * This enables user isolation - each user's dispatch uses their own credentials.
  */
 export interface TaskDispatcherDeps {
   logger: Logger;
-  cfAccessClientId: string;
-  cfAccessClientSecret: string;
-  dispatchSigningSecret: string;
-  orchestratorMacUrl: string;
-  orchestratorVmUrl: string;
 }
 
 /**
@@ -87,6 +97,7 @@ export interface TaskDispatcherService {
    *
    * @param taskId - The task ID to cancel
    * @param location - The worker location where the task is running
+   * @param credentials - Optional credentials for the worker. If not provided, cancellation is skipped.
    */
-  cancelOnWorker(taskId: string, location: WorkerLocation): Promise<void>;
+  cancelOnWorker(taskId: string, location: WorkerLocation, credentials?: WorkerCredentials): Promise<void>;
 }

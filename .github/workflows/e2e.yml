@@ -160,6 +160,7 @@ jobs:
           INTEXURAOS_INTERNAL_AUTH_TOKEN=test-secret \
           INTEXURAOS_DISPATCH_SIGNING_SECRET=test-signing-secret \
           INTEXURAOS_WEBHOOK_VERIFY_SECRET=test-webhook-secret \
+          INTEXURAOS_TOKEN_ENCRYPTION_KEY=test-encryption-key-must-be-32chars \
           INTEXURAOS_ORCHESTRATOR_MAC_URL=http://127.0.0.1:8090 \
           INTEXURAOS_ORCHESTRATOR_VM_URL=http://127.0.0.1:8090 \
           INTEXURAOS_SERVICE_URL=http://127.0.0.1:8128 \

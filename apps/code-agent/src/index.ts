@@ -13,6 +13,7 @@ const REQUIRED_ENV = [
   'INTEXURAOS_WEBHOOK_VERIFY_SECRET',
   'INTEXURAOS_ORCHESTRATOR_MAC_URL',
   'INTEXURAOS_ORCHESTRATOR_VM_URL',
+  'INTEXURAOS_TOKEN_ENCRYPTION_KEY', // For per-user worker credentials encryption (has dev fallback)
 ];
 
 /**

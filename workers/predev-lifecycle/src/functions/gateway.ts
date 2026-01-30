@@ -179,6 +179,7 @@ export const gateway: HttpFunction = async (req: any, res: any) => {
     return;
   }
 
+  /* v8 ignore ts-type -- TypeScript exhaustiveness check: all valid states handled above */
   res.status(500).send('Unknown state');
 };
 

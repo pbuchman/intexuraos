@@ -7,10 +7,11 @@
 import { err, ok, type Result } from '@intexuraos/common-core';
 import type { Logger } from '@intexuraos/common-core';
 import type { CodeTaskRepository } from '../../domain/repositories/codeTaskRepository.js';
-import type { TaskDispatcherService } from '../../domain/services/taskDispatcher.js';
+import type { TaskDispatcherService, DispatchWorkerCredentials } from '../../domain/services/taskDispatcher.js';
 import type { WhatsAppNotifier } from '../../domain/services/whatsappNotifier.js';
 import type { WorkerLocation } from '../../domain/models/worker.js';
 import type { MetricsClient } from '../../domain/services/metrics.js';
+import type { WorkerSettingsRepository } from '../../domain/ports/workerSettingsRepository.js';
 import { randomBytes } from 'node:crypto';
 
 /**
@@ -69,6 +70,7 @@ export type ProcessCodeActionErrorCode =
   | 'duplicate_approval'
   | 'duplicate_action'
   | 'worker_unavailable'
+  | 'worker_not_configured'
   | 'internal_error';
 
 /**
@@ -86,6 +88,7 @@ export interface ProcessCodeActionDeps {
   taskDispatcher: TaskDispatcherService;
   whatsappNotifier: WhatsAppNotifier;
   metricsClient: MetricsClient;
+  workerSettingsRepo: WorkerSettingsRepository;
 }
 
 /**
@@ -102,17 +105,61 @@ export async function processCodeAction(
   deps: ProcessCodeActionDeps,
   request: ProcessCodeActionRequest
 ): Promise<Result<ProcessCodeActionResult, ProcessCodeActionError>> {
-  const { logger, codeTaskRepo, taskDispatcher, whatsappNotifier } = deps;
+  const { logger, codeTaskRepo, taskDispatcher, whatsappNotifier, workerSettingsRepo } = deps;
   const { actionId, approvalEventId, userId, prompt, workerType, linearIssueId, repository, baseBranch, traceId } =
     request;
 
-  // Step 1: Linear issue creation (stub for now - use provided or undefined)
+  // Step 1: Fetch user's worker settings (required for dispatch)
+  const settingsResult = await workerSettingsRepo.getSettings(userId);
+  if (!settingsResult.ok) {
+    logger.error({ userId, error: settingsResult.error }, 'Failed to fetch worker settings');
+    return err({
+      code: 'internal_error',
+      message: 'Failed to fetch worker settings',
+    });
+  }
+
+  const settings = settingsResult.value;
+
+  // Build worker credentials from user's settings
+  const workerCredentials: DispatchWorkerCredentials = {
+    priority: settings?.workerPriority ?? ['mac', 'vm'],
+  };
+
+  if (settings?.mac?.enabled === true) {
+    workerCredentials.mac = {
+      url: settings.mac.url,
+      cfAccessClientId: settings.mac.cfAccessClientId,
+      cfAccessClientSecret: settings.mac.cfAccessClientSecret,
+      dispatchSigningSecret: settings.mac.dispatchSigningSecret,
+    };
+  }
+
+  if (settings?.vm?.enabled === true) {
+    workerCredentials.vm = {
+      url: settings.vm.url,
+      cfAccessClientId: settings.vm.cfAccessClientId,
+      cfAccessClientSecret: settings.vm.cfAccessClientSecret,
+      dispatchSigningSecret: settings.vm.dispatchSigningSecret,
+    };
+  }
+
+  // Fail if no workers configured
+  if (workerCredentials.mac === undefined && workerCredentials.vm === undefined) {
+    logger.warn({ userId }, 'User has no workers configured');
+    return err({
+      code: 'worker_not_configured',
+      message: 'Please configure your workers in Settings before submitting code tasks',
+    });
+  }
+
+  // Step 2: Linear issue creation (stub for now - use provided or undefined)
   const finalLinearIssueId = linearIssueId;
 
-  // Step 2: Generate webhook secret upfront so it can be stored with the task
+  // Step 3: Generate webhook secret upfront so it can be stored with the task
   const webhookSecret = generateWebhookSecret();
 
-  // Step 3: Create code task with deduplication
+  // Step 4: Create code task with deduplication
   const createInput: {
     userId: string;
     prompt: string;
@@ -170,11 +217,11 @@ export async function processCodeAction(
 
   const task = createResult.value;
 
-  // Step 4: Build webhook URL for callback (use SERVICE_URL for local/E2E environments)
+  // Step 5: Build webhook URL for callback (use SERVICE_URL for local/E2E environments)
   const serviceUrl = process.env['INTEXURAOS_SERVICE_URL'] ?? 'https://code-agent.intexuraos.cloud';
   const webhookUrl = `${serviceUrl}/internal/webhooks/task-complete`;
 
-  // Step 5: Dispatch to worker (webhookSecret was stored in task during creation)
+  // Step 6: Dispatch to worker with per-user credentials
   const dispatchRequest: {
     taskId: string;
     linearIssueId?: string;
@@ -186,6 +233,7 @@ export async function processCodeAction(
     webhookUrl: string;
     webhookSecret: string;
     traceId?: string;
+    workerCredentials: DispatchWorkerCredentials;
   } = {
     taskId: task.id,
     prompt: task.sanitizedPrompt,
@@ -195,6 +243,7 @@ export async function processCodeAction(
     workerType: task.workerType,
     webhookUrl,
     webhookSecret,
+    workerCredentials,
   };
 
   // Only include linearIssueId if it exists
@@ -225,13 +274,13 @@ export async function processCodeAction(
 
   const dispatchValue = dispatchResult.value;
 
-  // Step 6: Record metrics for task submission
-  const source = request.source ?? 'web'; // Default to web if not specified
+  // Step 7: Record metrics for task submission
+  const source = request.source ?? 'web';
   await deps.metricsClient.incrementTasksSubmitted(workerType, source).catch((error: unknown) => {
     logger.warn({ error, taskId: task.id }, 'Failed to record task submission metric');
   });
 
-  // Step 7: Generate cancel nonce and send task started notification (INT-379)
+  // Step 8: Generate cancel nonce and send task started notification (INT-379)
   const cancelNonce = generateCancelNonce();
   const cancelNonceExpiresAt = new Date(Date.now() + CANCEL_NONCE_TTL_MS).toISOString();
 
@@ -250,7 +299,7 @@ export async function processCodeAction(
     logger.warn({ taskId: task.id, error: updateResult.error }, 'Failed to update task with cancel nonce');
   }
 
-  // Step 8: Return success
+  // Step 9: Return success
   return ok({
     codeTaskId: task.id,
     resourceUrl: `/#/code-tasks/${task.id}`,

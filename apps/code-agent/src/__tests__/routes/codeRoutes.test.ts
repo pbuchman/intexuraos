@@ -3,6 +3,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as jose from 'jose';
+import nock from 'nock';
 
 // Mock jose library for JWT validation
 vi.mock('jose', () => ({
@@ -40,6 +41,8 @@ import { createProcessHeartbeatUseCase } from '../../domain/usecases/processHear
 import { createDetectZombieTasksUseCase } from '../../domain/usecases/detectZombieTasks.js';
 import { createCleanupTaskLogsUseCase } from '../../domain/usecases/cleanupTaskLogs.js';
 import { createNoOpMetricsClient, type MetricsClient } from '../../infra/metrics.js';
+import { createWorkerSettingsRepository } from '../../infra/firestore/workerSettingsRepository.js';
+import type { WorkerSettingsRepository } from '../../domain/ports/workerSettingsRepository.js';
 
 describe('codeRoutes', () => {
   let fakeFirestore: ReturnType<typeof createFakeFirestore>;
@@ -47,6 +50,18 @@ describe('codeRoutes', () => {
   let server: Awaited<ReturnType<typeof buildServer>>;
 
   beforeEach(async () => {
+    // Mock actions-agent HTTP calls to avoid hanging in CI
+    nock('http://actions-agent')
+      .persist()
+      .patch(/\/internal\/actions\/.*\/status/)
+      .reply(200, { success: true });
+
+    // Mock linear-agent HTTP calls
+    nock('http://linear-agent:8086')
+      .persist()
+      .post(/\/.*/)
+      .reply(200, { success: true });
+
     // Set jwtVerify to resolve by default (simulating valid token)
     mockedJwtVerify.mockResolvedValue({
       payload: { sub: 'test-user-id', email: 'test@example.com' },
@@ -179,8 +194,12 @@ describe('codeRoutes', () => {
         codeTaskRepository: codeTaskRepo,
         logger,
       }),
-      cleanupTaskLogs: createCleanupTaskLogsUseCase({
+cleanupTaskLogs: createCleanupTaskLogsUseCase({
         codeTaskRepository: codeTaskRepo,
+        logger,
+      }),
+      workerSettingsRepo: createWorkerSettingsRepository({
+        firestore: fakeFirestore as unknown as Firestore,
         logger,
       }),
     } as {
@@ -199,6 +218,17 @@ describe('codeRoutes', () => {
       processHeartbeat: import('../../domain/usecases/processHeartbeat.js').ProcessHeartbeatUseCase;
       detectZombieTasks: import('../../domain/usecases/detectZombieTasks.js').DetectZombieTasksUseCase;
       cleanupTaskLogs: import('../../domain/usecases/cleanupTaskLogs.js').CleanupTaskLogsUseCase;
+      workerSettingsRepo: WorkerSettingsRepository;
+    });
+
+    // Set up worker settings for the test user
+    const services = getServices();
+    await services.workerSettingsRepo.updateWorkerConfig('test-user-id', 'mac', {
+      url: 'https://cc-mac.intexuraos.cloud',
+      cfAccessClientId: 'test-client-id',
+      cfAccessClientSecret: 'test-client-secret',
+      dispatchSigningSecret: 'test-dispatch-secret',
+      enabled: true,
     });
 
     server = await buildServer();
@@ -207,6 +237,7 @@ describe('codeRoutes', () => {
   afterEach(() => {
     resetServices();
     resetFirestore();
+    nock.cleanAll();
   });
 
   it('has routes registered', async () => {
@@ -893,9 +924,29 @@ describe('codeRoutes', () => {
         }),
       } as unknown as CodeTaskRepository;
 
+      // Mock workerSettingsRepo to return valid settings for user-123
+      const mockWorkerSettingsRepo = {
+        getSettings: vi.fn().mockResolvedValue({
+          ok: true,
+          value: {
+            userId: 'user-123',
+            mac: {
+              url: 'https://cc-mac.intexuraos.cloud',
+              cfAccessClientId: 'test-client-id',
+              cfAccessClientSecret: 'test-client-secret',
+              dispatchSigningSecret: 'test-dispatch-secret',
+              enabled: true,
+            },
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          },
+        }),
+      } as unknown as WorkerSettingsRepository;
+
       setServices({
         ...getServices(),
         codeTaskRepo: mockRepo,
+        workerSettingsRepo: mockWorkerSettingsRepo,
       });
 
       const response = await server.inject({
