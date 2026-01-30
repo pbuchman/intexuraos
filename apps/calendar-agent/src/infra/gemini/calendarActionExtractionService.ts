@@ -3,6 +3,7 @@ import { err, getErrorMessage, ok } from '@intexuraos/common-core';
 import {
   calendarActionExtractionPrompt,
   CalendarEventSchema,
+  buildCalendarExtractionRepairPrompt,
 } from '@intexuraos/llm-prompts';
 import { formatZodErrors } from '@intexuraos/llm-utils';
 import type { LlmGenerateClient } from '@intexuraos/llm-factory';
@@ -17,8 +18,70 @@ import pino from 'pino';
 export type { CalendarActionExtractionService, ExtractedCalendarEvent, ExtractionError };
 
 const MAX_DESCRIPTION_LENGTH = 1000;
+const MAX_REPAIR_ATTEMPTS = 1;
 
 type MinimalLogger = pino.Logger;
+
+interface ParseResult {
+  success: true;
+  event: ExtractedCalendarEvent;
+}
+
+interface ParseError {
+  success: false;
+  errorMessage: string;
+  rawResponse: string;
+  wasWrappedInMarkdown: boolean;
+}
+
+type ParseAttemptResult = ParseResult | ParseError;
+
+function parseAndValidateResponse(rawContent: string): ParseAttemptResult {
+  let cleaned = rawContent.trim();
+  const codeBlockRegex = /^```(?:json)?\s*\n([\s\S]*?)\n```$/;
+  const codeBlockMatch = codeBlockRegex.exec(cleaned);
+  const wasWrappedInMarkdown = codeBlockMatch !== null;
+  if (wasWrappedInMarkdown && codeBlockMatch[1] !== undefined) {
+    cleaned = codeBlockMatch[1].trim();
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(cleaned);
+  } catch (e) {
+    return {
+      success: false,
+      errorMessage: `JSON parse error: ${getErrorMessage(e)}`,
+      rawResponse: cleaned,
+      wasWrappedInMarkdown,
+    };
+  }
+
+  const validationResult = CalendarEventSchema.safeParse(parsed);
+  if (!validationResult.success) {
+    const zodErrors = formatZodErrors(validationResult.error);
+    return {
+      success: false,
+      errorMessage: `Schema validation failed: ${zodErrors}`,
+      rawResponse: cleaned,
+      wasWrappedInMarkdown,
+    };
+  }
+
+  return {
+    success: true,
+    event: {
+      summary: validationResult.data.summary,
+      start: validationResult.data.start,
+      end: validationResult.data.end,
+      location: validationResult.data.location,
+      description: validationResult.data.description,
+      valid: validationResult.data.valid,
+      error: validationResult.data.error,
+      reasoning: validationResult.data.reasoning,
+    },
+  };
+}
 
 export function createCalendarActionExtractionService(
   llmUserServiceClient: UserServiceClient,
@@ -109,100 +172,118 @@ export function createCalendarActionExtractionService(
         'LLM generation successful'
       );
 
-      let cleaned = result.value.content.trim();
-      const codeBlockRegex = /^```(?:json)?\s*\n([\s\S]*?)\n```$/;
-      const codeBlockMatch = codeBlockRegex.exec(cleaned);
-      const wasWrappedInMarkdown = codeBlockMatch !== null;
-      if (wasWrappedInMarkdown && codeBlockMatch[1] !== undefined) {
-        log.debug({ userId }, 'Response wrapped in markdown code block, stripping');
-        cleaned = codeBlockMatch[1].trim();
+      const parseResult = parseAndValidateResponse(result.value.content);
+
+      if (parseResult.success) {
+        log.info(
+          {
+            userId,
+            summary: parseResult.event.summary,
+            valid: parseResult.event.valid,
+          },
+          'LLM calendar event extraction completed successfully'
+        );
+        return ok(parseResult.event);
       }
 
-      try {
-        let parsed: unknown;
-        try {
-          parsed = JSON.parse(cleaned);
-        } catch (e) {
-          log.error(
-            { userId, parseError: getErrorMessage(e) },
-            'Failed to parse LLM response as JSON'
-          );
-          return err({
-            code: 'INVALID_RESPONSE',
-            message: `Failed to parse: ${getErrorMessage(e)}`,
-            details: {
-              parseError: getErrorMessage(e),
-              rawResponsePreview: cleaned.slice(0, 1000),
-              wasWrappedInMarkdown,
-            },
-          });
-        }
+      log.warn(
+        {
+          userId,
+          errorMessage: parseResult.errorMessage,
+          rawResponsePreview: parseResult.rawResponse.slice(0, 500),
+          wasWrappedInMarkdown: parseResult.wasWrappedInMarkdown,
+        },
+        'Initial extraction failed, attempting repair'
+      );
 
-        const validationResult = CalendarEventSchema.safeParse(parsed);
-        if (!validationResult.success) {
-          const zodErrors = formatZodErrors(validationResult.error);
-          log.error(
-            {
-              userId,
-              zodErrors,
-              rawResponsePreview: cleaned.slice(0, 500),
-              wasWrappedInMarkdown,
-            },
-            'LLM returned invalid response format'
-          );
-          return err({
-            code: 'INVALID_RESPONSE',
-            message: `LLM returned invalid response format: ${zodErrors}`,
-            details: {
-              zodErrors,
-              rawResponsePreview: cleaned.slice(0, 1000),
-              wasWrappedInMarkdown,
-            },
-          });
-        }
-
-        const event: ExtractedCalendarEvent = {
-          summary: validationResult.data.summary,
-          start: validationResult.data.start,
-          end: validationResult.data.end,
-          location: validationResult.data.location,
-          description: validationResult.data.description,
-          valid: validationResult.data.valid,
-          error: validationResult.data.error,
-          reasoning: validationResult.data.reasoning,
-        };
+      for (let attempt = 0; attempt < MAX_REPAIR_ATTEMPTS; attempt++) {
+        const repairPrompt = buildCalendarExtractionRepairPrompt(
+          text,
+          currentDate,
+          parseResult.rawResponse,
+          parseResult.errorMessage
+        );
 
         log.info(
           {
             userId,
-            summary: event.summary,
-            valid: event.valid,
+            repairAttempt: attempt + 1,
+            maxAttempts: MAX_REPAIR_ATTEMPTS,
+            repairPromptLength: repairPrompt.length,
           },
-          'LLM calendar event extraction completed successfully'
+          'Sending repair prompt'
         );
 
-        return ok(event);
-      } catch (error) {
-        log.error(
+        const repairResult = await llmClient.generate(repairPrompt);
+
+        if (!repairResult.ok) {
+          log.error(
+            {
+              userId,
+              repairAttempt: attempt + 1,
+              llmErrorCode: repairResult.error.code,
+              errorMessage: repairResult.error.message,
+            },
+            'Repair LLM generation failed'
+          );
+          continue;
+        }
+
+        log.info(
           {
             userId,
-            parseError: getErrorMessage(error),
-            rawResponsePreview: cleaned.slice(0, 500),
+            repairAttempt: attempt + 1,
+            responseLength: repairResult.value.content.length,
           },
-          'Failed to parse LLM response'
+          'Repair LLM generation successful'
         );
-        return err({
-          code: 'INVALID_RESPONSE',
-          message: `Failed to parse: ${getErrorMessage(error)}`,
-          details: {
-            parseError: getErrorMessage(error),
-            rawResponsePreview: cleaned.slice(0, 1000),
-            wasWrappedInMarkdown,
-            originalLength: result.value.content.length,
-            cleanedLength: cleaned.length,
+
+        const repairParseResult = parseAndValidateResponse(repairResult.value.content);
+
+        if (repairParseResult.success) {
+          log.info(
+            {
+              userId,
+              repairAttempt: attempt + 1,
+              summary: repairParseResult.event.summary,
+              valid: repairParseResult.event.valid,
+            },
+            'Repair extraction succeeded'
+          );
+          return ok(repairParseResult.event);
+        }
+
+        log.warn(
+          {
+            userId,
+            repairAttempt: attempt + 1,
+            errorMessage: repairParseResult.errorMessage,
+            rawResponsePreview: repairParseResult.rawResponse.slice(0, 500),
           },
-        });
+          'Repair attempt failed'
+        );
       }
+
+      log.error(
+        {
+          userId,
+          errorMessage: parseResult.errorMessage,
+          rawResponsePreview: parseResult.rawResponse.slice(0, 500),
+          wasWrappedInMarkdown: parseResult.wasWrappedInMarkdown,
+          repairAttemptsMade: MAX_REPAIR_ATTEMPTS,
+        },
+        'LLM extraction failed after repair attempts'
+      );
+
+      return err({
+        code: 'INVALID_RESPONSE',
+        message: `LLM returned invalid response format: ${parseResult.errorMessage}`,
+        details: {
+          parseError: parseResult.errorMessage,
+          rawResponsePreview: parseResult.rawResponse.slice(0, 1000),
+          wasWrappedInMarkdown: parseResult.wasWrappedInMarkdown,
+        },
+      });
     },
   };
 }

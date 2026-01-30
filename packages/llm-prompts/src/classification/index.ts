@@ -10,20 +10,6 @@ export {
 } from './commandClassifierPrompt.js';
 
 export {
-  calendarActionExtractionPrompt,
-  type CalendarEventExtractionPromptInput,
-  type CalendarEventExtractionPromptDeps,
-  type ExtractedCalendarEvent,
-} from './calendarActionExtractionPrompt.js';
-
-export {
-  linearActionExtractionPrompt,
-  type LinearIssueExtractionPromptInput,
-  type LinearIssueExtractionPromptDeps,
-  type ExtractedLinearIssue,
-} from './linearActionExtractionPrompt.js';
-
-export {
   intelligentClassifierPrompt,
   type ClassificationExample,
   type ClassificationCorrection,

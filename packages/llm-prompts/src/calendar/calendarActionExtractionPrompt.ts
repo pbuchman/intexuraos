@@ -17,29 +17,6 @@ export interface CalendarEventExtractionPromptDeps extends PromptDeps {
   maxDescriptionLength?: number;
 }
 
-/**
- * Extracted calendar event data.
- * All fields except summary are optional - missing data indicates incomplete input.
- */
-export interface ExtractedCalendarEvent {
-  /** Event title/summary (required) */
-  summary: string;
-  /** Event start time in ISO-8601 format (YYYY-MM-DDTHH:mm:ss) or date only (YYYY-MM-DD) */
-  start: string | null;
-  /** Event end time in ISO-8601 format (null if not specified) */
-  end: string | null;
-  /** Event location or meeting link (null if not specified) */
-  location: string | null;
-  /** Detailed event description (null if not specified) */
-  description: string | null;
-  /** Whether extraction was successful (all required fields present) */
-  valid: boolean;
-  /** Error message if extraction failed (null if successful) */
-  error: string | null;
-  /** Reasoning for extraction decisions */
-  reasoning: string;
-}
-
 export const calendarActionExtractionPrompt: PromptBuilder<
   CalendarEventExtractionPromptInput,
   CalendarEventExtractionPromptDeps
@@ -178,17 +155,17 @@ Output:
 }
 
 Input: "fizjoterapia Myśliwska w nastepny czwartek o 15 30"
-Current date: "2026-01-29 Thursday"
+Current date: "2026-01-28 Wednesday"
 Output:
 {
   "summary": "Fizjoterapia Myśliwska",
-  "start": "2026-01-30T15:30:00",
-  "end": "2026-01-30T16:30:00",
+  "start": "2026-01-29T15:30:00",
+  "end": "2026-01-29T16:30:00",
   "location": "Myśliwska",
   "description": null,
   "valid": true,
   "error": null,
-  "reasoning": "Wyodrębniono tytuł, lokalizację (Myśliwska), datę (następny czwartek = 2026-01-30) i godzinę (15:30)"
+  "reasoning": "Wyodrębniono tytuł, lokalizację (Myśliwska), datę (następny czwartek od środy = 2026-01-29 czwartek) i godzinę (15:30)"
 }
 
 Input: "fizjoterapia myśliwska o 15 30 5 lutego 2026"
@@ -202,6 +179,20 @@ Output:
   "valid": true,
   "error": null,
   "reasoning": "Wyodrębniono tytuł, lokalizację, datę (5 lutego 2026 = 2026-02-05) i godzinę (15:30)"
+}
+
+Input: "Fizjoterapia w nastepny czwartek o 10"
+Current date: "2026-01-29 Thursday"
+Output:
+{
+  "summary": "Fizjoterapia",
+  "start": "2026-02-05T10:00:00",
+  "end": "2026-02-05T11:00:00",
+  "location": null,
+  "description": null,
+  "valid": true,
+  "error": null,
+  "reasoning": "Dziś jest czwartek, więc 'następny czwartek' oznacza czwartek za tydzień (2026-02-05)"
 }
 
 Input: "Obiad u mamy w niedzielę o 14"

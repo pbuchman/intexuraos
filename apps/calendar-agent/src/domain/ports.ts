@@ -8,6 +8,7 @@ import type {
   UserServiceClient,
   OAuthTokenResult,
 } from '@intexuraos/internal-clients';
+import type { ExtractedCalendarEvent } from '@intexuraos/llm-prompts';
 import type {
   CalendarEvent,
   CreateEventInput,
@@ -25,7 +26,7 @@ import type {
 } from './models.js';
 import type { CalendarError } from './errors.js';
 
-export type { UserServiceClient, OAuthTokenResult };
+export type { UserServiceClient, OAuthTokenResult, ExtractedCalendarEvent };
 
 export interface GoogleCalendarClient {
   getCalendarTimezone(
@@ -97,17 +98,6 @@ export interface ExtractionError {
     originalLength?: number;
     cleanedLength?: number;
   };
-}
-
-export interface ExtractedCalendarEvent {
-  summary: string;
-  start: string | null;
-  end: string | null;
-  location: string | null;
-  description: string | null;
-  valid: boolean;
-  error: string | null;
-  reasoning: string;
 }
 
 export interface CalendarActionExtractionService {
