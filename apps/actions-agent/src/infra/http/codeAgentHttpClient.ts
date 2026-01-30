@@ -29,13 +29,23 @@ export interface CodeAgentHttpClientConfig {
 const defaultLogger = createAppLogger({ name: 'codeAgentHttpClient' }) as unknown as HttpLogger;
 
 interface ApiResponse {
-  codeTaskId: string;
-  resourceUrl: string;
+  success: boolean;
+  data?: {
+    codeTaskId: string;
+    resourceUrl: string;
+  };
+  error?: { code?: string; message?: string };
 }
 
 interface ErrorResponse {
-  error?: string;
-  existingTaskId?: string;
+  success: boolean;
+  error?: {
+    code?: string;
+    message?: string;
+    details?: {
+      existingTaskId?: string;
+    };
+  };
 }
 
 export function createCodeAgentHttpClient(
@@ -99,13 +109,20 @@ export function createCodeAgentHttpClient(
       if (response.status === 200) {
         try {
           const body = (await response.json()) as ApiResponse;
+          if (!body.success || body.data === undefined) {
+            logger.error({ body }, 'Invalid response from code-agent');
+            return err({
+              code: 'UNKNOWN',
+              message: 'Invalid response from code-agent',
+            });
+          }
           logger.info(
-            { codeTaskId: body.codeTaskId, resourceUrl: body.resourceUrl },
+            { codeTaskId: body.data.codeTaskId, resourceUrl: body.data.resourceUrl },
             'Code task created successfully'
           );
           return ok({
-            codeTaskId: body.codeTaskId,
-            resourceUrl: body.resourceUrl,
+            codeTaskId: body.data.codeTaskId,
+            resourceUrl: body.data.resourceUrl,
           });
         } catch (error) {
           logger.error({ error: getErrorMessage(error) }, 'Invalid JSON response from code-agent');
@@ -120,13 +137,14 @@ export function createCodeAgentHttpClient(
       if (response.status === 409) {
         try {
           const body = (await response.json()) as ErrorResponse;
-          logger.info({ existingTaskId: body.existingTaskId }, 'Duplicate task detected');
+          const existingTaskId = body.error?.details?.existingTaskId;
+          logger.info({ existingTaskId }, 'Duplicate task detected');
           const error: CodeAgentError = {
             code: 'DUPLICATE',
             message: 'Task already exists for this approval',
           };
-          if (body.existingTaskId !== undefined) {
-            error.existingTaskId = body.existingTaskId;
+          if (existingTaskId !== undefined) {
+            error.existingTaskId = existingTaskId;
           }
           return err(error);
         } catch {
@@ -141,11 +159,12 @@ export function createCodeAgentHttpClient(
       if (response.status === 503) {
         try {
           const body = (await response.json()) as ErrorResponse;
-          logger.warn({ error: body.error }, 'Code-agent worker unavailable');
+          const errorMessage = body.error?.message ?? 'No workers available';
+          logger.warn({ error: errorMessage }, 'Code-agent worker unavailable');
           return err({
             code: 'WORKER_UNAVAILABLE',
             /* v8 ignore ts-type -- 503 response always includes error message */
-            message: body.error ?? 'No workers available',
+            message: errorMessage,
           });
         } catch {
           return err({
