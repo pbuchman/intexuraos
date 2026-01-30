@@ -39,6 +39,7 @@ import type { LinearIssueService } from '../domain/services/linearIssueService.j
 import type { StatusMirrorService } from '../infra/services/statusMirrorServiceImpl.js';
 import { createProcessHeartbeatUseCase } from '../domain/usecases/processHeartbeat.js';
 import { createDetectZombieTasksUseCase } from '../domain/usecases/detectZombieTasks.js';
+import { createCleanupTaskLogsUseCase } from '../domain/usecases/cleanupTaskLogs.js';
 import { createNoOpMetricsClient, type MetricsClient } from '../infra/metrics.js';
 
 describe('OpenAPI contract', () => {
@@ -116,6 +117,10 @@ describe('OpenAPI contract', () => {
         codeTaskRepository: codeTaskRepo,
         logger,
       }),
+      cleanupTaskLogs: createCleanupTaskLogsUseCase({
+        codeTaskRepository: codeTaskRepo,
+        logger,
+      }),
       linearIssueService: createLinearIssueService({
         linearAgentClient: createLinearAgentHttpClient({
           baseUrl: 'http://linear-agent:8086',
@@ -141,6 +146,7 @@ describe('OpenAPI contract', () => {
       metricsClient: MetricsClient;
       processHeartbeat: import('../domain/usecases/processHeartbeat.js').ProcessHeartbeatUseCase;
       detectZombieTasks: import('../domain/usecases/detectZombieTasks.js').DetectZombieTasksUseCase;
+      cleanupTaskLogs: import('../domain/usecases/cleanupTaskLogs.js').CleanupTaskLogsUseCase;
     });
 
     app = await buildServer();

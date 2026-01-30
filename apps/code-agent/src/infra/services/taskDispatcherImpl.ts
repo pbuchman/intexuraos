@@ -81,11 +81,12 @@ class TaskDispatcherImpl implements TaskDispatcherService {
 
     const body = JSON.stringify(taskRequest);
     const timestamp = Date.now();
+    const nonce = generateNonce();
 
-    // Generate HMAC signature
+    // Generate HMAC signature (includes nonce for replay protection)
     const signatureResult = signDispatchRequest(
       { logger: this.logger, dispatchSigningSecret: this.dispatchSigningSecret },
-      { body, timestamp }
+      { body, timestamp, nonce }
     );
     if (!signatureResult.ok) {
       return err({
@@ -95,7 +96,6 @@ class TaskDispatcherImpl implements TaskDispatcherService {
     }
 
     const { signature } = signatureResult.value;
-    const nonce = generateNonce();
 
     // Try to dispatch to available workers
     const result = await this.dispatchToWorker(taskRequest, body, timestamp, signature, nonce);

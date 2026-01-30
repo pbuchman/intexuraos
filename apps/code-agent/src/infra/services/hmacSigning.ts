@@ -23,6 +23,7 @@ export interface HmacSigningDeps {
 export interface SignDispatchParams {
   body: string;
   timestamp: number;
+  nonce: string;
 }
 
 /**
@@ -56,8 +57,8 @@ export function signDispatchRequest(
   }
 
   try {
-    const { body, timestamp } = params;
-    const message = `${String(timestamp)}.${body}`;
+    const { body, timestamp, nonce } = params;
+    const message = `${String(timestamp)}.${nonce}.${body}`;
 
     const signature = crypto.createHmac('sha256', dispatchSigningSecret).update(message).digest('hex');
 

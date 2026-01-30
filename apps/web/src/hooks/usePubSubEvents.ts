@@ -15,9 +15,28 @@ interface SSEMessage {
   event?: PubSubEvent;
 }
 
-const PUBSUB_UI_URL = 'http://localhost:8105';
 const MAX_EVENTS = 100;
 const RECONNECT_DELAYS = [1000, 2000, 5000, 10000];
+
+// Detect environment and return appropriate PubSub UI URL
+function getPubSubUrl(): string | null {
+  if (typeof window === 'undefined') return null;
+
+  const hostname = window.location.hostname;
+
+  // Local development
+  if (import.meta.env.DEV && hostname === 'localhost') {
+    return 'http://localhost:8105';
+  }
+
+  // Pre-dev environment (Cloud Function gateway)
+  if (hostname.includes('cloudfunctions.net')) {
+    return `${window.location.origin}/devbar`;
+  }
+
+  // Production - no PubSub UI
+  return null;
+}
 
 export function usePubSubEvents(enabled: boolean): {
   events: PubSubEvent[];
@@ -36,8 +55,10 @@ export function usePubSubEvents(enabled: boolean): {
     setEvents([]);
   }, []);
 
+  const pubsubUrl = getPubSubUrl();
+
   useEffect(() => {
-    if (!enabled) {
+    if (!enabled || !pubsubUrl) {
       if (eventSourceRef.current !== null) {
         eventSourceRef.current.close();
         eventSourceRef.current = null;
@@ -55,7 +76,7 @@ export function usePubSubEvents(enabled: boolean): {
         eventSourceRef.current.close();
       }
 
-      const eventSource = new EventSource(`${PUBSUB_UI_URL}/events`);
+      const eventSource = new EventSource(`${String(pubsubUrl)}/events`);
       eventSourceRef.current = eventSource;
 
       eventSource.onopen = (): void => {
@@ -102,7 +123,7 @@ export function usePubSubEvents(enabled: boolean): {
         reconnectTimeoutRef.current = null;
       }
     };
-  }, [enabled]);
+  }, [enabled, pubsubUrl]);
 
   return { events, isConnected, clearEvents, topics };
 }

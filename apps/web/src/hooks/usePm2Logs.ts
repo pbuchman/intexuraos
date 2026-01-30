@@ -23,9 +23,28 @@ interface SSEMessage {
   };
 }
 
-const LOG_SERVER_URL = 'http://localhost:8106';
 const MAX_LOGS = 500;
 const RECONNECT_DELAYS = [1000, 2000, 5000, 10000];
+
+// Detect environment and return appropriate log server URL
+function getLogServerUrl(): string | null {
+  if (typeof window === 'undefined') return null;
+
+  const hostname = window.location.hostname;
+
+  // Local development
+  if (import.meta.env.DEV && hostname === 'localhost') {
+    return 'http://localhost:8106';
+  }
+
+  // Pre-dev environment (Cloud Function gateway)
+  if (hostname.includes('cloudfunctions.net')) {
+    return `${window.location.origin}/devbar`;
+  }
+
+  // Production - no log server
+  return null;
+}
 
 function extractNestedJson(message: string): Record<string, unknown> | null {
   const jsonStart = message.indexOf('{');
@@ -108,8 +127,10 @@ export function usePm2Logs(enabled: boolean): {
     setLogs([]);
   }, []);
 
+  const logServerUrl = getLogServerUrl();
+
   useEffect(() => {
-    if (!enabled) {
+    if (!enabled || !logServerUrl) {
       if (eventSourceRef.current !== null) {
         eventSourceRef.current.close();
         eventSourceRef.current = null;
@@ -127,7 +148,7 @@ export function usePm2Logs(enabled: boolean): {
         eventSourceRef.current.close();
       }
 
-      const eventSource = new EventSource(`${LOG_SERVER_URL}/logs`);
+      const eventSource = new EventSource(`${String(logServerUrl)}/logs`);
       eventSourceRef.current = eventSource;
 
       eventSource.onopen = (): void => {
@@ -200,7 +221,7 @@ export function usePm2Logs(enabled: boolean): {
         reconnectTimeoutRef.current = null;
       }
     };
-  }, [enabled]);
+  }, [enabled, logServerUrl]);
 
   return { logs, isConnected, clearLogs, apps };
 }

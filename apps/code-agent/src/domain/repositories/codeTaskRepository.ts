@@ -111,4 +111,20 @@ export interface CodeTaskRepository {
    * Returns the number of tasks created since midnight.
    */
   countByUserToday(userId: string): Promise<Result<number, RepositoryError>>;
+
+  /**
+   * Find tasks eligible for log archival (completed before cutoff, not yet archived).
+   */
+  findArchivableTasks(
+    cutoffDate: Date,
+    limit: number
+  ): Promise<Result<{ taskId: string }[], RepositoryError>>;
+
+  /**
+   * Archive logs for a task: delete logs subcollection and mark task as archived.
+   */
+  archiveTaskLogs(
+    taskId: string,
+    batchSize: number
+  ): Promise<Result<{ logCount: number; archivedAt: Date }, RepositoryError>>;
 }

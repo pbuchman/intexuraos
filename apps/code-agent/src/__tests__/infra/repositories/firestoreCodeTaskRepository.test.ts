@@ -799,4 +799,92 @@ describe('firestoreCodeTaskRepository', () => {
       expect(result.ok).toBe(true);
     });
   });
+
+  describe('findArchivableTasks', () => {
+    it('returns tasks before cutoff with logsArchived=false', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const created = await repo.create(createTaskInput());
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+
+      await repo.update(created.value.id, {
+        status: 'completed',
+        completedAt: new Date('2024-01-01'),
+      });
+
+      const cutoff = new Date('2024-06-01');
+      const result = await repo.findArchivableTasks(cutoff, 100);
+
+      expect(result.ok).toBe(true);
+    });
+
+    it('returns empty array when none exist', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const result = await repo.findArchivableTasks(new Date(), 100);
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value).toEqual([]);
+    });
+
+    it('respects limit parameter', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      await repo.create(createTaskInput({ prompt: 'Task 1' }));
+      await repo.create(createTaskInput({ prompt: 'Task 2' }));
+
+      const result = await repo.findArchivableTasks(new Date(), 1);
+
+      expect(result.ok).toBe(true);
+    });
+  });
+
+  describe('archiveTaskLogs', () => {
+    it('updates task with logsArchived=true', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const created = await repo.create(createTaskInput());
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+
+      await repo.update(created.value.id, {
+        status: 'completed',
+        completedAt: new Date(),
+      });
+
+      const result = await repo.archiveTaskLogs(created.value.id, 500);
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.logCount).toBe(0);
+      expect(result.value.archivedAt).toBeInstanceOf(Date);
+    });
+
+    it('returns NOT_FOUND for non-existent task', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const result = await repo.archiveTaskLogs('non-existent', 500);
+
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error.code).toBe('NOT_FOUND');
+    });
+  });
 });
