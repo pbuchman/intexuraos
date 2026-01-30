@@ -66,6 +66,8 @@ export async function submitResearch(
       synthesisModel: params.synthesisModel,
       hasContexts: params.inputContexts !== undefined && params.inputContexts.length > 0,
       skipSynthesis: params.skipSynthesis === true,
+      hasUserName: params.userName !== undefined,
+      hasUserEmail: params.userEmail !== undefined,
     },
     'Creating research submission'
   );
