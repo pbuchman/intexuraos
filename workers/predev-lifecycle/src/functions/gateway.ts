@@ -76,7 +76,10 @@ async function proxyRequest(vmIp: string, req: any, res: any): Promise<void> {
 
     res.status(response.status);
     for (const [key, value] of response.headers.entries()) {
-      if (key.toLowerCase() !== 'transfer-encoding') {
+      const lowerKey = key.toLowerCase();
+      if (lowerKey !== 'transfer-encoding' &&
+          lowerKey !== 'content-encoding' &&
+          lowerKey !== 'content-length') {
         res.setHeader(key, value);
       }
     }
