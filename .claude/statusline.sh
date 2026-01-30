@@ -245,6 +245,23 @@ if [ -n "$hooks_dir" ]; then
   fi
 fi
 
+# ---- PM2 status ----
+pm2_metrics=""
+if command -v pm2 &>/dev/null || command -v npx &>/dev/null; then
+  pm2_json=$(pm2 jlist 2>/dev/null || npx pm2 jlist 2>/dev/null)
+  if [ -n "$pm2_json" ] && [ "$HAS_JQ" -eq 1 ]; then
+    pm2_online=$(echo "$pm2_json" | jq '[.[] | select(.pm2_env.status == "online")] | length' 2>/dev/null || echo 0)
+    pm2_total=$(echo "$pm2_json" | jq 'length' 2>/dev/null || echo 0)
+    if [ "$pm2_total" -gt 0 ]; then
+      if [ "$pm2_online" -eq "$pm2_total" ]; then
+        pm2_metrics="⚡ PM2:${pm2_online}/${pm2_total}"
+      else
+        pm2_metrics="⚡ PM2:${pm2_online}/${pm2_total} ⚠️"
+      fi
+    fi
+  fi
+fi
+
 # ---- render statusline ----
 # Line 1: Core info (directory, git, model, claude code version, output style)
 printf '📁 %s%s%s' "$(dir_color)" "$current_dir" "$(rst)"
@@ -271,6 +288,9 @@ else
 fi
 if [ -n "$hook_metrics" ]; then
   line2="$line2  $hook_metrics"
+fi
+if [ -n "$pm2_metrics" ]; then
+  line2="$line2  $pm2_metrics"
 fi
 
 # Line 3: Cost and usage analytics
