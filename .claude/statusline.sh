@@ -208,6 +208,37 @@ if [ "$HAS_JQ" -eq 1 ]; then
   fi
 fi
 
+# ---- hook metrics (executed + blocked commands) ----
+hook_metrics=""
+hooks_dir=""
+
+# Find hooks directory - try CLAUDE_PROJECT_DIR first, then current_dir
+if [ -n "$CLAUDE_PROJECT_DIR" ] && [ -d "$CLAUDE_PROJECT_DIR/.claude/hooks" ]; then
+  hooks_dir="$CLAUDE_PROJECT_DIR/.claude/hooks"
+elif [ -d ".claude/hooks" ]; then
+  hooks_dir=".claude/hooks"
+fi
+
+if [ -n "$hooks_dir" ]; then
+  # Count executed commands (lines in commands.log)
+  executed=0
+  if [ -f "$hooks_dir/commands.log" ]; then
+    executed=$(grep -c "^\[" "$hooks_dir/commands.log" 2>/dev/null || echo 0)
+  fi
+
+  # Count blocked commands (BLOCKED in validate-*.log)
+  blocked=$(grep -h "BLOCKED" "$hooks_dir"/validate-*.log 2>/dev/null | wc -l | tr -d ' ')
+  [ -z "$blocked" ] && blocked=0
+
+  # Calculate total and ratio
+  total=$((executed + blocked))
+  if [ "$total" -gt 0 ]; then
+    ratio=$(echo "scale=1; $blocked * 100 / $total" | bc)
+    [[ "$ratio" == .* ]] && ratio="0${ratio}"
+    hook_metrics="🛡️ Cmds: ${total} | Blocked: ${blocked} (${ratio}%)"
+  fi
+fi
+
 # ---- render statusline ----
 # Line 1: Core info (directory, git, model, claude code version, output style)
 printf '📁 %s%s%s' "$(dir_color)" "$current_dir" "$(rst)"
@@ -271,6 +302,9 @@ if [ -n "$line2" ]; then
 fi
 if [ -n "$line3" ]; then
   printf '\n%s' "$line3"
+fi
+if [ -n "$hook_metrics" ]; then
+  printf '\n%s' "$hook_metrics"
 fi
 printf '\n'
 
