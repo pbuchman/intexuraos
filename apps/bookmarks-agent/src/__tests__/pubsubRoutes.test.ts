@@ -446,5 +446,49 @@ describe('pubsubRoutes', () => {
       expect(response.statusCode).toBe(200);
       expect(response.json()).toEqual({ success: true });
     });
+
+    it('returns HTTP 503 for rate-limited error (triggers Pub/Sub retry)', async () => {
+      const createResult = await ctx.bookmarkRepository.create({
+        userId: 'user-1',
+        url: 'https://example.com',
+        source: 'test',
+        sourceId: 'rate-limit-test',
+        title: 'Test',
+      });
+
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) return;
+
+      ctx.bookmarkSummaryService.setNextError({
+        code: 'GENERATION_ERROR',
+        message: 'Crawl4AI rate limited: HTTP 429',
+        transient: true,
+      });
+
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/internal/bookmarks/pubsub/summarize',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+          'content-type': 'application/json',
+        },
+        payload: {
+          message: {
+            data: Buffer.from(
+              JSON.stringify({
+                type: 'bookmarks.summarize',
+                bookmarkId: createResult.value.id,
+                userId: 'user-1',
+              })
+            ).toString('base64'),
+            messageId: 'msg-rate-limit',
+          },
+          subscription: 'test-sub',
+        },
+      });
+
+      expect(response.statusCode).toBe(503);
+      expect(response.json()).toMatchObject({ retryable: true });
+    });
   });
 });
