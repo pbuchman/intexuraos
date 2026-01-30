@@ -205,8 +205,7 @@ export class FirestoreBookmarkRepository implements BookmarkRepository {
       }
 
       const doc = snapshot.docs[0];
-      // istanbul ignore next -- defensive check for noUncheckedIndexedAccess; snapshot.empty guarantees docs[0] exists
-/* v8 ignore ts-type -- `if (snapshot */
+      /* v8 ignore ts-type -- snapshot.empty check on line 203 guarantees docs[0] exists */
       if (doc === undefined) {
         return { ok: true, value: null };
       }

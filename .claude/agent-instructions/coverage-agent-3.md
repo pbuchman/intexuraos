@@ -1,11 +1,13 @@
 # Coverage Agent 3 - Strict Instructions
 
 ## Mission
+
 Cover **113 uncovered branches** across 15 workspaces (remaining after Agent 1 and Agent 2).
 
 ## Your Scope (DO NOT TOUCH ANYTHING ELSE)
 
 ### apps/whatsapp-service (31 branches)
+
 ```
 src/domain/whatsapp/usecases/transcribeAudio.ts:305
 src/infra/firestore/messageRepository.ts:103
@@ -19,6 +21,7 @@ src/routes/webhookRoutes.ts:176,270,405,416,555,660,671,786,885,936,942,945,1014
 ```
 
 ### apps/calendar-agent (20 branches)
+
 ```
 src/domain/useCases/generateCalendarPreview.ts:63,66,131,156,168,190
 src/domain/useCases/processCalendarAction.ts:137,154,155,156,161,363
@@ -27,6 +30,7 @@ src/routes/internalRoutes.ts:311
 ```
 
 ### apps/actions-agent (12 branches)
+
 ```
 src/domain/usecases/handleApprovalReply.ts:122,133,245,687
 src/infra/http/calendarServiceHttpClient.ts:163
@@ -38,6 +42,7 @@ src/routes/publicRoutes.ts:646
 ```
 
 ### apps/todos-agent (11 branches)
+
 ```
 src/domain/usecases/reorderTodoItems.ts:63
 src/domain/usecases/updateTodoItem.ts:18,69
@@ -46,6 +51,7 @@ src/routes/todoRoutes.ts:320,378,432,455,490,506,565
 ```
 
 ### apps/user-service (10 branches)
+
 ```
 src/domain/settings/formatLlmError.ts:140,167
 src/infra/firestore/encryption.ts:75
@@ -55,6 +61,7 @@ src/routes/tokenRoutes.ts:101
 ```
 
 ### apps/web-agent (7 branches)
+
 ```
 src/infra/linkpreview/openGraphFetcher.ts:225
 src/infra/pagesummary/crawl4aiClient.ts:145
@@ -63,6 +70,7 @@ src/infra/pagesummary/parseSummaryResponse.ts:94,136,197
 ```
 
 ### apps/notion-service (4 branches)
+
 ```
 src/infra/firestore/notionConnectionRepository.ts:144
 src/routes/integrationRoutes.ts:29
@@ -70,6 +78,7 @@ src/routes/internalRoutes.ts:195,204
 ```
 
 ### apps/mobile-notifications-service (4 branches)
+
 ```
 src/infra/firestore/firestoreNotificationRepository.ts:202
 src/infra/firestore/firestoreSignatureConnectionRepository.ts:82
@@ -78,52 +87,62 @@ src/routes/statusRoutes.ts:92
 ```
 
 ### apps/linear-agent (3 branches)
+
 ```
 src/routes/linearRoutes.ts:307,308,309
 ```
 
 ### apps/bookmarks-agent (3 branches)
+
 ```
 src/domain/usecases/summarizeBookmark.ts:103,112
 src/infra/firestore/firestoreBookmarkRepository.ts:210
 ```
 
 ### packages/infra-sentry (1 branch)
+
 ```
 src/fastify.ts:117
 ```
 
 ### packages/infra-perplexity (1 branch)
+
 ```
 src/client.ts:165
 ```
 
 ### packages/internal-clients (1 branch)
+
 ```
 src/user-service/client.ts:91
 ```
 
 ### apps/commands-agent (1 branch)
+
 ```
 src/routes/internalRoutes.ts:173
 ```
 
 ### apps/app-settings-service (1 branch)
+
 ```
 src/infra/firestore/usageStatsRepository.ts:86
 ```
 
 ### apps/image-service (1 branch)
+
 ```
 src/infra/llm/GptPromptAdapter.ts:63
 ```
 
 ### workers/log-cleanup (1 branch)
+
 ```
 src/cleanup.ts:4
 ```
 
 ### workers/vm-lifecycle (1 branch)
+
 ```
 src/start-vm.ts:120
 ```
@@ -135,10 +154,13 @@ src/start-vm.ts:120
 For EACH uncovered branch line, decide:
 
 ### Option A: Write a Test
+
 Use when the branch CAN be triggered via test setup (fake repositories, mock services, etc.)
 
 ### Option B: Add v8 Ignore Comment
+
 Use when the branch CANNOT be tested due to:
+
 - TypeScript type narrowing (`ts-type`)
 - Fake/mock cannot produce required state (`test-infra`)
 - Auth middleware tested elsewhere (`auth-guard`)
@@ -165,6 +187,7 @@ cd apps/<service> && pnpm vitest run src/__tests__/<file>.test.ts --coverage
 ```
 
 ### Check remaining uncovered branches in your scope
+
 ```bash
 node scripts/verify-v8-ignore.mjs --all 2>&1 > /tmp/v8-check.txt
 rg "apps/whatsapp-service|apps/calendar-agent|apps/actions-agent|apps/todos-agent|apps/user-service|apps/web-agent|apps/notion-service|apps/mobile-notifications-service|apps/linear-agent|apps/bookmarks-agent|apps/commands-agent|apps/app-settings-service|apps/image-service|packages/infra-sentry|packages/infra-perplexity|packages/internal-clients|workers/log-cleanup|workers/vm-lifecycle" /tmp/v8-check.txt
@@ -175,12 +198,14 @@ rg "apps/whatsapp-service|apps/calendar-agent|apps/actions-agent|apps/todos-agen
 ## Exit Criteria (ALL MUST PASS)
 
 1. **Zero uncovered branches in your scope:**
+
    ```bash
    node scripts/verify-v8-ignore.mjs --all 2>&1 > /tmp/v8-check.txt
    # Must show 0 branches for all services in scope
    ```
 
 2. **Workspace verification passes for all services:**
+
    ```bash
    pnpm -w run verify:workspace:tracked <each-service>
    # All must show "All checks passed"

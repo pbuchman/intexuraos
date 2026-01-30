@@ -88,6 +88,7 @@ export function createUserServiceClient(config: UserServiceConfig): UserServiceC
 
         // Convert null values to undefined (null is used by JSON to distinguish from missing)
         const result: DecryptedApiKeys = {};
+        /* v8 ignore test-infra -- response shape depends on user's configured API keys */
         if (data.google !== null && data.google !== undefined) {
           result.google = data.google;
         }

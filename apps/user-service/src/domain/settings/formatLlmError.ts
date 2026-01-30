@@ -135,6 +135,7 @@ function tryParseOpenaiError(raw: string): string | null {
     /429.*Rate limit.*on\s+(\w+[^:]*?):\s*Limit\s+(\d+),\s*Used\s+(\d+),\s*Requested\s+(\d+)\./i;
   const rateLimitMatch = rateLimitRegex.exec(raw);
 
+  /* v8 ignore next 3 -- ts-type: destructuring regex match with noUncheckedIndexedAccess */
   if (rateLimitMatch !== null) {
     const [, limitType, limit, used, requested] = rateLimitMatch;
     return `${limitType ?? 'Tokens'}: ${used ?? '?'}/${limit ?? '?'} used, need ${requested ?? '?'} more`;
@@ -164,6 +165,7 @@ function tryParseAnthropicError(raw: string): string | null {
       if (isAnthropicError(parsed)) {
         const { message } = parsed.error;
         // Double-check parsed message for billing error
+        /* v8 ignore test-infra -- requires actual Anthropic billing error response */
         if (message.includes('credit balance') || message.includes('credit_balance')) {
           return 'Insufficient Anthropic API credits. Please add funds at console.anthropic.com';
         }

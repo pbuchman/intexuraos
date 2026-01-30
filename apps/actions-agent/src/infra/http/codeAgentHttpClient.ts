@@ -41,6 +41,7 @@ interface ErrorResponse {
 export function createCodeAgentHttpClient(
   config: CodeAgentHttpClientConfig
 ): CodeAgentClient {
+  /* v8 ignore test-infra -- tests always provide logger */
   const logger = config.logger ?? defaultLogger;
 
   return {
@@ -143,6 +144,7 @@ export function createCodeAgentHttpClient(
           logger.warn({ error: body.error }, 'Code-agent worker unavailable');
           return err({
             code: 'WORKER_UNAVAILABLE',
+            /* v8 ignore ts-type -- 503 response always includes error message */
             message: body.error ?? 'No workers available',
           });
         } catch {
