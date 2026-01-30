@@ -127,11 +127,12 @@ async function proxySSE(vmIp: string, port: number, path: string, res: any): Pro
 export const gateway: HttpFunction = async (req: any, res: any) => {
   logger.info({ method: req.method, url: req.url }, 'Gateway request');
 
+  // Fetch state once to avoid race conditions
+  const currentState = await state.getState();
+
   // Handle DevBar SSE endpoints (public, no auth required for DevBar)
   const pathname = new URL(req.url ?? '/', 'http://localhost').pathname;
   if (pathname === '/devbar/logs' || pathname === '/devbar/events') {
-    const currentState = await state.getState();
-
     if (currentState?.status !== 'running' || currentState.vmIp === null) {
       res.status(503).send('VM not running');
       return;
@@ -145,7 +146,6 @@ export const gateway: HttpFunction = async (req: any, res: any) => {
   }
 
   // Update last activity for running VM
-  const currentState = await state.getState();
   if (currentState?.status === 'running') {
     await state.updateActivity();
   }
