@@ -433,10 +433,9 @@ function findFiles(directories) {
 // PHASE A: Find All v8 Ignore Comments
 // ============================================================================
 
-const V8_IGNORE_WITH_CATEGORY_REGEX = /\/\*\s*v8\s+ignore\s+(\S+)\s*--\s*(.+?)\s*\*\//;
-const V8_IGNORE_LEGACY_REGEX = /\/\*\s*v8\s+ignore\s+(next|start|stop)(?:\s*--\s*(.+?))?\s*\*\//;
-// Looser pattern to catch ANY v8 ignore comment (for validation)
-const V8_IGNORE_ANY_REGEX = /\/\*\s*v8\s+ignore\s+([^\s*]+?)(?:\s*--\s*([^\*]*?))?\s*\*\//;
+// Legacy pattern: matches /* v8 ignore next <N>? -/-- explanation? */ or /* v8 ignore start -/-- explanation? */
+// Strict pattern - ONLY accepts valid categories from VALID_CATEGORIES
+const V8_IGNORE_STRICT_REGEX = /\/\*\s*v8\s+ignore\s+(ts-type|regex|module-init|async-timing|test-infra|upstream|module-mock|schema|source-map|auth-guard)\s+--\s*(.+?)\s*\*\//;
 
 function findV8IgnoreComments(files) {
   const comments = [];
@@ -449,47 +448,35 @@ function findV8IgnoreComments(files) {
     for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
       const line = lines[lineIdx];
 
-      // First, check for legacy keywords (next/start/stop) - these are allowed without --
-      const legacyMatch = V8_IGNORE_LEGACY_REGEX.exec(line);
-      if (legacyMatch) {
+      // Check for strict modern format with valid category
+      const strictMatch = V8_IGNORE_STRICT_REGEX.exec(line);
+      if (strictMatch) {
         comments.push({
           file: file.replace(ROOT_DIR + '/', ''),
           line: lineIdx + 1,
-          category: legacyMatch[1],
-          explanation: legacyMatch[2] ?? '',
-          isLegacy: true,
+          category: strictMatch[1],
+          explanation: strictMatch[2],
         });
         continue;
       }
 
-      // Then check for modern format comments
-      const anyMatch = V8_IGNORE_ANY_REGEX.exec(line);
-      if (anyMatch) {
-        const fullComment = anyMatch[0];
-        const category = anyMatch[1]; // The category or keyword
+      // Any other v8 ignore pattern is malformed
+      const v8IgnoreLooseCheck = /\/\*\s*v8\s+ignore\s+/.exec(line);
+      if (v8IgnoreLooseCheck) {
+        // Extract the full comment to report it
+        const fullMatch = /\/\*\s*v8\s+ignore\s+[^\*]*?\*\//.exec(line);
+        const content = fullMatch ? fullMatch[0] : line.trim();
 
-        // If it's not a legacy keyword, it MUST match the proper format with -- and explanation
-        if (!V8_LEGACY_KEYWORDS.includes(category)) {
-          const properMatch = V8_IGNORE_WITH_CATEGORY_REGEX.exec(line);
-          if (!properMatch) {
-            // It's a modern v8 ignore (not legacy keyword) but doesn't match proper format
-            malformed.push({
-              file: file.replace(ROOT_DIR + '/', ''),
-              line: lineIdx + 1,
-              content: fullComment,
-              message: 'Invalid format. Required: /* v8 ignore <CATEGORY> -- <explanation> */',
-            });
-            continue;
-          }
+        // Try to extract what they used as "category"
+        const categoryMatch = /\/\*\s*v8\s+ignore\s+([^\s\*]+)/.exec(line);
+        const invalidCategory = categoryMatch ? categoryMatch[1] : '?';
 
-          comments.push({
-            file: file.replace(ROOT_DIR + '/', ''),
-            line: lineIdx + 1,
-            category: properMatch[1],
-            explanation: properMatch[2],
-            isLegacy: false,
-          });
-        }
+        malformed.push({
+          file: file.replace(ROOT_DIR + '/', ''),
+          line: lineIdx + 1,
+          content,
+          message: `Invalid v8 ignore comment. Category "${invalidCategory}" is not valid. Required: /* v8 ignore <CATEGORY> -- <explanation> */ where CATEGORY is one of: ${VALID_CATEGORIES.join(', ')}`,
+        });
       }
     }
   }
@@ -504,32 +491,10 @@ function findV8IgnoreComments(files) {
 function validateSyntax(comments) {
   const errors = [];
   const validComments = new Set();
-  const legacyComments = [];
 
   for (const comment of comments) {
-    if (comment.isLegacy) {
-      legacyComments.push(comment);
-      continue;
-    }
-
-    if (!comment.category || comment.category.trim() === '') {
-      errors.push({
-        file: comment.file,
-        line: comment.line,
-        message: 'Missing category',
-      });
-      continue;
-    }
-
-    if (!VALID_CATEGORIES.includes(comment.category)) {
-      errors.push({
-        file: comment.file,
-        line: comment.line,
-        message: `Invalid category "${comment.category}". Valid categories: ${VALID_CATEGORIES.join(', ')}`,
-      });
-      continue;
-    }
-
+    // Category validation already done by strict regex in findV8IgnoreComments
+    // Just need to verify explanation exists
     if (!comment.explanation || comment.explanation.trim() === '') {
       errors.push({
         file: comment.file,
@@ -542,7 +507,7 @@ function validateSyntax(comments) {
     validComments.add(comment);
   }
 
-  return { errors, validComments, legacyComments };
+  return { errors, validComments };
 }
 
 // ============================================================================
@@ -736,7 +701,7 @@ async function main() {
   }
 
   // Phase B: Syntax validation
-  const { errors: syntaxErrors, validComments, legacyComments } = validateSyntax(comments);
+  const { errors: syntaxErrors, validComments } = validateSyntax(comments);
 
   // Phase C: Pattern validation
   const patternErrors = validatePatterns(Array.from(validComments));
@@ -761,12 +726,8 @@ async function main() {
   // Output
   const allErrors = [...syntaxErrors, ...patternErrors, ...coverageErrors];
   const validCount = validComments.size;
-  const legacyCount = legacyComments.length;
 
   console.log(`\n✓ ${validCount} v8 ignore comments validated`);
-  if (legacyCount > 0) {
-    console.log(`  (${legacyCount} legacy v8 ignore next/start/stop comments skipped)`);
-  }
 
   if (allErrors.length > 0) {
     console.log(`\n❌ ${allErrors.length} error(s) found:\n`);
