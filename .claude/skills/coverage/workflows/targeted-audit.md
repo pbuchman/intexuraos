@@ -66,12 +66,17 @@ For EACH documented exemption:
 1. Query Linear:
    ```
    title contains "[coverage][<name>]"
-   state NOT IN (Done, Cancelled)
+   state IN (Backlog, Todo, In Progress, In Review, QA)
    ```
+
+   **IMPORTANT:** Only issues in ACTIVE statuses count toward coverage accounting.
+   Issues in Done, Canceled, or Duplicate do NOT count — they represent completed
+   or abandoned work, not tracked gaps. If a Done issue's branch is still uncovered,
+   a NEW issue must be created.
 
 2. Build map: `filename → issue ID`
 
-3. Include subtasks of parent issues
+3. Include subtasks of parent issues (if parent is in active status)
 
 ### Phase 7: Investigate New Gaps
 

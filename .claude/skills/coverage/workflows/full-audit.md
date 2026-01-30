@@ -38,10 +38,13 @@ For each app and package with gaps:
 
 3. **Check Linear for existing issues** (Rule 2):
    ```
-   Query: [coverage] state:!Done state:!Cancelled
+   Query: [coverage] state IN (Backlog, Todo, In Progress, In Review, QA)
    ```
    - Build map of file → issue ID
-   - Include parent issues AND their subtasks
+   - Include parent issues AND their subtasks (if parent is in active status)
+   - **IMPORTANT:** Only issues in ACTIVE statuses count toward coverage accounting.
+     Issues in Done, Canceled, or Duplicate do NOT count — they represent completed
+     or abandoned work, not tracked gaps.
 
 4. **Investigate each new gap:**
    - Read source code at uncovered lines

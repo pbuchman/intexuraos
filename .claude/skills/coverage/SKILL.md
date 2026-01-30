@@ -15,6 +15,41 @@ Analyze branch coverage gaps and convert them into Linear issues or documented e
 /coverage <name>             # Targeted audit: specific app, package, or worker
 ```
 
+## Coverage Target: 100% (NOT 95%)
+
+**CRITICAL: This skill does NOT target 95% coverage. The target is 100%.**
+
+100% branch coverage means every uncovered branch is accounted for:
+
+| Category        | What It Means                                   |
+| --------------- | ----------------------------------------------- |
+| **Covered**     | Tests exercise the branch                       |
+| **Unreachable** | Documented in `unreachable/<name>.md` with proof |
+| **Tracked**     | Linear issue exists in ACTIVE status            |
+
+**Active Linear statuses that count toward 100%:**
+- Backlog
+- Todo
+- In Progress
+- In Review
+- QA
+
+**Statuses that do NOT count:**
+- Done (already completed)
+- Canceled
+- Duplicate
+
+**Why 100%?** The 95% CI threshold is a minimum safety net, not the goal. Untracked gaps indicate:
+- Tests that should exist but don't
+- Unreachable code that should be documented
+- Work that should be in the backlog
+
+**An app is "covered" when:** Every branch with `pct < 100` either:
+1. Has a documented exemption, OR
+2. Has an active Linear issue tracking it
+
+---
+
 ## Scope Boundary — Analysis Only
 
 **CRITICAL: This skill is ANALYSIS ONLY. It does NOT fix coverage.**
@@ -69,14 +104,19 @@ Analyze branch coverage gaps and convert them into Linear issues or documented e
 
 1. Query Linear for issues matching:
    - Title contains `[coverage]`
-   - State NOT in: Done, Cancelled
-   - (includes: Backlog, Todo, In Progress, In Review, QA)
+   - State IN: Backlog, Todo, In Progress, In Review, QA
+   - (NOT Done, NOT Canceled, NOT Duplicate)
 2. For each found parent issue → fetch child issues (subtasks)
 3. Check if any existing issue/subtask covers the SAME FILE
 4. If match found → SKIP creation, log: "Already tracked by INT-XXX"
 5. Only create issue if NO existing coverage exists
 
 **Matching logic:** Parse issue titles for `[coverage][<name>] <filename>` pattern.
+
+**Why status matters:** Done issues represent completed work. If a coverage issue
+was marked Done but the branch is still uncovered, a NEW issue must be created.
+The same applies to Canceled and Duplicate issues — they do not count toward
+the 100% accounting.
 
 ### Rule 3: Proof by Construction (CRITICAL)
 
