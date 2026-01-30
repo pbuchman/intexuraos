@@ -48,6 +48,8 @@ For each app/package in category with gaps, follow the same process as [full-aud
 1. Load existing exemptions
 2. Verify existing exemptions (Rule 1)
 3. Check Linear for existing issues (Rule 2)
+   - Query: `[coverage] state IN (Backlog, Todo, In Progress, In Review, QA)`
+   - **IMPORTANT:** Only ACTIVE statuses count. Done, Canceled, Duplicate do NOT count.
 4. Investigate each new gap
 5. Execute actions (exemptions + issues)
 
