@@ -206,7 +206,9 @@ export const integrationRoutes: FastifyPluginCallback = (fastify, _opts, done) =
             type: 'object',
             properties: {
               success: { type: 'boolean', enum: [true] },
-              data: { $ref: 'DisconnectResponse#' },
+              data: {
+            type: 'object',
+          },
               diagnostics: { $ref: 'Diagnostics#' },
             },
             required: ['success', 'data'],
@@ -251,7 +253,7 @@ export const integrationRoutes: FastifyPluginCallback = (fastify, _opts, done) =
         return await reply.fail('DOWNSTREAM_ERROR', result.error.message);
       }
 
-      return await reply.ok(result.value);
+      return await reply.ok({});
     }
   );
 

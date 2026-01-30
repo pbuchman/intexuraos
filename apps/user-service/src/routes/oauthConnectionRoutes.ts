@@ -266,9 +266,12 @@ export const oauthConnectionRoutes: FastifyPluginCallback = (fastify, _opts, don
             type: 'object',
             properties: {
               success: { type: 'boolean', enum: [true] },
+              data: {
+                type: 'object',
+              },
               diagnostics: { $ref: 'Diagnostics#' },
             },
-            required: ['success'],
+            required: ['success', 'data'],
           },
           401: {
             description: 'Unauthorized',
@@ -304,7 +307,7 @@ export const oauthConnectionRoutes: FastifyPluginCallback = (fastify, _opts, don
         return await reply.fail('INTERNAL_ERROR', result.error.message);
       }
 
-      return await reply.ok(undefined);
+      return await reply.ok({});
     }
   );
 

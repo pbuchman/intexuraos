@@ -274,9 +274,10 @@ export const publicRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             type: 'object',
             properties: {
               success: { type: 'boolean', enum: [true] },
+              data: { type: 'object' },
               diagnostics: { $ref: 'Diagnostics#' },
             },
-            required: ['success'],
+            required: ['success', 'data'],
           },
           401: {
             description: 'Unauthorized',
