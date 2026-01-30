@@ -464,6 +464,86 @@ export const createFirestoreCodeTaskRepository = (deps: {
         });
       }
     },
+
+    findArchivableTasks: async (
+      cutoffDate: Date,
+      limit: number
+    ): Promise<Result<{ taskId: string }[], RepositoryError>> => {
+      try {
+        const cutoffTimestamp = Timestamp.fromDate(cutoffDate);
+        const snapshot = await collection
+          .where('completedAt', '<', cutoffTimestamp)
+          .where('logsArchived', '==', false)
+          .limit(limit)
+          .get();
+
+        const tasks = snapshot.docs.map((doc: any) => ({ taskId: doc.id as string }));
+        return ok(tasks);
+      } catch (error) {
+        logger.error({ error, cutoffDate }, 'Failed to find archivable tasks');
+        return err({
+          code: 'FIRESTORE_ERROR',
+          message: `Firestore error: ${getErrorMessage(error)}`,
+        });
+      }
+    },
+
+    archiveTaskLogs: async (
+      taskId: string,
+      batchSize: number
+    ): Promise<Result<{ logCount: number; archivedAt: Date }, RepositoryError>> => {
+      try {
+        const taskRef = collection.doc(taskId);
+        const taskDoc = await taskRef.get();
+
+        if (!taskDoc.exists) {
+          return err({
+            code: 'NOT_FOUND',
+            message: `Task ${taskId} not found`,
+          });
+        }
+
+        const logsRef = taskRef.collection('logs');
+        const logsSnapshot = await logsRef.get();
+        const logCount = logsSnapshot.docs.length;
+
+        if (logCount > 0) {
+          let batch = firestore.batch();
+          let batchCount = 0;
+
+          for (const logDoc of logsSnapshot.docs) {
+            batch.delete(logDoc.ref);
+            batchCount++;
+
+            if (batchCount >= batchSize) {
+              await batch.commit();
+              batch = firestore.batch();
+              batchCount = 0;
+            }
+          }
+
+          if (batchCount > 0) {
+            await batch.commit();
+          }
+        }
+
+        const archivedAt = new Date();
+        await taskRef.update({
+          logsArchived: true,
+          logCount,
+          archivedAt: Timestamp.fromDate(archivedAt),
+        });
+
+        logger.info({ taskId, logCount }, 'Task logs archived');
+        return ok({ logCount, archivedAt });
+      } catch (error) {
+        logger.error({ error, taskId }, 'Failed to archive task logs');
+        return err({
+          code: 'FIRESTORE_ERROR',
+          message: `Firestore error: ${getErrorMessage(error)}`,
+        });
+      }
+    },
   };
 };
 
