@@ -17,8 +17,8 @@ COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // ""')
 [[ -z "$COMMAND" ]] && exit 0
 
 # Check pnpm ci, verify:workspace, test commands, and direct vitest invocations
-# Matches: pnpm run ci, pnpm run ci:tracked, pnpm run verify:workspace, pnpm run test, pnpm test, pnpm vitest, etc.
-if ! echo "$COMMAND" | grep -qE 'pnpm\s+(run\s+(ci(:tracked)?|verify:workspace(:tracked)?|test)|test|vitest|--filter\s+\S+\s+(test|vitest))'; then
+# Matches: pnpm run ci, pnpm run ci:tracked, pnpm run verify:workspace, pnpm run test, pnpm test, pnpm vitest, pnpm exec vitest, etc.
+if ! echo "$COMMAND" | grep -qE 'pnpm\s+(run\s+(ci(:tracked)?|verify:workspace(:tracked)?|test)|test|vitest|exec\s+vitest|--filter\s+\S+\s+(test|vitest))'; then
     exit 0
 fi
 
