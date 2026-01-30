@@ -45,7 +45,7 @@ export async function listCalendarEvents(
 }
 
 interface ListFailedEventsResponse {
-  events: FailedCalendarEvent[];
+  failedEvents: FailedCalendarEvent[];
 }
 
 export async function listFailedEvents(
@@ -56,5 +56,5 @@ export async function listFailedEvents(
     '/calendar/failed-events',
     accessToken
   );
-  return response.events;
+  return response.failedEvents;
 }

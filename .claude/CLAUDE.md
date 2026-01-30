@@ -443,11 +443,11 @@ Raw `reply.send()` is **FORBIDDEN** unless annotated with `// @allow-raw-send: <
 
 **RULE:** Adding a new environment variable requires updating THREE locations:
 
-| Step | Location                             | What to Update                                                                     |
-| ---- | ------------------------------------ | ---------------------------------------------------------------------------------- |
-| 1    | `apps/<service>/src/index.ts`        | Add to `REQUIRED_ENV` array                                                        |
-| 2    | `terraform/environments/dev/main.tf` | Add to service's `env_vars` or `secrets`                                           |
-| 3    | `ecosystem.config.cjs`               | Add to `COMMON_SERVICE_ENV`, `COMMON_SERVICE_URLS`, or `SERVICE_ENV_MAPPINGS`      |
+| Step | Location                             | What to Update                                                                |
+| ---- | ------------------------------------ | ----------------------------------------------------------------------------- |
+| 1    | `apps/<service>/src/index.ts`        | Add to `REQUIRED_ENV` array                                                   |
+| 2    | `terraform/environments/dev/main.tf` | Add to service's `env_vars` or `secrets`                                      |
+| 3    | `ecosystem.config.cjs`               | Add to `COMMON_SERVICE_ENV`, `COMMON_SERVICE_URLS`, or `SERVICE_ENV_MAPPINGS` |
 
 **CI Enforcement:**
 

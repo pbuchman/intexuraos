@@ -188,6 +188,28 @@ describe('Internal Routes', () => {
       );
     });
 
+    it('uses prompt from payload in event, not title', async () => {
+      const fullPrompt = 'Add a calendar event for next Thursday at 3pm';
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/actions',
+        headers: {
+          'x-internal-auth': INTERNAL_AUTH_TOKEN,
+        },
+        payload: {
+          ...validBody,
+          title: 'Calendar event', // Short title
+          payload: { prompt: fullPrompt }, // Full user input
+        },
+      });
+
+      expect(response.statusCode).toBe(201);
+      const publishedEvent = fakeActionEventPublisher.getPublishedEvents()[0];
+      // The event should use the full prompt, not the short title
+      expect(publishedEvent?.payload.prompt).toBe(fullPrompt);
+      expect(publishedEvent?.payload.prompt).not.toBe('Calendar event');
+    });
+
     it('returns 201 even when event publishing fails', async () => {
       fakeActionEventPublisher.setFailNext(true, {
         code: 'PUBLISH_FAILED',
