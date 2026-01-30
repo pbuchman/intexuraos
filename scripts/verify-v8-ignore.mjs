@@ -607,30 +607,36 @@ function reportMissingComments(coverageData, comments) {
   const missing = [];
   const commentMap = new Map();
 
-  // Build map of files with comments
   for (const comment of comments) {
     const key = `${comment.file}:${comment.line}`;
     commentMap.set(key, true);
   }
 
-  // Find uncovered branches without comments
   for (const [filePath, fileData] of Object.entries(coverageData)) {
-    // Skip test files
     if (filePath.includes('__tests__')) continue;
 
     const branches = fileData.b;
+    const branchMap = fileData.branchMap;
 
-    if (!branches) continue;
+    if (!branches || !branchMap) continue;
 
-    for (const [branchId, range] of Object.entries(branches)) {
-      const startLine = range[0] + 1; // Convert to 1-indexed
+    for (const [branchId, hitCounts] of Object.entries(branches)) {
+      const branchInfo = branchMap[branchId];
+      if (!branchInfo) continue;
 
-      // Check if branch is uncovered (count 0 or false)
-      if (range[4] === 0) {
-        const key = `${filePath}:${startLine}`;
+      for (let i = 0; i < hitCounts.length; i++) {
+        if (hitCounts[i] === 0) {
+          const location = branchInfo.locations?.[i];
+          const branchLine = location?.start?.line ?? branchInfo.line;
 
-        if (!commentMap.has(key)) {
-          missing.push({ file: filePath, line: startLine });
+          if (branchLine) {
+            const relPath = filePath.replace(ROOT_DIR + '/', '');
+            const key = `${relPath}:${branchLine}`;
+
+            if (!commentMap.has(key)) {
+              missing.push({ file: relPath, line: branchLine });
+            }
+          }
         }
       }
     }
@@ -704,12 +710,18 @@ async function main() {
   }
 
   if (missingReport.length > 0) {
-    console.log(`\n📋 ${missingReport.length} uncovered branch(es) without exemption:\n`);
-    missingReport.slice(0, 50).forEach((m) => {
+    const uniqueMissing = [
+      ...new Map(missingReport.map((m) => [`${m.file}:${m.line}`, m])).values(),
+    ];
+    const showAll = process.argv.includes('--all');
+    const limit = showAll ? uniqueMissing.length : 50;
+
+    console.log(`\n📋 ${uniqueMissing.length} uncovered branch(es) without exemption:\n`);
+    uniqueMissing.slice(0, limit).forEach((m) => {
       console.log(`  ${m.file}:${m.line}`);
     });
-    if (missingReport.length > 50) {
-      console.log(`  ... and ${missingReport.length - 50} more`);
+    if (uniqueMissing.length > limit) {
+      console.log(`  ... and ${uniqueMissing.length - limit} more (use --all to see all)`);
     }
   }
 
