@@ -3,6 +3,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as jose from 'jose';
+import nock from 'nock';
 
 // Mock jose library for JWT validation
 vi.mock('jose', () => ({
@@ -49,6 +50,18 @@ describe('codeRoutes', () => {
   let server: Awaited<ReturnType<typeof buildServer>>;
 
   beforeEach(async () => {
+    // Mock actions-agent HTTP calls to avoid hanging in CI
+    nock('http://actions-agent')
+      .persist()
+      .patch(/\/internal\/actions\/.*\/status/)
+      .reply(200, { success: true });
+
+    // Mock linear-agent HTTP calls
+    nock('http://linear-agent:8086')
+      .persist()
+      .post(/\/.*/)
+      .reply(200, { success: true });
+
     // Set jwtVerify to resolve by default (simulating valid token)
     mockedJwtVerify.mockResolvedValue({
       payload: { sub: 'test-user-id', email: 'test@example.com' },
@@ -224,6 +237,7 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
   afterEach(() => {
     resetServices();
     resetFirestore();
+    nock.cleanAll();
   });
 
   it('has routes registered', async () => {
