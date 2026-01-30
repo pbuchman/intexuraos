@@ -28,13 +28,18 @@ vi.mock('@google-cloud/compute', () => ({
   },
 }));
 
-// Mock Firestore to return null state by default (no existing state)
+// Mock state data - mutable so tests can change it
+let mockStateData: { status: string; vmIp: string | null; branch: string } | null = null;
+
+// Mock Firestore to return configurable state
 vi.mock('@google-cloud/firestore', async () => {
   const actual = await vi.importActual('@google-cloud/firestore');
-  const mockDocGet = vi.fn().mockResolvedValue({
-    exists: false,
-    data: () => null,
-  });
+  const mockDocGet = vi.fn().mockImplementation(() =>
+    Promise.resolve({
+      exists: mockStateData !== null,
+      data: () => mockStateData,
+    })
+  );
   const mockDoc = vi.fn(() => ({
     get: mockDocGet,
     set: vi.fn().mockResolvedValue(undefined),
@@ -111,6 +116,7 @@ describe('gateway function', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     global.fetch = vi.fn();
+    mockStateData = null;
 
     mockReq = {
       method: 'GET',
@@ -205,6 +211,140 @@ describe('gateway function', () => {
       await gateway(mockReq, mockRes);
 
       expect(mockResize).toHaveBeenCalled();
+    });
+  });
+
+  describe('VM running state', () => {
+    beforeEach(() => {
+      mockStateData = { status: 'running', vmIp: '10.0.0.1', branch: 'development' };
+    });
+
+    it('should proxy requests to VM when running', async () => {
+      vi.mocked(global.fetch).mockResolvedValue({
+        ok: true,
+        status: 200,
+        headers: new Map([['content-type', 'application/json']]) as unknown as Headers,
+        text: () => Promise.resolve('{"result":"ok"}'),
+      } as Response);
+
+      await gateway(mockReq, mockRes);
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        'http://10.0.0.1:3000/test',
+        expect.objectContaining({ method: 'GET' })
+      );
+      expect(mockRes.status).toHaveBeenCalledWith(200);
+    });
+
+    it('should return 502 on proxy error', async () => {
+      vi.mocked(global.fetch).mockRejectedValue(new Error('Connection refused'));
+
+      await gateway(mockReq, mockRes);
+
+      expect(mockRes.status).toHaveBeenCalledWith(502);
+      expect(sendFn).toHaveBeenCalledWith('Bad Gateway');
+    });
+
+    it('should proxy POST requests with body', async () => {
+      vi.mocked(global.fetch).mockResolvedValue({
+        ok: true,
+        status: 201,
+        headers: new Map() as unknown as Headers,
+        text: () => Promise.resolve('created'),
+      } as Response);
+
+      mockReq.method = 'POST';
+      mockReq.body = { data: 'test' };
+
+      await gateway(mockReq, mockRes);
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        'http://10.0.0.1:3000/test',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({ data: 'test' }),
+        })
+      );
+    });
+
+    it('should proxy SSE logs endpoint when running', async () => {
+      const mockReader = {
+        read: vi
+          .fn()
+          .mockResolvedValueOnce({ done: false, value: new TextEncoder().encode('data: test\n\n') })
+          .mockResolvedValueOnce({ done: true, value: undefined }),
+      };
+
+      vi.mocked(global.fetch).mockResolvedValue({
+        ok: true,
+        status: 200,
+        body: { getReader: () => mockReader },
+      } as unknown as Response);
+
+      mockReq.url = '/devbar/logs';
+
+      await gateway(mockReq, mockRes);
+
+      expect(global.fetch).toHaveBeenCalledWith('http://10.0.0.1:8106/logs');
+      expect(mockRes.setHeader).toHaveBeenCalledWith('Content-Type', 'text/event-stream');
+    });
+
+    it('should proxy SSE events endpoint when running', async () => {
+      const mockReader = {
+        read: vi.fn().mockResolvedValueOnce({ done: true, value: undefined }),
+      };
+
+      vi.mocked(global.fetch).mockResolvedValue({
+        ok: true,
+        status: 200,
+        body: { getReader: () => mockReader },
+      } as unknown as Response);
+
+      mockReq.url = '/devbar/events';
+
+      await gateway(mockReq, mockRes);
+
+      expect(global.fetch).toHaveBeenCalledWith('http://10.0.0.1:8105/events');
+    });
+
+    it('should return error when SSE endpoint unavailable', async () => {
+      vi.mocked(global.fetch).mockResolvedValue({
+        ok: false,
+        status: 503,
+      } as Response);
+
+      mockReq.url = '/devbar/logs';
+
+      await gateway(mockReq, mockRes);
+
+      expect(mockRes.status).toHaveBeenCalledWith(503);
+      expect(sendFn).toHaveBeenCalledWith('SSE endpoint unavailable');
+    });
+
+    it('should end response when SSE has no body', async () => {
+      vi.mocked(global.fetch).mockResolvedValue({
+        ok: true,
+        status: 200,
+        body: null,
+      } as unknown as Response);
+
+      mockReq.url = '/devbar/logs';
+
+      await gateway(mockReq, mockRes);
+
+      expect(mockRes.end).toHaveBeenCalled();
+    });
+  });
+
+  describe('VM starting state (existing)', () => {
+    it('should show starting page when state is starting', async () => {
+      mockStateData = { status: 'starting', vmIp: null, branch: 'feature/test' };
+
+      await gateway(mockReq, mockRes);
+
+      expect(mockRes.status).toHaveBeenCalledWith(200);
+      expect(sendFn).toHaveBeenCalledWith(expect.stringContaining('Starting Pre-Dev Environment'));
+      expect(sendFn).toHaveBeenCalledWith(expect.stringContaining('feature/test'));
     });
   });
 });

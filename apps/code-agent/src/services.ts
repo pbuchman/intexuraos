@@ -16,6 +16,7 @@ import type { TaskDispatcherService } from './domain/services/taskDispatcher.js'
 import type { WhatsAppNotifier } from './domain/services/whatsappNotifier.js';
 import type { ActionsAgentClient } from './infra/clients/actionsAgentClient.js';
 import type { RateLimitService } from './domain/services/rateLimitService.js';
+import type { WorkerSettingsRepository } from './domain/ports/workerSettingsRepository.js';
 import { createFirestoreCodeTaskRepository } from './infra/repositories/firestoreCodeTaskRepository.js';
 import { createFirestoreLogChunkRepository } from './infra/repositories/firestoreLogChunkRepository.js';
 import { createWorkerDiscoveryService } from './infra/services/workerDiscoveryImpl.js';
@@ -32,6 +33,7 @@ import { createDetectZombieTasksUseCase, type DetectZombieTasksUseCase } from '.
 import { createCleanupTaskLogsUseCase, type CleanupTaskLogsUseCase } from './domain/usecases/cleanupTaskLogs.js';
 import { createMetricsClient, createNoOpMetricsClient, type MetricsClient } from './infra/metrics.js';
 import type { LinearAgentClient } from './domain/ports/linearAgentClient.js';
+import { createWorkerSettingsRepository } from './infra/firestore/workerSettingsRepository.js';
 
 export interface ServiceContainer {
   firestore: Firestore;
@@ -49,6 +51,7 @@ export interface ServiceContainer {
   detectZombieTasks: DetectZombieTasksUseCase;
   cleanupTaskLogs: CleanupTaskLogsUseCase;
   metricsClient: MetricsClient;
+  workerSettingsRepo: WorkerSettingsRepository;
 }
 
 // Configuration required to initialize services
@@ -168,11 +171,6 @@ export function initServices(config: ServiceConfig): void {
     workerDiscovery: createWorkerDiscoveryService({ logger }),
     taskDispatcher: createTaskDispatcherService({
       logger,
-      cfAccessClientId: config.cfAccessClientId,
-      cfAccessClientSecret: config.cfAccessClientSecret,
-      dispatchSigningSecret: config.dispatchSigningSecret,
-      orchestratorMacUrl: config.orchestratorMacUrl,
-      orchestratorVmUrl: config.orchestratorVmUrl,
     }),
     whatsappNotifier: createWhatsAppNotifier({
       whatsappPublisher,
@@ -200,6 +198,7 @@ export function initServices(config: ServiceConfig): void {
       logger,
     }),
     metricsClient,
+    workerSettingsRepo: createWorkerSettingsRepository({ firestore, logger }),
   };
 }
 

@@ -42,6 +42,8 @@ import { createProcessHeartbeatUseCase } from '../../domain/usecases/processHear
 import { createDetectZombieTasksUseCase } from '../../domain/usecases/detectZombieTasks.js';
 import { createCleanupTaskLogsUseCase } from '../../domain/usecases/cleanupTaskLogs.js';
 import { createNoOpMetricsClient, type MetricsClient } from '../../infra/metrics.js';
+import { createWorkerSettingsRepository } from '../../infra/firestore/workerSettingsRepository.js';
+import type { WorkerSettingsRepository } from '../../domain/ports/workerSettingsRepository.js';
 
 describe('POST /internal/code/process', () => {
   let app: Awaited<ReturnType<typeof buildServer>>;
@@ -81,11 +83,6 @@ describe('POST /internal/code/process', () => {
 
     taskDispatcher = createTaskDispatcherService({
       logger,
-      cfAccessClientId: 'test-client-id',
-      cfAccessClientSecret: 'test-client-secret',
-      dispatchSigningSecret: 'test-dispatch-secret',
-      orchestratorMacUrl: 'https://cc-mac.intexuraos.cloud',
-      orchestratorVmUrl: 'https://cc-vm.intexuraos.cloud',
     });
 
     _logChunkRepo = createFirestoreLogChunkRepository({
@@ -153,8 +150,12 @@ describe('POST /internal/code/process', () => {
         codeTaskRepository: codeTaskRepo,
         logger,
       }),
-      cleanupTaskLogs: createCleanupTaskLogsUseCase({
+cleanupTaskLogs: createCleanupTaskLogsUseCase({
         codeTaskRepository: codeTaskRepo,
+        logger,
+      }),
+      workerSettingsRepo: createWorkerSettingsRepository({
+        firestore: fakeFirestore as unknown as Firestore,
         logger,
       }),
     } as {
@@ -173,6 +174,18 @@ describe('POST /internal/code/process', () => {
       processHeartbeat: import('../../domain/usecases/processHeartbeat.js').ProcessHeartbeatUseCase;
       detectZombieTasks: import('../../domain/usecases/detectZombieTasks.js').DetectZombieTasksUseCase;
       cleanupTaskLogs: import('../../domain/usecases/cleanupTaskLogs.js').CleanupTaskLogsUseCase;
+      workerSettingsRepo: WorkerSettingsRepository;
+    });
+
+    // Set up worker settings for the test user
+    const { getServices } = await import('../../services.js');
+    const services = getServices();
+    await services.workerSettingsRepo.updateWorkerConfig('user-123', 'mac', {
+      url: 'https://cc-mac.intexuraos.cloud',
+      cfAccessClientId: 'test-client-id',
+      cfAccessClientSecret: 'test-client-secret',
+      dispatchSigningSecret: 'test-dispatch-secret',
+      enabled: true,
     });
 
     app = await buildServer();

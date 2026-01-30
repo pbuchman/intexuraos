@@ -9,6 +9,7 @@ import { err, ok, type Result } from '@intexuraos/common-core';
 import type { Logger } from '@intexuraos/common-core';
 import type { CodeTaskRepository } from '../repositories/codeTaskRepository.js';
 import type { TaskDispatcherService } from '../services/taskDispatcher.js';
+import type { WorkerSettingsRepository } from '../ports/workerSettingsRepository.js';
 
 export interface CancelTaskWithNonceRequest {
   taskId: string;
@@ -33,6 +34,7 @@ export interface CancelTaskWithNonceDeps {
   logger: Logger;
   codeTaskRepo: CodeTaskRepository;
   taskDispatcher: TaskDispatcherService;
+  workerSettingsRepo: WorkerSettingsRepository;
 }
 
 /**
@@ -51,7 +53,7 @@ export async function cancelTaskWithNonce(
   deps: CancelTaskWithNonceDeps,
   request: CancelTaskWithNonceRequest
 ): Promise<Result<{ cancelled: true }, CancelTaskWithNonceError>> {
-  const { logger, codeTaskRepo, taskDispatcher } = deps;
+  const { logger, codeTaskRepo, taskDispatcher, workerSettingsRepo } = deps;
   const { taskId, nonce, userId } = request;
 
   // Step 1: Fetch task
@@ -105,7 +107,22 @@ export async function cancelTaskWithNonce(
 
   // Step 7: Notify worker to stop (best effort)
   try {
-    await taskDispatcher.cancelOnWorker(taskId, task.workerLocation);
+    // Fetch user's worker credentials for the cancellation request
+    const settingsResult = await workerSettingsRepo.getSettings(userId);
+    let workerCreds = undefined;
+    if (settingsResult.ok && settingsResult.value !== null) {
+      const settings = settingsResult.value;
+      const workerConfig = task.workerLocation === 'mac' ? settings.mac : settings.vm;
+      if (workerConfig?.enabled === true) {
+        workerCreds = {
+          url: workerConfig.url,
+          cfAccessClientId: workerConfig.cfAccessClientId,
+          cfAccessClientSecret: workerConfig.cfAccessClientSecret,
+          dispatchSigningSecret: workerConfig.dispatchSigningSecret,
+        };
+      }
+    }
+    await taskDispatcher.cancelOnWorker(taskId, task.workerLocation, workerCreds);
   } catch (error) {
     logger.warn({ taskId, error }, 'Failed to notify worker of cancellation');
   }

@@ -14,7 +14,7 @@ vi.mock('jose', () => ({
 const mockedJwtVerify = vi.mocked(jose.jwtVerify);
 
 import { buildServer } from '../../server.js';
-import { resetServices, setServices } from '../../services.js';
+import { getServices, resetServices, setServices } from '../../services.js';
 import { createFakeFirestore, resetFirestore, setFirestore } from '@intexuraos/infra-firestore';
 import type { Firestore } from '@google-cloud/firestore';
 import pino from 'pino';
@@ -43,6 +43,8 @@ import { createProcessHeartbeatUseCase } from '../../domain/usecases/processHear
 import { createDetectZombieTasksUseCase } from '../../domain/usecases/detectZombieTasks.js';
 import { createCleanupTaskLogsUseCase } from '../../domain/usecases/cleanupTaskLogs.js';
 import { createNoOpMetricsClient, type MetricsClient } from '../../infra/metrics.js';
+import { createWorkerSettingsRepository } from '../../infra/firestore/workerSettingsRepository.js';
+import type { WorkerSettingsRepository } from '../../domain/ports/workerSettingsRepository.js';
 
 describe('POST /code/cancel', () => {
   let app: Awaited<ReturnType<typeof buildServer>>;
@@ -83,11 +85,6 @@ describe('POST /code/cancel', () => {
     const workerDiscovery = createWorkerDiscoveryService({ logger });
     taskDispatcher = createTaskDispatcherService({
       logger,
-      cfAccessClientId: 'test-client-id',
-      cfAccessClientSecret: 'test-client-secret',
-      dispatchSigningSecret: 'test-dispatch-secret',
-      orchestratorMacUrl: 'https://cc-mac.intexuraos.cloud',
-      orchestratorVmUrl: 'https://cc-vm.intexuraos.cloud',
     });
 
     const whatsappNotifier = createWhatsAppNotifier({
@@ -158,8 +155,12 @@ describe('POST /code/cancel', () => {
         codeTaskRepository: codeTaskRepo,
         logger,
       }),
-      cleanupTaskLogs: createCleanupTaskLogsUseCase({
+cleanupTaskLogs: createCleanupTaskLogsUseCase({
         codeTaskRepository: codeTaskRepo,
+        logger,
+      }),
+      workerSettingsRepo: createWorkerSettingsRepository({
+        firestore: fakeFirestore as unknown as Firestore,
         logger,
       }),
     } as {
@@ -178,6 +179,24 @@ describe('POST /code/cancel', () => {
       processHeartbeat: import('../../domain/usecases/processHeartbeat.js').ProcessHeartbeatUseCase;
       detectZombieTasks: import('../../domain/usecases/detectZombieTasks.js').DetectZombieTasksUseCase;
       cleanupTaskLogs: import('../../domain/usecases/cleanupTaskLogs.js').CleanupTaskLogsUseCase;
+      workerSettingsRepo: WorkerSettingsRepository;
+    });
+
+    // Set up worker settings for the test user so cancelOnWorker receives credentials
+    const services = getServices();
+    await services.workerSettingsRepo.updateWorkerConfig('test-user-id', 'mac', {
+      url: 'https://cc-mac.intexuraos.cloud',
+      cfAccessClientId: 'test-client-id',
+      cfAccessClientSecret: 'test-client-secret',
+      dispatchSigningSecret: 'test-dispatch-secret',
+      enabled: true,
+    });
+    await services.workerSettingsRepo.updateWorkerConfig('test-user-id', 'vm', {
+      url: 'https://cc-vm.intexuraos.cloud',
+      cfAccessClientId: 'test-client-id',
+      cfAccessClientSecret: 'test-client-secret',
+      dispatchSigningSecret: 'test-dispatch-secret',
+      enabled: true,
     });
 
     app = await buildServer();
@@ -440,7 +459,10 @@ describe('POST /code/cancel', () => {
       // Verify worker was notified
       expect(cancelOnWorkerSpy).toHaveBeenCalledTimes(1);
       if (!cancelOnWorkerSpy) throw new Error('cancelOnWorkerSpy not initialized');
-      expect(cancelOnWorkerSpy).toHaveBeenCalledWith(taskId, 'mac');
+      expect(cancelOnWorkerSpy).toHaveBeenCalledWith(taskId, 'mac', expect.objectContaining({
+        url: 'https://cc-mac.intexuraos.cloud',
+        cfAccessClientId: 'test-client-id',
+      }));
 
       // Verify task status in Firestore
       const getResult = await codeTaskRepo.findById(taskId);
@@ -488,7 +510,10 @@ describe('POST /code/cancel', () => {
       // Verify worker was notified
       expect(cancelOnWorkerSpy).toHaveBeenCalledTimes(1);
       if (!cancelOnWorkerSpy) throw new Error('cancelOnWorkerSpy not initialized');
-      expect(cancelOnWorkerSpy).toHaveBeenCalledWith(taskId, 'vm');
+      expect(cancelOnWorkerSpy).toHaveBeenCalledWith(taskId, 'vm', expect.objectContaining({
+        url: 'https://cc-vm.intexuraos.cloud',
+        cfAccessClientId: 'test-client-id',
+      }));
     });
 
     it('calls worker to stop task', async () => {
@@ -526,7 +551,10 @@ describe('POST /code/cancel', () => {
 
       // Verify cancelOnWorker was called with correct parameters
       if (!cancelOnWorkerSpy) throw new Error('cancelOnWorkerSpy not initialized');
-      expect(cancelOnWorkerSpy).toHaveBeenCalledWith(taskId, 'mac');
+      expect(cancelOnWorkerSpy).toHaveBeenCalledWith(taskId, 'mac', expect.objectContaining({
+        url: 'https://cc-mac.intexuraos.cloud',
+        cfAccessClientId: 'test-client-id',
+      }));
     });
 
     it('handles Firestore update failure gracefully', async () => {

@@ -1391,6 +1391,7 @@ module "code_agent" {
     INTEXURAOS_CF_ACCESS_CLIENT_SECRET = module.secret_manager.secret_ids["INTEXURAOS_CF_ACCESS_CLIENT_SECRET"]
     INTEXURAOS_DISPATCH_SIGNING_SECRET = module.secret_manager.secret_ids["INTEXURAOS_DISPATCH_SIGNING_SECRET"]
     INTEXURAOS_WEBHOOK_VERIFY_SECRET   = module.secret_manager.secret_ids["INTEXURAOS_WEBHOOK_VERIFY_SECRET"]
+    INTEXURAOS_TOKEN_ENCRYPTION_KEY    = module.secret_manager.secret_ids["INTEXURAOS_TOKEN_ENCRYPTION_KEY"]
   })
 
   env_vars = merge(local.common_service_env_vars, {

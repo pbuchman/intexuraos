@@ -44,6 +44,7 @@ function getOptionalEnv(name: string, defaultValue: string): string {
   return process.env[name] ?? defaultValue;
 }
 
+/* v8 ignore module-init -- directory setup function called during bootstrap */
 function ensureDirectoryExists(path: string): void {
   mkdirSync(path, { recursive: true });
 }
@@ -86,6 +87,7 @@ function getGitHubPrivateKey(projectId: string, cachePath: string): string {
   }
 }
 
+/* v8 ignore module-init -- orchestrator bootstrap function: env vars, Firebase init, service wiring */
 async function bootstrap(): Promise<void> {
   const home = homedir();
   const orchestratorDir = join(home, '.claude-orchestrator');
@@ -204,6 +206,7 @@ async function bootstrap(): Promise<void> {
   await main(config, statePersistence, dispatcher, tokenService, webhookClient, logger);
 }
 
+/* v8 ignore module-init -- bootstrap invocation and fatal error handler */
 bootstrap().catch((error: unknown) => {
   process.stderr.write(`Failed to start orchestrator: ${String(error)}\n`);
   process.exit(1);

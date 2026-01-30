@@ -9,11 +9,13 @@ import type { TaskDispatcherService } from '../../../domain/services/taskDispatc
 import type { Logger } from 'pino';
 import { cancelTaskWithNonce } from '../../../domain/usecases/cancelTaskWithNonce.js';
 import type { CodeTask } from '../../../domain/models/codeTask.js';
+import type { WorkerSettingsRepository } from '../../../domain/ports/workerSettingsRepository.js';
 
 describe('cancelTaskWithNonce', () => {
   let logger: Logger;
   let codeTaskRepo: CodeTaskRepository;
   let taskDispatcher: TaskDispatcherService;
+  let workerSettingsRepo: WorkerSettingsRepository;
 
   const baseTask = {
     id: 'task-123',
@@ -54,6 +56,25 @@ describe('cancelTaskWithNonce', () => {
       dispatch: vi.fn(),
       cancelOnWorker: vi.fn().mockResolvedValue(ok(undefined)),
     } as unknown as TaskDispatcherService;
+
+    workerSettingsRepo = {
+      getSettings: vi.fn().mockResolvedValue(ok({
+        userId: 'user-789',
+        mac: {
+          url: 'https://cc-mac.intexuraos.cloud',
+          cfAccessClientId: 'test-client-id',
+          cfAccessClientSecret: 'test-client-secret',
+          dispatchSigningSecret: 'test-dispatch-secret',
+          enabled: true,
+        },
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      })),
+      getWorkerConfig: vi.fn(),
+      updateWorkerConfig: vi.fn(),
+      deleteWorkerConfig: vi.fn(),
+      updateTestResult: vi.fn(),
+    } as unknown as WorkerSettingsRepository;
   });
 
   it('returns task_not_found when task does not exist', async () => {
@@ -62,7 +83,7 @@ describe('cancelTaskWithNonce', () => {
     );
 
     const result = await cancelTaskWithNonce(
-      { logger, codeTaskRepo, taskDispatcher },
+      { logger, codeTaskRepo, taskDispatcher, workerSettingsRepo },
       { taskId: 'nonexistent', nonce: 'abcd', userId: 'user-789' }
     );
 
@@ -76,7 +97,7 @@ describe('cancelTaskWithNonce', () => {
     vi.mocked(codeTaskRepo.findById).mockResolvedValueOnce(ok(baseTask));
 
     const result = await cancelTaskWithNonce(
-      { logger, codeTaskRepo, taskDispatcher },
+      { logger, codeTaskRepo, taskDispatcher, workerSettingsRepo },
       { taskId: 'task-123', nonce: 'wrong', userId: 'user-789' }
     );
 
@@ -91,7 +112,7 @@ describe('cancelTaskWithNonce', () => {
     vi.mocked(codeTaskRepo.findById).mockResolvedValueOnce(ok(taskWithoutNonce as CodeTask));
 
     const result = await cancelTaskWithNonce(
-      { logger, codeTaskRepo, taskDispatcher },
+      { logger, codeTaskRepo, taskDispatcher, workerSettingsRepo },
       { taskId: 'task-123', nonce: 'abcd', userId: 'user-789' }
     );
 
@@ -109,7 +130,7 @@ describe('cancelTaskWithNonce', () => {
     vi.mocked(codeTaskRepo.findById).mockResolvedValueOnce(ok(expiredTask));
 
     const result = await cancelTaskWithNonce(
-      { logger, codeTaskRepo, taskDispatcher },
+      { logger, codeTaskRepo, taskDispatcher, workerSettingsRepo },
       { taskId: 'task-123', nonce: 'abcd', userId: 'user-789' }
     );
 
@@ -123,7 +144,7 @@ describe('cancelTaskWithNonce', () => {
     vi.mocked(codeTaskRepo.findById).mockResolvedValueOnce(ok(baseTask));
 
     const result = await cancelTaskWithNonce(
-      { logger, codeTaskRepo, taskDispatcher },
+      { logger, codeTaskRepo, taskDispatcher, workerSettingsRepo },
       { taskId: 'task-123', nonce: 'abcd', userId: 'different-user' }
     );
 
@@ -138,7 +159,7 @@ describe('cancelTaskWithNonce', () => {
     vi.mocked(codeTaskRepo.findById).mockResolvedValueOnce(ok(completedTask));
 
     const result = await cancelTaskWithNonce(
-      { logger, codeTaskRepo, taskDispatcher },
+      { logger, codeTaskRepo, taskDispatcher, workerSettingsRepo },
       { taskId: 'task-123', nonce: 'abcd', userId: 'user-789' }
     );
 
@@ -154,7 +175,7 @@ describe('cancelTaskWithNonce', () => {
     vi.mocked(codeTaskRepo.findById).mockResolvedValueOnce(ok(failedTask));
 
     const result = await cancelTaskWithNonce(
-      { logger, codeTaskRepo, taskDispatcher },
+      { logger, codeTaskRepo, taskDispatcher, workerSettingsRepo },
       { taskId: 'task-123', nonce: 'abcd', userId: 'user-789' }
     );
 
@@ -171,7 +192,7 @@ describe('cancelTaskWithNonce', () => {
     );
 
     const result = await cancelTaskWithNonce(
-      { logger, codeTaskRepo, taskDispatcher },
+      { logger, codeTaskRepo, taskDispatcher, workerSettingsRepo },
       { taskId: 'task-123', nonce: 'abcd', userId: 'user-789' }
     );
 
@@ -188,7 +209,7 @@ describe('cancelTaskWithNonce', () => {
     );
 
     const result = await cancelTaskWithNonce(
-      { logger, codeTaskRepo, taskDispatcher },
+      { logger, codeTaskRepo, taskDispatcher, workerSettingsRepo },
       { taskId: 'task-123', nonce: 'abcd', userId: 'user-789' }
     );
 
@@ -203,7 +224,12 @@ describe('cancelTaskWithNonce', () => {
       cancelNonceExpiresAt: null,
     });
 
-    expect(taskDispatcher.cancelOnWorker).toHaveBeenCalledWith('task-123', 'mac');
+    expect(taskDispatcher.cancelOnWorker).toHaveBeenCalledWith('task-123', 'mac', {
+      url: 'https://cc-mac.intexuraos.cloud',
+      cfAccessClientId: 'test-client-id',
+      cfAccessClientSecret: 'test-client-secret',
+      dispatchSigningSecret: 'test-dispatch-secret',
+    });
   });
 
   it('successfully cancels task in dispatched status', async () => {
@@ -214,7 +240,7 @@ describe('cancelTaskWithNonce', () => {
     );
 
     const result = await cancelTaskWithNonce(
-      { logger, codeTaskRepo, taskDispatcher },
+      { logger, codeTaskRepo, taskDispatcher, workerSettingsRepo },
       { taskId: 'task-123', nonce: 'abcd', userId: 'user-789' }
     );
 
@@ -229,7 +255,7 @@ describe('cancelTaskWithNonce', () => {
     );
 
     const result = await cancelTaskWithNonce(
-      { logger, codeTaskRepo, taskDispatcher },
+      { logger, codeTaskRepo, taskDispatcher, workerSettingsRepo },
       { taskId: 'task-123', nonce: 'abcd', userId: 'user-789' }
     );
 
@@ -244,7 +270,7 @@ describe('cancelTaskWithNonce', () => {
     vi.mocked(taskDispatcher.cancelOnWorker).mockRejectedValueOnce(new Error('Worker unreachable'));
 
     const result = await cancelTaskWithNonce(
-      { logger, codeTaskRepo, taskDispatcher },
+      { logger, codeTaskRepo, taskDispatcher, workerSettingsRepo },
       { taskId: 'task-123', nonce: 'abcd', userId: 'user-789' }
     );
 
