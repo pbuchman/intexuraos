@@ -183,6 +183,7 @@ locals {
   cloud_function_workers = [
     "vm-lifecycle",
     "log-cleanup",
+    "predev-lifecycle",
   ]
 }
 

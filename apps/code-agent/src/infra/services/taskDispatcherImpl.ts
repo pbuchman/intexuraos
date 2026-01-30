@@ -6,7 +6,13 @@
 
 import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
 import type { WorkerConfig } from '../../domain/models/worker.js';
-import type { DispatchError, DispatchRequest, DispatchResult } from '../../domain/services/taskDispatcher.js';
+import type { WorkerCredentials } from '../../domain/models/workerSettings.js';
+import type {
+  DispatchError,
+  DispatchRequest,
+  DispatchResult,
+  DispatchWorkerCredentials,
+} from '../../domain/services/taskDispatcher.js';
 import type { TaskDispatcherDeps, TaskDispatcherService } from '../../domain/services/taskDispatcher.js';
 import { signDispatchRequest, generateNonce } from './hmacSigning.js';
 
@@ -35,23 +41,23 @@ interface WorkerTaskResponse {
 }
 
 /**
+ * Internal worker config with credentials for dispatch.
+ */
+interface WorkerConfigWithCredentials extends WorkerConfig {
+  credentials: WorkerCredentials;
+}
+
+/**
  * Task dispatcher implementation with worker fallback.
+ *
+ * Credentials are per-request, not stored in the instance.
+ * This enables user isolation - each dispatch uses the requesting user's credentials.
  */
 class TaskDispatcherImpl implements TaskDispatcherService {
   private readonly logger: TaskDispatcherDeps['logger'];
-  private readonly cfAccessClientId: string;
-  private readonly cfAccessClientSecret: string;
-  private readonly dispatchSigningSecret: string;
-  private readonly orchestratorMacUrl: string;
-  private readonly orchestratorVmUrl: string;
 
   constructor(deps: TaskDispatcherDeps) {
     this.logger = deps.logger;
-    this.cfAccessClientId = deps.cfAccessClientId;
-    this.cfAccessClientSecret = deps.cfAccessClientSecret;
-    this.dispatchSigningSecret = deps.dispatchSigningSecret;
-    this.orchestratorMacUrl = deps.orchestratorMacUrl;
-    this.orchestratorVmUrl = deps.orchestratorVmUrl;
   }
 
   async dispatch(request: DispatchRequest): Promise<Result<DispatchResult, DispatchError>> {
@@ -79,50 +85,59 @@ class TaskDispatcherImpl implements TaskDispatcherService {
       taskRequest.traceId = request.traceId;
     }
 
-    const body = JSON.stringify(taskRequest);
+const body = JSON.stringify(taskRequest);
     const timestamp = Date.now();
 
-    // Generate HMAC signature
-    const signatureResult = signDispatchRequest(
-      { logger: this.logger, dispatchSigningSecret: this.dispatchSigningSecret },
-      { body, timestamp }
-    );
-    if (!signatureResult.ok) {
+    // Get workers from per-request credentials
+    const workers = this.getWorkerConfigsFromCredentials(request.workerCredentials);
+
+    if (workers.length === 0) {
       return err({
-        code: 'dispatch_failed',
-        message: signatureResult.error.message,
+        code: 'worker_unavailable',
+        message: 'No workers configured for this user',
       });
     }
 
-    const { signature } = signatureResult.value;
-    const nonce = generateNonce();
-
     // Try to dispatch to available workers
-    const result = await this.dispatchToWorker(taskRequest, body, timestamp, signature, nonce);
+    const result = await this.dispatchToWorker(taskRequest, body, timestamp, workers);
 
     return result;
   }
 
   /**
    * Attempt to dispatch to a worker, with fallback on 503.
+   * Uses per-request worker credentials for user isolation.
    */
   private async dispatchToWorker(
     taskRequest: WorkerTaskRequest,
     body: string,
     timestamp: number,
-    signature: string,
-    nonce: string
+    workers: WorkerConfigWithCredentials[]
   ): Promise<Result<DispatchResult, DispatchError>> {
-    // Get list of workers from worker discovery
-    // For now, we'll try both workers in priority order
-    const workers = this.getWorkerConfigs();
-
     for (const worker of workers) {
+      // Generate nonce for replay protection
+      const nonce = generateNonce();
+
+      // Generate HMAC signature using this worker's signing secret
+      const signatureResult = signDispatchRequest(
+        { logger: this.logger, dispatchSigningSecret: worker.credentials.dispatchSigningSecret },
+        { body, timestamp, nonce }
+      );
+      if (!signatureResult.ok) {
+        this.logger.warn(
+          { taskId: taskRequest.taskId, workerLocation: worker.location },
+          'Failed to sign dispatch request'
+        );
+        continue;
+      }
+
+      const { signature } = signatureResult.value;
+
       try {
         const response = await this.tryDispatch(worker, taskRequest, body, timestamp, signature, nonce);
 
         if (!response.ok) {
-          return response; // Return error immediately
+          return response;
         }
 
         const workerResponse = response.value;
@@ -139,12 +154,10 @@ class TaskDispatcherImpl implements TaskDispatcherService {
           });
         }
 
-        // After the above check, status must be 'rejected' (type narrowing)
         this.logger.warn(
           { taskId: taskRequest.taskId, workerLocation: worker.location, reason: workerResponse.reason },
           'Worker rejected task'
         );
-        // Try next worker
         continue;
       } catch (error) {
         this.logger.error(
@@ -153,7 +166,6 @@ class TaskDispatcherImpl implements TaskDispatcherService {
         );
 
         if (error instanceof Error && error.message.includes('503')) {
-          // Worker busy, try next worker
           continue;
         }
 
@@ -172,9 +184,10 @@ class TaskDispatcherImpl implements TaskDispatcherService {
 
   /**
    * Attempt to dispatch to a specific worker.
+   * Uses per-request credentials for user isolation.
    */
   private async tryDispatch(
-    worker: WorkerConfig,
+    worker: WorkerConfigWithCredentials,
     taskRequest: WorkerTaskRequest,
     body: string,
     timestamp: number,
@@ -188,23 +201,22 @@ class TaskDispatcherImpl implements TaskDispatcherService {
 
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
-      'CF-Access-Client-Id': this.cfAccessClientId,
-      'CF-Access-Client-Secret': this.cfAccessClientSecret,
+      'CF-Access-Client-Id': worker.credentials.cfAccessClientId,
+      'CF-Access-Client-Secret': worker.credentials.cfAccessClientSecret,
       'X-Dispatch-Timestamp': String(timestamp),
       'X-Dispatch-Signature': signature,
       'X-Dispatch-Nonce': nonce,
     };
 
-    // Include traceId in headers if present
     if (taskRequest.traceId !== undefined) {
       headers['X-Trace-Id'] = taskRequest.traceId;
     }
 
-    const response = await this.fetchWithTimeout(worker.url + '/tasks', {
+    const response = await this.fetchWithTimeout(worker.credentials.url + '/tasks', {
       method: 'POST',
       headers,
       body,
-      signal: AbortSignal.timeout(30000), // 30 second timeout
+      signal: AbortSignal.timeout(30000),
     });
 
     if (!response.ok) {
@@ -246,52 +258,48 @@ class TaskDispatcherImpl implements TaskDispatcherService {
   }
 
   /**
-   * Get worker configurations from injected URLs.
+   * Build worker configurations from per-request credentials.
    *
-   * Returns workers sorted by priority (mac first, then vm).
+   * Returns workers sorted by user's priority preference.
    */
-  private getWorkerConfigs(): WorkerConfig[] {
-    const workers: WorkerConfig[] = [];
+  private getWorkerConfigsFromCredentials(credentials: DispatchWorkerCredentials): WorkerConfigWithCredentials[] {
+    const workers: WorkerConfigWithCredentials[] = [];
+    const priority = credentials.priority;
 
-    if (this.orchestratorMacUrl !== '') {
-      workers.push({
-        location: 'mac',
-        url: this.orchestratorMacUrl,
-        priority: 1,
-      });
-    }
+    for (let i = 0; i < priority.length; i++) {
+      const workerType = priority[i];
+      if (workerType === undefined) continue;
 
-    if (this.orchestratorVmUrl !== '') {
+      const workerCreds = credentials[workerType];
+      if (workerCreds === undefined) continue;
+
       workers.push({
-        location: 'vm',
-        url: this.orchestratorVmUrl,
-        priority: 2,
+        location: workerType,
+        url: workerCreds.url,
+        priority: i + 1,
+        credentials: workerCreds,
       });
     }
 
     return workers;
   }
 
-  async cancelOnWorker(taskId: string, location: 'mac' | 'vm'): Promise<void> {
+  async cancelOnWorker(taskId: string, location: 'mac' | 'vm', credentials?: WorkerCredentials): Promise<void> {
     this.logger.info({ taskId, location }, 'Sending cancellation request to worker');
 
-    const workers = this.getWorkerConfigs();
-    const worker = workers.find((w) => w.location === location);
-
-    /* v8 ignore ts-type -- negated condition after find creates type narrowing branch */
-    if (!worker) {
-      this.logger.warn({ taskId, location }, 'Worker configuration not found for cancellation');
+if (credentials === undefined) {
+      this.logger.warn({ taskId, location }, 'No credentials provided for cancellation, skipping worker notification');
       return;
     }
 
     try {
-      const response = await this.fetchWithTimeout(`${worker.url}/tasks/${taskId}`, {
+      const response = await this.fetchWithTimeout(`${credentials.url}/tasks/${taskId}`, {
         method: 'DELETE',
         headers: {
-          'CF-Access-Client-Id': this.cfAccessClientId,
-          'CF-Access-Client-Secret': this.cfAccessClientSecret,
+          'CF-Access-Client-Id': credentials.cfAccessClientId,
+          'CF-Access-Client-Secret': credentials.cfAccessClientSecret,
         },
-        signal: AbortSignal.timeout(10000), // 10 second timeout for cancellation
+        signal: AbortSignal.timeout(10000),
       });
 
       /* v8 ignore test-infra -- requires worker to return error response */
@@ -305,7 +313,6 @@ class TaskDispatcherImpl implements TaskDispatcherService {
 
       this.logger.info({ taskId, location }, 'Worker cancellation request successful');
     } catch (error) {
-      // Log but don't fail - task is already marked cancelled in Firestore
       this.logger.warn({ taskId, location, error: getErrorMessage(error) }, 'Failed to notify worker of cancellation');
     }
   }

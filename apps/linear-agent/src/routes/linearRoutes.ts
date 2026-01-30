@@ -260,6 +260,7 @@ export const linearRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       return await handleLinearError(deleteResult.error, reply);
     }
 
+    // @allow-raw-send: 204 No Content response
     reply.status(204);
     return await reply.send();
   });

@@ -47,6 +47,7 @@ import {
   TodosListPage,
   WhatsAppConnectionPage,
   WhatsAppNotesPage,
+  WorkerSettingsPage,
 } from '@/pages';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }): React.JSX.Element {
@@ -192,6 +193,14 @@ function AppRoutes(): React.JSX.Element {
         element={
           <ProtectedRoute>
             <LlmCostsPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/settings/workers"
+        element={
+          <ProtectedRoute>
+            <WorkerSettingsPage />
           </ProtectedRoute>
         }
       />

@@ -62,8 +62,8 @@ export function createNotionServiceClient(config: NotionServiceConfig): NotionSe
           });
         }
 
-        const data = (await response.json()) as NotionTokenContext;
-        return ok(data);
+        const response_data = (await response.json()) as { success: boolean; data: NotionTokenContext };
+        return ok(response_data.data);
       } catch (error) {
         return err({
           code: 'INTERNAL_ERROR',

@@ -19,8 +19,10 @@ import { createLinearIssueService } from '../../domain/services/linearIssueServi
 import { createStatusMirrorService } from '../../infra/services/statusMirrorServiceImpl.js';
 import { createProcessHeartbeatUseCase } from '../../domain/usecases/processHeartbeat.js';
 import { createDetectZombieTasksUseCase } from '../../domain/usecases/detectZombieTasks.js';
+import { createCleanupTaskLogsUseCase } from '../../domain/usecases/cleanupTaskLogs.js';
 import type { WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
 import { createNoOpMetricsClient } from '../../infra/metrics.js';
+import { createWorkerSettingsRepository } from '../../infra/firestore/workerSettingsRepository.js';
 
 export function setupTestServices({ actionsAgentUrl = 'http://actions-agent' }: { actionsAgentUrl?: string } = {}): void {
   const fakeFirestore = createFakeFirestore() as unknown as Firestore;
@@ -71,11 +73,6 @@ export function setupTestServices({ actionsAgentUrl = 'http://actions-agent' }: 
     workerDiscovery: createWorkerDiscoveryService({ logger }),
     taskDispatcher: createTaskDispatcherService({
       logger,
-      cfAccessClientId: 'test-client-id',
-      cfAccessClientSecret: 'test-client-secret',
-      dispatchSigningSecret: 'test-dispatch-secret',
-      orchestratorMacUrl: 'https://cc-mac.intexuraos.cloud',
-      orchestratorVmUrl: 'https://cc-vm.intexuraos.cloud',
     }),
     whatsappNotifier: createWhatsAppNotifier({
       whatsappPublisher: {
@@ -104,6 +101,17 @@ export function setupTestServices({ actionsAgentUrl = 'http://actions-agent' }: 
       }),
       logger,
     }),
+cleanupTaskLogs: createCleanupTaskLogsUseCase({
+      codeTaskRepository: createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore,
+        logger,
+      }),
+      logger,
+    }),
+    workerSettingsRepo: createWorkerSettingsRepository({
+      firestore: fakeFirestore,
+      logger,
+    }),
   };
 
   setServices(container);
@@ -111,4 +119,21 @@ export function setupTestServices({ actionsAgentUrl = 'http://actions-agent' }: 
 
 export function resetTestServices(): void {
   // No-op - will be handled by resetServices()
+}
+
+/**
+ * Set up default worker settings for a test user.
+ * Call this in tests that need to dispatch tasks.
+ */
+export async function setupTestWorkerSettings(userId: string): Promise<void> {
+  const { getServices } = await import('../../services.js');
+  const { workerSettingsRepo } = getServices();
+
+  await workerSettingsRepo.updateWorkerConfig(userId, 'mac', {
+    url: 'https://cc-mac.intexuraos.cloud',
+    cfAccessClientId: 'test-client-id',
+    cfAccessClientSecret: 'test-client-secret',
+    dispatchSigningSecret: 'test-dispatch-secret',
+    enabled: true,
+  });
 }

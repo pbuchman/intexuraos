@@ -29,6 +29,7 @@ FORBIDDEN_PATTERNS=(
   "pre-existing"
   "already broken"
   "legacy issue"
+  "CI should now pass"
 )
 
 for pattern in "${FORBIDDEN_PATTERNS[@]}"; do

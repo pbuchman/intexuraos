@@ -66,20 +66,28 @@ export function createLinearAgentHttpClient(
           return err({ code: 'INVALID_REQUEST', message: errorText });
         }
 
-        const data = await response.json() as {
-          id: string;
-          identifier: string;
-          title: string;
-          url: string;
+        const body = await response.json() as {
+          success: boolean;
+          data?: {
+            id: string;
+            identifier: string;
+            title: string;
+            url: string;
+          };
         };
 
-        logger.info({ issueId: data.id, identifier: data.identifier }, 'Linear issue created');
+        if (!body.success || body.data === undefined) {
+          logger.error({ body }, 'Invalid response from linear-agent');
+          return err({ code: 'UNKNOWN', message: 'Invalid response from linear-agent' });
+        }
+
+        logger.info({ issueId: body.data.id, identifier: body.data.identifier }, 'Linear issue created');
 
         return ok({
-          issueId: data.id,
-          issueIdentifier: data.identifier,
-          issueTitle: data.title,
-          issueUrl: data.url,
+          issueId: body.data.id,
+          issueIdentifier: body.data.identifier,
+          issueTitle: body.data.title,
+          issueUrl: body.data.url,
         });
       } catch (error) {
         if (error instanceof Error && error.name === 'AbortError') {
@@ -119,6 +127,16 @@ export function createLinearAgentHttpClient(
           const errorText = await response.text();
           logger.error({ status: response.status, error: errorText }, 'linear-agent updateState failed');
           return err({ code: 'UNAVAILABLE', message: errorText });
+        }
+
+        const body = await response.json() as {
+          success: boolean;
+          data?: unknown;
+        };
+
+        if (!body.success) {
+          logger.error({ body }, 'Invalid response from linear-agent');
+          return err({ code: 'UNKNOWN', message: 'Invalid response from linear-agent' });
         }
 
         logger.info({ issueId: request.issueId, state: request.state }, 'Linear issue state updated');

@@ -42,7 +42,10 @@ import { createStatusMirrorService } from '../../infra/services/statusMirrorServ
 import type { StatusMirrorService } from '../../infra/services/statusMirrorServiceImpl.js';
 import { createProcessHeartbeatUseCase } from '../../domain/usecases/processHeartbeat.js';
 import { createDetectZombieTasksUseCase } from '../../domain/usecases/detectZombieTasks.js';
+import { createCleanupTaskLogsUseCase } from '../../domain/usecases/cleanupTaskLogs.js';
 import { createNoOpMetricsClient, type MetricsClient } from '../../infra/metrics.js';
+import { createWorkerSettingsRepository } from '../../infra/firestore/workerSettingsRepository.js';
+import type { WorkerSettingsRepository } from '../../domain/ports/workerSettingsRepository.js';
 
 describe('GET /code/tasks endpoints', () => {
   let app: Awaited<ReturnType<typeof buildServer>>;
@@ -78,13 +81,10 @@ describe('GET /code/tasks endpoints', () => {
     });
 
     const workerDiscovery = createWorkerDiscoveryService({ logger });
-    const taskDispatcher = createTaskDispatcherService({
+    const taskDispatcher = createTaskDispatcherService({ logger });
+    const workerSettingsRepo = createWorkerSettingsRepository({
+      firestore: fakeFirestore as unknown as Firestore,
       logger,
-      cfAccessClientId: 'test-client-id',
-      cfAccessClientSecret: 'test-client-secret',
-      dispatchSigningSecret: 'test-dispatch-secret',
-      orchestratorMacUrl: 'https://cc-mac.intexuraos.cloud',
-      orchestratorVmUrl: 'https://cc-vm.intexuraos.cloud',
     });
 
     const whatsappNotifier = createWhatsAppNotifier({
@@ -133,6 +133,7 @@ describe('GET /code/tasks endpoints', () => {
       codeTaskRepo,
       workerDiscovery,
       taskDispatcher,
+      workerSettingsRepo,
       whatsappNotifier,
       logChunkRepo,
       actionsAgentClient,
@@ -151,12 +152,17 @@ describe('GET /code/tasks endpoints', () => {
         codeTaskRepository: codeTaskRepo,
         logger,
       }),
+      cleanupTaskLogs: createCleanupTaskLogsUseCase({
+        codeTaskRepository: codeTaskRepo,
+        logger,
+      }),
     } as {
       firestore: Firestore;
       logger: Logger;
       codeTaskRepo: CodeTaskRepository;
       workerDiscovery: WorkerDiscoveryService;
       taskDispatcher: TaskDispatcherService;
+      workerSettingsRepo: WorkerSettingsRepository;
       logChunkRepo: LogChunkRepository;
       actionsAgentClient: ActionsAgentClient;
       whatsappNotifier: WhatsAppNotifier;
@@ -166,6 +172,7 @@ describe('GET /code/tasks endpoints', () => {
       metricsClient: MetricsClient;
       processHeartbeat: import('../../domain/usecases/processHeartbeat.js').ProcessHeartbeatUseCase;
       detectZombieTasks: import('../../domain/usecases/detectZombieTasks.js').DetectZombieTasksUseCase;
+      cleanupTaskLogs: import('../../domain/usecases/cleanupTaskLogs.js').CleanupTaskLogsUseCase;
     });
 
     app = await buildServer();

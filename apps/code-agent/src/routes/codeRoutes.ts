@@ -428,6 +428,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           taskDispatcher: services.taskDispatcher,
           whatsappNotifier: services.whatsappNotifier,
           metricsClient: services.metricsClient,
+          workerSettingsRepo: services.workerSettingsRepo,
         },
         processRequest
       );
@@ -446,6 +447,10 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         // Handle specific error codes
         if (error.code === 'duplicate_approval' || error.code === 'duplicate_action') { /* v8 ignore ts-type -- string literal comparison creates type narrowing branch */
           return await reply.fail('CONFLICT', `Duplicate: ${error.existingTaskId ?? ''}`);
+        }
+
+        if (error.code === 'worker_not_configured') {
+          return await reply.fail('WORKER_NOT_CONFIGURED', error.message);
         }
 
         if (error.code === 'worker_unavailable') {
@@ -1038,7 +1043,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         includeParams: true,
       });
 
-      const { codeTaskRepo, taskDispatcher, rateLimitService, linearIssueService } = getServices();
+      const { codeTaskRepo, taskDispatcher, rateLimitService, linearIssueService, workerSettingsRepo } = getServices();
       const body = request.body as {
         prompt: string;
         workerType?: 'opus' | 'auto' | 'glm';
@@ -1134,6 +1139,50 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
 
       const task = createResult.value;
 
+      // Fetch user's worker settings
+      const settingsResult = await workerSettingsRepo.getSettings(userId);
+      if (!settingsResult.ok) {
+        request.log.error({ userId, error: settingsResult.error }, 'Failed to fetch worker settings');
+        return await reply.fail('INTERNAL_ERROR', 'Failed to fetch worker settings');
+      }
+
+      const settings = settingsResult.value;
+
+      // Build worker credentials from user's settings
+      type DispatchWorkerCredentials = {
+        mac?: { url: string; cfAccessClientId: string; cfAccessClientSecret: string; dispatchSigningSecret: string };
+        vm?: { url: string; cfAccessClientId: string; cfAccessClientSecret: string; dispatchSigningSecret: string };
+        priority: Array<'mac' | 'vm'>;
+      };
+
+      const workerCredentials: DispatchWorkerCredentials = {
+        priority: settings?.workerPriority ?? ['mac', 'vm'],
+      };
+
+      if (settings?.mac !== undefined && settings.mac.enabled) {
+        workerCredentials.mac = {
+          url: settings.mac.url,
+          cfAccessClientId: settings.mac.cfAccessClientId,
+          cfAccessClientSecret: settings.mac.cfAccessClientSecret,
+          dispatchSigningSecret: settings.mac.dispatchSigningSecret,
+        };
+      }
+
+      if (settings?.vm !== undefined && settings.vm.enabled) {
+        workerCredentials.vm = {
+          url: settings.vm.url,
+          cfAccessClientId: settings.vm.cfAccessClientId,
+          cfAccessClientSecret: settings.vm.cfAccessClientSecret,
+          dispatchSigningSecret: settings.vm.dispatchSigningSecret,
+        };
+      }
+
+      // Fail if no workers configured
+      if (workerCredentials.mac === undefined && workerCredentials.vm === undefined) {
+        request.log.warn({ userId }, 'User has no workers configured');
+        return await reply.fail('WORKER_NOT_CONFIGURED', 'Please configure your workers in Settings before submitting code tasks');
+      }
+
       // Dispatch to worker (use stored webhook secret from task)
       const dispatchInput: {
         taskId: string;
@@ -1145,6 +1194,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         workerType: 'opus' | 'auto' | 'glm';
         webhookUrl: string;
         webhookSecret: string;
+        workerCredentials: DispatchWorkerCredentials;
       } = {
         taskId: task.id,
         prompt: task.sanitizedPrompt,
@@ -1154,6 +1204,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         workerType: task.workerType,
         webhookUrl: `${process.env['INTEXURAOS_SERVICE_URL']}/internal/webhooks/task-complete`,
         webhookSecret,
+        workerCredentials,
       };
 
       if (task.linearIssueId !== undefined) {
@@ -1619,7 +1670,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         includeParams: true,
       });
 
-      const { codeTaskRepo, taskDispatcher, rateLimitService, statusMirrorService } = getServices();
+      const { codeTaskRepo, taskDispatcher, rateLimitService, statusMirrorService, workerSettingsRepo } = getServices();
       const { taskId } = request.body;
       const userId = request.user?.userId ?? 'unknown-user'; /* v8 ignore ts-type -- optional chaining and nullish coalescing create type narrowing branches */
 
@@ -1662,9 +1713,23 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
 
       // Step 6: Notify worker to stop (best effort)
       try {
-        await taskDispatcher.cancelOnWorker(taskId, task.workerLocation);
+        // Fetch user's worker credentials for the cancellation request
+        const settingsResult = await workerSettingsRepo.getSettings(userId);
+        let workerCreds = undefined;
+        if (settingsResult.ok && settingsResult.value !== null) {
+          const settings = settingsResult.value;
+          const workerConfig = task.workerLocation === 'mac' ? settings.mac : settings.vm;
+          if (workerConfig !== undefined && workerConfig.enabled) {
+            workerCreds = {
+              url: workerConfig.url,
+              cfAccessClientId: workerConfig.cfAccessClientId,
+              cfAccessClientSecret: workerConfig.cfAccessClientSecret,
+              dispatchSigningSecret: workerConfig.dispatchSigningSecret,
+            };
+          }
+        }
+        await taskDispatcher.cancelOnWorker(taskId, task.workerLocation, workerCreds);
       } catch (error) {
-        // Log but don't fail - task is already marked cancelled in Firestore
         request.log.warn({ taskId, error }, 'Failed to notify worker of cancellation');
       }
 
@@ -2052,6 +2117,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           logger: services.logger,
           codeTaskRepo: services.codeTaskRepo,
           taskDispatcher: services.taskDispatcher,
+          workerSettingsRepo: services.workerSettingsRepo,
         },
         { taskId, nonce, userId }
       );
@@ -2071,6 +2137,156 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
 
       request.log.info({ taskId }, 'Task cancelled via nonce successfully');
       return await reply.ok({ cancelled: true });
+    }
+  );
+
+  // POST /internal/tasks/cleanup-logs - Cleanup old task logs (cron endpoint)
+  fastify.post<{
+    Body: {
+      retentionDays?: number;
+      batchSize?: number;
+      tasksPerRun?: number;
+    };
+  }>(
+    '/internal/tasks/cleanup-logs',
+    {
+      schema: {
+        operationId: 'cleanupTaskLogs',
+        summary: 'Cleanup old task logs',
+        description: 'Internal endpoint for cleaning up logs from completed tasks. Called by log-cleanup worker.',
+        tags: ['internal'],
+        body: {
+          type: 'object',
+          properties: {
+            retentionDays: {
+              type: 'number',
+              minimum: 1,
+              description: 'Number of days to retain logs (default 90)',
+            },
+            batchSize: {
+              type: 'number',
+              minimum: 1,
+              maximum: 500,
+              description: 'Number of logs to delete per batch (default 500)',
+            },
+            tasksPerRun: {
+              type: 'number',
+              minimum: 1,
+              maximum: 1000,
+              description: 'Number of tasks to process per iteration (default 100)',
+            },
+          },
+        },
+        response: {
+          200: {
+            description: 'Cleanup completed successfully',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [true] },
+              data: {
+                type: 'object',
+                properties: {
+                  tasksProcessed: { type: 'number' },
+                  tasksFailed: { type: 'number' },
+                  logsDeleted: { type: 'number' },
+                  durationMs: { type: 'number' },
+                },
+                required: ['tasksProcessed', 'tasksFailed', 'logsDeleted', 'durationMs'],
+              },
+            },
+            required: ['success', 'data'],
+          },
+          401: {
+            description: 'Unauthorized',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: {
+                type: 'object',
+                properties: {
+                  code: { type: 'string', enum: ['UNAUTHORIZED'] },
+                  message: { type: 'string' },
+                },
+                required: ['code', 'message'],
+              },
+            },
+            required: ['success', 'error'],
+          },
+          500: {
+            description: 'Internal server error',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: {
+                type: 'object',
+                properties: {
+                  code: { type: 'string', enum: ['INTERNAL_ERROR'] },
+                  message: { type: 'string' },
+                },
+                required: ['code', 'message'],
+              },
+            },
+            required: ['success', 'error'],
+          },
+        },
+      },
+    },
+    async (
+      request: FastifyRequest<{
+        Body: {
+          retentionDays?: number;
+          batchSize?: number;
+          tasksPerRun?: number;
+        };
+      }>,
+      reply: FastifyReply
+    ) => {
+      logIncomingRequest(request, {
+        message: 'Received request to POST /internal/tasks/cleanup-logs',
+      });
+
+      const authResult = validateInternalAuth(request);
+      if (!authResult.valid) {
+        request.log.warn({ reason: authResult.reason }, 'Internal auth failed for cleanup-logs');
+        return await reply.fail('UNAUTHORIZED', 'Unauthorized');
+      }
+
+      const { cleanupTaskLogs } = getServices();
+      const body = request.body;
+
+      request.log.info(
+        { retentionDays: body.retentionDays, batchSize: body.batchSize, tasksPerRun: body.tasksPerRun },
+        'Starting task log cleanup'
+      );
+
+      const input: Parameters<typeof cleanupTaskLogs>[0] = {};
+      if (body.retentionDays !== undefined) {
+        input.retentionDays = body.retentionDays;
+      }
+      if (body.batchSize !== undefined) {
+        input.batchSize = body.batchSize;
+      }
+      if (body.tasksPerRun !== undefined) {
+        input.tasksPerRun = body.tasksPerRun;
+      }
+
+      const result = await cleanupTaskLogs(input);
+
+      if (!result.ok) {
+        request.log.error({ error: result.error.message }, 'Task log cleanup failed');
+        return await reply.fail('INTERNAL_ERROR', result.error.message);
+      }
+
+      request.log.info(
+        {
+          tasksProcessed: result.value.tasksProcessed,
+          logsDeleted: result.value.logsDeleted,
+          durationMs: result.value.durationMs,
+        },
+        'Task log cleanup completed'
+      );
+
+      return await reply.ok(result.value);
     }
   );
 

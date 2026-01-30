@@ -139,17 +139,17 @@ export async function exportResearchToNotion(
 
     // 6. Export to Notion
     const notionLogger = {
-      info: (msg: string): void => {
-        logger.info({ msg });
+      info: (msg: string, data?: Record<string, unknown>): void => {
+        logger.info({ researchId, ...data }, msg);
       },
-      warn: (msg: string): void => {
-        logger.warn({ msg });
+      warn: (msg: string, data?: Record<string, unknown>): void => {
+        logger.warn({ researchId, ...data }, msg);
       },
-      error: (msg: string): void => {
-        logger.error({ msg });
+      error: (msg: string, data?: Record<string, unknown>): void => {
+        logger.error({ researchId, ...data }, msg);
       },
-      debug: (msg: string): void => {
-        logger.debug({ msg });
+      debug: (msg: string, data?: Record<string, unknown>): void => {
+        logger.debug({ researchId, ...data }, msg);
       },
     };
 

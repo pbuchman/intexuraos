@@ -19,5 +19,6 @@ export { useLlmKeys } from './useLlmKeys.js';
 export { useNotes } from './useNotes.js';
 export { useResearch, useResearches } from './useResearch.js';
 export { useTodos } from './useTodos.js';
+export { useWorkerSettings } from './useWorkerSettings.js';
 export { usePubSubEvents, type PubSubEvent } from './usePubSubEvents.js';
 export { usePm2Logs, type Pm2LogEntry } from './usePm2Logs.js';

@@ -1,4 +1,5 @@
-import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { cleanupOldLogs, loadConfig, type CleanupConfig } from '../cleanup.js';
 
 vi.mock('../logger.js', () => ({
   logger: {
@@ -9,439 +10,249 @@ vi.mock('../logger.js', () => ({
   },
 }));
 
-interface MockTaskDoc {
-  id: string;
-  ref: {
-    update: Mock;
-    collection: Mock;
-  };
-  data: () => { completedAt: { toDate: () => Date }; logsArchived: boolean };
-}
+describe('loadConfig', () => {
+  const originalEnv = process.env;
 
-interface MockLogDoc {
-  ref: { path: string };
-}
-
-const firestoreMocks = vi.hoisted(() => {
-  const mockBatchDelete = vi.fn();
-  const mockBatchCommit = vi.fn().mockResolvedValue(undefined);
-
-  const mockBatch = vi.fn().mockReturnValue({
-    delete: mockBatchDelete,
-    commit: mockBatchCommit,
+  beforeEach(() => {
+    process.env = { ...originalEnv };
   });
 
-  const mockGet = vi.fn();
-  const mockLimit = vi.fn().mockReturnValue({ get: mockGet });
-  const mockWhere = vi.fn().mockReturnValue({
-    where: vi.fn().mockReturnValue({
-      limit: mockLimit,
-    }),
+  afterEach(() => {
+    process.env = originalEnv;
   });
-  const mockCollection = vi.fn().mockReturnValue({ where: mockWhere });
 
-  const mockFirestore = {
-    collection: mockCollection,
-    batch: mockBatch,
-  };
+  it('should throw when INTEXURAOS_CODE_AGENT_URL is missing', () => {
+    delete process.env['INTEXURAOS_CODE_AGENT_URL'];
+    process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = 'token';
 
-  return {
-    mockFirestore,
-    mockCollection,
-    mockWhere,
-    mockLimit,
-    mockGet,
-    mockBatch,
-    mockBatchDelete,
-    mockBatchCommit,
-  };
+    expect(() => loadConfig()).toThrow('INTEXURAOS_CODE_AGENT_URL is required');
+  });
+
+  it('should throw when INTEXURAOS_CODE_AGENT_URL is empty', () => {
+    process.env['INTEXURAOS_CODE_AGENT_URL'] = '';
+    process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = 'token';
+
+    expect(() => loadConfig()).toThrow('INTEXURAOS_CODE_AGENT_URL is required');
+  });
+
+  it('should throw when INTEXURAOS_INTERNAL_AUTH_TOKEN is missing', () => {
+    process.env['INTEXURAOS_CODE_AGENT_URL'] = 'http://code-agent';
+    delete process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'];
+
+    expect(() => loadConfig()).toThrow('INTEXURAOS_INTERNAL_AUTH_TOKEN is required');
+  });
+
+  it('should throw when INTEXURAOS_INTERNAL_AUTH_TOKEN is empty', () => {
+    process.env['INTEXURAOS_CODE_AGENT_URL'] = 'http://code-agent';
+    process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = '';
+
+    expect(() => loadConfig()).toThrow('INTEXURAOS_INTERNAL_AUTH_TOKEN is required');
+  });
+
+  it('should load required config values', () => {
+    process.env['INTEXURAOS_CODE_AGENT_URL'] = 'http://code-agent';
+    process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = 'test-token';
+
+    const config = loadConfig();
+
+    expect(config.codeAgentUrl).toBe('http://code-agent');
+    expect(config.internalAuthToken).toBe('test-token');
+    expect(config.retentionDays).toBeUndefined();
+    expect(config.batchSize).toBeUndefined();
+    expect(config.tasksPerRun).toBeUndefined();
+  });
+
+  it('should load optional config values when present', () => {
+    process.env['INTEXURAOS_CODE_AGENT_URL'] = 'http://code-agent';
+    process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = 'test-token';
+    process.env['INTEXURAOS_LOG_RETENTION_DAYS'] = '30';
+    process.env['INTEXURAOS_LOG_BATCH_SIZE'] = '250';
+    process.env['INTEXURAOS_LOG_TASKS_PER_RUN'] = '50';
+
+    const config = loadConfig();
+
+    expect(config.retentionDays).toBe(30);
+    expect(config.batchSize).toBe(250);
+    expect(config.tasksPerRun).toBe(50);
+  });
 });
-
-vi.mock('firebase-admin', () => {
-  return {
-    default: {
-      apps: [],
-      initializeApp: vi.fn(),
-      firestore: Object.assign(() => firestoreMocks.mockFirestore, {
-        FieldValue: {
-          serverTimestamp: vi.fn(() => 'SERVER_TIMESTAMP'),
-        },
-        Timestamp: {
-          fromDate: vi.fn((date: Date): { toDate: () => Date } => ({ toDate: (): Date => date })),
-          now: vi.fn((): { toDate: () => Date } => ({ toDate: (): Date => new Date() })),
-        },
-      }),
-    },
-  };
-});
-
-import { cleanupOldLogs } from '../cleanup.js';
 
 describe('cleanupOldLogs', () => {
+  const mockFetch = vi.fn();
+
   beforeEach(() => {
     vi.clearAllMocks();
-    firestoreMocks.mockBatch.mockReturnValue({
-      delete: firestoreMocks.mockBatchDelete,
-      commit: firestoreMocks.mockBatchCommit,
-    });
-    firestoreMocks.mockBatchCommit.mockResolvedValue(undefined);
+    global.fetch = mockFetch;
   });
 
-  it('should return early if no tasks need cleanup', async () => {
-    firestoreMocks.mockGet.mockResolvedValue({
-      empty: true,
-      docs: [],
-    });
-
-    const result = await cleanupOldLogs();
-
-    expect(result.success).toBe(true);
-    expect(result.tasksProcessed).toBe(0);
-    expect(result.logsDeleted).toBe(0);
-    expect(result.message).toContain('No tasks');
+  const createConfig = (overrides: Partial<CleanupConfig> = {}): CleanupConfig => ({
+    codeAgentUrl: 'http://code-agent',
+    internalAuthToken: 'test-token',
+    ...overrides,
   });
 
-  it('should process tasks with old logs and archive them', async () => {
-    const mockUpdate = vi.fn().mockResolvedValue(undefined);
-    const mockLogsGet = vi.fn().mockResolvedValue({
-      docs: [
-        { ref: { path: 'logs/1' } },
-        { ref: { path: 'logs/2' } },
-        { ref: { path: 'logs/3' } },
-      ] as MockLogDoc[],
+  it('should call API with correct headers', async () => {
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          success: true,
+          data: { tasksProcessed: 5, tasksFailed: 0, logsDeleted: 100, durationMs: 1000 },
+        }),
     });
 
-    const mockTaskDoc: MockTaskDoc = {
-      id: 'task-123',
-      ref: {
-        update: mockUpdate,
-        collection: vi.fn().mockReturnValue({ get: mockLogsGet }),
-      },
-      data: () => ({
-        completedAt: { toDate: () => new Date('2024-01-01') },
-        logsArchived: false,
-      }),
-    };
+    await cleanupOldLogs(createConfig());
 
-    let queryCallCount = 0;
-    firestoreMocks.mockGet.mockImplementation(() => {
-      queryCallCount++;
-      if (queryCallCount === 1) {
-        return Promise.resolve({
-          empty: false,
-          docs: [mockTaskDoc],
-        });
-      }
-      return Promise.resolve({
-        empty: true,
-        docs: [],
-      });
-    });
-
-    const result = await cleanupOldLogs();
-
-    expect(result.success).toBe(true);
-    expect(result.tasksProcessed).toBe(1);
-    expect(result.logsDeleted).toBe(3);
-    expect(firestoreMocks.mockBatchDelete).toHaveBeenCalledTimes(3);
-    expect(firestoreMocks.mockBatchCommit).toHaveBeenCalled();
-    expect(mockUpdate).toHaveBeenCalledWith(
+    expect(mockFetch).toHaveBeenCalledWith(
+      'http://code-agent/internal/tasks/cleanup-logs',
       expect.objectContaining({
-        logsArchived: true,
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Internal-Auth': 'test-token',
+        },
       })
     );
   });
 
-  it('should handle batch size limits correctly', async () => {
-    const logsArray: MockLogDoc[] = Array.from({ length: 600 }, (_, i) => ({
-      ref: { path: `logs/${String(i)}` },
-    }));
-
-    const mockUpdate = vi.fn().mockResolvedValue(undefined);
-    const mockLogsGet = vi.fn().mockResolvedValue({ docs: logsArray });
-
-    const mockTaskDoc: MockTaskDoc = {
-      id: 'task-456',
-      ref: {
-        update: mockUpdate,
-        collection: vi.fn().mockReturnValue({ get: mockLogsGet }),
-      },
-      data: () => ({
-        completedAt: { toDate: () => new Date('2024-01-01') },
-        logsArchived: false,
-      }),
-    };
-
-    let queryCallCount = 0;
-    firestoreMocks.mockGet.mockImplementation(() => {
-      queryCallCount++;
-      if (queryCallCount === 1) {
-        return Promise.resolve({
-          empty: false,
-          docs: [mockTaskDoc],
-        });
-      }
-      return Promise.resolve({
-        empty: true,
-        docs: [],
-      });
-    });
-
-    const result = await cleanupOldLogs();
-
-    expect(result.success).toBe(true);
-    expect(result.logsDeleted).toBe(600);
-    expect(firestoreMocks.mockBatchCommit).toHaveBeenCalledTimes(2);
-  });
-
-  it('should continue processing even if one task fails', async () => {
-    const mockTaskDoc1: MockTaskDoc = {
-      id: 'task-fail',
-      ref: {
-        update: vi.fn().mockRejectedValue(new Error('Update failed')),
-        collection: vi.fn().mockReturnValue({
-          get: vi.fn().mockResolvedValue({
-            docs: [{ ref: { path: 'logs/1' } }] as MockLogDoc[],
-          }),
+  it('should pass custom parameters in body', async () => {
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          success: true,
+          data: { tasksProcessed: 5, tasksFailed: 0, logsDeleted: 100, durationMs: 1000 },
         }),
-      },
-      data: () => ({
-        completedAt: { toDate: () => new Date('2024-01-01') },
-        logsArchived: false,
-      }),
-    };
-
-    const mockTaskDoc2: MockTaskDoc = {
-      id: 'task-success',
-      ref: {
-        update: vi.fn().mockResolvedValue(undefined),
-        collection: vi.fn().mockReturnValue({
-          get: vi.fn().mockResolvedValue({
-            docs: [{ ref: { path: 'logs/2' } }] as MockLogDoc[],
-          }),
-        }),
-      },
-      data: () => ({
-        completedAt: { toDate: () => new Date('2024-01-01') },
-        logsArchived: false,
-      }),
-    };
-
-    let queryCallCount = 0;
-    firestoreMocks.mockGet.mockImplementation(() => {
-      queryCallCount++;
-      if (queryCallCount === 1) {
-        return Promise.resolve({
-          empty: false,
-          docs: [mockTaskDoc1, mockTaskDoc2],
-        });
-      }
-      return Promise.resolve({
-        empty: true,
-        docs: [],
-      });
     });
 
-    const result = await cleanupOldLogs();
-
-    expect(result.success).toBe(true);
-    expect(result.tasksProcessed).toBe(1);
-    expect(result.tasksFailed).toBe(1);
-  });
-
-  it('should return error result if Firestore query fails', async () => {
-    firestoreMocks.mockGet.mockRejectedValue(new Error('Firestore unavailable'));
-
-    const result = await cleanupOldLogs();
-
-    expect(result.success).toBe(false);
-    expect(result.message).toContain('Firestore unavailable');
-  });
-
-  it('should handle task with no logs', async () => {
-    const mockUpdate = vi.fn().mockResolvedValue(undefined);
-    const mockLogsGet = vi.fn().mockResolvedValue({
-      docs: [],
-    });
-
-    const mockTaskDoc: MockTaskDoc = {
-      id: 'task-no-logs',
-      ref: {
-        update: mockUpdate,
-        collection: vi.fn().mockReturnValue({ get: mockLogsGet }),
-      },
-      data: () => ({
-        completedAt: { toDate: () => new Date('2024-01-01') },
-        logsArchived: false,
-      }),
-    };
-
-    let queryCallCount = 0;
-    firestoreMocks.mockGet.mockImplementation(() => {
-      queryCallCount++;
-      if (queryCallCount === 1) {
-        return Promise.resolve({
-          empty: false,
-          docs: [mockTaskDoc],
-        });
-      }
-      return Promise.resolve({
-        empty: true,
-        docs: [],
-      });
-    });
-
-    const result = await cleanupOldLogs();
-
-    expect(result.success).toBe(true);
-    expect(result.tasksProcessed).toBe(1);
-    expect(result.logsDeleted).toBe(0);
-    expect(firestoreMocks.mockBatchCommit).not.toHaveBeenCalled();
-    expect(mockUpdate).toHaveBeenCalledWith(
-      expect.objectContaining({
-        logsArchived: true,
-        logCount: 0,
+    await cleanupOldLogs(
+      createConfig({
+        retentionDays: 30,
+        batchSize: 250,
+        tasksPerRun: 50,
       })
     );
+
+    const callArgs = mockFetch.mock.calls[0] as [string, RequestInit];
+    const body = JSON.parse(callArgs[1].body as string) as Record<string, unknown>;
+
+    expect(body).toEqual({
+      retentionDays: 30,
+      batchSize: 250,
+      tasksPerRun: 50,
+    });
   });
 
-  it('should handle non-Error exceptions in task processing', async () => {
-    const mockTaskDoc: MockTaskDoc = {
-      id: 'task-string-error',
-      ref: {
-        update: vi.fn().mockRejectedValue('String error message'),
-        collection: vi.fn().mockReturnValue({
-          get: vi.fn().mockResolvedValue({
-            docs: [{ ref: { path: 'logs/1' } }] as MockLogDoc[],
-          }),
+  it('should return success from API response', async () => {
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          success: true,
+          data: { tasksProcessed: 10, tasksFailed: 1, logsDeleted: 500, durationMs: 2000 },
         }),
-      },
-      data: () => ({
-        completedAt: { toDate: () => new Date('2024-01-01') },
-        logsArchived: false,
-      }),
-    };
-
-    let queryCallCount = 0;
-    firestoreMocks.mockGet.mockImplementation(() => {
-      queryCallCount++;
-      if (queryCallCount === 1) {
-        return Promise.resolve({
-          empty: false,
-          docs: [mockTaskDoc],
-        });
-      }
-      return Promise.resolve({
-        empty: true,
-        docs: [],
-      });
     });
 
-    const result = await cleanupOldLogs();
+    const result = await cleanupOldLogs(createConfig());
 
     expect(result.success).toBe(true);
+    expect(result.tasksProcessed).toBe(10);
     expect(result.tasksFailed).toBe(1);
-  });
-
-  it('should handle non-Error exceptions at top level', async () => {
-    firestoreMocks.mockGet.mockRejectedValue('Non-error rejection');
-
-    const result = await cleanupOldLogs();
-
-    expect(result.success).toBe(false);
-    expect(result.message).toBe('Non-error rejection');
-  });
-
-  it('should not commit an empty batch when logs are exactly a multiple of BATCH_SIZE', async () => {
-    const logsArray: MockLogDoc[] = Array.from({ length: 500 }, (_, i) => ({
-      ref: { path: `logs/${String(i)}` },
-    }));
-
-    const mockUpdate = vi.fn().mockResolvedValue(undefined);
-    const mockLogsGet = vi.fn().mockResolvedValue({ docs: logsArray });
-
-    const mockTaskDoc: MockTaskDoc = {
-      id: 'task-exact-batch',
-      ref: {
-        update: mockUpdate,
-        collection: vi.fn().mockReturnValue({ get: mockLogsGet }),
-      },
-      data: () => ({
-        completedAt: { toDate: () => new Date('2024-01-01') },
-        logsArchived: false,
-      }),
-    };
-
-    let queryCallCount = 0;
-    firestoreMocks.mockGet.mockImplementation(() => {
-      queryCallCount++;
-      if (queryCallCount === 1) {
-        return Promise.resolve({
-          empty: false,
-          docs: [mockTaskDoc],
-        });
-      }
-      return Promise.resolve({
-        empty: true,
-        docs: [],
-      });
-    });
-
-    const result = await cleanupOldLogs();
-
-    expect(result.success).toBe(true);
     expect(result.logsDeleted).toBe(500);
-    expect(firestoreMocks.mockBatchCommit).toHaveBeenCalledTimes(1);
+    expect(result.durationMs).toBe(2000);
   });
 
-  it('should continue pagination when exactly TASKS_PER_RUN tasks are returned', async () => {
-    const mockUpdate = vi.fn().mockResolvedValue(undefined);
-    const mockLogsGet = vi.fn().mockResolvedValue({
-      docs: [{ ref: { path: 'logs/1' } }] as MockLogDoc[],
+  it('should return error when API returns non-200', async () => {
+    mockFetch.mockResolvedValue({
+      ok: false,
+      status: 500,
+      text: () => Promise.resolve('Internal Server Error'),
     });
 
-    const createTaskDoc = (id: string): MockTaskDoc => ({
-      id,
-      ref: {
-        update: mockUpdate,
-        collection: vi.fn().mockReturnValue({ get: mockLogsGet }),
-      },
-      data: () => ({
-        completedAt: { toDate: () => new Date('2024-01-01') },
-        logsArchived: false,
-      }),
+    const result = await cleanupOldLogs(createConfig());
+
+    expect(result.success).toBe(false);
+    expect(result.message).toContain('API returned 500');
+    expect(result.tasksProcessed).toBe(0);
+  });
+
+  it('should return error when API returns success=false', async () => {
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          success: false,
+          error: { code: 'INTERNAL_ERROR', message: 'Database connection failed' },
+        }),
     });
 
-    const firstBatch = Array.from({ length: 100 }, (_, i) =>
-      createTaskDoc(`task-batch1-${String(i)}`)
-    );
-    const secondBatch = [createTaskDoc('task-batch2-0')];
+    const result = await cleanupOldLogs(createConfig());
 
-    let queryCallCount = 0;
-    firestoreMocks.mockGet.mockImplementation(() => {
-      queryCallCount++;
-      if (queryCallCount === 1) {
-        return Promise.resolve({
-          empty: false,
-          docs: firstBatch,
-        });
-      }
-      if (queryCallCount === 2) {
-        return Promise.resolve({
-          empty: false,
-          docs: secondBatch,
-        });
-      }
-      return Promise.resolve({
-        empty: true,
-        docs: [],
-      });
+    expect(result.success).toBe(false);
+    expect(result.message).toBe('Database connection failed');
+  });
+
+  it('should return error when fetch throws', async () => {
+    mockFetch.mockRejectedValue(new Error('Network error'));
+
+    const result = await cleanupOldLogs(createConfig());
+
+    expect(result.success).toBe(false);
+    expect(result.message).toBe('Network error');
+  });
+
+  it('should handle non-Error exceptions', async () => {
+    mockFetch.mockRejectedValue('String error');
+
+    const result = await cleanupOldLogs(createConfig());
+
+    expect(result.success).toBe(false);
+    expect(result.message).toBe('String error');
+  });
+
+  it('should return error when API returns success but no data', async () => {
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ success: true }),
     });
 
-    const result = await cleanupOldLogs();
+    const result = await cleanupOldLogs(createConfig());
 
-    expect(result.success).toBe(true);
-    expect(result.tasksProcessed).toBe(101);
-    expect(result.logsDeleted).toBe(101);
+    expect(result.success).toBe(false);
+    expect(result.message).toBe('API returned success but no data');
+  });
+
+  it('should use default error message when API error has no message', async () => {
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          success: false,
+          error: { code: 'UNKNOWN' },
+        }),
+    });
+
+    const result = await cleanupOldLogs(createConfig());
+
+    expect(result.success).toBe(false);
+    expect(result.message).toBe('Unknown API error');
+  });
+
+  it('should not include undefined parameters in body', async () => {
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          success: true,
+          data: { tasksProcessed: 0, tasksFailed: 0, logsDeleted: 0, durationMs: 100 },
+        }),
+    });
+
+    await cleanupOldLogs(createConfig());
+
+    const callArgs = mockFetch.mock.calls[0] as [string, RequestInit];
+    const body = JSON.parse(callArgs[1].body as string) as Record<string, unknown>;
+
+    expect(body).toEqual({});
   });
 });
