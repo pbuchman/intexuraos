@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 /**
- * CI Pipeline ResearchAgent
+ * CI Pipeline
  *
  * Runs CI checks in phases with clean, scannable output.
  * Phases are ordered by failure likelihood (fail-fast).
+ * Parallel phases use abort-on-first-failure for faster feedback.
  */
 
 import { spawn } from 'node:child_process';
@@ -11,10 +12,27 @@ import { resolve } from 'node:path';
 
 const repoRoot = resolve(import.meta.dirname, '..');
 
+// Phases ordered by failure likelihood (most failures first = fail fast)
 const phases = [
+  {
+    name: 'Type & Lint',
+    parallel: true,
+    failFast: true,
+    commands: [
+      { name: 'typecheck', run: 'pnpm run typecheck' },
+      { name: 'typecheck:tests', run: 'pnpm run typecheck:tests' },
+      { name: 'lint', run: 'pnpm run lint' },
+    ],
+  },
+  {
+    name: 'Tests',
+    parallel: false,
+    commands: [{ name: 'test:coverage', run: 'pnpm run test:coverage' }],
+  },
   {
     name: 'Static Validation',
     parallel: true,
+    failFast: true,
     commands: [
       { name: 'package-json', script: 'verify-package-json.mjs' },
       { name: 'date-formatting', script: 'verify-date-formatting.mjs' },
@@ -38,22 +56,9 @@ const phases = [
     ],
   },
   {
-    name: 'Type & Lint',
-    parallel: true,
-    commands: [
-      { name: 'typecheck', run: 'pnpm run typecheck' },
-      { name: 'typecheck:tests', run: 'pnpm run typecheck:tests' },
-      { name: 'lint', run: 'pnpm run lint' },
-    ],
-  },
-  {
-    name: 'Tests',
-    parallel: false,
-    commands: [{ name: 'test:coverage', run: 'pnpm run test:coverage' }],
-  },
-  {
     name: 'Build & Format',
     parallel: true,
+    failFast: true,
     commands: [
       { name: 'build', run: 'pnpm run build' },
       { name: 'format', run: 'pnpm run format' },
@@ -70,13 +75,11 @@ function extractSummary(output) {
   const clean = stripAnsi(output);
   const lines = clean.trim().split('\n');
 
-  // Special handling for vitest output
   const testsMatch = clean.match(/Tests\s+(\d+)\s+passed/);
   if (testsMatch) {
     return `${testsMatch[1]} tests passed`;
   }
 
-  // Look for lines with ✓ or ✅
   for (let i = lines.length - 1; i >= 0; i--) {
     const line = lines[i].trim();
     if (line.includes('✓') || line.includes('✅')) {
@@ -86,14 +89,34 @@ function extractSummary(output) {
     }
   }
 
-  // Fallback: look for common success patterns
   if (clean.includes('passed') || clean.includes('success')) {
     return 'passed';
   }
   return 'completed';
 }
 
-async function runCommand(cmd) {
+function formatDuration(ms) {
+  return `${(ms / 1000).toFixed(1)}s`;
+}
+
+/**
+ * Run a command with abort signal support.
+ * Returns result with timing and aborted status.
+ */
+async function runCommand(cmd, abortSignal = null) {
+  const startTime = Date.now();
+
+  if (abortSignal?.aborted) {
+    return {
+      name: cmd.name,
+      code: 0,
+      output: '',
+      summary: 'aborted',
+      aborted: true,
+      duration: 0,
+    };
+  }
+
   return new Promise((resolve) => {
     let command, args;
 
@@ -104,7 +127,14 @@ async function runCommand(cmd) {
       command = 'sh';
       args = ['-c', cmd.run];
     } else {
-      resolve({ name: cmd.name, code: 1, output: 'Invalid command config', summary: 'error' });
+      resolve({
+        name: cmd.name,
+        code: 1,
+        output: 'Invalid command config',
+        summary: 'error',
+        aborted: false,
+        duration: 0,
+      });
       return;
     }
 
@@ -114,52 +144,149 @@ async function runCommand(cmd) {
     });
 
     let output = '';
+    let wasAborted = false;
+
     proc.stdout.on('data', (d) => (output += d.toString()));
     proc.stderr.on('data', (d) => (output += d.toString()));
 
+    const abortHandler = () => {
+      wasAborted = true;
+      proc.kill('SIGTERM');
+    };
+
+    if (abortSignal) {
+      abortSignal.addEventListener('abort', abortHandler, { once: true });
+    }
+
     proc.on('close', (code) => {
+      if (abortSignal) {
+        abortSignal.removeEventListener('abort', abortHandler);
+      }
+
+      const duration = Date.now() - startTime;
+
+      if (wasAborted) {
+        resolve({
+          name: cmd.name,
+          code: 0,
+          output: '',
+          summary: 'aborted',
+          aborted: true,
+          duration,
+        });
+        return;
+      }
+
       const summary = code === 0 ? extractSummary(output) : 'FAILED';
-      resolve({ name: cmd.name, code, output, summary });
+      resolve({
+        name: cmd.name,
+        code: code ?? 1,
+        output,
+        summary,
+        aborted: false,
+        duration,
+      });
     });
   });
 }
 
-async function runPhase(phase, phaseNumber) {
+/**
+ * Run phase with fail-fast: abort remaining commands on first failure.
+ */
+async function runPhaseFailFast(phase, phaseNumber) {
   console.log(`\n=== ${phase.name} ===\n`);
 
   const phaseStart = Date.now();
-  let results;
+  const abortController = new AbortController();
+  let firstFailure = null;
 
-  if (phase.parallel) {
-    results = await Promise.all(phase.commands.map(runCommand));
-  } else {
-    results = [];
-    for (const cmd of phase.commands) {
-      const result = await runCommand(cmd);
-      results.push(result);
+  const commandPromises = phase.commands.map(async (cmd) => {
+    const result = await runCommand(cmd, abortController.signal);
+
+    if (result.code !== 0 && !result.aborted && !firstFailure) {
+      firstFailure = result;
+      abortController.abort();
+    }
+
+    return result;
+  });
+
+  const results = await Promise.allSettled(commandPromises);
+  const phaseDuration = Date.now() - phaseStart;
+
+  const commandResults = results
+    .map((r) => (r.status === 'fulfilled' ? r.value : null))
+    .filter(Boolean);
+
+  let abortedCount = 0;
+  for (const result of commandResults) {
+    if (result.aborted) {
+      console.log(`[${result.name}] ⊘ aborted (${formatDuration(result.duration)})`);
+      abortedCount++;
+    } else if (result.code === 0) {
+      console.log(`[${result.name}] ✓ ${result.summary} (${formatDuration(result.duration)})`);
+    } else {
+      console.log(`[${result.name}] ✗ FAILED (${formatDuration(result.duration)})`);
     }
   }
 
-  let failed = null;
+  const status = firstFailure ? 'fail' : 'pass';
+  console.log(`@@PHASE_TIMING@@${phase.name}|${phaseNumber}|${status}|${phaseDuration}`);
 
-  for (const result of results) {
+  if (abortedCount > 0 && firstFailure) {
+    console.log(`\n⚡ Early exit: ${abortedCount} command(s) aborted after first failure`);
+  }
+
+  if (firstFailure) {
+    console.log(`\n─── ${firstFailure.name} output ───\n`);
+    console.log(firstFailure.output.trim());
+    console.log(`\n${'─'.repeat(30)}\n`);
+    throw new Error(`${firstFailure.name} failed`);
+  }
+}
+
+/**
+ * Run phase sequentially (no abort needed).
+ */
+async function runPhaseSequential(phase, phaseNumber) {
+  console.log(`\n=== ${phase.name} ===\n`);
+
+  const phaseStart = Date.now();
+  const results = [];
+
+  for (const cmd of phase.commands) {
+    const result = await runCommand(cmd);
+    results.push(result);
+
     if (result.code === 0) {
-      console.log(`[${result.name}] ✓ ${result.summary}`);
+      console.log(`[${result.name}] ✓ ${result.summary} (${formatDuration(result.duration)})`);
     } else {
-      console.log(`[${result.name}] ✗ FAILED`);
-      if (!failed) failed = result;
+      console.log(`[${result.name}] ✗ FAILED (${formatDuration(result.duration)})`);
+
+      const phaseDuration = Date.now() - phaseStart;
+      console.log(`@@PHASE_TIMING@@${phase.name}|${phaseNumber}|fail|${phaseDuration}`);
+
+      console.log(`\n─── ${result.name} output ───\n`);
+      console.log(result.output.trim());
+      console.log(`\n${'─'.repeat(30)}\n`);
+      throw new Error(`${result.name} failed`);
     }
   }
 
   const phaseDuration = Date.now() - phaseStart;
-  const status = failed ? 'fail' : 'pass';
-  console.log(`@@PHASE_TIMING@@${phase.name}|${phaseNumber}|${status}|${phaseDuration}`);
+  console.log(`@@PHASE_TIMING@@${phase.name}|${phaseNumber}|pass|${phaseDuration}`);
+}
 
-  if (failed) {
-    console.log(`\n─── ${failed.name} output ───\n`);
-    console.log(failed.output.trim());
-    console.log(`\n${'─'.repeat(30)}\n`);
-    throw new Error(`${failed.name} failed`);
+/**
+ * Run phase with appropriate strategy.
+ */
+async function runPhase(phase, phaseNumber) {
+  if (phase.parallel && phase.failFast) {
+    await runPhaseFailFast(phase, phaseNumber);
+  } else if (phase.parallel) {
+    await runPhaseFailFast(phase, phaseNumber);
+  } else {
+    await runPhaseSequential(phase, phaseNumber);
   }
 }
 
