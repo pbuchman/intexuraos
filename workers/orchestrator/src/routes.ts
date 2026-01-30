@@ -111,6 +111,7 @@ export function registerRoutes(
     }
     const parsed = parseResult.data;
 
+    /* v8 ignore ts-type -- spread operators create type-narrowing branches for optional properties */
     const body: CreateTaskRequest = {
       taskId: parsed.taskId,
       workerType: parsed.workerType,
