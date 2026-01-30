@@ -252,11 +252,14 @@ if command -v pm2 &>/dev/null || command -v npx &>/dev/null; then
   if [ -n "$pm2_json" ] && [ "$HAS_JQ" -eq 1 ]; then
     pm2_online=$(echo "$pm2_json" | jq '[.[] | select(.pm2_env.status == "online")] | length' 2>/dev/null || echo 0)
     pm2_total=$(echo "$pm2_json" | jq 'length' 2>/dev/null || echo 0)
+    pm2_worktree=$(echo "$pm2_json" | jq -r '.[0].pm2_env.pm_cwd // empty' 2>/dev/null | grep -oE 'intexuraos-[0-9]+' || echo "")
     if [ "$pm2_total" -gt 0 ]; then
+      wt_suffix=""
+      [ -n "$pm2_worktree" ] && wt_suffix=" (${pm2_worktree})"
       if [ "$pm2_online" -eq "$pm2_total" ]; then
-        pm2_metrics="⚡ PM2:${pm2_online}/${pm2_total}"
+        pm2_metrics="⚡ PM2:${pm2_online}/${pm2_total}${wt_suffix}"
       else
-        pm2_metrics="⚡ PM2:${pm2_online}/${pm2_total} ⚠️"
+        pm2_metrics="⚡ PM2:${pm2_online}/${pm2_total}${wt_suffix} ⚠️"
       fi
     fi
   fi
