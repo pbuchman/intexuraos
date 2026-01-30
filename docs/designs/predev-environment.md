@@ -18,14 +18,14 @@ A cloud-based development environment that mirrors local `pnpm run dev` but runs
 
 ### Key Behaviors
 
-| Event                            | Action                                |
-| -------------------------------- | ------------------------------------- |
-| Commit on branch X, VM running X | Do nothing (hot reload via tsx watch) |
-| Commit on branch X, VM running Y | `git checkout X` + restart services   |
-| Commit on branch X, VM stopped   | Start VM on branch X                  |
-| Request arrives, VM running      | Proxy to VM                           |
-| Request arrives, VM stopped      | Show "Starting..." page, boot VM      |
-| 30 min no requests               | Shutdown VM                           |
+| Event                              | Action                                    |
+| ---------------------------------- | ----------------------------------------- |
+| Commit on branch X, VM running X   | Do nothing (hot reload via tsx watch)     |
+| Commit on branch X, VM running Y   | `git checkout X` + restart services       |
+| Commit on branch X, VM stopped     | Start VM on branch X                      |
+| Request arrives, VM running        | Proxy to VM                               |
+| Request arrives, VM stopped        | Show "Starting..." page, boot VM          |
+| 30 min no requests                 | Shutdown VM                               |
 
 ---
 
@@ -140,45 +140,25 @@ read Firestore predev-state/current
 ```html
 <!DOCTYPE html>
 <html>
-  <head>
-    <title>IntexuraOS Pre-Dev</title>
-    <meta http-equiv="refresh" content="5" />
-    <style>
-      body {
-        font-family: system-ui;
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        height: 100vh;
-        background: #1a1a2e;
-        color: #eee;
-      }
-      .loader {
-        border: 4px solid #333;
-        border-top: 4px solid #6366f1;
-        border-radius: 50%;
-        width: 40px;
-        height: 40px;
-        animation: spin 1s linear infinite;
-      }
-      @keyframes spin {
-        0% {
-          transform: rotate(0deg);
-        }
-        100% {
-          transform: rotate(360deg);
-        }
-      }
-    </style>
-  </head>
-  <body>
-    <div style="text-align: center">
-      <div class="loader"></div>
-      <h2>Starting Pre-Dev Environment...</h2>
-      <p>Branch: <code>{{branch}}</code></p>
-      <p>This page will refresh automatically.</p>
-    </div>
-  </body>
+<head>
+  <title>IntexuraOS Pre-Dev</title>
+  <meta http-equiv="refresh" content="5">
+  <style>
+    body { font-family: system-ui; display: flex; justify-content: center;
+           align-items: center; height: 100vh; background: #1a1a2e; color: #eee; }
+    .loader { border: 4px solid #333; border-top: 4px solid #6366f1;
+              border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; }
+    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <div style="text-align: center">
+    <div class="loader"></div>
+    <h2>Starting Pre-Dev Environment...</h2>
+    <p>Branch: <code>{{branch}}</code></p>
+    <p>This page will refresh automatically.</p>
+  </div>
+</body>
 </html>
 ```
 
@@ -189,7 +169,6 @@ read Firestore predev-state/current
 **Endpoint:** `https://REGION-PROJECT.cloudfunctions.net/predev-webhook`
 
 **GitHub Webhook Config:**
-
 - Events: `push`
 - Content type: `application/json`
 - Secret: Shared secret for HMAC validation
@@ -302,7 +281,6 @@ update Firestore: { branch: targetBranch, vmStatus: "running" }
 **Purpose:** Run the full dev stack.
 
 **Specs:**
-
 - Machine type: `e2-medium` (1-2 vCPU, 4GB RAM)
 - Disk: 50GB SSD (for node_modules, Docker images)
 - OS: Ubuntu 24.04 LTS
@@ -401,13 +379,13 @@ predev.intexura.com {
 
 ```typescript
 interface PredevState {
-  branch: string; // Current branch (e.g., "feature/xyz")
-  vmStatus: 'running' | 'stopped' | 'starting' | 'stopping' | 'switching';
-  vmIp: string | null; // External IP when running
-  lastActivity: Timestamp; // Last HTTP request time
-  lastCommit: string; // SHA of last processed commit
+  branch: string;              // Current branch (e.g., "feature/xyz")
+  vmStatus: "running" | "stopped" | "starting" | "stopping" | "switching";
+  vmIp: string | null;         // External IP when running
+  lastActivity: Timestamp;     // Last HTTP request time
+  lastCommit: string;          // SHA of last processed commit
   startedAt: Timestamp | null; // When VM was started
-  startedBy: 'webhook' | 'gateway' | 'scheduler'; // Who triggered start
+  startedBy: "webhook" | "gateway" | "scheduler"; // Who triggered start
 }
 ```
 
@@ -416,24 +394,23 @@ interface PredevState {
 ## Cost Analysis
 
 ### Assumptions
-
 - Active usage: 4 hours/day on weekdays (80 hours/month)
 - VM auto-shutdowns save ~85% compute cost
 
 ### Monthly Cost Breakdown
 
-| Resource                      | Unit Cost        | Usage      | Monthly     |
-| ----------------------------- | ---------------- | ---------- | ----------- |
-| Spot e2-medium VM             | $0.0084/hr       | 80 hrs     | $0.67       |
-| 50GB SSD disk                 | $0.08/GB/mo      | Always-on  | $4.00       |
-| Static IP (attached)          | $0.00            | Always-on  | $0.00       |
-| Static IP (detached)          | $0.01/hr         | ~640 hrs   | $6.40       |
-| Cloud Functions (invocations) | $0.40/million    | ~10K       | ~$0.00      |
-| Cloud Functions (compute)     | $0.0000025/GB-s  | ~1000 GB-s | ~$0.00      |
-| Cloud Scheduler               | $0.10/job/mo     | 1 job      | $0.10       |
-| Firestore (reads/writes)      | $0.06/100K reads | ~50K       | ~$0.03      |
-| Egress (external)             | $0.12/GB         | ~5 GB      | $0.60       |
-| **Total**                     |                  |            | **~$12/mo** |
+| Resource                      | Unit Cost         | Usage         | Monthly    |
+| ----------------------------- | ----------------- | ------------- | ---------- |
+| Spot e2-medium VM             | $0.0084/hr        | 80 hrs        | $0.67      |
+| 50GB SSD disk                 | $0.08/GB/mo       | Always-on     | $4.00      |
+| Static IP (attached)          | $0.00             | Always-on     | $0.00      |
+| Static IP (detached)          | $0.01/hr          | ~640 hrs      | $6.40      |
+| Cloud Functions (invocations) | $0.40/million     | ~10K          | ~$0.00     |
+| Cloud Functions (compute)     | $0.0000025/GB-s   | ~1000 GB-s    | ~$0.00     |
+| Cloud Scheduler               | $0.10/job/mo      | 1 job         | $0.10      |
+| Firestore (reads/writes)      | $0.06/100K reads  | ~50K          | ~$0.03     |
+| Egress (external)             | $0.12/GB          | ~5 GB         | $0.60      |
+| **Total**                     |                   |               | **~$12/mo** |
 
 ### Cost Optimization Notes
 
@@ -447,54 +424,54 @@ interface PredevState {
 
 ### Phase 1: Core Infrastructure (Terraform)
 
-| Task                                   | Description                                   |
-| -------------------------------------- | --------------------------------------------- |
-| 1.1 Create predev VM instance template | e2-medium, spot, Ubuntu 24.04, startup script |
-| 1.2 Create managed instance group      | Size 0-1, auto-healing, target pool           |
-| 1.3 Reserve static IP                  | For consistent DNS                            |
-| 1.4 Create Cloud DNS record            | predev.intexura.com → static IP               |
-| 1.5 Create predev service account      | Minimal permissions for VM and functions      |
-| 1.6 Create predev-env-vars secret      | Aggregated env vars for .envrc.local          |
+| Task                                  | Description                                                      |
+| ------------------------------------- | ---------------------------------------------------------------- |
+| 1.1 Create predev VM instance template | e2-medium, spot, Ubuntu 24.04, startup script                    |
+| 1.2 Create managed instance group     | Size 0-1, auto-healing, target pool                              |
+| 1.3 Reserve static IP                 | For consistent DNS                                               |
+| 1.4 Create Cloud DNS record           | predev.intexura.com → static IP                                  |
+| 1.5 Create predev service account     | Minimal permissions for VM and functions                         |
+| 1.6 Create predev-env-vars secret     | Aggregated env vars for .envrc.local                             |
 
 ### Phase 2: Cloud Functions (Workers)
 
-| Task                                  | Description                           |
-| ------------------------------------- | ------------------------------------- |
-| 2.1 Create predev-gateway worker      | Entry point, proxy or "Starting" page |
-| 2.2 Create predev-webhook worker      | GitHub push handler, branch switching |
-| 2.3 Create predev-idle-check worker   | Scheduler-triggered idle shutdown     |
-| 2.4 Create predev-report-ready worker | Called by VM to report IP after boot  |
-| 2.5 Deploy all functions              | Terraform + Cloud Build               |
+| Task                                  | Description                                                      |
+| ------------------------------------- | ---------------------------------------------------------------- |
+| 2.1 Create predev-gateway worker      | Entry point, proxy or "Starting" page                            |
+| 2.2 Create predev-webhook worker      | GitHub push handler, branch switching                            |
+| 2.3 Create predev-idle-check worker   | Scheduler-triggered idle shutdown                                |
+| 2.4 Create predev-report-ready worker | Called by VM to report IP after boot                             |
+| 2.5 Deploy all functions              | Terraform + Cloud Build                                          |
 
 ### Phase 3: VM Configuration
 
-| Task                           | Description                               |
-| ------------------------------ | ----------------------------------------- |
-| 3.1 Create startup script      | Clone repo, install deps, start services  |
-| 3.2 Create Caddyfile template  | Reverse proxy config for all services     |
-| 3.3 Create systemd services    | Auto-start emulators and services on boot |
-| 3.4 Test VM boot-to-ready time | Target: < 90 seconds                      |
+| Task                                  | Description                                                      |
+| ------------------------------------- | ---------------------------------------------------------------- |
+| 3.1 Create startup script             | Clone repo, install deps, start services                         |
+| 3.2 Create Caddyfile template         | Reverse proxy config for all services                            |
+| 3.3 Create systemd services           | Auto-start emulators and services on boot                        |
+| 3.4 Test VM boot-to-ready time        | Target: < 90 seconds                                             |
 
 ### Phase 4: Integration
 
-| Task                          | Description                                   |
-| ----------------------------- | --------------------------------------------- |
-| 4.1 Configure GitHub webhook  | Push events to predev-webhook                 |
-| 4.2 Configure Cloud Scheduler | Every 5 min → predev-idle-check               |
-| 4.3 Configure DNS             | predev.intexura.com CNAME to gateway function |
-| 4.4 Test end-to-end flow      | Push → VM start → access → idle shutdown      |
+| Task                                  | Description                                                      |
+| ------------------------------------- | ---------------------------------------------------------------- |
+| 4.1 Configure GitHub webhook          | Push events to predev-webhook                                    |
+| 4.2 Configure Cloud Scheduler         | Every 5 min → predev-idle-check                                  |
+| 4.3 Configure DNS                     | predev.intexura.com CNAME to gateway function                    |
+| 4.4 Test end-to-end flow              | Push → VM start → access → idle shutdown                         |
 
 ### Phase 5: Testing
 
-| Test Case                    | Expected Result                                       |
-| ---------------------------- | ----------------------------------------------------- |
-| T1: Cold start from request  | "Starting..." page, VM boots, page refreshes to app   |
-| T2: Push to different branch | VM switches branches, services restart                |
-| T3: Push to same branch      | No restart, hot reload picks up changes               |
-| T4: 30 min idle              | VM automatically stops                                |
-| T5: Spot preemption          | Instance group recreates VM within 2 min              |
-| T6: Multiple rapid pushes    | Debounce prevents thrashing                           |
-| T7: External API calls       | WhatsApp, Notion, Calendar work with real credentials |
+| Test Case                             | Expected Result                                                  |
+| ------------------------------------- | ---------------------------------------------------------------- |
+| T1: Cold start from request           | "Starting..." page, VM boots, page refreshes to app              |
+| T2: Push to different branch          | VM switches branches, services restart                           |
+| T3: Push to same branch               | No restart, hot reload picks up changes                          |
+| T4: 30 min idle                       | VM automatically stops                                           |
+| T5: Spot preemption                   | Instance group recreates VM within 2 min                         |
+| T6: Multiple rapid pushes             | Debounce prevents thrashing                                      |
+| T7: External API calls                | WhatsApp, Notion, Calendar work with real credentials            |
 
 ---
 
@@ -688,17 +665,17 @@ INTEXURAOS_WEB_APP_URL=https://predev.intexura.com
 
 ## Differences from Local Dev
 
-| Aspect             | Local (`pnpm run dev`)  | Pre-Dev (GCP VM)                     |
-| ------------------ | ----------------------- | ------------------------------------ |
-| Entry point        | `scripts/dev.mjs`       | `systemd` + startup script           |
-| URL                | `http://localhost:3000` | `https://predev.intexura.com`        |
-| TLS                | None                    | Caddy auto-TLS                       |
-| External APIs      | Often stubbed           | Real credentials from Secret Manager |
-| Data persistence   | Local Docker volumes    | Docker volumes on VM disk            |
-| Process management | Node.js child processes | systemd + Docker Compose             |
-| Hot reload         | tsx watch               | tsx watch (same)                     |
-| Branch switching   | Manual `git checkout`   | Automatic on push                    |
-| Idle shutdown      | Manual Ctrl+C           | Automatic after 30 min               |
+| Aspect               | Local (`pnpm run dev`)          | Pre-Dev (GCP VM)                    |
+| -------------------- | ------------------------------- | ----------------------------------- |
+| Entry point          | `ecosystem.config.cjs` (PM2)    | `systemd` + startup script          |
+| URL                  | `http://localhost:3000`         | `https://predev.intexura.com`       |
+| TLS                  | None                            | Caddy auto-TLS                      |
+| External APIs        | Often stubbed                   | Real credentials from Secret Manager|
+| Data persistence     | Local Docker volumes            | Docker volumes on VM disk           |
+| Process management   | Node.js child processes         | systemd + Docker Compose            |
+| Hot reload           | tsx watch                       | tsx watch (same)                    |
+| Branch switching     | Manual `git checkout`           | Automatic on push                   |
+| Idle shutdown        | Manual Ctrl+C                   | Automatic after 30 min              |
 
 ---
 
@@ -714,12 +691,12 @@ INTEXURAOS_WEB_APP_URL=https://predev.intexura.com
 
 ## Monitoring & Alerts
 
-| Metric                     | Threshold       | Alert                    |
-| -------------------------- | --------------- | ------------------------ |
-| VM startup time            | > 120 seconds   | Slack notification       |
-| Gateway function errors    | > 5/min         | PagerDuty                |
-| VM preemption rate         | > 3/day         | Review spot availability |
-| Idle-check function errors | > 3 consecutive | Manual investigation     |
+| Metric                     | Threshold      | Alert                          |
+| -------------------------- | -------------- | ------------------------------ |
+| VM startup time            | > 120 seconds  | Slack notification             |
+| Gateway function errors    | > 5/min        | PagerDuty                      |
+| VM preemption rate         | > 3/day        | Review spot availability       |
+| Idle-check function errors | > 3 consecutive| Manual investigation           |
 
 ---
 
