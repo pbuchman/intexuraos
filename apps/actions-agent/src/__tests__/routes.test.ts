@@ -493,7 +493,7 @@ describe('Research Agent Routes', () => {
       expect(response.statusCode).toBe(400);
     });
 
-    it('creates action with status pending and publishes event', async () => {
+    it('creates action with status pending (event published by caller)', async () => {
       const response = await app.inject({
         method: 'POST',
         url: '/internal/actions',
@@ -537,12 +537,9 @@ describe('Research Agent Routes', () => {
       expect(savedAction).toBeDefined();
       expect(savedAction?.status).toBe('pending');
 
+      // Note: Event publishing is handled by the caller (commands-agent), not this endpoint
       const publishedEvents = fakeActionEventPublisher.getPublishedEvents();
-      expect(publishedEvents).toHaveLength(1);
-      expect(publishedEvents[0]?.type).toBe('action.created');
-      expect(publishedEvents[0]?.actionId).toBe(body.data.id);
-      expect(publishedEvents[0]?.userId).toBe('user-123');
-      expect(publishedEvents[0]?.actionType).toBe('research');
+      expect(publishedEvents).toHaveLength(0);
     });
 
     it('creates action with optional payload', async () => {

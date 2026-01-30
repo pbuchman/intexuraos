@@ -167,55 +167,7 @@ describe('Internal Routes', () => {
       expect(response.statusCode).toBe(500);
     });
 
-    it('publishes action.created event', async () => {
-      const response = await app.inject({
-        method: 'POST',
-        url: '/internal/actions',
-        headers: {
-          'x-internal-auth': INTERNAL_AUTH_TOKEN,
-        },
-        payload: validBody,
-      });
-
-      expect(response.statusCode).toBe(201);
-      expect(fakeActionEventPublisher.getPublishedEvents().length).toBe(1);
-      expect(fakeActionEventPublisher.getPublishedEvents()[0]).toEqual(
-        expect.objectContaining({
-          type: 'action.created',
-          actionType: 'todo',
-          userId: 'user-1',
-        })
-      );
-    });
-
-    it('uses prompt from payload in event, not title', async () => {
-      const fullPrompt = 'Add a calendar event for next Thursday at 3pm';
-      const response = await app.inject({
-        method: 'POST',
-        url: '/internal/actions',
-        headers: {
-          'x-internal-auth': INTERNAL_AUTH_TOKEN,
-        },
-        payload: {
-          ...validBody,
-          title: 'Calendar event', // Short title
-          payload: { prompt: fullPrompt }, // Full user input
-        },
-      });
-
-      expect(response.statusCode).toBe(201);
-      const publishedEvent = fakeActionEventPublisher.getPublishedEvents()[0];
-      // The event should use the full prompt, not the short title
-      expect(publishedEvent?.payload.prompt).toBe(fullPrompt);
-      expect(publishedEvent?.payload.prompt).not.toBe('Calendar event');
-    });
-
-    it('returns 201 even when event publishing fails', async () => {
-      fakeActionEventPublisher.setFailNext(true, {
-        code: 'PUBLISH_FAILED',
-        message: 'Failed to publish',
-      });
-
+    it('does not publish event (caller handles publishing)', async () => {
       const response = await app.inject({
         method: 'POST',
         url: '/internal/actions',
@@ -227,6 +179,8 @@ describe('Internal Routes', () => {
 
       expect(response.statusCode).toBe(201);
       expect(fakeActionRepository.getActions().size).toBe(1);
+      // Event publishing is handled by the caller (commands-agent), not this endpoint
+      expect(fakeActionEventPublisher.getPublishedEvents().length).toBe(0);
     });
   });
 
