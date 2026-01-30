@@ -37,10 +37,7 @@ import type { DocumentSnapshot } from '@google-cloud/firestore';
 import * as firestoreMock from '@google-cloud/firestore';
 
 // Helper to create mock document snapshot
-function createMockDoc(
-  exists: boolean,
-  data: Record<string, unknown> | null
-): DocumentSnapshot {
+function createMockDoc(exists: boolean, data: Record<string, unknown> | null): DocumentSnapshot {
   return {
     exists,
     data: () => data,
@@ -58,7 +55,8 @@ describe('StateManager', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     // Get the mock reference BEFORE creating StateManager
-    mockGet = (firestoreMock as unknown as { __mockGet: ReturnType<typeof vi.fn> }).__mockGet as ReturnType<typeof vi.fn> & { mockReturnValue: (value: unknown) => void };
+    mockGet = (firestoreMock as unknown as { __mockGet: ReturnType<typeof vi.fn> })
+      .__mockGet as ReturnType<typeof vi.fn> & { mockReturnValue: (value: unknown) => void };
     stateManager = new StateManager();
   });
 
@@ -158,10 +156,7 @@ describe('StateManager', () => {
 
       await stateManager.updateActivity();
 
-      expect(mockSetFn).toHaveBeenCalledWith(
-        { lastActivity: expect.any(Date) },
-        { merge: true }
-      );
+      expect(mockSetFn).toHaveBeenCalledWith({ lastActivity: expect.any(Date) }, { merge: true });
     });
   });
 

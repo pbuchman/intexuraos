@@ -62,7 +62,12 @@ import * as firestoreMock from '@google-cloud/firestore';
 describe('idleCheck function', () => {
   let originalSetTimeout: typeof setTimeout;
   let originalClearTimeout: typeof clearTimeout;
-  let mockDocGet: ReturnType<typeof vi.fn> & { mockReturnValue: (value: { get: ReturnType<typeof vi.fn>; set?: ReturnType<typeof vi.fn> }) => void };
+  let mockDocGet: ReturnType<typeof vi.fn> & {
+    mockReturnValue: (value: {
+      get: ReturnType<typeof vi.fn>;
+      set?: ReturnType<typeof vi.fn>;
+    }) => void;
+  };
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -71,7 +76,13 @@ describe('idleCheck function', () => {
     vi.useFakeTimers();
 
     // Get the mock reference from the Firestore mock
-    mockDocGet = (firestoreMock as unknown as { __mockGet: ReturnType<typeof vi.fn> }).__mockGet as ReturnType<typeof vi.fn> & { mockReturnValue: (value: { get: ReturnType<typeof vi.fn>; set?: ReturnType<typeof vi.fn> }) => void };
+    mockDocGet = (firestoreMock as unknown as { __mockGet: ReturnType<typeof vi.fn> })
+      .__mockGet as ReturnType<typeof vi.fn> & {
+      mockReturnValue: (value: {
+        get: ReturnType<typeof vi.fn>;
+        set?: ReturnType<typeof vi.fn>;
+      }) => void;
+    };
   });
 
   afterEach(() => {

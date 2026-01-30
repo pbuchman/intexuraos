@@ -82,7 +82,13 @@ vi.mock('../lib/config.js', () => ({
 import { gateway } from '../functions/gateway.js';
 
 describe('gateway function', () => {
-  let mockReq: { method?: string; url?: string; path?: string; headers?: Record<string, string>; body?: unknown };
+  let mockReq: {
+    method?: string;
+    url?: string;
+    path?: string;
+    headers?: Record<string, string>;
+    body?: unknown;
+  };
   let mockRes: MockResponse;
   let sendFn: ReturnType<typeof vi.fn>;
 

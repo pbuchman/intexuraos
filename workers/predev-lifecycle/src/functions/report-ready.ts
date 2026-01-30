@@ -13,7 +13,7 @@ interface ReadyPayload {
 
 export const reportReady: HttpFunction = async (
   req: { method?: string; body?: unknown },
-  res: { status(code: number): { send(message: string): void } },
+  res: { status(code: number): { send(message: string): void } }
 ) => {
   logger.info({ method: req.method }, 'Report-ready request');
 

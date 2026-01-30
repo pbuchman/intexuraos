@@ -77,9 +77,11 @@ async function proxyRequest(vmIp: string, req: any, res: any): Promise<void> {
     res.status(response.status);
     for (const [key, value] of response.headers.entries()) {
       const lowerKey = key.toLowerCase();
-      if (lowerKey !== 'transfer-encoding' &&
-          lowerKey !== 'content-encoding' &&
-          lowerKey !== 'content-length') {
+      if (
+        lowerKey !== 'transfer-encoding' &&
+        lowerKey !== 'content-encoding' &&
+        lowerKey !== 'content-length'
+      ) {
         res.setHeader(key, value);
       }
     }
@@ -131,7 +133,7 @@ export const gateway: HttpFunction = async (req: any, res: any) => {
   const currentState = await state.getState();
 
   // Handle DevBar SSE endpoints (public, no auth required for DevBar)
-  const pathname = new URL(req.url ?? '/', 'http://localhost').pathname;
+  const pathname = new URL(String(req.url ?? '/'), 'http://localhost').pathname;
   if (pathname === '/devbar/logs' || pathname === '/devbar/events') {
     if (currentState?.status !== 'running' || currentState.vmIp === null) {
       res.status(503).send('VM not running');

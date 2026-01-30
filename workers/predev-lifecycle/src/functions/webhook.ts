@@ -52,8 +52,10 @@ export const webhook: HttpFunction = async (req, res) => {
     const signatureBuffer = Buffer.from(signature);
     const expectedBuffer = Buffer.from(expectedSignature);
 
-    if (signatureBuffer.length !== expectedBuffer.length ||
-      !crypto.timingSafeEqual(signatureBuffer, expectedBuffer)) {
+    if (
+      signatureBuffer.length !== expectedBuffer.length ||
+      !crypto.timingSafeEqual(signatureBuffer, expectedBuffer)
+    ) {
       logger.warn('Invalid webhook signature');
       res.status(401).send('Invalid signature');
       return;
@@ -90,7 +92,10 @@ export const webhook: HttpFunction = async (req, res) => {
   // If VM is running on different branch, we would trigger branch switch here
   // For now, just update the target branch
   if (currentState?.status === 'running' && currentState.branch !== branch) {
-    logger.info({ from: currentState.branch, to: branch }, 'Branch change detected - update target branch');
+    logger.info(
+      { from: currentState.branch, to: branch },
+      'Branch change detected - update target branch'
+    );
     // TODO: Implement hot branch switch via SSH or Pub/Sub to VM
     // For now, the VM will switch on next restart
   }

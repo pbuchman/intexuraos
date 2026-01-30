@@ -37,7 +37,10 @@ export const idleCheck: CloudEventFunction = async () => {
       logger.error({ error: result.message }, 'Failed to stop VM');
     }
   } else {
-    logger.debug({ remainingMinutes: Math.round(CONFIG.IDLE_TIMEOUT_MINUTES - idleMinutes) }, 'VM still active');
+    logger.debug(
+      { remainingMinutes: Math.round(CONFIG.IDLE_TIMEOUT_MINUTES - idleMinutes) },
+      'VM still active'
+    );
   }
 };
 
