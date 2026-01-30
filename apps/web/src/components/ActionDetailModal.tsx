@@ -152,28 +152,37 @@ export function ActionDetailModal({
     };
   }, [onClose]);
 
-  // Fetch calendar preview for calendar actions
+  // Fetch calendar preview for calendar actions, with polling when pending
   useEffect(() => {
     if (action.type !== 'calendar') return;
     if (action.status === 'completed' || action.status === 'rejected') return;
 
     let cancelled = false;
+    let pollTimeoutId: ReturnType<typeof setTimeout> | null = null;
 
-    const fetchPreview = async (): Promise<void> => {
-      setIsLoadingPreview(true);
-      setPreviewError(null);
+    const fetchPreview = async (isPolling = false): Promise<void> => {
+      if (!isPolling) {
+        setIsLoadingPreview(true);
+        setPreviewError(null);
+      }
       try {
         const token = await getAccessToken();
         const preview = await getActionPreview(token, action.id);
         if (!cancelled) {
           setCalendarPreview(preview);
+          // If preview is still pending, poll again after 2 seconds
+          if (preview !== null && preview.status === 'pending') {
+            pollTimeoutId = setTimeout(() => {
+              void fetchPreview(true);
+            }, 2000);
+          }
         }
       } catch (error) {
         if (!cancelled) {
           setPreviewError(error instanceof Error ? error.message : 'Failed to load preview');
         }
       } finally {
-        if (!cancelled) {
+        if (!cancelled && !isPolling) {
           setIsLoadingPreview(false);
         }
       }
@@ -183,6 +192,9 @@ export function ActionDetailModal({
 
     return (): void => {
       cancelled = true;
+      if (pollTimeoutId !== null) {
+        clearTimeout(pollTimeoutId);
+      }
     };
   }, [action.id, action.type, action.status, getAccessToken]);
 
