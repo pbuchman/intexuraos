@@ -36,8 +36,8 @@ describe('Internal Routes', () => {
       });
 
       expect(response.statusCode).toBe(401);
-      const body = JSON.parse(response.body) as { error: string };
-      expect(body.error).toBe('Unauthorized');
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
+      expect(body.error.message).toContain('auth failed');
     });
 
     it('returns 401 when X-Internal-Auth header has wrong value', async (): Promise<void> => {
@@ -50,8 +50,8 @@ describe('Internal Routes', () => {
       });
 
       expect(response.statusCode).toBe(401);
-      const body = JSON.parse(response.body) as { error: string };
-      expect(body.error).toBe('Unauthorized');
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
+      expect(body.error.message).toContain('auth failed');
     });
 
     it('returns connected=true and token when user is connected', async (): Promise<void> => {
@@ -72,9 +72,12 @@ describe('Internal Routes', () => {
       });
 
       expect(response.statusCode).toBe(200);
-      const body = JSON.parse(response.body) as { connected: boolean; token: string | null };
-      expect(body.connected).toBe(true);
-      expect(body.token).toBe('secret_notion_token_abc123');
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: { connected: boolean; token: string | null };
+      };
+      expect(body.data.connected).toBe(true);
+      expect(body.data.token).toBe('secret_notion_token_abc123');
     });
 
     it('returns connected=false and token=null when user is not connected', async (): Promise<void> => {
@@ -95,9 +98,12 @@ describe('Internal Routes', () => {
       });
 
       expect(response.statusCode).toBe(200);
-      const body = JSON.parse(response.body) as { connected: boolean; token: string | null };
-      expect(body.connected).toBe(false);
-      expect(body.token).toBe(null);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: { connected: boolean; token: string | null };
+      };
+      expect(body.data.connected).toBe(false);
+      expect(body.data.token).toBe(null);
     });
 
     it('returns connected=false and token=null when user has no connection', async (): Promise<void> => {
@@ -112,9 +118,12 @@ describe('Internal Routes', () => {
       });
 
       expect(response.statusCode).toBe(200);
-      const body = JSON.parse(response.body) as { connected: boolean; token: string | null };
-      expect(body.connected).toBe(false);
-      expect(body.token).toBe(null);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: { connected: boolean; token: string | null };
+      };
+      expect(body.data.connected).toBe(false);
+      expect(body.data.token).toBe(null);
     });
 
     it('returns 401 when INTEXURAOS_INTERNAL_AUTH_TOKEN is not configured', async (): Promise<void> => {
@@ -130,8 +139,8 @@ describe('Internal Routes', () => {
       });
 
       expect(response.statusCode).toBe(401);
-      const body = JSON.parse(response.body) as { error: string };
-      expect(body.error).toBe('Unauthorized');
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
+      expect(body.error.message).toContain('auth failed');
     });
 
     it('returns connected=false when isConnected fails', async (): Promise<void> => {
@@ -146,9 +155,12 @@ describe('Internal Routes', () => {
       });
 
       expect(response.statusCode).toBe(200);
-      const body = JSON.parse(response.body) as { connected: boolean; token: string | null };
-      expect(body.connected).toBe(false);
-      expect(body.token).toBe(null);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: { connected: boolean; token: string | null };
+      };
+      expect(body.data.connected).toBe(false);
+      expect(body.data.token).toBe(null);
     });
 
     it('returns connected=true with token=null when getToken fails', async (): Promise<void> => {
@@ -170,9 +182,12 @@ describe('Internal Routes', () => {
       });
 
       expect(response.statusCode).toBe(200);
-      const body = JSON.parse(response.body) as { connected: boolean; token: string | null };
-      expect(body.connected).toBe(true);
-      expect(body.token).toBe(null);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: { connected: boolean; token: string | null };
+      };
+      expect(body.data.connected).toBe(true);
+      expect(body.data.token).toBe(null);
     });
   });
 });

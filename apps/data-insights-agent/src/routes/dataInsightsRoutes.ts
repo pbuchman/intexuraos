@@ -92,13 +92,10 @@ export const dataInsightsRoutes: FastifyPluginCallback = (fastify, _opts, done) 
         return await reply.fail('INTERNAL_ERROR', error.message);
       }
 
-      return {
-        success: true,
-        data: {
-          insights: result.value.insights,
-          noInsightsReason: result.value.noInsightsReason,
-        },
-      };
+      return await reply.ok({
+        insights: result.value.insights,
+        noInsightsReason: result.value.noInsightsReason,
+      });
     }
   );
 
@@ -168,13 +165,10 @@ export const dataInsightsRoutes: FastifyPluginCallback = (fastify, _opts, done) 
         return await reply.fail('INTERNAL_ERROR', error.message);
       }
 
-      return {
-        success: true,
-        data: {
-          vegaLiteConfig: result.value.vegaLiteConfig,
-          dataTransformInstructions: result.value.dataTransformInstructions,
-        },
-      };
+      return await reply.ok({
+        vegaLiteConfig: result.value.vegaLiteConfig,
+        dataTransformInstructions: result.value.dataTransformInstructions,
+      });
     }
   );
 
@@ -242,12 +236,9 @@ export const dataInsightsRoutes: FastifyPluginCallback = (fastify, _opts, done) 
         return await reply.fail('INTERNAL_ERROR', error.message);
       }
 
-      return {
-        success: true,
-        data: {
-          chartData: result.value,
-        },
-      };
+      return await reply.ok({
+        chartData: result.value,
+      });
     }
   );
 

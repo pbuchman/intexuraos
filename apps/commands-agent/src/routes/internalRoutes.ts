@@ -53,25 +53,35 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             description: 'Message acknowledged',
             type: 'object',
             properties: {
-              success: { type: 'boolean' },
-              commandId: { type: 'string' },
-              isNew: { type: 'boolean' },
+              success: { type: 'boolean', const: true },
+              data: {
+                type: 'object',
+                properties: {
+                  commandId: { type: 'string' },
+                  isNew: { type: 'boolean' },
+                },
+                required: ['commandId', 'isNew'],
+              },
             },
-            required: ['success'],
+            required: ['success', 'data'],
           },
           400: {
             description: 'Invalid message',
             type: 'object',
             properties: {
-              error: { type: 'string' },
+              success: { type: 'boolean', const: false },
+              error: { $ref: 'ErrorBody#' },
             },
+            required: ['success', 'error'],
           },
           401: {
             description: 'Unauthorized',
             type: 'object',
             properties: {
-              error: { type: 'string' },
+              success: { type: 'boolean', const: false },
+              error: { $ref: 'ErrorBody#' },
             },
+            required: ['success', 'error'],
           },
         },
       },
@@ -112,8 +122,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             },
             'Internal auth failed for router/commands endpoint'
           );
-          reply.status(401);
-          return { error: 'Unauthorized' };
+          return await reply.fail('UNAUTHORIZED', 'Internal auth failed for router/commands endpoint');
         }
       }
 
@@ -125,8 +134,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         eventData = JSON.parse(decoded) as CommandEvent;
       } catch {
         request.log.error({ data: body.message.data }, 'Failed to decode PubSub message');
-        reply.status(400);
-        return { error: 'Invalid message format' };
+        return await reply.fail('INVALID_REQUEST', 'Failed to decode PubSub message');
       }
 
       const parsedType = eventData.type as string;
@@ -140,8 +148,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           },
           'Unexpected event type for commands endpoint'
         );
-        reply.status(400);
-        return { error: 'Invalid event type' };
+        return await reply.fail('INVALID_REQUEST', 'Unexpected event type');
       }
 
       request.log.info(
@@ -177,11 +184,10 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         'Command processed successfully'
       );
 
-      return {
-        success: true,
+      return await reply.ok({
         commandId: result.command.id,
         isNew: result.isNew,
-      };
+      });
     }
   );
 
@@ -199,20 +205,28 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             description: 'Retry completed',
             type: 'object',
             properties: {
-              success: { type: 'boolean' },
-              processed: { type: 'number', description: 'Commands successfully classified' },
-              skipped: { type: 'number', description: 'Commands skipped (no API key)' },
-              failed: { type: 'number', description: 'Commands that failed classification' },
-              total: { type: 'number', description: 'Total pending commands found' },
+              success: { type: 'boolean', const: true },
+              data: {
+                type: 'object',
+                properties: {
+                  processed: { type: 'number', description: 'Commands successfully classified' },
+                  skipped: { type: 'number', description: 'Commands skipped (no API key)' },
+                  failed: { type: 'number', description: 'Commands that failed classification' },
+                  total: { type: 'number', description: 'Total pending commands found' },
+                },
+                required: ['processed', 'skipped', 'failed', 'total'],
+              },
             },
-            required: ['success', 'processed', 'skipped', 'failed', 'total'],
+            required: ['success', 'data'],
           },
           401: {
             description: 'Unauthorized',
             type: 'object',
             properties: {
-              error: { type: 'string' },
+              success: { type: 'boolean', const: false },
+              error: { $ref: 'ErrorBody#' },
             },
+            required: ['success', 'error'],
           },
         },
       },
@@ -235,8 +249,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         const authResult = validateInternalAuth(request);
         if (!authResult.valid) {
           request.log.warn({ reason: authResult.reason }, 'Internal auth failed for retry-pending');
-          reply.status(401);
-          return { error: 'Unauthorized' };
+          return await reply.fail('UNAUTHORIZED', 'Internal auth failed for retry-pending');
         }
       }
 
@@ -245,7 +258,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       request.log.info(result, 'Retry pending classifications completed');
 
-      return { success: true, ...result };
+      return await reply.ok(result);
     }
   );
 

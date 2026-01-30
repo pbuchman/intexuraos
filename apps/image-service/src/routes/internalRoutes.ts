@@ -51,8 +51,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       const authResult = validateInternalAuth(request);
       if (!authResult.valid) {
         request.log.warn({ reason: authResult.reason }, 'Internal auth failed for generate prompt');
-        reply.status(401);
-        return { error: 'Unauthorized' };
+        return await reply.fail('UNAUTHORIZED', 'Internal auth failed for generate prompt');
       }
 
       const { text, model, userId } = request.body;
@@ -136,8 +135,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       const authResult = validateInternalAuth(request);
       if (!authResult.valid) {
         request.log.warn({ reason: authResult.reason }, 'Internal auth failed for generate image');
-        reply.status(401);
-        return { error: 'Unauthorized' };
+        return await reply.fail('UNAUTHORIZED', 'Internal auth failed for generate image');
       }
 
       const { prompt, model, userId, title } = request.body;
@@ -256,8 +254,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       const authResult = validateInternalAuth(request);
       if (!authResult.valid) {
         request.log.warn({ reason: authResult.reason }, 'Internal auth failed for delete image');
-        reply.status(401);
-        return { error: 'Unauthorized' };
+        return await reply.fail('UNAUTHORIZED', 'Internal auth failed for delete image');
       }
 
       const { imageStorage, generatedImageRepository } = getServices();

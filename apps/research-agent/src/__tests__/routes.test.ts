@@ -3314,8 +3314,8 @@ describe('Internal Routes', () => {
       });
 
       expect(response.statusCode).toBe(401);
-      const body = JSON.parse(response.body) as { error: string };
-      expect(body.error).toBe('Unauthorized');
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
+      expect(body.error.message).toContain('auth failed');
     });
 
     it('returns 401 when X-Internal-Auth header has wrong value', async () => {
@@ -3332,8 +3332,8 @@ describe('Internal Routes', () => {
       });
 
       expect(response.statusCode).toBe(401);
-      const body = JSON.parse(response.body) as { error: string };
-      expect(body.error).toBe('Unauthorized');
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
+      expect(body.error.message).toContain('auth failed');
     });
 
     it('returns 401 when INTEXURAOS_INTERNAL_AUTH_TOKEN is not configured', async () => {
@@ -3352,8 +3352,8 @@ describe('Internal Routes', () => {
       });
 
       expect(response.statusCode).toBe(401);
-      const body = JSON.parse(response.body) as { error: string };
-      expect(body.error).toBe('Unauthorized');
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
+      expect(body.error.message).toContain('auth failed');
     });
 
     it('returns 500 on save failure', async () => {
@@ -3407,8 +3407,8 @@ describe('Internal Routes', () => {
       });
 
       expect(response.statusCode).toBe(401);
-      const body = JSON.parse(response.body) as { error: string };
-      expect(body.error).toBe('Unauthorized');
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
+      expect(body.error.message).toContain('auth failed');
     });
 
     it('accepts Pub/Sub push with from header', async () => {
@@ -3436,7 +3436,8 @@ describe('Internal Routes', () => {
 
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body) as { success: boolean };
-      expect(body.success).toBe(false);
+      expect(body.success).toBe(true);
+      // Error is logged internally for PubSub ack pattern - not returned in response
     });
 
     it('accepts direct call with x-internal-auth header', async () => {
@@ -3480,9 +3481,9 @@ describe('Internal Routes', () => {
       });
 
       expect(response.statusCode).toBe(200);
-      const body = JSON.parse(response.body) as { success: boolean; error: string };
-      expect(body.success).toBe(false);
-      expect(body.error).toBe('Invalid message format');
+      const body = JSON.parse(response.body) as { success: boolean };
+      expect(body.success).toBe(true);
+      // Error is logged internally for PubSub ack pattern - not returned in response
     });
 
     it('returns 200 with error for unexpected event type', async () => {
@@ -3500,9 +3501,9 @@ describe('Internal Routes', () => {
       });
 
       expect(response.statusCode).toBe(200);
-      const body = JSON.parse(response.body) as { success: boolean; error: string };
-      expect(body.success).toBe(false);
-      expect(body.error).toBe('Unexpected event type');
+      const body = JSON.parse(response.body) as { success: boolean };
+      expect(body.success).toBe(true);
+      // Error is logged internally for PubSub ack pattern - not returned in response
     });
 
     it('returns 200 with error for non-existent research', async () => {
@@ -3525,9 +3526,9 @@ describe('Internal Routes', () => {
       });
 
       expect(response.statusCode).toBe(200);
-      const body = JSON.parse(response.body) as { success: boolean; error: string };
-      expect(body.success).toBe(false);
-      expect(body.error).toBe('Research not found');
+      const body = JSON.parse(response.body) as { success: boolean };
+      expect(body.success).toBe(true);
+      // Error is logged internally for PubSub ack pattern - not returned in response
     });
   });
 
@@ -3605,7 +3606,8 @@ describe('Internal Routes', () => {
 
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body) as { success: boolean };
-      expect(body.success).toBe(false);
+      expect(body.success).toBe(true);
+      // Error is logged internally for PubSub ack pattern - not returned in response
     });
 
     it('returns 200 for unexpected event type', async () => {
@@ -3624,7 +3626,8 @@ describe('Internal Routes', () => {
 
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body) as { success: boolean };
-      expect(body.success).toBe(false);
+      expect(body.success).toBe(true);
+      // Error is logged internally for PubSub ack pattern - not returned in response
     });
   });
 
@@ -3774,9 +3777,9 @@ describe('Internal Routes', () => {
       });
 
       expect(response.statusCode).toBe(200);
-      const body = JSON.parse(response.body) as { success: boolean; error?: string };
-      expect(body.success).toBe(false);
-      expect(body.error).toBe('Invalid message format');
+      const body = JSON.parse(response.body) as { success: boolean };
+      expect(body.success).toBe(true);
+      // Error is logged internally for PubSub ack pattern - not returned in response
     });
 
     it('returns error for unexpected event type', async () => {
@@ -3794,9 +3797,9 @@ describe('Internal Routes', () => {
       });
 
       expect(response.statusCode).toBe(200);
-      const body = JSON.parse(response.body) as { success: boolean; error?: string };
-      expect(body.success).toBe(false);
-      expect(body.error).toBe('Unexpected event type');
+      const body = JSON.parse(response.body) as { success: boolean };
+      expect(body.success).toBe(true);
+      // Error is logged internally for PubSub ack pattern - not returned in response
     });
 
     it('returns error when research not found', async () => {
@@ -3814,9 +3817,9 @@ describe('Internal Routes', () => {
       });
 
       expect(response.statusCode).toBe(200);
-      const body = JSON.parse(response.body) as { success: boolean; error?: string };
-      expect(body.success).toBe(false);
-      expect(body.error).toBe('Research not found');
+      const body = JSON.parse(response.body) as { success: boolean };
+      expect(body.success).toBe(true);
+      // Error is logged internally for PubSub ack pattern - not returned in response
     });
 
     it('skips already completed LLM calls (idempotency)', async () => {
@@ -3906,9 +3909,9 @@ describe('Internal Routes', () => {
       });
 
       expect(response.statusCode).toBe(200);
-      const body = JSON.parse(response.body) as { success: boolean; error?: string };
-      expect(body.success).toBe(false);
-      expect(body.error).toBe('Failed to fetch API keys');
+      const body = JSON.parse(response.body) as { success: boolean };
+      expect(body.success).toBe(true);
+      // Error is logged internally for PubSub ack pattern - not returned in response
 
       const updatedResearch = fakeRepo.getAll()[0];
       expect(updatedResearch?.llmResults[0]?.status).toBe('failed');
@@ -3933,9 +3936,9 @@ describe('Internal Routes', () => {
       });
 
       expect(response.statusCode).toBe(200);
-      const body = JSON.parse(response.body) as { success: boolean; error?: string };
-      expect(body.success).toBe(false);
-      expect(body.error).toBe('API key missing');
+      const body = JSON.parse(response.body) as { success: boolean };
+      expect(body.success).toBe(true);
+      // Error is logged internally for PubSub ack pattern - not returned in response
 
       const failures = fakeNotificationSender.getSentFailures();
       expect(failures.length).toBe(1);
@@ -4309,9 +4312,9 @@ describe('Internal Routes', () => {
       });
 
       expect(response.statusCode).toBe(200);
-      const body = JSON.parse(response.body) as { success: boolean; error?: string };
-      expect(body.success).toBe(false);
-      expect(body.error).toContain('Unexpected repository error');
+      const body = JSON.parse(response.body) as { success: boolean };
+      expect(body.success).toBe(true);
+      // Error is logged internally for PubSub ack pattern - not returned in response
 
       // Verify the LLM result was updated to failed status
       const updatedResearch = fakeRepo.getAll()[0];

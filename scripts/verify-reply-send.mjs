@@ -1,14 +1,18 @@
 #!/usr/bin/env node
 /**
- * Reply.send() Verification Script.
+ * Response Contract Verification Script.
  *
- * Ensures all HTTP responses use reply.ok() or reply.fail() instead of raw reply.send().
+ * Ensures all HTTP responses use reply.ok() or reply.fail() instead of:
+ * 1. Raw reply.send() calls
+ * 2. Raw return statements with { error: ... } or { success: true, ... }
+ *
  * This enforces the standard response contract: { success: true, data: T } for success,
  * { success: false, error: { code, message } } for errors.
  *
  * Exceptions:
  * - reply.status(204).send() - HTTP spec (No Content)
- * - Lines with @allow-raw-send comment - documented exceptions
+ * - Lines with @allow-raw-send comment - documented exceptions for send()
+ * - Lines with @allow-raw-return comment - documented exceptions for raw returns
  *
  * Usage:
  *   node scripts/verify-reply-send.mjs
@@ -62,6 +66,17 @@ function hasAllowRawSendComment(lines, lineIndex) {
 }
 
 /**
+ * Check if a line has the @allow-raw-return escape hatch on the preceding line.
+ */
+function hasAllowRawReturnComment(lines, lineIndex) {
+  if (lineIndex === 0) {
+    return false;
+  }
+  const prevLine = lines[lineIndex - 1].trim();
+  return prevLine.includes('@allow-raw-return');
+}
+
+/**
  * Check if a send() call is allowed (204 status, empty send, or has escape hatch).
  */
 function isAllowedSend(line, lines, lineIndex) {
@@ -98,6 +113,25 @@ function isAllowedSend(line, lines, lineIndex) {
 }
 
 /**
+ * Check if a raw return is allowed (has escape hatch or is followed by reply.ok/fail).
+ */
+function isAllowedRawReturn(line, lines, lineIndex) {
+  // Allow if preceded by @allow-raw-return comment
+  if (hasAllowRawReturnComment(lines, lineIndex)) {
+    return true;
+  }
+
+  // Check if this return is actually part of reply.ok() or reply.fail() call
+  // e.g., "return reply.ok(...)" or "return await reply.ok(...)"
+  const trimmed = line.trim();
+  if (/return\s+(await\s+)?reply\.(ok|fail)\s*\(/.test(trimmed)) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
  * Find reply.send() violations in a file.
  */
 function findReplySendViolations(content, filePath) {
@@ -127,6 +161,7 @@ function findReplySendViolations(content, filePath) {
             file: relative(repoRoot, filePath),
             line: lineNumber,
             content: trimmed.length > 80 ? trimmed.slice(0, 77) + '...' : trimmed,
+            type: 'raw-send',
           });
         }
       }
@@ -137,7 +172,88 @@ function findReplySendViolations(content, filePath) {
 }
 
 /**
- * Check a single service for reply.send() violations.
+ * Find raw return violations in route files.
+ * Detects: return { error: ... } and return { success: true, ... }
+ */
+function findRawReturnViolations(content, filePath) {
+  const violations = [];
+  const lines = content.split('\n');
+
+  // Patterns for raw returns that should use reply.ok() or reply.fail():
+  // 1. return { error: - should use reply.fail()
+  // 2. return { success: true - should use reply.ok()
+  // 3. return {\n  error: - multiline variant
+  // 4. return {\n  success: true - multiline variant
+  const rawReturnPatterns = [
+    { pattern: /return\s*\{\s*error\s*:/, fix: 'reply.fail()' },
+    { pattern: /return\s*\{\s*success\s*:\s*true/, fix: 'reply.ok()' },
+    { pattern: /return\s*\{\s*success\s*:\s*false/, fix: 'reply.fail()' },
+  ];
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const lineNumber = i + 1;
+    const trimmed = line.trim();
+
+    // Skip comment lines
+    if (trimmed.startsWith('//') || trimmed.startsWith('/*') || trimmed.startsWith('*')) {
+      continue;
+    }
+
+    // Check single-line patterns
+    for (const { pattern, fix } of rawReturnPatterns) {
+      if (pattern.test(line)) {
+        if (!isAllowedRawReturn(line, lines, i)) {
+          violations.push({
+            file: relative(repoRoot, filePath),
+            line: lineNumber,
+            content: trimmed.length > 80 ? trimmed.slice(0, 77) + '...' : trimmed,
+            type: 'raw-return',
+            fix,
+          });
+        }
+      }
+    }
+
+    // Check for multiline patterns: "return {" followed by "error:" or "success: true"
+    if (/return\s*\{\s*$/.test(trimmed) && i + 1 < lines.length) {
+      const nextLine = lines[i + 1].trim();
+      if (/^error\s*:/.test(nextLine)) {
+        if (!isAllowedRawReturn(line, lines, i)) {
+          violations.push({
+            file: relative(repoRoot, filePath),
+            line: lineNumber,
+            content: `${trimmed} ${nextLine}`.slice(0, 77) + '...',
+            type: 'raw-return',
+            fix: 'reply.fail()',
+          });
+        }
+      } else if (/^success\s*:\s*true/.test(nextLine)) {
+        if (!isAllowedRawReturn(line, lines, i)) {
+          violations.push({
+            file: relative(repoRoot, filePath),
+            line: lineNumber,
+            content: `${trimmed} ${nextLine}`.slice(0, 77) + '...',
+            type: 'raw-return',
+            fix: 'reply.ok()',
+          });
+        }
+      }
+    }
+  }
+
+  return violations;
+}
+
+/**
+ * Check if a file is a route file.
+ */
+function isRouteFile(filePath) {
+  return filePath.includes('/routes/') && filePath.endsWith('.ts');
+}
+
+/**
+ * Check a single service for response contract violations.
  */
 function checkService(serviceName, serviceDir) {
   const srcDir = join(serviceDir, 'src');
@@ -150,10 +266,19 @@ function checkService(serviceName, serviceDir) {
 
   for (const filePath of tsFiles) {
     const content = readFileSync(filePath, 'utf8');
-    const violations = findReplySendViolations(content, filePath);
 
-    for (const v of violations) {
+    // Check for reply.send() violations in all files
+    const sendViolations = findReplySendViolations(content, filePath);
+    for (const v of sendViolations) {
       errors.push(v);
+    }
+
+    // Check for raw return violations only in route files
+    if (isRouteFile(filePath)) {
+      const returnViolations = findRawReturnViolations(content, filePath);
+      for (const v of returnViolations) {
+        errors.push(v);
+      }
     }
   }
 }
@@ -162,7 +287,7 @@ function checkService(serviceName, serviceDir) {
  * Main verification function.
  */
 function main() {
-  console.log('Verifying response contract (no raw reply.send())...\n');
+  console.log('Verifying response contract...\n');
 
   if (!existsSync(appsDir)) {
     console.log('No apps directory found');
@@ -182,21 +307,39 @@ function main() {
   console.log('');
 
   if (errors.length > 0) {
-    console.log('Violations found:');
-    console.log('');
-    for (const error of errors) {
-      console.log(`  ${error.file}:${String(error.line)}`);
-      console.log(`    ${error.content}`);
-      console.log('');
+    // Group by type for clearer output
+    const sendViolations = errors.filter((e) => e.type === 'raw-send');
+    const returnViolations = errors.filter((e) => e.type === 'raw-return');
+
+    console.log('Violations found:\n');
+
+    if (sendViolations.length > 0) {
+      console.log(`── Raw reply.send() violations (${String(sendViolations.length)}) ──\n`);
+      for (const error of sendViolations) {
+        console.log(`  ${error.file}:${String(error.line)}`);
+        console.log(`    ${error.content}`);
+        console.log('');
+      }
     }
+
+    if (returnViolations.length > 0) {
+      console.log(`── Raw return violations (${String(returnViolations.length)}) ──\n`);
+      for (const error of returnViolations) {
+        console.log(`  ${error.file}:${String(error.line)}`);
+        console.log(`    ${error.content}`);
+        console.log(`    Fix: Use ${error.fix}`);
+        console.log('');
+      }
+    }
+
     console.log(
       `Response contract verification failed with ${String(errors.length)} violation(s).`
     );
     console.log('');
     console.log('To fix:');
-    console.log('  - Use reply.ok(data) instead of reply.send({ success: true, data })');
-    console.log('  - Use reply.fail(code, message) instead of reply.status(4xx).send({ error })');
-    console.log('  - Or add // @allow-raw-send: <reason> on the line above for valid exceptions');
+    console.log('  - Use reply.ok(data) instead of return { success: true, data }');
+    console.log('  - Use reply.fail(code, message) instead of return { error: ... }');
+    console.log('  - Or add // @allow-raw-return: <reason> on the line above for valid exceptions');
     console.log('');
     console.log('Valid exceptions:');
     console.log('  - reply.status(204).send() - HTTP No Content (auto-allowed)');

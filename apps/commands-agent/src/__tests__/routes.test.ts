@@ -185,8 +185,8 @@ describe('Commands Agent Routes', () => {
       });
 
       expect(response.statusCode).toBe(400);
-      const body = JSON.parse(response.body) as { error: string };
-      expect(body.error).toBe('Invalid message format');
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
+      expect(body.error.message).toBe('Failed to decode PubSub message');
     });
 
     it('returns 400 when message is missing', async () => {
@@ -236,9 +236,9 @@ describe('Commands Agent Routes', () => {
         });
 
         expect(response.statusCode).toBe(200);
-        const body = JSON.parse(response.body) as { success: boolean; commandId: string };
+        const body = JSON.parse(response.body) as { success: boolean; data: { commandId: string } };
         expect(body.success).toBe(true);
-        expect(body.commandId).toBeDefined();
+        expect(body.data.commandId).toBeDefined();
       });
 
       it('rejects direct calls without x-internal-auth or Pub/Sub from header', async () => {
@@ -256,8 +256,8 @@ describe('Commands Agent Routes', () => {
         });
 
         expect(response.statusCode).toBe(401);
-        const body = JSON.parse(response.body) as { error: string };
-        expect(body.error).toBe('Unauthorized');
+        const body = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
+        expect(body.error.message).toContain('auth failed');
       });
     });
 
@@ -486,9 +486,9 @@ describe('Commands Agent Routes', () => {
       });
 
       expect(response.statusCode).toBe(200);
-      const body = JSON.parse(response.body) as { success: boolean; isNew: boolean };
+      const body = JSON.parse(response.body) as { success: boolean; data: { isNew: boolean } };
       expect(body.success).toBe(true);
-      expect(body.isNew).toBe(true);
+      expect(body.data.isNew).toBe(true);
 
       const commands = await fakeCommandRepo.listByUserId('user-no-key');
       expect(commands).toHaveLength(1);
@@ -545,8 +545,8 @@ describe('Commands Agent Routes', () => {
       });
 
       expect(response.statusCode).toBe(400);
-      const body = JSON.parse(response.body) as { error: string };
-      expect(body.error).toBe('Invalid event type');
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
+      expect(body.error.message).toBe('Unexpected event type');
     });
 
     it('classifies command when user has Gemini key configured', async () => {
@@ -890,16 +890,18 @@ describe('Commands Agent Routes', () => {
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body) as {
         success: boolean;
-        processed: number;
-        skipped: number;
-        failed: number;
-        total: number;
+        data: {
+          processed: number;
+          skipped: number;
+          failed: number;
+          total: number;
+        };
       };
       expect(body.success).toBe(true);
-      expect(body.processed).toBe(0);
-      expect(body.skipped).toBe(0);
-      expect(body.failed).toBe(0);
-      expect(body.total).toBe(0);
+      expect(body.data.processed).toBe(0);
+      expect(body.data.skipped).toBe(0);
+      expect(body.data.failed).toBe(0);
+      expect(body.data.total).toBe(0);
     });
 
     it('classifies pending command when user now has API key', async () => {
@@ -934,16 +936,18 @@ describe('Commands Agent Routes', () => {
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body) as {
         success: boolean;
-        processed: number;
-        skipped: number;
-        failed: number;
-        total: number;
+        data: {
+          processed: number;
+          skipped: number;
+          failed: number;
+          total: number;
+        };
       };
       expect(body.success).toBe(true);
-      expect(body.processed).toBe(1);
-      expect(body.skipped).toBe(0);
-      expect(body.failed).toBe(0);
-      expect(body.total).toBe(1);
+      expect(body.data.processed).toBe(1);
+      expect(body.data.skipped).toBe(0);
+      expect(body.data.failed).toBe(0);
+      expect(body.data.total).toBe(1);
 
       const command = await fakeCommandRepo.getById('whatsapp_text:retry-1');
       expect(command?.status).toBe('classified');
@@ -980,12 +984,14 @@ describe('Commands Agent Routes', () => {
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body) as {
         success: boolean;
-        processed: number;
-        skipped: number;
+        data: {
+          processed: number;
+          skipped: number;
+        };
       };
       expect(body.success).toBe(true);
-      expect(body.processed).toBe(0);
-      expect(body.skipped).toBe(1);
+      expect(body.data.processed).toBe(0);
+      expect(body.data.skipped).toBe(1);
 
       const command = await fakeCommandRepo.getById('whatsapp_text:retry-2');
       expect(command?.status).toBe('pending_classification');
@@ -1018,12 +1024,14 @@ describe('Commands Agent Routes', () => {
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body) as {
         success: boolean;
-        processed: number;
-        failed: number;
+        data: {
+          processed: number;
+          failed: number;
+        };
       };
       expect(body.success).toBe(true);
-      expect(body.processed).toBe(0);
-      expect(body.failed).toBe(1);
+      expect(body.data.processed).toBe(0);
+      expect(body.data.failed).toBe(1);
 
       const command = await fakeCommandRepo.getById('whatsapp_text:retry-3');
       expect(command?.status).toBe('failed');
@@ -1074,14 +1082,16 @@ describe('Commands Agent Routes', () => {
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body) as {
         success: boolean;
-        processed: number;
-        skipped: number;
-        total: number;
+        data: {
+          processed: number;
+          skipped: number;
+          total: number;
+        };
       };
       expect(body.success).toBe(true);
-      expect(body.total).toBe(2);
-      expect(body.processed).toBe(1);
-      expect(body.skipped).toBe(1);
+      expect(body.data.total).toBe(2);
+      expect(body.data.processed).toBe(1);
+      expect(body.data.skipped).toBe(1);
     });
 
     it('publishes action.created event for classified commands', async () => {

@@ -74,8 +74,7 @@ export const pubsubRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             { reason: authResult.reason },
             'Internal auth failed for pubsub/enrich endpoint'
           );
-          reply.status(401);
-          return { error: 'Unauthorized' };
+          return await reply.fail('UNAUTHORIZED', 'Internal auth failed for pubsub/enrich endpoint');
         }
       }
 
@@ -87,13 +86,13 @@ export const pubsubRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         eventData = JSON.parse(decoded) as EnrichBookmarkEvent;
       } catch {
         request.log.error({ messageId: body.message.messageId }, 'Failed to decode PubSub message');
-        return { success: true };
+        return await reply.ok({});
       }
 
       const parsedType = eventData.type as string;
       if (parsedType !== 'bookmarks.enrich') {
         request.log.warn({ type: parsedType }, 'Unexpected event type');
-        return { success: true };
+        return await reply.ok({});
       }
 
       request.log.info(
@@ -124,7 +123,7 @@ export const pubsubRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         );
       }
 
-      return { success: true };
+      return await reply.ok({});
     }
   );
 
@@ -195,8 +194,7 @@ export const pubsubRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             { reason: authResult.reason },
             'Internal auth failed for pubsub/summarize endpoint'
           );
-          reply.status(401);
-          return { error: 'Unauthorized' };
+          return await reply.fail('UNAUTHORIZED', 'Internal auth failed for pubsub/summarize endpoint');
         }
       }
 
@@ -208,13 +206,13 @@ export const pubsubRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         eventData = JSON.parse(decoded) as SummarizeBookmarkEvent;
       } catch {
         request.log.error({ messageId: body.message.messageId }, 'Failed to decode PubSub message');
-        return { success: true };
+        return await reply.ok({});
       }
 
       const parsedType = eventData.type as string;
       if (parsedType !== 'bookmarks.summarize') {
         request.log.warn({ type: parsedType }, 'Unexpected event type');
-        return { success: true };
+        return await reply.ok({});
       }
 
       request.log.info(
@@ -245,6 +243,7 @@ export const pubsubRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             'Transient error during summarization - returning 503 for retry'
           );
           reply.status(503);
+          // @allow-raw-return: PubSub retry contract requires specific 503 response with retryable flag
           return { error: result.error.message, retryable: true };
         }
 
@@ -259,7 +258,7 @@ export const pubsubRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         );
       }
 
-      return { success: true };
+      return await reply.ok({});
     }
   );
 

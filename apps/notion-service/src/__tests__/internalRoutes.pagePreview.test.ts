@@ -41,9 +41,9 @@ describe('GET /internal/notion/users/:userId/pages/:pageId/preview', () => {
       });
 
       expect(response.statusCode).toBe(401);
-      const body = JSON.parse(response.body) as { success: boolean; error: string };
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
       expect(body.success).toBe(false);
-      expect(body.error).toBe('Unauthorized');
+      expect(body.error.message).toContain('auth failed');
     });
 
     it('returns 401 when X-Internal-Auth header is invalid', async () => {
@@ -66,9 +66,9 @@ describe('GET /internal/notion/users/:userId/pages/:pageId/preview', () => {
       });
 
       expect(response.statusCode).toBe(404);
-      const body = JSON.parse(response.body) as { success: boolean; error: string };
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
       expect(body.success).toBe(false);
-      expect(body.error).toBe('User has no active Notion connection');
+      expect(body.error.message).toBe('User has no active Notion connection');
     });
 
     it('returns 404 when user connection exists but is disconnected', async () => {
@@ -85,9 +85,9 @@ describe('GET /internal/notion/users/:userId/pages/:pageId/preview', () => {
       });
 
       expect(response.statusCode).toBe(404);
-      const body = JSON.parse(response.body) as { success: boolean; error: string };
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
       expect(body.success).toBe(false);
-      expect(body.error).toBe('User has no active Notion connection');
+      expect(body.error.message).toBe('User has no active Notion connection');
     });
   });
 
@@ -129,9 +129,9 @@ describe('GET /internal/notion/users/:userId/pages/:pageId/preview', () => {
       });
 
       expect(response.statusCode).toBe(404);
-      const body = JSON.parse(response.body) as { success: boolean; error: string };
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
       expect(body.success).toBe(false);
-      expect(body.error).toBe('Page not found or not accessible');
+      expect(body.error.message).toBe('Page not found or not accessible');
     });
 
     it('returns 404 when page is marked as inaccessible', async () => {
@@ -144,9 +144,9 @@ describe('GET /internal/notion/users/:userId/pages/:pageId/preview', () => {
       });
 
       expect(response.statusCode).toBe(404);
-      const body = JSON.parse(response.body) as { success: boolean; error: string };
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
       expect(body.success).toBe(false);
-      expect(body.error).toBe('Page not found or not accessible');
+      expect(body.error.message).toBe('Page not found or not accessible');
     });
 
     it('returns 502 when Notion API fails with other error', async () => {
@@ -159,9 +159,9 @@ describe('GET /internal/notion/users/:userId/pages/:pageId/preview', () => {
       });
 
       expect(response.statusCode).toBe(502);
-      const body = JSON.parse(response.body) as { success: boolean; error: string };
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
       expect(body.success).toBe(false);
-      expect(body.error).toBe('Rate limited');
+      expect(body.error.message).toBe('Rate limited');
     });
   });
 });

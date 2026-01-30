@@ -31,17 +31,28 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             description: 'Notion connection context',
             type: 'object',
             properties: {
-              connected: { type: 'boolean' },
-              token: { type: 'string', nullable: true },
+              success: { type: 'boolean', const: true },
+              data: {
+                type: 'object',
+                properties: {
+                  connected: { type: 'boolean' },
+                  token: { type: 'string', nullable: true },
+                },
+                required: ['connected', 'token'],
+              },
+              diagnostics: { $ref: 'Diagnostics#' },
             },
-            required: ['connected', 'token'],
+            required: ['success', 'data'],
           },
           401: {
             description: 'Unauthorized',
             type: 'object',
             properties: {
-              error: { type: 'string' },
+              success: { type: 'boolean', const: false },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
             },
+            required: ['success', 'error'],
           },
         },
       },
@@ -60,8 +71,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           { reason: authResult.reason },
           'Internal auth failed for notion/users/:userId/context endpoint'
         );
-        reply.status(401);
-        return { error: 'Unauthorized' };
+        return await reply.fail('UNAUTHORIZED', 'Internal auth failed for notion/users/:userId/context endpoint');
       }
 
       const params = request.params as { userId: string };
@@ -70,27 +80,27 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       // Check if connected
       const connectedResult = await connectionRepository.isConnected(params.userId);
       if (!connectedResult.ok) {
-        return {
+        return await reply.ok({
           connected: false,
           token: null,
-        };
+        });
       }
 
       if (!connectedResult.value) {
-        return {
+        return await reply.ok({
           connected: false,
           token: null,
-        };
+        });
       }
 
       // Get token
       const tokenResult = await connectionRepository.getToken(params.userId);
       const token = tokenResult.ok ? tokenResult.value : null;
 
-      return {
+      return await reply.ok({
         connected: true,
         token,
-      };
+      });
     }
   );
 
@@ -132,8 +142,9 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             description: 'Unauthorized',
             type: 'object',
             properties: {
-              success: { type: 'boolean', enum: [false] },
-              error: { type: 'string' },
+              success: { type: 'boolean', const: false },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
             },
             required: ['success', 'error'],
           },
@@ -141,8 +152,9 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             description: 'Not found',
             type: 'object',
             properties: {
-              success: { type: 'boolean', enum: [false] },
-              error: { type: 'string' },
+              success: { type: 'boolean', const: false },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
             },
             required: ['success', 'error'],
           },
@@ -150,8 +162,9 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             description: 'Downstream error',
             type: 'object',
             properties: {
-              success: { type: 'boolean', enum: [false] },
-              error: { type: 'string' },
+              success: { type: 'boolean', const: false },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
             },
             required: ['success', 'error'],
           },
@@ -170,8 +183,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           { reason: authResult.reason },
           'Internal auth failed for page preview endpoint'
         );
-        reply.status(401);
-        return { success: false, error: 'Unauthorized' };
+        return await reply.fail('UNAUTHORIZED', 'Internal auth failed for page preview endpoint');
       }
 
       const { userId, pageId } = request.params as { userId: string; pageId: string };
@@ -180,19 +192,16 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       // Get user's Notion connection
       const connectionResult = await connectionRepository.getConnection(userId);
       if (!connectionResult.ok) {
-        reply.status(502);
-        return { success: false, error: connectionResult.error.message };
+        return await reply.fail('DOWNSTREAM_ERROR', connectionResult.error.message);
       }
       if (connectionResult.value?.connected !== true) {
-        reply.status(404);
-        return { success: false, error: 'User has no active Notion connection' };
+        return await reply.fail('NOT_FOUND', 'User has no active Notion connection');
       }
 
       // Get token from connection
       const tokenResult = await connectionRepository.getToken(userId);
       if (!tokenResult.ok || tokenResult.value === null) {
-        reply.status(404);
-        return { success: false, error: 'User has no active Notion connection' };
+        return await reply.fail('NOT_FOUND', 'User has no active Notion connection');
       }
 
       // Fetch page preview from Notion
@@ -200,20 +209,15 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       if (!previewResult.ok) {
         if (previewResult.error.code === 'NOT_FOUND') {
-          reply.status(404);
-          return { success: false, error: 'Page not found or not accessible' };
+          return await reply.fail('NOT_FOUND', 'Page not found or not accessible');
         }
-        reply.status(502);
-        return { success: false, error: previewResult.error.message };
+        return await reply.fail('DOWNSTREAM_ERROR', previewResult.error.message);
       }
 
-      return {
-        success: true,
-        data: {
-          title: previewResult.value.page.title,
-          url: previewResult.value.page.url,
-        },
-      };
+      return await reply.ok({
+        title: previewResult.value.page.title,
+        url: previewResult.value.page.url,
+      });
     }
   );
 

@@ -125,8 +125,8 @@ describe('Pub/Sub Routes', () => {
       });
 
       expect(response.statusCode).toBe(401);
-      const responseBody = JSON.parse(response.body) as { error: string };
-      expect(responseBody.error).toBe('Unauthorized');
+      const responseBody = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
+      expect(responseBody.error.message).toContain('auth failed');
     });
 
     it('returns 401 when X-Internal-Auth header is invalid', async () => {
@@ -146,8 +146,8 @@ describe('Pub/Sub Routes', () => {
       });
 
       expect(response.statusCode).toBe(401);
-      const responseBody = JSON.parse(response.body) as { error: string };
-      expect(responseBody.error).toBe('Unauthorized');
+      const responseBody = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
+      expect(responseBody.error.message).toContain('auth failed');
     });
 
     describe('Pub/Sub OIDC authentication', () => {
@@ -199,8 +199,8 @@ describe('Pub/Sub Routes', () => {
         });
 
         expect(response.statusCode).toBe(401);
-        const responseBody = JSON.parse(response.body) as { error: string };
-        expect(responseBody.error).toBe('Unauthorized');
+        const responseBody = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
+        expect(responseBody.error.message).toContain('auth failed');
       });
     });
 
@@ -220,8 +220,8 @@ describe('Pub/Sub Routes', () => {
       });
 
       expect(response.statusCode).toBe(400);
-      const responseBody = JSON.parse(response.body) as { error: string };
-      expect(responseBody.error).toBe('Invalid message format');
+      const responseBody = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
+      expect(responseBody.error.message).toBe('Failed to decode PubSub message');
     });
 
     it('returns 400 when message data is not valid JSON', async () => {
@@ -240,8 +240,8 @@ describe('Pub/Sub Routes', () => {
       });
 
       expect(response.statusCode).toBe(400);
-      const responseBody = JSON.parse(response.body) as { error: string };
-      expect(responseBody.error).toBe('Invalid message format');
+      const responseBody = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
+      expect(responseBody.error.message).toBe('Failed to decode PubSub message');
     });
 
     it('returns 400 when event type is not whatsapp.message.send', async () => {
@@ -261,8 +261,8 @@ describe('Pub/Sub Routes', () => {
       });
 
       expect(response.statusCode).toBe(400);
-      const responseBody = JSON.parse(response.body) as { error: string };
-      expect(responseBody.error).toBe('Invalid event type');
+      const responseBody = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
+      expect(responseBody.error.message).toBe('Unexpected event type');
     });
 
     it('sends message and returns 200 on success', async () => {
@@ -338,9 +338,9 @@ describe('Pub/Sub Routes', () => {
         payload: body,
       });
 
-      expect(response.statusCode).toBe(500);
-      const responseBody = JSON.parse(response.body) as { error: string };
-      expect(responseBody.error).toBe('WhatsApp API error');
+      expect(response.statusCode).toBe(502);
+      const responseBody = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
+      expect(responseBody.error.message).toBe('WhatsApp API error');
     });
 
     it('handles message without optional fields', async () => {
@@ -387,8 +387,8 @@ describe('Pub/Sub Routes', () => {
       });
 
       expect(response.statusCode).toBe(500);
-      const responseBody = JSON.parse(response.body) as { error: string };
-      expect(responseBody.error).toBe('Failed to look up phone number');
+      const responseBody = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
+      expect(responseBody.error.message).toBe('Failed to look up phone number');
     });
 
     it('sends interactive message with buttons when buttons are provided', async () => {
@@ -449,9 +449,9 @@ describe('Pub/Sub Routes', () => {
         payload: body,
       });
 
-      expect(response.statusCode).toBe(500);
-      const responseBody = JSON.parse(response.body) as { error: string };
-      expect(responseBody.error).toBe('WhatsApp API error for buttons');
+      expect(response.statusCode).toBe(502);
+      const responseBody = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
+      expect(responseBody.error.message).toBe('WhatsApp API error for buttons');
     });
   });
 
@@ -472,8 +472,8 @@ describe('Pub/Sub Routes', () => {
       });
 
       expect(response.statusCode).toBe(401);
-      const responseBody = JSON.parse(response.body) as { error: string };
-      expect(responseBody.error).toBe('Unauthorized');
+      const responseBody = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
+      expect(responseBody.error.message).toContain('auth failed');
     });
 
     it('returns 401 when X-Internal-Auth header is invalid', async () => {
@@ -493,8 +493,8 @@ describe('Pub/Sub Routes', () => {
       });
 
       expect(response.statusCode).toBe(401);
-      const responseBody = JSON.parse(response.body) as { error: string };
-      expect(responseBody.error).toBe('Unauthorized');
+      const responseBody = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
+      expect(responseBody.error.message).toContain('auth failed');
     });
 
     describe('Pub/Sub OIDC authentication', () => {
@@ -522,10 +522,10 @@ describe('Pub/Sub Routes', () => {
         expect(response.statusCode).toBe(200);
         const responseBody = JSON.parse(response.body) as {
           success: boolean;
-          deletedCount: number;
+          data: { deletedCount: number };
         };
         expect(responseBody.success).toBe(true);
-        expect(responseBody.deletedCount).toBe(2);
+        expect(responseBody.data.deletedCount).toBe(2);
       });
 
       it('rejects direct calls without x-internal-auth or Pub/Sub from header', async () => {
@@ -549,8 +549,8 @@ describe('Pub/Sub Routes', () => {
         });
 
         expect(response.statusCode).toBe(401);
-        const responseBody = JSON.parse(response.body) as { error: string };
-        expect(responseBody.error).toBe('Unauthorized');
+        const responseBody = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
+        expect(responseBody.error.message).toContain('auth failed');
       });
     });
 
@@ -570,8 +570,8 @@ describe('Pub/Sub Routes', () => {
       });
 
       expect(response.statusCode).toBe(400);
-      const responseBody = JSON.parse(response.body) as { error: string };
-      expect(responseBody.error).toBe('Invalid message format');
+      const responseBody = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
+      expect(responseBody.error.message).toBe('Failed to decode PubSub message');
     });
 
     it('returns 400 when message data is not valid JSON', async () => {
@@ -590,8 +590,8 @@ describe('Pub/Sub Routes', () => {
       });
 
       expect(response.statusCode).toBe(400);
-      const responseBody = JSON.parse(response.body) as { error: string };
-      expect(responseBody.error).toBe('Invalid message format');
+      const responseBody = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
+      expect(responseBody.error.message).toBe('Failed to decode PubSub message');
     });
 
     it('returns 400 when event type is not whatsapp.media.cleanup', async () => {
@@ -611,8 +611,8 @@ describe('Pub/Sub Routes', () => {
       });
 
       expect(response.statusCode).toBe(400);
-      const responseBody = JSON.parse(response.body) as { error: string };
-      expect(responseBody.error).toBe('Invalid event type');
+      const responseBody = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
+      expect(responseBody.error.message).toBe('Unexpected event type');
     });
 
     it('deletes files and returns 200 on success', async () => {
@@ -633,9 +633,9 @@ describe('Pub/Sub Routes', () => {
       });
 
       expect(response.statusCode).toBe(200);
-      const responseBody = JSON.parse(response.body) as { success: boolean; deletedCount: number };
+      const responseBody = JSON.parse(response.body) as { success: boolean; data: { deletedCount: number } };
       expect(responseBody.success).toBe(true);
-      expect(responseBody.deletedCount).toBe(2);
+      expect(responseBody.data.deletedCount).toBe(2);
 
       const deletedPaths = mediaStorage.getDeletedPaths();
       expect(deletedPaths).toEqual(gcsPaths);
@@ -658,9 +658,9 @@ describe('Pub/Sub Routes', () => {
       });
 
       expect(response.statusCode).toBe(200);
-      const responseBody = JSON.parse(response.body) as { success: boolean; deletedCount: number };
+      const responseBody = JSON.parse(response.body) as { success: boolean; data: { deletedCount: number } };
       expect(responseBody.success).toBe(true);
-      expect(responseBody.deletedCount).toBe(0);
+      expect(responseBody.data.deletedCount).toBe(0);
     });
 
     it('continues cleanup when delete fails for some files', async () => {
@@ -683,9 +683,9 @@ describe('Pub/Sub Routes', () => {
       });
 
       expect(response.statusCode).toBe(200);
-      const responseBody = JSON.parse(response.body) as { success: boolean; deletedCount: number };
+      const responseBody = JSON.parse(response.body) as { success: boolean; data: { deletedCount: number } };
       expect(responseBody.success).toBe(true);
-      expect(responseBody.deletedCount).toBe(0);
+      expect(responseBody.data.deletedCount).toBe(0);
     });
 
     it('returns 500 when delete throws an unexpected exception', async () => {
@@ -708,8 +708,10 @@ describe('Pub/Sub Routes', () => {
       });
 
       expect(response.statusCode).toBe(500);
-      const responseBody = JSON.parse(response.body) as { error: string };
-      expect(responseBody.error).toBe('Cleanup failed');
+      const responseBody = JSON.parse(response.body);
+      // console.log('Response body:', responseBody);
+      expect(responseBody.error).toBeDefined();
+      expect(responseBody.error.message).toBe('Cleanup failed');
     });
   });
 
@@ -733,8 +735,8 @@ describe('Pub/Sub Routes', () => {
       });
 
       expect(response.statusCode).toBe(401);
-      const responseBody = JSON.parse(response.body) as { error: string };
-      expect(responseBody.error).toBe('Unauthorized');
+      const responseBody = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
+      expect(responseBody.error.message).toContain('auth failed');
     });
 
     it('accepts Pub/Sub push with from: noreply@google.com header', async () => {
@@ -944,8 +946,8 @@ describe('Pub/Sub Routes', () => {
       });
 
       expect(response.statusCode).toBe(401);
-      const responseBody = JSON.parse(response.body) as { error: string };
-      expect(responseBody.error).toBe('Unauthorized');
+      const responseBody = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
+      expect(responseBody.error.message).toContain('auth failed');
     });
 
     it('accepts Pub/Sub push with from: noreply@google.com header', async () => {

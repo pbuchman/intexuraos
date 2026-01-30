@@ -367,7 +367,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       const authResult = validateInternalAuth(request);
       if (!authResult.valid) {
         request.log.warn({ reason: authResult.reason }, 'Internal auth failed for code process');
-        return reply.fail('UNAUTHORIZED', 'Unauthorized');
+        return await reply.fail('UNAUTHORIZED', 'Unauthorized');
       }
 
       const services = getServices();
@@ -442,14 +442,14 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
 
         // Handle specific error codes
         if (error.code === 'duplicate_approval' || error.code === 'duplicate_action') {
-          return reply.fail('CONFLICT', `Duplicate: ${error.existingTaskId ?? ''}`);
+          return await reply.fail('CONFLICT', `Duplicate: ${error.existingTaskId ?? ''}`);
         }
 
         if (error.code === 'worker_unavailable') {
-          return reply.fail('MISCONFIGURED', 'Worker unavailable');
+          return await reply.fail('MISCONFIGURED', 'Worker unavailable');
         }
 
-        return reply.fail('INTERNAL_ERROR', error.message);
+        return await reply.fail('INTERNAL_ERROR', error.message);
       }
 
       request.log.info({ codeTaskId: result.value.codeTaskId }, 'Code action processed successfully');
@@ -462,7 +462,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         traceId,
       });
 
-      return reply.ok({
+      return await reply.ok({
         status: 'submitted',
         codeTaskId: result.value.codeTaskId,
         resourceUrl: result.value.resourceUrl,
@@ -659,7 +659,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       const authResult = validateInternalAuth(request);
       if (!authResult.valid) {
         request.log.warn({ reason: authResult.reason }, 'Internal auth failed for code tasks');
-        return reply.fail('UNAUTHORIZED', 'Unauthorized');
+        return await reply.fail('UNAUTHORIZED', 'Unauthorized');
       }
 
       const { codeTaskRepo, linearIssueService, rateLimitService } = getServices();
@@ -683,7 +683,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
 
       if (!result.ok) {
         request.log.warn({ taskId, errorCode: result.error.code }, 'Failed to update code task');
-        return reply.fail('NOT_FOUND', result.error.message);
+        return await reply.fail('NOT_FOUND', result.error.message);
       }
 
       // Record task completion for rate limiting (decrement concurrent, update cost)
@@ -705,7 +705,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
 
       request.log.info({ taskId, status: result.value.status }, 'Code task updated successfully');
 
-      return reply.ok({ task: taskToApiResponse(result.value) });
+      return await reply.ok({ task: taskToApiResponse(result.value) });
     }
   );
 
@@ -771,7 +771,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       const authResult = validateInternalAuth(request);
       if (!authResult.valid) {
         request.log.warn({ reason: authResult.reason }, 'Internal auth failed for code tasks');
-        return reply.fail('UNAUTHORIZED', 'Unauthorized');
+        return await reply.fail('UNAUTHORIZED', 'Unauthorized');
       }
 
       const { codeTaskRepo } = getServices();
@@ -783,12 +783,12 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
 
       if (!result.ok) {
         request.log.error({ linearIssueId, error: result.error }, 'Failed to check active code task');
-        return reply.fail('INTERNAL_ERROR', result.error.message);
+        return await reply.fail('INTERNAL_ERROR', result.error.message);
       }
 
       request.log.info({ linearIssueId, hasActive: result.value.hasActive }, 'Active code task check complete');
 
-      return reply.ok(result.value);
+      return await reply.ok(result.value);
     }
   );
 
@@ -864,7 +864,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       const authResult = validateInternalAuth(request);
       if (!authResult.valid) {
         request.log.warn({ reason: authResult.reason }, 'Internal auth failed for code tasks');
-        return reply.fail('UNAUTHORIZED', 'Unauthorized');
+        return await reply.fail('UNAUTHORIZED', 'Unauthorized');
       }
 
       const { codeTaskRepo } = getServices();
@@ -878,12 +878,12 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
 
       if (!result.ok) {
         request.log.error({ staleThreshold, error: result.error }, 'Failed to find zombie code tasks');
-        return reply.fail('INTERNAL_ERROR', result.error.message);
+        return await reply.fail('INTERNAL_ERROR', result.error.message);
       }
 
       request.log.info({ count: result.value.length }, 'Zombie code tasks found');
 
-      return reply.ok({
+      return await reply.ok({
         tasks: result.value.map(taskToApiResponse),
       });
     }
@@ -1050,9 +1050,9 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
 
         // service_unavailable returns 503, other rate limits return 429
         if (error.code === 'service_unavailable') {
-          return reply.fail('MISCONFIGURED', error.message);
+          return await reply.fail('MISCONFIGURED', error.message);
         }
-        return reply.fail('RATE_LIMITED', error.message);
+        return await reply.fail('RATE_LIMITED', error.message);
       }
 
       // Ensure Linear issue exists (create if not provided)
@@ -1114,14 +1114,14 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         request.log.warn({ error: createResult.error }, 'Failed to create code task');
 
         if (createResult.error.code === 'DUPLICATE_PROMPT') {
-          return reply.fail('CONFLICT', `Similar task submitted in last 5 minutes: ${createResult.error.existingTaskId ?? ''}`);
+          return await reply.fail('CONFLICT', `Similar task submitted in last 5 minutes: ${createResult.error.existingTaskId ?? ''}`);
         }
 
         if (createResult.error.code === 'ACTIVE_TASK_EXISTS') {
-          return reply.fail('CONFLICT', `Active task already exists for this Linear issue: ${createResult.error.existingTaskId ?? ''}`);
+          return await reply.fail('CONFLICT', `Active task already exists for this Linear issue: ${createResult.error.existingTaskId ?? ''}`);
         }
 
-        return reply.fail('INTERNAL_ERROR', createResult.error.message);
+        return await reply.fail('INTERNAL_ERROR', createResult.error.message);
       }
 
       const task = createResult.value;
@@ -1165,7 +1165,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           },
         });
 
-        return reply.fail('MISCONFIGURED', 'Failed to dispatch task to worker');
+        return await reply.fail('MISCONFIGURED', 'Failed to dispatch task to worker');
       }
 
       // Record task start for rate limiting
@@ -1178,7 +1178,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
 
       request.log.info({ taskId: task.id, workerLocation: dispatchResult.value.workerLocation }, 'Code task submitted successfully');
 
-      return reply.ok({
+      return await reply.ok({
         status: 'submitted',
         codeTaskId: task.id,
       });
@@ -1306,10 +1306,10 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
 
       if (!listResult.ok) {
         request.log.error({ error: listResult.error }, 'Failed to list code tasks');
-        return reply.fail('INTERNAL_ERROR', listResult.error.message);
+        return await reply.fail('INTERNAL_ERROR', listResult.error.message);
       }
 
-      return reply.ok({
+      return await reply.ok({
         tasks: listResult.value.tasks.map(taskToApiResponse),
         ...(listResult.value.nextCursor !== undefined && { nextCursor: listResult.value.nextCursor }),
       });
@@ -1478,11 +1478,11 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       if (!getResult.ok) {
         if (getResult.error.code === 'NOT_FOUND') {
           logger.warn({ taskId: request.params.taskId, userId }, 'Code task not found');
-          return reply.fail('NOT_FOUND', `Task ${request.params.taskId} not found`);
+          return await reply.fail('NOT_FOUND', `Task ${request.params.taskId} not found`);
         }
 
         logger.error({ error: getResult.error }, 'Failed to get code task');
-        return reply.fail('INTERNAL_ERROR', getResult.error.message);
+        return await reply.fail('INTERNAL_ERROR', getResult.error.message);
       }
 
       const apiResponse = taskToApiResponse(getResult.value);
@@ -1499,7 +1499,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         'Returning task for GET /code/tasks/:taskId'
       );
 
-      return reply.ok(apiResponse);
+      return await reply.ok(apiResponse);
     }
   );
 
@@ -1622,7 +1622,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
 
       if (!taskResult.ok) {
         request.log.warn({ taskId, errorCode: taskResult.error.code }, 'Task not found for cancellation');
-        return reply.fail('NOT_FOUND', 'Task not found');
+        return await reply.fail('NOT_FOUND', 'Task not found');
       }
 
       const task = taskResult.value;
@@ -1630,13 +1630,13 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       // Step 2: Verify ownership
       if (task.userId !== userId) {
         request.log.warn({ taskId, taskUserId: task.userId, requestUserId: userId }, 'Cancellation forbidden - not task owner');
-        return reply.fail('FORBIDDEN', 'Not authorized to cancel this task');
+        return await reply.fail('FORBIDDEN', 'Not authorized to cancel this task');
       }
 
       // Step 3: Check task is cancellable
       if (!['dispatched', 'running'].includes(task.status)) {
         request.log.info({ taskId, status: task.status }, 'Cannot cancel task - not in running state');
-        return reply.fail('CONFLICT', 'Task is not running');
+        return await reply.fail('CONFLICT', 'Task is not running');
       }
 
       // Step 4: Update Firestore status to cancelled (source of truth)
@@ -1644,7 +1644,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
 
       if (!updateResult.ok) {
         request.log.error({ taskId, error: updateResult.error }, 'Failed to update task status to cancelled');
-        return reply.fail('INTERNAL_ERROR', 'Failed to cancel task');
+        return await reply.fail('INTERNAL_ERROR', 'Failed to cancel task');
       }
 
       // Step 5: Record task completion for rate limiting
@@ -1669,7 +1669,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
 
       request.log.info({ taskId }, 'Code task cancelled successfully');
 
-      return reply.ok({ status: 'cancelled' });
+      return await reply.ok({ status: 'cancelled' });
     }
   );
 
@@ -1763,7 +1763,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           }
         : { healthy: false, capacity: 0, checkedAt: new Date().toISOString() };
 
-      return reply.ok({ mac: macStatus, vm: vmStatus });
+      return await reply.ok({ mac: macStatus, vm: vmStatus });
     }
   );
 
@@ -1820,7 +1820,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       const authResult = validateInternalAuth(request);
       if (!authResult.valid) {
         request.log.warn({ reason: authResult.reason }, 'Internal auth failed for heartbeat');
-        return reply.fail('UNAUTHORIZED', 'Unauthorized');
+        return await reply.fail('UNAUTHORIZED', 'Unauthorized');
       }
 
       const { processHeartbeat } = getServices();
@@ -1832,10 +1832,10 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
 
       if (!result.ok) {
         request.log.error({ error: result.error }, 'Heartbeat processing failed');
-        return reply.fail('INTERNAL_ERROR', 'Failed to process heartbeat');
+        return await reply.fail('INTERNAL_ERROR', 'Failed to process heartbeat');
       }
 
-      return reply.ok(result.value);
+      return await reply.ok(result.value);
     }
   );
 
@@ -1892,7 +1892,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       const authResult = validateInternalAuth(request);
       if (!authResult.valid) {
         request.log.warn({ reason: authResult.reason }, 'Internal auth failed for zombie detection');
-        return reply.fail('UNAUTHORIZED', 'Unauthorized');
+        return await reply.fail('UNAUTHORIZED', 'Unauthorized');
       }
 
       const { detectZombieTasks } = getServices();
@@ -1903,10 +1903,10 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
 
       if (!result.ok) {
         request.log.error({ error: result.error }, 'Zombie detection failed');
-        return reply.fail('INTERNAL_ERROR', 'Failed to detect zombie tasks');
+        return await reply.fail('INTERNAL_ERROR', 'Failed to detect zombie tasks');
       }
 
-      return reply.ok(result.value);
+      return await reply.ok(result.value);
     }
   );
 
@@ -2031,7 +2031,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       const authResult = validateInternalAuth(request);
       if (!authResult.valid) {
         request.log.warn({ reason: authResult.reason }, 'Internal auth failed for cancel-with-nonce');
-        return reply.fail('UNAUTHORIZED', 'Unauthorized');
+        return await reply.fail('UNAUTHORIZED', 'Unauthorized');
       }
 
       const services = getServices();
@@ -2053,16 +2053,16 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         request.log.warn({ taskId, errorCode: error.code, errorMessage: error.message }, 'Cancel-with-nonce failed');
 
         if (error.code === 'task_not_found') {
-          return reply.fail('NOT_FOUND', error.message);
+          return await reply.fail('NOT_FOUND', error.message);
         } else if (error.code === 'internal_error') {
-          return reply.fail('INTERNAL_ERROR', error.message);
+          return await reply.fail('INTERNAL_ERROR', error.message);
         } else {
-          return reply.fail('INVALID_REQUEST', error.message);
+          return await reply.fail('INVALID_REQUEST', error.message);
         }
       }
 
       request.log.info({ taskId }, 'Task cancelled via nonce successfully');
-      return reply.ok({ cancelled: true });
+      return await reply.ok({ cancelled: true });
     }
   );
 
