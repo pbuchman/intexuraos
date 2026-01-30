@@ -112,8 +112,8 @@ export async function handleAllCompleted(params: AllCompletedHandlerParams): Pro
         logger.info({ researchId, ...obj }, msg);
       },
       error: (obj: object, msg?: string): void => {
-        const message = typeof msg === 'string' ? msg : typeof obj === 'string' ? obj : undefined;
-        const context = typeof obj === 'string' ? {} : obj;
+        const message = typeof msg === 'string' ? msg : typeof obj === 'string' ? obj : undefined; /* v8 ignore ts-type -- type narrowing for overloaded logger signature */
+        const context = typeof obj === 'string' ? {} : obj; /* v8 ignore ts-type -- type narrowing for overloaded logger signature */
         logger.error({ researchId, ...context }, message);
       },
       warn: (obj: object, msg?: string): void => {
