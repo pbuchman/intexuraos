@@ -1,4 +1,5 @@
-import pino, { Logger } from 'pino';
+import pino from 'pino';
+import type { Logger } from 'pino';
 
 export function createLogger(name: string): Logger {
   return pino({

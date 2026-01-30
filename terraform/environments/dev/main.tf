@@ -492,8 +492,8 @@ module "secret_manager" {
     "INTEXURAOS_GITHUB_APP_ID"          = "GitHub App ID for code worker"
     "INTEXURAOS_GITHUB_INSTALLATION_ID" = "GitHub App installation ID for pbuchman/intexuraos"
     # Pre-dev environment secrets
-    "INTEXURAOS_PREDEV_ENV_VARS"        = "Aggregated environment variables for pre-dev VM .envrc.local"
-    "INTEXURAOS_GITHUB_WEBHOOK_SECRET"  = "GitHub webhook secret for HMAC validation (predev branch switch)"
+    "INTEXURAOS_PREDEV_ENV_VARS"       = "Aggregated environment variables for pre-dev VM .envrc.local"
+    "INTEXURAOS_GITHUB_WEBHOOK_SECRET" = "GitHub webhook secret for HMAC validation (predev branch switch)"
   }
 
   depends_on = [google_project_service.apis]
@@ -2068,12 +2068,12 @@ resource "google_cloud_scheduler_job" "log_cleanup" {
 module "predev_environment" {
   source = "../../modules/predev-environment"
 
-  project_id               = var.project_id
-  region                   = var.region
-  zone                     = "${var.region}-a"
-  environment              = var.environment
-  functions_source_bucket  = google_storage_bucket.cloud_functions_source.name
-  github_repo              = "${var.github_owner}/${var.github_repo}"
+  project_id              = var.project_id
+  region                  = var.region
+  zone                    = "${var.region}-a"
+  environment             = var.environment
+  functions_source_bucket = google_storage_bucket.cloud_functions_source.name
+  github_repo             = "${var.github_owner}/${var.github_repo}"
 
   internal_auth_token_secret_id = module.secret_manager.secret_ids["INTEXURAOS_INTERNAL_AUTH_TOKEN"]
   github_webhook_secret_id      = module.secret_manager.secret_ids["INTEXURAOS_GITHUB_WEBHOOK_SECRET"]

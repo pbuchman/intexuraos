@@ -16,10 +16,7 @@ interface GitHubPushPayload {
   };
 }
 
-export const webhook: HttpFunction = async (
-  req: { method?: string; headers?: Record<string, string>; rawBody?: string; body?: unknown },
-  res: { status(code: number): { send(data: string): void } },
-) => {
+export const webhook: HttpFunction = async (req, res) => {
   logger.info({ method: req.method }, 'Webhook request');
 
   if (req.method !== 'POST') {
@@ -28,7 +25,7 @@ export const webhook: HttpFunction = async (
   }
 
   // Verify GitHub webhook signature
-  const signature = req.headers?.['x-hub-signature-256'];
+  const signature = (req.headers as Record<string, string | string[]>)['x-hub-signature-256'];
   const secret = process.env['INTEXURAOS_GITHUB_WEBHOOK_SECRET'];
 
   if (!secret || secret.length === 0) {
@@ -37,14 +34,14 @@ export const webhook: HttpFunction = async (
     return;
   }
 
-  if (!signature) {
+  if (!signature || typeof signature !== 'string') {
     logger.warn('Missing signature header');
     res.status(401).send('Missing signature');
     return;
   }
 
   // Get raw body for signature verification
-  const rawBody = req.rawBody ?? JSON.stringify(req.body);
+  const rawBody = req.rawBody ? Buffer.from(req.rawBody) : Buffer.from(JSON.stringify(req.body));
 
   const hmac = crypto.createHmac('sha256', secret);
   hmac.update(rawBody);
@@ -67,7 +64,7 @@ export const webhook: HttpFunction = async (
     return;
   }
 
-  const event = req.headers?.['x-github-event'];
+  const event = (req.headers as Record<string, string | string[]>)['x-github-event'];
   logger.info({ event }, 'GitHub event received');
 
   if (event !== 'push') {
