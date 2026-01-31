@@ -14,3 +14,20 @@ export function stripMarkdown(text: string): string {
     .replace(/^["']|["']$/g, '') // Remove surrounding quotes
     .trim();
 }
+
+/**
+ * Strip HTML tags from text for clean display.
+ * Preserves the text content, removes all HTML elements.
+ */
+export function stripHtmlTags(text: string): string {
+  return text
+    .replace(/<br\s*\/?>/gi, ' ')
+    .replace(/<[^>]*>/g, '')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/\s+/g, ' ')
+    .trim();
+}

@@ -6,7 +6,7 @@ import {
   type ListCalendarEventsFilters,
 } from '@/services/calendarApi';
 import type { CalendarEvent } from '@/types';
-import { getCurrentWeekRange } from '@/utils';
+import { getCurrentMonthRange } from '@/utils';
 
 interface UseCalendarEventsResult {
   events: CalendarEvent[];
@@ -19,21 +19,26 @@ interface UseCalendarEventsResult {
 }
 
 function getDefaultFilters(): ListCalendarEventsFilters {
-  const { start, end } = getCurrentWeekRange();
+  const range = getCurrentMonthRange();
   return {
-    timeMin: start.toISOString(),
-    timeMax: end.toISOString(),
-    maxResults: 50,
+    timeMin: range.start.toISOString(),
+    timeMax: range.end.toISOString(),
+    maxResults: 100,
   };
 }
 
-export function useCalendarEvents(): UseCalendarEventsResult {
+export function useCalendarEvents(
+  initialFilters?: Partial<ListCalendarEventsFilters>
+): UseCalendarEventsResult {
   const { getAccessToken } = useAuth();
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [filters, setFilters] = useState<ListCalendarEventsFilters>(getDefaultFilters);
+  const [filters, setFilters] = useState<ListCalendarEventsFilters>(() => ({
+    ...getDefaultFilters(),
+    ...initialFilters,
+  }));
 
   const refresh = useCallback(
     async (showLoading?: boolean): Promise<void> => {

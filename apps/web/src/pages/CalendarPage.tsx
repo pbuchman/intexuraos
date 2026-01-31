@@ -3,25 +3,31 @@ import {
   Calendar as CalendarIcon,
   ChevronLeft,
   ChevronRight,
-  ChevronDown,
-  ChevronUp,
-  Clock,
   ExternalLink,
   Loader2,
-  MapPin,
   RefreshCw,
   Trash2,
-  Users,
   AlertCircle,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
-import { Button, Card, Layout, RefreshIndicator } from '@/components';
+import { Button, Layout, RefreshIndicator } from '@/components';
 import { useAuth } from '@/context';
 import { useCalendarEvents, useFailedCalendarEvents } from '@/hooks';
 import { deleteFailedEvent, retryFailedEvent } from '@/services/calendarApi.js';
 import { getErrorMessage } from '@intexuraos/common-core/errors';
 import type { CalendarEvent, FailedCalendarEvent } from '@/types';
-import { formatTime, formatWeekRange } from '@/utils/dateFormat';
-import { getCurrentWeekRange } from '@/utils';
+import { formatTime, formatMonthYear } from '@/utils/dateFormat';
+import {
+  getCurrentMonthRange,
+  getMonthRange,
+  getCalendarDays,
+  isToday,
+  stripHtmlTags,
+  type MonthRange,
+} from '@/utils';
+
+const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
 function isAllDayEvent(event: CalendarEvent): boolean {
   return event.start.date !== undefined;
@@ -37,30 +43,16 @@ function getEventDate(event: CalendarEvent): Date {
   return new Date();
 }
 
-function groupEventsByDate(events: CalendarEvent[]): Map<string, CalendarEvent[]> {
-  const grouped = new Map<string, CalendarEvent[]>();
-  for (const event of events) {
-    const date = getEventDate(event);
-    const dateKey = date.toDateString();
-    const existing = grouped.get(dateKey);
-    if (existing !== undefined) {
-      existing.push(event);
-    } else {
-      grouped.set(dateKey, [event]);
-    }
-  }
-  return grouped;
-}
-
-interface EventRowProps {
+interface EventChipProps {
   event: CalendarEvent;
 }
 
-function EventRow({ event }: EventRowProps): React.JSX.Element {
+function EventChip({ event }: EventChipProps): React.JSX.Element {
   const allDay = isAllDayEvent(event);
   const hasLink = event.htmlLink !== undefined;
 
-  const handleClick = (): void => {
+  const handleClick = (e: React.MouseEvent): void => {
+    e.stopPropagation();
     if (hasLink) {
       window.open(event.htmlLink, '_blank', 'noopener,noreferrer');
     }
@@ -74,51 +66,137 @@ function EventRow({ event }: EventRowProps): React.JSX.Element {
       onKeyDown={(e) => {
         if (hasLink && (e.key === 'Enter' || e.key === ' ')) {
           e.preventDefault();
-          handleClick();
+          handleClick(e as unknown as React.MouseEvent);
         }
       }}
-      className={`flex gap-4 rounded-lg border border-slate-200 bg-white p-4 transition-colors hover:bg-slate-50 ${hasLink ? 'cursor-pointer' : ''}`}
+      className={`group mb-0.5 flex items-center gap-1 truncate rounded px-1 py-0.5 text-xs ${
+        allDay
+          ? 'bg-blue-100 text-blue-800'
+          : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+      } ${hasLink ? 'cursor-pointer' : ''}`}
+      title={`${event.summary}${event.location !== undefined ? ` • ${event.location}` : ''}`}
     >
-      <div className="flex w-20 shrink-0 flex-col items-center justify-center rounded-lg bg-blue-50 p-2 text-center">
-        <Clock className="mb-1 h-4 w-4 text-blue-600" />
-        <span className="text-xs font-medium text-blue-700">
-          {formatTime(event.start.dateTime ?? undefined, allDay)}
+      {!allDay && (
+        <span className="shrink-0 text-slate-500">
+          {formatTime(event.start.dateTime ?? undefined, false).replace(' ', '')}
         </span>
-        {!allDay && (
-          <span className="text-xs text-blue-500">
-            {formatTime(event.end.dateTime ?? undefined, allDay)}
-          </span>
+      )}
+      <span className="truncate">{event.summary}</span>
+      {hasLink && (
+        <ExternalLink className="hidden h-3 w-3 shrink-0 text-slate-400 group-hover:block" />
+      )}
+    </div>
+  );
+}
+
+interface DayCellProps {
+  date: Date;
+  events: CalendarEvent[];
+  isCurrentMonth: boolean;
+}
+
+function DayCell({ date, events, isCurrentMonth }: DayCellProps): React.JSX.Element {
+  const [showAll, setShowAll] = useState(false);
+  const today = isToday(date);
+  const maxVisible = 3;
+  const hasMore = events.length > maxVisible;
+  const visibleEvents = showAll ? events : events.slice(0, maxVisible);
+
+  return (
+    <div
+      className={`min-h-24 border-b border-r border-slate-200 p-1 ${
+        isCurrentMonth ? 'bg-white' : 'bg-slate-50'
+      }`}
+    >
+      <div className="mb-1 flex items-center justify-between">
+        <span
+          className={`flex h-6 w-6 items-center justify-center rounded-full text-sm ${
+            today
+              ? 'bg-blue-600 font-semibold text-white'
+              : isCurrentMonth
+                ? 'text-slate-900'
+                : 'text-slate-400'
+          }`}
+        >
+          {date.getDate()}
+        </span>
+        {hasMore && !showAll && (
+          <button
+            type="button"
+            onClick={() => {
+              setShowAll(true);
+            }}
+            className="text-xs text-blue-600 hover:text-blue-800"
+          >
+            +{events.length - maxVisible}
+          </button>
+        )}
+        {showAll && hasMore && (
+          <button
+            type="button"
+            onClick={() => {
+              setShowAll(false);
+            }}
+            className="text-xs text-slate-500 hover:text-slate-700"
+          >
+            less
+          </button>
         )}
       </div>
+      <div className="space-y-0">
+        {visibleEvents.map((event) => (
+          <EventChip key={event.id} event={event} />
+        ))}
+      </div>
+    </div>
+  );
+}
 
-      <div className="min-w-0 flex-1">
-        <div className="flex items-start justify-between gap-2">
-          <h3 className="font-medium text-slate-900">{event.summary}</h3>
-          {hasLink && (
-            <span className="shrink-0 rounded p-1 text-slate-400">
-              <ExternalLink className="h-4 w-4" />
-            </span>
-          )}
-        </div>
+interface CalendarGridProps {
+  range: MonthRange;
+  events: CalendarEvent[];
+}
 
-        {event.description !== undefined && event.description !== '' && (
-          <p className="mt-1 line-clamp-2 text-sm text-slate-500">{event.description}</p>
-        )}
+function CalendarGrid({ range, events }: CalendarGridProps): React.JSX.Element {
+  const days = getCalendarDays(range);
 
-        <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-slate-500">
-          {event.location !== undefined && event.location !== '' && (
-            <span className="flex items-center gap-1">
-              <MapPin className="h-3 w-3" />
-              {event.location}
-            </span>
-          )}
-          {event.attendees !== undefined && event.attendees.length > 0 && (
-            <span className="flex items-center gap-1">
-              <Users className="h-3 w-3" />
-              {event.attendees.length} attendee{event.attendees.length !== 1 ? 's' : ''}
-            </span>
-          )}
-        </div>
+  const eventsByDate = new Map<string, CalendarEvent[]>();
+  for (const event of events) {
+    const date = getEventDate(event);
+    const key = date.toDateString();
+    const existing = eventsByDate.get(key);
+    if (existing !== undefined) {
+      existing.push(event);
+    } else {
+      eventsByDate.set(key, [event]);
+    }
+  }
+
+  return (
+    <div className="overflow-hidden rounded-lg border-l border-t border-slate-200">
+      <div className="grid grid-cols-7 bg-slate-100">
+        {WEEKDAYS.map((day) => (
+          <div
+            key={day}
+            className="border-b border-r border-slate-200 px-2 py-2 text-center text-xs font-semibold text-slate-600"
+          >
+            {day}
+          </div>
+        ))}
+      </div>
+      <div className="grid grid-cols-7">
+        {days.map((day) => {
+          const dayEvents = eventsByDate.get(day.toDateString()) ?? [];
+          const isCurrentMonth = day.getMonth() === range.month;
+          return (
+            <DayCell
+              key={day.toISOString()}
+              date={day}
+              events={dayEvents}
+              isCurrentMonth={isCurrentMonth}
+            />
+          );
+        })}
       </div>
     </div>
   );
@@ -183,7 +261,9 @@ function FailedEventCard({
         </div>
 
         {event.description !== null && event.description !== '' && (
-          <p className="mb-2 line-clamp-2 text-sm text-amber-700">{event.description}</p>
+          <p className="mb-2 line-clamp-2 text-sm text-amber-700">
+            {stripHtmlTags(event.description)}
+          </p>
         )}
 
         <div className="mb-2 rounded-md bg-amber-100 px-2 py-1 text-xs text-amber-800">
@@ -280,43 +360,13 @@ function NeedsAttentionSection({
   );
 }
 
-interface DateGroupProps {
-  date: string;
-  events: CalendarEvent[];
-}
-
-function DateGroup({ date, events }: DateGroupProps): React.JSX.Element {
-  const dateObj = new Date(date);
-  const isToday = new Date().toDateString() === date;
-
-  return (
-    <div className="space-y-3">
-      <div className="flex items-center gap-2">
-        <h3 className={`text-sm font-semibold ${isToday ? 'text-blue-600' : 'text-slate-700'}`}>
-          {dateObj.toLocaleDateString(undefined, {
-            weekday: 'long',
-            month: 'long',
-            day: 'numeric',
-          })}
-        </h3>
-        {isToday && (
-          <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700">
-            Today
-          </span>
-        )}
-      </div>
-      <div className="space-y-2">
-        {events.map((event) => (
-          <EventRow key={event.id} event={event} />
-        ))}
-      </div>
-    </div>
-  );
-}
-
 export function CalendarPage(): React.JSX.Element {
   const { getAccessToken } = useAuth();
-  const { events, loading, refreshing, error, filters, setFilters, refresh } = useCalendarEvents();
+  const [monthRange, setMonthRange] = useState<MonthRange>(getCurrentMonthRange());
+  const { events, loading, refreshing, error, setFilters, refresh } = useCalendarEvents({
+    timeMin: monthRange.start.toISOString(),
+    timeMax: monthRange.end.toISOString(),
+  });
   const {
     events: failedEvents,
     loading: failedEventsLoading,
@@ -328,41 +378,34 @@ export function CalendarPage(): React.JSX.Element {
   const [actionError, setActionError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
-  const currentStart = filters.timeMin !== undefined ? new Date(filters.timeMin) : new Date();
-  const currentEnd = filters.timeMax !== undefined ? new Date(filters.timeMax) : new Date();
-
-  const handlePrevWeek = (): void => {
-    const newStart = new Date(currentStart);
-    newStart.setDate(newStart.getDate() - 7);
-    const newEnd = new Date(newStart);
-    newEnd.setDate(newStart.getDate() + 7);
-
+  const handlePrevMonth = (): void => {
+    const newMonth = monthRange.month === 0 ? 11 : monthRange.month - 1;
+    const newYear = monthRange.month === 0 ? monthRange.year - 1 : monthRange.year;
+    const newRange = getMonthRange(newYear, newMonth);
+    setMonthRange(newRange);
     setFilters({
-      ...filters,
-      timeMin: newStart.toISOString(),
-      timeMax: newEnd.toISOString(),
+      timeMin: newRange.start.toISOString(),
+      timeMax: newRange.end.toISOString(),
     });
   };
 
-  const handleNextWeek = (): void => {
-    const newStart = new Date(currentStart);
-    newStart.setDate(newStart.getDate() + 7);
-    const newEnd = new Date(newStart);
-    newEnd.setDate(newStart.getDate() + 7);
-
+  const handleNextMonth = (): void => {
+    const newMonth = monthRange.month === 11 ? 0 : monthRange.month + 1;
+    const newYear = monthRange.month === 11 ? monthRange.year + 1 : monthRange.year;
+    const newRange = getMonthRange(newYear, newMonth);
+    setMonthRange(newRange);
     setFilters({
-      ...filters,
-      timeMin: newStart.toISOString(),
-      timeMax: newEnd.toISOString(),
+      timeMin: newRange.start.toISOString(),
+      timeMax: newRange.end.toISOString(),
     });
   };
 
   const handleToday = (): void => {
-    const { start, end } = getCurrentWeekRange();
+    const newRange = getCurrentMonthRange();
+    setMonthRange(newRange);
     setFilters({
-      ...filters,
-      timeMin: start.toISOString(),
-      timeMax: end.toISOString(),
+      timeMin: newRange.start.toISOString(),
+      timeMax: newRange.end.toISOString(),
     });
   };
 
@@ -410,11 +453,6 @@ export function CalendarPage(): React.JSX.Element {
       setRetryingFailedEventId(null);
     }
   };
-
-  const groupedEvents = groupEventsByDate(events);
-  const sortedDates = Array.from(groupedEvents.keys()).sort(
-    (a, b) => new Date(a).getTime() - new Date(b).getTime()
-  );
 
   if (loading && failedEventsLoading && events.length === 0) {
     return (
@@ -467,23 +505,24 @@ export function CalendarPage(): React.JSX.Element {
         retryingId={retryingFailedEventId}
       />
 
-      <div className="mb-6 flex items-center justify-between rounded-lg border border-slate-200 bg-white p-4">
-        <Button type="button" variant="ghost" size="sm" onClick={handlePrevWeek}>
+      <div className="mb-6 flex items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white p-4">
+        <Button type="button" variant="ghost" size="sm" onClick={handlePrevMonth}>
           <ChevronLeft className="h-4 w-4" />
         </Button>
 
         <div className="flex items-center gap-3">
           <CalendarIcon className="h-5 w-5 text-slate-500" />
-          <span className="font-medium text-slate-700">
-            {formatWeekRange(currentStart, currentEnd)}
+          <span className="min-w-36 text-center font-medium text-slate-700">
+            {formatMonthYear(monthRange.year, monthRange.month)}
           </span>
-          <Button type="button" variant="secondary" size="sm" onClick={handleToday}>
-            Today
-          </Button>
         </div>
 
-        <Button type="button" variant="ghost" size="sm" onClick={handleNextWeek}>
+        <Button type="button" variant="ghost" size="sm" onClick={handleNextMonth}>
           <ChevronRight className="h-4 w-4" />
+        </Button>
+
+        <Button type="button" variant="secondary" size="sm" onClick={handleToday} className="ml-4">
+          Today
         </Button>
       </div>
 
@@ -493,25 +532,7 @@ export function CalendarPage(): React.JSX.Element {
         </div>
       )}
 
-      {events.length === 0 ? (
-        <Card>
-          <div className="flex flex-col items-center justify-center py-12 text-center">
-            <CalendarIcon className="mb-4 h-12 w-12 text-slate-300" />
-            <h3 className="mb-2 text-lg font-medium text-slate-900">No events this week</h3>
-            <p className="mb-4 text-slate-500">
-              Your calendar is clear for the selected time range.
-            </p>
-          </div>
-        </Card>
-      ) : (
-        <div className="space-y-6">
-          {sortedDates.map((dateKey) => {
-            const dateEvents = groupedEvents.get(dateKey);
-            if (dateEvents === undefined) return null;
-            return <DateGroup key={dateKey} date={dateKey} events={dateEvents} />;
-          })}
-        </div>
-      )}
+      <CalendarGrid range={monthRange} events={events} />
     </Layout>
   );
 }
