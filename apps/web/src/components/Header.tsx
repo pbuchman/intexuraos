@@ -60,7 +60,7 @@ export function Header(): React.JSX.Element {
     };
   }, []);
 
-  const userEmail = user?.email ?? 'User';
+  const userName = user?.name ?? user?.email ?? 'User';
   const userPicture = user?.picture;
 
   return (
@@ -204,7 +204,7 @@ export function Header(): React.JSX.Element {
             ) : (
               <User className="h-5 w-5 text-slate-400" />
             )}
-            <span className="hidden max-w-32 truncate sm:inline md:max-w-48">{userEmail}</span>
+            <span className="hidden max-w-32 truncate sm:inline md:max-w-48">{userName}</span>
             <ChevronDown
               className={`h-4 w-4 transition-transform ${isMenuOpen ? 'rotate-180' : ''}`}
             />
@@ -213,7 +213,7 @@ export function Header(): React.JSX.Element {
           {isMenuOpen ? (
             <div className="absolute right-0 top-full mt-1 w-48 rounded-lg border border-slate-200 bg-white py-1 shadow-lg">
               <div className="border-b border-slate-100 px-4 py-2 sm:hidden">
-                <span className="text-sm text-slate-600">{userEmail}</span>
+                <span className="text-sm text-slate-600">{userName}</span>
               </div>
               {isInstalled && (
                 <button
