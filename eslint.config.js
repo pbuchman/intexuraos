@@ -16,6 +16,8 @@ export default tseslint.config(
       'vitest.setup.ts',
       'vitest.config.ts',
       'packages/*/vitest.config.ts',
+      'apps/*/vitest.config.ts',
+      'migrations/vitest.config.ts',
       'vitest-mocks/**',
       'workers/**/scripts/**',
       // Standalone tools not in pnpm workspace
@@ -31,7 +33,12 @@ export default tseslint.config(
       parserOptions: {
         projectService: true,
         tsconfigRootDir: import.meta.dirname,
-        allowDefaultProject: ['vitest.config.ts', 'vitest.setup.ts'],
+        allowDefaultProject: [
+          'vitest.config.ts',
+          'vitest.setup.ts',
+          'apps/*/vitest.config.ts',
+          'migrations/vitest.config.ts',
+        ],
       },
       globals: {
         ...globals.node,

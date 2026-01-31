@@ -10,7 +10,7 @@ import type { Result } from '@intexuraos/common-core';
  * Fake embedding repository for testing.
  */
 export class FakeEmbeddingRepository implements EmbeddingRepositoryPort {
-  private chunks: Map<string, DocChunk> = new Map();
+  private chunks: Map<string, DocChunk> = new Map<string, DocChunk>();
   private searchResults: DocChunkWithScore[] = [];
 
   setChunks(chunks: DocChunk[]): void {

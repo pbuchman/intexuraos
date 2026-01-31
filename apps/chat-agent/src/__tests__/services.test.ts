@@ -1,8 +1,8 @@
 /**
  * Service container tests for chat-agent.
  */
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { getServices, setServices, resetServices, initializeServices } from '../services.js';
+import { describe, it, expect, afterEach } from 'vitest';
+import { getServices, setServices, resetServices, initializeServices, type ServiceContainer } from '../services.js';
 
 describe('chat-agent services', () => {
   afterEach(() => {
@@ -25,7 +25,7 @@ describe('chat-agent services', () => {
 
   describe('setServices', () => {
     it('should set custom service container', () => {
-      const customServices = {
+      const customServices: ServiceContainer = {
         generateId: () => 'custom-id',
       };
       setServices(customServices);
