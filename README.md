@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="docs/assets/branding/exports/logo-primary-light.png" alt="IntexuraOS Logo" width="320">
+  <img src="apps/web/public/branding/logo-primary-light.png" alt="IntexuraOS Logo" width="320">
 
   <h2><a href="https://intexuraos.cloud/" target="_blank">intexuraos.cloud</a></h2>
 

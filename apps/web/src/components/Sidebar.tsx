@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef, useLayoutEffect } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import {
   Bell,
@@ -130,6 +130,31 @@ export function Sidebar(): React.JSX.Element {
   const [savedFilters, setSavedFilters] = useState<SavedNotificationFilter[]>([]);
   const location = useLocation();
   const navigate = useNavigate();
+  const navRef = useRef<HTMLElement>(null);
+  const scrollPositionRef = useRef(0);
+
+  // Preserve scroll position across route changes
+  useEffect(() => {
+    const nav = navRef.current;
+    if (nav === null) return;
+
+    const handleScroll = (): void => {
+      scrollPositionRef.current = nav.scrollTop;
+    };
+
+    nav.addEventListener('scroll', handleScroll);
+    return (): void => {
+      nav.removeEventListener('scroll', handleScroll);
+    };
+  }, []);
+
+  // Restore scroll position after route change
+  useLayoutEffect(() => {
+    const nav = navRef.current;
+    if (nav !== null && scrollPositionRef.current > 0) {
+      nav.scrollTop = scrollPositionRef.current;
+    }
+  }, [location.pathname]);
 
   // Auto-expand settings when on a settings page
   useEffect(() => {
@@ -265,7 +290,7 @@ export function Sidebar(): React.JSX.Element {
           <X className="h-5 w-5" />
         </button>
 
-        <nav className="mt-8 flex-1 space-y-1 overflow-y-auto p-3 md:mt-0">
+        <nav ref={navRef} className="mt-8 flex-1 space-y-1 overflow-y-auto p-3 md:mt-0">
           {/* Inbox - primary nav item */}
           <NavLink
             to="/inbox"
