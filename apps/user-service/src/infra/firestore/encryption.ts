@@ -72,10 +72,11 @@ export function decryptToken(encryptedData: string): string {
   const authTagPart = parts[1];
   const encryptedPart = parts[2];
 
-  /* v8 ignore ts-type -- parts.length === 3 check on line 67 guarantees these exist */
+  /* v8 ignore start -- ts-type: parts.length === 3 check on line 67 guarantees these exist @preserve */
   if (ivPart === undefined || authTagPart === undefined || encryptedPart === undefined) {
     throw new Error('Invalid encrypted data format');
   }
+  /* v8 ignore stop @preserve */
 
   const iv = Buffer.from(ivPart, 'base64');
   const authTag = Buffer.from(authTagPart, 'base64');

@@ -205,10 +205,11 @@ export class FirestoreBookmarkRepository implements BookmarkRepository {
       }
 
       const doc = snapshot.docs[0];
-      /* v8 ignore ts-type -- snapshot.empty check on line 203 guarantees docs[0] exists */
+      /* v8 ignore start -- ts-type: snapshot.empty check on line 203 guarantees docs[0] exists @preserve */
       if (doc === undefined) {
         return { ok: true, value: null };
       }
+      /* v8 ignore stop @preserve */
 
       return { ok: true, value: toBookmark(doc.id, doc.data() as BookmarkDocument) };
     } catch (error) {

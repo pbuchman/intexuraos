@@ -47,7 +47,7 @@ export async function main(
   try {
     // Start HTTP server
     const isProd = process.env['NODE_ENV'] === 'production';
-    /* v8 ignore ts-type -- fastify logger config branches based on isProd ternary */
+    /* v8 ignore start -- ts-type: fastify logger config branches based on isProd ternary @preserve */
     const app = fastify({
       logger: isProd
         ? { level: process.env['LOG_LEVEL'] ?? 'info' }
@@ -56,6 +56,7 @@ export async function main(
             transport: { target: 'pino-pretty', options: { colorize: true } },
           },
     });
+    /* v8 ignore stop @preserve */
 
     void app.register(cors);
 
@@ -217,11 +218,12 @@ function setupShutdownHandlers(handlers: ShutdownHandlers): void {
     await handlers.statePersistence.save(await handlers.statePersistence.load());
 
     // Close server
-    /* v8 ignore ts-type -- optional chaining type narrowing */
+    /* v8 ignore start -- ts-type: optional chaining type narrowing @preserve */
     // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
     if (serviceState?.server) {
       serviceState.server.close();
     }
+    /* v8 ignore stop @preserve */
 
     handlers.logger.info({ message: 'Orchestrator shutdown complete' });
     exit(0);

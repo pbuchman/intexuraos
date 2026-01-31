@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
 import nock from 'nock';
 import type { ModelPricing } from '@intexuraos/llm-contract';
-import { GptPromptAdapter } from '../infra/llm/GptPromptAdapter.js';
+import { GptPromptAdapter, mapError } from '../infra/llm/GptPromptAdapter.js';
 import type { Logger } from '@intexuraos/common-core';
 
 vi.mock('@intexuraos/llm-audit', (): object => ({
@@ -263,6 +263,20 @@ describe('GptPromptAdapter', () => {
       const result = await adapter.generateThumbnailPrompt('Test');
 
       expect(result.ok).toBe(true);
+    });
+  });
+
+  describe('mapError', () => {
+    it('maps TIMEOUT code', () => {
+      const result = mapError('TIMEOUT', 'Request timed out');
+      expect(result.code).toBe('TIMEOUT');
+      expect(result.message).toBe('Request timed out');
+    });
+
+    it('maps unknown codes to API_ERROR', () => {
+      const result = mapError('UNKNOWN_CODE', 'Something went wrong');
+      expect(result.code).toBe('API_ERROR');
+      expect(result.message).toBe('Something went wrong');
     });
   });
 });

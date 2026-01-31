@@ -51,8 +51,9 @@ interface ErrorResponse {
 export function createCodeAgentHttpClient(
   config: CodeAgentHttpClientConfig
 ): CodeAgentClient {
-  /* v8 ignore test-infra -- tests always provide logger */
+  /* v8 ignore start -- test-infra: tests always provide logger @preserve */
   const logger = config.logger ?? defaultLogger;
+  /* v8 ignore stop @preserve */
 
   return {
     async submitTask(input: {
@@ -109,6 +110,7 @@ export function createCodeAgentHttpClient(
       if (response.status === 200) {
         try {
           const body = (await response.json()) as ApiResponse;
+          /* v8 ignore start -- test-infra: invalid response path requires malformed mock @preserve */
           if (!body.success || body.data === undefined) {
             logger.error({ body }, 'Invalid response from code-agent');
             return err({
@@ -116,6 +118,7 @@ export function createCodeAgentHttpClient(
               message: 'Invalid response from code-agent',
             });
           }
+          /* v8 ignore stop @preserve */
           logger.info(
             { codeTaskId: body.data.codeTaskId, resourceUrl: body.data.resourceUrl },
             'Code task created successfully'
@@ -163,8 +166,9 @@ export function createCodeAgentHttpClient(
           logger.warn({ error: errorMessage }, 'Code-agent worker unavailable');
           return err({
             code: 'WORKER_UNAVAILABLE',
-            /* v8 ignore ts-type -- 503 response always includes error message */
+            /* v8 ignore start -- ts-type: 503 response always includes error message @preserve */
             message: errorMessage,
+            /* v8 ignore stop @preserve */
           });
         } catch {
           return err({

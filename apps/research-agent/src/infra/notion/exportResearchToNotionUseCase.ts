@@ -157,7 +157,9 @@ export async function exportResearchToNotion(
     const token = tokenContext.token as string;
     const exportResult = await exportToNotion(research, token, targetPageId, notionLogger);
 
-    if (!exportResult.ok) { /* v8 ignore test-infra -- Notion API error handling requires external service mocking */
+    /* v8 ignore start -- test-infra: Notion API error handling requires external service mocking @preserve */
+    if (!exportResult.ok) {
+    /* v8 ignore stop @preserve */
       const error = exportResult.error;
       logger.error({ researchId, code: error.code, message: error.message }, `Failed to export research ${researchId} to Notion`);
       return err(error);

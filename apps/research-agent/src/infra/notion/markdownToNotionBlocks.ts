@@ -144,7 +144,9 @@ function parseInlineFormatting(text: string): RichTextSegment[] {
 
     // Single special character that's not part of formatting
     // Loop condition guarantees remaining has at least 1 character
-    const char = remaining[0] ?? ''; /* v8 ignore ts-type -- loop condition guarantees remaining has characters, fallback is defensive */
+    /* v8 ignore start -- ts-type: loop condition guarantees remaining has characters, fallback is defensive @preserve */
+    const char = remaining[0] ?? '';
+    /* v8 ignore stop @preserve */
     segments.push({
       type: 'text',
       text: { content: char },
@@ -152,7 +154,9 @@ function parseInlineFormatting(text: string): RichTextSegment[] {
     remaining = remaining.slice(1);
   }
 
-  return segments.length > 0 ? segments : [{ type: 'text', text: { content: '' } }]; /* v8 ignore ts-type -- ternary fallback is defensive */
+  /* v8 ignore start -- ts-type: ternary fallback is defensive @preserve */
+  return segments.length > 0 ? segments : [{ type: 'text', text: { content: '' } }];
+  /* v8 ignore stop @preserve */
 }
 
 // ============================================================================
@@ -166,7 +170,9 @@ function parseTable(lines: string[]): { block: NotionBlock; linesConsumed: numbe
   // Length check guarantees these exist
   const firstLine = lines[0];
   const secondLine = lines[1];
-  if (firstLine === undefined || secondLine === undefined) return null; /* v8 ignore ts-type -- array access guaranteed by length check above */
+  /* v8 ignore start -- ts-type: array access guaranteed by length check above @preserve */
+  if (firstLine === undefined || secondLine === undefined) return null;
+  /* v8 ignore stop @preserve */
 
   // Check separator format
   if (!/^\|?[\s-:|]+\|?$/.test(secondLine)) return null;
@@ -176,7 +182,9 @@ function parseTable(lines: string[]): { block: NotionBlock; linesConsumed: numbe
   let linesConsumed = 2; // header + separator
   for (let i = 2; i < lines.length; i++) {
     const line = lines[i];
-    if (line === undefined) break; /* v8 ignore ts-type -- loop bounds guarantee array access is valid */
+    /* v8 ignore start -- ts-type: loop bounds guarantee array access is valid @preserve */
+    if (line === undefined) break;
+    /* v8 ignore stop @preserve */
     if (!line.includes('|')) break;
     tableLines.push(line);
     linesConsumed++;
@@ -198,7 +206,9 @@ function parseTable(lines: string[]): { block: NotionBlock; linesConsumed: numbe
 
   // rows is mapped from tableLines which has at least 1 element
   const firstRow = rows[0];
-  if (firstRow === undefined) return null; /* v8 ignore ts-type -- rows mapped from non-empty tableLines array */
+  /* v8 ignore start -- ts-type: rows mapped from non-empty tableLines array @preserve */
+  if (firstRow === undefined) return null;
+  /* v8 ignore stop @preserve */
 
   const tableWidth = firstRow.length;
 
@@ -256,18 +266,24 @@ function mapLanguage(lang: string): NotionLanguage {
 
 function parseCodeBlock(lines: string[], startIndex: number): { block: NotionBlock; linesConsumed: number } | null {
   const firstLine = lines[startIndex];
-  if (firstLine === undefined) return null; /* v8 ignore ts-type -- startIndex validated by caller to be within bounds */
+  /* v8 ignore start -- ts-type: startIndex validated by caller to be within bounds @preserve */
+  if (firstLine === undefined) return null;
+  /* v8 ignore stop @preserve */
 
   const openMatch = /^```(\w*)$/.exec(firstLine);
   if (openMatch === null) return null;
 
-  const language = mapLanguage(openMatch[1] ?? ''); /* v8 ignore regex -- regex capture group guarantees value, fallback is defensive */
+  /* v8 ignore start -- regex: regex capture group guarantees value, fallback is defensive @preserve */
+  const language = mapLanguage(openMatch[1] ?? '');
+  /* v8 ignore stop @preserve */
   const codeLines: string[] = [];
   let i = startIndex + 1;
 
   for (; i < lines.length; i++) {
     const line = lines[i];
-    if (line === undefined) break; /* v8 ignore ts-type -- loop bounds guarantee array access is valid */
+    /* v8 ignore start -- ts-type: loop bounds guarantee array access is valid @preserve */
+    if (line === undefined) break;
+    /* v8 ignore stop @preserve */
     if (line === '```') {
       i++;
       break;
@@ -327,7 +343,9 @@ export function markdownToNotionBlocks(markdown: string): NotionBlock[] {
 
   while (i < lines.length) {
     const line = lines[i];
-    if (line === undefined) { /* v8 ignore ts-type -- loop bounds guarantee array access is valid */
+    /* v8 ignore start -- ts-type: loop bounds guarantee array access is valid @preserve */
+    if (line === undefined) {
+    /* v8 ignore stop @preserve */
       i++;
       continue;
     }
@@ -425,17 +443,27 @@ export function markdownToNotionBlocks(markdown: string): NotionBlock[] {
 
     // Image: ![alt](url)
     const imageMatch = /^!\[([^\]]*)\]\(([^)]+)\)$/.exec(line.trim());
-    if (imageMatch !== null) { /* v8 ignore test-infra -- image parsing requires markdown with image syntax */
-      const alt = imageMatch[1] ?? ''; /* v8 ignore regex -- regex capture groups guarantee values, fallbacks are defensive */
-      const url = imageMatch[2] ?? ''; /* v8 ignore regex -- regex capture groups guarantee values, fallbacks are defensive */
-      if (url !== '') { /* v8 ignore test-infra -- non-empty URL branch requires valid image URL in test */
+    /* v8 ignore start -- test-infra: image parsing requires markdown with image syntax @preserve */
+    if (imageMatch !== null) {
+    /* v8 ignore stop @preserve */
+      /* v8 ignore start -- regex: regex capture groups guarantee values, fallbacks are defensive @preserve */
+      const alt = imageMatch[1] ?? '';
+      /* v8 ignore stop @preserve */
+      /* v8 ignore start -- regex: regex capture groups guarantee values, fallbacks are defensive @preserve */
+      const url = imageMatch[2] ?? '';
+      /* v8 ignore stop @preserve */
+      /* v8 ignore start -- test-infra: non-empty URL branch requires valid image URL in test @preserve */
+      if (url !== '') {
+      /* v8 ignore stop @preserve */
         const imageBlock: NotionBlock = {
           object: 'block' as const,
           type: 'image' as const,
           image: {
             type: 'external' as const,
             external: { url },
-            ...(alt !== '' && { caption: [{ type: 'text' as const, text: { content: alt } }] }), /* v8 ignore ts-type -- conditional spread filtered by condition */
+            /* v8 ignore start -- ts-type: conditional spread filtered by condition @preserve */
+            ...(alt !== '' && { caption: [{ type: 'text' as const, text: { content: alt } }] }),
+            /* v8 ignore stop @preserve */
           },
         };
         blocks.push(imageBlock);

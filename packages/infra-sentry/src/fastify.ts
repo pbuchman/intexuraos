@@ -112,10 +112,9 @@ function sanitizeHeaders(
     const lowerKey = key.toLowerCase();
     if (SENSITIVE_HEADERS.includes(lowerKey)) {
       sanitized[key] = '[REDACTED]';
-    } else if (typeof value === 'string') {
-      sanitized[key] = value;
-    } /* v8 ignore ts-type -- headers are strings in practice */ else if (Array.isArray(value)) {
-      sanitized[key] = value[0] ?? '';
+    } else if (value !== undefined) {
+      // Handle both string and array values (HTTP/2 can have array headers)
+      sanitized[key] = typeof value === 'string' ? value : (value[0] ?? '');
     }
   }
   return sanitized;

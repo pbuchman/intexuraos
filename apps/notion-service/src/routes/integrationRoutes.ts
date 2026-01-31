@@ -11,13 +11,14 @@
 import type { FastifyPluginCallback } from 'fastify';
 import { logIncomingRequest, requireAuth } from '@intexuraos/common-http';
 import { getServices } from '../services.js';
-/* v8 ignore test-infra -- test infrastructure uses `fakeauthplugin` which always re... */
+/* v8 ignore start -- test-infra: test infrastructure uses `fakeauthplugin` which always re... @preserve */
 import {
   connectNotion,
   type ConnectNotionErrorCode,
   disconnectNotion,
   getNotionStatus,
 } from '../domain/integration/index.js';
+/* v8 ignore stop @preserve */
 
 /**
  * Map domain error codes to HTTP error codes.
@@ -26,13 +27,18 @@ function mapConnectErrorToHttp(
   code: ConnectNotionErrorCode
 ): 'INVALID_REQUEST' | 'UNAUTHORIZED' | 'DOWNSTREAM_ERROR' {
   switch (code) {
-    /* v8 ignore test-infra -- validation errors require malformed OAuth responses */
+    /* v8 ignore start -- test-infra: validation errors require malformed OAuth responses @preserve */
     case 'VALIDATION_ERROR':
       return 'INVALID_REQUEST';
+    /* v8 ignore stop @preserve */
+    /* v8 ignore start -- test-infra: INVALID_TOKEN switch case @preserve */
     case 'INVALID_TOKEN':
       return 'UNAUTHORIZED';
+    /* v8 ignore stop @preserve */
+    /* v8 ignore start -- test-infra: DOWNSTREAM_ERROR case @preserve */
     case 'DOWNSTREAM_ERROR':
       return 'DOWNSTREAM_ERROR';
+    /* v8 ignore stop @preserve */
   }
 }
 

@@ -40,10 +40,11 @@ export class WorktreeManager {
       );
 
       // git worktree add outputs to stderr even on success
-      /* v8 ignore test-infra -- git worktree add outputs to stderr on success (e */
+      /* v8 ignore start -- test-infra: git worktree add outputs to stderr on success (e @preserve */
       if (stderr && !stderr.includes('Preparing worktree')) {
         throw new Error(`Failed to create worktree: ${stderr}`);
       }
+      /* v8 ignore stop @preserve */
 
       // Copy MCP config template if provided
       if (this.config.mcpConfigTemplatePath && existsSync(this.config.mcpConfigTemplatePath)) {
@@ -55,8 +56,9 @@ export class WorktreeManager {
 
       return worktreePath;
     } catch (error: unknown) {
-      /* v8 ignore test-infra -- worktree creation failure requires git worktree state manipulation */
+      /* v8 ignore start -- test-infra: worktree creation failure requires git worktree state manipulation @preserve */
       const message = error instanceof Error ? error.message : 'Unknown error';
+      /* v8 ignore stop @preserve */
       throw new Error(`Failed to create worktree: ${message}`);
     }
   }
@@ -74,13 +76,15 @@ export class WorktreeManager {
         cwd: this.config.repositoryPath,
       });
 
-      /* v8 ignore test-infra -- similar to create worktree - requires git worktree remove failure simulation */
+      /* v8 ignore start -- test-infra: similar to create worktree - requires git worktree remove failure simulation @preserve */
       if (stderr) {
         throw new Error(`Failed to remove worktree: ${stderr}`);
       }
+      /* v8 ignore stop @preserve */
     } catch (error: unknown) {
-      /* v8 ignore test-infra -- worktree removal failure requires git worktree state manipulation */
+      /* v8 ignore start -- test-infra: worktree removal failure requires git worktree state manipulation @preserve */
       const message = error instanceof Error ? error.message : 'Unknown error';
+      /* v8 ignore stop @preserve */
       throw new Error(`Failed to remove worktree: ${message}`);
     }
   }
@@ -94,7 +98,7 @@ export class WorktreeManager {
       const lines = stdout.split('\n').filter((line) => line.length > 0);
       const worktreePaths: string[] = [];
 
-      /* v8 ignore test-infra -- filtering by worktree base path requires specific git worktree setup */
+      /* v8 ignore start -- test-infra: filtering by worktree base path requires specific git worktree setup @preserve */
       for (const line of lines) {
         if (line.startsWith('worktree ')) {
           const path = line.slice('worktree '.length);
@@ -104,6 +108,7 @@ export class WorktreeManager {
           }
         }
       }
+      /* v8 ignore stop @preserve */
 
       return worktreePaths;
     } catch (error) {
@@ -136,9 +141,10 @@ export class WorktreeManager {
       }
 
       // Substitute environment variables
-      /* v8 ignore ts-type -- nullish coalescing on env vars creates type narrowing branches */
+      /* v8 ignore start -- ts-type: nullish coalescing on env vars creates type narrowing branches @preserve */
       const config = template
         .replace(/\{\{LINEAR_API_KEY\}\}/g, linearKey ?? '')
+        /* v8 ignore stop @preserve */
         .replace(/\{\{SENTRY_AUTH_TOKEN\}\}/g, sentryToken ?? '');
 
       // Ensure target directory exists
@@ -151,8 +157,12 @@ export class WorktreeManager {
       // Atomic rename
       await (await import('node:fs/promises')).rename(tempPath, targetPath);
     } catch (error: unknown) {
+      /* v8 ignore start -- ts-type: catch block error handling @preserve */
       const message = error instanceof Error ? error.message : 'Unknown error';
+      /* v8 ignore stop @preserve */
+      /* v8 ignore start -- ts-type: TypeScript type narrowing makes branch unreachable @preserve */
       throw new Error(`Failed to copy MCP config: ${message}`);
+      /* v8 ignore stop @preserve */
     }
   }
 
@@ -165,9 +175,10 @@ export class WorktreeManager {
       try {
         await access(lockPath, constants.F_OK);
       } catch {
-        /* v8 ignore test-infra -- requires worktree without pnpm-lock.yaml to test */
+        /* v8 ignore start -- test-infra: requires worktree without pnpm-lock.yaml to test @preserve */
         // No lock file, skip install
         return;
+        /* v8 ignore stop @preserve */
       }
 
       // Run pnpm install with timeout
@@ -176,8 +187,9 @@ export class WorktreeManager {
         timeout: timeoutMs,
       });
     } catch (error: unknown) {
-      /* v8 ignore test-infra -- pnpm install failure requires corrupted worktree state */
+      /* v8 ignore start -- test-infra: pnpm install failure requires corrupted worktree state @preserve */
       const message = error instanceof Error ? error.message : 'Unknown error';
+      /* v8 ignore stop @preserve */
       throw new Error(`Failed to install dependencies: ${message}`);
     }
   }

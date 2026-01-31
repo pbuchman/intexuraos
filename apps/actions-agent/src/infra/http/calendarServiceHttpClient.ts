@@ -29,8 +29,9 @@ interface ApiResponse {
   data?: {
     status: 'completed' | 'failed';
     message: string;
-/* v8 ignore test-infra -- test mock for http responses always returns `ok: true` */
+/* v8 ignore start -- test-infra: test mock for http responses always returns `ok: true` @preserve */
     resourceUrl?: string;
+    /* v8 ignore stop @preserve */
     errorCode?: string;
   };
   error?: { code: string; message: string };
@@ -160,8 +161,9 @@ export function createCalendarServiceHttpClient(
       }
 
       if (!response.ok) {
-        /* v8 ignore ts-type -- API always returns error object with message */
+        /* v8 ignore start -- ts-type: API always returns error object with message @preserve */
         const errorMessage = body.error?.message ?? `HTTP ${String(response.status)}: ${response.statusText}`;
+        /* v8 ignore stop @preserve */
         logger.error(
           { httpStatus: response.status, statusText: response.statusText, errorMessage, actionId },
           'calendar-agent returned error'

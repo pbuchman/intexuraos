@@ -110,11 +110,11 @@ export function parseApprovalIntentResponse(response: string): ApprovalIntentRes
 
     // The regex only matches {...} patterns, which always parse to objects.
     // The typeof check is defensive but unreachable in practice.
-    /* v8 ignore start */
+    /* v8 ignore start -- test-infra: block coverage @preserve */
     if (typeof parsed !== 'object' || parsed === null) {
       return null;
     }
-    /* v8 ignore stop */
+    /* v8 ignore stop @preserve */
 
     const obj = parsed as Record<string, unknown>;
 

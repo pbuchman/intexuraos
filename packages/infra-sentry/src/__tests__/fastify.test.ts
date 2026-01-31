@@ -529,6 +529,26 @@ describe('sanitizeHeaders (via error handler)', () => {
     expect(Sentry.withScope).toHaveBeenCalled();
   });
 
+  it('handles requests with header value explicitly set to undefined', async () => {
+    const app = Fastify({ logger: false });
+    setupSentryErrorHandler(app);
+
+    app.get('/test', async (request) => {
+      // Explicitly set a header value to undefined to test the else branch
+      (request.headers as Record<string, string | string[] | undefined>)['x-undefined-header'] =
+        undefined;
+      throw new Error('Test error');
+    });
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/test',
+    });
+
+    expect(response.statusCode).toBe(500);
+    expect(Sentry.withScope).toHaveBeenCalled();
+  });
+
   it('passes request context to Sentry', async () => {
     const app = Fastify({ logger: false });
     setupSentryErrorHandler(app);

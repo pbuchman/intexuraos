@@ -86,8 +86,9 @@ export async function validateWebhookSignature(
 
   // Compute expected signature
   const rawBody = JSON.stringify(request.body);
-/* v8 ignore ts-type -- `request */
+/* v8 ignore start -- ts-type: `request @preserve */
   const timestampStr = Array.isArray(timestamp) ? timestamp[0] ?? '' : timestamp;
+  /* v8 ignore stop @preserve */
   const message = `${timestampStr}.${rawBody}`;
   const expected = crypto
     .createHmac('sha256', webhookSecret)

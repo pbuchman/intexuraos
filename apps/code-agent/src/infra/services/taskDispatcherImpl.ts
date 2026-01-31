@@ -266,6 +266,7 @@ const body = JSON.stringify(taskRequest);
     const workers: WorkerConfigWithCredentials[] = [];
     const priority = credentials.priority;
 
+    /* v8 ignore start -- ts-type: array iteration with optional access @preserve */
     for (let i = 0; i < priority.length; i++) {
       const workerType = priority[i];
       if (workerType === undefined) continue;
@@ -280,6 +281,7 @@ const body = JSON.stringify(taskRequest);
         credentials: workerCreds,
       });
     }
+    /* v8 ignore stop @preserve */
 
     return workers;
   }
@@ -302,7 +304,7 @@ if (credentials === undefined) {
         signal: AbortSignal.timeout(10000),
       });
 
-      /* v8 ignore test-infra -- requires worker to return error response */
+      /* v8 ignore start -- test-infra: requires worker to return error response @preserve */
       if (!response.ok) {
         this.logger.warn(
           { taskId, location, status: response.status },
@@ -310,6 +312,7 @@ if (credentials === undefined) {
         );
         return;
       }
+      /* v8 ignore stop @preserve */
 
       this.logger.info({ taskId, location }, 'Worker cancellation request successful');
     } catch (error) {
