@@ -734,7 +734,26 @@ export INTEXURAOS_<SERVICE_NAME>_SERVICE_URL=http://localhost:81XX
 
 This ensures developers can run the service locally with proper configuration.
 
-### 14. Run Verification
+### 14. Update Statusline
+
+**MANDATORY:** Update `.claude/statusline.sh` to include the new service in the dev services monitoring.
+
+**Step 1:** Add service name and port to the parallel arrays (around line 278-281):
+
+```bash
+# Dev services (ports 8110-8128) - parallel arrays for bash 3.x compatibility
+DEV_NAMES="user notion whatsapp mobile research commands actions insights image notes settings todos bookmarks calendar linear web-agent code <new-service>"
+DEV_PORTS="8110 8112 8113 8114 8116 8117 8118 8119 8120 8121 8122 8123 8124 8125 8126 8127 8128 81XX"
+DEV_TOTAL=18  # Increment by 1
+```
+
+**Step 2:** Verify the arrays are aligned:
+- `DEV_NAMES` and `DEV_PORTS` must have the same number of space-separated entries
+- `DEV_TOTAL` must equal the count of entries
+
+**Why:** The statusline displays dev service health (🟢🟡🔴) based on port availability. Without this update, the new service won't be monitored in the statusline, making debugging harder during local development.
+
+### 15. Run Verification
 
 ```bash
 pnpm install
@@ -742,7 +761,7 @@ pnpm run ci
 cd terraform && terraform fmt -recursive && terraform validate
 ```
 
-### 15. Update Domain Docs Registry (if service has domain layer)
+### 16. Update Domain Docs Registry (if service has domain layer)
 
 If your service has a `src/domain/` directory, update the domain documentation registry:
 
@@ -983,6 +1002,7 @@ terraform fmt -check -recursive && terraform validate
 - [ ] Added to `.envrc.local.example`
 - [ ] Added to root tsconfig.json
 - [ ] Added to local dev setup (`ecosystem.config.cjs`)
+- [ ] Updated statusline (`DEV_NAMES`, `DEV_PORTS`, `DEV_TOTAL` in `.claude/statusline.sh`)
 - [ ] Updated domain docs registry
 - [ ] `pnpm run ci` passes
 - [ ] `terraform validate` passes
