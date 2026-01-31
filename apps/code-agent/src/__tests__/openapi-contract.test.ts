@@ -47,8 +47,6 @@ describe('OpenAPI contract', () => {
 
   beforeEach(async () => {
     // Set required env vars
-    process.env['INTEXURAOS_CF_ACCESS_CLIENT_ID'] = 'test-client-id';
-    process.env['INTEXURAOS_CF_ACCESS_CLIENT_SECRET'] = 'test-client-secret';
     process.env['INTEXURAOS_AUTH_AUDIENCE'] = 'https://api.intexuraos.cloud';
     process.env['INTEXURAOS_AUTH_ISSUER'] = 'https://intexuraos.eu.auth0.com/';
     process.env['INTEXURAOS_AUTH_JWKS_URL'] = 'https://intexuraos.eu.auth0.com/.well-known/jwks.json';

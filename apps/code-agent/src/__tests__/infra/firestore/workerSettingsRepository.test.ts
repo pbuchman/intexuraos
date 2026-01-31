@@ -266,6 +266,44 @@ describe('workerSettingsRepository', () => {
         expect(settings.value.workers[0]?.enabled).toBe(true);
       }
     });
+
+    it('should normalize URL by removing trailing slashes', async () => {
+      const repo = createWorkerSettingsRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      await repo.addWorker('user-1', createWorkerConfig({
+        name: 'trailing-slash',
+        url: 'https://worker.example.com/',
+      }));
+
+      const settings = await repo.getSettings('user-1');
+      expect(settings.ok).toBe(true);
+      if (settings.ok && settings.value !== null) {
+        const worker = settings.value.workers.find((w) => w.name === 'trailing-slash');
+        expect(worker?.url).toBe('https://worker.example.com');
+      }
+    });
+
+    it('should normalize URL with multiple trailing slashes', async () => {
+      const repo = createWorkerSettingsRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      await repo.addWorker('user-1', createWorkerConfig({
+        name: 'multi-slash',
+        url: 'https://worker.example.com///',
+      }));
+
+      const settings = await repo.getSettings('user-1');
+      expect(settings.ok).toBe(true);
+      if (settings.ok && settings.value !== null) {
+        const worker = settings.value.workers.find((w) => w.name === 'multi-slash');
+        expect(worker?.url).toBe('https://worker.example.com');
+      }
+    });
   });
 
   describe('updateWorker', () => {
@@ -315,6 +353,22 @@ describe('workerSettingsRepository', () => {
       if (settings.ok && settings.value !== null) {
         const worker = settings.value.workers.find((w) => w.name === 'home-mac');
         expect(worker?.enabled).toBe(false);
+      }
+    });
+
+    it('should normalize URL by removing trailing slashes on update', async () => {
+      const repo = createWorkerSettingsRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      await repo.updateWorker('user-1', 'home-mac', { url: 'https://updated.example.com/' });
+
+      const settings = await repo.getSettings('user-1');
+      expect(settings.ok).toBe(true);
+      if (settings.ok && settings.value !== null) {
+        const worker = settings.value.workers.find((w) => w.name === 'home-mac');
+        expect(worker?.url).toBe('https://updated.example.com');
       }
     });
 

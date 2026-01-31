@@ -1,13 +1,68 @@
 # INT-156 Legacy Worker Discovery Cleanup Plan
 
+## Status: ✅ COMPLETED (2026-01-31)
+
+All phases have been completed. The legacy worker discovery system has been fully replaced with per-user Firestore-based worker settings.
+
+### Summary of Changes
+
+| Component                         | Status      | Notes                                                                                                                 |
+| --------------------------------- | ----------- | --------------------------------------------------------------------------------------------------------------------- |
+| WorkerDiscovery service           | ✅ Removed  | `workerDiscoveryImpl.ts` and `workerDiscovery.ts` deleted                                                             |
+| `INTEXURAOS_CODE_WORKERS` env var | ✅ Removed  | No longer used anywhere                                                                                               |
+| `/code/workers/status` endpoint   | ✅ Updated  | Returns `{ workers: [...] }` instead of `{ mac: {...}, vm: {...} }`                                                   |
+| Web app types                     | ✅ Updated  | `CodeTaskWorkerLocation` is now `string`, `WorkersStatusResponse` uses workers array                                  |
+| Test files                        | ✅ Updated  | All references to legacy env vars and services removed                                                                |
+| Terraform secrets                 | ✅ Cleaned  | Removed 4 dead secrets: `CF_ACCESS_CLIENT_ID`, `CF_ACCESS_CLIENT_SECRET`, `CF_TUNNEL_TOKEN_MAC`, `CF_TUNNEL_TOKEN_VM` |
+| `DISPATCH_SIGNING_SECRET`         | ✅ Per-user | Moved from global env var to per-user worker settings in Firestore                                                    |
+
+### Architecture: Per-User Worker Settings
+
+Workers are now configured per-user in Firestore (`workerSettings/{userId}`), with credentials encrypted using `INTEXURAOS_TOKEN_ENCRYPTION_KEY`:
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                     Per-User Worker Architecture                             │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│   Firestore: workerSettings/{userId}                                        │
+│   ┌─────────────────────────────────────────────────────────────────────┐   │
+│   │  workers: [                                                          │   │
+│   │    {                                                                 │   │
+│   │      name: "home-mac",                                               │   │
+│   │      url: "https://my-tunnel.example.com",                           │   │
+│   │      priority: 1,                                                    │   │
+│   │      enabled: true,                                                  │   │
+│   │      cfAccessClientId: "...",        // encrypted                    │   │
+│   │      cfAccessClientSecret: "...",    // encrypted                    │   │
+│   │      dispatchSigningSecret: "..."    // encrypted, for HMAC signing  │   │
+│   │    }                                                                 │   │
+│   │  ]                                                                   │   │
+│   └─────────────────────────────────────────────────────────────────────┘   │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### HMAC Signing Flow
+
+The `dispatchSigningSecret` enables secure communication between code-agent and orchestrator:
+
+1. **Code-agent** reads secret from Firestore, signs dispatch requests
+2. **Orchestrator** reads secret from local env, verifies signatures
+3. Both sides must have the **same** secret configured
+
+See `workers/orchestrator/README.md` for orchestrator setup instructions.
+
+---
+
 ## Overview
 
 Remove legacy `INTEXURAOS_CODE_WORKERS` env var-based worker discovery and replace with per-user Firestore-based worker settings.
 
 ## Pre-Conditions
 
-- [ ] `pnpm run ci:tracked` passes before starting
-- [ ] On `development` branch with clean working directory
+- [x] `pnpm run ci:tracked` passes before starting
+- [x] On `development` branch with clean working directory
 
 ---
 

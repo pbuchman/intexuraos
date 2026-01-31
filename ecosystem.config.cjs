@@ -94,7 +94,6 @@ const SERVICE_ENV_MAPPINGS = {
   },
   'code-agent': {
     INTEXURAOS_SERVICE_URL: 'http://localhost:8128',
-    INTEXURAOS_DISPATCH_SIGNING_SECRET: 'dev-dispatch-signing-secret',
     INTEXURAOS_WEBHOOK_VERIFY_SECRET: 'dev-webhook-secret',
     INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC:
       process.env.INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC ?? 'whatsapp-send-message',

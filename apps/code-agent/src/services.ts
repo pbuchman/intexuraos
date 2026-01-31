@@ -60,7 +60,6 @@ export interface ServiceConfig {
   whatsappSendTopic: string;
   linearAgentUrl: string;
   actionsAgentUrl: string;
-  dispatchSigningSecret: string;
   webhookVerifySecret: string;
 }
 

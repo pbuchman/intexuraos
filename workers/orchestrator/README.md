@@ -62,26 +62,69 @@ gcloud auth activate-service-account --key-file=$HOME/personal/gcloud-claude-cod
 export GOOGLE_APPLICATION_CREDENTIALS=$HOME/personal/gcloud-claude-code-dev.json
 ```
 
-### 3. Fetch Secrets and Create Environment File
+### 3. Create Environment File
 
-```bash
-# Create env file from GCP secrets
-cat > ~/.claude-orchestrator/.env << 'EOF'
-PORT=8199
-WORKER_CAPACITY=1
+The orchestrator requires several secrets. The **DISPATCH_SECRET** is particularly important - it must match the `dispatchSigningSecret` configured in your IntexuraOS worker settings.
 
-# Fetch these from GCP Secret Manager:
-EOF
+#### HMAC Signing (DISPATCH_SECRET)
 
-# Append secrets (run each line)
-echo "DISPATCH_SECRET=$(gcloud secrets versions access latest --secret=INTEXURAOS_DISPATCH_SIGNING_SECRET --project=intexuraos-dev-pbuchman)" >> ~/.claude-orchestrator/.env
-echo "GH_APP_ID=$(gcloud secrets versions access latest --secret=INTEXURAOS_GITHUB_APP_ID --project=intexuraos-dev-pbuchman)" >> ~/.claude-orchestrator/.env
-echo "GH_INSTALLATION_ID=$(gcloud secrets versions access latest --secret=INTEXURAOS_GITHUB_INSTALLATION_ID --project=intexuraos-dev-pbuchman)" >> ~/.claude-orchestrator/.env
+The `DISPATCH_SECRET` is used for HMAC signature verification between code-agent and orchestrator:
 
-# Private key needs special handling (multiline)
-gcloud secrets versions access latest --secret=INTEXURAOS_GITHUB_APP_PRIVATE_KEY --project=intexuraos-dev-pbuchman > ~/.claude-orchestrator/github-app.pem
-echo "GH_PRIVATE_KEY_PATH=$HOME/.claude-orchestrator/github-app.pem" >> ~/.claude-orchestrator/.env
 ```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           HMAC Signing Flow                                  │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│   Your Machine (orchestrator)              Cloud (code-agent)               │
+│   ┌─────────────────────────────┐         ┌─────────────────────────────┐   │
+│   │  ~/.claude-orchestrator/    │         │  Firestore                  │   │
+│   │  .env:                      │◄─MUST───│  workerSettings/{userId}    │   │
+│   │    DISPATCH_SECRET=abc123   │  MATCH  │    dispatchSigningSecret    │   │
+│   │                             │         │    =abc123 (encrypted)      │   │
+│   └─────────────────────────────┘         └─────────────────────────────┘   │
+│              ▲                                        │                      │
+│              │ 2. Verifies signature                  │ 1. Signs request     │
+│              └────────────── POST /tasks ─────────────┘                     │
+│                            X-Signature: hmac(...)                            │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+#### Setup Steps
+
+1. **Generate a signing secret** (run once, save the output):
+
+   ```bash
+   openssl rand -hex 32
+   ```
+
+2. **Configure in IntexuraOS** (via web UI or API):
+   - Go to Settings → Worker Configuration
+   - Add your worker with the signing secret you generated
+   - This stores the secret (encrypted) in Firestore for code-agent to use
+
+3. **Create the env file**:
+
+   ```bash
+   cat > ~/.claude-orchestrator/.env << 'EOF'
+   PORT=8199
+   WORKER_CAPACITY=1
+
+   # HMAC signing secret - MUST match your IntexuraOS worker settings
+   DISPATCH_SECRET=<paste-your-generated-secret-here>
+
+   # GitHub App credentials (fetch from GCP Secret Manager)
+   EOF
+
+   # Append GitHub secrets
+   echo "GH_APP_ID=$(gcloud secrets versions access latest --secret=INTEXURAOS_GITHUB_APP_ID --project=intexuraos-dev-pbuchman)" >> ~/.claude-orchestrator/.env
+   echo "GH_INSTALLATION_ID=$(gcloud secrets versions access latest --secret=INTEXURAOS_GITHUB_INSTALLATION_ID --project=intexuraos-dev-pbuchman)" >> ~/.claude-orchestrator/.env
+
+   # Private key needs special handling (multiline)
+   gcloud secrets versions access latest --secret=INTEXURAOS_GITHUB_APP_PRIVATE_KEY --project=intexuraos-dev-pbuchman > ~/.claude-orchestrator/github-app.pem
+   echo "GH_PRIVATE_KEY_PATH=$HOME/.claude-orchestrator/github-app.pem" >> ~/.claude-orchestrator/.env
+   ```
+
+> **Important:** The `DISPATCH_SECRET` in your local `.env` MUST match the `dispatchSigningSecret` you configured in IntexuraOS worker settings. If they don't match, task dispatch requests will fail signature verification.
 
 ### 4. Verify Cloudflare Tunnel
 
@@ -226,31 +269,42 @@ tail -f ~/.claude-orchestrator/logs/orchestrator.err.log
 
 ### Environment Variables
 
-| Variable              | Required | Default | Description                                   |
-| --------------------- | -------- | ------- | --------------------------------------------- |
-| `PORT`                | No       | 8199    | HTTP server port                              |
-| `WORKER_CAPACITY`     | No       | 1       | Max concurrent tasks                          |
-| `DISPATCH_SECRET`     | Yes      | -       | HMAC secret for verifying code-agent requests |
-| `GH_APP_ID`           | Yes      | -       | GitHub App ID                                 |
-| `GH_INSTALLATION_ID`  | Yes      | -       | GitHub App installation ID                    |
-| `GH_PRIVATE_KEY_PATH` | Yes      | -       | Path to GitHub App private key (PEM file)     |
+| Variable              | Required | Default | Description                                                                               |
+| --------------------- | -------- | ------- | ----------------------------------------------------------------------------------------- |
+| `PORT`                | No       | 8199    | HTTP server port                                                                          |
+| `WORKER_CAPACITY`     | No       | 1       | Max concurrent tasks                                                                      |
+| `DISPATCH_SECRET`     | Yes      | -       | HMAC secret for verifying code-agent requests. **Must match IntexuraOS worker settings.** |
+| `GH_APP_ID`           | Yes      | -       | GitHub App ID                                                                             |
+| `GH_INSTALLATION_ID`  | Yes      | -       | GitHub App installation ID                                                                |
+| `GH_PRIVATE_KEY_PATH` | Yes      | -       | Path to GitHub App private key (PEM file)                                                 |
 
-### GCP Secrets
+### DISPATCH_SECRET Setup
 
-| Secret Name                          | Description                   |
-| ------------------------------------ | ----------------------------- |
-| `INTEXURAOS_DISPATCH_SIGNING_SECRET` | HMAC secret for dispatch auth |
-| `INTEXURAOS_GITHUB_APP_ID`           | GitHub App ID: 2753232        |
-| `INTEXURAOS_GITHUB_INSTALLATION_ID`  | Installation ID: 106781840    |
-| `INTEXURAOS_GITHUB_APP_PRIVATE_KEY`  | GitHub App private key (PEM)  |
+The `DISPATCH_SECRET` is a shared secret between your orchestrator and code-agent:
 
-### Fetching All Secrets
+1. **Generate once:** `openssl rand -hex 32`
+2. **Store in two places:**
+   - **Local:** `~/.claude-orchestrator/.env` as `DISPATCH_SECRET`
+   - **IntexuraOS:** Worker Settings → your worker → `dispatchSigningSecret`
+
+The code-agent reads the secret from Firestore (encrypted), the orchestrator reads from local env. They must match.
+
+### GCP Secrets (GitHub App Only)
+
+| Secret Name                         | Description                  |
+| ----------------------------------- | ---------------------------- |
+| `INTEXURAOS_GITHUB_APP_ID`          | GitHub App ID: 2753232       |
+| `INTEXURAOS_GITHUB_INSTALLATION_ID` | Installation ID: 106781840   |
+| `INTEXURAOS_GITHUB_APP_PRIVATE_KEY` | GitHub App private key (PEM) |
+
+> **Note:** `INTEXURAOS_DISPATCH_SIGNING_SECRET` in GCP is deprecated for multi-user setups. Each user should generate their own secret and configure it in their IntexuraOS worker settings.
+
+### Fetching GitHub Secrets
 
 ```bash
 export PROJECT=intexuraos-dev-pbuchman
 export GOOGLE_APPLICATION_CREDENTIALS=$HOME/personal/gcloud-claude-code-dev.json
 
-gcloud secrets versions access latest --secret=INTEXURAOS_DISPATCH_SIGNING_SECRET --project=$PROJECT
 gcloud secrets versions access latest --secret=INTEXURAOS_GITHUB_APP_ID --project=$PROJECT
 gcloud secrets versions access latest --secret=INTEXURAOS_GITHUB_INSTALLATION_ID --project=$PROJECT
 gcloud secrets versions access latest --secret=INTEXURAOS_GITHUB_APP_PRIVATE_KEY --project=$PROJECT
@@ -264,23 +318,32 @@ gcloud secrets versions access latest --secret=INTEXURAOS_GITHUB_APP_PRIVATE_KEY
 # 1. Create directories
 mkdir -p ~/.claude-orchestrator/logs ~/claude-workers/worktrees
 
-# 2. Set up environment (first time only)
+# 2. Generate your dispatch signing secret (save this!)
+DISPATCH_SECRET=$(openssl rand -hex 32)
+echo "Your DISPATCH_SECRET: $DISPATCH_SECRET"
+echo "⚠️  Save this! You'll need to configure the same secret in IntexuraOS worker settings."
+
+# 3. Set up environment (first time only)
 export GOOGLE_APPLICATION_CREDENTIALS=$HOME/personal/gcloud-claude-code-dev.json
 cat > ~/.claude-orchestrator/.env << EOF
 PORT=8199
 WORKER_CAPACITY=1
-DISPATCH_SECRET=$(gcloud secrets versions access latest --secret=INTEXURAOS_DISPATCH_SIGNING_SECRET --project=intexuraos-dev-pbuchman)
+DISPATCH_SECRET=$DISPATCH_SECRET
 GH_APP_ID=$(gcloud secrets versions access latest --secret=INTEXURAOS_GITHUB_APP_ID --project=intexuraos-dev-pbuchman)
 GH_INSTALLATION_ID=$(gcloud secrets versions access latest --secret=INTEXURAOS_GITHUB_INSTALLATION_ID --project=intexuraos-dev-pbuchman)
 GH_PRIVATE_KEY_PATH=$HOME/.claude-orchestrator/github-app.pem
 EOF
 gcloud secrets versions access latest --secret=INTEXURAOS_GITHUB_APP_PRIVATE_KEY --project=intexuraos-dev-pbuchman > ~/.claude-orchestrator/github-app.pem
 
-# 3. Start dev server
+# 4. Configure IntexuraOS worker settings
+#    Go to IntexuraOS → Settings → Worker Configuration
+#    Add your worker with the DISPATCH_SECRET from step 2
+
+# 5. Start dev server
 cd /path/to/intexuraos-3/workers/orchestrator
 set -a; source ~/.claude-orchestrator/.env; set +a
 pnpm dev
 
-# 4. Test (in another terminal)
+# 6. Test (in another terminal)
 curl https://cc-mac.intexuraos.cloud/health
 ```

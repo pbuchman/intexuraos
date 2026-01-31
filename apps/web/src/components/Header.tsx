@@ -100,7 +100,7 @@ export function Header(): React.JSX.Element {
 
       <div className="flex items-center gap-2 md:gap-4">
         {/* Worker Status Indicator */}
-        {isAuthenticated && workersStatus !== null && (
+        {isAuthenticated && workersStatus !== null && workersStatus.workers.length > 0 && (
           <div className="relative" ref={workersRef}>
             <button
               onClick={(): void => {
@@ -112,7 +112,7 @@ export function Header(): React.JSX.Element {
               <Server className="h-4 w-4 text-slate-500" />
               <span
                 className={`h-2 w-2 rounded-full ${
-                  workersStatus.mac.healthy || workersStatus.vm.healthy
+                  workersStatus.workers.some((w) => w.healthy)
                     ? 'bg-green-500'
                     : 'bg-red-500'
                 }`}
@@ -125,39 +125,26 @@ export function Header(): React.JSX.Element {
                   Code Workers
                 </div>
 
-                {/* Mac Worker */}
-                <div className="flex items-center justify-between px-4 py-2 text-sm">
-                  <div className="flex items-center gap-2">
-                    <span
-                      className={`h-2 w-2 rounded-full ${
-                        workersStatus.mac.healthy ? 'bg-green-500' : 'bg-red-500'
-                      }`}
-                    />
-                    <span className="font-medium text-slate-700 dark:text-slate-200">Mac</span>
+                {workersStatus.workers.map((worker) => (
+                  <div
+                    key={worker.name}
+                    className="flex items-center justify-between px-4 py-2 text-sm"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={`h-2 w-2 rounded-full ${
+                          worker.healthy ? 'bg-green-500' : 'bg-red-500'
+                        }`}
+                      />
+                      <span className="font-medium text-slate-700 dark:text-slate-200">
+                        {worker.name}
+                      </span>
+                    </div>
+                    <div className="text-slate-500 dark:text-slate-400">
+                      {worker.healthy ? 'Online' : 'Offline'}
+                    </div>
                   </div>
-                  <div className="text-slate-500 dark:text-slate-400">
-                    {workersStatus.mac.healthy
-                      ? `${String(workersStatus.mac.capacity)} slots`
-                      : 'Offline'}
-                  </div>
-                </div>
-
-                {/* VM Worker */}
-                <div className="flex items-center justify-between px-4 py-2 text-sm">
-                  <div className="flex items-center gap-2">
-                    <span
-                      className={`h-2 w-2 rounded-full ${
-                        workersStatus.vm.healthy ? 'bg-green-500' : 'bg-red-500'
-                      }`}
-                    />
-                    <span className="font-medium text-slate-700 dark:text-slate-200">VM</span>
-                  </div>
-                  <div className="text-slate-500 dark:text-slate-400">
-                    {workersStatus.vm.healthy
-                      ? `${String(workersStatus.vm.capacity)} slots`
-                      : 'Offline'}
-                  </div>
-                </div>
+                ))}
 
                 <div className="mt-1 border-t border-slate-100 px-4 py-2 dark:border-slate-700">
                   <Link

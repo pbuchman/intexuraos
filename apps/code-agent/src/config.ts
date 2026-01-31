@@ -11,7 +11,6 @@ export interface Config {
   whatsappSendTopic: string;
   linearAgentUrl: string;
   actionsAgentUrl: string;
-  dispatchSigningSecret: string;
   webhookVerifySecret: string;
   tokenEncryptionKey: string;
   // Auth0 JWT validation
@@ -29,7 +28,6 @@ export function loadConfig(): Config {
   const whatsappSendTopic = process.env['INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC'] ?? '';
   const linearAgentUrl = process.env['INTEXURAOS_LINEAR_AGENT_URL'] ?? '';
   const actionsAgentUrl = process.env['INTEXURAOS_ACTIONS_AGENT_URL'] ?? '';
-  const dispatchSigningSecret = process.env['INTEXURAOS_DISPATCH_SIGNING_SECRET'] ?? '';
   const webhookVerifySecret = process.env['INTEXURAOS_WEBHOOK_VERIFY_SECRET'] ?? '';
   const auth0Audience = process.env['INTEXURAOS_AUTH_AUDIENCE'] ?? '';
   const auth0Issuer = process.env['INTEXURAOS_AUTH_ISSUER'] ?? '';
@@ -45,7 +43,6 @@ export function loadConfig(): Config {
     whatsappSendTopic,
     linearAgentUrl,
     actionsAgentUrl,
-    dispatchSigningSecret,
     webhookVerifySecret,
     tokenEncryptionKey,
     auth0Audience,
