@@ -641,14 +641,15 @@ gcloud builds log <id> --stream --region=<region>
 
 - Pattern: `setServices({fakes})` in `beforeEach`, `resetServices()` in `afterEach`
 - Routes: integration via `app.inject()`. Domain: unit tests.
-- **Coverage: 95%. NEVER modify thresholds — write tests.**
+- **Coverage: 100% branch coverage required.** Every branch must be:
+  1. Covered by tests, OR
+  2. Exempted with `/* v8 ignore <CATEGORY> -- reason @preserve */`
+
+CI fails on any unaccounted branch. No exceptions.
 
 ### Coverage Exemptions
 
-**RULE:** All uncovered branches must have either:
-
-1. A `/* v8 ignore <CATEGORY> -- reason */` comment with valid category, OR
-2. An active Linear issue tracking it
+**RULE:** All uncovered branches must have a `/* v8 ignore <CATEGORY> -- reason */` comment with valid category.
 
 **Valid categories:** `ts-type`, `regex`, `module-init`, `async-timing`, `test-infra`, `upstream`, `module-mock`, `schema`, `source-map`, `auth-guard`
 
