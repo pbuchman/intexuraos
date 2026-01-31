@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AlertCircle, Loader2, Play } from 'lucide-react';
+import MDEditor from '@uiw/react-md-editor';
 import { Button, Card, Layout } from '@/components';
 import { useCodeTasks } from '@/hooks';
 import type { CodeTaskWorkerType } from '@/types';
@@ -55,22 +56,39 @@ export function CodeTaskNewPage(): React.JSX.Element {
       <Card className="mb-6">
         <div className="space-y-6">
           <div>
-            <label htmlFor="prompt" className="block text-sm font-medium text-slate-700 mb-2 dark:text-slate-200">
+            <label className="block text-sm font-medium text-slate-700 mb-2 dark:text-slate-200">
               Task Description <span className="text-red-500">*</span>
             </label>
-            <textarea
-              id="prompt"
-              value={prompt}
-              onChange={(e): void => {
-                setPrompt(e.target.value);
-              }}
-              placeholder="Describe what you want Claude to build or fix..."
-              className="w-full rounded-lg border border-slate-200 p-3 text-slate-900 placeholder-slate-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-100 dark:placeholder-slate-400"
-              rows={6}
-              disabled={submitting}
-            />
+            <div data-color-mode="light" className="dark:hidden">
+              <MDEditor
+                value={prompt}
+                onChange={(value): void => {
+                  setPrompt(value ?? '');
+                }}
+                preview="edit"
+                height={200}
+                textareaProps={{
+                  placeholder: 'Describe what you want Claude to build or fix...',
+                  disabled: submitting,
+                }}
+              />
+            </div>
+            <div data-color-mode="dark" className="hidden dark:block">
+              <MDEditor
+                value={prompt}
+                onChange={(value): void => {
+                  setPrompt(value ?? '');
+                }}
+                preview="edit"
+                height={200}
+                textareaProps={{
+                  placeholder: 'Describe what you want Claude to build or fix...',
+                  disabled: submitting,
+                }}
+              />
+            </div>
             <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-              Be specific about what you want to achieve. Include any relevant context or constraints.
+              Supports markdown formatting. Use the toolbar or keyboard shortcuts (Ctrl+B for bold, Ctrl+I for italic).
             </p>
           </div>
 
