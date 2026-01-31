@@ -22,7 +22,6 @@ import type { Logger } from 'pino';
 import { err, ok } from '@intexuraos/common-core';
 import { createFirestoreCodeTaskRepository } from '../../infra/repositories/firestoreCodeTaskRepository.js';
 import { createFirestoreLogChunkRepository } from '../../infra/repositories/firestoreLogChunkRepository.js';
-import { createWorkerDiscoveryService } from '../../infra/services/workerDiscoveryImpl.js';
 import { createTaskDispatcherService } from '../../infra/services/taskDispatcherImpl.js';
 import { createWhatsAppNotifier } from '../../infra/services/whatsappNotifierImpl.js';
 import { createActionsAgentClient, type ActionsAgentClient } from '../../infra/clients/actionsAgentClient.js';
@@ -31,7 +30,6 @@ import { createLinearIssueService } from '../../domain/services/linearIssueServi
 import type { CodeTaskRepository } from '../../domain/repositories/codeTaskRepository.js';
 import type { TaskDispatcherService } from '../../domain/services/taskDispatcher.js';
 import type { LogChunkRepository } from '../../domain/repositories/logChunkRepository.js';
-import type { WorkerDiscoveryService } from '../../domain/services/workerDiscovery.js';
 import crypto from 'node:crypto';
 import { fetchWithAuth } from '@intexuraos/internal-clients';
 import type { WhatsAppNotifier } from '../../domain/services/whatsappNotifier.js';
@@ -71,8 +69,6 @@ describe('POST /internal/webhooks/task-complete', () => {
     } as never);
 
     // Set required env vars
-    process.env['INTEXURAOS_CODE_WORKERS'] =
-      'mac:https://cc-mac.intexuraos.cloud:1,vm:https://cc-vm.intexuraos.cloud:2';
     process.env['INTEXURAOS_CF_ACCESS_CLIENT_ID'] = 'test-client-id';
     process.env['INTEXURAOS_CF_ACCESS_CLIENT_SECRET'] = 'test-client-secret';
     process.env['INTEXURAOS_DISPATCH_SECRET'] = 'test-dispatch-secret';
@@ -95,7 +91,6 @@ describe('POST /internal/webhooks/task-complete', () => {
       logger,
     });
 
-    const workerDiscovery = createWorkerDiscoveryService({ logger });
     taskDispatcher = createTaskDispatcherService({ logger });
     const workerSettingsRepo = createWorkerSettingsRepository({
       firestore: fakeFirestore as unknown as Firestore,
@@ -145,7 +140,6 @@ describe('POST /internal/webhooks/task-complete', () => {
       logger,
       codeTaskRepo,
       logChunkRepo,
-      workerDiscovery,
       taskDispatcher,
       workerSettingsRepo,
       whatsappNotifier,
@@ -174,7 +168,6 @@ describe('POST /internal/webhooks/task-complete', () => {
       logger: Logger;
       codeTaskRepo: CodeTaskRepository;
       logChunkRepo: LogChunkRepository;
-      workerDiscovery: WorkerDiscoveryService;
       taskDispatcher: TaskDispatcherService;
       workerSettingsRepo: WorkerSettingsRepository;
       actionsAgentClient: ActionsAgentClient;
@@ -1249,8 +1242,6 @@ describe('POST /internal/webhooks/task-complete - Metrics recording', () => {
       protectedHeader: new Uint8Array(),
     } as never);
 
-    process.env['INTEXURAOS_CODE_WORKERS'] =
-      'mac:https://cc-mac.intexuraos.cloud:1,vm:https://cc-vm.intexuraos.cloud:2';
     process.env['INTEXURAOS_CF_ACCESS_CLIENT_ID'] = 'test-client-id';
     process.env['INTEXURAOS_CF_ACCESS_CLIENT_SECRET'] = 'test-client-secret';
     process.env['INTEXURAOS_DISPATCH_SECRET'] = 'test-dispatch-secret';
@@ -1283,7 +1274,6 @@ describe('POST /internal/webhooks/task-complete - Metrics recording', () => {
       firestore: fakeFirestore as unknown as Firestore,
       logger,
       codeTaskRepo,
-      workerDiscovery: createWorkerDiscoveryService({ logger }),
       taskDispatcher: createTaskDispatcherService({ logger }),
       workerSettingsRepo: createWorkerSettingsRepository({
         firestore: fakeFirestore as unknown as Firestore,
@@ -1339,7 +1329,6 @@ describe('POST /internal/webhooks/task-complete - Metrics recording', () => {
       firestore: Firestore;
       logger: Logger;
       codeTaskRepo: CodeTaskRepository;
-      workerDiscovery: WorkerDiscoveryService;
       taskDispatcher: TaskDispatcherService;
       workerSettingsRepo: WorkerSettingsRepository;
       logChunkRepo: LogChunkRepository;
@@ -1562,8 +1551,6 @@ describe('POST /internal/logs', () => {
     } as never);
 
     // Set required env vars
-    process.env['INTEXURAOS_CODE_WORKERS'] =
-      'mac:https://cc-mac.intexuraos.cloud:1,vm:https://cc-vm.intexuraos.cloud:2';
     process.env['INTEXURAOS_CF_ACCESS_CLIENT_ID'] = 'test-client-id';
     process.env['INTEXURAOS_CF_ACCESS_CLIENT_SECRET'] = 'test-client-secret';
     process.env['INTEXURAOS_DISPATCH_SECRET'] = 'test-dispatch-secret';
@@ -1586,7 +1573,6 @@ describe('POST /internal/logs', () => {
       logger,
     });
 
-    const workerDiscovery = createWorkerDiscoveryService({ logger });
     taskDispatcher = createTaskDispatcherService({ logger });
     const workerSettingsRepo = createWorkerSettingsRepository({
       firestore: fakeFirestore as unknown as Firestore,
@@ -1631,7 +1617,6 @@ describe('POST /internal/logs', () => {
       logger,
       codeTaskRepo,
       logChunkRepo,
-      workerDiscovery,
       taskDispatcher,
       workerSettingsRepo,
       actionsAgentClient,
@@ -1655,7 +1640,6 @@ describe('POST /internal/logs', () => {
       logger: Logger;
       codeTaskRepo: CodeTaskRepository;
       logChunkRepo: LogChunkRepository;
-      workerDiscovery: WorkerDiscoveryService;
       taskDispatcher: TaskDispatcherService;
       workerSettingsRepo: WorkerSettingsRepository;
       actionsAgentClient: ActionsAgentClient;
@@ -1981,8 +1965,6 @@ describe('POST /internal/webhooks/task-complete - WhatsApp notifications', () =>
   let mockWhatsAppPublisher: { publishSendMessage: ReturnType<typeof vi.fn> };
 
   beforeEach(async () => {
-    process.env['INTEXURAOS_CODE_WORKERS'] =
-      'mac:https://cc-mac.intexuraos.cloud:1,vm:https://cc-vm.intexuraos.cloud:2';
     process.env['INTEXURAOS_CF_ACCESS_CLIENT_ID'] = 'test-client-id';
     process.env['INTEXURAOS_CF_ACCESS_CLIENT_SECRET'] = 'test-client-secret';
     process.env['INTEXURAOS_DISPATCH_SECRET'] = 'test-dispatch-secret';
@@ -2002,7 +1984,6 @@ describe('POST /internal/webhooks/task-complete - WhatsApp notifications', () =>
       logger,
     });
 
-    const workerDiscovery = createWorkerDiscoveryService({ logger });
     taskDispatcher = createTaskDispatcherService({ logger });
     const workerSettingsRepo = createWorkerSettingsRepository({
       firestore: fakeFirestore as unknown as Firestore,
@@ -2049,7 +2030,6 @@ describe('POST /internal/webhooks/task-complete - WhatsApp notifications', () =>
       logger,
       codeTaskRepo,
       logChunkRepo,
-      workerDiscovery,
       taskDispatcher,
       workerSettingsRepo,
       whatsappNotifier,
@@ -2078,7 +2058,6 @@ describe('POST /internal/webhooks/task-complete - WhatsApp notifications', () =>
       logger: Logger;
       codeTaskRepo: CodeTaskRepository;
       logChunkRepo: LogChunkRepository;
-      workerDiscovery: WorkerDiscoveryService;
       taskDispatcher: TaskDispatcherService;
       workerSettingsRepo: WorkerSettingsRepository;
       actionsAgentClient: ActionsAgentClient;

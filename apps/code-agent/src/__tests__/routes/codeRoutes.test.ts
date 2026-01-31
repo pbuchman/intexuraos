@@ -25,8 +25,6 @@ import { createFirestoreLogChunkRepository } from '../../infra/repositories/fire
 import { createActionsAgentClient } from '../../infra/clients/actionsAgentClient.js';
 import { createLinearAgentHttpClient } from '../../infra/http/linearAgentHttpClient.js';
 import { createLinearIssueService } from '../../domain/services/linearIssueService.js';
-import type { WorkerDiscoveryService } from '../../domain/services/workerDiscovery.js';
-import type { WorkerHealth, WorkerConfig, WorkerError } from '../../domain/models/worker.js';
 import type { TaskDispatcherService, DispatchResult, DispatchError } from '../../domain/services/taskDispatcher.js';
 import type { LogChunkRepository } from '../../domain/repositories/logChunkRepository.js';
 import type { ActionsAgentClient } from '../../infra/clients/actionsAgentClient.js';
@@ -93,29 +91,6 @@ describe('codeRoutes', () => {
       logger,
     });
 
-    const workerDiscovery: WorkerDiscoveryService = {
-      async checkHealth(location: 'mac' | 'vm'): Promise<Result<WorkerHealth, WorkerError>> {
-        return {
-          ok: true as const,
-          value: {
-            location,
-            healthy: true,
-            capacity: 2,
-            checkedAt: new Date(),
-          },
-        };
-      },
-      async findAvailableWorker(): Promise<Result<WorkerConfig, WorkerError>> {
-        return {
-          ok: true as const,
-          value: {
-            location: 'mac',
-            url: 'https://cc-mac.intexuraos.cloud',
-            priority: 1,
-          },
-        };
-      },
-    };
     const taskDispatcher: TaskDispatcherService = {
       async dispatch(): Promise<Result<DispatchResult, DispatchError>> {
         return {
@@ -174,7 +149,6 @@ describe('codeRoutes', () => {
       firestore: fakeFirestore as unknown as Firestore,
       logger,
       codeTaskRepo,
-      workerDiscovery,
       taskDispatcher,
       whatsappNotifier,
       logChunkRepo,
@@ -206,7 +180,6 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
       firestore: Firestore;
       logger: Logger;
       codeTaskRepo: CodeTaskRepository;
-      workerDiscovery: WorkerDiscoveryService;
       taskDispatcher: TaskDispatcherService;
       logChunkRepo: LogChunkRepository;
       actionsAgentClient: ActionsAgentClient;
@@ -1407,7 +1380,7 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
   });
 
   describe('GET /code/workers/status', () => {
-    it('returns worker health status', async () => {
+    it('returns workers array from user settings', async () => {
       const response = await server.inject({
         method: 'GET',
         url: '/code/workers/status',
@@ -1419,14 +1392,8 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body);
       expect(body.success).toBe(true);
-      expect(body.data.mac).toBeDefined();
-      expect(body.data.mac).toHaveProperty('healthy');
-      expect(body.data.mac).toHaveProperty('capacity');
-      expect(body.data.mac).toHaveProperty('checkedAt');
-      expect(body.data.vm).toBeDefined();
-      expect(body.data.vm).toHaveProperty('healthy');
-      expect(body.data.vm).toHaveProperty('capacity');
-      expect(body.data.vm).toHaveProperty('checkedAt');
+      expect(body.data.workers).toBeDefined();
+      expect(Array.isArray(body.data.workers)).toBe(true);
     });
 
     it('returns 401 when missing auth header', async () => {
@@ -1436,48 +1403,6 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
       });
 
       expect(response.statusCode).toBe(401);
-    });
-
-    it('handles worker check failures gracefully', async () => {
-      const mockWorkerDiscovery = {
-        async checkHealth(): Promise<Result<WorkerHealth, WorkerError>> {
-          return {
-            ok: false as const,
-            error: {
-              code: 'worker_unavailable' as const,
-              message: 'Worker not responding',
-            },
-          };
-        },
-        async findAvailableWorker(): Promise<Result<WorkerConfig, WorkerError>> {
-          return {
-            ok: false as const,
-            error: {
-              code: 'worker_unavailable' as const,
-              message: 'No workers available',
-            },
-          };
-        },
-      } satisfies WorkerDiscoveryService;
-
-      setServices({
-        ...getServices(),
-        workerDiscovery: mockWorkerDiscovery,
-      });
-
-      const response = await server.inject({
-        method: 'GET',
-        url: '/code/workers/status',
-        headers: {
-          authorization: 'Bearer test-token',
-        },
-      });
-
-      expect(response.statusCode).toBe(200);
-      const body = JSON.parse(response.body);
-      expect(body.success).toBe(true);
-      expect(body.data.mac.healthy).toBe(false);
-      expect(body.data.vm.healthy).toBe(false);
     });
   });
 

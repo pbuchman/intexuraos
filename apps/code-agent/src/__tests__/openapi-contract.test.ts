@@ -23,13 +23,11 @@ import { createActionsAgentClient } from '../infra/clients/actionsAgentClient.js
 import { createLinearAgentHttpClient } from '../infra/http/linearAgentHttpClient.js';
 import { createLinearIssueService } from '../domain/services/linearIssueService.js';
 import type { CodeTaskRepository } from '../domain/repositories/codeTaskRepository.js';
-import { createWorkerDiscoveryService } from '../infra/services/workerDiscoveryImpl.js';
 import { createTaskDispatcherService } from '../infra/services/taskDispatcherImpl.js';
 import { createWhatsAppNotifier } from '../infra/services/whatsappNotifierImpl.js';
 import { createStatusMirrorService } from '../infra/services/statusMirrorServiceImpl.js';
 import type { WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
 import { ok } from '@intexuraos/common-core';
-import type { WorkerDiscoveryService } from '../domain/services/workerDiscovery.js';
 import type { TaskDispatcherService } from '../domain/services/taskDispatcher.js';
 import type { LogChunkRepository } from '../domain/repositories/logChunkRepository.js';
 import type { ActionsAgentClient } from '../infra/clients/actionsAgentClient.js';
@@ -48,9 +46,7 @@ describe('OpenAPI contract', () => {
   let app: Awaited<ReturnType<typeof buildServer>>;
 
   beforeEach(async () => {
-    // Set required env vars for worker discovery
-    process.env['INTEXURAOS_CODE_WORKERS'] =
-      'mac:https://cc-mac.intexuraos.cloud:1,vm:https://cc-vm.intexuraos.cloud:2';
+    // Set required env vars
     process.env['INTEXURAOS_CF_ACCESS_CLIENT_ID'] = 'test-client-id';
     process.env['INTEXURAOS_CF_ACCESS_CLIENT_SECRET'] = 'test-client-secret';
     process.env['INTEXURAOS_AUTH_AUDIENCE'] = 'https://api.intexuraos.cloud';
@@ -93,7 +89,6 @@ describe('OpenAPI contract', () => {
       firestore: fakeFirestore,
       logger,
       codeTaskRepo,
-      workerDiscovery: createWorkerDiscoveryService({ logger }),
       taskDispatcher: createTaskDispatcherService({ logger }),
       workerSettingsRepo,
       whatsappNotifier: createWhatsAppNotifier({
@@ -136,7 +131,6 @@ describe('OpenAPI contract', () => {
       firestore: Firestore;
       logger: Logger;
       codeTaskRepo: CodeTaskRepository;
-      workerDiscovery: WorkerDiscoveryService;
       taskDispatcher: TaskDispatcherService;
       logChunkRepo: LogChunkRepository;
       actionsAgentClient: ActionsAgentClient;

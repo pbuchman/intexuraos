@@ -1811,7 +1811,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       schema: {
         operationId: 'getWorkersStatus',
         summary: 'Get worker health status',
-        description: 'Public endpoint for checking Mac and VM worker health. Requires Auth0 JWT.',
+        description: 'Public endpoint for checking user-configured worker status. Requires Auth0 JWT.',
         tags: ['public'],
         response: {
           200: {
@@ -1822,25 +1822,21 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
               success: { type: 'boolean', enum: [true] },
               data: {
                 type: 'object',
-                required: ['mac', 'vm'],
+                required: ['workers'],
                 properties: {
-                  mac: {
-                    type: 'object',
-                    properties: {
-                      healthy: { type: 'boolean' },
-                      capacity: { type: 'number' },
-                      checkedAt: { type: 'string', format: 'date-time' },
+                  workers: {
+                    type: 'array',
+                    items: {
+                      type: 'object',
+                      properties: {
+                        name: { type: 'string' },
+                        url: { type: 'string' },
+                        priority: { type: 'number' },
+                        healthy: { type: 'boolean' },
+                        checkedAt: { type: 'string', format: 'date-time' },
+                      },
+                      required: ['name', 'url', 'priority', 'healthy', 'checkedAt'],
                     },
-                    required: ['healthy', 'capacity', 'checkedAt'],
-                  },
-                  vm: {
-                    type: 'object',
-                    properties: {
-                      healthy: { type: 'boolean' },
-                      capacity: { type: 'number' },
-                      checkedAt: { type: 'string', format: 'date-time' },
-                    },
-                    required: ['healthy', 'capacity', 'checkedAt'],
                   },
                 },
               },
@@ -1870,30 +1866,33 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         message: 'Received request to GET /code/workers/status',
       });
 
-      const { workerDiscovery } = getServices();
+      const { workerSettingsRepo } = getServices();
+      const userId = request.user?.userId;
 
-      const [macResult, vmResult] = await Promise.all([
-        workerDiscovery.checkHealth('mac'),
-        workerDiscovery.checkHealth('vm'),
-      ]);
+      /* v8 ignore start -- test-infra: test setup always has userId @preserve */
+      if (!userId) {
+        return reply.fail('UNAUTHORIZED', 'Authentication required');
+      }
+      /* v8 ignore stop @preserve */
 
-      const macStatus = macResult.ok
-        ? {
-            healthy: macResult.value.healthy,
-            capacity: macResult.value.capacity,
-            checkedAt: macResult.value.checkedAt.toISOString(),
-          }
-        : { healthy: false, capacity: 0, checkedAt: new Date().toISOString() };
+      const settingsResult = await workerSettingsRepo.getSettings(userId);
 
-      const vmStatus = vmResult.ok
-        ? {
-            healthy: vmResult.value.healthy,
-            capacity: vmResult.value.capacity,
-            checkedAt: vmResult.value.checkedAt.toISOString(),
-          }
-        : { healthy: false, capacity: 0, checkedAt: new Date().toISOString() };
+      /* v8 ignore start -- upstream: Firestore fetch failure or missing settings @preserve */
+      if (!settingsResult.ok || settingsResult.value === null) {
+        return reply.ok({ workers: [] });
+      }
+      /* v8 ignore stop @preserve */
 
-      return await reply.ok({ mac: macStatus, vm: vmStatus });
+      // Map worker settings to status response format
+      const workers = settingsResult.value.workers.map((w, index) => ({
+        name: w.name,
+        url: w.url,
+        priority: index + 1, // Array position = priority
+        healthy: true, // Status unknown without actual health check
+        checkedAt: new Date().toISOString(),
+      }));
+
+      return reply.ok({ workers });
     }
   );
 

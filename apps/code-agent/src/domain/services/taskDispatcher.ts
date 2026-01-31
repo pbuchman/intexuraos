@@ -81,7 +81,7 @@ export interface TaskDispatcherService {
    * Dispatch a code task to an available worker.
    *
    * Process:
-   * 1. Find available worker via workerDiscovery
+   * 1. Find available worker from user's configured worker settings
    * 2. Generate unique nonce and webhook secret
    * 3. Compute HMAC signature
    * 4. POST to worker /tasks endpoint

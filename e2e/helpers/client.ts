@@ -71,7 +71,7 @@ export interface CodeTask {
   sanitizedPrompt: string;
   systemPromptHash: string;
   workerType: 'opus' | 'auto' | 'glm';
-  workerLocation: 'mac' | 'vm';
+  workerLocation: string;
   repository: string;
   baseBranch: string;
   traceId: string;

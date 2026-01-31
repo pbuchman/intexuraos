@@ -20,7 +20,6 @@ import type { Firestore } from '@google-cloud/firestore';
 import pino from 'pino';
 import type { Logger } from 'pino';
 import { createFirestoreCodeTaskRepository } from '../../infra/repositories/firestoreCodeTaskRepository.js';
-import { createWorkerDiscoveryService } from '../../infra/services/workerDiscoveryImpl.js';
 import { createTaskDispatcherService } from '../../infra/services/taskDispatcherImpl.js';
 import { createWhatsAppNotifier } from '../../infra/services/whatsappNotifierImpl.js';
 import { createFirestoreLogChunkRepository } from '../../infra/repositories/firestoreLogChunkRepository.js';
@@ -30,7 +29,6 @@ import { createLinearIssueService } from '../../domain/services/linearIssueServi
 import type { LogChunkRepository } from '../../domain/repositories/logChunkRepository.js';
 import type { CodeTaskRepository } from '../../domain/repositories/codeTaskRepository.js';
 import type { CodeTask } from '../../domain/models/codeTask.js';
-import type { WorkerDiscoveryService } from '../../domain/services/workerDiscovery.js';
 import type { TaskDispatcherService } from '../../domain/services/taskDispatcher.js';
 import type { ActionsAgentClient } from '../../infra/clients/actionsAgentClient.js';
 import type { WhatsAppNotifier } from '../../domain/services/whatsappNotifier.js';
@@ -61,8 +59,6 @@ describe('GET /code/tasks endpoints', () => {
     } as never);
 
     // Set required env vars
-    process.env['INTEXURAOS_CODE_WORKERS'] =
-      'mac:https://cc-mac.intexuraos.cloud:1,vm:https://cc-vm.intexuraos.cloud:2';
     process.env['INTEXURAOS_CF_ACCESS_CLIENT_ID'] = 'test-client-id';
     process.env['INTEXURAOS_CF_ACCESS_CLIENT_SECRET'] = 'test-client-secret';
     process.env['INTEXURAOS_DISPATCH_SECRET'] = 'test-dispatch-secret';
@@ -80,7 +76,6 @@ describe('GET /code/tasks endpoints', () => {
       logger,
     });
 
-    const workerDiscovery = createWorkerDiscoveryService({ logger });
     const taskDispatcher = createTaskDispatcherService({ logger });
     const workerSettingsRepo = createWorkerSettingsRepository({
       firestore: fakeFirestore as unknown as Firestore,
@@ -131,7 +126,6 @@ describe('GET /code/tasks endpoints', () => {
       firestore: fakeFirestore as unknown as Firestore,
       logger,
       codeTaskRepo,
-      workerDiscovery,
       taskDispatcher,
       workerSettingsRepo,
       whatsappNotifier,
@@ -160,7 +154,6 @@ describe('GET /code/tasks endpoints', () => {
       firestore: Firestore;
       logger: Logger;
       codeTaskRepo: CodeTaskRepository;
-      workerDiscovery: WorkerDiscoveryService;
       taskDispatcher: TaskDispatcherService;
       workerSettingsRepo: WorkerSettingsRepository;
       logChunkRepo: LogChunkRepository;

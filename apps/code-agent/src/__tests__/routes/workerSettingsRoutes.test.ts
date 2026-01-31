@@ -28,7 +28,6 @@ import type { Firestore } from '@google-cloud/firestore';
 import pino from 'pino';
 import type { Logger } from 'pino';
 import { createFirestoreCodeTaskRepository } from '../../infra/repositories/firestoreCodeTaskRepository.js';
-import { createWorkerDiscoveryService } from '../../infra/services/workerDiscoveryImpl.js';
 import { createTaskDispatcherService } from '../../infra/services/taskDispatcherImpl.js';
 import { createWhatsAppNotifier } from '../../infra/services/whatsappNotifierImpl.js';
 import { createFirestoreLogChunkRepository } from '../../infra/repositories/firestoreLogChunkRepository.js';
@@ -70,10 +69,6 @@ describe('Worker Settings Routes', () => {
       logger,
     });
 
-    // Mock worker discovery - not needed for worker settings tests
-    const workerDiscovery = {
-      findAvailableWorker: vi.fn().mockResolvedValue(ok({ location: 'test-worker', capacity: 5 })),
-    } as unknown as ReturnType<typeof createWorkerDiscoveryService>;
     const taskDispatcher = createTaskDispatcherService({ logger });
 
     const whatsappNotifier = createWhatsAppNotifier({
@@ -116,7 +111,6 @@ describe('Worker Settings Routes', () => {
       firestore: fakeFirestore as unknown as Firestore,
       logger,
       codeTaskRepo,
-      workerDiscovery,
       taskDispatcher,
       whatsappNotifier,
       logChunkRepo,

@@ -22,14 +22,12 @@ import { createFirestoreCodeTaskRepository } from '../../infra/repositories/fire
 import { createTaskDispatcherService } from '../../infra/services/taskDispatcherImpl.js';
 import { createWhatsAppNotifier } from '../../infra/services/whatsappNotifierImpl.js';
 import { createFirestoreLogChunkRepository } from '../../infra/repositories/firestoreLogChunkRepository.js';
-import { createWorkerDiscoveryService } from '../../infra/services/workerDiscoveryImpl.js';
 import { createActionsAgentClient } from '../../infra/clients/actionsAgentClient.js';
 import { createLinearAgentHttpClient } from '../../infra/http/linearAgentHttpClient.js';
 import { createLinearIssueService } from '../../domain/services/linearIssueService.js';
 import type { CodeTaskRepository } from '../../domain/repositories/codeTaskRepository.js';
 import type { TaskDispatcherService } from '../../domain/services/taskDispatcher.js';
 import type { LogChunkRepository } from '../../domain/repositories/logChunkRepository.js';
-import type { WorkerDiscoveryService } from '../../domain/services/workerDiscovery.js';
 import type { ActionsAgentClient } from '../../infra/clients/actionsAgentClient.js';
 import type { WhatsAppNotifier } from '../../domain/services/whatsappNotifier.js';
 import type { RateLimitService } from '../../domain/services/rateLimitService.js';
@@ -52,7 +50,6 @@ describe('POST /internal/code/process', () => {
   let codeTaskRepo: CodeTaskRepository;
   let taskDispatcher: TaskDispatcherService;
   let _logChunkRepo: LogChunkRepository;
-  let _workerDiscovery: WorkerDiscoveryService;
 
   beforeEach(async () => {
     // Set jwtVerify to resolve by default (simulating valid token)
@@ -62,8 +59,6 @@ describe('POST /internal/code/process', () => {
     } as never);
 
     // Set required env vars
-    process.env['INTEXURAOS_CODE_WORKERS'] =
-      'mac:https://cc-mac.intexuraos.cloud:1,vm:https://cc-vm.intexuraos.cloud:2';
     process.env['INTEXURAOS_CF_ACCESS_CLIENT_ID'] = 'test-client-id';
     process.env['INTEXURAOS_CF_ACCESS_CLIENT_SECRET'] = 'test-client-secret';
     process.env['INTEXURAOS_DISPATCH_SECRET'] = 'test-dispatch-secret';
@@ -89,7 +84,6 @@ describe('POST /internal/code/process', () => {
       firestore: fakeFirestore as unknown as Firestore,
       logger,
     });
-    _workerDiscovery = createWorkerDiscoveryService({ logger });
 
     const whatsappNotifier = createWhatsAppNotifier({
       whatsappPublisher: {
@@ -131,7 +125,6 @@ describe('POST /internal/code/process', () => {
       logger,
       codeTaskRepo,
       taskDispatcher,
-      workerDiscovery: _workerDiscovery,
       whatsappNotifier,
       logChunkRepo: _logChunkRepo,
       actionsAgentClient,
@@ -163,7 +156,6 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
       logger: Logger;
       codeTaskRepo: CodeTaskRepository;
       taskDispatcher: TaskDispatcherService;
-      workerDiscovery: WorkerDiscoveryService;
       logChunkRepo: LogChunkRepository;
       actionsAgentClient: ActionsAgentClient;
       whatsappNotifier: WhatsAppNotifier;
