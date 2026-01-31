@@ -6,6 +6,7 @@ export interface Pm2LogEntry {
   app: string;
   level: 'info' | 'warn' | 'error' | 'debug';
   message: string;
+  url: string | null;
   raw: Record<string, unknown>;
 }
 
@@ -24,28 +25,9 @@ interface SSEMessage {
   };
 }
 
-const MAX_LOGS = 500;
+const LOG_SERVER_URL = 'http://localhost:8106';
+const MAX_LOGS = 2000;
 const RECONNECT_DELAYS = [1000, 2000, 5000, 10000];
-
-// Detect environment and return appropriate log server URL
-function getLogServerUrl(): string | null {
-  if (typeof window === 'undefined') return null;
-
-  const hostname = window.location.hostname;
-
-  // Local development
-  if (import.meta.env.DEV && hostname === 'localhost') {
-    return 'http://localhost:8106';
-  }
-
-  // Pre-dev environment (Cloud Function gateway)
-  if (hostname.includes('cloudfunctions.net')) {
-    return `${window.location.origin}/devbar`;
-  }
-
-  // Production - no log server
-  return null;
-}
 
 function extractFirstJson(message: string): Record<string, unknown> | null {
   const jsonStart = message.indexOf('{');
@@ -137,21 +119,53 @@ function parseLogMessage(log: SSEMessage['log']): string {
   }
 
   // For PM2 process events (no nested JSON), show type + status
-  if (raw === '' && log?.type) {
+  if (!raw && log?.type) {
     if (log.status) {
       return `${log.type}: ${log.status}`;
     }
     return log.type;
   }
 
-  return raw;
+  return raw || log?.type || '';
+}
+
+function extractUrlFromObject(obj: Record<string, unknown>): string | null {
+  if (typeof obj['url'] === 'string') return obj['url'];
+  if (typeof obj['path'] === 'string') return obj['path'];
+
+  const req = obj['req'];
+  if (typeof req === 'object' && req !== null) {
+    const reqObj = req as Record<string, unknown>;
+    if (typeof reqObj['url'] === 'string') return reqObj['url'];
+    if (typeof reqObj['path'] === 'string') return reqObj['path'];
+  }
+
+  const request = obj['request'];
+  if (typeof request === 'object' && request !== null) {
+    const requestObj = request as Record<string, unknown>;
+    if (typeof requestObj['url'] === 'string') return requestObj['url'];
+    if (typeof requestObj['path'] === 'string') return requestObj['path'];
+  }
+
+  return null;
+}
+
+function extractUrl(log: SSEMessage['log']): string | null {
+  const message = log?.message ?? log?.data ?? '';
+
+  const nested = extractFirstJson(message);
+  if (nested !== null) {
+    return extractUrlFromObject(nested);
+  }
+
+  return null;
 }
 
 function generateLogId(): string {
-  return `${String(Date.now())}-${Math.random().toString(36).slice(2, 9)}`;
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
-export function usePm2Logs(enabled: boolean): {
+export function usePm2Logs(): {
   logs: Pm2LogEntry[];
   isConnected: boolean;
   clearLogs: () => void;
@@ -168,28 +182,13 @@ export function usePm2Logs(enabled: boolean): {
     setLogs([]);
   }, []);
 
-  const logServerUrl = getLogServerUrl();
-
   useEffect(() => {
-    if (!enabled || !logServerUrl) {
-      if (eventSourceRef.current !== null) {
-        eventSourceRef.current.close();
-        eventSourceRef.current = null;
-      }
-      if (reconnectTimeoutRef.current !== null) {
-        clearTimeout(reconnectTimeoutRef.current);
-        reconnectTimeoutRef.current = null;
-      }
-      setIsConnected(false);
-      return;
-    }
-
     function connect(): void {
       if (eventSourceRef.current !== null) {
         eventSourceRef.current.close();
       }
 
-      const eventSource = new EventSource(`${String(logServerUrl)}/logs`);
+      const eventSource = new EventSource(`${LOG_SERVER_URL}/logs`);
       eventSourceRef.current = eventSource;
 
       eventSource.onopen = (): void => {
@@ -202,7 +201,8 @@ export function usePm2Logs(enabled: boolean): {
         eventSource.close();
         eventSourceRef.current = null;
 
-        const delay = RECONNECT_DELAYS[Math.min(reconnectAttemptRef.current, RECONNECT_DELAYS.length - 1)];
+        const delay =
+          RECONNECT_DELAYS[Math.min(reconnectAttemptRef.current, RECONNECT_DELAYS.length - 1)];
         if (delay !== undefined) {
           reconnectAttemptRef.current++;
           reconnectTimeoutRef.current = setTimeout(connect, delay);
@@ -226,6 +226,7 @@ export function usePm2Logs(enabled: boolean): {
               app: appName,
               level: parseLogLevel(log),
               message: parseLogMessage(log),
+              url: extractUrl(log),
               raw: log as Record<string, unknown>,
             };
 
@@ -262,7 +263,7 @@ export function usePm2Logs(enabled: boolean): {
         reconnectTimeoutRef.current = null;
       }
     };
-  }, [enabled, logServerUrl]);
+  }, []);
 
   return { logs, isConnected, clearLogs, apps };
 }
