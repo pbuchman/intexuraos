@@ -1387,8 +1387,6 @@ module "code_agent" {
   image = "${var.region}-docker.pkg.dev/${var.project_id}/${module.artifact_registry.repository_id}/code-agent:latest"
 
   secrets = merge(local.common_service_secrets, {
-    INTEXURAOS_CF_ACCESS_CLIENT_ID     = module.secret_manager.secret_ids["INTEXURAOS_CF_ACCESS_CLIENT_ID"]
-    INTEXURAOS_CF_ACCESS_CLIENT_SECRET = module.secret_manager.secret_ids["INTEXURAOS_CF_ACCESS_CLIENT_SECRET"]
     INTEXURAOS_DISPATCH_SIGNING_SECRET = module.secret_manager.secret_ids["INTEXURAOS_DISPATCH_SIGNING_SECRET"]
     INTEXURAOS_WEBHOOK_VERIFY_SECRET   = module.secret_manager.secret_ids["INTEXURAOS_WEBHOOK_VERIFY_SECRET"]
     INTEXURAOS_TOKEN_ENCRYPTION_KEY    = module.secret_manager.secret_ids["INTEXURAOS_TOKEN_ENCRYPTION_KEY"]
@@ -1396,9 +1394,6 @@ module "code_agent" {
 
   env_vars = merge(local.common_service_env_vars, {
     INTEXURAOS_SERVICE_URL                = "https://${local.services.code_agent.name}-${local.cloud_run_url_suffix}"
-    INTEXURAOS_ORCHESTRATOR_MAC_URL       = "https://cc-mac.intexuraos.cloud"
-    INTEXURAOS_ORCHESTRATOR_VM_URL        = "https://cc-vm.intexuraos.cloud"
-    INTEXURAOS_CODE_WORKERS               = "mac:https://cc-mac.intexuraos.cloud:1,vm:https://cc-vm.intexuraos.cloud:2"
     INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC = "intexuraos-whatsapp-send-${var.environment}"
   })
 

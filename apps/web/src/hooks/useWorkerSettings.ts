@@ -1,16 +1,21 @@
 import { useCallback, useEffect, useState } from 'react';
-import { getErrorMessage } from '@intexuraos/common-core/errors';
+
+function getErrorMessage(error: unknown, fallback = 'Unknown error'): string {
+  return error instanceof Error ? error.message : fallback;
+}
 import { useAuth } from '@/context';
 import {
   getWorkerSettings,
-  updateWorkerConfig,
-  deleteWorkerConfig,
+  addWorker as addWorkerApi,
+  updateWorker as updateWorkerApi,
+  deleteWorker as deleteWorkerApi,
   testWorkerConnectivity,
+  reorderWorkers as reorderWorkersApi,
 } from '@/services/workerSettingsApi';
 import type {
   WorkerSettingsResponse,
-  WorkerType,
   WorkerConfigInput,
+  WorkerConfigUpdateInput,
   TestWorkerConnectivityResponse,
 } from '@/services/workerSettingsApi.types';
 
@@ -19,9 +24,11 @@ interface UseWorkerSettingsResult {
   loading: boolean;
   refreshing: boolean;
   error: string | null;
-  updateConfig: (workerType: WorkerType, config: WorkerConfigInput) => Promise<void>;
-  deleteConfig: (workerType: WorkerType) => Promise<void>;
-  testConnectivity: (workerType: WorkerType) => Promise<TestWorkerConnectivityResponse>;
+  addWorker: (config: WorkerConfigInput) => Promise<void>;
+  updateWorker: (workerName: string, config: WorkerConfigUpdateInput) => Promise<void>;
+  deleteWorker: (workerName: string) => Promise<void>;
+  testConnectivity: (workerName: string) => Promise<TestWorkerConnectivityResponse>;
+  reorderWorkers: (workerNames: string[]) => Promise<void>;
   refresh: (showLoading?: boolean) => Promise<void>;
 }
 
@@ -70,34 +77,51 @@ export function useWorkerSettings(): UseWorkerSettingsResult {
     void refresh();
   }, [refresh]);
 
-  const updateConfig = useCallback(
-    async (workerType: WorkerType, config: WorkerConfigInput): Promise<void> => {
+  const handleAddWorker = useCallback(
+    async (config: WorkerConfigInput): Promise<void> => {
       const userId = user?.sub;
       if (userId === undefined) return;
 
       try {
         const token = await getAccessToken();
-        await updateWorkerConfig(token, workerType, config);
+        await addWorkerApi(token, config);
         await refresh(false);
       } catch (err) {
-        setError(getErrorMessage(err, 'Failed to save worker configuration'));
+        setError(getErrorMessage(err, 'Failed to add worker'));
         throw err;
       }
     },
     [user?.sub, getAccessToken, refresh]
   );
 
-  const deleteConfig = useCallback(
-    async (workerType: WorkerType): Promise<void> => {
+  const handleUpdateWorker = useCallback(
+    async (workerName: string, config: WorkerConfigUpdateInput): Promise<void> => {
       const userId = user?.sub;
       if (userId === undefined) return;
 
       try {
         const token = await getAccessToken();
-        await deleteWorkerConfig(token, workerType);
+        await updateWorkerApi(token, workerName, config);
         await refresh(false);
       } catch (err) {
-        setError(getErrorMessage(err, 'Failed to delete worker configuration'));
+        setError(getErrorMessage(err, 'Failed to update worker'));
+        throw err;
+      }
+    },
+    [user?.sub, getAccessToken, refresh]
+  );
+
+  const handleDeleteWorker = useCallback(
+    async (workerName: string): Promise<void> => {
+      const userId = user?.sub;
+      if (userId === undefined) return;
+
+      try {
+        const token = await getAccessToken();
+        await deleteWorkerApi(token, workerName);
+        await refresh(false);
+      } catch (err) {
+        setError(getErrorMessage(err, 'Failed to delete worker'));
         throw err;
       }
     },
@@ -105,27 +129,30 @@ export function useWorkerSettings(): UseWorkerSettingsResult {
   );
 
   const testConnectivity = useCallback(
-    async (workerType: WorkerType): Promise<TestWorkerConnectivityResponse> => {
+    async (workerName: string): Promise<TestWorkerConnectivityResponse> => {
       const userId = user?.sub;
       if (userId === undefined) {
         throw new Error('User not authenticated');
       }
 
       const token = await getAccessToken();
-      const result = await testWorkerConnectivity(token, workerType);
+      const result = await testWorkerConnectivity(token, workerName);
 
+      // Update local state with test result
       setSettings((prev) => {
         if (prev === null) return prev;
         return {
           ...prev,
-          [workerType]: prev[workerType] !== undefined
-            ? {
-                ...prev[workerType],
-                testStatus: result.testStatus,
-                testMessage: result.testMessage,
-                lastTestedAt: result.lastTestedAt,
-              }
-            : undefined,
+          workers: prev.workers.map((w) =>
+            w.name === workerName
+              ? {
+                  ...w,
+                  testStatus: result.testStatus,
+                  testMessage: result.testMessage,
+                  lastTestedAt: result.lastTestedAt,
+                }
+              : w
+          ),
         };
       });
 
@@ -134,5 +161,33 @@ export function useWorkerSettings(): UseWorkerSettingsResult {
     [user?.sub, getAccessToken]
   );
 
-  return { settings, loading, refreshing, error, updateConfig, deleteConfig, testConnectivity, refresh };
+  const handleReorderWorkers = useCallback(
+    async (workerNames: string[]): Promise<void> => {
+      const userId = user?.sub;
+      if (userId === undefined) return;
+
+      try {
+        const token = await getAccessToken();
+        await reorderWorkersApi(token, { workerNames });
+        await refresh(false);
+      } catch (err) {
+        setError(getErrorMessage(err, 'Failed to reorder workers'));
+        throw err;
+      }
+    },
+    [user?.sub, getAccessToken, refresh]
+  );
+
+  return {
+    settings,
+    loading,
+    refreshing,
+    error,
+    addWorker: handleAddWorker,
+    updateWorker: handleUpdateWorker,
+    deleteWorker: handleDeleteWorker,
+    testConnectivity,
+    reorderWorkers: handleReorderWorkers,
+    refresh,
+  };
 }

@@ -113,13 +113,12 @@ export async function cancelTaskWithNonce(
     /* v8 ignore start -- ts-type: optional worker config checks for cancellation @preserve */
     if (settingsResult.ok && settingsResult.value !== null) {
       const settings = settingsResult.value;
-      const workerConfig = task.workerLocation === 'mac' ? settings.mac : settings.vm;
+      const workerConfig = settings.workers.find((w) => w.name === task.workerLocation);
       if (workerConfig?.enabled === true) {
         workerCreds = {
           url: workerConfig.url,
           cfAccessClientId: workerConfig.cfAccessClientId,
           cfAccessClientSecret: workerConfig.cfAccessClientSecret,
-          dispatchSigningSecret: workerConfig.dispatchSigningSecret,
         };
       }
     }

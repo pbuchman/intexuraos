@@ -11,11 +11,10 @@ export type WorkerType = 'opus' | 'auto' | 'glm';
 
 /**
  * Worker location for routing.
- * Design reference: Lines 1214-1219
- * - mac: Primary MacBook worker (preferred)
- * - vm: GCP VM fallback (auto-started if Mac unavailable)
+ * Dynamic user-defined worker names (e.g., "home-mac", "office-pc", "worker1").
+ * Configured per-user via Worker Settings UI.
  */
-export type WorkerLocation = 'mac' | 'vm';
+export type WorkerLocation = string;
 
 /**
  * Task status lifecycle.

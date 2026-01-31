@@ -24,7 +24,7 @@ describe('cancelTaskWithNonce', () => {
     sanitizedPrompt: 'Fix the bug',
     systemPromptHash: 'hash-123',
     workerType: 'auto' as const,
-    workerLocation: 'mac' as const,
+    workerLocation: 'home-mac',
     repository: 'pbuchman/intexuraos',
     baseBranch: 'development',
     traceId: 'trace-123',
@@ -35,7 +35,7 @@ describe('cancelTaskWithNonce', () => {
     updatedAt: Timestamp.now(),
     cancelNonce: 'abcd',
     cancelNonceExpiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
-  };
+  } as const;
 
   beforeEach(() => {
     logger = {
@@ -60,19 +60,24 @@ describe('cancelTaskWithNonce', () => {
     workerSettingsRepo = {
       getSettings: vi.fn().mockResolvedValue(ok({
         userId: 'user-789',
-        mac: {
-          url: 'https://cc-mac.intexuraos.cloud',
-          cfAccessClientId: 'test-client-id',
-          cfAccessClientSecret: 'test-client-secret',
-          dispatchSigningSecret: 'test-dispatch-secret',
-          enabled: true,
-        },
+        workers: [
+          {
+            name: 'home-mac',
+            url: 'https://cc-mac.intexuraos.cloud',
+            cfAccessClientId: 'test-client-id',
+            cfAccessClientSecret: 'test-client-secret',
+            dispatchSigningSecret: 'test-dispatch-secret',
+            enabled: true,
+          },
+        ],
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       })),
-      getWorkerConfig: vi.fn(),
-      updateWorkerConfig: vi.fn(),
-      deleteWorkerConfig: vi.fn(),
+      getWorkerByName: vi.fn(),
+      addWorker: vi.fn(),
+      updateWorker: vi.fn(),
+      deleteWorker: vi.fn(),
+      reorderWorkers: vi.fn(),
       updateTestResult: vi.fn(),
     } as unknown as WorkerSettingsRepository;
   });
@@ -224,11 +229,10 @@ describe('cancelTaskWithNonce', () => {
       cancelNonceExpiresAt: null,
     });
 
-    expect(taskDispatcher.cancelOnWorker).toHaveBeenCalledWith('task-123', 'mac', {
+    expect(taskDispatcher.cancelOnWorker).toHaveBeenCalledWith('task-123', 'home-mac', {
       url: 'https://cc-mac.intexuraos.cloud',
       cfAccessClientId: 'test-client-id',
       cfAccessClientSecret: 'test-client-secret',
-      dispatchSigningSecret: 'test-dispatch-secret',
     });
   });
 

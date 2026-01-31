@@ -3,9 +3,10 @@
  */
 
 /**
- * Worker location type - Mac is primary, VM is fallback.
+ * Worker location - now dynamic, user-defined worker name.
+ * Examples: "home-mac", "office-pc", "worker1"
  */
-export type WorkerLocation = 'mac' | 'vm';
+export type WorkerLocation = string;
 
 /**
  * Worker configuration loaded from environment.

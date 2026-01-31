@@ -123,32 +123,13 @@ export async function processCodeAction(
 
   const settings = settingsResult.value;
 
-  // Build worker credentials from user's settings
-  const workerCredentials: DispatchWorkerCredentials = {
-    priority: settings?.workerPriority ?? ['mac', 'vm'],
-  };
+  // Build worker credentials from user's settings - NO FALLBACKS
+  /* v8 ignore start -- ts-type: nullish coalescing for when settings is null @preserve */
+  const enabledWorkers = (settings?.workers ?? []).filter((w) => w.enabled);
+  /* v8 ignore stop @preserve */
 
-  /* v8 ignore start -- ts-type: optional worker config checks @preserve */
-  if (settings?.mac?.enabled === true) {
-    workerCredentials.mac = {
-      url: settings.mac.url,
-      cfAccessClientId: settings.mac.cfAccessClientId,
-      cfAccessClientSecret: settings.mac.cfAccessClientSecret,
-      dispatchSigningSecret: settings.mac.dispatchSigningSecret,
-    };
-  }
-
-  if (settings?.vm?.enabled === true) {
-    workerCredentials.vm = {
-      url: settings.vm.url,
-      cfAccessClientId: settings.vm.cfAccessClientId,
-      cfAccessClientSecret: settings.vm.cfAccessClientSecret,
-      dispatchSigningSecret: settings.vm.dispatchSigningSecret,
-    };
-  }
-
-  // Fail if no workers configured
-  if (workerCredentials.mac === undefined && workerCredentials.vm === undefined) {
+  /* v8 ignore start -- test-infra: requires user with no enabled workers fixture @preserve */
+  if (enabledWorkers.length === 0) {
     logger.warn({ userId }, 'User has no workers configured');
     return err({
       code: 'worker_not_configured',
@@ -156,6 +137,16 @@ export async function processCodeAction(
     });
   }
   /* v8 ignore stop @preserve */
+
+  const workerCredentials: DispatchWorkerCredentials = {
+    workers: enabledWorkers.map((w) => ({
+      name: w.name,
+      url: w.url,
+      cfAccessClientId: w.cfAccessClientId,
+      cfAccessClientSecret: w.cfAccessClientSecret,
+      dispatchSigningSecret: w.dispatchSigningSecret,
+    })),
+  };
 
   // Step 2: Linear issue creation (stub for now - use provided or undefined)
   const finalLinearIssueId = linearIssueId;
@@ -170,7 +161,7 @@ export async function processCodeAction(
     sanitizedPrompt: string;
     systemPromptHash: string;
     workerType: 'opus' | 'auto' | 'glm';
-    workerLocation: 'mac' | 'vm';
+    workerLocation: string;
     repository: string;
     baseBranch: string;
     traceId: string;
@@ -186,7 +177,9 @@ export async function processCodeAction(
     sanitizedPrompt: prompt, // TODO: Add sanitization
     systemPromptHash: 'system-prompt-hash-v1', // TODO: Compute from actual system prompt
     workerType,
-    workerLocation: 'mac', // Default to mac, dispatcher will handle availability
+    /* v8 ignore start -- ts-type: nullish coalescing fallback (enabledWorkers[0] always exists after length check) @preserve */
+    workerLocation: enabledWorkers[0]?.name ?? 'unknown', // Use first worker as default
+    /* v8 ignore stop @preserve */
     repository: repository ?? 'pbuchman/intexuraos',
     baseBranch: baseBranch ?? 'development',
     traceId: traceId ?? `trace-${String(Date.now())}`, // Use provided traceId or generate one

@@ -48,10 +48,7 @@ describe('loadConfig', () => {
       expect(config.actionsAgentUrl).toBe('');
       expect(config.dispatchSigningSecret).toBe('');
       expect(config.webhookVerifySecret).toBe('');
-      expect(config.cfAccessClientId).toBe('');
-      expect(config.cfAccessClientSecret).toBe('');
-      expect(config.orchestratorMacUrl).toBe('');
-      expect(config.orchestratorVmUrl).toBe('');
+      expect(config.tokenEncryptionKey).toBe('');
     });
 
     it('loads all env vars when set', () => {
@@ -62,10 +59,7 @@ describe('loadConfig', () => {
       process.env['INTEXURAOS_ACTIONS_AGENT_URL'] = 'http://actions';
       process.env['INTEXURAOS_DISPATCH_SIGNING_SECRET'] = 'test-dispatch-signing';
       process.env['INTEXURAOS_WEBHOOK_VERIFY_SECRET'] = 'test-webhook';
-      process.env['INTEXURAOS_CF_ACCESS_CLIENT_ID'] = 'test-client-id';
-      process.env['INTEXURAOS_CF_ACCESS_CLIENT_SECRET'] = 'test-client-secret';
-      process.env['INTEXURAOS_ORCHESTRATOR_MAC_URL'] = 'https://cc-mac.intexuraos.cloud';
-      process.env['INTEXURAOS_ORCHESTRATOR_VM_URL'] = 'https://cc-vm.intexuraos.cloud';
+      process.env['INTEXURAOS_TOKEN_ENCRYPTION_KEY'] = 'test-encryption-key-32chars!';
 
       const config = loadConfig();
       expect(config.gcpProjectId).toBe('test-project');
@@ -76,10 +70,7 @@ describe('loadConfig', () => {
       expect(config.actionsAgentUrl).toBe('http://actions');
       expect(config.dispatchSigningSecret).toBe('test-dispatch-signing');
       expect(config.webhookVerifySecret).toBe('test-webhook');
-      expect(config.cfAccessClientId).toBe('test-client-id');
-      expect(config.cfAccessClientSecret).toBe('test-client-secret');
-      expect(config.orchestratorMacUrl).toBe('https://cc-mac.intexuraos.cloud');
-      expect(config.orchestratorVmUrl).toBe('https://cc-vm.intexuraos.cloud');
+      expect(config.tokenEncryptionKey).toBe('test-encryption-key-32chars!');
     });
   });
 });

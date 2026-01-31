@@ -31,19 +31,22 @@ describe('taskDispatcherImpl', () => {
     };
 
     testWorkerCredentials = {
-      mac: {
-        url: 'https://cc-mac.intexuraos.cloud',
-        cfAccessClientId: 'test-client-id',
-        cfAccessClientSecret: 'test-client-secret',
-        dispatchSigningSecret: 'test-dispatch-secret',
-      },
-      vm: {
-        url: 'https://cc-vm.intexuraos.cloud',
-        cfAccessClientId: 'test-client-id',
-        cfAccessClientSecret: 'test-client-secret',
-        dispatchSigningSecret: 'test-dispatch-secret',
-      },
-      priority: ['mac', 'vm'],
+      workers: [
+        {
+          name: 'home-mac',
+          url: 'https://cc-mac.intexuraos.cloud',
+          cfAccessClientId: 'test-client-id',
+          cfAccessClientSecret: 'test-client-secret',
+          dispatchSigningSecret: 'test-dispatch-secret',
+        },
+        {
+          name: 'cloud-vm',
+          url: 'https://cc-vm.intexuraos.cloud',
+          cfAccessClientId: 'test-client-id',
+          cfAccessClientSecret: 'test-client-secret',
+          dispatchSigningSecret: 'test-dispatch-secret',
+        },
+      ],
     };
 
     // Mock global fetch
@@ -78,7 +81,7 @@ describe('taskDispatcherImpl', () => {
       expect(result.ok).toBe(true);
       if (result.ok) {
         expect(result.value.dispatched).toBe(true);
-        expect(result.value.workerLocation).toBe('mac');
+        expect(result.value.workerLocation).toBe('home-mac');
       }
 
       // Verify fetch was called with correct headers
@@ -194,10 +197,10 @@ describe('taskDispatcherImpl', () => {
       const service = createTaskDispatcherService(baseDeps);
       const mockFetch = vi.mocked(global.fetch);
 
-      // First call (Mac) returns 503
+      // First call (home-mac) returns 503
       mockFetch.mockRejectedValueOnce(Object.assign(new Error('HTTP 503'), { code: '503' }));
 
-      // Second call (VM) succeeds
+      // Second call (cloud-vm) succeeds
       mockFetch.mockResolvedValueOnce({
         ok: true,
         json: async () => ({ status: 'accepted' }),
@@ -217,7 +220,7 @@ describe('taskDispatcherImpl', () => {
 
       expect(result.ok).toBe(true);
       if (result.ok) {
-        expect(result.value.workerLocation).toBe('vm');
+        expect(result.value.workerLocation).toBe('cloud-vm');
       }
 
       // Should have tried both workers
@@ -370,13 +373,15 @@ describe('taskDispatcherImpl', () => {
     it('returns error when dispatchSigningSecret is empty', async () => {
       const service = createTaskDispatcherService(baseDeps);
       const credentialsWithEmptySecret: DispatchWorkerCredentials = {
-        mac: {
-          url: 'https://cc-mac.intexuraos.cloud',
-          cfAccessClientId: 'test-client-id',
-          cfAccessClientSecret: 'test-client-secret',
-          dispatchSigningSecret: '',
-        },
-        priority: ['mac'],
+        workers: [
+          {
+            name: 'home-mac',
+            url: 'https://cc-mac.intexuraos.cloud',
+            cfAccessClientId: 'test-client-id',
+            cfAccessClientSecret: 'test-client-secret',
+            dispatchSigningSecret: '',
+          },
+        ],
       };
 
       vi.mocked(global.fetch).mockResolvedValueOnce({
@@ -436,7 +441,7 @@ describe('taskDispatcherImpl', () => {
 
       expect(result.ok).toBe(true);
       if (result.ok) {
-        expect(result.value.workerLocation).toBe('vm');
+        expect(result.value.workerLocation).toBe('cloud-vm');
       }
     });
 
@@ -606,13 +611,15 @@ describe('taskDispatcherImpl', () => {
     it('uses empty string for missing CF credentials', async () => {
       const service = createTaskDispatcherService(baseDeps);
       const credentialsWithEmptyCF: DispatchWorkerCredentials = {
-        mac: {
-          url: 'https://cc-mac.intexuraos.cloud',
-          cfAccessClientId: '',
-          cfAccessClientSecret: '',
-          dispatchSigningSecret: 'test-dispatch-secret',
-        },
-        priority: ['mac'],
+        workers: [
+          {
+            name: 'home-mac',
+            url: 'https://cc-mac.intexuraos.cloud',
+            cfAccessClientId: '',
+            cfAccessClientSecret: '',
+            dispatchSigningSecret: 'test-dispatch-secret',
+          },
+        ],
       };
 
       const mockFetch = vi.mocked(global.fetch);
@@ -652,8 +659,7 @@ describe('taskDispatcherImpl', () => {
     it('returns error when no workers configured in credentials', async () => {
       const service = createTaskDispatcherService(baseDeps);
       const emptyCredentials: DispatchWorkerCredentials = {
-        priority: ['mac', 'vm'],
-        // No mac or vm credentials
+        workers: [],
       };
 
       const result = await service.dispatch({
@@ -675,16 +681,18 @@ describe('taskDispatcherImpl', () => {
       }
     });
 
-    it('uses only mac worker when vm not in credentials', async () => {
+    it('uses only home-mac worker when cloud-vm not in credentials', async () => {
       const service = createTaskDispatcherService(baseDeps);
       const macOnlyCredentials: DispatchWorkerCredentials = {
-        mac: {
-          url: 'https://cc-mac.intexuraos.cloud',
-          cfAccessClientId: 'test-client-id',
-          cfAccessClientSecret: 'test-client-secret',
-          dispatchSigningSecret: 'test-dispatch-secret',
-        },
-        priority: ['mac'],
+        workers: [
+          {
+            name: 'home-mac',
+            url: 'https://cc-mac.intexuraos.cloud',
+            cfAccessClientId: 'test-client-id',
+            cfAccessClientSecret: 'test-client-secret',
+            dispatchSigningSecret: 'test-dispatch-secret',
+          },
+        ],
       };
 
       vi.mocked(global.fetch).mockResolvedValueOnce({
@@ -706,23 +714,25 @@ describe('taskDispatcherImpl', () => {
 
       expect(result.ok).toBe(true);
       if (result.ok) {
-        expect(result.value.workerLocation).toBe('mac');
+        expect(result.value.workerLocation).toBe('home-mac');
       }
 
-      // Only one call since vm is not configured
+      // Only one call since cloud-vm is not configured
       expect(vi.mocked(global.fetch)).toHaveBeenCalledTimes(1);
     });
 
-    it('uses only vm worker when mac not in credentials', async () => {
+    it('uses only cloud-vm worker when home-mac not in credentials', async () => {
       const service = createTaskDispatcherService(baseDeps);
       const vmOnlyCredentials: DispatchWorkerCredentials = {
-        vm: {
-          url: 'https://cc-vm.intexuraos.cloud',
-          cfAccessClientId: 'test-client-id',
-          cfAccessClientSecret: 'test-client-secret',
-          dispatchSigningSecret: 'test-dispatch-secret',
-        },
-        priority: ['vm'],
+        workers: [
+          {
+            name: 'cloud-vm',
+            url: 'https://cc-vm.intexuraos.cloud',
+            cfAccessClientId: 'test-client-id',
+            cfAccessClientSecret: 'test-client-secret',
+            dispatchSigningSecret: 'test-dispatch-secret',
+          },
+        ],
       };
 
       vi.mocked(global.fetch).mockResolvedValueOnce({
@@ -744,26 +754,29 @@ describe('taskDispatcherImpl', () => {
 
       expect(result.ok).toBe(true);
       if (result.ok) {
-        expect(result.value.workerLocation).toBe('vm');
+        expect(result.value.workerLocation).toBe('cloud-vm');
       }
     });
 
     it('respects priority order in credentials', async () => {
       const service = createTaskDispatcherService(baseDeps);
       const vmFirstCredentials: DispatchWorkerCredentials = {
-        mac: {
-          url: 'https://cc-mac.intexuraos.cloud',
-          cfAccessClientId: 'test-client-id',
-          cfAccessClientSecret: 'test-client-secret',
-          dispatchSigningSecret: 'test-dispatch-secret',
-        },
-        vm: {
-          url: 'https://cc-vm.intexuraos.cloud',
-          cfAccessClientId: 'test-client-id',
-          cfAccessClientSecret: 'test-client-secret',
-          dispatchSigningSecret: 'test-dispatch-secret',
-        },
-        priority: ['vm', 'mac'],
+        workers: [
+          {
+            name: 'cloud-vm',
+            url: 'https://cc-vm.intexuraos.cloud',
+            cfAccessClientId: 'test-client-id',
+            cfAccessClientSecret: 'test-client-secret',
+            dispatchSigningSecret: 'test-dispatch-secret',
+          },
+          {
+            name: 'home-mac',
+            url: 'https://cc-mac.intexuraos.cloud',
+            cfAccessClientId: 'test-client-id',
+            cfAccessClientSecret: 'test-client-secret',
+            dispatchSigningSecret: 'test-dispatch-secret',
+          },
+        ],
       };
 
       vi.mocked(global.fetch).mockResolvedValueOnce({
@@ -785,10 +798,10 @@ describe('taskDispatcherImpl', () => {
 
       expect(result.ok).toBe(true);
       if (result.ok) {
-        expect(result.value.workerLocation).toBe('vm');
+        expect(result.value.workerLocation).toBe('cloud-vm');
       }
 
-      // Should have called VM first due to priority
+      // Should have called cloud-vm first due to priority
       expect(vi.mocked(global.fetch)).toHaveBeenCalledWith(
         'https://cc-vm.intexuraos.cloud/tasks',
         expect.any(Object)

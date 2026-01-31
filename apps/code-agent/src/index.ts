@@ -11,8 +11,6 @@ const REQUIRED_ENV = [
   'INTEXURAOS_INTERNAL_AUTH_TOKEN',
   'INTEXURAOS_DISPATCH_SIGNING_SECRET',
   'INTEXURAOS_WEBHOOK_VERIFY_SECRET',
-  'INTEXURAOS_ORCHESTRATOR_MAC_URL',
-  'INTEXURAOS_ORCHESTRATOR_VM_URL',
   'INTEXURAOS_TOKEN_ENCRYPTION_KEY', // For per-user worker credentials encryption (has dev fallback)
 ];
 
@@ -32,9 +30,6 @@ const PRODUCTION_ONLY_ENV = [
   'INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC',
   'INTEXURAOS_LINEAR_AGENT_URL',
   'INTEXURAOS_ACTIONS_AGENT_URL',
-  'INTEXURAOS_CF_ACCESS_CLIENT_ID',
-  'INTEXURAOS_CF_ACCESS_CLIENT_SECRET',
-  'INTEXURAOS_CODE_WORKERS',
   'INTEXURAOS_SERVICE_URL',
   'INTEXURAOS_AUTH_AUDIENCE',
   'INTEXURAOS_AUTH_ISSUER',
@@ -69,10 +64,6 @@ async function main(): Promise<void> {
     actionsAgentUrl: config.actionsAgentUrl,
     dispatchSigningSecret: config.dispatchSigningSecret,
     webhookVerifySecret: config.webhookVerifySecret,
-    cfAccessClientId: config.cfAccessClientId,
-    cfAccessClientSecret: config.cfAccessClientSecret,
-    orchestratorMacUrl: config.orchestratorMacUrl,
-    orchestratorVmUrl: config.orchestratorVmUrl,
   });
 
   const app = await buildServer();

@@ -65,10 +65,6 @@ export interface ServiceConfig {
   actionsAgentUrl: string;
   dispatchSigningSecret: string;
   webhookVerifySecret: string;
-  cfAccessClientId: string;
-  cfAccessClientSecret: string;
-  orchestratorMacUrl: string;
-  orchestratorVmUrl: string;
 }
 
 let container: ServiceContainer | null = null;

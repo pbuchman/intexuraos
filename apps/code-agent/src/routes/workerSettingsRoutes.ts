@@ -12,11 +12,12 @@ import { getServices } from '../services.js';
 import type { JwtValidator } from './codeRoutes.js';
 import type {
   WorkerConfig,
-  WorkerConfigInput,
-  WorkerType,
   MaskedWorkerConfig,
   UserWorkerSettingsResponse,
+  WorkerConfigInput,
+  WorkerConfigUpdateInput,
 } from '../domain/models/workerSettings.js';
+import { WORKER_NAME_REGEX, MAX_WORKERS_PER_USER } from '../domain/models/workerSettings.js';
 
 export interface WorkerSettingsRoutesOptions {
   jwtValidator: JwtValidator;
@@ -40,6 +41,7 @@ function maskSecret(secret: string): string {
  */
 function maskWorkerConfig(config: WorkerConfig): MaskedWorkerConfig {
   const masked: MaskedWorkerConfig = {
+    name: config.name,
     url: config.url,
     cfAccessClientId: maskSecret(config.cfAccessClientId),
     cfAccessClientSecret: maskSecret(config.cfAccessClientSecret),
@@ -62,16 +64,23 @@ function maskWorkerConfig(config: WorkerConfig): MaskedWorkerConfig {
   return masked;
 }
 
-/**
- * Validate worker type parameter.
- */
-function isValidWorkerType(type: string): type is WorkerType {
-  /* v8 ignore start -- ts-type: type guard comparison always takes one branch @preserve */
-  return type === 'mac' || type === 'vm';
-  /* v8 ignore stop @preserve */
-}
+const addWorkerSchema = {
+  type: 'object',
+  properties: {
+    name: {
+      type: 'string',
+      minLength: 1,
+      maxLength: 32,
+    },
+    url: { type: 'string', format: 'uri' },
+    cfAccessClientId: { type: 'string', minLength: 1 },
+    cfAccessClientSecret: { type: 'string', minLength: 1 },
+    dispatchSigningSecret: { type: 'string', minLength: 1 },
+  },
+  required: ['name', 'url', 'cfAccessClientId', 'cfAccessClientSecret', 'dispatchSigningSecret'],
+} as const;
 
-const workerConfigInputSchema = {
+const updateWorkerSchema = {
   type: 'object',
   properties: {
     url: { type: 'string', format: 'uri' },
@@ -80,12 +89,25 @@ const workerConfigInputSchema = {
     dispatchSigningSecret: { type: 'string', minLength: 1 },
     enabled: { type: 'boolean' },
   },
-  required: ['url', 'cfAccessClientId', 'cfAccessClientSecret', 'dispatchSigningSecret'],
+} as const;
+
+const reorderSchema = {
+  type: 'object',
+  properties: {
+    workerNames: {
+      type: 'array',
+      items: { type: 'string' },
+      minItems: 1,
+      maxItems: MAX_WORKERS_PER_USER,
+    },
+  },
+  required: ['workerNames'],
 } as const;
 
 const maskedWorkerConfigSchema = {
   type: 'object',
   properties: {
+    name: { type: 'string' },
     url: { type: 'string' },
     cfAccessClientId: { type: 'string' },
     cfAccessClientSecret: { type: 'string' },
@@ -95,6 +117,7 @@ const maskedWorkerConfigSchema = {
     testStatus: { type: 'string', enum: ['success', 'failure'], nullable: true },
     testMessage: { type: 'string', nullable: true },
   },
+  required: ['name', 'url', 'cfAccessClientId', 'cfAccessClientSecret', 'dispatchSigningSecret', 'enabled'],
 } as const;
 
 export const workerSettingsRoutes: FastifyPluginCallback<WorkerSettingsRoutesOptions> = (
@@ -125,13 +148,12 @@ export const workerSettingsRoutes: FastifyPluginCallback<WorkerSettingsRoutesOpt
               data: {
                 type: 'object',
                 properties: {
-                  mac: maskedWorkerConfigSchema,
-                  vm: maskedWorkerConfigSchema,
-                  workerPriority: {
+                  workers: {
                     type: 'array',
-                    items: { type: 'string', enum: ['mac', 'vm'] },
+                    items: maskedWorkerConfigSchema,
                   },
                 },
+                required: ['workers'],
               },
             },
           },
@@ -192,52 +214,176 @@ export const workerSettingsRoutes: FastifyPluginCallback<WorkerSettingsRoutesOpt
 
       const settings = result.value;
 
-      /* v8 ignore start -- ts-type: optional property checks for worker configs @preserve */
-      const response: UserWorkerSettingsResponse = {};
-
-      if (settings !== null) {
-        if (settings.mac !== undefined) {
-          response.mac = maskWorkerConfig(settings.mac);
-        }
-        if (settings.vm !== undefined) {
-          response.vm = maskWorkerConfig(settings.vm);
-        }
-        if (settings.workerPriority !== undefined) {
-          response.workerPriority = settings.workerPriority;
-        }
-      }
-      /* v8 ignore stop @preserve */
+      const response: UserWorkerSettingsResponse = {
+        workers: settings?.workers.map(maskWorkerConfig) ?? [],
+      };
 
       return await reply.ok(response);
     }
     /* v8 ignore stop @preserve */
   );
 
-  // PATCH /code/worker-settings/:workerType - Create/update worker config
-  fastify.patch<{
-    Params: { workerType: string };
+  // POST /code/worker-settings/workers - Add new worker
+  fastify.post<{
     Body: WorkerConfigInput;
   }>(
-    '/code/worker-settings/:workerType',
+    '/code/worker-settings/workers',
     {
       // eslint-disable-next-line @typescript-eslint/no-misused-promises
       onRequest: jwtValidator,
       schema: {
-        operationId: 'updateWorkerConfig',
-        summary: 'Create or update worker configuration',
-        description: 'Create or update configuration for a specific worker type (mac or vm). Requires Auth0 JWT.',
+        operationId: 'addWorker',
+        summary: 'Add new worker',
+        description: 'Add a new worker configuration. Requires Auth0 JWT.',
+        tags: ['public', 'worker-settings'],
+        body: addWorkerSchema,
+        response: {
+          200: {
+            description: 'Worker added',
+            type: 'object',
+            required: ['success', 'data'],
+            properties: {
+              success: { type: 'boolean', enum: [true] },
+              data: {
+                type: 'object',
+                properties: {
+                  added: { type: 'boolean', enum: [true] },
+                },
+                required: ['added'],
+              },
+            },
+          },
+          400: {
+            description: 'Invalid request',
+            type: 'object',
+            required: ['success', 'error'],
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: {
+                type: 'object',
+                required: ['code', 'message'],
+                properties: {
+                  code: { type: 'string', enum: ['INVALID_REQUEST'] },
+                  message: { type: 'string' },
+                },
+              },
+            },
+          },
+          401: {
+            description: 'Unauthorized',
+            type: 'object',
+            required: ['success', 'error'],
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: {
+                type: 'object',
+                required: ['code', 'message'],
+                properties: {
+                  code: { type: 'string', enum: ['UNAUTHORIZED'] },
+                  message: { type: 'string' },
+                },
+              },
+            },
+          },
+          409: {
+            description: 'Conflict - max workers exceeded or worker already exists',
+            type: 'object',
+            required: ['success', 'error'],
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: {
+                type: 'object',
+                required: ['code', 'message'],
+                properties: {
+                  code: { type: 'string', enum: ['CONFLICT'] },
+                  message: { type: 'string' },
+                },
+              },
+            },
+          },
+          500: {
+            description: 'Internal server error',
+            type: 'object',
+            required: ['success', 'error'],
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: {
+                type: 'object',
+                required: ['code', 'message'],
+                properties: {
+                  code: { type: 'string', enum: ['INTERNAL_ERROR'] },
+                  message: { type: 'string' },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    /* v8 ignore start -- test-infra: route handler auth branches tested at middleware level @preserve */
+    async (request: FastifyRequest<{ Body: WorkerConfigInput }>, reply: FastifyReply) => {
+      logIncomingRequest(request, {
+        message: 'Received request to POST /code/worker-settings/workers',
+      });
+
+      const { workerSettingsRepo } = getServices();
+      /* v8 ignore stop @preserve */
+      const userId = request.user?.userId ?? 'unknown-user';
+      const { name } = request.body;
+
+      // Validate worker name
+      if (!WORKER_NAME_REGEX.test(name)) {
+        return await reply.fail(
+          'INVALID_REQUEST',
+          'Worker name must be 3-32 chars, lowercase alphanumeric with hyphens, start/end with letter or number'
+        );
+      }
+
+      request.log.info({ userId, name }, 'Adding worker');
+
+      const result = await workerSettingsRepo.addWorker(userId, request.body);
+
+      if (!result.ok) {
+        request.log.error({ error: result.error }, 'Failed to add worker');
+        const codeMap: Record<string, 'INVALID_REQUEST' | 'CONFLICT' | 'INTERNAL_ERROR'> = {
+          max_workers_exceeded: 'CONFLICT',
+          already_exists: 'CONFLICT',
+          internal_error: 'INTERNAL_ERROR',
+        };
+        return await reply.fail(codeMap[result.error.code] ?? 'INTERNAL_ERROR', result.error.message);
+      }
+
+      request.log.info({ userId, name }, 'Worker added successfully');
+
+      return await reply.ok({ added: true });
+    }
+  );
+
+  // PATCH /code/worker-settings/workers/:name - Update worker
+  fastify.patch<{
+    Params: { name: string };
+    Body: WorkerConfigUpdateInput;
+  }>(
+    '/code/worker-settings/workers/:name',
+    {
+      // eslint-disable-next-line @typescript-eslint/no-misused-promises
+      onRequest: jwtValidator,
+      schema: {
+        operationId: 'updateWorker',
+        summary: 'Update worker configuration',
+        description: 'Update configuration for a specific worker. Requires Auth0 JWT.',
         tags: ['public', 'worker-settings'],
         params: {
           type: 'object',
           properties: {
-            workerType: { type: 'string', enum: ['mac', 'vm'] },
+            name: { type: 'string' },
           },
-          required: ['workerType'],
+          required: ['name'],
         },
-        body: workerConfigInputSchema,
+        body: updateWorkerSchema,
         response: {
           200: {
-            description: 'Worker config updated',
+            description: 'Worker updated',
             type: 'object',
             required: ['success', 'data'],
             properties: {
@@ -252,7 +398,7 @@ export const workerSettingsRoutes: FastifyPluginCallback<WorkerSettingsRoutesOpt
             },
           },
           400: {
-            description: 'Invalid worker type',
+            description: 'Invalid request',
             type: 'object',
             required: ['success', 'error'],
             properties: {
@@ -261,7 +407,7 @@ export const workerSettingsRoutes: FastifyPluginCallback<WorkerSettingsRoutesOpt
                 type: 'object',
                 required: ['code', 'message'],
                 properties: {
-                  code: { type: 'string', enum: ['INVALID_REQUEST'] },
+                  code: { type: 'string', enum: ['INVALID_REQUEST', 'NOT_FOUND'] },
                   message: { type: 'string' },
                 },
               },
@@ -304,61 +450,61 @@ export const workerSettingsRoutes: FastifyPluginCallback<WorkerSettingsRoutesOpt
     },
     /* v8 ignore start -- test-infra: route handler auth branches tested at middleware level @preserve */
     async (
-      request: FastifyRequest<{ Params: { workerType: string }; Body: WorkerConfigInput }>,
+      request: FastifyRequest<{ Params: { name: string }; Body: WorkerConfigUpdateInput }>,
       reply: FastifyReply
     ) => {
       logIncomingRequest(request, {
-        message: 'Received request to PATCH /code/worker-settings/:workerType',
+        message: 'Received request to PATCH /code/worker-settings/workers/:name',
         includeParams: true,
       });
 
       const { workerSettingsRepo } = getServices();
       /* v8 ignore stop @preserve */
       const userId = request.user?.userId ?? 'unknown-user';
-      const { workerType } = request.params;
+      const { name } = request.params;
 
-      if (!isValidWorkerType(workerType)) {
-        return await reply.fail('INVALID_REQUEST', 'Worker type must be "mac" or "vm"');
-      }
+      request.log.info({ userId, name }, 'Updating worker');
 
-      request.log.info({ userId, workerType }, 'Updating worker config');
-
-      const result = await workerSettingsRepo.updateWorkerConfig(userId, workerType, request.body);
+      const result = await workerSettingsRepo.updateWorker(userId, name, request.body);
 
       if (!result.ok) {
-        request.log.error({ error: result.error }, 'Failed to update worker config');
-        return await reply.fail('INTERNAL_ERROR', result.error.message);
+        request.log.error({ error: result.error }, 'Failed to update worker');
+        const codeMap: Record<string, 'INVALID_REQUEST' | 'NOT_FOUND' | 'INTERNAL_ERROR'> = {
+          not_found: 'NOT_FOUND',
+          internal_error: 'INTERNAL_ERROR',
+        };
+        return await reply.fail(codeMap[result.error.code] ?? 'INTERNAL_ERROR', result.error.message);
       }
 
-      request.log.info({ userId, workerType }, 'Worker config updated successfully');
+      request.log.info({ userId, name }, 'Worker updated successfully');
 
       return await reply.ok({ updated: true });
     }
   );
 
-  // DELETE /code/worker-settings/:workerType - Delete worker config
+  // DELETE /code/worker-settings/workers/:name - Delete worker
   fastify.delete<{
-    Params: { workerType: string };
+    Params: { name: string };
   }>(
-    '/code/worker-settings/:workerType',
+    '/code/worker-settings/workers/:name',
     {
       // eslint-disable-next-line @typescript-eslint/no-misused-promises
       onRequest: jwtValidator,
       schema: {
-        operationId: 'deleteWorkerConfig',
+        operationId: 'deleteWorker',
         summary: 'Delete worker configuration',
-        description: 'Delete configuration for a specific worker type. Requires Auth0 JWT.',
+        description: 'Delete configuration for a specific worker. Requires Auth0 JWT.',
         tags: ['public', 'worker-settings'],
         params: {
           type: 'object',
           properties: {
-            workerType: { type: 'string', enum: ['mac', 'vm'] },
+            name: { type: 'string' },
           },
-          required: ['workerType'],
+          required: ['name'],
         },
         response: {
           200: {
-            description: 'Worker config deleted',
+            description: 'Worker deleted',
             type: 'object',
             required: ['success', 'data'],
             properties: {
@@ -373,7 +519,7 @@ export const workerSettingsRoutes: FastifyPluginCallback<WorkerSettingsRoutesOpt
             },
           },
           400: {
-            description: 'Invalid worker type',
+            description: 'Invalid request',
             type: 'object',
             required: ['success', 'error'],
             properties: {
@@ -382,7 +528,7 @@ export const workerSettingsRoutes: FastifyPluginCallback<WorkerSettingsRoutesOpt
                 type: 'object',
                 required: ['code', 'message'],
                 properties: {
-                  code: { type: 'string', enum: ['INVALID_REQUEST'] },
+                  code: { type: 'string', enum: ['INVALID_REQUEST', 'NOT_FOUND'] },
                   message: { type: 'string' },
                 },
               },
@@ -424,44 +570,41 @@ export const workerSettingsRoutes: FastifyPluginCallback<WorkerSettingsRoutesOpt
       },
     },
     /* v8 ignore start -- test-infra: route handler auth branches tested at middleware level @preserve */
-    async (
-      request: FastifyRequest<{ Params: { workerType: string } }>,
-      reply: FastifyReply
-    ) => {
+    async (request: FastifyRequest<{ Params: { name: string } }>, reply: FastifyReply) => {
       logIncomingRequest(request, {
-        message: 'Received request to DELETE /code/worker-settings/:workerType',
+        message: 'Received request to DELETE /code/worker-settings/workers/:name',
         includeParams: true,
       });
 
       const { workerSettingsRepo } = getServices();
       /* v8 ignore stop @preserve */
       const userId = request.user?.userId ?? 'unknown-user';
-      const { workerType } = request.params;
+      const { name } = request.params;
 
-      if (!isValidWorkerType(workerType)) {
-        return await reply.fail('INVALID_REQUEST', 'Worker type must be "mac" or "vm"');
-      }
+      request.log.info({ userId, name }, 'Deleting worker');
 
-      request.log.info({ userId, workerType }, 'Deleting worker config');
-
-      const result = await workerSettingsRepo.deleteWorkerConfig(userId, workerType);
+      const result = await workerSettingsRepo.deleteWorker(userId, name);
 
       if (!result.ok) {
-        request.log.error({ error: result.error }, 'Failed to delete worker config');
-        return await reply.fail('INTERNAL_ERROR', result.error.message);
+        request.log.error({ error: result.error }, 'Failed to delete worker');
+        const codeMap: Record<string, 'INVALID_REQUEST' | 'NOT_FOUND' | 'INTERNAL_ERROR'> = {
+          not_found: 'NOT_FOUND',
+          internal_error: 'INTERNAL_ERROR',
+        };
+        return await reply.fail(codeMap[result.error.code] ?? 'INTERNAL_ERROR', result.error.message);
       }
 
-      request.log.info({ userId, workerType }, 'Worker config deleted successfully');
+      request.log.info({ userId, name }, 'Worker deleted successfully');
 
       return await reply.ok({ deleted: true });
     }
   );
 
-  // POST /code/worker-settings/:workerType/test - Test worker connectivity
+  // POST /code/worker-settings/workers/:name/test - Test worker connectivity
   fastify.post<{
-    Params: { workerType: string };
+    Params: { name: string };
   }>(
-    '/code/worker-settings/:workerType/test',
+    '/code/worker-settings/workers/:name/test',
     {
       // eslint-disable-next-line @typescript-eslint/no-misused-promises
       onRequest: jwtValidator,
@@ -473,9 +616,9 @@ export const workerSettingsRoutes: FastifyPluginCallback<WorkerSettingsRoutesOpt
         params: {
           type: 'object',
           properties: {
-            workerType: { type: 'string', enum: ['mac', 'vm'] },
+            name: { type: 'string' },
           },
-          required: ['workerType'],
+          required: ['name'],
         },
         response: {
           200: {
@@ -496,7 +639,7 @@ export const workerSettingsRoutes: FastifyPluginCallback<WorkerSettingsRoutesOpt
             },
           },
           400: {
-            description: 'Invalid worker type',
+            description: 'Invalid request',
             type: 'object',
             required: ['success', 'error'],
             properties: {
@@ -505,7 +648,7 @@ export const workerSettingsRoutes: FastifyPluginCallback<WorkerSettingsRoutesOpt
                 type: 'object',
                 required: ['code', 'message'],
                 properties: {
-                  code: { type: 'string', enum: ['INVALID_REQUEST'] },
+                  code: { type: 'string', enum: ['INVALID_REQUEST', 'NOT_FOUND'] },
                   message: { type: 'string' },
                 },
               },
@@ -563,27 +706,20 @@ export const workerSettingsRoutes: FastifyPluginCallback<WorkerSettingsRoutesOpt
       },
     },
     /* v8 ignore start -- test-infra: route handler auth branches tested at middleware level @preserve */
-    async (
-      request: FastifyRequest<{ Params: { workerType: string } }>,
-      reply: FastifyReply
-    ) => {
+    async (request: FastifyRequest<{ Params: { name: string } }>, reply: FastifyReply) => {
       logIncomingRequest(request, {
-        message: 'Received request to POST /code/worker-settings/:workerType/test',
+        message: 'Received request to POST /code/worker-settings/workers/:name/test',
         includeParams: true,
       });
 
       const { workerSettingsRepo } = getServices();
       /* v8 ignore stop @preserve */
       const userId = request.user?.userId ?? 'unknown-user';
-      const { workerType } = request.params;
+      const { name } = request.params;
 
-      if (!isValidWorkerType(workerType)) {
-        return await reply.fail('INVALID_REQUEST', 'Worker type must be "mac" or "vm"');
-      }
+      request.log.info({ userId, name }, 'Testing worker connectivity');
 
-      request.log.info({ userId, workerType }, 'Testing worker connectivity');
-
-      const configResult = await workerSettingsRepo.getWorkerConfig(userId, workerType);
+      const configResult = await workerSettingsRepo.getWorkerByName(userId, name);
 
       if (!configResult.ok) {
         request.log.error({ error: configResult.error }, 'Failed to get worker config for test');
@@ -593,7 +729,7 @@ export const workerSettingsRoutes: FastifyPluginCallback<WorkerSettingsRoutesOpt
       const config = configResult.value;
 
       if (config === null) {
-        return await reply.fail('NOT_FOUND', `${workerType} worker not configured`);
+        return await reply.fail('NOT_FOUND', `Worker '${name}' not configured`);
       }
 
       const lastTestedAt = new Date().toISOString();
@@ -619,22 +755,128 @@ export const workerSettingsRoutes: FastifyPluginCallback<WorkerSettingsRoutesOpt
       } catch (error) {
         const errorMessage = getErrorMessage(error);
         testMessage = `Connection failed: ${errorMessage}`;
-        request.log.warn({ userId, workerType, error: errorMessage }, 'Worker connectivity test failed');
+        request.log.warn({ userId, name, error: errorMessage }, 'Worker connectivity test failed');
       }
 
-      await workerSettingsRepo.updateTestResult(userId, workerType, {
-        testStatus,
-        testMessage,
-        lastTestedAt,
+      await workerSettingsRepo.updateTestResult(userId, name, {
+        status: testStatus,
+        message: testMessage,
       });
 
-      request.log.info({ userId, workerType, testStatus }, 'Worker connectivity test completed');
+      request.log.info({ userId, name, testStatus }, 'Worker connectivity test completed');
 
       return await reply.ok({
         testStatus,
         testMessage,
         lastTestedAt,
       });
+    }
+  );
+
+  // PUT /code/worker-settings/priority - Reorder workers
+  fastify.put<{
+    Body: { workerNames: string[] };
+  }>(
+    '/code/worker-settings/priority',
+    {
+      // eslint-disable-next-line @typescript-eslint/no-misused-promises
+      onRequest: jwtValidator,
+      schema: {
+        operationId: 'reorderWorkers',
+        summary: 'Reorder workers',
+        description: 'Reorder workers by priority. First in array = primary worker. Requires Auth0 JWT.',
+        tags: ['public', 'worker-settings'],
+        body: reorderSchema,
+        response: {
+          200: {
+            description: 'Workers reordered',
+            type: 'object',
+            required: ['success', 'data'],
+            properties: {
+              success: { type: 'boolean', enum: [true] },
+              data: {
+                type: 'object',
+                properties: {
+                  reordered: { type: 'boolean', enum: [true] },
+                },
+                required: ['reordered'],
+              },
+            },
+          },
+          400: {
+            description: 'Invalid request',
+            type: 'object',
+            required: ['success', 'error'],
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: {
+                type: 'object',
+                required: ['code', 'message'],
+                properties: {
+                  code: { type: 'string', enum: ['INVALID_REQUEST'] },
+                  message: { type: 'string' },
+                },
+              },
+            },
+          },
+          401: {
+            description: 'Unauthorized',
+            type: 'object',
+            required: ['success', 'error'],
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: {
+                type: 'object',
+                required: ['code', 'message'],
+                properties: {
+                  code: { type: 'string', enum: ['UNAUTHORIZED'] },
+                  message: { type: 'string' },
+                },
+              },
+            },
+          },
+          500: {
+            description: 'Internal server error',
+            type: 'object',
+            required: ['success', 'error'],
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: {
+                type: 'object',
+                required: ['code', 'message'],
+                properties: {
+                  code: { type: 'string', enum: ['INTERNAL_ERROR'] },
+                  message: { type: 'string' },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    /* v8 ignore start -- test-infra: route handler auth branches tested at middleware level @preserve */
+    async (request: FastifyRequest<{ Body: { workerNames: string[] } }>, reply: FastifyReply) => {
+      logIncomingRequest(request, {
+        message: 'Received request to PUT /code/worker-settings/priority',
+      });
+
+      const { workerSettingsRepo } = getServices();
+      /* v8 ignore stop @preserve */
+      const userId = request.user?.userId ?? 'unknown-user';
+      const { workerNames } = request.body;
+
+      request.log.info({ userId, workerNames }, 'Reordering workers');
+
+      const result = await workerSettingsRepo.reorderWorkers(userId, workerNames);
+
+      if (!result.ok) {
+        request.log.error({ error: result.error }, 'Failed to reorder workers');
+        return await reply.fail('INVALID_REQUEST', result.error.message);
+      }
+
+      request.log.info({ userId, workerNames }, 'Workers reordered successfully');
+
+      return await reply.ok({ reordered: true });
     }
   );
 

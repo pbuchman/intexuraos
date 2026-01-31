@@ -26,7 +26,7 @@ const codeTaskSchema = {
     sanitizedPrompt: { type: 'string' },
     systemPromptHash: { type: 'string' },
     workerType: { type: 'string', enum: ['opus', 'auto', 'glm'] },
-    workerLocation: { type: 'string', enum: ['mac', 'vm'] },
+    workerLocation: { type: 'string' },
     repository: { type: 'string' },
     baseBranch: { type: 'string' },
     traceId: { type: 'string' },
@@ -122,7 +122,7 @@ function taskToApiResponse(task: {
   sanitizedPrompt: string;
   systemPromptHash: string;
   workerType: 'opus' | 'auto' | 'glm';
-  workerLocation: 'mac' | 'vm';
+  workerLocation: string;
   repository: string;
   baseBranch: string;
   traceId: string;
@@ -166,7 +166,7 @@ function taskToApiResponse(task: {
   sanitizedPrompt: string;
   systemPromptHash: string;
   workerType: 'opus' | 'auto' | 'glm';
-  workerLocation: 'mac' | 'vm';
+  workerLocation: string;
   repository: string;
   baseBranch: string;
   traceId: string;
@@ -1123,7 +1123,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         sanitizedPrompt: string;
         systemPromptHash: string;
         workerType: 'opus' | 'auto' | 'glm';
-        workerLocation: 'mac' | 'vm';
+        workerLocation: string;
         repository: string;
         baseBranch: string;
         traceId: string;
@@ -1194,41 +1194,28 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       const settings = settingsResult.value;
 
       // Build worker credentials from user's settings
-      type DispatchWorkerCredentials = {
-        mac?: { url: string; cfAccessClientId: string; cfAccessClientSecret: string; dispatchSigningSecret: string };
-        vm?: { url: string; cfAccessClientId: string; cfAccessClientSecret: string; dispatchSigningSecret: string };
-        priority: Array<'mac' | 'vm'>;
-      };
+      // Only include enabled workers, in the user's priority order
+      /* v8 ignore start -- ts-type: nullish coalescing for when settings is null @preserve */
+      const enabledWorkers = settings?.workers.filter((w) => w.enabled) ?? [];
+      /* v8 ignore stop @preserve */
 
-      /* v8 ignore start -- ts-type: optional worker config checks @preserve */
-      const workerCredentials: DispatchWorkerCredentials = {
-        priority: settings?.workerPriority ?? ['mac', 'vm'],
-      };
-
-      if (settings?.mac !== undefined && settings.mac.enabled) {
-        workerCredentials.mac = {
-          url: settings.mac.url,
-          cfAccessClientId: settings.mac.cfAccessClientId,
-          cfAccessClientSecret: settings.mac.cfAccessClientSecret,
-          dispatchSigningSecret: settings.mac.dispatchSigningSecret,
-        };
-      }
-
-      if (settings?.vm !== undefined && settings.vm.enabled) {
-        workerCredentials.vm = {
-          url: settings.vm.url,
-          cfAccessClientId: settings.vm.cfAccessClientId,
-          cfAccessClientSecret: settings.vm.cfAccessClientSecret,
-          dispatchSigningSecret: settings.vm.dispatchSigningSecret,
-        };
-      }
-
+      /* v8 ignore start -- test-infra: requires user with no enabled workers fixture @preserve */
       // Fail if no workers configured
-      if (workerCredentials.mac === undefined && workerCredentials.vm === undefined) {
+      if (enabledWorkers.length === 0) {
         request.log.warn({ userId }, 'User has no workers configured');
         return await reply.fail('WORKER_NOT_CONFIGURED', 'Please configure your workers in Settings before submitting code tasks');
       }
       /* v8 ignore stop @preserve */
+
+      const workerCredentials = {
+        workers: enabledWorkers.map((w) => ({
+          name: w.name,
+          url: w.url,
+          cfAccessClientId: w.cfAccessClientId,
+          cfAccessClientSecret: w.cfAccessClientSecret,
+          dispatchSigningSecret: w.dispatchSigningSecret,
+        })),
+      };
 
       // Dispatch to worker (use stored webhook secret from task)
       const dispatchInput: {
@@ -1241,7 +1228,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         workerType: 'opus' | 'auto' | 'glm';
         webhookUrl: string;
         webhookSecret: string;
-        workerCredentials: DispatchWorkerCredentials;
+        workerCredentials: { workers: Array<{ name: string; url: string; cfAccessClientId: string; cfAccessClientSecret: string; dispatchSigningSecret: string }> };
       } = {
         taskId: task.id,
         prompt: task.sanitizedPrompt,
@@ -1788,13 +1775,12 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         /* v8 ignore start -- ts-type: optional worker config checks for cancellation @preserve */
         if (settingsResult.ok && settingsResult.value !== null) {
           const settings = settingsResult.value;
-          const workerConfig = task.workerLocation === 'mac' ? settings.mac : settings.vm;
+          const workerConfig = settings.workers.find((w) => w.name === task.workerLocation);
           if (workerConfig !== undefined && workerConfig.enabled) {
             workerCreds = {
               url: workerConfig.url,
               cfAccessClientId: workerConfig.cfAccessClientId,
               cfAccessClientSecret: workerConfig.cfAccessClientSecret,
-              dispatchSigningSecret: workerConfig.dispatchSigningSecret,
             };
           }
         }

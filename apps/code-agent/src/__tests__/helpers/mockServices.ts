@@ -129,11 +129,12 @@ export async function setupTestWorkerSettings(userId: string): Promise<void> {
   const { getServices } = await import('../../services.js');
   const { workerSettingsRepo } = getServices();
 
-  await workerSettingsRepo.updateWorkerConfig(userId, 'mac', {
+  // Add a default worker for testing
+  await workerSettingsRepo.addWorker(userId, {
+    name: 'home-mac',
     url: 'https://cc-mac.intexuraos.cloud',
     cfAccessClientId: 'test-client-id',
     cfAccessClientSecret: 'test-client-secret',
     dispatchSigningSecret: 'test-dispatch-secret',
-    enabled: true,
   });
 }
