@@ -65,8 +65,8 @@ export function Header(): React.JSX.Element {
   const userPicture = user?.picture;
 
   return (
-    <header className="fixed left-0 right-0 top-0 z-50 flex h-16 items-center justify-between border-b border-slate-200 bg-white px-4 shadow-sm dark:border-slate-700 dark:bg-slate-800 md:px-6">
-      {/* Logo - with left padding on mobile to account for menu button */}
+    <header className="fixed left-0 right-0 top-0 z-50 flex h-16 items-center justify-between border-b border-slate-200 bg-white px-4 shadow-sm dark:border-slate-700 dark:bg-slate-800 md:pl-3 md:pr-6">
+      {/* Logo - aligned with sidebar menu icons, with left padding on mobile for menu button */}
       <div className="flex items-center gap-3 pl-12 md:pl-0">
         <button
           onClick={(): void => {
@@ -78,7 +78,7 @@ export function Header(): React.JSX.Element {
           <img
             src="/branding/logo-primary-dark.png"
             alt="IntexuraOS"
-            className="h-8 block dark:hidden"
+            className="h-10 block dark:hidden"
             onError={(e): void => {
               e.currentTarget.style.display = 'none';
             }}
@@ -87,7 +87,7 @@ export function Header(): React.JSX.Element {
           <img
             src="/branding/logo-primary-light.png"
             alt="IntexuraOS"
-            className="h-8 hidden dark:block"
+            className="h-10 hidden dark:block"
             onError={(e): void => {
               e.currentTarget.style.display = 'none';
             }}
