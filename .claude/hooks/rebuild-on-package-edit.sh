@@ -5,7 +5,10 @@
 
 set -euo pipefail
 
-cd "$(dirname "$0")/../.." || exit 0
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+LOG_FILE="${SCRIPT_DIR}/rebuild-on-package-edit.log"
+
+cd "$SCRIPT_DIR/../.." || exit 0
 
 INPUT=$(cat)
 TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name // ""')
@@ -31,6 +34,7 @@ if [[ "$FILE_PATH" =~ ^packages/([^/]+)/src/ ]]; then
       PKG_JSON_NAME=$(jq -r '.name // empty' "$PACKAGE_DIR/package.json" 2>/dev/null)
       if [ -n "$PKG_JSON_NAME" ]; then
         echo "Rebuilding $PKG_JSON_NAME after edit..." >&2
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] REBUILD: $PKG_JSON_NAME ($FILE_PATH)" >> "$LOG_FILE"
         pnpm --filter "$PKG_JSON_NAME" build >&2 2>&1 || true
       fi
     fi

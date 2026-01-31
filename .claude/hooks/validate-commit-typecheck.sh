@@ -5,7 +5,10 @@
 
 set -euo pipefail
 
-cd "$(dirname "$0")/../.." || exit 0
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+LOG_FILE="${SCRIPT_DIR}/validate-commit-typecheck.log"
+
+cd "$SCRIPT_DIR/../.." || exit 0
 
 INPUT=$(cat)
 TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name // ""')
@@ -57,6 +60,7 @@ $ERROR_OUTPUT
 
 Run 'pnpm typecheck' for full output.
 EOF
+  echo "[$(date '+%Y-%m-%d %H:%M:%S')] BLOCKED: TS errors in staged files" >> "$LOG_FILE"
   exit 2
 fi
 
@@ -71,6 +75,7 @@ for pkg in packages/*/; do
 
 Run 'pnpm build' before committing.
 EOF
+      echo "[$(date '+%Y-%m-%d %H:%M:%S')] BLOCKED: $(basename $pkg) missing dist/" >> "$LOG_FILE"
       exit 2
     fi
   fi
