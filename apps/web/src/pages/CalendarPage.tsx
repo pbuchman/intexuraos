@@ -7,14 +7,18 @@ import {
   ChevronUp,
   Clock,
   ExternalLink,
+  Loader2,
   MapPin,
   RefreshCw,
+  Trash2,
   Users,
   AlertCircle,
-  X,
 } from 'lucide-react';
 import { Button, Card, Layout, RefreshIndicator } from '@/components';
+import { useAuth } from '@/context';
 import { useCalendarEvents, useFailedCalendarEvents } from '@/hooks';
+import { deleteFailedEvent, retryFailedEvent } from '@/services/calendarApi.js';
+import { getErrorMessage } from '@intexuraos/common-core/errors';
 import type { CalendarEvent, FailedCalendarEvent } from '@/types';
 import { formatTime, formatWeekRange } from '@/utils/dateFormat';
 import { getCurrentWeekRange } from '@/utils';
@@ -122,10 +126,19 @@ function EventRow({ event }: EventRowProps): React.JSX.Element {
 
 interface FailedEventCardProps {
   event: FailedCalendarEvent;
-  onDismiss: (id: string) => void;
+  onDelete: (id: string) => Promise<void>;
+  onRetry: (id: string) => Promise<void>;
+  isDeleting: boolean;
+  isRetrying: boolean;
 }
 
-function FailedEventCard({ event, onDismiss }: FailedEventCardProps): React.JSX.Element {
+function FailedEventCard({
+  event,
+  onDelete,
+  onRetry,
+  isDeleting,
+  isRetrying,
+}: FailedEventCardProps): React.JSX.Element {
   return (
     <div className="flex gap-3 rounded-lg border border-amber-200 bg-amber-50 p-3">
       <div className="flex shrink-0 items-center justify-center rounded-lg bg-amber-100 p-2 text-amber-600">
@@ -137,16 +150,36 @@ function FailedEventCard({ event, onDismiss }: FailedEventCardProps): React.JSX.
           <h4 className="font-medium text-amber-900">
             {event.summary ?? 'Untitled event'}
           </h4>
-          <button
-            type="button"
-            onClick={() => {
-              onDismiss(event.id);
-            }}
-            className="shrink-0 rounded p-1 text-amber-400 transition-colors hover:bg-amber-100 hover:text-amber-600"
-            aria-label="Dismiss"
-          >
-            <X className="h-3 w-3" />
-          </button>
+          <div className="flex shrink-0 gap-1">
+            <button
+              type="button"
+              onClick={() => void onRetry(event.id)}
+              disabled={isRetrying || isDeleting}
+              className="rounded p-1 text-amber-400 transition-colors hover:bg-amber-100 hover:text-blue-600 disabled:opacity-50"
+              aria-label="Retry"
+              title="Retry creating event"
+            >
+              {isRetrying ? (
+                <Loader2 className="h-3 w-3 animate-spin" />
+              ) : (
+                <RefreshCw className="h-3 w-3" />
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={() => void onDelete(event.id)}
+              disabled={isDeleting || isRetrying}
+              className="rounded p-1 text-amber-400 transition-colors hover:bg-amber-100 hover:text-red-600 disabled:opacity-50"
+              aria-label="Delete"
+              title="Delete failed event"
+            >
+              {isDeleting ? (
+                <Loader2 className="h-3 w-3 animate-spin" />
+              ) : (
+                <Trash2 className="h-3 w-3" />
+              )}
+            </button>
+          </div>
         </div>
 
         {event.description !== null && event.description !== '' && (
@@ -173,12 +206,18 @@ function FailedEventCard({ event, onDismiss }: FailedEventCardProps): React.JSX.
 
 interface NeedsAttentionSectionProps {
   events: FailedCalendarEvent[];
-  onDismiss: (id: string) => void;
+  onDelete: (id: string) => Promise<void>;
+  onRetry: (id: string) => Promise<void>;
+  deletingId: string | null;
+  retryingId: string | null;
 }
 
 function NeedsAttentionSection({
   events,
-  onDismiss,
+  onDelete,
+  onRetry,
+  deletingId,
+  retryingId,
 }: NeedsAttentionSectionProps): React.JSX.Element | null {
   const [expanded, setExpanded] = useState(false);
   const visibleCount = expanded ? events.length : Math.min(events.length, 3);
@@ -227,7 +266,14 @@ function NeedsAttentionSection({
 
       <div className="space-y-2">
         {events.slice(0, visibleCount).map((event) => (
-          <FailedEventCard key={event.id} event={event} onDismiss={onDismiss} />
+          <FailedEventCard
+            key={event.id}
+            event={event}
+            onDelete={onDelete}
+            onRetry={onRetry}
+            isDeleting={deletingId === event.id}
+            isRetrying={retryingId === event.id}
+          />
         ))}
       </div>
     </div>
@@ -269,6 +315,7 @@ function DateGroup({ date, events }: DateGroupProps): React.JSX.Element {
 }
 
 export function CalendarPage(): React.JSX.Element {
+  const { getAccessToken } = useAuth();
   const { events, loading, refreshing, error, filters, setFilters, refresh } = useCalendarEvents();
   const {
     events: failedEvents,
@@ -276,7 +323,10 @@ export function CalendarPage(): React.JSX.Element {
     refresh: refreshFailedEvents,
   } = useFailedCalendarEvents();
   const [isManualRefreshing, setIsManualRefreshing] = useState(false);
-  const [dismissedFailedEventIds, setDismissedFailedEventIds] = useState<Set<string>>(new Set());
+  const [deletingFailedEventId, setDeletingFailedEventId] = useState<string | null>(null);
+  const [retryingFailedEventId, setRetryingFailedEventId] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   const currentStart = filters.timeMin !== undefined ? new Date(filters.timeMin) : new Date();
   const currentEnd = filters.timeMax !== undefined ? new Date(filters.timeMax) : new Date();
@@ -325,13 +375,41 @@ export function CalendarPage(): React.JSX.Element {
     }
   };
 
-  const handleDismissFailedEvent = (id: string): void => {
-    setDismissedFailedEventIds((prev) => new Set([...prev, id]));
+  const handleDeleteFailedEvent = async (id: string): Promise<void> => {
+    try {
+      setDeletingFailedEventId(id);
+      setActionError(null);
+      const token = await getAccessToken();
+      await deleteFailedEvent(token, id);
+      await refreshFailedEvents();
+      setSuccessMessage('Failed event deleted');
+      setTimeout(() => {
+        setSuccessMessage(null);
+      }, 3000);
+    } catch (e) {
+      setActionError(getErrorMessage(e, 'Failed to delete event'));
+    } finally {
+      setDeletingFailedEventId(null);
+    }
   };
 
-  const visibleFailedEvents = failedEvents.filter(
-    (event) => !dismissedFailedEventIds.has(event.id)
-  );
+  const handleRetryFailedEvent = async (id: string): Promise<void> => {
+    try {
+      setRetryingFailedEventId(id);
+      setActionError(null);
+      const token = await getAccessToken();
+      await retryFailedEvent(token, id);
+      await Promise.all([refreshFailedEvents(), refresh()]);
+      setSuccessMessage('Event created successfully');
+      setTimeout(() => {
+        setSuccessMessage(null);
+      }, 5000);
+    } catch (e) {
+      setActionError(getErrorMessage(e, 'Failed to retry event creation'));
+    } finally {
+      setRetryingFailedEventId(null);
+    }
+  };
 
   const groupedEvents = groupEventsByDate(events);
   const sortedDates = Array.from(groupedEvents.keys()).sort(
@@ -369,9 +447,24 @@ export function CalendarPage(): React.JSX.Element {
 
       <RefreshIndicator show={refreshing || isManualRefreshing} />
 
+      {successMessage !== null && (
+        <div className="mb-6 rounded-lg border border-green-200 bg-green-50 p-4 text-green-700">
+          {successMessage}
+        </div>
+      )}
+
+      {actionError !== null && (
+        <div className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 text-red-700">
+          {actionError}
+        </div>
+      )}
+
       <NeedsAttentionSection
-        events={visibleFailedEvents}
-        onDismiss={handleDismissFailedEvent}
+        events={failedEvents}
+        onDelete={handleDeleteFailedEvent}
+        onRetry={handleRetryFailedEvent}
+        deletingId={deletingFailedEventId}
+        retryingId={retryingFailedEventId}
       />
 
       <div className="mb-6 flex items-center justify-between rounded-lg border border-slate-200 bg-white p-4">

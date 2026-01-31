@@ -123,4 +123,32 @@ export async function listFailedLinearIssues(
   return response.failedIssues;
 }
 
+export async function deleteFailedIssue(
+  accessToken: string,
+  id: string
+): Promise<void> {
+  await apiRequest<Record<string, never>>(
+    config.linearAgentUrl,
+    `/linear/failed-issues/${id}`,
+    accessToken,
+    { method: 'DELETE' }
+  );
+}
+
+interface RetryFailedIssueResponse {
+  issue: { id: string; identifier: string; url: string };
+}
+
+export async function retryFailedIssue(
+  accessToken: string,
+  id: string
+): Promise<RetryFailedIssueResponse> {
+  return await apiRequest<RetryFailedIssueResponse>(
+    config.linearAgentUrl,
+    `/linear/failed-issues/${id}/retry`,
+    accessToken,
+    { method: 'POST' }
+  );
+}
+
 export type { ValidateResponse, SaveConnectionRequest };

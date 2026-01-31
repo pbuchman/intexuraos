@@ -8,14 +8,15 @@ import {
   ChevronUp,
   ExternalLink,
   Eye,
+  Loader2,
   RefreshCw,
-  X,
+  Trash2,
 } from 'lucide-react';
 import { Button, Layout } from '@/components';
 import { useAuth } from '@/context';
 import { useFailedLinearIssues } from '@/hooks';
 import { getErrorMessage } from '@intexuraos/common-core/errors';
-import { listLinearIssues } from '@/services';
+import { deleteFailedIssue, listLinearIssues, retryFailedIssue } from '@/services';
 import type { FailedLinearIssue, LinearIssue, ListIssuesResponse } from '@/types';
 
 const POLLING_INTERVAL_MS = 60_000; // 1 minute
@@ -195,10 +196,19 @@ function StackedColumn({
 
 interface FailedIssueCardProps {
   issue: FailedLinearIssue;
-  onDismiss: (id: string) => void;
+  onDelete: (id: string) => Promise<void>;
+  onRetry: (id: string) => Promise<void>;
+  isDeleting: boolean;
+  isRetrying: boolean;
 }
 
-function FailedIssueCard({ issue, onDismiss }: FailedIssueCardProps): React.JSX.Element {
+function FailedIssueCard({
+  issue,
+  onDelete,
+  onRetry,
+  isDeleting,
+  isRetrying,
+}: FailedIssueCardProps): React.JSX.Element {
   return (
     <div className="flex gap-3 rounded-lg border border-amber-200 bg-amber-50 p-3">
       <div className="flex shrink-0 items-center justify-center rounded-lg bg-amber-100 p-2 text-amber-600">
@@ -210,16 +220,36 @@ function FailedIssueCard({ issue, onDismiss }: FailedIssueCardProps): React.JSX.
           <h4 className="font-medium text-amber-900">
             {issue.extractedTitle ?? 'Untitled issue'}
           </h4>
-          <button
-            type="button"
-            onClick={() => {
-              onDismiss(issue.id);
-            }}
-            className="shrink-0 rounded p-1 text-amber-400 transition-colors hover:bg-amber-100 hover:text-amber-600"
-            aria-label="Dismiss"
-          >
-            <X className="h-3 w-3" />
-          </button>
+          <div className="flex shrink-0 gap-1">
+            <button
+              type="button"
+              onClick={() => void onRetry(issue.id)}
+              disabled={isRetrying || isDeleting}
+              className="rounded p-1 text-amber-400 transition-colors hover:bg-amber-100 hover:text-blue-600 disabled:opacity-50"
+              aria-label="Retry"
+              title="Retry creating issue"
+            >
+              {isRetrying ? (
+                <Loader2 className="h-3 w-3 animate-spin" />
+              ) : (
+                <RefreshCw className="h-3 w-3" />
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={() => void onDelete(issue.id)}
+              disabled={isDeleting || isRetrying}
+              className="rounded p-1 text-amber-400 transition-colors hover:bg-amber-100 hover:text-red-600 disabled:opacity-50"
+              aria-label="Delete"
+              title="Delete failed issue"
+            >
+              {isDeleting ? (
+                <Loader2 className="h-3 w-3 animate-spin" />
+              ) : (
+                <Trash2 className="h-3 w-3" />
+              )}
+            </button>
+          </div>
         </div>
 
         <p className="mb-2 line-clamp-2 text-sm text-amber-700">{issue.originalText}</p>
@@ -234,12 +264,18 @@ function FailedIssueCard({ issue, onDismiss }: FailedIssueCardProps): React.JSX.
 
 interface NeedsAttentionSectionProps {
   issues: FailedLinearIssue[];
-  onDismiss: (id: string) => void;
+  onDelete: (id: string) => Promise<void>;
+  onRetry: (id: string) => Promise<void>;
+  deletingId: string | null;
+  retryingId: string | null;
 }
 
 function NeedsAttentionSection({
   issues,
-  onDismiss,
+  onDelete,
+  onRetry,
+  deletingId,
+  retryingId,
 }: NeedsAttentionSectionProps): React.JSX.Element | null {
   const [expanded, setExpanded] = useState(false);
   const visibleCount = expanded ? issues.length : Math.min(issues.length, 3);
@@ -288,7 +324,14 @@ function NeedsAttentionSection({
 
       <div className="space-y-2">
         {issues.slice(0, visibleCount).map((issue) => (
-          <FailedIssueCard key={issue.id} issue={issue} onDismiss={onDismiss} />
+          <FailedIssueCard
+            key={issue.id}
+            issue={issue}
+            onDelete={onDelete}
+            onRetry={onRetry}
+            isDeleting={deletingId === issue.id}
+            isRetrying={retryingId === issue.id}
+          />
         ))}
       </div>
     </div>
@@ -308,7 +351,9 @@ export function LinearIssuesPage(): React.JSX.Element {
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<TabType>('todo');
   const [archiveExpanded, setArchiveExpanded] = useState(false);
-  const [dismissedFailedIssueIds, setDismissedFailedIssueIds] = useState<Set<string>>(new Set());
+  const [deletingFailedIssueId, setDeletingFailedIssueId] = useState<string | null>(null);
+  const [retryingFailedIssueId, setRetryingFailedIssueId] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   const loadIssues = useCallback(
     async (showRefreshIndicator = false): Promise<void> => {
@@ -355,13 +400,41 @@ export function LinearIssuesPage(): React.JSX.Element {
     }
   };
 
-  const handleDismissFailedIssue = (id: string): void => {
-    setDismissedFailedIssueIds((prev) => new Set([...prev, id]));
+  const handleDeleteFailedIssue = async (id: string): Promise<void> => {
+    try {
+      setDeletingFailedIssueId(id);
+      setError(null);
+      const token = await getAccessToken();
+      await deleteFailedIssue(token, id);
+      await refreshFailedIssues();
+      setSuccessMessage('Failed issue deleted');
+      setTimeout(() => {
+        setSuccessMessage(null);
+      }, 3000);
+    } catch (e) {
+      setError(getErrorMessage(e, 'Failed to delete issue'));
+    } finally {
+      setDeletingFailedIssueId(null);
+    }
   };
 
-  const visibleFailedIssues = failedIssues.filter(
-    (issue) => !dismissedFailedIssueIds.has(issue.id)
-  );
+  const handleRetryFailedIssue = async (id: string): Promise<void> => {
+    try {
+      setRetryingFailedIssueId(id);
+      setError(null);
+      const token = await getAccessToken();
+      const result = await retryFailedIssue(token, id);
+      await Promise.all([refreshFailedIssues(), loadIssues(true)]);
+      setSuccessMessage(`Issue created: ${result.issue.identifier}`);
+      setTimeout(() => {
+        setSuccessMessage(null);
+      }, 5000);
+    } catch (e) {
+      setError(getErrorMessage(e, 'Failed to retry issue creation'));
+    } finally {
+      setRetryingFailedIssueId(null);
+    }
+  };
 
   if (loading || failedIssuesLoading) {
     return (
@@ -373,7 +446,7 @@ export function LinearIssuesPage(): React.JSX.Element {
     );
   }
 
-  if (error !== null) {
+  if (error !== null && data === null) {
     return (
       <Layout>
         <div className="flex flex-col items-center justify-center py-12">
@@ -423,7 +496,25 @@ export function LinearIssuesPage(): React.JSX.Element {
         </button>
       </div>
 
-      <NeedsAttentionSection issues={visibleFailedIssues} onDismiss={handleDismissFailedIssue} />
+      {successMessage !== null && (
+        <div className="mb-6 rounded-lg border border-green-200 bg-green-50 p-4 text-green-700">
+          {successMessage}
+        </div>
+      )}
+
+      {error !== null && (
+        <div className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 text-red-700">
+          {error}
+        </div>
+      )}
+
+      <NeedsAttentionSection
+        issues={failedIssues}
+        onDelete={handleDeleteFailedIssue}
+        onRetry={handleRetryFailedIssue}
+        deletingId={deletingFailedIssueId}
+        retryingId={retryingFailedIssueId}
+      />
 
       {/* Mobile: Tabs */}
       <div className="mb-4 flex gap-1 overflow-x-auto rounded-lg bg-slate-100 p-1 md:hidden">
