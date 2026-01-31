@@ -117,6 +117,18 @@ export function formatWeekRange(startDate: Date, endDate: Date): string {
 }
 
 /**
+ * Format month and year as "January 2025"
+ * Use for: Calendar month headers
+ */
+export function formatMonthYear(year: number, month: number): string {
+  const date = new Date(year, month, 1);
+  return date.toLocaleDateString('en-US', {
+    month: 'long',
+    year: 'numeric',
+  });
+}
+
+/**
  * Format time as "2:30 PM" or "All day"
  * Use for: Calendar events
  */

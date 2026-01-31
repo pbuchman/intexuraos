@@ -1,6 +1,7 @@
 import { Calendar, Clock, MapPin, FileText, AlertCircle, Loader2 } from 'lucide-react';
 import type { CalendarPreview } from '@/types';
 import { formatDateTime, formatFullDay } from '@/utils/dateFormat';
+import { stripHtmlTags } from '@/utils';
 
 interface CalendarPreviewCardProps {
   preview: CalendarPreview | null;
@@ -113,7 +114,7 @@ export function CalendarPreviewCard({
             {preview.description !== null && preview.description !== undefined && (
               <div className="flex items-start gap-2 text-sm text-slate-600">
                 <FileText className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-400" />
-                <span className="line-clamp-2">{preview.description}</span>
+                <span className="line-clamp-2">{stripHtmlTags(preview.description)}</span>
               </div>
             )}
           </div>
