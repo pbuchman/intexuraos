@@ -20,7 +20,6 @@ import type { Firestore } from '@google-cloud/firestore';
 import pino from 'pino';
 import type { Logger } from 'pino';
 import { createFirestoreCodeTaskRepository } from '../../infra/repositories/firestoreCodeTaskRepository.js';
-import { createWorkerDiscoveryService } from '../../infra/services/workerDiscoveryImpl.js';
 import { createTaskDispatcherService } from '../../infra/services/taskDispatcherImpl.js';
 import { createWhatsAppNotifier } from '../../infra/services/whatsappNotifierImpl.js';
 import { createFirestoreLogChunkRepository } from '../../infra/repositories/firestoreLogChunkRepository.js';
@@ -30,7 +29,6 @@ import { createLinearIssueService } from '../../domain/services/linearIssueServi
 import type { CodeTaskRepository } from '../../domain/repositories/codeTaskRepository.js';
 import type { TaskDispatcherService } from '../../domain/services/taskDispatcher.js';
 import type { LogChunkRepository } from '../../domain/repositories/logChunkRepository.js';
-import type { WorkerDiscoveryService } from '../../domain/services/workerDiscovery.js';
 import type { ActionsAgentClient } from '../../infra/clients/actionsAgentClient.js';
 import type { WhatsAppNotifier } from '../../domain/services/whatsappNotifier.js';
 import type { RateLimitService } from '../../domain/services/rateLimitService.js';
@@ -63,8 +61,6 @@ describe('POST /code/cancel', () => {
     } as never);
 
     // Set required env vars
-    process.env['INTEXURAOS_CODE_WORKERS'] =
-      'mac:https://cc-mac.intexuraos.cloud:1,vm:https://cc-vm.intexuraos.cloud:2';
     process.env['INTEXURAOS_CF_ACCESS_CLIENT_ID'] = 'test-client-id';
     process.env['INTEXURAOS_CF_ACCESS_CLIENT_SECRET'] = 'test-client-secret';
     process.env['INTEXURAOS_DISPATCH_SECRET'] = 'test-dispatch-secret';
@@ -82,7 +78,6 @@ describe('POST /code/cancel', () => {
       logger,
     });
 
-    const workerDiscovery = createWorkerDiscoveryService({ logger });
     taskDispatcher = createTaskDispatcherService({
       logger,
     });
@@ -135,7 +130,6 @@ describe('POST /code/cancel', () => {
       firestore: fakeFirestore as unknown as Firestore,
       logger,
       codeTaskRepo,
-      workerDiscovery,
       taskDispatcher,
       whatsappNotifier,
       logChunkRepo,
@@ -167,7 +161,6 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
       firestore: Firestore;
       logger: Logger;
       codeTaskRepo: CodeTaskRepository;
-      workerDiscovery: WorkerDiscoveryService;
       taskDispatcher: TaskDispatcherService;
       logChunkRepo: LogChunkRepository;
       actionsAgentClient: ActionsAgentClient;

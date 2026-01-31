@@ -1028,7 +1028,7 @@ export type CodeTaskWorkerType = 'opus' | 'auto' | 'glm';
 /**
  * Worker location for routing.
  */
-export type CodeTaskWorkerLocation = 'mac' | 'vm';
+export type CodeTaskWorkerLocation = string;
 
 /**
  * Task status lifecycle.

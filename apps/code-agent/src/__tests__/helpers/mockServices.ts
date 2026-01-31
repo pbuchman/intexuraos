@@ -8,7 +8,6 @@ import type { Firestore } from '@google-cloud/firestore';
 import pino from 'pino';
 import { createFirestoreCodeTaskRepository } from '../../infra/repositories/firestoreCodeTaskRepository.js';
 import { createFirestoreLogChunkRepository } from '../../infra/repositories/firestoreLogChunkRepository.js';
-import { createWorkerDiscoveryService } from '../../infra/services/workerDiscoveryImpl.js';
 import { createTaskDispatcherService } from '../../infra/services/taskDispatcherImpl.js';
 import { createWhatsAppNotifier } from '../../infra/services/whatsappNotifierImpl.js';
 import { createActionsAgentClient } from '../../infra/clients/actionsAgentClient.js';
@@ -70,7 +69,6 @@ export function setupTestServices({ actionsAgentUrl = 'http://actions-agent' }: 
       firestore: fakeFirestore,
       logger,
     }),
-    workerDiscovery: createWorkerDiscoveryService({ logger }),
     taskDispatcher: createTaskDispatcherService({
       logger,
     }),

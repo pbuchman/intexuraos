@@ -11,7 +11,6 @@ import { getFirestore } from '@intexuraos/infra-firestore';
 import { createWhatsAppSendPublisher, type WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
 import type { CodeTaskRepository } from './domain/repositories/codeTaskRepository.js';
 import type { LogChunkRepository } from './domain/repositories/logChunkRepository.js';
-import type { WorkerDiscoveryService } from './domain/services/workerDiscovery.js';
 import type { TaskDispatcherService } from './domain/services/taskDispatcher.js';
 import type { WhatsAppNotifier } from './domain/services/whatsappNotifier.js';
 import type { ActionsAgentClient } from './infra/clients/actionsAgentClient.js';
@@ -19,7 +18,6 @@ import type { RateLimitService } from './domain/services/rateLimitService.js';
 import type { WorkerSettingsRepository } from './domain/ports/workerSettingsRepository.js';
 import { createFirestoreCodeTaskRepository } from './infra/repositories/firestoreCodeTaskRepository.js';
 import { createFirestoreLogChunkRepository } from './infra/repositories/firestoreLogChunkRepository.js';
-import { createWorkerDiscoveryService } from './infra/services/workerDiscoveryImpl.js';
 import { createTaskDispatcherService } from './infra/services/taskDispatcherImpl.js';
 import { createWhatsAppNotifier } from './infra/services/whatsappNotifierImpl.js';
 import { createActionsAgentClient } from './infra/clients/actionsAgentClient.js';
@@ -40,7 +38,6 @@ export interface ServiceContainer {
   logger: Logger;
   codeTaskRepo: CodeTaskRepository;
   logChunkRepo: LogChunkRepository;
-  workerDiscovery: WorkerDiscoveryService;
   taskDispatcher: TaskDispatcherService;
   whatsappNotifier: WhatsAppNotifier;
   actionsAgentClient: ActionsAgentClient;
@@ -164,7 +161,6 @@ export function initServices(config: ServiceConfig): void {
     logger,
     codeTaskRepo: createFirestoreCodeTaskRepository({ firestore, logger }),
     logChunkRepo: createFirestoreLogChunkRepository({ firestore, logger }),
-    workerDiscovery: createWorkerDiscoveryService({ logger }),
     taskDispatcher: createTaskDispatcherService({
       logger,
     }),

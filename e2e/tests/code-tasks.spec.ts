@@ -43,8 +43,8 @@ describe('Code Tasks E2E', () => {
       const response = await client.get('/code/workers/status');
 
       expect(response.status).toBe(200);
-      expect(response.data.data).toHaveProperty('mac');
-      expect(response.data.data).toHaveProperty('vm');
+      expect(response.data.data).toHaveProperty('workers');
+      expect(Array.isArray(response.data.data.workers)).toBe(true);
     });
   });
 
@@ -310,14 +310,16 @@ describe('Code Tasks E2E', () => {
       const response = await client.get('/code/workers/status');
 
       expect(response.status).toBe(200);
-      expect(response.data.data).toHaveProperty('mac');
-      expect(response.data.data).toHaveProperty('vm');
+      expect(response.data.data).toHaveProperty('workers');
+      expect(Array.isArray(response.data.data.workers)).toBe(true);
 
-      // Each worker status should have expected fields
-      ['mac', 'vm'].forEach((worker) => {
-        expect(response.data.data[worker]).toHaveProperty('healthy');
-        expect(response.data.data[worker]).toHaveProperty('capacity');
-        expect(response.data.data[worker]).toHaveProperty('checkedAt');
+      // Each worker should have expected fields
+      response.data.data.workers.forEach((worker) => {
+        expect(worker).toHaveProperty('name');
+        expect(worker).toHaveProperty('url');
+        expect(worker).toHaveProperty('priority');
+        expect(worker).toHaveProperty('healthy');
+        expect(worker).toHaveProperty('checkedAt');
       });
     });
   });
