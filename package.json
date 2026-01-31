@@ -10,7 +10,7 @@
   "scripts": {
     "dev": "node scripts/dev-setup.mjs && pnpm exec pm2 start ecosystem.config.cjs && pnpm exec pm2 logs",
     "dev:sync": "./scripts/sync-firestore.sh && pnpm exec pm2 start ecosystem.config.cjs && pnpm exec pm2 logs",
-    "emulators:start": "node scripts/dev-setup.mjs",
+    "emulators:start": "docker compose -f docker/docker-compose.local.yaml up -d",
     "emulators:sync": "./scripts/sync-firestore.sh",
     "emulators:stop": "docker compose -f docker/docker-compose.local.yaml down",
     "emulators:logs": "docker compose -f docker/docker-compose.local.yaml logs -f",

@@ -160,28 +160,55 @@ fi
 
 # ---- context window calculation (native) ----
 context_used_pct=""
+token_metrics=""
 context_color() { if [ "$use_color" -eq 1 ]; then printf '\033[38;5;158m'; fi; }  # default mint green
+token_color() { if [ "$use_color" -eq 1 ]; then printf '\033[38;5;249m'; fi; }  # light gray
 
 if [ "$HAS_JQ" -eq 1 ]; then
   CONTEXT_SIZE=$(echo "$input" | jq -r '.context_window.context_window_size // 200000' 2>/dev/null)
+
+  # Cumulative session totals
+  TOTAL_INPUT=$(echo "$input" | jq -r '.context_window.total_input_tokens // 0' 2>/dev/null)
+  TOTAL_OUTPUT=$(echo "$input" | jq -r '.context_window.total_output_tokens // 0' 2>/dev/null)
+
+  # Per-request cache metrics
   USAGE=$(echo "$input" | jq '.context_window.current_usage' 2>/dev/null)
-
   if [ "$USAGE" != "null" ] && [ -n "$USAGE" ]; then
-    CURRENT_TOKENS=$(echo "$USAGE" | jq '(.input_tokens // 0) + (.cache_creation_input_tokens // 0) + (.cache_read_input_tokens // 0)' 2>/dev/null)
+    CACHE_CREATION=$(echo "$USAGE" | jq '.cache_creation_input_tokens // 0' 2>/dev/null)
+    CACHE_READ=$(echo "$USAGE" | jq '.cache_read_input_tokens // 0' 2>/dev/null)
+  else
+    CACHE_CREATION=0
+    CACHE_READ=0
+  fi
 
-    if [ -n "$CURRENT_TOKENS" ] && [ "$CURRENT_TOKENS" -gt 0 ] 2>/dev/null; then
+  if [ "$TOTAL_INPUT" -gt 0 ] 2>/dev/null; then
+    # Calculate context % from current_usage (accurate for context window)
+    if [ "$USAGE" != "null" ] && [ -n "$USAGE" ]; then
+      INPUT_TOKENS=$(echo "$USAGE" | jq '.input_tokens // 0' 2>/dev/null)
+      CURRENT_TOKENS=$((INPUT_TOKENS + CACHE_CREATION + CACHE_READ))
       context_used_pct=$(( CURRENT_TOKENS * 100 / CONTEXT_SIZE ))
-      # Clamp to valid range
       (( context_used_pct < 0 )) && context_used_pct=0
       (( context_used_pct > 100 )) && context_used_pct=100
-
-      # Set color based on used percentage (higher = worse)
-      if [ "$context_used_pct" -ge 80 ]; then
-        context_color() { if [ "$use_color" -eq 1 ]; then printf '\033[38;5;203m'; fi; }  # coral red
-      elif [ "$context_used_pct" -ge 60 ]; then
-        context_color() { if [ "$use_color" -eq 1 ]; then printf '\033[38;5;215m'; fi; }  # peach
-      fi
     fi
+
+    # Set color based on used percentage (higher = worse)
+    if [ "$context_used_pct" -ge 80 ]; then
+      context_color() { if [ "$use_color" -eq 1 ]; then printf '\033[38;5;203m'; fi; }  # coral red
+    elif [ "$context_used_pct" -ge 60 ]; then
+      context_color() { if [ "$use_color" -eq 1 ]; then printf '\033[38;5;215m'; fi; }  # peach
+    fi
+
+    # Format with k for thousands
+    fmt_k() {
+      local n="$1"
+      if [ "$n" -ge 1000 ]; then
+        echo "$((n / 1000))k"
+      else
+        echo "$n"
+      fi
+    }
+
+    token_metrics="📊 $(token_color)↓$(fmt_k $TOTAL_INPUT) ↑$(fmt_k $TOTAL_OUTPUT) +$(fmt_k $CACHE_CREATION) ⚡$(fmt_k $CACHE_READ)$(rst)"
   fi
 fi
 
@@ -217,39 +244,109 @@ if [ -n "$hooks_dir" ]; then
   total=$((executed + blocked))
 
   if [ "$total" -gt 0 ]; then
-    # Build breakdown string (only show non-zero)
-    breakdown=""
-    [ "$b_vitest" -gt 0 ] && breakdown="${breakdown}vi:${b_vitest} "
-    [ "$b_poll" -gt 0 ] && breakdown="${breakdown}poll:${b_poll} "
-    [ "$b_ci" -gt 0 ] && breakdown="${breakdown}ci:${b_ci} "
-    [ "$b_cov" -gt 0 ] && breakdown="${breakdown}cov:${b_cov} "
-    [ "$b_ws" -gt 0 ] && breakdown="${breakdown}ws:${b_ws} "
-    [ "$b_gcloud" -gt 0 ] && breakdown="${breakdown}gc:${b_gcloud} "
-    breakdown=$(echo "$breakdown" | sed 's/ $//')
-
-    hook_metrics="🛡️ Cmds:${total} | ✗${blocked} (${breakdown})"
-  fi
-fi
-
-# ---- PM2 status ----
-pm2_metrics=""
-if command -v pm2 &>/dev/null || command -v npx &>/dev/null; then
-  pm2_json=$(pm2 jlist 2>/dev/null || npx pm2 jlist 2>/dev/null)
-  if [ -n "$pm2_json" ] && [ "$HAS_JQ" -eq 1 ]; then
-    pm2_online=$(echo "$pm2_json" | jq '[.[] | select(.pm2_env.status == "online")] | length' 2>/dev/null || echo 0)
-    pm2_total=$(echo "$pm2_json" | jq 'length' 2>/dev/null || echo 0)
-    pm2_worktree=$(echo "$pm2_json" | jq -r '.[0].pm2_env.pm_cwd // empty' 2>/dev/null | grep -oE 'intexuraos-[0-9]+' || echo "")
-    if [ "$pm2_total" -gt 0 ]; then
-      wt_suffix=""
-      [ -n "$pm2_worktree" ] && wt_suffix=" (${pm2_worktree})"
-      if [ "$pm2_online" -eq "$pm2_total" ]; then
-        pm2_metrics="⚡ PM2:${pm2_online}/${pm2_total}${wt_suffix}"
-      else
-        pm2_metrics="⚡ PM2:${pm2_online}/${pm2_total}${wt_suffix} ⚠️"
-      fi
+    # Calculate blocked percentage
+    if [ "$total" -gt 0 ]; then
+      blocked_pct=$(( blocked * 100 / total ))
+    else
+      blocked_pct=0
     fi
+
+    hook_metrics="🛡️ Cmds: ${total} | ✗${blocked} (${blocked_pct}%)"
   fi
 fi
+
+# ---- Port status check (fast, no PM2) ----
+check_port_status() {
+  local port="$1"
+  local pid=$(lsof -t -i :"$port" -sTCP:LISTEN 2>/dev/null | head -1)
+  if [ -n "$pid" ]; then
+    echo "up"
+  else
+    echo "down"
+  fi
+}
+
+get_worktree_from_port() {
+  local port="$1"
+  local pid=$(lsof -t -i :"$port" -sTCP:LISTEN 2>/dev/null | head -1)
+  if [ -n "$pid" ]; then
+    local cwd=$(lsof -a -p "$pid" -d cwd -Fn 2>/dev/null | grep ^n | cut -c2-)
+    echo "$cwd" | grep -oE 'intexuraos-[0-9]+' || echo ""
+  fi
+}
+
+# Dev services (ports 8110-8128) - parallel arrays for bash 3.x compatibility
+DEV_NAMES="user notion whatsapp mobile research commands actions insights image notes settings todos bookmarks calendar linear web-agent code"
+DEV_PORTS="8110 8112 8113 8114 8116 8117 8118 8119 8120 8121 8122 8123 8124 8125 8126 8127 8128"
+DEV_TOTAL=17
+
+# Check all dev services
+dev_up=0
+dev_down_list=""
+dev_worktree=""
+set -- $DEV_PORTS
+for name in $DEV_NAMES; do
+  port="$1"; shift
+  status=$(check_port_status "$port")
+  if [ "$status" = "up" ]; then
+    dev_up=$((dev_up + 1))
+    [ -z "$dev_worktree" ] && dev_worktree=$(get_worktree_from_port "$port")
+  else
+    [ -n "$dev_down_list" ] && dev_down_list="${dev_down_list},"
+    dev_down_list="${dev_down_list}${name}"
+  fi
+done
+
+# Build dev metrics display
+dev_color() { if [ "$use_color" -eq 1 ]; then printf '\033[38;5;150m'; fi; }  # green
+dev_warn_color() { if [ "$use_color" -eq 1 ]; then printf '\033[38;5;220m'; fi; }  # yellow
+dev_fail_color() { if [ "$use_color" -eq 1 ]; then printf '\033[38;5;203m'; fi; }  # red
+
+if [ "$dev_up" -eq 0 ]; then
+  dev_metrics=":dev 🔴"
+elif [ "$dev_up" -eq "$DEV_TOTAL" ]; then
+  wt_info=""
+  [ -n "$dev_worktree" ] && wt_info="${dev_worktree}, "
+  dev_metrics=":dev 🟢 (${wt_info}${dev_up}/${DEV_TOTAL})"
+else
+  wt_info=""
+  [ -n "$dev_worktree" ] && wt_info="${dev_worktree}, "
+  dev_metrics=":dev 🟡 (${wt_info}${dev_up}/${DEV_TOTAL})"
+fi
+
+# Docker services (from docker-compose.local.yaml)
+DOCKER_PORTS="8100 8101 8102 8103 8104 8105"
+DOCKER_TOTAL=6
+
+docker_up=0
+for port in $DOCKER_PORTS; do
+  status=$(check_port_status "$port")
+  [ "$status" = "up" ] && docker_up=$((docker_up + 1))
+done
+
+if [ "$docker_up" -eq 0 ]; then
+  docker_metrics=":docker 🔴"
+elif [ "$docker_up" -eq "$DOCKER_TOTAL" ]; then
+  docker_metrics=":docker 🟢 (${docker_up}/${DOCKER_TOTAL})"
+else
+  docker_metrics=":docker 🟡 (${docker_up}/${DOCKER_TOTAL})"
+fi
+
+# Individual port checks (3000=web, 8199=orchestrator)
+port_3000=$(check_port_status 3000)
+port_8199=$(check_port_status 8199)
+if [ "$port_3000" = "up" ]; then
+  p3000="$(dev_color):3000$(rst)"
+else
+  p3000="$(dev_fail_color):3000$(rst)"
+fi
+if [ "$port_8199" = "up" ]; then
+  p8199="$(dev_color):8199$(rst)"
+else
+  p8199="$(dev_fail_color):8199$(rst)"
+fi
+
+port_metrics="🔌 ${docker_metrics}  ${dev_metrics}  ${p3000}  ${p8199}"
 
 # ---- render statusline ----
 # Line 1: Core info (directory, git, model, claude code version, output style)
@@ -268,50 +365,46 @@ if [ -n "$api_display" ]; then
   printf '  🌐 %s%s%s' "$(api_color)" "$api_display" "$(rst)"
 fi
 
-# Line 2: Context and hook metrics (same line)
+# Line 2: Context and hook metrics
 line2=""
 if [ -n "$context_used_pct" ]; then
-  line2="🧠 $(context_color)CTX ${context_used_pct}%$(rst)"
+  line2="🧠 $(context_color)Ctx ${context_used_pct}% used$(rst)"
 else
-  line2="🧠 $(context_color)CTX -$(rst)"
+  line2="🧠 $(context_color)Ctx -$(rst)"
 fi
 if [ -n "$hook_metrics" ]; then
   line2="$line2  $hook_metrics"
 fi
-if [ -n "$pm2_metrics" ]; then
-  line2="$line2  $pm2_metrics"
+if [ -n "$token_metrics" ]; then
+  line2="$line2  $token_metrics"
 fi
 
-# ---- Orchestrator port check ----
-if lsof -i :8199 -sTCP:LISTEN >/dev/null 2>&1; then
-  line2="$line2  🎭 Orch:✓"
-else
-  line2="$line2  🎭 Orch:✗"
-fi
+# Line 3: Port metrics (docker, dev, web, orchestrator)
+line3="$port_metrics"
 
-# Line 3: Cost and usage analytics
-line3=""
+# Line 4: Cost and usage analytics (optional)
+line4=""
 if [ -n "$cost_usd" ] && [[ "$cost_usd" =~ ^[0-9.]+$ ]]; then
   if [ -n "$cost_per_hour" ] && [[ "$cost_per_hour" =~ ^[0-9.]+$ ]]; then
     cost_per_hour_formatted=$(printf '%.2f' "$cost_per_hour")
-    line3="💰 $(cost_color)\$$(printf '%.2f' "$cost_usd")$(rst) ($(burn_color)\$${cost_per_hour_formatted}/h$(rst))"
+    line4="💰 $(cost_color)\$$(printf '%.2f' "$cost_usd")$(rst) ($(burn_color)\$${cost_per_hour_formatted}/h$(rst))"
   else
-    line3="💰 $(cost_color)\$$(printf '%.2f' "$cost_usd")$(rst)"
+    line4="💰 $(cost_color)\$$(printf '%.2f' "$cost_usd")$(rst)"
   fi
 fi
 if [ -n "$tot_tokens" ] && [[ "$tot_tokens" =~ ^[0-9]+$ ]]; then
   if [ -n "$tpm" ] && [[ "$tpm" =~ ^[0-9.]+$ ]]; then
     tpm_formatted=$(printf '%.0f' "$tpm")
-    if [ -n "$line3" ]; then
-      line3="$line3  📊 $(usage_color)${tot_tokens} tok (${tpm_formatted} tpm)$(rst)"
+    if [ -n "$line4" ]; then
+      line4="$line4  📊 $(usage_color)${tot_tokens} tok (${tpm_formatted} tpm)$(rst)"
     else
-      line3="📊 $(usage_color)${tot_tokens} tok (${tpm_formatted} tpm)$(rst)"
+      line4="📊 $(usage_color)${tot_tokens} tok (${tpm_formatted} tpm)$(rst)"
     fi
   else
-    if [ -n "$line3" ]; then
-      line3="$line3  📊 $(usage_color)${tot_tokens} tok$(rst)"
+    if [ -n "$line4" ]; then
+      line4="$line4  📊 $(usage_color)${tot_tokens} tok$(rst)"
     else
-      line3="📊 $(usage_color)${tot_tokens} tok$(rst)"
+      line4="📊 $(usage_color)${tot_tokens} tok$(rst)"
     fi
   fi
 fi
@@ -322,5 +415,8 @@ if [ -n "$line2" ]; then
 fi
 if [ -n "$line3" ]; then
   printf '\n%s' "$line3"
+fi
+if [ -n "$line4" ]; then
+  printf '\n%s' "$line4"
 fi
 printf '\n'
