@@ -137,6 +137,11 @@ const SERVICE_ENV_MAPPINGS = {
 
 /**
  * Create a service configuration for PM2
+ *
+ * Uses PM2's native file watching instead of tsx watch.
+ * This ensures PM2 can detect crashes and trigger autorestart properly.
+ * With tsx watch, the wrapper process stays alive even when the app crashes,
+ * causing PM2 to report "online" for dead services.
  */
 function createServiceConfig(name, port, options = {}) {
   const { startupDelay = 0 } = options;
@@ -154,7 +159,9 @@ function createServiceConfig(name, port, options = {}) {
     },
     autorestart: true,
     restart_delay: 5000,
-    watch: false, // tsx watch handles file watching
+    watch: ['src', '../../packages'],
+    watch_delay: 1000,
+    ignore_watch: ['node_modules', '__tests__', '**/*.test.ts', '**/*.spec.ts', 'dist'],
     log_date_format: 'YYYY-MM-DD HH:mm:ss',
   };
 
@@ -162,7 +169,7 @@ function createServiceConfig(name, port, options = {}) {
     return {
       ...baseConfig,
       script: 'bash',
-      args: ['-c', `sleep ${startupDelay} && pnpm exec tsx watch src/index.ts`],
+      args: ['-c', `sleep ${startupDelay} && pnpm exec tsx src/index.ts`],
       interpreter: 'none',
     };
   }
@@ -170,8 +177,8 @@ function createServiceConfig(name, port, options = {}) {
   return {
     ...baseConfig,
     script: 'pnpm',
-    args: ['exec', 'tsx', 'watch', 'src/index.ts'],
-    interpreter: 'none', // pnpm is the script itself
+    args: ['exec', 'tsx', 'src/index.ts'],
+    interpreter: 'none',
   };
 }
 
