@@ -106,7 +106,7 @@ export function Header(): React.JSX.Element {
               onClick={(): void => {
                 setIsWorkersOpen(!isWorkersOpen);
               }}
-              className="flex items-center gap-1 rounded-lg p-2 text-sm transition-colors hover:bg-slate-100"
+              className="flex items-center gap-1 rounded-lg p-2 text-sm transition-colors hover:bg-slate-100 dark:hover:bg-slate-700"
               title="Worker status"
             >
               <Server className="h-4 w-4 text-slate-500" />
@@ -120,7 +120,7 @@ export function Header(): React.JSX.Element {
             </button>
 
             {isWorkersOpen ? (
-              <div className="absolute right-0 top-full mt-1 w-64 rounded-lg border border-slate-200 bg-white py-2 shadow-lg">
+              <div className="absolute right-0 top-full mt-1 w-64 rounded-lg border border-slate-200 bg-white py-2 shadow-lg dark:border-slate-700 dark:bg-slate-800">
                 <div className="px-4 py-1 text-xs font-medium uppercase text-slate-400">
                   Code Workers
                 </div>
@@ -133,9 +133,9 @@ export function Header(): React.JSX.Element {
                         workersStatus.mac.healthy ? 'bg-green-500' : 'bg-red-500'
                       }`}
                     />
-                    <span className="font-medium text-slate-700">Mac</span>
+                    <span className="font-medium text-slate-700 dark:text-slate-200">Mac</span>
                   </div>
-                  <div className="text-slate-500">
+                  <div className="text-slate-500 dark:text-slate-400">
                     {workersStatus.mac.healthy
                       ? `${String(workersStatus.mac.capacity)} slots`
                       : 'Offline'}
@@ -150,22 +150,22 @@ export function Header(): React.JSX.Element {
                         workersStatus.vm.healthy ? 'bg-green-500' : 'bg-red-500'
                       }`}
                     />
-                    <span className="font-medium text-slate-700">VM</span>
+                    <span className="font-medium text-slate-700 dark:text-slate-200">VM</span>
                   </div>
-                  <div className="text-slate-500">
+                  <div className="text-slate-500 dark:text-slate-400">
                     {workersStatus.vm.healthy
                       ? `${String(workersStatus.vm.capacity)} slots`
                       : 'Offline'}
                   </div>
                 </div>
 
-                <div className="mt-1 border-t border-slate-100 px-4 py-2">
+                <div className="mt-1 border-t border-slate-100 px-4 py-2 dark:border-slate-700">
                   <Link
                     to="/code-tasks"
                     onClick={(): void => {
                       setIsWorkersOpen(false);
                     }}
-                    className="block text-sm text-blue-600 hover:underline"
+                    className="block text-sm text-blue-600 hover:underline dark:text-blue-400"
                   >
                     View Code Tasks →
                   </Link>
@@ -227,15 +227,15 @@ export function Header(): React.JSX.Element {
           </button>
 
           {isMenuOpen ? (
-            <div className="absolute right-0 top-full mt-1 w-48 rounded-lg border border-slate-200 bg-white py-1 shadow-lg">
-              <div className="border-b border-slate-100 px-4 py-2 sm:hidden">
-                <span className="text-sm text-slate-600">{userName}</span>
+            <div className="absolute right-0 top-full mt-1 w-48 rounded-lg border border-slate-200 bg-white py-1 shadow-lg dark:border-slate-700 dark:bg-slate-800">
+              <div className="border-b border-slate-100 px-4 py-2 sm:hidden dark:border-slate-700">
+                <span className="text-sm text-slate-600 dark:text-slate-300">{userName}</span>
               </div>
               {isInstalled && (
                 <button
                   onClick={handleForceRefresh}
                   disabled={isRefreshing}
-                  className="flex w-full items-center gap-2 px-4 py-2 text-sm text-slate-700 transition-colors hover:bg-slate-100 disabled:opacity-50"
+                  className="flex w-full items-center gap-2 px-4 py-2 text-sm text-slate-700 transition-colors hover:bg-slate-100 disabled:opacity-50 dark:text-slate-200 dark:hover:bg-slate-700"
                 >
                   <RotateCcw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
                   {isRefreshing ? 'Refreshing...' : 'Force Refresh'}
@@ -246,7 +246,7 @@ export function Header(): React.JSX.Element {
                   logout();
                   setIsMenuOpen(false);
                 }}
-                className="flex w-full items-center gap-2 px-4 py-2 text-sm text-slate-700 transition-colors hover:bg-slate-100"
+                className="flex w-full items-center gap-2 px-4 py-2 text-sm text-slate-700 transition-colors hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-700"
               >
                 <LogOut className="h-4 w-4" />
                 Log out
