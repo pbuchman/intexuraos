@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { useAuth, useSyncQueue } from '@/context';
+import { useAuth, useSyncQueue, useTheme } from '@/context';
 import { usePWA } from '@/context/pwa-context';
 import { useWorkersStatus } from '@/hooks';
-import { ChevronDown, LogOut, User, RefreshCw, RotateCcw, Server } from 'lucide-react';
+import { ChevronDown, LogOut, Moon, Sun, User, RefreshCw, RotateCcw, Server } from 'lucide-react';
 import { VersionInfoModal } from './VersionInfoModal';
 
 export function Header(): React.JSX.Element {
@@ -11,6 +11,7 @@ export function Header(): React.JSX.Element {
   const { pendingCount, isSyncing, isOnline, authFailed } = useSyncQueue();
   const { isInstalled } = usePWA();
   const { status: workersStatus } = useWorkersStatus();
+  const { resolvedTheme, toggleTheme } = useTheme();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isWorkersOpen, setIsWorkersOpen] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -64,7 +65,7 @@ export function Header(): React.JSX.Element {
   const userPicture = user?.picture;
 
   return (
-    <header className="fixed left-0 right-0 top-0 z-50 flex h-16 items-center justify-between border-b border-slate-200 bg-white px-4 shadow-sm md:px-6">
+    <header className="fixed left-0 right-0 top-0 z-50 flex h-16 items-center justify-between border-b border-slate-200 bg-white px-4 shadow-sm dark:border-slate-700 dark:bg-slate-800 md:px-6">
       {/* Logo - with left padding on mobile to account for menu button */}
       <div className="flex items-center gap-3 pl-12 md:pl-0">
         <img
@@ -168,10 +169,19 @@ export function Header(): React.JSX.Element {
           </div>
         )}
 
+        {/* Theme Toggle */}
+        <button
+          onClick={toggleTheme}
+          className="flex items-center justify-center rounded-lg p-2 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+          title={`Switch to ${resolvedTheme === 'dark' ? 'light' : 'dark'} mode`}
+        >
+          {resolvedTheme === 'dark' ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
+        </button>
+
         {pendingCount > 0 && (
           <Link
             to="/settings/share-history"
-            className="flex items-center justify-center rounded-lg p-2 text-sm transition-colors hover:bg-slate-100"
+            className="flex items-center justify-center rounded-lg p-2 text-sm transition-colors hover:bg-slate-100 dark:hover:bg-slate-800"
             title={
               !isOnline
                 ? 'Offline - click to view history'
@@ -197,7 +207,7 @@ export function Header(): React.JSX.Element {
             onClick={(): void => {
               setIsMenuOpen(!isMenuOpen);
             }}
-            className="flex items-center gap-2 rounded-lg px-2 py-2 text-sm text-slate-700 transition-colors hover:bg-slate-100 md:px-3"
+            className="flex items-center gap-2 rounded-lg px-2 py-2 text-sm text-slate-700 transition-colors hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-700 md:px-3"
           >
             {userPicture !== undefined && userPicture !== '' ? (
               <img src={userPicture} alt="" className="h-6 w-6 rounded-full" />
