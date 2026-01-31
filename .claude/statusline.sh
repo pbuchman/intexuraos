@@ -28,6 +28,9 @@ style_color() { if [ "$use_color" -eq 1 ]; then printf '\033[38;5;245m'; fi; } #
 api_color() { if [ "$use_color" -eq 1 ]; then printf '\033[38;5;222m'; fi; }   # warm gold
 rst() { if [ "$use_color" -eq 1 ]; then printf '\033[0m'; fi; }
 
+# Terminal hyperlink helper (OSC 8)
+hyperlink() { printf '\033]8;;%s\033\\%s\033]8;;\033\\' "$1" "$2"; }
+
 # ---- time helpers ----
 to_epoch() {
   ts="$1"
@@ -333,13 +336,12 @@ else
 fi
 
 # Individual port checks (3000=web, 8199=orchestrator)
-# OSC 8 hyperlink: \e]8;;URL\e\\TEXT\e]8;;\e\\
 port_3000=$(check_port_status 3000)
 port_8199=$(check_port_status 8199)
 if [ "$port_3000" = "up" ]; then
-  p3000="$(dev_color)\033]8;;http://localhost:3000\033\\:3000\033]8;;\033\\$(rst)"
+  p3000="$(dev_color)$(hyperlink 'http://localhost:3000' ':3000')$(rst)"
 else
-  p3000="$(dev_fail_color)\033]8;;http://localhost:3000\033\\:3000\033]8;;\033\\$(rst)"
+  p3000="$(dev_fail_color)$(hyperlink 'http://localhost:3000' ':3000')$(rst)"
 fi
 if [ "$port_8199" = "up" ]; then
   p8199="$(dev_color):8199$(rst)"
