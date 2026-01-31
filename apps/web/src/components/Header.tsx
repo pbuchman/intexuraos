@@ -92,7 +92,7 @@ export function Header(): React.JSX.Element {
               e.currentTarget.style.display = 'none';
             }}
           />
-          <span className="text-[10px] font-normal text-slate-400 md:text-xs">
+          <span className="self-end pb-0.5 text-[10px] font-normal text-slate-400 md:text-xs">
             ver. {import.meta.env.INTEXURAOS_BUILD_VERSION}
           </span>
         </button>
