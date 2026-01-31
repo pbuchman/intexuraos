@@ -18,6 +18,7 @@ import { useFailedLinearIssues } from '@/hooks';
 import { getErrorMessage } from '@intexuraos/common-core/errors';
 import { deleteFailedIssue, listLinearIssues, retryFailedIssue } from '@/services';
 import type { FailedLinearIssue, LinearIssue, ListIssuesResponse } from '@/types';
+import { stripMarkdown } from '@/utils/markdownUtils';
 
 const POLLING_INTERVAL_MS = 60_000; // 1 minute
 
@@ -73,7 +74,9 @@ function IssueCard({ issue }: IssueCardProps): React.JSX.Element {
       <h4 className="mb-2 font-medium text-slate-900 line-clamp-2 dark:text-slate-100">{issue.title}</h4>
 
       {issue.description !== null && issue.description !== '' && (
-        <p className="mb-2 text-sm text-slate-500 line-clamp-2 dark:text-slate-400">{issue.description}</p>
+        <p className="mb-2 text-sm text-slate-500 line-clamp-2 dark:text-slate-400">
+          {stripMarkdown(issue.description)}
+        </p>
       )}
 
       <div className="flex items-center justify-between text-xs text-slate-400 dark:text-slate-500">
