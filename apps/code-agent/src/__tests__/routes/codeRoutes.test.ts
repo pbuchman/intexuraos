@@ -66,9 +66,6 @@ describe('codeRoutes', () => {
       protectedHeader: new Uint8Array(),
     } as never);
 
-    // Set required env vars for worker discovery
-    process.env['INTEXURAOS_CODE_WORKERS'] =
-      'mac:https://cc-mac.intexuraos.cloud:1,vm:https://cc-vm.intexuraos.cloud:2';
     process.env['INTEXURAOS_CF_ACCESS_CLIENT_ID'] = 'test-client-id';
     process.env['INTEXURAOS_CF_ACCESS_CLIENT_SECRET'] = 'test-client-secret';
     process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = 'test-internal-token';
