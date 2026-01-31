@@ -5,7 +5,10 @@
 
 set -euo pipefail
 
-cd "$(dirname "$0")/../.." || exit 0
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+LOG_FILE="${SCRIPT_DIR}/typecheck-after-edit.log"
+
+cd "$SCRIPT_DIR/../.." || exit 0
 
 INPUT=$(cat)
 TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name // ""')
@@ -52,6 +55,7 @@ OUTPUT=$(cd "$WORKSPACE_DIR" && npx tsc --noEmit --skipLibCheck 2>&1) || {
     echo "$OUTPUT" | grep -A2 "error TS" | head -20 >&2
     echo "" >&2
     echo "Run 'pnpm --filter $(basename $WORKSPACE_DIR) typecheck' for full output." >&2
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] ERRORS: $FILE_PATH ($ERROR_COUNT errors)" >> "$LOG_FILE"
   fi
 }
 

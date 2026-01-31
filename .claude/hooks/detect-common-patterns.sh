@@ -7,7 +7,10 @@
 
 set -euo pipefail
 
-cd "$(dirname "$0")/../.." || exit 0
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+LOG_FILE="${SCRIPT_DIR}/detect-common-patterns.log"
+
+cd "$SCRIPT_DIR/../.." || exit 0
 
 INPUT=$(cat)
 TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name // ""')
@@ -80,6 +83,7 @@ if [ -n "$WARNINGS" ]; then
   echo "" >&2
   echo "━━━ Pattern Detection: $FILE_PATH ━━━" >&2
   echo "$WARNINGS" >&2
+  echo "[$(date '+%Y-%m-%d %H:%M:%S')] WARNED: $FILE_PATH" >> "$LOG_FILE"
 fi
 
 exit 0

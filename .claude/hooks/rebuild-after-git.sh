@@ -4,7 +4,10 @@
 
 set -euo pipefail
 
-cd "$(dirname "$0")/../.." || exit 0
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+LOG_FILE="${SCRIPT_DIR}/rebuild-after-git.log"
+
+cd "$SCRIPT_DIR/../.." || exit 0
 
 INPUT=$(cat)
 TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name // ""')
@@ -24,6 +27,7 @@ CHANGED=$(git diff --name-only HEAD@{1} HEAD 2>/dev/null | grep -E '^packages/(i
 
 if [ -n "$CHANGED" ]; then
   echo "Buildable package changed by git operation, rebuilding..." >&2
+  echo "[$(date '+%Y-%m-%d %H:%M:%S')] REBUILD: git op changed packages" >> "$LOG_FILE"
   pnpm build >&2
 fi
 
