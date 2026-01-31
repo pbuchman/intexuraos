@@ -10,7 +10,7 @@
 
   <p>
     <a href="https://github.com/pbuchman/intexuraos/actions"><img src="https://img.shields.io/github/actions/workflow/status/pbuchman/intexuraos/ci.yml?branch=main&label=CI&style=flat-square&logo=github" alt="CI Status"></a>
-    <img src="https://img.shields.io/badge/Coverage-95%25+-success?style=flat-square&logo=codecov" alt="Coverage">
+    <img src="https://img.shields.io/badge/Coverage-100%25-success?style=flat-square&logo=codecov" alt="Coverage">
     <img src="https://img.shields.io/badge/TypeScript-5.7-blue?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript">
     <img src="https://img.shields.io/badge/AI_Models-17-purple?style=flat-square" alt="AI Models">
     <img src="https://img.shields.io/badge/Services-18-orange?style=flat-square" alt="Services">
@@ -218,17 +218,25 @@ From task acceptance until `pnpm run ci:tracked` passes, YOU own everything. "Pr
 ### Quality Gates
 
 ```bash
-pnpm run ci:tracked  # TypeCheck → Lint → Tests (95% coverage) → Build
+pnpm run ci:tracked  # TypeCheck → Lint → Tests (100% branch coverage) → Build
 ```
 
-**Coverage is a gate, not a target.** 94.9% is failure. Every operation returns `Result<T, E>` — no silent failures.
+**Coverage is a gate, not a target.** Every branch is either tested OR exempted with `/* v8 ignore */`. Every operation returns `Result<T, E>` — no silent failures.
 
 ### Sleep-at-Night Reliability
 
-- **95%+ test coverage**: Enforced by CI, no exceptions
+- **100% branch coverage**: Every branch tested OR exempted with `/* v8 ignore <CATEGORY> */`
 - **Strict TypeScript**: `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`
 - **Hexagonal architecture**: Domain logic is pure and testable
 - **Infrastructure as Code**: Everything in Terraform
+
+### Code Coverage
+
+IntexuraOS enforces **100% branch coverage**:
+
+- Every branch is either: tested OR exempted with `/* v8 ignore */`
+- CI fails on any unaccounted branch
+- See `.claude/skills/coverage/reference/canonical-categories.md` for valid exemption categories
 
 See `.claude/CLAUDE.md` for the complete AI development playbook.
 
