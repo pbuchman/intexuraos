@@ -320,8 +320,10 @@ describe('useCodeTasks hooks', () => {
 
   describe('useWorkersStatus', () => {
     const mockStatus: WorkersStatusResponse = {
-      mac: { healthy: true, capacity: 2, checkedAt: '2024-01-01T00:00:00Z' },
-      vm: { healthy: false, capacity: 0, checkedAt: '2024-01-01T00:00:00Z' },
+      workers: [
+        { name: 'mac-worker', url: 'https://mac.example.com', priority: 1, healthy: true, checkedAt: '2024-01-01T00:00:00Z' },
+        { name: 'vm-worker', url: 'https://vm.example.com', priority: 2, healthy: false, checkedAt: '2024-01-01T00:00:00Z' },
+      ],
     };
 
     it('fetches worker status on mount', async () => {
@@ -363,17 +365,19 @@ describe('useCodeTasks hooks', () => {
       });
 
       mockGetWorkersStatus.mockClear();
-      mockGetWorkersStatus.mockResolvedValue({
-        ...mockStatus,
-        mac: { ...mockStatus.mac, capacity: 1 },
-      });
+      const updatedStatus: WorkersStatusResponse = {
+        workers: [
+          { name: 'mac-worker', url: 'https://mac.example.com', priority: 1, healthy: true, checkedAt: '2024-01-01T00:00:00Z' },
+        ],
+      };
+      mockGetWorkersStatus.mockResolvedValue(updatedStatus);
 
       await act(async () => {
         await result.current.refresh();
       });
 
       expect(mockGetWorkersStatus).toHaveBeenCalledTimes(1);
-      expect(result.current.status?.mac.capacity).toBe(1);
+      expect(result.current.status?.workers).toHaveLength(1);
     });
   });
 });

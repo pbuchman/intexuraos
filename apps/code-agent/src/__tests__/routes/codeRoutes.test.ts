@@ -66,8 +66,6 @@ describe('codeRoutes', () => {
       protectedHeader: new Uint8Array(),
     } as never);
 
-    process.env['INTEXURAOS_CF_ACCESS_CLIENT_ID'] = 'test-client-id';
-    process.env['INTEXURAOS_CF_ACCESS_CLIENT_SECRET'] = 'test-client-secret';
     process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = 'test-internal-token';
     process.env['INTEXURAOS_AUTH_AUDIENCE'] = 'https://api.intexuraos.cloud';
     process.env['INTEXURAOS_AUTH_ISSUER'] = 'https://intexuraos.eu.auth0.com/';

@@ -27,6 +27,14 @@ import { encryptToken, decryptToken } from './encryption.js';
 const COLLECTION_NAME = 'code_worker_settings';
 
 /**
+ * Normalize URL by removing trailing slashes.
+ * Prevents double-slash issues when appending paths (e.g., /health).
+ */
+function normalizeUrl(url: string): string {
+  return url.replace(/\/+$/, '');
+}
+
+/**
  * Firestore document structure with encrypted fields.
  */
 interface WorkerSettingsDoc {
@@ -193,7 +201,7 @@ export function createWorkerSettingsRepository(
         // Encrypt credentials and add to array
         const encryptedWorker: EncryptedWorkerConfig = {
           name: config.name,
-          url: config.url,
+          url: normalizeUrl(config.url),
           cfAccessClientId: encryptToken(config.cfAccessClientId),
           cfAccessClientSecret: encryptToken(config.cfAccessClientSecret),
           dispatchSigningSecret: encryptToken(config.dispatchSigningSecret),
@@ -268,7 +276,7 @@ export function createWorkerSettingsRepository(
         // Build updated worker config - only include optional fields if they have values
         const updatedWorker: EncryptedWorkerConfig = {
           name: workerName, // Name is immutable
-          url: config.url ?? existingWorker.url,
+          url: config.url !== undefined ? normalizeUrl(config.url) : existingWorker.url,
           cfAccessClientId:
             config.cfAccessClientId !== undefined
               ? encryptToken(config.cfAccessClientId)

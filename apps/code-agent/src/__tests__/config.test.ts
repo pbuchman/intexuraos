@@ -46,7 +46,6 @@ describe('loadConfig', () => {
       expect(config.whatsappServiceUrl).toBe('');
       expect(config.linearAgentUrl).toBe('');
       expect(config.actionsAgentUrl).toBe('');
-      expect(config.dispatchSigningSecret).toBe('');
       expect(config.webhookVerifySecret).toBe('');
       expect(config.tokenEncryptionKey).toBe('');
     });
@@ -57,7 +56,6 @@ describe('loadConfig', () => {
       process.env['INTEXURAOS_WHATSAPP_SERVICE_URL'] = 'http://whatsapp';
       process.env['INTEXURAOS_LINEAR_AGENT_URL'] = 'http://linear';
       process.env['INTEXURAOS_ACTIONS_AGENT_URL'] = 'http://actions';
-      process.env['INTEXURAOS_DISPATCH_SIGNING_SECRET'] = 'test-dispatch-signing';
       process.env['INTEXURAOS_WEBHOOK_VERIFY_SECRET'] = 'test-webhook';
       process.env['INTEXURAOS_TOKEN_ENCRYPTION_KEY'] = 'test-encryption-key-32chars!';
 
@@ -68,7 +66,6 @@ describe('loadConfig', () => {
       expect(config.whatsappServiceUrl).toBe('http://whatsapp');
       expect(config.linearAgentUrl).toBe('http://linear');
       expect(config.actionsAgentUrl).toBe('http://actions');
-      expect(config.dispatchSigningSecret).toBe('test-dispatch-signing');
       expect(config.webhookVerifySecret).toBe('test-webhook');
       expect(config.tokenEncryptionKey).toBe('test-encryption-key-32chars!');
     });

@@ -480,12 +480,8 @@ module "secret_manager" {
     "INTEXURAOS_SENTRY_DSN_WEB" = "Sentry Data Source Name for error tracking (web app)"
     # Crawl4AI Cloud API
     "INTEXURAOS_CRAWL4AI_API_KEY" = "Crawl4AI Cloud API key for web page content extraction"
-    # Cloudflare Zero Trust (INT-156 Code Action)
-    "INTEXURAOS_CF_TUNNEL_TOKEN_MAC"     = "Cloudflare tunnel token for Mac worker"
-    "INTEXURAOS_CF_TUNNEL_TOKEN_VM"      = "Cloudflare tunnel token for VM worker"
-    "INTEXURAOS_CF_ACCESS_CLIENT_ID"     = "Cloudflare Access service token client ID"
-    "INTEXURAOS_CF_ACCESS_CLIENT_SECRET" = "Cloudflare Access service token client secret"
-    "INTEXURAOS_DISPATCH_SIGNING_SECRET" = "HMAC signing secret for code-agent to orchestrator dispatch requests"
+    # Code worker secrets (INT-156)
+    "INTEXURAOS_DISPATCH_SIGNING_SECRET" = "HMAC signing secret for orchestrator dispatch validation"
     "INTEXURAOS_WEBHOOK_VERIFY_SECRET"   = "HMAC signing secret for orchestrator webhook callbacks to code-agent"
     # GitHub App for code worker PRs (INT-156)
     "INTEXURAOS_GITHUB_APP_PRIVATE_KEY" = "GitHub App private key (PEM format) for code worker authentication"
@@ -1387,9 +1383,8 @@ module "code_agent" {
   image = "${var.region}-docker.pkg.dev/${var.project_id}/${module.artifact_registry.repository_id}/code-agent:latest"
 
   secrets = merge(local.common_service_secrets, {
-    INTEXURAOS_DISPATCH_SIGNING_SECRET = module.secret_manager.secret_ids["INTEXURAOS_DISPATCH_SIGNING_SECRET"]
-    INTEXURAOS_WEBHOOK_VERIFY_SECRET   = module.secret_manager.secret_ids["INTEXURAOS_WEBHOOK_VERIFY_SECRET"]
-    INTEXURAOS_TOKEN_ENCRYPTION_KEY    = module.secret_manager.secret_ids["INTEXURAOS_TOKEN_ENCRYPTION_KEY"]
+    INTEXURAOS_WEBHOOK_VERIFY_SECRET = module.secret_manager.secret_ids["INTEXURAOS_WEBHOOK_VERIFY_SECRET"]
+    INTEXURAOS_TOKEN_ENCRYPTION_KEY  = module.secret_manager.secret_ids["INTEXURAOS_TOKEN_ENCRYPTION_KEY"]
   })
 
   env_vars = merge(local.common_service_env_vars, {

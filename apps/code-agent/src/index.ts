@@ -9,7 +9,6 @@ import { initServices } from './services.js';
 const REQUIRED_ENV = [
   'INTEXURAOS_GCP_PROJECT_ID',
   'INTEXURAOS_INTERNAL_AUTH_TOKEN',
-  'INTEXURAOS_DISPATCH_SIGNING_SECRET',
   'INTEXURAOS_WEBHOOK_VERIFY_SECRET',
   'INTEXURAOS_TOKEN_ENCRYPTION_KEY', // For per-user worker credentials encryption (has dev fallback)
 ];
@@ -19,7 +18,6 @@ const REQUIRED_ENV = [
  * - E2E_MODE, E2E_TEST_USER_ID: E2E testing mode flags
  * - INTEXURAOS_WHATSAPP_SERVICE_URL, INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC: WhatsApp integration
  * - INTEXURAOS_LINEAR_AGENT_URL, INTEXURAOS_ACTIONS_AGENT_URL: Service integrations
- * - INTEXURAOS_CF_ACCESS_CLIENT_ID, INTEXURAOS_CF_ACCESS_CLIENT_SECRET: Cloudflare Access
  * - INTEXURAOS_SERVICE_URL: Worker configuration
  * - INTEXURAOS_AUTH_AUDIENCE, INTEXURAOS_AUTH_ISSUER, INTEXURAOS_AUTH_JWKS_URL: Auth0 JWT
  */
@@ -62,7 +60,6 @@ async function main(): Promise<void> {
     whatsappSendTopic: config.whatsappSendTopic,
     linearAgentUrl: config.linearAgentUrl,
     actionsAgentUrl: config.actionsAgentUrl,
-    dispatchSigningSecret: config.dispatchSigningSecret,
     webhookVerifySecret: config.webhookVerifySecret,
   });
 
