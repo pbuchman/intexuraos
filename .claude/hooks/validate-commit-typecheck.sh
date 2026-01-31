@@ -27,19 +27,13 @@ STAGED_TS=$(git diff --cached --name-only --diff-filter=ACM 2>/dev/null | grep -
 
 [[ -z "$STAGED_TS" ]] && exit 0
 
-# Group files by workspace and check each
-declare -A WORKSPACE_FILES
-for FILE in $STAGED_TS; do
-  if [[ "$FILE" =~ ^(apps/[^/]+|packages/[^/]+|workers/[^/]+)/ ]]; then
-    WS="${BASH_REMATCH[1]}"
-    WORKSPACE_FILES[$WS]="${WORKSPACE_FILES[$WS]:-} $FILE"
-  fi
-done
+# Extract unique workspaces from staged files (POSIX-compatible, no associative arrays)
+WORKSPACES=$(echo "$STAGED_TS" | sed -n 's|^\(apps/[^/]*\)/.*|\1|p; s|^\(packages/[^/]*\)/.*|\1|p; s|^\(workers/[^/]*\)/.*|\1|p' | sort -u)
 
 ERRORS_FOUND=0
 ERROR_OUTPUT=""
 
-for WS in "${!WORKSPACE_FILES[@]}"; do
+for WS in $WORKSPACES; do
   [[ ! -f "$WS/tsconfig.json" ]] && continue
 
   OUTPUT=$(cd "$WS" && npx tsc --noEmit --skipLibCheck 2>&1) || {

@@ -1125,8 +1125,10 @@ export interface ListCodeTasksResponse {
  * Worker health status for a single worker
  */
 export interface WorkerStatus {
+  name: string;
+  url: string;
+  priority: number;
   healthy: boolean;
-  capacity: number;
   checkedAt: string;
 }
 
@@ -1134,6 +1136,5 @@ export interface WorkerStatus {
  * Response from worker status endpoint
  */
 export interface WorkersStatusResponse {
-  mac: WorkerStatus;
-  vm: WorkerStatus;
+  workers: WorkerStatus[];
 }

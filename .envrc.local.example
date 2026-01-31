@@ -148,3 +148,31 @@ export INTEXURAOS_SENTRY_DSN="https://5e5f5df6749b5153e6692c7995ec3ff9@o45107026
 export INTEXURAOS_SENTRY_DSN_WEB="https://e80fca02a2e9ae3a49aeafcac1cf59fa@o4510702688337920.ingest.de.sentry.io/4510703657812048"
 # Environment name for Sentry
 export INTEXURAOS_ENVIRONMENT=development
+
+# =============================================================================
+# CODE-AGENT WORKER SETTINGS (for testing task dispatch)
+# =============================================================================
+# Worker credentials are stored per-user in Firestore, NOT as env vars.
+# code-agent reads these from Firestore when dispatching tasks.
+#
+# To test task dispatch locally:
+# 1. Configure worker settings via the IntexuraOS web UI or API
+# 2. Each worker needs:
+#    - name: e.g., "home-mac"
+#    - url: Cloudflare Tunnel URL, e.g., "https://cc-mac.intexuraos.cloud"
+#    - cfAccessClientId: Cloudflare Access service token client ID
+#    - cfAccessClientSecret: Cloudflare Access service token secret
+#    - dispatchSigningSecret: HMAC secret for request signing (see below)
+#
+# HMAC Signing (dispatchSigningSecret):
+# This secret is used for secure communication between code-agent and orchestrator.
+# - code-agent reads it from Firestore and signs outgoing dispatch requests
+# - orchestrator reads it from local env (~/.claude-orchestrator/.env) and verifies
+# - BOTH SIDES MUST HAVE THE SAME SECRET
+#
+# Generate a secret: openssl rand -hex 32
+# Then configure it in BOTH:
+# 1. IntexuraOS worker settings (stored encrypted in Firestore)
+# 2. Orchestrator's ~/.claude-orchestrator/.env as INTEXURAOS_DISPATCH_SIGNING_SECRET
+#
+# See workers/orchestrator/README.md for full orchestrator setup instructions.
