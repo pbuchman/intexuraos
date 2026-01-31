@@ -184,19 +184,19 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
 
     // Set up worker settings for the test user so cancelOnWorker receives credentials
     const services = getServices();
-    await services.workerSettingsRepo.updateWorkerConfig('test-user-id', 'mac', {
+    await services.workerSettingsRepo.addWorker('test-user-id', {
+      name: 'home-mac',
       url: 'https://cc-mac.intexuraos.cloud',
       cfAccessClientId: 'test-client-id',
       cfAccessClientSecret: 'test-client-secret',
       dispatchSigningSecret: 'test-dispatch-secret',
-      enabled: true,
     });
-    await services.workerSettingsRepo.updateWorkerConfig('test-user-id', 'vm', {
+    await services.workerSettingsRepo.addWorker('test-user-id', {
+      name: 'cloud-vm',
       url: 'https://cc-vm.intexuraos.cloud',
       cfAccessClientId: 'test-client-id',
       cfAccessClientSecret: 'test-client-secret',
       dispatchSigningSecret: 'test-dispatch-secret',
-      enabled: true,
     });
 
     app = await buildServer();
@@ -275,7 +275,7 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
         sanitizedPrompt: 'Fix the bug',
         systemPromptHash: 'default',
         workerType: 'auto',
-        workerLocation: 'mac',
+        workerLocation: 'home-mac',
         repository: 'pbuchman/intexuraos',
         baseBranch: 'development',
         traceId: 'trace_123',
@@ -314,7 +314,7 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
         sanitizedPrompt: 'Fix the bug',
         systemPromptHash: 'default',
         workerType: 'auto',
-        workerLocation: 'mac',
+        workerLocation: 'home-mac',
         repository: 'pbuchman/intexuraos',
         baseBranch: 'development',
         traceId: 'trace_123',
@@ -352,7 +352,7 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
         sanitizedPrompt: 'Fix the bug',
         systemPromptHash: 'default',
         workerType: 'auto',
-        workerLocation: 'mac',
+        workerLocation: 'home-mac',
         repository: 'pbuchman/intexuraos',
         baseBranch: 'development',
         traceId: 'trace_123',
@@ -390,7 +390,7 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
         sanitizedPrompt: 'Fix the bug',
         systemPromptHash: 'default',
         workerType: 'auto',
-        workerLocation: 'mac',
+        workerLocation: 'home-mac',
         repository: 'pbuchman/intexuraos',
         baseBranch: 'development',
         traceId: 'trace_123',
@@ -430,7 +430,7 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
         sanitizedPrompt: 'Fix the bug',
         systemPromptHash: 'default',
         workerType: 'auto',
-        workerLocation: 'mac',
+        workerLocation: 'home-mac',
         repository: 'pbuchman/intexuraos',
         baseBranch: 'development',
         traceId: 'trace_123',
@@ -459,7 +459,7 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
       // Verify worker was notified
       expect(cancelOnWorkerSpy).toHaveBeenCalledTimes(1);
       if (!cancelOnWorkerSpy) throw new Error('cancelOnWorkerSpy not initialized');
-      expect(cancelOnWorkerSpy).toHaveBeenCalledWith(taskId, 'mac', expect.objectContaining({
+      expect(cancelOnWorkerSpy).toHaveBeenCalledWith(taskId, 'home-mac', expect.objectContaining({
         url: 'https://cc-mac.intexuraos.cloud',
         cfAccessClientId: 'test-client-id',
       }));
@@ -479,7 +479,7 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
         sanitizedPrompt: 'Fix the bug',
         systemPromptHash: 'default',
         workerType: 'auto',
-        workerLocation: 'vm',
+        workerLocation: 'cloud-vm',
         repository: 'pbuchman/intexuraos',
         baseBranch: 'development',
         traceId: 'trace_123',
@@ -510,7 +510,7 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
       // Verify worker was notified
       expect(cancelOnWorkerSpy).toHaveBeenCalledTimes(1);
       if (!cancelOnWorkerSpy) throw new Error('cancelOnWorkerSpy not initialized');
-      expect(cancelOnWorkerSpy).toHaveBeenCalledWith(taskId, 'vm', expect.objectContaining({
+      expect(cancelOnWorkerSpy).toHaveBeenCalledWith(taskId, 'cloud-vm', expect.objectContaining({
         url: 'https://cc-vm.intexuraos.cloud',
         cfAccessClientId: 'test-client-id',
       }));
@@ -524,7 +524,7 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
         sanitizedPrompt: 'Fix the bug',
         systemPromptHash: 'default',
         workerType: 'auto',
-        workerLocation: 'mac',
+        workerLocation: 'home-mac',
         repository: 'pbuchman/intexuraos',
         baseBranch: 'development',
         traceId: 'trace_123',
@@ -551,7 +551,7 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
 
       // Verify cancelOnWorker was called with correct parameters
       if (!cancelOnWorkerSpy) throw new Error('cancelOnWorkerSpy not initialized');
-      expect(cancelOnWorkerSpy).toHaveBeenCalledWith(taskId, 'mac', expect.objectContaining({
+      expect(cancelOnWorkerSpy).toHaveBeenCalledWith(taskId, 'home-mac', expect.objectContaining({
         url: 'https://cc-mac.intexuraos.cloud',
         cfAccessClientId: 'test-client-id',
       }));
@@ -565,7 +565,7 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
         sanitizedPrompt: 'Fix the bug',
         systemPromptHash: 'default',
         workerType: 'auto',
-        workerLocation: 'vm',
+        workerLocation: 'cloud-vm',
         repository: 'pbuchman/intexuraos',
         baseBranch: 'development',
         traceId: 'trace_123',
@@ -611,7 +611,7 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
         sanitizedPrompt: 'Fix the bug',
         systemPromptHash: 'default',
         workerType: 'auto',
-        workerLocation: 'vm',
+        workerLocation: 'cloud-vm',
         repository: 'pbuchman/intexuraos',
         baseBranch: 'development',
         traceId: 'trace_123',
@@ -662,7 +662,7 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
         sanitizedPrompt: 'Fix the bug',
         systemPromptHash: 'default',
         workerType: 'auto',
-        workerLocation: 'mac',
+        workerLocation: 'home-mac',
         repository: 'pbuchman/intexuraos',
         baseBranch: 'development',
         traceId: 'trace_123',
@@ -700,7 +700,7 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
         sanitizedPrompt: 'Fix the bug',
         systemPromptHash: 'default',
         workerType: 'auto',
-        workerLocation: 'mac',
+        workerLocation: 'home-mac',
         repository: 'pbuchman/intexuraos',
         baseBranch: 'development',
         traceId: 'trace_123',

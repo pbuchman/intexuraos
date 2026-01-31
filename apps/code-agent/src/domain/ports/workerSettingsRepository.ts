@@ -9,78 +9,80 @@ import type {
   UserWorkerSettings,
   WorkerConfig,
   WorkerConfigInput,
-  WorkerType,
+  WorkerConfigUpdateInput,
 } from '../models/workerSettings.js';
 
-/**
- * Error codes for worker settings repository operations.
- */
-export type WorkerSettingsErrorCode =
-  | 'NOT_FOUND'
-  | 'ENCRYPTION_ERROR'
-  | 'DECRYPTION_ERROR'
-  | 'FIRESTORE_ERROR'
-  | 'VALIDATION_ERROR';
-
-/**
- * Error from worker settings repository.
- */
 export interface WorkerSettingsError {
-  code: WorkerSettingsErrorCode;
+  code: 'not_found' | 'already_exists' | 'max_workers_exceeded' | 'internal_error';
   message: string;
 }
 
-/**
- * Repository interface for user worker settings.
- *
- * Key isolation property: Document ID = userId.
- * All operations are scoped to a single user.
- */
+export interface TestResult {
+  status: 'success' | 'failure';
+  message: string;
+}
+
 export interface WorkerSettingsRepository {
   /**
-   * Get worker settings for a user.
-   * Returns null if user has no settings configured.
+   * Get all worker settings for a user.
+   * Returns null if user has no settings document.
    */
   getSettings(userId: string): Promise<Result<UserWorkerSettings | null, WorkerSettingsError>>;
 
   /**
-   * Get a specific worker config for a user.
-   * Returns the decrypted credentials.
+   * Get a specific worker by name.
+   * Returns null if worker not found.
    */
-  getWorkerConfig(
+  getWorkerByName(
     userId: string,
-    workerType: WorkerType
+    workerName: string
   ): Promise<Result<WorkerConfig | null, WorkerSettingsError>>;
 
   /**
-   * Create or update a worker config for a user.
-   * Encrypts credentials before storage.
+   * Add a new worker for a user.
+   * Fails if:
+   * - Worker with same name already exists
+   * - User already has MAX_WORKERS_PER_USER workers
    */
-  updateWorkerConfig(
+  addWorker(
     userId: string,
-    workerType: WorkerType,
     config: WorkerConfigInput
   ): Promise<Result<void, WorkerSettingsError>>;
 
   /**
-   * Delete a worker config for a user.
-   * Only removes the specified worker type, not the entire document.
+   * Update an existing worker by name.
+   * Fails if worker not found.
    */
-  deleteWorkerConfig(
+  updateWorker(
     userId: string,
-    workerType: WorkerType
+    workerName: string,
+    config: WorkerConfigUpdateInput
   ): Promise<Result<void, WorkerSettingsError>>;
 
   /**
-   * Update test results for a worker.
+   * Delete a worker by name.
+   * Fails if worker not found.
+   */
+  deleteWorker(
+    userId: string,
+    workerName: string
+  ): Promise<Result<void, WorkerSettingsError>>;
+
+  /**
+   * Reorder workers.
+   * workerNames must contain exactly all existing worker names.
+   */
+  reorderWorkers(
+    userId: string,
+    workerNames: string[]
+  ): Promise<Result<void, WorkerSettingsError>>;
+
+  /**
+   * Update test result for a worker.
    */
   updateTestResult(
     userId: string,
-    workerType: WorkerType,
-    result: {
-      testStatus: 'success' | 'failure';
-      testMessage?: string;
-      lastTestedAt: string;
-    }
+    workerName: string,
+    result: TestResult
   ): Promise<Result<void, WorkerSettingsError>>;
 }

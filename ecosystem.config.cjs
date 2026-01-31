@@ -95,11 +95,6 @@ const SERVICE_ENV_MAPPINGS = {
     INTEXURAOS_SERVICE_URL: 'http://localhost:8128',
     INTEXURAOS_DISPATCH_SIGNING_SECRET: 'dev-dispatch-signing-secret',
     INTEXURAOS_WEBHOOK_VERIFY_SECRET: 'dev-webhook-secret',
-    INTEXURAOS_CF_ACCESS_CLIENT_ID: 'dev-cf-client-id',
-    INTEXURAOS_CF_ACCESS_CLIENT_SECRET: 'dev-cf-client-secret',
-    INTEXURAOS_ORCHESTRATOR_MAC_URL: 'http://localhost:8199',
-    INTEXURAOS_ORCHESTRATOR_VM_URL: 'http://localhost:8198',
-    INTEXURAOS_CODE_WORKERS: 'mac:http://localhost:8199:1,vm:http://localhost:8198:2',
     INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC:
       process.env.INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC ?? 'whatsapp-send-message',
     INTEXURAOS_TOKEN_ENCRYPTION_KEY: process.env.INTEXURAOS_TOKEN_ENCRYPTION_KEY ?? '',

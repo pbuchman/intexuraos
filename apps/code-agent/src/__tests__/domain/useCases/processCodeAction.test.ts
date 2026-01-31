@@ -56,19 +56,24 @@ describe('processCodeAction', () => {
     workerSettingsRepo = {
       getSettings: vi.fn().mockResolvedValue(ok({
         userId: 'user-789',
-        mac: {
-          url: 'https://cc-mac.intexuraos.cloud',
-          cfAccessClientId: 'test-client-id',
-          cfAccessClientSecret: 'test-client-secret',
-          dispatchSigningSecret: 'test-dispatch-secret',
-          enabled: true,
-        },
+        workers: [
+          {
+            name: 'home-mac',
+            url: 'https://cc-mac.intexuraos.cloud',
+            cfAccessClientId: 'test-client-id',
+            cfAccessClientSecret: 'test-client-secret',
+            dispatchSigningSecret: 'test-dispatch-secret',
+            enabled: true,
+          },
+        ],
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       })),
-      getWorkerConfig: vi.fn(),
-      updateWorkerConfig: vi.fn(),
-      deleteWorkerConfig: vi.fn(),
+      getWorkerByName: vi.fn(),
+      addWorker: vi.fn(),
+      updateWorker: vi.fn(),
+      deleteWorker: vi.fn(),
+      reorderWorkers: vi.fn(),
       updateTestResult: vi.fn(),
     } as unknown as WorkerSettingsRepository;
   });

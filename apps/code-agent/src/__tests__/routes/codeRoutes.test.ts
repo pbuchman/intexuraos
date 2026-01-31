@@ -223,12 +223,12 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
 
     // Set up worker settings for the test user
     const services = getServices();
-    await services.workerSettingsRepo.updateWorkerConfig('test-user-id', 'mac', {
+    await services.workerSettingsRepo.addWorker('test-user-id', {
+      name: 'home-mac',
       url: 'https://cc-mac.intexuraos.cloud',
       cfAccessClientId: 'test-client-id',
       cfAccessClientSecret: 'test-client-secret',
       dispatchSigningSecret: 'test-dispatch-secret',
-      enabled: true,
     });
 
     server = await buildServer();
@@ -930,13 +930,16 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
           ok: true,
           value: {
             userId: 'user-123',
-            mac: {
-              url: 'https://cc-mac.intexuraos.cloud',
-              cfAccessClientId: 'test-client-id',
-              cfAccessClientSecret: 'test-client-secret',
-              dispatchSigningSecret: 'test-dispatch-secret',
-              enabled: true,
-            },
+            workers: [
+              {
+                name: 'home-mac',
+                url: 'https://cc-mac.intexuraos.cloud',
+                cfAccessClientId: 'test-client-id',
+                cfAccessClientSecret: 'test-client-secret',
+                dispatchSigningSecret: 'test-dispatch-secret',
+                enabled: true,
+              },
+            ],
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString(),
           },

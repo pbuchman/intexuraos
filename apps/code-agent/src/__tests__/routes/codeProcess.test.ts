@@ -180,12 +180,12 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
     // Set up worker settings for the test user
     const { getServices } = await import('../../services.js');
     const services = getServices();
-    await services.workerSettingsRepo.updateWorkerConfig('user-123', 'mac', {
+    await services.workerSettingsRepo.addWorker('user-123', {
+      name: 'home-mac',
       url: 'https://cc-mac.intexuraos.cloud',
       cfAccessClientId: 'test-client-id',
       cfAccessClientSecret: 'test-client-secret',
       dispatchSigningSecret: 'test-dispatch-secret',
-      enabled: true,
     });
 
     app = await buildServer();

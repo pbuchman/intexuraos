@@ -2,10 +2,13 @@ import { config } from '@/config';
 import { apiRequest } from './apiClient.js';
 import type {
   WorkerSettingsResponse,
-  WorkerType,
   WorkerConfigInput,
-  UpdateWorkerConfigResponse,
-  DeleteWorkerConfigResponse,
+  WorkerConfigUpdateInput,
+  ReorderWorkersRequest,
+  AddWorkerResponse,
+  UpdateWorkerResponse,
+  DeleteWorkerResponse,
+  ReorderWorkersResponse,
   TestWorkerConnectivityResponse,
 } from './workerSettingsApi.types.js';
 
@@ -21,36 +24,72 @@ export async function getWorkerSettings(accessToken: string): Promise<WorkerSett
 }
 
 /**
- * Create or update worker configuration.
+ * Add a new worker configuration.
  */
-export async function updateWorkerConfig(
+export async function addWorker(
   accessToken: string,
-  workerType: WorkerType,
-  config_: WorkerConfigInput
-): Promise<UpdateWorkerConfigResponse> {
-  return await apiRequest<UpdateWorkerConfigResponse>(
+  workerConfig: WorkerConfigInput
+): Promise<AddWorkerResponse> {
+  return await apiRequest<AddWorkerResponse>(
     config.codeAgentUrl,
-    `/code/worker-settings/${workerType}`,
+    '/code/worker-settings/workers',
     accessToken,
     {
-      method: 'PATCH',
-      body: config_,
+      method: 'POST',
+      body: workerConfig,
     }
   );
 }
 
 /**
- * Delete worker configuration.
+ * Update an existing worker configuration.
  */
-export async function deleteWorkerConfig(
+export async function updateWorker(
   accessToken: string,
-  workerType: WorkerType
-): Promise<DeleteWorkerConfigResponse> {
-  return await apiRequest<DeleteWorkerConfigResponse>(
+  workerName: string,
+  workerConfig: WorkerConfigUpdateInput
+): Promise<UpdateWorkerResponse> {
+  return await apiRequest<UpdateWorkerResponse>(
     config.codeAgentUrl,
-    `/code/worker-settings/${workerType}`,
+    `/code/worker-settings/workers/${workerName}`,
+    accessToken,
+    {
+      method: 'PATCH',
+      body: workerConfig,
+    }
+  );
+}
+
+/**
+ * Delete a worker configuration.
+ */
+export async function deleteWorker(
+  accessToken: string,
+  workerName: string
+): Promise<DeleteWorkerResponse> {
+  return await apiRequest<DeleteWorkerResponse>(
+    config.codeAgentUrl,
+    `/code/worker-settings/workers/${workerName}`,
     accessToken,
     { method: 'DELETE' }
+  );
+}
+
+/**
+ * Reorder workers by priority.
+ */
+export async function reorderWorkers(
+  accessToken: string,
+  request: ReorderWorkersRequest
+): Promise<ReorderWorkersResponse> {
+  return await apiRequest<ReorderWorkersResponse>(
+    config.codeAgentUrl,
+    '/code/worker-settings/priority',
+    accessToken,
+    {
+      method: 'PUT',
+      body: request,
+    }
   );
 }
 
@@ -59,22 +98,25 @@ export async function deleteWorkerConfig(
  */
 export async function testWorkerConnectivity(
   accessToken: string,
-  workerType: WorkerType
+  workerName: string
 ): Promise<TestWorkerConnectivityResponse> {
   return await apiRequest<TestWorkerConnectivityResponse>(
     config.codeAgentUrl,
-    `/code/worker-settings/${workerType}/test`,
+    `/code/worker-settings/workers/${workerName}/test`,
     accessToken,
     { method: 'POST' }
   );
 }
 
 export type {
-  WorkerType,
   MaskedWorkerConfig,
   WorkerSettingsResponse,
   WorkerConfigInput,
-  UpdateWorkerConfigResponse,
-  DeleteWorkerConfigResponse,
+  WorkerConfigUpdateInput,
+  ReorderWorkersRequest,
+  AddWorkerResponse,
+  UpdateWorkerResponse,
+  DeleteWorkerResponse,
+  ReorderWorkersResponse,
   TestWorkerConnectivityResponse,
 } from './workerSettingsApi.types.js';

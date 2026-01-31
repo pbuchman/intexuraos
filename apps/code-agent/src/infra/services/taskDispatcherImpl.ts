@@ -259,34 +259,24 @@ const body = JSON.stringify(taskRequest);
 
   /**
    * Build worker configurations from per-request credentials.
-   *
-   * Returns workers sorted by user's priority preference.
+   * Workers are already sorted by user's priority (array order).
    */
   private getWorkerConfigsFromCredentials(credentials: DispatchWorkerCredentials): WorkerConfigWithCredentials[] {
-    const workers: WorkerConfigWithCredentials[] = [];
-    const priority = credentials.priority;
-
-    /* v8 ignore start -- ts-type: array iteration with optional access @preserve */
-    for (let i = 0; i < priority.length; i++) {
-      const workerType = priority[i];
-      if (workerType === undefined) continue;
-
-      const workerCreds = credentials[workerType];
-      if (workerCreds === undefined) continue;
-
-      workers.push({
-        location: workerType,
-        url: workerCreds.url,
-        priority: i + 1,
-        credentials: workerCreds,
-      });
-    }
-    /* v8 ignore stop @preserve */
-
-    return workers;
+    return credentials.workers.map((worker, index) => ({
+      location: worker.name,
+      url: worker.url,
+      priority: index + 1,
+      credentials: {
+        name: worker.name,
+        url: worker.url,
+        cfAccessClientId: worker.cfAccessClientId,
+        cfAccessClientSecret: worker.cfAccessClientSecret,
+        dispatchSigningSecret: worker.dispatchSigningSecret,
+      },
+    }));
   }
 
-  async cancelOnWorker(taskId: string, location: 'mac' | 'vm', credentials?: WorkerCredentials): Promise<void> {
+  async cancelOnWorker(taskId: string, location: string, credentials?: { url: string; cfAccessClientId: string; cfAccessClientSecret: string }): Promise<void> {
     this.logger.info({ taskId, location }, 'Sending cancellation request to worker');
 
 if (credentials === undefined) {

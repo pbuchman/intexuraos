@@ -3,9 +3,11 @@
  *
  * Tests:
  * - GET /code/worker-settings
- * - PATCH /code/worker-settings/:workerType
- * - DELETE /code/worker-settings/:workerType
- * - POST /code/worker-settings/:workerType/test
+ * - POST /code/worker-settings/workers
+ * - PATCH /code/worker-settings/workers/:name
+ * - DELETE /code/worker-settings/workers/:name
+ * - POST /code/worker-settings/workers/:name/test
+ * - PUT /code/worker-settings/priority
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -54,10 +56,6 @@ describe('Worker Settings Routes', () => {
       protectedHeader: new Uint8Array(),
     } as never);
 
-    process.env['INTEXURAOS_CODE_WORKERS'] = 'mac:https://cc-mac.intexuraos.cloud:1';
-    process.env['INTEXURAOS_CF_ACCESS_CLIENT_ID'] = 'test-client-id';
-    process.env['INTEXURAOS_CF_ACCESS_CLIENT_SECRET'] = 'test-client-secret';
-    process.env['INTEXURAOS_DISPATCH_SECRET'] = 'test-dispatch-secret';
     process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = 'test-internal-token';
     process.env['INTEXURAOS_AUTH_AUDIENCE'] = 'https://api.intexuraos.cloud';
     process.env['INTEXURAOS_AUTH_ISSUER'] = 'https://intexuraos.eu.auth0.com/';
@@ -72,7 +70,10 @@ describe('Worker Settings Routes', () => {
       logger,
     });
 
-    const workerDiscovery = createWorkerDiscoveryService({ logger });
+    // Mock worker discovery - not needed for worker settings tests
+    const workerDiscovery = {
+      findAvailableWorker: vi.fn().mockResolvedValue(ok({ location: 'test-worker', capacity: 5 })),
+    } as unknown as ReturnType<typeof createWorkerDiscoveryService>;
     const taskDispatcher = createTaskDispatcherService({ logger });
 
     const whatsappNotifier = createWhatsAppNotifier({
@@ -163,7 +164,7 @@ describe('Worker Settings Routes', () => {
   });
 
   describe('GET /code/worker-settings', () => {
-    it('should return empty object when user has no settings', async () => {
+    it('should return empty workers array for new user', async () => {
       const response = await app.inject({
         method: 'GET',
         url: '/code/worker-settings',
@@ -171,15 +172,16 @@ describe('Worker Settings Routes', () => {
       });
 
       expect(response.statusCode).toBe(200);
-      const body = JSON.parse(response.body) as { success: boolean; data: object };
+      const body = JSON.parse(response.body) as { success: boolean; data: { workers: unknown[] } };
       expect(body.success).toBe(true);
-      expect(body.data).toEqual({});
+      expect(body.data.workers).toEqual([]);
     });
 
-    it('should return masked secrets for configured worker', async () => {
+    it('should return masked secrets for configured workers', async () => {
       const { workerSettingsRepo } = await import('../../services.js').then((m) => m.getServices());
 
-      await workerSettingsRepo.updateWorkerConfig('test-user-id', 'mac', {
+      await workerSettingsRepo.addWorker('test-user-id', {
+        name: 'home-mac',
         url: 'https://mac.example.com',
         cfAccessClientId: 'client-id-12345',
         cfAccessClientSecret: 'secret-abcdef',
@@ -195,37 +197,31 @@ describe('Worker Settings Routes', () => {
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body) as {
         success: boolean;
-        data: {
-          mac?: {
-            url: string;
-            cfAccessClientId: string;
-            cfAccessClientSecret: string;
-            dispatchSigningSecret: string;
-            enabled: boolean;
-          };
-        };
+        data: { workers: { name: string; url: string; cfAccessClientId: string; cfAccessClientSecret: string; enabled: boolean }[] };
       };
       expect(body.success).toBe(true);
-      expect(body.data.mac).toBeDefined();
-      expect(body.data.mac?.url).toBe('https://mac.example.com');
-      expect(body.data.mac?.cfAccessClientId).toContain('•');
-      expect(body.data.mac?.cfAccessClientId.endsWith('345')).toBe(true);
-      expect(body.data.mac?.cfAccessClientSecret).toContain('•');
-      expect(body.data.mac?.cfAccessClientSecret.endsWith('def')).toBe(true);
-      expect(body.data.mac?.enabled).toBe(true);
+      expect(body.data.workers).toHaveLength(1);
+      expect(body.data.workers[0]?.name).toBe('home-mac');
+      expect(body.data.workers[0]?.url).toBe('https://mac.example.com');
+      expect(body.data.workers[0]?.cfAccessClientId).toContain('•');
+      expect(body.data.workers[0]?.cfAccessClientId.endsWith('345')).toBe(true);
+      expect(body.data.workers[0]?.cfAccessClientSecret).toContain('•');
+      expect(body.data.workers[0]?.cfAccessClientSecret.endsWith('def')).toBe(true);
+      expect(body.data.workers[0]?.enabled).toBe(true);
     });
   });
 
-  describe('PATCH /code/worker-settings/:workerType', () => {
-    it('should create new worker config', async () => {
+  describe('POST /code/worker-settings/workers', () => {
+    it('should add new worker', async () => {
       const response = await app.inject({
-        method: 'PATCH',
-        url: '/code/worker-settings/mac',
+        method: 'POST',
+        url: '/code/worker-settings/workers',
         headers: {
           Authorization: 'Bearer test-token',
           'Content-Type': 'application/json',
         },
         payload: {
+          name: 'home-mac',
           url: 'https://my-mac.example.com',
           cfAccessClientId: 'my-client-id',
           cfAccessClientSecret: 'my-secret',
@@ -234,9 +230,125 @@ describe('Worker Settings Routes', () => {
       });
 
       expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as { success: boolean; data: { added: boolean } };
+      expect(body.success).toBe(true);
+      expect(body.data.added).toBe(true);
+    });
+
+    it('should enforce max workers limit', async () => {
+      const { workerSettingsRepo } = await import('../../services.js').then((m) => m.getServices());
+
+      // Add 2 workers (max)
+      await workerSettingsRepo.addWorker('test-user-id', {
+        name: 'home-mac',
+        url: 'https://mac.example.com',
+        cfAccessClientId: 'id1',
+        cfAccessClientSecret: 'secret1',
+        dispatchSigningSecret: 'signing1',
+      });
+      await workerSettingsRepo.addWorker('test-user-id', {
+        name: 'office-pc',
+        url: 'https://office.example.com',
+        cfAccessClientId: 'id2',
+        cfAccessClientSecret: 'secret2',
+        dispatchSigningSecret: 'signing2',
+      });
+
+      // Try to add 3rd worker
+      const response = await app.inject({
+        method: 'POST',
+        url: '/code/worker-settings/workers',
+        headers: {
+          Authorization: 'Bearer test-token',
+          'Content-Type': 'application/json',
+        },
+        payload: {
+          name: 'cloud-vm',
+          url: 'https://vm.example.com',
+          cfAccessClientId: 'id3',
+          cfAccessClientSecret: 'secret3',
+          dispatchSigningSecret: 'signing3',
+        },
+      });
+
+      expect(response.statusCode).toBe(409);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('CONFLICT');
+    });
+
+    it('should validate worker name format', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/code/worker-settings/workers',
+        headers: {
+          Authorization: 'Bearer test-token',
+          'Content-Type': 'application/json',
+        },
+        payload: {
+          name: 'AB', // invalid: too short, uppercase (requires 3-32 chars, lowercase alphanumeric with hyphens)
+          url: 'https://example.com',
+          cfAccessClientId: 'id',
+          cfAccessClientSecret: 'secret',
+          dispatchSigningSecret: 'signing',
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INVALID_REQUEST');
+    });
+  });
+
+  describe('PATCH /code/worker-settings/workers/:name', () => {
+    beforeEach(async () => {
+      const { workerSettingsRepo } = await import('../../services.js').then((m) => m.getServices());
+      await workerSettingsRepo.addWorker('test-user-id', {
+        name: 'home-mac',
+        url: 'https://mac.example.com',
+        cfAccessClientId: 'id',
+        cfAccessClientSecret: 'secret',
+        dispatchSigningSecret: 'signing',
+      });
+    });
+
+    it('should update existing worker', async () => {
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/code/worker-settings/workers/home-mac',
+        headers: {
+          Authorization: 'Bearer test-token',
+          'Content-Type': 'application/json',
+        },
+        payload: {
+          url: 'https://new-mac.example.com',
+          cfAccessClientId: 'new-client-id',
+          cfAccessClientSecret: 'new-secret',
+          dispatchSigningSecret: 'new-signing-secret',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body) as { success: boolean; data: { updated: boolean } };
       expect(body.success).toBe(true);
       expect(body.data.updated).toBe(true);
+    });
+
+    it('should support partial updates', async () => {
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/code/worker-settings/workers/home-mac',
+        headers: {
+          Authorization: 'Bearer test-token',
+          'Content-Type': 'application/json',
+        },
+        payload: {
+          enabled: false,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
 
       const getResponse = await app.inject({
         method: 'GET',
@@ -246,50 +358,53 @@ describe('Worker Settings Routes', () => {
 
       const getBody = JSON.parse(getResponse.body) as {
         success: boolean;
-        data: { mac?: { url: string } };
+        data: { workers: { enabled: boolean }[] };
       };
-      expect(getBody.data.mac?.url).toBe('https://my-mac.example.com');
+      expect(getBody.data.workers[0]?.enabled).toBe(false);
     });
 
-    it('should return error for invalid worker type', async () => {
+    it('should return 404 for non-existent worker', async () => {
       const response = await app.inject({
         method: 'PATCH',
-        url: '/code/worker-settings/invalid',
+        url: '/code/worker-settings/workers/cloud-vm',
         headers: {
           Authorization: 'Bearer test-token',
           'Content-Type': 'application/json',
         },
         payload: {
           url: 'https://example.com',
-          cfAccessClientId: 'id',
-          cfAccessClientSecret: 'secret',
-          dispatchSigningSecret: 'signing',
         },
       });
 
-      expect([400, 500]).toContain(response.statusCode);
+      expect(response.statusCode).toBe(404);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('NOT_FOUND');
     });
   });
 
-  describe('DELETE /code/worker-settings/:workerType', () => {
-    it('should delete existing worker config', async () => {
+  describe('DELETE /code/worker-settings/workers/:name', () => {
+    beforeEach(async () => {
       const { workerSettingsRepo } = await import('../../services.js').then((m) => m.getServices());
-
-      await workerSettingsRepo.updateWorkerConfig('test-user-id', 'mac', {
+      await workerSettingsRepo.addWorker('test-user-id', {
+        name: 'home-mac',
         url: 'https://mac.example.com',
         cfAccessClientId: 'id',
         cfAccessClientSecret: 'secret',
         dispatchSigningSecret: 'signing',
       });
+    });
 
-      const deleteResponse = await app.inject({
+    it('should delete existing worker', async () => {
+      const response = await app.inject({
         method: 'DELETE',
-        url: '/code/worker-settings/mac',
+        url: '/code/worker-settings/workers/home-mac',
         headers: { Authorization: 'Bearer test-token' },
       });
 
-      expect(deleteResponse.statusCode).toBe(200);
-      const body = JSON.parse(deleteResponse.body) as { success: boolean; data: { deleted: boolean } };
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as { success: boolean; data: { deleted: boolean } };
+      expect(body.success).toBe(true);
       expect(body.data.deleted).toBe(true);
 
       const getResponse = await app.inject({
@@ -298,26 +413,40 @@ describe('Worker Settings Routes', () => {
         headers: { Authorization: 'Bearer test-token' },
       });
 
-      const getBody = JSON.parse(getResponse.body) as { success: boolean; data: object };
-      expect(getBody.data).toEqual({});
+      const getBody = JSON.parse(getResponse.body) as { success: boolean; data: { workers: unknown[] } };
+      expect(getBody.data.workers).toEqual([]);
     });
 
-    it('should return error for invalid worker type', async () => {
+    it('should return 404 for non-existent worker', async () => {
       const response = await app.inject({
         method: 'DELETE',
-        url: '/code/worker-settings/invalid',
+        url: '/code/worker-settings/workers/cloud-vm',
         headers: { Authorization: 'Bearer test-token' },
       });
 
-      expect([400, 500]).toContain(response.statusCode);
+      expect(response.statusCode).toBe(404);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('NOT_FOUND');
     });
   });
 
-  describe('POST /code/worker-settings/:workerType/test', () => {
-    it('should return 404 when worker not configured', async () => {
+  describe('POST /code/worker-settings/workers/:name/test', () => {
+    beforeEach(async () => {
+      const { workerSettingsRepo } = await import('../../services.js').then((m) => m.getServices());
+      await workerSettingsRepo.addWorker('test-user-id', {
+        name: 'home-mac',
+        url: 'https://mac-worker.example.com',
+        cfAccessClientId: 'id',
+        cfAccessClientSecret: 'secret',
+        dispatchSigningSecret: 'signing',
+      });
+    });
+
+    it('should return 404 for non-existent worker', async () => {
       const response = await app.inject({
         method: 'POST',
-        url: '/code/worker-settings/mac/test',
+        url: '/code/worker-settings/workers/cloud-vm/test',
         headers: { Authorization: 'Bearer test-token' },
       });
 
@@ -327,23 +456,14 @@ describe('Worker Settings Routes', () => {
       expect(body.error.code).toBe('NOT_FOUND');
     });
 
-    it('should test connectivity and update result for configured worker', async () => {
-      const { workerSettingsRepo } = await import('../../services.js').then((m) => m.getServices());
-
-      await workerSettingsRepo.updateWorkerConfig('test-user-id', 'mac', {
-        url: 'https://mac-worker.example.com',
-        cfAccessClientId: 'id',
-        cfAccessClientSecret: 'secret',
-        dispatchSigningSecret: 'signing',
-      });
-
+    it('should test connectivity and update result on success', async () => {
       nock('https://mac-worker.example.com')
         .get('/health')
         .reply(200, { status: 'ok' });
 
       const response = await app.inject({
         method: 'POST',
-        url: '/code/worker-settings/mac/test',
+        url: '/code/worker-settings/workers/home-mac/test',
         headers: { Authorization: 'Bearer test-token' },
       });
 
@@ -363,22 +483,13 @@ describe('Worker Settings Routes', () => {
     });
 
     it('should record failure when health check fails', async () => {
-      const { workerSettingsRepo } = await import('../../services.js').then((m) => m.getServices());
-
-      await workerSettingsRepo.updateWorkerConfig('test-user-id', 'mac', {
-        url: 'https://failing-worker.example.com',
-        cfAccessClientId: 'id',
-        cfAccessClientSecret: 'secret',
-        dispatchSigningSecret: 'signing',
-      });
-
-      nock('https://failing-worker.example.com')
+      nock('https://mac-worker.example.com')
         .get('/health')
         .reply(503, 'Service Unavailable');
 
       const response = await app.inject({
         method: 'POST',
-        url: '/code/worker-settings/mac/test',
+        url: '/code/worker-settings/workers/home-mac/test',
         headers: { Authorization: 'Bearer test-token' },
       });
 
@@ -394,20 +505,81 @@ describe('Worker Settings Routes', () => {
       expect(body.data.testStatus).toBe('failure');
       expect(body.data.testMessage).toContain('503');
     });
+  });
 
-    it('should return error for invalid worker type', async () => {
+  describe('PUT /code/worker-settings/priority', () => {
+    beforeEach(async () => {
+      const { workerSettingsRepo } = await import('../../services.js').then((m) => m.getServices());
+      await workerSettingsRepo.addWorker('test-user-id', {
+        name: 'home-mac',
+        url: 'https://mac.example.com',
+        cfAccessClientId: 'id1',
+        cfAccessClientSecret: 'secret1',
+        dispatchSigningSecret: 'signing1',
+      });
+      await workerSettingsRepo.addWorker('test-user-id', {
+        name: 'office-pc',
+        url: 'https://office.example.com',
+        cfAccessClientId: 'id2',
+        cfAccessClientSecret: 'secret2',
+        dispatchSigningSecret: 'signing2',
+      });
+    });
+
+    it('should reorder workers', async () => {
       const response = await app.inject({
-        method: 'POST',
-        url: '/code/worker-settings/invalid/test',
+        method: 'PUT',
+        url: '/code/worker-settings/priority',
+        headers: {
+          Authorization: 'Bearer test-token',
+          'Content-Type': 'application/json',
+        },
+        payload: {
+          workerNames: ['office-pc', 'home-mac'],
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as { success: boolean; data: { reordered: boolean } };
+      expect(body.success).toBe(true);
+      expect(body.data.reordered).toBe(true);
+
+      const getResponse = await app.inject({
+        method: 'GET',
+        url: '/code/worker-settings',
         headers: { Authorization: 'Bearer test-token' },
       });
 
-      expect([400, 500]).toContain(response.statusCode);
+      const getBody = JSON.parse(getResponse.body) as {
+        success: boolean;
+        data: { workers: { name: string }[] };
+      };
+      expect(getBody.data.workers[0]?.name).toBe('office-pc');
+      expect(getBody.data.workers[1]?.name).toBe('home-mac');
+    });
+
+    it('should return error for non-existent worker', async () => {
+      const response = await app.inject({
+        method: 'PUT',
+        url: '/code/worker-settings/priority',
+        headers: {
+          Authorization: 'Bearer test-token',
+          'Content-Type': 'application/json',
+        },
+        payload: {
+          workerNames: ['home-mac', 'cloud-vm'],
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INVALID_REQUEST');
     });
   });
 
   describe('authentication', () => {
-    it('should return 401 without token', async () => {
+    it('should return 401 without valid token', async () => {
       mockedJwtVerify.mockRejectedValue(new Error('Invalid token'));
 
       const response = await app.inject({

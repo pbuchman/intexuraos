@@ -748,6 +748,7 @@ DEV_TOTAL=18  # Increment by 1
 ```
 
 **Step 2:** Verify the arrays are aligned:
+
 - `DEV_NAMES` and `DEV_PORTS` must have the same number of space-separated entries
 - `DEV_TOTAL` must equal the count of entries
 

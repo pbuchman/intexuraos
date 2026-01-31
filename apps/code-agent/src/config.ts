@@ -13,10 +13,7 @@ export interface Config {
   actionsAgentUrl: string;
   dispatchSigningSecret: string;
   webhookVerifySecret: string;
-  cfAccessClientId: string;
-  cfAccessClientSecret: string;
-  orchestratorMacUrl: string;
-  orchestratorVmUrl: string;
+  tokenEncryptionKey: string;
   // Auth0 JWT validation
   auth0Audience: string;
   auth0Issuer: string;
@@ -34,13 +31,10 @@ export function loadConfig(): Config {
   const actionsAgentUrl = process.env['INTEXURAOS_ACTIONS_AGENT_URL'] ?? '';
   const dispatchSigningSecret = process.env['INTEXURAOS_DISPATCH_SIGNING_SECRET'] ?? '';
   const webhookVerifySecret = process.env['INTEXURAOS_WEBHOOK_VERIFY_SECRET'] ?? '';
-  const cfAccessClientId = process.env['INTEXURAOS_CF_ACCESS_CLIENT_ID'] ?? '';
-  const cfAccessClientSecret = process.env['INTEXURAOS_CF_ACCESS_CLIENT_SECRET'] ?? '';
-  const orchestratorMacUrl = process.env['INTEXURAOS_ORCHESTRATOR_MAC_URL'] ?? '';
-  const orchestratorVmUrl = process.env['INTEXURAOS_ORCHESTRATOR_VM_URL'] ?? '';
   const auth0Audience = process.env['INTEXURAOS_AUTH_AUDIENCE'] ?? '';
   const auth0Issuer = process.env['INTEXURAOS_AUTH_ISSUER'] ?? '';
   const auth0JwksUri = process.env['INTEXURAOS_AUTH_JWKS_URL'] ?? '';
+  const tokenEncryptionKey = process.env['INTEXURAOS_TOKEN_ENCRYPTION_KEY'] ?? '';
 
   return {
     port,
@@ -53,10 +47,7 @@ export function loadConfig(): Config {
     actionsAgentUrl,
     dispatchSigningSecret,
     webhookVerifySecret,
-    cfAccessClientId,
-    cfAccessClientSecret,
-    orchestratorMacUrl,
-    orchestratorVmUrl,
+    tokenEncryptionKey,
     auth0Audience,
     auth0Issuer,
     auth0JwksUri,

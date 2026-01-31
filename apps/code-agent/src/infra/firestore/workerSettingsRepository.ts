@@ -13,13 +13,15 @@ import type { Logger } from '@intexuraos/common-core';
 import type {
   WorkerSettingsRepository,
   WorkerSettingsError,
+  TestResult,
 } from '../../domain/ports/workerSettingsRepository.js';
 import type {
   UserWorkerSettings,
   WorkerConfig,
   WorkerConfigInput,
-  WorkerType,
+  WorkerConfigUpdateInput,
 } from '../../domain/models/workerSettings.js';
+import { MAX_WORKERS_PER_USER } from '../../domain/models/workerSettings.js';
 import { encryptToken, decryptToken } from './encryption.js';
 
 const COLLECTION_NAME = 'code_worker_settings';
@@ -29,9 +31,7 @@ const COLLECTION_NAME = 'code_worker_settings';
  */
 interface WorkerSettingsDoc {
   userId: string;
-  mac?: EncryptedWorkerConfig;
-  vm?: EncryptedWorkerConfig;
-  workerPriority?: WorkerType[];
+  workers: EncryptedWorkerConfig[];
   createdAt: string;
   updatedAt: string;
 }
@@ -40,6 +40,7 @@ interface WorkerSettingsDoc {
  * Worker config as stored in Firestore (credentials encrypted).
  */
 interface EncryptedWorkerConfig {
+  name: string;
   url: string;
   cfAccessClientId: string; // encrypted
   cfAccessClientSecret: string; // encrypted
@@ -51,23 +52,14 @@ interface EncryptedWorkerConfig {
 }
 
 /**
- * Encrypt a worker config for storage.
- */
-function encryptWorkerConfig(config: WorkerConfigInput): EncryptedWorkerConfig {
-  return {
-    url: config.url,
-    cfAccessClientId: encryptToken(config.cfAccessClientId),
-    cfAccessClientSecret: encryptToken(config.cfAccessClientSecret),
-    dispatchSigningSecret: encryptToken(config.dispatchSigningSecret),
-    enabled: config.enabled ?? true,
-  };
-}
-
-/**
  * Decrypt a worker config from storage.
  */
-function decryptWorkerConfig(encrypted: EncryptedWorkerConfig): WorkerConfig {
+function decryptWorkerConfig(
+  encrypted: EncryptedWorkerConfig,
+  workerName: string
+): WorkerConfig {
   const config: WorkerConfig = {
+    name: workerName,
     url: encrypted.url,
     cfAccessClientId: decryptToken(encrypted.cfAccessClientId),
     cfAccessClientSecret: decryptToken(encrypted.cfAccessClientSecret),
@@ -114,25 +106,16 @@ export function createWorkerSettingsRepository(
 
         const data = doc.data() as WorkerSettingsDoc;
 
+        const workers: WorkerConfig[] = data.workers.map((w) =>
+          decryptWorkerConfig(w, w.name)
+        );
+
         const settings: UserWorkerSettings = {
           userId: data.userId,
+          workers,
           createdAt: data.createdAt,
           updatedAt: data.updatedAt,
         };
-
-        /* v8 ignore start -- ts-type: optional property checks for worker config @preserve */
-        if (data.workerPriority !== undefined) {
-          settings.workerPriority = data.workerPriority;
-        }
-
-        if (data.mac !== undefined) {
-          settings.mac = decryptWorkerConfig(data.mac);
-        }
-
-        if (data.vm !== undefined) {
-          settings.vm = decryptWorkerConfig(data.vm);
-        }
-        /* v8 ignore stop @preserve */
 
         return ok(settings);
       } catch (error) {
@@ -142,7 +125,7 @@ export function createWorkerSettingsRepository(
         if (message.includes('decrypt') || message.includes('Invalid encrypted')) {
           logger.error({ error, userId }, 'Failed to decrypt worker settings');
           return err({
-            code: 'DECRYPTION_ERROR',
+            code: 'internal_error',
             message: `Failed to decrypt worker settings: ${message}`,
           });
         }
@@ -150,15 +133,15 @@ export function createWorkerSettingsRepository(
 
         logger.error({ error, userId }, 'Failed to get worker settings');
         return err({
-          code: 'FIRESTORE_ERROR',
+          code: 'internal_error',
           message: `Firestore error: ${message}`,
         });
       }
     },
 
-    async getWorkerConfig(
+    async getWorkerByName(
       userId: string,
-      workerType: WorkerType
+      workerName: string
     ): Promise<Result<WorkerConfig | null, WorkerSettingsError>> {
       const settingsResult = await this.getSettings(userId);
 
@@ -173,50 +156,63 @@ export function createWorkerSettingsRepository(
         return ok(null);
       }
 
-      const config = settings[workerType];
-      return ok(config ?? null);
+      const worker = settings.workers.find((w) => w.name === workerName);
+      return ok(worker ?? null);
     },
 
-    async updateWorkerConfig(
+    async addWorker(
       userId: string,
-      workerType: WorkerType,
       config: WorkerConfigInput
     ): Promise<Result<void, WorkerSettingsError>> {
       try {
         const docRef = collection.doc(userId);
-        const now = new Date().toISOString();
-
-        const encryptedConfig = encryptWorkerConfig(config);
-
         const doc = await docRef.get();
 
-        /* v8 ignore start -- test-infra: create vs update branch depends on fixture state @preserve */
-        if (!doc.exists) {
-          const newDoc: WorkerSettingsDoc = {
+        /* v8 ignore start -- ts-type: nullish coalescing fallback when doc.data() returns undefined @preserve */
+        const existingWorkers = doc.exists
+          ? ((doc.data() as WorkerSettingsDoc | undefined)?.workers ?? [])
+          : [];
+        /* v8 ignore stop @preserve */
+
+        // Check max workers limit
+        if (existingWorkers.length >= MAX_WORKERS_PER_USER) {
+          return err({
+            code: 'max_workers_exceeded',
+            message: `Maximum ${String(MAX_WORKERS_PER_USER)} workers allowed per user`,
+          });
+        }
+
+        // Check for duplicate name
+        if (existingWorkers.some((w: EncryptedWorkerConfig) => w.name === config.name)) {
+          return err({
+            code: 'already_exists',
+            message: `Worker with name '${config.name}' already exists`,
+          });
+        }
+
+        // Encrypt credentials and add to array
+        const encryptedWorker: EncryptedWorkerConfig = {
+          name: config.name,
+          url: config.url,
+          cfAccessClientId: encryptToken(config.cfAccessClientId),
+          cfAccessClientSecret: encryptToken(config.cfAccessClientSecret),
+          dispatchSigningSecret: encryptToken(config.dispatchSigningSecret),
+          enabled: true,
+        };
+
+        const newWorkers = [...existingWorkers, encryptedWorker];
+        const now = new Date().toISOString();
+
+        if (doc.exists) {
+          await docRef.update({ workers: newWorkers, updatedAt: now });
+        } else {
+          await docRef.set({
             userId,
-            [workerType]: encryptedConfig,
-            workerPriority: [workerType],
+            workers: newWorkers,
             createdAt: now,
             updatedAt: now,
-          };
-          await docRef.set(newDoc);
-        } else {
-          const existingData = doc.data() as WorkerSettingsDoc;
-          const existingPriority = existingData.workerPriority ?? [];
-
-          const updatedPriority = existingPriority.includes(workerType)
-            ? existingPriority
-            : [...existingPriority, workerType];
-
-          const updateData: Record<string, unknown> = {
-            [workerType]: encryptedConfig,
-            workerPriority: updatedPriority,
-            updatedAt: now,
-          };
-
-          await docRef.update(updateData);
+          });
         }
-        /* v8 ignore stop @preserve */
 
         return ok(undefined);
       } catch (error) {
@@ -224,64 +220,189 @@ export function createWorkerSettingsRepository(
 
         /* v8 ignore start -- test-infra: encryption error path requires crypto failure @preserve */
         if (message.includes('encrypt')) {
-          logger.error({ error, userId, workerType }, 'Failed to encrypt worker config');
+          logger.error({ error, userId }, 'Failed to encrypt worker config');
           return err({
-            code: 'ENCRYPTION_ERROR',
+            code: 'internal_error',
             message: `Failed to encrypt worker config: ${message}`,
           });
         }
         /* v8 ignore stop @preserve */
 
-        logger.error({ error, userId, workerType }, 'Failed to update worker config');
+        logger.error({ error, userId }, 'Failed to add worker');
         return err({
-          code: 'FIRESTORE_ERROR',
+          code: 'internal_error',
           message: `Firestore error: ${message}`,
         });
       }
     },
 
-    async deleteWorkerConfig(
+    async updateWorker(
       userId: string,
-      workerType: WorkerType
+      workerName: string,
+      config: WorkerConfigUpdateInput
     ): Promise<Result<void, WorkerSettingsError>> {
       try {
         const docRef = collection.doc(userId);
         const doc = await docRef.get();
 
         if (!doc.exists) {
-          return ok(undefined);
+          return err({
+            code: 'not_found',
+            message: `Worker '${workerName}' not found`,
+          });
         }
 
         const existingData = doc.data() as WorkerSettingsDoc;
-        const now = new Date().toISOString();
+        const workerIndex = existingData.workers.findIndex((w) => w.name === workerName);
 
-        /* v8 ignore start -- test-infra: delete vs update branch depends on fixture state @preserve */
-        const otherType: WorkerType = workerType === 'mac' ? 'vm' : 'mac';
-        const hasOtherConfig = existingData[otherType] !== undefined;
-
-        if (!hasOtherConfig) {
-          await docRef.delete();
-        } else {
-          const { FieldValue } = await import('@google-cloud/firestore');
-
-          const updatedPriority = (existingData.workerPriority ?? []).filter(
-            (t) => t !== workerType
-          );
-
-          await docRef.update({
-            [workerType]: FieldValue.delete(),
-            workerPriority: updatedPriority,
-            updatedAt: now,
+        const existingWorker = existingData.workers[workerIndex];
+        if (workerIndex === -1 || existingWorker === undefined) {
+          return err({
+            code: 'not_found',
+            message: `Worker '${workerName}' not found`,
           });
         }
-        /* v8 ignore stop @preserve */
+
+        const now = new Date().toISOString();
+
+        // Build updated worker config - only include optional fields if they have values
+        const updatedWorker: EncryptedWorkerConfig = {
+          name: workerName, // Name is immutable
+          url: config.url ?? existingWorker.url,
+          cfAccessClientId:
+            config.cfAccessClientId !== undefined
+              ? encryptToken(config.cfAccessClientId)
+              : existingWorker.cfAccessClientId,
+          cfAccessClientSecret:
+            config.cfAccessClientSecret !== undefined
+              ? encryptToken(config.cfAccessClientSecret)
+              : existingWorker.cfAccessClientSecret,
+          dispatchSigningSecret:
+            config.dispatchSigningSecret !== undefined
+              ? encryptToken(config.dispatchSigningSecret)
+              : existingWorker.dispatchSigningSecret,
+          enabled: config.enabled ?? existingWorker.enabled,
+          /* v8 ignore start -- ts-type: spread conditionals for optional field propagation @preserve */
+          ...(existingWorker.lastTestedAt !== undefined && { lastTestedAt: existingWorker.lastTestedAt }),
+          ...(existingWorker.testStatus !== undefined && { testStatus: existingWorker.testStatus }),
+          ...(existingWorker.testMessage !== undefined && { testMessage: existingWorker.testMessage }),
+          /* v8 ignore stop @preserve */
+        };
+
+        const updatedWorkers = [...existingData.workers];
+        updatedWorkers[workerIndex] = updatedWorker;
+
+        await docRef.update({
+          workers: updatedWorkers,
+          updatedAt: now,
+        });
 
         return ok(undefined);
       } catch (error) {
         const message = getErrorMessage(error);
-        logger.error({ error, userId, workerType }, 'Failed to delete worker config');
+        logger.error({ error, userId, workerName }, 'Failed to update worker');
         return err({
-          code: 'FIRESTORE_ERROR',
+          code: 'internal_error',
+          message: `Firestore error: ${message}`,
+        });
+      }
+    },
+
+    async deleteWorker(
+      userId: string,
+      workerName: string
+    ): Promise<Result<void, WorkerSettingsError>> {
+      try {
+        const docRef = collection.doc(userId);
+        const doc = await docRef.get();
+
+        if (!doc.exists) {
+          return err({
+            code: 'not_found',
+            message: `Worker '${workerName}' not found`,
+          });
+        }
+
+        const existingData = doc.data() as WorkerSettingsDoc;
+        const workerIndex = existingData.workers.findIndex((w) => w.name === workerName);
+
+        if (workerIndex === -1) {
+          return err({
+            code: 'not_found',
+            message: `Worker '${workerName}' not found`,
+          });
+        }
+
+        const now = new Date().toISOString();
+
+        // If this is the only worker, delete the entire document
+        if (existingData.workers.length === 1) {
+          await docRef.delete();
+        } else {
+          const updatedWorkers = existingData.workers.filter((w) => w.name !== workerName);
+          await docRef.update({
+            workers: updatedWorkers,
+            updatedAt: now,
+          });
+        }
+
+        return ok(undefined);
+      } catch (error) {
+        const message = getErrorMessage(error);
+        logger.error({ error, userId, workerName }, 'Failed to delete worker');
+        return err({
+          code: 'internal_error',
+          message: `Firestore error: ${message}`,
+        });
+      }
+    },
+
+    async reorderWorkers(
+      userId: string,
+      workerNames: string[]
+    ): Promise<Result<void, WorkerSettingsError>> {
+      try {
+        const docRef = collection.doc(userId);
+        const doc = await docRef.get();
+
+        if (!doc.exists) {
+          return err({
+            code: 'not_found',
+            message: 'Worker settings not found',
+          });
+        }
+
+        const existingData = doc.data() as WorkerSettingsDoc;
+        const existingNames = existingData.workers.map((w) => w.name).sort();
+
+        // Verify the reorder contains exactly the same workers
+        const sortedInput = [...workerNames].sort();
+        if (JSON.stringify(existingNames) !== JSON.stringify(sortedInput)) {
+          return err({
+            code: 'internal_error',
+            message: 'Reorder must contain exactly all existing worker names',
+          });
+        }
+
+        // Reorder workers according to the provided order
+        // We've verified all names exist via the sort comparison above
+        const reorderedWorkers: EncryptedWorkerConfig[] = workerNames
+          .map((name) => existingData.workers.find((w) => w.name === name))
+          .filter((w): w is EncryptedWorkerConfig => w !== undefined);
+
+        const now = new Date().toISOString();
+
+        await docRef.update({
+          workers: reorderedWorkers,
+          updatedAt: now,
+        });
+
+        return ok(undefined);
+      } catch (error) {
+        const message = getErrorMessage(error);
+        logger.error({ error, userId }, 'Failed to reorder workers');
+        return err({
+          code: 'internal_error',
           message: `Firestore error: ${message}`,
         });
       }
@@ -289,12 +410,8 @@ export function createWorkerSettingsRepository(
 
     async updateTestResult(
       userId: string,
-      workerType: WorkerType,
-      result: {
-        testStatus: 'success' | 'failure';
-        testMessage?: string;
-        lastTestedAt: string;
-      }
+      workerName: string,
+      result: TestResult
     ): Promise<Result<void, WorkerSettingsError>> {
       try {
         const docRef = collection.doc(userId);
@@ -302,39 +419,45 @@ export function createWorkerSettingsRepository(
 
         if (!doc.exists) {
           return err({
-            code: 'NOT_FOUND',
+            code: 'not_found',
             message: 'Worker settings not found',
           });
         }
 
         const existingData = doc.data() as WorkerSettingsDoc;
+        const workerIndex = existingData.workers.findIndex((w) => w.name === workerName);
 
+        const existingWorker = existingData.workers[workerIndex];
         /* v8 ignore start -- test-infra: NOT_FOUND error path requires missing config fixture @preserve */
-        if (existingData[workerType] === undefined) {
+        if (workerIndex === -1 || existingWorker === undefined) {
           return err({
-            code: 'NOT_FOUND',
-            message: `${workerType} worker config not found`,
+            code: 'not_found',
+            message: `Worker '${workerName}' not found`,
           });
         }
         /* v8 ignore stop @preserve */
 
         const now = new Date().toISOString();
 
-        /* v8 ignore start -- ts-type: optional testMessage property fallback @preserve */
+        const updatedWorkers = [...existingData.workers];
+        updatedWorkers[workerIndex] = {
+          ...existingWorker,
+          lastTestedAt: now,
+          testStatus: result.status,
+          testMessage: result.message,
+        };
+
         await docRef.update({
-          [`${workerType}.lastTestedAt`]: result.lastTestedAt,
-          [`${workerType}.testStatus`]: result.testStatus,
-          [`${workerType}.testMessage`]: result.testMessage ?? null,
+          workers: updatedWorkers,
           updatedAt: now,
         });
-        /* v8 ignore stop @preserve */
 
         return ok(undefined);
       } catch (error) {
         const message = getErrorMessage(error);
-        logger.error({ error, userId, workerType }, 'Failed to update test result');
+        logger.error({ error, userId, workerName }, 'Failed to update test result');
         return err({
-          code: 'FIRESTORE_ERROR',
+          code: 'internal_error',
           message: `Firestore error: ${message}`,
         });
       }

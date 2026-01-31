@@ -4,8 +4,10 @@
  * Key test scenarios:
  * - User isolation: Document ID = userId, no cross-user access
  * - Encryption: Credentials encrypted at rest, decrypted on read
- * - CRUD operations: get, update, delete worker configs
+ * - CRUD operations: get, add, update, delete worker configs
+ * - Reordering: Workers can be reordered by priority
  * - Test result storage
+ * - Max workers: 2 workers per user enforced
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createFakeFirestore, resetFirestore, setFirestore } from '@intexuraos/infra-firestore';
@@ -13,6 +15,7 @@ import type { Firestore } from '@google-cloud/firestore';
 import type { Logger } from '@intexuraos/common-core';
 import { createWorkerSettingsRepository } from '../../../infra/firestore/workerSettingsRepository.js';
 import type { WorkerConfigInput } from '../../../domain/models/workerSettings.js';
+import { WORKER_NAME_REGEX, MAX_WORKERS_PER_USER } from '../../../domain/models/workerSettings.js';
 
 describe('workerSettingsRepository', () => {
   let fakeFirestore: ReturnType<typeof createFakeFirestore>;
@@ -33,22 +36,13 @@ describe('workerSettingsRepository', () => {
     resetFirestore();
   });
 
-  function createMacConfig(overrides: Partial<WorkerConfigInput> = {}): WorkerConfigInput {
+  function createWorkerConfig(overrides: Partial<WorkerConfigInput> = {}): WorkerConfigInput {
     return {
+      name: 'home-mac',
       url: 'https://mac.example.com',
       cfAccessClientId: 'client-id-mac',
       cfAccessClientSecret: 'secret-mac',
       dispatchSigningSecret: 'signing-secret-mac',
-      ...overrides,
-    };
-  }
-
-  function createVmConfig(overrides: Partial<WorkerConfigInput> = {}): WorkerConfigInput {
-    return {
-      url: 'https://vm.example.com',
-      cfAccessClientId: 'client-id-vm',
-      cfAccessClientSecret: 'secret-vm',
-      dispatchSigningSecret: 'signing-secret-vm',
       ...overrides,
     };
   }
@@ -68,58 +62,59 @@ describe('workerSettingsRepository', () => {
       }
     });
 
-    it('should return decrypted settings for user with settings', async () => {
+    it('should return decrypted settings for user with workers', async () => {
       const repo = createWorkerSettingsRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
 
-      await repo.updateWorkerConfig('user-1', 'mac', createMacConfig());
+      await repo.addWorker('user-1', createWorkerConfig({ name: 'home-mac' }));
 
       const result = await repo.getSettings('user-1');
 
       expect(result.ok).toBe(true);
       if (result.ok && result.value !== null) {
         expect(result.value.userId).toBe('user-1');
-        expect(result.value.mac).toBeDefined();
-        expect(result.value.mac?.url).toBe('https://mac.example.com');
-        expect(result.value.mac?.cfAccessClientId).toBe('client-id-mac');
-        expect(result.value.mac?.cfAccessClientSecret).toBe('secret-mac');
-        expect(result.value.mac?.dispatchSigningSecret).toBe('signing-secret-mac');
-        expect(result.value.mac?.enabled).toBe(true);
+        expect(result.value.workers).toHaveLength(1);
+        expect(result.value.workers[0]?.name).toBe('home-mac');
+        expect(result.value.workers[0]?.url).toBe('https://mac.example.com');
+        expect(result.value.workers[0]?.cfAccessClientId).toBe('client-id-mac');
+        expect(result.value.workers[0]?.cfAccessClientSecret).toBe('secret-mac');
+        expect(result.value.workers[0]?.dispatchSigningSecret).toBe('signing-secret-mac');
+        expect(result.value.workers[0]?.enabled).toBe(true);
       }
     });
 
-    it('should return settings with both mac and vm configs', async () => {
+    it('should return settings with multiple workers', async () => {
       const repo = createWorkerSettingsRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
 
-      await repo.updateWorkerConfig('user-1', 'mac', createMacConfig());
-      await repo.updateWorkerConfig('user-1', 'vm', createVmConfig());
+      await repo.addWorker('user-1', createWorkerConfig({ name: 'home-mac', url: 'https://mac.example.com' }));
+      await repo.addWorker('user-1', createWorkerConfig({ name: 'office-pc', url: 'https://office.example.com' }));
 
       const result = await repo.getSettings('user-1');
 
       expect(result.ok).toBe(true);
       if (result.ok && result.value !== null) {
-        expect(result.value.mac).toBeDefined();
-        expect(result.value.vm).toBeDefined();
-        expect(result.value.mac?.url).toBe('https://mac.example.com');
-        expect(result.value.vm?.url).toBe('https://vm.example.com');
-        expect(result.value.workerPriority).toEqual(['mac', 'vm']);
+        expect(result.value.workers).toHaveLength(2);
+        expect(result.value.workers[0]?.name).toBe('home-mac');
+        expect(result.value.workers[1]?.name).toBe('office-pc');
+        expect(result.value.workers[0]?.url).toBe('https://mac.example.com');
+        expect(result.value.workers[1]?.url).toBe('https://office.example.com');
       }
     });
   });
 
-  describe('getWorkerConfig', () => {
+  describe('getWorkerByName', () => {
     it('should return null for non-existent user', async () => {
       const repo = createWorkerSettingsRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
 
-      const result = await repo.getWorkerConfig('no-user', 'mac');
+      const result = await repo.getWorkerByName('no-user', 'home-mac');
 
       expect(result.ok).toBe(true);
       if (result.ok) {
@@ -127,15 +122,15 @@ describe('workerSettingsRepository', () => {
       }
     });
 
-    it('should return null for non-existent worker type', async () => {
+    it('should return null for non-existent worker', async () => {
       const repo = createWorkerSettingsRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
 
-      await repo.updateWorkerConfig('user-1', 'mac', createMacConfig());
+      await repo.addWorker('user-1', createWorkerConfig({ name: 'home-mac' }));
 
-      const result = await repo.getWorkerConfig('user-1', 'vm');
+      const result = await repo.getWorkerByName('user-1', 'office-pc');
 
       expect(result.ok).toBe(true);
       if (result.ok) {
@@ -149,12 +144,13 @@ describe('workerSettingsRepository', () => {
         logger,
       });
 
-      await repo.updateWorkerConfig('user-1', 'mac', createMacConfig());
+      await repo.addWorker('user-1', createWorkerConfig({ name: 'home-mac' }));
 
-      const result = await repo.getWorkerConfig('user-1', 'mac');
+      const result = await repo.getWorkerByName('user-1', 'home-mac');
 
       expect(result.ok).toBe(true);
       if (result.ok && result.value !== null) {
+        expect(result.value.name).toBe('home-mac');
         expect(result.value.url).toBe('https://mac.example.com');
         expect(result.value.cfAccessClientId).toBe('client-id-mac');
         expect(result.value.cfAccessClientSecret).toBe('secret-mac');
@@ -163,14 +159,14 @@ describe('workerSettingsRepository', () => {
     });
   });
 
-  describe('updateWorkerConfig', () => {
+  describe('addWorker', () => {
     it('should create new document for new user', async () => {
       const repo = createWorkerSettingsRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
 
-      const result = await repo.updateWorkerConfig('new-user', 'mac', createMacConfig());
+      const result = await repo.addWorker('new-user', createWorkerConfig({ name: 'home-mac' }));
 
       expect(result.ok).toBe(true);
 
@@ -178,8 +174,58 @@ describe('workerSettingsRepository', () => {
       expect(settings.ok).toBe(true);
       if (settings.ok && settings.value !== null) {
         expect(settings.value.userId).toBe('new-user');
-        expect(settings.value.mac).toBeDefined();
-        expect(settings.value.workerPriority).toEqual(['mac']);
+        expect(settings.value.workers).toHaveLength(1);
+        expect(settings.value.workers[0]?.name).toBe('home-mac');
+      }
+    });
+
+    it('should enforce max workers limit', async () => {
+      const repo = createWorkerSettingsRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      await repo.addWorker('user-1', createWorkerConfig({ name: 'home-mac' }));
+      await repo.addWorker('user-1', createWorkerConfig({ name: 'office-pc' }));
+
+      const thirdWorker = await repo.addWorker('user-1', createWorkerConfig({ name: 'cloud-vm' }));
+
+      expect(thirdWorker.ok).toBe(false);
+      if (!thirdWorker.ok) {
+        expect(thirdWorker.error.code).toBe('max_workers_exceeded');
+        expect(thirdWorker.error.message).toContain(`Maximum ${MAX_WORKERS_PER_USER} workers`);
+      }
+    });
+
+    it('should reject duplicate worker names', async () => {
+      const repo = createWorkerSettingsRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      await repo.addWorker('user-1', createWorkerConfig({ name: 'home-mac' }));
+
+      const duplicate = await repo.addWorker('user-1', createWorkerConfig({ name: 'home-mac', url: 'https://different.url' }));
+
+      expect(duplicate.ok).toBe(false);
+      if (!duplicate.ok) {
+        expect(duplicate.error.code).toBe('already_exists');
+      }
+    });
+
+    it('should accept valid worker names', async () => {
+      const validNames = [
+        'home-mac',
+        'office-pc',
+        'cloud-vm-1',
+        'a-b',
+        'abc123',
+        '123abc',
+        'worker',
+      ];
+
+      for (const name of validNames) {
+        expect(WORKER_NAME_REGEX.test(name)).toBe(true);
       }
     });
 
@@ -189,67 +235,21 @@ describe('workerSettingsRepository', () => {
         logger,
       });
 
-      await repo.updateWorkerConfig('user-1', 'mac', createMacConfig());
+      await repo.addWorker('user-1', createWorkerConfig({ name: 'home-mac' }));
 
       const collection = fakeFirestore.collection('code_worker_settings');
       const doc = await collection.doc('user-1').get();
       const data = doc.data();
 
-      const macData = data?.['mac'] as Record<string, string> | undefined;
-      expect(macData?.['cfAccessClientId']).not.toBe('client-id-mac');
-      expect(macData?.['cfAccessClientId']).toContain(':');
-      expect(macData?.['cfAccessClientSecret']).not.toBe('secret-mac');
-      expect(macData?.['dispatchSigningSecret']).not.toBe('signing-secret-mac');
-    });
+      expect(data?.['userId']).toBe('user-1');
+      const workers = data?.['workers'] as unknown[];
+      expect(workers).toHaveLength(1);
 
-    it('should update existing config and preserve other worker', async () => {
-      const repo = createWorkerSettingsRepository({
-        firestore: fakeFirestore as unknown as Firestore,
-        logger,
-      });
-
-      await repo.updateWorkerConfig('user-1', 'mac', createMacConfig());
-      await repo.updateWorkerConfig('user-1', 'vm', createVmConfig());
-      await repo.updateWorkerConfig('user-1', 'mac', createMacConfig({ url: 'https://new-mac.example.com' }));
-
-      const settings = await repo.getSettings('user-1');
-      expect(settings.ok).toBe(true);
-      if (settings.ok && settings.value !== null) {
-        expect(settings.value.mac?.url).toBe('https://new-mac.example.com');
-        expect(settings.value.vm?.url).toBe('https://vm.example.com');
-      }
-    });
-
-    it('should add new worker type to priority list', async () => {
-      const repo = createWorkerSettingsRepository({
-        firestore: fakeFirestore as unknown as Firestore,
-        logger,
-      });
-
-      await repo.updateWorkerConfig('user-1', 'mac', createMacConfig());
-      await repo.updateWorkerConfig('user-1', 'vm', createVmConfig());
-
-      const settings = await repo.getSettings('user-1');
-      expect(settings.ok).toBe(true);
-      if (settings.ok && settings.value !== null) {
-        expect(settings.value.workerPriority).toEqual(['mac', 'vm']);
-      }
-    });
-
-    it('should not duplicate worker type in priority list on update', async () => {
-      const repo = createWorkerSettingsRepository({
-        firestore: fakeFirestore as unknown as Firestore,
-        logger,
-      });
-
-      await repo.updateWorkerConfig('user-1', 'mac', createMacConfig());
-      await repo.updateWorkerConfig('user-1', 'mac', createMacConfig({ url: 'https://updated.example.com' }));
-
-      const settings = await repo.getSettings('user-1');
-      expect(settings.ok).toBe(true);
-      if (settings.ok && settings.value !== null) {
-        expect(settings.value.workerPriority).toEqual(['mac']);
-      }
+      const workerData = workers[0] as Record<string, string>;
+      expect(workerData['cfAccessClientId']).not.toBe('client-id-mac');
+      expect(workerData['cfAccessClientId']).toContain(':');
+      expect(workerData['cfAccessClientSecret']).not.toBe('secret-mac');
+      expect(workerData['dispatchSigningSecret']).not.toBe('signing-secret-mac');
     });
 
     it('should set enabled to true by default', async () => {
@@ -258,51 +258,137 @@ describe('workerSettingsRepository', () => {
         logger,
       });
 
-      await repo.updateWorkerConfig('user-1', 'mac', createMacConfig());
+      await repo.addWorker('user-1', createWorkerConfig({ name: 'home-mac' }));
 
       const settings = await repo.getSettings('user-1');
       expect(settings.ok).toBe(true);
       if (settings.ok && settings.value !== null) {
-        expect(settings.value.mac?.enabled).toBe(true);
-      }
-    });
-
-    it('should respect enabled flag when provided', async () => {
-      const repo = createWorkerSettingsRepository({
-        firestore: fakeFirestore as unknown as Firestore,
-        logger,
-      });
-
-      await repo.updateWorkerConfig('user-1', 'mac', createMacConfig({ enabled: false }));
-
-      const settings = await repo.getSettings('user-1');
-      expect(settings.ok).toBe(true);
-      if (settings.ok && settings.value !== null) {
-        expect(settings.value.mac?.enabled).toBe(false);
+        expect(settings.value.workers[0]?.enabled).toBe(true);
       }
     });
   });
 
-  describe('deleteWorkerConfig', () => {
-    it('should do nothing for non-existent user', async () => {
+  describe('updateWorker', () => {
+    beforeEach(async () => {
       const repo = createWorkerSettingsRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
-
-      const result = await repo.deleteWorkerConfig('no-user', 'mac');
-
-      expect(result.ok).toBe(true);
+      await repo.addWorker('user-1', createWorkerConfig({ name: 'home-mac' }));
+      await repo.addWorker('user-1', createWorkerConfig({ name: 'office-pc', url: 'https://office.example.com' }));
     });
 
-    it('should delete entire document when only one worker config', async () => {
+    it('should update existing worker', async () => {
       const repo = createWorkerSettingsRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
 
-      await repo.updateWorkerConfig('user-1', 'mac', createMacConfig());
-      await repo.deleteWorkerConfig('user-1', 'mac');
+      const result = await repo.updateWorker('user-1', 'home-mac', {
+        url: 'https://new-mac.example.com',
+        cfAccessClientId: 'new-client-id',
+        cfAccessClientSecret: 'new-secret',
+        dispatchSigningSecret: 'new-signing-secret',
+      });
+
+      expect(result.ok).toBe(true);
+
+      const settings = await repo.getSettings('user-1');
+      expect(settings.ok).toBe(true);
+      if (settings.ok && settings.value !== null) {
+        const worker = settings.value.workers.find((w) => w.name === 'home-mac');
+        expect(worker?.url).toBe('https://new-mac.example.com');
+        expect(worker?.cfAccessClientId).toBe('new-client-id');
+      }
+    });
+
+    it('should update enabled flag', async () => {
+      const repo = createWorkerSettingsRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      await repo.updateWorker('user-1', 'home-mac', { enabled: false });
+
+      const settings = await repo.getSettings('user-1');
+      expect(settings.ok).toBe(true);
+      if (settings.ok && settings.value !== null) {
+        const worker = settings.value.workers.find((w) => w.name === 'home-mac');
+        expect(worker?.enabled).toBe(false);
+      }
+    });
+
+    it('should preserve other workers when updating one', async () => {
+      const repo = createWorkerSettingsRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      await repo.updateWorker('user-1', 'home-mac', { url: 'https://updated.example.com' });
+
+      const settings = await repo.getSettings('user-1');
+      expect(settings.ok).toBe(true);
+      if (settings.ok && settings.value !== null) {
+        expect(settings.value.workers).toHaveLength(2);
+        const homeMac = settings.value.workers.find((w) => w.name === 'home-mac');
+        const officePc = settings.value.workers.find((w) => w.name === 'office-pc');
+        expect(homeMac?.url).toBe('https://updated.example.com');
+        expect(officePc?.url).toBe('https://office.example.com');
+      }
+    });
+
+    it('should return NOT_FOUND for non-existent user', async () => {
+      const repo = createWorkerSettingsRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const result = await repo.updateWorker('no-user', 'home-mac', { url: 'https://new.example.com' });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('not_found');
+      }
+    });
+
+    it('should return NOT_FOUND for non-existent worker', async () => {
+      const repo = createWorkerSettingsRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const result = await repo.updateWorker('user-1', 'cloud-vm', { url: 'https://new.example.com' });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('not_found');
+      }
+    });
+  });
+
+  describe('deleteWorker', () => {
+    it('should return NOT_FOUND for non-existent user', async () => {
+      const repo = createWorkerSettingsRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const result = await repo.deleteWorker('no-user', 'home-mac');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('not_found');
+      }
+    });
+
+    it('should delete entire document when removing last worker', async () => {
+      const repo = createWorkerSettingsRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      await repo.addWorker('user-1', createWorkerConfig({ name: 'home-mac' }));
+      await repo.deleteWorker('user-1', 'home-mac');
 
       const settings = await repo.getSettings('user-1');
       expect(settings.ok).toBe(true);
@@ -311,93 +397,136 @@ describe('workerSettingsRepository', () => {
       }
     });
 
-    it('should remove only specified worker type and keep other', async () => {
+    it('should remove only specified worker and keep others', async () => {
       const repo = createWorkerSettingsRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
 
-      await repo.updateWorkerConfig('user-1', 'mac', createMacConfig());
-      await repo.updateWorkerConfig('user-1', 'vm', createVmConfig());
-      await repo.deleteWorkerConfig('user-1', 'mac');
+      await repo.addWorker('user-1', createWorkerConfig({ name: 'home-mac' }));
+      await repo.addWorker('user-1', createWorkerConfig({ name: 'office-pc', url: 'https://office.example.com' }));
+      await repo.deleteWorker('user-1', 'home-mac');
 
       const settings = await repo.getSettings('user-1');
       expect(settings.ok).toBe(true);
       if (settings.ok && settings.value !== null) {
-        expect(settings.value.mac).toBeUndefined();
-        expect(settings.value.vm).toBeDefined();
-        expect(settings.value.workerPriority).toEqual(['vm']);
-      }
-    });
-
-    it('should update priority list on delete', async () => {
-      const repo = createWorkerSettingsRepository({
-        firestore: fakeFirestore as unknown as Firestore,
-        logger,
-      });
-
-      await repo.updateWorkerConfig('user-1', 'mac', createMacConfig());
-      await repo.updateWorkerConfig('user-1', 'vm', createVmConfig());
-      await repo.deleteWorkerConfig('user-1', 'vm');
-
-      const settings = await repo.getSettings('user-1');
-      expect(settings.ok).toBe(true);
-      if (settings.ok && settings.value !== null) {
-        expect(settings.value.workerPriority).toEqual(['mac']);
+        expect(settings.value.workers).toHaveLength(1);
+        expect(settings.value.workers[0]?.name).toBe('office-pc');
       }
     });
   });
 
-  describe('updateTestResult', () => {
+  describe('reorderWorkers', () => {
+    beforeEach(async () => {
+      const repo = createWorkerSettingsRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+      await repo.addWorker('user-1', createWorkerConfig({ name: 'home-mac' }));
+      await repo.addWorker('user-1', createWorkerConfig({ name: 'office-pc', url: 'https://office.example.com' }));
+    });
+
+    it('should reorder workers by name list', async () => {
+      const repo = createWorkerSettingsRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const result = await repo.reorderWorkers('user-1', ['office-pc', 'home-mac']);
+
+      expect(result.ok).toBe(true);
+
+      const settings = await repo.getSettings('user-1');
+      expect(settings.ok).toBe(true);
+      if (settings.ok && settings.value !== null) {
+        expect(settings.value.workers).toHaveLength(2);
+        expect(settings.value.workers[0]?.name).toBe('office-pc');
+        expect(settings.value.workers[1]?.name).toBe('home-mac');
+      }
+    });
+
     it('should return NOT_FOUND for non-existent user', async () => {
       const repo = createWorkerSettingsRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
 
-      const result = await repo.updateTestResult('no-user', 'mac', {
-        testStatus: 'success',
-        lastTestedAt: new Date().toISOString(),
-      });
+      const result = await repo.reorderWorkers('no-user', ['home-mac']);
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
-        expect(result.error.code).toBe('NOT_FOUND');
+        expect(result.error.code).toBe('not_found');
       }
     });
 
-    it('should return NOT_FOUND for non-existent worker type', async () => {
+    it('should validate all worker names exist', async () => {
       const repo = createWorkerSettingsRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
 
-      await repo.updateWorkerConfig('user-1', 'mac', createMacConfig());
-
-      const result = await repo.updateTestResult('user-1', 'vm', {
-        testStatus: 'success',
-        lastTestedAt: new Date().toISOString(),
-      });
+      const result = await repo.reorderWorkers('user-1', ['home-mac', 'cloud-vm']);
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
-        expect(result.error.code).toBe('NOT_FOUND');
+        expect(result.error.code).toBe('internal_error');
+        expect(result.error.message).toContain('exactly all existing worker names');
       }
     });
+  });
 
-    it('should update test status for existing worker', async () => {
+  describe('updateTestResult', () => {
+    beforeEach(async () => {
+      const repo = createWorkerSettingsRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+      await repo.addWorker('user-1', createWorkerConfig({ name: 'home-mac' }));
+    });
+
+    it('should return NOT_FOUND for non-existent user', async () => {
       const repo = createWorkerSettingsRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
 
-      await repo.updateWorkerConfig('user-1', 'mac', createMacConfig());
+      const result = await repo.updateTestResult('no-user', 'home-mac', {
+        status: 'success',
+        message: 'Test passed',
+      });
 
-      const testTime = new Date().toISOString();
-      const result = await repo.updateTestResult('user-1', 'mac', {
-        testStatus: 'success',
-        testMessage: 'Connection successful',
-        lastTestedAt: testTime,
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('not_found');
+      }
+    });
+
+    it('should return NOT_FOUND for non-existent worker', async () => {
+      const repo = createWorkerSettingsRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const result = await repo.updateTestResult('user-1', 'office-pc', {
+        status: 'success',
+        message: 'Test passed',
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('not_found');
+      }
+    });
+
+    it('should update test status for success', async () => {
+      const repo = createWorkerSettingsRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const result = await repo.updateTestResult('user-1', 'home-mac', {
+        status: 'success',
+        message: 'Connection successful',
       });
 
       expect(result.ok).toBe(true);
@@ -405,9 +534,10 @@ describe('workerSettingsRepository', () => {
       const settings = await repo.getSettings('user-1');
       expect(settings.ok).toBe(true);
       if (settings.ok && settings.value !== null) {
-        expect(settings.value.mac?.testStatus).toBe('success');
-        expect(settings.value.mac?.testMessage).toBe('Connection successful');
-        expect(settings.value.mac?.lastTestedAt).toBe(testTime);
+        const worker = settings.value.workers.find((w) => w.name === 'home-mac');
+        expect(worker?.testStatus).toBe('success');
+        expect(worker?.testMessage).toBe('Connection successful');
+        expect(worker?.lastTestedAt).toBeDefined();
       }
     });
 
@@ -417,13 +547,9 @@ describe('workerSettingsRepository', () => {
         logger,
       });
 
-      await repo.updateWorkerConfig('user-1', 'mac', createMacConfig());
-
-      const testTime = new Date().toISOString();
-      const result = await repo.updateTestResult('user-1', 'mac', {
-        testStatus: 'failure',
-        testMessage: 'Connection timeout',
-        lastTestedAt: testTime,
+      const result = await repo.updateTestResult('user-1', 'home-mac', {
+        status: 'failure',
+        message: 'Connection timeout',
       });
 
       expect(result.ok).toBe(true);
@@ -431,8 +557,9 @@ describe('workerSettingsRepository', () => {
       const settings = await repo.getSettings('user-1');
       expect(settings.ok).toBe(true);
       if (settings.ok && settings.value !== null) {
-        expect(settings.value.mac?.testStatus).toBe('failure');
-        expect(settings.value.mac?.testMessage).toBe('Connection timeout');
+        const worker = settings.value.workers.find((w) => w.name === 'home-mac');
+        expect(worker?.testStatus).toBe('failure');
+        expect(worker?.testMessage).toBe('Connection timeout');
       }
     });
   });
@@ -444,8 +571,8 @@ describe('workerSettingsRepository', () => {
         logger,
       });
 
-      await repo.updateWorkerConfig('user-a', 'mac', createMacConfig({ url: 'https://user-a.example.com' }));
-      await repo.updateWorkerConfig('user-b', 'mac', createMacConfig({ url: 'https://user-b.example.com' }));
+      await repo.addWorker('user-a', createWorkerConfig({ name: 'home-mac', url: 'https://user-a.example.com' }));
+      await repo.addWorker('user-b', createWorkerConfig({ name: 'home-mac', url: 'https://user-b.example.com' }));
 
       const settingsA = await repo.getSettings('user-a');
       const settingsB = await repo.getSettings('user-b');
@@ -454,11 +581,11 @@ describe('workerSettingsRepository', () => {
       expect(settingsB.ok).toBe(true);
 
       if (settingsA.ok && settingsA.value !== null) {
-        expect(settingsA.value.mac?.url).toBe('https://user-a.example.com');
+        expect(settingsA.value.workers[0]?.url).toBe('https://user-a.example.com');
       }
 
       if (settingsB.ok && settingsB.value !== null) {
-        expect(settingsB.value.mac?.url).toBe('https://user-b.example.com');
+        expect(settingsB.value.workers[0]?.url).toBe('https://user-b.example.com');
       }
     });
 
@@ -468,7 +595,7 @@ describe('workerSettingsRepository', () => {
         logger,
       });
 
-      await repo.updateWorkerConfig('specific-user-id', 'mac', createMacConfig());
+      await repo.addWorker('specific-user-id', createWorkerConfig({ name: 'home-mac' }));
 
       const collection = fakeFirestore.collection('code_worker_settings');
       const doc = await collection.doc('specific-user-id').get();
@@ -485,7 +612,8 @@ describe('workerSettingsRepository', () => {
         logger,
       });
 
-      await repo.updateWorkerConfig('user-1', 'mac', createMacConfig({
+      await repo.addWorker('user-1', createWorkerConfig({
+        name: 'home-mac',
         cfAccessClientSecret: 'super-secret-value-12345',
       }));
 
@@ -493,14 +621,15 @@ describe('workerSettingsRepository', () => {
       const doc = await collection.doc('user-1').get();
       const rawData = doc.data();
 
-      const macRawData = rawData?.['mac'] as Record<string, string> | undefined;
-      expect(macRawData?.['cfAccessClientSecret']).not.toBe('super-secret-value-12345');
-      expect(macRawData?.['cfAccessClientSecret']).toMatch(/^[A-Za-z0-9+/=]+:[A-Za-z0-9+/=]+:[A-Za-z0-9+/=]+$/);
+      const workers = rawData?.['workers'] as unknown[];
+      const workerRawData = workers[0] as Record<string, string>;
+      expect(workerRawData['cfAccessClientSecret']).not.toBe('super-secret-value-12345');
+      expect(workerRawData['cfAccessClientSecret']).toMatch(/^[A-Za-z0-9+/=]+:[A-Za-z0-9+/=]+:[A-Za-z0-9+/=]+$/);
 
       const decrypted = await repo.getSettings('user-1');
       expect(decrypted.ok).toBe(true);
       if (decrypted.ok && decrypted.value !== null) {
-        expect(decrypted.value.mac?.cfAccessClientSecret).toBe('super-secret-value-12345');
+        expect(decrypted.value.workers[0]?.cfAccessClientSecret).toBe('super-secret-value-12345');
       }
     });
   });
