@@ -163,7 +163,9 @@ async function processStreamResponse(
       const lines = buffer.split('\n');
       // Keep the last line in the buffer as it might be incomplete
       buffer =
-        lines.pop() /* v8 ignore ts-type -- split always returns at least one element */ ?? '';
+        /* v8 ignore start -- ts-type: split always returns at least one element @preserve */
+        lines.pop() ?? '';
+      /* v8 ignore stop @preserve */
 
       for (const line of lines) {
         const trimmed = line.trim();

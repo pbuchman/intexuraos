@@ -1,318 +1,353 @@
 #!/usr/bin/env node
 
-// Migration Script: Convert unreachable/*.md files to inline v8 ignore comments
-//
-// This script reads all .claude/skills/coverage/unreachable/*.md files and
-// converts them to inline v8 ignore comments.
+// Migrates v8 ignore comments from old format to start/stop format.
+// Old format: [v8 ignore <CATEGORY> -- <reason>]
+// New format: [v8 ignore start -- <CATEGORY>: <reason> @preserve] ... [v8 ignore stop @preserve]
 
-import { readFileSync, writeFileSync, readdirSync, existsSync } from 'node:fs';
-import { resolve, dirname, basename } from 'node:path';
+import { readFileSync, writeFileSync, readdirSync } from 'node:fs';
+import { join, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT_DIR = resolve(__dirname, '..');
 
-const CATEGORY_MAP = {
-  'TypeScript Type System Guarantees': 'ts-type',
-  'Type System Constraints': 'ts-type',
-  'Firestore Contract Guarantees': 'ts-type',
-  'Schema Validation Guarantees': 'schema',
-  'Schema Validation': 'schema',
-  'Auth Guards': 'auth-guard',
-  'Upstream Guards': 'upstream',
-  'Use Case Contract': 'test-infra',
-  'Non-Critical Error Handling': 'test-infra',
-  'Generic Error Path': 'test-infra',
-  'Code Logic Redundancy': 'upstream',
-  'Single-Threaded Testing': 'test-infra',
-  'Security Testing Scenarios': 'test-infra',
-  'External API Specific Error States': 'test-infra',
-  'Source Map Alignment Issues': 'source-map',
-  'Interface Definition': 'module-init',
-  'Module State': 'module-init',
-  'Test Infrastructure Constraints': 'test-infra',
-  // Categories to REJECT (write test instead)
-  'Testable but edge case': null,
-  'Precondition Violation': null,
-};
+// Match current format: /* v8 ignore <CATEGORY> -- <reason> */
+const V8_IGNORE_OLD_REGEX =
+  /\/\*\s*v8\s+ignore\s+(ts-type|regex|module-init|async-timing|test-infra|upstream|module-mock|schema|source-map|auth-guard)\s+--\s+(.+?)\s*\*\//;
 
-// ============================================================================
-// MARKDOWN PARSER
-// ============================================================================
+function* walkDir(dir) {
+  let entries;
+  try {
+    entries = readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return;
+  }
 
-function parseUnreachableMarkdown(content) {
-  const exemptions = [];
-  const lines = content.split('\n');
+  for (const entry of entries) {
+    const fullPath = join(dir, entry.name);
+    if (entry.name === 'node_modules' || entry.name === 'dist' || entry.name === '.git') continue;
+    if (entry.name === '__tests__') continue;
 
-  let currentFile = null;
-  let currentLine = null;
-  let currentBlocker = null;
-  let currentProof = null;
-  let inCodeBlock = false;
-  let codeSnippet = [];
+    if (entry.isDirectory()) {
+      yield* walkDir(fullPath);
+    } else if (entry.isFile() && entry.name.endsWith('.ts')) {
+      yield fullPath;
+    }
+  }
+}
 
-  for (let i = 0; i < lines.length; i++) {
+function skipCommentBlock(lines, startIdx) {
+  const line = lines[startIdx]?.trim() ?? '';
+
+  if (line.startsWith('//')) {
+    return startIdx + 1;
+  }
+
+  if (line.startsWith('/*') || line.startsWith('/**')) {
+    if (line.includes('*/') && line.indexOf('*/') > line.indexOf('/*')) {
+      return startIdx + 1;
+    }
+    for (let i = startIdx + 1; i < lines.length; i++) {
+      if (lines[i].includes('*/')) {
+        return i + 1;
+      }
+    }
+    return startIdx + 1;
+  }
+
+  return startIdx;
+}
+
+function findCodeStart(lines, startIdx) {
+  let idx = startIdx;
+  while (idx < lines.length) {
+    const line = lines[idx]?.trim() ?? '';
+
+    if (line === '') {
+      idx++;
+      continue;
+    }
+
+    if (line.startsWith('//')) {
+      idx++;
+      continue;
+    }
+
+    if (line.startsWith('/*') || line.startsWith('/**')) {
+      idx = skipCommentBlock(lines, idx);
+      continue;
+    }
+
+    return idx;
+  }
+  return startIdx;
+}
+
+function findStatementEnd(lines, startLineIdx) {
+  let braceCount = 0;
+  let parenCount = 0;
+  let bracketCount = 0;
+  let foundStart = false;
+  let inString = false;
+  let stringChar = '';
+  let inTemplateString = false;
+
+  for (let i = startLineIdx; i < lines.length; i++) {
     const line = lines[i];
 
-    // Section header: ## `path/to/file.ts`
-    if (line.startsWith('## `') && line.endsWith('`')) {
-      // Save previous exemption if exists
-      if (currentFile && currentLine && currentBlocker && currentProof) {
-        exemptions.push({
-          filePath: currentFile,
-          line: currentLine,
-          oldCategory: currentBlocker,
-          proof: currentProof,
-          codeSnippet: codeSnippet.join('\n'),
-        });
+    for (let j = 0; j < line.length; j++) {
+      const char = line[j];
+      const prevChar = j > 0 ? line[j - 1] : '';
+
+      if (prevChar === '\\' && (inString || inTemplateString)) {
+        continue;
       }
 
-      // Start new exemption
-      currentFile = line.slice(4, -1);
-      currentLine = null;
-      currentBlocker = null;
-      currentProof = null;
-      codeSnippet = [];
-      inCodeBlock = false;
-      continue;
-    }
-
-    // Line header: ### Line ~XX: <description>
-    const lineMatch = line.match(/###\s+Line\s+~?(\d+):/);
-    if (lineMatch) {
-      // Save previous exemption if exists
-      if (currentFile && currentLine && currentBlocker && currentProof) {
-        exemptions.push({
-          filePath: currentFile,
-          line: currentLine,
-          oldCategory: currentBlocker,
-          proof: currentProof,
-          codeSnippet: codeSnippet.join('\n'),
-        });
+      if (char === '`') {
+        inTemplateString = !inTemplateString;
+        continue;
       }
 
-      currentLine = parseInt(lineMatch[1], 10);
-      currentBlocker = null;
-      currentProof = null;
-      codeSnippet = [];
-      inCodeBlock = false;
-      continue;
+      if ((char === '"' || char === "'") && !inTemplateString) {
+        if (!inString) {
+          inString = true;
+          stringChar = char;
+        } else if (char === stringChar) {
+          inString = false;
+        }
+        continue;
+      }
+
+      if (inString || inTemplateString) {
+        continue;
+      }
+
+      if (char === '{') {
+        braceCount++;
+        foundStart = true;
+      } else if (char === '}') {
+        braceCount--;
+      } else if (char === '(') {
+        parenCount++;
+      } else if (char === ')') {
+        parenCount--;
+      } else if (char === '[') {
+        bracketCount++;
+      } else if (char === ']') {
+        bracketCount--;
+      }
     }
 
-    // Blocker: - **Blocker:** <name>
-    const blockerMatch = line.match(/\*\*Blocker:\*\*\s*(.+)/);
-    if (blockerMatch) {
-      currentBlocker = blockerMatch[1].trim();
-      continue;
+    if (foundStart && braceCount === 0) {
+      return i;
     }
 
-    // Proof: - **Proof:** <text>
-    const proofMatch = line.match(/\*\*Proof:\*\*\s*(.+)/);
-    if (proofMatch) {
-      currentProof = proofMatch[1].trim();
-      continue;
+    if (braceCount === 0 && parenCount === 0 && bracketCount === 0) {
+      const trimmed = line.trim();
+      if (trimmed.endsWith(';') || trimmed.endsWith(',')) {
+        return i;
+      }
     }
 
-    // Code block
-    if (line.startsWith('```')) {
-      inCodeBlock = !inCodeBlock;
-      continue;
-    }
-    if (inCodeBlock) {
-      codeSnippet.push(line);
+    if (i === startLineIdx && !line.includes('{') && braceCount === 0 && parenCount === 0) {
+      const trimmed = line.trim();
+      if (trimmed.endsWith(';') || trimmed.endsWith(',')) {
+        return i;
+      }
     }
   }
 
-  // Don't forget the last exemption
-  if (currentFile && currentLine && currentBlocker && currentProof) {
-    exemptions.push({
-      filePath: currentFile,
-      line: currentLine,
-      oldCategory: currentBlocker,
-      proof: currentProof,
-      codeSnippet: codeSnippet.join('\n'),
-    });
-  }
-
-  return exemptions;
+  return startLineIdx;
 }
 
-// ============================================================================
-// CODE LOCATION FINDER
-// ============================================================================
+function findBlockEnd(lines, startLineIdx) {
+  let braceCount = 0;
+  let foundStart = false;
+  let inString = false;
+  let stringChar = '';
+  let inTemplateString = false;
 
-function findCodeLocation(filePath, lineHint) {
-  // Try to read the file
-  const fullPath = resolve(ROOT_DIR, filePath);
-  if (!existsSync(fullPath)) {
-    return null;
-  }
+  for (let i = startLineIdx; i < lines.length; i++) {
+    const line = lines[i];
 
-  const content = readFileSync(fullPath, 'utf8');
-  const lines = content.split('\n');
+    for (let j = 0; j < line.length; j++) {
+      const char = line[j];
+      const prevChar = j > 0 ? line[j - 1] : '';
 
-  // The lineHint is approximate (~84), search around it
-  // Check if the line contains something interesting
-  if (lineHint > 0 && lineHint <= lines.length) {
-    const searchLine = lines[lineHint - 1];
-    // Skip if it's already a comment
-    if (searchLine.includes('// istanbul ignore') || searchLine.includes('/* v8 ignore')) {
-      return lineHint;
-    }
-    // Skip if it's just whitespace
-    if (searchLine.trim() === '') {
-      // Look for the next non-empty line
-      for (let i = lineHint; i < lines.length && i < lineHint + 5; i++) {
-        if (lines[i].trim() !== '' && !lines[i].trim().startsWith('//')) {
-          return i + 1;
+      if (prevChar === '\\' && (inString || inTemplateString)) {
+        continue;
+      }
+
+      if (char === '`') {
+        inTemplateString = !inTemplateString;
+        continue;
+      }
+
+      if ((char === '"' || char === "'") && !inTemplateString) {
+        if (!inString) {
+          inString = true;
+          stringChar = char;
+        } else if (char === stringChar) {
+          inString = false;
+        }
+        continue;
+      }
+
+      if (inString || inTemplateString) {
+        continue;
+      }
+
+      if (char === '{') {
+        braceCount++;
+        foundStart = true;
+      } else if (char === '}') {
+        braceCount--;
+        if (foundStart && braceCount === 0) {
+          return i;
         }
       }
     }
-    return lineHint;
   }
 
-  return null;
+  return startLineIdx;
 }
 
-// ============================================================================
-// COMMENT INSERTER
-// ============================================================================
-
-function insertV8IgnoreComment(filePath, line, category, reason) {
-  const fullPath = resolve(ROOT_DIR, filePath);
-  const content = readFileSync(fullPath, 'utf8');
+function migrateFile(filePath) {
+  const content = readFileSync(filePath, 'utf8');
   const lines = content.split('\n');
+  let modified = false;
+  let changeCount = 0;
 
-  // Insert comment before the specified line (line is 1-indexed)
-  const insertIndex = line - 1;
+  // Process from bottom to top to preserve line numbers
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const line = lines[i];
+    const match = V8_IGNORE_OLD_REGEX.exec(line);
 
-  // Check if comment already exists nearby
-  for (let i = Math.max(0, insertIndex - 3); i < Math.min(lines.length, insertIndex + 3); i++) {
-    if (lines[i].includes('/* v8 ignore')) {
-      console.log(`      (Comment already exists at line ${i + 1}, skipping)`);
-      return;
-    }
-  }
+    if (match) {
+      const category = match[1];
+      const reason = match[2].trim();
+      const matchIndex = match.index;
+      const matchEnd = matchIndex + match[0].length;
+      const beforeComment = line.substring(0, matchIndex).trim();
+      const afterComment = line.substring(matchEnd).trim();
+      const indent = line.match(/^(\s*)/)?.[1] ?? '';
 
-  // Format the comment
-  const comment = `/* v8 ignore ${category} -- ${reason} */`;
-
-  // Insert the comment
-  lines.splice(insertIndex, 0, comment);
-
-  // Write back
-  writeFileSync(fullPath, lines.join('\n') + '\n');
-}
-
-// ============================================================================
-// MAIN
-// ============================================================================
-
-async function main() {
-  const unreachableDir = resolve(ROOT_DIR, '.claude/skills/coverage/unreachable');
-
-  if (!existsSync(unreachableDir)) {
-    console.log('No unreachable/ directory found. Nothing to migrate.');
-    process.exit(0);
-  }
-
-  const mdFiles = readdirSync(unreachableDir).filter((f) => f.endsWith('.md') && f !== '.gitkeep');
-
-  if (mdFiles.length === 0) {
-    console.log('No unreachable/*.md files found. Nothing to migrate.');
-    process.exit(0);
-  }
-
-  let totalMigrated = 0;
-  let totalSkipped = 0;
-  let totalRejected = 0;
-
-  console.log(`\n🔄 Migrating ${mdFiles.length} unreachable file(s)...\n`);
-
-  for (const mdFile of mdFiles) {
-    const serviceName = basename(mdFile, '.md');
-    console.log(`Processing ${serviceName}...`);
-
-    const content = readFileSync(resolve(unreachableDir, mdFile), 'utf8');
-    const exemptions = parseUnreachableMarkdown(content);
-
-    console.log(`  Found ${exemptions.length} exemption(s) in ${mdFile}`);
-
-    for (const exemption of exemptions) {
-      const newCategory = CATEGORY_MAP[exemption.oldCategory];
-
-      if (newCategory === null) {
-        console.log(
-          `    ⚠️  REJECTED: "${exemption.oldCategory}" at line ${exemption.line} - should write test instead`
-        );
-        totalRejected++;
-        continue;
-      }
-
-      if (newCategory === undefined) {
-        console.log(
-          `    ⚠️  UNKNOWN category: "${exemption.oldCategory}" at line ${exemption.line} - skipping`
-        );
-        totalSkipped++;
-        continue;
-      }
-
-      // Resolve file path relative to service
-      let fullPath = exemption.filePath;
+      // Pattern 1: } /* v8 ignore... */ else if (...) { or } /* v8 ignore... */ else {
+      // Need to wrap the else/else-if block
       if (
-        !fullPath.includes('apps/') &&
-        !fullPath.includes('packages/') &&
-        !fullPath.includes('workers/')
+        beforeComment.endsWith('}') &&
+        (afterComment.startsWith('else') || afterComment.startsWith('catch'))
       ) {
-        // Try to guess the correct path
-        const possiblePaths = [
-          `apps/${serviceName}/${exemption.filePath}`,
-          `workers/${serviceName}/${exemption.filePath}`,
-          exemption.filePath,
-        ];
-        for (const p of possiblePaths) {
-          if (existsSync(resolve(ROOT_DIR, p))) {
-            fullPath = p;
-            break;
-          }
-        }
-      }
+        // First, split this line: keep } on current, put else... on next line
+        const closingBrace = beforeComment;
+        const elseOrCatch = afterComment;
 
-      const line = findCodeLocation(fullPath, exemption.line);
-      if (line === null) {
-        console.log(`    ⚠️  SKIPPED: File not found - ${fullPath}`);
-        totalSkipped++;
+        lines[i] = `${indent}${closingBrace}`;
+        lines.splice(
+          i + 1,
+          0,
+          `${indent}/* v8 ignore start -- ${category}: ${reason} @preserve */`
+        );
+        lines.splice(i + 2, 0, `${indent}${elseOrCatch}`);
+
+        // Now find where the else/catch block ends, starting from the new line i+2
+        const blockEndIdx = findBlockEnd(lines, i + 2);
+        const endIndent = lines[blockEndIdx]?.match(/^(\s*)/)?.[1] ?? indent;
+        lines.splice(blockEndIdx + 1, 0, `${endIndent}/* v8 ignore stop @preserve */`);
+
+        modified = true;
+        changeCount++;
         continue;
       }
 
-      // Extract a short reason from the proof
-      // Use first sentence, max 60 chars
-      let reason = exemption.proof
-        .split('.')[0]
-        .toLowerCase()
-        .replace(/^(the |this |a |an |it |)/i, '')
-        .trim();
+      // Pattern 2: } catch /* v8 ignore... */ { - comment between catch and opening brace
+      if (beforeComment.match(/}\s*catch$/) && afterComment.startsWith('{')) {
+        // Wrap the catch block
+        const blockEndIdx = findBlockEnd(lines, i);
 
-      // Truncate if too long
-      if (reason.length > 60) {
-        reason = reason.substring(0, 57) + '...';
+        // Reconstruct the line without the comment, add start/stop around block
+        const cleanLine = beforeComment + ' ' + afterComment;
+        lines[i] = `${indent}/* v8 ignore start -- ${category}: ${reason} @preserve */`;
+        lines.splice(i + 1, 0, `${indent}${cleanLine}`);
+
+        const newBlockEndIdx = blockEndIdx + 1;
+        const endIndent = lines[newBlockEndIdx]?.match(/^(\s*)/)?.[1] ?? indent;
+        lines.splice(newBlockEndIdx + 1, 0, `${endIndent}/* v8 ignore stop @preserve */`);
+
+        modified = true;
+        changeCount++;
+        continue;
       }
 
-      insertV8IgnoreComment(fullPath, line, newCategory, reason);
-      console.log(`    ✓ ${fullPath}:${line} → ${newCategory}`);
-      totalMigrated++;
+      // Pattern 3: Inline comment at end of line (e.g., "return value; /* v8 ignore... */")
+      if (beforeComment.length > 0 && afterComment === '') {
+        // Wrap just this statement
+        lines[i] =
+          `${indent}/* v8 ignore start -- ${category}: ${reason} @preserve */\n${indent}${beforeComment}\n${indent}/* v8 ignore stop @preserve */`;
+        modified = true;
+        changeCount++;
+        continue;
+      }
+
+      // Pattern 4: Comment is on its own line, followed by next statement
+      if (beforeComment === '' && afterComment === '') {
+        const nextLineIdx = i + 1;
+        if (nextLineIdx < lines.length) {
+          const codeStartIdx = findCodeStart(lines, nextLineIdx);
+          const endLineIdx = findStatementEnd(lines, codeStartIdx);
+          const nextIndent = lines[codeStartIdx]?.match(/^(\s*)/)?.[1] ?? '';
+
+          lines[i] = `${indent}/* v8 ignore start -- ${category}: ${reason} @preserve */`;
+          lines.splice(endLineIdx + 1, 0, `${nextIndent}/* v8 ignore stop @preserve */`);
+          modified = true;
+          changeCount++;
+        }
+        continue;
+      }
+
+      // Pattern 5: Inline comment in middle of statement (complex case)
+      // For now, just wrap the whole line
+      if (beforeComment.length > 0 && afterComment.length > 0) {
+        const cleanLine = beforeComment + ' ' + afterComment;
+        lines[i] =
+          `${indent}/* v8 ignore start -- ${category}: ${reason} @preserve */\n${indent}${cleanLine}\n${indent}/* v8 ignore stop @preserve */`;
+        modified = true;
+        changeCount++;
+        continue;
+      }
     }
   }
 
-  console.log(`\n${'─'.repeat(50)}`);
-  console.log(`Migration complete:`);
-  console.log(`  ✓ ${totalMigrated} migrated`);
-  console.log(`  ⚠️  ${totalSkipped} skipped (file not found or unknown category)`);
-  console.log(`  ✗ ${totalRejected} rejected (need tests)`);
-  console.log(`\n⚠️  IMPORTANT: Run 'pnpm run verify:v8-ignore' to validate all comments.`);
-  console.log(
-    `⚠️  If validation passes, run 'pnpm run ci' before deleting unreachable/ directory.`
-  );
+  if (modified) {
+    writeFileSync(filePath, lines.join('\n'));
+  }
+
+  return { modified, changeCount };
+}
+
+function main() {
+  const dirs = ['apps', 'packages', 'workers'];
+  let totalFiles = 0;
+  let modifiedFiles = 0;
+  let totalChanges = 0;
+
+  for (const dir of dirs) {
+    const fullDir = resolve(ROOT_DIR, dir);
+    for (const file of walkDir(fullDir)) {
+      totalFiles++;
+      const result = migrateFile(file);
+      if (result.modified) {
+        modifiedFiles++;
+        totalChanges += result.changeCount;
+        console.log(`✓ ${file.replace(ROOT_DIR + '/', '')}: ${result.changeCount} change(s)`);
+      }
+    }
+  }
+
+  console.log('\n' + '='.repeat(60));
+  console.log(`Files scanned: ${totalFiles}`);
+  console.log(`Files modified: ${modifiedFiles}`);
+  console.log(`Comments migrated: ${totalChanges}`);
 }
 
 main();

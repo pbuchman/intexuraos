@@ -134,7 +134,7 @@ export async function processCalendarAction(
   const previewResult = await calendarPreviewRepository.getByActionId(actionId);
   let extracted: ExtractedCalendarEvent;
 
-  /* v8 ignore test-infra -- fake repository getByActionId always succeeds */
+  /* v8 ignore start -- test-infra: fake repository getByActionId always succeeds @preserve */
   if (!previewResult.ok) {
     // Log preview lookup failure but continue with fallback (non-fatal)
     logger.warn(
@@ -142,6 +142,7 @@ export async function processCalendarAction(
       'processCalendarAction: failed to fetch preview, falling back to LLM extraction'
     );
   }
+  /* v8 ignore stop @preserve */
 
   if (previewResult.ok && previewResult.value !== null && previewResult.value.status === 'ready') {
     const preview = previewResult.value;
@@ -151,7 +152,7 @@ export async function processCalendarAction(
     );
 
     // Convert preview to ExtractedCalendarEvent format
-    /* v8 ignore ts-type -- ready previews always have required fields */
+    // Ready previews always have required fields from the preview generation process
     extracted = {
       summary: preview.summary ?? '',
       start: preview.start ?? null,
@@ -362,13 +363,14 @@ export async function processCalendarAction(
   // Clean up preview after successful processing
   if (previewResult.ok && previewResult.value !== null) {
     const deleteResult = await calendarPreviewRepository.delete(actionId);
-    /* v8 ignore test-infra -- fake repository delete always succeeds */
+    /* v8 ignore start -- test-infra: fake repository delete always succeeds @preserve */
     if (!deleteResult.ok) {
       logger.warn(
         { actionId, error: deleteResult.error },
         'processCalendarAction: failed to delete calendar preview after successful event creation'
       );
     }
+    /* v8 ignore stop @preserve */
   }
 
   return ok({

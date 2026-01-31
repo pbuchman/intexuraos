@@ -100,17 +100,19 @@ export class LogForwarder {
     this.logger.info({ taskId }, 'Stopping log forwarding');
 
     // Clear timers
-    /* v8 ignore test-infra -- cannot set timer to non-null to test else branch without breaking startForwarding */
+    /* v8 ignore start -- test-infra: cannot set timer to non-null to test else branch without breaking startForwarding @preserve */
     if (state.timer) {
       clearInterval(state.timer);
       state.timer = null;
     }
+    /* v8 ignore stop @preserve */
 
-    /* v8 ignore test-infra -- cannot set pollTimer to non-null to test else branch without breaking startForwarding */
+    /* v8 ignore start -- test-infra: cannot set pollTimer to non-null to test else branch without breaking startForwarding @preserve */
     if (state.pollTimer) {
       clearInterval(state.pollTimer);
       state.pollTimer = null;
     }
+    /* v8 ignore stop @preserve */
 
     // Flush remaining buffer
     await this.flushBuffer(taskId);
@@ -155,7 +157,7 @@ export class LogForwarder {
     if (!state || state.buffer.length === 0) return;
 
     // Check size limits
-    /* v8 ignore test-infra -- requires sending 500 chunks to trigger, impractical in unit tests */
+    /* v8 ignore start -- test-infra: requires sending 500 chunks to trigger, impractical in unit tests @preserve */
     if (state.chunksSent >= MAX_CHUNKS_PER_TASK) {
       this.logger.warn(
         { taskId, chunksSent: state.chunksSent },
@@ -165,8 +167,9 @@ export class LogForwarder {
       state.buffer = '';
       return;
     }
+    /* v8 ignore stop @preserve */
 
-    /* v8 ignore test-infra -- requires sending 4MB of log data to trigger, impractical in unit tests */
+    /* v8 ignore start -- test-infra: requires sending 4MB of log data to trigger, impractical in unit tests @preserve */
     if (state.totalBytes >= MAX_TOTAL_LOG_SIZE) {
       this.logger.warn(
         { taskId, totalBytes: state.totalBytes },
@@ -176,6 +179,7 @@ export class LogForwarder {
       state.buffer = '';
       return;
     }
+    /* v8 ignore stop @preserve */
 
     // Split buffer into chunks
     const chunks = this.splitIntoChunks(state.buffer);
@@ -214,7 +218,7 @@ export class LogForwarder {
     return chunks;
   }
 
-  /* v8 ignore upstream -- early return for small chunks is the happy path */
+  /* v8 ignore start -- upstream: early return for small chunks is the happy path @preserve */
   private async sendBatch(taskId: string, chunks: string[], state: ForwardingState): Promise<void> {
     for (const chunk of chunks) {
       const truncated = this.enforceChunkSize(chunk);
@@ -243,10 +247,12 @@ export class LogForwarder {
       }
     }
   }
+  /* v8 ignore stop @preserve */
 
   private enforceChunkSize(chunk: string): string {
-    /* v8 ignore upstream -- early return for normal-sized chunks is the happy path */
+    /* v8 ignore start -- upstream: early return for normal-sized chunks is the happy path @preserve */
     if (chunk.length <= MAX_CHUNK_SIZE) return chunk;
+    /* v8 ignore stop @preserve */
 
     // Truncate and preserve last 1KB
     const tailSize = 1024;

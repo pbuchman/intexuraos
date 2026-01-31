@@ -129,13 +129,14 @@ export class GitHubTokenService {
       this.stopBackgroundRefresh();
     }
 
-    /* v8 ignore test-infra -- setInterval callback with timing condition requires fake timers to test */
+    /* v8 ignore start -- test-infra: setInterval callback with timing condition requires fake timers to test @preserve */
     this.refreshTimer = setInterval(
       () => {
         if (this.isExpiringSoon()) {
           void this.refreshToken();
         }
       },
+      /* v8 ignore stop @preserve */
       intervalMinutes * 60 * 1000
     );
   }

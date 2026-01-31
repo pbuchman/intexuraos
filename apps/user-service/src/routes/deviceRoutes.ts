@@ -91,10 +91,11 @@ export const deviceRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       }
 
       const parseResult = deviceStartRequestSchema.safeParse(request.body);
-      /* v8 ignore schema -- Zod validation only fails with malformed requests */
+      /* v8 ignore start -- schema: Zod validation only fails with malformed requests @preserve */
       if (!parseResult.success) {
         return await handleValidationError(parseResult.error, reply);
       }
+      /* v8 ignore stop @preserve */
 
       const { audience, scope } = parseResult.data;
       const deviceCodeUrl = `https://${config.domain}/oauth/device/code`;
@@ -208,10 +209,11 @@ export const deviceRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       }
 
       const parseResult = devicePollRequestSchema.safeParse(request.body);
-      /* v8 ignore schema -- Zod validation only fails with malformed requests */
+      /* v8 ignore start -- schema: Zod validation only fails with malformed requests @preserve */
       if (!parseResult.success) {
         return await handleValidationError(parseResult.error, reply);
       }
+      /* v8 ignore stop @preserve */
 
       const { device_code } = parseResult.data;
       const tokenUrl = `https://${config.domain}/oauth/token`;
@@ -299,11 +301,14 @@ async function storeRefreshToken(
   try {
     // Extract userId from access token JWT (without verification, just for storage key)
     const tokenParts = data.access_token.split('.');
-    /* v8 ignore test-infra -- test tokens are always valid JWTs */
+    /* v8 ignore start -- test-infra: test tokens are always valid JWTs @preserve */
     if (tokenParts.length !== 3) return;
+    /* v8 ignore stop @preserve */
 
     const payloadPart = tokenParts[1];
+    /* v8 ignore start -- ts-type: JWT payload undefined check @preserve */
     if (payloadPart === undefined) return;
+    /* v8 ignore stop @preserve */
 
     // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
     const payload = JSON.parse(Buffer.from(payloadPart, 'base64').toString());

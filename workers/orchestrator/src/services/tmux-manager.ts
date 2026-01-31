@@ -98,8 +98,9 @@ cat '${taskPromptFile}' | ${claudePath} --system-prompt "$(cat '${systemPromptFi
         try {
           await this.execAsync(`tmux send-keys -t ${sessionName} C-c`);
         } catch (error: unknown) {
-          /* v8 ignore ts-type -- nullish coalescing on error.stderr creates type narrowing branch */
+          /* v8 ignore start -- ts-type: nullish coalescing on error.stderr creates type narrowing branch @preserve */
           const stderr = (error as { stderr?: string }).stderr ?? '';
+          /* v8 ignore stop @preserve */
           if (!stderr.includes("can't find session") && !stderr.includes('no session')) {
             this.logger.warn({ taskId, error }, 'Graceful shutdown signal failed unexpectedly');
           }
