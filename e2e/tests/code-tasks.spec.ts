@@ -20,15 +20,17 @@ describe('Code Tasks E2E', () => {
     const mockClaudeUrl = 'http://127.0.0.1:8090';
     const testSigningSecret = 'test-signing-secret';
 
-    const macConfig = await client.patch('/code/worker-settings/mac', {
+    // Create e2e-test-worker with POST (new API)
+    const createWorker = await client.post('/code/worker-settings/workers', {
+      name: 'e2e-test-worker',
       url: mockClaudeUrl,
       cfAccessClientId: 'test-cf-id',
       cfAccessClientSecret: 'test-cf-secret',
       dispatchSigningSecret: testSigningSecret,
     });
 
-    if (macConfig.status !== 200) {
-      throw new Error(`Failed to configure mac worker: ${JSON.stringify(macConfig.data)}`);
+    if (createWorker.status !== 200) {
+      throw new Error(`Failed to create e2e-test-worker: ${JSON.stringify(createWorker.data)}`);
     }
   });
 
