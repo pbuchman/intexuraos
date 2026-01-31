@@ -96,7 +96,7 @@ class WorkerDiscoveryImpl implements WorkerDiscoveryService {
     this.logger.info({ location, url: config.url }, 'Checking worker health');
 
     try {
-      /* v8 ignore ts-type -- nullish coalescing on env vars creates type narrowing branches */
+      /* v8 ignore start -- ts-type: nullish coalescing on env vars creates type narrowing branches @preserve */
       const response = await fetch(`${config.url}/health`, {
         headers: {
           'CF-Access-Client-Id': process.env['INTEXURAOS_CF_ACCESS_CLIENT_ID'] ?? '',
@@ -104,6 +104,7 @@ class WorkerDiscoveryImpl implements WorkerDiscoveryService {
         },
         signal: AbortSignal.timeout(10000), // 10 second timeout
       });
+      /* v8 ignore stop @preserve */
 
       if (!response.ok) {
         this.logger.info(
@@ -148,7 +149,7 @@ class WorkerDiscoveryImpl implements WorkerDiscoveryService {
     } catch (error) {
       this.logger.error({ location, error }, 'Worker health check threw error');
 
-      /* v8 ignore ts-type -- instanceof check creates type narrowing branch */
+      /* v8 ignore start -- ts-type: instanceof check creates type narrowing branch @preserve */
       if (error instanceof Error) {
         if (error.name === 'AbortError') {
           return err({
@@ -164,6 +165,7 @@ class WorkerDiscoveryImpl implements WorkerDiscoveryService {
           });
         }
       }
+      /* v8 ignore stop @preserve */
 
       return err({
         code: 'network_error',

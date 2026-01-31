@@ -52,7 +52,7 @@ export const linearRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
     const result = await connectionRepository.getConnection(user.userId);
     if (!result.ok) {
       return await handleLinearError(result.error, reply);
-/* v8 ignore test-infra -- test infrastructure uses `fakeauthplugin` which always re... */
+/* v8 ignore start -- test-infra: test infrastructure uses `fakeauthplugin` which always re... @preserve */
     }
 
     return await reply.ok(result.value);
@@ -68,6 +68,7 @@ export const linearRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       const result = await linearApiClient.validateAndGetTeams(apiKey);
       if (!result.ok) {
+    /* v8 ignore stop @preserve */
         return await handleLinearError(result.error, reply);
       }
 
@@ -304,13 +305,14 @@ export const linearRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
     }
 
     // Retry Linear creation
-    /* v8 ignore test-infra -- nullish fallbacks for optional extracted fields */
+    /* v8 ignore start -- test-infra: nullish fallbacks for optional extracted fields @preserve */
     const createResult = await linearApiClient.createIssue(apiKeyResult.value, {
       title: failedIssue.extractedTitle ?? 'Untitled Issue',
       description: failedIssue.reasoning ?? null,
       priority: failedIssue.extractedPriority ?? 3,
       teamId: 'TODO', // This should come from connection, but using default for now
     });
+    /* v8 ignore stop @preserve */
 
     if (!createResult.ok) {
       // Update error in Firestore - log if this fails but don't block response

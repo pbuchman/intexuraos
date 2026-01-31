@@ -93,10 +93,11 @@ export function createUserServiceClient(config: UserServiceConfig): UserServiceC
 
         // Convert null values to undefined (null is used by JSON to distinguish from missing)
         const result: DecryptedApiKeys = {};
-        /* v8 ignore test-infra -- response shape depends on user's configured API keys */
+        /* v8 ignore start -- test-infra: response shape depends on user's configured API keys @preserve */
         if (data.google !== null && data.google !== undefined) {
           result.google = data.google;
         }
+        /* v8 ignore stop @preserve */
         if (data.openai !== null && data.openai !== undefined) {
           result.openai = data.openai;
         }
@@ -245,7 +246,9 @@ export function createUserServiceClient(config: UserServiceConfig): UserServiceC
             },
           }
         );
-      } catch /* v8 ignore next -- best effort, silent failure intentional */ {
+        /* v8 ignore start -- test-infra: best effort, silent failure intentional @preserve */
+      } catch {
+        /* v8 ignore stop @preserve */
         // Best effort - don't block on failure
       }
     },

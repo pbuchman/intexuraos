@@ -136,19 +136,13 @@ function parseHeading(line: string): { level: number; title: string } | null {
   const h2Regex = /^##\s+(.+)$/;
   const h2Match = h2Regex.exec(line);
   if (h2Match !== null) {
-    const title = h2Match[1];
-    return title !== undefined
-      ? { level: 2, title }
-      : null; /* v8 ignore ts-type -- regex capture group guarantees title is defined */
+    return { level: 2, title: h2Match[1] as string };
   }
 
   const h3Regex = /^###\s+(.+)$/;
   const h3Match = h3Regex.exec(line);
   if (h3Match !== null) {
-    const title = h3Match[1];
-    return title !== undefined
-      ? { level: 3, title }
-      : null; /* v8 ignore ts-type -- regex capture group guarantees title is defined */
+    return { level: 3, title: h3Match[1] as string };
   }
 
   return null;
@@ -166,15 +160,13 @@ export function parseSections(markdown: string): ParsedSection[] {
   const h3Headings: { line: number; title: string }[] = [];
 
   for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    if (line === undefined)
-      continue; /* v8 ignore ts-type -- loop bound guarantees element exists */
+    const line = lines[i] as string;
     const heading = parseHeading(line);
     if (heading !== null) {
       if (heading.level === 2) {
         h2Headings.push({ line: i, title: heading.title });
-      } else if (heading.level === 3) {
-        /* v8 ignore ts-type -- parseHeading only returns level 2 or 3 */
+      } else {
+        // parseHeading only returns level 2 or 3, so if not 2, must be 3
         h3Headings.push({ line: i, title: heading.title });
       }
     }
@@ -197,10 +189,8 @@ export function parseSections(markdown: string): ParsedSection[] {
 
   const sections: ParsedSection[] = [];
   for (let i = 0; i < headings.length; i++) {
-    const current = headings[i];
+    const current = headings[i] as { line: number; title: string };
     const next = headings[i + 1];
-    if (current === undefined)
-      continue; /* v8 ignore ts-type -- loop bound guarantees current is defined */
 
     const startLine = current.line;
     const endLine = next !== undefined ? next.line - 1 : lines.length - 1;
@@ -229,9 +219,7 @@ function extractAttributionFromLines(
   endLine: number
 ): AttributionLine | null {
   for (let i = endLine; i >= startLine; i--) {
-    const line = lines[i];
-    if (line === undefined)
-      continue; /* v8 ignore ts-type -- loop bounds guarantee array access is valid */
+    const line = lines[i] as string;
     const trimmed = line.trim();
     if (trimmed === '') continue;
     if (trimmed.toLowerCase().startsWith('attribution:')) {

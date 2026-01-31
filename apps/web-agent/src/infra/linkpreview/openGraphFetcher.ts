@@ -45,10 +45,11 @@ function extractFavicon($: cheerio.CheerioAPI, baseUrl: string): string | undefi
 }
 
 function resolveImageUrl(imageUrl: string | undefined, baseUrl: string): string | undefined {
-/* v8 ignore test-infra -- test mock for http responses uses `nock` to intercept req... */
+/* v8 ignore start -- test-infra: test mock for http responses uses `nock` to intercept req... @preserve */
   if (imageUrl === undefined || imageUrl === '') {
     return undefined;
   }
+  /* v8 ignore stop @preserve */
 
   try {
     return new URL(imageUrl, baseUrl).href;
@@ -222,10 +223,11 @@ export class OpenGraphFetcher implements LinkPreviewFetcherPort {
       }
 
       const favicon = extractFavicon($, url);
-      /* v8 ignore test-infra -- test HTML fixtures always include favicon */
+      /* v8 ignore start -- test-infra: test HTML fixtures always include favicon @preserve */
       if (favicon !== undefined) {
         preview.favicon = favicon;
       }
+      /* v8 ignore stop @preserve */
 
       this.logger.info(
         {

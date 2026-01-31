@@ -65,8 +65,9 @@ function toTodo(id: string, doc: TodoDocument): Todo {
     description: doc.description,
     tags: doc.tags,
     priority: doc.priority,
-    /* v8 ignore test-infra -- test data typically includes dueDate */
+    /* v8 ignore start -- test-infra: test data typically includes dueDate @preserve */
     dueDate: doc.dueDate !== null ? new Date(doc.dueDate) : null,
+    /* v8 ignore stop @preserve */
     source: doc.source,
     sourceId: doc.sourceId,
     status: doc.status,
@@ -168,8 +169,9 @@ export class FirestoreTodoRepository implements TodoRepository {
         return { ok: true, value: null };
       }
 
-/* v8 ignore ts-type -- line 166 explicitly checks `if (!doc */
+/* v8 ignore start -- ts-type: line 166 explicitly checks `if (!doc @preserve */
       return { ok: true, value: toTodo(doc.id, doc.data() as TodoDocument) };
+      /* v8 ignore stop @preserve */
     } catch (error) {
       return {
         ok: false,

@@ -25,9 +25,12 @@ function parseInsightLine(line: string, lineNumber: number): ParsedDataInsight {
   }
 
   const content = match[1];
+  /* v8 ignore start -- ts-type: regex capture undefined check @preserve */
   if (content === undefined) {
-    /* v8 ignore ts-type -- regex capture group guaranteed when match succeeds */
+    /* v8 ignore stop @preserve */
+    /* v8 ignore start -- ts-type: regex capture group guaranteed when match succeeds @preserve */
     throw new Error(`Line ${String(lineNumber)}: Invalid INSIGHT format - content is undefined`);
+    /* v8 ignore stop @preserve */
   }
 
   const parts = content.split(';').map((p) => p.trim());
@@ -38,8 +41,10 @@ function parseInsightLine(line: string, lineNumber: number): ParsedDataInsight {
     );
   }
 
+  /* v8 ignore start -- ts-type: array elements undefined check @preserve */
   if (
-    /* v8 ignore ts-type -- length check above guarantees 4 elements exist */
+    /* v8 ignore stop @preserve */
+    /* v8 ignore start -- ts-type: length check above guarantees 4 elements exist @preserve */
     parts[0] === undefined ||
     parts[1] === undefined ||
     parts[2] === undefined ||
@@ -47,6 +52,7 @@ function parseInsightLine(line: string, lineNumber: number): ParsedDataInsight {
   ) {
     throw new Error(`Line ${String(lineNumber)}: Missing required parts`);
   }
+  /* v8 ignore stop @preserve */
 
   const part0 = parts[0];
   const part1 = parts[1];
@@ -58,9 +64,12 @@ function parseInsightLine(line: string, lineNumber: number): ParsedDataInsight {
     throw new Error(`Line ${String(lineNumber)}: Title field missing or malformed`);
   }
   const title = titleRaw[1].trim();
+  /* v8 ignore start -- schema: regex .+ guarantees non-empty @preserve */
   if (title.length === 0) {
-    /* v8 ignore schema -- regex pattern .+ requires at least one character */
+    /* v8 ignore stop @preserve */
+    /* v8 ignore start -- schema: regex pattern .+ requires at least one character @preserve */
     throw new Error(`Line ${String(lineNumber)}: Title cannot be empty`);
+    /* v8 ignore stop @preserve */
   }
 
   const descRaw = /^Description=(.+)$/.exec(part1);
@@ -68,9 +77,12 @@ function parseInsightLine(line: string, lineNumber: number): ParsedDataInsight {
     throw new Error(`Line ${String(lineNumber)}: Description field missing or malformed`);
   }
   const description = descRaw[1].trim();
+  /* v8 ignore start -- schema: regex .+ guarantees non-empty @preserve */
   if (description.length === 0) {
-    /* v8 ignore schema -- regex pattern .+ requires at least one character */
+    /* v8 ignore stop @preserve */
+    /* v8 ignore start -- schema: regex pattern .+ requires at least one character @preserve */
     throw new Error(`Line ${String(lineNumber)}: Description cannot be empty`);
+    /* v8 ignore stop @preserve */
   }
 
   const sentenceCount = description.split(/[.!?]+/).filter((s) => s.trim().length > 0).length;
@@ -86,9 +98,12 @@ function parseInsightLine(line: string, lineNumber: number): ParsedDataInsight {
     throw new Error(`Line ${String(lineNumber)}: Trackable field missing or malformed`);
   }
   const trackableMetric = trackableRaw[1].trim();
+  /* v8 ignore start -- schema: regex .+ guarantees non-empty @preserve */
   if (trackableMetric.length === 0) {
-    /* v8 ignore schema -- regex pattern .+ requires at least one character */
+    /* v8 ignore stop @preserve */
+    /* v8 ignore start -- schema: regex pattern .+ requires at least one character @preserve */
     throw new Error(`Line ${String(lineNumber)}: Trackable metric cannot be empty`);
+    /* v8 ignore stop @preserve */
   }
 
   const chartTypeRaw = /^ChartType=([A-Z0-9]+)$/.exec(part3);
@@ -120,9 +135,12 @@ function parseNoInsightsLine(line: string, lineNumber: number): string {
   }
 
   const reason = match[1].trim();
+  /* v8 ignore start -- schema: regex .+ guarantees non-empty @preserve */
   if (reason.length === 0) {
-    /* v8 ignore schema -- regex pattern .+ requires at least one character */
+    /* v8 ignore stop @preserve */
+    /* v8 ignore start -- schema: regex pattern .+ requires at least one character @preserve */
     throw new Error(`Line ${String(lineNumber)}: Reason cannot be empty`);
+    /* v8 ignore stop @preserve */
   }
 
   return reason;
@@ -139,9 +157,12 @@ export function parseInsightResponse(response: string): ParseInsightResult {
   }
 
   const firstLine = lines[0];
+  /* v8 ignore start -- ts-type: array length check guarantees element @preserve */
   if (firstLine === undefined) {
-    /* v8 ignore ts-type -- length check above guarantees at least one element exists */
+    /* v8 ignore stop @preserve */
+    /* v8 ignore start -- ts-type: length check above guarantees at least one element exists @preserve */
     throw new Error('Empty response from LLM');
+    /* v8 ignore stop @preserve */
   }
 
   if (firstLine.startsWith('NO_INSIGHTS:')) {
@@ -155,9 +176,12 @@ export function parseInsightResponse(response: string): ParseInsightResult {
   const insights: ParsedDataInsight[] = [];
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
+    /* v8 ignore start -- ts-type: loop bound guarantees element @preserve */
     if (line === undefined) {
-      /* v8 ignore ts-type -- loop bound check guarantees element exists at this index */
+      /* v8 ignore stop @preserve */
+      /* v8 ignore start -- ts-type: loop bound check guarantees element exists at this index @preserve */
       throw new Error(`Line ${String(i + 1)}: Line is undefined`);
+      /* v8 ignore stop @preserve */
     }
     if (!line.startsWith('INSIGHT_')) {
       throw new Error(
@@ -168,9 +192,12 @@ export function parseInsightResponse(response: string): ParseInsightResult {
     insights.push(insight);
   }
 
+  /* v8 ignore start -- ts-type: loop guarantees non-empty @preserve */
   if (insights.length === 0) {
-    /* v8 ignore ts-type -- loop above guarantees at least one insight was added successfully */
+    /* v8 ignore stop @preserve */
+    /* v8 ignore start -- ts-type: loop above guarantees at least one insight was added successfully @preserve */
     throw new Error('No insights found in response');
+    /* v8 ignore stop @preserve */
   }
 
   if (insights.length > 5) {

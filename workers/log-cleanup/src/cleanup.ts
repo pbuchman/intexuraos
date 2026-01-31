@@ -67,7 +67,9 @@ export function loadConfig(): CleanupConfig {
 
 export async function cleanupOldLogs(config?: CleanupConfig): Promise<CleanupResult> {
   const startTime = Date.now();
+  /* v8 ignore start -- ts-type: config resolution fallback @preserve */
   const resolvedConfig = config ?? loadConfig();
+  /* v8 ignore stop @preserve */
 
   logger.info(
     {

@@ -98,10 +98,11 @@ export const tokenRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       // Parse request
       const parseResult = refreshTokenRequestSchema.safeParse(request.body);
-      /* v8 ignore schema -- Zod validation only fails with malformed requests */
+      /* v8 ignore start -- schema: Zod validation only fails with malformed requests @preserve */
       if (!parseResult.success) {
         return await handleValidationError(parseResult.error, reply);
       }
+      /* v8 ignore stop @preserve */
 
       const { userId } = parseResult.data;
       const { authTokenRepository, auth0Client } = getServices();

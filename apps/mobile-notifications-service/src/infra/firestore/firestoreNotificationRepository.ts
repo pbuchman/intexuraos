@@ -37,7 +37,7 @@ interface NotificationDoc {
 /**
  * Decode a cursor string to a Firestore doc snapshot.
  */
-/* v8 ignore ts-type -- previous `findbyid` call ensures the document exists befo... */
+/* v8 ignore start -- ts-type: previous `findbyid` call ensures the document exists befo... @preserve */
 function decodeCursor(cursor: string | undefined): { receivedAt: string; id: string } | undefined {
   if (cursor === undefined) {
     return undefined;
@@ -53,6 +53,7 @@ function decodeCursor(cursor: string | undefined): { receivedAt: string; id: str
     return undefined;
   }
 }
+/* v8 ignore stop @preserve */
 
 /**
  * Encode a cursor from notification data.
@@ -199,11 +200,12 @@ export class FirestoreNotificationRepository implements NotificationRepository {
         // Update cursor for next iteration (tracks DB position, not filtered results)
         if (docs.length > 0) {
           const lastDoc = docs[docs.length - 1];
-          /* v8 ignore ts-type -- docs.length > 0 check guarantees lastDoc exists */
+          /* v8 ignore start -- ts-type: docs.length > 0 check guarantees lastDoc exists @preserve */
           if (lastDoc !== undefined) {
             const lastData = lastDoc.data() as NotificationDoc;
             currentCursor = encodeCursor(lastData.receivedAt, lastDoc.id);
           }
+          /* v8 ignore stop @preserve */
         }
       }
 
