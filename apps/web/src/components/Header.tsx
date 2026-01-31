@@ -68,24 +68,30 @@ export function Header(): React.JSX.Element {
     <header className="fixed left-0 right-0 top-0 z-50 flex h-16 items-center justify-between border-b border-slate-200 bg-white px-4 shadow-sm dark:border-slate-700 dark:bg-slate-800 md:px-6">
       {/* Logo - with left padding on mobile to account for menu button */}
       <div className="flex items-center gap-3 pl-12 md:pl-0">
-        <img
-          src="/logo.png"
-          alt="IntexuraOS Logo"
-          className="h-8 w-8"
-          onError={(e): void => {
-            e.currentTarget.style.display = 'none';
-          }}
-        />
         <button
           onClick={(): void => {
             setIsVersionModalOpen(true);
           }}
-          className="flex flex-col rounded-md px-1 transition-colors hover:bg-slate-100 md:flex-row md:items-baseline md:gap-2"
+          className="flex items-center gap-2 rounded-md px-1 transition-colors hover:bg-slate-100 dark:hover:bg-slate-700"
         >
-          <h1 className="text-xl font-bold">
-            <span className="text-cyan-500">Intexura</span>
-            <span className="text-slate-900">OS</span>
-          </h1>
+          {/* Light theme: dark logo */}
+          <img
+            src="/branding/logo-primary-dark.png"
+            alt="IntexuraOS"
+            className="h-8 block dark:hidden"
+            onError={(e): void => {
+              e.currentTarget.style.display = 'none';
+            }}
+          />
+          {/* Dark theme: light logo */}
+          <img
+            src="/branding/logo-primary-light.png"
+            alt="IntexuraOS"
+            className="h-8 hidden dark:block"
+            onError={(e): void => {
+              e.currentTarget.style.display = 'none';
+            }}
+          />
           <span className="text-[10px] font-normal text-slate-400 md:text-xs">
             ver. {import.meta.env.INTEXURAOS_BUILD_VERSION}
           </span>
