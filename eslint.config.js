@@ -18,6 +18,8 @@ export default tseslint.config(
       'packages/*/vitest.config.ts',
       'vitest-mocks/**',
       'workers/**/scripts/**',
+      // Standalone tools not in pnpm workspace
+      'tools/log-viewer/**',
       // Test files now linted with same rules as production code
     ],
   },

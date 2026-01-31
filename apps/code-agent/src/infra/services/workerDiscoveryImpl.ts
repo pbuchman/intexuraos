@@ -218,15 +218,16 @@ class WorkerDiscoveryImpl implements WorkerDiscoveryService {
 
 /**
  * Factory function to create worker discovery service.
+ *
+ * Note: With INT-156, worker credentials come from per-user settings in Firestore.
+ * This service is now optional and used only for legacy health check endpoints.
+ * If INTEXURAOS_CODE_WORKERS is not set, returns a service with no workers configured.
  */
-/* v8 ignore start -- module-init: factory function checks env vars at module initialization @preserve */
+/* v8 ignore start -- module-init: factory function handles env vars at module initialization @preserve */
 export function createWorkerDiscoveryService(
   deps: WorkerDiscoveryDeps
 ): WorkerDiscoveryService {
-  const codeWorkersEnv = process.env['INTEXURAOS_CODE_WORKERS'];
-  if (codeWorkersEnv === undefined || codeWorkersEnv === '') {
-    throw new Error('INTEXURAOS_CODE_WORKERS environment variable is required');
-  }
+  const codeWorkersEnv = process.env['INTEXURAOS_CODE_WORKERS'] ?? '';
 
   return new WorkerDiscoveryImpl(deps, codeWorkersEnv);
 }
