@@ -279,9 +279,9 @@ get_worktree_from_port() {
 }
 
 # Dev services (ports 8110-8128) - parallel arrays for bash 3.x compatibility
-DEV_NAMES="user notion whatsapp mobile research commands actions insights image notes settings todos bookmarks calendar linear web-agent code"
-DEV_PORTS="8110 8112 8113 8114 8116 8117 8118 8119 8120 8121 8122 8123 8124 8125 8126 8127 8128"
-DEV_TOTAL=17
+DEV_NAMES="user notion whatsapp mobile research commands actions insights image notes settings todos bookmarks calendar linear web-agent code chat"
+DEV_PORTS="8110 8112 8113 8114 8116 8117 8118 8119 8120 8121 8122 8123 8124 8125 8126 8127 8128 8129"
+DEV_TOTAL=18
 
 # Check all dev services
 dev_up=0

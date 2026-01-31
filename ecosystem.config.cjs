@@ -39,6 +39,7 @@ const COMMON_SERVICE_URLS = {
   INTEXURAOS_BOOKMARKS_AGENT_URL: 'http://localhost:8124',
   INTEXURAOS_CALENDAR_AGENT_URL: 'http://localhost:8125',
   INTEXURAOS_LINEAR_AGENT_URL: 'http://localhost:8126',
+  INTEXURAOS_CHAT_AGENT_URL: 'http://localhost:8129',
   INTEXURAOS_CODE_AGENT_URL: 'http://localhost:8128',
   INTEXURAOS_WEB_AGENT_URL: 'http://localhost:8127',
 };
@@ -128,6 +129,9 @@ const SERVICE_ENV_MAPPINGS = {
   'web-agent': {
     INTEXURAOS_CRAWL4AI_API_KEY: process.env.INTEXURAOS_CRAWL4AI_API_KEY ?? '',
   },
+  'chat-agent': {
+    INTEXURAOS_OPENAI_API_KEY: process.env.INTEXURAOS_OPENAI_API_KEY ?? '',
+  },
 };
 
 /**
@@ -199,6 +203,7 @@ module.exports = {
     createServiceConfig('image-service', 8120, { startupDelay: 5 }),
     createServiceConfig('calendar-agent', 8125, { startupDelay: 5 }),
     createServiceConfig('linear-agent', 8126, { startupDelay: 5 }),
+    createServiceConfig('chat-agent', 8129, { startupDelay: 5 }),
     createServiceConfig('web-agent', 8127, { startupDelay: 5 }),
 
     // Web app (Vite dev server)
