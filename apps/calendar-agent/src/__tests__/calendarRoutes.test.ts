@@ -1090,6 +1090,38 @@ describe('Calendar Routes', () => {
 
       expect(response.statusCode).toBe(502);
     });
+
+    it('returns 502 when delete fails', async () => {
+      const token = await createJwt('user-123');
+      await fakeFailedEventRepository.create({
+        userId: 'user-123',
+        actionId: 'action-1',
+        originalText: 'test',
+        summary: 'Test Event',
+        start: null,
+        end: null,
+        location: null,
+        description: null,
+        error: 'Test error',
+        reasoning: 'test',
+      });
+      const events = await fakeFailedEventRepository.list('user-123');
+      const eventId = events.ok ? events.value[0]?.id : 'unknown';
+
+      fakeFailedEventRepository.setDeleteResult(
+        err({ code: 'INTERNAL_ERROR', message: 'Delete failed' })
+      );
+
+      const response = await app.inject({
+        method: 'DELETE',
+        url: `/calendar/failed-events/${String(eventId)}`,
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(502);
+      const body = response.json() as { success: boolean; error: { code: string } };
+      expect(body.error.code).toBe('DOWNSTREAM_ERROR');
+    });
   });
 
   describe('POST /calendar/failed-events/:id/retry', () => {
@@ -1243,6 +1275,45 @@ describe('Calendar Routes', () => {
       });
 
       expect(response.statusCode).toBe(502);
+    });
+
+    it('succeeds but logs error when delete of failed event fails after retry', async () => {
+      const token = await createJwt('user-123');
+      await fakeFailedEventRepository.create({
+        userId: 'user-123',
+        actionId: 'action-1',
+        originalText: 'test',
+        summary: 'Retry Event',
+        start: '2025-01-15T10:00:00Z',
+        end: '2025-01-15T11:00:00Z',
+        location: null,
+        description: null,
+        error: 'Previous error',
+        reasoning: 'test',
+      });
+      const events = await fakeFailedEventRepository.list('user-123');
+      const eventId = events.ok ? events.value[0]?.id : 'unknown';
+
+      fakeFailedEventRepository.setDeleteResult(
+        err({ code: 'INTERNAL_ERROR', message: 'Delete failed' })
+      );
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/calendar/failed-events/${String(eventId)}/retry`,
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json() as {
+        success: boolean;
+        data: { event: { summary: string } };
+      };
+      expect(body.success).toBe(true);
+      expect(body.data.event.summary).toBe('Retry Event');
+
+      const afterRetry = await fakeFailedEventRepository.list('user-123');
+      expect(afterRetry.ok && afterRetry.value).toHaveLength(1);
     });
   });
 });
