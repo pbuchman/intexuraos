@@ -333,12 +333,13 @@ else
 fi
 
 # Individual port checks (3000=web, 8199=orchestrator)
+# OSC 8 hyperlink: \e]8;;URL\e\\TEXT\e]8;;\e\\
 port_3000=$(check_port_status 3000)
 port_8199=$(check_port_status 8199)
 if [ "$port_3000" = "up" ]; then
-  p3000="$(dev_color):3000$(rst)"
+  p3000="$(dev_color)\033]8;;http://localhost:3000\033\\:3000\033]8;;\033\\$(rst)"
 else
-  p3000="$(dev_fail_color):3000$(rst)"
+  p3000="$(dev_fail_color)\033]8;;http://localhost:3000\033\\:3000\033]8;;\033\\$(rst)"
 fi
 if [ "$port_8199" = "up" ]; then
   p8199="$(dev_color):8199$(rst)"
