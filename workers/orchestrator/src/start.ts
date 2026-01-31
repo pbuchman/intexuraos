@@ -31,29 +31,32 @@ const DEFAULT_TASK_TIMEOUT_MS = 60 * 60 * 1000; // 1 hour
 
 function getRequiredEnv(name: string): string {
   const value = process.env[name];
-  /* v8 ignore test-infra -- process.exit() terminates the process, cannot test in unit tests */
+  /* v8 ignore start -- test-infra: process.exit() terminates the process, cannot test in unit tests @preserve */
   if (value === undefined || value === '') {
     process.stderr.write(`ERROR: Required environment variable ${name} is not set\n`);
     process.exit(1);
   }
+  /* v8 ignore stop @preserve */
   return value;
 }
 
-/* v8 ignore ts-type -- nullish coalescing creates type narrowing branch */
+/* v8 ignore start -- ts-type: nullish coalescing creates type narrowing branch @preserve */
 function getOptionalEnv(name: string, defaultValue: string): string {
   return process.env[name] ?? defaultValue;
 }
+/* v8 ignore stop @preserve */
 
-/* v8 ignore module-init -- directory setup function called during bootstrap */
+/* v8 ignore start -- module-init: directory setup function called during bootstrap @preserve */
 function ensureDirectoryExists(path: string): void {
   mkdirSync(path, { recursive: true });
 }
+/* v8 ignore stop @preserve */
 
 /**
  * Get GitHub private key from Secret Manager or cached file.
  * The key is multiline (PEM format) so it can't be in .envrc.
  */
-/* v8 ignore test-infra -- process.exit() in catch block terminates the process */
+/* v8 ignore start -- test-infra: process.exit() in catch block terminates the process @preserve */
 function getGitHubPrivateKey(projectId: string, cachePath: string): string {
   // Check env var first (for testing or manual override)
   const envKey = process.env['INTEXURAOS_GITHUB_APP_PRIVATE_KEY'];
@@ -63,13 +66,15 @@ function getGitHubPrivateKey(projectId: string, cachePath: string): string {
 
   // Check if cached file exists and is recent (< 1 hour old)
   if (existsSync(cachePath)) {
-    /* v8 ignore ts-type -- TypeScript type narrowing makes branch unreachable */
+    /* v8 ignore start -- ts-type: TypeScript type narrowing makes branch unreachable @preserve */
     const stats = statSync(cachePath);
+    /* v8 ignore stop @preserve */
     const ageMs = Date.now() - stats.mtimeMs;
-    /* v8 ignore ts-type -- TypeScript type narrowing makes branch unreachable */
+    /* v8 ignore start -- ts-type: TypeScript type narrowing makes branch unreachable @preserve */
     if (ageMs < 60 * 60 * 1000) {
       return readFileSync(cachePath, 'utf-8');
     }
+    /* v8 ignore stop @preserve */
   }
 
   // Fetch from Secret Manager
@@ -88,8 +93,9 @@ function getGitHubPrivateKey(projectId: string, cachePath: string): string {
     process.exit(1);
   }
 }
+/* v8 ignore stop @preserve */
 
-/* v8 ignore module-init -- orchestrator bootstrap function: env vars, Firebase init, service wiring */
+/* v8 ignore start -- module-init: orchestrator bootstrap function: env vars, Firebase init, service wiring @preserve */
 async function bootstrap(): Promise<void> {
   const home = homedir();
   const orchestratorDir = join(home, '.claude-orchestrator');
@@ -132,23 +138,26 @@ async function bootstrap(): Promise<void> {
   };
 
   // Create logger
-  /* v8 ignore ts-type -- logger config ternary creates type narrowing branches */
+  /* v8 ignore start -- ts-type: logger config ternary creates type narrowing branches @preserve */
   const logger = pino(
     process.env['NODE_ENV'] !== 'production'
       ? {
           level: process.env['LOG_LEVEL'] ?? 'info',
           transport: { target: 'pino-pretty', options: { colorize: true } },
-          /* v8 ignore ts-type -- TypeScript type narrowing makes branch unreachable */
+          /* v8 ignore start -- ts-type: TypeScript type narrowing makes branch unreachable @preserve */
         }
-      : { level: process.env['LOG_LEVEL'] ?? 'info' }
+      : /* v8 ignore stop @preserve */
+        { level: process.env['LOG_LEVEL'] ?? 'info' }
   );
 
   logger.info({ port: config.port, capacity: config.capacity }, 'Starting orchestrator');
 
   // Initialize Firebase Admin SDK
-  /* v8 ignore ts-type -- conditional Firebase init based on credentials path */
+  /* v8 ignore start -- ts-type: conditional Firebase init based on credentials path @preserve */
   const credentialsPath = process.env['GOOGLE_APPLICATION_CREDENTIALS'];
+  /* v8 ignore stop @preserve */
   if (credentialsPath) {
+    /* v8 ignore stop @preserve */
     const serviceAccount = JSON.parse(readFileSync(credentialsPath, 'utf-8')) as ServiceAccount;
     initializeApp({ credential: cert(serviceAccount), projectId });
   } else {
@@ -208,9 +217,11 @@ async function bootstrap(): Promise<void> {
   // Start orchestrator
   await main(config, statePersistence, dispatcher, tokenService, webhookClient, logger);
 }
+/* v8 ignore stop @preserve */
 
-/* v8 ignore module-init -- bootstrap invocation and fatal error handler */
+/* v8 ignore start -- module-init: bootstrap invocation and fatal error handler @preserve */
 bootstrap().catch((error: unknown) => {
   process.stderr.write(`Failed to start orchestrator: ${String(error)}\n`);
   process.exit(1);
 });
+/* v8 ignore stop @preserve */

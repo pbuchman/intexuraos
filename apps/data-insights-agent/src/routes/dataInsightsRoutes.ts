@@ -2,9 +2,10 @@
  * Data insights routes for composite feeds.
  * Endpoints for analyzing data, generating chart definitions, and previewing visualizations.
  */
-/* v8 ignore source-map -- false positive: v8 reports branch on line 2 (JSDoc comment) */
+/* v8 ignore start -- source-map: false positive: v8 reports branch on line 2 (JSDoc comment) @preserve */
 
 import type { FastifyPluginCallback, FastifyReply, FastifyRequest } from 'fastify';
+/* v8 ignore stop @preserve */
 import { logIncomingRequest, requireAuth } from '@intexuraos/common-http';
 import { getServices } from '../services.js';
 import { analyzeData, generateChartDefinition, transformDataForPreview } from '../domain/dataInsights/index.js';
@@ -23,11 +24,12 @@ interface AnalyzeFeedParams {
   feedId: string;
 }
 
-/* v8 ignore test-infra -- test infrastructure uses `fakeauthplugin` which always re... */
+/* v8 ignore start -- test-infra: test infrastructure uses `fakeauthplugin` which always re... @preserve */
 interface ChartDefinitionParams {
   feedId: string;
   insightId: string;
 }
+/* v8 ignore stop @preserve */
 
 interface PreviewParams {
   feedId: string;

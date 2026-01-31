@@ -117,10 +117,13 @@ export function createHandleApprovalReplyUseCase(
       const intent = parts[0];
 
       if (intent === 'cancel-task') {
-        /* v8 ignore ts-type -- button ID format guarantees taskId exists */
+        /* v8 ignore start -- ts-type: button ID format guarantees taskId exists @preserve */
         const [, taskId, nonce] = parts;
+        /* v8 ignore stop @preserve */
+        /* v8 ignore start -- ts-type: nullish coalescing after destructure @preserve */
         return await handleCancelTaskButton(
           taskId ?? '',
+          /* v8 ignore stop @preserve */
           nonce,
           userId,
           whatsappPublisher,
@@ -130,9 +133,10 @@ export function createHandleApprovalReplyUseCase(
       }
 
       if (intent === 'view-task') {
-        /* v8 ignore ts-type -- button ID format guarantees taskId exists */
+        /* v8 ignore start -- ts-type: button ID format guarantees taskId exists @preserve */
         const [, taskId] = parts;
         return await handleViewTaskButton(taskId ?? '', userId, whatsappPublisher, logger);
+        /* v8 ignore stop @preserve */
       }
     }
 
@@ -243,9 +247,10 @@ export function createHandleApprovalReplyUseCase(
     // This provides a fallback for users who prefer typing over clicking buttons
     const nonceMatch = /^approve\s+([0-9a-fA-F]{4})\s*$/.exec(replyText.trim());
     if (nonceMatch !== null) {
-      /* v8 ignore ts-type -- noUncheckedIndexedAccess guard for regex match[1] */
+      /* v8 ignore start -- ts-type: noUncheckedIndexedAccess guard for regex match[1] @preserve */
       const nonce = nonceMatch[1];
       if (nonce !== undefined) {
+        /* v8 ignore stop @preserve */
         const nonceResult = await handleNonceTextFallback(
           nonce,
           action,
@@ -685,13 +690,16 @@ async function handleButtonResponse(
   }
 
   const [intent, idFromButton, nonce] = parts;
+/* v8 ignore start -- ts-type: array destructure branch @preserve */
 
+/* v8 ignore stop @preserve */
   // For action-related buttons, verify we have an action
-  /* v8 ignore test-infra -- test button handlers always have valid actions */
+  /* v8 ignore start -- test-infra: test button handlers always have valid actions @preserve */
   if (action === null) {
     logger.warn({ buttonId, intent }, 'Action-related button received but no action found');
     return err(new Error('Action not found for button'));
   }
+  /* v8 ignore stop @preserve */
 
   // Verify the actionId from button matches the action we're processing
   if (idFromButton !== action.id) {

@@ -1221,6 +1221,53 @@ describe('processCalendarAction', () => {
       }
     });
 
+    it('uses fallback values when ready preview has missing optional fields', async () => {
+      // Seed a ready preview with only required fields (missing summary, start, end, reasoning)
+      calendarPreviewRepository.seedPreview({
+        actionId: 'action-minimal-preview',
+        userId: 'user-456',
+        status: 'ready',
+        generatedAt: '2025-01-15T10:00:00Z',
+        // Explicitly undefined optional fields to hit ?? fallbacks
+      });
+
+      const result = await processCalendarAction(
+        {
+          actionId: 'action-minimal-preview',
+          userId: 'user-456',
+          text: 'Original text',
+        },
+        {
+          userServiceClient,
+          googleCalendarClient,
+          failedEventRepository,
+          calendarActionExtractionService,
+          processedActionRepository,
+          calendarPreviewRepository,
+          logger: mockLogger,
+        }
+      );
+
+      // With undefined summary/start, valid will be false (since both are undefined)
+      // After fallback: summary='', start=null → valid calculation: undefined !== undefined && undefined !== undefined = false
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.status).toBe('failed');
+      }
+
+      // Verify we used the preview path (with undefined summary in the log, before fallback)
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        expect.objectContaining({ summary: undefined }),
+        expect.stringContaining('using existing preview data')
+      );
+
+      // Verify extraction complete shows the fallback value (empty string)
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        expect.objectContaining({ summary: '', valid: false }),
+        expect.stringContaining('extraction complete')
+      );
+    });
+
     it('deletes preview after successful event creation', async () => {
       const mockEvent = {
         id: 'event-with-preview-cleanup',

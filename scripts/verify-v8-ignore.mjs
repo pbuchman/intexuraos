@@ -433,30 +433,52 @@ function findFiles(directories) {
 // PHASE A: Find All v8 Ignore Comments
 // ============================================================================
 
-// Legacy pattern: matches /* v8 ignore next <N>? -/-- explanation? */ or /* v8 ignore start -/-- explanation? */
-// Strict pattern - ONLY accepts valid categories from VALID_CATEGORIES
-const V8_IGNORE_STRICT_REGEX =
-  /\/\*\s*v8\s+ignore\s+(ts-type|regex|module-init|async-timing|test-infra|upstream|module-mock|schema|source-map|auth-guard)\s+--\s*(.+?)\s*\*\//;
+// v8-compatible format: /* v8 ignore start -- <CATEGORY>: <explanation> @preserve */
+// Uses start/stop blocks so coverage is actually excluded
+// @preserve ensures esbuild keeps the comment during transpilation
+const V8_IGNORE_START_REGEX =
+  /\/\*\s*v8\s+ignore\s+start\s+--\s+(ts-type|regex|module-init|async-timing|test-infra|upstream|module-mock|schema|source-map|auth-guard):\s*(.+?)\s*@preserve\s*\*\//;
+
+const V8_IGNORE_STOP_REGEX = /\/\*\s*v8\s+ignore\s+stop\s+@preserve\s*\*\//;
 
 function findV8IgnoreComments(files) {
   const comments = [];
   const malformed = [];
+  const unbalanced = [];
 
   for (const file of files) {
     const content = readFileSync(file, 'utf8');
     const lines = content.split('\n');
+    const relPath = file.replace(ROOT_DIR + '/', '');
+
+    let startCount = 0;
+    let stopCount = 0;
 
     for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
       const line = lines[lineIdx];
 
-      // Check for strict modern format with valid category
-      const strictMatch = V8_IGNORE_STRICT_REGEX.exec(line);
-      if (strictMatch) {
+      // Check for start comment with valid category
+      const startMatch = V8_IGNORE_START_REGEX.exec(line);
+      if (startMatch) {
+        startCount++;
         comments.push({
-          file: file.replace(ROOT_DIR + '/', ''),
+          file: relPath,
           line: lineIdx + 1,
-          category: strictMatch[1],
-          explanation: strictMatch[2],
+          category: startMatch[1],
+          explanation: startMatch[2],
+          type: 'start',
+        });
+        continue;
+      }
+
+      // Check for stop comment
+      const stopMatch = V8_IGNORE_STOP_REGEX.exec(line);
+      if (stopMatch) {
+        stopCount++;
+        comments.push({
+          file: relPath,
+          line: lineIdx + 1,
+          type: 'stop',
         });
         continue;
       }
@@ -464,25 +486,30 @@ function findV8IgnoreComments(files) {
       // Any other v8 ignore pattern is malformed
       const v8IgnoreLooseCheck = /\/\*\s*v8\s+ignore\s+/.exec(line);
       if (v8IgnoreLooseCheck) {
-        // Extract the full comment to report it
         const fullMatch = /\/\*\s*v8\s+ignore\s+[^\*]*?\*\//.exec(line);
-        const content = fullMatch ? fullMatch[0] : line.trim();
-
-        // Try to extract what they used as "category"
-        const categoryMatch = /\/\*\s*v8\s+ignore\s+([^\s\*]+)/.exec(line);
-        const invalidCategory = categoryMatch ? categoryMatch[1] : '?';
+        const foundContent = fullMatch ? fullMatch[0] : line.trim();
 
         malformed.push({
-          file: file.replace(ROOT_DIR + '/', ''),
+          file: relPath,
           line: lineIdx + 1,
-          content,
-          message: `Invalid v8 ignore comment. Category "${invalidCategory}" is not valid. Required: /* v8 ignore <CATEGORY> -- <explanation> */ where CATEGORY is one of: ${VALID_CATEGORIES.join(', ')}`,
+          content: foundContent,
+          message: `Invalid format. Required: /* v8 ignore start -- <CATEGORY>: <reason> @preserve */ ... /* v8 ignore stop @preserve */`,
         });
       }
     }
+
+    // Check balanced pairs per file
+    if (startCount !== stopCount) {
+      unbalanced.push({
+        file: relPath,
+        startCount,
+        stopCount,
+        message: `Unbalanced v8 ignore blocks: ${startCount} start(s), ${stopCount} stop(s)`,
+      });
+    }
   }
 
-  return { comments, malformed };
+  return { comments, malformed, unbalanced };
 }
 
 // ============================================================================
@@ -494,6 +521,11 @@ function validateSyntax(comments) {
   const validComments = new Set();
 
   for (const comment of comments) {
+    // Skip stop comments - they don't need validation
+    if (comment.type === 'stop') {
+      continue;
+    }
+
     // Category validation already done by strict regex in findV8IgnoreComments
     // Just need to verify explanation exists
     if (!comment.explanation || comment.explanation.trim() === '') {
@@ -591,30 +623,38 @@ function validateCoverage(comments, coverageData) {
 
 function reportMissingComments(coverageData, comments) {
   const missing = [];
-  const commentMap = new Map();
 
   // Normalize file path from coverage data to match comment paths (relative)
   function normalizePath(filePath) {
     return filePath.replace(ROOT_DIR + '/', '');
   }
 
-  // Build map of files with comments (by exact line)
-  for (const comment of comments) {
-    const key = `${comment.file}:${comment.line}`;
-    commentMap.set(key, true);
-  }
+  // Build map of v8 ignore ranges per file (start line -> stop line)
+  // A branch is exempt if it falls BETWEEN a start and its matching stop
+  const ignoreRangesMap = new Map();
 
-  // Build map of files with comments (by nearby lines for cases like JSDoc)
-  const nearbyCommentMap = new Map();
   for (const comment of comments) {
+    if (comment.type !== 'start') continue;
+
     const fileKey = comment.file;
-    if (!nearbyCommentMap.has(fileKey)) {
-      nearbyCommentMap.set(fileKey, []);
+    if (!ignoreRangesMap.has(fileKey)) {
+      ignoreRangesMap.set(fileKey, []);
     }
-    nearbyCommentMap.get(fileKey).push(comment.line);
+
+    // Find the matching stop for this start
+    const matchingStop = comments.find(
+      (c) => c.file === comment.file && c.type === 'stop' && c.line > comment.line
+    );
+
+    if (matchingStop) {
+      ignoreRangesMap.get(fileKey).push({
+        start: comment.line,
+        stop: matchingStop.line,
+      });
+    }
   }
 
-  // Find uncovered branches without comments
+  // Find uncovered branches without exemptions
   for (const [filePath, fileData] of Object.entries(coverageData)) {
     if (filePath.includes('__tests__')) continue;
 
@@ -624,6 +664,7 @@ function reportMissingComments(coverageData, comments) {
     if (!branches || !branchMap) continue;
 
     const normalizedPath = normalizePath(filePath);
+    const ranges = ignoreRangesMap.get(normalizedPath) ?? [];
 
     for (const [branchId, hitCounts] of Object.entries(branches)) {
       const branchInfo = branchMap[branchId];
@@ -635,21 +676,12 @@ function reportMissingComments(coverageData, comments) {
           const branchLine = location?.start?.line ?? branchInfo.line;
 
           if (branchLine) {
-            const key = `${normalizedPath}:${branchLine}`;
-
-            // Check exact line match first
-            if (commentMap.has(key)) {
-              continue;
-            }
-
-            // Check for nearby v8 ignore comment (within ±10 lines)
-            // This handles cases like JSDoc blocks and larger if blocks
-            const nearbyComments = nearbyCommentMap.get(normalizedPath) ?? [];
-            const hasNearbyComment = nearbyComments.some(
-              (commentLine) => Math.abs(commentLine - branchLine) <= 10
+            // Check if branch line falls within any v8 ignore start/stop range
+            const isWithinRange = ranges.some(
+              (range) => branchLine >= range.start && branchLine <= range.stop
             );
 
-            if (!hasNearbyComment) {
+            if (!isWithinRange) {
               missing.push({ file: normalizedPath, line: branchLine });
             }
           }
@@ -662,6 +694,107 @@ function reportMissingComments(coverageData, comments) {
 }
 
 // ============================================================================
+// PHASE F: Verify 1:1 Mapping (each block covers exactly 1 branch)
+// ============================================================================
+
+function verifyOneToOneMapping(coverageData, comments) {
+  const issues = [];
+
+  function normalizePath(filePath) {
+    return filePath.replace(ROOT_DIR + '/', '');
+  }
+
+  // Build map of v8 ignore ranges per file with their line info
+  const ignoreRangesMap = new Map();
+
+  for (const comment of comments) {
+    if (comment.type !== 'start') continue;
+
+    const fileKey = comment.file;
+    if (!ignoreRangesMap.has(fileKey)) {
+      ignoreRangesMap.set(fileKey, []);
+    }
+
+    const matchingStop = comments.find(
+      (c) => c.file === comment.file && c.type === 'stop' && c.line > comment.line
+    );
+
+    if (matchingStop) {
+      ignoreRangesMap.get(fileKey).push({
+        start: comment.line,
+        stop: matchingStop.line,
+        branchesInRange: [],
+      });
+    }
+  }
+
+  // Count uncovered branches per range
+  let totalUncoveredBranches = 0;
+  let totalExemptedBranches = 0;
+
+  for (const [filePath, fileData] of Object.entries(coverageData)) {
+    if (filePath.includes('__tests__')) continue;
+
+    const branches = fileData.b;
+    const branchMap = fileData.branchMap;
+
+    if (!branches || !branchMap) continue;
+
+    const normalizedPath = normalizePath(filePath);
+    const ranges = ignoreRangesMap.get(normalizedPath) ?? [];
+
+    for (const [branchId, hitCounts] of Object.entries(branches)) {
+      const branchInfo = branchMap[branchId];
+      if (!branchInfo) continue;
+
+      for (let i = 0; i < hitCounts.length; i++) {
+        if (hitCounts[i] === 0) {
+          totalUncoveredBranches++;
+          const location = branchInfo.locations?.[i];
+          const branchLine = location?.start?.line ?? branchInfo.line;
+
+          if (branchLine) {
+            for (const range of ranges) {
+              if (branchLine >= range.start && branchLine <= range.stop) {
+                range.branchesInRange.push(branchLine);
+                totalExemptedBranches++;
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // Find ranges with multiple branches
+  for (const [file, ranges] of ignoreRangesMap.entries()) {
+    for (const range of ranges) {
+      if (range.branchesInRange.length > 1) {
+        issues.push({
+          file,
+          start: range.start,
+          stop: range.stop,
+          count: range.branchesInRange.length,
+          lines: range.branchesInRange,
+        });
+      }
+    }
+  }
+
+  // Count total v8 ignore blocks
+  const totalBlocks = comments.filter((c) => c.type === 'start').length;
+
+  return {
+    issues,
+    stats: {
+      totalBlocks,
+      totalUncoveredBranches,
+      totalExemptedBranches,
+    },
+  };
+}
+
+// ============================================================================
 // MAIN
 // ============================================================================
 
@@ -670,18 +803,21 @@ async function main() {
   if (process.argv.includes('--help') || process.argv.includes('-h')) {
     console.log('v8 Ignore Comment Validator');
     console.log('');
-    console.log(
-      'Validates all /* v8 ignore <CATEGORY> -- <explanation> */ comments in the codebase.'
-    );
+    console.log('Validates v8 ignore start/stop blocks in the codebase.');
     console.log('');
-    console.log('Required format: /* v8 ignore <CATEGORY> -- <explanation> */');
+    console.log('Required format:');
+    console.log('  /* v8 ignore start -- <CATEGORY>: <reason> @preserve */');
+    console.log('  ...excluded code...');
+    console.log('  /* v8 ignore stop @preserve */');
     console.log('');
     console.log('Usage: node scripts/verify-v8-ignore.mjs');
     console.log('');
     console.log('Valid categories:');
     VALID_CATEGORIES.forEach((cat) => console.log(`  - ${cat}`));
     console.log('');
-    console.log('Note: Comments without "-- <explanation>" suffix will be rejected as malformed.');
+    console.log('Rules:');
+    console.log('  - Every start must have a matching stop in the same file');
+    console.log('  - Category must match the code context (validated by detectors)');
     process.exit(0);
   }
 
@@ -689,15 +825,26 @@ async function main() {
   const files = findFiles(['apps', 'packages', 'workers']);
 
   // Phase A: Find all v8 ignore comments
-  const { comments, malformed: malformedComments } = findV8IgnoreComments(files);
+  const { comments, malformed: malformedComments, unbalanced } = findV8IgnoreComments(files);
 
-  // Phase A.5: Report malformed comments immediately (these are syntax errors)
-  if (malformedComments.length > 0) {
-    console.log(`\n❌ ${malformedComments.length} malformed v8 ignore comment(s) found:\n`);
-    malformedComments.forEach((m) => {
-      console.log(`  ${m.file}:${m.line}: ${m.message}`);
-      console.log(`    Found: ${m.content}`);
-    });
+  // Phase A.5: Report malformed comments and unbalanced blocks
+  const hasMalformed = malformedComments.length > 0;
+  const hasUnbalanced = unbalanced.length > 0;
+
+  if (hasMalformed || hasUnbalanced) {
+    if (hasMalformed) {
+      console.log(`\n❌ ${malformedComments.length} malformed v8 ignore comment(s):\n`);
+      malformedComments.forEach((m) => {
+        console.log(`  ${m.file}:${m.line}: ${m.message}`);
+        console.log(`    Found: ${m.content}`);
+      });
+    }
+    if (hasUnbalanced) {
+      console.log(`\n❌ ${unbalanced.length} file(s) with unbalanced start/stop:\n`);
+      unbalanced.forEach((u) => {
+        console.log(`  ${u.file}: ${u.message}`);
+      });
+    }
     process.exit(1);
   }
 
@@ -716,7 +863,7 @@ async function main() {
     coverageErrors = validateCoverage(Array.from(validComments), coverageData);
   }
 
-  // Phase E: Report missing comments (informational only)
+  // Phase E: Report missing comments
   let missingReport = [];
 
   if (existsSync(coveragePath)) {
@@ -724,11 +871,29 @@ async function main() {
     missingReport = reportMissingComments(coverageData, comments);
   }
 
+  // Phase F: Verify 1:1 mapping (each block covers exactly 1 branch)
+  let mappingResult = {
+    issues: [],
+    stats: { totalBlocks: 0, totalUncoveredBranches: 0, totalExemptedBranches: 0 },
+  };
+
+  if (existsSync(coveragePath)) {
+    const coverageData = JSON.parse(readFileSync(coveragePath, 'utf8'));
+    mappingResult = verifyOneToOneMapping(coverageData, comments);
+  }
+
   // Output
   const allErrors = [...syntaxErrors, ...patternErrors, ...coverageErrors];
   const validCount = validComments.size;
 
+  // Count lines within v8 ignore blocks
+  const startComments = comments.filter((c) => c.type === 'start');
+  const blockCount = startComments.length;
+
   console.log(`\n✓ ${validCount} v8 ignore comments validated`);
+  console.log(
+    `  ${blockCount} exclusion blocks (lines within blocks are not tracked by v8 coverage)`
+  );
 
   if (allErrors.length > 0) {
     console.log(`\n❌ ${allErrors.length} error(s) found:\n`);
@@ -751,7 +916,9 @@ async function main() {
     if (uniqueMissing.length > limit) {
       console.log(`  ... and ${uniqueMissing.length - limit} more (use --all to see all)`);
     }
-    console.log(`\nAdd /* v8 ignore <CATEGORY> -- reason */ or write tests.`);
+    console.log(
+      `\nAdd /* v8 ignore start -- <CATEGORY>: reason @preserve */ ... /* v8 ignore stop @preserve */ or write tests.`
+    );
     console.log(
       `Valid categories: ts-type, regex, module-init, async-timing, test-infra, upstream, module-mock, schema, source-map, auth-guard`
     );

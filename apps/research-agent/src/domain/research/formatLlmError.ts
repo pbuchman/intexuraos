@@ -125,7 +125,9 @@ function tryParseGeminiError(raw: string): string | null {
     }
 
     return 'An error occurred with the Gemini API';
-  } catch /* v8 ignore upstream -- defensive, JSON.parse failure returns null */ {
+  /* v8 ignore start -- upstream: defensive, JSON.parse failure returns null @preserve */
+  } catch {
+  /* v8 ignore stop @preserve */
     return null;
   }
 }
@@ -137,7 +139,9 @@ function tryParseOpenaiError(raw: string): string | null {
 
   if (rateLimitMatch !== null) {
     const [, limitType, limit, used, requested] = rateLimitMatch;
-    return `${limitType ?? 'Tokens'}: ${used ?? '?'}/${limit ?? '?'} used, need ${requested ?? '?'} more`; /* v8 ignore ts-type -- regex match with capture groups guarantees non-null values, but TypeScript can't prove after destructuring */
+    /* v8 ignore start -- ts-type: regex match with capture groups guarantees non-null values, but TypeScript can't prove after destructuring @preserve */
+    return `${limitType ?? 'Tokens'}: ${used ?? '?'}/${limit ?? '?'} used, need ${requested ?? '?'} more`;
+    /* v8 ignore stop @preserve */
   }
 
   if (raw.includes('exceeded your current quota')) {
@@ -160,7 +164,9 @@ function tryParseAnthropicError(raw: string): string | null {
         const { message } = parsed.error;
         return message.length > 150 ? message.slice(0, 147) + '...' : message;
       }
-    } catch /* v8 ignore upstream -- defensive, JSON.parse failure falls through */ {
+    /* v8 ignore start -- upstream: defensive, JSON.parse failure falls through @preserve */
+    } catch {
+    /* v8 ignore stop @preserve */
       // Fall through
     }
   }

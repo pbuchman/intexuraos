@@ -100,9 +100,12 @@ export async function getMessagesByUser(
     if (hasMore && resultDocs.length > 0) {
       const lastDoc = resultDocs[resultDocs.length - 1];
       
+      /* v8 ignore start -- ts-type: array last element check @preserve */
       if (lastDoc !== undefined) {
-/* v8 ignore ts-type -- TypeScript type narrowing makes branch unreachable */
+      /* v8 ignore stop @preserve */
+/* v8 ignore start -- ts-type: TypeScript type narrowing makes branch unreachable @preserve */
         const lastData = lastDoc.data() as WhatsAppMessage;
+        /* v8 ignore stop @preserve */
         result.nextCursor = encodeCursor(lastData.receivedAt, lastDoc.id);
       }
     }

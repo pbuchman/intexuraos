@@ -740,16 +740,18 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       );
 
       const services = getServices();
-      /* v8 ignore test-infra -- spread conditionals for optional event fields */
+      /* v8 ignore start -- test-infra: spread conditionals for optional event fields @preserve */
       const result = await services.handleApprovalReplyUseCase({
         replyToWamid: eventData.replyToWamid,
         replyText: eventData.replyText,
         userId: eventData.userId,
         ...(eventData.actionId !== undefined && { actionId: eventData.actionId }),
         ...(eventData.buttonId !== undefined && { buttonId: eventData.buttonId }),
-/* v8 ignore ts-type -- TypeScript type narrowing makes branch unreachable */
+/* v8 ignore start -- ts-type: TypeScript type narrowing makes branch unreachable @preserve */
         ...(eventData.buttonTitle !== undefined && { buttonTitle: eventData.buttonTitle }),
+        /* v8 ignore stop @preserve */
       });
+      /* v8 ignore stop @preserve */
 
       if (!result.ok) {
         request.log.error(

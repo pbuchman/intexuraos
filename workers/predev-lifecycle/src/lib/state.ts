@@ -29,6 +29,7 @@ export class StateManager {
       const data = doc.data() as FirestoreData | undefined;
       if (!data) return null;
 
+      /* v8 ignore start -- ts-type: Firestore Timestamp vs string date handling @preserve */
       const toDate = (value: unknown): Date | null => {
         if (value instanceof Timestamp) {
           return value.toDate();
@@ -38,6 +39,7 @@ export class StateManager {
         }
         return null;
       };
+      /* v8 ignore stop @preserve */
 
       return {
         status: (data['status'] ?? 'stopped') as PredevState['status'],

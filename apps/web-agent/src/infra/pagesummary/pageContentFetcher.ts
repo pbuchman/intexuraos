@@ -12,11 +12,12 @@ export interface PageContentFetcherConfig {
   timeoutMs: number;
 }
 
-/* v8 ignore test-infra -- test mock for http responses uses `nock` to intercept req... */
+/* v8 ignore start -- test-infra: test mock for http responses uses `nock` to intercept req... @preserve */
 const DEFAULT_CONFIG: Omit<PageContentFetcherConfig, 'apiKey'> = {
   baseUrl: 'https://api.crawl4ai.com',
   timeoutMs: 60000,
 };
+/* v8 ignore stop @preserve */
 
 /**
  * Error from page content fetching.
@@ -123,7 +124,9 @@ export function createPageContentFetcher(
           logger.warn({ url, error: data.error_message }, 'Crawl4AI crawl failed');
           return err({
             code: 'FETCH_FAILED',
-            message: data.error_message /* v8 ignore ts-type -- API always includes error_message on failure */ ?? 'Crawl4AI crawl failed',
+            /* v8 ignore start -- ts-type: API always includes error_message on failure @preserve */
+            message: data.error_message ?? 'Crawl4AI crawl failed',
+            /* v8 ignore stop @preserve */
           });
         }
 
@@ -158,7 +161,7 @@ export function createPageContentFetcher(
       } catch (error) {
         clearTimeout(timeoutId);
 
-        /* v8 ignore ts-type -- caught errors are always Error instances */
+        /* v8 ignore start -- ts-type: caught errors are always Error instances @preserve */
         if (error instanceof Error) {
           if (error.name === 'AbortError') {
             logger.warn({ url, timeoutMs: fullConfig.timeoutMs }, 'Request timed out (AbortError)');
@@ -174,6 +177,7 @@ export function createPageContentFetcher(
             message: error.message,
           });
         }
+        /* v8 ignore stop @preserve */
 
         logger.error({ url }, 'Unknown error during Crawl4AI request');
         return err({

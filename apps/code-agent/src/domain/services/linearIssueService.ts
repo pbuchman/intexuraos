@@ -142,8 +142,9 @@ function generateIssueTitle(prompt: string): string {
   clean = clean.replace(/[#*_~]/g, '');
 
   // Get first line or sentence
-  /* v8 ignore ts-type -- optional chaining and nullish coalescing create type narrowing branches */
+  /* v8 ignore start -- ts-type: optional chaining and nullish coalescing create type narrowing branches @preserve */
   const firstLine = clean.split(/[.\n]/)[0]?.trim() ?? 'Code task';
+  /* v8 ignore stop @preserve */
 
   // Truncate to 80 chars
   return firstLine.length > 80 ? firstLine.slice(0, 77) + '...' : firstLine;

@@ -3206,6 +3206,7 @@ describe('System Endpoints', () => {
 describe('Internal Routes', () => {
   let app: FastifyInstance;
   let fakeRepo: FakeResearchRepository;
+  let fakeUserServiceClient: FakeUserServiceClient;
   const TEST_INTERNAL_TOKEN = 'test-internal-auth-token';
 
   beforeEach(async () => {
@@ -3216,7 +3217,7 @@ describe('Internal Routes', () => {
     process.env['INTEXURAOS_WEB_APP_URL'] = 'https://app.example.com';
 
     fakeRepo = new FakeResearchRepository();
-    const fakeUserServiceClient = new FakeUserServiceClient();
+    fakeUserServiceClient = new FakeUserServiceClient();
     const fakeResearchEventPublisher = new FakeResearchEventPublisher();
     const fakeNotificationSender = new FakeNotificationSender();
     const fakeLlmCallPublisher = new FakeLlmCallPublisher();
@@ -3379,6 +3380,54 @@ describe('Internal Routes', () => {
       expect(body.success).toBe(true);
       expect(body.data.status).toBe('failed');
       expect(body.data.errorCode).toBe('EXTERNAL_API_ERROR');
+    });
+
+    it('creates draft research with empty models when getApiKeys fails', async () => {
+      fakeUserServiceClient.setFailNextGetApiKeys(true);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/research/draft',
+        headers: { 'x-internal-auth': TEST_INTERNAL_TOKEN },
+        payload: {
+          userId: TEST_USER_ID,
+          title: 'Test Draft Research',
+          prompt: 'Test prompt content',
+          originalMessage: 'Research AI using gemini',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: { status: string; message: string; resourceUrl?: string };
+      };
+      expect(body.success).toBe(true);
+      expect(body.data.status).toBe('completed');
+    });
+
+    it('creates draft research with empty models when getLlmClient fails', async () => {
+      fakeUserServiceClient.setFailNextGetLlmClient(true);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/research/draft',
+        headers: { 'x-internal-auth': TEST_INTERNAL_TOKEN },
+        payload: {
+          userId: TEST_USER_ID,
+          title: 'Test Draft Research',
+          prompt: 'Test prompt content',
+          originalMessage: 'Research AI using gemini',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: { status: string; message: string; resourceUrl?: string };
+      };
+      expect(body.success).toBe(true);
+      expect(body.data.status).toBe('completed');
     });
   });
 
@@ -4731,6 +4780,92 @@ describe('Internal Routes', () => {
       const updatedResearch = fakeRepo.getAll()[0];
       expect(updatedResearch?.status).toBe('awaiting_confirmation');
       expect(updatedResearch?.partialFailure?.failedModels).toContain(LlmModels.O4MiniDeepResearch);
+    });
+
+    it('handles all_completed state when all LLMs succeed', async () => {
+      const fakeShareStorage = {
+        upload: async (): Promise<
+          Result<{ gcsPath: string }, { code: 'UPLOAD_FAILED'; message: string }>
+        > => ok({ gcsPath: 'gs://test-bucket/share/abc123.html' }),
+        delete: async (): Promise<
+          Result<void, { code: 'DELETE_FAILED'; message: string }>
+        > => ok(undefined),
+      };
+      const fakeShareConfig = {
+        shareBaseUrl: 'https://storage.example.com/share',
+        staticAssetsUrl: 'https://cdn.example.com/assets',
+      };
+
+      const services: ServiceContainer = {
+        researchRepo: fakeRepo,
+        researchExportSettings: new FakeResearchExportSettings(),
+        pricingContext: fakePricingContext,
+        generateId: (): string => 'generated-id-123',
+        researchEventPublisher: new FakeResearchEventPublisher(),
+        llmCallPublisher: new FakeLlmCallPublisher(),
+        userServiceClient: fakeUserServiceClient,
+        imageServiceClient: null,
+        notionServiceClient: new FakeNotionServiceClient(),
+        notificationSender: fakeNotificationSender,
+        shareStorage: fakeShareStorage,
+        shareConfig: fakeShareConfig,
+        webAppUrl: 'https://app.example.com',
+        createResearchProvider: () =>
+          createFakeLlmResearchProvider('Success response', {
+            usage: { inputTokens: 100, outputTokens: 200, costUsd: 0.005 },
+          }),
+        createSynthesizer: () => createFakeSynthesizer(),
+        createTitleGenerator: () => createFakeTitleGenerator(),
+        createContextInferrer: () => createFakeContextInferrer(),
+        createInputValidator: () => createFakeInputValidator(),
+        notionExporter: createFakeNotionExporter(),
+      };
+      setServices(services);
+
+      const research = createTestResearch({
+        id: 'research-123',
+        status: 'processing',
+        selectedModels: [LlmModels.Gemini25Pro, LlmModels.O4MiniDeepResearch],
+        llmResults: [
+          {
+            provider: LlmProviders.Google,
+            model: LlmModels.Gemini25Pro,
+            status: 'completed',
+            result: 'First LLM result',
+            completedAt: new Date().toISOString(),
+          },
+          { provider: LlmProviders.OpenAI, model: LlmModels.O4MiniDeepResearch, status: 'pending' },
+        ],
+      });
+      fakeRepo.addResearch(research);
+      fakeUserServiceClient.setApiKeys(TEST_USER_ID, {
+        google: 'google-key',
+        openai: 'openai-key',
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/llm/pubsub/process-llm-call',
+        headers: { from: 'noreply@google.com' },
+        payload: {
+          message: {
+            data: encodePubSubMessage(createLlmCallEvent({ model: LlmModels.O4MiniDeepResearch })),
+            messageId: 'msg-complete',
+          },
+          subscription: 'test-sub',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const updatedResearch = fakeRepo.getAll()[0];
+      expect(updatedResearch?.llmResults.every((r) => r.status === 'completed')).toBe(true);
+      const secondResult = updatedResearch?.llmResults.find(
+        (r) => r.model === LlmModels.O4MiniDeepResearch
+      );
+      expect(secondResult?.inputTokens).toBe(100);
+      expect(secondResult?.outputTokens).toBe(200);
+      expect(secondResult?.costUsd).toBe(0.005);
     });
   });
 });

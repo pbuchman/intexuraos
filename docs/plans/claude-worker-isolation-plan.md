@@ -24,13 +24,13 @@
 
 Claude workers currently execute with these security gaps:
 
-| Gap | Current State | Risk |
-|-----|---------------|------|
-| Filesystem access | CWD-locked but no kernel enforcement | Process can `cd ..` or use absolute paths |
-| Network access | Unrestricted | Claude can curl external APIs, exfiltrate data |
-| Host secrets | Available via env vars and ~/.aws | Credential theft possible |
-| Other worktrees | Same filesystem namespace | Task A can read Task B's code |
-| System utilities | Full access to /usr/bin/* | Privilege escalation vectors |
+| Gap               | Current State                        | Risk                                           |
+| ----------------- | ------------------------------------ | ---------------------------------------------- |
+| Filesystem access | CWD-locked but no kernel enforcement | Process can `cd ..` or use absolute paths      |
+| Network access    | Unrestricted                         | Claude can curl external APIs, exfiltrate data |
+| Host secrets      | Available via env vars and ~/.aws    | Credential theft possible                      |
+| Other worktrees   | Same filesystem namespace            | Task A can read Task B's code                  |
+| System utilities  | Full access to /usr/bin/\*           | Privilege escalation vectors                   |
 
 ### 1.2 The Goal
 
@@ -98,39 +98,40 @@ A Claude worker is considered "isolated" when ALL of these are true:
 
 Claude workers MUST NOT be able to:
 
-| Category | Forbidden Access | Why Forbidden |
-|----------|------------------|---------------|
-| Filesystem | `/home/*` (host home) | Contains SSH keys, credentials |
-| Filesystem | `~/.aws`, `~/.gcloud` | Cloud credentials |
-| Filesystem | `~/.claude-orchestrator` | GitHub App key, state |
-| Filesystem | Other worktrees | Task isolation |
-| Filesystem | `/etc/passwd`, `/etc/shadow` | System credentials |
-| Network | Internal services (localhost:*, 127.0.0.1) | Firestore, other apps |
-| Network | Metadata server (169.254.169.254) | Cloud instance credentials |
-| Network | Private IP ranges (10.x, 172.16-31.x, 192.168.x) | Internal infrastructure |
-| Process | Host processes | Privilege escalation |
-| Process | Other containers | Container escape |
+| Category   | Forbidden Access                                 | Why Forbidden                  |
+| ---------- | ------------------------------------------------ | ------------------------------ |
+| Filesystem | `/home/*` (host home)                            | Contains SSH keys, credentials |
+| Filesystem | `~/.aws`, `~/.gcloud`                            | Cloud credentials              |
+| Filesystem | `~/.claude-orchestrator`                         | GitHub App key, state          |
+| Filesystem | Other worktrees                                  | Task isolation                 |
+| Filesystem | `/etc/passwd`, `/etc/shadow`                     | System credentials             |
+| Network    | Internal services (localhost:\*, 127.0.0.1)      | Firestore, other apps          |
+| Network    | Metadata server (169.254.169.254)                | Cloud instance credentials     |
+| Network    | Private IP ranges (10.x, 172.16-31.x, 192.168.x) | Internal infrastructure        |
+| Process    | Host processes                                   | Privilege escalation           |
+| Process    | Other containers                                 | Container escape               |
 
 ### 2.3 Allowed Access List
 
 Claude workers MAY access:
 
-| Category | Allowed Access | Why Allowed |
-|----------|----------------|-------------|
-| Filesystem | `/repo` (mounted worktree) | The task workspace |
-| Filesystem | `/tmp` (container-local) | Temporary files |
-| Network | **Full public internet** | Web search, documentation, npm, APIs |
-| Network | `github.com` | Git operations, gh CLI |
-| Network | `api.anthropic.com` | Claude API calls |
-| Network | `api.linear.app` | Linear issue management |
-| Network | `sentry.io` | Error reporting |
-| Network | `registry.npmjs.org` | Package installation |
-| Network | Any public website | Research, documentation, Stack Overflow |
-| Environment | `LINEAR_API_KEY` | Mounted secret |
-| Environment | `SENTRY_AUTH_TOKEN` | Mounted secret |
-| Environment | `GITHUB_TOKEN` | Mounted secret (scoped) |
+| Category    | Allowed Access             | Why Allowed                             |
+| ----------- | -------------------------- | --------------------------------------- |
+| Filesystem  | `/repo` (mounted worktree) | The task workspace                      |
+| Filesystem  | `/tmp` (container-local)   | Temporary files                         |
+| Network     | **Full public internet**   | Web search, documentation, npm, APIs    |
+| Network     | `github.com`               | Git operations, gh CLI                  |
+| Network     | `api.anthropic.com`        | Claude API calls                        |
+| Network     | `api.linear.app`           | Linear issue management                 |
+| Network     | `sentry.io`                | Error reporting                         |
+| Network     | `registry.npmjs.org`       | Package installation                    |
+| Network     | Any public website         | Research, documentation, Stack Overflow |
+| Environment | `LINEAR_API_KEY`           | Mounted secret                          |
+| Environment | `SENTRY_AUTH_TOKEN`        | Mounted secret                          |
+| Environment | `GITHUB_TOKEN`             | Mounted secret (scoped)                 |
 
 **Why full internet access?** Claude Code needs to:
+
 - Search the web for documentation and solutions
 - Read Stack Overflow, GitHub issues, blog posts
 - Install npm/pnpm packages
@@ -159,6 +160,7 @@ Blocking arbitrary internet would cripple Claude's core functionality.
 ```
 
 **Implementation:**
+
 - Orchestrator runs in Docker container
 - Spawns Claude workers as sibling containers via Docker socket mount
 - OR uses Docker-in-Docker (DinD)
@@ -206,6 +208,7 @@ Blocking arbitrary internet would cripple Claude's core functionality.
 ```
 
 **Implementation:**
+
 - Orchestrator runs natively on host (macOS, Linux, VM)
 - Uses Docker SDK to create isolated worker containers
 - Mounts only specific worktree into each container
@@ -254,6 +257,7 @@ Blocking arbitrary internet would cripple Claude's core functionality.
 ```
 
 **Implementation:**
+
 - Orchestrator creates GCE VMs via API
 - Each VM runs single Claude task
 - VM destroyed after task completion
@@ -297,6 +301,7 @@ Production:
 ```
 
 **Implementation:**
+
 - Abstract "isolation provider" interface
 - Docker implementation for local dev
 - GCE implementation for production
@@ -323,14 +328,14 @@ Production:
 
 ### 3.5 Recommendation Matrix
 
-| Criterion | Option A (Orchestrator in Docker) | Option B (Workers in Docker) | Option C (VMs) | Option D (Hybrid) |
-|-----------|-----------------------------------|------------------------------|----------------|-------------------|
-| Security | ⚠️ Medium | ✅ High | ✅✅ Highest | ✅ High |
-| Local dev speed | ⚠️ Slow | ✅ Fast | ❌ Very slow | ✅ Fast |
-| Production ready | ⚠️ Complex | ✅ Yes | ✅ Yes | ✅ Yes |
-| VM compatibility | ❌ No | ✅ Yes | ✅ Native | ✅ Native |
-| Complexity | ⚠️ High | ✅ Low | ⚠️ Medium | ⚠️ Medium |
-| Cost | ✅ Low | ✅ Low | ⚠️ High | ✅ Medium |
+| Criterion        | Option A (Orchestrator in Docker) | Option B (Workers in Docker) | Option C (VMs) | Option D (Hybrid) |
+| ---------------- | --------------------------------- | ---------------------------- | -------------- | ----------------- |
+| Security         | ⚠️ Medium                         | ✅ High                      | ✅✅ Highest   | ✅ High           |
+| Local dev speed  | ⚠️ Slow                           | ✅ Fast                      | ❌ Very slow   | ✅ Fast           |
+| Production ready | ⚠️ Complex                        | ✅ Yes                       | ✅ Yes         | ✅ Yes            |
+| VM compatibility | ❌ No                             | ✅ Yes                       | ✅ Native      | ✅ Native         |
+| Complexity       | ⚠️ High                           | ✅ Low                       | ⚠️ Medium      | ⚠️ Medium         |
+| Cost             | ✅ Low                            | ✅ Low                       | ⚠️ High        | ✅ Medium         |
 
 **RECOMMENDED: Option D (Hybrid) with Option B for local, Option C for production**
 
@@ -454,16 +459,16 @@ exec claude \
 
 ```typescript
 interface DockerProviderConfig {
-  imageName: string;           // e.g., "gcr.io/intexuraos/claude-worker:latest"
-  networkName: string;         // e.g., "claude-worker-network"
-  memoryLimit: string;         // e.g., "8g"
-  cpuLimit: number;            // e.g., 2
-  timeoutSeconds: number;      // e.g., 7200 (2 hours)
+  imageName: string; // e.g., "gcr.io/intexuraos/claude-worker:latest"
+  networkName: string; // e.g., "claude-worker-network"
+  memoryLimit: string; // e.g., "8g"
+  cpuLimit: number; // e.g., 2
+  timeoutSeconds: number; // e.g., 7200 (2 hours)
 }
 
 interface WorkerConfig {
   taskId: string;
-  worktreePath: string;        // Host path to git worktree
+  worktreePath: string; // Host path to git worktree
   prompt: string;
   systemPrompt: string;
   secrets: {
@@ -471,7 +476,7 @@ interface WorkerConfig {
     LINEAR_API_KEY?: string;
     SENTRY_AUTH_TOKEN?: string;
   };
-  allowedHosts: string[];      // e.g., ["github.com", "api.linear.app"]
+  allowedHosts: string[]; // e.g., ["github.com", "api.linear.app"]
 }
 ```
 
@@ -502,6 +507,7 @@ async createWorker(taskId: string, config: WorkerConfig): Promise<Worker> {
 **Philosophy: Allow by default, block dangerous destinations**
 
 Claude Code requires full internet access for:
+
 - Web search (documentation, Stack Overflow, tutorials)
 - Package installation (npm, pnpm)
 - API access (GitHub, Linear, Sentry, Anthropic)
@@ -547,18 +553,19 @@ iptables -A OUTPUT -j ACCEPT
 
 **Why this approach:**
 
-| Blocked | Reason |
-|---------|--------|
+| Blocked           | Reason                                                           |
+| ----------------- | ---------------------------------------------------------------- |
 | `169.254.169.254` | Cloud metadata server - exposes instance credentials, IAM tokens |
-| `127.0.0.0/8` | Localhost - prevents access to host Firestore, other services |
-| `10.0.0.0/8` | Private IPs - prevents lateral movement in VPC |
-| `172.16.0.0/12` | Private IPs - Docker's default range, other containers |
-| `192.168.0.0/16` | Private IPs - home/office networks |
-| `169.254.0.0/16` | Link-local - various cloud provider metadata endpoints |
+| `127.0.0.0/8`     | Localhost - prevents access to host Firestore, other services    |
+| `10.0.0.0/8`      | Private IPs - prevents lateral movement in VPC                   |
+| `172.16.0.0/12`   | Private IPs - Docker's default range, other containers           |
+| `192.168.0.0/16`  | Private IPs - home/office networks                               |
+| `169.254.0.0/16`  | Link-local - various cloud provider metadata endpoints           |
 
 **Monitoring (not blocking):**
 
 For security visibility without breaking functionality:
+
 - Log all outbound connections to unusual ports
 - Alert on large data transfers (>100MB in 1 minute)
 - Track unique domains accessed per task
@@ -569,12 +576,12 @@ For security visibility without breaking functionality:
 
 ```typescript
 interface VMProviderConfig {
-  projectId: string;           // GCP project
-  zone: string;                // e.g., "us-central1-a"
-  machineType: string;         // e.g., "e2-standard-2"
-  sourceImage: string;         // Pre-built VM image with Claude
-  networkName: string;         // VPC network
-  serviceAccount: string;      // Minimal permissions SA
+  projectId: string; // GCP project
+  zone: string; // e.g., "us-central1-a"
+  machineType: string; // e.g., "e2-standard-2"
+  sourceImage: string; // Pre-built VM image with Claude
+  networkName: string; // VPC network
+  serviceAccount: string; // Minimal permissions SA
   timeoutSeconds: number;
 }
 
@@ -584,6 +591,7 @@ interface VMConfig extends WorkerConfig {
 ```
 
 **VM Image Requirements:**
+
 - Ubuntu 22.04 LTS base
 - Node.js 22 installed
 - Claude CLI installed
@@ -594,16 +602,16 @@ interface VMConfig extends WorkerConfig {
 
 ### 4.3 Security Controls Matrix
 
-| Control | Docker Implementation | VM Implementation |
-|---------|----------------------|-------------------|
-| Filesystem isolation | Read-only root + volume mounts | Full disk isolation |
-| Network isolation | Docker network + iptables | VPC firewall rules |
-| User isolation | Non-root user (UID 1000) | Non-root user |
-| Resource limits | cgroups (memory, CPU) | Instance type limits |
-| Secrets | Environment variables | Instance metadata |
-| Logging | Docker logs API | Serial port + cloud logging |
-| Timeout | Container kill after 2h | Instance preemptible timeout |
-| Cleanup | docker rm -f | Instance delete |
+| Control              | Docker Implementation          | VM Implementation            |
+| -------------------- | ------------------------------ | ---------------------------- |
+| Filesystem isolation | Read-only root + volume mounts | Full disk isolation          |
+| Network isolation    | Docker network + iptables      | VPC firewall rules           |
+| User isolation       | Non-root user (UID 1000)       | Non-root user                |
+| Resource limits      | cgroups (memory, CPU)          | Instance type limits         |
+| Secrets              | Environment variables          | Instance metadata            |
+| Logging              | Docker logs API                | Serial port + cloud logging  |
+| Timeout              | Container kill after 2h        | Instance preemptible timeout |
+| Cleanup              | docker rm -f                   | Instance delete              |
 
 ---
 
@@ -613,24 +621,24 @@ interface VMConfig extends WorkerConfig {
 
 #### 5.1.1 Files to Create
 
-| File | Purpose |
-|------|---------|
-| `workers/claude-worker/Dockerfile` | Worker container image |
-| `workers/claude-worker/entrypoint.sh` | Container entry script |
-| `workers/orchestrator/src/services/isolation/types.ts` | Interface definitions |
-| `workers/orchestrator/src/services/isolation/docker-provider.ts` | Docker implementation |
-| `workers/orchestrator/src/services/isolation/index.ts` | Provider factory |
-| `docker/docker-compose.worker-network.yaml` | Network definition |
-| `scripts/build-worker-image.sh` | Image build script |
+| File                                                             | Purpose                |
+| ---------------------------------------------------------------- | ---------------------- |
+| `workers/claude-worker/Dockerfile`                               | Worker container image |
+| `workers/claude-worker/entrypoint.sh`                            | Container entry script |
+| `workers/orchestrator/src/services/isolation/types.ts`           | Interface definitions  |
+| `workers/orchestrator/src/services/isolation/docker-provider.ts` | Docker implementation  |
+| `workers/orchestrator/src/services/isolation/index.ts`           | Provider factory       |
+| `docker/docker-compose.worker-network.yaml`                      | Network definition     |
+| `scripts/build-worker-image.sh`                                  | Image build script     |
 
 #### 5.1.2 Files to Modify
 
-| File | Changes |
-|------|---------|
+| File                                                   | Changes                             |
+| ------------------------------------------------------ | ----------------------------------- |
 | `workers/orchestrator/src/services/task-dispatcher.ts` | Replace tmux with IsolationProvider |
-| `workers/orchestrator/src/services/tmux-manager.ts` | Deprecate, keep for fallback |
-| `workers/orchestrator/src/main.ts` | Add provider initialization |
-| `workers/orchestrator/package.json` | Add dockerode dependency |
+| `workers/orchestrator/src/services/tmux-manager.ts`    | Deprecate, keep for fallback        |
+| `workers/orchestrator/src/main.ts`                     | Add provider initialization         |
+| `workers/orchestrator/package.json`                    | Add dockerode dependency            |
 
 #### 5.1.3 Implementation Steps
 
@@ -701,8 +709,8 @@ export class DockerProvider implements IsolationProvider {
   private workers: Map<string, { containerId: string; handle: WorkerHandle }>;
   private config: {
     imageName: string;
-    memoryLimit: number;  // bytes
-    cpuLimit: number;     // CPU shares
+    memoryLimit: number; // bytes
+    cpuLimit: number; // CPU shares
     networkMode: string;
   };
 
@@ -711,7 +719,7 @@ export class DockerProvider implements IsolationProvider {
     this.workers = new Map();
     this.config = {
       imageName: config.imageName ?? 'gcr.io/intexuraos/claude-worker:latest',
-      memoryLimit: 8 * 1024 * 1024 * 1024,  // 8GB
+      memoryLimit: 8 * 1024 * 1024 * 1024, // 8GB
       cpuLimit: 2,
       networkMode: config.networkMode ?? 'claude-worker-network',
     };
@@ -732,10 +740,7 @@ export class DockerProvider implements IsolationProvider {
     await fs.promises.writeFile(path.join(taskDir, 'system-prompt.txt'), systemPrompt);
 
     // Build environment variables
-    const env = [
-      `TASK_ID=${taskId}`,
-      ...Object.entries(secrets).map(([k, v]) => `${k}=${v}`),
-    ];
+    const env = [`TASK_ID=${taskId}`, ...Object.entries(secrets).map(([k, v]) => `${k}=${v}`)];
 
     // Create container
     const container = await this.docker.createContainer({
@@ -743,11 +748,11 @@ export class DockerProvider implements IsolationProvider {
       name: `claude-worker-${taskId}`,
       Env: env,
       WorkingDir: '/repo',
-      User: '1000:1000',  // Non-root
+      User: '1000:1000', // Non-root
       HostConfig: {
         Binds: [
-          `${worktreePath}:/repo:rw`,      // Worktree (read-write)
-          `${taskDir}:/task:ro`,           // Task files (read-only)
+          `${worktreePath}:/repo:rw`, // Worktree (read-write)
+          `${taskDir}:/task:ro`, // Task files (read-only)
         ],
         Memory: this.config.memoryLimit,
         NanoCpus: this.config.cpuLimit * 1e9,
@@ -758,7 +763,7 @@ export class DockerProvider implements IsolationProvider {
         },
         CapDrop: ['ALL'],
         SecurityOpt: ['no-new-privileges'],
-        AutoRemove: false,  // Keep for log retrieval
+        AutoRemove: false, // Keep for log retrieval
       },
     });
 
@@ -802,7 +807,7 @@ export class DockerProvider implements IsolationProvider {
 
     try {
       const container = this.docker.getContainer(worker.containerId);
-      await container.stop({ t: 10 });  // 10 second grace period
+      await container.stop({ t: 10 }); // 10 second grace period
     } catch (e) {
       // Container might already be stopped
     }
@@ -854,10 +859,13 @@ export class DockerProvider implements IsolationProvider {
         this.destroyWorker(taskId).then(() => resolve(-1));
       }, timeoutMs);
 
-      container.wait().then((data) => {
-        clearTimeout(timeout);
-        resolve(data.StatusCode);
-      }).catch(reject);
+      container
+        .wait()
+        .then((data) => {
+          clearTimeout(timeout);
+          resolve(data.StatusCode);
+        })
+        .catch(reject);
     });
   }
 }
@@ -910,7 +918,7 @@ async function executeTask(task: Task, provider: IsolationProvider): Promise<voi
       SENTRY_AUTH_TOKEN: process.env.SENTRY_AUTH_TOKEN ?? '',
     },
     allowedHosts: ['github.com', 'api.anthropic.com', 'api.linear.app', 'sentry.io'],
-    timeoutMs: 2 * 60 * 60 * 1000,  // 2 hours
+    timeoutMs: 2 * 60 * 60 * 1000, // 2 hours
     onLog: (chunk) => logForwarder.append(task.taskId, chunk),
     onComplete: (exitCode) => handleTaskCompletion(task, exitCode),
   };
@@ -931,11 +939,11 @@ async function executeTask(task: Task, provider: IsolationProvider): Promise<voi
 
 #### 5.2.1 Files to Create
 
-| File | Purpose |
-|------|---------|
+| File                                                         | Purpose               |
+| ------------------------------------------------------------ | --------------------- |
 | `workers/orchestrator/src/services/isolation/vm-provider.ts` | GCE VM implementation |
-| `terraform/modules/claude-worker-vm/main.tf` | VM Terraform module |
-| `packer/claude-worker-vm.pkr.hcl` | VM image builder |
+| `terraform/modules/claude-worker-vm/main.tf`                 | VM Terraform module   |
+| `packer/claude-worker-vm.pkr.hcl`                            | VM image builder      |
 
 #### 5.2.2 VM Provider Implementation
 
@@ -976,23 +984,29 @@ export class VMProvider implements IsolationProvider {
     // Create VM
     const [vm, operation] = await zone.createVM(vmName, {
       machineType: this.config.machineType,
-      disks: [{
-        boot: true,
-        autoDelete: true,
-        initializeParams: {
-          sourceImage: this.config.sourceImage,
-          diskSizeGb: 50,
+      disks: [
+        {
+          boot: true,
+          autoDelete: true,
+          initializeParams: {
+            sourceImage: this.config.sourceImage,
+            diskSizeGb: 50,
+          },
         },
-      }],
-      networkInterfaces: [{
-        network: this.config.network,
-        subnetwork: this.config.subnetwork,
-        accessConfigs: [],  // No external IP
-      }],
-      serviceAccounts: [{
-        email: this.config.serviceAccount,
-        scopes: ['https://www.googleapis.com/auth/cloud-platform'],
-      }],
+      ],
+      networkInterfaces: [
+        {
+          network: this.config.network,
+          subnetwork: this.config.subnetwork,
+          accessConfigs: [], // No external IP
+        },
+      ],
+      serviceAccounts: [
+        {
+          email: this.config.serviceAccount,
+          scopes: ['https://www.googleapis.com/auth/cloud-platform'],
+        },
+      ],
       metadata: {
         items: [
           { key: 'startup-script', value: startupScript },
@@ -1000,7 +1014,7 @@ export class VMProvider implements IsolationProvider {
         ],
       },
       scheduling: {
-        preemptible: true,  // Auto-kill after 24h max
+        preemptible: true, // Auto-kill after 24h max
       },
       labels: {
         'claude-worker': 'true',
@@ -1139,7 +1153,7 @@ curl -X POST http://metadata.google.internal/computeMetadata/v1/instance/attribu
         }
         return 1;
       }
-      await sleep(5000);  // Poll every 5 seconds
+      await sleep(5000); // Poll every 5 seconds
     }
 
     // Timeout - kill VM
@@ -1218,7 +1232,9 @@ describe('DockerProvider', () => {
       createContainer: vi.fn(),
       getContainer: vi.fn(),
     };
-    provider = new DockerProvider({ /* config */ });
+    provider = new DockerProvider({
+      /* config */
+    });
     // @ts-expect-error - inject mock
     provider.docker = mockDocker;
   });
@@ -1270,9 +1286,7 @@ describe('DockerProvider', () => {
       expect(mockDocker.createContainer).toHaveBeenCalledWith(
         expect.objectContaining({
           HostConfig: expect.objectContaining({
-            Binds: expect.arrayContaining([
-              '/host/path/worktree:/repo:rw',
-            ]),
+            Binds: expect.arrayContaining(['/host/path/worktree:/repo:rw']),
           }),
         })
       );
@@ -1299,7 +1313,7 @@ describe('DockerProvider', () => {
       expect(mockDocker.createContainer).toHaveBeenCalledWith(
         expect.objectContaining({
           HostConfig: expect.objectContaining({
-            Memory: 8 * 1024 * 1024 * 1024,  // 8GB
+            Memory: 8 * 1024 * 1024 * 1024, // 8GB
           }),
         })
       );
@@ -1360,15 +1374,17 @@ describe('DockerProvider', () => {
     });
 
     it('MUST reject invalid worktree path', async () => {
-      await expect(provider.createWorker({
-        taskId: 'task-1',
-        worktreePath: '/nonexistent/path',
-        prompt: 'Test',
-        systemPrompt: '',
-        secrets: {},
-        allowedHosts: [],
-        timeoutMs: 60000,
-      })).rejects.toThrow('Invalid worktree');
+      await expect(
+        provider.createWorker({
+          taskId: 'task-1',
+          worktreePath: '/nonexistent/path',
+          prompt: 'Test',
+          systemPrompt: '',
+          secrets: {},
+          allowedHosts: [],
+          timeoutMs: 60000,
+        })
+      ).rejects.toThrow('Invalid worktree');
     });
   });
 
@@ -1738,7 +1754,9 @@ describe('E2E: Docker Container Isolation', () => {
 
   beforeAll(async () => {
     // Build test image
-    await execAsync('docker build -t claude-worker-test -f workers/claude-worker/Dockerfile workers/claude-worker/');
+    await execAsync(
+      'docker build -t claude-worker-test -f workers/claude-worker/Dockerfile workers/claude-worker/'
+    );
 
     // Create test worktree
     testWorktree = '/tmp/e2e-test-worktree';
@@ -1749,7 +1767,7 @@ describe('E2E: Docker Container Isolation', () => {
 
     provider = new DockerProvider({
       imageName: 'claude-worker-test',
-      networkMode: 'none',  // Full network isolation for tests
+      networkMode: 'none', // Full network isolation for tests
     });
   });
 
@@ -1782,15 +1800,15 @@ describe('E2E: Docker Container Isolation', () => {
     const handle = await provider.createWorker({
       taskId: 'e2e-test-2',
       worktreePath: testWorktree,
-      prompt: 'sleep 3600',  // Sleep for 1 hour
+      prompt: 'sleep 3600', // Sleep for 1 hour
       systemPrompt: '',
       secrets: {},
       allowedHosts: [],
-      timeoutMs: 5000,  // 5 second timeout
+      timeoutMs: 5000, // 5 second timeout
     });
 
     const exitCode = await provider.waitForCompletion('e2e-test-2', 5000);
-    expect(exitCode).toBe(-1);  // Timeout
+    expect(exitCode).toBe(-1); // Timeout
 
     const running = await provider.isWorkerRunning('e2e-test-2');
     expect(running).toBe(false);
@@ -1920,43 +1938,43 @@ These tests MUST be performed manually before production deployment.
 
 #### 6.3.1 Security Penetration Tests
 
-| Test ID | Test Name | Steps | Expected Result | Pass/Fail |
-|---------|-----------|-------|-----------------|-----------|
-| SEC-001 | Host file read | 1. Start worker container<br>2. Run: `cat /etc/shadow`<br>3. Observe output | Permission denied or file not found | |
-| SEC-002 | Host process list | 1. Start worker container<br>2. Run: `ps aux \| wc -l`<br>3. Observe count | Less than 10 processes visible | |
-| SEC-003 | Docker socket access | 1. Start worker container<br>2. Run: `ls -la /var/run/docker.sock`<br>3. Observe output | File not found | |
-| SEC-004 | Sudo escalation | 1. Start worker container<br>2. Run: `sudo whoami`<br>3. Observe output | sudo not found or permission denied | |
-| SEC-005 | Capability check | 1. Start worker container<br>2. Run: `capsh --print`<br>3. Observe output | Current: = (empty) | |
-| SEC-006 | Public internet access | 1. Start worker container<br>2. Run: `curl -s https://stackoverflow.com`<br>3. Observe output | Success (200 OK) - internet must work | |
-| SEC-007 | Metadata theft | 1. Start worker container<br>2. Run: `curl http://169.254.169.254/latest/meta-data/`<br>3. Observe output | Connection refused | |
-| SEC-008 | Container escape | 1. Start worker container<br>2. Run: `nsenter --target 1 --mount --uts --ipc --net --pid`<br>3. Observe output | Permission denied | |
-| SEC-009 | Worktree isolation | 1. Start two workers (task-A, task-B)<br>2. In task-A, try: `cat /worktrees/task-B/secret.txt`<br>3. Observe output | File not found or permission denied | |
-| SEC-010 | Private IP blocked | 1. Start worker container<br>2. Run: `curl -s http://10.0.0.1:8080`<br>3. Observe output | Connection refused (private IPs blocked) | |
+| Test ID | Test Name              | Steps                                                                                                               | Expected Result                          | Pass/Fail |
+| ------- | ---------------------- | ------------------------------------------------------------------------------------------------------------------- | ---------------------------------------- | --------- |
+| SEC-001 | Host file read         | 1. Start worker container<br>2. Run: `cat /etc/shadow`<br>3. Observe output                                         | Permission denied or file not found      |           |
+| SEC-002 | Host process list      | 1. Start worker container<br>2. Run: `ps aux \| wc -l`<br>3. Observe count                                          | Less than 10 processes visible           |           |
+| SEC-003 | Docker socket access   | 1. Start worker container<br>2. Run: `ls -la /var/run/docker.sock`<br>3. Observe output                             | File not found                           |           |
+| SEC-004 | Sudo escalation        | 1. Start worker container<br>2. Run: `sudo whoami`<br>3. Observe output                                             | sudo not found or permission denied      |           |
+| SEC-005 | Capability check       | 1. Start worker container<br>2. Run: `capsh --print`<br>3. Observe output                                           | Current: = (empty)                       |           |
+| SEC-006 | Public internet access | 1. Start worker container<br>2. Run: `curl -s https://stackoverflow.com`<br>3. Observe output                       | Success (200 OK) - internet must work    |           |
+| SEC-007 | Metadata theft         | 1. Start worker container<br>2. Run: `curl http://169.254.169.254/latest/meta-data/`<br>3. Observe output           | Connection refused                       |           |
+| SEC-008 | Container escape       | 1. Start worker container<br>2. Run: `nsenter --target 1 --mount --uts --ipc --net --pid`<br>3. Observe output      | Permission denied                        |           |
+| SEC-009 | Worktree isolation     | 1. Start two workers (task-A, task-B)<br>2. In task-A, try: `cat /worktrees/task-B/secret.txt`<br>3. Observe output | File not found or permission denied      |           |
+| SEC-010 | Private IP blocked     | 1. Start worker container<br>2. Run: `curl -s http://10.0.0.1:8080`<br>3. Observe output                            | Connection refused (private IPs blocked) |           |
 
 #### 6.3.2 Functional Tests
 
-| Test ID | Test Name | Steps | Expected Result | Pass/Fail |
-|---------|-----------|-------|-----------------|-----------|
-| FUN-001 | Git operations | 1. Start worker<br>2. Run: `git status && git log -1`<br>3. Observe output | Shows worktree status and commit | |
-| FUN-002 | GitHub CLI | 1. Start worker with GITHUB_TOKEN<br>2. Run: `gh auth status`<br>3. Observe output | Authenticated as expected user | |
-| FUN-003 | File creation | 1. Start worker<br>2. Run: `echo "test" > /repo/newfile.txt`<br>3. Check host worktree | File exists with content | |
-| FUN-004 | Branch creation | 1. Start worker<br>2. Run: `git checkout -b test-branch`<br>3. Check host worktree | Branch exists | |
-| FUN-005 | Commit creation | 1. Start worker<br>2. Run: `touch /repo/x && git add x && git commit -m "test"`<br>3. Check host worktree | Commit exists | |
-| FUN-006 | Log capture | 1. Start worker with log callback<br>2. Run: `echo "logged line"`<br>3. Check callback received | "logged line" in logs | |
-| FUN-007 | Timeout kill | 1. Start worker with 10s timeout<br>2. Run: `sleep 60`<br>3. Wait 15 seconds | Worker killed, status=timeout | |
-| FUN-008 | Graceful stop | 1. Start worker running: `trap 'echo SIGTERM' TERM; sleep 60`<br>2. Call destroyWorker()<br>3. Check logs | "SIGTERM" in logs | |
-| FUN-009 | Exit code capture | 1. Start worker<br>2. Run: `exit 42`<br>3. Check exitCode | exitCode = 42 | |
-| FUN-010 | Large output | 1. Start worker<br>2. Run: `seq 1 100000`<br>3. Check logs | All 100000 lines captured | |
+| Test ID | Test Name         | Steps                                                                                                     | Expected Result                  | Pass/Fail |
+| ------- | ----------------- | --------------------------------------------------------------------------------------------------------- | -------------------------------- | --------- |
+| FUN-001 | Git operations    | 1. Start worker<br>2. Run: `git status && git log -1`<br>3. Observe output                                | Shows worktree status and commit |           |
+| FUN-002 | GitHub CLI        | 1. Start worker with GITHUB_TOKEN<br>2. Run: `gh auth status`<br>3. Observe output                        | Authenticated as expected user   |           |
+| FUN-003 | File creation     | 1. Start worker<br>2. Run: `echo "test" > /repo/newfile.txt`<br>3. Check host worktree                    | File exists with content         |           |
+| FUN-004 | Branch creation   | 1. Start worker<br>2. Run: `git checkout -b test-branch`<br>3. Check host worktree                        | Branch exists                    |           |
+| FUN-005 | Commit creation   | 1. Start worker<br>2. Run: `touch /repo/x && git add x && git commit -m "test"`<br>3. Check host worktree | Commit exists                    |           |
+| FUN-006 | Log capture       | 1. Start worker with log callback<br>2. Run: `echo "logged line"`<br>3. Check callback received           | "logged line" in logs            |           |
+| FUN-007 | Timeout kill      | 1. Start worker with 10s timeout<br>2. Run: `sleep 60`<br>3. Wait 15 seconds                              | Worker killed, status=timeout    |           |
+| FUN-008 | Graceful stop     | 1. Start worker running: `trap 'echo SIGTERM' TERM; sleep 60`<br>2. Call destroyWorker()<br>3. Check logs | "SIGTERM" in logs                |           |
+| FUN-009 | Exit code capture | 1. Start worker<br>2. Run: `exit 42`<br>3. Check exitCode                                                 | exitCode = 42                    |           |
+| FUN-010 | Large output      | 1. Start worker<br>2. Run: `seq 1 100000`<br>3. Check logs                                                | All 100000 lines captured        |           |
 
 #### 6.3.3 Performance Tests
 
-| Test ID | Test Name | Steps | Expected Result | Pass/Fail |
-|---------|-----------|-------|-----------------|-----------|
-| PERF-001 | Container startup | 1. Measure time from createWorker() to first log | < 5 seconds | |
-| PERF-002 | Container cleanup | 1. Measure time for destroyWorker() | < 3 seconds | |
-| PERF-003 | Concurrent workers | 1. Start 5 workers simultaneously<br>2. Check all start successfully | All 5 running within 30s | |
-| PERF-004 | Memory under limit | 1. Run worker allocating 7GB<br>2. Check completion | Completes successfully | |
-| PERF-005 | Log throughput | 1. Run worker generating 1MB/s logs<br>2. Check log capture rate | Logs captured without loss | |
+| Test ID  | Test Name          | Steps                                                                | Expected Result            | Pass/Fail |
+| -------- | ------------------ | -------------------------------------------------------------------- | -------------------------- | --------- |
+| PERF-001 | Container startup  | 1. Measure time from createWorker() to first log                     | < 5 seconds                |           |
+| PERF-002 | Container cleanup  | 1. Measure time for destroyWorker()                                  | < 3 seconds                |           |
+| PERF-003 | Concurrent workers | 1. Start 5 workers simultaneously<br>2. Check all start successfully | All 5 running within 30s   |           |
+| PERF-004 | Memory under limit | 1. Run worker allocating 7GB<br>2. Check completion                  | Completes successfully     |           |
+| PERF-005 | Log throughput     | 1. Run worker generating 1MB/s logs<br>2. Check log capture rate     | Logs captured without loss |           |
 
 ---
 
@@ -1964,24 +1982,25 @@ These tests MUST be performed manually before production deployment.
 
 ### 7.1 Pre-Deployment Checklist
 
-| # | Item | Verified |
-|---|------|----------|
-| 1 | Worker Docker image built and pushed to registry | ☐ |
-| 2 | All unit tests passing | ☐ |
-| 3 | All integration tests passing | ☐ |
-| 4 | All SEC-* manual tests passing | ☐ |
-| 5 | All FUN-* manual tests passing | ☐ |
-| 6 | All PERF-* tests within acceptable limits | ☐ |
-| 7 | Network isolation rules verified | ☐ |
-| 8 | Resource limits verified (cgroups) | ☐ |
-| 9 | Documentation updated | ☐ |
-| 10 | Rollback plan documented | ☐ |
+| #   | Item                                             | Verified |
+| --- | ------------------------------------------------ | -------- |
+| 1   | Worker Docker image built and pushed to registry | ☐        |
+| 2   | All unit tests passing                           | ☐        |
+| 3   | All integration tests passing                    | ☐        |
+| 4   | All SEC-\* manual tests passing                  | ☐        |
+| 5   | All FUN-\* manual tests passing                  | ☐        |
+| 6   | All PERF-\* tests within acceptable limits       | ☐        |
+| 7   | Network isolation rules verified                 | ☐        |
+| 8   | Resource limits verified (cgroups)               | ☐        |
+| 9   | Documentation updated                            | ☐        |
+| 10  | Rollback plan documented                         | ☐        |
 
 ### 7.2 Rollback Plan
 
 If issues arise after deployment:
 
 1. **Immediate rollback:**
+
    ```bash
    # Switch provider to 'local' (tmux-based, no isolation)
    export ISOLATION_PROVIDER=local
@@ -2002,13 +2021,13 @@ If issues arise after deployment:
 
 Configure these alerts:
 
-| Alert | Condition | Action |
-|-------|-----------|--------|
-| Container OOM killed | Exit code 137 | Investigate memory leak |
-| Container timeout | > 5 timeouts/hour | Check for stuck tasks |
-| Network egress blocked | > 100 blocks/hour | Potential exfiltration attempt |
-| Security policy violation | Any SELinux/AppArmor deny | Investigate escape attempt |
-| Worker startup failure | > 3 failures/hour | Check Docker daemon |
+| Alert                     | Condition                 | Action                         |
+| ------------------------- | ------------------------- | ------------------------------ |
+| Container OOM killed      | Exit code 137             | Investigate memory leak        |
+| Container timeout         | > 5 timeouts/hour         | Check for stuck tasks          |
+| Network egress blocked    | > 100 blocks/hour         | Potential exfiltration attempt |
+| Security policy violation | Any SELinux/AppArmor deny | Investigate escape attempt     |
+| Worker startup failure    | > 3 failures/hour         | Check Docker daemon            |
 
 ---
 
@@ -2016,43 +2035,43 @@ Configure these alerts:
 
 ### Environment Variables
 
-| Variable | Required | Default | Description |
-|----------|----------|---------|-------------|
-| `ISOLATION_PROVIDER` | No | `docker` | Provider type: `docker`, `vm`, `local` |
-| `CLAUDE_WORKER_IMAGE` | No | `gcr.io/intexuraos/claude-worker:latest` | Worker container image |
-| `CLAUDE_WORKER_NETWORK` | No | `claude-worker-network` | Docker network name |
-| `WORKER_MEMORY_LIMIT` | No | `8g` | Container memory limit |
-| `WORKER_CPU_LIMIT` | No | `2` | Container CPU limit |
-| `WORKER_TIMEOUT_SECONDS` | No | `7200` | Task timeout (2 hours) |
+| Variable                 | Required | Default                                  | Description                            |
+| ------------------------ | -------- | ---------------------------------------- | -------------------------------------- |
+| `ISOLATION_PROVIDER`     | No       | `docker`                                 | Provider type: `docker`, `vm`, `local` |
+| `CLAUDE_WORKER_IMAGE`    | No       | `gcr.io/intexuraos/claude-worker:latest` | Worker container image                 |
+| `CLAUDE_WORKER_NETWORK`  | No       | `claude-worker-network`                  | Docker network name                    |
+| `WORKER_MEMORY_LIMIT`    | No       | `8g`                                     | Container memory limit                 |
+| `WORKER_CPU_LIMIT`       | No       | `2`                                      | Container CPU limit                    |
+| `WORKER_TIMEOUT_SECONDS` | No       | `7200`                                   | Task timeout (2 hours)                 |
 
 ### VM Provider Variables
 
-| Variable | Required | Default | Description |
-|----------|----------|---------|-------------|
-| `PROJECT_ID` | Yes | - | GCP project ID |
-| `GCE_ZONE` | No | `us-central1-a` | GCE zone |
-| `GCE_MACHINE_TYPE` | No | `e2-standard-2` | VM machine type |
-| `CLAUDE_WORKER_VM_IMAGE` | Yes | - | VM image path |
-| `CLAUDE_WORKER_SA` | Yes | - | Service account email |
-| `VPC_NETWORK` | No | `default` | VPC network |
-| `VPC_SUBNETWORK` | No | `default` | VPC subnetwork |
+| Variable                 | Required | Default         | Description           |
+| ------------------------ | -------- | --------------- | --------------------- |
+| `PROJECT_ID`             | Yes      | -               | GCP project ID        |
+| `GCE_ZONE`               | No       | `us-central1-a` | GCE zone              |
+| `GCE_MACHINE_TYPE`       | No       | `e2-standard-2` | VM machine type       |
+| `CLAUDE_WORKER_VM_IMAGE` | Yes      | -               | VM image path         |
+| `CLAUDE_WORKER_SA`       | Yes      | -               | Service account email |
+| `VPC_NETWORK`            | No       | `default`       | VPC network           |
+| `VPC_SUBNETWORK`         | No       | `default`       | VPC subnetwork        |
 
 ---
 
 ## Appendix B: Glossary
 
-| Term | Definition |
-|------|------------|
-| **Worktree** | Isolated git working directory for a single task |
-| **Isolation Provider** | Abstract interface for running isolated workers |
-| **Docker Provider** | Isolation using Docker containers |
-| **VM Provider** | Isolation using GCE virtual machines |
-| **Local Provider** | No isolation (tmux-based, for debugging only) |
-| **Egress** | Outbound network traffic from worker |
-| **Ingress** | Inbound network traffic to worker |
-| **cgroups** | Linux kernel feature for resource limits |
-| **seccomp** | Linux kernel feature for syscall filtering |
-| **OOM** | Out of memory (kernel kills process) |
+| Term                   | Definition                                       |
+| ---------------------- | ------------------------------------------------ |
+| **Worktree**           | Isolated git working directory for a single task |
+| **Isolation Provider** | Abstract interface for running isolated workers  |
+| **Docker Provider**    | Isolation using Docker containers                |
+| **VM Provider**        | Isolation using GCE virtual machines             |
+| **Local Provider**     | No isolation (tmux-based, for debugging only)    |
+| **Egress**             | Outbound network traffic from worker             |
+| **Ingress**            | Inbound network traffic to worker                |
+| **cgroups**            | Linux kernel feature for resource limits         |
+| **seccomp**            | Linux kernel feature for syscall filtering       |
+| **OOM**                | Out of memory (kernel kills process)             |
 
 ---
 

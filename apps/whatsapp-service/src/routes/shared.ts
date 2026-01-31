@@ -454,21 +454,26 @@ export interface ReplyContext {
 export function extractReplyContext(payload: unknown): ReplyContext | null {
   const value = extractFirstValue(payload);
   const message = value?.messages?.[0];
+  /* v8 ignore start -- ts-type: message undefined check @preserve */
   if (message === undefined) return null;
-/* v8 ignore ts-type -- TypeScript type narrowing makes branch unreachable */
+  /* v8 ignore stop @preserve */
+/* v8 ignore start -- ts-type: TypeScript type narrowing makes branch unreachable @preserve */
   const context = message.context;
+  /* v8 ignore stop @preserve */
   if (context === undefined) return null;
-/* v8 ignore ts-type -- TypeScript type narrowing makes branch unreachable */
+/* v8 ignore start -- ts-type: TypeScript type narrowing makes branch unreachable @preserve */
   if (typeof context.id !== 'string') return null;
+  /* v8 ignore stop @preserve */
 
   const result: ReplyContext = {
     replyToWamid: context.id,
   };
-/* v8 ignore ts-type -- TypeScript type narrowing makes branch unreachable */
+/* v8 ignore start -- ts-type: TypeScript type narrowing makes branch unreachable @preserve */
 
   if (typeof context.from === 'string') {
     result.from = context.from;
   }
+  /* v8 ignore stop @preserve */
 
   return result;
 }
@@ -527,10 +532,13 @@ export interface ButtonResponseInfo {
  * @see https://developers.facebook.com/docs/whatsapp/cloud-api/webhooks/components#button-object
  */
 export function extractButtonResponse(payload: unknown): ButtonResponseInfo | null {
-/* v8 ignore ts-type -- TypeScript type narrowing makes branch unreachable */
+/* v8 ignore start -- ts-type: TypeScript type narrowing makes branch unreachable @preserve */
   const value = extractFirstValue(payload);
+  /* v8 ignore stop @preserve */
   const message = value?.messages?.[0];
+  /* v8 ignore start -- ts-type: message undefined check @preserve */
   if (message === undefined) return null;
+  /* v8 ignore stop @preserve */
   const interactive = message.interactive;
   if (interactive === undefined) return null;
 
@@ -541,11 +549,14 @@ export function extractButtonResponse(payload: unknown): ButtonResponseInfo | nu
 
   // Extract button response info
   const buttonReply = interactive.button_reply;
-/* v8 ignore ts-type -- TypeScript type narrowing makes branch unreachable */
+/* v8 ignore start -- ts-type: TypeScript type narrowing makes branch unreachable @preserve */
   if (buttonReply.id === undefined || buttonReply.title === undefined) {
     return null;
   }
+  /* v8 ignore stop @preserve */
+  /* v8 ignore start -- ts-type: buttonReply type check @preserve */
   if (typeof buttonReply.id !== 'string' || typeof buttonReply.title !== 'string') {
+  /* v8 ignore stop @preserve */
     return null;
   }
 

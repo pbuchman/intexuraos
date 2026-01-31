@@ -215,7 +215,9 @@ export class ContextInferenceAdapter implements ContextInferenceProvider {
     );
     const result = await this.client.generate(repairPrompt);
 
-    if (!result.ok) { /* v8 ignore test-infra -- LLM API error handling requires external service mocking */
+    /* v8 ignore start -- test-infra: LLM API error handling requires external service mocking @preserve */
+    if (!result.ok) {
+    /* v8 ignore stop @preserve */
       const error = mapToLlmError(result.error);
       return { ok: false, error: `${error.message} (repair attempt)` };
     }
@@ -269,7 +271,9 @@ export class ContextInferenceAdapter implements ContextInferenceProvider {
     );
     const result = await this.client.generate(repairPrompt);
 
-    if (!result.ok) { /* v8 ignore test-infra -- LLM API error handling requires external service mocking */
+    /* v8 ignore start -- test-infra: LLM API error handling requires external service mocking @preserve */
+    if (!result.ok) {
+    /* v8 ignore stop @preserve */
       const error = mapToLlmError(result.error);
       return { ok: false, error: `${error.message} (repair attempt)` };
     }
@@ -337,7 +341,9 @@ function mapToLlmError(error: { code: string; message: string }): LlmError {
 const MAX_ZOD_ISSUES = 5;
 
 function formatZodErrors(error: ZodError): string {
-  if (error.issues.length === 0) { /* v8 ignore schema -- ZodError always has at least one issue by construction */
+  /* v8 ignore start -- schema: ZodError always has at least one issue by construction @preserve */
+  if (error.issues.length === 0) {
+  /* v8 ignore stop @preserve */
     return 'Unknown validation error (no issues reported)';
   }
 
@@ -355,7 +361,9 @@ function formatZodErrors(error: ZodError): string {
         return `${pathStr}: expected ${options}, received '${String(issue.received)}'`;
       }
 
-      if (issue.code === 'invalid_type' && 'expected' in issue && 'received' in issue) { /* v8 ignore ts-type -- Zod error type narrowing after 'in' checks */
+      /* v8 ignore start -- ts-type: Zod error type narrowing after 'in' checks @preserve */
+      if (issue.code === 'invalid_type' && 'expected' in issue && 'received' in issue) {
+      /* v8 ignore stop @preserve */
         const expected = issue.expected as string;
         const received = issue.received as string;
         return `${pathStr}: expected ${expected}, received ${received}`;

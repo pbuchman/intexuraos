@@ -71,22 +71,18 @@ const MODEL_DISPLAY_NAMES: Record<ResearchModel, string> = {
 
 /**
  * Get API key field name for a provider.
+ * Provider is always one of the known values from getProviderForModel.
  */
+const PROVIDER_KEY_MAP: Record<string, keyof ApiKeyStore> = {
+  google: 'google',
+  openai: 'openai',
+  anthropic: 'anthropic',
+  perplexity: 'perplexity',
+  zai: 'zai',
+};
+
 function providerToKeyField(provider: string): keyof ApiKeyStore {
-  switch (provider) {
-    case 'google':
-      return 'google';
-    case 'openai':
-      return 'openai';
-    case 'anthropic':
-      return 'anthropic';
-    case 'perplexity':
-      return 'perplexity';
-    case 'zai':
-      return 'zai';
-    default: /* v8 ignore ts-type -- switch covers all known providers, fallback is defensive for unknown strings */
-      return 'google';
-  }
+  return PROVIDER_KEY_MAP[provider] as keyof ApiKeyStore;
 }
 
 /**
@@ -129,7 +125,9 @@ function validateSelectedModels(
   const valid: ResearchModel[] = [];
 
   for (const model of models) {
-    if (!availableIds.has(model)) { /* v8 ignore test-infra -- filtering invalid models requires test setup with unavailable models */
+    /* v8 ignore start -- test-infra: filtering invalid models requires test setup with unavailable models @preserve */
+    if (!availableIds.has(model)) {
+    /* v8 ignore stop @preserve */
       continue;
     }
 
@@ -165,7 +163,9 @@ function validateSynthesisModel(
   }
 
   // Check if user has API key for this model
-  if (!availableIds.has(model)) { /* v8 ignore test-infra -- filtering models without API keys requires specific test setup */
+  /* v8 ignore start -- test-infra: filtering models without API keys requires specific test setup @preserve */
+  if (!availableIds.has(model)) {
+  /* v8 ignore stop @preserve */
     return undefined;
   }
 

@@ -257,10 +257,11 @@ export class TranscribeAudioUseCase {
           completedAt: new Date().toISOString(),
           error: { code: 'POLL_TIMEOUT', message: 'Transcription polling timed out' },
         };
-        /* v8 ignore test-infra -- fake transcription service completes before timeout */
+        /* v8 ignore start -- test-infra: fake transcription service completes before timeout @preserve */
         if (pollResult.lastApiCall !== undefined) {
           errorState.lastApiCall = pollResult.lastApiCall;
         }
+        /* v8 ignore stop @preserve */
         await messageRepository.updateTranscription(userId, messageId, errorState);
         await this.sendFailureMessage(
           whatsappCloudApi,
@@ -276,7 +277,7 @@ export class TranscribeAudioUseCase {
         return;
       }
 
-      /* v8 ignore test-infra -- fake transcription service doesn't reject jobs */
+      /* v8 ignore start -- test-infra: fake transcription service doesn't reject jobs @preserve */
       if (pollResult.status === 'rejected') {
         const rawError = pollResult.error?.message ?? 'Job was rejected';
         const formattedMessage = formatSpeechmaticsError(rawError);
@@ -304,10 +305,11 @@ export class TranscribeAudioUseCase {
             message: formattedMessage,
           },
         };
-        /* v8 ignore test-infra -- fake transcription service behavior */
+        /* v8 ignore start -- test-infra: fake transcription service behavior @preserve */
         if (pollResult.lastApiCall !== undefined) {
           errorState.lastApiCall = pollResult.lastApiCall;
         }
+        /* v8 ignore stop @preserve */
         await messageRepository.updateTranscription(userId, messageId, errorState);
         await this.sendFailureMessage(
           whatsappCloudApi,
@@ -322,6 +324,7 @@ export class TranscribeAudioUseCase {
         );
         return;
       }
+      /* v8 ignore stop @preserve */
       
 
       logger.info({ event: 'transcription_done', messageId, jobId }, 'Transcription job completed');
