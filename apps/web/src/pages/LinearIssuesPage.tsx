@@ -22,11 +22,11 @@ import type { FailedLinearIssue, LinearIssue, ListIssuesResponse } from '@/types
 const POLLING_INTERVAL_MS = 60_000; // 1 minute
 
 const PRIORITY_COLORS: Record<number, string> = {
-  0: 'bg-slate-100 text-slate-600',
-  1: 'bg-red-100 text-red-700',
-  2: 'bg-orange-100 text-orange-700',
-  3: 'bg-blue-100 text-blue-700',
-  4: 'bg-slate-100 text-slate-500',
+  0: 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-400',
+  1: 'bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-300',
+  2: 'bg-orange-100 text-orange-700 dark:bg-orange-900/50 dark:text-orange-300',
+  3: 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300',
+  4: 'bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-400',
 };
 
 const PRIORITY_LABELS: Record<number, string> = {
@@ -59,10 +59,10 @@ function IssueCard({ issue }: IssueCardProps): React.JSX.Element {
       href={issue.url}
       target="_blank"
       rel="noopener noreferrer"
-      className="block rounded-lg border border-slate-200 bg-white p-4 transition-all hover:border-blue-300 hover:shadow-md"
+      className="block rounded-lg border border-slate-200 bg-white p-4 transition-all hover:border-blue-300 hover:shadow-md dark:border-slate-600 dark:bg-slate-700 dark:hover:border-blue-500"
     >
       <div className="mb-2 flex items-start justify-between gap-2">
-        <span className="text-xs font-medium text-slate-500">{issue.identifier}</span>
+        <span className="text-xs font-medium text-slate-500 dark:text-slate-400">{issue.identifier}</span>
         <span
           className={`rounded px-2 py-0.5 text-xs font-medium ${String(PRIORITY_COLORS[issue.priority] ?? PRIORITY_COLORS[0])}`}
         >
@@ -70,13 +70,13 @@ function IssueCard({ issue }: IssueCardProps): React.JSX.Element {
         </span>
       </div>
 
-      <h4 className="mb-2 font-medium text-slate-900 line-clamp-2">{issue.title}</h4>
+      <h4 className="mb-2 font-medium text-slate-900 line-clamp-2 dark:text-slate-100">{issue.title}</h4>
 
       {issue.description !== null && issue.description !== '' && (
-        <p className="mb-2 text-sm text-slate-500 line-clamp-2">{issue.description}</p>
+        <p className="mb-2 text-sm text-slate-500 line-clamp-2 dark:text-slate-400">{issue.description}</p>
       )}
 
-      <div className="flex items-center justify-between text-xs text-slate-400">
+      <div className="flex items-center justify-between text-xs text-slate-400 dark:text-slate-500">
         <span>{issue.status?.name ?? 'Unknown'}</span>
         <ExternalLink className="h-3 w-3" />
       </div>
@@ -95,21 +95,21 @@ function IssueColumn({
   title,
   icon,
   issues,
-  colorClass = 'bg-slate-50',
+  colorClass = 'bg-slate-50 dark:bg-slate-800',
 }: IssueColumnProps): React.JSX.Element {
   return (
     <div className={`flex flex-col rounded-lg ${colorClass} p-4`}>
       <div className="mb-4 flex items-center gap-2">
         {icon}
-        <h3 className="font-semibold text-slate-700">{title}</h3>
-        <span className="rounded-full bg-slate-200 px-2 py-0.5 text-xs font-medium text-slate-600">
+        <h3 className="font-semibold text-slate-700 dark:text-slate-200">{title}</h3>
+        <span className="rounded-full bg-slate-200 px-2 py-0.5 text-xs font-medium text-slate-600 dark:bg-slate-600 dark:text-slate-300">
           {issues.length}
         </span>
       </div>
 
       <div className="flex-1 space-y-3 overflow-y-auto">
         {issues.length === 0 ? (
-          <p className="text-center text-sm text-slate-400 py-8">No issues</p>
+          <p className="text-center text-sm text-slate-400 py-8 dark:text-slate-500">No issues</p>
         ) : (
           issues.map((issue) => <IssueCard key={issue.id} issue={issue} />)
         )}
@@ -129,7 +129,7 @@ function StackedSection({
   title,
   icon,
   issues,
-  colorClass = 'bg-white',
+  colorClass = 'bg-white dark:bg-slate-700',
 }: StackedSectionProps): React.JSX.Element | null {
   if (issues.length === 0) {
     return null;
@@ -139,8 +139,8 @@ function StackedSection({
     <div className={`mb-4 rounded-lg ${colorClass} p-3 last:mb-0`}>
       <div className="mb-3 flex items-center gap-2">
         {icon}
-        <h4 className="text-sm font-semibold text-slate-700">{title}</h4>
-        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-500">
+        <h4 className="text-sm font-semibold text-slate-700 dark:text-slate-200">{title}</h4>
+        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-500 dark:bg-slate-600 dark:text-slate-300">
           {issues.length}
         </span>
       </div>
@@ -166,15 +166,15 @@ interface StackedColumnProps {
 function StackedColumn({
   title,
   sections,
-  colorClass = 'bg-slate-50',
+  colorClass = 'bg-slate-50 dark:bg-slate-800',
 }: StackedColumnProps): React.JSX.Element {
   const totalIssues = sections.reduce((sum, section) => sum + section.issues.length, 0);
 
   return (
     <div className={`flex flex-col rounded-lg ${colorClass} p-4`}>
       <div className="mb-4 flex items-center gap-2">
-        <h3 className="font-semibold text-slate-700">{title}</h3>
-        <span className="rounded-full bg-slate-200 px-2 py-0.5 text-xs font-medium text-slate-600">
+        <h3 className="font-semibold text-slate-700 dark:text-slate-200">{title}</h3>
+        <span className="rounded-full bg-slate-200 px-2 py-0.5 text-xs font-medium text-slate-600 dark:bg-slate-600 dark:text-slate-300">
           {totalIssues}
         </span>
       </div>
@@ -186,7 +186,7 @@ function StackedColumn({
             title={section.title}
             icon={section.icon}
             issues={section.issues}
-            colorClass={section.colorClass ?? 'bg-white'}
+            colorClass={section.colorClass ?? 'bg-white dark:bg-slate-700'}
           />
         ))}
       </div>
@@ -210,14 +210,14 @@ function FailedIssueCard({
   isRetrying,
 }: FailedIssueCardProps): React.JSX.Element {
   return (
-    <div className="flex gap-3 rounded-lg border border-amber-200 bg-amber-50 p-3">
-      <div className="flex shrink-0 items-center justify-center rounded-lg bg-amber-100 p-2 text-amber-600">
+    <div className="flex gap-3 rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-800 dark:bg-amber-900/30">
+      <div className="flex shrink-0 items-center justify-center rounded-lg bg-amber-100 p-2 text-amber-600 dark:bg-amber-900/50 dark:text-amber-400">
         <AlertCircle className="h-4 w-4" />
       </div>
 
       <div className="min-w-0 flex-1">
         <div className="mb-1 flex items-start justify-between gap-2">
-          <h4 className="font-medium text-amber-900">
+          <h4 className="font-medium text-amber-900 dark:text-amber-200">
             {issue.extractedTitle ?? 'Untitled issue'}
           </h4>
           <div className="flex shrink-0 gap-1">
@@ -225,7 +225,7 @@ function FailedIssueCard({
               type="button"
               onClick={() => void onRetry(issue.id)}
               disabled={isRetrying || isDeleting}
-              className="rounded p-1 text-amber-400 transition-colors hover:bg-amber-100 hover:text-blue-600 disabled:opacity-50"
+              className="rounded p-1 text-amber-400 transition-colors hover:bg-amber-100 hover:text-blue-600 disabled:opacity-50 dark:hover:bg-amber-900/50 dark:hover:text-blue-400"
               aria-label="Retry"
               title="Retry creating issue"
             >
@@ -239,7 +239,7 @@ function FailedIssueCard({
               type="button"
               onClick={() => void onDelete(issue.id)}
               disabled={isDeleting || isRetrying}
-              className="rounded p-1 text-amber-400 transition-colors hover:bg-amber-100 hover:text-red-600 disabled:opacity-50"
+              className="rounded p-1 text-amber-400 transition-colors hover:bg-amber-100 hover:text-red-600 disabled:opacity-50 dark:hover:bg-amber-900/50 dark:hover:text-red-400"
               aria-label="Delete"
               title="Delete failed issue"
             >
@@ -252,10 +252,10 @@ function FailedIssueCard({
           </div>
         </div>
 
-        <p className="mb-2 line-clamp-2 text-sm text-amber-700">{issue.originalText}</p>
+        <p className="mb-2 line-clamp-2 text-sm text-amber-700 dark:text-amber-300">{issue.originalText}</p>
 
-        <div className="flex items-center gap-2 text-xs text-amber-600">
-          <span className="rounded bg-amber-100 px-1.5 py-0.5">{issue.error}</span>
+        <div className="flex items-center gap-2 text-xs text-amber-600 dark:text-amber-400">
+          <span className="rounded bg-amber-100 px-1.5 py-0.5 dark:bg-amber-900/50">{issue.error}</span>
         </div>
       </div>
     </div>
@@ -285,11 +285,11 @@ function NeedsAttentionSection({
   }
 
   return (
-    <div className="mb-6 rounded-lg border border-amber-200 bg-amber-50 p-4">
+    <div className="mb-6 rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-900/30">
       <div className="mb-3 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <AlertCircle className="h-5 w-5 text-amber-600" />
-          <h3 className="font-semibold text-amber-900">
+          <AlertCircle className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+          <h3 className="font-semibold text-amber-900 dark:text-amber-200">
             Needs Attention ({issues.length})
           </h3>
         </div>
@@ -301,7 +301,7 @@ function NeedsAttentionSection({
             onClick={() => {
               setExpanded(!expanded);
             }}
-            className="text-amber-700 hover:bg-amber-100 hover:text-amber-900"
+            className="text-amber-700 hover:bg-amber-100 hover:text-amber-900 dark:text-amber-300 dark:hover:bg-amber-900/50 dark:hover:text-amber-200"
           >
             {expanded ? (
               <>
@@ -318,7 +318,7 @@ function NeedsAttentionSection({
         )}
       </div>
 
-      <p className="mb-4 text-sm text-amber-700">
+      <p className="mb-4 text-sm text-amber-700 dark:text-amber-300">
         These issues couldn't be created. Please edit them and try again.
       </p>
 
@@ -450,9 +450,9 @@ export function LinearIssuesPage(): React.JSX.Element {
     return (
       <Layout>
         <div className="flex flex-col items-center justify-center py-12">
-          <AlertCircle className="mb-4 h-12 w-12 text-red-500" />
-          <h3 className="mb-2 text-lg font-medium text-slate-900">Unable to load issues</h3>
-          <p className="mb-4 text-slate-500">{error}</p>
+          <AlertCircle className="mb-4 h-12 w-12 text-red-500 dark:text-red-400" />
+          <h3 className="mb-2 text-lg font-medium text-slate-900 dark:text-slate-100">Unable to load issues</h3>
+          <p className="mb-4 text-slate-500 dark:text-slate-400">{error}</p>
           <Button
             type="button"
             onClick={() => {
@@ -481,15 +481,15 @@ export function LinearIssuesPage(): React.JSX.Element {
       {/* Header */}
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-slate-900">Linear Issues</h2>
-          <p className="text-slate-600">Issues from your connected Linear workspace.</p>
+          <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Linear Issues</h2>
+          <p className="text-slate-600 dark:text-slate-300">Issues from your connected Linear workspace.</p>
         </div>
         <button
           onClick={(): void => {
             void handleRefresh();
           }}
           disabled={refreshing}
-          className="rounded p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 disabled:opacity-50"
+          className="rounded p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 disabled:opacity-50 dark:hover:bg-slate-700 dark:hover:text-slate-300"
           title="Refresh"
         >
           <RefreshCw className={`h-5 w-5 ${refreshing ? 'animate-spin' : ''}`} />
@@ -497,13 +497,13 @@ export function LinearIssuesPage(): React.JSX.Element {
       </div>
 
       {successMessage !== null && (
-        <div className="mb-6 rounded-lg border border-green-200 bg-green-50 p-4 text-green-700">
+        <div className="mb-6 rounded-lg border border-green-200 bg-green-50 p-4 text-green-700 dark:border-green-800 dark:bg-green-900/30 dark:text-green-400">
           {successMessage}
         </div>
       )}
 
       {error !== null && (
-        <div className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 text-red-700">
+        <div className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 text-red-700 dark:border-red-800 dark:bg-red-900/30 dark:text-red-400">
           {error}
         </div>
       )}
@@ -517,7 +517,7 @@ export function LinearIssuesPage(): React.JSX.Element {
       />
 
       {/* Mobile: Tabs */}
-      <div className="mb-4 flex gap-1 overflow-x-auto rounded-lg bg-slate-100 p-1 md:hidden">
+      <div className="mb-4 flex gap-1 overflow-x-auto rounded-lg bg-slate-100 p-1 md:hidden dark:bg-slate-800">
         {TABS.map((tab) => (
           <button
             key={tab.id}
@@ -527,13 +527,13 @@ export function LinearIssuesPage(): React.JSX.Element {
             }}
             className={`flex flex-1 items-center justify-center gap-1 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
               activeTab === tab.id
-                ? 'bg-white text-slate-900 shadow-sm'
-                : 'text-slate-600 hover:text-slate-900'
+                ? 'bg-white text-slate-900 shadow-sm dark:bg-slate-700 dark:text-slate-100'
+                : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200'
             }`}
           >
             {tab.icon}
             <span className="hidden sm:inline">{tab.label}</span>
-            <span className="ml-1 text-xs text-slate-500">({columnIssues[tab.id].length})</span>
+            <span className="ml-1 text-xs text-slate-500 dark:text-slate-400">({columnIssues[tab.id].length})</span>
           </button>
         ))}
       </div>
@@ -541,21 +541,21 @@ export function LinearIssuesPage(): React.JSX.Element {
       {/* Mobile: Active column */}
       <div className="md:hidden">
         {activeTab === 'archive' ? (
-          <div className="rounded-lg bg-slate-50 p-4">
+          <div className="rounded-lg bg-slate-50 p-4 dark:bg-slate-800">
             <button
               type="button"
               onClick={() => {
                 setArchiveExpanded(!archiveExpanded);
               }}
-              className="mb-4 flex w-full items-center justify-between rounded-lg bg-slate-100 px-4 py-3 text-left transition-colors hover:bg-slate-200"
+              className="mb-4 flex w-full items-center justify-between rounded-lg bg-slate-100 px-4 py-3 text-left transition-colors hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600"
             >
-              <span className="font-medium text-slate-700">
+              <span className="font-medium text-slate-700 dark:text-slate-200">
                 Archive ({columnIssues.archive.length} older completed issues)
               </span>
               {archiveExpanded ? (
-                <ChevronUp className="h-5 w-5 text-slate-500" />
+                <ChevronUp className="h-5 w-5 text-slate-500 dark:text-slate-400" />
               ) : (
-                <ChevronDown className="h-5 w-5 text-slate-500" />
+                <ChevronDown className="h-5 w-5 text-slate-500 dark:text-slate-400" />
               )}
             </button>
 
@@ -586,16 +586,16 @@ export function LinearIssuesPage(): React.JSX.Element {
               title: 'Todo',
               icon: <Circle className="h-3 w-3 text-blue-400" />,
               issues: columnIssues.todo,
-              colorClass: 'bg-blue-50',
+              colorClass: 'bg-blue-50 dark:bg-blue-900/20',
             },
             {
               title: 'Backlog',
               icon: <Circle className="h-3 w-3 text-slate-400" />,
               issues: columnIssues.backlog,
-              colorClass: 'bg-slate-50',
+              colorClass: 'bg-slate-50 dark:bg-slate-700/50',
             },
           ]}
-          colorClass="bg-slate-50"
+          colorClass="bg-slate-50 dark:bg-slate-800"
         />
 
         {/* Column 2: In Progress → In Review → To Test (stacked) */}
@@ -606,22 +606,22 @@ export function LinearIssuesPage(): React.JSX.Element {
               title: 'In Progress',
               icon: <Clock className="h-3 w-3 text-blue-500" />,
               issues: columnIssues.in_progress,
-              colorClass: 'bg-blue-50',
+              colorClass: 'bg-blue-50 dark:bg-blue-900/20',
             },
             {
               title: 'In Review',
               icon: <Eye className="h-3 w-3 text-purple-500" />,
               issues: columnIssues.in_review,
-              colorClass: 'bg-purple-50',
+              colorClass: 'bg-purple-50 dark:bg-purple-900/20',
             },
             {
               title: 'To Test',
               icon: <CheckCircle2 className="h-3 w-3 text-amber-500" />,
               issues: columnIssues.to_test,
-              colorClass: 'bg-amber-50',
+              colorClass: 'bg-amber-50 dark:bg-amber-900/20',
             },
           ]}
-          colorClass="bg-blue-50"
+          colorClass="bg-blue-50 dark:bg-slate-800"
         />
 
         {/* Column 3: Recently Closed */}
@@ -629,7 +629,7 @@ export function LinearIssuesPage(): React.JSX.Element {
           title="Recently Closed"
           icon={<CheckCircle2 className="h-4 w-4 text-green-500" />}
           issues={columnIssues.done}
-          colorClass="bg-green-50"
+          colorClass="bg-green-50 dark:bg-slate-800"
         />
       </div>
 
@@ -641,15 +641,15 @@ export function LinearIssuesPage(): React.JSX.Element {
             onClick={() => {
               setArchiveExpanded(!archiveExpanded);
             }}
-            className="flex w-full items-center justify-between rounded-lg bg-slate-100 px-4 py-3 text-left transition-colors hover:bg-slate-200"
+            className="flex w-full items-center justify-between rounded-lg bg-slate-100 px-4 py-3 text-left transition-colors hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600"
           >
-            <span className="font-medium text-slate-700">
+            <span className="font-medium text-slate-700 dark:text-slate-200">
               Archive ({columnIssues.archive.length} older completed issues)
             </span>
             {archiveExpanded ? (
-              <ChevronUp className="h-5 w-5 text-slate-500" />
+              <ChevronUp className="h-5 w-5 text-slate-500 dark:text-slate-400" />
             ) : (
-              <ChevronDown className="h-5 w-5 text-slate-500" />
+              <ChevronDown className="h-5 w-5 text-slate-500 dark:text-slate-400" />
             )}
           </button>
 

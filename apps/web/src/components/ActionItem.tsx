@@ -204,7 +204,7 @@ export function ActionItem({
 
   return (
     <div
-      className="cursor-pointer rounded-lg border border-slate-200 bg-white p-4 transition-all hover:border-slate-300 hover:shadow-sm"
+      className="cursor-pointer rounded-lg border border-slate-200 bg-white p-4 transition-all hover:border-slate-300 hover:shadow-sm dark:border-slate-700 dark:bg-slate-800 dark:hover:border-slate-600"
       onClick={onClick}
       role="button"
       tabIndex={0}
@@ -217,9 +217,9 @@ export function ActionItem({
       <div className="flex items-start gap-3">
         <div className="mt-0.5 shrink-0">{getTypeIcon(action.type)}</div>
         <div className="min-w-0 flex-1">
-          <h3 className="break-words font-medium text-slate-800">{action.title}</h3>
-          <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-500">
-            <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 font-medium text-slate-700">
+          <h3 className="break-words font-medium text-slate-800 dark:text-slate-200">{action.title}</h3>
+          <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+            <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 font-medium text-slate-700 dark:bg-slate-700 dark:text-slate-300">
               {getTypeLabel(action.type)}
             </span>
             <span className="inline-flex items-center gap-1">
@@ -275,14 +275,14 @@ export function ActionItem({
                 onClick={(): void => {
                   setIsDropdownOpen((prev) => !prev);
                 }}
-                className="rounded p-2 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700"
+                className="rounded p-2 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-300"
                 aria-label="More actions"
               >
                 <MoreVertical className="h-4 w-4" />
               </button>
 
               {isDropdownOpen && (
-                <div className="absolute right-0 top-full z-10 mt-1 min-w-[140px] rounded-lg border border-slate-200 bg-white py-1 shadow-lg">
+                <div className="absolute right-0 top-full z-10 mt-1 min-w-[140px] rounded-lg border border-slate-200 bg-white py-1 shadow-lg dark:border-slate-700 dark:bg-slate-800">
                   {persistedResourceUrl !== null && executionState === null && (
                     <RouterLink
                       to={persistedResourceUrl}
@@ -329,7 +329,7 @@ export function ActionItem({
       {executionState !== null && (
         <div
           className={`mt-3 rounded-md border p-3 ${
-            isSuccess ? 'border-green-200 bg-green-50' : 'border-red-200 bg-red-50'
+            isSuccess ? 'border-green-200 bg-green-50 dark:border-green-800 dark:bg-green-900/30' : 'border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-900/30'
           }`}
           onClick={(e): void => {
             e.stopPropagation();
@@ -342,7 +342,7 @@ export function ActionItem({
               <XCircle className="mt-0.5 h-4 w-4 shrink-0 text-red-600" />
             )}
             <div className="min-w-0 flex-1">
-              <p className={`text-sm ${isSuccess ? 'text-green-800' : 'text-red-800'}`}>
+              <p className={`text-sm ${isSuccess ? 'text-green-800 dark:text-green-400' : 'text-red-800 dark:text-red-400'}`}>
                 {executionState.message}
               </p>
               {isSuccess && executionState.resourceUrl !== undefined && (
@@ -380,7 +380,7 @@ export function ActionItem({
 
       {showPersistedError && (
         <div
-          className="mt-3 rounded-md border border-red-200 bg-red-50 p-3"
+          className="mt-3 rounded-md border border-red-200 bg-red-50 p-3 dark:border-red-800 dark:bg-red-900/30"
           onClick={(e): void => {
             e.stopPropagation();
           }}
@@ -388,7 +388,7 @@ export function ActionItem({
           <div className="flex items-start gap-2">
             <XCircle className="mt-0.5 h-4 w-4 shrink-0 text-red-600" />
             <div className="min-w-0 flex-1">
-              <p className="text-sm text-red-800">{persistedError}</p>
+              <p className="text-sm text-red-800 dark:text-red-400">{persistedError}</p>
               {showReconnectLink && (
                 <RouterLink
                   to="/settings/calendar"

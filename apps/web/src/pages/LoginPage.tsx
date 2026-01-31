@@ -14,10 +14,10 @@ export function LoginPage(): React.JSX.Element {
   }, [isLoading, isAuthenticated, login]);
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[#f8fafc]">
+    <div className="flex min-h-screen items-center justify-center bg-[#f8fafc] dark:bg-slate-900">
       <div className="flex flex-col items-center gap-3">
-        <Loader2 className="h-8 w-8 animate-spin text-slate-400" />
-        <p className="text-sm text-slate-500">Redirecting...</p>
+        <Loader2 className="h-8 w-8 animate-spin text-slate-400 dark:text-slate-500" />
+        <p className="text-sm text-slate-500 dark:text-slate-400">Redirecting...</p>
       </div>
     </div>
   );

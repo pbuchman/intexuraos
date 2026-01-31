@@ -15,18 +15,18 @@ function truncateContent(content: string, maxLength = 150): string {
 
 function DataInsightsTabs(): React.JSX.Element {
   return (
-    <div className="mb-6 border-b border-slate-200">
+    <div className="mb-6 border-b border-slate-200 dark:border-slate-700">
       <nav className="-mb-px flex space-x-8" aria-label="Tabs">
         <Link
           to="/data-insights"
-          className="border-b-2 border-transparent px-1 py-4 text-sm font-medium text-slate-500 hover:border-slate-300 hover:text-slate-700"
+          className="border-b-2 border-transparent px-1 py-4 text-sm font-medium text-slate-500 hover:border-slate-300 hover:text-slate-700 dark:text-slate-400 dark:hover:border-slate-600 dark:hover:text-slate-300"
         >
           <Layers className="mr-2 inline h-4 w-4" />
           Composite Feeds
         </Link>
         <Link
           to="/data-insights/static-sources"
-          className="border-b-2 border-blue-500 px-1 py-4 text-sm font-medium text-blue-600"
+          className="border-b-2 border-blue-500 px-1 py-4 text-sm font-medium text-blue-600 dark:text-blue-400"
         >
           <Database className="mr-2 inline h-4 w-4" />
           Static Sources
@@ -56,8 +56,8 @@ export function DataSourcesListPage(): React.JSX.Element {
 
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-slate-900">Data Sources</h2>
-          <p className="text-slate-600">Manage your custom data sources for analysis.</p>
+          <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Data Sources</h2>
+          <p className="text-slate-600 dark:text-slate-300">Manage your custom data sources for analysis.</p>
         </div>
         <Link to="/data-insights/static-sources/new">
           <Button type="button" variant="primary">
@@ -70,7 +70,7 @@ export function DataSourcesListPage(): React.JSX.Element {
       <RefreshIndicator show={refreshing} />
 
       {error !== null && error !== '' ? (
-        <div className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 text-red-700">
+        <div className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 text-red-700 dark:border-red-800 dark:bg-red-900/30 dark:text-red-400">
           {error}
         </div>
       ) : null}
@@ -78,9 +78,9 @@ export function DataSourcesListPage(): React.JSX.Element {
       {dataSources.length === 0 ? (
         <Card>
           <div className="flex flex-col items-center justify-center py-12 text-center">
-            <Database className="mb-4 h-12 w-12 text-slate-300" />
-            <h3 className="mb-2 text-lg font-medium text-slate-900">No data sources yet</h3>
-            <p className="mb-4 text-slate-500">
+            <Database className="mb-4 h-12 w-12 text-slate-300 dark:text-slate-600" />
+            <h3 className="mb-2 text-lg font-medium text-slate-900 dark:text-slate-100">No data sources yet</h3>
+            <p className="mb-4 text-slate-500 dark:text-slate-400">
               Add your first data source to get started with analysis.
             </p>
             <Link to="/data-insights/static-sources/new">
@@ -131,13 +131,13 @@ function DataSourceRow({ dataSource, onDelete }: DataSourceRowProps): React.JSX.
     <Card>
       <div className="flex items-start justify-between gap-4">
         <Link to={`/data-insights/static-sources/${dataSource.id}`} className="flex-1 min-w-0">
-          <h3 className="font-medium text-slate-900 hover:text-blue-600 transition-colors">
+          <h3 className="font-medium text-slate-900 hover:text-blue-600 transition-colors dark:text-slate-100 dark:hover:text-blue-400">
             {dataSource.title}
           </h3>
-          <p className="mt-1 text-sm text-slate-500 line-clamp-2">
+          <p className="mt-1 text-sm text-slate-500 line-clamp-2 dark:text-slate-400">
             {truncateContent(dataSource.content)}
           </p>
-          <p className="mt-2 text-xs text-slate-400">Updated {formatDate(dataSource.updatedAt)}</p>
+          <p className="mt-2 text-xs text-slate-400 dark:text-slate-500">Updated {formatDate(dataSource.updatedAt)}</p>
         </Link>
 
         {!showDeleteConfirm ? (
@@ -156,8 +156,8 @@ function DataSourceRow({ dataSource, onDelete }: DataSourceRowProps): React.JSX.
       </div>
 
       {showDeleteConfirm ? (
-        <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-4">
-          <p className="mb-3 text-sm text-red-800">Delete "{dataSource.title}"?</p>
+        <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-800 dark:bg-red-900/30">
+          <p className="mb-3 text-sm text-red-800 dark:text-red-300">Delete "{dataSource.title}"?</p>
           <div className="flex gap-2">
             <Button
               type="button"

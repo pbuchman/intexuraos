@@ -21,12 +21,12 @@ interface StatusStyle {
 }
 
 const STATUS_STYLES: Record<CodeTaskStatus, StatusStyle> = {
-  dispatched: { bg: 'bg-slate-100', text: 'text-slate-800', label: 'Dispatched', icon: Clock },
-  running: { bg: 'bg-blue-100', text: 'text-blue-800', label: 'Running', icon: Loader2 },
-  completed: { bg: 'bg-green-100', text: 'text-green-800', label: 'Completed', icon: CheckCircle2 },
-  failed: { bg: 'bg-red-100', text: 'text-red-800', label: 'Failed', icon: XCircle },
-  interrupted: { bg: 'bg-amber-100', text: 'text-amber-800', label: 'Interrupted', icon: AlertCircle },
-  cancelled: { bg: 'bg-slate-100', text: 'text-slate-600', label: 'Cancelled', icon: XCircle },
+  dispatched: { bg: 'bg-slate-100 dark:bg-slate-700', text: 'text-slate-800 dark:text-slate-300', label: 'Dispatched', icon: Clock },
+  running: { bg: 'bg-blue-100 dark:bg-blue-900/50', text: 'text-blue-800 dark:text-blue-300', label: 'Running', icon: Loader2 },
+  completed: { bg: 'bg-green-100 dark:bg-green-900/50', text: 'text-green-800 dark:text-green-300', label: 'Completed', icon: CheckCircle2 },
+  failed: { bg: 'bg-red-100 dark:bg-red-900/50', text: 'text-red-800 dark:text-red-300', label: 'Failed', icon: XCircle },
+  interrupted: { bg: 'bg-amber-100 dark:bg-amber-900/50', text: 'text-amber-800 dark:text-amber-300', label: 'Interrupted', icon: AlertCircle },
+  cancelled: { bg: 'bg-slate-100 dark:bg-slate-700', text: 'text-slate-600 dark:text-slate-400', label: 'Cancelled', icon: XCircle },
 };
 
 export function CodeTasksPage(): React.JSX.Element {
@@ -46,8 +46,8 @@ export function CodeTasksPage(): React.JSX.Element {
     <Layout>
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-slate-900">Code Tasks</h2>
-          <p className="text-slate-600">View and manage your code generation tasks</p>
+          <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Code Tasks</h2>
+          <p className="text-slate-600 dark:text-slate-300">View and manage your code generation tasks</p>
         </div>
         <Link to="/code-tasks/new">
           <Button>
@@ -60,7 +60,7 @@ export function CodeTasksPage(): React.JSX.Element {
       <RefreshIndicator show={refreshing} />
 
       {error !== null && error !== '' ? (
-        <div className="mb-6 break-words rounded-lg border border-red-200 bg-red-50 p-4 text-red-700">
+        <div className="mb-6 break-words rounded-lg border border-red-200 bg-red-50 p-4 text-red-700 dark:border-red-800 dark:bg-red-900/30 dark:text-red-400">
           {error}
         </div>
       ) : null}
@@ -68,8 +68,8 @@ export function CodeTasksPage(): React.JSX.Element {
       {tasks.length === 0 ? (
         <Card>
           <div className="py-12 text-center">
-            <p className="mb-4 text-slate-600">No code tasks yet</p>
-            <Link to="/code-tasks/new" className="text-blue-600 underline">
+            <p className="mb-4 text-slate-600 dark:text-slate-300">No code tasks yet</p>
+            <Link to="/code-tasks/new" className="text-blue-600 underline dark:text-blue-400">
               Create your first code task
             </Link>
           </div>
@@ -128,19 +128,19 @@ function CodeTaskCard({ task }: CodeTaskCardProps): React.JSX.Element {
   return (
     <div
       onClick={handleCardClick}
-      className="cursor-pointer rounded-lg border border-slate-200 bg-white p-4 transition-shadow hover:shadow-md"
+      className="cursor-pointer rounded-lg border border-slate-200 bg-white p-4 transition-shadow hover:shadow-md dark:border-slate-700 dark:bg-slate-800"
     >
       <div className="flex items-start gap-3">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1">
             {task.linearIssueId !== undefined ? (
-              <span className="text-sm font-medium text-blue-600">{task.linearIssueId}</span>
+              <span className="text-sm font-medium text-blue-600 dark:text-blue-400">{task.linearIssueId}</span>
             ) : null}
-            <h3 className="text-lg font-semibold text-slate-900 hover:text-blue-600 truncate">
+            <h3 className="text-lg font-semibold text-slate-900 hover:text-blue-600 truncate dark:text-slate-100 dark:hover:text-blue-400">
               {task.linearIssueTitle ?? truncatePrompt(task.sanitizedPrompt, 80)}
             </h3>
           </div>
-          <p className="mt-1 line-clamp-2 text-sm text-slate-600">
+          <p className="mt-1 line-clamp-2 text-sm text-slate-600 dark:text-slate-300">
             {truncatePrompt(task.sanitizedPrompt)}
           </p>
         </div>
@@ -152,7 +152,7 @@ function CodeTaskCard({ task }: CodeTaskCardProps): React.JSX.Element {
         </span>
       </div>
 
-      <div className="mt-4 flex items-center justify-between text-sm text-slate-500">
+      <div className="mt-4 flex items-center justify-between text-sm text-slate-500 dark:text-slate-400">
         <div className="flex gap-4">
           <span>Created: {formatDateTime(task.createdAt)}</span>
           {task.status === 'completed' ? (
@@ -160,10 +160,10 @@ function CodeTaskCard({ task }: CodeTaskCardProps): React.JSX.Element {
           ) : null}
         </div>
         <div className="flex gap-2">
-          <span className="rounded bg-slate-100 px-2 py-0.5 text-xs capitalize">
+          <span className="rounded bg-slate-100 px-2 py-0.5 text-xs capitalize dark:bg-slate-700 dark:text-slate-300">
             {task.workerType}
           </span>
-          <span className="rounded bg-slate-100 px-2 py-0.5 text-xs capitalize">
+          <span className="rounded bg-slate-100 px-2 py-0.5 text-xs capitalize dark:bg-slate-700 dark:text-slate-300">
             {task.workerLocation}
           </span>
         </div>
@@ -179,24 +179,24 @@ function CodeTaskCard({ task }: CodeTaskCardProps): React.JSX.Element {
               onClick={(e): void => {
                 e.stopPropagation();
               }}
-              className="flex items-center gap-1 text-blue-600 hover:underline"
+              className="flex items-center gap-1 text-blue-600 hover:underline dark:text-blue-400"
             >
               <ExternalLink className="h-3.5 w-3.5" />
               View PR
             </a>
           ) : null}
-          <span className="text-slate-600">
+          <span className="text-slate-600 dark:text-slate-300">
             {task.result.commits} commit{task.result.commits !== 1 ? 's' : ''} on{' '}
-            <code className="rounded bg-slate-100 px-1 py-0.5 text-xs">{task.result.branch}</code>
+            <code className="rounded bg-slate-100 px-1 py-0.5 text-xs dark:bg-slate-700 dark:text-slate-300">{task.result.branch}</code>
           </span>
           {task.result.ciFailed === true ? (
-            <span className="text-amber-600">CI failed</span>
+            <span className="text-amber-600 dark:text-amber-400">CI failed</span>
           ) : null}
         </div>
       ) : null}
 
       {task.error !== undefined ? (
-        <div className="mt-3 text-sm text-red-600">
+        <div className="mt-3 text-sm text-red-600 dark:text-red-400">
           Error: {task.error.message}
         </div>
       ) : null}

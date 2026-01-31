@@ -65,9 +65,9 @@ function getDisplayDescription(bookmark: BookmarkType): string | null {
 }
 
 const OG_STATUS_STYLES: Record<OgFetchStatus, { bg: string; text: string; label: string }> = {
-  pending: { bg: 'bg-yellow-100', text: 'text-yellow-700', label: 'Fetching...' },
-  processed: { bg: 'bg-green-100', text: 'text-green-700', label: 'Loaded' },
-  failed: { bg: 'bg-red-100', text: 'text-red-700', label: 'Failed' },
+  pending: { bg: 'bg-yellow-100 dark:bg-yellow-900/50', text: 'text-yellow-700 dark:text-yellow-300', label: 'Fetching...' },
+  processed: { bg: 'bg-green-100 dark:bg-green-900/50', text: 'text-green-700 dark:text-green-300', label: 'Loaded' },
+  failed: { bg: 'bg-red-100 dark:bg-red-900/50', text: 'text-red-700 dark:text-red-300', label: 'Failed' },
 };
 
 interface OgStatusBadgeProps {
@@ -124,7 +124,7 @@ function FilterBar({ filters, onFiltersChange, availableTags }: FilterBarProps):
           }
           onFiltersChange(newFilters);
         }}
-        className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+        className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200"
       >
         {archiveOptions.map((opt) => (
           <option key={String(opt.value)} value={String(opt.value ?? '')}>
@@ -150,7 +150,7 @@ function FilterBar({ filters, onFiltersChange, availableTags }: FilterBarProps):
             }
             onFiltersChange(newFilters);
           }}
-          className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+          className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200"
         >
           <option value="">All Tags</option>
           {availableTags.map((tag) => (
@@ -266,14 +266,14 @@ function BookmarkModal({
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
       onClick={handleBackdropClick}
     >
-      <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-xl bg-white shadow-xl">
-        <div className="flex items-center justify-between border-b border-slate-200 p-4">
-          <h2 className="text-lg font-semibold text-slate-900">
+      <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-xl bg-white shadow-xl dark:bg-slate-800">
+        <div className="flex items-center justify-between border-b border-slate-200 p-4 dark:border-slate-700">
+          <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
             {isEditing ? 'Edit Bookmark' : 'View Bookmark'}
           </h2>
           <button
             onClick={onClose}
-            className="rounded-lg p-1 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700"
+            className="rounded-lg p-1 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-300"
           >
             <X className="h-5 w-5" />
           </button>
@@ -291,7 +291,7 @@ function BookmarkModal({
                 placeholder="Enter bookmark title (optional)"
               />
               <div className="space-y-1">
-                <label htmlFor="description" className="block text-sm font-medium text-slate-700">
+                <label htmlFor="description" className="block text-sm font-medium text-slate-700 dark:text-slate-300">
                   Description
                 </label>
                 <textarea
@@ -302,7 +302,7 @@ function BookmarkModal({
                   }}
                   rows={4}
                   placeholder="Enter description (optional)"
-                  className="block w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900 shadow-sm transition-colors placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                  className="block w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900 shadow-sm transition-colors placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-100 dark:placeholder:text-slate-500"
                 />
               </div>
               <Input
@@ -317,7 +317,7 @@ function BookmarkModal({
           ) : (
             <div className="space-y-4">
               {ogImage !== null ? (
-                <div className="overflow-hidden rounded-lg border border-slate-200">
+                <div className="overflow-hidden rounded-lg border border-slate-200 dark:border-slate-700">
                   <img
                     src={ogImage}
                     alt=""
@@ -329,7 +329,7 @@ function BookmarkModal({
                 </div>
               ) : null}
 
-              <div className="flex items-center gap-2 text-sm text-slate-500">
+              <div className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
                 {favicon !== null ? (
                   <img
                     src={favicon}
@@ -345,28 +345,28 @@ function BookmarkModal({
                 <span>{siteName ?? getHostname(bookmark.url)}</span>
                 <OgStatusBadge status={bookmark.ogFetchStatus} />
                 {bookmark.archived ? (
-                  <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
+                  <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600 dark:bg-slate-700 dark:text-slate-400">
                     <Archive className="mr-1 h-3 w-3" />
                     Archived
                   </span>
                 ) : null}
               </div>
 
-              <h3 className="text-xl font-semibold text-slate-900">{getDisplayTitle(bookmark)}</h3>
+              <h3 className="text-xl font-semibold text-slate-900 dark:text-slate-100">{getDisplayTitle(bookmark)}</h3>
 
               <a
                 href={bookmark.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center gap-1 text-sm text-blue-600 hover:text-blue-800 hover:underline"
+                className="flex items-center gap-1 text-sm text-blue-600 hover:text-blue-800 hover:underline dark:text-blue-400 dark:hover:text-blue-300"
               >
                 <span className="min-w-0 truncate">{bookmark.url}</span>
                 <ExternalLink className="h-3 w-3 shrink-0" />
               </a>
 
               {bookmark.aiSummary !== null && bookmark.aiSummary !== '' ? (
-                <div className="rounded-lg border border-purple-200 bg-purple-50 p-4">
-                  <div className="mb-2 flex items-center gap-2 text-sm font-medium text-purple-700">
+                <div className="rounded-lg border border-purple-200 bg-purple-50 p-4 dark:border-purple-800 dark:bg-purple-900/30">
+                  <div className="mb-2 flex items-center gap-2 text-sm font-medium text-purple-700 dark:text-purple-300">
                     <Sparkles className="h-4 w-4" />
                     AI Summary
                   </div>
@@ -376,8 +376,8 @@ function BookmarkModal({
 
               {bookmark.description !== null && bookmark.description !== '' ? (
                 <div>
-                  <p className="text-sm font-medium text-slate-700">Description</p>
-                  <p className="mt-1 text-slate-600">{bookmark.description}</p>
+                  <p className="text-sm font-medium text-slate-700 dark:text-slate-300">Description</p>
+                  <p className="mt-1 text-slate-600 dark:text-slate-400">{bookmark.description}</p>
                 </div>
               ) : null}
 
@@ -385,8 +385,8 @@ function BookmarkModal({
               bookmark.ogPreview.description !== '' &&
               bookmark.description !== bookmark.ogPreview.description ? (
                 <div>
-                  <p className="text-sm font-medium text-slate-700">Page Description</p>
-                  <p className="mt-1 text-slate-600">{bookmark.ogPreview.description}</p>
+                  <p className="text-sm font-medium text-slate-700 dark:text-slate-300">Page Description</p>
+                  <p className="mt-1 text-slate-600 dark:text-slate-400">{bookmark.ogPreview.description}</p>
                 </div>
               ) : null}
 
@@ -395,7 +395,7 @@ function BookmarkModal({
                   {bookmark.tags.map((tag) => (
                     <span
                       key={tag}
-                      className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2.5 py-0.5 text-sm font-medium text-blue-800"
+                      className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2.5 py-0.5 text-sm font-medium text-blue-800 dark:bg-blue-900/50 dark:text-blue-300"
                     >
                       <Tag className="h-3 w-3" />
                       {tag}
@@ -404,7 +404,7 @@ function BookmarkModal({
                 </div>
               ) : null}
 
-              <div className="flex flex-wrap items-center gap-3 text-xs text-slate-400">
+              <div className="flex flex-wrap items-center gap-3 text-xs text-slate-400 dark:text-slate-500">
                 <span className="flex items-center gap-1" title="Created">
                   <Calendar className="h-3 w-3" />
                   {formatDate(bookmark.createdAt)}
@@ -422,11 +422,11 @@ function BookmarkModal({
           )}
         </div>
 
-        <div className="flex items-center justify-between border-t border-slate-200 p-4">
+        <div className="flex items-center justify-between border-t border-slate-200 p-4 dark:border-slate-700">
           <div className="flex items-center gap-2">
             {showDeleteConfirm ? (
               <div className="flex items-center gap-3">
-                <span className="text-sm text-red-600">Delete this bookmark?</span>
+                <span className="text-sm text-red-600 dark:text-red-400">Delete this bookmark?</span>
                 <Button
                   type="button"
                   variant="danger"
@@ -460,7 +460,7 @@ function BookmarkModal({
                   onClick={(): void => {
                     setShowDeleteConfirm(true);
                   }}
-                  className="text-red-600 hover:bg-red-50 hover:text-red-700"
+                  className="text-red-600 hover:bg-red-50 hover:text-red-700 dark:text-red-400 dark:hover:bg-red-900/30 dark:hover:text-red-300"
                 >
                   <Trash2 className="mr-1 h-4 w-4" />
                   Delete
@@ -615,12 +615,12 @@ function CreateBookmarkModal({
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
       onClick={handleBackdropClick}
     >
-      <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl bg-white shadow-xl">
-        <div className="flex items-center justify-between border-b border-slate-200 p-4">
-          <h2 className="text-lg font-semibold text-slate-900">Create New Bookmark</h2>
+      <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl bg-white shadow-xl dark:bg-slate-800">
+        <div className="flex items-center justify-between border-b border-slate-200 p-4 dark:border-slate-700">
+          <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Create New Bookmark</h2>
           <button
             onClick={onClose}
-            className="rounded-lg p-1 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700"
+            className="rounded-lg p-1 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-300"
           >
             <X className="h-5 w-5" />
           </button>
@@ -628,12 +628,12 @@ function CreateBookmarkModal({
 
         <div className="p-6">
           {duplicateBookmarkId !== null ? (
-            <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-4">
+            <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-900/30">
               <div className="flex items-start gap-3">
-                <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+                <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600 dark:text-amber-400" />
                 <div className="flex-1">
-                  <p className="text-sm font-medium text-amber-800">Duplicate URL</p>
-                  <p className="mt-1 text-sm text-amber-700">{error}</p>
+                  <p className="text-sm font-medium text-amber-800 dark:text-amber-300">Duplicate URL</p>
+                  <p className="mt-1 text-sm text-amber-700 dark:text-amber-400">{error}</p>
                   <div className="mt-3">
                     <Button
                       type="button"
@@ -648,7 +648,7 @@ function CreateBookmarkModal({
               </div>
             </div>
           ) : error !== null ? (
-            <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+            <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/30 dark:text-red-400">
               {error}
             </div>
           ) : null}
@@ -673,7 +673,7 @@ function CreateBookmarkModal({
             <div className="space-y-1">
               <label
                 htmlFor="create-description"
-                className="block text-sm font-medium text-slate-700"
+                className="block text-sm font-medium text-slate-700 dark:text-slate-300"
               >
                 Description (optional)
               </label>
@@ -685,7 +685,7 @@ function CreateBookmarkModal({
                 }}
                 rows={3}
                 placeholder="Enter description"
-                className="block w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900 shadow-sm transition-colors placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                className="block w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900 shadow-sm transition-colors placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-100 dark:placeholder:text-slate-500"
               />
             </div>
             <Input
@@ -699,7 +699,7 @@ function CreateBookmarkModal({
           </div>
         </div>
 
-        <div className="flex justify-end gap-2 border-t border-slate-200 p-4">
+        <div className="flex justify-end gap-2 border-t border-slate-200 p-4 dark:border-slate-700">
           <Button type="button" variant="secondary" onClick={onClose} disabled={saving}>
             Cancel
           </Button>
@@ -771,7 +771,7 @@ function BookmarkRow({
             />
           ) : null}
           <div
-            className={`h-16 w-16 items-center justify-center rounded-lg bg-slate-100 ${ogImage !== null ? 'hidden' : 'flex'}`}
+            className={`h-16 w-16 items-center justify-center rounded-lg bg-slate-100 dark:bg-slate-700 ${ogImage !== null ? 'hidden' : 'flex'}`}
           >
             {favicon !== null ? (
               <img
@@ -788,7 +788,7 @@ function BookmarkRow({
               />
             ) : null}
             <Globe
-              className={`h-8 w-8 text-slate-400 ${favicon !== null ? 'hidden' : ''}`}
+              className={`h-8 w-8 text-slate-400 dark:text-slate-500 ${favicon !== null ? 'hidden' : ''}`}
             />
           </div>
         </div>
@@ -796,12 +796,12 @@ function BookmarkRow({
         <div className="min-w-0 flex-1">
           <button onClick={onOpen} className="w-full cursor-pointer text-left" type="button">
             <div className="flex items-start justify-between gap-2">
-              <h3 className="font-medium text-slate-900 transition-colors hover:text-blue-600">
+              <h3 className="font-medium text-slate-900 transition-colors hover:text-blue-600 dark:text-slate-100 dark:hover:text-blue-400">
                 {displayTitle}
               </h3>
               <div className="flex shrink-0 items-center gap-2">
                 {bookmark.archived ? (
-                  <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
+                  <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600 dark:bg-slate-700 dark:text-slate-400">
                     <Archive className="mr-1 h-3 w-3" />
                     Archived
                   </span>
@@ -810,9 +810,9 @@ function BookmarkRow({
               </div>
             </div>
             {displayDescription !== null ? (
-              <p className="mt-1 line-clamp-2 text-sm text-slate-500">
+              <p className="mt-1 line-clamp-2 text-sm text-slate-500 dark:text-slate-400">
                 {hasAiSummary ? (
-                  <span className="mr-1 inline-flex items-center text-purple-600">
+                  <span className="mr-1 inline-flex items-center text-purple-600 dark:text-purple-400">
                     <Sparkles className="mr-0.5 h-3 w-3" />
                   </span>
                 ) : null}
@@ -830,19 +830,19 @@ function BookmarkRow({
                   e.stopPropagation();
                   onTagClick(tag);
                 }}
-                className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-800 transition-colors hover:bg-blue-200"
+                className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-800 transition-colors hover:bg-blue-200 dark:bg-blue-900/50 dark:text-blue-300 dark:hover:bg-blue-900/70"
               >
                 <Tag className="h-2.5 w-2.5" />
                 {tag}
               </button>
             ))}
             {bookmark.tags.length > 3 ? (
-              <span className="text-xs text-slate-400">+{bookmark.tags.length - 3} more</span>
+              <span className="text-xs text-slate-400 dark:text-slate-500">+{bookmark.tags.length - 3} more</span>
             ) : null}
-            <span className="text-xs text-slate-400">·</span>
-            <span className="text-xs text-slate-400">{getHostname(bookmark.url)}</span>
-            <span className="text-xs text-slate-400">·</span>
-            <span className="text-xs text-slate-400">Updated {formatDate(bookmark.updatedAt)}</span>
+            <span className="text-xs text-slate-400 dark:text-slate-500">·</span>
+            <span className="text-xs text-slate-400 dark:text-slate-500">{getHostname(bookmark.url)}</span>
+            <span className="text-xs text-slate-400 dark:text-slate-500">·</span>
+            <span className="text-xs text-slate-400 dark:text-slate-500">Updated {formatDate(bookmark.updatedAt)}</span>
           </div>
         </div>
 
@@ -853,7 +853,7 @@ function BookmarkRow({
                 href={bookmark.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-blue-600"
+                className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-blue-600 dark:hover:bg-slate-700 dark:hover:text-blue-400"
                 onClick={(e): void => {
                   e.stopPropagation();
                 }}
@@ -868,7 +868,7 @@ function BookmarkRow({
                   e.stopPropagation();
                   setShowDeleteConfirm(true);
                 }}
-                className="text-slate-400 hover:text-red-600"
+                className="text-slate-400 hover:text-red-600 dark:hover:text-red-400"
               >
                 <Trash2 className="h-4 w-4" />
               </Button>
@@ -878,8 +878,8 @@ function BookmarkRow({
       </div>
 
       {showDeleteConfirm ? (
-        <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-4">
-          <p className="mb-3 text-sm text-red-800">Delete "{displayTitle}"?</p>
+        <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-800 dark:bg-red-900/30">
+          <p className="mb-3 text-sm text-red-800 dark:text-red-400">Delete "{displayTitle}"?</p>
           <div className="flex gap-2">
             <Button
               type="button"
@@ -1010,8 +1010,8 @@ export function BookmarksListPage(): React.JSX.Element {
     <Layout>
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-slate-900">My Bookmarks</h2>
-          <p className="text-slate-600">Save and organize your favorite links.</p>
+          <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100">My Bookmarks</h2>
+          <p className="text-slate-600 dark:text-slate-300">Save and organize your favorite links.</p>
         </div>
         <Button
           type="button"
@@ -1030,7 +1030,7 @@ export function BookmarksListPage(): React.JSX.Element {
       <FilterBar filters={filters} onFiltersChange={setFilters} availableTags={availableTags} />
 
       {error !== null && error !== '' ? (
-        <div className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 text-red-700">
+        <div className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 text-red-700 dark:border-red-800 dark:bg-red-900/30 dark:text-red-400">
           {error}
         </div>
       ) : null}
@@ -1038,9 +1038,9 @@ export function BookmarksListPage(): React.JSX.Element {
       {bookmarks.length === 0 ? (
         <Card>
           <div className="flex flex-col items-center justify-center py-12 text-center">
-            <Bookmark className="mb-4 h-12 w-12 text-slate-300" />
-            <h3 className="mb-2 text-lg font-medium text-slate-900">No bookmarks yet</h3>
-            <p className="mb-4 text-slate-500">Save your first bookmark to get started.</p>
+            <Bookmark className="mb-4 h-12 w-12 text-slate-300 dark:text-slate-600" />
+            <h3 className="mb-2 text-lg font-medium text-slate-900 dark:text-slate-100">No bookmarks yet</h3>
+            <p className="mb-4 text-slate-500 dark:text-slate-400">Save your first bookmark to get started.</p>
             <Button
               type="button"
               variant="primary"

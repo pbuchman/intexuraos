@@ -50,23 +50,23 @@ export function StatusWidget({
           />
         </div>
         <div className="flex-1">
-          <h3 className="font-semibold text-slate-900">{title}</h3>
+          <h3 className="font-semibold text-slate-900 dark:text-slate-100">{title}</h3>
           <p
             className={`text-sm font-medium ${
               status === 'connected'
-                ? 'text-green-700'
+                ? 'text-green-700 dark:text-green-400'
                 : status === 'disconnected'
-                  ? 'text-amber-700'
+                  ? 'text-amber-700 dark:text-amber-400'
                   : status === 'error'
-                    ? 'text-red-700'
-                    : 'text-slate-500'
+                    ? 'text-red-700 dark:text-red-400'
+                    : 'text-slate-500 dark:text-slate-400'
             }`}
           >
             {config.label}
           </p>
-          {description ? <p className="mt-1 text-sm text-slate-600">{description}</p> : null}
+          {description ? <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">{description}</p> : null}
           {details !== undefined && details !== '' ? (
-            <p className="mt-1 text-xs text-slate-500">{details}</p>
+            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{details}</p>
           ) : null}
         </div>
       </div>

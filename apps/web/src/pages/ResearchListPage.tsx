@@ -20,14 +20,14 @@ interface StatusStyle {
 }
 
 const STATUS_STYLES: Record<ResearchStatus, StatusStyle> = {
-  draft: { bg: 'bg-amber-100', text: 'text-amber-800', label: 'Draft' },
-  pending: { bg: 'bg-slate-100', text: 'text-slate-800', label: 'Pending' },
-  processing: { bg: 'bg-blue-100', text: 'text-blue-800', label: 'Processing' },
-  awaiting_confirmation: { bg: 'bg-orange-100', text: 'text-orange-800', label: 'Action Required' },
-  retrying: { bg: 'bg-blue-100', text: 'text-blue-800', label: 'Retrying' },
-  synthesizing: { bg: 'bg-purple-100', text: 'text-purple-800', label: 'Synthesizing' },
-  completed: { bg: 'bg-green-100', text: 'text-green-800', label: 'Completed' },
-  failed: { bg: 'bg-red-100', text: 'text-red-800', label: 'Failed' },
+  draft: { bg: 'bg-amber-100 dark:bg-amber-900/50', text: 'text-amber-800 dark:text-amber-300', label: 'Draft' },
+  pending: { bg: 'bg-slate-100 dark:bg-slate-700', text: 'text-slate-800 dark:text-slate-300', label: 'Pending' },
+  processing: { bg: 'bg-blue-100 dark:bg-blue-900/50', text: 'text-blue-800 dark:text-blue-300', label: 'Processing' },
+  awaiting_confirmation: { bg: 'bg-orange-100 dark:bg-orange-900/50', text: 'text-orange-800 dark:text-orange-300', label: 'Action Required' },
+  retrying: { bg: 'bg-blue-100 dark:bg-blue-900/50', text: 'text-blue-800 dark:text-blue-300', label: 'Retrying' },
+  synthesizing: { bg: 'bg-purple-100 dark:bg-purple-900/50', text: 'text-purple-800 dark:text-purple-300', label: 'Synthesizing' },
+  completed: { bg: 'bg-green-100 dark:bg-green-900/50', text: 'text-green-800 dark:text-green-300', label: 'Completed' },
+  failed: { bg: 'bg-red-100 dark:bg-red-900/50', text: 'text-red-800 dark:text-red-300', label: 'Failed' },
 };
 
 export function ResearchListPage(): React.JSX.Element {
@@ -65,8 +65,8 @@ export function ResearchListPage(): React.JSX.Element {
     <Layout>
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-slate-900">Previous Researches</h2>
-          <p className="text-slate-600">View and manage your research history</p>
+          <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Previous Researches</h2>
+          <p className="text-slate-600 dark:text-slate-300">View and manage your research history</p>
         </div>
         <Link to="/research/new">
           <Button>
@@ -79,7 +79,7 @@ export function ResearchListPage(): React.JSX.Element {
       <RefreshIndicator show={refreshing} />
 
       {error !== null && error !== '' ? (
-        <div className="mb-6 break-words rounded-lg border border-red-200 bg-red-50 p-4 text-red-700">
+        <div className="mb-6 break-words rounded-lg border border-red-200 bg-red-50 p-4 text-red-700 dark:border-red-800 dark:bg-red-900/30 dark:text-red-400">
           {error}
         </div>
       ) : null}
@@ -87,8 +87,8 @@ export function ResearchListPage(): React.JSX.Element {
       {researches.length === 0 ? (
         <Card>
           <div className="py-12 text-center">
-            <p className="mb-4 text-slate-600">No researches yet</p>
-            <Link to="/research/new" className="text-blue-600 underline">
+            <p className="mb-4 text-slate-600 dark:text-slate-300">No researches yet</p>
+            <Link to="/research/new" className="text-blue-600 underline dark:text-blue-400">
               Start your first research
             </Link>
           </div>
@@ -158,13 +158,13 @@ function ResearchCard({ research, onDelete, onToggleFavourite, updatingFavourite
   return (
     <div
       onClick={handleCardClick}
-      className="cursor-pointer rounded-lg border border-slate-200 bg-white p-4 transition-shadow hover:shadow-md"
+      className="cursor-pointer rounded-lg border border-slate-200 bg-white p-4 transition-shadow hover:shadow-md dark:border-slate-700 dark:bg-slate-800"
     >
       <div className="flex-1 min-w-0">
-        <h3 className="text-lg font-semibold text-slate-900 hover:text-blue-600">
+        <h3 className="text-lg font-semibold text-slate-900 hover:text-blue-600 dark:text-slate-100 dark:hover:text-blue-400">
           {research.title !== '' ? stripMarkdown(research.title) : 'Untitled Research'}
         </h3>
-        <p className="mt-1 line-clamp-2 text-sm text-slate-600">{research.prompt}</p>
+        <p className="mt-1 line-clamp-2 text-sm text-slate-600 dark:text-slate-300">{research.prompt}</p>
       </div>
 
       <div className="mt-3 flex items-center gap-2 flex-wrap">
@@ -174,14 +174,14 @@ function ResearchCard({ research, onDelete, onToggleFavourite, updatingFavourite
           {status.label}
         </span>
         {[...new Set(research.selectedModels.map(getProviderForModel))].map((provider) => (
-          <span key={provider} className="rounded bg-slate-100 px-2 py-0.5 text-xs text-slate-600">
+          <span key={provider} className="rounded bg-slate-100 px-2 py-0.5 text-xs text-slate-600 dark:bg-slate-700 dark:text-slate-300">
             {provider}
           </span>
         ))}
       </div>
 
       <div className="mt-3 flex items-center justify-between">
-        <span className="text-sm text-slate-500">{getCreationDate()}</span>
+        <span className="text-sm text-slate-500 dark:text-slate-400">{getCreationDate()}</span>
         <div className="flex items-center gap-2">
           <button
             onClick={(e): void => {
@@ -189,11 +189,11 @@ function ResearchCard({ research, onDelete, onToggleFavourite, updatingFavourite
               onToggleFavourite(research.id, !(research.favourite ?? false));
             }}
             disabled={updatingFavourite === research.id}
-            className="p-1 rounded hover:bg-slate-100 transition-colors disabled:opacity-50"
+            className="p-1 rounded hover:bg-slate-100 transition-colors disabled:opacity-50 dark:hover:bg-slate-700"
             aria-label={research.favourite === true ? 'Unfavourite' : 'Favourite'}
           >
             <Star
-              className={`h-5 w-5 ${research.favourite === true ? 'text-amber-400 fill-amber-400' : 'text-slate-300'}`}
+              className={`h-5 w-5 ${research.favourite === true ? 'text-amber-400 fill-amber-400' : 'text-slate-300 dark:text-slate-500'}`}
             />
           </button>
           {showDeleteConfirm ? (
@@ -223,7 +223,7 @@ function ResearchCard({ research, onDelete, onToggleFavourite, updatingFavourite
                 e.stopPropagation();
                 setShowDeleteConfirm(true);
               }}
-              className="text-sm text-slate-400 hover:text-red-600 flex items-center gap-1"
+              className="text-sm text-slate-400 hover:text-red-600 flex items-center gap-1 dark:hover:text-red-400"
             >
               <Trash2 className="h-4 w-4" />
               <span className="hidden sm:inline">{deleteLabel}</span>

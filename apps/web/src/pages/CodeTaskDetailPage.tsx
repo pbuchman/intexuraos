@@ -48,12 +48,12 @@ interface StatusStyle {
 }
 
 const STATUS_STYLES: Record<CodeTaskStatus, StatusStyle> = {
-  dispatched: { bg: 'bg-slate-100', text: 'text-slate-800', label: 'Dispatched', icon: Clock },
-  running: { bg: 'bg-blue-100', text: 'text-blue-800', label: 'Running', icon: Loader2 },
-  completed: { bg: 'bg-green-100', text: 'text-green-800', label: 'Completed', icon: CheckCircle2 },
-  failed: { bg: 'bg-red-100', text: 'text-red-800', label: 'Failed', icon: XCircle },
-  interrupted: { bg: 'bg-amber-100', text: 'text-amber-800', label: 'Interrupted', icon: AlertCircle },
-  cancelled: { bg: 'bg-slate-100', text: 'text-slate-600', label: 'Cancelled', icon: XCircle },
+  dispatched: { bg: 'bg-slate-100 dark:bg-slate-700', text: 'text-slate-800 dark:text-slate-300', label: 'Dispatched', icon: Clock },
+  running: { bg: 'bg-blue-100 dark:bg-blue-900/50', text: 'text-blue-800 dark:text-blue-300', label: 'Running', icon: Loader2 },
+  completed: { bg: 'bg-green-100 dark:bg-green-900/50', text: 'text-green-800 dark:text-green-300', label: 'Completed', icon: CheckCircle2 },
+  failed: { bg: 'bg-red-100 dark:bg-red-900/50', text: 'text-red-800 dark:text-red-300', label: 'Failed', icon: XCircle },
+  interrupted: { bg: 'bg-amber-100 dark:bg-amber-900/50', text: 'text-amber-800 dark:text-amber-300', label: 'Interrupted', icon: AlertCircle },
+  cancelled: { bg: 'bg-slate-100 dark:bg-slate-700', text: 'text-slate-600 dark:text-slate-400', label: 'Cancelled', icon: XCircle },
 };
 
 export function CodeTaskDetailPage(): React.JSX.Element {
@@ -99,10 +99,10 @@ export function CodeTaskDetailPage(): React.JSX.Element {
   if (error !== null || task === null) {
     return (
       <Layout>
-        <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-4 text-red-700">
+        <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-4 text-red-700 dark:border-red-800 dark:bg-red-900/30 dark:text-red-400">
           {error ?? 'Task not found'}
         </div>
-        <Link to="/code-tasks" className="text-blue-600 underline">
+        <Link to="/code-tasks" className="text-blue-600 underline dark:text-blue-400">
           Back to list
         </Link>
       </Layout>
@@ -117,7 +117,7 @@ export function CodeTaskDetailPage(): React.JSX.Element {
   return (
     <Layout>
       <div className="mb-4">
-        <Link to="/code-tasks" className="text-sm text-blue-600 hover:underline">
+        <Link to="/code-tasks" className="text-sm text-blue-600 hover:underline dark:text-blue-400">
           ← Back to list
         </Link>
       </div>
@@ -127,9 +127,9 @@ export function CodeTaskDetailPage(): React.JSX.Element {
       <div className="mb-6">
         <div className="flex flex-wrap items-center gap-3">
           {task.linearIssueId !== undefined ? (
-            <span className="text-lg font-medium text-blue-600">{task.linearIssueId}</span>
+            <span className="text-lg font-medium text-blue-600 dark:text-blue-400">{task.linearIssueId}</span>
           ) : null}
-          <h2 className="text-2xl font-bold text-slate-900">
+          <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100">
             {task.linearIssueTitle ?? 'Code Task'}
           </h2>
           <span
@@ -140,15 +140,15 @@ export function CodeTaskDetailPage(): React.JSX.Element {
           </span>
         </div>
 
-        <div className="mt-2 flex flex-wrap items-center gap-4 text-sm text-slate-500">
+        <div className="mt-2 flex flex-wrap items-center gap-4 text-sm text-slate-500 dark:text-slate-400">
           <span>Created: {formatDateTime(task.createdAt)}</span>
           {task.status !== 'dispatched' && task.status !== 'running' ? (
             <span>Updated: {formatRelative(task.updatedAt)}</span>
           ) : null}
-          <span className="rounded bg-slate-100 px-2 py-0.5 text-xs capitalize">
+          <span className="rounded bg-slate-100 px-2 py-0.5 text-xs capitalize dark:bg-slate-700 dark:text-slate-300">
             {task.workerType}
           </span>
-          <span className="rounded bg-slate-100 px-2 py-0.5 text-xs capitalize">
+          <span className="rounded bg-slate-100 px-2 py-0.5 text-xs capitalize dark:bg-slate-700 dark:text-slate-300">
             {task.workerLocation}
           </span>
         </div>
@@ -170,7 +170,7 @@ export function CodeTaskDetailPage(): React.JSX.Element {
         ) : null}
 
         {cancelError !== null ? (
-          <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+          <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/30 dark:text-red-400">
             {cancelError}
           </div>
         ) : null}
@@ -190,15 +190,15 @@ export function CodeTaskDetailPage(): React.JSX.Element {
             </span>
           </Button>
         </div>
-        <blockquote className="border-l-4 border-blue-400 bg-slate-50 py-3 pl-4 pr-3">
-          <p className="whitespace-pre-wrap text-slate-700">{task.prompt}</p>
+        <blockquote className="border-l-4 border-blue-400 bg-slate-50 py-3 pl-4 pr-3 dark:bg-slate-700">
+          <p className="whitespace-pre-wrap text-slate-700 dark:text-slate-200">{task.prompt}</p>
         </blockquote>
         {task.sanitizedPrompt !== task.prompt ? (
           <details className="mt-3">
-            <summary className="cursor-pointer text-sm text-slate-500 hover:text-slate-700">
+            <summary className="cursor-pointer text-sm text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300">
               Show sanitized prompt
             </summary>
-            <blockquote className="mt-2 border-l-4 border-slate-300 bg-slate-100 py-2 pl-4 pr-3 text-sm text-slate-500">
+            <blockquote className="mt-2 border-l-4 border-slate-300 bg-slate-100 py-2 pl-4 pr-3 text-sm text-slate-500 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-400">
               <p className="whitespace-pre-wrap">{task.sanitizedPrompt}</p>
             </blockquote>
           </details>
@@ -231,17 +231,17 @@ function TaskResultCard({ task }: TaskResultCardProps): React.JSX.Element | null
               href={result.prUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 text-blue-600 hover:underline"
+              className="inline-flex items-center gap-2 text-blue-600 hover:underline dark:text-blue-400"
             >
               <ExternalLink className="h-4 w-4" />
               View Pull Request
             </a>
           ) : null}
-          <div className="flex items-center gap-2 text-slate-600">
+          <div className="flex items-center gap-2 text-slate-600 dark:text-slate-300">
             <GitBranch className="h-4 w-4" />
-            <code className="rounded bg-slate-100 px-2 py-0.5 text-sm">{result.branch}</code>
+            <code className="rounded bg-slate-100 px-2 py-0.5 text-sm dark:bg-slate-700 dark:text-slate-300">{result.branch}</code>
           </div>
-          <div className="flex items-center gap-2 text-slate-600">
+          <div className="flex items-center gap-2 text-slate-600 dark:text-slate-300">
             <GitCommit className="h-4 w-4" />
             <span>
               {result.commits} commit{result.commits !== 1 ? 's' : ''}
@@ -250,19 +250,19 @@ function TaskResultCard({ task }: TaskResultCardProps): React.JSX.Element | null
         </div>
 
         {result.ciFailed === true ? (
-          <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700">
+          <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700 dark:border-amber-800 dark:bg-amber-900/30 dark:text-amber-300">
             ⚠️ CI checks failed. Please review and fix before merging.
           </div>
         ) : null}
 
         {result.partialWork === true ? (
-          <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700">
+          <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700 dark:border-amber-800 dark:bg-amber-900/30 dark:text-amber-300">
             ⚠️ Partial work completed. The task may need additional attention.
           </div>
         ) : null}
 
         {result.rebaseResult !== undefined && result.rebaseResult !== 'success' ? (
-          <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700">
+          <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700 dark:border-amber-800 dark:bg-amber-900/30 dark:text-amber-300">
             {result.rebaseResult === 'conflict'
               ? '⚠️ Merge conflicts need to be resolved manually.'
               : '⚠️ Rebase was skipped.'}
@@ -270,8 +270,8 @@ function TaskResultCard({ task }: TaskResultCardProps): React.JSX.Element | null
         ) : null}
 
         <div>
-          <h4 className="mb-2 font-medium text-slate-700">Summary</h4>
-          <p className="whitespace-pre-wrap text-slate-600">{result.summary}</p>
+          <h4 className="mb-2 font-medium text-slate-700 dark:text-slate-200">Summary</h4>
+          <p className="whitespace-pre-wrap text-slate-600 dark:text-slate-300">{result.summary}</p>
         </div>
       </div>
     </Card>
@@ -287,16 +287,16 @@ function TaskErrorCard({ task }: TaskErrorCardProps): React.JSX.Element | null {
   if (error === undefined) return null;
 
   return (
-    <Card className="mb-6 border-red-200 bg-red-50">
+    <Card className="mb-6 border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-900/30">
       <div className="flex items-start gap-3">
-        <XCircle className="mt-0.5 h-5 w-5 flex-shrink-0 text-red-600" />
+        <XCircle className="mt-0.5 h-5 w-5 flex-shrink-0 text-red-600 dark:text-red-400" />
         <div>
-          <h3 className="font-semibold text-red-800">Error: {error.code}</h3>
-          <p className="mt-1 text-sm text-red-700">{error.message}</p>
+          <h3 className="font-semibold text-red-800 dark:text-red-300">Error: {error.code}</h3>
+          <p className="mt-1 text-sm text-red-700 dark:text-red-400">{error.message}</p>
           {error.remediation !== undefined ? (
             <div className="mt-3 space-y-2">
               {error.remediation.manualSteps !== undefined ? (
-                <p className="text-sm text-slate-700">
+                <p className="text-sm text-slate-700 dark:text-slate-300">
                   <strong>Manual steps:</strong> {error.remediation.manualSteps}
                 </p>
               ) : null}
@@ -305,7 +305,7 @@ function TaskErrorCard({ task }: TaskErrorCardProps): React.JSX.Element | null {
                   href={error.remediation.supportLink}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 text-sm text-blue-600 hover:underline"
+                  className="inline-flex items-center gap-1 text-sm text-blue-600 hover:underline dark:text-blue-400"
                 >
                   <ExternalLink className="h-3.5 w-3.5" />
                   Get help
@@ -449,7 +449,7 @@ function LogViewer({ taskId, isActive }: LogViewerProps): React.JSX.Element {
           <Terminal className="h-5 w-5" />
           <span>Execution Logs</span>
           {isActive ? (
-            <span className="ml-2 flex items-center gap-1.5 rounded-full bg-green-100 px-2 py-0.5 text-xs text-green-700">
+            <span className="ml-2 flex items-center gap-1.5 rounded-full bg-green-100 px-2 py-0.5 text-xs text-green-700 dark:bg-green-900/50 dark:text-green-300">
               <span className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
               Live
             </span>
@@ -459,17 +459,17 @@ function LogViewer({ taskId, isActive }: LogViewerProps): React.JSX.Element {
       className="mb-6"
     >
       <div className="mb-2 flex items-center justify-between">
-        <span className="text-sm text-slate-500">
+        <span className="text-sm text-slate-500 dark:text-slate-400">
           {logs.length} log{logs.length !== 1 ? 's' : ''}
         </span>
-        <label className="flex items-center gap-2 text-sm text-slate-600">
+        <label className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
           <input
             type="checkbox"
             checked={autoScroll}
             onChange={(e): void => {
               setAutoScroll(e.target.checked);
             }}
-            className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+            className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 dark:border-slate-600 dark:bg-slate-700"
           />
           Auto-scroll
         </label>

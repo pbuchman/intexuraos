@@ -37,14 +37,14 @@ export function WorkerSettingsPage(): React.JSX.Element {
   return (
     <Layout>
       <div className="mb-6">
-        <h2 className="text-2xl font-bold text-slate-900">Worker Configuration</h2>
-        <p className="text-slate-600">
+        <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Worker Configuration</h2>
+        <p className="text-slate-600 dark:text-slate-300">
           Configure your code execution workers. Each worker requires Cloudflare Access credentials and a dispatch signing secret.
         </p>
       </div>
 
       {error !== null && error !== '' ? (
-        <div className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 text-red-700">
+        <div className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 text-red-700 dark:border-red-800 dark:bg-red-900/30 dark:text-red-400">
           {error}
         </div>
       ) : null}
@@ -175,21 +175,21 @@ function WorkerRow({
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <Server className="h-5 w-5 text-slate-400" />
-            <span className="font-medium text-slate-900">{worker.name}</span>
+            <Server className="h-5 w-5 text-slate-400 dark:text-slate-500" />
+            <span className="font-medium text-slate-900 dark:text-slate-100">{worker.name}</span>
           </div>
-          <p className="mt-1 text-sm text-slate-500">{worker.description}</p>
+          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{worker.description}</p>
           {isConfigured ? (
             <div className="mt-2 space-y-1">
-              <code className="block truncate rounded bg-slate-100 px-2 py-0.5 font-mono text-xs text-slate-600">
+              <code className="block truncate rounded bg-slate-100 px-2 py-0.5 font-mono text-xs text-slate-600 dark:bg-slate-700 dark:text-slate-300">
                 {currentConfig.url}
               </code>
-              <div className="flex flex-wrap gap-2 text-xs text-slate-500">
+              <div className="flex flex-wrap gap-2 text-xs text-slate-500 dark:text-slate-400">
                 <span>CF Access ID: {currentConfig.cfAccessClientId}</span>
               </div>
             </div>
           ) : (
-            <span className="mt-2 block text-sm text-slate-400">Not configured</span>
+            <span className="mt-2 block text-sm text-slate-400 dark:text-slate-500">Not configured</span>
           )}
         </div>
 
@@ -202,13 +202,13 @@ function WorkerRow({
                   onClick={(): void => {
                     setIsMenuOpen(!isMenuOpen);
                   }}
-                  className="rounded p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
+                  className="rounded p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-700 dark:hover:text-slate-300"
                   title="Actions"
                 >
                   <MoreVertical className="h-5 w-5" />
                 </button>
                 {isMenuOpen && (
-                  <div className="absolute right-0 top-full z-10 mt-1 w-36 rounded-lg border border-slate-200 bg-white py-1 shadow-lg">
+                  <div className="absolute right-0 top-full z-10 mt-1 w-36 rounded-lg border border-slate-200 bg-white py-1 shadow-lg dark:border-slate-700 dark:bg-slate-800">
                     <button
                       type="button"
                       onClick={(): void => {
@@ -216,7 +216,7 @@ function WorkerRow({
                         void handleTest();
                       }}
                       disabled={isTesting}
-                      className="flex w-full items-center gap-2 px-3 py-2 text-sm text-slate-700 transition-colors hover:bg-slate-100 disabled:opacity-50"
+                      className="flex w-full items-center gap-2 px-3 py-2 text-sm text-slate-700 transition-colors hover:bg-slate-100 disabled:opacity-50 dark:text-slate-200 dark:hover:bg-slate-700"
                     >
                       <FlaskConical className="h-4 w-4" />
                       {isTesting ? 'Testing...' : 'Test'}
@@ -227,7 +227,7 @@ function WorkerRow({
                         setIsMenuOpen(false);
                         setIsEditing(true);
                       }}
-                      className="flex w-full items-center gap-2 px-3 py-2 text-sm text-slate-700 transition-colors hover:bg-slate-100"
+                      className="flex w-full items-center gap-2 px-3 py-2 text-sm text-slate-700 transition-colors hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-700"
                     >
                       <Pencil className="h-4 w-4" />
                       Update
@@ -238,7 +238,7 @@ function WorkerRow({
                         setIsMenuOpen(false);
                         setShowDeleteConfirm(true);
                       }}
-                      className="flex w-full items-center gap-2 px-3 py-2 text-sm text-red-600 transition-colors hover:bg-red-50"
+                      className="flex w-full items-center gap-2 px-3 py-2 text-sm text-red-600 transition-colors hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/30"
                     >
                       <Trash2 className="h-4 w-4" />
                       Delete
@@ -263,8 +263,8 @@ function WorkerRow({
       </div>
 
       {saveSuccess ? (
-        <div className="mt-3 rounded-lg border border-green-200 bg-green-50 p-3">
-          <p className="text-sm font-medium text-green-800">
+        <div className="mt-3 rounded-lg border border-green-200 bg-green-50 p-3 dark:border-green-800 dark:bg-green-900/30">
+          <p className="text-sm font-medium text-green-800 dark:text-green-300">
             ✓ Worker configuration saved successfully
           </p>
         </div>
@@ -272,13 +272,13 @@ function WorkerRow({
         <div
           className={`mt-3 rounded-lg border p-3 ${
             currentConfig.testStatus === 'success'
-              ? 'border-green-200 bg-green-50'
-              : 'border-red-200 bg-red-50'
+              ? 'border-green-200 bg-green-50 dark:border-green-800 dark:bg-green-900/30'
+              : 'border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-900/30'
           }`}
         >
           <p
             className={`text-sm font-medium mb-1 ${
-              currentConfig.testStatus === 'success' ? 'text-green-800' : 'text-red-800'
+              currentConfig.testStatus === 'success' ? 'text-green-800 dark:text-green-300' : 'text-red-800 dark:text-red-300'
             }`}
           >
             {currentConfig.testStatus === 'success'
@@ -286,7 +286,7 @@ function WorkerRow({
               : `Connection Failed (${currentConfig.lastTestedAt !== undefined ? formatDateTime(currentConfig.lastTestedAt) : 'N/A'}):`}
           </p>
           <p
-            className={`text-sm ${currentConfig.testStatus === 'success' ? 'text-green-700' : 'text-red-700'}`}
+            className={`text-sm ${currentConfig.testStatus === 'success' ? 'text-green-700 dark:text-green-400' : 'text-red-700 dark:text-red-400'}`}
           >
             {currentConfig.testMessage ?? 'No message available'}
           </p>
@@ -340,9 +340,9 @@ function WorkerRow({
             disabled={isSaving}
           />
           {formError !== null ? (
-            <p className="text-sm text-red-600">{formError}</p>
+            <p className="text-sm text-red-600 dark:text-red-400">{formError}</p>
           ) : null}
-          {isSaving ? <p className="text-sm text-blue-600">Saving configuration...</p> : null}
+          {isSaving ? <p className="text-sm text-blue-600 dark:text-blue-400">Saving configuration...</p> : null}
           <div className="flex gap-2">
             <Button
               type="button"
@@ -370,8 +370,8 @@ function WorkerRow({
       ) : null}
 
       {showDeleteConfirm ? (
-        <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-4">
-          <p className="mb-3 text-sm text-red-800">Delete this worker configuration?</p>
+        <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-800 dark:bg-red-900/30">
+          <p className="mb-3 text-sm text-red-800 dark:text-red-300">Delete this worker configuration?</p>
           <div className="flex gap-2">
             <Button
               type="button"

@@ -1,12 +1,22 @@
 @import 'tailwindcss';
 @import 'highlight.js/styles/github.css';
 
+/* Enable class-based dark mode */
+@custom-variant dark (&:where(.dark, .dark *));
+
 /* Custom theme variables */
 :root {
   --color-primary: theme('colors.blue.600');
   --color-primary-hover: theme('colors.blue.700');
   --color-accent: theme('colors.amber.400');
   --color-accent-hover: theme('colors.amber.500');
+}
+
+.dark {
+  --color-primary: theme('colors.blue.400');
+  --color-primary-hover: theme('colors.blue.300');
+  --color-accent: theme('colors.amber.300');
+  --color-accent-hover: theme('colors.amber.200');
 }
 
 /* Prevent horizontal scrolling on mobile */
@@ -19,6 +29,11 @@ body {
 /* Base styles */
 body {
   @apply bg-slate-50 text-slate-900 antialiased;
+}
+
+.dark body,
+body.dark {
+  @apply bg-slate-900 text-slate-100;
 }
 
 /* Focus styles */

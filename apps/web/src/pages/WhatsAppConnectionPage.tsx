@@ -270,19 +270,19 @@ export function WhatsAppConnectionPage(): React.JSX.Element {
   return (
     <Layout>
       <div className="mb-6">
-        <h2 className="text-2xl font-bold text-slate-900">WhatsApp Connection</h2>
-        <p className="text-slate-600">
+        <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100">WhatsApp Connection</h2>
+        <p className="text-slate-600 dark:text-slate-300">
           Connect your WhatsApp phone numbers to save messages as notes
         </p>
       </div>
 
       <div className="max-w-2xl space-y-6">
         {error !== null && error !== '' ? (
-          <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-red-700">{error}</div>
+          <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-red-700 dark:border-red-800 dark:bg-red-900/30 dark:text-red-400">{error}</div>
         ) : null}
 
         {successMessage !== null && successMessage !== '' ? (
-          <div className="rounded-lg border border-green-200 bg-green-50 p-4 text-green-700">
+          <div className="rounded-lg border border-green-200 bg-green-50 p-4 text-green-700 dark:border-green-800 dark:bg-green-900/30 dark:text-green-400">
             {successMessage}
           </div>
         ) : null}
@@ -290,8 +290,8 @@ export function WhatsAppConnectionPage(): React.JSX.Element {
         <Card title="Connection Settings">
           <form onSubmit={(e) => void handleSubmit(e)} className="space-y-4">
             <div className="space-y-3">
-              <label className="block text-sm font-medium text-slate-700">Phone Numbers</label>
-              <p className="text-sm text-slate-500">
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Phone Numbers</label>
+              <p className="text-sm text-slate-500 dark:text-slate-400">
                 Enter your phone number and verify it with a 6-digit code sent via WhatsApp.
               </p>
               {form.phoneNumbers.map((phone, index) => (
@@ -306,7 +306,7 @@ export function WhatsAppConnectionPage(): React.JSX.Element {
                       disabled={phone.verificationState === 'verified'}
                     />
                     {phone.verificationState === 'verified' ? (
-                      <div className="flex items-center gap-1 rounded-lg bg-green-100 px-3 text-green-700">
+                      <div className="flex items-center gap-1 rounded-lg bg-green-100 px-3 text-green-700 dark:bg-green-900/50 dark:text-green-400">
                         <Check className="h-4 w-4" />
                         <span className="text-sm font-medium">Verified</span>
                       </div>
@@ -319,7 +319,7 @@ export function WhatsAppConnectionPage(): React.JSX.Element {
                             handleOtpChange(index, e.target.value.replace(/\D/g, '').slice(0, 6));
                           }}
                           placeholder="6-digit code"
-                          className="w-28 rounded-lg border border-slate-300 px-3 py-2 text-center font-mono text-lg tracking-widest focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                          className="w-28 rounded-lg border border-slate-300 px-3 py-2 text-center font-mono text-lg tracking-widest focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-100"
                           maxLength={6}
                         />
                         <Button
@@ -351,7 +351,7 @@ export function WhatsAppConnectionPage(): React.JSX.Element {
                         onClick={() => {
                           handleRemovePhoneNumber(index);
                         }}
-                        className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-red-600"
+                        className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-red-600 dark:hover:bg-slate-700"
                         aria-label="Remove phone number"
                       >
                         <X className="h-5 w-5" />
@@ -359,7 +359,7 @@ export function WhatsAppConnectionPage(): React.JSX.Element {
                     ) : null}
                   </div>
                   {phone.error !== undefined && phone.error !== '' ? (
-                    <p className="text-sm text-red-600">{phone.error}</p>
+                    <p className="text-sm text-red-600 dark:text-red-400">{phone.error}</p>
                   ) : null}
                 </div>
               ))}
@@ -395,7 +395,7 @@ export function WhatsAppConnectionPage(): React.JSX.Element {
             </div>
 
             {hasValidPhones && !allPhonesVerified ? (
-              <p className="text-sm text-amber-600">
+              <p className="text-sm text-amber-600 dark:text-amber-400">
                 Please verify all phone numbers before connecting.
               </p>
             ) : null}
@@ -406,16 +406,16 @@ export function WhatsAppConnectionPage(): React.JSX.Element {
           <Card title="Current Status" variant="success">
             <dl className="space-y-2 text-sm">
               <div className="flex justify-between">
-                <dt className="text-slate-600">Status</dt>
-                <dd className="font-medium text-green-700">Connected</dd>
+                <dt className="text-slate-600 dark:text-slate-400">Status</dt>
+                <dd className="font-medium text-green-700 dark:text-green-400">Connected</dd>
               </div>
               <div>
-                <dt className="text-slate-600">Connected Phone Numbers</dt>
+                <dt className="text-slate-600 dark:text-slate-400">Connected Phone Numbers</dt>
                 <dd className="mt-1 space-y-1">
                   {status.phoneNumbers.map((phone, index) => (
                     <span
                       key={index}
-                      className="mr-2 inline-block rounded bg-slate-100 px-2 py-1 font-mono text-sm text-slate-900"
+                      className="mr-2 inline-block rounded bg-slate-100 px-2 py-1 font-mono text-sm text-slate-900 dark:bg-slate-700 dark:text-slate-100"
                     >
                       +{phone.replace(/^\+/, '')}
                     </span>
@@ -424,8 +424,8 @@ export function WhatsAppConnectionPage(): React.JSX.Element {
               </div>
               {status.updatedAt !== '' ? (
                 <div className="flex justify-between">
-                  <dt className="text-slate-600">Last Updated</dt>
-                  <dd className="text-slate-900">{new Date(status.updatedAt).toLocaleString()}</dd>
+                  <dt className="text-slate-600 dark:text-slate-400">Last Updated</dt>
+                  <dd className="text-slate-900 dark:text-slate-100">{new Date(status.updatedAt).toLocaleString()}</dd>
                 </div>
               ) : null}
             </dl>
