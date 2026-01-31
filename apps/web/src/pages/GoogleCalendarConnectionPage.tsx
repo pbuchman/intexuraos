@@ -93,17 +93,17 @@ export function GoogleCalendarConnectionPage(): React.JSX.Element {
   return (
     <Layout>
       <div className="mb-6">
-        <h2 className="text-2xl font-bold text-slate-900">Google Calendar</h2>
-        <p className="text-slate-600">Connect your Google Calendar to create and manage events</p>
+        <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Google Calendar</h2>
+        <p className="text-slate-600 dark:text-slate-300">Connect your Google Calendar to create and manage events</p>
       </div>
 
       <div className="max-w-2xl space-y-6">
         {error !== null && error !== '' ? (
-          <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-red-700">{error}</div>
+          <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-red-700 dark:border-red-800 dark:bg-red-900/30 dark:text-red-400">{error}</div>
         ) : null}
 
         {successMessage !== null && successMessage !== '' ? (
-          <div className="rounded-lg border border-green-200 bg-green-50 p-4 text-green-700">
+          <div className="rounded-lg border border-green-200 bg-green-50 p-4 text-green-700 dark:border-green-800 dark:bg-green-900/30 dark:text-green-400">
             {successMessage}
           </div>
         ) : null}
@@ -112,30 +112,30 @@ export function GoogleCalendarConnectionPage(): React.JSX.Element {
           <Card title="Connected Account" variant="success">
             <dl className="space-y-2 text-sm">
               <div className="flex justify-between">
-                <dt className="text-slate-600">Status</dt>
-                <dd className="font-medium text-green-700">Connected</dd>
+                <dt className="text-slate-600 dark:text-slate-400">Status</dt>
+                <dd className="font-medium text-green-700 dark:text-green-400">Connected</dd>
               </div>
               {status.email !== undefined ? (
                 <div className="flex justify-between">
-                  <dt className="text-slate-600">Account</dt>
-                  <dd className="text-slate-900">{status.email}</dd>
+                  <dt className="text-slate-600 dark:text-slate-400">Account</dt>
+                  <dd className="text-slate-900 dark:text-slate-100">{status.email}</dd>
                 </div>
               ) : null}
               {status.scopes !== undefined && status.scopes.length > 0 ? (
                 <div className="flex justify-between">
-                  <dt className="text-slate-600">Permissions</dt>
-                  <dd className="text-slate-900">{status.scopes.length} granted</dd>
+                  <dt className="text-slate-600 dark:text-slate-400">Permissions</dt>
+                  <dd className="text-slate-900 dark:text-slate-100">{status.scopes.length} granted</dd>
                 </div>
               ) : null}
               {status.updatedAt !== null ? (
                 <div className="flex justify-between">
-                  <dt className="text-slate-600">Connected At</dt>
-                  <dd className="text-slate-900">{new Date(status.updatedAt).toLocaleString()}</dd>
+                  <dt className="text-slate-600 dark:text-slate-400">Connected At</dt>
+                  <dd className="text-slate-900 dark:text-slate-100">{new Date(status.updatedAt).toLocaleString()}</dd>
                 </div>
               ) : null}
             </dl>
 
-            <div className="mt-4 pt-4 border-t border-slate-200">
+            <div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-700">
               <Button
                 variant="danger"
                 isLoading={isDisconnecting}
@@ -147,15 +147,15 @@ export function GoogleCalendarConnectionPage(): React.JSX.Element {
           </Card>
         ) : (
           <Card title="Connect Google Calendar">
-            <p className="text-sm text-slate-600 mb-4">
+            <p className="text-sm text-slate-600 dark:text-slate-300 mb-4">
               Connect your Google account to allow IntexuraOS to create and manage calendar events
               on your behalf. This enables voice commands like &quot;schedule a meeting&quot; to
               work with your calendar.
             </p>
 
-            <div className="bg-slate-50 rounded-lg p-4 mb-4">
-              <h4 className="text-sm font-medium text-slate-900 mb-2">Permissions requested:</h4>
-              <ul className="text-sm text-slate-600 space-y-1">
+            <div className="bg-slate-50 rounded-lg p-4 mb-4 dark:bg-slate-700">
+              <h4 className="text-sm font-medium text-slate-900 dark:text-slate-100 mb-2">Permissions requested:</h4>
+              <ul className="text-sm text-slate-600 dark:text-slate-300 space-y-1">
                 <li>• View and edit events on your calendar</li>
                 <li>• View your email address</li>
               </ul>

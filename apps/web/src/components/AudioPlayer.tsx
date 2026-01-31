@@ -76,23 +76,23 @@ export function AudioPlayer({ messageId, accessToken }: AudioPlayerProps): React
 
   if (isLoading) {
     return (
-      <div className="flex items-center gap-2 rounded-lg bg-slate-100 p-3">
-        <Loader2 className="h-5 w-5 animate-spin text-slate-400" />
-        <span className="text-sm text-slate-500">Loading audio...</span>
+      <div className="flex items-center gap-2 rounded-lg bg-slate-100 p-3 dark:bg-slate-700">
+        <Loader2 className="h-5 w-5 animate-spin text-slate-400 dark:text-slate-500" />
+        <span className="text-sm text-slate-500 dark:text-slate-400">Loading audio...</span>
       </div>
     );
   }
 
   if (error !== null) {
     return (
-      <div className="flex items-center gap-2 rounded-lg bg-red-50 p-3">
+      <div className="flex items-center gap-2 rounded-lg bg-red-50 p-3 dark:bg-red-900/30">
         <AlertCircle className="h-5 w-5 text-red-400" />
-        <span className="text-sm text-red-600">{error}</span>
+        <span className="text-sm text-red-600 dark:text-red-400">{error}</span>
         <button
           onClick={(): void => {
             void fetchAudioUrl();
           }}
-          className="ml-auto text-sm text-red-600 underline hover:no-underline"
+          className="ml-auto text-sm text-red-600 underline hover:no-underline dark:text-red-400"
         >
           Retry
         </button>
@@ -101,7 +101,7 @@ export function AudioPlayer({ messageId, accessToken }: AudioPlayerProps): React
   }
 
   return (
-    <div className="flex items-center gap-3 rounded-lg bg-slate-100 p-3">
+    <div className="flex items-center gap-3 rounded-lg bg-slate-100 p-3 dark:bg-slate-700">
       {audioUrl !== null && (
         <audio
           ref={audioRef}
@@ -122,7 +122,7 @@ export function AudioPlayer({ messageId, accessToken }: AudioPlayerProps): React
       {/* Play/Pause button */}
       <button
         onClick={handlePlayPause}
-        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blue-600 text-white transition hover:bg-blue-700"
+        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blue-600 text-white transition hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600"
         aria-label={isPlaying ? 'Pause' : 'Play'}
       >
         {isPlaying ? <Pause className="h-5 w-5" /> : <Play className="ml-0.5 h-5 w-5" />}
@@ -136,10 +136,10 @@ export function AudioPlayer({ messageId, accessToken }: AudioPlayerProps): React
           max={duration || 100}
           value={progress}
           onChange={handleSeek}
-          className="h-2 w-full cursor-pointer appearance-none rounded-full bg-slate-300 accent-blue-600"
+          className="h-2 w-full cursor-pointer appearance-none rounded-full bg-slate-300 accent-blue-600 dark:bg-slate-600 dark:accent-blue-400"
           aria-label="Audio progress"
         />
-        <div className="flex justify-between text-xs text-slate-500">
+        <div className="flex justify-between text-xs text-slate-500 dark:text-slate-400">
           <span>{formatDuration(progress)}</span>
           <span>{formatDuration(duration)}</span>
         </div>

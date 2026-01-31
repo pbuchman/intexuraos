@@ -79,14 +79,14 @@ function NoteModal({ note, onClose, onUpdate, onDelete }: NoteModalProps): React
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
       onClick={handleBackdropClick}
     >
-      <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-xl bg-white shadow-xl">
-        <div className="flex items-center justify-between border-b border-slate-200 p-4">
-          <h2 className="text-lg font-semibold text-slate-900">
+      <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-xl bg-white shadow-xl dark:bg-slate-800">
+        <div className="flex items-center justify-between border-b border-slate-200 p-4 dark:border-slate-700">
+          <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
             {isEditing ? 'Edit Note' : 'View Note'}
           </h2>
           <button
             onClick={onClose}
-            className="rounded-lg p-1 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700"
+            className="rounded-lg p-1 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-300"
           >
             <X className="h-5 w-5" />
           </button>
@@ -103,7 +103,7 @@ function NoteModal({ note, onClose, onUpdate, onDelete }: NoteModalProps): React
                 }}
               />
               <div className="space-y-1">
-                <label htmlFor="content" className="block text-sm font-medium text-slate-700">
+                <label htmlFor="content" className="block text-sm font-medium text-slate-700 dark:text-slate-300">
                   Content
                 </label>
                 <textarea
@@ -113,7 +113,7 @@ function NoteModal({ note, onClose, onUpdate, onDelete }: NoteModalProps): React
                     setContent(e.target.value);
                   }}
                   rows={8}
-                  className="block w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900 shadow-sm transition-colors placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                  className="block w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900 shadow-sm transition-colors placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-100 dark:placeholder:text-slate-500"
                 />
               </div>
               <Input
@@ -127,13 +127,13 @@ function NoteModal({ note, onClose, onUpdate, onDelete }: NoteModalProps): React
             </div>
           ) : (
             <div className="space-y-4">
-              <h3 className="text-xl font-semibold text-slate-900">{note.title}</h3>
+              <h3 className="text-xl font-semibold text-slate-900 dark:text-slate-100">{note.title}</h3>
               {note.tags.length > 0 ? (
                 <div className="flex flex-wrap gap-2">
                   {note.tags.map((tag) => (
                     <span
                       key={tag}
-                      className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2.5 py-0.5 text-sm font-medium text-blue-800"
+                      className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2.5 py-0.5 text-sm font-medium text-blue-800 dark:bg-blue-900/50 dark:text-blue-300"
                     >
                       <Tag className="h-3 w-3" />
                       {tag}
@@ -141,12 +141,12 @@ function NoteModal({ note, onClose, onUpdate, onDelete }: NoteModalProps): React
                   ))}
                 </div>
               ) : null}
-              <div className="prose prose-slate prose-sm max-w-none">
+              <div className="prose prose-slate prose-sm max-w-none dark:prose-invert">
                 <ReactMarkdown remarkPlugins={[remarkGfm]}>
                   {note.content}
                 </ReactMarkdown>
               </div>
-              <div className="flex flex-wrap items-center gap-3 text-xs text-slate-400">
+              <div className="flex flex-wrap items-center gap-3 text-xs text-slate-400 dark:text-slate-500">
                 <span className="flex items-center gap-1" title="Created">
                   <Calendar className="h-3 w-3" />
                   {formatDate(note.createdAt)}
@@ -164,10 +164,10 @@ function NoteModal({ note, onClose, onUpdate, onDelete }: NoteModalProps): React
           )}
         </div>
 
-        <div className="flex items-center justify-between border-t border-slate-200 p-4">
+        <div className="flex items-center justify-between border-t border-slate-200 p-4 dark:border-slate-700">
           {showDeleteConfirm ? (
             <div className="flex items-center gap-3">
-              <span className="text-sm text-red-600">Delete this note?</span>
+              <span className="text-sm text-red-600 dark:text-red-400">Delete this note?</span>
               <Button
                 type="button"
                 variant="danger"
@@ -200,7 +200,7 @@ function NoteModal({ note, onClose, onUpdate, onDelete }: NoteModalProps): React
               onClick={(): void => {
                 setShowDeleteConfirm(true);
               }}
-              className="text-red-600 hover:bg-red-50 hover:text-red-700"
+              className="text-red-600 hover:bg-red-50 hover:text-red-700 dark:text-red-400 dark:hover:bg-red-900/30 dark:hover:text-red-300"
             >
               <Trash2 className="mr-1 h-4 w-4" />
               Delete
@@ -289,12 +289,12 @@ function CreateNoteModal({ onClose, onCreate }: CreateNoteModalProps): React.JSX
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
       onClick={handleBackdropClick}
     >
-      <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-xl bg-white shadow-xl">
-        <div className="flex items-center justify-between border-b border-slate-200 p-4">
-          <h2 className="text-lg font-semibold text-slate-900">Create New Note</h2>
+      <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-xl bg-white shadow-xl dark:bg-slate-800">
+        <div className="flex items-center justify-between border-b border-slate-200 p-4 dark:border-slate-700">
+          <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Create New Note</h2>
           <button
             onClick={onClose}
-            className="rounded-lg p-1 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700"
+            className="rounded-lg p-1 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-300"
           >
             <X className="h-5 w-5" />
           </button>
@@ -302,7 +302,7 @@ function CreateNoteModal({ onClose, onCreate }: CreateNoteModalProps): React.JSX
 
         <div className="p-6">
           {error !== null ? (
-            <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+            <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/30 dark:text-red-400">
               {error}
             </div>
           ) : null}
@@ -317,7 +317,7 @@ function CreateNoteModal({ onClose, onCreate }: CreateNoteModalProps): React.JSX
               placeholder="Enter note title"
             />
             <div className="space-y-1">
-              <label htmlFor="create-content" className="block text-sm font-medium text-slate-700">
+              <label htmlFor="create-content" className="block text-sm font-medium text-slate-700 dark:text-slate-300">
                 Content
               </label>
               <textarea
@@ -328,7 +328,7 @@ function CreateNoteModal({ onClose, onCreate }: CreateNoteModalProps): React.JSX
                 }}
                 rows={8}
                 placeholder="Enter note content"
-                className="block w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900 shadow-sm transition-colors placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                className="block w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900 shadow-sm transition-colors placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-100 dark:placeholder:text-slate-500"
               />
             </div>
             <Input
@@ -342,7 +342,7 @@ function CreateNoteModal({ onClose, onCreate }: CreateNoteModalProps): React.JSX
           </div>
         </div>
 
-        <div className="flex justify-end gap-2 border-t border-slate-200 p-4">
+        <div className="flex justify-end gap-2 border-t border-slate-200 p-4 dark:border-slate-700">
           <Button type="button" variant="secondary" onClick={onClose} disabled={saving}>
             Cancel
           </Button>
@@ -387,10 +387,10 @@ function NoteRow({ note, onOpen, onDelete }: NoteRowProps): React.JSX.Element {
     <Card>
       <div className="flex items-start justify-between gap-4">
         <button onClick={onOpen} className="flex-1 min-w-0 cursor-pointer text-left" type="button">
-          <h3 className="font-medium text-slate-900 hover:text-blue-600 transition-colors">
+          <h3 className="font-medium text-slate-900 hover:text-blue-600 transition-colors dark:text-slate-100 dark:hover:text-blue-400">
             {note.title}
           </h3>
-          <p className="mt-1 text-sm text-slate-500 line-clamp-2">
+          <p className="mt-1 text-sm text-slate-500 line-clamp-2 dark:text-slate-400">
             {truncateContent(note.content)}
           </p>
           {note.tags.length > 0 ? (
@@ -398,18 +398,18 @@ function NoteRow({ note, onOpen, onDelete }: NoteRowProps): React.JSX.Element {
               {note.tags.slice(0, 3).map((tag) => (
                 <span
                   key={tag}
-                  className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-800"
+                  className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-800 dark:bg-blue-900/50 dark:text-blue-300"
                 >
                   <Tag className="h-2.5 w-2.5" />
                   {tag}
                 </span>
               ))}
               {note.tags.length > 3 ? (
-                <span className="text-xs text-slate-400">+{note.tags.length - 3} more</span>
+                <span className="text-xs text-slate-400 dark:text-slate-500">+{note.tags.length - 3} more</span>
               ) : null}
             </div>
           ) : null}
-          <p className="mt-2 text-xs text-slate-400">Updated {formatDate(note.updatedAt)}</p>
+          <p className="mt-2 text-xs text-slate-400 dark:text-slate-500">Updated {formatDate(note.updatedAt)}</p>
         </button>
 
         {!showDeleteConfirm ? (
@@ -420,7 +420,7 @@ function NoteRow({ note, onOpen, onDelete }: NoteRowProps): React.JSX.Element {
             onClick={(): void => {
               setShowDeleteConfirm(true);
             }}
-            className="text-slate-400 hover:text-red-600"
+            className="text-slate-400 hover:text-red-600 dark:hover:text-red-400"
           >
             <Trash2 className="h-4 w-4" />
           </Button>
@@ -428,8 +428,8 @@ function NoteRow({ note, onOpen, onDelete }: NoteRowProps): React.JSX.Element {
       </div>
 
       {showDeleteConfirm ? (
-        <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-4">
-          <p className="mb-3 text-sm text-red-800">Delete "{note.title}"?</p>
+        <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-800 dark:bg-red-900/30">
+          <p className="mb-3 text-sm text-red-800 dark:text-red-400">Delete "{note.title}"?</p>
           <div className="flex gap-2">
             <Button
               type="button"
@@ -492,8 +492,8 @@ export function NotesListPage(): React.JSX.Element {
     <Layout>
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-slate-900">My Notes</h2>
-          <p className="text-slate-600">Manage your personal notes.</p>
+          <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100">My Notes</h2>
+          <p className="text-slate-600 dark:text-slate-300">Manage your personal notes.</p>
         </div>
         <Button
           type="button"
@@ -510,7 +510,7 @@ export function NotesListPage(): React.JSX.Element {
       <RefreshIndicator show={refreshing} />
 
       {error !== null && error !== '' ? (
-        <div className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 text-red-700">
+        <div className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 text-red-700 dark:border-red-800 dark:bg-red-900/30 dark:text-red-400">
           {error}
         </div>
       ) : null}
@@ -518,9 +518,9 @@ export function NotesListPage(): React.JSX.Element {
       {notes.length === 0 ? (
         <Card>
           <div className="flex flex-col items-center justify-center py-12 text-center">
-            <FileText className="mb-4 h-12 w-12 text-slate-300" />
-            <h3 className="mb-2 text-lg font-medium text-slate-900">No notes yet</h3>
-            <p className="mb-4 text-slate-500">Create your first note to get started.</p>
+            <FileText className="mb-4 h-12 w-12 text-slate-300 dark:text-slate-600" />
+            <h3 className="mb-2 text-lg font-medium text-slate-900 dark:text-slate-100">No notes yet</h3>
+            <p className="mb-4 text-slate-500 dark:text-slate-400">Create your first note to get started.</p>
             <Button
               type="button"
               variant="primary"

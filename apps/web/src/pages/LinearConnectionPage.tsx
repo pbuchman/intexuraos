@@ -149,19 +149,19 @@ export function LinearConnectionPage(): React.JSX.Element {
   return (
     <Layout>
       <div className="mb-6">
-        <h2 className="text-2xl font-bold text-slate-900">Linear Connection</h2>
-        <p className="text-slate-600">
+        <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Linear Connection</h2>
+        <p className="text-slate-600 dark:text-slate-300">
           Connect your Linear workspace to create issues via voice commands.
         </p>
       </div>
 
       <div className="max-w-2xl space-y-6">
         {error !== null && error !== '' ? (
-          <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-red-700">{error}</div>
+          <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-red-700 dark:border-red-800 dark:bg-red-900/30 dark:text-red-400">{error}</div>
         ) : null}
 
         {successMessage !== null && successMessage !== '' ? (
-          <div className="rounded-lg border border-green-200 bg-green-50 p-4 text-green-700">
+          <div className="rounded-lg border border-green-200 bg-green-50 p-4 text-green-700 dark:border-green-800 dark:bg-green-900/30 dark:text-green-400">
             {successMessage}
           </div>
         ) : null}
@@ -170,44 +170,44 @@ export function LinearConnectionPage(): React.JSX.Element {
           <Card title="Connected Account" variant="success">
             <dl className="space-y-2 text-sm">
               <div className="flex justify-between">
-                <dt className="text-slate-600">Status</dt>
-                <dd className="font-medium text-green-700">Connected</dd>
+                <dt className="text-slate-600 dark:text-slate-400">Status</dt>
+                <dd className="font-medium text-green-700 dark:text-green-400">Connected</dd>
               </div>
               {connection.teamName !== null ? (
                 <div className="flex justify-between">
-                  <dt className="text-slate-600">Team</dt>
-                  <dd className="text-slate-900">{connection.teamName}</dd>
+                  <dt className="text-slate-600 dark:text-slate-400">Team</dt>
+                  <dd className="text-slate-900 dark:text-slate-100">{connection.teamName}</dd>
                 </div>
               ) : null}
               <div className="flex justify-between">
-                <dt className="text-slate-600">Connected At</dt>
-                <dd className="text-slate-900">
+                <dt className="text-slate-600 dark:text-slate-400">Connected At</dt>
+                <dd className="text-slate-900 dark:text-slate-100">
                   {new Date(connection.updatedAt).toLocaleString()}
                 </dd>
               </div>
             </dl>
 
-            <div className="mt-4 rounded-lg bg-slate-50 p-4">
-              <p className="text-sm text-slate-600 mb-2">
+            <div className="mt-4 rounded-lg bg-slate-50 p-4 dark:bg-slate-700">
+              <p className="text-sm text-slate-600 dark:text-slate-300 mb-2">
                 You can now create Linear issues by saying:
               </p>
-              <ul className="space-y-1 text-sm text-slate-700">
+              <ul className="space-y-1 text-sm text-slate-700 dark:text-slate-200">
                 <li className="flex items-start">
-                  <span className="mr-2 text-slate-400">•</span>
+                  <span className="mr-2 text-slate-400 dark:text-slate-500">•</span>
                   <span>"Create linear issue for dark mode feature"</span>
                 </li>
                 <li className="flex items-start">
-                  <span className="mr-2 text-slate-400">•</span>
+                  <span className="mr-2 text-slate-400 dark:text-slate-500">•</span>
                   <span>"Nowe zadanie w Linear: napraw walidację"</span>
                 </li>
                 <li className="flex items-start">
-                  <span className="mr-2 text-slate-400">•</span>
+                  <span className="mr-2 text-slate-400 dark:text-slate-500">•</span>
                   <span>"Add to Linear: fix login button"</span>
                 </li>
               </ul>
             </div>
 
-            <div className="mt-4 flex gap-3 border-t border-slate-200 pt-4">
+            <div className="mt-4 flex gap-3 border-t border-slate-200 dark:border-slate-700 pt-4">
               <Button type="button" variant="secondary" onClick={handleStartConfiguring}>
                 Reconfigure
               </Button>
@@ -226,20 +226,20 @@ export function LinearConnectionPage(): React.JSX.Element {
         {state === 'disconnected' && (
           <Card title="Not Connected">
             <div className="flex items-center gap-3 mb-4">
-              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-100">
-                <div className="flex h-6 w-6 items-center justify-center rounded-full border-2 border-slate-400" />
+              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-700">
+                <div className="flex h-6 w-6 items-center justify-center rounded-full border-2 border-slate-400 dark:border-slate-500" />
               </div>
               <div>
-                <h3 className="font-semibold text-slate-900">Connect Linear</h3>
-                <p className="text-sm text-slate-500">
+                <h3 className="font-semibold text-slate-900 dark:text-slate-100">Connect Linear</h3>
+                <p className="text-sm text-slate-500 dark:text-slate-400">
                   Connect your Linear workspace to create issues via voice commands.
                 </p>
               </div>
             </div>
 
-            <div className="bg-slate-50 rounded-lg p-4 mb-4">
-              <h4 className="text-sm font-medium text-slate-900 mb-2">How to get your API key:</h4>
-              <ol className="text-sm text-slate-600 space-y-1 list-decimal list-inside">
+            <div className="bg-slate-50 rounded-lg p-4 mb-4 dark:bg-slate-700">
+              <h4 className="text-sm font-medium text-slate-900 dark:text-slate-100 mb-2">How to get your API key:</h4>
+              <ol className="text-sm text-slate-600 dark:text-slate-300 space-y-1 list-decimal list-inside">
                 <li>
                   Go to{' '}
                   <a
@@ -290,14 +290,14 @@ export function LinearConnectionPage(): React.JSX.Element {
                     Validate
                   </Button>
                 </div>
-                <p className="mt-1 text-xs text-slate-500">
+                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
                   Your Personal API key from Linear settings
                 </p>
               </div>
 
               {teams.length > 0 && (
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
                     Select Team
                   </label>
                   <select
@@ -305,7 +305,7 @@ export function LinearConnectionPage(): React.JSX.Element {
                     onChange={(e) => {
                       setSelectedTeamId(e.target.value);
                     }}
-                    className="w-full rounded-lg border border-slate-300 px-4 py-2 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    className="w-full rounded-lg border border-slate-300 px-4 py-2 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-100"
                   >
                     {teams.map((team) => (
                       <option key={team.id} value={team.id}>
@@ -313,7 +313,7 @@ export function LinearConnectionPage(): React.JSX.Element {
                       </option>
                     ))}
                   </select>
-                  <p className="mt-1 text-xs text-slate-500">
+                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
                     Choose the team where issues will be created
                   </p>
                 </div>

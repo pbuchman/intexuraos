@@ -567,23 +567,23 @@ export function ResearchAgentPage(): React.JSX.Element {
   return (
     <Layout>
       <div className="mb-6">
-        <h2 className="text-2xl font-bold text-slate-900">
+        <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100">
           {isEditMode ? 'Edit Research' : 'New Research'}
         </h2>
-        <p className="text-slate-600">
+        <p className="text-slate-600 dark:text-slate-300">
           Run your research prompt across multiple LLMs and get a synthesized report.
         </p>
       </div>
 
       {loading ? (
-        <div className="mb-6 rounded-lg border border-blue-200 bg-blue-50 p-4 text-blue-700">
+        <div className="mb-6 rounded-lg border border-blue-200 bg-blue-50 p-4 text-blue-700 dark:border-blue-800 dark:bg-blue-900/30 dark:text-blue-400">
           Loading draft...
         </div>
       ) : null}
 
       {!hasAnyProvider && !keysLoading ? (
-        <div className="mb-6 rounded-lg border border-amber-200 bg-amber-50 p-4">
-          <p className="text-amber-800">
+        <div className="mb-6 rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-900/30">
+          <p className="text-amber-800 dark:text-amber-300">
             <strong>No API keys configured.</strong> Configure at least one API key to start
             research.{' '}
             <a href="/#/settings/api-keys" className="underline">
@@ -594,7 +594,7 @@ export function ResearchAgentPage(): React.JSX.Element {
       ) : null}
 
       {error !== null && error !== '' ? (
-        <div className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 text-red-700">
+        <div className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 text-red-700 dark:border-red-800 dark:bg-red-900/30 dark:text-red-400">
           {error}
         </div>
       ) : null}
@@ -609,12 +609,12 @@ export function ResearchAgentPage(): React.JSX.Element {
               }}
               onBlur={handlePromptBlur}
               placeholder="Enter your research question or topic..."
-              className="w-full rounded-lg border border-slate-200 p-3 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 resize-y min-h-[150px]"
+              className="w-full rounded-lg border border-slate-200 p-3 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 resize-y min-h-[150px] dark:border-slate-600 dark:bg-slate-700 dark:text-slate-100 dark:placeholder-slate-400"
               rows={8}
               disabled={submitting || savingDraft}
             />
             <div className="flex items-center justify-between">
-              <p className="text-sm text-slate-500">{String(prompt.length)}/20000 characters</p>
+              <p className="text-sm text-slate-500 dark:text-slate-400">{String(prompt.length)}/20000 characters</p>
               <Button
                 type="button"
                 variant="secondary"
@@ -646,7 +646,7 @@ export function ResearchAgentPage(): React.JSX.Element {
         </Card>
 
         <Card title="Research Models">
-          <p className="text-sm text-slate-500 mb-4">
+          <p className="text-sm text-slate-500 mb-4 dark:text-slate-400">
             Select which models to query for research (one per provider)
           </p>
           <ModelSelector
@@ -660,9 +660,9 @@ export function ResearchAgentPage(): React.JSX.Element {
         </Card>
 
         <Card title="Synthesis Model">
-          <p className="text-sm text-slate-500 mb-4">Select which model synthesizes the results</p>
+          <p className="text-sm text-slate-500 mb-4 dark:text-slate-400">Select which model synthesizes the results</p>
           {keysLoading ? (
-            <div className="flex items-center gap-2 text-slate-400 text-sm">
+            <div className="flex items-center gap-2 text-slate-400 text-sm dark:text-slate-500">
               <Loader2 className="h-4 w-4 animate-spin" />
               <span>Loading API key status...</span>
             </div>
@@ -695,8 +695,8 @@ export function ResearchAgentPage(): React.JSX.Element {
                       isSelected
                         ? 'bg-green-600 text-white'
                         : hasKey && !hasFailed
-                          ? 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                          : 'bg-slate-50 text-slate-400 cursor-not-allowed'
+                          ? 'bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600'
+                          : 'bg-slate-50 text-slate-400 cursor-not-allowed dark:bg-slate-800 dark:text-slate-500'
                     }`}
                     title={disabledReason}
                   >
@@ -710,14 +710,14 @@ export function ResearchAgentPage(): React.JSX.Element {
         </Card>
 
         <Card title="Input Context (Optional)">
-          <p className="text-sm text-slate-500 mb-4">
+          <p className="text-sm text-slate-500 mb-4 dark:text-slate-400">
             Add your own reference materials to include in the research synthesis
           </p>
           <div className="space-y-4">
             {inputContexts.map((ctx, idx) => (
               <div key={idx} className="space-y-2">
                 <div className="flex justify-between items-center">
-                  <span className="text-sm font-medium text-slate-600">
+                  <span className="text-sm font-medium text-slate-600 dark:text-slate-300">
                     Context {String(idx + 1)}
                   </span>
                   <button
@@ -726,7 +726,7 @@ export function ResearchAgentPage(): React.JSX.Element {
                       removeInputContext(idx);
                     }}
                     disabled={submitting || savingDraft}
-                    className="p-1 text-slate-400 hover:text-red-600 transition-colors"
+                    className="p-1 text-slate-400 hover:text-red-600 transition-colors dark:hover:text-red-400"
                     title="Remove context"
                   >
                     <Trash2 className="h-4 w-4" />
@@ -738,7 +738,7 @@ export function ResearchAgentPage(): React.JSX.Element {
                     updateInputContext(idx, e.target.value);
                   }}
                   placeholder="Paste your reference content here..."
-                  className="w-full rounded-lg border border-slate-200 p-3 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 resize-y min-h-[100px]"
+                  className="w-full rounded-lg border border-slate-200 p-3 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 resize-y min-h-[100px] dark:border-slate-600 dark:bg-slate-700 dark:text-slate-100 dark:placeholder-slate-400"
                   maxLength={MAX_CONTEXT_LENGTH}
                   disabled={submitting || savingDraft}
                 />
@@ -752,7 +752,7 @@ export function ResearchAgentPage(): React.JSX.Element {
                 type="button"
                 onClick={addInputContext}
                 disabled={submitting || savingDraft}
-                className="w-full py-2 px-4 rounded-lg border-2 border-dashed border-slate-200 text-slate-500 hover:border-slate-300 hover:text-slate-600 transition-colors flex items-center justify-center gap-2"
+                className="w-full py-2 px-4 rounded-lg border-2 border-dashed border-slate-200 text-slate-500 hover:border-slate-300 hover:text-slate-600 transition-colors flex items-center justify-center gap-2 dark:border-slate-600 dark:text-slate-400 dark:hover:border-slate-500 dark:hover:text-slate-300"
               >
                 <Plus className="h-4 w-4" />
                 Add Input Context
@@ -807,18 +807,18 @@ export function ResearchAgentPage(): React.JSX.Element {
 
       {showSingleProviderConfirm ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="mx-4 max-w-md rounded-lg bg-white p-6 shadow-xl">
+          <div className="mx-4 max-w-md rounded-lg bg-white p-6 shadow-xl dark:bg-slate-800">
             <div className="mb-4 flex items-start gap-3">
               <AlertTriangle className="mt-0.5 h-6 w-6 flex-shrink-0 text-amber-500" />
               <div>
-                <h3 className="text-lg font-semibold text-slate-900">Single Model Research</h3>
-                <p className="mt-2 text-sm text-slate-600">
+                <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Single Model Research</h3>
+                <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
                   You selected only one model (
                   {PROVIDER_MODELS.flatMap((p) => p.models).find((m) => m.id === selectedModels[0])
                     ?.name ?? selectedModels[0]}
                   ) and no additional context.
                 </p>
-                <p className="mt-2 text-sm text-slate-600">
+                <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
                   The result will show the individual report without synthesis.
                 </p>
               </div>
@@ -845,12 +845,12 @@ export function ResearchAgentPage(): React.JSX.Element {
 
       {showDiscardConfirm ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="mx-4 max-w-md rounded-lg bg-white p-6 shadow-xl">
+          <div className="mx-4 max-w-md rounded-lg bg-white p-6 shadow-xl dark:bg-slate-800">
             <div className="mb-4 flex items-start gap-3">
-              <Trash2 className="mt-0.5 h-6 w-6 shrink-0 text-red-500" />
+              <Trash2 className="mt-0.5 h-6 w-6 shrink-0 text-red-500 dark:text-red-400" />
               <div>
-                <h3 className="text-lg font-semibold text-slate-900">Discard Draft?</h3>
-                <p className="mt-2 text-sm text-slate-600">
+                <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Discard Draft?</h3>
+                <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
                   This will permanently delete this draft. This action cannot be undone.
                 </p>
               </div>
@@ -882,12 +882,12 @@ export function ResearchAgentPage(): React.JSX.Element {
 
       {showImprovementModal ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="mx-4 max-w-2xl rounded-lg bg-white p-6 shadow-xl">
+          <div className="mx-4 max-w-2xl rounded-lg bg-white p-6 shadow-xl dark:bg-slate-800">
             <div className="mb-4 flex items-start gap-3">
-              <Sparkles className="mt-0.5 h-6 w-6 flex-shrink-0 text-blue-500" />
+              <Sparkles className="mt-0.5 h-6 w-6 flex-shrink-0 text-blue-500 dark:text-blue-400" />
               <div className="flex-1">
-                <h3 className="text-lg font-semibold text-slate-900">Improved Prompt Suggestion</h3>
-                <p className="mt-2 text-sm text-slate-600">
+                <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Improved Prompt Suggestion</h3>
+                <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
                   Your prompt could be improved for better research results. Compare the versions
                   below:
                 </p>
@@ -896,13 +896,13 @@ export function ResearchAgentPage(): React.JSX.Element {
 
             <div className="mb-4 space-y-4">
               <div>
-                <p className="mb-2 text-sm font-medium text-slate-700">Original:</p>
-                <div className="rounded-lg bg-slate-50 p-3 text-sm text-slate-700">{prompt}</div>
+                <p className="mb-2 text-sm font-medium text-slate-700 dark:text-slate-200">Original:</p>
+                <div className="rounded-lg bg-slate-50 p-3 text-sm text-slate-700 dark:bg-slate-700 dark:text-slate-300">{prompt}</div>
               </div>
 
               <div>
-                <p className="mb-2 text-sm font-medium text-slate-700">Improved:</p>
-                <div className="rounded-lg bg-blue-50 p-3 text-sm text-slate-700">
+                <p className="mb-2 text-sm font-medium text-slate-700 dark:text-slate-200">Improved:</p>
+                <div className="rounded-lg bg-blue-50 p-3 text-sm text-slate-700 dark:bg-blue-900/30 dark:text-blue-200">
                   {pendingImprovedPrompt}
                 </div>
               </div>
@@ -920,20 +920,20 @@ export function ResearchAgentPage(): React.JSX.Element {
 
       {showValidationModal ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="mx-4 max-w-md rounded-lg bg-white p-6 shadow-xl">
+          <div className="mx-4 max-w-md rounded-lg bg-white p-6 shadow-xl dark:bg-slate-800">
             {validating ? (
               <div className="flex flex-col items-center gap-4 py-4">
                 <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
-                <p className="text-sm text-slate-600">Validating your research request...</p>
+                <p className="text-sm text-slate-600 dark:text-slate-300">Validating your research request...</p>
               </div>
             ) : (
               <>
                 <div className="mb-4 flex items-start gap-3">
                   <AlertTriangle className="mt-0.5 h-6 w-6 flex-shrink-0 text-amber-500" />
                   <div>
-                    <h3 className="text-lg font-semibold text-slate-900">Input Quality Issue</h3>
-                    <p className="mt-2 text-sm text-slate-600">{validationWarning}</p>
-                    <p className="mt-2 text-sm text-slate-500">
+                    <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Input Quality Issue</h3>
+                    <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">{validationWarning}</p>
+                    <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
                       Please revise your prompt and try again.
                     </p>
                   </div>

@@ -8,7 +8,7 @@ export interface MarkdownContentProps {
 
 export function MarkdownContent({ content }: MarkdownContentProps): React.JSX.Element {
   return (
-    <div className="prose prose-slate max-w-none overflow-x-auto">
+    <div className="prose prose-slate dark:prose-invert max-w-none overflow-x-auto">
       <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight]}>
         {content}
       </ReactMarkdown>

@@ -30,10 +30,10 @@ export function LinkPreview({ preview }: LinkPreviewProps): React.JSX.Element {
       href={preview.url}
       target="_blank"
       rel="noopener noreferrer"
-      className="block rounded-lg border border-gray-200 bg-gray-50 hover:bg-gray-100 transition-colors overflow-hidden"
+      className="block rounded-lg border border-gray-200 bg-gray-50 hover:bg-gray-100 transition-colors overflow-hidden dark:border-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700"
     >
       {preview.image !== undefined && preview.image !== '' && (
-        <div className="w-full h-32 bg-gray-200 overflow-hidden">
+        <div className="w-full h-32 bg-gray-200 dark:bg-slate-700 overflow-hidden">
           <img
             src={preview.image}
             alt={preview.title ?? 'Link preview'}
@@ -57,13 +57,13 @@ export function LinkPreview({ preview }: LinkPreviewProps): React.JSX.Element {
               }}
             />
           )}
-          <span className="text-xs text-gray-500 truncate">{hostname}</span>
+          <span className="text-xs text-gray-500 dark:text-slate-400 truncate">{hostname}</span>
         </div>
         {preview.title !== undefined && preview.title !== '' && (
-          <h4 className="text-sm font-medium text-gray-900 line-clamp-2 mb-1">{preview.title}</h4>
+          <h4 className="text-sm font-medium text-gray-900 dark:text-slate-100 line-clamp-2 mb-1">{preview.title}</h4>
         )}
         {preview.description !== undefined && preview.description !== '' && (
-          <p className="text-xs text-gray-600 line-clamp-2">{preview.description}</p>
+          <p className="text-xs text-gray-600 dark:text-slate-300 line-clamp-2">{preview.description}</p>
         )}
       </div>
     </a>

@@ -109,7 +109,7 @@ export function DataSourceFormPage(): React.JSX.Element {
   if (isEditMode && fetchError !== null) {
     return (
       <Layout>
-        <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-red-700">
+        <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-red-700 dark:border-red-800 dark:bg-red-900/30 dark:text-red-400">
           {fetchError}
         </div>
       </Layout>
@@ -119,10 +119,10 @@ export function DataSourceFormPage(): React.JSX.Element {
   return (
     <Layout>
       <div className="mb-6">
-        <h2 className="text-2xl font-bold text-slate-900">
+        <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100">
           {isEditMode ? 'Edit Data Source' : 'Add Data Source'}
         </h2>
-        <p className="text-slate-600">
+        <p className="text-slate-600 dark:text-slate-300">
           {isEditMode ? 'Update your data source content.' : 'Add a new data source for analysis.'}
         </p>
       </div>
@@ -130,7 +130,7 @@ export function DataSourceFormPage(): React.JSX.Element {
       <RefreshIndicator show={refreshing} />
 
       {error !== null && error !== '' ? (
-        <div className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 text-red-700">
+        <div className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 text-red-700 dark:border-red-800 dark:bg-red-900/30 dark:text-red-400">
           {error}
         </div>
       ) : null}
@@ -168,7 +168,7 @@ export function DataSourceFormPage(): React.JSX.Element {
                 Generate
               </Button>
             </div>
-            <p className="text-sm text-slate-500">
+            <p className="text-sm text-slate-500 dark:text-slate-400">
               {String(title.length)}/{String(MAX_TITLE_LENGTH)} characters
             </p>
           </div>
@@ -182,11 +182,11 @@ export function DataSourceFormPage(): React.JSX.Element {
                 setContent(e.target.value);
               }}
               placeholder="Paste or type your content here..."
-              className="w-full rounded-lg border border-slate-200 p-3 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 resize-y min-h-[300px]"
+              className="w-full rounded-lg border border-slate-200 bg-white p-3 text-slate-900 placeholder-slate-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 resize-y min-h-[300px] dark:border-slate-600 dark:bg-slate-700 dark:text-slate-100 dark:placeholder-slate-500"
               disabled={saving || generatingTitle}
             />
             <p
-              className={`text-sm ${content.length > MAX_CONTENT_LENGTH ? 'text-red-600' : 'text-slate-500'}`}
+              className={`text-sm ${content.length > MAX_CONTENT_LENGTH ? 'text-red-600 dark:text-red-400' : 'text-slate-500 dark:text-slate-400'}`}
             >
               {content.length.toLocaleString()}/{MAX_CONTENT_LENGTH.toLocaleString()} characters
             </p>

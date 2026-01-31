@@ -65,13 +65,13 @@ function getButtonClasses(variant: 'primary' | 'secondary' | 'danger' | 'success
 
   switch (variant) {
     case 'primary':
-      return `${baseClasses} bg-blue-600 text-white hover:bg-blue-700`;
+      return `${baseClasses} bg-blue-600 text-white hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600`;
     case 'success':
-      return `${baseClasses} bg-green-600 text-white hover:bg-green-700`;
+      return `${baseClasses} bg-green-600 text-white hover:bg-green-700 dark:bg-green-500 dark:hover:bg-green-600`;
     case 'secondary':
-      return `${baseClasses} text-slate-500 hover:bg-slate-100 hover:text-slate-700`;
+      return `${baseClasses} text-slate-500 hover:bg-slate-100 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-300`;
     case 'danger':
-      return `${baseClasses} text-slate-500 hover:bg-red-50 hover:text-red-600`;
+      return `${baseClasses} text-slate-500 hover:bg-red-50 hover:text-red-600 dark:text-slate-400 dark:hover:bg-red-900/30 dark:hover:text-red-400`;
   }
 }
 

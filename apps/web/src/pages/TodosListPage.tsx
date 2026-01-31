@@ -36,19 +36,19 @@ import type {
 } from '@/types';
 
 const PRIORITY_CONFIG: Record<TodoPriority, { label: string; className: string }> = {
-  low: { label: 'Low', className: 'bg-slate-100 text-slate-700' },
-  medium: { label: 'Medium', className: 'bg-blue-100 text-blue-700' },
-  high: { label: 'High', className: 'bg-orange-100 text-orange-700' },
-  urgent: { label: 'Urgent', className: 'bg-red-100 text-red-700' },
+  low: { label: 'Low', className: 'bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-300' },
+  medium: { label: 'Medium', className: 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300' },
+  high: { label: 'High', className: 'bg-orange-100 text-orange-700 dark:bg-orange-900/50 dark:text-orange-300' },
+  urgent: { label: 'Urgent', className: 'bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-300' },
 };
 
 const STATUS_CONFIG: Record<TodoStatus, { label: string; className: string }> = {
-  draft: { label: 'Draft', className: 'bg-slate-100 text-slate-700' },
-  processing: { label: 'Processing', className: 'bg-purple-100 text-purple-700' },
-  pending: { label: 'Pending', className: 'bg-slate-100 text-slate-700' },
-  in_progress: { label: 'In Progress', className: 'bg-blue-100 text-blue-700' },
-  completed: { label: 'Completed', className: 'bg-green-100 text-green-700' },
-  cancelled: { label: 'Cancelled', className: 'bg-red-100 text-red-700' },
+  draft: { label: 'Draft', className: 'bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-300' },
+  processing: { label: 'Processing', className: 'bg-purple-100 text-purple-700 dark:bg-purple-900/50 dark:text-purple-300' },
+  pending: { label: 'Pending', className: 'bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-300' },
+  in_progress: { label: 'In Progress', className: 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300' },
+  completed: { label: 'Completed', className: 'bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-300' },
+  cancelled: { label: 'Cancelled', className: 'bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-300' },
 };
 
 function PriorityBadge({ priority }: { priority: TodoPriority }): React.JSX.Element {
@@ -76,13 +76,13 @@ function StatusBadge({ status }: { status: TodoStatus }): React.JSX.Element {
 function ItemStatusIcon({ status }: { status: TodoStatus }): React.JSX.Element {
   switch (status) {
     case 'completed':
-      return <CheckSquare className="h-4 w-4 text-green-600" />;
+      return <CheckSquare className="h-4 w-4 text-green-600 dark:text-green-400" />;
     case 'in_progress':
-      return <Circle className="h-4 w-4 text-blue-600" />;
+      return <Circle className="h-4 w-4 text-blue-600 dark:text-blue-400" />;
     case 'cancelled':
-      return <X className="h-4 w-4 text-red-600" />;
+      return <X className="h-4 w-4 text-red-600 dark:text-red-400" />;
     default:
-      return <Square className="h-4 w-4 text-slate-400" />;
+      return <Square className="h-4 w-4 text-slate-400 dark:text-slate-500" />;
   }
 }
 
@@ -141,7 +141,7 @@ function TodoItemRow({ item, isEditing, onUpdate, onDelete }: TodoItemRowProps):
 
   if (editingItem) {
     return (
-      <div className="space-y-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
+      <div className="space-y-3 rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-800">
         <Input
           label="Title"
           value={title}
@@ -151,13 +151,13 @@ function TodoItemRow({ item, isEditing, onUpdate, onDelete }: TodoItemRowProps):
         />
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-1">
-            <label className="block text-sm font-medium text-slate-700">Priority</label>
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Priority</label>
             <select
               value={priority}
               onChange={(e): void => {
                 setPriority(e.target.value as TodoPriority | '');
               }}
-              className="block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              className="block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-700 dark:text-slate-100"
             >
               <option value="">None</option>
               <option value="low">Low</option>
@@ -167,14 +167,14 @@ function TodoItemRow({ item, isEditing, onUpdate, onDelete }: TodoItemRowProps):
             </select>
           </div>
           <div className="space-y-1">
-            <label className="block text-sm font-medium text-slate-700">Due Date</label>
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Due Date</label>
             <input
               type="date"
               value={dueDate}
               onChange={(e): void => {
                 setDueDate(e.target.value);
               }}
-              className="block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              className="block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-700 dark:text-slate-100"
             />
           </div>
         </div>
@@ -218,11 +218,11 @@ function TodoItemRow({ item, isEditing, onUpdate, onDelete }: TodoItemRowProps):
       </button>
       <div className="min-w-0 flex-1">
         <p
-          className={`break-words text-sm ${item.status === 'completed' ? 'text-slate-400 line-through' : 'text-slate-900'}`}
+          className={`break-words text-sm ${item.status === 'completed' ? 'text-slate-400 line-through dark:text-slate-500' : 'text-slate-900 dark:text-slate-100'}`}
         >
           {item.title}
         </p>
-        <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+        <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
           {item.priority !== null ? <PriorityBadge priority={item.priority} /> : null}
           {item.dueDate !== null ? (
             <span className="flex items-center gap-1">
@@ -239,7 +239,7 @@ function TodoItemRow({ item, isEditing, onUpdate, onDelete }: TodoItemRowProps):
             onClick={(): void => {
               setEditingItem(true);
             }}
-            className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+            className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-700 dark:hover:text-slate-300"
           >
             <Edit2 className="h-4 w-4" />
           </button>
@@ -248,7 +248,7 @@ function TodoItemRow({ item, isEditing, onUpdate, onDelete }: TodoItemRowProps):
             onClick={(): void => {
               setShowDeleteConfirm(true);
             }}
-            className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-600"
+            className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/30 dark:hover:text-red-400"
           >
             <Trash2 className="h-4 w-4" />
           </button>
@@ -256,7 +256,7 @@ function TodoItemRow({ item, isEditing, onUpdate, onDelete }: TodoItemRowProps):
       ) : null}
       {showDeleteConfirm ? (
         <div className="flex shrink-0 items-center gap-2">
-          <span className="text-xs text-red-600">Delete?</span>
+          <span className="text-xs text-red-600 dark:text-red-400">Delete?</span>
           <Button
             type="button"
             variant="danger"
@@ -427,14 +427,14 @@ function TodoModal({
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
       onClick={handleBackdropClick}
     >
-      <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-xl bg-white shadow-xl">
-        <div className="flex items-center justify-between border-b border-slate-200 p-4">
-          <h2 className="text-lg font-semibold text-slate-900">
+      <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-xl bg-white shadow-xl dark:bg-slate-800">
+        <div className="flex items-center justify-between border-b border-slate-200 p-4 dark:border-slate-700">
+          <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
             {isEditing ? 'Edit Todo' : 'View Todo'}
           </h2>
           <button
             onClick={onClose}
-            className="rounded-lg p-1 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700"
+            className="rounded-lg p-1 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-300"
           >
             <X className="h-5 w-5" />
           </button>
@@ -451,7 +451,7 @@ function TodoModal({
                 }}
               />
               <div className="space-y-1">
-                <label htmlFor="description" className="block text-sm font-medium text-slate-700">
+                <label htmlFor="description" className="block text-sm font-medium text-slate-700 dark:text-slate-300">
                   Description
                 </label>
                 <textarea
@@ -461,18 +461,18 @@ function TodoModal({
                     setDescription(e.target.value);
                   }}
                   rows={4}
-                  className="block w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900 shadow-sm transition-colors placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                  className="block w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900 shadow-sm transition-colors placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-100 dark:placeholder:text-slate-500"
                 />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1">
-                  <label className="block text-sm font-medium text-slate-700">Priority</label>
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Priority</label>
                   <select
                     value={priority}
                     onChange={(e): void => {
                       setPriority(e.target.value as TodoPriority);
                     }}
-                    className="block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                    className="block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-700 dark:text-slate-100"
                   >
                     <option value="low">Low</option>
                     <option value="medium">Medium</option>
@@ -481,14 +481,14 @@ function TodoModal({
                   </select>
                 </div>
                 <div className="space-y-1">
-                  <label className="block text-sm font-medium text-slate-700">Due Date</label>
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Due Date</label>
                   <input
                     type="date"
                     value={dueDate}
                     onChange={(e): void => {
                       setDueDate(e.target.value);
                     }}
-                    className="block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                    className="block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-700 dark:text-slate-100"
                   />
                 </div>
               </div>
@@ -504,11 +504,11 @@ function TodoModal({
           ) : (
             <div className="space-y-4">
               <div className="flex flex-wrap items-start gap-2">
-                <h3 className="break-words text-xl font-semibold text-slate-900">
+                <h3 className="break-words text-xl font-semibold text-slate-900 dark:text-slate-100">
                   {currentTodo.title}
                 </h3>
                 {currentTodo.archived ? (
-                  <span className="inline-flex items-center gap-1 rounded-full bg-slate-200 px-2 py-0.5 text-xs font-medium text-slate-600">
+                  <span className="inline-flex items-center gap-1 rounded-full bg-slate-200 px-2 py-0.5 text-xs font-medium text-slate-600 dark:bg-slate-700 dark:text-slate-400">
                     <Archive className="h-3 w-3" />
                     Archived
                   </span>
@@ -518,7 +518,7 @@ function TodoModal({
                 <StatusBadge status={currentTodo.status} />
                 <PriorityBadge priority={currentTodo.priority} />
                 {currentTodo.dueDate !== null ? (
-                  <span className="flex items-center gap-1 text-sm text-slate-600">
+                  <span className="flex items-center gap-1 text-sm text-slate-600 dark:text-slate-400">
                     <Calendar className="h-4 w-4" />
                     Due: {formatDate(currentTodo.dueDate)}
                   </span>
@@ -529,7 +529,7 @@ function TodoModal({
                   {currentTodo.tags.map((tag) => (
                     <span
                       key={tag}
-                      className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2.5 py-0.5 text-sm font-medium text-blue-800"
+                      className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2.5 py-0.5 text-sm font-medium text-blue-800 dark:bg-blue-900/50 dark:text-blue-300"
                     >
                       <Tag className="h-3 w-3" />
                       {tag}
@@ -538,13 +538,13 @@ function TodoModal({
                 </div>
               ) : null}
               {currentTodo.description !== null && currentTodo.description !== '' ? (
-                <div className="prose prose-slate prose-sm max-w-none">
+                <div className="prose prose-slate prose-sm max-w-none dark:prose-invert">
                   <ReactMarkdown remarkPlugins={[remarkGfm]}>
                     {currentTodo.description}
                   </ReactMarkdown>
                 </div>
               ) : null}
-              <div className="flex flex-wrap items-center gap-3 text-xs text-slate-400">
+              <div className="flex flex-wrap items-center gap-3 text-xs text-slate-400 dark:text-slate-500">
                 <span className="flex items-center gap-1" title="Created">
                   <Calendar className="h-3 w-3" />
                   {formatDate(currentTodo.createdAt)}
@@ -562,9 +562,9 @@ function TodoModal({
           )}
 
           {/* Items Section */}
-          <div className="mt-6 border-t border-slate-200 pt-6">
+          <div className="mt-6 border-t border-slate-200 pt-6 dark:border-slate-700">
             <div className="mb-4 flex items-center justify-between">
-              <h4 className="font-medium text-slate-900">
+              <h4 className="font-medium text-slate-900 dark:text-slate-100">
                 Items ({completedCount}/{currentTodo.items.length})
               </h4>
               {isEditing && !showAddItem ? (
@@ -591,7 +591,7 @@ function TodoModal({
                     setNewItemTitle(e.target.value);
                   }}
                   placeholder="New item title"
-                  className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                  className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-100 dark:placeholder:text-slate-500"
                 />
                 <Button
                   type="button"
@@ -621,7 +621,7 @@ function TodoModal({
             ) : null}
 
             {currentTodo.items.length > 0 ? (
-              <div className="divide-y divide-slate-100">
+              <div className="divide-y divide-slate-100 dark:divide-slate-700">
                 {sortTodoItems(currentTodo.items).map((item) => (
                     <TodoItemRow
                       key={item.id}
@@ -637,15 +637,15 @@ function TodoModal({
                   ))}
               </div>
             ) : (
-              <p className="py-4 text-center text-sm text-slate-500">No items yet</p>
+              <p className="py-4 text-center text-sm text-slate-500 dark:text-slate-400">No items yet</p>
             )}
           </div>
         </div>
 
-        <div className="flex items-center justify-between border-t border-slate-200 p-4">
+        <div className="flex items-center justify-between border-t border-slate-200 p-4 dark:border-slate-700">
           {showDeleteConfirm ? (
             <div className="flex items-center gap-3">
-              <span className="text-sm text-red-600">Delete this todo?</span>
+              <span className="text-sm text-red-600 dark:text-red-400">Delete this todo?</span>
               <Button
                 type="button"
                 variant="danger"
@@ -679,7 +679,7 @@ function TodoModal({
                 onClick={(): void => {
                   setShowDeleteConfirm(true);
                 }}
-                className="text-red-600 hover:bg-red-50 hover:text-red-700"
+                className="text-red-600 hover:bg-red-50 hover:text-red-700 dark:text-red-400 dark:hover:bg-red-900/30 dark:hover:text-red-300"
               >
                 <Trash2 className="mr-1 h-4 w-4" />
                 Delete
@@ -709,7 +709,7 @@ function TodoModal({
                   }}
                   disabled={cancelling}
                   isLoading={cancelling}
-                  className="text-orange-600 hover:bg-orange-50 hover:text-orange-700"
+                  className="text-orange-600 hover:bg-orange-50 hover:text-orange-700 dark:text-orange-400 dark:hover:bg-orange-900/30 dark:hover:text-orange-300"
                 >
                   <Ban className="mr-1 h-4 w-4" />
                   Cancel
@@ -810,12 +810,12 @@ function CreateTodoModal({ onClose, onCreate }: CreateTodoModalProps): React.JSX
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
       onClick={handleBackdropClick}
     >
-      <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-xl bg-white shadow-xl">
-        <div className="flex items-center justify-between border-b border-slate-200 p-4">
-          <h2 className="text-lg font-semibold text-slate-900">Create New Todo</h2>
+      <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-xl bg-white shadow-xl dark:bg-slate-800">
+        <div className="flex items-center justify-between border-b border-slate-200 p-4 dark:border-slate-700">
+          <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Create New Todo</h2>
           <button
             onClick={onClose}
-            className="rounded-lg p-1 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700"
+            className="rounded-lg p-1 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-300"
           >
             <X className="h-5 w-5" />
           </button>
@@ -823,7 +823,7 @@ function CreateTodoModal({ onClose, onCreate }: CreateTodoModalProps): React.JSX
 
         <div className="p-6">
           {error !== null ? (
-            <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+            <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/30 dark:text-red-400">
               {error}
             </div>
           ) : null}
@@ -840,7 +840,7 @@ function CreateTodoModal({ onClose, onCreate }: CreateTodoModalProps): React.JSX
             <div className="space-y-1">
               <label
                 htmlFor="create-description"
-                className="block text-sm font-medium text-slate-700"
+                className="block text-sm font-medium text-slate-700 dark:text-slate-300"
               >
                 Description
               </label>
@@ -852,18 +852,18 @@ function CreateTodoModal({ onClose, onCreate }: CreateTodoModalProps): React.JSX
                 }}
                 rows={4}
                 placeholder="Enter todo description"
-                className="block w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900 shadow-sm transition-colors placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                className="block w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900 shadow-sm transition-colors placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-100 dark:placeholder:text-slate-500"
               />
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1">
-                <label className="block text-sm font-medium text-slate-700">Priority</label>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Priority</label>
                 <select
                   value={priority}
                   onChange={(e): void => {
                     setPriority(e.target.value as TodoPriority);
                   }}
-                  className="block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  className="block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-700 dark:text-slate-100"
                 >
                   <option value="low">Low</option>
                   <option value="medium">Medium</option>
@@ -872,14 +872,14 @@ function CreateTodoModal({ onClose, onCreate }: CreateTodoModalProps): React.JSX
                 </select>
               </div>
               <div className="space-y-1">
-                <label className="block text-sm font-medium text-slate-700">Due Date</label>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Due Date</label>
                 <input
                   type="date"
                   value={dueDate}
                   onChange={(e): void => {
                     setDueDate(e.target.value);
                   }}
-                  className="block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  className="block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-700 dark:text-slate-100"
                 />
               </div>
             </div>
@@ -894,7 +894,7 @@ function CreateTodoModal({ onClose, onCreate }: CreateTodoModalProps): React.JSX
           </div>
         </div>
 
-        <div className="flex justify-end gap-2 border-t border-slate-200 p-4">
+        <div className="flex justify-end gap-2 border-t border-slate-200 p-4 dark:border-slate-700">
           <Button type="button" variant="secondary" onClick={onClose} disabled={saving}>
             Cancel
           </Button>
@@ -931,31 +931,31 @@ function TodoRow({ todo, onOpen }: TodoRowProps): React.JSX.Element {
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
-              <h3 className="font-medium text-slate-900 transition-colors hover:text-blue-600">
+              <h3 className="font-medium text-slate-900 transition-colors hover:text-blue-600 dark:text-slate-100 dark:hover:text-blue-400">
                 {todo.title}
               </h3>
               {todo.archived ? (
-                <span className="inline-flex items-center gap-1 rounded-full bg-slate-200 px-2 py-0.5 text-xs font-medium text-slate-600">
+                <span className="inline-flex items-center gap-1 rounded-full bg-slate-200 px-2 py-0.5 text-xs font-medium text-slate-600 dark:bg-slate-700 dark:text-slate-400">
                   <Archive className="h-3 w-3" />
                   Archived
                 </span>
               ) : null}
             </div>
             {todo.description !== null && todo.description !== '' ? (
-              <p className="mt-1 line-clamp-2 text-sm text-slate-500">{todo.description}</p>
+              <p className="mt-1 line-clamp-2 text-sm text-slate-500 dark:text-slate-400">{todo.description}</p>
             ) : null}
             <div className="mt-2 flex flex-wrap items-center gap-2">
               <StatusBadge status={todo.status} />
               <PriorityBadge priority={todo.priority} />
               {todo.items.length > 0 ? (
-                <span className="flex items-center gap-1 text-xs text-slate-500">
+                <span className="flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400">
                   <Check className="h-3 w-3" />
                   {completedCount}/{todo.items.length}
                 </span>
               ) : null}
               {todo.dueDate !== null ? (
                 <span
-                  className={`flex items-center gap-1 text-xs ${isPastDue ? 'text-red-600' : 'text-slate-500'}`}
+                  className={`flex items-center gap-1 text-xs ${isPastDue ? 'text-red-600 dark:text-red-400' : 'text-slate-500 dark:text-slate-400'}`}
                 >
                   {isPastDue ? (
                     <AlertTriangle className="h-3 w-3" />
@@ -971,18 +971,18 @@ function TodoRow({ todo, onOpen }: TodoRowProps): React.JSX.Element {
                 {todo.tags.slice(0, 3).map((tag) => (
                   <span
                     key={tag}
-                    className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-800"
+                    className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-800 dark:bg-blue-900/50 dark:text-blue-300"
                   >
                     <Tag className="h-2.5 w-2.5" />
                     {tag}
                   </span>
                 ))}
                 {todo.tags.length > 3 ? (
-                  <span className="text-xs text-slate-400">+{todo.tags.length - 3} more</span>
+                  <span className="text-xs text-slate-400 dark:text-slate-500">+{todo.tags.length - 3} more</span>
                 ) : null}
               </div>
             ) : null}
-            <p className="mt-2 text-xs text-slate-400">Updated {formatDate(todo.updatedAt)}</p>
+            <p className="mt-2 text-xs text-slate-400 dark:text-slate-500">Updated {formatDate(todo.updatedAt)}</p>
           </div>
         </div>
       </button>
@@ -1035,8 +1035,8 @@ export function TodosListPage(): React.JSX.Element {
     <Layout>
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-slate-900">My Todos</h2>
-          <p className="text-slate-600">Manage your tasks and track progress.</p>
+          <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100">My Todos</h2>
+          <p className="text-slate-600 dark:text-slate-300">Manage your tasks and track progress.</p>
         </div>
         <Button
           type="button"
@@ -1053,7 +1053,7 @@ export function TodosListPage(): React.JSX.Element {
       <RefreshIndicator show={refreshing} />
 
       {error !== null && error !== '' ? (
-        <div className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 text-red-700">
+        <div className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 text-red-700 dark:border-red-800 dark:bg-red-900/30 dark:text-red-400">
           {error}
         </div>
       ) : null}
@@ -1061,9 +1061,9 @@ export function TodosListPage(): React.JSX.Element {
       {todos.length === 0 ? (
         <Card>
           <div className="flex flex-col items-center justify-center py-12 text-center">
-            <ListTodo className="mb-4 h-12 w-12 text-slate-300" />
-            <h3 className="mb-2 text-lg font-medium text-slate-900">No todos yet</h3>
-            <p className="mb-4 text-slate-500">Create your first todo to get started.</p>
+            <ListTodo className="mb-4 h-12 w-12 text-slate-300 dark:text-slate-600" />
+            <h3 className="mb-2 text-lg font-medium text-slate-900 dark:text-slate-100">No todos yet</h3>
+            <p className="mb-4 text-slate-500 dark:text-slate-400">Create your first todo to get started.</p>
             <Button
               type="button"
               variant="primary"

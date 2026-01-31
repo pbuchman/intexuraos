@@ -75,14 +75,14 @@ export function ApiKeysSettingsPage(): React.JSX.Element {
   return (
     <Layout>
       <div className="mb-6">
-        <h2 className="text-2xl font-bold text-slate-900">API Keys</h2>
-        <p className="text-slate-600">
+        <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100">API Keys</h2>
+        <p className="text-slate-600 dark:text-slate-300">
           Configure your LLM API keys. Keys are encrypted and validated before storage.
         </p>
       </div>
 
       {error !== null && error !== '' ? (
-        <div className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 text-red-700">
+        <div className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 text-red-700 dark:border-red-800 dark:bg-red-900/30 dark:text-red-400">
           {error}
         </div>
       ) : null}
@@ -196,13 +196,13 @@ function ApiKeyRow({
     <Card>
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
-          <span className="font-medium text-slate-900">{provider.name}</span>
+          <span className="font-medium text-slate-900 dark:text-slate-100">{provider.name}</span>
           {isConfigured ? (
-            <code className="mt-1 block truncate rounded bg-slate-100 px-2 py-0.5 font-mono text-xs text-slate-600">
+            <code className="mt-1 block truncate rounded bg-slate-100 px-2 py-0.5 font-mono text-xs text-slate-600 dark:bg-slate-700 dark:text-slate-300">
               {currentValue}
             </code>
           ) : (
-            <span className="mt-1 block text-sm text-slate-400">Not configured</span>
+            <span className="mt-1 block text-sm text-slate-400 dark:text-slate-500">Not configured</span>
           )}
         </div>
 
@@ -215,13 +215,13 @@ function ApiKeyRow({
                   onClick={(): void => {
                     setIsMenuOpen(!isMenuOpen);
                   }}
-                  className="rounded p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
+                  className="rounded p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-700 dark:hover:text-slate-300"
                   title="Actions"
                 >
                   <MoreVertical className="h-5 w-5" />
                 </button>
                 {isMenuOpen && (
-                  <div className="absolute right-0 top-full z-10 mt-1 w-36 rounded-lg border border-slate-200 bg-white py-1 shadow-lg">
+                  <div className="absolute right-0 top-full z-10 mt-1 w-36 rounded-lg border border-slate-200 bg-white py-1 shadow-lg dark:border-slate-700 dark:bg-slate-800">
                     <button
                       type="button"
                       onClick={(): void => {
@@ -229,7 +229,7 @@ function ApiKeyRow({
                         void handleTest();
                       }}
                       disabled={isTesting}
-                      className="flex w-full items-center gap-2 px-3 py-2 text-sm text-slate-700 transition-colors hover:bg-slate-100 disabled:opacity-50"
+                      className="flex w-full items-center gap-2 px-3 py-2 text-sm text-slate-700 transition-colors hover:bg-slate-100 disabled:opacity-50 dark:text-slate-200 dark:hover:bg-slate-700"
                     >
                       <FlaskConical className="h-4 w-4" />
                       {isTesting ? 'Testing...' : 'Test'}
@@ -240,7 +240,7 @@ function ApiKeyRow({
                         setIsMenuOpen(false);
                         setIsEditing(true);
                       }}
-                      className="flex w-full items-center gap-2 px-3 py-2 text-sm text-slate-700 transition-colors hover:bg-slate-100"
+                      className="flex w-full items-center gap-2 px-3 py-2 text-sm text-slate-700 transition-colors hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-700"
                     >
                       <Pencil className="h-4 w-4" />
                       Update
@@ -251,7 +251,7 @@ function ApiKeyRow({
                         setIsMenuOpen(false);
                         setShowDeleteConfirm(true);
                       }}
-                      className="flex w-full items-center gap-2 px-3 py-2 text-sm text-red-600 transition-colors hover:bg-red-50"
+                      className="flex w-full items-center gap-2 px-3 py-2 text-sm text-red-600 transition-colors hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/30"
                     >
                       <Trash2 className="h-4 w-4" />
                       Delete
@@ -276,8 +276,8 @@ function ApiKeyRow({
       </div>
 
       {saveSuccess ? (
-        <div className="mt-3 rounded-lg border border-green-200 bg-green-50 p-3">
-          <p className="text-sm font-medium text-green-800">
+        <div className="mt-3 rounded-lg border border-green-200 bg-green-50 p-3 dark:border-green-800 dark:bg-green-900/30">
+          <p className="text-sm font-medium text-green-800 dark:text-green-400">
             ✓ API key validated and saved successfully
           </p>
         </div>
@@ -285,13 +285,13 @@ function ApiKeyRow({
         <div
           className={`mt-3 rounded-lg border p-3 ${
             savedTestResult.status === 'success'
-              ? 'border-green-200 bg-green-50'
-              : 'border-red-200 bg-red-50'
+              ? 'border-green-200 bg-green-50 dark:border-green-800 dark:bg-green-900/30'
+              : 'border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-900/30'
           }`}
         >
           <p
             className={`text-sm font-medium mb-1 ${
-              savedTestResult.status === 'success' ? 'text-green-800' : 'text-red-800'
+              savedTestResult.status === 'success' ? 'text-green-800 dark:text-green-400' : 'text-red-800 dark:text-red-400'
             }`}
           >
             {savedTestResult.status === 'success'
@@ -299,7 +299,7 @@ function ApiKeyRow({
               : `API Key Error (${formatDateTime(savedTestResult.testedAt)}):`}
           </p>
           <p
-            className={`text-sm ${savedTestResult.status === 'success' ? 'text-green-700' : 'text-red-700'}`}
+            className={`text-sm ${savedTestResult.status === 'success' ? 'text-green-700 dark:text-green-300' : 'text-red-700 dark:text-red-300'}`}
           >
             {savedTestResult.message}
           </p>
@@ -320,9 +320,9 @@ function ApiKeyRow({
             disabled={isSaving}
           />
           {validationError !== null ? (
-            <p className="text-sm text-red-600">{validationError}</p>
+            <p className="text-sm text-red-600 dark:text-red-400">{validationError}</p>
           ) : null}
-          {isSaving ? <p className="text-sm text-blue-600">Validating API key...</p> : null}
+          {isSaving ? <p className="text-sm text-blue-600 dark:text-blue-400">Validating API key...</p> : null}
           <div className="flex gap-2">
             <Button
               type="button"
@@ -351,8 +351,8 @@ function ApiKeyRow({
       ) : null}
 
       {showDeleteConfirm ? (
-        <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-4">
-          <p className="mb-3 text-sm text-red-800">Delete this API key?</p>
+        <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-800 dark:bg-red-900/30">
+          <p className="mb-3 text-sm text-red-800 dark:text-red-400">Delete this API key?</p>
           <div className="flex gap-2">
             <Button
               type="button"
