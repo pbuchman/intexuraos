@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AlertCircle, Loader2, Play } from 'lucide-react';
 import MDEditor from '@uiw/react-md-editor';
+import rehypeSanitize from 'rehype-sanitize';
 import { Button, Card, Layout } from '@/components';
 import { useCodeTasks } from '@/hooks';
 import type { CodeTaskWorkerType } from '@/types';
@@ -63,10 +64,14 @@ export function CodeTaskNewPage(): React.JSX.Element {
               <MDEditor
                 value={prompt}
                 onChange={(value): void => {
+                  // MDEditor returns null when cleared; convert to empty string for validation
                   setPrompt(value ?? '');
                 }}
                 preview="edit"
                 height={200}
+                previewOptions={{
+                  rehypePlugins: [rehypeSanitize],
+                }}
                 textareaProps={{
                   placeholder: 'Describe what you want Claude to build or fix...',
                   disabled: submitting,
@@ -77,10 +82,14 @@ export function CodeTaskNewPage(): React.JSX.Element {
               <MDEditor
                 value={prompt}
                 onChange={(value): void => {
+                  // MDEditor returns null when cleared; convert to empty string for validation
                   setPrompt(value ?? '');
                 }}
                 preview="edit"
                 height={200}
+                previewOptions={{
+                  rehypePlugins: [rehypeSanitize],
+                }}
                 textareaProps={{
                   placeholder: 'Describe what you want Claude to build or fix...',
                   disabled: submitting,
