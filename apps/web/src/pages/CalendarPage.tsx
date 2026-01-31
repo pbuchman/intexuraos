@@ -71,19 +71,19 @@ function EventChip({ event }: EventChipProps): React.JSX.Element {
       }}
       className={`group mb-0.5 flex items-center gap-1 truncate rounded px-1 py-0.5 text-xs ${
         allDay
-          ? 'bg-blue-100 text-blue-800'
-          : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+          ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-300'
+          : 'bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-slate-700 dark:text-slate-300 dark:hover:bg-slate-600'
       } ${hasLink ? 'cursor-pointer' : ''}`}
       title={`${event.summary}${event.location !== undefined ? ` • ${event.location}` : ''}`}
     >
       {!allDay && (
-        <span className="shrink-0 text-slate-500">
+        <span className="shrink-0 text-slate-500 dark:text-slate-400">
           {formatTime(event.start.dateTime ?? undefined, false).replace(' ', '')}
         </span>
       )}
       <span className="truncate">{event.summary}</span>
       {hasLink && (
-        <ExternalLink className="hidden h-3 w-3 shrink-0 text-slate-400 group-hover:block" />
+        <ExternalLink className="hidden h-3 w-3 shrink-0 text-slate-400 group-hover:block dark:text-slate-500" />
       )}
     </div>
   );
@@ -104,8 +104,8 @@ function DayCell({ date, events, isCurrentMonth }: DayCellProps): React.JSX.Elem
 
   return (
     <div
-      className={`min-h-24 border-b border-r border-slate-200 p-1 ${
-        isCurrentMonth ? 'bg-white' : 'bg-slate-50'
+      className={`min-h-24 border-b border-r border-slate-200 p-1 dark:border-slate-700 ${
+        isCurrentMonth ? 'bg-white dark:bg-slate-800' : 'bg-slate-50 dark:bg-slate-800/50'
       }`}
     >
       <div className="mb-1 flex items-center justify-between">
@@ -114,8 +114,8 @@ function DayCell({ date, events, isCurrentMonth }: DayCellProps): React.JSX.Elem
             today
               ? 'bg-blue-600 font-semibold text-white'
               : isCurrentMonth
-                ? 'text-slate-900'
-                : 'text-slate-400'
+                ? 'text-slate-900 dark:text-slate-100'
+                : 'text-slate-400 dark:text-slate-500'
           }`}
         >
           {date.getDate()}
@@ -126,7 +126,7 @@ function DayCell({ date, events, isCurrentMonth }: DayCellProps): React.JSX.Elem
             onClick={() => {
               setShowAll(true);
             }}
-            className="text-xs text-blue-600 hover:text-blue-800"
+            className="text-xs text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
           >
             +{events.length - maxVisible}
           </button>
@@ -137,7 +137,7 @@ function DayCell({ date, events, isCurrentMonth }: DayCellProps): React.JSX.Elem
             onClick={() => {
               setShowAll(false);
             }}
-            className="text-xs text-slate-500 hover:text-slate-700"
+            className="text-xs text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300"
           >
             less
           </button>
@@ -173,12 +173,12 @@ function CalendarGrid({ range, events }: CalendarGridProps): React.JSX.Element {
   }
 
   return (
-    <div className="overflow-hidden rounded-lg border-l border-t border-slate-200">
-      <div className="grid grid-cols-7 bg-slate-100">
+    <div className="overflow-hidden rounded-lg border-l border-t border-slate-200 dark:border-slate-700">
+      <div className="grid grid-cols-7 bg-slate-100 dark:bg-slate-700">
         {WEEKDAYS.map((day) => (
           <div
             key={day}
-            className="border-b border-r border-slate-200 px-2 py-2 text-center text-xs font-semibold text-slate-600"
+            className="border-b border-r border-slate-200 px-2 py-2 text-center text-xs font-semibold text-slate-600 dark:border-slate-700 dark:text-slate-300"
           >
             {day}
           </div>
@@ -218,14 +218,14 @@ function FailedEventCard({
   isRetrying,
 }: FailedEventCardProps): React.JSX.Element {
   return (
-    <div className="flex gap-3 rounded-lg border border-amber-200 bg-amber-50 p-3">
-      <div className="flex shrink-0 items-center justify-center rounded-lg bg-amber-100 p-2 text-amber-600">
+    <div className="flex gap-3 rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-800 dark:bg-amber-900/30">
+      <div className="flex shrink-0 items-center justify-center rounded-lg bg-amber-100 p-2 text-amber-600 dark:bg-amber-900/50 dark:text-amber-400">
         <AlertCircle className="h-4 w-4" />
       </div>
 
       <div className="min-w-0 flex-1">
         <div className="mb-1 flex items-start justify-between gap-2">
-          <h4 className="font-medium text-amber-900">
+          <h4 className="font-medium text-amber-900 dark:text-amber-200">
             {event.summary ?? 'Untitled event'}
           </h4>
           <div className="flex shrink-0 gap-1">
@@ -233,7 +233,7 @@ function FailedEventCard({
               type="button"
               onClick={() => void onRetry(event.id)}
               disabled={isRetrying || isDeleting}
-              className="rounded p-1 text-amber-400 transition-colors hover:bg-amber-100 hover:text-blue-600 disabled:opacity-50"
+              className="rounded p-1 text-amber-400 transition-colors hover:bg-amber-100 hover:text-blue-600 disabled:opacity-50 dark:hover:bg-amber-900/50 dark:hover:text-blue-400"
               aria-label="Retry"
               title="Retry creating event"
             >
@@ -247,7 +247,7 @@ function FailedEventCard({
               type="button"
               onClick={() => void onDelete(event.id)}
               disabled={isDeleting || isRetrying}
-              className="rounded p-1 text-amber-400 transition-colors hover:bg-amber-100 hover:text-red-600 disabled:opacity-50"
+              className="rounded p-1 text-amber-400 transition-colors hover:bg-amber-100 hover:text-red-600 disabled:opacity-50 dark:hover:bg-amber-900/50 dark:hover:text-red-400"
               aria-label="Delete"
               title="Delete failed event"
             >
@@ -261,21 +261,21 @@ function FailedEventCard({
         </div>
 
         {event.description !== null && event.description !== '' && (
-          <p className="mb-2 line-clamp-2 text-sm text-amber-700">
+          <p className="mb-2 line-clamp-2 text-sm text-amber-700 dark:text-amber-300">
             {stripHtmlTags(event.description)}
           </p>
         )}
 
-        <div className="mb-2 rounded-md bg-amber-100 px-2 py-1 text-xs text-amber-800">
+        <div className="mb-2 rounded-md bg-amber-100 px-2 py-1 text-xs text-amber-800 dark:bg-amber-900/50 dark:text-amber-300">
           <span className="font-medium">Issue:</span> {event.error}
         </div>
 
-        <div className="text-xs text-amber-600">
+        <div className="text-xs text-amber-600 dark:text-amber-400">
           <span className="font-medium">Original text:</span> "{event.originalText}"
         </div>
 
         {event.reasoning !== null && (
-          <div className="mt-1 text-xs text-amber-600">
+          <div className="mt-1 text-xs text-amber-600 dark:text-amber-400">
             <span className="font-medium">Reasoning:</span> {event.reasoning}
           </div>
         )}
@@ -307,11 +307,11 @@ function NeedsAttentionSection({
   }
 
   return (
-    <div className="mb-6 rounded-lg border border-amber-200 bg-amber-50 p-4">
+    <div className="mb-6 rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-900/30">
       <div className="mb-3 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <AlertCircle className="h-5 w-5 text-amber-600" />
-          <h3 className="font-semibold text-amber-900">
+          <AlertCircle className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+          <h3 className="font-semibold text-amber-900 dark:text-amber-200">
             Needs Attention ({events.length})
           </h3>
         </div>
@@ -323,7 +323,7 @@ function NeedsAttentionSection({
             onClick={() => {
               setExpanded(!expanded);
             }}
-            className="text-amber-700 hover:bg-amber-100 hover:text-amber-900"
+            className="text-amber-700 hover:bg-amber-100 hover:text-amber-900 dark:text-amber-300 dark:hover:bg-amber-900/50 dark:hover:text-amber-200"
           >
             {expanded ? (
               <>
@@ -340,7 +340,7 @@ function NeedsAttentionSection({
         )}
       </div>
 
-      <p className="mb-4 text-sm text-amber-700">
+      <p className="mb-4 text-sm text-amber-700 dark:text-amber-300">
         These events couldn't be created. Please edit them and try again.
       </p>
 
@@ -468,15 +468,15 @@ export function CalendarPage(): React.JSX.Element {
     <Layout>
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-slate-900">Calendar</h2>
-          <p className="text-slate-600">Events from your connected Google Calendar.</p>
+          <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Calendar</h2>
+          <p className="text-slate-600 dark:text-slate-300">Events from your connected Google Calendar.</p>
         </div>
         <button
           onClick={(): void => {
             void handleRefresh();
           }}
           disabled={isManualRefreshing}
-          className="rounded p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 disabled:opacity-50"
+          className="rounded p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 disabled:opacity-50 dark:hover:bg-slate-700 dark:hover:text-slate-300"
           title="Refresh"
         >
           <RefreshCw className={`h-5 w-5 ${isManualRefreshing ? 'animate-spin' : ''}`} />
@@ -486,13 +486,13 @@ export function CalendarPage(): React.JSX.Element {
       <RefreshIndicator show={refreshing || isManualRefreshing} />
 
       {successMessage !== null && (
-        <div className="mb-6 rounded-lg border border-green-200 bg-green-50 p-4 text-green-700">
+        <div className="mb-6 rounded-lg border border-green-200 bg-green-50 p-4 text-green-700 dark:border-green-800 dark:bg-green-900/30 dark:text-green-400">
           {successMessage}
         </div>
       )}
 
       {actionError !== null && (
-        <div className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 text-red-700">
+        <div className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 text-red-700 dark:border-red-800 dark:bg-red-900/30 dark:text-red-400">
           {actionError}
         </div>
       )}
@@ -505,14 +505,14 @@ export function CalendarPage(): React.JSX.Element {
         retryingId={retryingFailedEventId}
       />
 
-      <div className="mb-6 flex items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white p-4">
+      <div className="mb-6 flex items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-800">
         <Button type="button" variant="ghost" size="sm" onClick={handlePrevMonth}>
           <ChevronLeft className="h-4 w-4" />
         </Button>
 
         <div className="flex items-center gap-3">
-          <CalendarIcon className="h-5 w-5 text-slate-500" />
-          <span className="min-w-36 text-center font-medium text-slate-700">
+          <CalendarIcon className="h-5 w-5 text-slate-500 dark:text-slate-400" />
+          <span className="min-w-36 text-center font-medium text-slate-700 dark:text-slate-200">
             {formatMonthYear(monthRange.year, monthRange.month)}
           </span>
         </div>
@@ -527,7 +527,7 @@ export function CalendarPage(): React.JSX.Element {
       </div>
 
       {error !== null && error !== '' && (
-        <div className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 text-red-700">
+        <div className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 text-red-700 dark:border-red-800 dark:bg-red-900/30 dark:text-red-400">
           {error}
         </div>
       )}

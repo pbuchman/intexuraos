@@ -40,10 +40,10 @@ export function VersionInfoModal({ onClose }: VersionInfoModalProps): React.JSX.
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
       onClick={handleBackdropClick}
     >
-      <div className="relative w-full max-w-md rounded-xl bg-white shadow-2xl">
+      <div className="relative w-full max-w-md rounded-xl bg-white shadow-2xl dark:bg-slate-800">
         <button
           onClick={onClose}
-          className="absolute right-3 top-3 rounded-full p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
+          className="absolute right-3 top-3 rounded-full p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-700 dark:hover:text-slate-300"
           aria-label="Close"
         >
           <X className="h-5 w-5" />
@@ -55,9 +55,9 @@ export function VersionInfoModal({ onClose }: VersionInfoModalProps): React.JSX.
             <div>
               <h2 className="text-xl font-bold">
                 <span className="text-cyan-500">Intexura</span>
-                <span className="text-slate-900">OS</span>
+                <span className="text-slate-900 dark:text-slate-100">OS</span>
               </h2>
-              <p className="text-sm text-slate-500">Version Information</p>
+              <p className="text-sm text-slate-500 dark:text-slate-400">Version Information</p>
             </div>
           </div>
 
@@ -65,23 +65,23 @@ export function VersionInfoModal({ onClose }: VersionInfoModalProps): React.JSX.
             <div className="flex items-start gap-3">
               <Tag className="mt-0.5 h-5 w-5 flex-shrink-0 text-slate-400" />
               <div>
-                <p className="text-sm font-medium text-slate-500">Version</p>
-                <p className="font-mono text-slate-900">{version}</p>
+                <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Version</p>
+                <p className="font-mono text-slate-900 dark:text-slate-100">{version}</p>
               </div>
             </div>
 
             <div className="flex items-start gap-3">
               <GitCommit className="mt-0.5 h-5 w-5 flex-shrink-0 text-slate-400" />
               <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium text-slate-500">Last Commit</p>
-                <p className="truncate text-slate-900" title={commitMessage}>
+                <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Last Commit</p>
+                <p className="truncate text-slate-900 dark:text-slate-100" title={commitMessage}>
                   {commitMessage}
                 </p>
                 <a
                   href={commitUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="mt-1 inline-flex items-center gap-1 font-mono text-sm text-blue-600 hover:underline"
+                  className="mt-1 inline-flex items-center gap-1 font-mono text-sm text-blue-600 hover:underline dark:text-blue-400"
                 >
                   {shortSha}
                   <ExternalLink className="h-3 w-3" />
@@ -92,18 +92,18 @@ export function VersionInfoModal({ onClose }: VersionInfoModalProps): React.JSX.
             <div className="flex items-start gap-3">
               <Calendar className="mt-0.5 h-5 w-5 flex-shrink-0 text-slate-400" />
               <div>
-                <p className="text-sm font-medium text-slate-500">Build Date</p>
-                <p className="text-slate-900">{formattedDate}</p>
+                <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Build Date</p>
+                <p className="text-slate-900 dark:text-slate-100">{formattedDate}</p>
               </div>
             </div>
           </div>
 
-          <div className="mt-6 border-t border-slate-100 pt-4">
+          <div className="mt-6 border-t border-slate-100 pt-4 dark:border-slate-700">
             <a
               href={GITHUB_REPO_URL}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center justify-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800"
+              className="flex items-center justify-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800 dark:bg-slate-700 dark:hover:bg-slate-600"
             >
               View on GitHub
               <ExternalLink className="h-4 w-4" />

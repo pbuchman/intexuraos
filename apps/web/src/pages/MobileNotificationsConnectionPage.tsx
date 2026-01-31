@@ -107,19 +107,19 @@ export function MobileNotificationsConnectionPage(): React.JSX.Element {
   return (
     <Layout>
       <div className="mb-6">
-        <h2 className="text-2xl font-bold text-slate-900">Mobile Notifications</h2>
-        <p className="text-slate-600">
+        <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Mobile Notifications</h2>
+        <p className="text-slate-600 dark:text-slate-300">
           Capture notifications from your Android device using Tasker
         </p>
       </div>
 
       <div className="max-w-2xl space-y-6">
         {error !== null && error !== '' ? (
-          <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-red-700">{error}</div>
+          <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-red-700 dark:border-red-800 dark:bg-red-900/30 dark:text-red-400">{error}</div>
         ) : null}
 
         {successMessage !== null && successMessage !== '' ? (
-          <div className="rounded-lg border border-green-200 bg-green-50 p-4 text-green-700">
+          <div className="rounded-lg border border-green-200 bg-green-50 p-4 text-green-700 dark:border-green-800 dark:bg-green-900/30 dark:text-green-400">
             {successMessage}
           </div>
         ) : null}
@@ -127,24 +127,24 @@ export function MobileNotificationsConnectionPage(): React.JSX.Element {
         {/* Signature Generation Card */}
         <Card title="Connection Setup">
           <div className="space-y-4">
-            <p className="text-sm text-slate-600">
+            <p className="text-sm text-slate-600 dark:text-slate-300">
               Generate a signature to authenticate your mobile device. This signature is used by
               Tasker to send notifications to IntexuraOS.
             </p>
 
             {/* New Signature Display */}
             {newSignature !== null ? (
-              <div className="rounded-lg border border-amber-200 bg-amber-50 p-4">
+              <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-900/30">
                 <div className="mb-2 flex items-center gap-2">
-                  <Bell className="h-5 w-5 text-amber-600" />
-                  <span className="font-medium text-amber-800">
+                  <Bell className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+                  <span className="font-medium text-amber-800 dark:text-amber-300">
                     Important: Save this signature now!
                   </span>
                 </div>
-                <p className="mb-3 text-sm text-amber-700">
+                <p className="mb-3 text-sm text-amber-700 dark:text-amber-300">
                   This signature is only shown once. Copy it and add it to your Tasker HTTP Request
                   header as{' '}
-                  <code className="rounded bg-amber-100 px-1">
+                  <code className="rounded bg-amber-100 px-1 dark:bg-amber-900/50">
                     X-Mobile-Notifications-Signature
                   </code>
                   .
@@ -159,8 +159,8 @@ export function MobileNotificationsConnectionPage(): React.JSX.Element {
                     }}
                     className={`shrink-0 rounded-lg p-2 transition-colors ${
                       copied
-                        ? 'bg-green-100 text-green-600'
-                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                        ? 'bg-green-100 text-green-600 dark:bg-green-900/50 dark:text-green-400'
+                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-700 dark:text-slate-300 dark:hover:bg-slate-600'
                     }`}
                     title={copied ? 'Copied!' : 'Copy signature'}
                   >
@@ -183,7 +183,7 @@ export function MobileNotificationsConnectionPage(): React.JSX.Element {
             </div>
 
             {isConfigured && newSignature === null ? (
-              <p className="text-sm text-slate-500">
+              <p className="text-sm text-slate-500 dark:text-slate-400">
                 <strong>Note:</strong> Regenerating will invalidate your current signature. You will
                 need to update your Tasker configuration with the new signature.
               </p>
@@ -195,14 +195,14 @@ export function MobileNotificationsConnectionPage(): React.JSX.Element {
         <Card title="Connection Status" variant={isConfigured ? 'success' : 'default'}>
           <dl className="space-y-3 text-sm">
             <div className="flex justify-between">
-              <dt className="text-slate-600">Status</dt>
-              <dd className={`font-medium ${isConfigured ? 'text-green-700' : 'text-slate-500'}`}>
+              <dt className="text-slate-600 dark:text-slate-400">Status</dt>
+              <dd className={`font-medium ${isConfigured ? 'text-green-700 dark:text-green-400' : 'text-slate-500 dark:text-slate-400'}`}>
                 {isConfigured ? 'Configured' : 'Not configured'}
               </dd>
             </div>
             <div className="flex justify-between">
-              <dt className="text-slate-600">Last Notification</dt>
-              <dd className="text-slate-900">
+              <dt className="text-slate-600 dark:text-slate-400">Last Notification</dt>
+              <dd className="text-slate-900 dark:text-slate-100">
                 {lastNotificationAt !== null
                   ? formatRelative(lastNotificationAt)
                   : 'No notifications yet'}
@@ -213,23 +213,23 @@ export function MobileNotificationsConnectionPage(): React.JSX.Element {
 
         {/* Setup Instructions Card */}
         <Card title="Setup Instructions">
-          <div className="space-y-4 text-sm text-slate-600">
+          <div className="space-y-4 text-sm text-slate-600 dark:text-slate-300">
             <div className="flex items-start gap-3">
-              <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-blue-100 text-xs font-bold text-blue-600">
+              <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-blue-100 text-xs font-bold text-blue-600 dark:bg-blue-900/50 dark:text-blue-400">
                 1
               </div>
               <div>
-                <p className="font-medium text-slate-800">Generate a signature</p>
+                <p className="font-medium text-slate-800 dark:text-slate-200">Generate a signature</p>
                 <p>Click the button above to generate your unique authentication signature.</p>
               </div>
             </div>
 
             <div className="flex items-start gap-3">
-              <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-blue-100 text-xs font-bold text-blue-600">
+              <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-blue-100 text-xs font-bold text-blue-600 dark:bg-blue-900/50 dark:text-blue-400">
                 2
               </div>
               <div>
-                <p className="font-medium text-slate-800">Install Tasker & AutoNotification</p>
+                <p className="font-medium text-slate-800 dark:text-slate-200">Install Tasker & AutoNotification</p>
                 <p>
                   Install{' '}
                   <a
@@ -255,11 +255,11 @@ export function MobileNotificationsConnectionPage(): React.JSX.Element {
             </div>
 
             <div className="flex items-start gap-3">
-              <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-blue-100 text-xs font-bold text-blue-600">
+              <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-blue-100 text-xs font-bold text-blue-600 dark:bg-blue-900/50 dark:text-blue-400">
                 3
               </div>
               <div>
-                <p className="font-medium text-slate-800">Configure your device</p>
+                <p className="font-medium text-slate-800 dark:text-slate-200">Configure your device</p>
                 <p>
                   Follow our{' '}
                   <a
@@ -276,9 +276,9 @@ export function MobileNotificationsConnectionPage(): React.JSX.Element {
               </div>
             </div>
 
-            <div className="mt-4 flex items-center gap-2 rounded-lg bg-slate-50 p-3">
-              <Smartphone className="h-5 w-5 text-slate-400" />
-              <span className="text-slate-500">
+            <div className="mt-4 flex items-center gap-2 rounded-lg bg-slate-50 p-3 dark:bg-slate-700">
+              <Smartphone className="h-5 w-5 text-slate-400 dark:text-slate-500" />
+              <span className="text-slate-500 dark:text-slate-400">
                 Tested on Xiaomi devices with HyperOS. May require additional configuration on other
                 manufacturers.
               </span>

@@ -27,7 +27,7 @@ function StatusText({ item, isOnline, authFailed }: StatusTextProps): React.JSX.
   // Synced state
   if (item.status === 'synced' && item.syncedAt !== undefined) {
     return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-800">
+      <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-800 dark:bg-green-900/50 dark:text-green-300">
         <CheckCircle2 className="h-3 w-3" />
         Synced
       </span>
@@ -37,7 +37,7 @@ function StatusText({ item, isOnline, authFailed }: StatusTextProps): React.JSX.
   // Syncing state
   if (item.status === 'syncing') {
     return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-medium text-blue-800">
+      <span className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-medium text-blue-800 dark:bg-blue-900/50 dark:text-blue-300">
         <RefreshCw className="h-3 w-3 animate-spin" />
         Syncing
       </span>
@@ -47,7 +47,7 @@ function StatusText({ item, isOnline, authFailed }: StatusTextProps): React.JSX.
   // Pending states
   if (!isOnline) {
     return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-800">
+      <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-800 dark:bg-slate-700 dark:text-slate-300">
         <Clock className="h-3 w-3" />
         Offline
       </span>
@@ -56,7 +56,7 @@ function StatusText({ item, isOnline, authFailed }: StatusTextProps): React.JSX.
 
   if (authFailed) {
     return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-medium text-red-800">
+      <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-medium text-red-800 dark:bg-red-900/50 dark:text-red-300">
         <AlertCircle className="h-3 w-3" />
         Auth Required
       </span>
@@ -68,7 +68,7 @@ function StatusText({ item, isOnline, authFailed }: StatusTextProps): React.JSX.
     const timeUntil = getTimeUntilRetry(item.nextRetryAt);
     if (timeUntil > 0) {
       return (
-        <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-800">
+        <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-900/50 dark:text-amber-300">
           <Clock className="h-3 w-3" />
           Retry {formatDuration(timeUntil)}
         </span>
@@ -78,7 +78,7 @@ function StatusText({ item, isOnline, authFailed }: StatusTextProps): React.JSX.
 
   // Default pending
   return (
-    <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-800">
+    <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-900/50 dark:text-amber-300">
       <Clock className="h-3 w-3" />
       Pending
     </span>
@@ -103,8 +103,8 @@ export function ShareHistoryPage(): React.JSX.Element {
     <Layout>
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-slate-900">Share History</h2>
-          <p className={`text-slate-600 ${!isOnline ? 'text-amber-600' : authFailed ? 'text-red-600' : ''}`}>
+          <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Share History</h2>
+          <p className={`text-slate-600 dark:text-slate-300 ${!isOnline ? 'text-amber-600 dark:text-amber-400' : authFailed ? 'text-red-600 dark:text-red-400' : ''}`}>
             {getSubtitle()}
           </p>
         </div>
@@ -119,9 +119,9 @@ export function ShareHistoryPage(): React.JSX.Element {
       {history.length === 0 ? (
         <Card>
           <div className="py-12 text-center">
-            <Share2 className="mx-auto mb-4 h-10 w-10 text-slate-300" />
-            <p className="mb-2 text-slate-600">No shared content yet</p>
-            <p className="text-sm text-slate-500">
+            <Share2 className="mx-auto mb-4 h-10 w-10 text-slate-300 dark:text-slate-600" />
+            <p className="mb-2 text-slate-600 dark:text-slate-300">No shared content yet</p>
+            <p className="text-sm text-slate-500 dark:text-slate-400">
               Use your device&apos;s share menu to send content here
             </p>
           </div>
@@ -145,11 +145,11 @@ interface ShareHistoryCardProps {
 
 function ShareHistoryCard({ item, isOnline, authFailed }: ShareHistoryCardProps): React.JSX.Element {
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-4 transition-shadow hover:shadow-md">
-      <p className="text-sm text-slate-900 break-all line-clamp-2">{item.contentPreview}</p>
+    <div className="rounded-lg border border-slate-200 bg-white p-4 transition-shadow hover:shadow-md dark:border-slate-700 dark:bg-slate-800 dark:hover:shadow-lg dark:hover:shadow-slate-900/20">
+      <p className="text-sm text-slate-900 break-all line-clamp-2 dark:text-slate-100">{item.contentPreview}</p>
 
       <div className="mt-3 flex items-center justify-between">
-        <span className="text-sm text-slate-500">{formatRelative(item.createdAt)}</span>
+        <span className="text-sm text-slate-500 dark:text-slate-400">{formatRelative(item.createdAt)}</span>
         <StatusText item={item} isOnline={isOnline} authFailed={authFailed} />
       </div>
     </div>

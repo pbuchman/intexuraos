@@ -40,8 +40,8 @@ export function ImageThumbnail({
 
   if (isLoading) {
     return (
-      <div className="flex h-32 w-32 items-center justify-center rounded-lg bg-slate-100">
-        <Loader2 className="h-6 w-6 animate-spin text-slate-400" />
+      <div className="flex h-32 w-32 items-center justify-center rounded-lg bg-slate-100 dark:bg-slate-700">
+        <Loader2 className="h-6 w-6 animate-spin text-slate-400 dark:text-slate-500" />
       </div>
     );
   }
@@ -52,18 +52,18 @@ export function ImageThumbnail({
         onClick={(): void => {
           void fetchThumbnailUrl();
         }}
-        className="flex h-32 w-32 flex-col items-center justify-center gap-2 rounded-lg bg-red-50 transition hover:bg-red-100"
+        className="flex h-32 w-32 flex-col items-center justify-center gap-2 rounded-lg bg-red-50 transition hover:bg-red-100 dark:bg-red-900/30 dark:hover:bg-red-900/50"
       >
         <AlertCircle className="h-6 w-6 text-red-400" />
-        <span className="text-xs text-red-600">Retry</span>
+        <span className="text-xs text-red-600 dark:text-red-400">Retry</span>
       </button>
     );
   }
 
   if (thumbnailUrl === null) {
     return (
-      <div className="flex h-32 w-32 items-center justify-center rounded-lg bg-slate-100">
-        <ImageIcon className="h-8 w-8 text-slate-400" />
+      <div className="flex h-32 w-32 items-center justify-center rounded-lg bg-slate-100 dark:bg-slate-700">
+        <ImageIcon className="h-8 w-8 text-slate-400 dark:text-slate-500" />
       </div>
     );
   }

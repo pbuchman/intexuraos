@@ -177,19 +177,19 @@ export function NotionConnectionPage(): React.JSX.Element {
   return (
     <Layout>
       <div className="mb-6">
-        <h2 className="text-2xl font-bold text-slate-900">Notion Connection</h2>
-        <p className="text-slate-600">
+        <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Notion Connection</h2>
+        <p className="text-slate-600 dark:text-slate-300">
           Connect your Notion workspace to export research and sync prompts.
         </p>
       </div>
 
       <div className="max-w-2xl space-y-6">
         {state !== 'connected' && error !== null && error !== '' ? (
-          <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-red-700">{error}</div>
+          <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-red-700 dark:border-red-800 dark:bg-red-900/30 dark:text-red-400">{error}</div>
         ) : null}
 
         {state !== 'connected' && successMessage !== null && successMessage !== '' ? (
-          <div className="rounded-lg border border-green-200 bg-green-50 p-4 text-green-700">
+          <div className="rounded-lg border border-green-200 bg-green-50 p-4 text-green-700 dark:border-green-800 dark:bg-green-900/30 dark:text-green-400">
             {successMessage}
           </div>
         ) : null}
@@ -199,40 +199,40 @@ export function NotionConnectionPage(): React.JSX.Element {
             <Card title="Connected Account" variant="success">
               <dl className="space-y-2 text-sm">
                 <div className="flex justify-between">
-                  <dt className="text-slate-600">Status</dt>
-                  <dd className="font-medium text-green-700">Connected</dd>
+                  <dt className="text-slate-600 dark:text-slate-400">Status</dt>
+                  <dd className="font-medium text-green-700 dark:text-green-400">Connected</dd>
                 </div>
                 {connection.updatedAt !== null ? (
                   <div className="flex justify-between">
-                    <dt className="text-slate-600">Connected At</dt>
-                    <dd className="text-slate-900">
+                    <dt className="text-slate-600 dark:text-slate-400">Connected At</dt>
+                    <dd className="text-slate-900 dark:text-slate-100">
                       {new Date(connection.updatedAt).toLocaleString()}
                     </dd>
                   </div>
                 ) : null}
               </dl>
 
-              <div className="mt-4 rounded-lg bg-slate-50 p-4">
-                <p className="text-sm text-slate-600 mb-2">
+              <div className="mt-4 rounded-lg bg-slate-50 p-4 dark:bg-slate-700">
+                <p className="text-sm text-slate-600 dark:text-slate-300 mb-2">
                   With Notion connected, you can:
                 </p>
-                <ul className="space-y-1 text-sm text-slate-700">
+                <ul className="space-y-1 text-sm text-slate-700 dark:text-slate-200">
                   <li className="flex items-start">
-                    <span className="mr-2 text-slate-400">•</span>
+                    <span className="mr-2 text-slate-400 dark:text-slate-500">•</span>
                     <span>Export completed research to Notion pages</span>
                   </li>
                   <li className="flex items-start">
-                    <span className="mr-2 text-slate-400">•</span>
+                    <span className="mr-2 text-slate-400 dark:text-slate-500">•</span>
                     <span>Auto-export research when synthesis completes</span>
                   </li>
                   <li className="flex items-start">
-                    <span className="mr-2 text-slate-400">•</span>
+                    <span className="mr-2 text-slate-400 dark:text-slate-500">•</span>
                     <span>Sync prompts from Notion databases</span>
                   </li>
                 </ul>
               </div>
 
-              <div className="mt-4 flex gap-3 border-t border-slate-200 pt-4">
+              <div className="mt-4 flex gap-3 border-t border-slate-200 dark:border-slate-700 pt-4">
                 <Button type="button" variant="secondary" onClick={handleStartConfiguring}>
                   Reconfigure
                 </Button>
@@ -248,26 +248,26 @@ export function NotionConnectionPage(): React.JSX.Element {
             </Card>
 
             {error !== null && error !== '' ? (
-              <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-red-700">{error}</div>
+              <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-red-700 dark:border-red-800 dark:bg-red-900/30 dark:text-red-400">{error}</div>
             ) : null}
 
             {successMessage !== null && successMessage !== '' ? (
-              <div className="rounded-lg border border-green-200 bg-green-50 p-4 text-green-700">
+              <div className="rounded-lg border border-green-200 bg-green-50 p-4 text-green-700 dark:border-green-800 dark:bg-green-900/30 dark:text-green-400">
                 {successMessage}
               </div>
             ) : null}
 
             <Card title="Research Export Settings">
               <div className="space-y-4">
-                <p className="text-sm text-slate-500">
+                <p className="text-sm text-slate-500 dark:text-slate-400">
                   Configure a Notion page where completed research will be exported.
                 </p>
 
-                <details className="bg-slate-50 rounded-lg">
-                  <summary className="p-4 text-sm font-medium text-slate-900 cursor-pointer hover:bg-slate-100 rounded-lg">
+                <details className="bg-slate-50 rounded-lg dark:bg-slate-700">
+                  <summary className="p-4 text-sm font-medium text-slate-900 dark:text-slate-100 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-600 rounded-lg">
                     How to get the Page ID
                   </summary>
-                  <ol className="px-4 pb-4 text-sm text-slate-600 space-y-1 list-decimal list-inside">
+                  <ol className="px-4 pb-4 text-sm text-slate-600 dark:text-slate-300 space-y-1 list-decimal list-inside">
                     <li>Open the target page in Notion</li>
                     <li>Click "Share" → "Copy link"</li>
                     <li>The ID is the 32-character string after the page name</li>
@@ -275,8 +275,8 @@ export function NotionConnectionPage(): React.JSX.Element {
                   </ol>
                 </details>
 
-                <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
-                  <p className="text-sm text-amber-800">
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 dark:bg-amber-900/30 dark:border-amber-800">
+                  <p className="text-sm text-amber-800 dark:text-amber-300">
                     <span className="font-medium">Important:</span> Make sure the page is shared with
                     your IntexuraOS integration in Notion (click "..." → "Add connections").
                   </p>
@@ -308,14 +308,14 @@ export function NotionConnectionPage(): React.JSX.Element {
                 </div>
 
                 {validationState === 'error' && validationError !== null && (
-                  <div className="rounded-md border border-red-200 bg-red-50 p-3">
-                    <p className="text-sm text-red-700">{validationError}</p>
+                  <div className="rounded-md border border-red-200 bg-red-50 p-3 dark:border-red-800 dark:bg-red-900/30">
+                    <p className="text-sm text-red-700 dark:text-red-400">{validationError}</p>
                   </div>
                 )}
 
                 {validationState === 'valid' && validatedPage !== null && (
-                  <div className="rounded-md border border-green-200 bg-green-50 p-4">
-                    <p className="text-sm text-green-700">
+                  <div className="rounded-md border border-green-200 bg-green-50 p-4 dark:border-green-800 dark:bg-green-900/30">
+                    <p className="text-sm text-green-700 dark:text-green-400">
                       <span className="font-medium">✓ Configured:</span> Research exports will be sent to{' '}
                       <a
                         href={validatedPage.url}
@@ -336,20 +336,20 @@ export function NotionConnectionPage(): React.JSX.Element {
         {state === 'disconnected' && (
           <Card title="Not Connected">
             <div className="flex items-center gap-3 mb-4">
-              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-100">
-                <div className="flex h-6 w-6 items-center justify-center rounded-full border-2 border-slate-400" />
+              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-700">
+                <div className="flex h-6 w-6 items-center justify-center rounded-full border-2 border-slate-400 dark:border-slate-500" />
               </div>
               <div>
-                <h3 className="font-semibold text-slate-900">Connect Notion</h3>
-                <p className="text-sm text-slate-500">
+                <h3 className="font-semibold text-slate-900 dark:text-slate-100">Connect Notion</h3>
+                <p className="text-sm text-slate-500 dark:text-slate-400">
                   Connect your Notion workspace to export research and sync prompts.
                 </p>
               </div>
             </div>
 
-            <div className="bg-slate-50 rounded-lg p-4 mb-4">
-              <h4 className="text-sm font-medium text-slate-900 mb-2">How to get your integration token:</h4>
-              <ol className="text-sm text-slate-600 space-y-1 list-decimal list-inside">
+            <div className="bg-slate-50 rounded-lg p-4 mb-4 dark:bg-slate-700">
+              <h4 className="text-sm font-medium text-slate-900 dark:text-slate-100 mb-2">How to get your integration token:</h4>
+              <ol className="text-sm text-slate-600 dark:text-slate-300 space-y-1 list-decimal list-inside">
                 <li>
                   Go to{' '}
                   <a
@@ -390,13 +390,13 @@ export function NotionConnectionPage(): React.JSX.Element {
                     setNotionToken(e.target.value);
                   }}
                 />
-                <p className="mt-1 text-xs text-slate-500">
+                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
                   Your Internal Integration Secret from Notion
                 </p>
               </div>
 
-              <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
-                <p className="text-sm text-amber-800">
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 dark:bg-amber-900/30 dark:border-amber-800">
+                <p className="text-sm text-amber-800 dark:text-amber-300">
                   <span className="font-medium">Remember:</span> After connecting, you must share
                   your Notion pages with this integration for IntexuraOS to access them.
                 </p>

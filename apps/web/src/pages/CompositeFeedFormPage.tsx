@@ -68,14 +68,14 @@ function MultiSelectDropdown({
 
   return (
     <div className="relative flex flex-col gap-1">
-      <label className="text-xs text-slate-500">{label}</label>
+      <label className="text-xs text-slate-500 dark:text-slate-400">{label}</label>
       <button
         type="button"
         onClick={(): void => {
           if (!disabled) setIsOpen(!isOpen);
         }}
         disabled={disabled}
-        className="flex w-[140px] items-center justify-between gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-left text-sm text-slate-700 hover:border-slate-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
+        className="flex w-[140px] items-center justify-between gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-left text-sm text-slate-700 hover:border-slate-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200 dark:hover:border-slate-500 dark:disabled:bg-slate-800 dark:disabled:text-slate-500"
       >
         <span className="truncate">{displayText}</span>
         <ChevronDown className={`h-4 w-4 shrink-0 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
@@ -89,7 +89,7 @@ function MultiSelectDropdown({
               setIsOpen(false);
             }}
           />
-          <div className="absolute top-full z-20 mt-1 max-h-60 w-full min-w-[200px] overflow-auto rounded-lg border border-slate-200 bg-white py-1 shadow-lg">
+          <div className="absolute top-full z-20 mt-1 max-h-60 w-full min-w-[200px] overflow-auto rounded-lg border border-slate-200 bg-white py-1 shadow-lg dark:border-slate-700 dark:bg-slate-800">
             {options.map((option) => (
               <button
                 key={option}
@@ -97,22 +97,22 @@ function MultiSelectDropdown({
                 onClick={(): void => {
                   toggleOption(option);
                 }}
-                className="flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-left hover:bg-slate-50"
+                className="flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-left hover:bg-slate-50 dark:hover:bg-slate-700"
               >
                 <div
                   className={`flex h-4 w-4 items-center justify-center rounded border ${
                     selected.includes(option)
                       ? 'border-blue-600 bg-blue-600 text-white'
-                      : 'border-slate-300'
+                      : 'border-slate-300 dark:border-slate-500'
                   }`}
                 >
                   {selected.includes(option) ? <Check className="h-3 w-3" /> : null}
                 </div>
-                <span className="truncate text-sm text-slate-700">{option}</span>
+                <span className="truncate text-sm text-slate-700 dark:text-slate-200">{option}</span>
               </button>
             ))}
             {options.length === 0 ? (
-              <div className="px-3 py-2 text-sm text-slate-400">No options available</div>
+              <div className="px-3 py-2 text-sm text-slate-400 dark:text-slate-500">No options available</div>
             ) : null}
           </div>
         </>
@@ -144,10 +144,10 @@ function DataSourceSelector({
 
   return (
     <div className="space-y-2">
-      <div className="text-sm font-medium text-slate-700">
+      <div className="text-sm font-medium text-slate-700 dark:text-slate-200">
         Static Data Sources ({selectedIds.length}/{MAX_STATIC_SOURCES})
       </div>
-      <p className="text-sm text-slate-500">
+      <p className="text-sm text-slate-500 dark:text-slate-400">
         Select up to {MAX_STATIC_SOURCES} data sources to include in this feed.
       </p>
       <div className="space-y-2 mt-3">
@@ -165,22 +165,22 @@ function DataSourceSelector({
               disabled={disabled || isAtLimit}
               className={`flex w-full items-center gap-3 rounded-lg border p-3 text-left transition-colors ${
                 isSelected
-                  ? 'border-blue-500 bg-blue-50'
+                  ? 'border-blue-500 bg-blue-50 dark:border-blue-400 dark:bg-blue-900/30'
                   : isAtLimit
-                    ? 'border-slate-200 bg-slate-50 cursor-not-allowed opacity-50'
-                    : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'
+                    ? 'border-slate-200 bg-slate-50 cursor-not-allowed opacity-50 dark:border-slate-700 dark:bg-slate-800'
+                    : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50 dark:border-slate-700 dark:hover:border-slate-600 dark:hover:bg-slate-800'
               }`}
             >
               <div
                 className={`flex h-5 w-5 shrink-0 items-center justify-center rounded border ${
-                  isSelected ? 'border-blue-600 bg-blue-600 text-white' : 'border-slate-300'
+                  isSelected ? 'border-blue-600 bg-blue-600 text-white' : 'border-slate-300 dark:border-slate-500'
                 }`}
               >
                 {isSelected ? <Check className="h-3 w-3" /> : null}
               </div>
               <div className="min-w-0 flex-1">
-                <div className="font-medium text-slate-900 truncate">{ds.title}</div>
-                <div className="text-sm text-slate-500 truncate">
+                <div className="font-medium text-slate-900 truncate dark:text-slate-100">{ds.title}</div>
+                <div className="text-sm text-slate-500 truncate dark:text-slate-400">
                   {ds.content.slice(0, 100)}
                   {ds.content.length > 100 ? '...' : ''}
                 </div>
@@ -189,7 +189,7 @@ function DataSourceSelector({
           );
         })}
         {dataSources.length === 0 ? (
-          <div className="text-sm text-slate-400 py-4 text-center">
+          <div className="text-sm text-slate-400 py-4 text-center dark:text-slate-500">
             No data sources available. Create one first.
           </div>
         ) : null}
@@ -216,14 +216,14 @@ function NotificationFilterCard({
   disabled = false,
 }: NotificationFilterCardProps): React.JSX.Element {
   return (
-    <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+    <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800">
       <div className="flex items-center justify-between mb-3">
-        <span className="text-sm font-medium text-slate-700">Filter {index + 1}</span>
+        <span className="text-sm font-medium text-slate-700 dark:text-slate-200">Filter {index + 1}</span>
         <button
           type="button"
           onClick={onRemove}
           disabled={disabled}
-          className="text-slate-400 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-50"
+          className="text-slate-400 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-50 dark:text-slate-500 dark:hover:text-red-400"
         >
           <Trash2 className="h-4 w-4" />
         </button>
@@ -231,7 +231,7 @@ function NotificationFilterCard({
 
       <div className="space-y-3">
         <div>
-          <label className="text-xs text-slate-500">Filter Name</label>
+          <label className="text-xs text-slate-500 dark:text-slate-400">Filter Name</label>
           <input
             type="text"
             value={filter.name}
@@ -240,7 +240,7 @@ function NotificationFilterCard({
             }}
             placeholder="e.g., Banking Alerts"
             disabled={disabled}
-            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 placeholder-slate-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-slate-100"
+            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 placeholder-slate-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-slate-100 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200 dark:placeholder-slate-500 dark:disabled:bg-slate-800"
           />
         </div>
 
@@ -257,14 +257,14 @@ function NotificationFilterCard({
           />
 
           <div className="flex flex-col gap-1">
-            <label className="text-xs text-slate-500">Source</label>
+            <label className="text-xs text-slate-500 dark:text-slate-400">Source</label>
             <select
               value={filter.source}
               onChange={(e): void => {
                 onChange({ ...filter, source: e.target.value });
               }}
               disabled={disabled}
-              className="min-w-[140px] rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 hover:border-slate-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
+              className="min-w-[140px] rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 hover:border-slate-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200 dark:hover:border-slate-500 dark:disabled:bg-slate-800 dark:disabled:text-slate-500"
             >
               <option value="">All Sources</option>
               {filterOptions.source.map((option) => (
@@ -276,7 +276,7 @@ function NotificationFilterCard({
           </div>
 
           <div className="flex flex-col gap-1">
-            <label className="text-xs text-slate-500">Title contains</label>
+            <label className="text-xs text-slate-500 dark:text-slate-400">Title contains</label>
             <input
               type="text"
               value={filter.title}
@@ -285,7 +285,7 @@ function NotificationFilterCard({
               }}
               placeholder="Search in title..."
               disabled={disabled}
-              className="w-40 rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 placeholder-slate-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-slate-100"
+              className="w-40 rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 placeholder-slate-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-slate-100 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200 dark:placeholder-slate-500 dark:disabled:bg-slate-800"
             />
           </div>
         </div>
@@ -497,7 +497,7 @@ export function CompositeFeedFormPage(): React.JSX.Element {
   if (isEditMode && fetchError !== null) {
     return (
       <Layout>
-        <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-red-700">
+        <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-red-700 dark:border-red-800 dark:bg-red-900/30 dark:text-red-400">
           {fetchError}
         </div>
       </Layout>
@@ -508,10 +508,10 @@ export function CompositeFeedFormPage(): React.JSX.Element {
     <Layout>
       <div className="mb-6 flex items-start justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-slate-900">
+          <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100">
             {isEditMode ? 'Edit Composite Feed' : 'Create Composite Feed'}
           </h2>
-          <p className="text-slate-600">
+          <p className="text-slate-600 dark:text-slate-300">
             {isEditMode
               ? 'Update your composite feed configuration.'
               : 'Create a feed that aggregates data sources and notification filters.'}
@@ -530,13 +530,13 @@ export function CompositeFeedFormPage(): React.JSX.Element {
       <RefreshIndicator show={refreshing} />
 
       {error !== null && error !== '' ? (
-        <div className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 text-red-700">
+        <div className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 text-red-700 dark:border-red-800 dark:bg-red-900/30 dark:text-red-400">
           {error}
         </div>
       ) : null}
 
       {showSuccess ? (
-        <div className="mb-6 flex items-center gap-2 rounded-lg border border-green-200 bg-green-50 p-4 text-green-700">
+        <div className="mb-6 flex items-center gap-2 rounded-lg border border-green-200 bg-green-50 p-4 text-green-700 dark:border-green-800 dark:bg-green-900/30 dark:text-green-400">
           <Check className="h-5 w-5" />
           <span>Composite feed saved successfully</span>
         </div>
@@ -545,7 +545,7 @@ export function CompositeFeedFormPage(): React.JSX.Element {
       <div className="space-y-6">
         <Card title="Purpose">
           <div className="space-y-2">
-            <p className="text-sm text-slate-500">
+            <p className="text-sm text-slate-500 dark:text-slate-400">
               Describe what this feed is used for. This helps generate a meaningful name and guides
               LLM consumption.
             </p>
@@ -555,11 +555,11 @@ export function CompositeFeedFormPage(): React.JSX.Element {
                 setPurpose(e.target.value);
               }}
               placeholder="e.g., Track my banking transactions and credit card alerts for monthly expense analysis..."
-              className="w-full rounded-lg border border-slate-200 p-3 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 resize-y min-h-[100px]"
+              className="w-full rounded-lg border border-slate-200 bg-white p-3 text-slate-900 placeholder-slate-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 resize-y min-h-[100px] dark:border-slate-600 dark:bg-slate-700 dark:text-slate-100 dark:placeholder-slate-500"
               disabled={saving}
             />
             <p
-              className={`text-sm ${purpose.length > MAX_PURPOSE_LENGTH ? 'text-red-600' : 'text-slate-500'}`}
+              className={`text-sm ${purpose.length > MAX_PURPOSE_LENGTH ? 'text-red-600 dark:text-red-400' : 'text-slate-500 dark:text-slate-400'}`}
             >
               {purpose.length.toLocaleString()}/{MAX_PURPOSE_LENGTH.toLocaleString()} characters
             </p>
@@ -583,7 +583,7 @@ export function CompositeFeedFormPage(): React.JSX.Element {
 
         <Card title="Notification Filters">
           <div className="space-y-4">
-            <p className="text-sm text-slate-500">
+            <p className="text-sm text-slate-500 dark:text-slate-400">
               Add up to {MAX_NOTIFICATION_FILTERS} notification filters to include mobile
               notifications matching specific criteria.
             </p>
@@ -616,7 +616,7 @@ export function CompositeFeedFormPage(): React.JSX.Element {
             <div className="relative">
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
-                  <p className="text-sm text-slate-500">
+                  <p className="text-sm text-slate-500 dark:text-slate-400">
                     Pre-computed snapshot data (refreshed every 15 minutes)
                   </p>
                   <Button
@@ -639,12 +639,12 @@ export function CompositeFeedFormPage(): React.JSX.Element {
                     <div className="h-6 w-6 animate-spin rounded-full border-4 border-blue-600 border-t-transparent" />
                   </div>
                 ) : snapshot === null ? (
-                  <div className="rounded-lg border border-amber-200 bg-amber-50 p-4">
+                  <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-900/30">
                     <div className="flex gap-2">
-                      <AlertCircle className="h-5 w-5 text-amber-600 shrink-0" />
+                      <AlertCircle className="h-5 w-5 text-amber-600 shrink-0 dark:text-amber-400" />
                       <div>
-                        <p className="font-medium text-amber-900">Snapshot Not Yet Generated</p>
-                        <p className="text-sm text-amber-700 mt-1">
+                        <p className="font-medium text-amber-900 dark:text-amber-300">Snapshot Not Yet Generated</p>
+                        <p className="text-sm text-amber-700 mt-1 dark:text-amber-400">
                           Snapshots are generated every 15 minutes by the scheduler. Please check back
                           soon.
                         </p>
@@ -654,7 +654,7 @@ export function CompositeFeedFormPage(): React.JSX.Element {
                 ) : (
                   <>
                     <div className="flex items-center gap-4 text-sm">
-                      <div className="flex items-center gap-1 text-slate-600">
+                      <div className="flex items-center gap-1 text-slate-600 dark:text-slate-300">
                         <Clock className="h-4 w-4" />
                         <span>
                           Generated: {new Date(snapshot.generatedAt).toLocaleString('en-US', {
@@ -665,7 +665,7 @@ export function CompositeFeedFormPage(): React.JSX.Element {
                           })}
                         </span>
                       </div>
-                      <div className="text-slate-500">
+                      <div className="text-slate-500 dark:text-slate-400">
                         Expires: {new Date(snapshot.expiresAt).toLocaleString('en-US', {
                           hour: 'numeric',
                           minute: '2-digit',
@@ -675,7 +675,7 @@ export function CompositeFeedFormPage(): React.JSX.Element {
 
                     {snapshot.staticSources.length > 0 ? (
                       <div>
-                        <h4 className="text-sm font-medium text-slate-700 mb-2">
+                        <h4 className="text-sm font-medium text-slate-700 mb-2 dark:text-slate-200">
                           Static Sources ({snapshot.staticSources.length})
                         </h4>
                         <div className="space-y-2">
@@ -685,10 +685,10 @@ export function CompositeFeedFormPage(): React.JSX.Element {
                             return (
                               <div
                                 key={source.id}
-                                className="rounded-lg border border-slate-200 bg-slate-50 p-3"
+                                className="rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-800"
                               >
-                                <div className="font-medium text-slate-900 text-sm">{source.name}</div>
-                                <div className="text-xs text-slate-500 mt-1">
+                                <div className="font-medium text-slate-900 text-sm dark:text-slate-100">{source.name}</div>
+                                <div className="text-xs text-slate-500 mt-1 dark:text-slate-400">
                                   {rows} rows, {chars.toLocaleString()} characters
                                 </div>
                               </div>
@@ -700,28 +700,28 @@ export function CompositeFeedFormPage(): React.JSX.Element {
 
                     {snapshot.notifications.length > 0 ? (
                       <div>
-                        <h4 className="text-sm font-medium text-slate-700 mb-2">
+                        <h4 className="text-sm font-medium text-slate-700 mb-2 dark:text-slate-200">
                           Notification Filters ({snapshot.notifications.length})
                         </h4>
                         <div className="space-y-2">
                           {snapshot.notifications.map((filter) => (
                             <div
                               key={filter.filterId}
-                              className="rounded-lg border border-slate-200 bg-slate-50 p-3"
+                              className="rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-800"
                             >
-                              <div className="font-medium text-slate-900 text-sm">
+                              <div className="font-medium text-slate-900 text-sm dark:text-slate-100">
                                 {filter.filterName}
                               </div>
-                              <div className="text-xs text-slate-500 mt-1">
+                              <div className="text-xs text-slate-500 mt-1 dark:text-slate-400">
                                 {filter.items.length} notifications
                                 {filter.criteria.app !== undefined && filter.criteria.app.length > 0
                                   ? ` from ${filter.criteria.app.join(', ')}`
                                   : ''}
                               </div>
                               {filter.items.length === 1000 ? (
-                                <div className="mt-2 flex items-start gap-1.5 rounded border border-amber-200 bg-amber-50 px-2 py-1.5">
-                                  <AlertCircle className="h-3.5 w-3.5 text-amber-600 mt-0.5 shrink-0" />
-                                  <span className="text-xs text-amber-800">
+                                <div className="mt-2 flex items-start gap-1.5 rounded border border-amber-200 bg-amber-50 px-2 py-1.5 dark:border-amber-800 dark:bg-amber-900/30">
+                                  <AlertCircle className="h-3.5 w-3.5 text-amber-600 mt-0.5 shrink-0 dark:text-amber-400" />
+                                  <span className="text-xs text-amber-800 dark:text-amber-300">
                                     Reached 1000 notification limit. Some may be missing. Consider
                                     narrowing your filter criteria.
                                   </span>
@@ -737,10 +737,10 @@ export function CompositeFeedFormPage(): React.JSX.Element {
               </div>
 
               {showSnapshotLoader && snapshot !== null ? (
-                <div className="absolute inset-0 flex items-center justify-center bg-white/80 backdrop-blur-[1px] transition-opacity duration-300">
+                <div className="absolute inset-0 flex items-center justify-center bg-white/80 backdrop-blur-[1px] transition-opacity duration-300 dark:bg-slate-800/80">
                   <div className="flex flex-col items-center gap-3">
                     <div className="h-8 w-8 animate-spin rounded-full border-4 border-blue-600 border-t-transparent" />
-                    <span className="text-sm text-slate-600">Refreshing snapshot...</span>
+                    <span className="text-sm text-slate-600 dark:text-slate-300">Refreshing snapshot...</span>
                   </div>
                 </div>
               ) : null}

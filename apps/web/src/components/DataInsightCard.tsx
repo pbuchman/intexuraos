@@ -22,25 +22,25 @@ export function DataInsightCard({ insight, onConfigureChart, isConfiguring }: Da
     <Card className="transition-shadow hover:shadow-md">
       <div className="flex items-start justify-between">
         <div className="flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-100">
-            <BarChart3 className="h-4 w-4 text-blue-600" />
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-100 dark:bg-blue-900/50">
+            <BarChart3 className="h-4 w-4 text-blue-600 dark:text-blue-400" />
           </div>
           <div>
-            <h3 className="font-semibold text-slate-900">{insight.title}</h3>
-            <span className="text-xs text-slate-500">{CHART_TYPE_NAMES[insight.suggestedChartType]}</span>
+            <h3 className="font-semibold text-slate-900 dark:text-slate-100">{insight.title}</h3>
+            <span className="text-xs text-slate-500 dark:text-slate-400">{CHART_TYPE_NAMES[insight.suggestedChartType]}</span>
           </div>
         </div>
-        <span className="text-xs text-slate-400">
+        <span className="text-xs text-slate-400 dark:text-slate-500">
           {new Date(insight.generatedAt).toLocaleDateString()}
         </span>
       </div>
-      <p className="mt-3 text-sm text-slate-600">{insight.description}</p>
-      <div className="mt-4 rounded-lg bg-slate-50 p-3">
+      <p className="mt-3 text-sm text-slate-600 dark:text-slate-300">{insight.description}</p>
+      <div className="mt-4 rounded-lg bg-slate-50 p-3 dark:bg-slate-700">
         <div className="flex items-center gap-1.5">
-          <TrendingUp className="h-3.5 w-3.5 text-slate-500" />
-          <span className="text-xs font-medium text-slate-600">Trackable metric:</span>
+          <TrendingUp className="h-3.5 w-3.5 text-slate-500 dark:text-slate-400" />
+          <span className="text-xs font-medium text-slate-600 dark:text-slate-300">Trackable metric:</span>
         </div>
-        <p className="mt-1 text-xs text-slate-600">{insight.trackableMetric}</p>
+        <p className="mt-1 text-xs text-slate-600 dark:text-slate-300">{insight.trackableMetric}</p>
       </div>
       <div className="mt-4 flex justify-end">
         <Button

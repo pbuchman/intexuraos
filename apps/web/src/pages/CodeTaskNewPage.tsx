@@ -48,14 +48,14 @@ export function CodeTaskNewPage(): React.JSX.Element {
   return (
     <Layout>
       <div className="mb-6">
-        <h2 className="text-2xl font-bold text-slate-900">New Code Task</h2>
-        <p className="text-slate-600">Submit a coding task to be executed by Claude</p>
+        <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100">New Code Task</h2>
+        <p className="text-slate-600 dark:text-slate-300">Submit a coding task to be executed by Claude</p>
       </div>
 
       <Card className="mb-6">
         <div className="space-y-6">
           <div>
-            <label htmlFor="prompt" className="block text-sm font-medium text-slate-700 mb-2">
+            <label htmlFor="prompt" className="block text-sm font-medium text-slate-700 mb-2 dark:text-slate-200">
               Task Description <span className="text-red-500">*</span>
             </label>
             <textarea
@@ -65,17 +65,17 @@ export function CodeTaskNewPage(): React.JSX.Element {
                 setPrompt(e.target.value);
               }}
               placeholder="Describe what you want Claude to build or fix..."
-              className="w-full rounded-lg border border-slate-200 p-3 text-slate-900 placeholder-slate-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              className="w-full rounded-lg border border-slate-200 p-3 text-slate-900 placeholder-slate-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-100 dark:placeholder-slate-400"
               rows={6}
               disabled={submitting}
             />
-            <p className="mt-1 text-xs text-slate-500">
+            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
               Be specific about what you want to achieve. Include any relevant context or constraints.
             </p>
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-2">Worker Type</label>
+            <label className="block text-sm font-medium text-slate-700 mb-2 dark:text-slate-200">Worker Type</label>
             <div className="flex flex-wrap gap-3">
               {WORKER_TYPES.map((type) => (
                 <button
@@ -87,8 +87,8 @@ export function CodeTaskNewPage(): React.JSX.Element {
                   disabled={submitting}
                   className={`px-4 py-2 rounded-lg border text-sm font-medium transition-colors ${
                     workerType === type.id
-                      ? 'border-blue-500 bg-blue-50 text-blue-700'
-                      : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                      ? 'border-blue-500 bg-blue-50 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300'
+                      : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600'
                   } disabled:opacity-50`}
                   title={type.description}
                 >
@@ -96,18 +96,18 @@ export function CodeTaskNewPage(): React.JSX.Element {
                 </button>
               ))}
             </div>
-            <p className="mt-1 text-xs text-slate-500">
+            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
               {WORKER_TYPES.find((t) => t.id === workerType)?.description}
             </p>
           </div>
 
-          <div className="border-t border-slate-200 pt-6">
-            <h3 className="text-sm font-medium text-slate-700 mb-4">
+          <div className="border-t border-slate-200 pt-6 dark:border-slate-700">
+            <h3 className="text-sm font-medium text-slate-700 mb-4 dark:text-slate-200">
               Linear Issue (Optional)
             </h3>
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
-                <label htmlFor="linearIssueId" className="block text-sm text-slate-600 mb-1">
+                <label htmlFor="linearIssueId" className="block text-sm text-slate-600 mb-1 dark:text-slate-400">
                   Issue ID
                 </label>
                 <input
@@ -118,12 +118,12 @@ export function CodeTaskNewPage(): React.JSX.Element {
                     setLinearIssueId(e.target.value);
                   }}
                   placeholder="INT-123"
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-slate-900 placeholder-slate-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-slate-900 placeholder-slate-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-100 dark:placeholder-slate-400"
                   disabled={submitting}
                 />
               </div>
               <div>
-                <label htmlFor="linearIssueTitle" className="block text-sm text-slate-600 mb-1">
+                <label htmlFor="linearIssueTitle" className="block text-sm text-slate-600 mb-1 dark:text-slate-400">
                   Issue Title
                 </label>
                 <input
@@ -134,12 +134,12 @@ export function CodeTaskNewPage(): React.JSX.Element {
                     setLinearIssueTitle(e.target.value);
                   }}
                   placeholder="Issue title..."
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-slate-900 placeholder-slate-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-slate-900 placeholder-slate-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-100 dark:placeholder-slate-400"
                   disabled={submitting}
                 />
               </div>
             </div>
-            <p className="mt-2 text-xs text-slate-500">
+            <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
               Link this task to a Linear issue for tracking and context.
             </p>
           </div>
@@ -147,11 +147,11 @@ export function CodeTaskNewPage(): React.JSX.Element {
       </Card>
 
       {error !== null ? (
-        <div className="mb-6 flex items-start gap-3 rounded-lg border border-red-200 bg-red-50 p-4">
-          <AlertCircle className="h-5 w-5 flex-shrink-0 text-red-600" />
+        <div className="mb-6 flex items-start gap-3 rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-800 dark:bg-red-900/30">
+          <AlertCircle className="h-5 w-5 flex-shrink-0 text-red-600 dark:text-red-400" />
           <div>
-            <h3 className="font-medium text-red-800">Failed to submit task</h3>
-            <p className="mt-1 text-sm text-red-700">{error}</p>
+            <h3 className="font-medium text-red-800 dark:text-red-300">Failed to submit task</h3>
+            <p className="mt-1 text-sm text-red-700 dark:text-red-400">{error}</p>
           </div>
         </div>
       ) : null}

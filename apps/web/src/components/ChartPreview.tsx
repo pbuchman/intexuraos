@@ -51,15 +51,15 @@ export function ChartPreview({ chartDefinition, chartData, isLoading, error }: C
     return (
       <Card className="mt-4 flex items-center justify-center py-12">
         <div className="h-8 w-8 animate-spin rounded-full border-4 border-blue-600 border-t-transparent" />
-        <span className="ml-3 text-slate-600">Generating preview...</span>
+        <span className="ml-3 text-slate-600 dark:text-slate-300">Generating preview...</span>
       </Card>
     );
   }
 
   if (error !== null) {
     return (
-      <Card className="mt-4 border-red-200 bg-red-50">
-        <div className="flex items-center gap-2 text-red-700">
+      <Card className="mt-4 border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-900/30">
+        <div className="flex items-center gap-2 text-red-700 dark:text-red-400">
           <span className="font-medium">Error generating preview:</span>
           <span>{error}</span>
         </div>
@@ -70,7 +70,7 @@ export function ChartPreview({ chartDefinition, chartData, isLoading, error }: C
   if (chartData.length === 0) {
     return (
       <Card className="mt-4">
-        <p className="text-slate-600">No data available for preview. Please try again.</p>
+        <p className="text-slate-600 dark:text-slate-300">No data available for preview. Please try again.</p>
       </Card>
     );
   }
@@ -82,7 +82,7 @@ export function ChartPreview({ chartDefinition, chartData, isLoading, error }: C
 
   return (
     <Card className="mt-4">
-      <h3 className="mb-4 text-lg font-semibold text-slate-900">Chart Preview</h3>
+      <h3 className="mb-4 text-lg font-semibold text-slate-900 dark:text-slate-100">Chart Preview</h3>
       <VegaChart spec={fullSpec} data={chartData} />
     </Card>
   );
