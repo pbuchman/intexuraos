@@ -42,7 +42,10 @@ done
 
 if [ "$missing_dist" = true ]; then
   echo "Building packages (dist/ missing)..." >&2
-  pnpm build >&2
+  # Skip actual build in test mode (set by hook tests)
+  if [ "${HOOK_DRY_RUN:-}" != "1" ]; then
+    pnpm build >&2
+  fi
 fi
 
 echo "CONTINUE"
