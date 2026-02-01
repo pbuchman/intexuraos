@@ -179,11 +179,19 @@ export const gateway: HttpFunction = async (req: any, res: any) => {
     return;
   }
 
-  // If starting, show "Starting" page
-  /* v8 ignore start -- ts-type: exhaustiveness check fallthrough @preserve */
+  // If starting and VM was created recently (within 3 minutes), assume it's coming up
+  // Avoid race condition where report-ready hasn't yet updated state to "running"
   if (currentState.status === 'starting') {
-    /* v8 ignore stop @preserve */
-    res.status(200).send(getStartingPage(currentState.branch));
+    const startedAt = currentState.startedAt ?? new Date(0);
+    const timeSinceStart = Date.now() - startedAt.getTime();
+    if (timeSinceStart < 180000) { // 3 minutes
+      res.status(200).send(getStartingPage(currentState.branch));
+      return;
+    }
+    // If starting for too long, reset and try again
+    logger.warn('VM stuck in starting state, resetting...');
+    await state.setStopped();
+    res.status(503).send('VM startup timed out, please refresh');
     return;
   }
 
