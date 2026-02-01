@@ -55,6 +55,10 @@ git pull origin "$TARGET_BRANCH"
 log "Fetching predev environment variables from Secret Manager..."
 gcloud secrets versions access latest --secret="INTEXURAOS_PREDEV_ENV_VARS" --quiet > "$REPO_DIR/.envrc.local"
 
+# Copy to .env for Vite (Vite reads .env files automatically)
+log "Copying env vars to .env for Vite build..."
+cp "$REPO_DIR/.envrc.local" "$REPO_DIR/.env"
+
 # Source env vars for build (Vite needs them at build time for client bundle)
 log "Loading environment variables for build..."
 cd "$REPO_DIR"
