@@ -14,7 +14,14 @@ vi.mock('@google-cloud/firestore', async () => {
             set: mockSet,
             get: mockGet,
           })),
-        })),
+        runTransaction: vi.fn(async (fn) => {
+          const mockTx = {
+            get: vi.fn(async () => ({ exists: false })),
+            create: vi.fn(),
+            update: vi.fn(),
+          };
+          return await fn(mockTx);
+        }),
       };
     }),
   };
