@@ -93,6 +93,10 @@ log "Starting services with PM2..."
 # Ensure HOME is set for PM2 and child processes (git commands need it)
 export PREDEV_ENVIRONMENT=true
 export HOME=/root
+# Source .env file to ensure all environment variables are available to PM2
+cd "$REPO_DIR"
+# shellcheck source=/dev/null disable=SC1091
+set -a && . .env && set +a
 HOME=/root pm2 start ecosystem.config.cjs
 pm2 save
 
