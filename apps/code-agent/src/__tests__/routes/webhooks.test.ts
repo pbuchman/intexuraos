@@ -44,6 +44,8 @@ import { createCleanupTaskLogsUseCase } from '../../domain/usecases/cleanupTaskL
 import { createNoOpMetricsClient, type MetricsClient } from '../../infra/metrics.js';
 import { createWorkerSettingsRepository } from '../../infra/firestore/workerSettingsRepository.js';
 import type { WorkerSettingsRepository } from '../../domain/ports/workerSettingsRepository.js';
+import type { WorkerHealthProbe } from '../../domain/ports/workerHealthProbe.js';
+import { mockWorkerHealthProbe } from '../helpers/mockServices.js';
 
 // Mock fetchWithAuth
 vi.mock('@intexuraos/internal-clients', async () => ({
@@ -160,6 +162,7 @@ describe('POST /internal/webhooks/task-complete', () => {
         codeTaskRepository: codeTaskRepo,
         logger,
       }),
+      workerHealthProbe: mockWorkerHealthProbe,
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -176,6 +179,7 @@ describe('POST /internal/webhooks/task-complete', () => {
       processHeartbeat: import('../../domain/usecases/processHeartbeat.js').ProcessHeartbeatUseCase;
       detectZombieTasks: import('../../domain/usecases/detectZombieTasks.js').DetectZombieTasksUseCase;
       cleanupTaskLogs: import('../../domain/usecases/cleanupTaskLogs.js').CleanupTaskLogsUseCase;
+      workerHealthProbe: WorkerHealthProbe;
     });
 
     app = await buildServer();
@@ -1322,6 +1326,7 @@ describe('POST /internal/webhooks/task-complete - Metrics recording', () => {
           return;
         },
       },
+      workerHealthProbe: mockWorkerHealthProbe,
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -1338,6 +1343,7 @@ describe('POST /internal/webhooks/task-complete - Metrics recording', () => {
       processHeartbeat: import('../../domain/usecases/processHeartbeat.js').ProcessHeartbeatUseCase;
       detectZombieTasks: import('../../domain/usecases/detectZombieTasks.js').DetectZombieTasksUseCase;
       cleanupTaskLogs: import('../../domain/usecases/cleanupTaskLogs.js').CleanupTaskLogsUseCase;
+      workerHealthProbe: WorkerHealthProbe;
     });
 
     app = await buildServer();
@@ -1629,6 +1635,7 @@ describe('POST /internal/logs', () => {
         codeTaskRepository: codeTaskRepo,
         logger,
       }),
+      workerHealthProbe: mockWorkerHealthProbe,
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -1645,6 +1652,7 @@ describe('POST /internal/logs', () => {
       processHeartbeat: import('../../domain/usecases/processHeartbeat.js').ProcessHeartbeatUseCase;
       detectZombieTasks: import('../../domain/usecases/detectZombieTasks.js').DetectZombieTasksUseCase;
       cleanupTaskLogs: import('../../domain/usecases/cleanupTaskLogs.js').CleanupTaskLogsUseCase;
+      workerHealthProbe: WorkerHealthProbe;
     });
 
     app = await buildServer();
@@ -2047,6 +2055,7 @@ describe('POST /internal/webhooks/task-complete - WhatsApp notifications', () =>
         codeTaskRepository: codeTaskRepo,
         logger,
       }),
+      workerHealthProbe: mockWorkerHealthProbe,
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -2063,6 +2072,7 @@ describe('POST /internal/webhooks/task-complete - WhatsApp notifications', () =>
       processHeartbeat: import('../../domain/usecases/processHeartbeat.js').ProcessHeartbeatUseCase;
       detectZombieTasks: import('../../domain/usecases/detectZombieTasks.js').DetectZombieTasksUseCase;
       cleanupTaskLogs: import('../../domain/usecases/cleanupTaskLogs.js').CleanupTaskLogsUseCase;
+      workerHealthProbe: WorkerHealthProbe;
     });
 
     app = await buildServer();

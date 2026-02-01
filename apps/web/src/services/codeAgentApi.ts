@@ -71,3 +71,12 @@ export async function cancelCodeTask(accessToken: string, taskId: string): Promi
 export async function getWorkersStatus(accessToken: string): Promise<WorkersStatusResponse> {
   return await apiRequest<WorkersStatusResponse>(config.codeAgentUrl, '/code/workers/status', accessToken);
 }
+
+/**
+ * Refresh worker status synchronously
+ */
+export async function refreshWorkersStatus(accessToken: string): Promise<WorkersStatusResponse> {
+  return await apiRequest<WorkersStatusResponse>(config.codeAgentUrl, '/code/workers/refresh-status', accessToken, {
+    method: 'POST',
+  });
+}

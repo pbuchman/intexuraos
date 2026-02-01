@@ -42,6 +42,8 @@ import { createCleanupTaskLogsUseCase } from '../../domain/usecases/cleanupTaskL
 import { createNoOpMetricsClient, type MetricsClient } from '../../infra/metrics.js';
 import { createWorkerSettingsRepository } from '../../infra/firestore/workerSettingsRepository.js';
 import type { WorkerSettingsRepository } from '../../domain/ports/workerSettingsRepository.js';
+import type { WorkerHealthProbe } from '../../domain/ports/workerHealthProbe.js';
+import { mockWorkerHealthProbe } from '../helpers/mockServices.js';
 
 describe('POST /internal/code/process', () => {
   let app: Awaited<ReturnType<typeof buildServer>>;
@@ -148,6 +150,7 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       }),
+      workerHealthProbe: mockWorkerHealthProbe,
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -164,6 +167,7 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
       detectZombieTasks: import('../../domain/usecases/detectZombieTasks.js').DetectZombieTasksUseCase;
       cleanupTaskLogs: import('../../domain/usecases/cleanupTaskLogs.js').CleanupTaskLogsUseCase;
       workerSettingsRepo: WorkerSettingsRepository;
+      workerHealthProbe: WorkerHealthProbe;
     });
 
     // Set up worker settings for the test user

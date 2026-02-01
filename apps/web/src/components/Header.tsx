@@ -5,12 +5,66 @@ import { usePWA } from '@/context/pwa-context';
 import { useWorkersStatus } from '@/hooks';
 import { ChevronDown, LogOut, Moon, Sun, User, RefreshCw, RotateCcw, Server } from 'lucide-react';
 import { VersionInfoModal } from './VersionInfoModal';
+import type { WorkerStatus } from '@/types';
+
+/**
+ * Get display text and color for worker status.
+ */
+const getStatusDisplay = (worker: WorkerStatus): {
+  text: string;
+  color: string;
+  icon: string;
+} => {
+  if (worker.status === 'healthy') {
+    if (worker.details?.available !== undefined && worker.details.capacity !== undefined) {
+      return {
+        text: `Online (${String(worker.details.available)}/${String(worker.details.capacity)})`,
+        color: 'bg-green-500',
+        icon: '🟢',
+      };
+    }
+    return {
+      text: 'Online',
+      color: 'bg-green-500',
+      icon: '🟢',
+    };
+  }
+
+  if (worker.status === 'orchestrator-unreachable') {
+    if (worker.details?.reason === 'timeout') {
+      return {
+        text: 'Orchestrator not responding',
+        color: 'bg-yellow-500',
+        icon: '🟡',
+      };
+    }
+    return {
+      text: `Orchestrator error ${worker.details?.code ?? ''}`,
+      color: 'bg-yellow-500',
+      icon: '🟡',
+    };
+  }
+
+  if (worker.status === 'tunnel-down') {
+    return {
+      text: 'Tunnel offline',
+      color: 'bg-red-500',
+      icon: '🔴',
+    };
+  }
+
+  return {
+    text: 'Unknown status',
+    color: 'bg-gray-400',
+    icon: '⚪',
+  };
+};
 
 export function Header(): React.JSX.Element {
   const { user, logout, isAuthenticated } = useAuth();
   const { pendingCount, isSyncing, isOnline, authFailed } = useSyncQueue();
   const { isInstalled } = usePWA();
-  const { status: workersStatus } = useWorkersStatus();
+  const { status: workersStatus, refresh: refreshWorkersStatus } = useWorkersStatus();
   const { resolvedTheme, toggleTheme } = useTheme();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isWorkersOpen, setIsWorkersOpen] = useState(false);
@@ -120,31 +174,48 @@ export function Header(): React.JSX.Element {
             </button>
 
             {isWorkersOpen ? (
-              <div className="absolute right-0 top-full mt-1 w-64 rounded-lg border border-slate-200 bg-white py-2 shadow-lg dark:border-slate-700 dark:bg-slate-800">
-                <div className="px-4 py-1 text-xs font-medium uppercase text-slate-400">
-                  Code Workers
+              <div className="absolute right-0 top-full mt-1 w-72 rounded-lg border border-slate-200 bg-white py-2 shadow-lg dark:border-slate-700 dark:bg-slate-800">
+                <div className="flex items-center justify-between px-4 py-1">
+                  <div className="text-xs font-medium uppercase text-slate-400">
+                    Code Workers
+                  </div>
+                  <button
+                    onClick={(): void => {
+                      void refreshWorkersStatus();
+                    }}
+                    className="text-xs text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
+                    title="Refresh status"
+                  >
+                    Refresh
+                  </button>
                 </div>
 
-                {workersStatus.workers.map((worker) => (
-                  <div
-                    key={worker.name}
-                    className="flex items-center justify-between px-4 py-2 text-sm"
-                  >
-                    <div className="flex items-center gap-2">
-                      <span
-                        className={`h-2 w-2 rounded-full ${
-                          worker.healthy ? 'bg-green-500' : 'bg-red-500'
-                        }`}
-                      />
-                      <span className="font-medium text-slate-700 dark:text-slate-200">
-                        {worker.name}
-                      </span>
+                {workersStatus.workers.map((worker) => {
+                  const display = getStatusDisplay(worker);
+                  return (
+                    <div
+                      key={worker.name}
+                      className="flex items-center justify-between px-4 py-2 text-sm"
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="text-lg">{display.icon}</span>
+                        <div className="flex flex-col">
+                          <span className="font-medium text-slate-700 dark:text-slate-200">
+                            {worker.name}
+                          </span>
+                          {worker.stale && (
+                            <span className="text-xs text-slate-400">
+                              (stale)
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="text-xs text-slate-500 dark:text-slate-400">
+                        {display.text}
+                      </div>
                     </div>
-                    <div className="text-slate-500 dark:text-slate-400">
-                      {worker.healthy ? 'Online' : 'Offline'}
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
 
                 <div className="mt-1 border-t border-slate-100 px-4 py-2 dark:border-slate-700">
                   <Link

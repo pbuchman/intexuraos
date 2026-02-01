@@ -41,6 +41,8 @@ import { createCleanupTaskLogsUseCase } from '../../domain/usecases/cleanupTaskL
 import { createNoOpMetricsClient, type MetricsClient } from '../../infra/metrics.js';
 import { createWorkerSettingsRepository } from '../../infra/firestore/workerSettingsRepository.js';
 import type { WorkerSettingsRepository } from '../../domain/ports/workerSettingsRepository.js';
+import type { WorkerHealthProbe } from '../../domain/ports/workerHealthProbe.js';
+import { mockWorkerHealthProbe } from '../helpers/mockServices.js';
 
 describe('codeRoutes', () => {
   let fakeFirestore: ReturnType<typeof createFakeFirestore>;
@@ -171,6 +173,7 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       }),
+      workerHealthProbe: mockWorkerHealthProbe,
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -187,6 +190,7 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
       detectZombieTasks: import('../../domain/usecases/detectZombieTasks.js').DetectZombieTasksUseCase;
       cleanupTaskLogs: import('../../domain/usecases/cleanupTaskLogs.js').CleanupTaskLogsUseCase;
       workerSettingsRepo: WorkerSettingsRepository;
+      workerHealthProbe: WorkerHealthProbe;
     });
 
     // Set up worker settings for the test user
@@ -2080,6 +2084,171 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
         batchSize: undefined,
         tasksPerRun: undefined,
       });
+    });
+  });
+
+  describe('POST /code/workers/refresh-status', () => {
+    it('should return workers status after synchronous health probe', async () => {
+      const mockProbeAllWorkers = vi.fn().mockResolvedValue({
+        'home-mac': {
+          _tag: 'healthy',
+          healthy: true,
+          capacity: 2,
+          running: 1,
+          available: 1,
+          responseTimeMs: 100,
+        },
+      });
+
+      setServices({
+        ...getServices(),
+        workerHealthProbe: {
+          probeWorker: vi.fn().mockResolvedValue({
+            _tag: 'healthy',
+            healthy: true,
+            capacity: 1,
+            running: 0,
+            available: 1,
+            responseTimeMs: 50,
+          }),
+          probeAllWorkers: mockProbeAllWorkers,
+        },
+      });
+
+      // Set up worker settings
+      const services = getServices();
+      await services.workerSettingsRepo.addWorker('test-user-id', {
+        name: 'home-mac',
+        url: 'https://cc-mac.intexuraos.cloud',
+        cfAccessClientId: 'test-client-id',
+        cfAccessClientSecret: 'test-client-secret',
+        dispatchSigningSecret: 'test-dispatch-secret',
+      });
+
+      const response = await server.inject({
+        method: 'POST',
+        url: '/code/workers/refresh-status',
+        headers: {
+          Authorization: 'Bearer test-token',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+
+      expect(body.success).toBe(true);
+      expect(body.data.workers).toHaveLength(1);
+      expect(body.data.workers[0]).toEqual({
+        name: 'home-mac',
+        url: 'https://cc-mac.intexuraos.cloud',
+        priority: 1,
+        healthy: true,
+        status: 'healthy',
+        details: {
+          capacity: 2,
+          available: 1,
+          running: 1,
+          responseTimeMs: 100,
+        },
+        checkedAt: expect.any(String),
+        stale: false,
+      });
+      expect(mockProbeAllWorkers).toHaveBeenCalledWith([
+        expect.objectContaining({
+          name: 'home-mac',
+        }),
+      ]);
+    });
+
+    it('should return orchestrator-unreachable when probe times out', async () => {
+      const mockProbeAllWorkers = vi.fn().mockResolvedValue({
+        'home-mac': {
+          _tag: 'orchestrator-unreachable',
+          healthy: false,
+          reason: 'timeout',
+        },
+      });
+
+      setServices({
+        ...getServices(),
+        workerHealthProbe: {
+          probeWorker: vi.fn(),
+          probeAllWorkers: mockProbeAllWorkers,
+        },
+      });
+
+      // Set up worker settings
+      const services = getServices();
+      await services.workerSettingsRepo.addWorker('test-user-id', {
+        name: 'home-mac',
+        url: 'https://cc-mac.intexuraos.cloud',
+        cfAccessClientId: 'test-client-id',
+        cfAccessClientSecret: 'test-client-secret',
+        dispatchSigningSecret: 'test-dispatch-secret',
+      });
+
+      const response = await server.inject({
+        method: 'POST',
+        url: '/code/workers/refresh-status',
+        headers: {
+          Authorization: 'Bearer test-token',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+
+      expect(body.success).toBe(true);
+      expect(body.data.workers[0]).toMatchObject({
+        name: 'home-mac',
+        url: 'https://cc-mac.intexuraos.cloud',
+        priority: 1,
+        healthy: false,
+        status: 'orchestrator-unreachable',
+        details: {
+          reason: 'timeout',
+        },
+        stale: false,
+      });
+      expect(body.data.workers[0]).toHaveProperty('checkedAt');
+      expect(body.data.workers[0].checkedAt).toMatch(/\d{4}-\d{2}-\d{2}T/);
+    });
+
+    it('should return empty workers array when user has no workers', async () => {
+      // Mock getSettings to return null (no workers configured)
+      const services = getServices();
+      const mockGetSettings = vi.spyOn(services.workerSettingsRepo, 'getSettings').mockResolvedValue(
+        ok(null)
+      );
+
+      const response = await server.inject({
+        method: 'POST',
+        url: '/code/workers/refresh-status',
+        headers: {
+          Authorization: 'Bearer test-token',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+
+      expect(body.success).toBe(true);
+      expect(body.data.workers).toEqual([]);
+
+      mockGetSettings.mockRestore();
+    });
+
+    it('should return 401 when user is not authenticated', async () => {
+      const response = await server.inject({
+        method: 'POST',
+        url: '/code/workers/refresh-status',
+      });
+
+      expect(response.statusCode).toBe(401);
+      const body = JSON.parse(response.body);
+
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('UNAUTHORIZED');
     });
   });
 });

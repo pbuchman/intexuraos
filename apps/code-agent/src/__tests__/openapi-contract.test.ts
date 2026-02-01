@@ -41,6 +41,8 @@ import { createCleanupTaskLogsUseCase } from '../domain/usecases/cleanupTaskLogs
 import { createNoOpMetricsClient, type MetricsClient } from '../infra/metrics.js';
 import { createWorkerSettingsRepository } from '../infra/firestore/workerSettingsRepository.js';
 import type { WorkerSettingsRepository } from '../domain/ports/workerSettingsRepository.js';
+import type { WorkerHealthProbe } from '../domain/ports/workerHealthProbe.js';
+import { mockWorkerHealthProbe } from './helpers/mockServices.js';
 
 describe('OpenAPI contract', () => {
   let app: Awaited<ReturnType<typeof buildServer>>;
@@ -125,6 +127,7 @@ describe('OpenAPI contract', () => {
       }),
       metricsClient: createNoOpMetricsClient(),
       rateLimitService,
+      workerHealthProbe: mockWorkerHealthProbe,
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -141,6 +144,7 @@ describe('OpenAPI contract', () => {
       processHeartbeat: import('../domain/usecases/processHeartbeat.js').ProcessHeartbeatUseCase;
       detectZombieTasks: import('../domain/usecases/detectZombieTasks.js').DetectZombieTasksUseCase;
       cleanupTaskLogs: import('../domain/usecases/cleanupTaskLogs.js').CleanupTaskLogsUseCase;
+      workerHealthProbe: WorkerHealthProbe;
     });
 
     app = await buildServer();

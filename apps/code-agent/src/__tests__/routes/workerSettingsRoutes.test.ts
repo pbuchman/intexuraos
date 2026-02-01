@@ -43,6 +43,7 @@ import { createWorkerSettingsRepository } from '../../infra/firestore/workerSett
 import { ok } from '@intexuraos/common-core';
 import type { WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
 import type { ServiceContainer } from '../../services.js';
+import { mockWorkerHealthProbe } from '../helpers/mockServices.js';
 
 describe('Worker Settings Routes', () => {
   let app: Awaited<ReturnType<typeof buildServer>>;
@@ -145,6 +146,7 @@ describe('Worker Settings Routes', () => {
         logger,
       }),
       workerSettingsRepo,
+      workerHealthProbe: mockWorkerHealthProbe,
     } as ServiceContainer);
 
     app = await buildServer();

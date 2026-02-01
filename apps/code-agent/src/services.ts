@@ -16,6 +16,7 @@ import type { WhatsAppNotifier } from './domain/services/whatsappNotifier.js';
 import type { ActionsAgentClient } from './infra/clients/actionsAgentClient.js';
 import type { RateLimitService } from './domain/services/rateLimitService.js';
 import type { WorkerSettingsRepository } from './domain/ports/workerSettingsRepository.js';
+import type { WorkerHealthProbe } from './domain/ports/workerHealthProbe.js';
 import { createFirestoreCodeTaskRepository } from './infra/repositories/firestoreCodeTaskRepository.js';
 import { createFirestoreLogChunkRepository } from './infra/repositories/firestoreLogChunkRepository.js';
 import { createTaskDispatcherService } from './infra/services/taskDispatcherImpl.js';
@@ -32,6 +33,7 @@ import { createCleanupTaskLogsUseCase, type CleanupTaskLogsUseCase } from './dom
 import { createMetricsClient, createNoOpMetricsClient, type MetricsClient } from './infra/metrics.js';
 import type { LinearAgentClient } from './domain/ports/linearAgentClient.js';
 import { createWorkerSettingsRepository } from './infra/firestore/workerSettingsRepository.js';
+import { createWorkerHealthProbe } from './infra/services/workerHealthProbe.js';
 
 export interface ServiceContainer {
   firestore: Firestore;
@@ -49,6 +51,7 @@ export interface ServiceContainer {
   cleanupTaskLogs: CleanupTaskLogsUseCase;
   metricsClient: MetricsClient;
   workerSettingsRepo: WorkerSettingsRepository;
+  workerHealthProbe: WorkerHealthProbe;
 }
 
 // Configuration required to initialize services
@@ -206,6 +209,7 @@ export function initServices(config: ServiceConfig): void {
     }),
     metricsClient,
     workerSettingsRepo: createWorkerSettingsRepository({ firestore, logger }),
+    workerHealthProbe: createWorkerHealthProbe(),
   };
 }
 
