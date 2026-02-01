@@ -207,6 +207,27 @@ export default defineConfig(({ mode }) => {
     preview: {
       port: 3000,
       strictPort: true,
+      host: '0.0.0.0',
+      proxy: {
+        '/api/user': { target: 'http://localhost:8110', rewrite: (p) => p.replace(/^\/api\/user/, '') },
+        '/api/notion': { target: 'http://localhost:8112', rewrite: (p) => p.replace(/^\/api\/notion/, '') },
+        '/api/whatsapp': { target: 'http://localhost:8113', rewrite: (p) => p.replace(/^\/api\/whatsapp/, '') },
+        '/api/notifications': { target: 'http://localhost:8114', rewrite: (p) => p.replace(/^\/api\/notifications/, '') },
+        '/api/research': { target: 'http://localhost:8116', rewrite: (p) => p.replace(/^\/api\/research/, '') },
+        '/api/commands': { target: 'http://localhost:8117', rewrite: (p) => p.replace(/^\/api\/commands/, '') },
+        '/api/actions': { target: 'http://localhost:8118', rewrite: (p) => p.replace(/^\/api\/actions/, '') },
+        '/api/data-insights': { target: 'http://localhost:8119', rewrite: (p) => p.replace(/^\/api\/data-insights/, '') },
+        '/api/images': { target: 'http://localhost:8120', rewrite: (p) => p.replace(/^\/api\/images/, '') },
+        '/api/notes': { target: 'http://localhost:8121', rewrite: (p) => p.replace(/^\/api\/notes/, '') },
+        '/api/settings': { target: 'http://localhost:8122', rewrite: (p) => p.replace(/^\/api\/settings/, '') },
+        '/api/todos': { target: 'http://localhost:8123', rewrite: (p) => p.replace(/^\/api\/todos/, '') },
+        '/api/bookmarks': { target: 'http://localhost:8124', rewrite: (p) => p.replace(/^\/api\/bookmarks/, '') },
+        '/api/calendar': { target: 'http://localhost:8125', rewrite: (p) => p.replace(/^\/api\/calendar/, '') },
+        '/api/linear': { target: 'http://localhost:8126', rewrite: (p) => p.replace(/^\/api\/linear/, '') },
+        '/api/web': { target: 'http://localhost:8127', rewrite: (p) => p.replace(/^\/api\/web/, '') },
+        '/api/code': { target: 'http://localhost:8128', rewrite: (p) => p.replace(/^\/api\/code/, '') },
+        '/api/chat': { target: 'http://localhost:8129', rewrite: (p) => p.replace(/^\/api\/chat/, '') },
+      },
     },
   };
 });
