@@ -18,6 +18,7 @@ output "service_accounts" {
     calendar_agent               = google_service_account.calendar_agent.email
     web_agent                    = google_service_account.web_agent.email
     linear_agent                 = google_service_account.linear_agent.email
+    chat_agent                   = google_service_account.chat_agent.email
     code_agent                   = google_service_account.code_agent.email
   }
 }
@@ -105,6 +106,11 @@ output "web_agent_sa" {
 output "linear_agent_sa" {
   description = "Linear Agent service account email"
   value       = google_service_account.linear_agent.email
+}
+
+output "chat_agent_sa" {
+  description = "Chat Agent service account email"
+  value       = google_service_account.chat_agent.email
 }
 
 output "code_agent_sa" {

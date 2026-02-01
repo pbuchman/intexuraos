@@ -1,6 +1,9 @@
 #!/bin/bash
 set -euo pipefail
 
+# Set HOME for root (required by npm/pnpm)
+export HOME=/root
+
 REPO_DIR="/opt/intexuraos"
 LOG_FILE="/var/log/predev-startup.log"
 
@@ -87,8 +90,14 @@ log "Fixed ownership for p.buchman user"
 # Start services with PM2
 log "Starting services with PM2..."
 # Set PREDEV_ENVIRONMENT to use preview mode (no HMR, works through proxy)
+# Ensure HOME is set for PM2 and child processes (git commands need it)
 export PREDEV_ENVIRONMENT=true
-pm2 start ecosystem.config.cjs
+export HOME=/root
+# Source .env file to ensure all environment variables are available to PM2
+cd "$REPO_DIR"
+# shellcheck source=/dev/null disable=SC1091
+set -a && . .env && set +a
+HOME=/root pm2 start ecosystem.config.cjs
 pm2 save
 
 # Get VM's external IP

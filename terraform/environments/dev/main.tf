@@ -976,6 +976,7 @@ module "api_docs_hub" {
     INTEXURAOS_TODOS_AGENT_OPENAPI_URL                  = "${module.todos_agent.service_url}/openapi.json"
     INTEXURAOS_BOOKMARKS_AGENT_OPENAPI_URL              = "${module.bookmarks_agent.service_url}/openapi.json"
     INTEXURAOS_CALENDAR_AGENT_OPENAPI_URL               = "${module.calendar_agent.service_url}/openapi.json"
+    INTEXURAOS_CHAT_AGENT_OPENAPI_URL                   = "${module.chat_agent.service_url}/openapi.json"
   })
 
   depends_on = [
@@ -995,6 +996,7 @@ module "api_docs_hub" {
     module.todos_agent,
     module.bookmarks_agent,
     module.calendar_agent,
+    module.chat_agent,
   ]
 }
 
