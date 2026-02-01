@@ -4,9 +4,11 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   executeHookSync,
+  executeHookSyncWithTempDir,
   clearHooksLog,
   HookFixtureBuilder,
   expectAllowed,
+  createTempDir,
 } from './helpers/index.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -150,25 +152,33 @@ describe('Claude Hooks - Logging', () => {
     });
 
     it('writes to commands.log with proper format', () => {
-      const command = 'echo "hello world"';
+      const { path: tempDir, cleanup } = createTempDir();
 
-      // Create timing file
-      executeHookSync({
-        hookName: 'log-command-start',
-        input: HookFixtureBuilder.bash(command),
-      });
+      try {
+        const command = 'echo "hello world"';
 
-      // End command
-      executeHookSync({
-        hookName: 'log-command-end',
-        input: HookFixtureBuilder.bash(command),
-      });
+        // Create timing file
+        executeHookSyncWithTempDir(
+          { hookName: 'log-command-start', input: HookFixtureBuilder.bash(command) },
+          tempDir
+        );
 
-      // Check commands.log format
-      if (fs.existsSync(commandsLogPath)) {
-        const logContent = fs.readFileSync(commandsLogPath, 'utf-8');
-        // Format: [timestamp] duration command (duration has variable padding)
-        expect(logContent).toMatch(/\[.*?\]\s+\d+.*echo/);
+        // End command
+        executeHookSyncWithTempDir(
+          { hookName: 'log-command-end', input: HookFixtureBuilder.bash(command) },
+          tempDir
+        );
+
+        // Check commands.log format
+        if (fs.existsSync(commandsLogPath)) {
+          const logContent = fs.readFileSync(commandsLogPath, 'utf-8');
+          // Format: [timestamp] duration command (duration has variable padding)
+          // Should NOT have "?" duration - should be an actual number
+          expect(logContent).toMatch(/\[.*?\]\s+[\d.]+s\s+echo/);
+          expect(logContent).not.toMatch(/\[\s*\?\s*s\]/); // No unknown durations
+        }
+      } finally {
+        cleanup();
       }
     });
 

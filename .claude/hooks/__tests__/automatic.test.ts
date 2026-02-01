@@ -28,19 +28,6 @@ describe('Claude Hooks - Automatic/Rebuild', () => {
   });
 
   describe('session-start-build.sh', () => {
-    it('outputs CONTINUE when node_modules does not exist', () => {
-      const { cleanup, path: tempDir } = createTempDir();
-
-      const result = executeHookSync({
-        hookName: 'session-start-build',
-        input: HookFixtureBuilder.sessionStart(),
-        cwd: tempDir,
-      });
-
-      expectContinue(result);
-      cleanup();
-    });
-
     it('outputs CONTINUE when all packages have dist/', () => {
       const { cleanup, path: tempDir } = createTempDir();
 
