@@ -201,6 +201,8 @@ export default defineConfig(({ mode }) => {
       host: '0.0.0.0',
       port: 3000,
       strictPort: true,
+      // HMR disabled - WebSocket not supported through Cloud Functions gateway
+      hmr: false,
     },
     preview: {
       port: 3000,

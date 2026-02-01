@@ -50,10 +50,47 @@ export function registerRoutes(
   app: FastifyInstance,
   dispatcher: TaskDispatcher,
   tokenService: GitHubTokenService,
-  config: { dispatchSecret: string },
+  config: { orchestratorSecret: string },
   logger: Logger
 ): void {
   const nonceCache: NonceCache = {};
+
+  // Request/Response logging hooks
+  // Note: Body is not yet parsed in onRequest - taskId from POST body is logged in route handler
+  app.addHook('onRequest', async (request) => {
+    const logData: Record<string, unknown> = {
+      method: request.method,
+      url: request.url,
+      requestId: request.id,
+    };
+
+    // Add task ID from URL params if available (e.g., GET/DELETE /tasks/:id)
+    const params = request.params as { id?: string } | undefined;
+    if (params?.id !== undefined) {
+      logData['taskId'] = params.id;
+    }
+
+    logger.info(logData, 'Incoming request');
+  });
+
+  app.addHook('onResponse', async (request, reply) => {
+    const logData: Record<string, unknown> = {
+      method: request.method,
+      url: request.url,
+      statusCode: reply.statusCode,
+      responseTimeMs: Math.round(reply.elapsedTime),
+      requestId: request.id,
+    };
+
+    // Add taskId context if available
+    const params = request.params as { id?: string } | undefined;
+    if (params?.id !== undefined) {
+      logData['taskId'] = params.id;
+    }
+
+    const level = reply.statusCode >= 400 ? 'warn' : 'info';
+    logger[level](logData, 'Request completed');
+  });
 
   const verifyDispatchSignature = async (
     request: TaskBodyRequest,
@@ -86,7 +123,7 @@ export function registerRoutes(
 
     // Verify HMAC signature
     const message = `${timestamp}.${nonce}.${JSON.stringify(request.body)}`;
-    const expectedSignature = createHmac('sha256', config.dispatchSecret)
+    const expectedSignature = createHmac('sha256', config.orchestratorSecret)
       .update(message)
       .digest('hex');
 
@@ -106,7 +143,12 @@ export function registerRoutes(
   app.post('/tasks', { preHandler: [verifyDispatchSignature] }, async (request, reply) => {
     const parseResult = CreateTaskRequestSchema.safeParse(request.body);
     if (!parseResult.success) {
-      reply.status(400).send({ error: parseResult.error.message });
+      const errorResponse = { error: parseResult.error.message };
+      logger.warn(
+        { taskId: 'unknown', validationError: parseResult.error.message },
+        'Task validation failed'
+      );
+      reply.status(400).send(errorResponse);
       return;
     }
     const parsed = parseResult.data;
@@ -133,19 +175,31 @@ export function registerRoutes(
     };
     /* v8 ignore stop @preserve */
 
+    logger.info(
+      { taskId: body.taskId, workerType: body.workerType, linearIssueId: body.linearIssueId },
+      'Processing task submission'
+    );
+
     const result = await dispatcher.submitTask(body);
 
     if (!result.ok) {
       const { error } = result;
       if (error.type === 'at_capacity') {
+        logger.warn({ taskId: body.taskId, errorType: error.type }, 'Task rejected: at capacity');
         reply.status(503).send({ error: error.message });
         return;
       }
+      logger.warn(
+        { taskId: body.taskId, errorType: error.type, errorMessage: error.message },
+        'Task submission failed'
+      );
       reply.status(400).send({ error: error.message });
       return;
     }
 
-    reply.status(202).send({ taskId: body.taskId, status: 'queued' });
+    const response = { taskId: body.taskId, status: 'accepted' };
+    logger.info({ taskId: body.taskId, response }, 'Task accepted');
+    reply.status(202).send(response);
   });
 
   // GET /tasks/:id - Get task status

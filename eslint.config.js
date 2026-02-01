@@ -874,7 +874,13 @@ export default tseslint.config(
   // Test files: Disable type-aware linting (not in tsconfig by design)
   // This MUST be last to override all type-checked rules from strictTypeChecked
   {
-    files: ['**/__tests__/**/*.ts', '**/__tests__/**/*.tsx', '**/*.test.ts', '**/*.test.tsx', '**/*.spec.ts'],
+    files: [
+      '**/__tests__/**/*.ts',
+      '**/__tests__/**/*.tsx',
+      '**/*.test.ts',
+      '**/*.test.tsx',
+      '**/*.spec.ts',
+    ],
     languageOptions: {
       parserOptions: {
         program: null,

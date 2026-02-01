@@ -325,6 +325,16 @@ async function main() {
   console.log('Dev tools (start with PM2):');
   console.log('  Log Server:       http://localhost:8106 (DevBar Logs tab)');
   console.log('');
+  console.log(`${BOLD}🌐 Application Endpoints:${RESET}`);
+  console.log('  Web App:        http://localhost:3000');
+  console.log('  Log Viewer:     http://localhost:8107');
+  console.log('  API Docs Hub:   http://localhost:8115/docs');
+  console.log('');
+  console.log(`${BOLD}💡 Quick Check:${RESET}`);
+  console.log('  curl http://localhost:3000       # Web app');
+  console.log('  curl http://localhost:8115/docs  # API docs');
+  console.log('  pnpm services:status             # All services');
+  console.log('');
 }
 
 main().catch((error) => {

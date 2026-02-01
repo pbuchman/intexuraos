@@ -54,7 +54,7 @@ export class VmControl {
         zone: CONFIG.ZONE,
         instanceGroupManager: CONFIG.MIG_NAME,
       });
-      return response.targetSize ?? 0;
+      return (response as { targetSize?: number }).targetSize ?? 0;
     } catch (error) {
       logger.error({ error }, 'Failed to get VM count');
       return 0;

@@ -56,7 +56,6 @@ export function resetServices(): void {
  */
 export function initializeServices(): void {
   const openaiApiKey = process.env['INTEXURAOS_OPENAI_API_KEY'];
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-assignment -- LlmModels from llm-contract
   const model = process.env['INTEXURAOS_LLM_MODEL'] ?? LlmModels.Gemini25Flash;
 
   if (openaiApiKey === undefined || openaiApiKey.length === 0) {
@@ -74,7 +73,6 @@ export function initializeServices(): void {
     embeddingClient: new EmbeddingClient({ apiKey: openaiApiKey }),
     llmClient: new ChatClient({
       apiKey: openaiApiKey,
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- Model string from env var or LlmModels constant
       model,
       userId: 'system',
       logger,

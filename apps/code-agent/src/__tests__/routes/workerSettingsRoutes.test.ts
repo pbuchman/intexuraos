@@ -364,7 +364,7 @@ describe('Worker Settings Routes', () => {
       const body = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
       expect(body.success).toBe(false);
       expect(body.error.code).toBe('INVALID_REQUEST');
-      expect(body.error.message).toContain('Dispatch Signing Secret');
+      expect(body.error.message).toContain('Orchestrator Secret');
     });
   });
 

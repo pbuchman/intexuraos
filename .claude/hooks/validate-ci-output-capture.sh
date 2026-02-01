@@ -2,12 +2,15 @@
 # BLOCK: CI and test commands without proper tee output capture
 # Exit 0 = allow, Exit 2 = block with stderr message
 
-HOOK_NAME="validate-ci-output-capture"
-LOG_FILE="$(dirname "$0")/${HOOK_NAME}.log"
+set -euo pipefail
 
-log_blocked() {
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] BLOCKED: $1" >> "$LOG_FILE"
-}
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+# Source shared logging library
+# shellcheck source=lib/log.sh
+source "${SCRIPT_DIR}/lib/log.sh"
+
+HOOK_NAME="validate-ci-output-capture"
 
 INPUT=$(cat)
 TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name // ""')
@@ -17,7 +20,6 @@ COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // ""')
 [[ -z "$COMMAND" ]] && exit 0
 
 # Check pnpm ci, verify:workspace, test commands, and direct vitest invocations
-# Matches: pnpm run ci, pnpm run ci:tracked, pnpm run verify:workspace, pnpm run test, pnpm test, pnpm vitest, pnpm exec vitest, etc.
 if ! echo "$COMMAND" | grep -qE 'pnpm\s+(run\s+(ci(:tracked)?|verify:workspace(:tracked)?|test)|test|vitest|exec\s+vitest|--filter\s+\S+\s+(test|vitest))'; then
     exit 0
 fi
@@ -29,6 +31,11 @@ fi
 
 # BLOCK: CI commands piped to grep/tail/head/awk/sed (without tee)
 if echo "$COMMAND" | grep -qE '\|\s*(grep|tail|head|awk|sed)'; then
+
+    log_blocked "$HOOK_NAME" "output-truncation" \
+        "Piping output to grep/tail loses CI failure details" \
+        "Use: 2>&1 | tee /tmp/ci-output-\$(date +%s).log"
+
     cat >&2 << 'EOF'
 
 BLOCKED: Piping output to grep/tail loses context and wastes time.
@@ -40,12 +47,7 @@ INSTEAD: Capture first, then analyze:
 
 Or read the test file directly to find the test name you need.
 EOF
-    log_blocked "$COMMAND"
     exit 2
 fi
-
-# BLOCK: CI commands with no output handling (just running bare)
-# This is less severe - we want to encourage capture but not strictly require it
-# for simple "just run and see" cases. Only block explicit bad patterns above.
 
 exit 0

@@ -95,6 +95,7 @@ Avoid redundant paths like `/internal/todos/todos` — use simple `/internal/tod
   "scripts": {
     "build": "node ../../scripts/build-service.mjs <service-name>",
     "typecheck": "tsc --noEmit",
+    "lint:local": "eslint src --max-warnings 0",
     "start": "node dist/index.js",
     "dev": "node --watch --experimental-strip-types src/index.ts"
   },
@@ -811,6 +812,7 @@ workers/<worker-name>/
   "scripts": {
     "build": "tsc",
     "typecheck": "tsc --noEmit",
+    "lint:local": "eslint src --max-warnings 0",
     "start": "node dist/index.js",
     "dev": "node --watch --experimental-strip-types src/index.ts",
     "test": "vitest run",

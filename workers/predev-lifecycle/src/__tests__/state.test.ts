@@ -3,17 +3,18 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 // We need to preserve the actual Timestamp class for instanceof checks
 vi.mock('@google-cloud/firestore', async () => {
   const actual = await vi.importActual('@google-cloud/firestore');
-  const mockGet = vi.fn();
+  const mockDocMethods = vi.fn();
   return {
     ...actual,
     Firestore: vi.fn(function () {
       return {
         collection: vi.fn(() => ({
-          doc: mockGet,
+          doc: vi.fn(() => mockDocMethods()),
         })),
+        runTransaction: vi.fn(),
       };
     }),
-    __mockGet: mockGet,
+    __mockDocMethods: mockDocMethods,
   };
 });
 
@@ -50,13 +51,13 @@ function createMockDoc(exists: boolean, data: Record<string, unknown> | null): D
 
 describe('StateManager', () => {
   let stateManager: StateManager;
-  let mockGet: ReturnType<typeof vi.fn> & { mockReturnValue: (value: unknown) => void };
+  let mockDocMethods: ReturnType<typeof vi.fn> & { mockReturnValue: (value: unknown) => void };
 
   beforeEach(() => {
     vi.clearAllMocks();
     // Get the mock reference BEFORE creating StateManager
-    mockGet = (firestoreMock as unknown as { __mockGet: ReturnType<typeof vi.fn> })
-      .__mockGet as ReturnType<typeof vi.fn> & { mockReturnValue: (value: unknown) => void };
+    mockDocMethods = (firestoreMock as unknown as { __mockDocMethods: ReturnType<typeof vi.fn> })
+      .__mockDocMethods as ReturnType<typeof vi.fn> & { mockReturnValue: (value: unknown) => void };
     stateManager = new StateManager();
   });
 
@@ -72,7 +73,7 @@ describe('StateManager', () => {
       };
       const mockDoc = createMockDoc(true, mockData);
       const mockGetFn = vi.fn().mockResolvedValue(mockDoc);
-      mockGet.mockReturnValue({ get: mockGetFn });
+      mockDocMethods.mockReturnValue({ get: mockGetFn });
 
       const result = await stateManager.getState();
 
@@ -86,7 +87,7 @@ describe('StateManager', () => {
     });
 
     it('should return null when document does not exist', async () => {
-      mockGet.mockReturnValue({
+      mockDocMethods.mockReturnValue({
         get: vi.fn().mockResolvedValue(createMockDoc(false, null)),
       });
 
@@ -96,7 +97,7 @@ describe('StateManager', () => {
     });
 
     it('should return null when data is undefined', async () => {
-      mockGet.mockReturnValue({
+      mockDocMethods.mockReturnValue({
         get: vi.fn().mockResolvedValue(createMockDoc(true, null)),
       });
 
@@ -106,7 +107,7 @@ describe('StateManager', () => {
     });
 
     it('should return default values when fields are missing', async () => {
-      mockGet.mockReturnValue({
+      mockDocMethods.mockReturnValue({
         get: vi.fn().mockResolvedValue(createMockDoc(true, {})),
       });
 
@@ -120,7 +121,7 @@ describe('StateManager', () => {
     });
 
     it('should return null on error and log error', async () => {
-      mockGet.mockReturnValue({
+      mockDocMethods.mockReturnValue({
         get: vi.fn().mockRejectedValue(new Error('Firestore error')),
       });
 
@@ -133,7 +134,7 @@ describe('StateManager', () => {
   describe('setState', () => {
     it('should call set with merge option', async () => {
       const mockSetFn = vi.fn().mockResolvedValue(undefined);
-      mockGet.mockReturnValue({ set: mockSetFn });
+      mockDocMethods.mockReturnValue({ set: mockSetFn });
 
       await stateManager.setState({ status: 'running' });
 
@@ -142,7 +143,7 @@ describe('StateManager', () => {
 
     it('should handle set errors gracefully', async () => {
       const mockSetFn = vi.fn().mockRejectedValue(new Error('Set error'));
-      mockGet.mockReturnValue({ set: mockSetFn });
+      mockDocMethods.mockReturnValue({ set: mockSetFn });
 
       // Should not throw
       await expect(stateManager.setState({ status: 'running' })).resolves.toBeUndefined();
@@ -152,7 +153,7 @@ describe('StateManager', () => {
   describe('updateActivity', () => {
     it('should update lastActivity to current time', async () => {
       const mockSetFn = vi.fn().mockResolvedValue(undefined);
-      mockGet.mockReturnValue({ set: mockSetFn });
+      mockDocMethods.mockReturnValue({ set: mockSetFn });
 
       await stateManager.updateActivity();
 
@@ -163,7 +164,7 @@ describe('StateManager', () => {
   describe('setRunning', () => {
     it('should set running state with ip and branch', async () => {
       const mockSetFn = vi.fn().mockResolvedValue(undefined);
-      mockGet.mockReturnValue({ set: mockSetFn });
+      mockDocMethods.mockReturnValue({ set: mockSetFn });
 
       await stateManager.setRunning('10.0.0.1', 'feature-branch');
 
@@ -183,7 +184,7 @@ describe('StateManager', () => {
   describe('setStarting', () => {
     it('should set starting status', async () => {
       const mockSetFn = vi.fn().mockResolvedValue(undefined);
-      mockGet.mockReturnValue({ set: mockSetFn });
+      mockDocMethods.mockReturnValue({ set: mockSetFn });
 
       await stateManager.setStarting();
 
@@ -194,7 +195,7 @@ describe('StateManager', () => {
   describe('setStopped', () => {
     it('should set stopped status with null values', async () => {
       const mockSetFn = vi.fn().mockResolvedValue(undefined);
-      mockGet.mockReturnValue({ set: mockSetFn });
+      mockDocMethods.mockReturnValue({ set: mockSetFn });
 
       await stateManager.setStopped();
 
@@ -212,7 +213,7 @@ describe('StateManager', () => {
   describe('setStopping', () => {
     it('should set stopping status', async () => {
       const mockSetFn = vi.fn().mockResolvedValue(undefined);
-      mockGet.mockReturnValue({ set: mockSetFn });
+      mockDocMethods.mockReturnValue({ set: mockSetFn });
 
       await stateManager.setStopping();
 

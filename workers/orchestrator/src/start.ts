@@ -109,7 +109,7 @@ async function bootstrap(): Promise<void> {
   ensureDirectoryExists(logsDir);
 
   // Load required env vars
-  const dispatchSecret = getRequiredEnv('INTEXURAOS_DISPATCH_SIGNING_SECRET');
+  const orchestratorSecret = getRequiredEnv('INTEXURAOS_ORCHESTRATOR_SECRET');
   const githubAppId = getRequiredEnv('INTEXURAOS_GITHUB_APP_ID');
   const githubInstallationId = getRequiredEnv('INTEXURAOS_GITHUB_INSTALLATION_ID');
   const projectId = getRequiredEnv('PROJECT_ID');
@@ -134,7 +134,7 @@ async function bootstrap(): Promise<void> {
     githubAppId,
     githubAppPrivateKeyPath: privateKeyPath,
     githubInstallationId,
-    dispatchSecret,
+    orchestratorSecret,
   };
 
   // Create logger
