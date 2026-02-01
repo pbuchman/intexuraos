@@ -4,6 +4,16 @@
 # Checks Claude's response for forbidden ownership-deflecting language
 # Forces Claude to rephrase if detected
 
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+# Source shared logging library
+# shellcheck source=lib/log.sh
+source "${SCRIPT_DIR}/lib/log.sh"
+
+HOOK_NAME="ownership-check"
+
 INPUT=$(cat)
 TRANSCRIPT_PATH=$(echo "$INPUT" | jq -r '.transcript_path // empty')
 
@@ -12,7 +22,6 @@ if [[ -z "$TRANSCRIPT_PATH" || ! -f "$TRANSCRIPT_PATH" ]]; then
 fi
 
 # Get text content from the last assistant message
-# Content is an array of blocks - extract only text blocks
 LAST_RESPONSE=$(jq -rs '
   [.[] | select(.type == "assistant")] | last |
   .message.content // [] |
@@ -25,20 +34,26 @@ if [[ -z "$LAST_RESPONSE" ]]; then
 fi
 
 # Forbidden ownership-deflecting patterns
-FORBIDDEN_PATTERNS=(
-  "pre-existing"
-  "already broken"
-  "legacy issue"
-  "CI should now pass"
+declare -A PATTERNS=(
+  ["pre-existing"]="pre-existing condition/issue language"
+  ["already broken"]="deflecting blame to prior state"
+  ["legacy issue"]="deflecting to legacy as excuse"
+  ["CI should now pass"]="assuming CI passes without verification"
 )
 
-for pattern in "${FORBIDDEN_PATTERNS[@]}"; do
+for pattern in "${!PATTERNS[@]}"; do
   # Check if pattern exists in response
   if echo "$LAST_RESPONSE" | grep -iq "$pattern"; then
     # Skip false positives: pattern inside backticks (code/discussion)
     if echo "$LAST_RESPONSE" | grep -qE "\`[^\`]*${pattern}[^\`]*\`"; then
       continue
     fi
+
+    # Log the ownership violation
+    log_blocked "$HOOK_NAME" "ownership-violation" \
+        "Used forbidden language: '$pattern'" \
+        "See CLAUDE.md: Ownership Mindset (MANDATORY)"
+
     cat << EOF
 {
   "decision": "block",

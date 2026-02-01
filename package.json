@@ -33,6 +33,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
+    "test:hooks": "vitest run --config .claude/hooks/__tests__/vitest.config.ts",
+    "test:hooks:watch": "vitest --config .claude/hooks/__tests__/vitest.config.ts",
     "build": "pnpm -r --if-present build",
     "build:all": "node scripts/build-all-services.mjs",
     "clean": "rm -rf apps/*/dist packages/*/dist packages/*/*/dist node_modules/.cache",
