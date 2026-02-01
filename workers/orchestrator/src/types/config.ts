@@ -5,6 +5,7 @@ export interface OrchestratorConfig {
   stateFilePath: string;
   worktreeBasePath: string;
   logBasePath: string;
+  codeAgentUrl: string;
   githubAppId: string;
   githubAppPrivateKeyPath: string;
   githubInstallationId: string;

@@ -13,8 +13,6 @@ import { join } from 'node:path';
 import { execSync } from 'node:child_process';
 import pino from 'pino';
 import { serializeError } from '@intexuraos/common-core';
-import { initializeApp, cert, type ServiceAccount } from 'firebase-admin/app';
-import { getFirestore } from 'firebase-admin/firestore';
 
 const errorSerializers = { error: serializeError, err: serializeError };
 
@@ -25,7 +23,8 @@ import { GitHubTokenService } from './github/token-service.js';
 import { WebhookClient } from './services/webhook-client.js';
 import { WorktreeManager } from './services/worktree-manager.js';
 import { TmuxManager } from './services/tmux-manager.js';
-import { LogForwarder, type LogChunkData } from './services/log-forwarder.js';
+import { LogForwarder } from './services/log-forwarder.js';
+import { createHeartbeatManager } from './heartbeat.js';
 import type { OrchestratorConfig } from './types/config.js';
 
 const DEFAULT_PORT = 8199;
@@ -98,7 +97,7 @@ function getGitHubPrivateKey(projectId: string, cachePath: string): string {
 }
 /* v8 ignore stop @preserve */
 
-/* v8 ignore start -- module-init: orchestrator bootstrap function: env vars, Firebase init, service wiring @preserve */
+/* v8 ignore start -- module-init: orchestrator bootstrap function: env vars, service wiring @preserve */
 async function bootstrap(): Promise<void> {
   const home = homedir();
   const orchestratorDir = join(home, '.claude-orchestrator');
@@ -112,6 +111,7 @@ async function bootstrap(): Promise<void> {
   ensureDirectoryExists(logsDir);
 
   // Load required env vars
+  const codeAgentUrl = getRequiredEnv('INTEXURAOS_CODE_AGENT_URL');
   const orchestratorSecret = getRequiredEnv('INTEXURAOS_ORCHESTRATOR_SECRET');
   const githubAppId = getRequiredEnv('INTEXURAOS_GITHUB_APP_ID');
   const githubInstallationId = getRequiredEnv('INTEXURAOS_GITHUB_INSTALLATION_ID');
@@ -134,6 +134,7 @@ async function bootstrap(): Promise<void> {
     stateFilePath: join(orchestratorDir, 'state.json'),
     worktreeBasePath: worktreeDir,
     logBasePath: logsDir,
+    codeAgentUrl,
     githubAppId,
     githubAppPrivateKeyPath: privateKeyPath,
     githubInstallationId,
@@ -141,33 +142,17 @@ async function bootstrap(): Promise<void> {
   };
 
   // Create logger
-  /* v8 ignore start -- ts-type: logger config ternary creates type narrowing branches @preserve */
   const logger = pino(
     process.env['NODE_ENV'] !== 'production'
       ? {
           level: process.env['LOG_LEVEL'] ?? 'info',
           transport: { target: 'pino-pretty', options: { colorize: true } },
           serializers: errorSerializers,
-          /* v8 ignore start -- ts-type: TypeScript type narrowing makes branch unreachable @preserve */
         }
-      : /* v8 ignore stop @preserve */
-        { level: process.env['LOG_LEVEL'] ?? 'info', serializers: errorSerializers }
+      : { level: process.env['LOG_LEVEL'] ?? 'info', serializers: errorSerializers }
   );
 
   logger.info({ port: config.port, capacity: config.capacity }, 'Starting orchestrator');
-
-  // Initialize Firebase Admin SDK
-  /* v8 ignore start -- ts-type: conditional Firebase init based on credentials path @preserve */
-  const credentialsPath = process.env['GOOGLE_APPLICATION_CREDENTIALS'];
-  /* v8 ignore stop @preserve */
-  if (credentialsPath) {
-    /* v8 ignore stop @preserve */
-    const serviceAccount = JSON.parse(readFileSync(credentialsPath, 'utf-8')) as ServiceAccount;
-    initializeApp({ credential: cert(serviceAccount), projectId });
-  } else {
-    initializeApp({ projectId });
-  }
-  const firestore = getFirestore();
 
   // Create services
   const statePersistence = new StatePersistence(config.stateFilePath, logger);
@@ -195,14 +180,8 @@ async function bootstrap(): Promise<void> {
   const logForwarder = new LogForwarder(
     {
       logBasePath: config.logBasePath,
-      firestore: {
-        collection: (path: string): { add: (data: LogChunkData) => Promise<{ id: string }> } => ({
-          add: async (data: LogChunkData): Promise<{ id: string }> => {
-            const docRef = await firestore.collection(path).add(data);
-            return { id: docRef.id };
-          },
-        }),
-      },
+      codeAgentUrl: config.codeAgentUrl,
+      orchestratorSecret: config.orchestratorSecret,
     },
     logger
   );
@@ -218,8 +197,27 @@ async function bootstrap(): Promise<void> {
     logger
   );
 
+  // Create heartbeat manager
+  const heartbeatManager = createHeartbeatManager(
+    {
+      codeAgentUrl: config.codeAgentUrl,
+      orchestratorSecret: config.orchestratorSecret,
+      intervalMs: 10 * 60 * 1000, // 10 minutes
+      getRunningTasks: () => dispatcher.getRunningTaskIds(),
+    },
+    logger
+  );
+
   // Start orchestrator
-  await main(config, statePersistence, dispatcher, tokenService, webhookClient, logger);
+  await main(
+    config,
+    statePersistence,
+    dispatcher,
+    tokenService,
+    webhookClient,
+    heartbeatManager,
+    logger
+  );
 }
 /* v8 ignore stop @preserve */
 

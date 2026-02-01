@@ -1,13 +1,11 @@
 import { readFileSync, existsSync } from 'node:fs';
+import { createHmac } from 'node:crypto';
 import type { Logger } from '@intexuraos/common-core';
 
 export interface LogForwarderConfig {
   logBasePath: string;
-  firestore: {
-    collection: (path: string) => {
-      add: (data: LogChunkData) => Promise<{ id: string }>;
-    };
-  };
+  codeAgentUrl: string;
+  orchestratorSecret: string;
 }
 
 export interface LogChunkData {
@@ -220,34 +218,83 @@ export class LogForwarder {
 
   /* v8 ignore start -- upstream: early return for small chunks is the happy path @preserve */
   private async sendBatch(taskId: string, chunks: string[], state: ForwardingState): Promise<void> {
-    for (const chunk of chunks) {
+    const chunkPayloads = chunks.map((chunk, index) => {
       const truncated = this.enforceChunkSize(chunk);
-      const chunkData: LogChunkData = {
-        taskId,
-        sequence: state.sequence,
+      return {
+        sequence: state.sequence + index,
         content: truncated,
-        timestamp: new Date(),
+        timestamp: new Date().toISOString(),
       };
+    });
 
-      const success = await this.retryUpload(async () => {
-        const collection = this.config.firestore.collection(`code_tasks/${taskId}/logs`);
-        await collection.add(chunkData);
-      });
+    const payload = {
+      taskId,
+      chunks: chunkPayloads,
+    };
 
-      if (success) {
-        state.sequence += 1;
-        state.chunksSent += 1;
-        state.totalBytes += truncated.length;
-      } else {
-        state.droppedChunks += 1;
-        this.logger.error(
-          { taskId, sequence: state.sequence },
-          'Failed to upload log chunk after retries'
-        );
-      }
+    const success = await this.sendWithRetry(payload);
+
+    if (success) {
+      state.sequence += chunks.length;
+      state.chunksSent += chunks.length;
+      state.totalBytes += chunks.reduce((sum, c) => sum + c.length, 0);
+    } else {
+      state.droppedChunks += chunks.length;
+      this.logger.error(
+        { taskId, count: chunks.length },
+        'Failed to upload log chunks after retries'
+      );
     }
   }
   /* v8 ignore stop @preserve */
+
+  private async sendWithRetry(payload: {
+    taskId: string;
+    chunks: { sequence: number; content: string; timestamp: string }[];
+  }): Promise<boolean> {
+    const url = `${this.config.codeAgentUrl}/internal/logs`;
+    const jsonBody = JSON.stringify(payload);
+    const timestamp = Math.floor(Date.now() / 1000);
+    const signature = this.signPayload(jsonBody, timestamp);
+
+    const delays = [1000, 2000, 4000];
+
+    for (let i = 0; i < 3; i++) {
+      try {
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Request-Timestamp': String(timestamp),
+            'X-Request-Signature': signature,
+          },
+          body: jsonBody,
+        });
+
+        if (response.ok) return true;
+        // Don't retry 4xx errors (client errors)
+        if (response.status >= 400 && response.status < 500) return false;
+
+        this.logger.warn(
+          { attempt: i + 1, status: response.status },
+          'Log upload failed, retrying'
+        );
+      } catch (error) {
+        this.logger.warn({ attempt: i + 1, error }, 'Log upload failed, retrying');
+      }
+
+      if (i < 2) {
+        await new Promise((resolve) => setTimeout(resolve, delays[i]));
+      }
+    }
+
+    return false;
+  }
+
+  private signPayload(payload: string, timestamp: number): string {
+    const message = `${String(timestamp)}.${payload}`;
+    return createHmac('sha256', this.config.orchestratorSecret).update(message).digest('hex');
+  }
 
   private enforceChunkSize(chunk: string): string {
     /* v8 ignore start -- upstream: early return for normal-sized chunks is the happy path @preserve */
@@ -260,25 +307,6 @@ export class LogForwarder {
     const marker = '\n[... TRUNCATED ...]\n';
 
     return tail + marker;
-  }
-
-  private async retryUpload<T>(fn: () => Promise<T>, attempts = 3): Promise<boolean> {
-    const delays = [1000, 2000, 4000]; // Exponential backoff
-
-    for (let i = 0; i < attempts; i++) {
-      try {
-        await fn();
-        return true;
-      } catch (error) {
-        this.logger.warn({ attempt: i + 1, error }, 'Upload failed, retrying');
-
-        if (i < attempts - 1) {
-          await new Promise((resolve) => setTimeout(resolve, delays[i]));
-        }
-      }
-    }
-
-    return false;
   }
 
   getActiveTaskIds(): string[] {

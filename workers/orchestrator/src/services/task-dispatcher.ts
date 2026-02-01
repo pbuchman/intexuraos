@@ -237,6 +237,12 @@ export class TaskDispatcher {
     return this.config.capacity;
   }
 
+  getRunningTaskIds(): string[] {
+    return Array.from(this.activeTasks.keys())
+      .filter((key) => key.endsWith('-monitor'))
+      .map((key) => key.replace('-monitor', ''));
+  }
+
   private getDefaultRepository(_request: CreateTaskRequest): string {
     // TODO: Implement GitHub API call to get default repository
     // For now, use a default
