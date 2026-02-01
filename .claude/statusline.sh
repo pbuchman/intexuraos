@@ -31,6 +31,14 @@ rst() { if [ "$use_color" -eq 1 ]; then printf '\033[0m'; fi; }
 # Terminal hyperlink helper (OSC 8)
 hyperlink() { printf '\033]8;;%s\033\\%s\033]8;;\033\\' "$1" "$2"; }
 
+# Colored hyperlink helper (works in command substitution)
+colored_hyperlink() {
+  local url="$1"
+  local text="$2"
+  local color_code="$3"
+  printf '\033]8;;%s\033\\%s%s\033]8;;\033\\%s' "$url" "$color_code" "$text" "$(rst)"
+}
+
 # ---- time helpers ----
 to_epoch() {
   ts="$1"
@@ -361,21 +369,34 @@ else
   docker_metrics=":docker 🟡 (${docker_up}/${DOCKER_TOTAL})"
 fi
 
-# Individual port checks (3000=web, 8199=orchestrator)
+# Individual port checks (3000=web, 8107=log-viewer, 8199=orchestrator)
 port_3000=$(check_port_status 3000)
+port_8107=$(check_port_status 8107)
 port_8199=$(check_port_status 8199)
+
+# Get color codes as strings
+dev_color_code=$(dev_color)
+dev_fail_color_code=$(dev_fail_color)
+
 if [ "$port_3000" = "up" ]; then
-  p3000="$(dev_color)$(hyperlink 'http://localhost:3000' ':3000')$(rst)"
+  p3000="$(colored_hyperlink 'http://localhost:3000' ':3000' "$dev_color_code")"
 else
-  p3000="$(dev_fail_color)$(hyperlink 'http://localhost:3000' ':3000')$(rst)"
+  p3000="$(colored_hyperlink 'http://localhost:3000' ':3000' "$dev_fail_color_code")"
 fi
+
+if [ "$port_8107" = "up" ]; then
+  p8107="$(colored_hyperlink 'http://localhost:8107' ':8107' "$dev_color_code")"
+else
+  p8107="$(colored_hyperlink 'http://localhost:8107' ':8107' "$dev_fail_color_code")"
+fi
+
 if [ "$port_8199" = "up" ]; then
   p8199="$(dev_color):8199$(rst)"
 else
   p8199="$(dev_fail_color):8199$(rst)"
 fi
 
-port_metrics="🔌 ${docker_metrics}  ${dev_metrics}  ${p3000}  ${p8199}"
+port_metrics="🔌 ${docker_metrics}  ${dev_metrics}  ${p3000}  ${p8107}  ${p8199}"
 
 # ---- render statusline ----
 # Line 1: Core info (directory, git, model, claude code version, output style)
