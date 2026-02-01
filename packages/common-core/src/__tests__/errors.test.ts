@@ -2,7 +2,13 @@
  * Tests for error utilities and types.
  */
 import { describe, expect, it } from 'vitest';
-import { ERROR_HTTP_STATUS, type ErrorCode, getErrorMessage, IntexuraOSError } from '../errors.js';
+import {
+  ERROR_HTTP_STATUS,
+  type ErrorCode,
+  getErrorMessage,
+  IntexuraOSError,
+  serializeError,
+} from '../errors.js';
 
 describe('Error utilities', () => {
   describe('ERROR_HTTP_STATUS', () => {
@@ -163,6 +169,79 @@ describe('Error utilities', () => {
     it('still extracts message from Error even with custom fallback', () => {
       const error = new Error('Actual message');
       expect(getErrorMessage(error, 'Custom fallback')).toBe('Actual message');
+    });
+  });
+
+  describe('serializeError', () => {
+    it('extracts message and name from Error', () => {
+      const error = new Error('Something failed');
+      const result = serializeError(error);
+
+      expect(result.message).toBe('Something failed');
+      expect(result.name).toBe('Error');
+      expect(result.stack).toBeDefined();
+      expect(result.stack).toContain('Something failed');
+    });
+
+    it('extracts code from IntexuraOSError', () => {
+      const error = new IntexuraOSError('NOT_FOUND', 'Resource not found');
+      const result = serializeError(error);
+
+      expect(result.message).toBe('Resource not found');
+      expect(result.name).toBe('IntexuraOSError');
+      expect(result.code).toBe('NOT_FOUND');
+    });
+
+    it('extracts code from error with code property', () => {
+      const error = new Error('Network error') as Error & { code: string };
+      error.code = 'ECONNREFUSED';
+      const result = serializeError(error);
+
+      expect(result.message).toBe('Network error');
+      expect(result.code).toBe('ECONNREFUSED');
+    });
+
+    it('returns fallback message for non-Error values', () => {
+      expect(serializeError(null).message).toBe('Unknown error');
+      expect(serializeError(undefined).message).toBe('Unknown error');
+      expect(serializeError('string error').message).toBe('Unknown error');
+      expect(serializeError(42).message).toBe('Unknown error');
+      expect(serializeError({ foo: 'bar' }).message).toBe('Unknown error');
+    });
+
+    it('has no stack for non-Error values', () => {
+      const result = serializeError(null);
+      expect(result.stack).toBeUndefined();
+    });
+
+    it('has no code for plain Error', () => {
+      const error = new Error('Plain error');
+      const result = serializeError(error);
+      expect(result.code).toBeUndefined();
+    });
+
+    it('truncates long stack traces', () => {
+      const error = new Error('Test error');
+      const result = serializeError(error);
+
+      expect(result.stack).toBeDefined();
+      expect(result.stack?.length).toBeLessThanOrEqual(2000);
+    });
+
+    it('extracts errno from system errors', () => {
+      const error = new Error('System error') as Error & { errno: number };
+      error.errno = -2;
+      const result = serializeError(error);
+
+      expect(result.errno).toBe(-2);
+    });
+
+    it('extracts syscall from system errors', () => {
+      const error = new Error('System error') as Error & { syscall: string };
+      error.syscall = 'open';
+      const result = serializeError(error);
+
+      expect(result.syscall).toBe('open');
     });
   });
 });

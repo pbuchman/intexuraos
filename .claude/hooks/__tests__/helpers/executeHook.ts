@@ -77,6 +77,7 @@ function parseHooksLog(logContent: string): LogEntry[] {
 /**
  * Executes a hook script with mocked JSON input via stdin
  * Captures exit code, stdout, stderr, and log file contents
+ * Uses isolated log files to prevent race conditions in parallel tests
  */
 export function executeHook(options: ExecuteHookOptions): HookExecutionResult {
   const { hookName, input, cwd, env, transcriptContent } = options;
@@ -94,12 +95,18 @@ export function executeHook(options: ExecuteHookOptions): HookExecutionResult {
   // Determine working directory (default to hooks dir)
   const workingDir = cwd ?? HOOKS_DIR;
 
+  // Use isolated log file per test invocation to prevent race conditions
+  const tempDir = path.join(HOOKS_DIR, '__tests__', 'fixtures', 'temp-files');
+  fs.mkdirSync(tempDir, { recursive: true });
+  const isolatedLogFile = path.join(tempDir, `hooks-${randomUUID()}.log`);
+
   // Prepare environment
   const processEnv: Record<string, string> = {
     ...process.env,
     // Clear CI-related env vars that might affect hook behavior
     CI: '',
     CONTINUOUS_INTEGRATION: '',
+    CLAUDE_HOOKS_LOG_FILE: isolatedLogFile,
     ...env,
   };
 
@@ -107,8 +114,6 @@ export function executeHook(options: ExecuteHookOptions): HookExecutionResult {
   let transcriptPath: string | undefined;
   let finalInputJson = inputJson;
   if (transcriptContent) {
-    const tempDir = path.join(HOOKS_DIR, '__tests__', 'fixtures', 'temp-files');
-    fs.mkdirSync(tempDir, { recursive: true });
     transcriptPath = path.join(tempDir, `transcript-${randomUUID()}.jsonl`);
     fs.writeFileSync(transcriptPath, transcriptContent, 'utf-8');
     // Update input to include transcript path
@@ -149,15 +154,16 @@ export function executeHook(options: ExecuteHookOptions): HookExecutionResult {
         }
       }
 
-      // Read hooks.log if it exists
+      // Read the isolated log file if it exists
       let logFile: string | undefined;
       let logEntries: LogEntry[] | undefined;
-      const logPath = path.join(HOOKS_DIR, 'hooks.log');
 
-      if (fs.existsSync(logPath)) {
+      if (fs.existsSync(isolatedLogFile)) {
         try {
-          logFile = fs.readFileSync(logPath, 'utf-8');
+          logFile = fs.readFileSync(isolatedLogFile, 'utf-8');
           logEntries = parseHooksLog(logFile);
+          // Clean up the isolated log file
+          fs.unlinkSync(isolatedLogFile);
         } catch {
           // Log file might be locked or malformed
         }
@@ -181,6 +187,14 @@ export function executeHook(options: ExecuteHookOptions): HookExecutionResult {
           // Ignore cleanup errors
         }
       }
+      // Clean up isolated log file
+      if (fs.existsSync(isolatedLogFile)) {
+        try {
+          fs.unlinkSync(isolatedLogFile);
+        } catch {
+          // Ignore cleanup errors
+        }
+      }
       reject(error);
     });
   }) as Promise<HookExecutionResult>;
@@ -189,6 +203,7 @@ export function executeHook(options: ExecuteHookOptions): HookExecutionResult {
 /**
  * Synchronous version of executeHook for simple cases
  * Uses spawnSync internally
+ * Uses isolated log files to prevent race conditions in parallel tests
  */
 export function executeHookSync(options: ExecuteHookOptions): HookExecutionResult {
   const { spawnSync } = require('node:child_process');
@@ -203,10 +218,22 @@ export function executeHookSync(options: ExecuteHookOptions): HookExecutionResul
   const inputJson = JSON.stringify(input);
   const workingDir = cwd ?? HOOKS_DIR;
 
+  // Use isolated log file per test invocation to prevent race conditions
+  const isolatedLogFile = path.join(
+    HOOKS_DIR,
+    '__tests__',
+    'fixtures',
+    'temp-files',
+    `hooks-${randomUUID()}.log`
+  );
+  // Ensure temp directory exists
+  fs.mkdirSync(path.dirname(isolatedLogFile), { recursive: true });
+
   const processEnv: Record<string, string> = {
     ...process.env,
     CI: '',
     CONTINUOUS_INTEGRATION: '',
+    CLAUDE_HOOKS_LOG_FILE: isolatedLogFile,
     ...env,
   };
 
@@ -218,15 +245,16 @@ export function executeHookSync(options: ExecuteHookOptions): HookExecutionResul
     stdio: 'pipe',
   });
 
-  // Read hooks.log if it exists
+  // Read the isolated log file if it exists
   let logFile: string | undefined;
   let logEntries: LogEntry[] | undefined;
-  const logPath = path.join(HOOKS_DIR, 'hooks.log');
 
-  if (fs.existsSync(logPath)) {
+  if (fs.existsSync(isolatedLogFile)) {
     try {
-      logFile = fs.readFileSync(logPath, 'utf-8');
+      logFile = fs.readFileSync(isolatedLogFile, 'utf-8');
       logEntries = parseHooksLog(logFile);
+      // Clean up the isolated log file
+      fs.unlinkSync(isolatedLogFile);
     } catch {
       // Log file might be locked or malformed
     }
@@ -259,59 +287,44 @@ export function executeHookSyncWithTempDir(
 }
 
 /**
- * Clears the hooks.log file before running tests
- * Call this in beforeEach to get clean log entries per test
+ * Clears test artifacts before running tests
+ * Note: With isolated log files per test invocation, hooks.log no longer needs clearing
+ * This function now only cleans up other shared log files
  */
 export function clearHooksLog(): void {
-  const logPath = path.join(HOOKS_DIR, 'hooks.log');
-
-  if (fs.existsSync(logPath)) {
-    try {
-      fs.unlinkSync(logPath);
-    } catch {
-      // File might be locked by another process
-    }
-  }
+  // Note: hooks.log is now isolated per test invocation via CLAUDE_HOOKS_LOG_FILE
+  // No need to clear the shared hooks.log file
 
   // Note: /tmp/claude-cmd-timing is NOT cleared here to avoid race conditions
   // Individual tests that use timing files handle their own cleanup
 
-  // Clear sessions.log
+  // Clear sessions.log (used by session tracking hooks)
   const sessionsLogPath = path.join(HOOKS_DIR, 'sessions.log');
   if (fs.existsSync(sessionsLogPath)) {
     try {
       fs.unlinkSync(sessionsLogPath);
     } catch {
-      // Ignore
+      // File might be locked by another process
     }
   }
 
-  // Clear commands.log
+  // Clear commands.log (used by command logging hooks)
   const commandsLogPath = path.join(HOOKS_DIR, 'commands.log');
   if (fs.existsSync(commandsLogPath)) {
     try {
       fs.unlinkSync(commandsLogPath);
     } catch {
-      // Ignore
+      // File might be locked by another process
     }
   }
 
-  // Clear ci-phases.log
+  // Clear ci-phases.log (used by CI phase tracking hooks)
   const ciPhasesLogPath = path.join(HOOKS_DIR, 'ci-phases.log');
   if (fs.existsSync(ciPhasesLogPath)) {
     try {
       fs.unlinkSync(ciPhasesLogPath);
     } catch {
-      // Ignore
+      // File might be locked by another process
     }
-  }
-
-  // Small sync delay to ensure file system operations complete
-  // (helps prevent race conditions in rapid test execution)
-  const { execSync } = require('node:child_process');
-  try {
-    execSync('sync', { stdio: 'ignore' });
-  } catch {
-    // sync command might not be available on all platforms
   }
 }

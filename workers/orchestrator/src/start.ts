@@ -12,6 +12,9 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { execSync } from 'node:child_process';
 import pino from 'pino';
+import { serializeError } from '@intexuraos/common-core';
+
+const errorSerializers = { error: serializeError, err: serializeError };
 
 import { main } from './main.js';
 import { StatePersistence } from './services/state-persistence.js';
@@ -144,8 +147,9 @@ async function bootstrap(): Promise<void> {
       ? {
           level: process.env['LOG_LEVEL'] ?? 'info',
           transport: { target: 'pino-pretty', options: { colorize: true } },
+          serializers: errorSerializers,
         }
-      : { level: process.env['LOG_LEVEL'] ?? 'info' }
+      : { level: process.env['LOG_LEVEL'] ?? 'info', serializers: errorSerializers }
   );
 
   logger.info({ port: config.port, capacity: config.capacity }, 'Starting orchestrator');

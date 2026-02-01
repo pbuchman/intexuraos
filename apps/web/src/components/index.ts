@@ -21,5 +21,6 @@ export { ModelSelector, getSelectedModelsList, PROVIDER_MODELS } from './ModelSe
 export { VegaChart } from './VegaChart.js';
 export { RefreshIndicator } from './RefreshIndicator.js';
 export { VersionInfoModal } from './VersionInfoModal.js';
+export { LinearIssueCombobox } from './LinearIssueCombobox.js';
 export * from './ui/index.js';
 export * from './Chat/index.js';

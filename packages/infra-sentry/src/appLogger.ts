@@ -15,8 +15,18 @@
  */
 
 import pino, { type Logger } from 'pino';
-import { getLogLevel } from '@intexuraos/common-core';
+import { getLogLevel, serializeError } from '@intexuraos/common-core';
 import { createSentryStream, isSentryConfigured } from './transport.js';
+
+/**
+ * Pino serializers for automatic error serialization.
+ * Ensures Error objects are properly serialized (message, stack, code, etc.)
+ * regardless of how they're logged.
+ */
+const errorSerializers = {
+  error: serializeError,
+  err: serializeError,
+};
 
 export interface AppLoggerConfig {
   /**
@@ -46,15 +56,15 @@ export function createAppLogger(config: AppLoggerConfig): Logger {
   const level = config.level ?? getLogLevel();
 
   if (process.env['NODE_ENV'] === 'test') {
-    return pino({ name: config.name, level: 'silent' });
+    return pino({ name: config.name, level: 'silent', serializers: errorSerializers });
   }
 
   if (!isSentryConfigured()) {
-    return pino({ name: config.name, level });
+    return pino({ name: config.name, level, serializers: errorSerializers });
   }
 
   return pino(
-    { name: config.name, level },
+    { name: config.name, level, serializers: errorSerializers },
     createSentryStream(pino.multistream([pino.destination({ dest: 1, sync: false })]))
   );
 }

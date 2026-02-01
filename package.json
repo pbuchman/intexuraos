@@ -55,6 +55,7 @@
     "verify:reply-send": "node scripts/verify-reply-send.mjs",
     "verify:sentry-logging": "node scripts/verify-sentry-logging.mjs",
     "verify:v8-ignore": "node scripts/verify-v8-ignore.mjs",
+    "verify:error-serializers": "node scripts/verify-error-serializers.mjs",
     "verify:llm-architecture": "pnpm tsx scripts/verify-llm-architecture.ts",
     "verify:workspace": "./scripts/verify-workspace.sh",
     "verify:workspace:tracked": "node scripts/verify-workspace-tracked.mjs",
@@ -92,12 +93,17 @@
     "tsx": "^4.21.0",
     "typescript": "^5.7.2",
     "typescript-eslint": "^8.18.1",
-    "vitest": "^4.0.16"
+    "vite": "^6.0.7",
+    "vitest": "^4.0.16",
+    "@vitejs/plugin-react": "^4.3.4"
   },
   "dependencies": {
     "@google-cloud/monitoring": "^5.3.1",
     "dotenv": "^17.2.3",
-    "minimatch": "^10.1.1"
+    "lucide-react": "^0.468.0",
+    "minimatch": "^10.1.1",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
   },
   "optionalDependencies": {
     "@img/sharp-libvips-linux-x64": "^1.2.4",

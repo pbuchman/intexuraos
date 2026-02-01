@@ -6,7 +6,8 @@
 # Hooks may run from different working directories, so we resolve relative to this file
 _LOG_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 _LOG_HOOKS_DIR="$(cd "$_LOG_LIB_DIR/.." && pwd)"
-LOG_FILE="${_LOG_HOOKS_DIR}/hooks.log"
+# Allow override via env var for test isolation
+LOG_FILE="${CLAUDE_HOOKS_LOG_FILE:-${_LOG_HOOKS_DIR}/hooks.log}"
 
 # Get ISO 8601 timestamp in UTC
 # Usage: log_timestamp

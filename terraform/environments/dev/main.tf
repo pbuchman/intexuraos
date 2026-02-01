@@ -488,6 +488,8 @@ module "secret_manager" {
     "INTEXURAOS_SENTRY_DSN_WEB" = "Sentry Data Source Name for error tracking (web app)"
     # Crawl4AI Cloud API
     "INTEXURAOS_CRAWL4AI_API_KEY" = "Crawl4AI Cloud API key for web page content extraction"
+    # LLM API keys
+    "INTEXURAOS_OPENAI_API_KEY" = "OpenAI API key for chat-agent LLM features"
     # Code worker secrets (INT-156)
     "INTEXURAOS_ORCHESTRATOR_SECRET"   = "HMAC signing secret for orchestrator communication"
     "INTEXURAOS_WEBHOOK_VERIFY_SECRET" = "HMAC signing secret for orchestrator webhook callbacks to code-agent"
@@ -1478,7 +1480,9 @@ module "chat_agent" {
 
   image = "${var.region}-docker.pkg.dev/${var.project_id}/${module.artifact_registry.repository_id}/chat-agent:latest"
 
-  secrets  = local.common_service_secrets
+  secrets = merge(local.common_service_secrets, {
+    INTEXURAOS_OPENAI_API_KEY = module.secret_manager.secret_ids["INTEXURAOS_OPENAI_API_KEY"]
+  })
   env_vars = local.common_service_env_vars
 
   depends_on = [
