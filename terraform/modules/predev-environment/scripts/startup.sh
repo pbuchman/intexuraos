@@ -55,12 +55,17 @@ git pull origin "$TARGET_BRANCH"
 log "Fetching predev environment variables from Secret Manager..."
 gcloud secrets versions access latest --secret="INTEXURAOS_PREDEV_ENV_VARS" --quiet > "$REPO_DIR/.envrc.local"
 
+# Source env vars for build (Vite needs them at build time for client bundle)
+log "Loading environment variables for build..."
+cd "$REPO_DIR"
+# shellcheck source=/dev/null disable=SC1091
+set -a && . .envrc.local && set +a
+
 # Install dependencies
 log "Installing dependencies..."
-cd "$REPO_DIR"
 pnpm install --frozen-lockfile
 
-# Build packages
+# Build packages (env vars now loaded for client bundle)
 log "Building packages..."
 pnpm build
 
