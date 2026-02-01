@@ -1,12 +1,17 @@
 /**
  * Service container tests for chat-agent.
  */
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { getServices, setServices, resetServices, initializeServices, type ServiceContainer } from '../services.js';
 
 describe('chat-agent services', () => {
+  beforeEach(() => {
+    process.env['INTEXURAOS_OPENAI_API_KEY'] = 'test-key';
+  });
+
   afterEach(() => {
     resetServices();
+    delete process.env['INTEXURAOS_OPENAI_API_KEY'];
   });
 
   describe('getServices', () => {
@@ -20,6 +25,8 @@ describe('chat-agent services', () => {
       const services = getServices();
       expect(services).toBeDefined();
       expect(typeof services.generateId).toBe('function');
+      expect(services.embeddingRepository).toBeDefined();
+      expect(services.embeddingClient).toBeDefined();
     });
   });
 
@@ -27,6 +34,8 @@ describe('chat-agent services', () => {
     it('should set custom service container', () => {
       const customServices: ServiceContainer = {
         generateId: () => 'custom-id',
+        embeddingRepository: null as unknown as ServiceContainer['embeddingRepository'],
+        embeddingClient: null as unknown as ServiceContainer['embeddingClient'],
       };
       setServices(customServices);
       const services = getServices();
