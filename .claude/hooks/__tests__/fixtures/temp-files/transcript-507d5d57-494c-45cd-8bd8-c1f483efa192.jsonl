@@ -1,0 +1,2 @@
+{"type":"user","message":[{"type":"text","text":"Show me an example."}]}
+{"type":"assistant","message":[{"type":"text","text":"```typescript\n// This is a legacy issue pattern\nconst legacy = true;\n```"}]}

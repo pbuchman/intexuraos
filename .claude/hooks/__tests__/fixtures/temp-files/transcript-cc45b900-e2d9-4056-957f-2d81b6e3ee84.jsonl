@@ -1,0 +1,1 @@
+[{"type":"user","message":[{"type":"text","text":"Should I fix this?"}]},{"type":"assistant","message":[{"type":"text","text":"This is just a legacy issue we can ignore."}]}]

@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process';
 import { createRequire } from 'node:module';
+import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -104,16 +105,14 @@ export function executeHook(options: ExecuteHookOptions): HookExecutionResult {
 
   // If transcript content is provided, write it to a temp file
   let transcriptPath: string | undefined;
+  let finalInputJson = inputJson;
   if (transcriptContent) {
     const tempDir = path.join(HOOKS_DIR, '__tests__', 'fixtures', 'temp-files');
     fs.mkdirSync(tempDir, { recursive: true });
-    transcriptPath = path.join(tempDir, `transcript-${Date.now()}.jsonl`);
+    transcriptPath = path.join(tempDir, `transcript-${randomUUID()}.jsonl`);
     fs.writeFileSync(transcriptPath, transcriptContent, 'utf-8');
     // Update input to include transcript path
-    inputJson.replace(
-      JSON.stringify(input),
-      JSON.stringify({ ...input, transcript_path: transcriptPath })
-    );
+    finalInputJson = JSON.stringify({ ...input, transcript_path: transcriptPath });
   }
 
   // Spawn the hook script
@@ -135,7 +134,7 @@ export function executeHook(options: ExecuteHookOptions): HookExecutionResult {
   });
 
   // Write input to stdin
-  child.stdin?.write(inputJson);
+  child.stdin?.write(finalInputJson);
   child.stdin?.end();
 
   // Wait for completion
@@ -174,6 +173,14 @@ export function executeHook(options: ExecuteHookOptions): HookExecutionResult {
     });
 
     child.on('error', (error) => {
+      // Clean up temp transcript file if created
+      if (transcriptPath && fs.existsSync(transcriptPath)) {
+        try {
+          fs.unlinkSync(transcriptPath);
+        } catch {
+          // Ignore cleanup errors
+        }
+      }
       reject(error);
     });
   }) as Promise<HookExecutionResult>;

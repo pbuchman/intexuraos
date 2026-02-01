@@ -1,4 +1,4 @@
-import { describe, it, beforeEach } from 'vitest';
+import { describe, it, beforeEach, afterAll } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import {
@@ -13,12 +13,17 @@ import {
 } from './helpers/index.js';
 
 describe('Claude Hooks - Pattern Detection', () => {
+  const { path: testBaseDir, cleanup: cleanupTempDir } = createTempDir();
+
   beforeEach(() => {
     clearHooksLog();
   });
 
+  afterAll(() => {
+    cleanupTempDir();
+  });
+
   describe('detect-common-patterns.sh', () => {
-    const { path: testBaseDir } = createTempDir();
 
     // Create a temporary TypeScript file for testing
     function createTestFile(fileName: string, content: string): string {
