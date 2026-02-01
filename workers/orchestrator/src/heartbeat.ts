@@ -21,6 +21,7 @@ export interface HeartbeatManager {
  */
 export function createHeartbeatManager(config: HeartbeatConfig, logger: Logger): HeartbeatManager {
   let intervalId: NodeJS.Timeout | null = null;
+  let consecutiveFailures = 0;
 
   function signPayload(payload: string, timestamp: number): string {
     const message = `${String(timestamp)}.${payload}`;
@@ -54,13 +55,32 @@ export function createHeartbeatManager(config: HeartbeatConfig, logger: Logger):
       });
 
       if (!response.ok) {
-        logger.warn({ status: response.status }, 'Heartbeat request failed');
+        consecutiveFailures++;
+        if (consecutiveFailures >= 3) {
+          logger.error(
+            { status: response.status, consecutiveFailures },
+            'Heartbeat request failed - repeated failures may cause zombie tasks'
+          );
+        } else {
+          logger.warn({ status: response.status, consecutiveFailures }, 'Heartbeat request failed');
+        }
       } else {
+        if (consecutiveFailures > 0) {
+          logger.info({ previousFailures: consecutiveFailures }, 'Heartbeat recovered');
+        }
+        consecutiveFailures = 0;
         logger.debug({ taskCount: taskIds.length }, 'Heartbeats sent successfully');
       }
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      logger.error({ error: message }, 'Failed to send heartbeats');
+      consecutiveFailures++;
+      if (consecutiveFailures >= 3) {
+        logger.error(
+          { error, consecutiveFailures },
+          'Failed to send heartbeats - repeated failures'
+        );
+      } else {
+        logger.error({ error, consecutiveFailures }, 'Failed to send heartbeats');
+      }
     }
   }
 

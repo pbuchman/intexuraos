@@ -438,6 +438,27 @@ describe('validateWebhookSignature', () => {
 
       expect(result.ok).toBe(true);
     });
+
+    it('rejects future timestamps beyond 15 minutes', async () => {
+      const payload = { taskId: 'task-123', status: 'completed' };
+      const farFutureTimestamp = String(Math.floor((Date.now() + 20 * 60 * 1000) / 1000));
+
+      const rawBody = JSON.stringify(payload);
+      const message = `${farFutureTimestamp}.${rawBody}`;
+      const signature = crypto.createHmac('sha256', 'test-secret').update(message).digest('hex');
+
+      const request = createRequest(payload, {
+        'x-request-timestamp': farFutureTimestamp,
+        'x-request-signature': signature,
+      });
+
+      const result = await validateWebhookSignature(request, { getWebhookSecret });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('expired_signature');
+      }
+    });
   });
 
   describe('array header handling', () => {

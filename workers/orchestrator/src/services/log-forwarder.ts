@@ -272,15 +272,28 @@ export class LogForwarder {
         });
 
         if (response.ok) return true;
-        // Don't retry 4xx errors (client errors)
-        if (response.status >= 400 && response.status < 500) return false;
+
+        if (response.status >= 400 && response.status < 500) {
+          this.logger.error(
+            { taskId: payload.taskId, status: response.status, url },
+            'Log upload rejected with client error - not retrying'
+          );
+          return false;
+        }
 
         this.logger.warn(
-          { attempt: i + 1, status: response.status },
+          { taskId: payload.taskId, attempt: i + 1, status: response.status, url },
           'Log upload failed, retrying'
         );
       } catch (error) {
-        this.logger.warn({ attempt: i + 1, error }, 'Log upload failed, retrying');
+        /* v8 ignore start -- ts-type: error type narrowing for non-Error throwables @preserve */
+        const errorInfo =
+          error instanceof Error ? { name: error.name, message: error.message } : { error };
+        /* v8 ignore stop @preserve */
+        this.logger.warn(
+          { taskId: payload.taskId, attempt: i + 1, ...errorInfo },
+          'Log upload failed, retrying'
+        );
       }
 
       if (i < 2) {
