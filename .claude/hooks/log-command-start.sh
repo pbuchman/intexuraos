@@ -31,7 +31,8 @@ fi
 CMD_HASH=$(echo -n "${COMMAND}${TIMESTAMP_NANO}" | md5 | cut -c1-12)
 
 # Store start time in temp file for PostToolUse correlation
-echo "$TIMESTAMP_NANO" > "${TEMP_DIR}/${CMD_HASH}.start"
+# Use >> in case file already exists (shouldn't, but defensive)
+echo "$TIMESTAMP_NANO" >> "${TEMP_DIR}/${CMD_HASH}.start"
 
 # Store hash in pending file so PostToolUse can correlate
 COMMAND_ONLY_HASH=$(echo -n "$COMMAND" | md5 | cut -c1-12)
