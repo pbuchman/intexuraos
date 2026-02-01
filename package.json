@@ -99,7 +99,10 @@
   "dependencies": {
     "@google-cloud/monitoring": "^5.3.1",
     "dotenv": "^17.2.3",
-    "minimatch": "^10.1.1"
+    "lucide-react": "^0.468.0",
+    "minimatch": "^10.1.1",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
   },
   "optionalDependencies": {
     "@img/sharp-libvips-linux-x64": "^1.2.4",
