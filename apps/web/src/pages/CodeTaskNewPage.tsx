@@ -162,7 +162,6 @@ export function CodeTaskNewPage(): React.JSX.Element {
             void handleSubmit();
           }}
           disabled={!isValid || submitting}
-          isLoading={submitting}
         >
           {submitting ? (
             <>
