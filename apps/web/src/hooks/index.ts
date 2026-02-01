@@ -9,6 +9,7 @@ export { useCalendarEvents } from './useCalendarEvents.js';
 export { useCodeTask, useCodeTasks, useWorkersStatus } from './useCodeTasks.js';
 export { useFailedCalendarEvents } from './useFailedCalendarEvents.js';
 export { useFailedLinearIssues } from './useFailedLinearIssues.js';
+export { useLinearIssueOptions } from './useLinearIssueOptions.js';
 export { useChartDefinition } from './useChartDefinition.js';
 export { useChartPreview } from './useChartPreview.js';
 export { useCommandChanges, type UseCommandChangesResult } from './useCommandChanges.js';

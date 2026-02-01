@@ -27,8 +27,30 @@ export interface UpdateIssueStateRequest {
   state: 'backlog' | 'in_progress' | 'in_review' | 'qa';
 }
 
+export interface ValidateIssueRequest {
+  userId: string;
+  identifier: string;
+}
+
+export interface ValidatedIssue {
+  id: string;
+  identifier: string;
+  title: string;
+  url: string;
+}
+
+export interface GenerateTitleRequest {
+  userId: string;
+  description: string;
+}
+
+export interface GeneratedTitle {
+  title: string;
+  issueType: 'feature' | 'bug' | 'refactor' | 'research';
+}
+
 export interface LinearAgentError {
-  code: 'UNAVAILABLE' | 'RATE_LIMITED' | 'INVALID_REQUEST' | 'UNKNOWN';
+  code: 'UNAVAILABLE' | 'RATE_LIMITED' | 'INVALID_REQUEST' | 'NOT_FOUND' | 'UNKNOWN';
   message: string;
 }
 
@@ -44,4 +66,16 @@ export interface LinearAgentClient {
    * Used for state transitions: Backlog → In Progress → In Review
    */
   updateIssueState(request: UpdateIssueStateRequest): Promise<Result<void, LinearAgentError>>;
+
+  /**
+   * Validate that a Linear issue exists and belongs to the user's team.
+   * Returns validated issue details or an error.
+   */
+  validateIssue(request: ValidateIssueRequest): Promise<Result<ValidatedIssue, LinearAgentError>>;
+
+  /**
+   * Generate a concise issue title from a task description using LLM.
+   * Returns generated title with issue type classification.
+   */
+  generateTitle(request: GenerateTitleRequest): Promise<Result<GeneratedTitle, LinearAgentError>>;
 }
