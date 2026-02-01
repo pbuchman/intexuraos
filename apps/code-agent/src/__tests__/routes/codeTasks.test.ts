@@ -44,6 +44,8 @@ import { createCleanupTaskLogsUseCase } from '../../domain/usecases/cleanupTaskL
 import { createNoOpMetricsClient, type MetricsClient } from '../../infra/metrics.js';
 import { createWorkerSettingsRepository } from '../../infra/firestore/workerSettingsRepository.js';
 import type { WorkerSettingsRepository } from '../../domain/ports/workerSettingsRepository.js';
+import type { WorkerHealthProbe } from '../../domain/ports/workerHealthProbe.js';
+import { mockWorkerHealthProbe } from '../helpers/mockServices.js';
 
 describe('GET /code/tasks endpoints', () => {
   let app: Awaited<ReturnType<typeof buildServer>>;
@@ -147,6 +149,7 @@ describe('GET /code/tasks endpoints', () => {
         codeTaskRepository: codeTaskRepo,
         logger,
       }),
+      workerHealthProbe: mockWorkerHealthProbe,
     } as {
       firestore: Firestore;
       logger: Logger;
@@ -163,6 +166,7 @@ describe('GET /code/tasks endpoints', () => {
       processHeartbeat: import('../../domain/usecases/processHeartbeat.js').ProcessHeartbeatUseCase;
       detectZombieTasks: import('../../domain/usecases/detectZombieTasks.js').DetectZombieTasksUseCase;
       cleanupTaskLogs: import('../../domain/usecases/cleanupTaskLogs.js').CleanupTaskLogsUseCase;
+      workerHealthProbe: WorkerHealthProbe;
     });
 
     app = await buildServer();

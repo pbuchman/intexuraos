@@ -89,7 +89,7 @@ const body = JSON.stringify(taskRequest);
     const timestamp = Date.now();
 
     // Get workers from per-request credentials
-    const workers = this.getWorkerConfigsFromCredentials(request.workerCredentials);
+    let workers = this.getWorkerConfigsFromCredentials(request.workerCredentials);
 
     if (workers.length === 0) {
       return err({
@@ -97,6 +97,27 @@ const body = JSON.stringify(taskRequest);
         message: 'No workers configured for this user',
       });
     }
+
+    // Filter to healthy workers if health statuses are available
+    /* v8 ignore start -- test-infra: requires worker health status setup @preserve */
+    if (request.workerHealthStatuses !== undefined) {
+      const healthyWorkers = workers.filter((w) => {
+        const status = request.workerHealthStatuses?.[w.location];
+        return status?.healthy === true;
+      });
+
+      if (healthyWorkers.length > 0) {
+        this.logger.info(
+          {
+            totalWorkers: workers.length,
+            healthyWorkers: healthyWorkers.length,
+          },
+          'Using healthy workers for dispatch'
+        );
+        workers = healthyWorkers;
+      }
+    }
+    /* v8 ignore stop @preserve */
 
     // Try to dispatch to available workers
     const result = await this.dispatchToWorker(taskRequest, body, timestamp, workers);

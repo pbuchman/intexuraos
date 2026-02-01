@@ -8,6 +8,7 @@ import {
   submitCodeTask as submitCodeTaskApi,
   cancelCodeTask as cancelCodeTaskApi,
   getWorkersStatus as getWorkersStatusApi,
+  refreshWorkersStatus as refreshWorkersStatusApi,
 } from '@/services/codeAgentApi';
 import type { CodeTask, CodeTaskStatus, SubmitCodeTaskRequest, WorkersStatusResponse } from '@/types';
 import {
@@ -299,13 +300,14 @@ export function useCodeTasks(options?: { status?: CodeTaskStatus }): {
 
 /**
  * Hook for fetching worker status (Mac and VM health).
- * Polls every 30 seconds when visible.
+ * Polls every 60 seconds when visible.
  */
 export function useWorkersStatus(): {
   status: WorkersStatusResponse | null;
   loading: boolean;
   error: string | null;
   refresh: () => Promise<void>;
+  refreshStatus: () => Promise<void>;
 } {
   const { getAccessToken, isAuthenticated } = useAuth();
   const [status, setStatus] = useState<WorkersStatusResponse | null>(null);
@@ -338,6 +340,23 @@ export function useWorkersStatus(): {
     }
   }, [getAccessToken, isAuthenticated]);
 
+  const refreshStatus = useCallback(async (): Promise<void> => {
+    if (!isAuthenticated) {
+      return;
+    }
+
+    try {
+      const token = await getAccessToken();
+      const data = await refreshWorkersStatusApi(token);
+      if (isMountedRef.current) {
+        setStatus(data);
+        setError(null);
+      }
+    } catch {
+      // Silently fail - status update is best effort
+    }
+  }, [getAccessToken, isAuthenticated]);
+
   useEffect(() => {
     isMountedRef.current = true;
     void refresh();
@@ -351,7 +370,7 @@ export function useWorkersStatus(): {
 
     const pollInterval = setInterval(() => {
       void refresh();
-    }, 30000);
+    }, 60000);
 
     const handleVisibilityChange = (): void => {
       if (document.visibilityState === 'visible' && !isInitialLoadRef.current) {
@@ -368,5 +387,5 @@ export function useWorkersStatus(): {
     };
   }, [refresh, isAuthenticated]);
 
-  return { status, loading, error, refresh };
+  return { status, loading, error, refresh, refreshStatus };
 }

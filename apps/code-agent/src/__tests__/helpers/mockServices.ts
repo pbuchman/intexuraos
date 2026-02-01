@@ -22,6 +22,31 @@ import { createCleanupTaskLogsUseCase } from '../../domain/usecases/cleanupTaskL
 import type { WhatsAppSendPublisher } from '@intexuraos/infra-pubsub';
 import { createNoOpMetricsClient } from '../../infra/metrics.js';
 import { createWorkerSettingsRepository } from '../../infra/firestore/workerSettingsRepository.js';
+import type { WorkerHealthProbe } from '../../domain/ports/workerHealthProbe.js';
+import type { WorkerHealthState } from '../../domain/models/workerSettings.js';
+
+/**
+ * Mock worker health probe that always returns healthy status.
+ */
+export const mockWorkerHealthProbe: WorkerHealthProbe = {
+  async probeWorker() {
+    return {
+      _tag: 'healthy',
+      healthy: true,
+      capacity: 1,
+      running: 0,
+      available: 1,
+      responseTimeMs: 50,
+    };
+  },
+  async probeAllWorkers(workers) {
+    const results: Record<string, WorkerHealthState> = {};
+    for (const worker of workers) {
+      results[worker.name] = await mockWorkerHealthProbe.probeWorker(worker);
+    }
+    return results;
+  },
+};
 
 export function setupTestServices({ actionsAgentUrl = 'http://actions-agent' }: { actionsAgentUrl?: string } = {}): void {
   const fakeFirestore = createFakeFirestore() as unknown as Firestore;
@@ -110,6 +135,7 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
       firestore: fakeFirestore,
       logger,
     }),
+    workerHealthProbe: mockWorkerHealthProbe,
   };
 
   setServices(container);
