@@ -88,7 +88,16 @@ export class WorkerHealthProbeImpl implements WorkerHealthProbe {
       }
       /* v8 ignore stop @preserve */
 
-      const data = await response.json();
+      let data: unknown;
+      try {
+        data = await response.json();
+      } catch {
+        return {
+          _tag: 'unknown',
+          healthy: false,
+          error: 'Invalid health response format',
+        };
+      }
 
       /* v8 ignore start -- test-infra: requires mock fetch for invalid health responses @preserve */
       if (this.isValidOrchestratorHealth(data)) {

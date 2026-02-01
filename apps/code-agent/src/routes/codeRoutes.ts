@@ -15,6 +15,12 @@ import { loadConfig } from '../config.js';
 
 const logger = createAppLogger({ name: 'code-routes' });
 
+/**
+ * Track in-flight health probe requests per user for deduplication.
+ * Prevents thundering herd when multiple concurrent requests arrive while health status is stale.
+ */
+const inFlightRequests = new Map<string, Promise<void>>();
+
 export type JwtValidator = (request: FastifyRequest, reply: FastifyReply) => Promise<void>;
 
 export interface CodeRoutesOptions {
@@ -1929,15 +1935,36 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       }
 
       if (stale || Object.keys(healthStatuses).length < settings.workers.length) {
-        workerHealthProbe.probeAllWorkers(settings.workers).then((results) => {
-          for (const [name, state] of Object.entries(results)) {
-            void workerSettingsRepo.updateHealthStatus(userId, name, {
-              state,
-              checkedAt: new Date().toISOString(),
-              stale: false,
+        // Deduplicate in-flight health probes per user
+        const probeKey = `health-probe:${userId}`;
+        let probePromise = inFlightRequests.get(probeKey);
+
+        if (!probePromise) {
+          probePromise = workerHealthProbe
+            .probeAllWorkers(settings.workers)
+            .then((results) => {
+              // Update all health statuses in Firestore
+              const updatePromises = Object.entries(results).map(([name, state]) =>
+                workerSettingsRepo.updateHealthStatus(userId, name, {
+                  state,
+                  checkedAt: new Date().toISOString(),
+                  stale: false,
+                })
+              );
+              // Wait for all updates to complete, return void for fire-and-forget
+              void Promise.allSettled(updatePromises);
+            })
+            .finally(() => {
+              // Clean up in-flight request after completion
+              inFlightRequests.delete(probeKey);
             });
-          }
-        }).catch((error) => {
+
+          inFlightRequests.set(probeKey, probePromise);
+        }
+
+        // Fire-and-forget - we don't await the probe
+        // Non-null assertion is safe here: probePromise is defined after the if block
+        void probePromise!.catch((error) => {
           logger.error({ error }, 'Failed to refresh worker health statuses');
         });
       }
