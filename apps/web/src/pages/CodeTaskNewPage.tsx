@@ -1,11 +1,13 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AlertCircle, Play } from 'lucide-react';
+import { AlertCircle, Play, Link2, Sparkles } from 'lucide-react';
 import MDEditor from '@uiw/react-md-editor';
 import rehypeSanitize from 'rehype-sanitize';
 import { Button, Card, Layout } from '@/components';
-import { useCodeTasks } from '@/hooks';
+import { LinearIssueCombobox } from '@/components';
+import { useCodeTasks, useLinearIssueOptions } from '@/hooks';
 import type { CodeTaskWorkerType } from '@/types';
+import type { LinearIssueOption } from '@/hooks/useLinearIssueOptions';
 
 const WORKER_TYPES: { id: CodeTaskWorkerType; name: string; description: string }[] = [
   { id: 'auto', name: 'Auto', description: 'Automatically select the best model' },
@@ -13,14 +15,25 @@ const WORKER_TYPES: { id: CodeTaskWorkerType; name: string; description: string 
   { id: 'glm', name: 'GLM', description: 'GLM - alternative model' },
 ];
 
+type LinearMode = 'none' | 'link' | 'create';
+
+const LINEAR_MODES: { id: LinearMode; name: string; description: string; icon: React.ReactNode }[] = [
+  { id: 'none', name: 'None', description: 'No Linear issue', icon: null },
+  { id: 'link', name: 'Link Existing', description: 'Link to an existing Linear issue', icon: <Link2 className="h-4 w-4" /> },
+  { id: 'create', name: 'Create New', description: 'Auto-generate title from task description', icon: <Sparkles className="h-4 w-4" /> },
+];
+
 export function CodeTaskNewPage(): React.JSX.Element {
   const navigate = useNavigate();
   const { submitTask } = useCodeTasks();
+  const { options, loading: linearLoading, error: linearError, generateTitle } = useLinearIssueOptions();
 
   const [prompt, setPrompt] = useState('');
   const [workerType, setWorkerType] = useState<CodeTaskWorkerType>('auto');
-  const [linearIssueId, setLinearIssueId] = useState('');
-  const [linearIssueTitle, setLinearIssueTitle] = useState('');
+  const [linearMode, setLinearMode] = useState<LinearMode>('none');
+  const [selectedIssue, setSelectedIssue] = useState<LinearIssueOption | null>(null);
+  const [generatedTitle, setGeneratedTitle] = useState('');
+  const [generatingTitle, setGeneratingTitle] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -33,12 +46,24 @@ export function CodeTaskNewPage(): React.JSX.Element {
     setError(null);
 
     try {
-      const taskId = await submitTask({
+      const requestData: {
+        prompt: string;
+        workerType?: CodeTaskWorkerType;
+        linearIssueId?: string;
+        linearIssueTitle?: string;
+      } = {
         prompt: prompt.trim(),
         workerType,
-        ...(linearIssueId.trim() !== '' && { linearIssueId: linearIssueId.trim() }),
-        ...(linearIssueTitle.trim() !== '' && { linearIssueTitle: linearIssueTitle.trim() }),
-      });
+      };
+
+      if (linearMode === 'link' && selectedIssue !== null) {
+        requestData.linearIssueId = selectedIssue.identifier;
+        requestData.linearIssueTitle = selectedIssue.title;
+      } else if (linearMode === 'create' && generatedTitle.trim() !== '') {
+        requestData.linearIssueTitle = generatedTitle.trim();
+      }
+
+      const taskId = await submitTask(requestData);
       void navigate(`/code-tasks/${taskId}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to submit task');
@@ -132,43 +157,96 @@ export function CodeTaskNewPage(): React.JSX.Element {
             <h3 className="text-sm font-medium text-slate-700 mb-4 dark:text-slate-200">
               Linear Issue (Optional)
             </h3>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div>
-                <label htmlFor="linearIssueId" className="block text-sm text-slate-600 mb-1 dark:text-slate-400">
-                  Issue ID
-                </label>
-                <input
-                  id="linearIssueId"
-                  type="text"
-                  value={linearIssueId}
-                  onChange={(e): void => {
-                    setLinearIssueId(e.target.value);
+
+            <div className="flex flex-wrap gap-3 mb-4">
+              {LINEAR_MODES.map((mode) => (
+                <button
+                  key={mode.id}
+                  type="button"
+                  onClick={(): void => {
+                    setLinearMode(mode.id);
+                    setSelectedIssue(null);
+                    setGeneratedTitle('');
                   }}
-                  placeholder="INT-123"
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-slate-900 placeholder-slate-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-100 dark:placeholder-slate-400"
                   disabled={submitting}
-                />
-              </div>
-              <div>
-                <label htmlFor="linearIssueTitle" className="block text-sm text-slate-600 mb-1 dark:text-slate-400">
-                  Issue Title
-                </label>
-                <input
-                  id="linearIssueTitle"
-                  type="text"
-                  value={linearIssueTitle}
-                  onChange={(e): void => {
-                    setLinearIssueTitle(e.target.value);
-                  }}
-                  placeholder="Issue title..."
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-slate-900 placeholder-slate-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-100 dark:placeholder-slate-400"
-                  disabled={submitting}
-                />
-              </div>
+                  className={`px-4 py-2 rounded-lg border text-sm font-medium transition-colors flex items-center gap-2 ${
+                    linearMode === mode.id
+                      ? 'border-blue-500 bg-blue-50 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300'
+                      : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600'
+                  } disabled:opacity-50`}
+                  title={mode.description}
+                >
+                  {mode.icon}
+                  {mode.name}
+                </button>
+              ))}
             </div>
-            <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
-              Link this task to a Linear issue for tracking and context.
-            </p>
+
+            {linearMode === 'link' && (
+              <div className="space-y-3">
+                <LinearIssueCombobox
+                  options={options}
+                  loading={linearLoading}
+                  error={linearError}
+                  selected={selectedIssue}
+                  onSelect={setSelectedIssue}
+                  disabled={submitting}
+                  placeholder="Search or select an issue..."
+                  allowNone={false}
+                />
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  Select an existing Linear issue to link this task for tracking and context.
+                </p>
+              </div>
+            )}
+
+            {linearMode === 'create' && (
+              <div className="space-y-3">
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (prompt.trim().length === 0) {
+                        return;
+                      }
+                      setGeneratingTitle(true);
+                      generateTitle(prompt.trim())
+                        .then(setGeneratedTitle)
+                        .catch(() => {
+                          setError('Failed to generate issue title');
+                        })
+                        .finally(() => {
+                          setGeneratingTitle(false);
+                        });
+                    }}
+                    disabled={submitting || generatingTitle || prompt.trim().length === 0}
+                    className="px-4 py-2 rounded-lg border border-blue-500 bg-blue-50 text-blue-700 text-sm font-medium hover:bg-blue-100 disabled:opacity-50 disabled:cursor-not-allowed dark:bg-blue-900/50 dark:text-blue-300 dark:hover:bg-blue-900/70 flex items-center gap-2"
+                  >
+                    <Sparkles className="h-4 w-4" />
+                    {generatingTitle ? 'Generating...' : 'Generate Title'}
+                  </button>
+                </div>
+
+                {generatedTitle && (
+                  <div className="p-3 bg-slate-50 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-600">
+                    <p className="text-sm font-medium text-slate-700 dark:text-slate-200 mb-1">
+                      Generated Title:
+                    </p>
+                    <p className="text-sm text-slate-900 dark:text-slate-100">{generatedTitle}</p>
+                  </div>
+                )}
+
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  A Linear issue will be created with the generated title. The Product Owner persona analyzes your task description to create a clear, actionable title.
+                </p>
+              </div>
+            )}
+
+            {linearMode === 'none' && (
+              <p className="text-sm text-slate-500 dark:text-slate-400">
+                No Linear issue will be linked to this task.
+              </p>
+            )}
           </div>
         </div>
       </Card>

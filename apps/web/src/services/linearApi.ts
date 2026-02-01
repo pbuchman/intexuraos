@@ -151,4 +151,36 @@ export async function retryFailedIssue(
   );
 }
 
+/**
+ * Validate that a Linear issue exists and belongs to the user's team
+ */
+export async function validateLinearIssue(
+  accessToken: string,
+  identifier: string
+): Promise<{ id: string; identifier: string; title: string; url: string }> {
+  return await apiRequest(
+    config.linearAgentUrl,
+    `/internal/linear/issues/${encodeURIComponent(identifier)}`,
+    accessToken
+  );
+}
+
+/**
+ * Generate an issue title from a description using LLM
+ */
+export async function generateLinearIssueTitle(
+  accessToken: string,
+  description: string
+): Promise<{ title: string; issueType: 'feature' | 'bug' | 'refactor' | 'research' }> {
+  return await apiRequest(
+    config.linearAgentUrl,
+    '/internal/linear/issues/generate-title',
+    accessToken,
+    {
+      method: 'POST',
+      body: { description },
+    }
+  );
+}
+
 export type { ValidateResponse, SaveConnectionRequest };
