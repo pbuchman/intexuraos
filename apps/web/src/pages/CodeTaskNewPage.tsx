@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AlertCircle, Loader2, Play } from 'lucide-react';
+import { AlertCircle, Play } from 'lucide-react';
 import MDEditor from '@uiw/react-md-editor';
 import rehypeSanitize from 'rehype-sanitize';
 import { Button, Card, Layout } from '@/components';
@@ -191,17 +191,8 @@ export function CodeTaskNewPage(): React.JSX.Element {
           disabled={!isValid || submitting}
           isLoading={submitting}
         >
-          {submitting ? (
-            <>
-              <Loader2 className="h-4 w-4 animate-spin sm:mr-2" />
-              <span className="hidden sm:inline">Submitting...</span>
-            </>
-          ) : (
-            <>
-              <Play className="h-4 w-4 sm:mr-2" />
-              <span className="hidden sm:inline">Submit Task</span>
-            </>
-          )}
+          <Play className="h-4 w-4 sm:mr-2" />
+          <span className="hidden sm:inline">Submit Task</span>
         </Button>
         <Button
           variant="secondary"
