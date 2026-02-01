@@ -1104,6 +1104,7 @@ export interface CodeTask {
   approvalEventId?: string;
   linearIssueId?: string;
   linearIssueTitle?: string;
+  linearIssueType?: 'feature' | 'bug' | 'refactor' | 'research';
   linearFallback?: boolean;
   result?: CodeTaskResult;
   error?: CodeTaskError;
@@ -1111,12 +1112,15 @@ export interface CodeTask {
 
 /**
  * Request to submit a code task
+ *
+ * Linear integration:
+ * - If linearIssueId is provided: link to existing issue (backend validates it exists and belongs to user's team)
+ * - If linearIssueId is NOT provided: backend creates new issue with auto-generated LLM title
  */
 export interface SubmitCodeTaskRequest {
   prompt: string;
   workerType?: CodeTaskWorkerType;
   linearIssueId?: string;
-  linearIssueTitle?: string;
 }
 
 /**

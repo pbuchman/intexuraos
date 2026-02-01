@@ -164,7 +164,6 @@ describe('codeAgentApi', () => {
         prompt: 'Build feature X',
         workerType: 'auto' as const,
         linearIssueId: 'INT-123',
-        linearIssueTitle: 'Feature X',
       };
 
       await submitCodeTask(mockAccessToken, request);

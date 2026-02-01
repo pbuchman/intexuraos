@@ -1116,14 +1116,10 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       const ensureParams: {
         userId: string;
         linearIssueId?: string;
-        linearIssueTitle?: string;
         taskPrompt: string;
       } = { userId, taskPrompt: body.prompt };
       if ('linearIssueId' in body && body.linearIssueId !== undefined) {
         ensureParams.linearIssueId = body.linearIssueId;
-      }
-      if ('linearIssueTitle' in body && body.linearIssueTitle !== undefined) {
-        ensureParams.linearIssueTitle = body.linearIssueTitle;
       }
       const issueResult = await linearIssueService.ensureIssueExists(ensureParams);
 
@@ -1144,6 +1140,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         webhookSecret: string;
         linearIssueId?: string;
         linearIssueTitle?: string;
+        linearIssueType?: 'feature' | 'bug' | 'refactor' | 'research';
         linearFallback?: boolean;
       } = {
         userId,
@@ -1163,6 +1160,11 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       /* v8 ignore stop @preserve */
         createInput.linearIssueId = issueResult.linearIssueId;
         createInput.linearIssueTitle = issueResult.linearIssueTitle;
+      }
+      /* v8 ignore start -- ts-type: optional property check creates type narrowing branch @preserve */
+      if (issueResult.linearIssueType !== undefined) {
+      /* v8 ignore stop @preserve */
+        createInput.linearIssueType = issueResult.linearIssueType;
       }
       /* v8 ignore start -- ts-type: optional property check creates type narrowing branch @preserve */
       if (issueResult.linearFallback) {
