@@ -82,7 +82,7 @@ export function createLinearIssueService(deps: LinearIssueServiceDeps): LinearIs
       }
 
       return {
-        linearIssueId: result.value.issueId,
+        linearIssueId: result.value.issueIdentifier,
         linearIssueTitle: result.value.issueTitle,
         linearFallback: false,
       };

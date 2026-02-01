@@ -188,7 +188,8 @@ export function CodeTaskNewPage(): React.JSX.Element {
           onClick={(): void => {
             void handleSubmit();
           }}
-          disabled={!isValid || submitting}
+          disabled={!isValid}
+          isLoading={submitting}
         >
           <Play className="h-4 w-4 sm:mr-2" />
           <span className="hidden sm:inline">Submit Task</span>

@@ -90,7 +90,7 @@ describe('linearIssueService', () => {
       });
 
       expect(result).toEqual({
-        linearIssueId: 'new-456',
+        linearIssueId: 'INT-456',
         linearIssueTitle: 'Fix the login bug',
         linearFallback: false,
       });
@@ -178,7 +178,7 @@ describe('linearIssueService', () => {
         taskPrompt: '',
       });
 
-      expect(result.linearIssueId).toBe('new-empty');
+      expect(result.linearIssueId).toBe('INT-999');
       expect(mockCreateIssue).toHaveBeenCalled();
     });
 

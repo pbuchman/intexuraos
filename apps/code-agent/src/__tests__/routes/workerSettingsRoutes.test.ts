@@ -293,6 +293,79 @@ describe('Worker Settings Routes', () => {
       expect(body.success).toBe(false);
       expect(body.error.code).toBe('INVALID_REQUEST');
     });
+
+    it('should reject masked cfAccessClientId', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/code/worker-settings/workers',
+        headers: {
+          Authorization: 'Bearer test-token',
+          'Content-Type': 'application/json',
+        },
+        payload: {
+          name: 'home-mac',
+          url: 'https://example.com',
+          cfAccessClientId: '•••••••345', // masked value
+          cfAccessClientSecret: 'real-secret',
+          dispatchSigningSecret: 'real-signing',
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INVALID_REQUEST');
+      expect(body.error.message).toContain('CF Access Client ID');
+      expect(body.error.message).toContain('masked');
+    });
+
+    it('should reject masked cfAccessClientSecret', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/code/worker-settings/workers',
+        headers: {
+          Authorization: 'Bearer test-token',
+          'Content-Type': 'application/json',
+        },
+        payload: {
+          name: 'home-mac',
+          url: 'https://example.com',
+          cfAccessClientId: 'real-id',
+          cfAccessClientSecret: '•••••def', // masked value
+          dispatchSigningSecret: 'real-signing',
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INVALID_REQUEST');
+      expect(body.error.message).toContain('CF Access Client Secret');
+    });
+
+    it('should reject masked dispatchSigningSecret', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/code/worker-settings/workers',
+        headers: {
+          Authorization: 'Bearer test-token',
+          'Content-Type': 'application/json',
+        },
+        payload: {
+          name: 'home-mac',
+          url: 'https://example.com',
+          cfAccessClientId: 'real-id',
+          cfAccessClientSecret: 'real-secret',
+          dispatchSigningSecret: '•••123', // masked value
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INVALID_REQUEST');
+      expect(body.error.message).toContain('Dispatch Signing Secret');
+    });
   });
 
   describe('PATCH /code/worker-settings/workers/:name', () => {
@@ -374,6 +447,46 @@ describe('Worker Settings Routes', () => {
       const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
       expect(body.success).toBe(false);
       expect(body.error.code).toBe('NOT_FOUND');
+    });
+
+    it('should reject masked credentials in update', async () => {
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/code/worker-settings/workers/home-mac',
+        headers: {
+          Authorization: 'Bearer test-token',
+          'Content-Type': 'application/json',
+        },
+        payload: {
+          url: 'https://new-url.example.com',
+          cfAccessClientId: '•••••••xyz', // masked value
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INVALID_REQUEST');
+      expect(body.error.message).toContain('masked');
+    });
+
+    it('should allow partial update with url only (no credentials)', async () => {
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/code/worker-settings/workers/home-mac',
+        headers: {
+          Authorization: 'Bearer test-token',
+          'Content-Type': 'application/json',
+        },
+        payload: {
+          url: 'https://updated-mac.example.com',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as { success: boolean; data: { updated: boolean } };
+      expect(body.success).toBe(true);
+      expect(body.data.updated).toBe(true);
     });
   });
 
