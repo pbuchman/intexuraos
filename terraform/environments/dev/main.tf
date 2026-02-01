@@ -481,7 +481,7 @@ module "secret_manager" {
     # Crawl4AI Cloud API
     "INTEXURAOS_CRAWL4AI_API_KEY" = "Crawl4AI Cloud API key for web page content extraction"
     # Code worker secrets (INT-156)
-    "INTEXURAOS_DISPATCH_SIGNING_SECRET" = "HMAC signing secret for orchestrator dispatch validation"
+    "INTEXURAOS_ORCHESTRATOR_SECRET" = "HMAC signing secret for orchestrator communication"
     "INTEXURAOS_WEBHOOK_VERIFY_SECRET"   = "HMAC signing secret for orchestrator webhook callbacks to code-agent"
     # GitHub App for code worker PRs (INT-156)
     "INTEXURAOS_GITHUB_APP_PRIVATE_KEY" = "GitHub App private key (PEM format) for code worker authentication"

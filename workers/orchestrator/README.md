@@ -297,7 +297,7 @@ The code-agent reads the secret from Firestore (encrypted), the orchestrator rea
 | `INTEXURAOS_GITHUB_INSTALLATION_ID` | Installation ID: 106781840   |
 | `INTEXURAOS_GITHUB_APP_PRIVATE_KEY` | GitHub App private key (PEM) |
 
-> **Note:** `INTEXURAOS_DISPATCH_SIGNING_SECRET` in GCP is deprecated for multi-user setups. Each user should generate their own secret and configure it in their IntexuraOS worker settings.
+> **Note:** `INTEXURAOS_ORCHESTRATOR_SECRET` in GCP is deprecated for multi-user setups. Each user should generate their own secret and configure it in their IntexuraOS worker settings.
 
 ### Fetching GitHub Secrets
 
