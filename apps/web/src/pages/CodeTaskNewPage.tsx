@@ -63,7 +63,7 @@ export function CodeTaskNewPage(): React.JSX.Element {
             <div data-color-mode="light" className="dark:hidden">
               <MDEditor
                 value={prompt}
-                onChange={(value): void => {
+                onChange={(value: string | undefined): void => {
                   // MDEditor returns null when cleared; convert to empty string for validation
                   setPrompt(value ?? '');
                 }}
@@ -81,7 +81,7 @@ export function CodeTaskNewPage(): React.JSX.Element {
             <div data-color-mode="dark" className="hidden dark:block">
               <MDEditor
                 value={prompt}
-                onChange={(value): void => {
+                onChange={(value: string | undefined): void => {
                   // MDEditor returns null when cleared; convert to empty string for validation
                   setPrompt(value ?? '');
                 }}

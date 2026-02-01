@@ -38,6 +38,8 @@ export default tseslint.config(
           'vitest.setup.ts',
           'apps/*/vitest.config.ts',
           'migrations/vitest.config.ts',
+          // Test files are excluded from tsconfig but need linting
+          'apps/web/src/**/__tests__/**/*.tsx',
         ],
       },
       globals: {
@@ -872,7 +874,7 @@ export default tseslint.config(
   // Test files: Disable type-aware linting (not in tsconfig by design)
   // This MUST be last to override all type-checked rules from strictTypeChecked
   {
-    files: ['**/__tests__/**/*.ts', '**/*.test.ts', '**/*.spec.ts'],
+    files: ['**/__tests__/**/*.ts', '**/__tests__/**/*.tsx', '**/*.test.ts', '**/*.test.tsx', '**/*.spec.ts'],
     languageOptions: {
       parserOptions: {
         program: null,

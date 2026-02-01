@@ -4,6 +4,7 @@ import { AuthProvider, SyncQueueProvider, ThemeProvider, useAuth } from '@/conte
 import { PWAProvider } from '@/context/pwa-context';
 import { AndroidInstallBanner, IOSInstallBanner, UpdateBanner } from '@/components/pwa-banners';
 import { DevBar } from '@/components/DevBar';
+import { Chat } from '@/components/Chat';
 import { config } from '@/config';
 
 
@@ -450,6 +451,7 @@ export function App(): React.JSX.Element {
                 <IOSInstallBanner />
                 <AndroidInstallBanner />
                 <DevBar />
+                <Chat />
               </SyncQueueProvider>
             </AuthProvider>
           </HashRouter>
