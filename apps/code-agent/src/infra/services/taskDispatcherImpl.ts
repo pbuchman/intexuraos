@@ -5,7 +5,6 @@
  */
 
 import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
-import type { WorkerConfig } from '../../domain/models/worker.js';
 import type { WorkerCredentials } from '../../domain/models/workerSettings.js';
 import type {
   DispatchError,
@@ -43,7 +42,11 @@ interface WorkerTaskResponse {
 /**
  * Internal worker config with credentials for dispatch.
  */
-interface WorkerConfigWithCredentials extends WorkerConfig {
+interface WorkerConfigWithCredentials {
+  name: string;
+  location: string;
+  url: string;
+  priority: number;
   credentials: WorkerCredentials;
 }
 
@@ -102,7 +105,7 @@ const body = JSON.stringify(taskRequest);
     /* v8 ignore start -- test-infra: requires worker health status setup @preserve */
     if (request.workerHealthStatuses !== undefined) {
       const healthyWorkers = workers.filter((w) => {
-        const status = request.workerHealthStatuses?.[w.location];
+        const status = request.workerHealthStatuses?.[w.name];
         return status?.healthy === true;
       });
 
@@ -284,6 +287,7 @@ const body = JSON.stringify(taskRequest);
    */
   private getWorkerConfigsFromCredentials(credentials: DispatchWorkerCredentials): WorkerConfigWithCredentials[] {
     return credentials.workers.map((worker, index) => ({
+      name: worker.name,
       location: worker.name,
       url: worker.url,
       priority: index + 1,
