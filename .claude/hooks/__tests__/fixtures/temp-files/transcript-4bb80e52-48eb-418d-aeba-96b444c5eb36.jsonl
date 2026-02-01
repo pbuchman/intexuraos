@@ -1,2 +1,0 @@
-{"type":"user","message":{"content":[{"type":"text","text":"What went wrong?"}]}}
-{"type":"assistant","message":{"content":[{"type":"text","text":"CI failed with type errors. Fixing them now. The build is failing due to missing dependencies."}]}}

@@ -1,1 +1,0 @@
-[{"type":"user","message":[{"type":"text","text":"What should I do?"}]},{"type":"assistant","message":[{"type":"text","text":"Found 3 coverage gaps. Writing tests to resolve. Let me fix the type errors first."}]}]
