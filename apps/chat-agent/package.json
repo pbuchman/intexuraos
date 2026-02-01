@@ -23,6 +23,7 @@
     "@intexuraos/http-server": "workspace:*",
     "@intexuraos/infra-firestore": "workspace:*",
     "@intexuraos/infra-sentry": "workspace:*",
+    "@intexuraos/llm-contract": "workspace:*",
     "@intexuraos/llm-factory": "workspace:*",
     "fastify": "^5.1.0",
     "openai": "^4.0.0",
