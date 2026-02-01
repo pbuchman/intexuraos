@@ -200,18 +200,22 @@ module.exports = {
     createServiceConfig('linear-agent', 8126, { startupDelay: 5 }),
     createServiceConfig('web-agent', 8127, { startupDelay: 5 }),
 
-    // Web app (Vite dev server)
+    // Web app (Vite dev server or preview mode for predev)
+    // Predev uses preview mode (production build without HMR/WebSocket)
+    // because Cloud Functions gateway doesn't support WebSocket
     {
       name: 'web',
       script: 'pnpm',
-      args: ['run', 'dev'],
+      args: process.env.PREDEV_ENVIRONMENT === 'true'
+        ? ['run', 'preview']
+        : ['run', 'dev'],
       cwd: './apps/web',
       interpreter: 'none',
       env: {
         ...process.env,
         ...COMMON_SERVICE_ENV,
         ...COMMON_SERVICE_URLS,
-        NODE_ENV: 'development',
+        NODE_ENV: process.env.PREDEV_ENVIRONMENT === 'true' ? 'production' : 'development',
         VITE_PM2_MODE: 'true',
       },
       autorestart: true,
