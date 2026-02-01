@@ -156,11 +156,12 @@ export async function retryFailedIssue(
  */
 export async function validateLinearIssue(
   accessToken: string,
-  identifier: string
+  identifier: string,
+  userId: string
 ): Promise<{ id: string; identifier: string; title: string; url: string }> {
   return await apiRequest(
     config.linearAgentUrl,
-    `/internal/linear/issues/${encodeURIComponent(identifier)}`,
+    `/internal/linear/issues/${encodeURIComponent(identifier)}?userId=${encodeURIComponent(userId)}`,
     accessToken
   );
 }
@@ -170,7 +171,8 @@ export async function validateLinearIssue(
  */
 export async function generateLinearIssueTitle(
   accessToken: string,
-  description: string
+  description: string,
+  userId: string
 ): Promise<{ title: string; issueType: 'feature' | 'bug' | 'refactor' | 'research' }> {
   return await apiRequest(
     config.linearAgentUrl,
@@ -178,7 +180,7 @@ export async function generateLinearIssueTitle(
     accessToken,
     {
       method: 'POST',
-      body: { description },
+      body: { description, userId },
     }
   );
 }

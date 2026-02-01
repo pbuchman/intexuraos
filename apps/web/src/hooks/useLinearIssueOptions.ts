@@ -27,7 +27,7 @@ interface UseLinearIssueOptionsResult {
 }
 
 export function useLinearIssueOptions(): UseLinearIssueOptionsResult {
-  const { getAccessToken } = useAuth();
+  const { getAccessToken, user } = useAuth();
   const [options, setOptions] = useState<LinearIssueOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -74,7 +74,7 @@ export function useLinearIssueOptions(): UseLinearIssueOptionsResult {
     async (identifier: string): Promise<LinearIssueOption | null> => {
       try {
         const token = await getAccessToken();
-        const validated = await validateLinearIssue(token, identifier);
+        const validated = await validateLinearIssue(token, identifier, user?.sub ?? '');
         return {
           identifier: validated.identifier,
           title: validated.title,
@@ -85,16 +85,16 @@ export function useLinearIssueOptions(): UseLinearIssueOptionsResult {
         return null;
       }
     },
-    [getAccessToken]
+    [getAccessToken, user?.sub]
   );
 
   const generateTitle = useCallback(
     async (description: string): Promise<string> => {
       const token = await getAccessToken();
-      const result = await generateLinearIssueTitle(token, description);
+      const result = await generateLinearIssueTitle(token, description, user?.sub ?? '');
       return result.title;
     },
-    [getAccessToken]
+    [getAccessToken, user?.sub]
   );
 
   useEffect(() => {
