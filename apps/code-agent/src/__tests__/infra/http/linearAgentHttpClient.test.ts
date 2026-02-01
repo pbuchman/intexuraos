@@ -41,9 +41,11 @@ describe('linearAgentHttpClient', () => {
       nock(baseUrl)
         .post('/internal/issues')
         .matchHeader('X-Internal-Auth', internalAuthToken)
+        .matchHeader('X-User-Id', 'test-user-123')
         .reply(200, mockResponse);
 
       const result = await client.createIssue({
+        userId: 'test-user-123',
         title: 'Test Issue',
         description: 'Test description',
       });
@@ -84,6 +86,7 @@ describe('linearAgentHttpClient', () => {
         });
 
       await client.createIssue({
+        userId: 'test-user-123',
         title: 'Test Issue',
         description: 'Test description',
       });
@@ -99,9 +102,11 @@ describe('linearAgentHttpClient', () => {
       nock(baseUrl)
         .post('/internal/issues')
         .matchHeader('X-Internal-Auth', internalAuthToken)
+        .matchHeader('X-User-Id', 'test-user-123')
         .reply(500, 'Internal Server Error');
 
       const result = await client.createIssue({
+        userId: 'test-user-123',
         title: 'Test',
         description: 'Test',
       });
@@ -122,9 +127,11 @@ describe('linearAgentHttpClient', () => {
       nock(baseUrl)
         .post('/internal/issues')
         .matchHeader('X-Internal-Auth', internalAuthToken)
+        .matchHeader('X-User-Id', 'test-user-123')
         .reply(429, 'Too Many Requests');
 
       const result = await client.createIssue({
+        userId: 'test-user-123',
         title: 'Test',
         description: 'Test',
       });
@@ -141,9 +148,11 @@ describe('linearAgentHttpClient', () => {
       nock(baseUrl)
         .post('/internal/issues')
         .matchHeader('X-Internal-Auth', internalAuthToken)
+        .matchHeader('X-User-Id', 'test-user-123')
         .reply(400, 'Bad Request');
 
       const result = await client.createIssue({
+        userId: 'test-user-123',
         title: 'Test',
         description: 'Test',
       });
@@ -160,10 +169,12 @@ describe('linearAgentHttpClient', () => {
       nock(baseUrl)
         .post('/internal/issues')
         .matchHeader('X-Internal-Auth', internalAuthToken)
+        .matchHeader('X-User-Id', 'test-user-123')
         .delay(6000)
         .reply(200, {});
 
       const result = await client.createIssue({
+        userId: 'test-user-123',
         title: 'Test',
         description: 'Test',
       });
@@ -184,9 +195,11 @@ describe('linearAgentHttpClient', () => {
       nock(baseUrl)
         .post('/internal/issues')
         .matchHeader('X-Internal-Auth', internalAuthToken)
+        .matchHeader('X-User-Id', 'test-user-123')
         .replyWithError('ECONNREFUSED');
 
       const result = await client.createIssue({
+        userId: 'test-user-123',
         title: 'Test',
         description: 'Test',
       });
@@ -203,6 +216,7 @@ describe('linearAgentHttpClient', () => {
       nock(baseUrl)
         .post('/internal/issues')
         .matchHeader('X-Internal-Auth', internalAuthToken)
+        .matchHeader('X-User-Id', 'test-user-123')
         .reply(200, {
           id: 'issue-789',
           identifier: 'INT-789',
@@ -211,6 +225,7 @@ describe('linearAgentHttpClient', () => {
         });
 
       await client.createIssue({
+        userId: 'test-user-123',
         title: 'My Title',
         description: 'My Description',
       });
@@ -227,9 +242,11 @@ describe('linearAgentHttpClient', () => {
       nock(baseUrl)
         .patch('/internal/issues/issue-123/state')
         .matchHeader('X-Internal-Auth', internalAuthToken)
+        .matchHeader('X-User-Id', 'test-user-123')
         .reply(200, { success: true, data: {} });
 
       const result = await client.updateIssueState({
+        userId: 'test-user-123',
         issueId: 'issue-123',
         state: 'in_progress',
       });
@@ -249,9 +266,11 @@ describe('linearAgentHttpClient', () => {
       nock(baseUrl)
         .patch('/internal/issues/issue-456/state')
         .matchHeader('X-Internal-Auth', internalAuthToken)
+        .matchHeader('X-User-Id', 'test-user-123')
         .reply(200, { success: true, data: {} });
 
       const result = await client.updateIssueState({
+        userId: 'test-user-123',
         issueId: 'issue-456',
         state: 'in_review',
       });
@@ -267,9 +286,11 @@ describe('linearAgentHttpClient', () => {
       nock(baseUrl)
         .patch('/internal/issues/issue-789/state')
         .matchHeader('X-Internal-Auth', internalAuthToken)
+        .matchHeader('X-User-Id', 'test-user-123')
         .reply(500, 'Internal Server Error');
 
       const result = await client.updateIssueState({
+        userId: 'test-user-123',
         issueId: 'issue-789',
         state: 'in_progress',
       });
@@ -289,9 +310,11 @@ describe('linearAgentHttpClient', () => {
       nock(baseUrl)
         .patch('/internal/issues/test-issue/state')
         .matchHeader('X-Internal-Auth', internalAuthToken)
+        .matchHeader('X-User-Id', 'test-user-123')
         .reply(200, { success: true, data: {} });
 
       await client.updateIssueState({
+        userId: 'test-user-123',
         issueId: 'test-issue',
         state: 'qa',
       });

@@ -240,6 +240,7 @@ function taskToApiResponse(task: {
 /* v8 ignore start -- ts-type: TypeScript type narrowing makes branch unreachable @preserve */
   };
 }
+/* v8 ignore stop @preserve */
 
 export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, opts, done) => {
   const { jwtValidator } = opts;
@@ -249,7 +250,6 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
 
   // POST /internal/code/process - Called by actions-agent
   fastify.post<{
-  /* v8 ignore stop @preserve */
     Body: {
       actionId: string;
       approvalEventId: string;
@@ -483,12 +483,16 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       request.log.info({ codeTaskId: result.value.codeTaskId }, 'Code action processed successfully');
 
       // Mirror dispatched status to action (non-fatal)
-      await services.statusMirrorService.mirrorStatus({
-        actionId: body.actionId,
-        taskStatus: 'dispatched',
-        resourceUrl: result.value.resourceUrl,
-        traceId,
-      });
+      try {
+        await services.statusMirrorService.mirrorStatus({
+          actionId: body.actionId,
+          taskStatus: 'dispatched',
+          resourceUrl: result.value.resourceUrl,
+          traceId,
+        });
+      } catch (mirrorError) {
+        request.log.warn({ actionId: body.actionId, error: mirrorError }, 'Failed to mirror status to action');
+      }
 
       return await reply.ok({
         status: 'submitted',
@@ -738,12 +742,10 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         });
       }
 
-/* v8 ignore start -- ts-type: TypeScript type narrowing makes branch unreachable @preserve */
       // If PR was created and task has a Linear issue, transition to In Review
       if (body.result?.prUrl !== undefined && result.value.linearIssueId !== undefined) {
-        await linearIssueService.markInReview(result.value.linearIssueId);
+        await linearIssueService.markInReview(result.value.userId, result.value.linearIssueId);
       }
-      /* v8 ignore stop @preserve */
 
       request.log.info({ taskId, status: result.value.status }, 'Code task updated successfully');
 
@@ -1101,10 +1103,11 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
 
       // Ensure Linear issue exists (create if not provided)
       const ensureParams: {
+        userId: string;
         linearIssueId?: string;
         linearIssueTitle?: string;
         taskPrompt: string;
-      } = { taskPrompt: body.prompt };
+      } = { userId, taskPrompt: body.prompt };
       if ('linearIssueId' in body && body.linearIssueId !== undefined) {
         ensureParams.linearIssueId = body.linearIssueId;
       }
@@ -1144,8 +1147,8 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         webhookSecret,
       };
 
-      /* v8 ignore start -- ts-type: string literal comparison creates type narrowing branch @preserve */
-      if (issueResult.linearIssueId !== '') {
+      /* v8 ignore start -- ts-type: undefined check creates type narrowing branch @preserve */
+      if (issueResult.linearIssueId !== undefined) {
       /* v8 ignore stop @preserve */
         createInput.linearIssueId = issueResult.linearIssueId;
         createInput.linearIssueTitle = issueResult.linearIssueTitle;
@@ -1265,8 +1268,8 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       await rateLimitService.recordTaskStart(userId);
 
       // Mark Linear issue as In Progress after successful dispatch
-      if (issueResult.linearIssueId !== '') {
-        await linearIssueService.markInProgress(issueResult.linearIssueId);
+      if (issueResult.linearIssueId !== undefined) {
+        await linearIssueService.markInProgress(userId, issueResult.linearIssueId);
       }
 
       request.log.info({ taskId: task.id, workerLocation: dispatchResult.value.workerLocation }, 'Code task submitted successfully');
