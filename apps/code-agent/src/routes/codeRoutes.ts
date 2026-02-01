@@ -1162,8 +1162,8 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       if (issueResult.linearIssueId !== undefined) {
       /* v8 ignore stop @preserve */
         createInput.linearIssueId = issueResult.linearIssueId;
-        createInput.linearIssueTitle = issueResult.linearIssueTitle;
       }
+      createInput.linearIssueTitle = issueResult.linearIssueTitle;
       /* v8 ignore start -- ts-type: optional property check creates type narrowing branch @preserve */
       if (issueResult.linearFallback) {
       /* v8 ignore stop @preserve */
