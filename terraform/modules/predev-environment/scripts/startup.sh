@@ -43,7 +43,7 @@ fi
 # Falls back to instance metadata, then defaults to 'development'
 TARGET_BRANCH=$(gcloud firestore documents predev-state/current \
   --format="value(fields.branch.stringValue)" 2>/dev/null || \
-  curl -s -H "Metadata-Flavor: Google" \
+  curl -s -f -H "Metadata-Flavor: Google" \
   "http://metadata.google.internal/computeMetadata/v1/instance/attributes/target-branch" 2>/dev/null || \
   echo "development")
 
@@ -79,9 +79,19 @@ REPORT_READY_URL=$(curl -s -H "Metadata-Flavor: Google" \
 
 if [ -n "$REPORT_READY_URL" ]; then
   log "Reporting ready to: $REPORT_READY_URL"
-  curl -X POST "$REPORT_READY_URL" \
-    -H "Content-Type: application/json" \
-    -d "{\"ip\": \"$EXTERNAL_IP\", \"branch\": \"$TARGET_BRANCH\"}" || log "Failed to report ready"
+
+  # Get identity token for authentication
+  ID_TOKEN=$(curl -s -H "Metadata-Flavor: Google" \
+    "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/identity?audience=$REPORT_READY_URL")
+
+  if [ -n "$ID_TOKEN" ]; then
+    curl -s -X POST "$REPORT_READY_URL" \
+      -H "Content-Type: application/json" \
+      -H "Authorization: Bearer $ID_TOKEN" \
+      -d "{\"ip\": \"$EXTERNAL_IP\", \"branch\": \"$TARGET_BRANCH\"}" && log "Reported ready successfully" || log "Failed to report ready"
+  else
+    log "Failed to get identity token"
+  fi
 else
   log "No REPORT_READY_URL set, skipping ready callback"
 fi

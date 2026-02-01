@@ -74,7 +74,7 @@ resource "google_cloudfunctions2_function" "webhook" {
   }
 
   service_config {
-    available_memory      = "256M"
+    available_memory      = "512M"
     timeout_seconds       = 120
     service_account_email = google_service_account.predev_functions.email
     max_instance_count    = 1
@@ -134,7 +134,7 @@ resource "google_cloudfunctions2_function" "idle_check" {
   }
 
   service_config {
-    available_memory      = "256M"
+    available_memory      = "512M"
     timeout_seconds       = 120
     service_account_email = google_service_account.predev_functions.email
     max_instance_count    = 1
@@ -175,7 +175,7 @@ resource "google_cloudfunctions2_function" "report_ready" {
   }
 
   service_config {
-    available_memory      = "256M"
+    available_memory      = "512M"
     timeout_seconds       = 30
     service_account_email = google_service_account.predev_functions.email
     max_instance_count    = 1
