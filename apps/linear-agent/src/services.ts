@@ -14,7 +14,7 @@ import { createLinearApiClient } from './infra/linear/linearApiClient.js';
 import { createLinearActionExtractionService } from './infra/llm/linearActionExtractionService.js';
 import { createFailedIssueRepository } from './infra/firestore/failedIssueRepository.js';
 import { createProcessedActionRepository } from './infra/firestore/processedActionRepository.js';
-import { createUserServiceClient } from '@intexuraos/internal-clients';
+import { createUserServiceClient, type UserServiceClient } from '@intexuraos/internal-clients';
 import type { IPricingContext } from '@intexuraos/llm-pricing';
 import { createAppLogger } from '@intexuraos/infra-sentry';
 
@@ -28,6 +28,7 @@ export interface ServiceContainer {
   extractionService: LinearActionExtractionService;
   failedIssueRepository: FailedIssueRepository;
   processedActionRepository: ProcessedActionRepository;
+  userServiceClient: UserServiceClient;
 }
 
 export interface ServiceConfig {
@@ -54,6 +55,7 @@ export function initServices(config: ServiceConfig): void {
     extractionService,
     failedIssueRepository: createFailedIssueRepository(),
     processedActionRepository: createProcessedActionRepository(),
+    userServiceClient,
   };
 }
 

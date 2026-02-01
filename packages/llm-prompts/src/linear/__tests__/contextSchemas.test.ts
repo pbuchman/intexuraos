@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { LinearIssueDataSchema } from '../contextSchemas.js';
+import {
+  LinearIssueDataSchema,
+  LinearIssueTitleSchema,
+  LinearIssueTypeSchema,
+} from '../contextSchemas.js';
 
 describe('LinearIssueDataSchema', () => {
   it('accepts valid issue data with all fields', () => {
@@ -283,6 +287,218 @@ describe('LinearIssueDataSchema', () => {
         reasoning: 'Complex formatting test',
       });
       expect(result.success).toBe(true);
+    });
+  });
+});
+
+describe('LinearIssueTypeSchema', () => {
+  it('accepts feature type', () => {
+    const result = LinearIssueTypeSchema.safeParse('feature');
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data).toBe('feature');
+    }
+  });
+
+  it('accepts bug type', () => {
+    const result = LinearIssueTypeSchema.safeParse('bug');
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts refactor type', () => {
+    const result = LinearIssueTypeSchema.safeParse('refactor');
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts research type', () => {
+    const result = LinearIssueTypeSchema.safeParse('research');
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects invalid type', () => {
+    const result = LinearIssueTypeSchema.safeParse('task');
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects empty string', () => {
+    const result = LinearIssueTypeSchema.safeParse('');
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects number', () => {
+    const result = LinearIssueTypeSchema.safeParse(1);
+    expect(result.success).toBe(false);
+  });
+});
+
+describe('LinearIssueTitleSchema', () => {
+  describe('valid inputs', () => {
+    it('accepts valid title with feature type', () => {
+      const result = LinearIssueTitleSchema.safeParse({
+        title: 'Enable users to sign in with Google',
+        issueType: 'feature',
+      });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.title).toBe('Enable users to sign in with Google');
+        expect(result.data.issueType).toBe('feature');
+      }
+    });
+
+    it('accepts valid title with bug type', () => {
+      const result = LinearIssueTitleSchema.safeParse({
+        title: 'Fix login button not responding on mobile',
+        issueType: 'bug',
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it('accepts valid title with refactor type', () => {
+      const result = LinearIssueTitleSchema.safeParse({
+        title: 'Improve API response time for dashboard',
+        issueType: 'refactor',
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it('accepts valid title with research type', () => {
+      const result = LinearIssueTitleSchema.safeParse({
+        title: 'Evaluate caching strategies for performance',
+        issueType: 'research',
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it('accepts title at exactly 80 characters', () => {
+      const title = 'x'.repeat(80);
+      const result = LinearIssueTitleSchema.safeParse({
+        title,
+        issueType: 'feature',
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it('accepts single character title', () => {
+      const result = LinearIssueTitleSchema.safeParse({
+        title: 'X',
+        issueType: 'bug',
+      });
+      expect(result.success).toBe(true);
+    });
+  });
+
+  describe('title validation', () => {
+    it('rejects empty title', () => {
+      const result = LinearIssueTitleSchema.safeParse({
+        title: '',
+        issueType: 'feature',
+      });
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error.issues[0].path[0]).toBe('title');
+      }
+    });
+
+    it('rejects title longer than 80 characters', () => {
+      const result = LinearIssueTitleSchema.safeParse({
+        title: 'x'.repeat(81),
+        issueType: 'feature',
+      });
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error.issues[0].path[0]).toBe('title');
+      }
+    });
+
+    it('rejects missing title', () => {
+      const result = LinearIssueTitleSchema.safeParse({
+        issueType: 'feature',
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects non-string title', () => {
+      const result = LinearIssueTitleSchema.safeParse({
+        title: 123,
+        issueType: 'feature',
+      });
+      expect(result.success).toBe(false);
+    });
+  });
+
+  describe('issueType validation', () => {
+    it('rejects missing issueType', () => {
+      const result = LinearIssueTitleSchema.safeParse({
+        title: 'Valid title',
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects invalid issueType', () => {
+      const result = LinearIssueTitleSchema.safeParse({
+        title: 'Valid title',
+        issueType: 'task',
+      });
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error.issues[0].path[0]).toBe('issueType');
+      }
+    });
+
+    it('rejects empty issueType', () => {
+      const result = LinearIssueTitleSchema.safeParse({
+        title: 'Valid title',
+        issueType: '',
+      });
+      expect(result.success).toBe(false);
+    });
+  });
+
+  describe('edge cases', () => {
+    it('accepts title with special characters', () => {
+      const result = LinearIssueTitleSchema.safeParse({
+        title: 'Fix "Error 500" on /api/users endpoint',
+        issueType: 'bug',
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it('accepts title with unicode characters', () => {
+      const result = LinearIssueTitleSchema.safeParse({
+        title: 'Napraw błąd logowania dla użytkowników SSO',
+        issueType: 'bug',
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it('accepts title with emojis (within length limit)', () => {
+      const result = LinearIssueTitleSchema.safeParse({
+        title: 'Add 🌙 dark mode toggle',
+        issueType: 'feature',
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it('rejects null input', () => {
+      const result = LinearIssueTitleSchema.safeParse(null);
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects undefined input', () => {
+      const result = LinearIssueTitleSchema.safeParse(undefined);
+      expect(result.success).toBe(false);
+    });
+
+    it('ignores extra fields', () => {
+      const result = LinearIssueTitleSchema.safeParse({
+        title: 'Valid title',
+        issueType: 'feature',
+        extraField: 'should be ignored',
+      });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect((result.data as Record<string, unknown>)['extraField']).toBeUndefined();
+      }
     });
   });
 });

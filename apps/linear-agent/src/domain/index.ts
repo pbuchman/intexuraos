@@ -24,3 +24,17 @@ export {
   type ListIssuesResponse,
   type GroupedIssues,
 } from './useCases/listIssues.js';
+export {
+  generateIssueTitle,
+  type GenerateIssueTitleDeps,
+  type GenerateIssueTitleRequest,
+  type GeneratedTitle,
+  type GenerateTitleError,
+} from './useCases/generateIssueTitle.js';
+export {
+  validateIssue,
+  type ValidateIssueDeps,
+  type ValidateIssueRequest,
+  type ValidatedIssue,
+  type ValidateIssueError,
+} from './useCases/validateIssue.js';
