@@ -176,4 +176,4 @@ export INTEXURAOS_ENVIRONMENT=development
 # 2. Orchestrator's ~/.claude-orchestrator/.env as INTEXURAOS_ORCHESTRATOR_SECRET
 #
 # See workers/orchestrator/README.md for full orchestrator setup instructions.
-INTEXURAOS_ORCHESTRATOR_SECRET=your-super-confidential-secret-here
+export INTEXURAOS_ORCHESTRATOR_SECRET=your-super-confidential-secret-here
