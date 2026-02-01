@@ -305,4 +305,114 @@ describe('HeartbeatManager', () => {
     body = JSON.parse(capturedBody ?? '{}');
     expect(body.taskIds).toEqual(['task-1', 'task-3']);
   });
+
+  it('should escalate to error level after 3 consecutive failures', async () => {
+    mockFetch.mockResolvedValue({
+      ok: false,
+      status: 500,
+    } as Response);
+
+    runningTasks = ['task-1'];
+    manager.start();
+
+    // First failure - should log as warn
+    await vi.advanceTimersByTimeAsync(60_000);
+    let warnCalls = loggerCalls.filter((call) => call['level'] === 'warn');
+    let errorCalls = loggerCalls.filter((call) => call['level'] === 'error');
+    expect(warnCalls.length).toBe(1);
+    expect(errorCalls.length).toBe(0);
+
+    // Second failure - still warn
+    loggerCalls = [];
+    await vi.advanceTimersByTimeAsync(60_000);
+    warnCalls = loggerCalls.filter((call) => call['level'] === 'warn');
+    errorCalls = loggerCalls.filter((call) => call['level'] === 'error');
+    expect(warnCalls.length).toBe(1);
+    expect(errorCalls.length).toBe(0);
+
+    // Third failure - should escalate to error
+    loggerCalls = [];
+    await vi.advanceTimersByTimeAsync(60_000);
+    warnCalls = loggerCalls.filter((call) => call['level'] === 'warn');
+    errorCalls = loggerCalls.filter((call) => call['level'] === 'error');
+    expect(warnCalls.length).toBe(0);
+    expect(errorCalls.length).toBe(1);
+  });
+
+  it('should reset consecutive failures after successful heartbeat', async () => {
+    runningTasks = ['task-1'];
+    manager.start();
+
+    // Two failures
+    mockFetch.mockResolvedValue({ ok: false, status: 500 } as Response);
+    await vi.advanceTimersByTimeAsync(60_000);
+    await vi.advanceTimersByTimeAsync(60_000);
+
+    // Success - should reset and log recovery
+    loggerCalls = [];
+    mockFetch.mockResolvedValue({ ok: true, json: async () => ({}) } as Response);
+    await vi.advanceTimersByTimeAsync(60_000);
+
+    const infoCalls = loggerCalls.filter((call) => call['level'] === 'info');
+    const recoveryLog = infoCalls.find(
+      (call) =>
+        typeof call['data'] === 'object' &&
+        call['data'] !== null &&
+        'previousFailures' in call['data']
+    );
+    expect(recoveryLog).toBeDefined();
+
+    // Next failure should start from 1 again (warn, not error)
+    loggerCalls = [];
+    mockFetch.mockResolvedValue({ ok: false, status: 500 } as Response);
+    await vi.advanceTimersByTimeAsync(60_000);
+
+    const warnCalls = loggerCalls.filter((call) => call['level'] === 'warn');
+    const errorCalls = loggerCalls.filter((call) => call['level'] === 'error');
+    expect(warnCalls.length).toBe(1);
+    expect(errorCalls.length).toBe(0);
+  });
+
+  it('should include consecutiveFailures in log context', async () => {
+    mockFetch.mockResolvedValue({
+      ok: false,
+      status: 500,
+    } as Response);
+
+    runningTasks = ['task-1'];
+    manager.start();
+
+    await vi.advanceTimersByTimeAsync(60_000);
+
+    const warnCalls = loggerCalls.filter((call) => call['level'] === 'warn');
+    expect(warnCalls.length).toBe(1);
+    const data = warnCalls[0]?.['data'];
+    expect(typeof data === 'object' && data !== null && 'consecutiveFailures' in data).toBe(true);
+    if (typeof data === 'object' && data !== null && 'consecutiveFailures' in data) {
+      expect(data['consecutiveFailures']).toBe(1);
+    }
+  });
+
+  it('should escalate to error for network failures after 3 consecutive attempts', async () => {
+    mockFetch.mockRejectedValue(new Error('Network error'));
+
+    runningTasks = ['task-1'];
+    manager.start();
+
+    // First two failures - should still include consecutiveFailures
+    await vi.advanceTimersByTimeAsync(60_000);
+    await vi.advanceTimersByTimeAsync(60_000);
+
+    loggerCalls = [];
+    // Third failure - should have elevated message
+    await vi.advanceTimersByTimeAsync(60_000);
+
+    const errorCalls = loggerCalls.filter((call) => call['level'] === 'error');
+    expect(errorCalls.length).toBe(1);
+    const data = errorCalls[0]?.['data'];
+    expect(typeof data === 'object' && data !== null && 'consecutiveFailures' in data).toBe(true);
+    if (typeof data === 'object' && data !== null && 'consecutiveFailures' in data) {
+      expect(data['consecutiveFailures']).toBe(3);
+    }
+  });
 });

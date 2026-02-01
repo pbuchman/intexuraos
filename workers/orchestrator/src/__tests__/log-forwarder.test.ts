@@ -266,8 +266,9 @@ describe('LogForwarder', () => {
       expect(attempts).toBe(3);
     });
 
-    it('should not retry on 4xx errors', { timeout: 25000 }, async () => {
+    it('should not retry on 4xx errors and log as error', { timeout: 25000 }, async () => {
       let attempts = 0;
+      vi.mocked(mockLogger.error).mockReset();
 
       mockFetch.mockImplementation(async () => {
         attempts++;
@@ -297,6 +298,16 @@ describe('LogForwarder', () => {
 
       // Should only try once (no retry on 4xx)
       expect(attempts).toBe(1);
+
+      // Should log 4xx as error with taskId, status, and url
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        expect.objectContaining({
+          taskId: 'task-no-retry',
+          status: 400,
+          url: expect.stringContaining('/internal/logs'),
+        }),
+        expect.stringContaining('client error')
+      );
     });
 
     it('should drop chunks after max retries exceeded', { timeout: 25000 }, async () => {
