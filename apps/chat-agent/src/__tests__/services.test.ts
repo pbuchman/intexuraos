@@ -7,11 +7,13 @@ import { getServices, setServices, resetServices, initializeServices, type Servi
 describe('chat-agent services', () => {
   beforeEach(() => {
     process.env['INTEXURAOS_OPENAI_API_KEY'] = 'test-key';
+    process.env['INTEXURAOS_GCP_PROJECT_ID'] = 'test-project';
   });
 
   afterEach(() => {
     resetServices();
     delete process.env['INTEXURAOS_OPENAI_API_KEY'];
+    delete process.env['INTEXURAOS_GCP_PROJECT_ID'];
   });
 
   describe('getServices', () => {

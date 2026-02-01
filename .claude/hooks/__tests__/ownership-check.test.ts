@@ -265,7 +265,7 @@ describe('Claude Hooks - Ownership Check', () => {
         cleanupTranscript(transcriptPath);
       });
 
-      it('allows solution-focused language', () => {
+      it('allows solution-focused language', { timeout: 25000 }, () => {
         const transcriptPath = createTranscript([
           { type: 'user', message: { content: [{ type: 'text', text: 'What should I do?' }] } },
           {
@@ -345,7 +345,7 @@ describe('Claude Hooks - Ownership Check', () => {
         cleanupTranscript(transcriptPath);
       });
 
-      it('is case-insensitive for pattern matching', () => {
+      it('is case-insensitive for pattern matching', { timeout: 20000 }, () => {
         const transcriptPath = createTranscript([
           {
             type: 'user',

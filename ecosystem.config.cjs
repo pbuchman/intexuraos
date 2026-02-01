@@ -220,6 +220,7 @@ module.exports = {
         ...COMMON_SERVICE_URLS,
         NODE_ENV: process.env.PREDEV_ENVIRONMENT === 'true' ? 'production' : 'development',
         VITE_PM2_MODE: 'true',
+        INTEXURAOS_USE_FIREBASE_EMULATORS: 'true',
       },
       autorestart: true,
       max_restarts: 5,

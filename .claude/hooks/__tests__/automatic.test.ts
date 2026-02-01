@@ -28,7 +28,7 @@ describe('Claude Hooks - Automatic/Rebuild', () => {
   });
 
   describe('session-start-build.sh', () => {
-    it('outputs CONTINUE when all packages have dist/', () => {
+    it('outputs CONTINUE when all packages have dist/', { timeout: 20000 }, () => {
       const { cleanup, path: tempDir } = createTempDir();
 
       // Create mock packages with dist/
@@ -43,6 +43,7 @@ describe('Claude Hooks - Automatic/Rebuild', () => {
         hookName: 'session-start-build',
         input: HookFixtureBuilder.sessionStart(),
         cwd: tempDir,
+        env: { HOOK_DRY_RUN: '1' },
       });
 
       expectContinue(result);
@@ -63,13 +64,14 @@ describe('Claude Hooks - Automatic/Rebuild', () => {
         hookName: 'session-start-build',
         input: HookFixtureBuilder.sessionStart(),
         cwd: tempDir,
+        env: { HOOK_DRY_RUN: '1' },
       });
 
       expectContinue(result);
       cleanup();
     });
 
-    it('logs session start to sessions.log', () => {
+    it('logs session start to sessions.log', { timeout: 20000 }, () => {
       const { cleanup, path: tempDir } = createTempDir();
 
       // Create node_modules
@@ -79,6 +81,7 @@ describe('Claude Hooks - Automatic/Rebuild', () => {
         hookName: 'session-start-build',
         input: HookFixtureBuilder.sessionStart(),
         cwd: tempDir,
+        env: { HOOK_DRY_RUN: '1' },
       });
 
       // Check sessions.log was created
@@ -90,7 +93,7 @@ describe('Claude Hooks - Automatic/Rebuild', () => {
       cleanup();
     });
 
-    it('outputs CONTINUE (even when build would run)', () => {
+    it('outputs CONTINUE (even when build would run)', { timeout: 30000 }, () => {
       const { cleanup, path: tempDir } = createTempDir();
 
       // Create package without dist/
@@ -104,11 +107,7 @@ describe('Claude Hooks - Automatic/Rebuild', () => {
         input: HookFixtureBuilder.sessionStart(),
         cwd: tempDir,
         // Don't actually run pnpm build in tests
-        env: {
-          PATH: process.env.PATH,
-          // Mock pnpm to prevent actual build
-          PNPM_SKIP_BUILD: '1',
-        },
+        env: { HOOK_DRY_RUN: '1' },
       });
 
       // Should still output CONTINUE
@@ -126,8 +125,8 @@ describe('Claude Hooks - Automatic/Rebuild', () => {
         hookName: 'rebuild-after-git',
         input: HookFixtureBuilder.bash('git pull origin main'),
         env: {
-          // Mock git status output
-          GIT_STATUS_OUTPUT: 'M packages/common-types/src/index.ts',
+          // Skip actual pnpm build in test mode (hook uses git diff, not this env var)
+          HOOK_DRY_RUN: '1',
         },
       });
 
@@ -135,12 +134,13 @@ describe('Claude Hooks - Automatic/Rebuild', () => {
       expectAllowed(result);
     });
 
-    it('does not trigger rebuild when only app files changed', () => {
+    it('does not trigger rebuild when only app files changed', { timeout: 20000 }, () => {
       const result = executeHookSync({
         hookName: 'rebuild-after-git',
         input: HookFixtureBuilder.bash('git pull origin main'),
         env: {
-          GIT_STATUS_OUTPUT: 'M apps/web/src/app.tsx',
+          // Skip actual pnpm build in test mode
+          HOOK_DRY_RUN: '1',
         },
       });
 

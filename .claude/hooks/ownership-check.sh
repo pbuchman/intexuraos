@@ -4,26 +4,9 @@
 # Checks Claude's response for forbidden ownership-deflecting language
 # Forces Claude to rephrase if detected
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-
-# IMPORTANT: Associative array declarations must come before set -u
-# because bash with set -u parses ["key"] as potential ${key-...} expansion
-declare -A PATTERNS=(
-  ["pre_existing"]="pre-existing condition/issue language"
-  ["already_broken"]="deflecting blame to prior state"
-  ["legacy_issue"]="deflecting to legacy as excuse"
-  ["ci_should_pass"]="assuming CI passes without verification"
-)
-
-declare -A SEARCH_PATTERNS=(
-  ["pre_existing"]="pre-existing"
-  ["already_broken"]="already broken"
-  ["legacy_issue"]="legacy issue"
-  ["ci_should_pass"]="CI should now pass"
-)
-
-# Now enable strict mode after declarations
 set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 # Source shared logging library
 # shellcheck source=lib/log.sh
@@ -46,21 +29,21 @@ LAST_RESPONSE=$(jq -rs '
   .message.content // [] |
   map(.text // .thinking // empty) |
   join("\n")
-' "$TRANSCRIPT_PATH" 2>/dev/null)
+' "$TRANSCRIPT_PATH" 2>/dev/null) || true
 
 if [[ -z "$LAST_RESPONSE" ]]; then
   exit 0
 fi
 
-for key in "${!PATTERNS[@]}"; do
-  pattern="${SEARCH_PATTERNS[$key]}"
-  description="${PATTERNS[$key]}"
+# Check each pattern (avoiding associative arrays for Bash 3.2 compatibility)
+check_pattern() {
+  local pattern="$1"
+  local description="$2"
 
-  # Check if pattern exists in response
   if echo "$LAST_RESPONSE" | grep -iqE "$pattern"; then
     # Skip false positives: pattern inside backticks (code/discussion)
     if echo "$LAST_RESPONSE" | grep -qE "\`[^\`]*${pattern}[^\`]*\`"; then
-      continue
+      return 1
     fi
 
     # Log the ownership violation
@@ -76,6 +59,12 @@ for key in "${!PATTERNS[@]}"; do
 EOF
     exit 0
   fi
-done
+  return 1
+}
+
+check_pattern "pre-existing" "pre-existing condition/issue language" || true
+check_pattern "already broken" "deflecting blame to prior state" || true
+check_pattern "legacy issue" "deflecting to legacy as excuse" || true
+check_pattern "CI should now pass" "assuming CI passes without verification" || true
 
 exit 0
