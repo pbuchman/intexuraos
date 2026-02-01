@@ -28,10 +28,10 @@ if [[ "$FILE_PATH" =~ ^packages/([^/]+)/src/ ]]; then
 
   # Verify package has a build script
   if [ -f "$PACKAGE_DIR/package.json" ]; then
-    HAS_BUILD=$(jq -r '.scripts.build // empty' "$PACKAGE_DIR/package.json" 2>/dev/null)
+    HAS_BUILD=$(jq -r '.scripts.build // empty' "$PACKAGE_DIR/package.json" 2>/dev/null) || true
     if [ -n "$HAS_BUILD" ]; then
       # Get the package name from package.json for --filter
-      PKG_JSON_NAME=$(jq -r '.name // empty' "$PACKAGE_DIR/package.json" 2>/dev/null)
+      PKG_JSON_NAME=$(jq -r '.name // empty' "$PACKAGE_DIR/package.json" 2>/dev/null) || true
       if [ -n "$PKG_JSON_NAME" ]; then
         echo "Rebuilding $PKG_JSON_NAME after edit..." >&2
         echo "[$(date '+%Y-%m-%d %H:%M:%S')] REBUILD: $PKG_JSON_NAME ($FILE_PATH)" >> "$LOG_FILE"

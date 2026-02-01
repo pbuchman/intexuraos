@@ -32,7 +32,7 @@ fi
 missing_dist=false
 for pkg in packages/*/; do
   if [ -f "$pkg/package.json" ]; then
-    has_build=$(jq -r '.scripts.build // empty' "$pkg/package.json" 2>/dev/null)
+    has_build=$(jq -r '.scripts.build // empty' "$pkg/package.json" 2>/dev/null) || true
     if [ -n "$has_build" ] && [ ! -d "$pkg/dist" ]; then
       missing_dist=true
       break
