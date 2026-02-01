@@ -8,6 +8,7 @@ import type {
   LinearConnection,
   LinearConnectionPublic,
   LinearIssue,
+  LinearIssueWithTeam,
   LinearTeam,
   CreateIssueInput,
   FailedLinearIssue,
@@ -92,6 +93,12 @@ export interface LinearApiClient {
 
   /** Get a single issue by ID */
   getIssue(apiKey: string, issueId: string): Promise<Result<LinearIssue | null, LinearError>>;
+
+  /** Get a single issue by identifier (e.g., "INT-123") with team ID for validation */
+  getIssueByIdentifier(
+    apiKey: string,
+    identifier: string
+  ): Promise<Result<LinearIssueWithTeam | null, LinearError>>;
 
   /** Update an issue's workflow state */
   updateIssueState(

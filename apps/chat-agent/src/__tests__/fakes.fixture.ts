@@ -1,0 +1,165 @@
+/**
+ * Fake implementations for testing.
+ */
+import { vi } from 'vitest';
+import type { ServiceContainer } from '../services.js';
+import { setServices, resetServices } from '../services.js';
+import type {
+  EmbeddingRepositoryPort,
+  DocChunk,
+  DocChunkWithScore,
+  SuggestedAction,
+} from '../domain/index.js';
+import type { Result } from '@intexuraos/common-core';
+import type { LLMResponse, LLMError } from '../domain/usecases/generateResponse.js';
+
+/**
+ * Fake embedding repository for testing.
+ */
+export class FakeEmbeddingRepository implements EmbeddingRepositoryPort {
+  private chunks: Map<string, DocChunk> = new Map<string, DocChunk>();
+  private searchResults: DocChunkWithScore[] = [];
+
+  setChunks(chunks: DocChunk[]): void {
+    this.chunks = new Map(chunks.map((c) => [c.id, c]));
+  }
+
+  setSearchResults(results: DocChunkWithScore[]): void {
+    this.searchResults = results;
+  }
+
+  async findSimilar(
+    _embedding: number[],
+    _limit: number
+  ): Promise<Result<DocChunkWithScore[], unknown>> {
+    return {
+      ok: true,
+      value: this.searchResults,
+    };
+  }
+
+  async findById(id: string): Promise<Result<DocChunk | null, unknown>> {
+    return {
+      ok: true,
+      value: this.chunks.get(id) ?? null,
+    };
+  }
+}
+
+/**
+ * Fake embedding client for testing.
+ */
+export class FakeEmbeddingClient {
+  private mockEmbedding: number[] = new Array(1536).fill(0.1);
+  private shouldFail = false;
+  private failMessage = 'Embedding failed';
+
+  setMockEmbedding(embedding: number[]): void {
+    this.mockEmbedding = embedding;
+  }
+
+  setFailure(shouldFail: boolean, message = 'Embedding failed'): void {
+    this.shouldFail = shouldFail;
+    this.failMessage = message;
+  }
+
+  async embed(_text: string): Promise<Result<number[]>> {
+    if (this.shouldFail) {
+      return {
+        ok: false,
+        error: new Error(this.failMessage),
+      };
+    }
+    return {
+      ok: true,
+      value: [...this.mockEmbedding],
+    };
+  }
+}
+
+/**
+ * Fake LLM client for testing.
+ */
+export class FakeLLMClient {
+  public response = 'Here is a response';
+  public suggestedAction: SuggestedAction | null = null;
+  public shouldFail = false;
+
+  setResponse(response: string): void {
+    this.response = response;
+  }
+
+  setSuggestedAction(action: SuggestedAction | null): void {
+    this.suggestedAction = action;
+  }
+
+  setFailure(shouldFail: boolean): void {
+    this.shouldFail = shouldFail;
+  }
+
+  async generate(
+    _prompt: string,
+    _options?: {
+      systemPrompt?: string;
+      conversationHistory?: { role: string; content: string }[];
+    }
+  ): Promise<Result<LLMResponse, LLMError>> {
+    if (this.shouldFail) {
+      return {
+        ok: false,
+        error: { code: 'LLM_ERROR', message: 'LLM failed' },
+      };
+    }
+    const baseValue = {
+      response: this.response,
+    };
+    if (this.suggestedAction !== null) {
+      Object.assign(baseValue, { suggestedAction: this.suggestedAction });
+    }
+    return {
+      ok: true,
+      value: baseValue as LLMResponse,
+    };
+  }
+
+  reset(): void {
+    this.response = 'Here is a response';
+    this.suggestedAction = null;
+    this.shouldFail = false;
+  }
+}
+
+/** Mock logger for testing. */
+export const mockLogger: {
+  info: () => void;
+  warn: () => void;
+  error: () => void;
+  debug: () => void;
+} = {
+  info: vi.fn(),
+  warn: vi.fn(),
+  error: vi.fn(),
+  debug: vi.fn(),
+};
+
+/**
+ * Set up fake services for testing.
+ */
+export function setupFakeServices(): ServiceContainer {
+  const services: ServiceContainer = {
+    generateId: () => `test-${crypto.randomUUID()}`,
+    embeddingRepository: new FakeEmbeddingRepository(),
+    embeddingClient: new FakeEmbeddingClient(),
+    llmClient: new FakeLLMClient(),
+    logger: mockLogger as unknown as import('pino').Logger,
+  };
+  setServices(services);
+  return services;
+}
+
+/**
+ * Reset services after testing.
+ */
+export function resetFakeServices(): void {
+  resetServices();
+}

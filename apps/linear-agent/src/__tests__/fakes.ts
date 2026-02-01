@@ -11,6 +11,7 @@ import type {
   LinearApiClient,
   LinearTeam,
   LinearIssue,
+  LinearIssueWithTeam,
   CreateIssueInput,
   LinearActionExtractionService,
   ExtractedIssueData,
@@ -20,6 +21,9 @@ import type {
   ProcessedAction,
   WorkflowState,
 } from '../domain/index.js';
+import type { UserServiceClient, UserServiceError } from '@intexuraos/internal-clients';
+import type { LlmGenerateClient, GenerateResult } from '@intexuraos/llm-factory';
+import type { LLMError, LLMErrorCode } from '@intexuraos/llm-contract';
 
 export class FakeLinearConnectionRepository implements LinearConnectionRepository {
   private connections = new Map<string, LinearConnection>();
@@ -150,6 +154,7 @@ export class FakeLinearConnectionRepository implements LinearConnectionRepositor
 export class FakeLinearApiClient implements LinearApiClient {
   private teams: LinearTeam[] = [{ id: 'team-1', name: 'Engineering', key: 'ENG' }];
   private issues: LinearIssue[] = [];
+  private issuesWithTeam: LinearIssueWithTeam[] = [];
   private shouldFail = false;
   private failError: LinearError = { code: 'API_ERROR', message: 'Fake error' };
   private issueCounter = 1;
@@ -209,6 +214,15 @@ export class FakeLinearApiClient implements LinearApiClient {
     return ok(issue ?? null);
   }
 
+  async getIssueByIdentifier(
+    _apiKey: string,
+    identifier: string
+  ): Promise<Result<LinearIssueWithTeam | null, LinearError>> {
+    if (this.shouldFail) return err(this.failError);
+    const issue = this.issuesWithTeam.find((i) => i.identifier === identifier);
+    return ok(issue ?? null);
+  }
+
   async updateIssueState(
     _apiKey: string,
     issueId: string,
@@ -243,6 +257,7 @@ export class FakeLinearApiClient implements LinearApiClient {
 
   reset(): void {
     this.issues = [];
+    this.issuesWithTeam = [];
     this.shouldFail = false;
     this.issueCounter = 1;
   }
@@ -253,6 +268,10 @@ export class FakeLinearApiClient implements LinearApiClient {
 
   seedIssue(issue: LinearIssue): void {
     this.issues.push(issue);
+  }
+
+  seedIssueWithTeam(issue: LinearIssueWithTeam): void {
+    this.issuesWithTeam.push(issue);
   }
 
   setFailure(fail: boolean, error?: LinearError): void {
@@ -446,5 +465,74 @@ export class FakeProcessedActionRepository implements ProcessedActionRepository 
 
   get count(): number {
     return this.processedActions.size;
+  }
+}
+
+export class FakeLlmGenerateClient implements LlmGenerateClient {
+  private content = '{"title": "Generated title", "issueType": "feature"}';
+  private shouldFail = false;
+  private failError: LLMError = { code: 'API_ERROR', message: 'LLM error' };
+
+  async generate(_prompt: string): Promise<Result<GenerateResult, LLMError>> {
+    if (this.shouldFail) return err(this.failError);
+    return ok({
+      content: this.content,
+      usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150, costUsd: 0.001 },
+    });
+  }
+
+  setContent(content: string): void {
+    this.content = content;
+  }
+
+  setFailure(fail: boolean, error?: { code: LLMErrorCode; message: string }): void {
+    this.shouldFail = fail;
+    if (error !== undefined) {
+      this.failError = { code: error.code, message: error.message };
+    }
+  }
+
+  reset(): void {
+    this.content = '{"title": "Generated title", "issueType": "feature"}';
+    this.shouldFail = false;
+  }
+}
+
+export class FakeUserServiceClient implements UserServiceClient {
+  private llmClient: LlmGenerateClient = new FakeLlmGenerateClient();
+  private shouldFail = false;
+  private failError: UserServiceError = { code: 'API_ERROR', message: 'User service error' };
+
+  async getApiKeys(_userId: string): Promise<Result<{ google?: string; openai?: string; anthropic?: string; perplexity?: string; zai?: string }, UserServiceError>> {
+    if (this.shouldFail) return err(this.failError);
+    return ok({ google: 'fake-google-key', openai: 'fake-openai-key' });
+  }
+
+  async getLlmClient(_userId: string): Promise<Result<LlmGenerateClient, UserServiceError>> {
+    if (this.shouldFail) return err(this.failError);
+    return ok(this.llmClient);
+  }
+
+  async reportLlmSuccess(_userId: string, _provider: string): Promise<void> {
+    return;
+  }
+
+  async getOAuthToken(_userId: string, _provider: string): Promise<Result<{ accessToken: string; email: string }, UserServiceError>> {
+    if (this.shouldFail) return err(this.failError);
+    return ok({ accessToken: 'fake-token', email: 'test@example.com' });
+  }
+
+  setLlmClient(client: LlmGenerateClient): void {
+    this.llmClient = client;
+  }
+
+  setFailure(fail: boolean, error?: UserServiceError): void {
+    this.shouldFail = fail;
+    if (error !== undefined) this.failError = error;
+  }
+
+  reset(): void {
+    this.llmClient = new FakeLlmGenerateClient();
+    this.shouldFail = false;
   }
 }

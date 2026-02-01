@@ -25,3 +25,20 @@ export const LinearIssueDataSchema = z.object({
 
 // Export derived types
 export type LinearIssueData = z.infer<typeof LinearIssueDataSchema>;
+
+/**
+ * Issue type classification for analytics and routing.
+ */
+export const LinearIssueTypeSchema = z.enum(['feature', 'bug', 'refactor', 'research']);
+export type LinearIssueType = z.infer<typeof LinearIssueTypeSchema>;
+
+/**
+ * Schema for LLM-generated issue title response.
+ * Used by linearIssueTitlePrompt for validation.
+ */
+export const LinearIssueTitleSchema = z.object({
+  title: z.string().min(1).max(80),
+  issueType: LinearIssueTypeSchema,
+});
+
+export type LinearIssueTitle = z.infer<typeof LinearIssueTitleSchema>;

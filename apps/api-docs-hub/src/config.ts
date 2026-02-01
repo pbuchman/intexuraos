@@ -67,6 +67,10 @@ const REQUIRED_ENV_VARS: EnvVar[] = [
     key: 'INTEXURAOS_CALENDAR_AGENT_OPENAPI_URL',
     displayName: 'Calendar Agent API',
   },
+  {
+    key: 'INTEXURAOS_CHAT_AGENT_OPENAPI_URL',
+    displayName: 'Chat Agent API',
+  },
 ];
 
 /**
