@@ -95,11 +95,11 @@ describe('linearIssueService', () => {
       );
     });
 
-    it('should use fallback mode when validation fails (WRONG_TEAM)', async () => {
+    it('should use fallback mode when validation fails (NOT_FOUND for wrong team)', async () => {
       mockValidateIssue = vi.fn().mockResolvedValue(
         err({
-          code: 'WRONG_TEAM',
-          message: 'Issue belongs to different team',
+          code: 'NOT_FOUND',
+          message: 'Issue OTHER-42 not found or belongs to different team',
         })
       );
 
@@ -114,7 +114,7 @@ describe('linearIssueService', () => {
       expect(result.linearFallback).toBe(true);
       expect(mockCreateIssue).not.toHaveBeenCalled();
       expect(mockLogger.warn).toHaveBeenCalledWith(
-        expect.objectContaining({ error: expect.objectContaining({ code: 'WRONG_TEAM' }) }),
+        expect.objectContaining({ error: expect.objectContaining({ code: 'NOT_FOUND' }) }),
         'Issue validation failed, using fallback mode'
       );
     });

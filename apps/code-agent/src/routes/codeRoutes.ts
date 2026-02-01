@@ -1155,17 +1155,21 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         webhookSecret,
       };
 
+      // Save linearIssueId if available (linking to existing issue)
       /* v8 ignore start -- ts-type: undefined check creates type narrowing branch @preserve */
       if (issueResult.linearIssueId !== undefined) {
       /* v8 ignore stop @preserve */
         createInput.linearIssueId = issueResult.linearIssueId;
-        createInput.linearIssueTitle = issueResult.linearIssueTitle;
       }
+      // Save linearIssueTitle (always present in result, even in fallback mode)
+      createInput.linearIssueTitle = issueResult.linearIssueTitle;
+      // Save linearIssueType if available (from LLM classification)
       /* v8 ignore start -- ts-type: optional property check creates type narrowing branch @preserve */
       if (issueResult.linearIssueType !== undefined) {
       /* v8 ignore stop @preserve */
         createInput.linearIssueType = issueResult.linearIssueType;
       }
+      // Save fallback flag
       /* v8 ignore start -- ts-type: optional property check creates type narrowing branch @preserve */
       if (issueResult.linearFallback) {
       /* v8 ignore stop @preserve */
