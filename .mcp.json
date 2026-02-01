@@ -1,8 +1,5 @@
 {
   "mcpServers": {
-    "github": {
-      "enabled": false
-    },
     "linear": {
       "type": "http",
       "url": "https://mcp.linear.app/mcp",
