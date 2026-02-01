@@ -39,10 +39,12 @@ if [[ -z "$TRANSCRIPT_PATH" || ! -f "$TRANSCRIPT_PATH" ]]; then
 fi
 
 # Get text content from the last assistant message
+# Extract .text and .thinking from ALL content blocks to catch
+# patterns in thinking blocks (.thinking field) and text blocks (.text field)
 LAST_RESPONSE=$(jq -rs '
   [.[] | select(.type == "assistant")] | last |
   .message.content // [] |
-  map(select(.type == "text") | .text) |
+  map(.text // .thinking // empty) |
   join("\n")
 ' "$TRANSCRIPT_PATH" 2>/dev/null)
 

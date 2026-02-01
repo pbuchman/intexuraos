@@ -70,7 +70,7 @@ describe('Orchestrator Types', () => {
         githubAppId: 'test-app-id',
         githubAppPrivateKeyPath: '/tmp/key.pem',
         githubInstallationId: 'test-installation-id',
-        dispatchSecret: 'test-secret',
+        orchestratorSecret: 'test-secret',
       };
 
       expect(config.capacity).toBe(5);

@@ -212,9 +212,7 @@ module.exports = {
     {
       name: 'web',
       script: 'pnpm',
-      args: process.env.PREDEV_ENVIRONMENT === 'true'
-        ? ['run', 'preview']
-        : ['run', 'dev'],
+      args: process.env.PREDEV_ENVIRONMENT === 'true' ? ['run', 'preview'] : ['run', 'dev'],
       cwd: './apps/web',
       interpreter: 'none',
       env: {

@@ -37,5 +37,4 @@ export const reportReady: HttpFunction = async (
   res.status(200).send('OK');
 };
 
-// eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
 functions.http('reportReady', reportReady);

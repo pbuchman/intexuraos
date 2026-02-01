@@ -50,7 +50,7 @@ export function registerRoutes(
   app: FastifyInstance,
   dispatcher: TaskDispatcher,
   tokenService: GitHubTokenService,
-  config: { dispatchSecret: string },
+  config: { orchestratorSecret: string },
   logger: Logger
 ): void {
   const nonceCache: NonceCache = {};
@@ -123,7 +123,7 @@ export function registerRoutes(
 
     // Verify HMAC signature
     const message = `${timestamp}.${nonce}.${JSON.stringify(request.body)}`;
-    const expectedSignature = createHmac('sha256', config.dispatchSecret)
+    const expectedSignature = createHmac('sha256', config.orchestratorSecret)
       .update(message)
       .digest('hex');
 
