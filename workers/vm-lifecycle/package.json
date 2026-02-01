@@ -8,7 +8,7 @@
     "node": ">=22.0.0"
   },
   "scripts": {
-    "build": "tsc",
+    "build": "node ../../scripts/build-service.mjs vm-lifecycle",
     "typecheck": "tsc --noEmit",
     "lint:local": "eslint src --max-warnings 0",
     "start": "node dist/index.js",
