@@ -38,6 +38,7 @@ describe('internalIssuesRoutes', () => {
       failedIssueRepository: null as unknown as import('../../domain/index.js').FailedIssueRepository,
       extractionService: null as unknown as import('../../domain/index.js').LinearActionExtractionService,
       processedActionRepository: null as unknown as import('../../domain/index.js').ProcessedActionRepository,
+      userServiceClient: null as unknown as import('@intexuraos/internal-clients').UserServiceClient,
     });
 
     app = await buildServer();

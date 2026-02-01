@@ -55,17 +55,28 @@ git pull origin "$TARGET_BRANCH"
 log "Fetching predev environment variables from Secret Manager..."
 gcloud secrets versions access latest --secret="INTEXURAOS_PREDEV_ENV_VARS" --quiet > "$REPO_DIR/.envrc.local"
 
+# Copy to .env for Vite (Vite reads .env files automatically)
+log "Copying env vars to .env for Vite build..."
+cp "$REPO_DIR/.envrc.local" "$REPO_DIR/.env"
+
+# Source env vars for build (Vite needs them at build time for client bundle)
+log "Loading environment variables for build..."
+cd "$REPO_DIR"
+# shellcheck source=/dev/null disable=SC1091
+set -a && . .envrc.local && set +a
+
 # Install dependencies
 log "Installing dependencies..."
-cd "$REPO_DIR"
 pnpm install --frozen-lockfile
 
-# Build packages
+# Build packages (env vars now loaded for client bundle)
 log "Building packages..."
 pnpm build
 
 # Start services with PM2
 log "Starting services with PM2..."
+# Set PREDEV_ENVIRONMENT to use preview mode (no HMR, works through proxy)
+export PREDEV_ENVIRONMENT=true
 pm2 start ecosystem.config.cjs
 pm2 save
 

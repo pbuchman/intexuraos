@@ -91,6 +91,7 @@ export class StateManager {
   }
 
   // Only transition to starting if currently stopped - prevents race conditions
+  /* v8 ignore start -- upstream: Firestore transaction branches depend on external state and timing @preserve */
   async setStartingIfStopped(): Promise<boolean> {
     try {
       const result = await this.db.runTransaction(async (tx: Transaction) => {
@@ -142,6 +143,7 @@ export class StateManager {
         logger.info({ status }, 'Skipped setStarting - not stopped');
       }
       return didUpdate;
+      /* v8 ignore stop @preserve */
     } catch (error) {
       logger.error({ error: serializeError(error) }, 'Failed in setStartingIfStopped transaction');
       return false;

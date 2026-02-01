@@ -46,7 +46,7 @@ export function WorkerSettingsPage(): React.JSX.Element {
           <div>
             <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Worker Configuration</h2>
             <p className="text-slate-600 dark:text-slate-300">
-              Configure your code execution workers. Each worker requires Cloudflare Access credentials and a dispatch signing secret.
+              Configure your code execution workers. Each worker requires Cloudflare Access credentials and an orchestrator secret.
               Max {MAX_WORKERS} workers.
             </p>
           </div>
@@ -238,9 +238,9 @@ function AddWorkerForm({ onCancel, onAdd }: AddWorkerFormProps): React.JSX.Eleme
         />
 
         <Input
-          label="Dispatch Signing Secret"
+          label="Orchestrator Secret"
           type="password"
-          placeholder="HMAC signing secret for task dispatch"
+          placeholder="Shared secret for code-agent ↔ orchestrator communication"
           value={dispatchSigningSecret}
           onChange={(e): void => {
             setDispatchSigningSecret(e.target.value);
@@ -531,9 +531,9 @@ function WorkerRow({
             disabled={isSaving}
           />
           <Input
-            label="Dispatch Signing Secret"
+            label="Orchestrator Secret"
             type="password"
-            placeholder="HMAC signing secret for task dispatch"
+            placeholder="Shared secret for code-agent ↔ orchestrator communication"
             value={dispatchSigningSecret}
             onChange={(e): void => {
               setDispatchSigningSecret(e.target.value);

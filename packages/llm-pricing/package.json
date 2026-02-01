@@ -15,6 +15,7 @@
     "@intexuraos/llm-contract": "workspace:*"
   },
   "scripts": {
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "lint:local": "eslint src --max-warnings 0"
   }
 }

@@ -58,6 +58,15 @@ vi.mock('../lib/config.js', () => ({
 
 import { idleCheck } from '../functions/idle-check.js';
 import * as firestoreMock from '@google-cloud/firestore';
+import type { CloudEvent } from '@google-cloud/functions-framework';
+
+// Mock CloudEvent for scheduler-triggered function
+const mockCloudEvent: CloudEvent<unknown> = {
+  id: 'test-event-id',
+  source: 'test-source',
+  specversion: '1.0',
+  type: 'google.cloud.scheduler.job.v1.executed',
+};
 
 describe('idleCheck function', () => {
   let originalSetTimeout: typeof setTimeout;
@@ -99,7 +108,7 @@ describe('idleCheck function', () => {
       }),
     });
 
-    await idleCheck();
+    await idleCheck(mockCloudEvent);
 
     expect(mockResize).not.toHaveBeenCalled();
   });
@@ -112,7 +121,7 @@ describe('idleCheck function', () => {
       }),
     });
 
-    await idleCheck();
+    await idleCheck(mockCloudEvent);
 
     expect(mockResize).not.toHaveBeenCalled();
   });
@@ -132,7 +141,7 @@ describe('idleCheck function', () => {
       }),
     });
 
-    await idleCheck();
+    await idleCheck(mockCloudEvent);
 
     expect(mockResize).not.toHaveBeenCalled();
   });
@@ -155,7 +164,7 @@ describe('idleCheck function', () => {
       set: vi.fn().mockResolvedValue(undefined),
     });
 
-    await idleCheck();
+    await idleCheck(mockCloudEvent);
 
     expect(mockResize).toHaveBeenCalledWith({
       project: 'test-project',
@@ -184,7 +193,7 @@ describe('idleCheck function', () => {
     });
 
     // Should not throw, should log error
-    await expect(idleCheck()).resolves.toBeUndefined();
+    await expect(idleCheck(mockCloudEvent)).resolves.toBeUndefined();
     expect(mockResize).toHaveBeenCalled();
   });
 
@@ -208,7 +217,7 @@ describe('idleCheck function', () => {
     });
 
     // The function should complete without throwing
-    await expect(idleCheck()).resolves.toBeUndefined();
+    await expect(idleCheck(mockCloudEvent)).resolves.toBeUndefined();
     expect(mockResize).toHaveBeenCalled();
   });
 });

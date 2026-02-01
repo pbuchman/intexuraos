@@ -84,3 +84,4 @@ CLAUDE.md
 .claude/ci-failures/*.jsonl
 
 .claude/hooks/commands.log
+.claude/hooks/__tests__/fixtures/temp-files/

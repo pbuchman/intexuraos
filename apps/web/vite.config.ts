@@ -201,11 +201,8 @@ export default defineConfig(({ mode }) => {
       host: '0.0.0.0',
       port: 3000,
       strictPort: true,
-      // HMR disabled when accessed through proxy gateway (WebSocket not supported)
-      // Set VITE_HMR_ENABLED=true env var to re-enable for direct access
-      /* v8 ignore start -- module-init: environment variable access at build time @preserve */
-      hmr: process.env['VITE_HMR_ENABLED'] === 'true',
-      /* v8 ignore stop @preserve */
+      // HMR disabled - WebSocket not supported through Cloud Functions gateway
+      hmr: false,
     },
     preview: {
       port: 3000,

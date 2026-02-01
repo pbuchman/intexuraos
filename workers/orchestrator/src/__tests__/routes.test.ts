@@ -18,7 +18,7 @@ describe('Routes', () => {
     debug: () => undefined,
   };
 
-  const dispatchSecret = 'test-secret';
+  const orchestratorSecret = 'test-secret';
 
   const createSignedRequest = (
     payload: object
@@ -27,7 +27,7 @@ describe('Routes', () => {
     const nonce = `nonce-${Math.random().toString(36).slice(2)}`;
     const body = JSON.stringify(payload);
     const message = `${timestamp}.${nonce}.${body}`;
-    const signature = createHmac('sha256', dispatchSecret).update(message).digest('hex');
+    const signature = createHmac('sha256', orchestratorSecret).update(message).digest('hex');
 
     return {
       headers: {
@@ -57,7 +57,7 @@ describe('Routes', () => {
       refreshToken: vi.fn(async () => ({ ok: true, value: 'new-token' })),
     } as unknown as GitHubTokenService;
 
-    registerRoutes(app, dispatcher, tokenService, { dispatchSecret }, mockLogger);
+    registerRoutes(app, dispatcher, tokenService, { orchestratorSecret }, mockLogger);
     await app.ready();
   });
 
@@ -119,7 +119,7 @@ describe('Routes', () => {
       const body = JSON.stringify(taskPayload);
       const nonce = `nonce-${Math.random().toString(36).slice(2)}`;
       const message = `.${nonce}.${body}`;
-      const signature = createHmac('sha256', dispatchSecret).update(message).digest('hex');
+      const signature = createHmac('sha256', orchestratorSecret).update(message).digest('hex');
 
       const response = await app.inject({
         method: 'POST',
@@ -179,7 +179,7 @@ describe('Routes', () => {
       const timestamp = String(Date.now());
       const body = JSON.stringify(taskPayload);
       const message = `${timestamp}..${body}`;
-      const signature = createHmac('sha256', dispatchSecret).update(message).digest('hex');
+      const signature = createHmac('sha256', orchestratorSecret).update(message).digest('hex');
 
       const response = await app.inject({
         method: 'POST',
@@ -461,7 +461,7 @@ describe('Routes', () => {
       const nonce = `nonce-${Math.random().toString(36).slice(2)}`;
       const body = JSON.stringify(taskPayload);
       const message = `${timestamp}.${nonce}.${body}`;
-      const signature = createHmac('sha256', dispatchSecret).update(message).digest('hex');
+      const signature = createHmac('sha256', orchestratorSecret).update(message).digest('hex');
 
       const headers = {
         'x-dispatch-timestamp': timestamp,
@@ -496,7 +496,7 @@ describe('Routes', () => {
       const nonce = `nonce-${Math.random().toString(36).slice(2)}`;
       const body = JSON.stringify(taskPayload);
       const message = `${timestamp}.${nonce}.${body}`;
-      const signature = createHmac('sha256', dispatchSecret).update(message).digest('hex');
+      const signature = createHmac('sha256', orchestratorSecret).update(message).digest('hex');
 
       const headers = {
         'x-dispatch-timestamp': timestamp,
@@ -616,7 +616,7 @@ describe('Routes', () => {
         const nonce = `cache-nonce-${i}`;
         const body = JSON.stringify({ ...taskPayload, taskId: `task-${i}` });
         const message = `${timestamp}.${nonce}.${body}`;
-        const signature = createHmac('sha256', dispatchSecret).update(message).digest('hex');
+        const signature = createHmac('sha256', orchestratorSecret).update(message).digest('hex');
 
         const headers = {
           'x-dispatch-timestamp': timestamp,

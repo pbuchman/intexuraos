@@ -60,7 +60,7 @@ describe('TaskDispatcher', () => {
     githubAppId: 'test-app-id',
     githubAppPrivateKeyPath: '/tmp/key.pem',
     githubInstallationId: 'test-installation-id',
-    dispatchSecret: 'test-secret',
+    orchestratorSecret: 'test-secret',
   };
 
   // Mock StatePersistence

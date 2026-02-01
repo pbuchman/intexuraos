@@ -11,7 +11,8 @@
   },
   "scripts": {
     "build": "tsc",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "lint:local": "eslint src --max-warnings 0"
   },
   "dependencies": {
     "@intexuraos/common-core": "workspace:*",

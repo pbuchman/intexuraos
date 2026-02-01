@@ -241,6 +241,13 @@ locals {
       min_scale = 0
       max_scale = 1
     }
+    chat_agent = {
+      name      = "intexuraos-chat-agent"
+      app_path  = "apps/chat-agent"
+      port      = 8080
+      min_scale = 0
+      max_scale = 1
+    }
   }
 
   common_labels = {
@@ -274,6 +281,7 @@ locals {
     INTEXURAOS_CALENDAR_AGENT_URL               = "https://${local.services.calendar_agent.name}-${local.cloud_run_url_suffix}"
     INTEXURAOS_WEB_AGENT_URL                    = "https://${local.services.web_agent.name}-${local.cloud_run_url_suffix}"
     INTEXURAOS_LINEAR_AGENT_URL                 = "https://${local.services.linear_agent.name}-${local.cloud_run_url_suffix}"
+    INTEXURAOS_CHAT_AGENT_URL                   = "https://${local.services.chat_agent.name}-${local.cloud_run_url_suffix}"
     INTEXURAOS_API_DOCS_HUB_URL                 = "https://${local.services.api_docs_hub.name}-${local.cloud_run_url_suffix}"
   }
 }
@@ -481,7 +489,7 @@ module "secret_manager" {
     # Crawl4AI Cloud API
     "INTEXURAOS_CRAWL4AI_API_KEY" = "Crawl4AI Cloud API key for web page content extraction"
     # Code worker secrets (INT-156)
-    "INTEXURAOS_DISPATCH_SIGNING_SECRET" = "HMAC signing secret for orchestrator dispatch validation"
+    "INTEXURAOS_ORCHESTRATOR_SECRET" = "HMAC signing secret for orchestrator communication"
     "INTEXURAOS_WEBHOOK_VERIFY_SECRET"   = "HMAC signing secret for orchestrator webhook callbacks to code-agent"
     # GitHub App for code worker PRs (INT-156)
     "INTEXURAOS_GITHUB_APP_PRIVATE_KEY" = "GitHub App private key (PEM format) for code worker authentication"
@@ -1440,6 +1448,32 @@ module "linear_agent" {
   labels          = local.common_labels
 
   image = "${var.region}-docker.pkg.dev/${var.project_id}/${module.artifact_registry.repository_id}/linear-agent:latest"
+
+  secrets  = local.common_service_secrets
+  env_vars = local.common_service_env_vars
+
+  depends_on = [
+    module.artifact_registry,
+    module.iam,
+    module.secret_manager,
+  ]
+}
+
+# Chat Agent - In-app AI assistant with RAG
+module "chat_agent" {
+  source = "../../modules/cloud-run-service"
+
+  project_id      = var.project_id
+  region          = var.region
+  environment     = var.environment
+  service_name    = local.services.chat_agent.name
+  service_account = module.iam.service_accounts["chat_agent"]
+  port            = local.services.chat_agent.port
+  min_scale       = local.services.chat_agent.min_scale
+  max_scale       = local.services.chat_agent.max_scale
+  labels          = local.common_labels
+
+  image = "${var.region}-docker.pkg.dev/${var.project_id}/${module.artifact_registry.repository_id}/chat-agent:latest"
 
   secrets  = local.common_service_secrets
   env_vars = local.common_service_env_vars

@@ -177,6 +177,7 @@ export interface AppConfig {
   calendarAgentUrl: string;
   linearAgentUrl: string;
   codeAgentUrl: string;
+  chatAgentUrl: string;
   appSettingsServiceUrl: string;
   firebaseProjectId: string;
   firebaseApiKey: string;
@@ -658,6 +659,19 @@ export interface UpdateTodoItemRequest {
  * LLM provider type
  */
 export type { LlmProvider };
+
+/**
+ * Chat types for Intex Chat feature.
+ */
+export type {
+  ChatRole,
+  ChatMessage,
+  ChatSource,
+  SuggestedAction,
+  ChatResponse,
+  ChatSession,
+  ChatRequest,
+} from './chat.js';
 
 /**
  * Image size for pricing

@@ -8,5 +8,5 @@ export interface OrchestratorConfig {
   githubAppId: string;
   githubAppPrivateKeyPath: string;
   githubInstallationId: string;
-  dispatchSecret: string;
+  orchestratorSecret: string;
 }

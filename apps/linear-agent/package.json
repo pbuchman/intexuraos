@@ -9,6 +9,7 @@
   "scripts": {
     "build": "node ../../scripts/build-service.mjs linear-agent",
     "typecheck": "tsc --noEmit",
+    "lint:local": "eslint src --max-warnings 0",
     "start": "node dist/index.js",
     "dev": "node --watch --experimental-strip-types src/index.ts"
   },

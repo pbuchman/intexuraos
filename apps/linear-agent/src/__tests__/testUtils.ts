@@ -10,6 +10,7 @@ import {
   FakeLinearActionExtractionService,
   FakeFailedIssueRepository,
   FakeProcessedActionRepository,
+  FakeUserServiceClient,
 } from './fakes.js';
 import { resetServices, setServices } from '../services.js';
 
@@ -166,6 +167,7 @@ export interface TestContext {
   extractionService: FakeLinearActionExtractionService;
   failedIssueRepository: FakeFailedIssueRepository;
   processedActionRepository: FakeProcessedActionRepository;
+  userServiceClient: FakeUserServiceClient;
   withTestLogger?: boolean;
 }
 
@@ -177,6 +179,7 @@ export function setupTestContext(withTestLogger = false): TestContext {
     extractionService: null as unknown as FakeLinearActionExtractionService,
     failedIssueRepository: null as unknown as FakeFailedIssueRepository,
     processedActionRepository: null as unknown as FakeProcessedActionRepository,
+    userServiceClient: null as unknown as FakeUserServiceClient,
     withTestLogger,
   };
 
@@ -196,12 +199,14 @@ export function setupTestContext(withTestLogger = false): TestContext {
     context.extractionService = new FakeLinearActionExtractionService();
     context.failedIssueRepository = new FakeFailedIssueRepository();
     context.processedActionRepository = new FakeProcessedActionRepository();
+    context.userServiceClient = new FakeUserServiceClient();
     setServices({
       connectionRepository: context.connectionRepository,
       linearApiClient: context.linearApiClient,
       extractionService: context.extractionService,
       failedIssueRepository: context.failedIssueRepository,
       processedActionRepository: context.processedActionRepository,
+      userServiceClient: context.userServiceClient,
     });
     clearJwksCache();
     context.app = await buildServer(withTestLogger ? getTestLoggerStream() : undefined);
@@ -218,6 +223,7 @@ export function setupTestContext(withTestLogger = false): TestContext {
     context.extractionService.reset();
     context.failedIssueRepository.reset();
     context.processedActionRepository.reset();
+    context.userServiceClient.reset();
     delete process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'];
   });
 

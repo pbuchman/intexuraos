@@ -5,7 +5,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-TEMP_DIR="/tmp/claude-cmd-timing"
+TEMP_DIR="${CLAUDE_CMD_TIMING_DIR:-/tmp/claude-cmd-timing}"
 LOG_FILE="${SCRIPT_DIR}/commands.log"
 
 INPUT=$(cat)
@@ -29,7 +29,8 @@ else
 fi
 
 # Find the correlation ID from the pending file (FIFO: use oldest/first entry)
-COMMAND_ONLY_HASH=$(echo -n "$COMMAND" | md5 | cut -c1-12)
+# Portable hash: use openssl md5 if available, else cksum
+COMMAND_ONLY_HASH=$(echo -n "$COMMAND" | { openssl md5 2>/dev/null || cksum; } | cut -c1-12)
 PENDING_FILE="${TEMP_DIR}/${COMMAND_ONLY_HASH}.pending"
 
 DURATION_SEC="?"
