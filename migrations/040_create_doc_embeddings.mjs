@@ -39,9 +39,6 @@ export const indexes = [
 ];
 
 export const rules = {
-  functions: {
-    isDocsContent: 'request.auth != null',
-  },
   collections: {
     'doc_embeddings/{chunkId}': {
       comment: 'Documentation chunks with vector embeddings for RAG',
