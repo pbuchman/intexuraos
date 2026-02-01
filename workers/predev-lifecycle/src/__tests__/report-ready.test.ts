@@ -3,16 +3,14 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 // Preserve actual exports while mocking Firestore
 vi.mock('@google-cloud/firestore', async () => {
   const actual = await vi.importActual('@google-cloud/firestore');
-  const mockSet = vi.fn().mockResolvedValue(undefined);
-  const mockGet = vi.fn().mockResolvedValue({ exists: false });
   return {
     ...actual,
     Firestore: vi.fn(function () {
       return {
         collection: vi.fn(() => ({
           doc: vi.fn(() => ({
-            set: mockSet,
-            get: mockGet,
+            set: vi.fn().mockResolvedValue(undefined),
+            get: vi.fn().mockResolvedValue({ exists: false }),
           })),
         })),
         runTransaction: vi.fn(async (fn) => {

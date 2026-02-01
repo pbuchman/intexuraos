@@ -187,12 +187,12 @@ export const gateway: HttpFunction = async (req: any, res: any) => {
   // The VM's report-ready callback will transition to running
   /* v8 ignore start -- ts-type: TypeScript exhaustiveness check: all valid states handled above @preserve */
   if (currentState.status === 'starting') {
+    /* v8 ignore stop @preserve */
     res.status(200).send(getStartingPage(currentState.branch));
     return;
   }
 
   res.status(500).send('Unknown state');
-  /* v8 ignore stop @preserve */
 };
 
 functions.http('gateway', gateway);

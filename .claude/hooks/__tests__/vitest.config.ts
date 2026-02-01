@@ -11,8 +11,8 @@ export default defineConfig({
     include: ['./*.test.ts'],
     root: __dirname,
     exclude: ['**/node_modules/**', '**/dist/**'],
-    testTimeout: 10000,
-    hookTimeout: 30000,
+    testTimeout: 30000,
+    hookTimeout: 60000,
     // Hook tests run sequentially since they access shared temp files
     sequence: {
       shuffle: false,

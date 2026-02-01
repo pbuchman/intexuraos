@@ -16,7 +16,8 @@ const hooksDir = path.resolve(__dirname, '..');
 const commandsLogPath = path.join(hooksDir, 'commands.log');
 const ciPhasesLogPath = path.join(hooksDir, 'ci-phases.log');
 
-describe('Claude Hooks - Logging', () => {
+// Use sequential to avoid resource contention issues when running with full CI
+describe.sequential('Claude Hooks - Logging', () => {
   beforeEach(() => {
     clearHooksLog();
   });
