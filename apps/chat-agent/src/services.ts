@@ -13,6 +13,9 @@ import type { EmbeddingClient as EmbeddingClientInterface } from './domain/useca
 import type { LLMClient } from './domain/usecases/generateResponse.js';
 import type { Logger } from 'pino';
 
+/** Default LLM model for chat responses. */
+const DEFAULT_LLM_MODEL = LlmModels.Gemini25Flash;
+
 /**
  * Service container holding all adapter instances.
  */
@@ -56,7 +59,6 @@ export function resetServices(): void {
  */
 export function initializeServices(): void {
   const openaiApiKey = process.env['INTEXURAOS_OPENAI_API_KEY'];
-  const model = process.env['INTEXURAOS_LLM_MODEL'] ?? LlmModels.Gemini25Flash;
 
   if (openaiApiKey === undefined || openaiApiKey.length === 0) {
     throw new Error('INTEXURAOS_OPENAI_API_KEY environment variable is required');
@@ -73,7 +75,7 @@ export function initializeServices(): void {
     embeddingClient: new EmbeddingClient({ apiKey: openaiApiKey }),
     llmClient: new ChatClient({
       apiKey: openaiApiKey,
-      model,
+      model: DEFAULT_LLM_MODEL,
       userId: 'system',
       logger,
     }),
