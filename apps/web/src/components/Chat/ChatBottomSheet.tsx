@@ -1,6 +1,6 @@
 /**
  * ChatBottomSheet - Mobile bottom sheet conversation panel.
- * Expandable from 60% to 100% with drag handle.
+ * Expandable from 60vh to 100vh (60-100% of viewport height) with drag handle.
  * Swipe down to dismiss support.
  */
 
@@ -140,7 +140,6 @@ export function ChatBottomSheet({
       ref={sheetRef}
       className={`fixed inset-x-0 bottom-0 z-50 flex flex-col bg-white dark:bg-gray-900 shadow-2xl md:hidden ${isDragging ? '' : 'transition-[height] duration-300 ease-out'} ${isExpanded ? 'h-[100vh] max-h-[100vh]' : 'h-[60vh] max-h-[60vh]'}`}
     >
-      {/* Drag handle / Header */}
       <div
         className="flex shrink-0 cursor-grab select-none flex items-center justify-between border-b border-gray-200 px-4 py-2 active:cursor-grabbing dark:border-gray-700"
         onTouchStart={handleTouchStart}
@@ -150,7 +149,6 @@ export function ChatBottomSheet({
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
       >
-        {/* Drag handle indicator */}
         <div className="flex-1 flex justify-center">
           <GripVertical className="h-6 w-6 text-gray-400" />
         </div>
@@ -188,7 +186,6 @@ export function ChatBottomSheet({
         </div>
       </div>
 
-      {/* Messages area */}
       <div className="flex flex-1 flex-col overflow-y-auto px-4 py-3">
         {messages.length === 0 && !isLoading && !error && (
           <div className="flex flex-1 items-center justify-center text-gray-500 dark:text-gray-400">
@@ -207,7 +204,6 @@ export function ChatBottomSheet({
           />
         ))}
 
-        {/* Typing indicator */}
         {isLoading && (
           <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
             <Loader2 className="h-4 w-4 animate-spin" data-testid="loader-icon" />
@@ -215,7 +211,6 @@ export function ChatBottomSheet({
           </div>
         )}
 
-        {/* Error display */}
         {error !== null && (
           <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800 dark:border-red-800 dark:bg-red-900/20 dark:text-red-200">
             <p className="font-semibold">Error</p>
@@ -223,11 +218,9 @@ export function ChatBottomSheet({
           </div>
         )}
 
-        {/* Scroll anchor */}
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Pending action confirmation */}
       {pendingAction !== null && pendingAction.awaitingConfirmation && (
         <div className="border-t border-gray-200 bg-blue-50 px-4 py-3 dark:border-gray-700 dark:bg-blue-900/20">
           <div className="flex items-start gap-2">
@@ -244,12 +237,10 @@ export function ChatBottomSheet({
         </div>
       )}
 
-      {/* Input area */}
       <div className="shrink-0 border-t border-gray-200 px-4 py-3 dark:border-gray-700">
         <ChatInput onSend={onSendMessage} disabled={isLoading} {...(pendingAction?.awaitingConfirmation ? { placeholder: 'Say "yes" to confirm...' } : {})} />
       </div>
 
-      {/* Swipe hint */}
       {!isExpanded && (
         <div className="flex justify-center py-1">
           <p className="text-xs text-gray-400 dark:text-gray-500">Swipe down to close</p>

@@ -273,7 +273,17 @@ export async function generateEmbedding(text: string, apiKey: string): Promise<n
 
   const data = (await response.json()) as { data: Array<{ embedding: number[] }> };
 
-  return data.data[0]?.embedding ?? [];
+  if (!data.data?.[0]?.embedding) {
+    throw new Error('Invalid embedding response: missing embedding data');
+  }
+
+  const embedding = data.data[0].embedding;
+
+  if (!Array.isArray(embedding) || embedding.length !== 1536) {
+    throw new Error(`Invalid embedding: expected 1536-dim array, got ${embedding.length}`);
+  }
+
+  return embedding;
 }
 
 /**
@@ -350,7 +360,10 @@ export async function generateEmbeddings(
         console.log(`Rate limited. Retrying in ${delayMs}ms...`);
         await new Promise((resolve) => setTimeout(resolve, delayMs));
       } else {
-        throw error;
+        const failedChunk = chunks[results.length];
+        throw new Error(
+          `Failed to generate embedding for chunk ${results.length + 1} (${failedChunk.filePath}:${failedChunk.section}): ${error}`
+        );
       }
     }
   }

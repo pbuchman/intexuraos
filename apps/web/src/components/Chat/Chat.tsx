@@ -23,7 +23,6 @@ export function Chat(): React.JSX.Element {
   const handleToggle = useCallback((): void => {
     setIsOpen((prev) => {
       if (!prev) {
-        // Opening: load session from storage
         const session = loadSession();
         if (session !== null) {
           setMessages(session.messages);
@@ -37,7 +36,6 @@ export function Chat(): React.JSX.Element {
     async (content: string): Promise<void> => {
       const token = await getAccessToken();
 
-      // Add user message
       const userMessage: ChatMessage = {
         id: `msg-${String(Date.now())}`,
         role: 'user',
@@ -53,9 +51,7 @@ export function Chat(): React.JSX.Element {
       try {
         const response = await sendMessage(token, content, messages, pendingAction ?? undefined);
 
-        // Check if this was a confirmation (action was confirmed by backend)
         if (response.suggestedAction !== null && !response.suggestedAction.awaitingConfirmation) {
-          // User confirmed - create the command via commands-agent
           try {
             const commandText = response.suggestedAction.payload['text'] as string;
             const command = await createCommand(token, { text: commandText, source: 'pwa-shared' });
@@ -87,7 +83,6 @@ export function Chat(): React.JSX.Element {
           return;
         }
 
-        // Normal response or new action suggestion
         const assistantMessage: ChatMessage = {
           id: `msg-${String(Date.now() + 1)}`,
           role: 'assistant',
@@ -98,7 +93,6 @@ export function Chat(): React.JSX.Element {
 
         setMessages(finalMessages);
 
-        // Store pending action if awaiting confirmation
         if (response.suggestedAction?.awaitingConfirmation) {
           setPendingAction(response.suggestedAction);
         } else {
