@@ -66,6 +66,8 @@ pnpm build
 
 # Start services with PM2
 log "Starting services with PM2..."
+# Set PREDEV_ENVIRONMENT to use preview mode (no HMR, works through proxy)
+export PREDEV_ENVIRONMENT=true
 pm2 start ecosystem.config.cjs
 pm2 save
 
