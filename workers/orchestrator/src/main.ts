@@ -9,6 +9,7 @@ import { registerRoutes } from './routes.js';
 import fastify from 'fastify';
 import cors from '@fastify/cors';
 import type { Logger } from '@intexuraos/common-core';
+import { serializeError } from '@intexuraos/common-core';
 
 const TOKEN_REFRESH_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 const WEBHOOK_RETRY_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
@@ -95,7 +96,7 @@ export async function main(
 
     logger.info({ message: 'Orchestrator ready' });
   } catch (error) {
-    logger.error({ error }, 'Failed to start orchestrator');
+    logger.error({ error: serializeError(error) }, 'Failed to start orchestrator');
     exit(1);
   }
 }
@@ -139,7 +140,7 @@ async function runStartupRecovery(
       logger.info({ taskId: task.taskId }, 'Notified code-agent of interrupted task');
     } catch (error) {
       logger.error(
-        { taskId: task.taskId, error },
+        { taskId: task.taskId, error: serializeError(error) },
         'Failed to notify code-agent of interrupted task'
       );
     }
@@ -157,7 +158,7 @@ function scheduleTokenRefresh(tokenService: GitHubTokenService, logger: Logger):
           logger.debug({ message: 'Token refreshed successfully' });
         }
       } catch (error) {
-        logger.error({ error }, 'Token refresh error');
+        logger.error({ error: serializeError(error) }, 'Token refresh error');
       }
     })();
   }, TOKEN_REFRESH_INTERVAL_MS);
@@ -169,7 +170,7 @@ function scheduleWebhookRetry(webhookClient: WebhookClient, logger: Logger): Nod
       try {
         await webhookClient.retryPending();
       } catch (error) {
-        logger.error({ error }, 'Webhook retry failed');
+        logger.error({ error: serializeError(error) }, 'Webhook retry failed');
       }
     })();
   }, WEBHOOK_RETRY_INTERVAL_MS);

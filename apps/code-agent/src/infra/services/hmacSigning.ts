@@ -5,7 +5,7 @@
  */
 
 import type { Logger } from '@intexuraos/common-core';
-import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
+import { err, getErrorMessage, ok, serializeError, type Result } from '@intexuraos/common-core';
 import type { SigningError } from '../../domain/models/signing.js';
 import * as crypto from 'node:crypto';
 
@@ -69,7 +69,7 @@ export function signDispatchRequest(
 
     return ok({ timestamp, signature });
   } catch (error) {
-    deps.logger.error({ error }, 'Failed to generate HMAC signature');
+    deps.logger.error({ error: serializeError(error) }, 'Failed to generate HMAC signature');
 
     return err({
       code: 'signing_failed',

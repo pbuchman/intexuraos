@@ -4,7 +4,7 @@
  * Creates a code task with deduplication and dispatches to worker.
  */
 
-import { err, ok, type Result } from '@intexuraos/common-core';
+import { err, ok, serializeError, type Result } from '@intexuraos/common-core';
 import type { Logger } from '@intexuraos/common-core';
 import type { CodeTaskRepository } from '../../domain/repositories/codeTaskRepository.js';
 import type { TaskDispatcherService, DispatchWorkerCredentials } from '../../domain/services/taskDispatcher.js';
@@ -274,7 +274,7 @@ export async function processCodeAction(
   // Step 7: Record metrics for task submission
   const source = request.source ?? 'web';
   await deps.metricsClient.incrementTasksSubmitted(workerType, source).catch((error: unknown) => {
-    logger.warn({ error, taskId: task.id }, 'Failed to record task submission metric');
+    logger.warn({ error: serializeError(error), taskId: task.id }, 'Failed to record task submission metric');
   });
 
   // Step 8: Generate cancel nonce and send task started notification (INT-379)

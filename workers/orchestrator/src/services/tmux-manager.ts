@@ -3,6 +3,7 @@ import { dirname } from 'node:path';
 import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
 import type { Logger } from '@intexuraos/common-core';
+import { serializeError } from '@intexuraos/common-core';
 
 const execAsync = promisify(exec);
 
@@ -102,7 +103,10 @@ cat '${taskPromptFile}' | ${claudePath} --system-prompt "$(cat '${systemPromptFi
           const stderr = (error as { stderr?: string }).stderr ?? '';
           /* v8 ignore stop @preserve */
           if (!stderr.includes("can't find session") && !stderr.includes('no session')) {
-            this.logger.warn({ taskId, error }, 'Graceful shutdown signal failed unexpectedly');
+            this.logger.warn(
+              { taskId, error: serializeError(error) },
+              'Graceful shutdown signal failed unexpectedly'
+            );
           }
         }
 
@@ -133,7 +137,10 @@ cat '${taskPromptFile}' | ${claudePath} --system-prompt "$(cat '${systemPromptFi
     } catch (error: unknown) {
       const stderr = (error as { stderr?: string }).stderr ?? '';
       if (!stderr.includes("can't find session") && !stderr.includes('no session')) {
-        this.logger.error({ taskId, error }, 'Unexpected error checking tmux session');
+        this.logger.error(
+          { taskId, error: serializeError(error) },
+          'Unexpected error checking tmux session'
+        );
       }
       return false;
     }
@@ -151,7 +158,7 @@ cat '${taskPromptFile}' | ${claudePath} --system-prompt "$(cat '${systemPromptFi
 
       return sessions;
     } catch (error: unknown) {
-      this.logger.error({ error }, 'Failed to list tmux sessions');
+      this.logger.error({ error: serializeError(error) }, 'Failed to list tmux sessions');
       return [];
     }
   }

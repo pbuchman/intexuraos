@@ -5,6 +5,7 @@ import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
 import type { OrchestratorState } from '../types/index.js';
 import type { Logger } from '@intexuraos/common-core';
+import { serializeError } from '@intexuraos/common-core';
 
 const execAsync = promisify(exec);
 
@@ -87,7 +88,7 @@ export class StatePersistence {
 
       return orphans;
     } catch (error) {
-      this.logger.error({ error }, 'Failed to detect orphan worktrees');
+      this.logger.error({ error: serializeError(error) }, 'Failed to detect orphan worktrees');
       return [];
     }
   }

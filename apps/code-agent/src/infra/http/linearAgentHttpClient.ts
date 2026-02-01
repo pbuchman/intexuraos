@@ -5,7 +5,7 @@
  */
 
 import type { Result } from '@intexuraos/common-core';
-import { ok, err } from '@intexuraos/common-core';
+import { ok, err, serializeError } from '@intexuraos/common-core';
 import type { Logger } from '@intexuraos/common-core';
 import type {
   LinearAgentClient,
@@ -96,7 +96,7 @@ export function createLinearAgentHttpClient(
           return err({ code: 'UNAVAILABLE', message: 'Request timed out' });
         }
 
-        logger.error({ error }, 'linear-agent request failed');
+        logger.error({ error: serializeError(error) }, 'linear-agent request failed');
         return err({ code: 'UNKNOWN', message: String(error) });
       } finally {
         clearTimeout(timeoutId);
@@ -146,7 +146,7 @@ export function createLinearAgentHttpClient(
         logger.info({ issueId: request.issueId, state: request.state }, 'Linear issue state updated');
         return ok(undefined);
       } catch (error) {
-        logger.error({ error }, 'linear-agent updateState request failed');
+        logger.error({ error: serializeError(error) }, 'linear-agent updateState request failed');
         return err({ code: 'UNKNOWN', message: String(error) });
       } finally {
         clearTimeout(timeoutId);

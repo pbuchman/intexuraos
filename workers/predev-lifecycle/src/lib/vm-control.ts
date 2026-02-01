@@ -1,6 +1,7 @@
 import { InstanceGroupManagersClient } from '@google-cloud/compute';
 import { logger } from './logger.js';
 import { CONFIG } from './config.js';
+import { serializeError } from './serializeError.js';
 
 export class VmControl {
   private client: InstanceGroupManagersClient;
@@ -56,7 +57,7 @@ export class VmControl {
       });
       return response.targetSize ?? 0;
     } catch (error) {
-      logger.error({ error }, 'Failed to get VM count');
+      logger.error({ error: serializeError(error) }, 'Failed to get VM count');
       return 0;
     }
   }

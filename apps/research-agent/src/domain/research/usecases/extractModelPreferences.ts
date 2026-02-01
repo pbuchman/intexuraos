@@ -6,6 +6,7 @@
  */
 
 import type { Logger } from '@intexuraos/common-core';
+import { serializeError } from '@intexuraos/common-core';
 import { getProviderForModel, type ResearchModel, LlmModels } from '@intexuraos/llm-contract';
 import {
   buildModelExtractionPrompt,
@@ -243,7 +244,7 @@ export async function extractModelPreferences(
       synthesisModel: validatedSynthesis,
     };
   } catch (error) {
-    logger.error({ error }, 'Exception during model extraction');
+    logger.error({ error: serializeError(error) }, 'Exception during model extraction');
     return { selectedModels: [], synthesisModel: undefined };
   }
 }

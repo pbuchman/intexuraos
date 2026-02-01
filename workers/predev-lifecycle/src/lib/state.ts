@@ -1,5 +1,6 @@
 import { Firestore, Timestamp } from '@google-cloud/firestore';
 import { logger } from './logger.js';
+import { serializeError } from './serializeError.js';
 
 export interface PredevState {
   status: 'stopped' | 'starting' | 'running' | 'stopping';
@@ -49,7 +50,7 @@ export class StateManager {
         startedAt: toDate(data['startedAt']),
       };
     } catch (error) {
-      logger.error({ error }, 'Failed to get state');
+      logger.error({ error: serializeError(error) }, 'Failed to get state');
       return null;
     }
   }
@@ -58,7 +59,7 @@ export class StateManager {
     try {
       await this.db.collection(COLLECTION).doc(DOC_ID).set(state, { merge: true });
     } catch (error) {
-      logger.error({ error }, 'Failed to set state');
+      logger.error({ error: serializeError(error) }, 'Failed to set state');
     }
   }
 

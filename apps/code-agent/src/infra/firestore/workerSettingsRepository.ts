@@ -8,7 +8,7 @@
  */
 
 import type { Firestore } from '@intexuraos/infra-firestore';
-import { ok, err, getErrorMessage, type Result } from '@intexuraos/common-core';
+import { ok, err, getErrorMessage, serializeError, type Result } from '@intexuraos/common-core';
 import type { Logger } from '@intexuraos/common-core';
 import type {
   WorkerSettingsRepository,
@@ -131,7 +131,7 @@ export function createWorkerSettingsRepository(
 
         /* v8 ignore start -- test-infra: decryption error path requires corrupted data @preserve */
         if (message.includes('decrypt') || message.includes('Invalid encrypted')) {
-          logger.error({ error, userId }, 'Failed to decrypt worker settings');
+          logger.error({ error: serializeError(error), userId }, 'Failed to decrypt worker settings');
           return err({
             code: 'internal_error',
             message: `Failed to decrypt worker settings: ${message}`,
@@ -139,7 +139,7 @@ export function createWorkerSettingsRepository(
         }
         /* v8 ignore stop @preserve */
 
-        logger.error({ error, userId }, 'Failed to get worker settings');
+        logger.error({ error: serializeError(error), userId }, 'Failed to get worker settings');
         return err({
           code: 'internal_error',
           message: `Firestore error: ${message}`,
@@ -228,7 +228,7 @@ export function createWorkerSettingsRepository(
 
         /* v8 ignore start -- test-infra: encryption error path requires crypto failure @preserve */
         if (message.includes('encrypt')) {
-          logger.error({ error, userId }, 'Failed to encrypt worker config');
+          logger.error({ error: serializeError(error), userId }, 'Failed to encrypt worker config');
           return err({
             code: 'internal_error',
             message: `Failed to encrypt worker config: ${message}`,
@@ -236,7 +236,7 @@ export function createWorkerSettingsRepository(
         }
         /* v8 ignore stop @preserve */
 
-        logger.error({ error, userId }, 'Failed to add worker');
+        logger.error({ error: serializeError(error), userId }, 'Failed to add worker');
         return err({
           code: 'internal_error',
           message: `Firestore error: ${message}`,
@@ -308,7 +308,7 @@ export function createWorkerSettingsRepository(
         return ok(undefined);
       } catch (error) {
         const message = getErrorMessage(error);
-        logger.error({ error, userId, workerName }, 'Failed to update worker');
+        logger.error({ error: serializeError(error), userId, workerName }, 'Failed to update worker');
         return err({
           code: 'internal_error',
           message: `Firestore error: ${message}`,
@@ -357,7 +357,7 @@ export function createWorkerSettingsRepository(
         return ok(undefined);
       } catch (error) {
         const message = getErrorMessage(error);
-        logger.error({ error, userId, workerName }, 'Failed to delete worker');
+        logger.error({ error: serializeError(error), userId, workerName }, 'Failed to delete worker');
         return err({
           code: 'internal_error',
           message: `Firestore error: ${message}`,
@@ -408,7 +408,7 @@ export function createWorkerSettingsRepository(
         return ok(undefined);
       } catch (error) {
         const message = getErrorMessage(error);
-        logger.error({ error, userId }, 'Failed to reorder workers');
+        logger.error({ error: serializeError(error), userId }, 'Failed to reorder workers');
         return err({
           code: 'internal_error',
           message: `Firestore error: ${message}`,
@@ -463,7 +463,7 @@ export function createWorkerSettingsRepository(
         return ok(undefined);
       } catch (error) {
         const message = getErrorMessage(error);
-        logger.error({ error, userId, workerName }, 'Failed to update test result');
+        logger.error({ error: serializeError(error), userId, workerName }, 'Failed to update test result');
         return err({
           code: 'internal_error',
           message: `Firestore error: ${message}`,

@@ -2,6 +2,7 @@ import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
 import { Mutex } from 'async-mutex';
 import type { Result, Logger } from '@intexuraos/common-core';
+import { serializeError } from '@intexuraos/common-core';
 import type { OrchestratorConfig } from '../types/config.js';
 import type { Task, TaskStatus, TaskResult, TaskError } from '../types/task.js';
 import type { CreateTaskRequest } from '../types/api.js';
@@ -263,7 +264,10 @@ export class TaskDispatcher {
             this.logger.warn({ taskId }, 'Task approaching 2-hour timeout');
           }
         } catch (error) {
-          this.logger.error({ taskId, error }, 'Error in timeout warning callback');
+          this.logger.error(
+            { taskId, error: serializeError(error) },
+            'Error in timeout warning callback'
+          );
         }
       })();
     }, TASK_TIMEOUT_WARNING_MS);
@@ -315,7 +319,10 @@ export class TaskDispatcher {
             taskId,
           });
         } catch (error) {
-          this.logger.error({ taskId, error }, 'Error in timeout kill callback');
+          this.logger.error(
+            { taskId, error: serializeError(error) },
+            'Error in timeout kill callback'
+          );
         }
       })();
     }, TASK_TIMEOUT_KILL_MS);
@@ -340,7 +347,10 @@ export class TaskDispatcher {
             await this.handleTaskCompletion(task);
           }
         } catch (error) {
-          this.logger.error({ taskId, error }, 'Error in completion monitoring callback');
+          this.logger.error(
+            { taskId, error: serializeError(error) },
+            'Error in completion monitoring callback'
+          );
         }
       })();
     }, COMPLETION_CHECK_INTERVAL_MS);
@@ -482,7 +492,10 @@ export class TaskDispatcher {
 
       return undefined;
     } catch (error) {
-      this.logger.error({ taskId: task.taskId, error }, 'Failed to check for task result');
+      this.logger.error(
+        { taskId: task.taskId, error: serializeError(error) },
+        'Failed to check for task result'
+      );
       return undefined;
     }
   }

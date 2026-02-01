@@ -6,6 +6,7 @@
 
 import { LlmModels, type GPTImage1, type Gemini25FlashImage } from '@intexuraos/llm-contract';
 import type { Logger } from '@intexuraos/common-core';
+import { serializeError } from '@intexuraos/common-core';
 import {
   buildSourceMap,
   validateSynthesisAttributions,
@@ -526,7 +527,7 @@ async function generateCoverImage(
 
     return imageResult.value;
   } catch (error) {
-    logger.error({ error, userId }, '[4.4.ERR] Unexpected error during cover image generation');
+    logger.error({ error: serializeError(error), userId }, '[4.4.ERR] Unexpected error during cover image generation');
     return null;
   }
 }

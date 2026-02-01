@@ -9,6 +9,7 @@ import * as functions from '@google-cloud/functions-framework';
 import { createLogger } from '../lib/logger.js';
 import { StateManager } from '../lib/state.js';
 import { VmControl } from '../lib/vm-control.js';
+import { serializeError } from '../lib/serializeError.js';
 
 const logger = createLogger('gateway');
 const state = new StateManager();
@@ -91,7 +92,7 @@ async function proxyRequest(vmIp: string, req: any, res: any): Promise<void> {
     const body = await response.text();
     res.send(body);
   } catch (error) {
-    logger.error({ error, vmIp, targetUrl }, 'Proxy error');
+    logger.error({ error: serializeError(error), vmIp, targetUrl }, 'Proxy error');
     res.status(502).send('Bad Gateway');
   }
 }
@@ -124,7 +125,7 @@ async function proxySSE(vmIp: string, port: number, path: string, res: any): Pro
       res.write(value);
     }
   } catch (error) {
-    logger.error({ error, vmIp, port, path }, 'SSE proxy error');
+    logger.error({ error: serializeError(error), vmIp, port, path }, 'SSE proxy error');
   } finally {
     res.end();
   }
