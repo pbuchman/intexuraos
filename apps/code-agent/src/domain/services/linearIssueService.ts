@@ -1,12 +1,14 @@
 /**
  * Service for managing Linear issues associated with code tasks.
- * Handles issue creation, state transitions, and fallback behavior.
+ * Handles issue validation, creation with LLM titles, state transitions, and fallback behavior.
  *
  * Design doc: docs/designs/INT-156-code-action-type.md (lines 207-308, 1901-1919)
  */
 
 import type { Logger } from '@intexuraos/common-core';
 import type { LinearAgentClient } from '../ports/linearAgentClient.js';
+
+export type LinearIssueType = 'feature' | 'bug' | 'refactor' | 'research';
 
 export interface LinearIssueServiceDeps {
   linearAgentClient: LinearAgentClient;
@@ -17,19 +19,23 @@ export interface EnsureIssueResult {
   /** Undefined when in fallback mode (Linear unavailable) */
   linearIssueId?: string;
   linearIssueTitle: string;
+  linearIssueType?: LinearIssueType;
   linearFallback: boolean;
 }
 
 export interface LinearIssueService {
   /**
    * Ensure a Linear issue exists for a code task.
-   * If linearIssueId is provided, use it. Otherwise, create a new issue.
-   * If creation fails, return fallback mode.
+   *
+   * Two modes:
+   * - Link existing: Validates issue exists and belongs to user's team
+   * - Create new: Generates title via LLM and creates issue
+   *
+   * Returns fallback mode if Linear unavailable.
    */
   ensureIssueExists(params: {
     userId: string;
     linearIssueId?: string;
-    linearIssueTitle?: string;
     taskPrompt: string;
   }): Promise<EnsureIssueResult>;
 
@@ -49,41 +55,87 @@ export function createLinearIssueService(deps: LinearIssueServiceDeps): LinearIs
 
   return {
     async ensureIssueExists(params): Promise<EnsureIssueResult> {
-      const { userId, linearIssueId, linearIssueTitle, taskPrompt } = params;
+      const { userId, linearIssueId, taskPrompt } = params;
 
-      // If linearIssueId provided, use existing issue (title optional - use fallback if missing)
+      // Link existing issue mode: validate issue exists and belongs to user's team
       if (linearIssueId !== undefined) {
-        const title = linearIssueTitle ?? `Linked issue ${linearIssueId}`;
-        logger.info({ linearIssueId }, 'Using existing Linear issue');
+        logger.info({ linearIssueId }, 'Validating existing Linear issue');
+
+        const validationResult = await linearAgentClient.validateIssue({
+          userId,
+          identifier: linearIssueId,
+        });
+
+        if (!validationResult.ok) {
+          logger.warn(
+            { linearIssueId, error: validationResult.error },
+            'Issue validation failed, using fallback mode'
+          );
+          return {
+            linearIssueTitle: `Linked issue ${linearIssueId}`,
+            linearFallback: true,
+          };
+        }
+
+        const validated = validationResult.value;
+        logger.info(
+          { linearIssueId, validatedTitle: validated.title },
+          'Issue validated successfully'
+        );
+
         return {
-          linearIssueId,
-          linearIssueTitle: title,
+          linearIssueId: validated.identifier,
+          linearIssueTitle: validated.title,
           linearFallback: false,
         };
       }
 
+      // Create new issue mode: generate title via LLM
       logger.info({}, 'Creating new Linear issue for code task');
 
-      const generatedTitle = generateIssueTitle(taskPrompt);
-
-      const result = await linearAgentClient.createIssue({
+      const titleResult = await linearAgentClient.generateTitle({
         userId,
-        title: generatedTitle,
+        description: taskPrompt,
+      });
+
+      let title: string;
+      let issueType: LinearIssueType;
+
+      if (!titleResult.ok) {
+        logger.warn({ error: titleResult.error }, 'LLM title generation failed, using fallback');
+        title = generateFallbackTitle(taskPrompt);
+        issueType = 'feature';
+      } else {
+        title = titleResult.value.title;
+        issueType = titleResult.value.issueType;
+        logger.info({ title, issueType }, 'Generated issue title via LLM');
+      }
+
+      const createResult = await linearAgentClient.createIssue({
+        userId,
+        title,
         description: `## Code Task\n\n${taskPrompt}\n\n---\n*Created automatically by code-agent*`,
         labels: ['Code Task'],
       });
 
-      if (!result.ok) {
-        logger.warn({ error: result.error }, 'Failed to create Linear issue, using fallback mode');
+      if (!createResult.ok) {
+        logger.warn({ error: createResult.error }, 'Failed to create Linear issue, using fallback mode');
         return {
-          linearIssueTitle: generatedTitle,
+          linearIssueTitle: title,
+          linearIssueType: issueType,
           linearFallback: true,
         };
       }
 
+      logger.info(
+        { issueId: createResult.value.issueIdentifier, title, issueType },
+        'Linear issue created successfully'
+      );
+
       return {
-        linearIssueId: result.value.issueIdentifier,
-        linearIssueTitle: result.value.issueTitle,
+        linearIssueId: createResult.value.issueIdentifier,
+        linearIssueTitle: createResult.value.issueTitle,
+        linearIssueType: issueType,
         linearFallback: false,
       };
     },
@@ -125,12 +177,10 @@ export function createLinearIssueService(deps: LinearIssueServiceDeps): LinearIs
 }
 
 /**
- * Generate a concise issue title from the task prompt.
- * - Max 80 characters
- * - Remove markdown, URLs, code blocks
- * - Use first sentence or phrase
+ * Fallback title generation using regex (no LLM).
+ * Used when LLM title generation fails.
  */
-function generateIssueTitle(prompt: string): string {
+function generateFallbackTitle(prompt: string): string {
   let clean = prompt;
 
   // Remove code blocks
@@ -151,5 +201,7 @@ function generateIssueTitle(prompt: string): string {
   /* v8 ignore stop @preserve */
 
   // Truncate to 80 chars
+  /* v8 ignore start -- ts-type: ternary creates branch for length check @preserve */
   return firstLine.length > 80 ? firstLine.slice(0, 77) + '...' : firstLine;
+  /* v8 ignore stop @preserve */
 }

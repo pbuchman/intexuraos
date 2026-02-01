@@ -118,6 +118,7 @@ export interface CodeTask {
   // Linear integration
   linearIssueId?: string;
   linearIssueTitle?: string;
+  linearIssueType?: 'feature' | 'bug' | 'refactor' | 'research';  // LLM-classified issue type
   linearFallback?: boolean;     // True if Linear was unavailable (design lines 290-296)
 
   // Results
