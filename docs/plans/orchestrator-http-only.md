@@ -21,19 +21,19 @@
 
 ### Current Firestore usage in orchestrator:
 
-| File | Usage | Action |
-|------|-------|--------|
-| `start.ts:166` | `getFirestore()` initialization | REMOVE |
-| `start.ts:194-200` | Firestore passed to LogForwarder | CHANGE to HTTP |
+| File                   | Usage                                | Action         |
+| ---------------------- | ------------------------------------ | -------------- |
+| `start.ts:166`         | `getFirestore()` initialization      | REMOVE         |
+| `start.ts:194-200`     | Firestore passed to LogForwarder     | CHANGE to HTTP |
 | `log-forwarder.ts:233` | Writes to `code_tasks/{taskId}/logs` | CHANGE to HTTP |
 
 ### Current environment variables:
 
-| Variable | Used For | Action |
-|----------|----------|--------|
+| Variable                             | Used For                        | Action                                     |
+| ------------------------------------ | ------------------------------- | ------------------------------------------ |
 | `INTEXURAOS_DISPATCH_SIGNING_SECRET` | Verify requests FROM code-agent | RENAME to `INTEXURAOS_ORCHESTRATOR_SECRET` |
-| `INTEXURAOS_INTERNAL_AUTH_SECRET` | In `heartbeat.ts` but NOT wired | REMOVE (wrong trust model) |
-| `GOOGLE_APPLICATION_CREDENTIALS` | Firebase init + Secret Manager | KEEP (for Secret Manager only) |
+| `INTEXURAOS_INTERNAL_AUTH_SECRET`    | In `heartbeat.ts` but NOT wired | REMOVE (wrong trust model)                 |
+| `GOOGLE_APPLICATION_CREDENTIALS`     | Firebase init + Secret Manager  | KEEP (for Secret Manager only)             |
 
 ---
 
@@ -63,11 +63,13 @@ orchestrator ──[HTTP]──► code-agent (logs, heartbeat, task-complete)
 **File:** `workers/orchestrator/src/start.ts`
 
 Find:
+
 ```typescript
 const dispatchSecret = getRequiredEnv('INTEXURAOS_DISPATCH_SIGNING_SECRET');
 ```
 
 Replace with:
+
 ```typescript
 const orchestratorSecret = getRequiredEnv('INTEXURAOS_ORCHESTRATOR_SECRET');
 ```
@@ -85,6 +87,7 @@ If there's a config type, update the field name.
 ### 1.2 Update orchestrator tests
 
 Search for `DISPATCH_SIGNING_SECRET` or `dispatchSecret` in:
+
 - `workers/orchestrator/src/__tests__/*.ts`
 
 Replace all occurrences with the new name.
@@ -98,6 +101,7 @@ Find comment referencing `INTEXURAOS_DISPATCH_SECRET` and update.
 **File:** `apps/code-agent/src/domain/models/workerSettings.ts`
 
 Find:
+
 ```typescript
 /** HMAC signing secret - must match DISPATCH_SECRET on the orchestrator */
 ```
@@ -109,15 +113,19 @@ Update comment to reference new name.
 **File:** `apps/web/src/pages/WorkerSettingsPage.tsx`
 
 Find all labels "Dispatch Signing Secret" (around lines 241, 534) and rename to:
+
 ```
 "Orchestrator Secret"
 ```
 
 Update placeholder text from:
+
 ```
 "HMAC signing secret for task dispatch"
 ```
+
 To:
+
 ```
 "Shared secret for code-agent ↔ orchestrator communication"
 ```
@@ -158,6 +166,7 @@ pnpm run ci:tracked
 **File:** `workers/orchestrator/src/heartbeat.ts`
 
 Find (around line 36):
+
 ```typescript
 const internalAuthSecret = process.env['INTEXURAOS_INTERNAL_AUTH_SECRET'] ?? '';
 ```
@@ -198,6 +207,7 @@ pnpm run ci:tracked
 **File:** `workers/orchestrator/src/start.ts`
 
 Add new required env var:
+
 ```typescript
 const codeAgentUrl = getRequiredEnv('INTEXURAOS_CODE_AGENT_URL');
 ```
@@ -207,6 +217,7 @@ const codeAgentUrl = getRequiredEnv('INTEXURAOS_CODE_AGENT_URL');
 **File:** `workers/orchestrator/src/types/config.ts`
 
 Add to `OrchestratorConfig`:
+
 ```typescript
 codeAgentUrl: string;
 ```
@@ -214,6 +225,7 @@ codeAgentUrl: string;
 ### 3.3 Pass to services
 
 In `start.ts`, pass `codeAgentUrl` to:
+
 - LogForwarder (new parameter)
 - HeartbeatManager (already expects it in config)
 
@@ -222,6 +234,7 @@ In `start.ts`, pass `codeAgentUrl` to:
 **File:** `terraform/environments/dev/main.tf`
 
 Add to orchestrator environment variables:
+
 ```hcl
 INTEXURAOS_CODE_AGENT_URL = "https://code-agent.intexuraos.cloud"
 ```
@@ -247,6 +260,7 @@ pnpm run ci:tracked
 **File:** `workers/orchestrator/src/services/log-forwarder.ts`
 
 Change config from:
+
 ```typescript
 export interface LogForwarderConfig {
   logBasePath: string;
@@ -259,6 +273,7 @@ export interface LogForwarderConfig {
 ```
 
 To:
+
 ```typescript
 export interface LogForwarderConfig {
   logBasePath: string;
@@ -345,6 +360,7 @@ private signPayload(payload: string, timestamp: number): string {
 ### 4.3 Update start.ts
 
 Remove Firestore initialization:
+
 ```typescript
 // REMOVE these lines:
 const firestore = getFirestore();
@@ -353,6 +369,7 @@ const firestore = getFirestore();
 ```
 
 Update LogForwarder instantiation:
+
 ```typescript
 const logForwarder = new LogForwarder(
   {
@@ -369,6 +386,7 @@ const logForwarder = new LogForwarder(
 **File:** `workers/orchestrator/src/start.ts`
 
 Remove:
+
 ```typescript
 import { initializeApp, cert, type ServiceAccount } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
@@ -381,6 +399,7 @@ Remove the Firebase initialization block (keep only Secret Manager via gcloud CL
 **File:** `apps/code-agent/src/routes/webhookRoutes.ts`
 
 The endpoint exists (lines 410-573). Verify it:
+
 1. Accepts HMAC authentication (not X-Internal-Auth)
 2. Uses `X-Request-Timestamp` and `X-Request-Signature` headers
 3. Validates signature against the worker's `orchestratorSecret` (renamed from dispatchSigningSecret)
@@ -394,6 +413,7 @@ If it currently uses `X-Internal-Auth`, update to use HMAC validation matching t
 Replace Firestore mocks with HTTP mocks (use `nock` or `vi.mock('node:fetch')`).
 
 Test scenarios:
+
 - Successful HTTP send
 - HTTP retry on 5xx
 - No retry on 4xx
@@ -476,11 +496,13 @@ export interface HeartbeatConfig {
 **File:** `workers/orchestrator/src/start.ts`
 
 Add import:
+
 ```typescript
 import { createHeartbeatManager } from './heartbeat.js';
 ```
 
 After creating dispatcher, add:
+
 ```typescript
 const heartbeatManager = createHeartbeatManager(
   {
@@ -501,6 +523,7 @@ heartbeatManager.start();
 **File:** `workers/orchestrator/src/services/task-dispatcher.ts`
 
 Add method:
+
 ```typescript
 getRunningTaskIds(): string[] {
   return Array.from(this.activeTasks.keys());
@@ -538,6 +561,7 @@ pnpm run ci:tracked
 **File:** `workers/orchestrator/package.json`
 
 Remove:
+
 ```json
 "firebase-admin": "..."
 ```
@@ -588,6 +612,7 @@ pnpm run ci:tracked
 ### 7.2 Integration test
 
 Create integration test that:
+
 1. Mocks code-agent endpoints
 2. Starts orchestrator
 3. Dispatches task
@@ -603,26 +628,27 @@ pnpm run ci:tracked
 
 ## Files Changed Summary
 
-| File | Changes |
-|------|---------|
-| `workers/orchestrator/src/start.ts` | Remove Firebase, add codeAgentUrl, rename secret |
-| `workers/orchestrator/src/services/log-forwarder.ts` | HTTP instead of Firestore |
-| `workers/orchestrator/src/heartbeat.ts` | HMAC auth, wire into production |
-| `workers/orchestrator/src/routes.ts` | Rename dispatchSecret |
-| `workers/orchestrator/src/types/config.ts` | Add codeAgentUrl, rename secret |
-| `workers/orchestrator/package.json` | Remove firebase-admin |
-| `workers/orchestrator/README.md` | Update architecture |
-| `apps/code-agent/src/routes/webhookRoutes.ts` | Verify HMAC auth on /internal/logs |
-| `apps/code-agent/src/routes/codeRoutes.ts` | Verify HMAC auth on /internal/code/heartbeat |
-| `apps/web/src/pages/WorkerSettingsPage.tsx` | Rename UI labels |
-| `terraform/environments/dev/main.tf` | Rename env var, add CODE_AGENT_URL |
-| `ecosystem.config.cjs` | Rename env var, add CODE_AGENT_URL |
+| File                                                 | Changes                                          |
+| ---------------------------------------------------- | ------------------------------------------------ |
+| `workers/orchestrator/src/start.ts`                  | Remove Firebase, add codeAgentUrl, rename secret |
+| `workers/orchestrator/src/services/log-forwarder.ts` | HTTP instead of Firestore                        |
+| `workers/orchestrator/src/heartbeat.ts`              | HMAC auth, wire into production                  |
+| `workers/orchestrator/src/routes.ts`                 | Rename dispatchSecret                            |
+| `workers/orchestrator/src/types/config.ts`           | Add codeAgentUrl, rename secret                  |
+| `workers/orchestrator/package.json`                  | Remove firebase-admin                            |
+| `workers/orchestrator/README.md`                     | Update architecture                              |
+| `apps/code-agent/src/routes/webhookRoutes.ts`        | Verify HMAC auth on /internal/logs               |
+| `apps/code-agent/src/routes/codeRoutes.ts`           | Verify HMAC auth on /internal/code/heartbeat     |
+| `apps/web/src/pages/WorkerSettingsPage.tsx`          | Rename UI labels                                 |
+| `terraform/environments/dev/main.tf`                 | Rename env var, add CODE_AGENT_URL               |
+| `ecosystem.config.cjs`                               | Rename env var, add CODE_AGENT_URL               |
 
 ---
 
 ## Rollback Plan
 
 If issues occur:
+
 1. Revert to previous commit
 2. Re-deploy orchestrator with Firebase access
 3. Investigate logs

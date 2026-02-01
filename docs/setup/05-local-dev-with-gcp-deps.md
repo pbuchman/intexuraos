@@ -293,6 +293,21 @@ After completing these steps, you can:
 - [x] Access secrets via ADC or direct environment variables
 - [x] Test API endpoints locally
 
+## Quick Verification
+
+After running `pnpm run dev`, verify:
+
+```bash
+# Web app is running
+curl -s http://localhost:3000 | grep -q "IntexuraOS" && echo "✓ Web app OK"
+
+# API docs available
+curl -s http://localhost:8115/docs | grep -q "swagger" && echo "✓ API docs OK"
+
+# All services up
+pnpm services:status | grep -q "online" && echo "✓ Services running"
+```
+
 ## Claude Code Setup
 
 If using Claude Code for development, configure MCP servers for Linear and Sentry integration:

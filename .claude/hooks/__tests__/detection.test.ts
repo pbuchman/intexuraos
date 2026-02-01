@@ -24,7 +24,6 @@ describe('Claude Hooks - Pattern Detection', () => {
   });
 
   describe('detect-common-patterns.sh', () => {
-
     // Create a temporary TypeScript file for testing
     function createTestFile(fileName: string, content: string): string {
       return createTempFile(testBaseDir, fileName, content);
