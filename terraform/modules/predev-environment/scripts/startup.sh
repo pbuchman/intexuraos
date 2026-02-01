@@ -1,6 +1,9 @@
 #!/bin/bash
 set -euo pipefail
 
+# Set HOME for root (required by npm/pnpm)
+export HOME=/root
+
 REPO_DIR="/opt/intexuraos"
 LOG_FILE="/var/log/predev-startup.log"
 
