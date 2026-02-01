@@ -1,0 +1,476 @@
+/**
+ * Tests for internal API routes.
+ */
+import { describe, expect, it, beforeEach, afterEach, beforeAll, afterAll } from 'vitest';
+import type { FastifyInstance } from 'fastify';
+import { buildServer } from '../../server.js';
+import type { LinearConnection, LinearIssueWithTeam } from '../../domain/models.js';
+import {
+  FakeLinearConnectionRepository,
+  FakeLinearApiClient,
+  FakeFailedIssueRepository,
+  FakeLinearActionExtractionService,
+  FakeProcessedActionRepository,
+  FakeUserServiceClient,
+  FakeLlmGenerateClient,
+} from '../fakes.js';
+import { setServices, resetServices } from '../../services.js';
+
+describe('internalRoutes', () => {
+  let app: FastifyInstance;
+  let fakeConnectionRepo: FakeLinearConnectionRepository;
+  let fakeLinearClient: FakeLinearApiClient;
+  let fakeExtractionService: FakeLinearActionExtractionService;
+  let fakeFailedIssueRepo: FakeFailedIssueRepository;
+  let fakeProcessedActionRepo: FakeProcessedActionRepository;
+  let fakeUserServiceClient: FakeUserServiceClient;
+  let fakeLlmClient: FakeLlmGenerateClient;
+
+  const INTERNAL_AUTH_TOKEN = 'test-internal-auth-token-12345';
+
+  beforeAll(async () => {
+    process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = INTERNAL_AUTH_TOKEN;
+  });
+
+  afterAll(async () => {
+    delete process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'];
+  });
+
+  beforeEach(async () => {
+    fakeConnectionRepo = new FakeLinearConnectionRepository();
+    fakeLinearClient = new FakeLinearApiClient();
+    fakeExtractionService = new FakeLinearActionExtractionService();
+    fakeFailedIssueRepo = new FakeFailedIssueRepository();
+    fakeProcessedActionRepo = new FakeProcessedActionRepository();
+    fakeUserServiceClient = new FakeUserServiceClient();
+    fakeLlmClient = new FakeLlmGenerateClient();
+    fakeUserServiceClient.setLlmClient(fakeLlmClient);
+
+    setServices({
+      connectionRepository: fakeConnectionRepo,
+      linearApiClient: fakeLinearClient,
+      extractionService: fakeExtractionService,
+      failedIssueRepository: fakeFailedIssueRepo,
+      processedActionRepository: fakeProcessedActionRepo,
+      userServiceClient: fakeUserServiceClient,
+    });
+
+    app = await buildServer();
+    await app.ready();
+  });
+
+  afterEach(async () => {
+    if (app) {
+      await app.close();
+    }
+    resetServices();
+  });
+
+  function seedConnection(userId: string): void {
+    const connection: LinearConnection = {
+      userId,
+      apiKey: 'linear-api-key-123',
+      teamId: 'team-456',
+      teamName: 'Engineering',
+      connected: true,
+      createdAt: '2025-01-15T00:00:00Z',
+      updatedAt: '2025-01-15T00:00:00Z',
+    };
+    fakeConnectionRepo.seedConnection(connection);
+  }
+
+  function createIssueWithTeam(overrides: Partial<LinearIssueWithTeam> = {}): LinearIssueWithTeam {
+    const now = new Date().toISOString();
+    return {
+      id: 'issue-1',
+      identifier: 'INT-123',
+      title: 'Test Issue',
+      description: null,
+      priority: 0,
+      state: { id: 'state-1', name: 'Backlog', type: 'backlog' },
+      url: 'https://linear.app/team/issue/INT-123',
+      createdAt: now,
+      updatedAt: now,
+      completedAt: null,
+      teamId: 'team-456',
+      ...overrides,
+    };
+  }
+
+  describe('GET /internal/linear/issues/:identifier', () => {
+    it('returns 401 when no internal auth header provided', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/internal/linear/issues/INT-123?userId=user-456',
+      });
+
+      expect(response.statusCode).toBe(401);
+      const body = response.json();
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('UNAUTHORIZED');
+    });
+
+    it('returns 401 when internal auth header is invalid', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/internal/linear/issues/INT-123?userId=user-456',
+        headers: { 'x-internal-auth': 'invalid-token' },
+      });
+
+      expect(response.statusCode).toBe(401);
+      const body = response.json();
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('UNAUTHORIZED');
+    });
+
+    it('returns 400 when identifier format is invalid', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/internal/linear/issues/invalid-format?userId=user-456',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = response.json();
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INVALID_REQUEST');
+    });
+
+    it('returns 403 when user is not connected', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/internal/linear/issues/INT-123?userId=user-456',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+      });
+
+      expect(response.statusCode).toBe(403);
+      const body = response.json();
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('FORBIDDEN');
+    });
+
+    it('returns 404 when issue does not exist', async () => {
+      seedConnection('user-456');
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/internal/linear/issues/INT-999?userId=user-456',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+      });
+
+      expect(response.statusCode).toBe(404);
+      const body = response.json();
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('NOT_FOUND');
+    });
+
+    it('returns 404 when issue belongs to different team', async () => {
+      seedConnection('user-456');
+      const issue = createIssueWithTeam({ teamId: 'different-team' });
+      fakeLinearClient.seedIssueWithTeam(issue);
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/internal/linear/issues/INT-123?userId=user-456',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+      });
+
+      expect(response.statusCode).toBe(404);
+      const body = response.json();
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('NOT_FOUND');
+    });
+
+    it('returns 200 with issue data when valid', async () => {
+      seedConnection('user-456');
+      const issue = createIssueWithTeam();
+      fakeLinearClient.seedIssueWithTeam(issue);
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/internal/linear/issues/INT-123?userId=user-456',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      expect(body.success).toBe(true);
+      expect(body.data.id).toBe('issue-1');
+      expect(body.data.identifier).toBe('INT-123');
+      expect(body.data.title).toBe('Test Issue');
+      expect(body.data.url).toBe('https://linear.app/team/issue/INT-123');
+    });
+
+    it('handles connection repository errors', async () => {
+      fakeConnectionRepo.setGetFullConnectionFailure(true, {
+        code: 'INTERNAL_ERROR',
+        message: 'Database unavailable',
+      });
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/internal/linear/issues/INT-123?userId=user-456',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = response.json();
+      expect(body.success).toBe(false);
+    });
+
+    it('handles Linear API errors', async () => {
+      seedConnection('user-456');
+      fakeLinearClient.setFailure(true, {
+        code: 'API_ERROR',
+        message: 'Rate limit exceeded',
+      });
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/internal/linear/issues/INT-123?userId=user-456',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = response.json();
+      expect(body.success).toBe(false);
+    });
+  });
+
+  describe('POST /internal/linear/issues/generate-title', () => {
+    it('returns 401 when no internal auth header provided', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/linear/issues/generate-title',
+        headers: { 'content-type': 'application/json' },
+        payload: { description: 'Fix the bug', userId: 'user-456' },
+      });
+
+      expect(response.statusCode).toBe(401);
+      const body = response.json();
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('UNAUTHORIZED');
+    });
+
+    it('returns 401 when internal auth header is invalid', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/linear/issues/generate-title',
+        headers: {
+          'content-type': 'application/json',
+          'x-internal-auth': 'invalid-token',
+        },
+        payload: { description: 'Fix the bug', userId: 'user-456' },
+      });
+
+      expect(response.statusCode).toBe(401);
+      const body = response.json();
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('UNAUTHORIZED');
+    });
+
+    it('generates title from description using LLM', async () => {
+      fakeLlmClient.setContent('{"title": "Fix login button on mobile", "issueType": "bug"}');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/linear/issues/generate-title',
+        headers: {
+          'content-type': 'application/json',
+          'x-internal-auth': INTERNAL_AUTH_TOKEN,
+        },
+        payload: {
+          description: 'The login button is not working on mobile devices',
+          userId: 'user-456',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      expect(body.success).toBe(true);
+      expect(body.data.title).toBe('Fix login button on mobile');
+      expect(body.data.issueType).toBe('bug');
+    });
+
+    it('returns feature issue type', async () => {
+      fakeLlmClient.setContent('{"title": "Add dark mode to settings", "issueType": "feature"}');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/linear/issues/generate-title',
+        headers: {
+          'content-type': 'application/json',
+          'x-internal-auth': INTERNAL_AUTH_TOKEN,
+        },
+        payload: {
+          description: 'I need dark mode support',
+          userId: 'user-456',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      expect(body.success).toBe(true);
+      expect(body.data.issueType).toBe('feature');
+    });
+
+    it('returns refactor issue type', async () => {
+      fakeLlmClient.setContent('{"title": "Refactor auth module", "issueType": "refactor"}');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/linear/issues/generate-title',
+        headers: {
+          'content-type': 'application/json',
+          'x-internal-auth': INTERNAL_AUTH_TOKEN,
+        },
+        payload: {
+          description: 'Clean up the authentication module',
+          userId: 'user-456',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      expect(body.success).toBe(true);
+      expect(body.data.issueType).toBe('refactor');
+    });
+
+    it('returns research issue type', async () => {
+      fakeLlmClient.setContent('{"title": "Investigate API options", "issueType": "research"}');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/linear/issues/generate-title',
+        headers: {
+          'content-type': 'application/json',
+          'x-internal-auth': INTERNAL_AUTH_TOKEN,
+        },
+        payload: {
+          description: 'Research the best API for payments',
+          userId: 'user-456',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      expect(body.success).toBe(true);
+      expect(body.data.issueType).toBe('research');
+    });
+
+    it('returns default title for empty description', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/linear/issues/generate-title',
+        headers: {
+          'content-type': 'application/json',
+          'x-internal-auth': INTERNAL_AUTH_TOKEN,
+        },
+        payload: {
+          description: '',
+          userId: 'user-456',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      expect(body.success).toBe(true);
+      expect(body.data.title).toBe('Code task');
+      expect(body.data.issueType).toBe('feature');
+    });
+
+    it('uses fallback when LLM client fails to initialize', async () => {
+      fakeUserServiceClient.setFailure(true, {
+        code: 'API_ERROR',
+        message: 'User service unavailable',
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/linear/issues/generate-title',
+        headers: {
+          'content-type': 'application/json',
+          'x-internal-auth': INTERNAL_AUTH_TOKEN,
+        },
+        payload: {
+          description: 'Fix the bug in the login flow',
+          userId: 'user-456',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      expect(body.success).toBe(true);
+      expect(body.data.title).toBe('Fix the bug in the login flow');
+      expect(body.data.issueType).toBe('feature');
+    });
+
+    it('uses fallback when LLM generation fails', async () => {
+      fakeLlmClient.setFailure(true, { code: 'API_ERROR', message: 'LLM error' });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/linear/issues/generate-title',
+        headers: {
+          'content-type': 'application/json',
+          'x-internal-auth': INTERNAL_AUTH_TOKEN,
+        },
+        payload: {
+          description: 'Add new feature to dashboard',
+          userId: 'user-456',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      expect(body.success).toBe(true);
+      expect(body.data.title).toBe('Add new feature to dashboard');
+      expect(body.data.issueType).toBe('feature');
+    });
+
+    it('uses fallback when JSON parsing fails', async () => {
+      fakeLlmClient.setContent('This is not valid JSON');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/linear/issues/generate-title',
+        headers: {
+          'content-type': 'application/json',
+          'x-internal-auth': INTERNAL_AUTH_TOKEN,
+        },
+        payload: {
+          description: 'Improve performance of API',
+          userId: 'user-456',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      expect(body.success).toBe(true);
+      expect(body.data.title).toBe('Improve performance of API');
+      expect(body.data.issueType).toBe('feature');
+    });
+
+    it('handles markdown code blocks in LLM response', async () => {
+      fakeLlmClient.setContent('```json\n{"title": "From code block", "issueType": "feature"}\n```');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/linear/issues/generate-title',
+        headers: {
+          'content-type': 'application/json',
+          'x-internal-auth': INTERNAL_AUTH_TOKEN,
+        },
+        payload: {
+          description: 'Some task description',
+          userId: 'user-456',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      expect(body.success).toBe(true);
+      expect(body.data.title).toBe('From code block');
+    });
+  });
+});

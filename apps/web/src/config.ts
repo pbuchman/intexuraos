@@ -27,6 +27,7 @@ export function getConfig(): AppConfig {
     calendarAgentUrl: getEnvVar('INTEXURAOS_CALENDAR_AGENT_URL'),
     linearAgentUrl: getEnvVar('INTEXURAOS_LINEAR_AGENT_URL'),
     codeAgentUrl: getEnvVar('INTEXURAOS_CODE_AGENT_URL'),
+    chatAgentUrl: getEnvVar('INTEXURAOS_CHAT_AGENT_URL'),
     appSettingsServiceUrl: getEnvVar('INTEXURAOS_APP_SETTINGS_SERVICE_URL'),
     firebaseProjectId: getEnvVar('INTEXURAOS_FIREBASE_PROJECT_ID'),
     firebaseApiKey: getEnvVar('INTEXURAOS_FIREBASE_API_KEY'),

@@ -14,6 +14,7 @@ import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
 import type {
   LinearApiClient,
   LinearIssue,
+  LinearIssueWithTeam,
   LinearTeam,
   CreateIssueInput,
   LinearError,
@@ -136,6 +137,30 @@ async function mapSingleIssue(issue: Issue): Promise<LinearIssue> {
     createdAt: issue.createdAt.toISOString(),
     updatedAt: issue.updatedAt.toISOString(),
     completedAt: issue.completedAt?.toISOString() ?? null,
+  };
+}
+
+/* istanbul ignore next -- @preserve Maps Linear SDK Issue with team that requires real API response */
+async function mapSingleIssueWithTeam(issue: Issue): Promise<LinearIssueWithTeam> {
+  const state = (await issue.state) as IssueState | null | undefined;
+  const team = (await issue.team) as { id: string } | null | undefined;
+
+  return {
+    id: issue.id,
+    identifier: issue.identifier,
+    title: issue.title,
+    description: issue.description ?? null,
+    priority: issue.priority as 0 | 1 | 2 | 3 | 4,
+    state: {
+      id: state?.id ?? '',
+      name: state?.name ?? 'Unknown',
+      type: mapIssueStateType(state?.type ?? 'backlog'),
+    },
+    url: issue.url,
+    createdAt: issue.createdAt.toISOString(),
+    updatedAt: issue.updatedAt.toISOString(),
+    completedAt: issue.completedAt?.toISOString() ?? null,
+    teamId: team?.id ?? '',
   };
 }
 
@@ -341,6 +366,35 @@ export function createLinearApiClient(): LinearApiClient {
         return ok(mapped);
       } catch (error) {
         logger.error({ error: getErrorMessage(error) }, 'Failed to fetch Linear issue');
+        return err(mapLinearError(error));
+      }
+    },
+
+    async getIssueByIdentifier(
+      apiKey: string,
+      identifier: string
+    ): Promise<Result<LinearIssueWithTeam | null, LinearError>> {
+      const dedupKey = createDedupKey('getIssueByIdentifier', apiKey.slice(0, 8), identifier);
+
+      try {
+        const mapped = await withDeduplication(dedupKey, async () => {
+          logger.info({ identifier }, 'Fetching Linear issue by identifier');
+
+          const client = getOrCreateClient(apiKey);
+
+          const issue = await client.issue(identifier);
+
+          return await mapSingleIssueWithTeam(issue);
+        });
+
+        return ok(mapped);
+      } catch (error) {
+        const errorMessage = getErrorMessage(error);
+        if (errorMessage.includes('not found') || errorMessage.includes('Entity not found')) {
+          logger.info({ identifier }, 'Issue not found by identifier');
+          return ok(null);
+        }
+        logger.error({ error: errorMessage }, 'Failed to fetch Linear issue by identifier');
         return err(mapLinearError(error));
       }
     },

@@ -35,6 +35,11 @@ export interface LinearIssue {
   completedAt: string | null;
 }
 
+/** Linear issue with team ID for validation */
+export interface LinearIssueWithTeam extends LinearIssue {
+  teamId: string;
+}
+
 /** Linear team from API */
 export interface LinearTeam {
   id: string;

@@ -22,3 +22,4 @@ export { VegaChart } from './VegaChart.js';
 export { RefreshIndicator } from './RefreshIndicator.js';
 export { VersionInfoModal } from './VersionInfoModal.js';
 export * from './ui/index.js';
+export * from './Chat/index.js';
