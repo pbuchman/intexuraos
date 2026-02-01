@@ -97,6 +97,22 @@ function createE2eLinearAgentClient(logger: Logger): LinearAgentClient {
       logger.info({ issueId: request.issueId, state: request.state }, '[E2E] Mock Linear state update');
       return Promise.resolve(ok(undefined));
     },
+    validateIssue(request): ReturnType<LinearAgentClient['validateIssue']> {
+      logger.info({ identifier: request.identifier }, '[E2E] Mock Linear issue validation');
+      return Promise.resolve(ok({
+        id: `issue-${request.identifier}`,
+        identifier: request.identifier,
+        title: `Mock ${request.identifier}`,
+        url: `https://linear.app/intexura/issue/${request.identifier}`,
+      }));
+    },
+    generateTitle(request): ReturnType<LinearAgentClient['generateTitle']> {
+      logger.info({ descriptionLength: request.description.length }, '[E2E] Mock title generation');
+      return Promise.resolve(ok({
+        title: request.description.slice(0, 80),
+        issueType: 'feature',
+      }));
+    },
   };
 }
 

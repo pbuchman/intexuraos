@@ -4,7 +4,9 @@
  * Design doc: docs/designs/INT-156-code-action-type.md (lines 207-308)
  */
 
-import type { Result } from '@intexuraos/common-core';
+import type {
+  Result,
+} from '@intexuraos/common-core';
 import { ok, err } from '@intexuraos/common-core';
 import type { Logger } from '@intexuraos/common-core';
 import type {
@@ -12,6 +14,10 @@ import type {
   CreateIssueRequest,
   CreateIssueResponse,
   UpdateIssueStateRequest,
+  ValidateIssueRequest,
+  ValidatedIssue,
+  GenerateTitleRequest,
+  GeneratedTitle,
   LinearAgentError,
 } from '../../domain/ports/linearAgentClient.js';
 
@@ -147,6 +153,143 @@ export function createLinearAgentHttpClient(
         return ok(undefined);
       } catch (error) {
         logger.error({ error }, 'linear-agent updateState request failed');
+        return err({ code: 'UNKNOWN', message: String(error) });
+      } finally {
+        clearTimeout(timeoutId);
+      }
+    },
+
+    async validateIssue(request: ValidateIssueRequest): Promise<Result<ValidatedIssue, LinearAgentError>> {
+      const url = `${baseUrl}/internal/linear/issues/${encodeURIComponent(request.identifier)}?userId=${encodeURIComponent(request.userId)}`;
+
+      logger.info({ identifier: request.identifier }, 'Validating Linear issue via linear-agent');
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => {
+        controller.abort();
+      }, timeoutMs);
+
+      try {
+        const response = await fetch(url, {
+          method: 'GET',
+          headers: {
+            'X-Internal-Auth': internalAuthToken,
+          },
+          signal: controller.signal,
+        });
+
+        if (response.status === 404) {
+          const errorText = await response.text();
+          logger.warn({ identifier: request.identifier, error: errorText }, 'Linear issue not found or wrong team');
+          return err({ code: 'NOT_FOUND', message: `Issue ${request.identifier} not found or belongs to different team` });
+        }
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          logger.error({ status: response.status, error: errorText }, 'linear-agent validateIssue failed');
+          return err({ code: 'UNAVAILABLE', message: errorText });
+        }
+
+        const body = await response.json() as {
+          success: boolean;
+          data?: {
+            id: string;
+            identifier: string;
+            title: string;
+            url: string;
+          };
+        };
+
+        /* v8 ignore start -- test-infra: invalid response path requires malformed mock @preserve */
+        if (!body.success || body.data === undefined) {
+          logger.error({ body }, 'Invalid response from linear-agent');
+          return err({ code: 'UNKNOWN', message: 'Invalid response from linear-agent' });
+        }
+        /* v8 ignore stop @preserve */
+
+        logger.info({ identifier: request.identifier, issueId: body.data.id }, 'Linear issue validated');
+
+        return ok({
+          id: body.data.id,
+          identifier: body.data.identifier,
+          title: body.data.title,
+          url: body.data.url,
+        });
+      } catch (error) {
+        /* v8 ignore start -- test-infra: AbortError path requires timing-dependent mock @preserve */
+        if (error instanceof Error && error.name === 'AbortError') {
+          logger.error({ timeoutMs }, 'linear-agent request timed out');
+          return err({ code: 'UNAVAILABLE', message: 'Request timed out' });
+        }
+        /* v8 ignore stop @preserve */
+
+        logger.error({ error }, 'linear-agent validateIssue request failed');
+        return err({ code: 'UNKNOWN', message: String(error) });
+      } finally {
+        clearTimeout(timeoutId);
+      }
+    },
+
+    async generateTitle(request: GenerateTitleRequest): Promise<Result<GeneratedTitle, LinearAgentError>> {
+      const url = `${baseUrl}/internal/linear/issues/generate-title`;
+
+      logger.info({ descriptionLength: request.description.length }, 'Generating issue title via linear-agent');
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => {
+        controller.abort();
+      }, timeoutMs);
+
+      try {
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Internal-Auth': internalAuthToken,
+          },
+          body: JSON.stringify({
+            description: request.description,
+            userId: request.userId,
+          }),
+          signal: controller.signal,
+        });
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          logger.error({ status: response.status, error: errorText }, 'linear-agent generateTitle failed');
+          return err({ code: 'UNAVAILABLE', message: errorText });
+        }
+
+        const body = await response.json() as {
+          success: boolean;
+          data?: {
+            title: string;
+            issueType: 'feature' | 'bug' | 'refactor' | 'research';
+          };
+        };
+
+        /* v8 ignore start -- test-infra: invalid response path requires malformed mock @preserve */
+        if (!body.success || body.data === undefined) {
+          logger.error({ body }, 'Invalid response from linear-agent');
+          return err({ code: 'UNKNOWN', message: 'Invalid response from linear-agent' });
+        }
+        /* v8 ignore stop @preserve */
+
+        logger.info({ title: body.data.title, issueType: body.data.issueType }, 'Issue title generated');
+
+        return ok({
+          title: body.data.title,
+          issueType: body.data.issueType,
+        });
+      } catch (error) {
+        /* v8 ignore start -- test-infra: AbortError path requires timing-dependent mock @preserve */
+        if (error instanceof Error && error.name === 'AbortError') {
+          logger.error({ timeoutMs }, 'linear-agent request timed out');
+          return err({ code: 'UNAVAILABLE', message: 'Request timed out' });
+        }
+        /* v8 ignore stop @preserve */
+
+        logger.error({ error }, 'linear-agent generateTitle request failed');
         return err({ code: 'UNKNOWN', message: String(error) });
       } finally {
         clearTimeout(timeoutId);
