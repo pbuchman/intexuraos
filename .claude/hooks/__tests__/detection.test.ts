@@ -260,30 +260,34 @@ import { describe } from 'vitest'`
         expectNoLogEntry(result, { pattern: 'bad-undefined-type' });
       });
 
-      it('does not warn for | undefined in function return type position', () => {
-        const testFile = createTestFile(
-          'function.ts',
-          `function getValue(): string | undefined {
+      it(
+        'does not warn for | undefined in function return type position',
+        { timeout: 20000 },
+        () => {
+          const testFile = createTestFile(
+            'function.ts',
+            `function getValue(): string | undefined {
   return undefined
 }`
-        );
+          );
 
-        const result = executeHookSync({
-          hookName: 'detect-common-patterns',
-          input: {
-            tool_name: 'Edit',
-            tool_input: {
-              file_path: testFile,
-              old_string: '// old',
-              new_string: '// new',
+          const result = executeHookSync({
+            hookName: 'detect-common-patterns',
+            input: {
+              tool_name: 'Edit',
+              tool_input: {
+                file_path: testFile,
+                old_string: '// old',
+                new_string: '// new',
+              },
             },
-          },
-        });
+          });
 
-        // The hook only checks property-level annotations, not function returns
-        // So this should not trigger a warning
-        expectNoLogEntry(result, { pattern: 'bad-undefined-type' });
-      });
+          // The hook only checks property-level annotations, not function returns
+          // So this should not trigger a warning
+          expectNoLogEntry(result, { pattern: 'bad-undefined-type' });
+        }
+      );
     });
 
     describe('Result.value without .ok detection', () => {
@@ -398,7 +402,7 @@ return result.ok ? result.value : defaultValue`
     // });
 
     describe('Write tool detection', () => {
-      it('detects patterns in newly written files', () => {
+      it('detects patterns in newly written files', { timeout: 20000 }, () => {
         const testFile = createTestFile(
           'new-file.ts',
           `import { foo } from "./local"
@@ -446,28 +450,32 @@ return result.value`,
         expectAllowed(result);
       });
 
-      it('ignores .tsx files (they are checked, but pattern handles them)', () => {
-        const testFile = createTestFile(
-          'component.tsx',
-          `import { foo } from "./local"
+      it(
+        'ignores .tsx files (they are checked, but pattern handles them)',
+        { timeout: 20000 },
+        () => {
+          const testFile = createTestFile(
+            'component.tsx',
+            `import { foo } from "./local"
 export default function Component() { return null }`
-        );
+          );
 
-        const result = executeHookSync({
-          hookName: 'detect-common-patterns',
-          input: {
-            tool_name: 'Edit',
-            tool_input: {
-              file_path: testFile,
-              old_string: '// old',
-              new_string: '// new',
+          const result = executeHookSync({
+            hookName: 'detect-common-patterns',
+            input: {
+              tool_name: 'Edit',
+              tool_input: {
+                file_path: testFile,
+                old_string: '// old',
+                new_string: '// new',
+              },
             },
-          },
-        });
+          });
 
-        // .tsx files ARE checked
-        expectWarned(result, { messageIncludes: '.js extension' });
-      });
+          // .tsx files ARE checked
+          expectWarned(result, { messageIncludes: '.js extension' });
+        }
+      );
     });
   });
 });

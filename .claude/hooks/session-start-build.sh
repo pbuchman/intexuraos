@@ -32,7 +32,7 @@ fi
 missing_dist=false
 for pkg in packages/*/; do
   if [ -f "$pkg/package.json" ]; then
-    has_build=$(jq -r '.scripts.build // empty' "$pkg/package.json" 2>/dev/null)
+    has_build=$(jq -r '.scripts.build // empty' "$pkg/package.json" 2>/dev/null) || true
     if [ -n "$has_build" ] && [ ! -d "$pkg/dist" ]; then
       missing_dist=true
       break
@@ -42,7 +42,10 @@ done
 
 if [ "$missing_dist" = true ]; then
   echo "Building packages (dist/ missing)..." >&2
-  pnpm build >&2
+  # Skip actual build in test mode (set by hook tests)
+  if [ "${HOOK_DRY_RUN:-}" != "1" ]; then
+    pnpm build >&2
+  fi
 fi
 
 echo "CONTINUE"

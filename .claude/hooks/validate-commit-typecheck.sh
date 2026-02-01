@@ -61,7 +61,7 @@ fi
 # Also verify packages are built
 for pkg in packages/*/; do
   if [ -f "$pkg/package.json" ]; then
-    HAS_BUILD=$(jq -r '.scripts.build // empty' "$pkg/package.json" 2>/dev/null)
+    HAS_BUILD=$(jq -r '.scripts.build // empty' "$pkg/package.json" 2>/dev/null) || true
     if [ -n "$HAS_BUILD" ] && [ ! -d "$pkg/dist" ]; then
       cat >&2 << EOF
 
