@@ -1,20 +1,23 @@
 /**
  * Chat - Container component managing chat state and UI.
- * Handles FAB toggle, message sending, and localStorage persistence.
+ * Handles FAB toggle, message sending, command creation flow, and localStorage persistence.
  */
 
 import { useState, useCallback } from 'react';
 import { useAuth } from '../../context';
 import { ChatFAB } from './ChatFAB.js';
 import { ChatPanel } from './ChatPanel.js';
+import { ChatBottomSheet } from './ChatBottomSheet.js';
 import { sendMessage, saveSession, loadSession, clearSession } from '../../services/chatService';
-import type { ChatMessage } from '../../types/chat';
+import { createCommand } from '../../services/commandsApi';
+import type { ChatMessage, SuggestedAction } from '../../types/chat';
 
 export function Chat(): React.JSX.Element {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [pendingAction, setPendingAction] = useState<SuggestedAction | null>(null);
   const { getAccessToken } = useAuth();
 
   const handleToggle = useCallback((): void => {
@@ -48,9 +51,43 @@ export function Chat(): React.JSX.Element {
       setError(null);
 
       try {
-        const response = await sendMessage(token, content, messages);
+        const response = await sendMessage(token, content, messages, pendingAction ?? undefined);
 
-        // Add assistant response
+        // Check if this was a confirmation (action was confirmed by backend)
+        if (response.suggestedAction !== null && !response.suggestedAction.awaitingConfirmation) {
+          // User confirmed - create the command via commands-agent
+          try {
+            const commandText = response.suggestedAction.payload['text'] as string;
+            const command = await createCommand(token, { text: commandText, source: 'pwa-shared' });
+            const confidencePercent = Math.round((command.classification?.confidence ?? 0) * 100);
+            const classificationType = command.classification?.type ?? 'command';
+
+            const successMessage: ChatMessage = {
+              id: `msg-${String(Date.now() + 1)}`,
+              role: 'assistant',
+              content: `✓ Created as ${classificationType} (${String(confidencePercent)}% confident): "${commandText}"\n\n[View in Inbox →]`,
+              timestamp: Date.now(),
+            };
+            const finalMessages = [...updatedMessages, successMessage];
+            setMessages(finalMessages);
+            setPendingAction(null);
+            saveSession({ messages: finalMessages, createdAt: Date.now(), lastActivityAt: Date.now() });
+          } catch {
+            const errorMessage: ChatMessage = {
+              id: `msg-${String(Date.now() + 1)}`,
+              role: 'assistant',
+              content: 'Sorry, I couldn\'t create the command. Please try again.',
+              timestamp: Date.now(),
+            };
+            const finalMessages = [...updatedMessages, errorMessage];
+            setMessages(finalMessages);
+            saveSession({ messages: finalMessages, createdAt: Date.now(), lastActivityAt: Date.now() });
+          }
+          setIsLoading(false);
+          return;
+        }
+
+        // Normal response or new action suggestion
         const assistantMessage: ChatMessage = {
           id: `msg-${String(Date.now() + 1)}`,
           role: 'assistant',
@@ -60,6 +97,14 @@ export function Chat(): React.JSX.Element {
         const finalMessages = [...updatedMessages, assistantMessage];
 
         setMessages(finalMessages);
+
+        // Store pending action if awaiting confirmation
+        if (response.suggestedAction?.awaitingConfirmation) {
+          setPendingAction(response.suggestedAction);
+        } else {
+          setPendingAction(null);
+        }
+
         saveSession({ messages: finalMessages, createdAt: Date.now(), lastActivityAt: Date.now() });
       } catch {
         setError('Failed to send message. Please try again.');
@@ -67,11 +112,12 @@ export function Chat(): React.JSX.Element {
         setIsLoading(false);
       }
     },
-    [messages, getAccessToken]
+    [messages, pendingAction, getAccessToken]
   );
 
   const handleClear = useCallback((): void => {
     setMessages([]);
+    setPendingAction(null);
     clearSession();
   }, []);
 
@@ -82,11 +128,26 @@ export function Chat(): React.JSX.Element {
   return (
     <>
       <ChatFAB isOpen={isOpen} onToggle={handleToggle} />
+      {/* Desktop: ChatPanel (hidden on mobile) */}
       <ChatPanel
         isOpen={isOpen}
         messages={messages}
         isLoading={isLoading}
         error={error}
+        pendingAction={pendingAction}
+        onSendMessage={(message): void => {
+          void handleSendMessage(message);
+        }}
+        onClose={handleClose}
+        onClear={handleClear}
+      />
+      {/* Mobile: ChatBottomSheet (hidden on desktop) */}
+      <ChatBottomSheet
+        isOpen={isOpen}
+        messages={messages}
+        isLoading={isLoading}
+        error={error}
+        pendingAction={pendingAction}
         onSendMessage={(message): void => {
           void handleSendMessage(message);
         }}

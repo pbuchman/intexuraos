@@ -1,0 +1,265 @@
+/**
+ * ChatBottomSheet - Mobile bottom sheet conversation panel.
+ * Expandable from 60% to 100% with drag handle.
+ * Swipe down to dismiss support.
+ */
+
+import { useEffect, useRef, useState, useCallback } from 'react';
+import { GripVertical, Trash2, Loader2, Minimize2, AlertCircle } from 'lucide-react';
+import { ChatMessage } from './ChatMessage.js';
+import { ChatInput } from './ChatInput.js';
+import type { ChatMessage as ChatMessageType, SuggestedAction } from '../../types/chat';
+
+interface ChatBottomSheetProps {
+  isOpen: boolean;
+  messages: ChatMessageType[];
+  isLoading: boolean;
+  error: string | null;
+  pendingAction: SuggestedAction | null;
+  onSendMessage: (message: string) => void;
+  onClose: () => void;
+  onClear: () => void;
+}
+
+export function ChatBottomSheet({
+  isOpen,
+  messages,
+  isLoading,
+  error,
+  pendingAction,
+  onSendMessage,
+  onClose,
+  onClear,
+}: ChatBottomSheetProps): React.JSX.Element | null {
+  const sheetRef = useRef<HTMLDivElement>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+  const [startY, setStartY] = useState(0);
+
+  // Auto-scroll to bottom when new messages arrive
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages, isLoading, error, pendingAction]);
+
+  // Close on escape key
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleEscape);
+    return (): void => {
+      window.removeEventListener('keydown', handleEscape);
+    };
+  }, [onClose]);
+
+  // Handle drag start
+  const handleDragStart = useCallback((clientY: number) => {
+    setIsDragging(true);
+    setStartY(clientY);
+  }, []);
+
+  // Handle drag move
+  const handleDragMove = useCallback(
+    (clientY: number) => {
+      if (!isDragging) return;
+
+      const deltaY = clientY - startY;
+
+      // If dragged down significantly and not at top, close
+      if (deltaY > 100 && deltaY < 300) {
+        setIsDragging(false);
+        onClose();
+        return;
+      }
+
+      // If dragged up significantly, expand
+      if (deltaY < -100) {
+        setIsExpanded(true);
+      } else if (deltaY > 50 && isExpanded) {
+        setIsExpanded(false);
+      }
+    },
+    [isDragging, startY, isExpanded, onClose]
+  );
+
+  // Handle drag end
+  const handleDragEnd = useCallback(() => {
+    setIsDragging(false);
+  }, []);
+
+  // Touch events
+  const handleTouchStart = useCallback(
+    (e: React.TouchEvent) => {
+      const touch = e.touches[0];
+      if (touch) handleDragStart(touch.clientY);
+    },
+    [handleDragStart]
+  );
+
+  const handleTouchMove = useCallback(
+    (e: React.TouchEvent) => {
+      const touch = e.touches[0];
+      if (touch) handleDragMove(touch.clientY);
+    },
+    [handleDragMove]
+  );
+
+  const handleTouchEnd = useCallback(() => {
+    handleDragEnd();
+  }, [handleDragEnd]);
+
+  // Mouse events (for desktop testing)
+  const handleMouseDown = useCallback(
+    (e: React.MouseEvent) => {
+      handleDragStart(e.clientY);
+    },
+    [handleDragStart]
+  );
+
+  const handleMouseMove = useCallback(
+    (e: React.MouseEvent) => {
+      handleDragMove(e.clientY);
+    },
+    [handleDragMove]
+  );
+
+  const handleMouseUp = useCallback(() => {
+    handleDragEnd();
+  }, [handleDragEnd]);
+
+  // Toggle expand state
+  const toggleExpand = useCallback((): void => {
+    setIsExpanded((prev) => !prev);
+  }, []);
+
+  if (!isOpen) return null;
+
+  return (
+    <div
+      ref={sheetRef}
+      className={`fixed inset-x-0 bottom-0 z-50 flex flex-col bg-white dark:bg-gray-900 shadow-2xl md:hidden ${isDragging ? '' : 'transition-[height] duration-300 ease-out'} ${isExpanded ? 'h-[100vh] max-h-[100vh]' : 'h-[60vh] max-h-[60vh]'}`}
+    >
+      {/* Drag handle / Header */}
+      <div
+        className="flex shrink-0 cursor-grab select-none flex items-center justify-between border-b border-gray-200 px-4 py-2 active:cursor-grabbing dark:border-gray-700"
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={handleMouseUp}
+      >
+        {/* Drag handle indicator */}
+        <div className="flex-1 flex justify-center">
+          <GripVertical className="h-6 w-6 text-gray-400" />
+        </div>
+
+        <div className="flex items-center gap-1">
+          <div className="flex items-center gap-2">
+            <div className="flex h-7 w-7 items-center justify-center rounded-full bg-blue-600 text-white text-sm font-bold">
+              I
+            </div>
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+              Intex
+            </h2>
+          </div>
+          <button
+            onClick={toggleExpand}
+            className="rounded p-1 text-gray-500 hover:bg-gray-100 hover:text-gray-700 focus:outline-none dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-200"
+            aria-label={isExpanded ? 'Collapse' : 'Expand'}
+          >
+            <Minimize2 className={`h-4 w-4 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+          </button>
+          <button
+            onClick={onClear}
+            className="rounded p-1.5 text-gray-500 hover:bg-gray-100 hover:text-gray-700 focus:outline-none dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-200"
+            aria-label="Clear conversation"
+          >
+            <Trash2 className="h-4 w-4" />
+          </button>
+          <button
+            onClick={onClose}
+            className="rounded p-1.5 text-gray-500 hover:bg-gray-100 hover:text-gray-700 focus:outline-none dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-200"
+            aria-label="Close chat"
+          >
+            <Minimize2 className="h-4 w-4" />
+          </button>
+        </div>
+      </div>
+
+      {/* Messages area */}
+      <div className="flex flex-1 flex-col overflow-y-auto px-4 py-3">
+        {messages.length === 0 && !isLoading && !error && (
+          <div className="flex flex-1 items-center justify-center text-gray-500 dark:text-gray-400">
+            <p className="text-center text-sm">
+              Ask me anything about IntexuraOS.<br />
+              I can help you navigate the system.
+            </p>
+          </div>
+        )}
+
+        {messages.map((message) => (
+          <ChatMessage
+            key={message.id}
+            message={message}
+            isUser={message.role === 'user'}
+          />
+        ))}
+
+        {/* Typing indicator */}
+        {isLoading && (
+          <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
+            <Loader2 className="h-4 w-4 animate-spin" data-testid="loader-icon" />
+            <span>Thinking...</span>
+          </div>
+        )}
+
+        {/* Error display */}
+        {error !== null && (
+          <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800 dark:border-red-800 dark:bg-red-900/20 dark:text-red-200">
+            <p className="font-semibold">Error</p>
+            <p>{error}</p>
+          </div>
+        )}
+
+        {/* Scroll anchor */}
+        <div ref={messagesEndRef} />
+      </div>
+
+      {/* Pending action confirmation */}
+      {pendingAction !== null && pendingAction.awaitingConfirmation && (
+        <div className="border-t border-gray-200 bg-blue-50 px-4 py-3 dark:border-gray-700 dark:bg-blue-900/20">
+          <div className="flex items-start gap-2">
+            <AlertCircle className="h-5 w-5 text-blue-600 mt-0.5 dark:text-blue-400 shrink-0" />
+            <div className="flex-1">
+              <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                Confirm action
+              </p>
+              <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+                Say "yes" to create: <em>"{pendingAction.payload['text'] as string}"</em>
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Input area */}
+      <div className="shrink-0 border-t border-gray-200 px-4 py-3 dark:border-gray-700">
+        <ChatInput onSend={onSendMessage} disabled={isLoading} {...(pendingAction?.awaitingConfirmation ? { placeholder: 'Say "yes" to confirm...' } : {})} />
+      </div>
+
+      {/* Swipe hint */}
+      {!isExpanded && (
+        <div className="flex justify-center py-1">
+          <p className="text-xs text-gray-400 dark:text-gray-500">Swipe down to close</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Note: Responsive switching is handled in Chat.tsx via Tailwind CSS classes:
+// - ChatBottomSheet: hidden on md+ screens (md:hidden)
+// - ChatPanel: visible only on md+ screens (hidden md:flex)
+// This CSS-based approach is preferred over JavaScript component switching.

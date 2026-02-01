@@ -1,20 +1,21 @@
 /**
  * ChatPanel - Desktop conversation panel.
  * Fixed position, bottom-right corner, above FAB.
- * Displays messages, typing indicator, and input area.
+ * Displays messages, typing indicator, pending action confirmations, and input area.
  */
 
 import { useEffect, useRef } from 'react';
-import { Minimize2, Trash2, Loader2 } from 'lucide-react';
+import { Minimize2, Trash2, Loader2, AlertCircle } from 'lucide-react';
 import { ChatMessage } from './ChatMessage.js';
 import { ChatInput } from './ChatInput.js';
-import type { ChatMessage as ChatMessageType } from '../../types/chat';
+import type { ChatMessage as ChatMessageType, SuggestedAction } from '../../types/chat';
 
 interface ChatPanelProps {
   isOpen: boolean;
   messages: ChatMessageType[];
   isLoading: boolean;
   error: string | null;
+  pendingAction: SuggestedAction | null;
   onSendMessage: (message: string) => void;
   onClose: () => void;
   onClear: () => void;
@@ -25,6 +26,7 @@ export function ChatPanel({
   messages,
   isLoading,
   error,
+  pendingAction,
   onSendMessage,
   onClose,
   onClear,
@@ -34,12 +36,14 @@ export function ChatPanel({
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, isLoading, error]);
+  }, [messages, isLoading, error, pendingAction]);
 
   if (!isOpen) return null;
 
+  const pendingCommandText = pendingAction?.payload['text'] as string | undefined;
+
   return (
-    <div className="fixed bottom-20 right-4 z-50 flex w-96 flex-col rounded-xl border border-gray-200 bg-white shadow-2xl dark:border-gray-700 dark:bg-gray-900">
+    <div className="hidden bottom-20 right-4 z-50 md:flex fixed w-96 flex-col rounded-xl border border-gray-200 bg-white shadow-2xl dark:border-gray-700 dark:bg-gray-900">
       {/* Header */}
       <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3 dark:border-gray-700">
         <div className="flex items-center gap-2">
@@ -105,8 +109,25 @@ export function ChatPanel({
         <div ref={messagesEndRef} />
       </div>
 
+      {/* Pending action confirmation */}
+      {pendingAction !== null && pendingAction.awaitingConfirmation && (
+        <div className="border-t border-gray-200 bg-blue-50 px-4 py-3 dark:border-gray-700 dark:bg-blue-900/20">
+          <div className="flex items-start gap-2">
+            <AlertCircle className="h-5 w-5 text-blue-600 mt-0.5 dark:text-blue-400" />
+            <div className="flex-1">
+              <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                Confirm action
+              </p>
+              <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+                Say "yes" to create: <em>"{pendingCommandText}"</em>
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Input area */}
-      <ChatInput onSend={onSendMessage} disabled={isLoading} />
+      <ChatInput onSend={onSendMessage} disabled={isLoading} {...(pendingAction?.awaitingConfirmation ? { placeholder: 'Say "yes" to confirm...' } : {})} />
     </div>
   );
 }

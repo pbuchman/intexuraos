@@ -10,9 +10,10 @@ import { Send, Loader2 } from 'lucide-react';
 interface ChatInputProps {
   onSend: (message: string) => void;
   disabled?: boolean;
+  placeholder?: string;
 }
 
-export function ChatInput({ onSend, disabled = false }: ChatInputProps): React.JSX.Element {
+export function ChatInput({ onSend, disabled = false, placeholder = 'Type your message...' }: ChatInputProps): React.JSX.Element {
   const [input, setInput] = useState('');
 
   const handleSubmit = (): void => {
@@ -40,7 +41,7 @@ export function ChatInput({ onSend, disabled = false }: ChatInputProps): React.J
           setInput(e.target.value);
         }}
         onKeyDown={handleKeyDown}
-        placeholder="Type your message..."
+        placeholder={placeholder}
         disabled={disabled}
         rows={1}
         className="flex-1 resize-none rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-100 disabled:opacity-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 h-[40px] max-h-[120px]"
