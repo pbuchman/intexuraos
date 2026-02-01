@@ -7,7 +7,7 @@ locals {
 # VM Instance Template
 resource "google_compute_instance_template" "predev" {
   name_prefix  = "predev-template-"
-  machine_type = "e2-medium"
+  machine_type = "e2-highmem-4"
   region       = var.region
 
   scheduling {
