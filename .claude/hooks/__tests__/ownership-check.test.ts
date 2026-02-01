@@ -48,7 +48,8 @@ function cleanupTranscript(transcriptPath: string): void {
   }
 }
 
-describe('Claude Hooks - Ownership Check', () => {
+// Use sequential to avoid resource contention issues when running with full CI
+describe.sequential('Claude Hooks - Ownership Check', () => {
   beforeEach(() => {
     clearHooksLog();
   });

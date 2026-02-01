@@ -329,13 +329,7 @@ describe('TmuxManager', () => {
       await promise;
 
       expect(errorSpy).toHaveBeenCalledWith(
-        {
-          taskId: 'task-1',
-          error: expect.objectContaining({
-            message: expect.any(String),
-            name: expect.any(String),
-          }),
-        },
+        { taskId: 'task-1', error: expect.any(Error) },
         'Graceful shutdown signal failed unexpectedly'
       );
 
@@ -399,13 +393,7 @@ describe('TmuxManager', () => {
 
       expect(isRunning).toBe(false);
       expect(errorSpy).toHaveBeenCalledWith(
-        {
-          taskId: 'task-error',
-          error: expect.objectContaining({
-            message: expect.any(String),
-            name: expect.any(String),
-          }),
-        },
+        { taskId: 'task-error', error: expect.any(Error) },
         'Unexpected error checking tmux session'
       );
     });
@@ -468,12 +456,7 @@ describe('TmuxManager', () => {
 
       expect(sessions).toEqual([]);
       expect(errorSpy).toHaveBeenCalledWith(
-        {
-          error: expect.objectContaining({
-            message: expect.any(String),
-            name: expect.any(String),
-          }),
-        },
+        { error: expect.any(Error) },
         'Failed to list tmux sessions'
       );
     });

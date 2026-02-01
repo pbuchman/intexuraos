@@ -4,7 +4,6 @@ import { join, dirname } from 'node:path';
 import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
 import type { Logger } from '@intexuraos/common-core';
-import { serializeError } from '@intexuraos/common-core';
 
 const execAsync = promisify(exec);
 
@@ -113,7 +112,7 @@ export class WorktreeManager {
 
       return worktreePaths;
     } catch (error) {
-      this.logger.error({ error: serializeError(error) }, 'Failed to list worktrees');
+      this.logger.error({ error }, 'Failed to list worktrees');
       return [];
     }
   }

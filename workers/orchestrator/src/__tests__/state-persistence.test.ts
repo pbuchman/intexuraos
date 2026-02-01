@@ -312,12 +312,7 @@ describe('StatePersistence', () => {
 
       expect(orphans).toEqual([]);
       expect(errorSpy).toHaveBeenCalledWith(
-        {
-          error: expect.objectContaining({
-            message: expect.any(String),
-            name: expect.any(String),
-          }),
-        },
+        { error: expect.any(Error) },
         'Failed to detect orphan worktrees'
       );
     });

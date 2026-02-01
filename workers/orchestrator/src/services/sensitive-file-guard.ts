@@ -1,6 +1,5 @@
 import { minimatch } from 'minimatch';
 import type { Logger } from '@intexuraos/common-core';
-import { serializeError } from '@intexuraos/common-core';
 
 export interface GuardResult {
   reverted: string[];
@@ -63,10 +62,7 @@ export class SensitiveFileGuard {
           });
           reverted.push(file);
         } catch (error) {
-          this.logger.error(
-            { file, error: serializeError(error) },
-            'Failed to revert sensitive file'
-          );
+          this.logger.error({ file, error }, 'Failed to revert sensitive file');
           remaining.push(file);
         }
       } else {

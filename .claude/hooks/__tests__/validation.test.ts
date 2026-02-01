@@ -7,7 +7,8 @@ import {
   expectAllowed,
 } from './helpers/index.js';
 
-describe('Claude Hooks - Validation', () => {
+// Use sequential to avoid resource contention issues when running with full CI
+describe.sequential('Claude Hooks - Validation', () => {
   beforeEach(() => {
     clearHooksLog();
   });

@@ -1,6 +1,5 @@
 import { Firestore, Timestamp, Transaction } from '@google-cloud/firestore';
 import { logger } from './logger.js';
-import { serializeError } from './serializeError.js';
 
 export interface PredevState {
   status: 'stopped' | 'starting' | 'running' | 'stopping';
@@ -50,7 +49,7 @@ export class StateManager {
         startedAt: toDate(data['startedAt']),
       };
     } catch (error) {
-      logger.error({ error: serializeError(error) }, 'Failed to get state');
+      logger.error({ error }, 'Failed to get state');
       return null;
     }
   }
@@ -59,7 +58,7 @@ export class StateManager {
     try {
       await this.db.collection(COLLECTION).doc(DOC_ID).set(state, { merge: true });
     } catch (error) {
-      logger.error({ error: serializeError(error) }, 'Failed to set state');
+      logger.error({ error }, 'Failed to set state');
     }
   }
 
@@ -85,7 +84,7 @@ export class StateManager {
         );
       logger.info({ ip, branch }, 'State set to running');
     } catch (error) {
-      logger.error({ error: serializeError(error) }, 'Failed to set running state');
+      logger.error({ error }, 'Failed to set running state');
       throw error;
     }
   }
@@ -145,7 +144,7 @@ export class StateManager {
       return didUpdate;
       /* v8 ignore stop @preserve */
     } catch (error) {
-      logger.error({ error: serializeError(error) }, 'Failed in setStartingIfStopped transaction');
+      logger.error({ error }, 'Failed in setStartingIfStopped transaction');
       return false;
     }
   }

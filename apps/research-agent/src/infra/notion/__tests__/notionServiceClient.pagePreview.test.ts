@@ -174,11 +174,7 @@ describe('getPagePreview', () => {
       await client.getPagePreview(userId, pageId, mockLogger);
 
       expect(mockLogger.error).toHaveBeenCalledWith(
-        {
-          error: expect.objectContaining({ message: expect.any(String), name: expect.any(String) }),
-          userId,
-          pageId,
-        },
+        { error: expect.any(Error), userId, pageId },
         'Failed to fetch page preview'
       );
     });

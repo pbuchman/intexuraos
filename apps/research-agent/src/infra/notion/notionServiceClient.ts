@@ -2,7 +2,7 @@
  * HTTP client for notion-service internal API.
  * Fetches Notion token context and page previews via service-to-service communication.
  */
-import { err, getErrorMessage, ok, serializeError, type Result } from '@intexuraos/common-core';
+import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
 import type { Logger } from 'pino';
 
 export interface NotionServiceConfig {
@@ -103,7 +103,7 @@ export function createNotionServiceClient(config: NotionServiceConfig): NotionSe
         const data = (await response.json()) as { success: true; data: PagePreview };
         return ok(data.data);
       } catch (error) {
-        logger.error({ error: serializeError(error), userId, pageId }, 'Failed to fetch page preview');
+        logger.error({ error, userId, pageId }, 'Failed to fetch page preview');
         return err({
           code: 'INTERNAL_ERROR',
           message: `Failed to fetch page preview: ${getErrorMessage(error)}`,

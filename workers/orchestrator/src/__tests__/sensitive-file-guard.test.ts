@@ -130,13 +130,7 @@ describe('SensitiveFileGuard', () => {
       expect(result.remaining).toEqual(['.env', 'src/index.ts']);
       expect(result.allSensitive).toBe(false);
       expect(errorLogger.error).toHaveBeenCalledWith(
-        {
-          file: '.env',
-          error: expect.objectContaining({
-            message: expect.any(String),
-            name: expect.any(String),
-          }),
-        },
+        { file: '.env', error: expect.any(Error) },
         'Failed to revert sensitive file'
       );
     });
@@ -171,13 +165,7 @@ describe('SensitiveFileGuard', () => {
       expect(result.remaining).toEqual(['credentials.json', 'src/index.ts']);
       expect(result.allSensitive).toBe(false);
       expect(errorLogger.error).toHaveBeenCalledWith(
-        {
-          file: 'credentials.json',
-          error: expect.objectContaining({
-            message: expect.any(String),
-            name: expect.any(String),
-          }),
-        },
+        { file: 'credentials.json', error: expect.any(Error) },
         'Failed to revert sensitive file'
       );
     });

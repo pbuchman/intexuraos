@@ -5,7 +5,6 @@
 
 import { randomUUID } from 'node:crypto';
 import type { FastifyPluginCallback, FastifyReply, FastifyRequest } from 'fastify';
-import { serializeError } from '@intexuraos/common-core';
 import { requireAuth } from '@intexuraos/common-http';
 import { getServices } from '../services.js';
 import type {
@@ -139,7 +138,7 @@ export const compositeFeedRoutes: FastifyPluginCallback = (fastify, _opts, done)
         mobileNotificationsClient: services.mobileNotificationsClient,
         logger: request.log,
       }).catch((error: unknown) => {
-        request.log.warn({ error: serializeError(error), feedId: result.value.id }, 'Failed to refresh snapshot after feed creation');
+        request.log.warn({ error, feedId: result.value.id }, 'Failed to refresh snapshot after feed creation');
       });
 
       void reply.status(201);
@@ -304,7 +303,7 @@ export const compositeFeedRoutes: FastifyPluginCallback = (fastify, _opts, done)
         mobileNotificationsClient,
         logger: request.log,
       }).catch((error: unknown) => {
-        request.log.warn({ error: serializeError(error), feedId: request.params.id }, 'Failed to refresh snapshot after feed update');
+        request.log.warn({ error, feedId: request.params.id }, 'Failed to refresh snapshot after feed update');
       });
 
       return await reply.ok(formatCompositeFeed(result.value));

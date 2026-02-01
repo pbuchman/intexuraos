@@ -145,7 +145,7 @@ describe('extractModelPreferences', () => {
 
       expect(result).toEqual({ selectedModels: [], synthesisModel: undefined });
       expect(logger.error).toHaveBeenCalledWith(
-        { error: expect.objectContaining({ message: expect.any(String), name: expect.any(String) }) },
+        { error: expect.any(Error) },
         'Exception during model extraction'
       );
     });

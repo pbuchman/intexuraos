@@ -275,10 +275,7 @@ describe('main.ts', () => {
       expect(mockLogger.error).toHaveBeenCalledWith(
         expect.objectContaining({
           taskId: 'interrupted-1',
-          error: expect.objectContaining({
-            message: expect.any(String),
-            name: expect.any(String),
-          }),
+          error: expect.any(Error),
         }),
         'Failed to notify code-agent of interrupted task'
       );
@@ -534,12 +531,7 @@ describe('main.ts', () => {
       await vi.advanceTimersByTimeAsync(5 * 60 * 1000);
 
       expect(mockLogger.error).toHaveBeenCalledWith(
-        {
-          error: expect.objectContaining({
-            message: expect.any(String),
-            name: expect.any(String),
-          }),
-        },
+        { error: expect.any(Error) },
         'Token refresh error'
       );
 
@@ -600,12 +592,7 @@ describe('main.ts', () => {
       await vi.advanceTimersByTimeAsync(5 * 60 * 1000);
 
       expect(mockLogger.error).toHaveBeenCalledWith(
-        {
-          error: expect.objectContaining({
-            message: expect.any(String),
-            name: expect.any(String),
-          }),
-        },
+        { error: expect.any(Error) },
         'Webhook retry failed'
       );
 
@@ -1068,12 +1055,7 @@ describe('main.ts', () => {
       }
 
       expect(mockLogger.error).toHaveBeenCalledWith(
-        {
-          error: expect.objectContaining({
-            message: expect.any(String),
-            name: expect.any(String),
-          }),
-        },
+        { error: expect.any(Error) },
         'Failed to start orchestrator'
       );
       expect(mockExit).toHaveBeenCalledWith(1);

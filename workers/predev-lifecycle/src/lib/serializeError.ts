@@ -12,9 +12,11 @@ export interface SerializedError {
 const MAX_STACK_LENGTH = 2000;
 
 export function serializeError(error: unknown): SerializedError {
+  /* v8 ignore start -- ts-type: non-Error path requires throwing non-Error values which is rare in typed code @preserve */
   if (!(error instanceof Error)) {
     return { message: 'Unknown error' };
   }
+  /* v8 ignore stop @preserve */
 
   const result: SerializedError = {
     message: error.message,

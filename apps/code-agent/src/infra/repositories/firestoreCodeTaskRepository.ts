@@ -16,7 +16,7 @@ import { FieldValue, Timestamp } from '@google-cloud/firestore';
 import { createHash, randomUUID } from 'node:crypto';
 import type { Result } from '@intexuraos/common-core';
 import type { Logger } from '@intexuraos/common-core';
-import { ok, err, serializeError } from '@intexuraos/common-core';
+import { ok, err } from '@intexuraos/common-core';
 import type { CodeTask } from '../../domain/models/codeTask.js';
 import type {
   CodeTaskRepository,
@@ -169,7 +169,7 @@ export const createFirestoreCodeTaskRepository = (deps: {
 
         return result;
       } catch (error) {
-        logger.error({ error: serializeError(error) }, 'Failed to create task');
+        logger.error({ error }, 'Failed to create task');
         return err({
           code: 'FIRESTORE_ERROR',
           message: `Firestore error: ${getErrorMessage(error)}`,
@@ -199,7 +199,7 @@ export const createFirestoreCodeTaskRepository = (deps: {
 
         return ok(task);
       } catch (error) {
-        logger.error({ error: serializeError(error) }, 'Failed to find task by id');
+        logger.error({ error }, 'Failed to find task by id');
         return err({
           code: 'FIRESTORE_ERROR',
           message: `Firestore error: ${getErrorMessage(error)}`,
@@ -241,7 +241,7 @@ export const createFirestoreCodeTaskRepository = (deps: {
 
         return ok(task);
       } catch (error) {
-        logger.error({ error: serializeError(error) }, 'Failed to find task by id for user');
+        logger.error({ error }, 'Failed to find task by id for user');
         return err({
           code: 'FIRESTORE_ERROR',
           message: `Firestore error: ${getErrorMessage(error)}`,
@@ -327,7 +327,7 @@ export const createFirestoreCodeTaskRepository = (deps: {
 
         return ok(task);
       } catch (error) {
-        logger.error({ error: serializeError(error), taskId, input }, 'Failed to update task');
+        logger.error({ error, taskId, input }, 'Failed to update task');
         return err({
           code: 'FIRESTORE_ERROR',
           message: `Firestore error: ${getErrorMessage(error)}`,
@@ -385,7 +385,7 @@ export const createFirestoreCodeTaskRepository = (deps: {
 
         return ok(output);
       } catch (error) {
-        logger.error({ error: serializeError(error), input }, 'Failed to list tasks');
+        logger.error({ error, input }, 'Failed to list tasks');
         return err({
           code: 'FIRESTORE_ERROR',
           message: `Firestore error: ${getErrorMessage(error)}`,
@@ -414,7 +414,7 @@ export const createFirestoreCodeTaskRepository = (deps: {
           taskId: task.id,
         });
       } catch (error) {
-        logger.error({ error: serializeError(error), linearIssueId }, 'Failed to check active task for Linear issue');
+        logger.error({ error, linearIssueId }, 'Failed to check active task for Linear issue');
         return err({
           code: 'FIRESTORE_ERROR',
           message: `Firestore error: ${getErrorMessage(error)}`,
@@ -442,7 +442,7 @@ export const createFirestoreCodeTaskRepository = (deps: {
 
         return ok(tasks);
       } catch (error) {
-        logger.error({ error: serializeError(error), staleThreshold }, 'Failed to find zombie tasks');
+        logger.error({ error, staleThreshold }, 'Failed to find zombie tasks');
         return err({
           code: 'FIRESTORE_ERROR',
           message: `Firestore error: ${getErrorMessage(error)}`,
@@ -463,7 +463,7 @@ export const createFirestoreCodeTaskRepository = (deps: {
 
         return ok(snapshot.size);
       } catch (error) {
-        logger.error({ error: serializeError(error), userId }, 'Failed to count user tasks for today');
+        logger.error({ error, userId }, 'Failed to count user tasks for today');
         return err({
           code: 'FIRESTORE_ERROR',
           message: `Firestore error: ${getErrorMessage(error)}`,
@@ -486,7 +486,7 @@ export const createFirestoreCodeTaskRepository = (deps: {
         const tasks = snapshot.docs.map((doc: any) => ({ taskId: doc.id as string }));
         return ok(tasks);
       } catch (error) {
-        logger.error({ error: serializeError(error), cutoffDate }, 'Failed to find archivable tasks');
+        logger.error({ error, cutoffDate }, 'Failed to find archivable tasks');
         return err({
           code: 'FIRESTORE_ERROR',
           message: `Firestore error: ${getErrorMessage(error)}`,
@@ -545,7 +545,7 @@ export const createFirestoreCodeTaskRepository = (deps: {
         logger.info({ taskId, logCount }, 'Task logs archived');
         return ok({ logCount, archivedAt });
       } catch (error) {
-        logger.error({ error: serializeError(error), taskId }, 'Failed to archive task logs');
+        logger.error({ error, taskId }, 'Failed to archive task logs');
         return err({
           code: 'FIRESTORE_ERROR',
           message: `Firestore error: ${getErrorMessage(error)}`,

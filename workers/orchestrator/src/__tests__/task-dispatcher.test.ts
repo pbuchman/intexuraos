@@ -576,13 +576,7 @@ describe('TaskDispatcher', () => {
       await vi.advanceTimersByTimeAsync(30 * 1000);
 
       expect(errorSpy).toHaveBeenCalledWith(
-        {
-          taskId: 'monitor-error-test',
-          error: expect.objectContaining({
-            message: expect.any(String),
-            name: expect.any(String),
-          }),
-        },
+        { taskId: 'monitor-error-test', error: expect.any(Error) },
         'Error in completion monitoring callback'
       );
     });
