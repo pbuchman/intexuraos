@@ -66,7 +66,7 @@ export function initializeFirebase(): void {
   // Check for predev environment (accessed via gateway but needs local emulators)
   const useEmulators =
     isLocalhost ||
-    (import.meta.env.INTEXURAOS_USE_FIREBASE_EMULATORS === 'true');
+    (import.meta.env['INTEXURAOS_USE_FIREBASE_EMULATORS'] === 'true');
 
   if (useEmulators) {
     connectFirestoreEmulator(firestoreClient, 'localhost', 8101);
