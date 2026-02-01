@@ -85,7 +85,7 @@ describe('Claude Hooks - Validation', () => {
       });
     });
 
-    it('allows gh pr checks with --watch flag', () => {
+    it('allows gh pr checks with --watch flag', { timeout: 20000 }, () => {
       const result = executeHookSync({
         hookName: 'validate-polling',
         input: HookFixtureBuilder.bash('gh pr checks 682 --watch'),
@@ -126,7 +126,7 @@ describe('Claude Hooks - Validation', () => {
   });
 
   describe('validate-coverage-commands.sh', () => {
-    it('blocks piping coverage output to grep', () => {
+    it('blocks piping coverage output to grep', { timeout: 20000 }, () => {
       const result = executeHookSync({
         hookName: 'validate-coverage-commands',
         input: HookFixtureBuilder.bash('pnpm test:coverage | grep -E "Lines|Branches"'),

@@ -28,7 +28,10 @@ CHANGED=$(git diff --name-only HEAD@{1} HEAD 2>/dev/null | grep -E '^packages/(i
 if [ -n "$CHANGED" ]; then
   echo "Buildable package changed by git operation, rebuilding..." >&2
   echo "[$(date '+%Y-%m-%d %H:%M:%S')] REBUILD: git op changed packages" >> "$LOG_FILE"
-  pnpm build >&2
+  # Skip actual build in test mode (set by hook tests)
+  if [ "${HOOK_DRY_RUN:-}" != "1" ]; then
+    pnpm build >&2
+  fi
 fi
 
 exit 0
