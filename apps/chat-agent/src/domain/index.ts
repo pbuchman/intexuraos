@@ -22,3 +22,14 @@ export type {
   EmbeddingClient,
 } from './usecases/searchDocumentation.js';
 export type { SearchError, SearchErrorCode } from './usecases/searchDocumentation.js';
+export { generateResponse } from './usecases/generateResponse.js';
+export type {
+  GenerateResponseDeps,
+  GenerateResponseInput,
+  GenerateErrorCode,
+  GenerateError,
+  LLMClient,
+  LLMResponse,
+  LLMError,
+} from './usecases/generateResponse.js';
+export { createChatClient, type ChatClientConfig } from './usecases/chatClient.js';
