@@ -411,7 +411,7 @@ describe('generateResponse', () => {
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
-        expect(result.error.code).toBe('INVALID_INPUT');
+        expect(result.error.code).toBe('INVALID_REQUEST');
       }
     });
 

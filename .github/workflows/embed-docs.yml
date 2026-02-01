@@ -1,0 +1,48 @@
+name: Embed Documentation
+
+# Run manually or on schedule to regenerate documentation embeddings
+on:
+  workflow_dispatch:
+  schedule:
+    # Run daily at 2 AM UTC
+    - cron: '0 2 * * *'
+  push:
+    branches:
+      - main
+      - development
+    paths:
+      - 'docs/**'
+      - 'embedding-generator/**'
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  embed-docs:
+    name: Generate Documentation Embeddings
+    runs-on: standard-4
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate embeddings
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          INTEXURAOS_GCP_PROJECT_ID: ${{ vars.INTEXURAOS_GCP_PROJECT_ID }}
+          INTEXURAOS_ENVIRONMENT: production
+        run: pnpm --filter @intexuraos/embedding-generator generate

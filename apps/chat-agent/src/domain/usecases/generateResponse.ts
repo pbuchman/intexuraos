@@ -25,7 +25,7 @@ import { searchDocumentation, type SearchDocumentationDeps } from './searchDocum
 export type GenerateErrorCode =
   | 'LLM_ERROR'
   | 'SEARCH_ERROR'
-  | 'INVALID_INPUT'
+  | 'INVALID_REQUEST'
   | 'EMPTY_MESSAGE';
 
 /** Error type for generate response operations. */
@@ -116,7 +116,7 @@ export async function generateResponse(
   if (trimmedMessage.length === 0) {
     return {
       ok: false,
-      error: { code: 'INVALID_INPUT', message: 'Message cannot be empty' },
+      error: { code: 'INVALID_REQUEST', message: 'Message cannot be empty' },
     };
   }
 

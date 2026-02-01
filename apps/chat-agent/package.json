@@ -29,6 +29,7 @@
     "pino": "^10.1.0"
   },
   "devDependencies": {
+    "jose": "^5.9.6",
     "vitest": "^3.0.0"
   }
 }

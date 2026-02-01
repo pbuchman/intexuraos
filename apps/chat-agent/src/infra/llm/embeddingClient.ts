@@ -6,6 +6,7 @@
 import type { Result } from '@intexuraos/common-core';
 import { ok, err } from '@intexuraos/common-core';
 import { getErrorMessage } from '@intexuraos/common-core';
+// eslint-disable-next-line no-restricted-imports -- OpenAI embeddings API is separate from LLM generation (not in @intexuraos/infra-gpt)
 import OpenAI from 'openai';
 
 /** Configuration for embedding client. */

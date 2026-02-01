@@ -32,4 +32,3 @@ export type {
   LLMResponse,
   LLMError,
 } from './usecases/generateResponse.js';
-export { createChatClient, type ChatClientConfig } from './usecases/chatClient.js';

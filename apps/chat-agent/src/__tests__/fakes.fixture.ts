@@ -8,9 +8,10 @@ import type {
   EmbeddingRepositoryPort,
   DocChunk,
   DocChunkWithScore,
+  SuggestedAction,
 } from '../domain/index.js';
 import type { Result } from '@intexuraos/common-core';
-import type { EmbeddingClient } from '../domain/usecases/searchDocumentation.js';
+import type { LLMResponse, LLMError } from '../domain/usecases/generateResponse.js';
 
 /**
  * Fake embedding repository for testing.
@@ -48,7 +49,7 @@ export class FakeEmbeddingRepository implements EmbeddingRepositoryPort {
 /**
  * Fake embedding client for testing.
  */
-export class FakeEmbeddingClient implements EmbeddingClient {
+export class FakeEmbeddingClient {
   private mockEmbedding: number[] = new Array(1536).fill(0.1);
   private shouldFail = false;
   private failMessage = 'Embedding failed';
@@ -76,6 +77,58 @@ export class FakeEmbeddingClient implements EmbeddingClient {
   }
 }
 
+/**
+ * Fake LLM client for testing.
+ */
+export class FakeLLMClient {
+  public response = 'Here is a response';
+  public suggestedAction: SuggestedAction | null = null;
+  public shouldFail = false;
+
+  setResponse(response: string): void {
+    this.response = response;
+  }
+
+  setSuggestedAction(action: SuggestedAction | null): void {
+    this.suggestedAction = action;
+  }
+
+  setFailure(shouldFail: boolean): void {
+    this.shouldFail = shouldFail;
+  }
+
+  async generate(
+    _prompt: string,
+    _options?: {
+      systemPrompt?: string;
+      conversationHistory?: { role: string; content: string }[];
+    }
+  ): Promise<Result<LLMResponse, LLMError>> {
+    if (this.shouldFail) {
+      return {
+        ok: false,
+        error: { code: 'LLM_ERROR', message: 'LLM failed' },
+      };
+    }
+    const baseValue = {
+      response: this.response,
+    };
+    if (this.suggestedAction !== null) {
+      Object.assign(baseValue, { suggestedAction: this.suggestedAction });
+    }
+    return {
+      ok: true,
+      value: baseValue as LLMResponse,
+    };
+  }
+
+  reset(): void {
+    this.response = 'Here is a response';
+    this.suggestedAction = null;
+    this.shouldFail = false;
+  }
+}
+
 /** Mock logger for testing. */
 export const mockLogger: {
   info: () => void;
@@ -97,6 +150,8 @@ export function setupFakeServices(): ServiceContainer {
     generateId: () => `test-${crypto.randomUUID()}`,
     embeddingRepository: new FakeEmbeddingRepository(),
     embeddingClient: new FakeEmbeddingClient(),
+    llmClient: new FakeLLMClient(),
+    logger: mockLogger as unknown as import('pino').Logger,
   };
   setServices(services);
   return services;

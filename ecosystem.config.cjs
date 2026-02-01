@@ -130,6 +130,7 @@ const SERVICE_ENV_MAPPINGS = {
   },
   'chat-agent': {
     INTEXURAOS_OPENAI_API_KEY: process.env.INTEXURAOS_OPENAI_API_KEY ?? '',
+    INTEXURAOS_LLM_MODEL: process.env.INTEXURAOS_LLM_MODEL ?? 'gemini-2.5-flash',
   },
 };
 

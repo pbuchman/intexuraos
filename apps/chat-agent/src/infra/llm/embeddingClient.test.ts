@@ -4,6 +4,7 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { EmbeddingClient, type EmbeddingClientDeps } from './embeddingClient.js';
+// eslint-disable-next-line no-restricted-imports -- OpenAI type needed for mocking embedding client (separate from LLM generation)
 import type OpenAI from 'openai';
 
 /** Mock embedding vector matching text-embedding-3-small dimensions. */

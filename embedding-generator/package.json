@@ -1,0 +1,24 @@
+{
+  "name": "@intexuraos/embedding-generator",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "description": "Generates embeddings for documentation and OpenAPI specs",
+  "scripts": {
+    "generate": "tsx src/index.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@intexuraos/common-core": "workspace:*",
+    "@intexuraos/infra-firestore": "workspace:*",
+    "openai": "^4.0.0"
+  },
+  "devDependencies": {
+    "@vitest/coverage-v8": "^1.0.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.7.3",
+    "vitest": "^2.0.0"
+  }
+}

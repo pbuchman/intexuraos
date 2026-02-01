@@ -5,7 +5,7 @@ export default defineConfig({
   test: {
     environment: 'node',
     include: ['src/**/__tests__/**/*.ts', 'src/**/*.test.ts'],
-    exclude: ['src/**/__tests__/**/*.fixture.ts'],
+    exclude: ['src/**/__tests__/**/*.fixture.ts', 'src/**/__tests__/testUtils.ts'],
     alias: {
       '@intexuraos/common-core': resolve(__dirname, '../../packages/common-core/src'),
       '@intexuraos/common-http': resolve(__dirname, '../../packages/common-http/src'),
@@ -13,6 +13,8 @@ export default defineConfig({
       '@intexuraos/http-server': resolve(__dirname, '../../packages/http-server/src'),
       '@intexuraos/infra-firestore': resolve(__dirname, '../../packages/infra-firestore/src'),
       '@intexuraos/infra-sentry': resolve(__dirname, '../../packages/infra-sentry/src'),
+      '@intexuraos/llm-contract': resolve(__dirname, '../../packages/llm-contract/src'),
+      '@intexuraos/llm-factory': resolve(__dirname, '../../packages/llm-factory/src'),
     },
     coverage: {
       provider: 'v8',

@@ -6,6 +6,16 @@
 
 import type { FastifyPluginCallback } from 'fastify';
 import { logIncomingRequest, requireAuth } from '@intexuraos/common-http';
+import { getServices } from '../services.js';
+import { generateResponse } from '../domain/usecases/generateResponse.js';
+import type { SuggestedAction, ConversationHistory } from '../domain/index.js';
+
+// Error codes for chat operations - must use standard ErrorCode values
+type ChatErrorCode =
+  | 'INVALID_REQUEST'
+  | 'UNAUTHORIZED'
+  | 'DOWNSTREAM_ERROR'
+  | 'INTERNAL_ERROR';
 
 export const chatRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   // POST /chat
@@ -19,9 +29,12 @@ export const chatRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         tags: ['chat'],
         body: {
           type: 'object',
-          required: ['message', 'conversationHistory'],
+          required: ['message'],
           properties: {
-            message: { type: 'string' },
+            message: {
+              type: 'string',
+              minLength: 1,
+            },
             conversationHistory: {
               type: 'array',
               items: {
@@ -31,6 +44,17 @@ export const chatRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                   role: { type: 'string', enum: ['user', 'assistant'] },
                   content: { type: 'string' },
                 },
+              },
+            },
+            pendingAction: {
+              type: ['object', 'null'],
+              properties: {
+                type: { type: 'string' },
+                payload: {
+                  type: 'object',
+                  additionalProperties: true,
+                },
+                awaitingConfirmation: { type: 'boolean' },
               },
             },
           },
@@ -61,7 +85,10 @@ export const chatRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                     type: ['object', 'null'],
                     properties: {
                       type: { type: 'string' },
-                      payload: { type: 'object' },
+                      payload: {
+                        type: 'object',
+                        additionalProperties: true,
+                      },
                       awaitingConfirmation: { type: 'boolean' },
                     },
                   },
@@ -85,8 +112,53 @@ export const chatRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       }
       /* v8 ignore stop @preserve */
 
-      // Stub implementation - returns 501 until RAG pipeline is implemented
-      return await reply.fail('INTERNAL_ERROR', 'Chat endpoint not yet implemented');
+      const { userId } = user;
+
+      // Validate request body
+      const body = request.body as {
+        message: string;
+        conversationHistory?: ConversationHistory[];
+        pendingAction?: SuggestedAction;
+      };
+
+      // Call generateResponse use case
+      const result = await generateResponse(
+        {
+          llmClient: getServices().llmClient,
+          searchDocumentation: {
+            embeddingRepository: getServices().embeddingRepository,
+            embeddingClient: getServices().embeddingClient,
+            logger: getServices().logger,
+          },
+          logger: getServices().logger,
+        },
+        {
+          message: body.message,
+          conversationHistory: body.conversationHistory ?? [],
+          userId,
+          ...(body.pendingAction !== undefined && { pendingAction: body.pendingAction }),
+        }
+      );
+
+      if (!result.ok) {
+        /* v8 ignore start -- upstream: Fallback for unknown error codes from domain layer @preserve */
+        // Map domain error codes to standard error codes
+        const errorMap: Record<string, ChatErrorCode> = {
+          LLM_ERROR: 'DOWNSTREAM_ERROR',
+          SEARCH_ERROR: 'DOWNSTREAM_ERROR',
+          INVALID_REQUEST: 'INVALID_REQUEST',
+          EMPTY_MESSAGE: 'INVALID_REQUEST',
+        };
+        const errorCode = errorMap[result.error.code] ?? 'INTERNAL_ERROR';
+        return await reply.fail(errorCode, result.error.message);
+        /* v8 ignore stop @preserve */
+      }
+
+      return await reply.ok({
+        response: result.value.response,
+        sources: result.value.sources,
+        suggestedAction: result.value.suggestedAction ?? null,
+      });
     }
   );
 
