@@ -201,6 +201,11 @@ export default defineConfig(({ mode }) => {
       host: '0.0.0.0',
       port: 3000,
       strictPort: true,
+      // Use polling for HMR when behind a proxy (predev gateway doesn't support WebSocket)
+      hmr: {
+        polling: true,
+        timeout: 30000,
+      },
     },
     preview: {
       port: 3000,
