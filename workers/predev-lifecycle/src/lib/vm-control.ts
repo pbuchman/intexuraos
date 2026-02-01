@@ -13,7 +13,6 @@ export class VmControl {
     try {
       logger.info({ mig: CONFIG.MIG_NAME, zone: CONFIG.ZONE }, 'Starting VM');
 
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
       await this.client.resize({
         project: CONFIG.PROJECT_ID,
         zone: CONFIG.ZONE,
@@ -33,7 +32,6 @@ export class VmControl {
     try {
       logger.info({ mig: CONFIG.MIG_NAME, zone: CONFIG.ZONE }, 'Stopping VM');
 
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
       await this.client.resize({
         project: CONFIG.PROJECT_ID,
         zone: CONFIG.ZONE,
@@ -51,7 +49,6 @@ export class VmControl {
 
   async getVmCount(): Promise<number> {
     try {
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-return
       const [response] = await this.client.get({
         project: CONFIG.PROJECT_ID,
         zone: CONFIG.ZONE,

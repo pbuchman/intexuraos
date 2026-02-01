@@ -244,21 +244,40 @@ See `.claude/CLAUDE.md` for the complete AI development playbook.
 
 ## Quick Start
 
+### Prerequisites
+
+- Node.js 22+, pnpm 9+, Docker
+- GCP account (for remote services)
+
+### First Time Setup
+
 ```bash
-# Install dependencies
 pnpm install
-
-# Setup environment
-cp .env.example .env.local
-
-# Run test suite (in-memory fakes, no external deps)
-pnpm run ci
-
-# Start local development
-pnpm run dev
+cp .envrc.local.example .envrc.local  # Environment template
+direnv allow                         # Load env vars
 ```
 
-For full setup: [Setup Guide](docs/setup/01-gcp-project.md)
+### Start Local Development
+
+```bash
+pnpm run dev          # Start emulators + all services
+```
+
+**Access Points:**
+| Service | URL |
+|---------|-----|
+| Web App | http://localhost:3000 |
+| API Docs | http://localhost:8115/docs |
+| Log Viewer | http://localhost:8107 |
+| Firebase UI | http://localhost:8100 |
+
+**Management:**
+
+- `pnpm services:status` - View all services
+- `pnpm services:logs` - Tail logs
+- `pnpm services:stop` - Stop all
+
+Full setup: [Development Setup Guide](docs/setup/05-local-dev-with-gcp-deps.md)
 
 ---
 

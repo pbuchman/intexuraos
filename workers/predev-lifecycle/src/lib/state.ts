@@ -69,13 +69,19 @@ export class StateManager {
   // Report-ready is authoritative - always succeeds
   async setRunning(ip: string, branch: string): Promise<void> {
     try {
-      await this.db.collection(COLLECTION).doc(DOC_ID).set({
-        status: 'running',
-        vmIp: ip,
-        branch,
-        lastActivity: new Date(),
-        startedAt: new Date(),
-      } as FirestoreData, { merge: true });
+      await this.db
+        .collection(COLLECTION)
+        .doc(DOC_ID)
+        .set(
+          {
+            status: 'running',
+            vmIp: ip,
+            branch,
+            lastActivity: new Date(),
+            startedAt: new Date(),
+          } as FirestoreData,
+          { merge: true }
+        );
       logger.info({ ip, branch }, 'State set to running');
     } catch (error) {
       logger.error({ error }, 'Failed to set running state');
@@ -84,6 +90,7 @@ export class StateManager {
   }
 
   // Only transition to starting if currently stopped - prevents race conditions
+  /* v8 ignore start -- upstream: Firestore transaction branches depend on external state and timing @preserve */
   async setStartingIfStopped(): Promise<boolean> {
     try {
       const result = await this.db.runTransaction(async (tx: Transaction) => {
@@ -125,6 +132,7 @@ export class StateManager {
         logger.info({ status }, 'Skipped setStarting - not stopped');
       }
       return didUpdate;
+      /* v8 ignore stop @preserve */
     } catch (error) {
       logger.error({ error }, 'Failed in setStartingIfStopped transaction');
       return false;

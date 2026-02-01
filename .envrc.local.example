@@ -173,7 +173,7 @@ export INTEXURAOS_ENVIRONMENT=development
 # Generate a secret: openssl rand -hex 32
 # Then configure it in BOTH:
 # 1. IntexuraOS worker settings (stored encrypted in Firestore)
-# 2. Orchestrator's ~/.claude-orchestrator/.env as INTEXURAOS_DISPATCH_SIGNING_SECRET
+# 2. Orchestrator's ~/.claude-orchestrator/.env as INTEXURAOS_ORCHESTRATOR_SECRET
 #
 # See workers/orchestrator/README.md for full orchestrator setup instructions.
-INTEXURAOS_DISPATCH_SIGNING_SECRET=your-super-confidential-secret-here
+export INTEXURAOS_ORCHESTRATOR_SECRET=your-super-confidential-secret-here

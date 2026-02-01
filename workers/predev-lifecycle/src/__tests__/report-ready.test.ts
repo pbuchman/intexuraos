@@ -3,13 +3,17 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 // Preserve actual exports while mocking Firestore
 vi.mock('@google-cloud/firestore', async () => {
   const actual = await vi.importActual('@google-cloud/firestore');
-  const mockGet = vi.fn();
+  const mockSet = vi.fn().mockResolvedValue(undefined);
+  const mockGet = vi.fn().mockResolvedValue({ exists: false });
   return {
     ...actual,
     Firestore: vi.fn(function () {
       return {
         collection: vi.fn(() => ({
-          doc: mockGet,
+          doc: vi.fn(() => ({
+            set: mockSet,
+            get: mockGet,
+          })),
         })),
       };
     }),
@@ -66,52 +70,52 @@ describe('reportReady function', () => {
 
   it('should reject non-POST requests', async () => {
     mockReq.method = 'GET';
-    await reportReady(mockReq, mockRes);
+    await reportReady(mockReq as never, mockRes as never);
     expect(mockRes.status).toHaveBeenCalledWith(405);
     expect(sendFn).toHaveBeenCalledWith('Method not allowed');
   });
 
   it('should return 400 when ip is missing', async () => {
     mockReq.body = { branch: 'development' };
-    await reportReady(mockReq, mockRes);
+    await reportReady(mockReq as never, mockRes as never);
     expect(mockRes.status).toHaveBeenCalledWith(400);
     expect(sendFn).toHaveBeenCalledWith('Missing ip or branch');
   });
 
   it('should return 400 when branch is missing', async () => {
     mockReq.body = { ip: '10.0.0.1' };
-    await reportReady(mockReq, mockRes);
+    await reportReady(mockReq as never, mockRes as never);
     expect(mockRes.status).toHaveBeenCalledWith(400);
     expect(sendFn).toHaveBeenCalledWith('Missing ip or branch');
   });
 
   it('should return 400 when both ip and branch are missing', async () => {
     mockReq.body = {};
-    await reportReady(mockReq, mockRes);
+    await reportReady(mockReq as never, mockRes as never);
     expect(mockRes.status).toHaveBeenCalledWith(400);
   });
 
   it('should return 400 when ip is null', async () => {
     mockReq.body = { ip: null, branch: 'development' };
-    await reportReady(mockReq, mockRes);
+    await reportReady(mockReq as never, mockRes as never);
     expect(mockRes.status).toHaveBeenCalledWith(400);
   });
 
   it('should return 400 when branch is null', async () => {
     mockReq.body = { ip: '10.0.0.1', branch: null };
-    await reportReady(mockReq, mockRes);
+    await reportReady(mockReq as never, mockRes as never);
     expect(mockRes.status).toHaveBeenCalledWith(400);
   });
 
   it('should return OK after processing', async () => {
-    await reportReady(mockReq, mockRes);
+    await reportReady(mockReq as never, mockRes as never);
     expect(mockRes.status).toHaveBeenCalledWith(200);
     expect(sendFn).toHaveBeenCalledWith('OK');
   });
 
   it('should handle different branch names', async () => {
     mockReq.body = { ip: '10.0.0.2', branch: 'feature/test' };
-    await reportReady(mockReq, mockRes);
+    await reportReady(mockReq as never, mockRes as never);
     expect(mockRes.status).toHaveBeenCalledWith(200);
   });
 });

@@ -86,14 +86,17 @@ vi.mock('../lib/config.js', () => ({
 
 import { gateway } from '../functions/gateway.js';
 
+// Type for test request (subset of Express Request)
+interface TestRequest {
+  method?: string;
+  url?: string;
+  path?: string;
+  headers?: Record<string, string>;
+  body?: unknown;
+}
+
 describe('gateway function', () => {
-  let mockReq: {
-    method?: string;
-    url?: string;
-    path?: string;
-    headers?: Record<string, string>;
-    body?: unknown;
-  };
+  let mockReq: TestRequest;
   let mockRes: MockResponse;
   let sendFn: ReturnType<typeof vi.fn>;
 
@@ -102,7 +105,7 @@ describe('gateway function', () => {
     const res: Partial<MockResponse> = {
       status: vi.fn(function (this: MockResponse) {
         this.send = sendFn;
-        this.setHeader = vi.fn(() => this);
+        this.setHeader = vi.fn(() => this) as never;
         return this;
       }) as unknown as ReturnType<typeof vi.fn> & MockResponseChaining,
       send: sendFn,
@@ -136,7 +139,7 @@ describe('gateway function', () => {
     it('should return 503 for SSE when VM is not running', async () => {
       mockReq.url = '/devbar/logs';
 
-      await gateway(mockReq, mockRes);
+      await gateway(mockReq as never, mockRes as never);
 
       expect(mockRes.status).toHaveBeenCalledWith(503);
       expect(sendFn).toHaveBeenCalledWith('VM not running');
@@ -147,7 +150,7 @@ describe('gateway function', () => {
     it('should start VM and show starting page when VM is stopped', async () => {
       mockResize.mockResolvedValue([{ name: 'operation-start' }]);
 
-      await gateway(mockReq, mockRes);
+      await gateway(mockReq as never, mockRes as never);
 
       expect(mockResize).toHaveBeenCalledWith({
         project: 'test-project',
@@ -161,7 +164,7 @@ describe('gateway function', () => {
     it('should return 503 when VM start fails', async () => {
       mockResize.mockRejectedValue(new Error('Start failed'));
 
-      await gateway(mockReq, mockRes);
+      await gateway(mockReq as never, mockRes as never);
 
       expect(mockRes.status).toHaveBeenCalledWith(503);
       // VmControl prefixes with "Failed to start VM: " and gateway prefixes again
@@ -173,7 +176,7 @@ describe('gateway function', () => {
     it('should show starting page when state is null', async () => {
       mockResize.mockResolvedValue([{ name: 'operation-start' }]);
 
-      await gateway(mockReq, mockRes);
+      await gateway(mockReq as never, mockRes as never);
 
       expect(mockRes.status).toHaveBeenCalledWith(200);
     });
@@ -182,7 +185,7 @@ describe('gateway function', () => {
   describe('Error handling', () => {
     it('should return 500 for unknown state', async () => {
       // This test verifies the gateway handles unexpected states
-      await gateway(mockReq, mockRes);
+      await gateway(mockReq as never, mockRes as never);
 
       // Default behavior when no state exists - should start VM
       expect(mockResize).toHaveBeenCalled();
@@ -196,7 +199,7 @@ describe('gateway function', () => {
       mockReq.method = 'GET';
       mockReq.url = '/api/test';
 
-      await gateway(mockReq, mockRes);
+      await gateway(mockReq as never, mockRes as never);
 
       expect(mockResize).toHaveBeenCalled();
     });
@@ -208,7 +211,7 @@ describe('gateway function', () => {
       mockReq.url = '/api/test';
       mockReq.body = { data: 'test' };
 
-      await gateway(mockReq, mockRes);
+      await gateway(mockReq as never, mockRes as never);
 
       expect(mockResize).toHaveBeenCalled();
     });
@@ -227,7 +230,7 @@ describe('gateway function', () => {
         text: () => Promise.resolve('{"result":"ok"}'),
       } as Response);
 
-      await gateway(mockReq, mockRes);
+      await gateway(mockReq as never, mockRes as never);
 
       expect(global.fetch).toHaveBeenCalledWith(
         'http://10.0.0.1:3000/test',
@@ -239,7 +242,7 @@ describe('gateway function', () => {
     it('should return 502 on proxy error', async () => {
       vi.mocked(global.fetch).mockRejectedValue(new Error('Connection refused'));
 
-      await gateway(mockReq, mockRes);
+      await gateway(mockReq as never, mockRes as never);
 
       expect(mockRes.status).toHaveBeenCalledWith(502);
       expect(sendFn).toHaveBeenCalledWith('Bad Gateway');
@@ -256,7 +259,7 @@ describe('gateway function', () => {
       mockReq.method = 'POST';
       mockReq.body = { data: 'test' };
 
-      await gateway(mockReq, mockRes);
+      await gateway(mockReq as never, mockRes as never);
 
       expect(global.fetch).toHaveBeenCalledWith(
         'http://10.0.0.1:3000/test',
@@ -283,7 +286,7 @@ describe('gateway function', () => {
 
       mockReq.url = '/devbar/logs';
 
-      await gateway(mockReq, mockRes);
+      await gateway(mockReq as never, mockRes as never);
 
       expect(global.fetch).toHaveBeenCalledWith('http://10.0.0.1:8106/logs');
       expect(mockRes.setHeader).toHaveBeenCalledWith('Content-Type', 'text/event-stream');
@@ -302,7 +305,7 @@ describe('gateway function', () => {
 
       mockReq.url = '/devbar/events';
 
-      await gateway(mockReq, mockRes);
+      await gateway(mockReq as never, mockRes as never);
 
       expect(global.fetch).toHaveBeenCalledWith('http://10.0.0.1:8105/events');
     });
@@ -315,7 +318,7 @@ describe('gateway function', () => {
 
       mockReq.url = '/devbar/logs';
 
-      await gateway(mockReq, mockRes);
+      await gateway(mockReq as never, mockRes as never);
 
       expect(mockRes.status).toHaveBeenCalledWith(503);
       expect(sendFn).toHaveBeenCalledWith('SSE endpoint unavailable');
@@ -330,7 +333,7 @@ describe('gateway function', () => {
 
       mockReq.url = '/devbar/logs';
 
-      await gateway(mockReq, mockRes);
+      await gateway(mockReq as never, mockRes as never);
 
       expect(mockRes.end).toHaveBeenCalled();
     });
@@ -340,7 +343,7 @@ describe('gateway function', () => {
     it('should show starting page when state is starting', async () => {
       mockStateData = { status: 'starting', vmIp: null, branch: 'feature/test' };
 
-      await gateway(mockReq, mockRes);
+      await gateway(mockReq as never, mockRes as never);
 
       expect(mockRes.status).toHaveBeenCalledWith(200);
       expect(sendFn).toHaveBeenCalledWith(expect.stringContaining('Starting Pre-Dev Environment'));

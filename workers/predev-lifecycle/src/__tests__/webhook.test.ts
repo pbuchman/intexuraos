@@ -6,7 +6,7 @@ vi.mock('crypto', async () => {
   const actual = await vi.importActual<typeof crypto>('crypto');
 
   // Create mock HMAC that produces predictable signature
-  const mockUpdate = vi.fn(function () {
+  const mockUpdate = vi.fn(function (this: unknown) {
     return this;
   });
   const mockDigest = vi.fn(() => 'predicted-hash-value');
@@ -88,33 +88,33 @@ describe('webhook function', () => {
 
   it('should reject non-POST requests', async () => {
     mockReq.method = 'GET';
-    await webhook(mockReq, mockRes);
+    await webhook(mockReq as never, mockRes as never);
     expect(mockRes.status).toHaveBeenCalledWith(405);
     expect(sendFn).toHaveBeenCalledWith('Method not allowed');
   });
 
   it('should return 500 when webhook secret is not configured', async () => {
     delete process.env['INTEXURAOS_GITHUB_WEBHOOK_SECRET'];
-    await webhook(mockReq, mockRes);
+    await webhook(mockReq as never, mockRes as never);
     expect(mockRes.status).toHaveBeenCalledWith(500);
     process.env['INTEXURAOS_GITHUB_WEBHOOK_SECRET'] = 'test-secret';
   });
 
   it('should return 401 when signature is missing', async () => {
     mockReq.headers = {};
-    await webhook(mockReq, mockRes);
+    await webhook(mockReq as never, mockRes as never);
     expect(mockRes.status).toHaveBeenCalledWith(401);
   });
 
   it('should return 401 when signature is empty string', async () => {
     mockReq.headers = { 'x-hub-signature-256': '' };
-    await webhook(mockReq, mockRes);
+    await webhook(mockReq as never, mockRes as never);
     expect(mockRes.status).toHaveBeenCalledWith(401);
   });
 
   it('should ignore non-push events', async () => {
     mockReq.headers['x-github-event'] = 'pull_request';
-    await webhook(mockReq, mockRes);
+    await webhook(mockReq as never, mockRes as never);
     expect(mockRes.status).toHaveBeenCalledWith(200);
     expect(sendFn).toHaveBeenCalledWith('Ignored event');
   });
@@ -122,7 +122,7 @@ describe('webhook function', () => {
   it('should return 400 when ref is missing', async () => {
     mockReq.body = {};
     mockReq.rawBody = JSON.stringify(mockReq.body);
-    await webhook(mockReq, mockRes);
+    await webhook(mockReq as never, mockRes as never);
     expect(mockRes.status).toHaveBeenCalledWith(400);
     expect(sendFn).toHaveBeenCalledWith('Missing ref');
   });
@@ -130,19 +130,19 @@ describe('webhook function', () => {
   it('should return 400 when ref is empty string', async () => {
     mockReq.body = { ref: '' };
     mockReq.rawBody = JSON.stringify(mockReq.body);
-    await webhook(mockReq, mockRes);
+    await webhook(mockReq as never, mockRes as never);
     expect(mockRes.status).toHaveBeenCalledWith(400);
   });
 
   it('should update state with branch from push event', async () => {
-    await webhook(mockReq, mockRes);
+    await webhook(mockReq as never, mockRes as never);
     expect(mockRes.status).toHaveBeenCalledWith(200);
   });
 
   it('should extract branch name from refs/heads/ prefix', async () => {
     mockReq.body = { ref: 'refs/heads/feature/test-branch' };
     mockReq.rawBody = JSON.stringify({ ref: 'refs/heads/feature/test-branch' });
-    await webhook(mockReq, mockRes);
+    await webhook(mockReq as never, mockRes as never);
     expect(mockRes.status).toHaveBeenCalledWith(200);
   });
 
@@ -150,7 +150,7 @@ describe('webhook function', () => {
     // Use an invalid signature (digest output won't match)
     mockReq.headers['x-hub-signature-256'] = 'sha256=invalid-signature';
 
-    await webhook(mockReq, mockRes);
+    await webhook(mockReq as never, mockRes as never);
     expect(mockRes.status).toHaveBeenCalledWith(401);
   });
 
@@ -158,13 +158,13 @@ describe('webhook function', () => {
     // Use a malformed signature that will cause comparison to fail
     mockReq.headers['x-hub-signature-256'] = 'invalid-format';
 
-    await webhook(mockReq, mockRes);
+    await webhook(mockReq as never, mockRes as never);
     // Should return 401 due to signature validation failure
     expect(mockRes.status).toHaveBeenCalledWith(401);
   });
 
   it('should return OK after processing push event', async () => {
-    await webhook(mockReq, mockRes);
+    await webhook(mockReq as never, mockRes as never);
     expect(sendFn).toHaveBeenCalledWith('OK');
   });
 });

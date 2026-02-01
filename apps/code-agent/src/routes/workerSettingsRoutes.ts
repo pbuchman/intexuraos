@@ -52,7 +52,7 @@ function validateCredentialsNotMasked(
     return 'CF Access Client Secret contains masked characters - please enter the actual credential';
   }
   if (credentials.dispatchSigningSecret !== undefined && isMaskedCredential(credentials.dispatchSigningSecret)) {
-    return 'Dispatch Signing Secret contains masked characters - please enter the actual credential';
+    return 'Orchestrator Secret contains masked characters - please enter the actual credential';
   }
   return undefined;
 }
