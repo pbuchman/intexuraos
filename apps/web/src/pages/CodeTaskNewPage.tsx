@@ -189,7 +189,6 @@ export function CodeTaskNewPage(): React.JSX.Element {
             void handleSubmit();
           }}
           disabled={!isValid || submitting}
-          isLoading={submitting}
         >
           <Play className="h-4 w-4 sm:mr-2" />
           <span className="hidden sm:inline">Submit Task</span>
