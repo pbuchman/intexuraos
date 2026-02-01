@@ -13,6 +13,7 @@ export interface Config {
   actionsAgentUrl: string;
   webhookVerifySecret: string;
   tokenEncryptionKey: string;
+  orchestratorSecret: string;
   // Auth0 JWT validation
   auth0Audience: string;
   auth0Issuer: string;
@@ -29,6 +30,7 @@ export function loadConfig(): Config {
   const linearAgentUrl = process.env['INTEXURAOS_LINEAR_AGENT_URL'] ?? '';
   const actionsAgentUrl = process.env['INTEXURAOS_ACTIONS_AGENT_URL'] ?? '';
   const webhookVerifySecret = process.env['INTEXURAOS_WEBHOOK_VERIFY_SECRET'] ?? '';
+  const orchestratorSecret = process.env['INTEXURAOS_ORCHESTRATOR_SECRET'] ?? '';
   const auth0Audience = process.env['INTEXURAOS_AUTH_AUDIENCE'] ?? '';
   const auth0Issuer = process.env['INTEXURAOS_AUTH_ISSUER'] ?? '';
   const auth0JwksUri = process.env['INTEXURAOS_AUTH_JWKS_URL'] ?? '';
@@ -44,6 +46,7 @@ export function loadConfig(): Config {
     linearAgentUrl,
     actionsAgentUrl,
     webhookVerifySecret,
+    orchestratorSecret,
     tokenEncryptionKey,
     auth0Audience,
     auth0Issuer,

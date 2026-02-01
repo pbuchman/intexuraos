@@ -5,6 +5,7 @@ import type { StatePersistence } from './services/state-persistence.js';
 import type { TaskDispatcher } from './services/task-dispatcher.js';
 import type { GitHubTokenService } from './github/token-service.js';
 import type { WebhookClient } from './services/webhook-client.js';
+import type { HeartbeatManager } from './heartbeat.js';
 import { registerRoutes } from './routes.js';
 import fastify from 'fastify';
 import cors from '@fastify/cors';
@@ -37,6 +38,7 @@ export async function main(
   dispatcher: TaskDispatcher,
   tokenService: GitHubTokenService,
   webhookClient: WebhookClient,
+  heartbeatManager: HeartbeatManager,
   logger: Logger
 ): Promise<void> {
   serviceState = {
@@ -80,6 +82,9 @@ export async function main(
     const webhookRetryInterval = scheduleWebhookRetry(webhookClient, logger);
     const taskPollInterval = scheduleTaskPolling(dispatcher, logger);
 
+    // Start heartbeat manager
+    heartbeatManager.start();
+
     // Set ready status
     serviceState.status = 'ready';
 
@@ -90,6 +95,7 @@ export async function main(
       taskPollInterval,
       dispatcher,
       statePersistence,
+      heartbeatManager,
       logger,
     });
 
@@ -187,6 +193,7 @@ interface ShutdownHandlers {
   taskPollInterval: NodeJS.Timeout;
   dispatcher: TaskDispatcher;
   statePersistence: StatePersistence;
+  heartbeatManager: HeartbeatManager;
   logger: Logger;
 }
 
@@ -203,6 +210,7 @@ function setupShutdownHandlers(handlers: ShutdownHandlers): void {
     clearInterval(handlers.tokenRefreshInterval);
     clearInterval(handlers.webhookRetryInterval);
     clearInterval(handlers.taskPollInterval);
+    handlers.heartbeatManager.stop();
 
     // Wait for running tasks (up to timeout)
     const startTime = Date.now();

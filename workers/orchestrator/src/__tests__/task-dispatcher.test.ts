@@ -1039,4 +1039,54 @@ describe('TaskDispatcher', () => {
       vi.useRealTimers();
     });
   });
+
+  describe('getRunningTaskIds', () => {
+    it('should return empty array when no tasks are running', () => {
+      const ids = dispatcher.getRunningTaskIds();
+      expect(ids).toEqual([]);
+    });
+
+    it('should return task IDs for active tasks', async () => {
+      const request1: CreateTaskRequest = {
+        taskId: 'heartbeat-test-1',
+        workerType: 'auto',
+        prompt: 'Test task 1',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+      };
+
+      const request2: CreateTaskRequest = {
+        taskId: 'heartbeat-test-2',
+        workerType: 'auto',
+        prompt: 'Test task 2',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+      };
+
+      await dispatcher.submitTask(request1);
+      await dispatcher.submitTask(request2);
+
+      const ids = dispatcher.getRunningTaskIds();
+      expect(ids).toHaveLength(2);
+      expect(ids).toContain('heartbeat-test-1');
+      expect(ids).toContain('heartbeat-test-2');
+    });
+
+    it('should extract task IDs from activeTasks keys', async () => {
+      const request: CreateTaskRequest = {
+        taskId: 'test-task',
+        workerType: 'auto',
+        prompt: 'Test task',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'secret',
+      };
+
+      await dispatcher.submitTask(request);
+
+      const ids = dispatcher.getRunningTaskIds();
+      // activeTasks contains keys like 'test-task-monitor', 'test-task-warning', 'test-task-kill'
+      // getRunningTaskIds filters for '-monitor' suffix and removes it
+      expect(ids).toContain('test-task');
+    });
+  });
 });

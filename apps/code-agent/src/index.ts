@@ -11,6 +11,7 @@ const REQUIRED_ENV = [
   'INTEXURAOS_INTERNAL_AUTH_TOKEN',
   'INTEXURAOS_WEBHOOK_VERIFY_SECRET',
   'INTEXURAOS_TOKEN_ENCRYPTION_KEY', // For per-user worker credentials encryption (has dev fallback)
+  'INTEXURAOS_ORCHESTRATOR_SECRET', // For HMAC signature validation from orchestrator
 ];
 
 /**

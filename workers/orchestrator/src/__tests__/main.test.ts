@@ -9,6 +9,7 @@ import type { StatePersistence } from '../services/state-persistence.js';
 import type { TaskDispatcher } from '../services/task-dispatcher.js';
 import type { GitHubTokenService } from '../github/token-service.js';
 import type { WebhookClient } from '../services/webhook-client.js';
+import type { HeartbeatManager } from '../heartbeat.js';
 import type { Logger } from '@intexuraos/common-core';
 import type { OrchestratorState } from '../types/state.js';
 
@@ -90,6 +91,11 @@ describe('main.ts', () => {
     getPendingCount: vi.fn(),
   } as unknown as WebhookClient;
 
+  const mockHeartbeatManager: HeartbeatManager = {
+    start: vi.fn(),
+    stop: vi.fn(),
+  } as unknown as HeartbeatManager;
+
   beforeEach(() => {
     vi.clearAllMocks();
     vi.useFakeTimers();
@@ -146,6 +152,7 @@ describe('main.ts', () => {
           mockDispatcher,
           mockTokenService,
           mockWebhookClient,
+          mockHeartbeatManager,
           mockLogger
         );
       } catch {
@@ -208,6 +215,7 @@ describe('main.ts', () => {
           mockDispatcher,
           mockTokenService,
           mockWebhookClient,
+          mockHeartbeatManager,
           mockLogger
         );
       } catch {
@@ -266,6 +274,7 @@ describe('main.ts', () => {
           mockDispatcher,
           mockTokenService,
           mockWebhookClient,
+          mockHeartbeatManager,
           mockLogger
         );
       } catch {
@@ -333,6 +342,7 @@ describe('main.ts', () => {
           mockDispatcher,
           mockTokenService,
           mockWebhookClient,
+          mockHeartbeatManager,
           mockLogger
         );
       } catch {
@@ -401,6 +411,7 @@ describe('main.ts', () => {
           mockDispatcher,
           mockTokenService,
           mockWebhookClient,
+          mockHeartbeatManager,
           mockLogger
         );
       } catch {
@@ -428,6 +439,7 @@ describe('main.ts', () => {
           mockDispatcher,
           mockTokenService,
           mockWebhookClient,
+          mockHeartbeatManager,
           mockLogger
         );
       } catch {
@@ -462,6 +474,7 @@ describe('main.ts', () => {
           mockDispatcher,
           mockTokenService,
           mockWebhookClient,
+          mockHeartbeatManager,
           mockLogger
         );
       } catch {
@@ -491,6 +504,7 @@ describe('main.ts', () => {
           mockDispatcher,
           mockTokenService,
           mockWebhookClient,
+          mockHeartbeatManager,
           mockLogger
         );
       } catch {
@@ -521,6 +535,7 @@ describe('main.ts', () => {
           mockDispatcher,
           mockTokenService,
           mockWebhookClient,
+          mockHeartbeatManager,
           mockLogger
         );
       } catch {
@@ -552,6 +567,7 @@ describe('main.ts', () => {
           mockDispatcher,
           mockTokenService,
           mockWebhookClient,
+          mockHeartbeatManager,
           mockLogger
         );
       } catch {
@@ -582,6 +598,7 @@ describe('main.ts', () => {
           mockDispatcher,
           mockTokenService,
           mockWebhookClient,
+          mockHeartbeatManager,
           mockLogger
         );
       } catch {
@@ -613,6 +630,7 @@ describe('main.ts', () => {
           mockDispatcher,
           mockTokenService,
           mockWebhookClient,
+          mockHeartbeatManager,
           mockLogger
         );
       } catch {
@@ -639,6 +657,7 @@ describe('main.ts', () => {
           mockDispatcher,
           mockTokenService,
           mockWebhookClient,
+          mockHeartbeatManager,
           mockLogger
         );
       } catch {
@@ -670,6 +689,7 @@ describe('main.ts', () => {
           mockDispatcher,
           mockTokenService,
           mockWebhookClient,
+          mockHeartbeatManager,
           mockLogger
         );
       } catch {
@@ -695,6 +715,7 @@ describe('main.ts', () => {
           mockDispatcher,
           mockTokenService,
           mockWebhookClient,
+          mockHeartbeatManager,
           mockLogger
         );
       } catch {
@@ -735,6 +756,7 @@ describe('main.ts', () => {
           mockDispatcher,
           mockTokenService,
           mockWebhookClient,
+          mockHeartbeatManager,
           mockLogger
         );
       } catch {
@@ -778,6 +800,7 @@ describe('main.ts', () => {
           mockDispatcher,
           mockTokenService,
           mockWebhookClient,
+          mockHeartbeatManager,
           mockLogger
         );
       } catch {
@@ -815,6 +838,7 @@ describe('main.ts', () => {
           mockDispatcher,
           mockTokenService,
           mockWebhookClient,
+          mockHeartbeatManager,
           mockLogger
         );
       } catch {
@@ -857,6 +881,7 @@ describe('main.ts', () => {
           mockDispatcher,
           mockTokenService,
           mockWebhookClient,
+          mockHeartbeatManager,
           mockLogger
         );
       } catch {
@@ -898,6 +923,7 @@ describe('main.ts', () => {
           mockDispatcher,
           mockTokenService,
           mockWebhookClient,
+          mockHeartbeatManager,
           mockLogger
         );
       } catch {
@@ -951,6 +977,7 @@ describe('main.ts', () => {
           mockDispatcher,
           mockTokenService,
           mockWebhookClient,
+          mockHeartbeatManager,
           mockLogger
         );
       } catch {
@@ -1007,6 +1034,7 @@ describe('main.ts', () => {
           mockDispatcher,
           mockTokenService,
           mockWebhookClient,
+          mockHeartbeatManager,
           mockLogger
         );
       } catch {
@@ -1048,6 +1076,7 @@ describe('main.ts', () => {
           mockDispatcher,
           mockTokenService,
           mockWebhookClient,
+          mockHeartbeatManager,
           mockLogger
         );
       } catch {
@@ -1076,6 +1105,7 @@ describe('main.ts', () => {
           mockDispatcher,
           mockTokenService,
           mockWebhookClient,
+          mockHeartbeatManager,
           mockLogger
         );
       } catch {
@@ -1105,6 +1135,7 @@ describe('main.ts', () => {
           mockDispatcher,
           mockTokenService,
           mockWebhookClient,
+          mockHeartbeatManager,
           mockLogger
         );
       } catch {

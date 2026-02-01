@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { createHmac } from 'node:crypto';
 import { createHeartbeatManager, type HeartbeatManager } from '../heartbeat.js';
 import type { Logger } from 'pino';
 
@@ -6,18 +7,18 @@ import type { Logger } from 'pino';
 const mockFetch = vi.fn();
 global.fetch = mockFetch as typeof global.fetch;
 
-// Set env var for internal auth
-process.env['INTEXURAOS_INTERNAL_AUTH_SECRET'] = 'test-internal-auth-secret';
-
 describe('HeartbeatManager', () => {
   let manager: HeartbeatManager;
   let logger: Logger;
   let loggerCalls: Record<string, unknown>[] = [];
+  let runningTasks: string[] = [];
+  const orchestratorSecret = 'test-orchestrator-secret';
 
   beforeEach(() => {
     vi.useFakeTimers();
     mockFetch.mockReset();
     loggerCalls = [];
+    runningTasks = [];
 
     // Create a simple logger that captures calls
     logger = {
@@ -38,7 +39,9 @@ describe('HeartbeatManager', () => {
     manager = createHeartbeatManager(
       {
         codeAgentUrl: 'https://code-agent.test',
+        orchestratorSecret,
         intervalMs: 60_000,
+        getRunningTasks: () => runningTasks,
       },
       logger
     );
@@ -49,7 +52,7 @@ describe('HeartbeatManager', () => {
     vi.useRealTimers();
   });
 
-  it('should not send heartbeats when no tasks registered', async () => {
+  it('should not send heartbeats when no tasks running', async () => {
     mockFetch.mockResolvedValue({
       ok: true,
       json: async () => ({}),
@@ -65,20 +68,21 @@ describe('HeartbeatManager', () => {
     expect(mockFetch).not.toHaveBeenCalled();
   });
 
-  it('should send heartbeats for registered tasks', async () => {
+  it('should send heartbeats for running tasks with HMAC signature', async () => {
     const expectedBody = { taskIds: ['task-1', 'task-2'] };
     let capturedBody: string | undefined;
+    let capturedHeaders: Record<string, string> | undefined;
 
     mockFetch.mockImplementation(async (_url: string, options?: RequestInit) => {
       capturedBody = options?.body as string;
+      capturedHeaders = options?.headers as Record<string, string>;
       return {
         ok: true,
         json: async () => ({}),
       } as Response;
     });
 
-    manager.registerTask('task-1');
-    manager.registerTask('task-2');
+    runningTasks = ['task-1', 'task-2'];
     manager.start();
 
     // Trigger interval
@@ -90,89 +94,55 @@ describe('HeartbeatManager', () => {
         method: 'POST',
         headers: expect.objectContaining({
           'Content-Type': 'application/json',
-          'X-Internal-Auth': 'test-internal-auth-secret',
         }),
       })
     );
 
+    // Verify body
     expect(capturedBody).toBeDefined();
     const body = JSON.parse(capturedBody ?? '{}');
     expect(body).toEqual(expectedBody);
+
+    // Verify HMAC signature
+    expect(capturedHeaders).toBeDefined();
+    expect(capturedHeaders?.['X-Request-Timestamp']).toBeDefined();
+    expect(capturedHeaders?.['X-Request-Signature']).toBeDefined();
+
+    const timestamp = capturedHeaders?.['X-Request-Timestamp'] ?? '0';
+    const signature = capturedHeaders?.['X-Request-Signature'] ?? '';
+    const message = `${timestamp}.${capturedBody}`;
+    const expectedSignature = createHmac('sha256', orchestratorSecret)
+      .update(message)
+      .digest('hex');
+    expect(signature).toBe(expectedSignature);
   });
 
-  it('should stop sending heartbeats for unregistered tasks', async () => {
-    mockFetch.mockResolvedValue({
-      ok: true,
-      json: async () => ({}),
-    } as Response);
-
-    manager.registerTask('task-1');
-    manager.unregisterTask('task-1');
-    manager.start();
-
-    await vi.advanceTimersByTimeAsync(60_000);
-
-    expect(mockFetch).not.toHaveBeenCalled();
-  });
-
-  it('should include internal auth header', async () => {
-    let capturedAuthHeader: string | undefined;
+  it('should include correct headers', async () => {
+    let capturedHeaders: Record<string, string> | undefined;
 
     mockFetch.mockImplementation(async (_url: string, options?: RequestInit) => {
-      const headers = options?.headers as Record<string, string>;
-      capturedAuthHeader = headers?.['X-Internal-Auth'];
+      capturedHeaders = options?.headers as Record<string, string>;
       return {
         ok: true,
         json: async () => ({}),
       } as Response;
     });
 
-    manager.registerTask('task-1');
+    runningTasks = ['task-1'];
     manager.start();
 
     await vi.advanceTimersByTimeAsync(60_000);
 
-    expect(capturedAuthHeader).toBe('test-internal-auth-secret');
-  });
-
-  it('should use empty string when internal auth env var is not set', async () => {
-    let capturedAuthHeader: string | undefined;
-
-    mockFetch.mockImplementation(async (_url: string, options?: RequestInit) => {
-      const headers = options?.headers as Record<string, string>;
-      capturedAuthHeader = headers?.['X-Internal-Auth'];
-      return {
-        ok: true,
-        json: async () => ({}),
-      } as Response;
-    });
-
-    // Delete env var and create new manager
-    delete process.env['INTEXURAOS_INTERNAL_AUTH_SECRET'];
-    const noAuthManager = createHeartbeatManager(
-      {
-        codeAgentUrl: 'https://code-agent.test',
-        intervalMs: 60_000,
-      },
-      logger
-    );
-
-    noAuthManager.registerTask('task-1');
-    noAuthManager.start();
-
-    await vi.advanceTimersByTimeAsync(60_000);
-
-    expect(capturedAuthHeader).toBe('');
-
-    // Restore env var for other tests
-    process.env['INTEXURAOS_INTERNAL_AUTH_SECRET'] = 'test-internal-auth-secret';
-    noAuthManager.stop();
+    expect(capturedHeaders).toBeDefined();
+    expect(capturedHeaders?.['Content-Type']).toBe('application/json');
+    expect(capturedHeaders?.['X-Request-Timestamp']).toBeDefined();
+    expect(capturedHeaders?.['X-Request-Signature']).toBeDefined();
   });
 
   it('should handle fetch errors gracefully', async () => {
     mockFetch.mockRejectedValue(new Error('Network error'));
 
-    manager.registerTask('task-1');
+    runningTasks = ['task-1'];
     manager.start();
 
     await vi.advanceTimersByTimeAsync(60_000);
@@ -188,7 +158,7 @@ describe('HeartbeatManager', () => {
       status: 500,
     } as Response);
 
-    manager.registerTask('task-1');
+    runningTasks = ['task-1'];
     manager.start();
 
     await vi.advanceTimersByTimeAsync(60_000);
@@ -204,7 +174,7 @@ describe('HeartbeatManager', () => {
       json: async () => ({}),
     } as Response);
 
-    manager.registerTask('task-1');
+    runningTasks = ['task-1'];
     manager.start();
     manager.start(); // Second call should be no-op
 
@@ -221,7 +191,7 @@ describe('HeartbeatManager', () => {
       json: async () => ({}),
     } as Response);
 
-    manager.registerTask('task-1');
+    runningTasks = ['task-1'];
     manager.start();
 
     await vi.advanceTimersByTimeAsync(60_000);
@@ -236,39 +206,12 @@ describe('HeartbeatManager', () => {
     expect(mockFetch.mock.calls.length).toBe(callCountAfterFirstStart + 1);
   });
 
-  it('should maintain correct task count after register/unregister', async () => {
-    let capturedBody: string | undefined;
-
-    mockFetch.mockImplementation(async (_url: string, options?: RequestInit) => {
-      capturedBody = options?.body as string;
-      return {
-        ok: true,
-        json: async () => ({}),
-      } as Response;
-    });
-
-    manager.registerTask('task-1');
-    manager.registerTask('task-2');
-    manager.registerTask('task-3');
-    manager.unregisterTask('task-2');
-
-    manager.start();
-    await vi.advanceTimersByTimeAsync(60_000);
-
-    expect(capturedBody).toBeDefined();
-    const body = JSON.parse(capturedBody ?? '{}');
-    expect(body.taskIds).toHaveLength(2);
-    expect(body.taskIds).toContain('task-1');
-    expect(body.taskIds).toContain('task-3');
-    expect(body.taskIds).not.toContain('task-2');
-  });
-
   it('should handle non-Error objects in sendHeartbeats catch', async () => {
     mockFetch.mockImplementation(() => {
       throw 'string error'; // Non-Error throwable
     });
 
-    manager.registerTask('task-1');
+    runningTasks = ['task-1'];
     manager.start();
 
     await vi.advanceTimersByTimeAsync(60_000);
@@ -290,7 +233,7 @@ describe('HeartbeatManager', () => {
       throw abortError;
     });
 
-    manager.registerTask('task-1');
+    runningTasks = ['task-1'];
     manager.start();
 
     await vi.advanceTimersByTimeAsync(60_000);
@@ -306,13 +249,9 @@ describe('HeartbeatManager', () => {
       json: async () => ({}),
     } as Response);
 
-    manager.registerTask('task-1');
-    // Call stop before start - intervalId is null
+    runningTasks = ['task-1'];
+    // Call stop before start - intervalId is null, should not throw
     manager.stop();
-
-    // Should not throw, just log debug message
-    const debugCalls = loggerCalls.filter((call) => call['level'] === 'debug');
-    expect(debugCalls.length).toBeGreaterThan(0);
 
     // Now start and verify it works
     manager.start();
@@ -320,37 +259,50 @@ describe('HeartbeatManager', () => {
     expect(mockFetch).toHaveBeenCalled();
   });
 
-  it('should use empty string for internal auth when env var is not set', async () => {
-    const originalEnv = process.env['INTEXURAOS_INTERNAL_AUTH_SECRET'];
-    delete process.env['INTEXURAOS_INTERNAL_AUTH_SECRET'];
-
-    let capturedAuthHeader: string | undefined;
+  it('should include correct task IDs in heartbeat request', async () => {
+    let capturedBody: string | undefined;
 
     mockFetch.mockImplementation(async (_url: string, options?: RequestInit) => {
-      const headers = options?.headers as Record<string, string>;
-      capturedAuthHeader = headers?.['X-Internal-Auth'];
+      capturedBody = options?.body as string;
       return {
         ok: true,
         json: async () => ({}),
       } as Response;
     });
 
-    const noEnvManager = createHeartbeatManager(
-      {
-        codeAgentUrl: 'https://code-agent.test',
-        intervalMs: 60_000,
-      },
-      logger
-    );
-
-    noEnvManager.registerTask('task-1');
-    noEnvManager.start();
+    runningTasks = ['task-1', 'task-2', 'task-3'];
+    manager.start();
 
     await vi.advanceTimersByTimeAsync(60_000);
 
-    expect(capturedAuthHeader).toBe('');
+    expect(capturedBody).toBeDefined();
+    const body = JSON.parse(capturedBody ?? '{}');
+    expect(body.taskIds).toEqual(['task-1', 'task-2', 'task-3']);
+  });
 
-    noEnvManager.stop();
-    process.env['INTEXURAOS_INTERNAL_AUTH_SECRET'] = originalEnv;
+  it('should update task IDs when running tasks change', async () => {
+    let capturedBody: string | undefined;
+
+    mockFetch.mockImplementation(async (_url: string, options?: RequestInit) => {
+      capturedBody = options?.body as string;
+      return {
+        ok: true,
+        json: async () => ({}),
+      } as Response;
+    });
+
+    runningTasks = ['task-1', 'task-2'];
+    manager.start();
+
+    await vi.advanceTimersByTimeAsync(60_000);
+    let body = JSON.parse(capturedBody ?? '{}');
+    expect(body.taskIds).toEqual(['task-1', 'task-2']);
+
+    // Update running tasks
+    runningTasks = ['task-1', 'task-3'];
+
+    await vi.advanceTimersByTimeAsync(60_000);
+    body = JSON.parse(capturedBody ?? '{}');
+    expect(body.taskIds).toEqual(['task-1', 'task-3']);
   });
 });

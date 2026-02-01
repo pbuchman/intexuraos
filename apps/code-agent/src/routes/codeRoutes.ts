@@ -9,6 +9,8 @@ import { processCodeAction } from '../domain/usecases/processCodeAction.js';
 import { cancelTaskWithNonce } from '../domain/usecases/cancelTaskWithNonce.js';
 import type { TaskStatus } from '../domain/models/codeTask.js';
 import { generateWebhookSecret } from '../infra/services/hmacSigning.js';
+import { validateOrchestratorSignature } from '../infra/webhookValidation.js';
+import { loadConfig } from '../config.js';
 
 export type JwtValidator = (request: FastifyRequest, reply: FastifyReply) => Promise<void>;
 
@@ -1948,10 +1950,13 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         message: 'Received request to POST /internal/code/heartbeat',
       });
 
-      // Validate internal auth
-      const authResult = validateInternalAuth(request);
-      if (!authResult.valid) {
-        request.log.warn({ reason: authResult.reason }, 'Internal auth failed for heartbeat');
+      // Validate orchestrator HMAC signature
+      const signatureResult = validateOrchestratorSignature(request, {
+        orchestratorSecret: loadConfig().orchestratorSecret,
+      });
+
+      if (!signatureResult.ok) {
+        request.log.warn({ error: signatureResult.error }, 'Orchestrator signature validation failed for heartbeat');
         return await reply.fail('UNAUTHORIZED', 'Unauthorized');
       }
 
