@@ -28,14 +28,15 @@ else
     TIMESTAMP_NANO=$(date +%s%N)
     TIMESTAMP_ISO=$(date -u +%Y-%m-%dT%H:%M:%S.%3NZ)
 fi
-CMD_HASH=$(echo -n "${COMMAND}${TIMESTAMP_NANO}" | md5 | cut -c1-12)
+# Portable hash: use openssl md5 if available, else cksum, else fallback
+CMD_HASH=$(echo -n "${COMMAND}${TIMESTAMP_NANO}" | { openssl md5 2>/dev/null || cksum; } | cut -c1-12)
 
 # Store start time in temp file for PostToolUse correlation
 # Use >> in case file already exists (shouldn't, but defensive)
 echo "$TIMESTAMP_NANO" >> "${TEMP_DIR}/${CMD_HASH}.start"
 
 # Store hash in pending file so PostToolUse can correlate
-COMMAND_ONLY_HASH=$(echo -n "$COMMAND" | md5 | cut -c1-12)
+COMMAND_ONLY_HASH=$(echo -n "$COMMAND" | { openssl md5 2>/dev/null || cksum; } | cut -c1-12)
 echo "$CMD_HASH" >> "${TEMP_DIR}/${COMMAND_ONLY_HASH}.pending"
 
 exit 0
