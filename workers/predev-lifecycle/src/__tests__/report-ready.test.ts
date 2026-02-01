@@ -14,6 +14,7 @@ vi.mock('@google-cloud/firestore', async () => {
             set: mockSet,
             get: mockGet,
           })),
+        })),
         runTransaction: vi.fn(async (fn) => {
           const mockTx = {
             get: vi.fn(async () => ({ exists: false })),
