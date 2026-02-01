@@ -44,6 +44,7 @@ export function createLinearAgentHttpClient(
           headers: {
             'Content-Type': 'application/json',
             'X-Internal-Auth': internalAuthToken,
+            'X-User-Id': request.userId,
           },
           body: JSON.stringify({
             title: request.title,
@@ -118,6 +119,7 @@ export function createLinearAgentHttpClient(
           headers: {
             'Content-Type': 'application/json',
             'X-Internal-Auth': internalAuthToken,
+            'X-User-Id': request.userId,
           },
           body: JSON.stringify({ state: request.state }),
           signal: controller.signal,

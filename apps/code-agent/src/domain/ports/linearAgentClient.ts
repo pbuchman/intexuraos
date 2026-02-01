@@ -8,6 +8,7 @@
 import type { Result } from '@intexuraos/common-core';
 
 export interface CreateIssueRequest {
+  userId: string;
   title: string;
   description: string;
   labels?: string[];
@@ -21,6 +22,7 @@ export interface CreateIssueResponse {
 }
 
 export interface UpdateIssueStateRequest {
+  userId: string;
   issueId: string;
   state: 'backlog' | 'in_progress' | 'in_review' | 'qa';
 }

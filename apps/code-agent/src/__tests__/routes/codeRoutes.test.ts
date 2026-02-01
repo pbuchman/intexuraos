@@ -880,6 +880,47 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
       expect(response.statusCode).toBe(200);
       expect(recordCompleteSpy).toHaveBeenCalledWith('user-123', undefined);
     });
+
+    it('calls markInReview when task has prUrl and linearIssueId', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      // Create a task with a linearIssueId
+      const createResult = await repo.create({
+        userId: 'user-123',
+        prompt: 'Test',
+        sanitizedPrompt: 'Test',
+        systemPromptHash: 'default',
+        workerType: 'auto',
+        workerLocation: 'mac',
+        repository: 'test/repo',
+        baseBranch: 'main',
+        traceId: 'trace_123',
+        linearIssueId: 'INT-999',
+      });
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok) return;
+      const task = createResult.value;
+
+      const { getServices } = await import('../../services.js');
+      const services = getServices();
+      const markInReviewSpy = vi.spyOn(services.linearIssueService, 'markInReview');
+
+      const response = await server.inject({
+        method: 'PATCH',
+        url: `/internal/code-tasks/${task.id}`,
+        headers: { 'x-internal-auth': 'test-internal-token' },
+        payload: {
+          status: 'completed',
+          result: { branch: 'test', commits: 1, summary: 'Done', prUrl: 'https://github.com/test/pr/1' },
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(markInReviewSpy).toHaveBeenCalledWith('user-123', 'INT-999');
+    });
   });
 
   describe('POST /internal/code/process error handling', () => {

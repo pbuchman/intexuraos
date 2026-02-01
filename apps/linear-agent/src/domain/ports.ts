@@ -13,6 +13,7 @@ import type {
   FailedLinearIssue,
   ExtractedIssueData,
   ProcessedAction,
+  WorkflowState,
 } from './models.js';
 import type { LinearError } from './errors.js';
 
@@ -91,6 +92,19 @@ export interface LinearApiClient {
 
   /** Get a single issue by ID */
   getIssue(apiKey: string, issueId: string): Promise<Result<LinearIssue | null, LinearError>>;
+
+  /** Update an issue's workflow state */
+  updateIssueState(
+    apiKey: string,
+    issueId: string,
+    stateId: string
+  ): Promise<Result<LinearIssue, LinearError>>;
+
+  /** Get workflow states for a team */
+  getWorkflowStates(
+    apiKey: string,
+    teamId: string
+  ): Promise<Result<WorkflowState[], LinearError>>;
 }
 
 /** Service for extracting issue data from natural language */

@@ -18,6 +18,7 @@ import type {
   FailedLinearIssue,
   ProcessedActionRepository,
   ProcessedAction,
+  WorkflowState,
 } from '../domain/index.js';
 
 export class FakeLinearConnectionRepository implements LinearConnectionRepository {
@@ -152,6 +153,12 @@ export class FakeLinearApiClient implements LinearApiClient {
   private shouldFail = false;
   private failError: LinearError = { code: 'API_ERROR', message: 'Fake error' };
   private issueCounter = 1;
+  private workflowStates: WorkflowState[] = [
+    { id: 'state-backlog', name: 'Backlog', type: 'backlog' },
+    { id: 'state-progress', name: 'In Progress', type: 'started' },
+    { id: 'state-review', name: 'In Review', type: 'started' },
+    { id: 'state-qa', name: 'QA', type: 'started' },
+  ];
 
   async validateAndGetTeams(apiKey: string): Promise<Result<LinearTeam[], LinearError>> {
     if (this.shouldFail) return err(this.failError);
@@ -200,6 +207,38 @@ export class FakeLinearApiClient implements LinearApiClient {
     if (this.shouldFail) return err(this.failError);
     const issue = this.issues.find((i) => i.id === issueId);
     return ok(issue ?? null);
+  }
+
+  async updateIssueState(
+    _apiKey: string,
+    issueId: string,
+    stateId: string
+  ): Promise<Result<LinearIssue, LinearError>> {
+    if (this.shouldFail) return err(this.failError);
+
+    const issue = this.issues.find((i) => i.id === issueId);
+    if (!issue) {
+      return err({ code: 'API_ERROR', message: 'Issue not found' });
+    }
+
+    // Find the workflow state to get the name
+    const workflowState = this.workflowStates.find((s) => s.id === stateId);
+    issue.state = {
+      id: stateId,
+      name: workflowState?.name ?? stateId,
+      type: workflowState?.type ?? 'started',
+    };
+    issue.updatedAt = new Date().toISOString();
+
+    return ok(issue);
+  }
+
+  async getWorkflowStates(
+    _apiKey: string,
+    _teamId: string
+  ): Promise<Result<WorkflowState[], LinearError>> {
+    if (this.shouldFail) return err(this.failError);
+    return ok(this.workflowStates);
   }
 
   reset(): void {
