@@ -41,7 +41,6 @@ export class ChatClient {
   constructor(config: ChatClientConfig) {
     this.client = createLlmClient({
       apiKey: config.apiKey,
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- Model cast to valid LlmModels type
       model: config.model as typeof LlmModels[keyof typeof LlmModels],
       userId: config.userId,
       pricing: { inputPricePerMillion: 0.3, outputPricePerMillion: 2.5 },

@@ -9,6 +9,7 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "lint": "eslint src --max-warnings 0",
+    "lint:local": "eslint src --max-warnings 0",
     "lint:fix": "eslint src --fix",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",

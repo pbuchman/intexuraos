@@ -22,7 +22,7 @@
     "services:monit": "pnpm exec pm2 monit",
     "services:restart": "pnpm exec pm2 restart all",
     "firestore:sync": "./scripts/sync-firestore.sh",
-    "lint": "eslint . --cache",
+    "lint": "node scripts/lint-parallel.mjs",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
