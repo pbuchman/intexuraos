@@ -201,11 +201,11 @@ export default defineConfig(({ mode }) => {
       host: '0.0.0.0',
       port: 3000,
       strictPort: true,
-      // Use polling for HMR when behind a proxy (predev gateway doesn't support WebSocket)
-      hmr: {
-        polling: true,
-        timeout: 30000,
-      },
+      // HMR disabled when accessed through proxy gateway (WebSocket not supported)
+      // Set VITE_HMR_ENABLED=true env var to re-enable for direct access
+      /* v8 ignore start -- ts-type: process.env access via indexer @preserve */
+      hmr: process.env['VITE_HMR_ENABLED'] === 'true',
+      /* v8 ignore stop @preserve */
     },
     preview: {
       port: 3000,
