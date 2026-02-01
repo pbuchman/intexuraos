@@ -4,6 +4,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as jose from 'jose';
 import nock from 'nock';
+import crypto from 'node:crypto';
 
 // Mock jose library for JWT validation
 vi.mock('jose', () => ({
@@ -44,6 +45,15 @@ import type { WorkerSettingsRepository } from '../../domain/ports/workerSettings
 import type { WorkerHealthProbe } from '../../domain/ports/workerHealthProbe.js';
 import { mockWorkerHealthProbe } from '../helpers/mockServices.js';
 
+// Helper function to generate orchestrator HMAC signature for heartbeat endpoint
+function generateOrchestratorSignature(payload: object, secret: string): { timestamp: string; signature: string } {
+  const timestamp = String(Math.floor(Date.now() / 1000));
+  const rawBody = JSON.stringify(payload);
+  const message = `${timestamp}.${rawBody}`;
+  const signature = crypto.createHmac('sha256', secret).update(message).digest('hex');
+  return { timestamp, signature };
+}
+
 describe('codeRoutes', () => {
   let fakeFirestore: ReturnType<typeof createFakeFirestore>;
   let logger: Logger;
@@ -72,6 +82,7 @@ describe('codeRoutes', () => {
     process.env['INTEXURAOS_AUTH_AUDIENCE'] = 'https://api.intexuraos.cloud';
     process.env['INTEXURAOS_AUTH_ISSUER'] = 'https://intexuraos.eu.auth0.com/';
     process.env['INTEXURAOS_AUTH_JWKS_URL'] = 'https://intexuraos.eu.auth0.com/.well-known/jwks.json';
+    process.env['INTEXURAOS_ORCHESTRATOR_SECRET'] = 'test-orchestrator-secret';
 
     fakeFirestore = createFakeFirestore();
     setFirestore(fakeFirestore as unknown as Firestore);
@@ -1468,15 +1479,17 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
       expect(created.ok).toBe(true);
       if (!created.ok) throw new Error('Test setup failed');
 
+      const payload = { taskIds: [created.value.id] };
+      const { timestamp, signature } = generateOrchestratorSignature(payload, 'test-orchestrator-secret');
+
       const response = await server.inject({
         method: 'POST',
         url: '/internal/code/heartbeat',
         headers: {
-          'x-internal-auth': 'test-internal-token',
+          'x-request-timestamp': timestamp,
+          'x-request-signature': signature,
         },
-        payload: {
-          taskIds: [created.value.id],
-        },
+        payload,
       });
 
       expect(response.statusCode).toBe(200);
@@ -1498,6 +1511,21 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
       expect(response.statusCode).toBe(401);
     });
 
+    it('returns 401 when signature is invalid', async () => {
+      const payload = { taskIds: ['task-123'] };
+      const response = await server.inject({
+        method: 'POST',
+        url: '/internal/code/heartbeat',
+        headers: {
+          'x-request-timestamp': String(Math.floor(Date.now() / 1000)),
+          'x-request-signature': 'invalid-signature',
+        },
+        payload,
+      });
+
+      expect(response.statusCode).toBe(401);
+    });
+
     it('returns 500 when heartbeat processing fails', async () => {
       const mockProcessHeartbeat = vi.fn().mockResolvedValue({
         ok: false,
@@ -1512,15 +1540,17 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
         processHeartbeat: mockProcessHeartbeat as never,
       });
 
+      const payload = { taskIds: ['task-123'] };
+      const { timestamp, signature } = generateOrchestratorSignature(payload, 'test-orchestrator-secret');
+
       const response = await server.inject({
         method: 'POST',
         url: '/internal/code/heartbeat',
         headers: {
-          'x-internal-auth': 'test-internal-token',
+          'x-request-timestamp': timestamp,
+          'x-request-signature': signature,
         },
-        payload: {
-          taskIds: ['task-123'],
-        },
+        payload,
       });
 
       expect(response.statusCode).toBe(500);

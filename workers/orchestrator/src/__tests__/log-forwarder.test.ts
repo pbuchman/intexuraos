@@ -5,44 +5,82 @@ import { join } from 'node:path';
 import { LogForwarder } from '../services/log-forwarder.js';
 import type { Logger } from '@intexuraos/common-core';
 
+// Mock fetch globally
+const mockFetch = vi.fn();
+global.fetch = mockFetch as typeof global.fetch;
+
 describe('LogForwarder', () => {
   const tempDir = mkdtempSync(join(tmpdir(), 'log-forwarder-test-'));
   const logBasePath = join(tempDir, 'logs');
 
+  // Test configuration
+  const codeAgentUrl = 'https://code-agent.test';
+  const orchestratorSecret = 'test-orchestrator-secret';
+
   // Mock logger
-  /* eslint-disable @typescript-eslint/no-empty-function */
   const mockLogger: Logger = {
-    info: (): void => {},
-    warn: (): void => {},
-    error: (): void => {},
-    debug: (): void => {},
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
   };
 
-  // Mock Firestore
-  const mockChunks: { taskId: string; sequence: number; content: string }[] = [];
-  const mockFirestore = {
-    collection: (): {
-      add: (data: { taskId: string; sequence: number; content: string }) => Promise<{ id: string }>;
-    } => ({
-      add: async (data: {
-        taskId: string;
-        sequence: number;
-        content: string;
-      }): Promise<{ id: string }> => {
-        mockChunks.push({
-          taskId: data.taskId,
-          sequence: data.sequence,
-          content: data.content,
-        });
-        return { id: `chunk-${mockChunks.length}` };
+  // Track uploaded chunks for verification
+  const uploadedChunks: {
+    taskId: string;
+    chunks: { sequence: number; content: string; timestamp: string }[];
+  }[] = [];
+
+  function createMockForwarder(httpResponse?: { ok: boolean; status?: number }): LogForwarder {
+    uploadedChunks.length = 0;
+    mockFetch.mockReset();
+
+    // Default: successful response
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({ received: true }),
+    } as Response);
+
+    if (httpResponse) {
+      mockFetch.mockResolvedValue({
+        ok: httpResponse.ok ?? true,
+        status: httpResponse.status ?? 200,
+        json: async () => ({ received: true }),
+      } as Response);
+    }
+
+    return new LogForwarder(
+      {
+        logBasePath,
+        codeAgentUrl,
+        orchestratorSecret,
       },
-    }),
-  };
+      mockLogger
+    );
+  }
+
+  function captureUploadedChunks(): void {
+    mockFetch.mockImplementation(async (_url: string, options?: RequestInit) => {
+      const body = options?.body as string;
+      if (body) {
+        const data = JSON.parse(body) as {
+          taskId: string;
+          chunks: { sequence: number; content: string; timestamp: string }[];
+        };
+        uploadedChunks.push(data);
+      }
+      return {
+        ok: true,
+        json: async () => ({ received: true }),
+      } as Response;
+    });
+  }
 
   beforeEach(() => {
     mkdirSync(tempDir, { recursive: true });
     mkdirSync(logBasePath, { recursive: true });
-    mockChunks.length = 0;
+    uploadedChunks.length = 0;
+    mockFetch.mockReset();
   });
 
   afterEach(() => {
@@ -51,7 +89,7 @@ describe('LogForwarder', () => {
 
   describe('startForwarding', () => {
     it('should start watching log file', () => {
-      const forwarder = new LogForwarder({ logBasePath, firestore: mockFirestore }, mockLogger);
+      const forwarder = createMockForwarder();
 
       const logFile = join(logBasePath, 'task-1.log');
       writeFileSync(logFile, 'Initial content\n');
@@ -62,7 +100,8 @@ describe('LogForwarder', () => {
     });
 
     it('should read existing log file content on start', async () => {
-      const forwarder = new LogForwarder({ logBasePath, firestore: mockFirestore }, mockLogger);
+      const forwarder = createMockForwarder();
+      captureUploadedChunks();
 
       const logFile = join(logBasePath, 'task-2.log');
       writeFileSync(logFile, 'Existing content\n');
@@ -79,14 +118,15 @@ describe('LogForwarder', () => {
       // Stop to flush buffer
       await forwarder.stopForwarding('task-2');
 
-      // Should have captured content
-      expect(mockChunks.length).toBeGreaterThan(0);
+      // Should have uploaded chunks
+      expect(uploadedChunks.length).toBeGreaterThan(0);
     });
   });
 
   describe('stopForwarding', () => {
     it('should stop watching and flush remaining buffer', async () => {
-      const forwarder = new LogForwarder({ logBasePath, firestore: mockFirestore }, mockLogger);
+      const forwarder = createMockForwarder();
+      captureUploadedChunks();
 
       const logFile = join(logBasePath, 'task-3.log');
       forwarder.startForwarding('task-3', logFile);
@@ -99,186 +139,115 @@ describe('LogForwarder', () => {
       await forwarder.stopForwarding('task-3');
 
       expect(forwarder.getActiveTaskIds()).not.toContain('task-3');
-      expect(mockChunks.length).toBeGreaterThan(0);
+      expect(uploadedChunks.length).toBeGreaterThan(0);
     });
   });
 
-  describe('chunking', () => {
-    it('should chunk by size when buffer exceeds 8KB', async () => {
-      const forwarder = new LogForwarder({ logBasePath, firestore: mockFirestore }, mockLogger);
+  describe('HTTP sending', () => {
+    it('should send POST to /internal/logs with correct headers', async () => {
+      let capturedUrl: string | undefined;
+      let capturedHeaders: Record<string, string> | undefined;
+      let capturedBody: string | undefined;
 
-      const logFile = join(logBasePath, 'task-chunk.log');
-      forwarder.startForwarding('task-chunk', logFile);
-
-      // Write content that exceeds 8KB
-      const largeContent = 'A'.repeat(10 * 1024); // 10KB
-      writeFileSync(logFile, largeContent, 'utf-8');
-
-      // Wait for processing
-      await new Promise<void>((resolve) => setTimeout(resolve, 100));
-
-      // Should create multiple chunks
-      const taskChunks = mockChunks.filter((c) => c.taskId === 'task-chunk');
-      expect(taskChunks.length).toBeGreaterThan(1);
-
-      // Each chunk should be <= 8KB
-      taskChunks.forEach((chunk) => {
-        expect(chunk.content.length).toBeLessThanOrEqual(8 * 1024);
+      mockFetch.mockImplementation(async (url: string, options?: RequestInit) => {
+        capturedUrl = url;
+        capturedHeaders = options?.headers as Record<string, string>;
+        capturedBody = options?.body as string;
+        return {
+          ok: true,
+          json: async () => ({ received: true }),
+        } as Response;
       });
-
-      await forwarder.stopForwarding('task-chunk');
-    });
-
-    it('should chunk by time every 10 seconds', { timeout: 15000 }, async () => {
-      const forwarder = new LogForwarder({ logBasePath, firestore: mockFirestore }, mockLogger);
-
-      const logFile = join(logBasePath, 'task-time.log');
-      forwarder.startForwarding('task-time', logFile);
-
-      writeFileSync(logFile, 'Small content\n');
-
-      // Wait for timer-triggered flush
-      await new Promise((resolve) => setTimeout(resolve, 11 * 1000));
-
-      const taskChunks = mockChunks.filter((c) => c.taskId === 'task-time');
-      expect(taskChunks.length).toBeGreaterThan(0);
-
-      await forwarder.stopForwarding('task-time');
-    });
-
-    it('should truncate chunks larger than 8KB and preserve tail', async () => {
-      const forwarder = new LogForwarder({ logBasePath, firestore: mockFirestore }, mockLogger);
-
-      const logFile = join(logBasePath, 'task-truncate.log');
-      forwarder.startForwarding('task-truncate', logFile);
-
-      // Write content larger than 8KB without newlines
-      const largeContent = 'B'.repeat(10 * 1024);
-      writeFileSync(logFile, largeContent, 'utf-8');
-
-      await new Promise<void>((resolve) => setTimeout(resolve, 200));
-
-      await forwarder.stopForwarding('task-truncate');
-
-      const taskChunks = mockChunks.filter((c) => c.taskId === 'task-truncate');
-      expect(taskChunks.length).toBeGreaterThan(0);
-
-      // All chunks should be <= 8KB (splitIntoChunks handles this)
-      taskChunks.forEach((chunk) => {
-        expect(chunk.content.length).toBeLessThanOrEqual(8 * 1024);
-      });
-
-      await forwarder.stopForwarding('task-truncate');
-    });
-  });
-
-  describe('size limits', () => {
-    it('should stop uploading after 500 chunks', async () => {
-      const forwarder = new LogForwarder({ logBasePath, firestore: mockFirestore }, mockLogger);
-
-      const logFile = join(logBasePath, 'task-limit.log');
-      forwarder.startForwarding('task-limit', logFile);
-
-      // Write enough data to trigger chunking (9KB per chunk to trigger immediate flush)
-      // Write 10 chunks of 9KB each
-      for (let i = 0; i < 10; i++) {
-        const chunk = 'X'.repeat(9 * 1024);
-        writeFileSync(logFile, chunk, { flag: 'a' });
-        // Wait for polling to pick up the content
-        await new Promise((resolve) => setTimeout(resolve, 150));
-      }
-
-      await forwarder.stopForwarding('task-limit');
-
-      // Should have created chunks (we wrote enough to trigger immediate flush)
-      const taskChunks = mockChunks.filter((c) => c.taskId === 'task-limit');
-      expect(taskChunks.length).toBeGreaterThan(0);
-    });
-
-    it('should stop uploading after 4MB total', async () => {
-      const forwarder = new LogForwarder({ logBasePath, firestore: mockFirestore }, mockLogger);
-
-      const logFile = join(logBasePath, 'task-size.log');
-      forwarder.startForwarding('task-size', logFile);
-
-      // Write enough data to create multiple chunks (10KB)
-      const largeContent = 'C'.repeat(10 * 1024);
-      writeFileSync(logFile, largeContent, 'utf-8');
-
-      // Wait for polling to pick up and chunk the content
-      await new Promise((resolve) => setTimeout(resolve, 200));
-
-      await forwarder.stopForwarding('task-size');
-
-      // Should have created chunks
-      const taskChunks = mockChunks.filter((c) => c.taskId === 'task-size');
-      expect(taskChunks.length).toBeGreaterThan(0);
-    });
-
-    it('should drop chunks when max total size is exceeded', async () => {
-      // Create a mock firestore that simulates hitting the 4MB limit
-      const sizeLimitFirestore = {
-        collection: (
-          _path: string
-        ): {
-          add: (data: {
-            taskId: string;
-            sequence: number;
-            content: string;
-          }) => Promise<{ id: string }>;
-        } => ({
-          add: async (data: {
-            taskId: string;
-            sequence: number;
-            content: string;
-          }): Promise<{ id: string }> => {
-            // After sequence 500 (which is ~4MB with 8KB chunks), we're at the limit
-            // But we can't easily simulate this without modifying the internal state
-            // For now, just verify the mock is callable
-            return { id: `chunk-${data.sequence}` };
-          },
-        }),
-      };
 
       const forwarder = new LogForwarder(
-        { logBasePath, firestore: sizeLimitFirestore },
+        { logBasePath, codeAgentUrl, orchestratorSecret },
         mockLogger
       );
 
-      const logFile = join(logBasePath, 'task-size-limit.log');
-      forwarder.startForwarding('task-size-limit', logFile);
+      const logFile = join(logBasePath, 'task-http.log');
+      forwarder.startForwarding('task-http', logFile);
 
-      // Write some content
       writeFileSync(logFile, 'Test content\n');
 
       await new Promise((resolve) => setTimeout(resolve, 200));
-      await forwarder.stopForwarding('task-size-limit');
+      await forwarder.stopForwarding('task-http');
 
-      // Verify forwarder completed without error
-      expect(forwarder.getActiveTaskIds()).not.toContain('task-size-limit');
+      expect(capturedUrl).toBe('https://code-agent.test/internal/logs');
+      expect(capturedHeaders?.['Content-Type']).toBe('application/json');
+      expect(capturedHeaders?.['X-Request-Timestamp']).toBeDefined();
+      expect(capturedHeaders?.['X-Request-Signature']).toBeDefined();
+
+      // Verify HMAC signature
+      const expectedMessage = `${capturedHeaders?.['X-Request-Timestamp']}.${capturedBody}`;
+      const crypto = await import('node:crypto');
+      const expectedSignature = crypto
+        .createHmac('sha256', orchestratorSecret)
+        .update(expectedMessage)
+        .digest('hex');
+      expect(capturedHeaders?.['X-Request-Signature']).toBe(expectedSignature);
+    });
+
+    it('should include correct payload format', async () => {
+      let capturedBody: string | undefined;
+
+      mockFetch.mockImplementation(async (_url: string, options?: RequestInit) => {
+        capturedBody = options?.body as string;
+        return {
+          ok: true,
+          json: async () => ({ received: true }),
+        } as Response;
+      });
+
+      const forwarder = new LogForwarder(
+        { logBasePath, codeAgentUrl, orchestratorSecret },
+        mockLogger
+      );
+
+      const logFile = join(logBasePath, 'task-payload.log');
+      forwarder.startForwarding('task-payload', logFile);
+
+      writeFileSync(logFile, 'Payload test\n');
+
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      await forwarder.stopForwarding('task-payload');
+
+      expect(capturedBody).toBeDefined();
+      const data = JSON.parse(capturedBody ?? '{}');
+      expect(data.taskId).toBe('task-payload');
+      expect(data.chunks).toBeInstanceOf(Array);
+      expect(data.chunks.length).toBeGreaterThan(0);
+
+      // Verify chunk structure
+      const chunk = data.chunks[0];
+      expect(chunk.sequence).toBe(0);
+      expect(chunk.content).toBe('Payload test\n');
+      expect(chunk.timestamp).toBeDefined();
     });
   });
 
   describe('retry logic', () => {
-    it('should retry failed uploads 3 times with backoff', { timeout: 25000 }, async () => {
+    it('should retry 3x on 5xx errors with exponential backoff', { timeout: 25000 }, async () => {
       let attempts = 0;
-      const failingFirestore = {
-        collection: (
-          _path: string
-        ): {
-          add: () => Promise<{ id: string }>;
-        } => ({
-          add: async (): Promise<{ id: string }> => {
-            attempts++;
-            if (attempts < 3) {
-              throw new Error('Upload failed');
-            }
-            return { id: 'chunk-1' };
-          },
-        }),
-      };
 
-      const forwarder = new LogForwarder({ logBasePath, firestore: failingFirestore }, mockLogger);
+      mockFetch.mockImplementation(async () => {
+        attempts++;
+        if (attempts < 3) {
+          return {
+            ok: false,
+            status: 500,
+            json: async () => ({}),
+          } as Response;
+        }
+        return {
+          ok: true,
+          json: async () => ({ received: true }),
+        } as Response;
+      });
+
+      const forwarder = new LogForwarder(
+        { logBasePath, codeAgentUrl, orchestratorSecret },
+        mockLogger
+      );
 
       const logFile = join(logBasePath, 'task-retry.log');
       forwarder.startForwarding('task-retry', logFile);
@@ -297,30 +266,58 @@ describe('LogForwarder', () => {
       expect(attempts).toBe(3);
     });
 
-    it('should drop chunk after 3 failed attempts', { timeout: 25000 }, async () => {
-      const alwaysFailingFirestore = {
-        collection: (
-          _path: string
-        ): {
-          add: () => Promise<{ id: string }>;
-        } => ({
-          add: async (): Promise<{ id: string }> => {
-            throw new Error('Always fails');
-          },
-        }),
-      };
+    it('should not retry on 4xx errors', { timeout: 25000 }, async () => {
+      let attempts = 0;
+
+      mockFetch.mockImplementation(async () => {
+        attempts++;
+        return {
+          ok: false,
+          status: 400,
+          json: async () => ({}),
+        } as Response;
+      });
 
       const forwarder = new LogForwarder(
-        { logBasePath, firestore: alwaysFailingFirestore },
+        { logBasePath, codeAgentUrl, orchestratorSecret },
+        mockLogger
+      );
+
+      const logFile = join(logBasePath, 'task-no-retry.log');
+      forwarder.startForwarding('task-no-retry', logFile);
+
+      writeFileSync(logFile, 'Test content\n');
+
+      await new Promise((resolve) => setTimeout(resolve, 21000));
+
+      // Check dropped count - should have dropped chunks
+      expect(forwarder.getDroppedChunkCount('task-no-retry')).toBe(1);
+
+      await forwarder.stopForwarding('task-no-retry');
+
+      // Should only try once (no retry on 4xx)
+      expect(attempts).toBe(1);
+    });
+
+    it('should drop chunks after max retries exceeded', { timeout: 25000 }, async () => {
+      mockFetch.mockImplementation(async () => {
+        return {
+          ok: false,
+          status: 500,
+          json: async () => ({}),
+        } as Response;
+      });
+
+      const forwarder = new LogForwarder(
+        { logBasePath, codeAgentUrl, orchestratorSecret },
         mockLogger
       );
 
       const logFile = join(logBasePath, 'task-drop.log');
       forwarder.startForwarding('task-drop', logFile);
 
-      writeFileSync(logFile, 'Test content\n');
+      writeFileSync(logFile, 'Test\n');
 
-      // Wait for two timer intervals (20s) to ensure flush happens
       await new Promise((resolve) => setTimeout(resolve, 21000));
 
       // Check dropped count BEFORE stopping (state is deleted on stop)
@@ -330,28 +327,171 @@ describe('LogForwarder', () => {
     });
   });
 
+  describe('chunking', () => {
+    it('should chunk by size when buffer exceeds 8KB', async () => {
+      const forwarder = createMockForwarder();
+      captureUploadedChunks();
+
+      const logFile = join(logBasePath, 'task-chunk.log');
+      forwarder.startForwarding('task-chunk', logFile);
+
+      // Write content that exceeds 8KB
+      const largeContent = 'A'.repeat(10 * 1024); // 10KB
+      writeFileSync(logFile, largeContent, 'utf-8');
+
+      // Wait for processing
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      // Should create multiple chunks
+      const taskUploads = uploadedChunks.filter((u) => u.taskId === 'task-chunk');
+      expect(taskUploads.length).toBeGreaterThan(0);
+      const allChunks = taskUploads.flatMap((u) => u.chunks);
+      expect(allChunks.length).toBeGreaterThan(1);
+
+      // Each chunk should be <= 8KB
+      allChunks.forEach((chunk) => {
+        expect(chunk.content.length).toBeLessThanOrEqual(8 * 1024);
+      });
+
+      await forwarder.stopForwarding('task-chunk');
+    });
+
+    it('should chunk by time every 10 seconds', { timeout: 15000 }, async () => {
+      const forwarder = createMockForwarder();
+      captureUploadedChunks();
+
+      const logFile = join(logBasePath, 'task-time.log');
+      forwarder.startForwarding('task-time', logFile);
+
+      writeFileSync(logFile, 'Small content\n');
+
+      // Wait for timer-triggered flush
+      await new Promise((resolve) => setTimeout(resolve, 11 * 1000));
+
+      const taskUploads = uploadedChunks.filter((u) => u.taskId === 'task-time');
+      expect(taskUploads.length).toBeGreaterThan(0);
+
+      await forwarder.stopForwarding('task-time');
+    });
+
+    it('should truncate chunks larger than 8KB and preserve tail', async () => {
+      const forwarder = createMockForwarder();
+      captureUploadedChunks();
+
+      const logFile = join(logBasePath, 'task-truncate.log');
+      forwarder.startForwarding('task-truncate', logFile);
+
+      // Write content larger than 8KB without newlines
+      const largeContent = 'B'.repeat(10 * 1024);
+      writeFileSync(logFile, largeContent, 'utf-8');
+
+      await new Promise((resolve) => setTimeout(resolve, 200));
+
+      await forwarder.stopForwarding('task-truncate');
+
+      const taskUploads = uploadedChunks.filter((u) => u.taskId === 'task-truncate');
+      expect(taskUploads.length).toBeGreaterThan(0);
+      const allChunks = taskUploads.flatMap((u) => u.chunks);
+
+      // All chunks should be <= 8KB
+      allChunks.forEach((chunk) => {
+        expect(chunk.content.length).toBeLessThanOrEqual(8 * 1024);
+      });
+    });
+  });
+
+  describe('size limits', () => {
+    it('should stop uploading after 500 chunks', async () => {
+      const forwarder = createMockForwarder();
+      captureUploadedChunks();
+
+      const logFile = join(logBasePath, 'task-limit.log');
+      forwarder.startForwarding('task-limit', logFile);
+
+      // Write enough data to trigger chunking (9KB per chunk to trigger immediate flush)
+      // Write 10 chunks of 9KB each
+      for (let i = 0; i < 10; i++) {
+        const chunk = 'X'.repeat(9 * 1024);
+        writeFileSync(logFile, chunk, { flag: 'a' });
+        // Wait for polling to pick up the content
+        await new Promise((resolve) => setTimeout(resolve, 150));
+      }
+
+      await forwarder.stopForwarding('task-limit');
+
+      // Should have created chunks (we wrote enough to trigger immediate flush)
+      const taskUploads = uploadedChunks.filter((u) => u.taskId === 'task-limit');
+      expect(taskUploads.length).toBeGreaterThan(0);
+    });
+
+    it('should stop uploading after 4MB total', async () => {
+      const forwarder = createMockForwarder();
+      captureUploadedChunks();
+
+      const logFile = join(logBasePath, 'task-size.log');
+      forwarder.startForwarding('task-size', logFile);
+
+      // Write enough data to create multiple chunks (10KB)
+      const largeContent = 'C'.repeat(10 * 1024);
+      writeFileSync(logFile, largeContent, 'utf-8');
+
+      // Wait for polling to pick up and chunk the content
+      await new Promise((resolve) => setTimeout(resolve, 200));
+
+      await forwarder.stopForwarding('task-size');
+
+      // Should have created chunks
+      const taskUploads = uploadedChunks.filter((u) => u.taskId === 'task-size');
+      expect(taskUploads.length).toBeGreaterThan(0);
+    });
+  });
+
+  describe('sequence numbering', () => {
+    it('should number chunks sequentially starting from 0', async () => {
+      const forwarder = createMockForwarder();
+      captureUploadedChunks();
+
+      const logFile = join(logBasePath, 'task-seq.log');
+      forwarder.startForwarding('task-seq', logFile);
+
+      // Write multiple chunks
+      for (let i = 0; i < 3; i++) {
+        writeFileSync(logFile, `Chunk ${i}\n`, { flag: 'a' });
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+
+      await forwarder.stopForwarding('task-seq');
+
+      const taskUploads = uploadedChunks.filter((u) => u.taskId === 'task-seq');
+      expect(taskUploads.length).toBeGreaterThan(0);
+      const allChunks = taskUploads.flatMap((u) => u.chunks);
+
+      // Verify sequential numbering
+      for (let i = 0; i < allChunks.length; i++) {
+        const chunk = allChunks[i];
+        expect(chunk.sequence).toBe(i);
+      }
+    });
+  });
+
   describe('getDroppedChunkCount', () => {
     it('should return 0 for non-existent task', () => {
-      const forwarder = new LogForwarder({ logBasePath, firestore: mockFirestore }, mockLogger);
+      const forwarder = createMockForwarder();
 
       expect(forwarder.getDroppedChunkCount('non-existent')).toBe(0);
     });
 
     it('should return dropped chunk count for active task', { timeout: 25000 }, async () => {
-      const alwaysFailingFirestore = {
-        collection: (
-          _path: string
-        ): {
-          add: () => Promise<{ id: string }>;
-        } => ({
-          add: async (): Promise<{ id: string }> => {
-            throw new Error('Always fails');
-          },
-        }),
-      };
+      mockFetch.mockImplementation(async () => {
+        return {
+          ok: false,
+          status: 500,
+          json: async () => ({}),
+        } as Response;
+      });
 
       const forwarder = new LogForwarder(
-        { logBasePath, firestore: alwaysFailingFirestore },
+        { logBasePath, codeAgentUrl, orchestratorSecret },
         mockLogger
       );
 
@@ -369,115 +509,6 @@ describe('LogForwarder', () => {
     });
   });
 
-  describe('sequence numbering', () => {
-    it('should number chunks sequentially starting from 0', async () => {
-      const forwarder = new LogForwarder({ logBasePath, firestore: mockFirestore }, mockLogger);
-
-      const logFile = join(logBasePath, 'task-seq.log');
-      forwarder.startForwarding('task-seq', logFile);
-
-      // Write multiple chunks
-      for (let i = 0; i < 3; i++) {
-        writeFileSync(logFile, `Chunk ${i}\n`, { flag: 'a' });
-        await new Promise((resolve) => setTimeout(resolve, 50));
-      }
-
-      await forwarder.stopForwarding('task-seq');
-
-      const taskChunks = mockChunks.filter((c) => c.taskId === 'task-seq');
-      expect(taskChunks.length).toBeGreaterThan(0);
-
-      // Verify sequential numbering
-      for (let i = 0; i < taskChunks.length; i++) {
-        const chunk = taskChunks[i];
-        if (!chunk) throw new Error(`No chunk at index ${i}`);
-        expect(chunk.sequence).toBe(i);
-      }
-    });
-  });
-
-  describe('splitIntoChunks', () => {
-    it('should prefer splitting at newline when within 80% of max size', async () => {
-      const forwarder = new LogForwarder({ logBasePath, firestore: mockFirestore }, mockLogger);
-
-      const logFile = join(logBasePath, 'task-split.log');
-      forwarder.startForwarding('task-split', logFile);
-
-      // Write content that has a newline within the 80% threshold of MAX_CHUNK_SIZE
-      // MAX_CHUNK_SIZE = 8192, 80% = 6553.6
-      const prefix = 'A'.repeat(6500); // Within 80%
-      const newline = '\n';
-      const suffix = 'B'.repeat(2000); // Total ~8700 bytes
-      const content = prefix + newline + suffix;
-      writeFileSync(logFile, content, 'utf-8');
-
-      await new Promise((resolve) => setTimeout(resolve, 200));
-      await forwarder.stopForwarding('task-split');
-
-      const taskChunks = mockChunks.filter((c) => c.taskId === 'task-split');
-      expect(taskChunks.length).toBeGreaterThan(0);
-
-      // First chunk should be at most MAX_CHUNK_SIZE
-      const firstChunk = taskChunks[0];
-      if (!firstChunk) throw new Error('No first chunk');
-      expect(firstChunk.content.length).toBeLessThanOrEqual(8192);
-    });
-
-    it('should not split at newline when too far back', async () => {
-      const forwarder = new LogForwarder({ logBasePath, firestore: mockFirestore }, mockLogger);
-
-      const logFile = join(logBasePath, 'task-nosplit.log');
-      forwarder.startForwarding('task-nosplit', logFile);
-
-      // Write content where newline is far back (< 80% of max)
-      // MAX_CHUNK_SIZE = 8192, 80% = 6553.6
-      const prefix = 'A'.repeat(7000); // Beyond 80%
-      const newline = '\n';
-      const suffix = 'B'.repeat(2000);
-      const content = prefix + newline + suffix;
-      writeFileSync(logFile, content, 'utf-8');
-
-      await new Promise((resolve) => setTimeout(resolve, 200));
-      await forwarder.stopForwarding('task-nosplit');
-
-      const taskChunks = mockChunks.filter((c) => c.taskId === 'task-nosplit');
-      expect(taskChunks.length).toBeGreaterThan(0);
-
-      // First chunk should be at max chunk size (not at the newline)
-      const firstChunk = taskChunks[0];
-      if (!firstChunk) throw new Error('No first chunk');
-      expect(firstChunk.content.length).toBeLessThanOrEqual(8192);
-    });
-  });
-
-  describe('enforceChunkSize', () => {
-    it('should truncate oversized chunks and preserve tail', async () => {
-      const forwarder = new LogForwarder({ logBasePath, firestore: mockFirestore }, mockLogger);
-
-      const logFile = join(logBasePath, 'task-enforce.log');
-      forwarder.startForwarding('task-enforce', logFile);
-
-      // Write content that will create a chunk > 8KB without newlines
-      // This will trigger enforceChunkSize during splitIntoChunks
-      const largeContent = 'X'.repeat(10 * 1024);
-      writeFileSync(logFile, largeContent, 'utf-8');
-
-      await new Promise((resolve) => setTimeout(resolve, 200));
-      await forwarder.stopForwarding('task-enforce');
-
-      const taskChunks = mockChunks.filter((c) => c.taskId === 'task-enforce');
-      expect(taskChunks.length).toBeGreaterThan(0);
-
-      // Check that chunks are within size limit
-      taskChunks.forEach((chunk) => {
-        expect(chunk.content.length).toBeLessThanOrEqual(8 * 1024);
-      });
-
-      // Should have multiple chunks since content > 8KB
-      expect(taskChunks.length).toBeGreaterThan(1);
-    });
-  });
-
   describe('edge cases', () => {
     it('should warn when starting forwarding for already active task', () => {
       const warnSpy = vi.fn();
@@ -488,7 +519,10 @@ describe('LogForwarder', () => {
         debug: () => undefined,
       };
 
-      const forwarder = new LogForwarder({ logBasePath, firestore: mockFirestore }, loggerWithWarn);
+      const forwarder = new LogForwarder(
+        { logBasePath, codeAgentUrl, orchestratorSecret },
+        loggerWithWarn
+      );
 
       const logFile = join(logBasePath, 'task-duplicate.log');
       forwarder.startForwarding('task-duplicate', logFile);
@@ -514,7 +548,10 @@ describe('LogForwarder', () => {
         debug: () => undefined,
       };
 
-      const forwarder = new LogForwarder({ logBasePath, firestore: mockFirestore }, loggerWithWarn);
+      const forwarder = new LogForwarder(
+        { logBasePath, codeAgentUrl, orchestratorSecret },
+        loggerWithWarn
+      );
 
       // Stop task that was never started
       await forwarder.stopForwarding('non-existent-task');
@@ -526,7 +563,7 @@ describe('LogForwarder', () => {
     });
 
     it('should handle non-existent log file gracefully in readNewContent', () => {
-      const forwarder = new LogForwarder({ logBasePath, firestore: mockFirestore }, mockLogger);
+      const forwarder = createMockForwarder();
 
       // Start with a log file that doesn't exist
       const nonExistentFile = join(tempDir, 'does-not-exist.log');
@@ -548,7 +585,7 @@ describe('LogForwarder', () => {
       };
 
       const forwarder = new LogForwarder(
-        { logBasePath, firestore: mockFirestore },
+        { logBasePath, codeAgentUrl, orchestratorSecret },
         loggerWithError
       );
 
@@ -558,8 +595,62 @@ describe('LogForwarder', () => {
       forwarder.startForwarding('task-error', logFile);
 
       // The test verifies the branch is exercised when file read fails
-      // In practice, this would be triggered by permission errors or other I/O issues
       expect(forwarder.getActiveTaskIds()).toContain('task-error');
+    });
+  });
+
+  describe('splitIntoChunks', () => {
+    it('should prefer splitting at newline when within 80% of max size', async () => {
+      const forwarder = createMockForwarder();
+      captureUploadedChunks();
+
+      const logFile = join(logBasePath, 'task-split.log');
+      forwarder.startForwarding('task-split', logFile);
+
+      // Write content that has a newline within the 80% threshold of MAX_CHUNK_SIZE
+      // MAX_CHUNK_SIZE = 8192, 80% = 6553.6
+      const prefix = 'A'.repeat(6500); // Within 80%
+      const newline = '\n';
+      const suffix = 'B'.repeat(2000); // Total ~8700 bytes
+      const content = prefix + newline + suffix;
+      writeFileSync(logFile, content, 'utf-8');
+
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      await forwarder.stopForwarding('task-split');
+
+      const taskUploads = uploadedChunks.filter((u) => u.taskId === 'task-split');
+      expect(taskUploads.length).toBeGreaterThan(0);
+      const allChunks = taskUploads.flatMap((u) => u.chunks);
+
+      // First chunk should be at most MAX_CHUNK_SIZE
+      const firstChunk = allChunks[0];
+      expect(firstChunk.content.length).toBeLessThanOrEqual(8192);
+    });
+
+    it('should not split at newline when too far back', async () => {
+      const forwarder = createMockForwarder();
+      captureUploadedChunks();
+
+      const logFile = join(logBasePath, 'task-nosplit.log');
+      forwarder.startForwarding('task-nosplit', logFile);
+
+      // Write content where newline is far back (< 80% of max)
+      const prefix = 'A'.repeat(7000); // Beyond 80%
+      const newline = '\n';
+      const suffix = 'B'.repeat(2000);
+      const content = prefix + newline + suffix;
+      writeFileSync(logFile, content, 'utf-8');
+
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      await forwarder.stopForwarding('task-nosplit');
+
+      const taskUploads = uploadedChunks.filter((u) => u.taskId === 'task-nosplit');
+      expect(taskUploads.length).toBeGreaterThan(0);
+      const allChunks = taskUploads.flatMap((u) => u.chunks);
+
+      // First chunk should be at max chunk size (not at the newline)
+      const firstChunk = allChunks[0];
+      expect(firstChunk.content.length).toBeLessThanOrEqual(8192);
     });
   });
 });

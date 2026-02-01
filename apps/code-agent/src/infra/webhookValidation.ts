@@ -22,6 +22,86 @@ export interface WebhookValidationDeps {
   getWebhookSecret: (taskId: string) => Promise<string | null>;
 }
 
+export interface OrchestratorValidationDeps {
+  orchestratorSecret: string;
+}
+
+/**
+ * Validate orchestrator signature using shared secret.
+ *
+ * Similar to validateWebhookSignature but uses orchestratorSecret instead of per-task webhookSecret.
+ * Used for endpoints like /internal/logs and /internal/code/heartbeat where the orchestrator
+ * sends requests signed with a shared secret rather than task-specific webhook secrets.
+ *
+ * Process:
+ * 1. Extract X-Request-Timestamp and X-Request-Signature headers
+ * 2. Validate timestamp within 15 minutes (replay protection)
+ * 3. Compute HMAC-SHA256 using orchestratorSecret with timing-safe comparison
+ *
+ * @param request - Fastify request object
+ * @param deps - Dependencies including orchestrator secret
+ * @returns Ok(undefined) if valid, Err(error) if invalid
+ */
+export function validateOrchestratorSignature(
+  request: FastifyRequest,
+  deps: OrchestratorValidationDeps
+): Result<void, AuthError> {
+  // Extract headers
+  const timestamp = request.headers['x-request-timestamp'];
+  const signature = request.headers['x-request-signature'];
+
+  // Check required headers exist
+  if (timestamp === undefined) {
+    return err({ code: 'missing_timestamp', message: 'Missing X-Request-Timestamp header' });
+  }
+  if (signature === undefined) {
+    return err({ code: 'missing_signature', message: 'Missing X-Request-Signature header' });
+  }
+
+  // Parse timestamp
+  const timestampInt = parseInt(String(timestamp), 10);
+  if (Number.isNaN(timestampInt)) {
+    return err({ code: 'invalid_timestamp_format', message: 'Invalid timestamp format' });
+  }
+
+  // Check timestamp within 15 minutes (replay protection)
+  const now = Math.floor(Date.now() / 1000);
+  const timestampAge = Math.abs(now - timestampInt);
+  const fifteenMinutes = 15 * 60;
+
+  if (timestampAge > fifteenMinutes) {
+    return err({
+      code: 'expired_signature',
+      message: `Signature expired (timestamp age: ${String(timestampAge)}s, max: ${String(fifteenMinutes)}s)`,
+    });
+  }
+
+  // Compute expected signature
+  const rawBody = JSON.stringify(request.body);
+  /* v8 ignore start -- ts-type: `request @preserve */
+  const timestampStr = Array.isArray(timestamp) ? timestamp[0] ?? '' : timestamp;
+  /* v8 ignore stop @preserve */
+  const message = `${timestampStr}.${rawBody}`;
+  const expected = crypto
+    .createHmac('sha256', deps.orchestratorSecret)
+    .update(message)
+    .digest('hex');
+
+  // Timing-safe comparison to prevent timing attacks
+  const receivedBuffer = Buffer.from(String(signature), 'utf-8');
+  const expectedBuffer = Buffer.from(expected, 'utf-8');
+
+  if (receivedBuffer.length !== expectedBuffer.length) {
+    return err({ code: 'invalid_signature', message: 'Signature length mismatch' });
+  }
+
+  if (!crypto.timingSafeEqual(expectedBuffer, receivedBuffer)) {
+    return err({ code: 'invalid_signature', message: 'HMAC signature verification failed' });
+  }
+
+  return ok(undefined);
+}
+
 /**
  * Validate webhook signature from orchestrator.
  *

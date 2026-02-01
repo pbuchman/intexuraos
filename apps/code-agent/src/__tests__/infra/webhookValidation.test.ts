@@ -4,7 +4,7 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { FastifyRequest } from 'fastify';
-import { validateWebhookSignature } from '../../infra/webhookValidation.js';
+import { validateWebhookSignature, validateOrchestratorSignature } from '../../infra/webhookValidation.js';
 import crypto from 'node:crypto';
 
 describe('validateWebhookSignature', () => {
@@ -33,7 +33,163 @@ describe('validateWebhookSignature', () => {
     } as unknown as FastifyRequest;
   }
 
-  describe('header validation', () => {
+  describe('validateOrchestratorSignature', () => {
+    function generateOrchestratorSignature(body: object, secret: string): { timestamp: string; signature: string } {
+      const timestamp = String(Math.floor(Date.now() / 1000));
+      const rawBody = JSON.stringify(body);
+      const message = `${timestamp}.${rawBody}`;
+      const signature = crypto.createHmac('sha256', secret).update(message).digest('hex');
+      return { timestamp, signature };
+    }
+
+    it('accepts valid orchestrator signature', () => {
+      const payload = { taskIds: ['task-123', 'task-456'] };
+      const { timestamp, signature } = generateOrchestratorSignature(payload, 'orchestrator-secret');
+
+      const request = createRequest(payload, {
+        'x-request-timestamp': timestamp,
+        'x-request-signature': signature,
+      });
+
+      const result = validateOrchestratorSignature(request, { orchestratorSecret: 'orchestrator-secret' });
+
+      expect(result.ok).toBe(true);
+    });
+
+    it('rejects missing timestamp header', () => {
+      const payload = { taskIds: ['task-123'] };
+      const { signature } = generateOrchestratorSignature(payload, 'orchestrator-secret');
+
+      const request = createRequest(payload, {
+        'x-request-timestamp': '',
+        'x-request-signature': signature,
+      });
+      delete request.headers['x-request-timestamp'];
+
+      const result = validateOrchestratorSignature(request, { orchestratorSecret: 'orchestrator-secret' });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('missing_timestamp');
+      }
+    });
+
+    it('rejects missing signature header', () => {
+      const payload = { taskIds: ['task-123'] };
+      const { timestamp } = generateOrchestratorSignature(payload, 'orchestrator-secret');
+
+      const request = createRequest(payload, {
+        'x-request-timestamp': timestamp,
+        'x-request-signature': '',
+      });
+      delete request.headers['x-request-signature'];
+
+      const result = validateOrchestratorSignature(request, { orchestratorSecret: 'orchestrator-secret' });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('missing_signature');
+      }
+    });
+
+    it('rejects invalid timestamp format', () => {
+      const payload = { taskIds: ['task-123'] };
+      const { signature } = generateOrchestratorSignature(payload, 'orchestrator-secret');
+
+      const request = createRequest(payload, {
+        'x-request-timestamp': 'invalid',
+        'x-request-signature': signature,
+      });
+
+      const result = validateOrchestratorSignature(request, { orchestratorSecret: 'orchestrator-secret' });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('invalid_timestamp_format');
+      }
+    });
+
+    it('rejects expired timestamp (> 15 minutes)', () => {
+      const payload = { taskIds: ['task-123'] };
+      const expiredTimestamp = String(Math.floor((Date.now() - 20 * 60 * 1000) / 1000));
+
+      const rawBody = JSON.stringify(payload);
+      const message = `${expiredTimestamp}.${rawBody}`;
+      const signature = crypto.createHmac('sha256', 'orchestrator-secret').update(message).digest('hex');
+
+      const request = createRequest(payload, {
+        'x-request-timestamp': expiredTimestamp,
+        'x-request-signature': signature,
+      });
+
+      const result = validateOrchestratorSignature(request, { orchestratorSecret: 'orchestrator-secret' });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('expired_signature');
+      }
+    });
+
+    it('rejects signature length mismatch', () => {
+      const payload = { taskIds: ['task-123'] };
+      const timestamp = String(Math.floor(Date.now() / 1000));
+
+      const request = createRequest(payload, {
+        'x-request-timestamp': timestamp,
+        'x-request-signature': 'abc',
+      });
+
+      const result = validateOrchestratorSignature(request, { orchestratorSecret: 'orchestrator-secret' });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('invalid_signature');
+      }
+    });
+
+    it('rejects HMAC mismatch', () => {
+      const payload = { taskIds: ['task-123'] };
+      const timestamp = String(Math.floor(Date.now() / 1000));
+
+      const wrongSecret = 'wrong-secret';
+      const rawBody = JSON.stringify(payload);
+      const message = `${timestamp}.${rawBody}`;
+      const signature = crypto.createHmac('sha256', wrongSecret).update(message).digest('hex');
+
+      const request = createRequest(payload, {
+        'x-request-timestamp': timestamp,
+        'x-request-signature': signature,
+      });
+
+      const result = validateOrchestratorSignature(request, { orchestratorSecret: 'orchestrator-secret' });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('invalid_signature');
+      }
+    });
+
+    it('accepts timestamp exactly 15 minutes old', () => {
+      const payload = { taskIds: ['task-123'] };
+      const fifteenMinutesAgo = String(Math.floor((Date.now() - 15 * 60 * 1000) / 1000));
+
+      const rawBody = JSON.stringify(payload);
+      const message = `${fifteenMinutesAgo}.${rawBody}`;
+      const signature = crypto.createHmac('sha256', 'orchestrator-secret').update(message).digest('hex');
+
+      const request = createRequest(payload, {
+        'x-request-timestamp': fifteenMinutesAgo,
+        'x-request-signature': signature,
+      });
+
+      const result = validateOrchestratorSignature(request, { orchestratorSecret: 'orchestrator-secret' });
+
+      // 15 minutes = 900 seconds, which should pass (timestampAge > fifteenMinutes fails)
+      expect(result.ok).toBe(true);
+    });
+  });
+
+  describe('validateWebhookSignature', () => {
     it('rejects missing timestamp header', async () => {
       const payload = { taskId: 'task-123', status: 'completed' };
       const { signature } = generateSignature(payload, 'test-secret');

@@ -1739,9 +1739,6 @@ importers:
       fastify-server:
         specifier: 0.0.1-alpha.1
         version: 0.0.1-alpha.1
-      firebase-admin:
-        specifier: ^13.0.2
-        version: 13.6.0(encoding@0.1.13)
       jsonwebtoken:
         specifier: ^9.0.2
         version: 9.0.3

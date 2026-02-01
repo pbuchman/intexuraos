@@ -1,15 +1,16 @@
+import { createHmac } from 'node:crypto';
 import type { Logger } from 'pino';
 
 export interface HeartbeatConfig {
   codeAgentUrl: string;
+  orchestratorSecret: string;
   intervalMs: number;
+  getRunningTasks: () => string[];
 }
 
 export interface HeartbeatManager {
   start(): void;
   stop(): void;
-  registerTask(taskId: string): void;
-  unregisterTask(taskId: string): void;
 }
 
 /**
@@ -19,29 +20,36 @@ export interface HeartbeatManager {
  * Design reference: INT-372
  */
 export function createHeartbeatManager(config: HeartbeatConfig, logger: Logger): HeartbeatManager {
-  const runningTasks = new Set<string>();
   let intervalId: NodeJS.Timeout | null = null;
 
+  function signPayload(payload: string, timestamp: number): string {
+    const message = `${String(timestamp)}.${payload}`;
+    return createHmac('sha256', config.orchestratorSecret).update(message).digest('hex');
+  }
+
   async function sendHeartbeats(): Promise<void> {
-    if (runningTasks.size === 0) {
+    const taskIds = config.getRunningTasks();
+    if (taskIds.length === 0) {
       logger.debug('No running tasks, skipping heartbeat');
       return;
     }
 
-    const taskIds = Array.from(runningTasks);
     logger.info({ taskCount: taskIds.length }, 'Sending heartbeats');
 
-    try {
-      const payload = { taskIds };
-      const internalAuthSecret = process.env['INTEXURAOS_INTERNAL_AUTH_SECRET'] ?? '';
+    const payload = { taskIds };
+    const jsonBody = JSON.stringify(payload);
+    const timestamp = Math.floor(Date.now() / 1000);
+    const signature = signPayload(jsonBody, timestamp);
 
+    try {
       const response = await fetch(`${config.codeAgentUrl}/internal/code/heartbeat`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-Internal-Auth': internalAuthSecret,
+          'X-Request-Timestamp': String(timestamp),
+          'X-Request-Signature': signature,
         },
-        body: JSON.stringify(payload),
+        body: jsonBody,
         signal: AbortSignal.timeout(30_000),
       });
 
@@ -74,16 +82,6 @@ export function createHeartbeatManager(config: HeartbeatConfig, logger: Logger):
         intervalId = null;
         logger.info('Heartbeat manager stopped');
       }
-    },
-
-    registerTask(taskId: string): void {
-      runningTasks.add(taskId);
-      logger.debug({ taskId, count: runningTasks.size }, 'Task registered for heartbeat');
-    },
-
-    unregisterTask(taskId: string): void {
-      runningTasks.delete(taskId);
-      logger.debug({ taskId, count: runningTasks.size }, 'Task unregistered from heartbeat');
     },
   };
 }
