@@ -41,7 +41,12 @@ declare -A PATTERNS=(
   ["CI should now pass"]="assuming CI passes without verification"
 )
 
-for pattern in "${!PATTERNS[@]}"; do
+# Get all keys (disable nounset temporarily for associative array expansion)
+set +u
+KEYS=("${!PATTERNS[@]}")
+set -u
+
+for pattern in "${KEYS[@]}"; do
   # Check if pattern exists in response
   if echo "$LAST_RESPONSE" | grep -iq "$pattern"; then
     # Skip false positives: pattern inside backticks (code/discussion)
