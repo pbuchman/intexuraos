@@ -242,5 +242,23 @@ module.exports = {
       watch: false,
       log_date_format: 'YYYY-MM-DD HH:mm:ss',
     },
+
+    // Log viewer UI for DevBar (connects to log-server via SSE)
+    {
+      name: 'log-viewer',
+      script: 'pnpm',
+      args: ['run', 'dev'],
+      cwd: './tools/log-viewer',
+      interpreter: 'none',
+      env: {
+        PORT: '8107',
+        NODE_ENV: 'development',
+      },
+      autorestart: true,
+      max_restarts: 3,
+      restart_delay: 2000,
+      watch: false,
+      log_date_format: 'YYYY-MM-DD HH:mm:ss',
+    },
   ],
 };
