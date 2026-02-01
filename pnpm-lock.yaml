@@ -1702,6 +1702,9 @@ importers:
       '@google-cloud/functions-framework':
         specifier: ^3.0.0
         version: 3.5.1
+      '@intexuraos/common-core':
+        specifier: workspace:*
+        version: link:../../packages/common-core
       firebase-admin:
         specifier: ^13.0.0
         version: 13.6.0(encoding@0.1.13)
@@ -1804,6 +1807,9 @@ importers:
       '@google-cloud/functions-framework':
         specifier: ^3.0.0
         version: 3.5.1
+      '@intexuraos/common-core':
+        specifier: workspace:*
+        version: link:../../packages/common-core
       pino:
         specifier: ^9.6.0
         version: 9.14.0

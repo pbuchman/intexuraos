@@ -12,7 +12,8 @@ import {
   expectNoLogEntry,
 } from './helpers/index.js';
 
-describe('Claude Hooks - Pattern Detection', () => {
+// Use sequential to avoid resource contention issues when running with full CI
+describe.sequential('Claude Hooks - Pattern Detection', () => {
   const { path: testBaseDir, cleanup: cleanupTempDir } = createTempDir();
 
   beforeEach(() => {

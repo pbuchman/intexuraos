@@ -16,7 +16,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const hooksDir = path.resolve(__dirname, '..');
 const sessionsLogPath = path.join(hooksDir, 'sessions.log');
 
-describe('Claude Hooks - Automatic/Rebuild', () => {
+// Use sequential to avoid resource contention issues when running with full CI
+describe.sequential('Claude Hooks - Automatic/Rebuild', () => {
   beforeEach(() => {
     clearHooksLog();
     // Clear sessions.log
@@ -125,7 +126,7 @@ describe('Claude Hooks - Automatic/Rebuild', () => {
         hookName: 'rebuild-after-git',
         input: HookFixtureBuilder.bash('git pull origin main'),
         env: {
-          // Skip actual pnpm build in test mode (hook uses git diff, not this env var)
+          // Skip actual pnpm build in test mode
           HOOK_DRY_RUN: '1',
         },
       });
