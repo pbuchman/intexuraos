@@ -1,5 +1,9 @@
 @import 'tailwindcss';
 
+/* Markdown editor styles */
+@import '@uiw/react-md-editor/markdown-editor.css';
+@import '@uiw/react-markdown-preview/markdown.css';
+
 /* Light mode code highlighting */
 @import 'highlight.js/styles/github.css' layer(hljs-light);
 
