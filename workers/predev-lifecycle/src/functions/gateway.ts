@@ -165,10 +165,14 @@ export const gateway: HttpFunction = async (req: any, res: any) => {
   }
 
   // If stopped, start VM and show "Starting" page
+  // Use conditional state transition to prevent race conditions
   if (currentState === null || currentState.status === 'stopped') {
-    logger.info('Starting VM...');
-    await state.setStarting();
+    logger.info('Attempting to start VM...');
 
+    // Only update state if currently stopped (transactional)
+    await state.setStartingIfStopped();
+
+    // Start the VM regardless of state update (MIG resize is idempotent)
     const result = await vm.startVm();
     if (!result.success) {
       res.status(503).send(`Failed to start VM: ${result.message}`);
@@ -179,19 +183,10 @@ export const gateway: HttpFunction = async (req: any, res: any) => {
     return;
   }
 
-  // If starting and VM was created recently (within 3 minutes), assume it's coming up
-  // Avoid race condition where report-ready hasn't yet updated state to "running"
+  // If starting, show "Starting" page
+  // The VM's report-ready callback will transition to running
   if (currentState.status === 'starting') {
-    const startedAt = currentState.startedAt ?? new Date(0);
-    const timeSinceStart = Date.now() - startedAt.getTime();
-    if (timeSinceStart < 180000) { // 3 minutes
-      res.status(200).send(getStartingPage(currentState.branch));
-      return;
-    }
-    // If starting for too long, reset and try again
-    logger.warn('VM stuck in starting state, resetting...');
-    await state.setStopped();
-    res.status(503).send('VM startup timed out, please refresh');
+    res.status(200).send(getStartingPage(currentState.branch));
     return;
   }
 

@@ -1,4 +1,4 @@
-import { Firestore, Timestamp } from '@google-cloud/firestore';
+import { Firestore, Timestamp, Transaction } from '@google-cloud/firestore';
 import { logger } from './logger.js';
 
 export interface PredevState {
@@ -66,14 +66,69 @@ export class StateManager {
     await this.setState({ lastActivity: new Date() });
   }
 
+  // Report-ready is authoritative - always succeeds
   async setRunning(ip: string, branch: string): Promise<void> {
-    await this.setState({
-      status: 'running',
-      vmIp: ip,
-      branch,
-      lastActivity: new Date(),
-      startedAt: new Date(),
-    });
+    try {
+      await this.db.collection(COLLECTION).doc(DOC_ID).set({
+        status: 'running',
+        vmIp: ip,
+        branch,
+        lastActivity: new Date(),
+        startedAt: new Date(),
+      } as FirestoreData, { merge: true });
+      logger.info({ ip, branch }, 'State set to running');
+    } catch (error) {
+      logger.error({ error }, 'Failed to set running state');
+      throw error;
+    }
+  }
+
+  // Only transition to starting if currently stopped - prevents race conditions
+  async setStartingIfStopped(): Promise<boolean> {
+    try {
+      const result = await this.db.runTransaction(async (tx: Transaction) => {
+        const docRef = this.db.collection(COLLECTION).doc(DOC_ID);
+        const doc = await tx.get(docRef);
+
+        if (!doc.exists) {
+          // First run - create document with starting state
+          tx.create(docRef, {
+            status: 'starting',
+            branch: 'development',
+            lastActivity: new Date(),
+            startedAt: new Date(),
+          } as FirestoreData);
+          return { created: true, updated: false };
+        }
+
+        const data = doc.data() as FirestoreData | undefined;
+        const currentStatus = (data?.['status'] ?? 'stopped') as PredevState['status'];
+
+        // Only update if currently stopped - don't overwrite starting/running
+        if (currentStatus === 'stopped') {
+          tx.update(docRef, {
+            status: 'starting',
+            startedAt: new Date(),
+          } as FirestoreData);
+          return { created: false, updated: true };
+        }
+
+        // Already starting or running - don't touch
+        return { created: false, updated: false, currentStatus };
+      });
+
+      const didUpdate = (result as { updated: boolean }).updated;
+      if (didUpdate) {
+        logger.info('State transitioned: stopped -> starting');
+      } else {
+        const status = (result as { currentStatus?: string }).currentStatus;
+        logger.info({ status }, 'Skipped setStarting - not stopped');
+      }
+      return didUpdate;
+    } catch (error) {
+      logger.error({ error }, 'Failed in setStartingIfStopped transaction');
+      return false;
+    }
   }
 
   async setStarting(): Promise<void> {
