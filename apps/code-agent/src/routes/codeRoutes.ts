@@ -240,6 +240,7 @@ function taskToApiResponse(task: {
 /* v8 ignore start -- ts-type: TypeScript type narrowing makes branch unreachable @preserve */
   };
 }
+/* v8 ignore stop @preserve */
 
 export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, opts, done) => {
   const { jwtValidator } = opts;
@@ -249,7 +250,6 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
 
   // POST /internal/code/process - Called by actions-agent
   fastify.post<{
-  /* v8 ignore stop @preserve */
     Body: {
       actionId: string;
       approvalEventId: string;
@@ -742,7 +742,6 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       if (body.result?.prUrl !== undefined && result.value.linearIssueId !== undefined) {
         await linearIssueService.markInReview(result.value.userId, result.value.linearIssueId);
       }
-      /* v8 ignore stop @preserve */
 
       request.log.info({ taskId, status: result.value.status }, 'Code task updated successfully');
 
