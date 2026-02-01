@@ -145,7 +145,7 @@ describe('TmuxManager', () => {
       await manager.startSession({
         taskId: 'task-2',
         worktreePath: '/tmp/worktree',
-        linearIssueId: '123',
+        linearIssueId: 'INT-123',
         prompt: 'Implement feature',
         workerType: 'auto',
         machine: 'vm',
@@ -156,7 +156,7 @@ describe('TmuxManager', () => {
       expect(call).toContain('tmux new-session -d -s cc-task-task-2');
       expect(call).toContain('-run.sh');
 
-      // Verify the system prompt file contains the Linear issue
+      // Verify the system prompt file contains the Linear issue identifier (already includes INT- prefix)
       const systemPromptFile = join(logBasePath, 'task-2-system.txt');
       const systemPrompt = readFileSync(systemPromptFile, 'utf-8');
       expect(systemPrompt).toContain('Linear Issue: INT-123');
@@ -496,13 +496,13 @@ describe('TmuxManager', () => {
       await manager.startSession({
         taskId: 'task-linear',
         worktreePath: '/tmp/worktree',
-        linearIssueId: '456',
+        linearIssueId: 'INT-456',
         prompt: 'Test task',
         workerType: 'opus',
         machine: 'mac',
       });
 
-      // Verify the system prompt file contains the Linear issue
+      // Verify the system prompt file contains the Linear issue identifier (already includes INT- prefix)
       const systemPromptFile = join(logBasePath, 'task-linear-system.txt');
       const systemPrompt = readFileSync(systemPromptFile, 'utf-8');
       expect(systemPrompt).toContain('Linear Issue: INT-456');
