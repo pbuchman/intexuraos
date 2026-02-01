@@ -14,7 +14,8 @@ export interface LinearIssueServiceDeps {
 }
 
 export interface EnsureIssueResult {
-  linearIssueId: string;
+  /** Undefined when in fallback mode (Linear unavailable) */
+  linearIssueId?: string;
   linearIssueTitle: string;
   linearFallback: boolean;
 }
@@ -26,6 +27,7 @@ export interface LinearIssueService {
    * If creation fails, return fallback mode.
    */
   ensureIssueExists(params: {
+    userId: string;
     linearIssueId?: string;
     linearIssueTitle?: string;
     taskPrompt: string;
@@ -34,12 +36,12 @@ export interface LinearIssueService {
   /**
    * Transition issue to In Progress when task is dispatched.
    */
-  markInProgress(linearIssueId: string): Promise<void>;
+  markInProgress(userId: string, linearIssueId: string): Promise<void>;
 
   /**
    * Transition issue to In Review when PR is created.
    */
-  markInReview(linearIssueId: string): Promise<void>;
+  markInReview(userId: string, linearIssueId: string): Promise<void>;
 }
 
 export function createLinearIssueService(deps: LinearIssueServiceDeps): LinearIssueService {
@@ -47,7 +49,7 @@ export function createLinearIssueService(deps: LinearIssueServiceDeps): LinearIs
 
   return {
     async ensureIssueExists(params): Promise<EnsureIssueResult> {
-      const { linearIssueId, linearIssueTitle, taskPrompt } = params;
+      const { userId, linearIssueId, linearIssueTitle, taskPrompt } = params;
 
       // If linearIssueId provided, use existing issue (title optional - use fallback if missing)
       if (linearIssueId !== undefined) {
@@ -65,6 +67,7 @@ export function createLinearIssueService(deps: LinearIssueServiceDeps): LinearIs
       const generatedTitle = generateIssueTitle(taskPrompt);
 
       const result = await linearAgentClient.createIssue({
+        userId,
         title: generatedTitle,
         description: `## Code Task\n\n${taskPrompt}\n\n---\n*Created automatically by code-agent*`,
         labels: ['Code Task'],
@@ -73,26 +76,26 @@ export function createLinearIssueService(deps: LinearIssueServiceDeps): LinearIs
       if (!result.ok) {
         logger.warn({ error: result.error }, 'Failed to create Linear issue, using fallback mode');
         return {
-          linearIssueId: '',
           linearIssueTitle: generatedTitle,
           linearFallback: true,
         };
       }
 
       return {
-        linearIssueId: result.value.issueId,
+        linearIssueId: result.value.issueIdentifier,
         linearIssueTitle: result.value.issueTitle,
         linearFallback: false,
       };
     },
 
-    async markInProgress(linearIssueId: string): Promise<void> {
-      if (linearIssueId === '') {
-        logger.debug({}, 'Skipping state transition (fallback mode)');
+    async markInProgress(userId: string, linearIssueId: string): Promise<void> {
+      if (!linearIssueId) {
+        logger.debug({}, 'Skipping state transition (no issue ID)');
         return;
       }
 
       const result = await linearAgentClient.updateIssueState({
+        userId,
         issueId: linearIssueId,
         state: 'in_progress',
       });
@@ -102,13 +105,14 @@ export function createLinearIssueService(deps: LinearIssueServiceDeps): LinearIs
       }
     },
 
-    async markInReview(linearIssueId: string): Promise<void> {
-      if (linearIssueId === '') {
-        logger.debug({}, 'Skipping state transition (fallback mode)');
+    async markInReview(userId: string, linearIssueId: string): Promise<void> {
+      if (!linearIssueId) {
+        logger.debug({}, 'Skipping state transition (no issue ID)');
         return;
       }
 
       const result = await linearAgentClient.updateIssueState({
+        userId,
         issueId: linearIssueId,
         state: 'in_review',
       });

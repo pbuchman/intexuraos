@@ -22,6 +22,7 @@ import {
 import { createSentryStream, setupSentryErrorHandler } from '@intexuraos/infra-sentry';
 import { linearRoutes } from './routes/linearRoutes.js';
 import { internalRoutes } from './routes/internalRoutes.js';
+import { internalIssuesRoutes } from './routes/internalIssuesRoutes.js';
 
 const SERVICE_NAME = 'linear-agent';
 const SERVICE_VERSION = '0.0.1';
@@ -208,6 +209,7 @@ export async function buildServer(testLoggerStream?: NodeJS.WritableStream): Pro
 
   await app.register(linearRoutes);
   await app.register(internalRoutes);
+  await app.register(internalIssuesRoutes);
 
   app.get(
     '/openapi.json',

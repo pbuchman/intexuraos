@@ -178,12 +178,12 @@ You are a Claude Code worker in IntexuraOS.
 Task ID: ${taskId}
 Worktree: ${worktreePath}
 Machine: ${machine}
-${linearIssueId !== undefined ? `Linear Issue: INT-${linearIssueId}` : ''}
+${linearIssueId !== undefined ? `Linear Issue: ${linearIssueId}` : ''}
 
 [MANDATORY - FIRST ACTION]${
       linearIssueId !== undefined
         ? `
-You MUST invoke: /linear INT-${linearIssueId}
+You MUST invoke: /linear ${linearIssueId}
 DO NOT proceed with any other action until this completes.`
         : ''
     }
@@ -233,11 +233,6 @@ ${sanitizedPrompt}`;
     sanitized = sanitized.replace(/\s+/g, ' ').trim();
 
     return sanitized;
-  }
-
-  private escapeForShell(str: string): string {
-    // Escape single quotes and backslashes for shell
-    return str.replace(/'/g, "'\\''").replace(/\\/g, '\\\\');
   }
 
   private sanitizeTaskId(taskId: string): string {

@@ -19,6 +19,7 @@ import type {
   CreateIssueInput,
   LinearError,
   IssueStateCategory,
+  WorkflowState,
 } from '../../domain/index.js';
 import { createAppLogger } from '@intexuraos/infra-sentry';
 
@@ -394,6 +395,64 @@ export function createLinearApiClient(): LinearApiClient {
           return ok(null);
         }
         logger.error({ error: errorMessage }, 'Failed to fetch Linear issue by identifier');
+        return err(mapLinearError(error));
+      }
+    },
+
+    async updateIssueState(
+      apiKey: string,
+      issueId: string,
+      stateId: string
+    ): Promise<Result<LinearIssue, LinearError>> {
+      try {
+        logger.info({ issueId, stateId }, 'Updating Linear issue state');
+        const client = getOrCreateClient(apiKey);
+        const payload = await client.updateIssue(issueId, { stateId });
+
+        if (!payload.success) {
+          return err({ code: 'API_ERROR', message: 'Failed to update issue state' });
+        }
+
+        const issue = await payload.issue;
+        if (issue === undefined) {
+          return err({ code: 'API_ERROR', message: 'Issue updated but could not fetch details' });
+        }
+
+        const mapped = await mapSingleIssue(issue);
+        logger.info({ issueId, newState: mapped.state.name }, 'Issue state updated');
+        return ok(mapped);
+      } catch (error) {
+        logger.error({ error: getErrorMessage(error) }, 'Failed to update Linear issue state');
+        return err(mapLinearError(error));
+      }
+    },
+
+    async getWorkflowStates(
+      apiKey: string,
+      teamId: string
+    ): Promise<Result<WorkflowState[], LinearError>> {
+      const dedupKey = createDedupKey('getWorkflowStates', apiKey.slice(0, 8), teamId);
+
+      try {
+        const states = await withDeduplication(dedupKey, async () => {
+          logger.info({ teamId }, 'Fetching Linear workflow states');
+
+          const client = getOrCreateClient(apiKey);
+          const statesConnection = await client.workflowStates({
+            filter: { team: { id: { eq: teamId } } },
+          });
+
+          return statesConnection.nodes.map((s) => ({
+            id: s.id,
+            name: s.name,
+            type: mapIssueStateType(s.type),
+          }));
+        });
+
+        logger.info({ teamId, stateCount: states.length }, 'Fetched Linear workflow states');
+        return ok(states);
+      } catch (error) {
+        logger.error({ error: getErrorMessage(error) }, 'Failed to fetch Linear workflow states');
         return err(mapLinearError(error));
       }
     },

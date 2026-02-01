@@ -23,6 +23,40 @@ export interface WorkerSettingsRoutesOptions {
   jwtValidator: JwtValidator;
 }
 
+const MASK_CHAR = '•';
+
+/**
+ * Check if a credential appears to be a masked value.
+ * Masked values contain bullet characters (•) from our maskSecret function.
+ * These should never be stored - they indicate the frontend sent back masked data.
+ */
+function isMaskedCredential(value: string): boolean {
+  return value.includes(MASK_CHAR);
+}
+
+/**
+ * Validate that credentials are not masked values.
+ * Returns error message if any credential is masked, undefined if all are valid.
+ */
+function validateCredentialsNotMasked(
+  credentials: Partial<{
+    cfAccessClientId: string;
+    cfAccessClientSecret: string;
+    dispatchSigningSecret: string;
+  }>
+): string | undefined {
+  if (credentials.cfAccessClientId !== undefined && isMaskedCredential(credentials.cfAccessClientId)) {
+    return 'CF Access Client ID contains masked characters - please enter the actual credential';
+  }
+  if (credentials.cfAccessClientSecret !== undefined && isMaskedCredential(credentials.cfAccessClientSecret)) {
+    return 'CF Access Client Secret contains masked characters - please enter the actual credential';
+  }
+  if (credentials.dispatchSigningSecret !== undefined && isMaskedCredential(credentials.dispatchSigningSecret)) {
+    return 'Dispatch Signing Secret contains masked characters - please enter the actual credential';
+  }
+  return undefined;
+}
+
 /**
  * Mask a secret string for API response.
  * Shows only last 3 characters, rest as dots.
@@ -30,10 +64,10 @@ export interface WorkerSettingsRoutesOptions {
 function maskSecret(secret: string): string {
   /* v8 ignore start -- test-infra: edge case for very short secrets rarely occurs @preserve */
   if (secret.length <= 3) {
-    return '•••';
+    return MASK_CHAR.repeat(3);
   }
   /* v8 ignore stop @preserve */
-  return '•'.repeat(Math.min(secret.length - 3, 20)) + secret.slice(-3);
+  return MASK_CHAR.repeat(Math.min(secret.length - 3, 20)) + secret.slice(-3);
 }
 
 /**
@@ -339,6 +373,12 @@ export const workerSettingsRoutes: FastifyPluginCallback<WorkerSettingsRoutesOpt
         );
       }
 
+      // Validate credentials are not masked values (security: prevent storing display-only data)
+      const maskedError = validateCredentialsNotMasked(request.body);
+      if (maskedError !== undefined) {
+        return await reply.fail('INVALID_REQUEST', maskedError);
+      }
+
       request.log.info({ userId, name }, 'Adding worker');
 
       const result = await workerSettingsRepo.addWorker(userId, request.body);
@@ -462,6 +502,12 @@ export const workerSettingsRoutes: FastifyPluginCallback<WorkerSettingsRoutesOpt
       /* v8 ignore stop @preserve */
       const userId = request.user?.userId ?? 'unknown-user';
       const { name } = request.params;
+
+      // Validate credentials are not masked values (security: prevent storing display-only data)
+      const maskedError = validateCredentialsNotMasked(request.body);
+      if (maskedError !== undefined) {
+        return await reply.fail('INVALID_REQUEST', maskedError);
+      }
 
       request.log.info({ userId, name }, 'Updating worker');
 

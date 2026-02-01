@@ -143,12 +143,38 @@ fi
 
 # Parse the endpoint to show a friendly name
 api_display=""
+api_bg_color=""  # Background color for special APIs
 if [ -n "$api_endpoint" ] && [ "$api_endpoint" != "null" ]; then
   # Extract host from URL for display (remove protocol and path)
   api_host=$(echo "$api_endpoint" | sed -E 's|^https?://||' | cut -d'/' -f1)
-  api_display="$api_host"
+
+  # Special handling for known APIs
+  if [ "$api_host" = "api.z.ai" ]; then
+    api_display="Z.AI"
+    api_bg_color="47"  # White background
+  elif [ "$api_host" = "api.anthropic.com" ]; then
+    api_display="anthropic"
+    api_bg_color="48;5;208"  # Orange background
+  else
+    api_display="$api_host"
+  fi
 else
-  api_display="api.anthropic.com"
+  api_display="anthropic"
+  api_bg_color="48;5;208"  # Orange background for default Anthropic
+fi
+
+# ---- Model override for api.z.ai ----
+# Store original api_host for model override logic
+if [ -n "$api_endpoint" ] && [ "$api_endpoint" != "null" ]; then
+  stored_api_host=$(echo "$api_endpoint" | sed -E 's|^https?://||' | cut -d'/' -f1)
+else
+  stored_api_host="api.anthropic.com"
+fi
+
+# Override model display when using api.z.ai
+if [ "$stored_api_host" = "api.z.ai" ]; then
+  model_name="GLM 4.7"
+  model_version=""  # Clear version for cleaner display
 fi
 
 # ---- git colors ----
@@ -365,7 +391,20 @@ if [ -n "$cc_version" ] && [ "$cc_version" != "null" ]; then
   printf '  📟 %sv%s%s' "$(cc_version_color)" "$cc_version" "$(rst)"
 fi
 if [ -n "$api_display" ]; then
-  printf '  🌐 %s%s%s' "$(api_color)" "$api_display" "$(rst)"
+  if [ -n "$api_bg_color" ]; then
+    # Use background color for special APIs (white for Z.AI, orange for anthropic)
+    # Need contrasting text color: black on white, white on orange
+    if [ "$api_bg_color" = "47" ]; then
+      # White background - use black text
+      printf '  🌐 \033[30;%sm %s \033[0m' "$api_bg_color" "$api_display"
+    else
+      # Orange background - use white text
+      printf '  🌐 \033[97;%sm %s \033[0m' "$api_bg_color" "$api_display"
+    fi
+  else
+    # Default styling for other APIs
+    printf '  🌐 %s%s%s' "$(api_color)" "$api_display" "$(rst)"
+  fi
 fi
 
 # Line 2: Context and hook metrics

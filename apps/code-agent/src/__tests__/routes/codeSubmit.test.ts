@@ -349,6 +349,9 @@ cleanupTaskLogs: createCleanupTaskLogsUseCase({
           linearIssueId: 'INT-305',
         })
       );
+
+      // Verify markInProgress was called with correct userId
+      expect(linearService.markInProgress).toHaveBeenCalledWith('test-user-id', 'INT-305');
     });
   });
 

@@ -26,11 +26,14 @@ describe('linearIssueService', () => {
     updateIssueState: (...args: Parameters<LinearAgentClient['updateIssueState']>) => mockUpdateIssueState(...args),
   };
 
+  const testUserId = 'test-user-123';
+
   describe('ensureIssueExists', () => {
     it('should return existing issue when linearIssueId and title provided', async () => {
       const service = createLinearIssueService({ linearAgentClient: mockClient, logger: mockLogger });
 
       const result = await service.ensureIssueExists({
+        userId: testUserId,
         linearIssueId: 'existing-123',
         linearIssueTitle: 'Existing Issue',
         taskPrompt: 'Fix the bug',
@@ -52,6 +55,7 @@ describe('linearIssueService', () => {
       const service = createLinearIssueService({ linearAgentClient: mockClient, logger: mockLogger });
 
       const result = await service.ensureIssueExists({
+        userId: testUserId,
         linearIssueId: 'INT-999',
         taskPrompt: 'Work on existing issue',
       });
@@ -81,11 +85,12 @@ describe('linearIssueService', () => {
       const service = createLinearIssueService({ linearAgentClient: mockClient, logger: mockLogger });
 
       const result = await service.ensureIssueExists({
+        userId: testUserId,
         taskPrompt: 'Fix the login bug in the auth module',
       });
 
       expect(result).toEqual({
-        linearIssueId: 'new-456',
+        linearIssueId: 'INT-456',
         linearIssueTitle: 'Fix the login bug',
         linearFallback: false,
       });
@@ -93,11 +98,13 @@ describe('linearIssueService', () => {
         title: 'Fix the login bug in the auth module',
         description: expect.stringContaining('Code Task'),
         labels: ['Code Task'],
+        userId: 'test-user-123',
       });
       expect(mockCreateIssue).toHaveBeenCalledWith({
         title: 'Fix the login bug in the auth module',
         description: expect.stringContaining('Fix the login bug in the auth module'),
         labels: ['Code Task'],
+        userId: 'test-user-123',
       });
       expect(mockLogger.info).toHaveBeenCalledWith(
         {},
@@ -116,11 +123,12 @@ describe('linearIssueService', () => {
       const service = createLinearIssueService({ linearAgentClient: mockClient, logger: mockLogger });
 
       const result = await service.ensureIssueExists({
+        userId: testUserId,
         taskPrompt: 'Fix the bug',
       });
 
       expect(result.linearFallback).toBe(true);
-      expect(result.linearIssueId).toBe('');
+      expect(result.linearIssueId).toBeUndefined();
       expect(result.linearIssueTitle).toBe('Fix the bug');
       expect(mockLogger.warn).toHaveBeenCalledWith(
         { error: { code: 'UNAVAILABLE', message: 'Service down' } },
@@ -141,6 +149,7 @@ describe('linearIssueService', () => {
       const service = createLinearIssueService({ linearAgentClient: mockClient, logger: mockLogger });
 
       await service.ensureIssueExists({
+        userId: testUserId,
         taskPrompt: 'Fix the bug in auth module',
       });
 
@@ -148,6 +157,7 @@ describe('linearIssueService', () => {
         title: 'Fix the bug in auth module',
         description: expect.stringContaining('Fix the bug in auth module'),
         labels: ['Code Task'],
+        userId: 'test-user-123',
       });
     });
 
@@ -164,10 +174,11 @@ describe('linearIssueService', () => {
       const service = createLinearIssueService({ linearAgentClient: mockClient, logger: mockLogger });
 
       const result = await service.ensureIssueExists({
+        userId: testUserId,
         taskPrompt: '',
       });
 
-      expect(result.linearIssueId).toBe('new-empty');
+      expect(result.linearIssueId).toBe('INT-999');
       expect(mockCreateIssue).toHaveBeenCalled();
     });
 
@@ -185,7 +196,7 @@ describe('linearIssueService', () => {
 
       const longPrompt = 'This is a very long prompt that exceeds eighty characters and should be truncated appropriately for the issue title';
 
-      await service.ensureIssueExists({ taskPrompt: longPrompt });
+      await service.ensureIssueExists({ userId: testUserId, taskPrompt: longPrompt });
 
       expect(mockCreateIssue).toHaveBeenCalled();
       // Verify the title was truncated to 80 chars by checking the generated title matches pattern
@@ -209,6 +220,7 @@ describe('linearIssueService', () => {
       const service = createLinearIssueService({ linearAgentClient: mockClient, logger: mockLogger });
 
       await service.ensureIssueExists({
+        userId: testUserId,
         taskPrompt: '```typescript\nconst x = 1;\n```\n\nFix the bug in the auth module',
       });
 
@@ -233,6 +245,7 @@ describe('linearIssueService', () => {
       const service = createLinearIssueService({ linearAgentClient: mockClient, logger: mockLogger });
 
       await service.ensureIssueExists({
+        userId: testUserId,
         taskPrompt: 'Check https://example.com/docs and Fix the bug',
       });
 
@@ -251,23 +264,24 @@ describe('linearIssueService', () => {
 
       const service = createLinearIssueService({ linearAgentClient: mockClient, logger: mockLogger });
 
-      await service.markInProgress('issue-123');
+      await service.markInProgress(testUserId, 'issue-123');
 
       expect(mockUpdateIssueState).toHaveBeenCalledWith({
+        userId: 'test-user-123',
         issueId: 'issue-123',
         state: 'in_progress',
       });
     });
 
-    it('should skip state transition in fallback mode (empty issueId)', async () => {
+    it('should skip state transition when no issue ID provided', async () => {
       const service = createLinearIssueService({ linearAgentClient: mockClient, logger: mockLogger });
 
-      await service.markInProgress('');
+      await service.markInProgress(testUserId, '');
 
       expect(mockUpdateIssueState).not.toHaveBeenCalled();
       expect(mockLogger.debug).toHaveBeenCalledWith(
         {},
-        'Skipping state transition (fallback mode)'
+        'Skipping state transition (no issue ID)'
       );
     });
 
@@ -281,7 +295,7 @@ describe('linearIssueService', () => {
 
       const service = createLinearIssueService({ linearAgentClient: mockClient, logger: mockLogger });
 
-      await expect(service.markInProgress('issue-123')).resolves.toBeUndefined();
+      await expect(service.markInProgress(testUserId, 'issue-123')).resolves.toBeUndefined();
       expect(mockLogger.warn).toHaveBeenCalledWith(
         {
           linearIssueId: 'issue-123',
@@ -298,23 +312,24 @@ describe('linearIssueService', () => {
 
       const service = createLinearIssueService({ linearAgentClient: mockClient, logger: mockLogger });
 
-      await service.markInReview('issue-123');
+      await service.markInReview(testUserId, 'issue-123');
 
       expect(mockUpdateIssueState).toHaveBeenCalledWith({
+        userId: 'test-user-123',
         issueId: 'issue-123',
         state: 'in_review',
       });
     });
 
-    it('should skip state transition in fallback mode (empty issueId)', async () => {
+    it('should skip state transition when no issue ID provided', async () => {
       const service = createLinearIssueService({ linearAgentClient: mockClient, logger: mockLogger });
 
-      await service.markInReview('');
+      await service.markInReview(testUserId, '');
 
       expect(mockUpdateIssueState).not.toHaveBeenCalled();
       expect(mockLogger.debug).toHaveBeenCalledWith(
         {},
-        'Skipping state transition (fallback mode)'
+        'Skipping state transition (no issue ID)'
       );
     });
 
@@ -328,7 +343,7 @@ describe('linearIssueService', () => {
 
       const service = createLinearIssueService({ linearAgentClient: mockClient, logger: mockLogger });
 
-      await expect(service.markInReview('issue-123')).resolves.toBeUndefined();
+      await expect(service.markInReview(testUserId, 'issue-123')).resolves.toBeUndefined();
       expect(mockLogger.warn).toHaveBeenCalledWith(
         {
           linearIssueId: 'issue-123',
