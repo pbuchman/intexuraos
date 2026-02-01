@@ -33,21 +33,21 @@ if [[ -z "$LAST_RESPONSE" ]]; then
   exit 0
 fi
 
-# Forbidden ownership-deflecting patterns (keys are search patterns, values are descriptions)
-# Use spaces instead of hyphens in keys to avoid bash variable expansion with set -u
+# Forbidden ownership-deflecting patterns
+# Keys are safe identifiers (no hyphens/spaces), values are descriptions
 declare -A PATTERNS=(
-  ["pre existing"]="pre-existing condition/issue language"
-  ["already broken"]="deflecting blame to prior state"
-  ["legacy issue"]="deflecting to legacy as excuse"
-  ["CI should now pass"]="assuming CI passes without verification"
+  ["pre_existing"]="pre-existing condition/issue language"
+  ["already_broken"]="deflecting blame to prior state"
+  ["legacy_issue"]="deflecting to legacy as excuse"
+  ["ci_should_pass"]="assuming CI passes without verification"
 )
 
-# Map safe keys to actual search patterns (with hyphens)
+# Map safe keys to actual search patterns
 declare -A SEARCH_PATTERNS=(
-  ["pre existing"]="pre-existing|pre existing"
-  ["already broken"]="already broken"
-  ["legacy issue"]="legacy issue"
-  ["CI should now pass"]="CI should now pass"
+  ["pre_existing"]="pre-existing"
+  ["already_broken"]="already broken"
+  ["legacy_issue"]="legacy issue"
+  ["ci_should_pass"]="CI should now pass"
 )
 
 for key in "${!PATTERNS[@]}"; do
@@ -63,13 +63,13 @@ for key in "${!PATTERNS[@]}"; do
 
     # Log the ownership violation
     log_blocked "$HOOK_NAME" "ownership-violation" \
-        "Used forbidden language: '$key'" \
+        "Used forbidden language: '$pattern'" \
         "See CLAUDE.md: Ownership Mindset (MANDATORY)"
 
     cat << EOF
 {
   "decision": "block",
-  "reason": "⚠️ OWNERSHIP CHECK: You used '$key' in your response. This violates the Ownership Mindset rules in CLAUDE.md. Please acknowledge this warning and rephrase without ownership-deflecting language. See: Ownership Mindset (MANDATORY) section."
+  "reason": "⚠️ OWNERSHIP CHECK: You used '$pattern' in your response. This violates the Ownership Mindset rules in CLAUDE.md. Please acknowledge this warning and rephrase without ownership-deflecting language. See: Ownership Mindset (MANDATORY) section."
 }
 EOF
     exit 0
