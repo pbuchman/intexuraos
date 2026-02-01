@@ -183,6 +183,13 @@ export function registerRoutes(
     reply.send({ taskId: id, status: 'cancelled' });
   });
 
+  // GET /hello - Hello World greeting
+  app.get('/hello', async (_request, reply) => {
+    reply.send({
+      message: 'Hello, World! Greetings from the local orchestrator.',
+    });
+  });
+
   // GET /health - Health check
   app.get('/health', async (_request, reply) => {
     const running = dispatcher.getRunningCount();

@@ -332,6 +332,20 @@ describe('Routes', () => {
     });
   });
 
+  describe('GET /hello', () => {
+    it('should return hello world greeting', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/hello',
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject({
+        message: 'Hello, World! Greetings from the local orchestrator.',
+      });
+    });
+  });
+
   describe('GET /health', () => {
     it('should return health status', async () => {
       const response = await app.inject({
