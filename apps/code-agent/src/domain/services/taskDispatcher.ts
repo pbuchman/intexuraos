@@ -37,6 +37,8 @@ export interface DispatchRequest {
   webhookSecret: string;
   traceId?: string;
   workerCredentials: DispatchWorkerCredentials;
+  /** Optional health statuses for filtering workers. Only healthy workers will be tried first. */
+  workerHealthStatuses?: Record<string, { healthy: boolean }>;
 }
 
 /**

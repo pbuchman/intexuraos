@@ -10,6 +10,7 @@ import type {
   WorkerConfig,
   WorkerConfigInput,
   WorkerConfigUpdateInput,
+  WorkerHealthStatus,
 } from '../models/workerSettings.js';
 
 export interface WorkerSettingsError {
@@ -84,5 +85,22 @@ export interface WorkerSettingsRepository {
     userId: string,
     workerName: string,
     result: TestResult
+  ): Promise<Result<void, WorkerSettingsError>>;
+
+  /**
+   * Get cached health status for all workers.
+   * Returns null if user has no settings or no cached statuses.
+   */
+  getHealthStatuses(
+    userId: string
+  ): Promise<Result<Record<string, WorkerHealthStatus> | null, WorkerSettingsError>>;
+
+  /**
+   * Update health status for a specific worker.
+   */
+  updateHealthStatus(
+    userId: string,
+    workerName: string,
+    status: WorkerHealthStatus
   ): Promise<Result<void, WorkerSettingsError>>;
 }

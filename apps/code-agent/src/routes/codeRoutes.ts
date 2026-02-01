@@ -4,11 +4,14 @@ import { Timestamp } from '@google-cloud/firestore';
 import type { FastifyPluginCallback, FastifyRequest, FastifyReply } from 'fastify';
 import { logIncomingRequest, validateInternalAuth } from '@intexuraos/common-http';
 import { extractOrGenerateTraceId } from '@intexuraos/common-core';
+import { createAppLogger } from '@intexuraos/infra-sentry';
 import { getServices } from '../services.js';
 import { processCodeAction } from '../domain/usecases/processCodeAction.js';
 import { cancelTaskWithNonce } from '../domain/usecases/cancelTaskWithNonce.js';
 import type { TaskStatus } from '../domain/models/codeTask.js';
 import { generateWebhookSecret } from '../infra/services/hmacSigning.js';
+
+const logger = createAppLogger({ name: 'code-routes' });
 
 export type JwtValidator = (request: FastifyRequest, reply: FastifyReply) => Promise<void>;
 
@@ -1814,7 +1817,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       schema: {
         operationId: 'getWorkersStatus',
         summary: 'Get worker health status',
-        description: 'Public endpoint for checking user-configured worker status. Requires Auth0 JWT.',
+        description: 'Public endpoint for checking user-configured worker status. Returns cached status with async refresh on stale data.',
         tags: ['public'],
         response: {
           200: {
@@ -1825,7 +1828,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
               success: { type: 'boolean', enum: [true] },
               data: {
                 type: 'object',
-                required: ['workers'],
+                required: ['workers', 'stale'],
                 properties: {
                   workers: {
                     type: 'array',
@@ -1836,11 +1839,29 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
                         url: { type: 'string' },
                         priority: { type: 'number' },
                         healthy: { type: 'boolean' },
-                        checkedAt: { type: 'string', format: 'date-time' },
+                        status: {
+                          type: 'string',
+                          enum: ['healthy', 'orchestrator-unreachable', 'tunnel-down', 'unknown'],
+                        },
+                        details: {
+                          type: 'object',
+                          nullable: true,
+                          properties: {
+                            capacity: { type: 'number' },
+                            available: { type: 'number' },
+                            running: { type: 'number' },
+                            responseTimeMs: { type: 'number' },
+                            reason: { type: 'string' },
+                            code: { type: 'string' },
+                          },
+                        },
+                        checkedAt: { type: 'string', format: 'date-time', nullable: true },
+                        stale: { type: 'boolean' },
                       },
-                      required: ['name', 'url', 'priority', 'healthy', 'checkedAt'],
+                      required: ['name', 'url', 'priority', 'healthy', 'status', 'details', 'checkedAt', 'stale'],
                     },
                   },
+                  stale: { type: 'boolean' },
                 },
               },
             },
@@ -1869,7 +1890,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         message: 'Received request to GET /code/workers/status',
       });
 
-      const { workerSettingsRepo } = getServices();
+      const { workerSettingsRepo, workerHealthProbe } = getServices();
       const userId = request.user?.userId;
 
       /* v8 ignore start -- test-infra: test setup always has userId @preserve */
@@ -1882,20 +1903,252 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
 
       /* v8 ignore start -- upstream: Firestore fetch failure or missing settings @preserve */
       if (!settingsResult.ok || settingsResult.value === null) {
-        return reply.ok({ workers: [] });
+        return reply.ok({ workers: [], stale: false });
       }
       /* v8 ignore stop @preserve */
 
-      // Map worker settings to status response format
-      const workers = settingsResult.value.workers.map((w, index) => ({
-        name: w.name,
-        url: w.url,
-        priority: index + 1, // Array position = priority
-        healthy: true, // Status unknown without actual health check
-        checkedAt: new Date().toISOString(),
-      }));
+      const settings = settingsResult.value;
+      const TTL_MS = 60_000;
+      const now = Date.now();
 
-      return reply.ok({ workers });
+      const healthStatusesResult = await workerSettingsRepo.getHealthStatuses(userId);
+      /* v8 ignore start -- test-infra: requires integration test with health status repository @preserve */
+      const healthStatuses = healthStatusesResult.ok ? healthStatusesResult.value ?? {} : {};
+      /* v8 ignore stop @preserve */
+
+      let stale = false;
+      /* v8 ignore start -- test-infra: requires testing with time-based staleness @preserve */
+      for (const [_name, status] of Object.entries(healthStatuses)) {
+        const checkedAt = new Date(status.checkedAt).getTime();
+        if (now - checkedAt > TTL_MS) {
+          stale = true;
+          status.stale = true;
+        }
+      }
+
+      if (stale || Object.keys(healthStatuses).length < settings.workers.length) {
+        workerHealthProbe.probeAllWorkers(settings.workers).then((results) => {
+          for (const [name, state] of Object.entries(results)) {
+            void workerSettingsRepo.updateHealthStatus(userId, name, {
+              state,
+              checkedAt: new Date().toISOString(),
+              stale: false,
+            });
+          }
+        }).catch((error) => {
+          logger.error({ error }, 'Failed to refresh worker health statuses');
+        });
+      }
+      /* v8 ignore stop @preserve */
+
+      const workers = settings.workers.map((w, index) => {
+        const healthStatus = healthStatuses[w.name];
+        const state = healthStatus?.state;
+
+        const isHealthy = state?.healthy ?? false;
+        const statusTag = state?._tag ?? 'unknown';
+
+        let details: {
+          capacity?: number;
+          available?: number;
+          running?: number;
+          responseTimeMs?: number;
+          reason?: string;
+          code?: string;
+        } | null = null;
+
+        /* v8 ignore start -- test-infra: requires integration tests with health status data @preserve */
+        if (state?._tag === 'healthy') {
+          details = {
+            capacity: state.capacity,
+            available: state.available,
+            running: state.running,
+            responseTimeMs: state.responseTimeMs,
+          };
+        } else if (state?._tag === 'orchestrator-unreachable' || state?._tag === 'tunnel-down') {
+          details = {
+            reason: state.reason,
+          };
+          if (state.code !== undefined) {
+            details.code = state.code;
+          }
+        }
+        /* v8 ignore stop @preserve */
+
+        return {
+          name: w.name,
+          url: w.url,
+          priority: index + 1,
+          healthy: isHealthy,
+          status: statusTag,
+          details,
+          checkedAt: healthStatus?.checkedAt ?? null,
+          stale: healthStatus?.stale ?? true,
+        };
+      });
+
+      return reply.ok({ workers, stale });
+    }
+  );
+
+  // POST /code/workers/refresh-status - Refresh worker health status synchronously (public, Auth0 JWT)
+  fastify.post(
+    '/code/workers/refresh-status',
+    {
+      onRequest: jwtValidator,
+      schema: {
+        operationId: 'refreshWorkersStatus',
+        summary: 'Refresh worker health status',
+        description: 'Synchronously probe all workers and update health status. Requires Auth0 JWT.',
+        tags: ['public'],
+        response: {
+          200: {
+            description: 'Worker status after refresh',
+            type: 'object',
+            required: ['success', 'data'],
+            properties: {
+              success: { type: 'boolean', enum: [true] },
+              data: {
+                type: 'object',
+                required: ['workers', 'stale'],
+                properties: {
+                  workers: {
+                    type: 'array',
+                    items: {
+                      type: 'object',
+                      properties: {
+                        name: { type: 'string' },
+                        url: { type: 'string' },
+                        priority: { type: 'number' },
+                        healthy: { type: 'boolean' },
+                        status: {
+                          type: 'string',
+                          enum: ['healthy', 'orchestrator-unreachable', 'tunnel-down', 'unknown'],
+                        },
+                        details: {
+                          type: 'object',
+                          nullable: true,
+                          properties: {
+                            capacity: { type: 'number' },
+                            available: { type: 'number' },
+                            running: { type: 'number' },
+                            responseTimeMs: { type: 'number' },
+                            reason: { type: 'string' },
+                            code: { type: 'string' },
+                          },
+                        },
+                        checkedAt: { type: 'string', format: 'date-time' },
+                        stale: { type: 'boolean' },
+                      },
+                      required: ['name', 'url', 'priority', 'healthy', 'status', 'details', 'checkedAt', 'stale'],
+                    },
+                  },
+                  stale: { type: 'boolean' },
+                },
+              },
+            },
+          },
+          401: {
+            description: 'Unauthorized',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: {
+                type: 'object',
+                properties: {
+                  code: { type: 'string', enum: ['UNAUTHORIZED'] },
+                  message: { type: 'string' },
+                },
+                required: ['code', 'message'],
+              },
+            },
+            required: ['success', 'error'],
+          },
+        },
+      },
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      logIncomingRequest(request, {
+        message: 'Received request to POST /code/workers/refresh-status',
+      });
+
+      const { workerSettingsRepo, workerHealthProbe } = getServices();
+      const userId = request.user?.userId;
+
+      /* v8 ignore start -- test-infra: requires authenticated user @preserve */
+      if (!userId) {
+        return reply.fail('UNAUTHORIZED', 'Authentication required');
+      }
+      /* v8 ignore stop @preserve */
+
+      const settingsResult = await workerSettingsRepo.getSettings(userId);
+
+      /* v8 ignore start -- upstream: Firestore fetch failure or missing settings @preserve */
+      if (!settingsResult.ok || settingsResult.value === null) {
+        return reply.ok({ workers: [], stale: false });
+      }
+      /* v8 ignore stop @preserve */
+
+      const settings = settingsResult.value;
+
+      const results = await workerHealthProbe.probeAllWorkers(settings.workers);
+
+      for (const [name, state] of Object.entries(results)) {
+        await workerSettingsRepo.updateHealthStatus(userId, name, {
+          state,
+          checkedAt: new Date().toISOString(),
+          stale: false,
+        });
+      }
+
+      const workers = settings.workers.map((w, index) => {
+        const state = results[w.name];
+
+        /* v8 ignore start -- test-infra: requires integration test with health state data @preserve */
+        const isHealthy = state?.healthy ?? false;
+        const statusTag = state?._tag ?? 'unknown';
+        /* v8 ignore stop @preserve */
+
+        let details: {
+          capacity?: number;
+          available?: number;
+          running?: number;
+          responseTimeMs?: number;
+          reason?: string;
+          code?: string;
+        } | null = null;
+
+        /* v8 ignore start -- test-infra: requires integration tests with health status data @preserve */
+        if (state?._tag === 'healthy') {
+          details = {
+            capacity: state.capacity,
+            available: state.available,
+            running: state.running,
+            responseTimeMs: state.responseTimeMs,
+          };
+        } else if (state?._tag === 'orchestrator-unreachable' || state?._tag === 'tunnel-down') {
+          details = {
+            reason: state.reason,
+          };
+          if (state.code !== undefined) {
+            details.code = state.code;
+          }
+        }
+        /* v8 ignore stop @preserve */
+
+        return {
+          name: w.name,
+          url: w.url,
+          priority: index + 1,
+          healthy: isHealthy,
+          status: statusTag,
+          details,
+          checkedAt: new Date().toISOString(),
+          stale: false,
+        };
+      });
+
+      return reply.ok({ workers, stale: false });
     }
   );
 

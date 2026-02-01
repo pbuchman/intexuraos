@@ -1136,6 +1136,23 @@ export interface ListCodeTasksResponse {
 }
 
 /**
+ * Worker health status tag
+ */
+export type WorkerStatusTag = 'healthy' | 'orchestrator-unreachable' | 'tunnel-down' | 'unknown';
+
+/**
+ * Worker status details
+ */
+export interface WorkerStatusDetails {
+  capacity?: number;
+  available?: number;
+  running?: number;
+  responseTimeMs?: number;
+  reason?: string;
+  code?: string;
+}
+
+/**
  * Worker health status for a single worker
  */
 export interface WorkerStatus {
@@ -1143,7 +1160,10 @@ export interface WorkerStatus {
   url: string;
   priority: number;
   healthy: boolean;
-  checkedAt: string;
+  status: WorkerStatusTag;
+  details: WorkerStatusDetails | null;
+  checkedAt: string | null;
+  stale: boolean;
 }
 
 /**
@@ -1151,4 +1171,5 @@ export interface WorkerStatus {
  */
 export interface WorkersStatusResponse {
   workers: WorkerStatus[];
+  stale: boolean;
 }

@@ -66,6 +66,8 @@ export interface UserWorkerSettings {
   createdAt: string;
   /** ISO timestamp of last update */
   updatedAt: string;
+  /** Cached health statuses for workers (name -> status) */
+  workerHealthStatuses?: Record<string, WorkerHealthStatus>;
 }
 
 /**
@@ -125,4 +127,64 @@ export interface WorkerCredentials {
   cfAccessClientId: string;
   cfAccessClientSecret: string;
   dispatchSigningSecret: string;
+}
+
+/**
+ * Health state of a worker with detailed failure reason.
+ * Discriminated union using _tag for type narrowing.
+ */
+export type WorkerHealthState =
+  | HealthyState
+  | OrchestratorUnreachableState
+  | TunnelDownState
+  | UnknownState;
+
+/**
+ * Worker is healthy and responding.
+ */
+export interface HealthyState {
+  _tag: 'healthy';
+  healthy: true;
+  capacity: number;
+  running: number;
+  available: number;
+  responseTimeMs: number;
+}
+
+/**
+ * Orchestrator is not responding (but tunnel is up).
+ */
+export interface OrchestratorUnreachableState {
+  _tag: 'orchestrator-unreachable';
+  healthy: false;
+  reason: 'timeout' | 'http-error';
+  code?: string;
+}
+
+/**
+ * Cloudflare tunnel or network is down.
+ */
+export interface TunnelDownState {
+  _tag: 'tunnel-down';
+  healthy: false;
+  reason: 'dns-failed' | 'connection-refused' | 'tls-error' | 'cf-error';
+  code?: string;
+}
+
+/**
+ * Unknown error occurred during health check.
+ */
+export interface UnknownState {
+  _tag: 'unknown';
+  healthy: false;
+  error: string;
+}
+
+/**
+ * Health status cache stored in Firestore.
+ */
+export interface WorkerHealthStatus {
+  state: WorkerHealthState;
+  checkedAt: string;
+  stale: boolean;
 }

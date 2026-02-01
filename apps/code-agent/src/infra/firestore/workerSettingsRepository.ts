@@ -20,6 +20,7 @@ import type {
   WorkerConfig,
   WorkerConfigInput,
   WorkerConfigUpdateInput,
+  WorkerHealthStatus,
 } from '../../domain/models/workerSettings.js';
 import { MAX_WORKERS_PER_USER } from '../../domain/models/workerSettings.js';
 import { encryptToken, decryptToken } from './encryption.js';
@@ -42,6 +43,11 @@ interface WorkerSettingsDoc {
   workers: EncryptedWorkerConfig[];
   createdAt: string;
   updatedAt: string;
+  workerHealthStatuses?: Record<string, {
+    state: unknown;
+    checkedAt: string;
+    stale: boolean;
+  }>;
 }
 
 /**
@@ -464,6 +470,53 @@ export function createWorkerSettingsRepository(
       } catch (error) {
         const message = getErrorMessage(error);
         logger.error({ error, userId, workerName }, 'Failed to update test result');
+        return err({
+          code: 'internal_error',
+          message: `Firestore error: ${message}`,
+        });
+      }
+    },
+
+    async getHealthStatuses(
+      userId: string
+    ): Promise<Result<Record<string, WorkerHealthStatus> | null, WorkerSettingsError>> {
+      try {
+        const doc = await collection.doc(userId).get();
+        /* v8 ignore start -- test-infra: requires testing document existence edge case @preserve */
+        if (!doc.exists) {
+          return ok(null);
+        }
+        const data = doc.data() as WorkerSettingsDoc;
+        if (!data.workerHealthStatuses) {
+          return ok(null);
+        }
+        /* v8 ignore stop @preserve */
+        return ok(data.workerHealthStatuses as Record<string, WorkerHealthStatus>);
+      } catch (error) {
+        const message = getErrorMessage(error);
+        logger.error({ error, userId }, 'Failed to get health statuses');
+        return err({
+          code: 'internal_error',
+          message: `Firestore error: ${message}`,
+        });
+      }
+    },
+
+    async updateHealthStatus(
+      userId: string,
+      workerName: string,
+      status: WorkerHealthStatus
+    ): Promise<Result<void, WorkerSettingsError>> {
+      try {
+        const docRef = collection.doc(userId);
+        await docRef.update({
+          [`workerHealthStatuses.${workerName}`]: status,
+          updatedAt: new Date().toISOString(),
+        });
+        return ok(undefined);
+      } catch (error) {
+        const message = getErrorMessage(error);
+        logger.error({ error, userId, workerName }, 'Failed to update health status');
         return err({
           code: 'internal_error',
           message: `Firestore error: ${message}`,
