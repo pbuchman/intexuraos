@@ -19,14 +19,14 @@ An in-app AI chat assistant named **"Intex"** that:
 
 ### MVP Scope
 
-| In Scope                                | Out of Scope (Post-MVP)                       |
-| --------------------------------------- | --------------------------------------------- |
-| Documentation Q&A                       | Codebase knowledge                            |
-| API specs knowledge                     | Direct system interactions beyond commands    |
-| Command creation (text confirmation)    | Button-based confirmations                    |
-| Session-based history (localStorage)    | Persistent cross-device history               |
-| 20-message sliding window               | Conversation summarization                    |
-| Manual embedding via GitHub Action      | Auto-embedding on deploy                      |
+| In Scope                             | Out of Scope (Post-MVP)                    |
+| ------------------------------------ | ------------------------------------------ |
+| Documentation Q&A                    | Codebase knowledge                         |
+| API specs knowledge                  | Direct system interactions beyond commands |
+| Command creation (text confirmation) | Button-based confirmations                 |
+| Session-based history (localStorage) | Persistent cross-device history            |
+| 20-message sliding window            | Conversation summarization                 |
+| Manual embedding via GitHub Action   | Auto-embedding on deploy                   |
 
 ### Success Criteria
 
@@ -73,14 +73,14 @@ An in-app AI chat assistant named **"Intex"** that:
 
 ### Component Responsibilities
 
-| Component | Responsibility |
-| --------- | -------------- |
-| **Chat FAB** | Floating button to open/close chat |
-| **Chat Panel** | UI for conversation, message input, controls |
-| **Chat Service (frontend)** | API calls to chat-agent, session storage |
-| **chat-agent (backend)** | RAG pipeline: embed query → search → generate response |
-| **commands-agent** | Command creation (called directly by frontend) |
-| **Firestore doc_embeddings** | Vector storage for documentation chunks |
+| Component                    | Responsibility                                         |
+| ---------------------------- | ------------------------------------------------------ |
+| **Chat FAB**                 | Floating button to open/close chat                     |
+| **Chat Panel**               | UI for conversation, message input, controls           |
+| **Chat Service (frontend)**  | API calls to chat-agent, session storage               |
+| **chat-agent (backend)**     | RAG pipeline: embed query → search → generate response |
+| **commands-agent**           | Command creation (called directly by frontend)         |
+| **Firestore doc_embeddings** | Vector storage for documentation chunks                |
 
 ### New Service: chat-agent
 
@@ -117,10 +117,10 @@ apps/chat-agent/
 
 ### Documentation Sources
 
-| Source | Location | Estimated Size |
-| ------ | -------- | -------------- |
-| All markdown docs | `docs/**/*.md` | 158 files, ~500k tokens |
-| OpenAPI specs | Fetched from deployed services `/openapi.json` | ~15 services |
+| Source            | Location                                       | Estimated Size          |
+| ----------------- | ---------------------------------------------- | ----------------------- |
+| All markdown docs | `docs/**/*.md`                                 | 158 files, ~500k tokens |
+| OpenAPI specs     | Fetched from deployed services `/openapi.json` | ~15 services            |
 
 ### Embedding Strategy
 
@@ -143,11 +143,11 @@ Content within section...  → included in chunk above
 
 ```typescript
 interface DocChunk {
-  id: string;                    // auto-generated
-  content: string;               // chunk text
-  embedding: number[];           // 1536-dim vector
-  filePath: string;              // "docs/services/todos-agent/API.md"
-  section: string;               // "POST /commands"
+  id: string; // auto-generated
+  content: string; // chunk text
+  embedding: number[]; // 1536-dim vector
+  filePath: string; // "docs/services/todos-agent/API.md"
+  section: string; // "POST /commands"
   docType: 'markdown' | 'openapi';
   createdAt: Timestamp;
 }
@@ -262,12 +262,12 @@ Intex: "✓ Created as todo (92% confident): 'buy groceries'
 
 ### Key Design Decisions
 
-| Decision | Rationale |
-| -------- | --------- |
-| Text confirmation only | Simpler MVP, conversational feel |
+| Decision                               | Rationale                                    |
+| -------------------------------------- | -------------------------------------------- |
+| Text confirmation only                 | Simpler MVP, conversational feel             |
 | Frontend calls commands-agent directly | chat-agent doesn't proxy, cleaner separation |
-| Show confidence | Transparency about classification |
-| Link to Inbox | User can verify result |
+| Show confidence                        | Transparency about classification            |
+| Link to Inbox                          | User can verify result                       |
 
 ### Confirmation Detection
 
@@ -286,11 +286,11 @@ Intex recognizes affirmative responses:
 
 **States:**
 
-| State | Appearance |
-| ----- | ---------- |
+| State  | Appearance                      |
+| ------ | ------------------------------- |
 | Closed | Chat bubble icon, primary color |
-| Open | Highlighted/active state |
-| Unread | Badge with count (post-MVP) |
+| Open   | Highlighted/active state        |
+| Unread | Badge with count (post-MVP)     |
 
 **Z-index:** Above DevBar (z-50 + 1)
 
@@ -337,12 +337,12 @@ Intex recognizes affirmative responses:
 
 **Gestures:**
 
-| Gesture | Action |
-| ------- | ------ |
-| Tap FAB | Open at 60% height |
-| Drag handle up | Expand to full-screen |
-| Drag handle down | Collapse to 60% or dismiss |
-| Swipe down (when at 60%) | Close chat |
+| Gesture                  | Action                     |
+| ------------------------ | -------------------------- |
+| Tap FAB                  | Open at 60% height         |
+| Drag handle up           | Expand to full-screen      |
+| Drag handle down         | Collapse to 60% or dismiss |
+| Swipe down (when at 60%) | Close chat                 |
 
 ### Message Components
 
@@ -358,7 +358,7 @@ Intex recognizes affirmative responses:
 
 **Intex Message:**
 
-```
+````
 ┌─────────────────────────────────────┐
 │ [I] Intex                           │
 ├─────────────────────────────────────┤
@@ -372,7 +372,7 @@ Intex recognizes affirmative responses:
 │                                     │
 │ 10:32 AM                     [📋]   │  ← Copy button
 └─────────────────────────────────────┘
-```
+````
 
 **Features:**
 
@@ -419,9 +419,7 @@ Send a message and get a response.
   "success": true,
   "data": {
     "response": "To create a todo, use the todos-agent API...",
-    "sources": [
-      { "filePath": "docs/services/todos-agent/API.md", "section": "POST /todos" }
-    ],
+    "sources": [{ "filePath": "docs/services/todos-agent/API.md", "section": "POST /todos" }],
     "suggestedAction": null
   }
 }
@@ -492,13 +490,13 @@ Limitations:
 
 ### Response Guidelines
 
-| Scenario | Response Style |
-| -------- | -------------- |
-| Documentation question | Direct answer with code examples if relevant |
-| API question | Show endpoint, method, request/response format |
-| Command request | Propose clearly, ask for confirmation |
-| No docs found | Acknowledge, offer general guidance with disclaimer |
-| Ambiguous request | Ask clarifying question |
+| Scenario               | Response Style                                      |
+| ---------------------- | --------------------------------------------------- |
+| Documentation question | Direct answer with code examples if relevant        |
+| API question           | Show endpoint, method, request/response format      |
+| Command request        | Propose clearly, ask for confirmation               |
+| No docs found          | Acknowledge, offer general guidance with disclaimer |
+| Ambiguous request      | Ask clarifying question                             |
 
 ---
 
@@ -539,13 +537,13 @@ interface ChatMessage {
 
 ### Error Types
 
-| Error | User Message | Technical Handling |
-| ----- | ------------ | ------------------ |
-| LLM timeout | "Sorry, I'm taking too long. Please try again." | Retry once, then show error |
-| LLM error | "I encountered an error. Please try again." | Log to Sentry, show generic message |
-| No auth | "Please log in to use the chat." | Redirect to login |
-| Vector search failed | "I'm having trouble searching docs. Please try again." | Fallback to no-context response |
-| Command creation failed | "Couldn't create the command: [error message]" | Show commands-agent error |
+| Error                   | User Message                                           | Technical Handling                  |
+| ----------------------- | ------------------------------------------------------ | ----------------------------------- |
+| LLM timeout             | "Sorry, I'm taking too long. Please try again."        | Retry once, then show error         |
+| LLM error               | "I encountered an error. Please try again."            | Log to Sentry, show generic message |
+| No auth                 | "Please log in to use the chat."                       | Redirect to login                   |
+| Vector search failed    | "I'm having trouble searching docs. Please try again." | Fallback to no-context response     |
+| Command creation failed | "Couldn't create the command: [error message]"         | Show commands-agent error           |
 
 ### Error Display
 
@@ -569,20 +567,20 @@ Errors appear as inline chat messages from Intex:
 
 ### New Resources
 
-| Resource | Type | Purpose |
-| -------- | ---- | ------- |
-| `chat-agent` | Cloud Run service | Backend API |
-| `doc_embeddings` | Firestore collection | Vector storage |
-| `embed-docs` | GitHub Action | Manual embedding trigger |
+| Resource         | Type                 | Purpose                  |
+| ---------------- | -------------------- | ------------------------ |
+| `chat-agent`     | Cloud Run service    | Backend API              |
+| `doc_embeddings` | Firestore collection | Vector storage           |
+| `embed-docs`     | GitHub Action        | Manual embedding trigger |
 
 ### Environment Variables
 
 **chat-agent:**
 
-| Variable | Description |
-| -------- | ----------- |
-| `INTEXURAOS_OPENAI_API_KEY` | For embedding queries at runtime |
-| `INTEXURAOS_FIRESTORE_PROJECT` | Firestore project ID |
+| Variable                       | Description                      |
+| ------------------------------ | -------------------------------- |
+| `INTEXURAOS_OPENAI_API_KEY`    | For embedding queries at runtime |
+| `INTEXURAOS_FIRESTORE_PROJECT` | Firestore project ID             |
 
 **Note:** Generation uses user's configured API key (fetched from user settings).
 
@@ -611,7 +609,7 @@ doc_embeddings/
 name: Embed Documentation
 
 on:
-  workflow_dispatch:  # Manual trigger
+  workflow_dispatch: # Manual trigger
 
 jobs:
   embed:
@@ -694,27 +692,27 @@ Located at `scripts/embed-docs.ts`:
 
 ## Post-MVP Roadmap
 
-| Feature | Description | Priority |
-| ------- | ----------- | -------- |
-| Codebase knowledge | Embed source code with AST-aware chunking | High |
-| Persistent history | Store conversations in Firestore | Medium |
-| Conversation summarization | Auto-summarize for long chats | Medium |
-| Auto-embedding on deploy | Trigger via Cloud Build | Medium |
-| Streaming responses | Real-time token streaming | Low |
-| Voice input | Speech-to-text for chat | Low |
+| Feature                    | Description                               | Priority |
+| -------------------------- | ----------------------------------------- | -------- |
+| Codebase knowledge         | Embed source code with AST-aware chunking | High     |
+| Persistent history         | Store conversations in Firestore          | Medium   |
+| Conversation summarization | Auto-summarize for long chats             | Medium   |
+| Auto-embedding on deploy   | Trigger via Cloud Build                   | Medium   |
+| Streaming responses        | Real-time token streaming                 | Low      |
+| Voice input                | Speech-to-text for chat                   | Low      |
 
 ---
 
 ## Appendix: Token Estimates
 
-| Component | Tokens |
-| --------- | ------ |
-| System prompt | ~500 |
-| RAG context (5 chunks) | ~2,000 |
-| Conversation history (20 msg) | ~4,000-8,000 |
-| User message | ~100 |
-| **Total input** | **~6,600-10,600** |
-| Response | ~500-1,000 |
+| Component                     | Tokens            |
+| ----------------------------- | ----------------- |
+| System prompt                 | ~500              |
+| RAG context (5 chunks)        | ~2,000            |
+| Conversation history (20 msg) | ~4,000-8,000      |
+| User message                  | ~100              |
+| **Total input**               | **~6,600-10,600** |
+| Response                      | ~500-1,000        |
 
 Well within limits of all modern models (128k+ context).
 
@@ -724,17 +722,17 @@ Well within limits of all modern models (128k+ context).
 
 ### Embedding (One-Time)
 
-| Item | Cost |
-| ---- | ---- |
-| Docs (~500k tokens) | $0.01 |
-| API specs (~200k tokens) | $0.004 |
-| **Total** | **~$0.02** |
+| Item                     | Cost       |
+| ------------------------ | ---------- |
+| Docs (~500k tokens)      | $0.01      |
+| API specs (~200k tokens) | $0.004     |
+| **Total**                | **~$0.02** |
 
 ### Per-Query
 
-| Item | Cost |
-| ---- | ---- |
-| Query embedding | $0.00001 |
+| Item                    | Cost      |
+| ----------------------- | --------- |
+| Query embedding         | $0.00001  |
 | Generation (user's key) | User pays |
 
 **Platform cost per query:** Essentially $0 (Firestore reads only).

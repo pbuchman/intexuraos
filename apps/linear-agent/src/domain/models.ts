@@ -115,6 +115,13 @@ export interface ProcessedAction {
 /** Dashboard filter for issue states */
 export type DashboardColumn = 'todo' | 'backlog' | 'in_progress' | 'in_review' | 'to_test' | 'done';
 
+/** Linear workflow state for state transition */
+export interface WorkflowState {
+  id: string;
+  name: string;
+  type: IssueStateCategory;
+}
+
 /** Map Linear state types to dashboard columns */
 export function mapStateToDashboardColumn(
   stateType: IssueStateCategory,

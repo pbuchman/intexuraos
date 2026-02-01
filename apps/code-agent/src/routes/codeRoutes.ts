@@ -738,10 +738,9 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         });
       }
 
-/* v8 ignore start -- ts-type: TypeScript type narrowing makes branch unreachable @preserve */
       // If PR was created and task has a Linear issue, transition to In Review
       if (body.result?.prUrl !== undefined && result.value.linearIssueId !== undefined) {
-        await linearIssueService.markInReview(result.value.linearIssueId);
+        await linearIssueService.markInReview(result.value.userId, result.value.linearIssueId);
       }
       /* v8 ignore stop @preserve */
 
@@ -1101,10 +1100,11 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
 
       // Ensure Linear issue exists (create if not provided)
       const ensureParams: {
+        userId: string;
         linearIssueId?: string;
         linearIssueTitle?: string;
         taskPrompt: string;
-      } = { taskPrompt: body.prompt };
+      } = { userId, taskPrompt: body.prompt };
       if ('linearIssueId' in body && body.linearIssueId !== undefined) {
         ensureParams.linearIssueId = body.linearIssueId;
       }
@@ -1266,7 +1266,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
 
       // Mark Linear issue as In Progress after successful dispatch
       if (issueResult.linearIssueId !== '') {
-        await linearIssueService.markInProgress(issueResult.linearIssueId);
+        await linearIssueService.markInProgress(userId, issueResult.linearIssueId);
       }
 
       request.log.info({ taskId: task.id, workerLocation: dispatchResult.value.workerLocation }, 'Code task submitted successfully');
