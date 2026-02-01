@@ -8,6 +8,7 @@ import { useState } from 'react';
 import { Copy } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { formatTime } from '../../utils/dateFormat';
 import type { ChatMessage as ChatMessageType } from '../../types/chat';
 
 interface ChatMessageProps {
@@ -28,11 +29,6 @@ export function ChatMessage({ message, isUser }: ChatMessageProps): React.JSX.El
     } catch {
       // Silently fail if clipboard is unavailable
     }
-  };
-
-  const formatTime = (timestamp: number): string => {
-    const date = new Date(timestamp);
-    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
   return (
@@ -94,7 +90,7 @@ export function ChatMessage({ message, isUser }: ChatMessageProps): React.JSX.El
         <div className={`mt-1 flex items-center gap-2 text-xs opacity-70 ${
           isUser ? 'text-blue-100' : 'text-gray-500 dark:text-gray-400'
         }`}>
-          <time data-testid="chat-message-timestamp">{formatTime(message.timestamp)}</time>
+          <time data-testid="chat-message-timestamp">{formatTime(new Date(message.timestamp).toISOString(), false)}</time>
           {!isUser && (
             <button
               onClick={(): void => {
