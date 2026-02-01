@@ -4,9 +4,26 @@
 # Checks Claude's response for forbidden ownership-deflecting language
 # Forces Claude to rephrase if detected
 
-set -euo pipefail
-
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+# IMPORTANT: Associative array declarations must come before set -u
+# because bash with set -u parses ["key"] as potential ${key-...} expansion
+declare -A PATTERNS=(
+  ["pre_existing"]="pre-existing condition/issue language"
+  ["already_broken"]="deflecting blame to prior state"
+  ["legacy_issue"]="deflecting to legacy as excuse"
+  ["ci_should_pass"]="assuming CI passes without verification"
+)
+
+declare -A SEARCH_PATTERNS=(
+  ["pre_existing"]="pre-existing"
+  ["already_broken"]="already broken"
+  ["legacy_issue"]="legacy issue"
+  ["ci_should_pass"]="CI should now pass"
+)
+
+# Now enable strict mode after declarations
+set -euo pipefail
 
 # Source shared logging library
 # shellcheck source=lib/log.sh
@@ -32,23 +49,6 @@ LAST_RESPONSE=$(jq -rs '
 if [[ -z "$LAST_RESPONSE" ]]; then
   exit 0
 fi
-
-# Forbidden ownership-deflecting patterns
-# Keys are safe identifiers (no hyphens/spaces), values are descriptions
-declare -A PATTERNS=(
-  ["pre_existing"]="pre-existing condition/issue language"
-  ["already_broken"]="deflecting blame to prior state"
-  ["legacy_issue"]="deflecting to legacy as excuse"
-  ["ci_should_pass"]="assuming CI passes without verification"
-)
-
-# Map safe keys to actual search patterns
-declare -A SEARCH_PATTERNS=(
-  ["pre_existing"]="pre-existing"
-  ["already_broken"]="already broken"
-  ["legacy_issue"]="legacy issue"
-  ["ci_should_pass"]="CI should now pass"
-)
 
 for key in "${!PATTERNS[@]}"; do
   pattern="${SEARCH_PATTERNS[$key]}"
