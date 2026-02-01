@@ -14,7 +14,8 @@ export interface LinearIssueServiceDeps {
 }
 
 export interface EnsureIssueResult {
-  linearIssueId: string;
+  /** Undefined when in fallback mode (Linear unavailable) */
+  linearIssueId?: string;
   linearIssueTitle: string;
   linearFallback: boolean;
 }
@@ -75,7 +76,6 @@ export function createLinearIssueService(deps: LinearIssueServiceDeps): LinearIs
       if (!result.ok) {
         logger.warn({ error: result.error }, 'Failed to create Linear issue, using fallback mode');
         return {
-          linearIssueId: '',
           linearIssueTitle: generatedTitle,
           linearFallback: true,
         };
@@ -89,8 +89,8 @@ export function createLinearIssueService(deps: LinearIssueServiceDeps): LinearIs
     },
 
     async markInProgress(userId: string, linearIssueId: string): Promise<void> {
-      if (linearIssueId === '') {
-        logger.debug({}, 'Skipping state transition (fallback mode)');
+      if (!linearIssueId) {
+        logger.debug({}, 'Skipping state transition (no issue ID)');
         return;
       }
 
@@ -106,8 +106,8 @@ export function createLinearIssueService(deps: LinearIssueServiceDeps): LinearIs
     },
 
     async markInReview(userId: string, linearIssueId: string): Promise<void> {
-      if (linearIssueId === '') {
-        logger.debug({}, 'Skipping state transition (fallback mode)');
+      if (!linearIssueId) {
+        logger.debug({}, 'Skipping state transition (no issue ID)');
         return;
       }
 

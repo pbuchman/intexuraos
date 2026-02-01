@@ -128,7 +128,7 @@ describe('linearIssueService', () => {
       });
 
       expect(result.linearFallback).toBe(true);
-      expect(result.linearIssueId).toBe('');
+      expect(result.linearIssueId).toBeUndefined();
       expect(result.linearIssueTitle).toBe('Fix the bug');
       expect(mockLogger.warn).toHaveBeenCalledWith(
         { error: { code: 'UNAVAILABLE', message: 'Service down' } },
@@ -273,7 +273,7 @@ describe('linearIssueService', () => {
       });
     });
 
-    it('should skip state transition in fallback mode (empty issueId)', async () => {
+    it('should skip state transition when no issue ID provided', async () => {
       const service = createLinearIssueService({ linearAgentClient: mockClient, logger: mockLogger });
 
       await service.markInProgress(testUserId, '');
@@ -281,7 +281,7 @@ describe('linearIssueService', () => {
       expect(mockUpdateIssueState).not.toHaveBeenCalled();
       expect(mockLogger.debug).toHaveBeenCalledWith(
         {},
-        'Skipping state transition (fallback mode)'
+        'Skipping state transition (no issue ID)'
       );
     });
 
@@ -321,7 +321,7 @@ describe('linearIssueService', () => {
       });
     });
 
-    it('should skip state transition in fallback mode (empty issueId)', async () => {
+    it('should skip state transition when no issue ID provided', async () => {
       const service = createLinearIssueService({ linearAgentClient: mockClient, logger: mockLogger });
 
       await service.markInReview(testUserId, '');
@@ -329,7 +329,7 @@ describe('linearIssueService', () => {
       expect(mockUpdateIssueState).not.toHaveBeenCalled();
       expect(mockLogger.debug).toHaveBeenCalledWith(
         {},
-        'Skipping state transition (fallback mode)'
+        'Skipping state transition (no issue ID)'
       );
     });
 

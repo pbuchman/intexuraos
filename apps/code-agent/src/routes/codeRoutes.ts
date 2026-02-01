@@ -483,12 +483,16 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       request.log.info({ codeTaskId: result.value.codeTaskId }, 'Code action processed successfully');
 
       // Mirror dispatched status to action (non-fatal)
-      await services.statusMirrorService.mirrorStatus({
-        actionId: body.actionId,
-        taskStatus: 'dispatched',
-        resourceUrl: result.value.resourceUrl,
-        traceId,
-      });
+      try {
+        await services.statusMirrorService.mirrorStatus({
+          actionId: body.actionId,
+          taskStatus: 'dispatched',
+          resourceUrl: result.value.resourceUrl,
+          traceId,
+        });
+      } catch (mirrorError) {
+        request.log.warn({ actionId: body.actionId, error: mirrorError }, 'Failed to mirror status to action');
+      }
 
       return await reply.ok({
         status: 'submitted',
@@ -1143,8 +1147,8 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         webhookSecret,
       };
 
-      /* v8 ignore start -- ts-type: string literal comparison creates type narrowing branch @preserve */
-      if (issueResult.linearIssueId !== '') {
+      /* v8 ignore start -- ts-type: undefined check creates type narrowing branch @preserve */
+      if (issueResult.linearIssueId !== undefined) {
       /* v8 ignore stop @preserve */
         createInput.linearIssueId = issueResult.linearIssueId;
         createInput.linearIssueTitle = issueResult.linearIssueTitle;
@@ -1264,7 +1268,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       await rateLimitService.recordTaskStart(userId);
 
       // Mark Linear issue as In Progress after successful dispatch
-      if (issueResult.linearIssueId !== '') {
+      if (issueResult.linearIssueId !== undefined) {
         await linearIssueService.markInProgress(userId, issueResult.linearIssueId);
       }
 
