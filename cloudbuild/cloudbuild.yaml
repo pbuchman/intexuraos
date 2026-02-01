@@ -657,6 +657,7 @@ steps:
           "todos-agent:TODOS_AGENT"
           "bookmarks-agent:BOOKMARKS_AGENT"
           "calendar-agent:CALENDAR_AGENT"
+          "chat-agent:CHAT_AGENT"
           "app-settings-service:APP_SETTINGS_SERVICE"
           "linear-agent:LINEAR_AGENT"
           "code-agent:CODE_AGENT"

@@ -34,59 +34,129 @@ describe('linearIssueService', () => {
 
   const testUserId = 'test-user-123';
 
-  describe('ensureIssueExists', () => {
-    it('should return existing issue when linearIssueId and title provided', async () => {
-      const service = createLinearIssueService({ linearAgentClient: mockClient, logger: mockLogger });
-
-      const result = await service.ensureIssueExists({
-        userId: testUserId,
-        linearIssueId: 'existing-123',
-        linearIssueTitle: 'Existing Issue',
-        taskPrompt: 'Fix the bug',
-      });
-
-      expect(result).toEqual({
-        linearIssueId: 'existing-123',
-        linearIssueTitle: 'Existing Issue',
-        linearFallback: false,
-      });
-      expect(mockCreateIssue).not.toHaveBeenCalled();
-      expect(mockLogger.info).toHaveBeenCalledWith(
-        { linearIssueId: 'existing-123' },
-        'Using existing Linear issue'
+  describe('ensureIssueExists - link existing issue', () => {
+    it('should validate and return existing issue when valid', async () => {
+      mockValidateIssue = vi.fn().mockResolvedValue(
+        ok({
+          id: 'issue-123',
+          identifier: 'INT-123',
+          title: 'Fix auth bug',
+          url: 'https://linear.app/intexuraos/INT-123',
+        })
       );
-    });
 
-    it('should return existing issue with fallback title when only linearIssueId provided', async () => {
       const service = createLinearIssueService({ linearAgentClient: mockClient, logger: mockLogger });
 
       const result = await service.ensureIssueExists({
         userId: testUserId,
-        linearIssueId: 'INT-999',
+        linearIssueId: 'INT-123',
         taskPrompt: 'Work on existing issue',
       });
 
       expect(result).toEqual({
-        linearIssueId: 'INT-999',
-        linearIssueTitle: 'Linked issue INT-999',
+        linearIssueId: 'INT-123',
+        linearIssueTitle: 'Fix auth bug',
         linearFallback: false,
+      });
+      expect(mockValidateIssue).toHaveBeenCalledWith({
+        userId: testUserId,
+        identifier: 'INT-123',
       });
       expect(mockCreateIssue).not.toHaveBeenCalled();
       expect(mockLogger.info).toHaveBeenCalledWith(
-        { linearIssueId: 'INT-999' },
-        'Using existing Linear issue'
+        { linearIssueId: 'INT-123' },
+        'Validating existing Linear issue'
       );
     });
 
-    it('should create new issue when linearIssueId not provided', async () => {
-      const mockIssueResponse = {
-        issueId: 'new-456',
-        issueIdentifier: 'INT-456',
-        issueTitle: 'Fix the login bug',
-        issueUrl: 'https://linear.app/intexuraos/issue/INT-456',
-      };
+    it('should use fallback mode when validation fails (NOT_FOUND)', async () => {
+      mockValidateIssue = vi.fn().mockResolvedValue(
+        err({
+          code: 'NOT_FOUND',
+          message: 'Issue INT-999 not found',
+        })
+      );
 
-      mockCreateIssue = vi.fn().mockResolvedValue(ok(mockIssueResponse));
+      const service = createLinearIssueService({ linearAgentClient: mockClient, logger: mockLogger });
+
+      const result = await service.ensureIssueExists({
+        userId: testUserId,
+        linearIssueId: 'INT-999',
+        taskPrompt: 'Work on issue',
+      });
+
+      expect(result.linearFallback).toBe(true);
+      expect(result.linearIssueId).toBeUndefined();
+      expect(result.linearIssueTitle).toBe('Linked issue INT-999');
+      expect(mockCreateIssue).not.toHaveBeenCalled();
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        { linearIssueId: 'INT-999', error: { code: 'NOT_FOUND', message: 'Issue INT-999 not found' } },
+        'Issue validation failed, using fallback mode'
+      );
+    });
+
+    it('should use fallback mode when validation fails (NOT_FOUND for wrong team)', async () => {
+      mockValidateIssue = vi.fn().mockResolvedValue(
+        err({
+          code: 'NOT_FOUND',
+          message: 'Issue OTHER-42 not found or belongs to different team',
+        })
+      );
+
+      const service = createLinearIssueService({ linearAgentClient: mockClient, logger: mockLogger });
+
+      const result = await service.ensureIssueExists({
+        userId: testUserId,
+        linearIssueId: 'OTHER-42',
+        taskPrompt: 'Work on issue',
+      });
+
+      expect(result.linearFallback).toBe(true);
+      expect(mockCreateIssue).not.toHaveBeenCalled();
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ error: expect.objectContaining({ code: 'NOT_FOUND' }) }),
+        'Issue validation failed, using fallback mode'
+      );
+    });
+
+    it('should use fallback mode when validation fails (UNAVAILABLE)', async () => {
+      mockValidateIssue = vi.fn().mockResolvedValue(
+        err({
+          code: 'UNAVAILABLE',
+          message: 'Service unavailable',
+        })
+      );
+
+      const service = createLinearIssueService({ linearAgentClient: mockClient, logger: mockLogger });
+
+      const result = await service.ensureIssueExists({
+        userId: testUserId,
+        linearIssueId: 'INT-123',
+        taskPrompt: 'Work on issue',
+      });
+
+      expect(result.linearFallback).toBe(true);
+      expect(mockCreateIssue).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('ensureIssueExists - create new issue', () => {
+    it('should generate title via LLM and create new issue', async () => {
+      mockGenerateTitle = vi.fn().mockResolvedValue(
+        ok({
+          title: 'Fix login authentication for SSO users',
+          issueType: 'bug',
+        })
+      );
+
+      mockCreateIssue = vi.fn().mockResolvedValue(
+        ok({
+          issueId: 'new-456',
+          issueIdentifier: 'INT-456',
+          issueTitle: 'Fix login authentication for SSO users',
+          issueUrl: 'https://linear.app/intexuraos/issue/INT-456',
+        })
+      );
 
       const service = createLinearIssueService({ linearAgentClient: mockClient, logger: mockLogger });
 
@@ -97,28 +167,156 @@ describe('linearIssueService', () => {
 
       expect(result).toEqual({
         linearIssueId: 'INT-456',
-        linearIssueTitle: 'Fix the login bug',
+        linearIssueTitle: 'Fix login authentication for SSO users',
+        linearIssueType: 'bug',
         linearFallback: false,
       });
-      expect(mockCreateIssue).toHaveBeenCalledWith({
-        title: 'Fix the login bug in the auth module',
-        description: expect.stringContaining('Code Task'),
-        labels: ['Code Task'],
-        userId: 'test-user-123',
+
+      expect(mockGenerateTitle).toHaveBeenCalledWith({
+        userId: testUserId,
+        description: 'Fix the login bug in the auth module',
       });
+
       expect(mockCreateIssue).toHaveBeenCalledWith({
-        title: 'Fix the login bug in the auth module',
+        title: 'Fix login authentication for SSO users',
         description: expect.stringContaining('Fix the login bug in the auth module'),
         labels: ['Code Task'],
-        userId: 'test-user-123',
+        userId: testUserId,
       });
+
       expect(mockLogger.info).toHaveBeenCalledWith(
-        {},
-        'Creating new Linear issue for code task'
+        { title: 'Fix login authentication for SSO users', issueType: 'bug' },
+        'Generated issue title via LLM'
       );
     });
 
-    it('should use fallback mode when Linear unavailable', async () => {
+    it('should create feature type issue when LLM classifies as feature', async () => {
+      mockGenerateTitle = vi.fn().mockResolvedValue(
+        ok({
+          title: 'Enable real-time notifications',
+          issueType: 'feature',
+        })
+      );
+
+      mockCreateIssue = vi.fn().mockResolvedValue(
+        ok({
+          issueId: 'feat-1',
+          issueIdentifier: 'INT-500',
+          issueTitle: 'Enable real-time notifications',
+          issueUrl: 'https://linear.app/intexuraos/INT-500',
+        })
+      );
+
+      const service = createLinearIssueService({ linearAgentClient: mockClient, logger: mockLogger });
+
+      const result = await service.ensureIssueExists({
+        userId: testUserId,
+        taskPrompt: 'Add WebSocket support for notifications',
+      });
+
+      expect(result.linearIssueType).toBe('feature');
+      expect(result.linearIssueTitle).toBe('Enable real-time notifications');
+    });
+
+    it('should create refactor type issue when LLM classifies as refactor', async () => {
+      mockGenerateTitle = vi.fn().mockResolvedValue(
+        ok({
+          title: 'Improve test coverage for user management',
+          issueType: 'refactor',
+        })
+      );
+
+      mockCreateIssue = vi.fn().mockResolvedValue(
+        ok({
+          issueId: 'refactor-1',
+          issueIdentifier: 'INT-501',
+          issueTitle: 'Improve test coverage for user management',
+          issueUrl: 'https://linear.app/intexuraos/INT-501',
+        })
+      );
+
+      const service = createLinearIssueService({ linearAgentClient: mockClient, logger: mockLogger });
+
+      const result = await service.ensureIssueExists({
+        userId: testUserId,
+        taskPrompt: 'Refactor user service to use repository pattern',
+      });
+
+      expect(result.linearIssueType).toBe('refactor');
+    });
+
+    it('should create research type issue when LLM classifies as research', async () => {
+      mockGenerateTitle = vi.fn().mockResolvedValue(
+        ok({
+          title: 'Evaluate caching strategies for API performance',
+          issueType: 'research',
+        })
+      );
+
+      mockCreateIssue = vi.fn().mockResolvedValue(
+        ok({
+          issueId: 'research-1',
+          issueIdentifier: 'INT-502',
+          issueTitle: 'Evaluate caching strategies for API performance',
+          issueUrl: 'https://linear.app/intexuraos/INT-502',
+        })
+      );
+
+      const service = createLinearIssueService({ linearAgentClient: mockClient, logger: mockLogger });
+
+      const result = await service.ensureIssueExists({
+        userId: testUserId,
+        taskPrompt: 'Research caching options',
+      });
+
+      expect(result.linearIssueType).toBe('research');
+    });
+
+    it('should use fallback title when LLM generation fails', async () => {
+      mockGenerateTitle = vi.fn().mockResolvedValue(
+        err({
+          code: 'UNAVAILABLE',
+          message: 'LLM service down',
+        })
+      );
+
+      mockCreateIssue = vi.fn().mockResolvedValue(
+        ok({
+          issueId: 'fallback-1',
+          issueIdentifier: 'INT-600',
+          issueTitle: 'Fix the bug in auth module',
+          issueUrl: 'https://linear.app/intexuraos/INT-600',
+        })
+      );
+
+      const service = createLinearIssueService({ linearAgentClient: mockClient, logger: mockLogger });
+
+      const result = await service.ensureIssueExists({
+        userId: testUserId,
+        taskPrompt: 'Fix the bug in auth module',
+      });
+
+      expect(result.linearIssueType).toBe('feature'); // default for fallback
+      expect(mockCreateIssue).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: 'Fix the bug in auth module',
+        })
+      );
+
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        { error: { code: 'UNAVAILABLE', message: 'LLM service down' } },
+        'LLM title generation failed, using fallback'
+      );
+    });
+
+    it('should use fallback mode when issue creation fails', async () => {
+      mockGenerateTitle = vi.fn().mockResolvedValue(
+        ok({
+          title: 'Generated Title',
+          issueType: 'bug',
+        })
+      );
+
       mockCreateIssue = vi.fn().mockResolvedValue(
         err({
           code: 'UNAVAILABLE',
@@ -135,47 +333,31 @@ describe('linearIssueService', () => {
 
       expect(result.linearFallback).toBe(true);
       expect(result.linearIssueId).toBeUndefined();
-      expect(result.linearIssueTitle).toBe('Fix the bug');
+      expect(result.linearIssueTitle).toBe('Generated Title');
+      expect(result.linearIssueType).toBe('bug');
+
       expect(mockLogger.warn).toHaveBeenCalledWith(
         { error: { code: 'UNAVAILABLE', message: 'Service down' } },
         'Failed to create Linear issue, using fallback mode'
       );
     });
 
-    it('should generate title from prompt when creating issue', async () => {
-      const mockIssueResponse = {
-        issueId: 'new-789',
-        issueIdentifier: 'INT-789',
-        issueTitle: 'Generated Title',
-        issueUrl: 'https://linear.app/intexuraos/issue/INT-789',
-      };
-
-      mockCreateIssue = vi.fn().mockResolvedValue(ok(mockIssueResponse));
-
-      const service = createLinearIssueService({ linearAgentClient: mockClient, logger: mockLogger });
-
-      await service.ensureIssueExists({
-        userId: testUserId,
-        taskPrompt: 'Fix the bug in auth module',
-      });
-
-      expect(mockCreateIssue).toHaveBeenCalledWith({
-        title: 'Fix the bug in auth module',
-        description: expect.stringContaining('Fix the bug in auth module'),
-        labels: ['Code Task'],
-        userId: 'test-user-123',
-      });
-    });
-
     it('should handle empty taskPrompt gracefully', async () => {
-      const mockIssueResponse = {
-        issueId: 'new-empty',
-        issueIdentifier: 'INT-999',
-        issueTitle: 'Code task',
-        issueUrl: 'https://linear.app/intexuraos/issue/INT-999',
-      };
+      mockGenerateTitle = vi.fn().mockResolvedValue(
+        ok({
+          title: 'Code task',
+          issueType: 'feature',
+        })
+      );
 
-      mockCreateIssue = vi.fn().mockResolvedValue(ok(mockIssueResponse));
+      mockCreateIssue = vi.fn().mockResolvedValue(
+        ok({
+          issueId: 'empty-1',
+          issueIdentifier: 'INT-700',
+          issueTitle: 'Code task',
+          issueUrl: 'https://linear.app/intexuraos/INT-700',
+        })
+      );
 
       const service = createLinearIssueService({ linearAgentClient: mockClient, logger: mockLogger });
 
@@ -184,83 +366,8 @@ describe('linearIssueService', () => {
         taskPrompt: '',
       });
 
-      expect(result.linearIssueId).toBe('INT-999');
+      expect(result.linearIssueId).toBe('INT-700');
       expect(mockCreateIssue).toHaveBeenCalled();
-    });
-
-    it('should truncate long prompts to 80 chars for title', async () => {
-      const mockIssueResponse = {
-        issueId: 'new-long',
-        issueIdentifier: 'INT-888',
-        issueTitle: 'This is a very long prompt that exceeds eighty characters and should be...',
-        issueUrl: 'https://linear.app/intexuraos/issue/INT-888',
-      };
-
-      mockCreateIssue = vi.fn().mockResolvedValue(ok(mockIssueResponse));
-
-      const service = createLinearIssueService({ linearAgentClient: mockClient, logger: mockLogger });
-
-      const longPrompt = 'This is a very long prompt that exceeds eighty characters and should be truncated appropriately for the issue title';
-
-      await service.ensureIssueExists({ userId: testUserId, taskPrompt: longPrompt });
-
-      expect(mockCreateIssue).toHaveBeenCalled();
-      // Verify the title was truncated to 80 chars by checking the generated title matches pattern
-      expect(mockCreateIssue).toHaveBeenCalledWith(
-        expect.objectContaining({
-          title: expect.stringMatching(/^.{80}$/),
-        })
-      );
-    });
-
-    it('should remove code blocks from title', async () => {
-      const mockIssueResponse = {
-        issueId: 'new-code',
-        issueIdentifier: 'INT-777',
-        issueTitle: 'Fix the bug',
-        issueUrl: 'https://linear.app/intexuraos/issue/INT-777',
-      };
-
-      mockCreateIssue = vi.fn().mockResolvedValue(ok(mockIssueResponse));
-
-      const service = createLinearIssueService({ linearAgentClient: mockClient, logger: mockLogger });
-
-      await service.ensureIssueExists({
-        userId: testUserId,
-        taskPrompt: '```typescript\nconst x = 1;\n```\n\nFix the bug in the auth module',
-      });
-
-      expect(mockCreateIssue).toHaveBeenCalled();
-      expect(mockCreateIssue).toHaveBeenCalledWith(
-        expect.objectContaining({
-          title: expect.not.stringContaining('```'),
-        })
-      );
-    });
-
-    it('should remove URLs from title', async () => {
-      const mockIssueResponse = {
-        issueId: 'new-url',
-        issueIdentifier: 'INT-666',
-        issueTitle: 'Fix the bug',
-        issueUrl: 'https://linear.app/intexuraos/issue/INT-666',
-      };
-
-      mockCreateIssue = vi.fn().mockResolvedValue(ok(mockIssueResponse));
-
-      const service = createLinearIssueService({ linearAgentClient: mockClient, logger: mockLogger });
-
-      await service.ensureIssueExists({
-        userId: testUserId,
-        taskPrompt: 'Check https://example.com/docs and Fix the bug',
-      });
-
-      expect(mockCreateIssue).toHaveBeenCalled();
-      expect(mockCreateIssue).toHaveBeenCalledWith(
-        expect.objectContaining({
-          title: expect.not.stringContaining('https://'),
-        })
-      );
     });
   });
 
