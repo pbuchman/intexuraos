@@ -78,6 +78,9 @@ pnpm build
 if ! id -u p.buchman > /dev/null 2>&1; then
   useradd -m -s /bin/bash p.buchman
 fi
+
+# Fix git ownership issue - add repo to git safe.directory
+git config --global --add safe.directory "$REPO_DIR"
 chown -R p.buchman:p.buchman "$REPO_DIR"
 log "Fixed ownership for p.buchman user"
 

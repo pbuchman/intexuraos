@@ -29,7 +29,7 @@ LAST_RESPONSE=$(jq -rs '
   .message.content // [] |
   map(.text // .thinking // empty) |
   join("\n")
-' "$TRANSCRIPT_PATH" 2>/dev/null)
+' "$TRANSCRIPT_PATH" 2>/dev/null) || true
 
 if [[ -z "$LAST_RESPONSE" ]]; then
   exit 0
