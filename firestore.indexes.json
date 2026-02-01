@@ -643,6 +643,20 @@
           "order": "ASCENDING"
         }
       ]
+    },
+    {
+      "collectionGroup": "doc_embeddings",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "embedding",
+          "order": "ASCENDING",
+          "vectorConfig": {
+            "dimension": 1536,
+            "flatIndexEnabled": true
+          }
+        }
+      ]
     }
   ],
   "fieldOverrides": []
