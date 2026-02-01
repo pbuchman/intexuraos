@@ -242,6 +242,23 @@ export function executeHookSync(options: ExecuteHookOptions): HookExecutionResul
 }
 
 /**
+ * Synchronous version of executeHook with custom temp directory override
+ * Use this to isolate tests that use timing files from each other
+ */
+export function executeHookSyncWithTempDir(
+  options: ExecuteHookOptions,
+  tempDir: string
+): HookExecutionResult {
+  return executeHookSync({
+    ...options,
+    env: {
+      ...options.env,
+      CLAUDE_CMD_TIMING_DIR: tempDir,
+    },
+  });
+}
+
+/**
  * Clears the hooks.log file before running tests
  * Call this in beforeEach to get clean log entries per test
  */

@@ -4,7 +4,7 @@
 
 set -euo pipefail
 
-TEMP_DIR="/tmp/claude-cmd-timing"
+TEMP_DIR="${CLAUDE_CMD_TIMING_DIR:-/tmp/claude-cmd-timing}"
 
 mkdir -p "$TEMP_DIR"
 

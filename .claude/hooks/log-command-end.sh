@@ -5,7 +5,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-TEMP_DIR="/tmp/claude-cmd-timing"
+TEMP_DIR="${CLAUDE_CMD_TIMING_DIR:-/tmp/claude-cmd-timing}"
 LOG_FILE="${SCRIPT_DIR}/commands.log"
 
 INPUT=$(cat)
