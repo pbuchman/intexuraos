@@ -166,10 +166,14 @@ export const gateway: HttpFunction = async (req: any, res: any) => {
   }
 
   // If stopped, start VM and show "Starting" page
+  // Use conditional state transition to prevent race conditions
   if (currentState === null || currentState.status === 'stopped') {
-    logger.info('Starting VM...');
-    await state.setStarting();
+    logger.info('Attempting to start VM...');
 
+    // Only update state if currently stopped (transactional)
+    await state.setStartingIfStopped();
+
+    // Start the VM regardless of state update (MIG resize is idempotent)
     const result = await vm.startVm();
     if (!result.success) {
       res.status(503).send(`Failed to start VM: ${result.message}`);
@@ -181,7 +185,8 @@ export const gateway: HttpFunction = async (req: any, res: any) => {
   }
 
   // If starting, show "Starting" page
-  /* v8 ignore start -- ts-type: exhaustiveness check fallthrough @preserve */
+  // The VM's report-ready callback will transition to running
+  /* v8 ignore start -- test-infra: starting state requires specific timing between gateway request and VM callback @preserve */
   if (currentState.status === 'starting') {
     /* v8 ignore stop @preserve */
     res.status(200).send(getStartingPage(currentState.branch));
