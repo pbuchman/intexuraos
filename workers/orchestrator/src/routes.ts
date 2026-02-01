@@ -145,7 +145,7 @@ export function registerRoutes(
       return;
     }
 
-    reply.status(202).send({ taskId: body.taskId, status: 'queued' });
+    reply.status(202).send({ taskId: body.taskId, status: 'accepted' });
   });
 
   // GET /tasks/:id - Get task status

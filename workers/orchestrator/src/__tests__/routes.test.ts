@@ -87,7 +87,7 @@ describe('Routes', () => {
       expect(response.statusCode).toBe(202);
       expect(response.json()).toMatchObject({
         taskId: 'test-task',
-        status: 'queued',
+        status: 'accepted',
       });
     });
 
