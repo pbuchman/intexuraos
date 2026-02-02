@@ -1,4 +1,5 @@
 export { ActionDetailModal } from './ActionDetailModal.js';
+export { ConfirmSubmitModal } from './ConfirmSubmitModal.js';
 export { ActionItem } from './ActionItem.js';
 export type { ExecutionState } from './ActionItem.js';
 export { ChartDefinitionDisplay } from './ChartDefinitionDisplay.js';
