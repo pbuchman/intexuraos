@@ -174,6 +174,62 @@ export function CodeTaskNewPage(): React.JSX.Element {
             </p>
           </div>
 
+          {showWorkerSelection && (
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-2 dark:text-slate-200">
+                Worker
+              </label>
+              {workersLoading ? (
+                <div className="text-sm text-slate-500 dark:text-slate-400">Loading workers...</div>
+              ) : (
+                <>
+                  <div className="flex flex-wrap gap-3">
+                    {availableWorkers.map((worker) => {
+                      const isHealthy = worker.healthy;
+                      const isSelected = selectedWorker === worker.name;
+                      return (
+                        <button
+                          key={worker.name}
+                          type="button"
+                          onClick={(): void => {
+                            if (isHealthy) {
+                              setSelectedWorker(worker.name);
+                            }
+                          }}
+                          disabled={submitting || !isHealthy}
+                          className={`px-4 py-2 rounded-lg border text-sm font-medium transition-colors ${
+                            isSelected
+                              ? 'border-blue-500 bg-blue-50 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300'
+                              : isHealthy
+                                ? 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600'
+                                : 'border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed dark:border-slate-700 dark:bg-slate-800 dark:text-slate-500'
+                          } disabled:opacity-50`}
+                          title={
+                            isHealthy
+                              ? `Worker: ${worker.name}`
+                              : `${worker.name} is unhealthy and cannot be selected`
+                          }
+                        >
+                          <span className="flex items-center gap-2">
+                            <span
+                              className={`h-2 w-2 rounded-full ${isHealthy ? 'bg-green-500' : 'bg-red-500'}`}
+                            />
+                            {worker.name}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                    {selectedWorker !== null
+                      ? `Task will be sent to ${selectedWorker}`
+                      : 'Select a healthy worker to run this task'}
+                  </p>
+                </>
+              )}
+            </div>
+          )}
+
           <div className="border-t border-slate-200 pt-6 dark:border-slate-700">
             <h3 className="text-sm font-medium text-slate-700 mb-4 dark:text-slate-200">
               Linear Issue (Optional)
