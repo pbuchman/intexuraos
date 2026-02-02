@@ -88,8 +88,21 @@ async function proxyRequest(vmIp: string, req: any, res: any): Promise<void> {
         res.setHeader(key, value);
       }
     }
-    const body = await response.text();
-    res.send(body);
+
+    // Use arrayBuffer to preserve binary content (images, fonts, etc.)
+    const contentType = response.headers.get('content-type') ?? '';
+    if (
+      contentType.startsWith('image/') ||
+      contentType.startsWith('font/') ||
+      contentType.startsWith('application/octet-stream') ||
+      contentType.includes('binary')
+    ) {
+      const buffer = await response.arrayBuffer();
+      res.send(Buffer.from(buffer));
+    } else {
+      const body = await response.text();
+      res.send(body);
+    }
   } catch (error) {
     logger.error({ error, vmIp, targetUrl }, 'Proxy error');
     res.status(502).send('Bad Gateway');

@@ -8,27 +8,34 @@ function getEnvVar(key: string): string {
   return value;
 }
 
+function getServiceUrl(envVar: string, apiPath: string): string {
+  if (import.meta.env['INTEXURAOS_PREDEV_MODE'] === 'true') {
+    return apiPath;
+  }
+  return getEnvVar(envVar);
+}
+
 export function getConfig(): AppConfig {
   return {
     auth0Domain: getEnvVar('INTEXURAOS_AUTH0_DOMAIN'),
     auth0ClientId: getEnvVar('INTEXURAOS_AUTH0_SPA_CLIENT_ID'),
     authAudience: getEnvVar('INTEXURAOS_AUTH_AUDIENCE'),
-    authServiceUrl: getEnvVar('INTEXURAOS_USER_SERVICE_URL'),
-    whatsappServiceUrl: getEnvVar('INTEXURAOS_WHATSAPP_SERVICE_URL'),
-    notionServiceUrl: getEnvVar('INTEXURAOS_NOTION_SERVICE_URL'),
-    mobileNotificationsServiceUrl: getEnvVar('INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_URL'),
-    ResearchAgentUrl: getEnvVar('INTEXURAOS_RESEARCH_AGENT_URL'),
-    commandsAgentServiceUrl: getEnvVar('INTEXURAOS_COMMANDS_AGENT_URL'),
-    actionsAgentUrl: getEnvVar('INTEXURAOS_ACTIONS_AGENT_URL'),
-    dataInsightsAgentUrl: getEnvVar('INTEXURAOS_DATA_INSIGHTS_AGENT_URL'),
-    notesAgentUrl: getEnvVar('INTEXURAOS_NOTES_AGENT_URL'),
-    todosAgentUrl: getEnvVar('INTEXURAOS_TODOS_AGENT_URL'),
-    bookmarksAgentUrl: getEnvVar('INTEXURAOS_BOOKMARKS_AGENT_URL'),
-    calendarAgentUrl: getEnvVar('INTEXURAOS_CALENDAR_AGENT_URL'),
-    linearAgentUrl: getEnvVar('INTEXURAOS_LINEAR_AGENT_URL'),
-    codeAgentUrl: getEnvVar('INTEXURAOS_CODE_AGENT_URL'),
-    chatAgentUrl: getEnvVar('INTEXURAOS_CHAT_AGENT_URL'),
-    appSettingsServiceUrl: getEnvVar('INTEXURAOS_APP_SETTINGS_SERVICE_URL'),
+    authServiceUrl: getServiceUrl('INTEXURAOS_USER_SERVICE_URL', '/api/user'),
+    whatsappServiceUrl: getServiceUrl('INTEXURAOS_WHATSAPP_SERVICE_URL', '/api/whatsapp'),
+    notionServiceUrl: getServiceUrl('INTEXURAOS_NOTION_SERVICE_URL', '/api/notion'),
+    mobileNotificationsServiceUrl: getServiceUrl('INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_URL', '/api/notifications'),
+    ResearchAgentUrl: getServiceUrl('INTEXURAOS_RESEARCH_AGENT_URL', '/api/research'),
+    commandsAgentServiceUrl: getServiceUrl('INTEXURAOS_COMMANDS_AGENT_URL', '/api/commands'),
+    actionsAgentUrl: getServiceUrl('INTEXURAOS_ACTIONS_AGENT_URL', '/api/actions'),
+    dataInsightsAgentUrl: getServiceUrl('INTEXURAOS_DATA_INSIGHTS_AGENT_URL', '/api/data-insights'),
+    notesAgentUrl: getServiceUrl('INTEXURAOS_NOTES_AGENT_URL', '/api/notes'),
+    todosAgentUrl: getServiceUrl('INTEXURAOS_TODOS_AGENT_URL', '/api/todos'),
+    bookmarksAgentUrl: getServiceUrl('INTEXURAOS_BOOKMARKS_AGENT_URL', '/api/bookmarks'),
+    calendarAgentUrl: getServiceUrl('INTEXURAOS_CALENDAR_AGENT_URL', '/api/calendar'),
+    linearAgentUrl: getServiceUrl('INTEXURAOS_LINEAR_AGENT_URL', '/api/linear'),
+    codeAgentUrl: getServiceUrl('INTEXURAOS_CODE_AGENT_URL', '/api/code'),
+    chatAgentUrl: getServiceUrl('INTEXURAOS_CHAT_AGENT_URL', '/api/chat'),
+    appSettingsServiceUrl: getServiceUrl('INTEXURAOS_APP_SETTINGS_SERVICE_URL', '/api/settings'),
     firebaseProjectId: getEnvVar('INTEXURAOS_FIREBASE_PROJECT_ID'),
     firebaseApiKey: getEnvVar('INTEXURAOS_FIREBASE_API_KEY'),
     firebaseAuthDomain: getEnvVar('INTEXURAOS_FIREBASE_AUTH_DOMAIN'),

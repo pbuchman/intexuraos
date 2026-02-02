@@ -1,5 +1,5 @@
 import type React from 'react';
-import { Download, PlusSquare, Share, X } from 'lucide-react';
+import { PlusSquare, Share, X } from 'lucide-react';
 import { usePWA } from '@/context/pwa-context';
 
 /**
@@ -14,28 +14,26 @@ export function IOSInstallBanner(): React.JSX.Element | null {
   }
 
   return (
-    <div className="safe-area-inset-bottom fixed bottom-0 left-0 right-0 z-50 bg-slate-900 p-4 text-white shadow-lg lg:hidden">
-      <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        <button
-          onClick={dismissIOSInstallPrompt}
-          className="absolute -right-1 -top-1 p-1 text-slate-400 hover:text-white"
-          aria-label="Dismiss"
-        >
-          <X className="h-5 w-5" />
-        </button>
+    <div className="fixed right-4 top-20 z-50 max-w-sm rounded-xl bg-slate-900 p-4 text-white shadow-xl lg:hidden">
+      <button
+        onClick={dismissIOSInstallPrompt}
+        className="absolute right-2 top-2 p-1 text-slate-400 hover:text-white"
+        aria-label="Dismiss"
+      >
+        <X className="h-5 w-5" />
+      </button>
 
-        <p className="mb-2 text-sm font-semibold">Install IntexuraOS</p>
-        <p className="mb-3 text-sm text-slate-300">
-          Add this app to your home screen for the best experience.
-        </p>
+      <p className="mb-2 pr-6 text-sm font-semibold">Install IntexuraOS</p>
+      <p className="mb-3 text-sm text-slate-300">
+        Add this app to your home screen for the best experience.
+      </p>
 
-        <div className="flex items-center gap-2 text-sm text-slate-300">
-          <span>Tap</span>
-          <Share className="h-5 w-5 text-blue-400" />
-          <span>then</span>
-          <PlusSquare className="h-5 w-5 text-blue-400" />
-          <span className="font-medium text-white">"Add to Home Screen"</span>
-        </div>
+      <div className="flex flex-wrap items-center gap-2 text-sm text-slate-300">
+        <span>Tap</span>
+        <Share className="h-5 w-5 text-blue-400" />
+        <span>then</span>
+        <PlusSquare className="h-5 w-5 text-blue-400" />
+        <span className="font-medium text-white">"Add to Home Screen"</span>
       </div>
     </div>
   );
@@ -53,31 +51,26 @@ export function AndroidInstallBanner(): React.JSX.Element | null {
   }
 
   return (
-    <div className="safe-area-inset-bottom fixed bottom-0 left-0 right-0 z-50 bg-blue-600 p-4 text-white shadow-lg lg:hidden">
-      <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        <button
-          onClick={dismissAndroidInstallPrompt}
-          className="absolute -right-1 -top-1 p-1 text-blue-200 hover:text-white"
-          aria-label="Dismiss"
-        >
-          <X className="h-5 w-5" />
-        </button>
+    <div className="fixed right-4 top-20 z-50 max-w-sm rounded-xl bg-blue-600 p-4 text-white shadow-xl lg:hidden">
+      <button
+        onClick={dismissAndroidInstallPrompt}
+        className="absolute right-2 top-2 p-1 text-blue-200 hover:text-white"
+        aria-label="Dismiss"
+      >
+        <X className="h-5 w-5" />
+      </button>
 
-        <div className="flex items-center gap-4 pr-6">
-          <Download className="h-8 w-8 shrink-0 text-blue-200" />
-          <div className="flex-1">
-            <p className="text-sm font-semibold">Install IntexuraOS</p>
-            <p className="text-sm text-blue-100">Add to your home screen for quick access.</p>
-          </div>
-          <button
-            onClick={(): void => {
-              void installApp();
-            }}
-            className="shrink-0 whitespace-nowrap rounded-lg bg-white px-4 py-2 text-sm font-semibold text-blue-600 transition-colors hover:bg-blue-50"
-          >
-            Install
-          </button>
-        </div>
+      <div className="pr-6">
+        <p className="mb-1 text-sm font-semibold">Install IntexuraOS</p>
+        <p className="mb-3 text-sm text-blue-100">Add to your home screen for quick access.</p>
+        <button
+          onClick={(): void => {
+            void installApp();
+          }}
+          className="w-full whitespace-nowrap rounded-lg bg-white px-4 py-2 text-sm font-semibold text-blue-600 transition-colors hover:bg-blue-50"
+        >
+          Install
+        </button>
       </div>
     </div>
   );

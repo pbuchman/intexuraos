@@ -146,7 +146,7 @@ export function Header(): React.JSX.Element {
               e.currentTarget.style.display = 'none';
             }}
           />
-          <span className="self-end pb-[calc(var(--spacing)*1.2)] text-[10px] font-normal text-slate-400 md:text-xs">
+          <span className="hidden self-end pb-[calc(var(--spacing)*1.2)] text-[10px] font-normal text-slate-400 md:inline md:text-xs">
             ver. {import.meta.env.INTEXURAOS_BUILD_VERSION}
           </span>
         </button>
