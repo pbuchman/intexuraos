@@ -20,13 +20,13 @@ function getStartingPage(branch: string): string {
 <html>
 <head>
   <title>Pre-Dev Starting...</title>
-  <meta http-equiv="refresh" content="5">
   <style>
     body { font-family: system-ui; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background: #1a1a2e; color: #eee; }
     .container { text-align: center; }
     .spinner { width: 50px; height: 50px; border: 3px solid #333; border-top-color: #6366f1; border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto 20px; }
     @keyframes spin { to { transform: rotate(360deg); } }
     .branch { color: #6366f1; font-family: monospace; }
+    .status { color: #888; font-size: 0.9em; margin-top: 10px; }
   </style>
 </head>
 <body>
@@ -34,8 +34,32 @@ function getStartingPage(branch: string): string {
     <div class="spinner"></div>
     <h1>Starting Pre-Dev Environment</h1>
     <p>Branch: <span class="branch">${escapeHtml(branch)}</span></p>
-    <p>This page will refresh automatically...</p>
+    <p class="status">Checking status...</p>
   </div>
+  <script>
+    (function() {
+      var checkCount = 0;
+      function checkStatus() {
+        checkCount++;
+        document.querySelector('.status').textContent = 'Checking status... (attempt ' + checkCount + ')';
+        fetch('/internal/branch-lock', { cache: 'no-store' })
+          .then(function(r) { return r.json(); })
+          .then(function(data) {
+            if (data.status === 'running') {
+              document.querySelector('.status').textContent = 'VM ready! Redirecting...';
+              // Force hard reload to bypass any caching
+              window.location.href = window.location.href.split('?')[0] + '?t=' + Date.now();
+            } else {
+              setTimeout(checkStatus, 3000);
+            }
+          })
+          .catch(function() {
+            setTimeout(checkStatus, 3000);
+          });
+      }
+      setTimeout(checkStatus, 2000);
+    })();
+  </script>
 </body>
 </html>
   `;
