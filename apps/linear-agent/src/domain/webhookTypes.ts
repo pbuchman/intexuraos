@@ -1,0 +1,42 @@
+/**
+ * Linear webhook event types.
+ * Based on Linear API documentation.
+ */
+
+export type WebhookAction = 'create' | 'update' | 'remove';
+
+export interface LinearWebhookPayload {
+  id: string;
+  identifier: string;
+  title: string;
+  description: string | null;
+  priority: number;
+  url: string;
+  createdAt: string;
+  updatedAt: string;
+  state: {
+    id: string;
+    name: string;
+    type: string;
+  };
+  assignee: {
+    id: string;
+    name: string;
+  } | null;
+  labels: {
+    id: string;
+    name: string;
+  }[];
+  team: {
+    id: string;
+    key: string;
+  };
+}
+
+export interface LinearWebhookEvent {
+  action: WebhookAction;
+  type: string;
+  data: LinearWebhookPayload;
+  webhookTimestamp: number;
+  webhookId: string;
+}

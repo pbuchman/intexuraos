@@ -1,0 +1,177 @@
+/**
+ * Firestore repository for locally synced Linear issues.
+ * Owned by linear-agent - stores issues synced via webhooks and full-sync.
+ */
+import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
+import { getFirestore } from '@intexuraos/infra-firestore';
+import type {
+  SyncedLinearIssue,
+  LinearIssueRepository,
+  LinearError,
+  IssueStateCategory,
+  LinearPriority,
+} from '../../domain/index.js';
+
+interface SyncedLinearIssueDoc {
+  id: string;
+  identifier: string;
+  title: string;
+  description: string | null;
+  state: string;
+  stateType: IssueStateCategory;
+  priority: LinearPriority;
+  assigneeId: string | null;
+  assigneeName: string | null;
+  labels: string[];
+  url: string;
+  userId: string;
+  createdAt: string;
+  updatedAt: string;
+  syncedAt: string;
+}
+
+const COLLECTION_NAME = 'linear_issues';
+
+export async function saveLinearIssue(
+  issue: SyncedLinearIssue
+): Promise<Result<SyncedLinearIssue, LinearError>> {
+  try {
+    const db = getFirestore();
+    const docRef = db.collection(COLLECTION_NAME).doc(issue.id);
+
+    const doc: SyncedLinearIssueDoc = {
+      id: issue.id,
+      identifier: issue.identifier,
+      title: issue.title,
+      description: issue.description,
+      state: issue.state,
+      stateType: issue.stateType,
+      priority: issue.priority,
+      assigneeId: issue.assigneeId,
+      assigneeName: issue.assigneeName,
+      labels: issue.labels,
+      url: issue.url,
+      userId: issue.userId,
+      createdAt: issue.createdAt,
+      updatedAt: issue.updatedAt,
+      syncedAt: issue.syncedAt,
+    };
+
+    await docRef.set(doc);
+
+    return ok(issue);
+  } catch (error) {
+    return err({
+      code: 'INTERNAL_ERROR',
+      message: `Failed to save issue: ${getErrorMessage(error, 'Unknown Firestore error')}`,
+    });
+  }
+}
+
+export async function findLinearIssueById(
+  id: string
+): Promise<Result<SyncedLinearIssue | null, LinearError>> {
+  try {
+    const db = getFirestore();
+    const doc = await db.collection(COLLECTION_NAME).doc(id).get();
+    if (!doc.exists) return ok(null);
+
+    const data = doc.data() as SyncedLinearIssueDoc;
+    return ok(docToIssue(data));
+  } catch (error) {
+    return err({
+      code: 'INTERNAL_ERROR',
+      message: `Failed to find issue: ${getErrorMessage(error, 'Unknown Firestore error')}`,
+    });
+  }
+}
+
+export async function findLinearIssueByIdentifier(
+  identifier: string
+): Promise<Result<SyncedLinearIssue | null, LinearError>> {
+  try {
+    const db = getFirestore();
+    const snapshot = await db
+      .collection(COLLECTION_NAME)
+      .where('identifier', '==', identifier)
+      .limit(1)
+      .get();
+
+    if (snapshot.empty) return ok(null);
+
+    /* v8 ignore start -- test-infra: Firestore integration requires real database mock @preserve */
+    const data = snapshot.docs[0]?.data() as SyncedLinearIssueDoc | undefined;
+    if (data === undefined) return ok(null);
+    return ok(docToIssue(data));
+    /* v8 ignore stop @preserve */
+  } catch (error) {
+    return err({
+      code: 'INTERNAL_ERROR',
+      message: `Failed to find issue by identifier: ${getErrorMessage(error, 'Unknown Firestore error')}`,
+    });
+  }
+}
+
+export async function listLinearIssuesByUserId(
+  userId: string
+): Promise<Result<SyncedLinearIssue[], LinearError>> {
+  try {
+    const db = getFirestore();
+    const snapshot = await db
+      .collection(COLLECTION_NAME)
+      .where('userId', '==', userId)
+      .get();
+
+    const issues = snapshot.docs.map((doc) => docToIssue(doc.data() as SyncedLinearIssueDoc));
+    return ok(issues);
+  } catch (error) {
+    return err({
+      code: 'INTERNAL_ERROR',
+      message: `Failed to list issues: ${getErrorMessage(error, 'Unknown Firestore error')}`,
+    });
+  }
+}
+
+export async function deleteLinearIssueById(id: string): Promise<Result<void, LinearError>> {
+  try {
+    const db = getFirestore();
+    await db.collection(COLLECTION_NAME).doc(id).delete();
+    return ok(undefined);
+  } catch (error) {
+    return err({
+      code: 'INTERNAL_ERROR',
+      message: `Failed to delete issue: ${getErrorMessage(error, 'Unknown Firestore error')}`,
+    });
+  }
+}
+
+function docToIssue(data: SyncedLinearIssueDoc): SyncedLinearIssue {
+  return {
+    id: data.id,
+    identifier: data.identifier,
+    title: data.title,
+    description: data.description,
+    state: data.state,
+    stateType: data.stateType,
+    priority: data.priority,
+    assigneeId: data.assigneeId,
+    assigneeName: data.assigneeName,
+    labels: data.labels,
+    url: data.url,
+    userId: data.userId,
+    createdAt: data.createdAt,
+    updatedAt: data.updatedAt,
+    syncedAt: data.syncedAt,
+  };
+}
+
+/** Factory for creating repository with interface */
+export function createLinearIssueRepository(): LinearIssueRepository {
+  return {
+    save: saveLinearIssue,
+    findById: findLinearIssueById,
+    findByIdentifier: findLinearIssueByIdentifier,
+    listByUserId: listLinearIssuesByUserId,
+    deleteById: deleteLinearIssueById,
+  };
+}

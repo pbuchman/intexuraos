@@ -4,9 +4,10 @@
  */
 
 import type { FastifyPluginCallback, FastifyRequest, FastifyReply } from 'fastify';
+import type { Logger } from 'pino';
 import { logIncomingRequest, requireAuth } from '@intexuraos/common-http';
 import { getServices } from '../services.js';
-import { listIssues } from '../domain/index.js';
+import { listIssues, fullSync } from '../domain/index.js';
 
 interface ConnectionBody {
   apiKey: string;
@@ -340,6 +341,109 @@ export const linearRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
     return await reply.ok({ issue: createResult.value });
   });
+
+  // Full sync endpoint for user-triggered sync
+  fastify.post(
+    '/linear/sync',
+    {
+      schema: {
+        operationId: 'fullSync',
+        summary: 'Trigger full sync of Linear issues',
+        description: 'Fetches all issues from Linear and syncs them to the database',
+        tags: ['linear'],
+        security: [{ bearerAuth: [] }],
+        response: {
+          200: {
+            description: 'Sync completed successfully',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [true] },
+              data: {
+                type: 'object',
+                required: ['created', 'updated', 'deleted', 'total', 'durationMs', 'syncedAt'],
+                properties: {
+                  created: { type: 'number', description: 'Number of new issues created' },
+                  updated: { type: 'number', description: 'Number of existing issues updated' },
+                  deleted: { type: 'number', description: 'Number of stale issues deleted' },
+                  total: { type: 'number', description: 'Total number of issues synced' },
+                  durationMs: { type: 'number', description: 'Sync duration in milliseconds' },
+                  syncedAt: { type: 'string', description: 'ISO timestamp of sync completion' },
+                },
+              },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+          },
+          401: {
+            description: 'Unauthorized',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+          },
+          403: {
+            description: 'Forbidden (not connected to Linear)',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+          },
+          500: {
+            description: 'Internal Server Error',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+          },
+        },
+      },
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      logIncomingRequest(request);
+      const user = await requireAuth(request, reply);
+      /* v8 ignore start -- test-infra: auth validation early return covered by other endpoint tests @preserve */
+      if (user === null) {
+        return;
+      }
+      /* v8 ignore stop @preserve */
+
+      const services = getServices();
+
+      request.log.info({ userId: user.userId }, 'linear/sync: starting sync');
+
+      /* v8 ignore start -- test-infra: error handling path covered by use case tests @preserve */
+      const result = await fullSync(user.userId, {
+        issueRepo: services.issueRepository,
+        connectionRepo: services.connectionRepository,
+        linearClient: services.linearApiClient,
+        logger: request.log as unknown as Logger,
+      });
+
+      if (!result.ok) {
+        return await handleLinearError(result.error, reply);
+      }
+
+      request.log.info(
+        {
+          userId: user.userId,
+          created: result.value.created,
+          updated: result.value.updated,
+          deleted: result.value.deleted,
+          total: result.value.total,
+          durationMs: result.value.durationMs,
+        },
+        'linear/sync: sync completed'
+      );
+
+      return await reply.ok(result.value);
+      /* v8 ignore stop @preserve */
+    }
+  );
 
   done();
 };

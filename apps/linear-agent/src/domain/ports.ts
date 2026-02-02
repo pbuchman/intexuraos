@@ -15,6 +15,7 @@ import type {
   ExtractedIssueData,
   ProcessedAction,
   WorkflowState,
+  SyncedLinearIssue,
 } from './models.js';
 import type { LinearError } from './errors.js';
 
@@ -42,6 +43,9 @@ export interface LinearConnectionRepository {
 
   /** Disconnect user's Linear integration */
   disconnect(userId: string): Promise<Result<LinearConnectionPublic, LinearError>>;
+
+  /** Find user ID by Linear team ID (for webhook routing) */
+  findUserIdByTeamId(teamId: string): Promise<Result<string | null, LinearError>>;
 }
 
 /** Repository for failed issue creations */
@@ -133,4 +137,22 @@ export interface ProcessedActionRepository {
     issueIdentifier: string;
     resourceUrl: string;
   }): Promise<Result<ProcessedAction, LinearError>>;
+}
+
+/** Repository for locally synced Linear issues */
+export interface LinearIssueRepository {
+  /** Save or update a synced issue */
+  save(issue: SyncedLinearIssue): Promise<Result<SyncedLinearIssue, LinearError>>;
+
+  /** Find issue by Linear UUID */
+  findById(id: string): Promise<Result<SyncedLinearIssue | null, LinearError>>;
+
+  /** Find issue by identifier (e.g., INT-444) */
+  findByIdentifier(identifier: string): Promise<Result<SyncedLinearIssue | null, LinearError>>;
+
+  /** List all issues for a user */
+  listByUserId(userId: string): Promise<Result<SyncedLinearIssue[], LinearError>>;
+
+  /** Delete issue by ID */
+  deleteById(id: string): Promise<Result<void, LinearError>>;
 }
