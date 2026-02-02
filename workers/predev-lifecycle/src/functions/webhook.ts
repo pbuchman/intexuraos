@@ -91,6 +91,16 @@ export const webhook: HttpFunction = async (req, res) => {
 
   const currentState = await state.getState();
 
+  // Check if branch is locked and trying to switch
+  if (currentState?.branchLocked === true && currentState.branch !== branch) {
+    logger.info(
+      { lockedBranch: currentState.branch, attemptedBranch: branch },
+      'Branch locked - ignoring push from different branch'
+    );
+    res.status(200).send('Branch locked - ignoring different branch');
+    return;
+  }
+
   // If VM is running on different branch, we would trigger branch switch here
   // For now, just update the target branch
   /* v8 ignore start -- test-infra: branch switch detection requires specific VM state @preserve */

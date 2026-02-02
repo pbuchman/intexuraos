@@ -8,6 +8,7 @@ const { mockResize, mockGet } = vi.hoisted(() => ({
 
 interface MockResponseChaining {
   send: ReturnType<typeof vi.fn>;
+  json: ReturnType<typeof vi.fn>;
   setHeader: () => MockResponse;
   write: () => MockResponse;
   end: () => MockResponse;
@@ -16,6 +17,7 @@ interface MockResponseChaining {
 interface MockResponse {
   status: ReturnType<typeof vi.fn> & MockResponseChaining;
   send: ReturnType<typeof vi.fn>;
+  json: ReturnType<typeof vi.fn>;
   setHeader: ReturnType<typeof vi.fn> & MockResponseChaining;
   write: ReturnType<typeof vi.fn> & MockResponseChaining;
   end: ReturnType<typeof vi.fn> & MockResponseChaining;
@@ -29,7 +31,12 @@ vi.mock('@google-cloud/compute', () => ({
 }));
 
 // Mock state data - mutable so tests can change it
-let mockStateData: { status: string; vmIp: string | null; branch: string } | null = null;
+let mockStateData: {
+  status: string;
+  vmIp: string | null;
+  branch: string;
+  branchLocked?: boolean;
+} | null = null;
 
 // Mock Firestore to return configurable state
 vi.mock('@google-cloud/firestore', async () => {
@@ -102,13 +109,16 @@ describe('gateway function', () => {
 
   function createMockRes(): MockResponse {
     sendFn = vi.fn();
+    const jsonFn = vi.fn();
     const res: Partial<MockResponse> = {
       status: vi.fn(function (this: MockResponse) {
         this.send = sendFn;
+        this.json = jsonFn;
         this.setHeader = vi.fn(() => this) as never;
         return this;
       }) as unknown as ReturnType<typeof vi.fn> & MockResponseChaining,
       send: sendFn,
+      json: jsonFn,
     };
     res.setHeader = vi.fn(() => res) as unknown as ReturnType<typeof vi.fn> & MockResponseChaining;
     res.write = vi.fn(() => res) as unknown as ReturnType<typeof vi.fn> & MockResponseChaining;
@@ -348,6 +358,111 @@ describe('gateway function', () => {
       expect(mockRes.status).toHaveBeenCalledWith(200);
       expect(sendFn).toHaveBeenCalledWith(expect.stringContaining('Starting Pre-Dev Environment'));
       expect(sendFn).toHaveBeenCalledWith(expect.stringContaining('feature/test'));
+    });
+  });
+
+  describe('branch lock endpoint', () => {
+    it('should return current lock state on GET', async () => {
+      mockStateData = {
+        status: 'running',
+        vmIp: '10.0.0.1',
+        branch: 'development',
+        branchLocked: true,
+      };
+      mockReq.method = 'GET';
+      mockReq.url = '/internal/branch-lock';
+
+      await gateway(mockReq as never, mockRes as never);
+
+      expect(mockRes.status).toHaveBeenCalledWith(200);
+      expect(mockRes.json).toHaveBeenCalledWith({
+        locked: true,
+        branch: 'development',
+        status: 'running',
+      });
+    });
+
+    it('should return defaults when state is null on GET', async () => {
+      mockStateData = null;
+      mockReq.method = 'GET';
+      mockReq.url = '/internal/branch-lock';
+
+      await gateway(mockReq as never, mockRes as never);
+
+      expect(mockRes.status).toHaveBeenCalledWith(200);
+      expect(mockRes.json).toHaveBeenCalledWith({
+        locked: false,
+        branch: 'unknown',
+        status: 'unknown',
+      });
+    });
+
+    it('should update lock state on POST', async () => {
+      mockStateData = {
+        status: 'running',
+        vmIp: '10.0.0.1',
+        branch: 'development',
+        branchLocked: false,
+      };
+      mockReq.method = 'POST';
+      mockReq.url = '/internal/branch-lock';
+      mockReq.body = { locked: true };
+
+      await gateway(mockReq as never, mockRes as never);
+
+      expect(mockRes.status).toHaveBeenCalledWith(200);
+      expect(mockRes.json).toHaveBeenCalledWith({
+        locked: false,
+        branch: 'development',
+        status: 'running',
+      });
+    });
+
+    it('should default to false when locked not provided in POST', async () => {
+      mockStateData = {
+        status: 'running',
+        vmIp: '10.0.0.1',
+        branch: 'development',
+        branchLocked: true,
+      };
+      mockReq.method = 'POST';
+      mockReq.url = '/internal/branch-lock';
+      mockReq.body = {};
+
+      await gateway(mockReq as never, mockRes as never);
+
+      expect(mockRes.status).toHaveBeenCalledWith(200);
+    });
+
+    it('should return 405 for unsupported methods', async () => {
+      mockStateData = {
+        status: 'running',
+        vmIp: '10.0.0.1',
+        branch: 'development',
+      };
+      mockReq.method = 'DELETE';
+      mockReq.url = '/internal/branch-lock';
+
+      await gateway(mockReq as never, mockRes as never);
+
+      expect(mockRes.status).toHaveBeenCalledWith(405);
+      expect(sendFn).toHaveBeenCalledWith('Method not allowed');
+    });
+
+    it('should return defaults when state is null on POST', async () => {
+      mockStateData = null;
+      mockReq.method = 'POST';
+      mockReq.url = '/internal/branch-lock';
+      mockReq.body = { locked: true };
+
+      await gateway(mockReq as never, mockRes as never);
+
+      expect(mockRes.status).toHaveBeenCalledWith(200);
+      expect(mockRes.json).toHaveBeenCalledWith({
+        locked: false,
+        branch: 'unknown',
+        status: 'unknown',
+      });
     });
   });
 });
