@@ -13,7 +13,7 @@ Generate a new release by analyzing merged pull requests and their associated Li
 cat package.json | grep '"version"'
 
 # Last release in CHANGELOG
-head -50 CHANGELOG.md
+head -30 CHANGELOG.md
 ```
 
 ### 2. Find Last Release Point
@@ -85,13 +85,13 @@ For Linear issues, use the `mcp__linear__get_issue` tool:
 
 **Label to Category Mapping:**
 
-| Label/Prefix                      | Category              | Semver Impact |
-| --------------------------------- | --------------------- | ------------- |
-| `breaking-change`, `BREAKING`     | Breaking Changes      | MAJOR         |
-| `feature`, `feat:`, `enhancement` | New Features          | MINOR         |
-| `bug`, `fix:`, `[sentry]`         | Bug Fixes             | PATCH         |
-| `chore`, `refactor`, `docs`       | Technical/Maintenance | PATCH         |
-| `infra`, `terraform`              | Infrastructure        | PATCH         |
+| Label/Prefix                      | Verb Prefix | Semver Impact |
+| --------------------------------- | ----------- | ------------- |
+| `breaking-change`, `BREAKING`     | Removed     | MAJOR         |
+| `feature`, `feat:`, `enhancement` | Added       | MINOR         |
+| `bug`, `fix:`, `[sentry]`         | Fixed       | PATCH         |
+| `improvement`, `perf:`            | Improved    | PATCH         |
+| `chore`, `refactor`               | Changed     | PATCH         |
 
 ### 6. Determine Semver Version Bump
 
@@ -99,20 +99,19 @@ Based on the categorized changes from PRs, Linear issues, and direct commits:
 
 **Decision Table:**
 
-| Change Type                 | Release Level | How to Detect                                       |
-| --------------------------- | ------------- | --------------------------------------------------- |
-| **Breaking Changes**        | **MAJOR**     |                                                     |
-| API breaking change         | MAJOR         | PR mentions "breaking", Linear has `breaking` label |
-| Removed endpoint/feature    | MAJOR         | PR describes removal, deprecation notice            |
-| Schema migration required   | MAJOR         | PR mentions migration, DB changes                   |
-| **New Features**            | **MINOR**     |                                                     |
-| New feature                 | MINOR         | Linear `feature` label, PR title `feat:`            |
-| New service/integration     | MINOR         | PR describes new service, Linear mentions new       |
-| **Bug Fixes & Maintenance** | **PATCH**     |                                                     |
-| Bug fix                     | PATCH         | Linear `bug` label, PR title `fix:`, `[sentry]`     |
-| Refactoring                 | PATCH         | PR title `refactor:`, Linear `chore` label          |
-| Documentation               | PATCH         | PR title `docs:`, docs-only changes                 |
-| CI/Infrastructure           | PATCH         | PR mentions infra, terraform, CI                    |
+| Change Type            | Release Level | How to Detect                                       |
+| ---------------------- | ------------- | --------------------------------------------------- |
+| **Breaking Changes**   | **MAJOR**     |                                                     |
+| API breaking change    | MAJOR         | PR mentions "breaking", Linear has `breaking` label |
+| Removed endpoint       | MAJOR         | PR describes removal, deprecation notice            |
+| Schema migration       | MAJOR         | PR mentions migration, DB changes                   |
+| **New Features**       | **MINOR**     |                                                     |
+| New feature            | MINOR         | Linear `feature` label, PR title `feat:`            |
+| New service            | MINOR         | PR describes new service, Linear mentions new       |
+| **Fixes & Maintenance**| **PATCH**     |                                                     |
+| Bug fix                | PATCH         | Linear `bug` label, PR title `fix:`, `[sentry]`     |
+| Refactoring            | PATCH         | PR title `refactor:`, Linear `chore` label          |
+| Documentation          | PATCH         | PR title `docs:`, docs-only changes                 |
 
 **Algorithm:**
 
@@ -125,53 +124,57 @@ ELSE:
     RETURN "patch"
 ```
 
-**Note for Early Development (0.0.X):**
-
-- Still follow semver rules for consistency
-- Breaking changes still warrant major bump (0.0.5 → 1.0.0)
-- This prepares for proper semver when v1.0 is released
-
 ### 7. Build the Changelog Entry
 
-**Sources for changelog entries:**
-
-1. **PR descriptions** — Use the Summary section from PR body
-2. **Linear issue titles** — Describe the feature/fix in user terms
-3. **Direct commit messages** — For non-PR work
-
-**Format:** Unnumbered version headers with date only.
+**Format:** Version header with simple bullet list.
 
 ```markdown
-## YYYY-MM-DD
+## X.Y.Z
 
-### Added
-
-- [Feature from PR summary or Linear issue title]
-
-### Changed
-
-- [Modification described in PR or Linear]
-
-### Fixed
-
-- [Bug fix from PR, often linked to Sentry via [sentry] prefix]
-
-### Technical
-
-- [Infrastructure/architecture from PR or direct commits]
-
----
+- Added [feature description with inline `code` for commands/settings]
+- Added [another feature] (INT-XXX)
+- Changed [modification description]
+- Fixed [bug description]
+- Improved [enhancement description]
+- Removed [deprecation description]
 ```
 
-**Writing Guidelines:**
+**Entry Rules:**
 
-- Summarize PR descriptions, don't copy verbatim
-- Use user-facing language, not internal jargon
-- Group related changes from multiple PRs
-- Link to Linear issues where helpful: `(INT-XXX)`
-- Use date as header, not version number
-- No numbered lists within sections — use bullet points
-- Most recent release at the top
+| Rule                    | Example                                                                 |
+| ----------------------- | ----------------------------------------------------------------------- |
+| Start with verb         | Added, Fixed, Improved, Changed, Removed                                |
+| Single line per entry   | No paragraphs, no multi-line descriptions                               |
+| Use backticks for code  | commands, flags, env vars, settings, file paths                         |
+| Linear refs optional    | `(INT-XXX)` at end of line if helpful                                   |
+| User-facing only        | Skip pure internal refactorings unless they affect users                |
+| No subcategories        | No `### Added`, `### Fixed` headers — just the bullet list              |
+| Most recent at top      | New version goes above existing versions                                |
+
+**Verb Usage:**
+
+| Verb     | Use For                                                    |
+| -------- | ---------------------------------------------------------- |
+| Added    | New features, new capabilities, new options                |
+| Fixed    | Bug fixes, error corrections, regressions                  |
+| Improved | Performance, UX enhancements to existing features          |
+| Changed  | Behavioral modifications, renames, config changes          |
+| Removed  | Deprecated features, deleted functionality, breaking drops |
+
+**What to Include:**
+
+- User-facing features and changes
+- Bug fixes users would notice
+- Performance improvements with impact
+- New integrations and services
+- Security fixes (call out explicitly)
+
+**What to Skip:**
+
+- Pure test additions without user impact
+- Internal refactorings with no behavior change
+- CI/tooling config changes
+- Dependency updates (unless security-related)
 
 ### 8. Update All Package Versions
 
@@ -209,15 +212,7 @@ done
 pnpm install
 ```
 
-### 9. Update CHANGELOG.md Header
-
-Update the "Current Version" line at the top of CHANGELOG.md:
-
-```markdown
-**Current Version:** X.Y.Z
-```
-
-### 10. Commit Release
+### 9. Commit Release
 
 ```bash
 git add CHANGELOG.md package.json pnpm-lock.yaml apps/*/package.json packages/*/package.json workers/*/package.json
@@ -261,14 +256,13 @@ To fetch Linear issue details for a PR:
 
 **Label Interpretation:**
 
-| Linear Label      | Changelog Category | Semver Impact |
-| ----------------- | ------------------ | ------------- |
-| `feature`         | Added              | MINOR         |
-| `enhancement`     | Changed            | MINOR         |
-| `bug`             | Fixed              | PATCH         |
-| `breaking-change` | Breaking           | MAJOR         |
-| `chore`           | Technical          | PATCH         |
-| `documentation`   | Technical          | PATCH         |
+| Linear Label      | Changelog Verb | Semver Impact |
+| ----------------- | -------------- | ------------- |
+| `feature`         | Added          | MINOR         |
+| `enhancement`     | Improved       | MINOR         |
+| `bug`             | Fixed          | PATCH         |
+| `breaking-change` | Removed        | MAJOR         |
+| `chore`           | Changed        | PATCH         |
 
 ## Version Strategy
 
@@ -277,5 +271,3 @@ Use semantic versioning:
 - **Major (X.0.0)** — Breaking changes, major rewrites
 - **Minor (0.X.0)** — New features, significant additions
 - **Patch (0.0.X)** — Bug fixes, small improvements
-
-For early development (0.0.X), increment patch for each release until feature-complete.
