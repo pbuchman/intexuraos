@@ -448,9 +448,10 @@ export function LinearIssuesPage(): React.JSX.Element {
       const token = await getAccessToken();
       const result = await syncFromLinear(token);
       await loadIssues(true);
+      const syncedCount = result.created + result.updated;
       setSuccessMessage(
-        `Synced ${String(result.syncedCount)} issue${result.syncedCount === 1 ? '' : 's'} from Linear` +
-          (result.deletedCount > 0 ? ` (removed ${String(result.deletedCount)} deleted issue${result.deletedCount === 1 ? '' : 's'})` : '')
+        `Synced ${String(syncedCount)} issue${syncedCount === 1 ? '' : 's'} from Linear` +
+          (result.deleted > 0 ? ` (removed ${String(result.deleted)} deleted issue${result.deleted === 1 ? '' : 's'})` : '')
       );
       setTimeout(() => {
         setSuccessMessage(null);

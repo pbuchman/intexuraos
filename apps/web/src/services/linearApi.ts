@@ -186,8 +186,12 @@ export async function generateLinearIssueTitle(
 }
 
 interface SyncFromLinearResponse {
-  syncedCount: number;
-  deletedCount: number;
+  created: number;
+  updated: number;
+  deleted: number;
+  total: number;
+  durationMs: number;
+  syncedAt: string;
 }
 
 /**
