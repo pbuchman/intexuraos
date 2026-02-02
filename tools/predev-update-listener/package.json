@@ -1,0 +1,13 @@
+{
+  "name": "predev-update-listener",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Listens for code update notifications via Pub/Sub and triggers git pull + pm2 restart",
+  "main": "listener.mjs",
+  "scripts": {
+    "start": "node listener.mjs"
+  },
+  "dependencies": {
+    "@google-cloud/pubsub": "^4.9.0"
+  }
+}
