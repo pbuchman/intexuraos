@@ -10,6 +10,7 @@ export type {
   LinearApiClient,
   LinearActionExtractionService,
   ProcessedActionRepository,
+  LinearIssueRepository,
 } from './ports.js';
 export {
   processLinearAction,
@@ -38,3 +39,16 @@ export {
   type ValidatedIssue,
   type ValidateIssueError,
 } from './useCases/validateIssue.js';
+export type { LinearWebhookEvent, LinearWebhookPayload, WebhookAction } from './webhookTypes.js';
+export { mapWebhookToSyncedIssue, mapApiIssueToSyncedIssue } from './issueMapper.js';
+export {
+  syncSingleIssue,
+  type SyncSingleIssueDeps,
+  type SyncSingleIssueResult,
+} from './useCases/syncSingleIssueUseCase.js';
+export {
+  fullSync,
+  fullSyncAllUsers,
+  type FullSyncDeps,
+  type SyncStats,
+} from './useCases/fullSyncUseCase.js';
