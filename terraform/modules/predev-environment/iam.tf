@@ -57,3 +57,26 @@ resource "google_cloud_run_service_iam_member" "vm_invokes_report_ready_run" {
   role     = "roles/run.invoker"
   member   = "serviceAccount:${google_service_account.predev_vm.email}"
 }
+
+# Functions can publish to code-update topic
+resource "google_pubsub_topic_iam_member" "functions_publish_code_update" {
+  project = var.project_id
+  topic   = google_pubsub_topic.code_update.name
+  role    = "roles/pubsub.publisher"
+  member  = "serviceAccount:${google_service_account.predev_functions.email}"
+}
+
+# VM can subscribe to code-update subscription
+resource "google_pubsub_subscription_iam_member" "vm_subscribe_code_update" {
+  project      = var.project_id
+  subscription = google_pubsub_subscription.code_update_vm.name
+  role         = "roles/pubsub.subscriber"
+  member       = "serviceAccount:${google_service_account.predev_vm.email}"
+}
+
+# VM can read Firestore state (for branch info)
+resource "google_project_iam_member" "vm_firestore" {
+  project = var.project_id
+  role    = "roles/datastore.user"
+  member  = "serviceAccount:${google_service_account.predev_vm.email}"
+}
