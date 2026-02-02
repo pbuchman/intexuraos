@@ -178,6 +178,30 @@ describe('codeAgentApi', () => {
         }
       );
     });
+
+    it('submits task with workerLocation', async () => {
+      const { apiRequest } = await import('../apiClient.js');
+      const mockResponse = { status: 'submitted' as const, codeTaskId: 'task-456' };
+      vi.mocked(apiRequest).mockResolvedValue(mockResponse);
+
+      const request = {
+        prompt: 'Fix bug',
+        workerType: 'opus' as const,
+        workerLocation: 'home-mac',
+      };
+      const result = await submitCodeTask(mockAccessToken, request);
+
+      expect(apiRequest).toHaveBeenCalledWith(
+        'https://code-agent.test',
+        '/code/submit',
+        mockAccessToken,
+        {
+          method: 'POST',
+          body: request,
+        }
+      );
+      expect(result).toEqual(mockResponse);
+    });
   });
 
   describe('cancelCodeTask', () => {
