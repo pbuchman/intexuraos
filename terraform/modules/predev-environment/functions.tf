@@ -18,11 +18,12 @@ resource "google_cloudfunctions2_function" "gateway" {
   }
 
   service_config {
-    available_memory      = "512M"
-    timeout_seconds       = 3600
-    service_account_email = google_service_account.predev_functions.email
-    max_instance_count    = 1
-    min_instance_count    = 0
+    available_memory                 = "512M"
+    timeout_seconds                  = 3600
+    service_account_email            = google_service_account.predev_functions.email
+    max_instance_count               = 1
+    min_instance_count               = 0
+    max_instance_request_concurrency = 200
 
     environment_variables = {
       INTEXURAOS_ENVIRONMENT    = var.environment
