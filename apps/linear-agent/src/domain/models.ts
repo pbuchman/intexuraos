@@ -53,6 +53,7 @@ export interface LinearConnection {
   apiKey: string;
   teamId: string;
   teamName: string;
+  webhookSecret: string | null;
   connected: boolean;
   createdAt: string;
   updatedAt: string;

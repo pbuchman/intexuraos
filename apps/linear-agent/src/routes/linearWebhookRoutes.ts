@@ -65,18 +65,49 @@ async function handleLinearWebhook(
   logIncomingRequest(request);
 
   const services = getServices();
-  const webhookSecret = process.env['INTEXURAOS_LINEAR_WEBHOOK_SECRET'];
-
-  /* v8 ignore start -- test-infra: missing env var is config error tested by infra @preserve */
-  if (webhookSecret === undefined || webhookSecret === '') {
-    request.log.error('Missing INTEXURAOS_LINEAR_WEBHOOK_SECRET environment variable');
-    reply.status(500);
-    return await reply.fail('INTERNAL_ERROR', 'Webhook secret not configured');
-  }
-  /* v8 ignore stop @preserve */
 
   /* v8 ignore start -- test-infra: signature validation and user lookup covered by tests @preserve */
-  // Validate signature
+  // Extract team ID from webhook payload (untrusted at this point)
+  const { data, action, type, webhookTimestamp, webhookId } = request.body;
+
+  // 1. For non-Issue events, skip processing early
+  if (type !== 'Issue') {
+    request.log.info({ type }, 'Ignoring non-Issue webhook event');
+    return await reply.ok({ message: 'Ignored' });
+  }
+
+  // 2. First check if team is connected (using findUserIdByTeamId for this)
+  const connectionResult = await services.connectionRepository.findUserIdByTeamId(data.team.id);
+  if (!connectionResult.ok) {
+    request.log.error({ error: connectionResult.error, teamId: data.team.id }, 'Failed to lookup connection');
+    reply.status(500);
+    return await reply.fail('INTERNAL_ERROR', 'Failed to lookup connection');
+  }
+
+  const userId = connectionResult.value;
+  if (userId === null) {
+    // No connected user for this team
+    request.log.warn({ teamId: data.team.id }, 'No connected user found for team');
+    return await reply.ok({ message: 'Team not connected' });
+  }
+
+  // 3. Now check if webhook secret is configured for this team
+  const secretResult = await services.connectionRepository.findWebhookSecretByTeamId(data.team.id);
+  if (!secretResult.ok) {
+    request.log.error({ error: secretResult.error, teamId: data.team.id }, 'Failed to lookup webhook secret');
+    reply.status(500);
+    return await reply.fail('INTERNAL_ERROR', 'Failed to lookup connection');
+  }
+
+  if (secretResult.value === null) {
+    // Team is connected but webhook secret not configured
+    request.log.warn({ teamId: data.team.id }, 'Webhook secret not configured for team');
+    return await reply.ok({ message: 'Webhook not configured' });
+  }
+
+  const { webhookSecret } = secretResult.value;
+
+  // 4. Validate signature with per-connection secret
   const signatureResult = validateLinearWebhookSignature(request, webhookSecret);
   if (!signatureResult.ok) {
     request.log.warn({ error: signatureResult.error }, 'Linear webhook signature validation failed');
@@ -84,30 +115,7 @@ async function handleLinearWebhook(
     return await reply.fail('UNAUTHORIZED', 'Invalid webhook signature');
   }
 
-  // Extract team ID from webhook payload
-  const { data, action, type, webhookTimestamp, webhookId } = request.body;
-
-  if (type !== 'Issue') {
-    request.log.info({ type }, 'Ignoring non-Issue webhook event');
-    return await reply.ok({ message: 'Ignored' });
-  }
-
-  // Find user by team ID
-  const connectionResult = await services.connectionRepository.findUserIdByTeamId(data.team.id);
-  if (!connectionResult.ok) {
-    request.log.error({ error: connectionResult.error, teamId: data.team.id }, 'Failed to find user by team ID');
-    reply.status(500);
-    return await reply.fail('INTERNAL_ERROR', 'Failed to find user');
-  }
-
-  const userId = connectionResult.value;
-  if (userId === null) {
-    request.log.warn({ teamId: data.team.id }, 'No connected user found for team');
-    // Return 200 to avoid retrying, but log the issue
-    return await reply.ok({ message: 'Team not connected' });
-  }
-
-  // Sync the issue
+  // 5. Process webhook (now trusted)
   const event: LinearWebhookEvent = {
     action: action as 'create' | 'update' | 'remove',
     type,
@@ -162,9 +170,9 @@ const webhookSchema: FastifySchema = {
   headers: {
     type: 'object',
     properties: {
-      'linear-hmacsha256': {
+      'linear-signature': {
         type: 'string',
-        description: 'HMAC-SHA256 signature of request body',
+        description: 'Linear webhook signature for verification (HMAC-SHA256)',
       },
       'linear-delivery': {
         type: 'string',

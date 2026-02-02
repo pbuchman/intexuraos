@@ -18,7 +18,7 @@ describe('validateLinearWebhookSignature', () => {
   function createMockRequest(body: unknown, signature: string): FastifyRequest {
     return {
       headers: {
-        'linear-hmacsha256': signature,
+        'linear-signature': signature,
       },
       rawBody: JSON.stringify(body),
     } as unknown as FastifyRequest;
@@ -77,7 +77,7 @@ describe('validateLinearWebhookSignature', () => {
     it('rejects missing raw body', () => {
       const request = {
         headers: {
-          'linear-hmacsha256': 'sha256=abc123',
+          'linear-signature': 'sha256=abc123',
         },
         rawBody: undefined,
       } as unknown as FastifyRequest;

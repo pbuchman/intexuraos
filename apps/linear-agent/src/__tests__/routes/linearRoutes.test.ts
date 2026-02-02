@@ -21,6 +21,7 @@ describe('linearRoutes', () => {
       apiKey: 'linear-api-key-123',
       teamId: 'team-456',
       teamName: 'Engineering',
+      webhookSecret: null,
       connected: true,
       createdAt: '2025-01-15T00:00:00Z',
       updatedAt: '2025-01-15T00:00:00Z',
@@ -82,10 +83,10 @@ describe('linearRoutes', () => {
         headers: { authorization: `Bearer ${token}` },
       });
 
-      expect(response.statusCode).toBe(502);
+      expect(response.statusCode).toBe(500);
       const body = response.json();
       expect(body.success).toBe(false);
-      expect(body.error.code).toBe('DOWNSTREAM_ERROR');
+      expect(body.error.code).toBe('INTERNAL_ERROR');
     });
   });
 
@@ -215,10 +216,10 @@ describe('linearRoutes', () => {
         },
       });
 
-      expect(response.statusCode).toBe(502);
+      expect(response.statusCode).toBe(500);
       const body = response.json();
       expect(body.success).toBe(false);
-      expect(body.error.code).toBe('DOWNSTREAM_ERROR');
+      expect(body.error.code).toBe('INTERNAL_ERROR');
     });
   });
 
@@ -262,10 +263,10 @@ describe('linearRoutes', () => {
         headers: { authorization: `Bearer ${token}` },
       });
 
-      expect(response.statusCode).toBe(502);
+      expect(response.statusCode).toBe(500);
       const body = response.json();
       expect(body.success).toBe(false);
-      expect(body.error.code).toBe('DOWNSTREAM_ERROR');
+      expect(body.error.code).toBe('INTERNAL_ERROR');
     });
   });
 
@@ -481,10 +482,10 @@ describe('linearRoutes', () => {
         headers: { authorization: `Bearer ${token}` },
       });
 
-      expect(response.statusCode).toBe(502);
+      expect(response.statusCode).toBe(500);
       const body = response.json();
       expect(body.success).toBe(false);
-      expect(body.error.code).toBe('DOWNSTREAM_ERROR');
+      expect(body.error.code).toBe('INTERNAL_ERROR');
     });
   });
 
@@ -589,10 +590,10 @@ describe('linearRoutes', () => {
         headers: { authorization: `Bearer ${token}` },
       });
 
-      expect(response.statusCode).toBe(502);
+      expect(response.statusCode).toBe(500);
       const body = response.json();
       expect(body.success).toBe(false);
-      expect(body.error.code).toBe('DOWNSTREAM_ERROR');
+      expect(body.error.code).toBe('INTERNAL_ERROR');
     });
 
     it('returns 404 when getById repository fails', async () => {
@@ -862,6 +863,325 @@ describe('linearRoutes', () => {
       expect(body.error.code).toBe('FORBIDDEN');
     });
   });
+
+  describe('Webhook Config Endpoints', () => {
+    describe('GET /linear/webhook-config', () => {
+      it('returns webhook config when connected without secret', async () => {
+        seedConnection('test-user-123');
+
+        const token = await createToken({ sub: 'test-user-123' });
+        const response = await ctx.app.inject({
+          method: 'GET',
+          url: '/linear/webhook-config',
+          headers: { authorization: `Bearer ${token}` },
+        });
+
+        expect(response.statusCode).toBe(200);
+        const body = response.json();
+        expect(body.success).toBe(true);
+        expect(body.data.webhookUrl).toBeDefined();
+        expect(body.data.hasWebhookSecret).toBe(false);
+        expect(body.data.teamId).toBe('team-456');
+      });
+
+      it('returns webhook config when connected with secret', async () => {
+        seedConnection('test-user-123');
+        // Set webhook secret
+        const setResult = await ctx.connectionRepository.updateWebhookSecret('test-user-123', 'my-secret');
+        expect(setResult.ok).toBe(true);
+
+        const token = await createToken({ sub: 'test-user-123' });
+        const response = await ctx.app.inject({
+          method: 'GET',
+          url: '/linear/webhook-config',
+          headers: { authorization: `Bearer ${token}` },
+        });
+
+        expect(response.statusCode).toBe(200);
+        const body = response.json();
+        expect(body.success).toBe(true);
+        expect(body.data.hasWebhookSecret).toBe(true);
+        expect(body.data.teamId).toBe('team-456');
+      });
+
+      it('returns 401 when no auth token provided', async () => {
+        const response = await ctx.app.inject({
+          method: 'GET',
+          url: '/linear/webhook-config',
+        });
+
+        expect(response.statusCode).toBe(401);
+      });
+
+      it('returns 403 when not connected', async () => {
+        const token = await createToken({ sub: 'test-user-123' });
+        const response = await ctx.app.inject({
+          method: 'GET',
+          url: '/linear/webhook-config',
+          headers: { authorization: `Bearer ${token}` },
+        });
+
+        expect(response.statusCode).toBe(403);
+        const body = response.json();
+        expect(body.success).toBe(false);
+        expect(body.error.code).toBe('FORBIDDEN');
+      });
+
+      it('returns 500 when connection lookup fails', async () => {
+        ctx.connectionRepository.setGetFullConnectionFailure(true, {
+          code: 'INTERNAL_ERROR',
+          message: 'Database unavailable',
+        });
+
+        const token = await createToken({ sub: 'test-user-123' });
+        const response = await ctx.app.inject({
+          method: 'GET',
+          url: '/linear/webhook-config',
+          headers: { authorization: `Bearer ${token}` },
+        });
+
+        expect(response.statusCode).toBe(500);
+        const body = response.json();
+        expect(body.success).toBe(false);
+        expect(body.error.code).toBe('INTERNAL_ERROR');
+      });
+    });
+
+    describe('POST /linear/webhook-config', () => {
+      it('returns 401 when no auth token provided', async () => {
+        const response = await ctx.app.inject({
+          method: 'POST',
+          url: '/linear/webhook-config',
+          payload: { secret: 'my-secret' },
+        });
+
+        expect(response.statusCode).toBe(401);
+      });
+
+      it('sets webhook secret when connected', async () => {
+        seedConnection('test-user-123');
+
+        const token = await createToken({ sub: 'test-user-123' });
+        const response = await ctx.app.inject({
+          method: 'POST',
+          url: '/linear/webhook-config',
+          headers: { authorization: `Bearer ${token}` },
+          payload: { secret: 'new-webhook-secret' },
+        });
+
+        expect(response.statusCode).toBe(200);
+        const body = response.json();
+        expect(body.success).toBe(true);
+        expect(body.data.configured).toBe(true);
+
+        // Verify secret was set
+        const conn = await ctx.connectionRepository.getFullConnection('test-user-123');
+        if (conn.ok && conn.value) {
+          expect(conn.value.webhookSecret).toBe('new-webhook-secret');
+        }
+      });
+
+      it('returns 400 when secret is empty', async () => {
+        seedConnection('test-user-123');
+
+        const token = await createToken({ sub: 'test-user-123' });
+        const response = await ctx.app.inject({
+          method: 'POST',
+          url: '/linear/webhook-config',
+          headers: { authorization: `Bearer ${token}` },
+          payload: { secret: '' },
+        });
+
+        expect(response.statusCode).toBe(400);
+        const body = response.json();
+        expect(body.success).toBe(false);
+      });
+
+      it('returns 400 when secret is whitespace only', async () => {
+        seedConnection('test-user-123');
+
+        const token = await createToken({ sub: 'test-user-123' });
+        const response = await ctx.app.inject({
+          method: 'POST',
+          url: '/linear/webhook-config',
+          headers: { authorization: `Bearer ${token}` },
+          payload: { secret: '   ' },
+        });
+
+        expect(response.statusCode).toBe(400);
+        const body = response.json();
+        expect(body.success).toBe(false);
+        expect(body.error.code).toBe('INVALID_REQUEST');
+      });
+
+      it('returns 403 when not connected', async () => {
+        const token = await createToken({ sub: 'test-user-123' });
+        const response = await ctx.app.inject({
+          method: 'POST',
+          url: '/linear/webhook-config',
+          headers: { authorization: `Bearer ${token}` },
+          payload: { secret: 'my-secret' },
+        });
+
+        expect(response.statusCode).toBe(403);
+        const body = response.json();
+        expect(body.success).toBe(false);
+        expect(body.error.code).toBe('FORBIDDEN');
+      });
+
+      it('updates existing secret', async () => {
+        seedConnection('test-user-123');
+        await ctx.connectionRepository.updateWebhookSecret('test-user-123', 'old-secret');
+
+        const token = await createToken({ sub: 'test-user-123' });
+        const response = await ctx.app.inject({
+          method: 'POST',
+          url: '/linear/webhook-config',
+          headers: { authorization: `Bearer ${token}` },
+          payload: { secret: 'new-secret' },
+        });
+
+        expect(response.statusCode).toBe(200);
+
+        const conn = await ctx.connectionRepository.getFullConnection('test-user-123');
+        if (conn.ok && conn.value) {
+          expect(conn.value.webhookSecret).toBe('new-secret');
+        }
+      });
+
+      it('returns 500 when connection check fails', async () => {
+        seedConnection('test-user-123');
+        ctx.connectionRepository.setIsConnectedFailure(true, {
+          code: 'INTERNAL_ERROR',
+          message: 'Database connection error',
+        });
+
+        const token = await createToken({ sub: 'test-user-123' });
+        const response = await ctx.app.inject({
+          method: 'POST',
+          url: '/linear/webhook-config',
+          headers: { authorization: `Bearer ${token}` },
+          payload: { secret: 'my-secret' },
+        });
+
+        expect(response.statusCode).toBe(500);
+        const body = response.json();
+        expect(body.success).toBe(false);
+        expect(body.error.code).toBe('INTERNAL_ERROR');
+      });
+
+      it('returns 500 when secret update fails', async () => {
+        seedConnection('test-user-123');
+        ctx.connectionRepository.setSaveFailure(true, {
+          code: 'INTERNAL_ERROR',
+          message: 'Database write failed',
+        });
+
+        const token = await createToken({ sub: 'test-user-123' });
+        const response = await ctx.app.inject({
+          method: 'POST',
+          url: '/linear/webhook-config',
+          headers: { authorization: `Bearer ${token}` },
+          payload: { secret: 'my-secret' },
+        });
+
+        expect(response.statusCode).toBe(500);
+        const body = response.json();
+        expect(body.success).toBe(false);
+        expect(body.error.code).toBe('INTERNAL_ERROR');
+      });
+    });
+
+    describe('DELETE /linear/webhook-config', () => {
+      it('returns 401 when no auth token provided', async () => {
+        const response = await ctx.app.inject({
+          method: 'DELETE',
+          url: '/linear/webhook-config',
+        });
+
+        expect(response.statusCode).toBe(401);
+      });
+
+      it('removes webhook secret', async () => {
+        seedConnection('test-user-123');
+        await ctx.connectionRepository.updateWebhookSecret('test-user-123', 'my-secret');
+
+        const token = await createToken({ sub: 'test-user-123' });
+        const response = await ctx.app.inject({
+          method: 'DELETE',
+          url: '/linear/webhook-config',
+          headers: { authorization: `Bearer ${token}` },
+        });
+
+        expect(response.statusCode).toBe(200);
+        const body = response.json();
+        expect(body.success).toBe(true);
+        expect(body.data.configured).toBe(false);
+
+        // Verify secret was removed
+        const conn = await ctx.connectionRepository.getFullConnection('test-user-123');
+        if (conn.ok && conn.value) {
+          expect(conn.value.webhookSecret).toBeNull();
+        }
+      });
+
+      it('returns 403 when not connected', async () => {
+        const token = await createToken({ sub: 'test-user-123' });
+        const response = await ctx.app.inject({
+          method: 'DELETE',
+          url: '/linear/webhook-config',
+          headers: { authorization: `Bearer ${token}` },
+        });
+
+        expect(response.statusCode).toBe(403);
+        const body = response.json();
+        expect(body.success).toBe(false);
+        expect(body.error.code).toBe('FORBIDDEN');
+      });
+
+      it('returns 500 when connection check fails', async () => {
+        seedConnection('test-user-123');
+        await ctx.connectionRepository.updateWebhookSecret('test-user-123', 'my-secret');
+        ctx.connectionRepository.setIsConnectedFailure(true, {
+          code: 'INTERNAL_ERROR',
+          message: 'Database connection error',
+        });
+
+        const token = await createToken({ sub: 'test-user-123' });
+        const response = await ctx.app.inject({
+          method: 'DELETE',
+          url: '/linear/webhook-config',
+          headers: { authorization: `Bearer ${token}` },
+        });
+
+        expect(response.statusCode).toBe(500);
+        const body = response.json();
+        expect(body.success).toBe(false);
+        expect(body.error.code).toBe('INTERNAL_ERROR');
+      });
+
+      it('returns 500 when secret removal fails', async () => {
+        seedConnection('test-user-123');
+        await ctx.connectionRepository.updateWebhookSecret('test-user-123', 'my-secret');
+        ctx.connectionRepository.setSaveFailure(true, {
+          code: 'INTERNAL_ERROR',
+          message: 'Database write failed',
+        });
+
+        const token = await createToken({ sub: 'test-user-123' });
+        const response = await ctx.app.inject({
+          method: 'DELETE',
+          url: '/linear/webhook-config',
+          headers: { authorization: `Bearer ${token}` },
+        });
+
+        expect(response.statusCode).toBe(500);
+        const body = response.json();
+        expect(body.success).toBe(false);
+        expect(body.error.code).toBe('INTERNAL_ERROR');
+      });
+    });
+  });
 });
 
 // Logging coverage tests - use beforeEach to build server with test logger
@@ -891,6 +1211,7 @@ describe('linearRoutes logging coverage', () => {
       apiKey: 'linear-api-key-123',
       teamId: 'team-456',
       teamName: 'Engineering',
+      webhookSecret: null,
       connected: true,
       createdAt: '2025-01-15T00:00:00Z',
       updatedAt: '2025-01-15T00:00:00Z',
@@ -970,7 +1291,7 @@ describe('linearRoutes logging coverage', () => {
         headers: { authorization: `Bearer ${token}` },
       });
 
-      expect(response.statusCode).toBe(502);
+      expect(response.statusCode).toBe(500);
       // Error logging is enabled - coverage will verify the log line is hit
     });
   });

@@ -12,6 +12,8 @@ import {
   getFullLinearConnection,
   isLinearConnected,
   saveLinearConnection,
+  findWebhookSecretByTeamId,
+  updateWebhookSecret,
 } from '../../infra/firestore/linearConnectionRepository.js';
 
 describe('linearConnectionRepository', () => {
@@ -174,7 +176,7 @@ describe('linearConnectionRepository', () => {
       }
     });
 
-    it('returns full connection including API key', async () => {
+    it('returns full connection including API key and webhookSecret', async () => {
       await saveLinearConnection('user-123', 'secret-api-key', 'team-xyz', 'Engineering');
 
       const result = await getFullLinearConnection('user-123');
@@ -185,6 +187,7 @@ describe('linearConnectionRepository', () => {
         expect(result.value.apiKey).toBe('secret-api-key');
         expect(result.value.teamId).toBe('team-xyz');
         expect(result.value.teamName).toBe('Engineering');
+        expect(result.value.webhookSecret).toBeNull();
         expect(result.value.connected).toBe(true);
       }
     });
@@ -364,6 +367,144 @@ describe('linearConnectionRepository', () => {
       expect(result.ok).toBe(false);
       if (!result.ok) {
         expect(result.error.code).toBe('INTERNAL_ERROR');
+      }
+    });
+  });
+
+  describe('findWebhookSecretByTeamId', () => {
+    it('returns userId and webhookSecret when team exists with secret', async () => {
+      await saveLinearConnection('user-123', 'api-key', 'team-abc', 'Team ABC');
+      await updateWebhookSecret('user-123', 'my-webhook-secret');
+
+      const result = await findWebhookSecretByTeamId('team-abc');
+
+      expect(result.ok).toBe(true);
+      if (result.ok && result.value) {
+        expect(result.value.userId).toBe('user-123');
+        expect(result.value.webhookSecret).toBe('my-webhook-secret');
+      }
+    });
+
+    it('returns null when team exists but no webhookSecret configured', async () => {
+      await saveLinearConnection('user-123', 'api-key', 'team-abc', 'Team ABC');
+
+      const result = await findWebhookSecretByTeamId('team-abc');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toBeNull();
+      }
+    });
+
+    it('returns null when team not found', async () => {
+      const result = await findWebhookSecretByTeamId('unknown-team');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toBeNull();
+      }
+    });
+
+    it('returns null for disconnected user', async () => {
+      await saveLinearConnection('user-123', 'api-key', 'team-abc', 'Team ABC');
+      await updateWebhookSecret('user-123', 'my-secret');
+      await disconnectLinear('user-123');
+
+      const result = await findWebhookSecretByTeamId('team-abc');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toBeNull();
+      }
+    });
+
+    it('returns error when Firestore query fails', async () => {
+      fakeFirestore.configure({ errorToThrow: new Error('Query failed') });
+
+      const result = await findWebhookSecretByTeamId('team-abc');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('INTERNAL_ERROR');
+        expect(result.error.message).toContain('Failed to find webhook secret');
+      }
+    });
+  });
+
+  describe('updateWebhookSecret', () => {
+    it('sets webhookSecret for a user', async () => {
+      await saveLinearConnection('user-123', 'api-key', 'team-abc', 'Team ABC');
+
+      const result = await updateWebhookSecret('user-123', 'new-secret');
+
+      expect(result.ok).toBe(true);
+
+      // Verify secret was set
+      const secretResult = await findWebhookSecretByTeamId('team-abc');
+      if (secretResult.ok && secretResult.value) {
+        expect(secretResult.value.webhookSecret).toBe('new-secret');
+      }
+    });
+
+    it('clears webhookSecret when null is passed', async () => {
+      await saveLinearConnection('user-123', 'api-key', 'team-abc', 'Team ABC');
+      await updateWebhookSecret('user-123', 'some-secret');
+
+      // Clear it
+      const clearResult = await updateWebhookSecret('user-123', null);
+      expect(clearResult.ok).toBe(true);
+
+      // Verify it was cleared
+      const secretResult = await findWebhookSecretByTeamId('team-abc');
+      if (secretResult.ok) {
+        expect(secretResult.value).toBeNull();
+      }
+    });
+
+    it('returns error when Firestore update fails', async () => {
+      await saveLinearConnection('user-123', 'api-key', 'team-abc', 'Team ABC');
+      fakeFirestore.configure({ errorToThrow: new Error('Update failed') });
+
+      const result = await updateWebhookSecret('user-123', 'new-secret');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('INTERNAL_ERROR');
+        expect(result.error.message).toContain('Failed to update webhook secret');
+      }
+    });
+
+    it('updates updatedAt timestamp', async () => {
+      await saveLinearConnection('user-123', 'api-key', 'team-abc', 'Team ABC');
+      const before = await getFullLinearConnection('user-123');
+      const beforeUpdatedAt = before.ok && before.value ? before.value.updatedAt : undefined;
+
+      // Wait a bit to ensure timestamp changes
+      await new Promise((r) => setTimeout(r, 10));
+
+      await updateWebhookSecret('user-123', 'new-secret');
+
+      const after = await getFullLinearConnection('user-123');
+
+      expect(after.ok).toBe(true);
+      if (after.ok && after.value && beforeUpdatedAt) {
+        expect(after.value.updatedAt).not.toBe(beforeUpdatedAt);
+      }
+    });
+  });
+
+  describe('webhookSecret preserved on saveLinearConnection', () => {
+    it('preserves existing webhookSecret when updating connection', async () => {
+      await saveLinearConnection('user-123', 'api-key', 'team-abc', 'Team ABC');
+      await updateWebhookSecret('user-123', 'my-secret');
+
+      // Update connection (should preserve webhookSecret)
+      await saveLinearConnection('user-123', 'new-api-key', 'team-xyz', 'Team XYZ');
+
+      const conn = await getFullLinearConnection('user-123');
+      expect(conn.ok).toBe(true);
+      if (conn.ok && conn.value) {
+        expect(conn.value.webhookSecret).toBe('my-secret');
       }
     });
   });

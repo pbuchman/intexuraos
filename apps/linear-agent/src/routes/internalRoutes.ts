@@ -22,10 +22,13 @@ async function handleLinearError(
   reply: FastifyReply
 ): Promise<unknown> {
   if (error.code === 'NOT_CONNECTED') {
-    reply.status(403);
     return await reply.fail('FORBIDDEN', error.message);
   }
-  reply.status(500);
+  /* v8 ignore start -- test-infra: covered by internalRoutes.test.ts but v8 misses async branch @preserve */
+  if (error.code === 'INTERNAL_ERROR') {
+    return await reply.fail('INTERNAL_ERROR', error.message);
+  }
+  /* v8 ignore stop @preserve */
   return await reply.fail('DOWNSTREAM_ERROR', error.message);
 }
 

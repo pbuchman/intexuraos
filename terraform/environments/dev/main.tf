@@ -500,8 +500,6 @@ module "secret_manager" {
     # Pre-dev environment secrets
     "INTEXURAOS_PREDEV_ENV_VARS"       = "Aggregated environment variables for pre-dev VM .envrc.local"
     "INTEXURAOS_GITHUB_WEBHOOK_SECRET" = "GitHub webhook secret for HMAC validation (predev branch switch)"
-    # Linear webhook secrets (INT-444)
-    "INTEXURAOS_LINEAR_WEBHOOK_SECRET" = "Linear webhook signing secret for signature validation"
   }
 
   depends_on = [google_project_service.apis]
@@ -1456,9 +1454,7 @@ module "linear_agent" {
 
   image = "${var.region}-docker.pkg.dev/${var.project_id}/${module.artifact_registry.repository_id}/linear-agent:latest"
 
-  secrets = merge(local.common_service_secrets, {
-    INTEXURAOS_LINEAR_WEBHOOK_SECRET = module.secret_manager.secret_ids["INTEXURAOS_LINEAR_WEBHOOK_SECRET"]
-  })
+  secrets = local.common_service_secrets
   env_vars = local.common_service_env_vars
 
   depends_on = [

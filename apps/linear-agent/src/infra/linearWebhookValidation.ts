@@ -4,6 +4,8 @@
  * Validates HMAC-SHA256 signatures from Linear webhooks.
  * Linear signature format: "sha256=<hex-digest>"
  * Signature computed as: HMAC-SHA256(webhookSecret, rawRequestBody)
+ *
+ * Linear sends the signature in the "Linear-Signature" header.
  */
 
 import crypto from 'node:crypto';
@@ -26,7 +28,7 @@ export type LinearWebhookError =
 /**
  * Validate Linear webhook signature.
  *
- * Linear webhooks include a Linear-Hmacsha256 header with format "sha256=<hex-digest>".
+ * Linear webhooks include a Linear-Signature header with format "sha256=<hex-digest>".
  * The signature is computed as HMAC-SHA256(webhookSecret, rawRequestBody).
  *
  * @param request - Fastify request object
@@ -37,11 +39,11 @@ export function validateLinearWebhookSignature(
   request: FastifyRequest,
   webhookSecret: string
 ): Result<void, LinearWebhookError> {
-  // Extract signature header
-  const signatureHeader = request.headers['linear-hmacsha256'];
+  // Extract signature header - Fastify normalizes headers to lowercase
+  const signatureHeader = request.headers['linear-signature'];
 
   if (signatureHeader === undefined) {
-    return err({ code: 'MISSING_SIGNATURE', message: 'Missing Linear-Hmacsha256 header' });
+    return err({ code: 'MISSING_SIGNATURE', message: 'Missing Linear-Signature header' });
   }
 
   /* v8 ignore start -- test-infra: Fastify header edge cases difficult to reproduce @preserve */

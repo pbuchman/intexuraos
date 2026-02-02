@@ -76,6 +76,7 @@ describe('internalRoutes', () => {
       apiKey: 'linear-api-key-123',
       teamId: 'team-456',
       teamName: 'Engineering',
+      webhookSecret: null,
       connected: true,
       createdAt: '2025-01-15T00:00:00Z',
       updatedAt: '2025-01-15T00:00:00Z',
