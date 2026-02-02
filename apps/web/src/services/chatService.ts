@@ -81,7 +81,7 @@ export function saveSession(session: ChatSession): void {
   try {
     localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(session));
   } catch {
-    // Silently fail if localStorage is unavailable
+    // Silently fail - localStorage unavailable in incognito/private browsing
   }
 }
 
@@ -109,6 +109,6 @@ export function clearSession(): void {
   try {
     localStorage.removeItem(LOCAL_STORAGE_KEY);
   } catch {
-    // Silently fail if localStorage is unavailable
+    // Silently fail - localStorage unavailable
   }
 }

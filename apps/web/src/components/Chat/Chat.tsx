@@ -1,26 +1,28 @@
 /**
  * Chat - Container component managing chat state and UI.
- * Handles FAB toggle, message sending, and localStorage persistence.
+ * Handles FAB toggle, message sending, command creation flow, and localStorage persistence.
  */
 
 import { useState, useCallback } from 'react';
 import { useAuth } from '../../context';
 import { ChatFAB } from './ChatFAB.js';
 import { ChatPanel } from './ChatPanel.js';
-import { sendMessage, saveSession, loadSession, clearSession } from '../../services/chatService';
-import type { ChatMessage } from '../../types/chat';
+import { ChatBottomSheet } from './ChatBottomSheet.js';
+import { sendMessage, saveSession, loadSession, clearSession } from '../../services/chatService.js';
+import { createCommand } from '../../services/commandsApi.js';
+import type { ChatMessage, SuggestedAction } from '../../types/chat';
 
 export function Chat(): React.JSX.Element {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [pendingAction, setPendingAction] = useState<SuggestedAction | null>(null);
   const { getAccessToken } = useAuth();
 
   const handleToggle = useCallback((): void => {
     setIsOpen((prev) => {
       if (!prev) {
-        // Opening: load session from storage
         const session = loadSession();
         if (session !== null) {
           setMessages(session.messages);
@@ -34,9 +36,8 @@ export function Chat(): React.JSX.Element {
     async (content: string): Promise<void> => {
       const token = await getAccessToken();
 
-      // Add user message
       const userMessage: ChatMessage = {
-        id: `msg-${String(Date.now())}`,
+        id: `msg-${crypto.randomUUID()}`,
         role: 'user',
         content,
         timestamp: Date.now(),
@@ -48,11 +49,54 @@ export function Chat(): React.JSX.Element {
       setError(null);
 
       try {
-        const response = await sendMessage(token, content, messages);
+        const response = await sendMessage(token, content, messages, pendingAction ?? undefined);
 
-        // Add assistant response
+        if (response.suggestedAction !== null && !response.suggestedAction.awaitingConfirmation) {
+          const assistantResponseMessage: ChatMessage = {
+            id: `msg-${crypto.randomUUID()}`,
+            role: 'assistant',
+            content: response.response,
+            timestamp: Date.now(),
+          };
+          const messagesWithResponse = [...updatedMessages, assistantResponseMessage];
+
+          try {
+            const payloadText = response.suggestedAction.payload['text'];
+            if (typeof payloadText !== 'string') {
+              throw new Error('Invalid payload: text is not a string');
+            }
+            const commandText = payloadText;
+            const command = await createCommand(token, { text: commandText, source: 'pwa-shared' });
+            const confidencePercent = Math.round((command.classification?.confidence ?? 0) * 100);
+            const classificationType = command.classification?.type ?? 'todo';
+
+            const successMessage: ChatMessage = {
+              id: `msg-${crypto.randomUUID()}`,
+              role: 'assistant',
+              content: `✓ Created as ${classificationType} (${String(confidencePercent)}% confident): "${commandText}"\n\n[View in Inbox →]`,
+              timestamp: Date.now(),
+            };
+            const finalMessages = [...messagesWithResponse, successMessage];
+            setMessages(finalMessages);
+            setPendingAction(null);
+            saveSession({ messages: finalMessages, createdAt: Date.now(), lastActivityAt: Date.now() });
+          } catch {
+            const errorMessage: ChatMessage = {
+              id: `msg-${crypto.randomUUID()}`,
+              role: 'assistant',
+              content: 'Sorry, I couldn\'t create the command. Please try again.',
+              timestamp: Date.now(),
+            };
+            const finalMessages = [...messagesWithResponse, errorMessage];
+            setMessages(finalMessages);
+            saveSession({ messages: finalMessages, createdAt: Date.now(), lastActivityAt: Date.now() });
+          }
+          setIsLoading(false);
+          return;
+        }
+
         const assistantMessage: ChatMessage = {
-          id: `msg-${String(Date.now() + 1)}`,
+          id: `msg-${crypto.randomUUID()}`,
           role: 'assistant',
           content: response.response,
           timestamp: Date.now(),
@@ -60,6 +104,13 @@ export function Chat(): React.JSX.Element {
         const finalMessages = [...updatedMessages, assistantMessage];
 
         setMessages(finalMessages);
+
+        if (response.suggestedAction?.awaitingConfirmation) {
+          setPendingAction(response.suggestedAction);
+        } else {
+          setPendingAction(null);
+        }
+
         saveSession({ messages: finalMessages, createdAt: Date.now(), lastActivityAt: Date.now() });
       } catch {
         setError('Failed to send message. Please try again.');
@@ -67,11 +118,12 @@ export function Chat(): React.JSX.Element {
         setIsLoading(false);
       }
     },
-    [messages, getAccessToken]
+    [messages, pendingAction, getAccessToken]
   );
 
   const handleClear = useCallback((): void => {
     setMessages([]);
+    setPendingAction(null);
     clearSession();
   }, []);
 
@@ -82,11 +134,26 @@ export function Chat(): React.JSX.Element {
   return (
     <>
       <ChatFAB isOpen={isOpen} onToggle={handleToggle} />
+      {/* Desktop: ChatPanel (hidden on mobile) */}
       <ChatPanel
         isOpen={isOpen}
         messages={messages}
         isLoading={isLoading}
         error={error}
+        pendingAction={pendingAction}
+        onSendMessage={(message): void => {
+          void handleSendMessage(message);
+        }}
+        onClose={handleClose}
+        onClear={handleClear}
+      />
+      {/* Mobile: ChatBottomSheet (hidden on desktop) */}
+      <ChatBottomSheet
+        isOpen={isOpen}
+        messages={messages}
+        isLoading={isLoading}
+        error={error}
+        pendingAction={pendingAction}
         onSendMessage={(message): void => {
           void handleSendMessage(message);
         }}
