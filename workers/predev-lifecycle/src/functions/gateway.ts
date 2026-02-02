@@ -154,6 +154,7 @@ export const gateway: HttpFunction = async (req: any, res: any) => {
   const pathname = new URL(String(req.url ?? '/'), 'http://localhost').pathname;
   if (pathname === '/devbar/logs' || pathname === '/devbar/events') {
     if (currentState?.status !== 'running' || currentState.vmIp === null) {
+      res.setHeader('Cache-Control', 'no-store, must-revalidate');
       res.status(503).send('VM not running');
       return;
     }
@@ -215,10 +216,12 @@ export const gateway: HttpFunction = async (req: any, res: any) => {
     // Start the VM regardless of state update (MIG resize is idempotent)
     const result = await vm.startVm();
     if (!result.success) {
+      res.setHeader('Cache-Control', 'no-store, must-revalidate');
       res.status(503).send(`Failed to start VM: ${result.message}`);
       return;
     }
 
+    res.setHeader('Cache-Control', 'no-store, must-revalidate');
     res.status(200).send(getStartingPage(currentState?.branch ?? 'development'));
     return;
   }
@@ -228,10 +231,12 @@ export const gateway: HttpFunction = async (req: any, res: any) => {
   /* v8 ignore start -- ts-type: TypeScript exhaustiveness check: all valid states handled above @preserve */
   if (currentState.status === 'starting') {
     /* v8 ignore stop @preserve */
+    res.setHeader('Cache-Control', 'no-store, must-revalidate');
     res.status(200).send(getStartingPage(currentState.branch));
     return;
   }
 
+  res.setHeader('Cache-Control', 'no-store, must-revalidate');
   res.status(500).send('Unknown state');
 };
 
