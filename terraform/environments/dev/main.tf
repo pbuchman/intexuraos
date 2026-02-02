@@ -2099,6 +2099,11 @@ module "function_log_cleanup" {
   env_vars = {
     INTEXURAOS_ENVIRONMENT    = var.environment
     INTEXURAOS_GCP_PROJECT_ID = var.project_id
+    INTEXURAOS_CODE_AGENT_URL = "https://${local.services.code_agent.name}-${local.cloud_run_url_suffix}"
+  }
+
+  secrets = {
+    INTEXURAOS_INTERNAL_AUTH_TOKEN = module.secret_manager.secret_ids["INTEXURAOS_INTERNAL_AUTH_TOKEN"]
   }
 
   labels = local.common_labels
@@ -2108,6 +2113,7 @@ module "function_log_cleanup" {
     google_storage_bucket_object.function_placeholder,
     google_service_account.cloud_functions,
     google_pubsub_topic.log_cleanup,
+    google_secret_manager_secret_iam_member.functions_internal_auth_token,
   ]
 }
 
