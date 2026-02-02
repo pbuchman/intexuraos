@@ -24,8 +24,10 @@
     "@intexuraos/http-server": "workspace:*",
     "@intexuraos/infra-firestore": "workspace:*",
     "@intexuraos/infra-sentry": "workspace:*",
+    "@intexuraos/internal-clients": "workspace:*",
     "@intexuraos/llm-contract": "workspace:*",
     "@intexuraos/llm-factory": "workspace:*",
+    "@intexuraos/llm-pricing": "workspace:*",
     "fastify": "^5.1.0",
     "openai": "^4.0.0",
     "pino": "^10.1.0"
