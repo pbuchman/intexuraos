@@ -132,18 +132,9 @@ If CI fails due to a "pre-existing" issue, that issue is now YOURS.
 
 ### Forbidden Language
 
-| Forbidden                          | Why                            |
-| ---------------------------------- | ------------------------------ |
-| "pre-existing issue/bug"           | Discovery = ownership          |
-| "not my fault/responsibility"      | Fault irrelevant; fix is yours |
-| "unrelated to my changes"          | Blocks CI = related            |
-| "was already broken"               | Now yours to fix               |
-| "legacy issue"                     | Legacy = code awaiting owner   |
-| **"OTHER services/workspaces"**    | No "other" in CI               |
-| **"my code/part passes"**          | CI passes or doesn't           |
-| **"global CI fails but X passes"** | This phrase = violation        |
+See `.claude/reference/ownership-mindset.md` for full table and examples.
 
-Catch yourself using these? Stop. Reframe: "How do I fix this?"
+**Key violations:** "OTHER services", "my code passes", "unrelated to my changes", "was already broken"
 
 ### Ownership Standard
 
@@ -151,24 +142,6 @@ Catch yourself using these? Stop. Reframe: "How do I fix this?"
 2. **No blame** — don't point at "previous state"
 3. **Proactive** — see problem, fix problem
 4. **Cover and move** — fix issues outside your scope if they block success
-
-### Real Violation Example
-
-```
-❌ ACTUAL VIOLATION:
-   "All code-agent checks pass. The global CI fails on OTHER services,
-    not the INT-252 changes. Let me commit..."
-   [Agent commits despite CI failure]
-
-✅ CORRECT:
-   "CI failed with coverage threshold error.
-    Fix gaps here or handle separately?"
-   [Wait for instruction before ANY commit]
-```
-
-**Why violated:** Used "OTHER services", used "not the INT-252 changes", committed despite failure.
-
-**Correct behavior:** CI fails → STOP → Ask or fix → Never commit until CI passes.
 
 ### The Only Exception
 
@@ -298,47 +271,15 @@ terraform validate
 
 **Service account:** `$HOME/personal/gcloud-claude-code-dev.json`
 
-**Full reference:** `.claude/reference/infrastructure.md` (GCloud auth, Terraform, Cloud Build, Pub/Sub)
+**Full reference:** `.claude/reference/infrastructure.md` (GCloud auth, Terraform, Cloud Build, Pub/Sub, resource creation rules)
 
 **Quick commands:**
 
 - GCloud CLI: `gcloud auth activate-service-account --key-file=$HOME/personal/gcloud-claude-code-dev.json`
+- Terraform: Clear emulator vars + set GOOGLE_APPLICATION_CREDENTIALS (see reference)
 - New service image: `./scripts/push-missing-images.sh`
 
-### Running Terraform
-
-**Always clear emulator env vars and set credentials:**
-
-```bash
-STORAGE_EMULATOR_HOST= FIRESTORE_EMULATOR_HOST= PUBSUB_EMULATOR_HOST= \
-GOOGLE_APPLICATION_CREDENTIALS=$HOME/personal/gcloud-claude-code-dev.json \
-terraform plan
-```
-
-### Terraform-Only Resource Creation
-
-**RULE: ALL persistent infrastructure MUST be created via Terraform. Direct CLI resource creation is FORBIDDEN.**
-
-| Command                          | What It Creates        | Use Terraform Instead          |
-| -------------------------------- | ---------------------- | ------------------------------ |
-| `gsutil mb`                      | GCS buckets            | `google_storage_bucket`        |
-| `gcloud pubsub topics create`    | Pub/Sub topics         | `google_pubsub_topic`          |
-| `gcloud pubsub subscriptions`    | Pub/Sub subscriptions  | `google_pubsub_subscription`   |
-| `gcloud run deploy`              | Cloud Run services     | `google_cloud_run_service`     |
-| `gcloud secrets create`          | Secret Manager secrets | `google_secret_manager_secret` |
-| `gcloud sql instances create`    | Cloud SQL instances    | `google_sql_database_instance` |
-| `gcloud compute instances`       | Compute Engine VMs     | `google_compute_instance`      |
-| `gcloud iam service-accounts`    | Service accounts       | `google_service_account`       |
-| `gcloud projects add-iam-policy` | IAM bindings           | `google_*_iam_*`               |
-
-**Why:** Terraform tracks state, enables reproducibility, version control, drift detection. CLI creates "orphan" resources invisible to IaC.
-
-```
-❌ WRONG: Need a bucket → gsutil mb gs://my-bucket → Done
-✅ RIGHT: Need a bucket → Add to terraform/ → terraform plan → terraform apply → PR
-```
-
-**Exception:** Truly ephemeral resources for debugging. Never new named resources.
+**RULE:** ALL infrastructure via Terraform only. See reference for CLI-to-Terraform mapping.
 
 ---
 
@@ -597,63 +538,31 @@ gcloud builds log <id> --stream --region=<region>
 
 ## Linear MCP Query Safety (MANDATORY)
 
-**RULE:** Never use broad text searches with high limits in Linear MCP. This causes context overflow.
+**RULE:** Never use broad text searches with high limits. Causes context overflow.
 
-### Dangerous Patterns (FORBIDDEN)
+### Patterns
 
 ```typescript
-// ❌ DANGEROUS - can return 15k+ tokens, crashing context
-list_issues({ query: "tier", limit: 50, team: "IntexuraOS" })
+// ❌ DANGEROUS - returns 15k+ tokens
 list_issues({ query: "fix", limit: 50 })
-list_issues({ limit: 100 })  // No filter at all
+get_issue({ id: "INT-445", includeRelations: true })  // Does NOT return children
 
-// ❌ DANGEROUS - parent-child relations NOT included in get_issue
-get_issue({ id: "INT-445", includeRelations: true })  // Only returns blocks/blockedBy, NOT children
+// ✅ SAFE
+list_issues({ query: "INT-445", limit: 10 })  // Specific ID
+list_issues({ parentId: "<uuid>", limit: 20 })  // Children by parentId
+get_issue({ id: "INT-445" })  // Single issue
 ```
 
-### Safe Patterns (REQUIRED)
+### Finding Child Issues
+
+`includeRelations` returns blocks/blockedBy/relatedTo - NOT children. Query by `parentId`:
 
 ```typescript
-// ✅ SAFE - specific issue ID lookup
-list_issues({ query: "INT-445", limit: 10 })
-
-// ✅ SAFE - query by parentId to find children
-list_issues({ parentId: "<uuid>", limit: 20 })
-
-// ✅ SAFE - small limit with specific filters
-list_issues({ state: "Todo", team: "IntexuraOS", limit: 10 })
-
-// ✅ SAFE - single issue fetch (always small)
-get_issue({ id: "INT-445" })
-```
-
-### Finding Child Issues of a Parent
-
-**The `includeRelations` flag does NOT return child issues.** It only returns:
-
-- `blocks` — issues this issue blocks
-- `blockedBy` — issues blocking this issue
-- `relatedTo` — related issues
-- `duplicateOf` — duplicate reference
-
-**To find children, query by `parentId`:**
-
-```typescript
-// 1. Get the parent issue UUID
 const parent = await get_issue({ id: "INT-445" });
-const parentUuid = parent.id;  // e.g., "abc123-..."
-
-// 2. Query children using parentId
-const children = await list_issues({ parentId: parentUuid, limit: 20 });
+const children = await list_issues({ parentId: parent.id, limit: 20 });
 ```
 
-### Recovery If Context Overflows
-
-If Linear MCP returns a massive response causing context overflow:
-
-1. Clear conversation context (`/clear`)
-2. Use targeted queries with specific issue IDs
-3. Never retry the same broad query
+**Recovery:** If context overflows, `/clear` and use targeted queries.
 
 ---
 
