@@ -8,6 +8,7 @@ import { useState } from 'react';
 import { Copy } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import rehypeSanitize from 'rehype-sanitize';
 import { formatTime } from '../../utils/dateFormat';
 import type { ChatMessage as ChatMessageType } from '../../types/chat';
 
@@ -27,7 +28,7 @@ export function ChatMessage({ message, isUser }: ChatMessageProps): React.JSX.El
         setCopied(false);
       }, 2000);
     } catch {
-      // Silently fail if clipboard is unavailable
+      // Silently fail - clipboard unavailable in some contexts
     }
   };
 
@@ -55,6 +56,7 @@ export function ChatMessage({ message, isUser }: ChatMessageProps): React.JSX.El
         <div className="prose prose-sm max-w-none">
           <ReactMarkdown
             remarkPlugins={[remarkGfm]}
+            rehypePlugins={[rehypeSanitize]}
             components={{
               p: ({ children }) => <p className="my-1">{children}</p>,
               ul: ({ children }) => <ul className="my-1 list-inside list-disc">{children}</ul>,

@@ -7,10 +7,15 @@
  * 3. Logging is suppressed during tests
  * 4. HTTP requests use node-fetch polyfill for nock interception (fetch only)
  * 5. @notionhq/client is mocked to prevent real API calls
+ * 6. Signal handlers don't cause MaxListenersExceededWarning
  */
 
 import { vi } from 'vitest';
 import nodeFetch from 'node-fetch';
+
+// Increase max listeners to prevent warnings when services register signal handlers
+// Each service adds SIGTERM/SIGINT listeners, and with 18+ services this exceeds the default of 10
+process.setMaxListeners(50);
 
 // Set LOG_LEVEL to test the environment variable branch in commandsAgentClient.ts
 process.env['LOG_LEVEL'] = 'debug';
