@@ -1,23 +1,38 @@
 #!/bin/bash
-# PostToolUse Hook: Detect common TypeScript anti-patterns after file edits
-# Scans written file content for patterns that cause CI failures:
+# PostToolUse Hook: Detect common anti-patterns after file edits
+# Consolidated checker for patterns that cause CI failures:
+#
+# TypeScript patterns:
 # - Result type usage without .ok check before .value access
 # - Import without .js extension (ESM requirement)
 # - | undefined in type position (should use ?:)
+#
+# Sentry/Logging patterns:
+# - Direct pino import in apps/ (should use createAppLogger)
+#
+# Response contract patterns:
+# - Raw reply.send() in routes (should use reply.ok/fail)
+#
+# Migration patterns:
+# - Modification of existing migration files (immutable)
 #
 # BEHAVIOR: Soft block (JSON decision) - forces acknowledgment before continuing
 # SUPPRESSION: Use inline comments to suppress false positives:
 #   // @allow-missing-js -- reason
 #   // @allow-undefined-type -- reason
 #   // @allow-result-access -- reason
+#   // @allow-pino-import -- reason
+#   // @allow-raw-send -- reason
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
-# Source shared logging library
+# Source shared libraries
 # shellcheck source=lib/log.sh
 source "${SCRIPT_DIR}/lib/log.sh"
+# shellcheck source=lib/checks.sh
+source "${SCRIPT_DIR}/lib/checks.sh"
 
 cd "$SCRIPT_DIR/../.." || exit 0
 
@@ -32,96 +47,122 @@ FILE_PATH=$(echo "$INPUT" | jq -r '.tool_input.file_path // ""')
 # Make path relative to repo root
 FILE_PATH="${FILE_PATH#$(pwd)/}"
 
-# Only check TypeScript files
-[[ ! "$FILE_PATH" =~ \.(ts|tsx)$ ]] && exit 0
-[[ "$FILE_PATH" =~ \.d\.ts$ ]] && exit 0
-[[ "$FILE_PATH" =~ node_modules/ ]] && exit 0
-# Skip hook test files (they contain intentional test fixtures with "bad" patterns)
-[[ "$FILE_PATH" =~ \.claude/hooks/__tests__/ ]] && exit 0
+# Skip hook test fixture files
+[[ "$FILE_PATH" =~ \.claude/hooks/__tests__/fixtures/ ]] && exit 0
 
-# Skip if file doesn't exist
+# Skip node_modules
+[[ "$FILE_PATH" =~ node_modules/ ]] && exit 0
+
+# Skip if file doesn't exist (for Write operations on truly new files)
 [[ ! -f "$FILE_PATH" ]] && exit 0
 
 ISSUES=""
 HOOK_NAME="detect-common-patterns"
 
-# Helper function to check if a line has a suppression comment
-# Usage: has_suppression "pattern-name" "line_content"
-has_suppression() {
-    local pattern="$1"
-    local line="$2"
-    echo "$line" | grep -qE "@allow-${pattern}(\s+--|$)" 2>/dev/null
-}
+# ═══════════════════════════════════════════════════════════════════════════════
+# MIGRATION CHECK (runs on .mjs files)
+# ═══════════════════════════════════════════════════════════════════════════════
+if [[ "$FILE_PATH" =~ \.mjs$ ]]; then
+    MIGRATION_ISSUES=$(check_migration_immutable "$FILE_PATH" "$TOOL_NAME")
+    ISSUES+="$MIGRATION_ISSUES"
+fi
 
-# Pattern 1: Import from local files without .js extension
-while IFS= read -r LINE_INFO; do
-    [[ -z "$LINE_INFO" ]] && continue
+# ═══════════════════════════════════════════════════════════════════════════════
+# TYPESCRIPT CHECKS (only for .ts/.tsx files, not .d.ts)
+# ═══════════════════════════════════════════════════════════════════════════════
+if [[ "$FILE_PATH" =~ \.(ts|tsx)$ ]] && [[ ! "$FILE_PATH" =~ \.d\.ts$ ]]; then
 
-    LINE_NUM=$(echo "$LINE_INFO" | cut -d: -f1)
-    LINE_CONTENT=$(sed -n "${LINE_NUM}p" "$FILE_PATH" 2>/dev/null || true)
-    IMPORT_PATH=$(echo "$LINE_INFO" | sed -E "s/.*from ['\"]([^'\"]+)['\"].*/\1/")
+    # ─────────────────────────────────────────────────────────────────────────────
+    # Check: Pino import in apps/ (should use createAppLogger)
+    # ─────────────────────────────────────────────────────────────────────────────
+    PINO_ISSUES=$(check_pino_import "$FILE_PATH")
+    ISSUES+="$PINO_ISSUES"
 
-    # Check for suppression comment
-    if has_suppression "missing-js" "$LINE_CONTENT"; then
-        log_info "$HOOK_NAME" "suppressed-missing-js" "$FILE_PATH:$LINE_NUM" "Intentionally allowed via @allow-missing-js"
-        continue
-    fi
+    # ─────────────────────────────────────────────────────────────────────────────
+    # Check: Raw reply.send() in routes (should use reply.ok/fail)
+    # ─────────────────────────────────────────────────────────────────────────────
+    REPLY_ISSUES=$(check_reply_send "$FILE_PATH")
+    ISSUES+="$REPLY_ISSUES"
 
-    ISSUES+="missing-js-extension at $FILE_PATH:$LINE_NUM - from '$IMPORT_PATH' (add .js extension or suppress with // @allow-missing-js -- reason)\n"
-    log_warned "$HOOK_NAME" "missing-js-extension" "$FILE_PATH" \
-        "Line $LINE_NUM: from '$IMPORT_PATH'" \
-        "Change to: from '$IMPORT_PATH.js'"
-done < <(grep -nE "from ['\"]\.\.?/[^'\"]+['\"]" "$FILE_PATH" 2>/dev/null | grep -vE "\.js['\"]" | grep -vE "\.json['\"]" || true)
+    # ─────────────────────────────────────────────────────────────────────────────
+    # Check: Import from local files without .js extension
+    # ─────────────────────────────────────────────────────────────────────────────
+    while IFS= read -r LINE_INFO; do
+        [[ -z "$LINE_INFO" ]] && continue
 
-# Pattern 2: | undefined in type annotation (should use ?: for optional)
-while IFS= read -r LINE_INFO; do
-    [[ -z "$LINE_INFO" ]] && continue
+        LINE_NUM=$(echo "$LINE_INFO" | cut -d: -f1)
+        LINE_CONTENT=$(sed -n "${LINE_NUM}p" "$FILE_PATH" 2>/dev/null || true)
+        IMPORT_PATH=$(echo "$LINE_INFO" | sed -E "s/.*from ['\"]([^'\"]+)['\"].*/\1/")
 
-    LINE_NUM=$(echo "$LINE_INFO" | cut -d: -f1)
-    LINE_CONTENT=$(sed -n "${LINE_NUM}p" "$FILE_PATH" 2>/dev/null || true)
-    PROP_NAME=$(echo "$LINE_INFO" | sed -E "s/^\s*(\w+):.*/\1/")
+        # Check for suppression comment
+        if echo "$LINE_CONTENT" | grep -qE "@allow-missing-js" 2>/dev/null; then
+            log_info "$HOOK_NAME" "suppressed-missing-js" "$FILE_PATH:$LINE_NUM" "Intentionally allowed via @allow-missing-js"
+            continue
+        fi
 
-    # Check for suppression comment
-    if has_suppression "undefined-type" "$LINE_CONTENT"; then
-        log_info "$HOOK_NAME" "suppressed-undefined-type" "$FILE_PATH:$LINE_NUM" "Intentionally allowed via @allow-undefined-type"
-        continue
-    fi
+        ISSUES+="missing-js-extension at $FILE_PATH:$LINE_NUM - from '$IMPORT_PATH' (add .js extension or suppress with // @allow-missing-js -- reason)\n"
+        log_warned "$HOOK_NAME" "missing-js-extension" "$FILE_PATH" \
+            "Line $LINE_NUM: from '$IMPORT_PATH'" \
+            "Change to: from '$IMPORT_PATH.js'"
+    done < <(grep -nE "from ['\"]\.\.?/[^'\"]+['\"]" "$FILE_PATH" 2>/dev/null | grep -vE "\.js['\"]" | grep -vE "\.json['\"]" || true)
 
-    ISSUES+="bad-undefined-type at $FILE_PATH:$LINE_NUM - '$PROP_NAME: Type | undefined' (use ?: instead or suppress with // @allow-undefined-type -- reason)\n"
-    log_warned "$HOOK_NAME" "bad-undefined-type" "$FILE_PATH" \
-        "Line $LINE_NUM: $PROP_NAME: Type | undefined" \
-        "Use: $PROP_NAME?: Type instead"
-done < <(grep -nE "^\s+\w+:\s+\w+\s*\|\s*undefined" "$FILE_PATH" 2>/dev/null || true)
+    # ─────────────────────────────────────────────────────────────────────────────
+    # Check: | undefined in type annotation (should use ?: for optional)
+    # ─────────────────────────────────────────────────────────────────────────────
+    while IFS= read -r LINE_INFO; do
+        [[ -z "$LINE_INFO" ]] && continue
 
-# Pattern 3: Accessing .value on Result without checking .ok
-while IFS= read -r LINE_INFO; do
-    [[ -z "$LINE_INFO" ]] && continue
+        LINE_NUM=$(echo "$LINE_INFO" | cut -d: -f1)
+        LINE_CONTENT=$(sed -n "${LINE_NUM}p" "$FILE_PATH" 2>/dev/null || true)
+        PROP_NAME=$(echo "$LINE_INFO" | sed -E "s/^\s*(\w+):.*/\1/")
 
-    LINE_NUM=$(echo "$LINE_INFO" | cut -d: -f1)
-    LINE_CONTENT=$(sed -n "${LINE_NUM}p" "$FILE_PATH" 2>/dev/null || true)
+        # Check for suppression comment
+        if echo "$LINE_CONTENT" | grep -qE "@allow-undefined-type" 2>/dev/null; then
+            log_info "$HOOK_NAME" "suppressed-undefined-type" "$FILE_PATH:$LINE_NUM" "Intentionally allowed via @allow-undefined-type"
+            continue
+        fi
 
-    # Check for suppression comment
-    if has_suppression "result-access" "$LINE_CONTENT"; then
-        log_info "$HOOK_NAME" "suppressed-result-access" "$FILE_PATH:$LINE_NUM" "Intentionally allowed via @allow-result-access"
-        continue
-    fi
+        ISSUES+="bad-undefined-type at $FILE_PATH:$LINE_NUM - '$PROP_NAME: Type | undefined' (use ?: instead or suppress with // @allow-undefined-type -- reason)\n"
+        log_warned "$HOOK_NAME" "bad-undefined-type" "$FILE_PATH" \
+            "Line $LINE_NUM: $PROP_NAME: Type | undefined" \
+            "Use: $PROP_NAME?: Type instead"
+    done < <(grep -nE "^\s+\w+:\s+\w+\s*\|\s*undefined" "$FILE_PATH" 2>/dev/null || true)
 
-    # Check if there's an .ok check in the same function context (simplified: same 10 lines)
-    START=$((LINE_NUM - 5))
-    [ "$START" -lt 1 ] && START=1
-    CONTEXT=$(sed -n "${START},${LINE_NUM}p" "$FILE_PATH" 2>/dev/null || true)
+    # ─────────────────────────────────────────────────────────────────────────────
+    # Check: Accessing .value on Result without checking .ok
+    # ─────────────────────────────────────────────────────────────────────────────
+    while IFS= read -r LINE_INFO; do
+        [[ -z "$LINE_INFO" ]] && continue
 
-    if ! echo "$CONTEXT" | grep -qE "\.ok\s*(===|!==|\)|\?|&&|\|\|)"; then
-        ISSUES+="result-value-without-ok at $FILE_PATH:$LINE_NUM - accessing .value without .ok check (narrow Result first or suppress with // @allow-result-access -- reason)\n"
-        log_warned "$HOOK_NAME" "result-value-without-ok" "$FILE_PATH" \
-            "Line $LINE_NUM: $(echo "$LINE_CONTENT" | xargs)" \
-            "Narrow Result type before accessing .value: if (!result.ok) return result;"
-    fi
-done < <(grep -nE "result\w*\.value" "$FILE_PATH" 2>/dev/null | head -3 || true)
+        LINE_NUM=$(echo "$LINE_INFO" | cut -d: -f1)
+        LINE_CONTENT=$(sed -n "${LINE_NUM}p" "$FILE_PATH" 2>/dev/null || true)
 
-# If issues found, output JSON soft block decision
+        # Check for suppression comment
+        if echo "$LINE_CONTENT" | grep -qE "@allow-result-access" 2>/dev/null; then
+            log_info "$HOOK_NAME" "suppressed-result-access" "$FILE_PATH:$LINE_NUM" "Intentionally allowed via @allow-result-access"
+            continue
+        fi
+
+        # Check if there's an .ok check in the same function context (simplified: same 10 lines)
+        START=$((LINE_NUM - 5))
+        [ "$START" -lt 1 ] && START=1
+        CONTEXT=$(sed -n "${START},${LINE_NUM}p" "$FILE_PATH" 2>/dev/null || true)
+
+        if ! echo "$CONTEXT" | grep -qE "\.ok\s*(===|!==|\)|\?|&&|\|\|)"; then
+            ISSUES+="result-value-without-ok at $FILE_PATH:$LINE_NUM - accessing .value without .ok check (narrow Result first or suppress with // @allow-result-access -- reason)\n"
+            log_warned "$HOOK_NAME" "result-value-without-ok" "$FILE_PATH" \
+                "Line $LINE_NUM: $(echo "$LINE_CONTENT" | xargs)" \
+                "Narrow Result type before accessing .value: if (!result.ok) return result;"
+        fi
+    done < <(grep -nE "result\w*\.value" "$FILE_PATH" 2>/dev/null | head -3 || true)
+
+fi  # End TypeScript checks
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# OUTPUT RESULTS
+# ═══════════════════════════════════════════════════════════════════════════════
 if [ -n "$ISSUES" ]; then
-    # Also output to stderr for visibility
+    # Output to stderr for visibility
     echo "" >&2
     echo "━━━ Pattern Detection: $FILE_PATH ━━━" >&2
     echo -e "$ISSUES" >&2
