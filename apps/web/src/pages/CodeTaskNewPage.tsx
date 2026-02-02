@@ -6,7 +6,7 @@ import rehypeSanitize from 'rehype-sanitize';
 import { Button, Card, Layout, ConfirmSubmitModal } from '@/components';
 import { LinearIssueCombobox } from '@/components';
 import { useCodeTasks, useLinearIssueOptions, useWorkersStatus } from '@/hooks';
-import type { CodeTaskWorkerType, WorkerStatus } from '@/types';
+import type { CodeTaskWorkerType } from '@/types';
 import type { LinearIssueOption } from '@/hooks/useLinearIssueOptions';
 
 const WORKER_TYPES: { id: CodeTaskWorkerType; name: string; description: string }[] = [
@@ -35,7 +35,7 @@ export function CodeTaskNewPage(): React.JSX.Element {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const { status: workersStatus, loading: workersLoading, refreshStatus } = useWorkersStatus();
+  const { status: workersStatus, loading: workersLoading } = useWorkersStatus();
 
   const [selectedWorker, setSelectedWorker] = useState<string | null>(null);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
@@ -59,11 +59,26 @@ export function CodeTaskNewPage(): React.JSX.Element {
   // Check if we should show worker selection (more than 1 worker configured)
   const showWorkerSelection = availableWorkers.length > 1;
 
-  const isValid = prompt.trim().length > 0;
+  const isValid =
+    prompt.trim().length > 0 &&
+    (!showWorkerSelection || selectedWorker !== null);
 
-  const handleSubmit = async (): Promise<void> => {
+  // Get task title for confirmation modal
+  const getTaskTitle = (): string => {
+    if (linearMode === 'link' && selectedIssue !== null) {
+      return `${selectedIssue.identifier} ${selectedIssue.title}`;
+    }
+    // For 'create' or 'none' mode, use a truncated prompt
+    const truncated = prompt.trim().substring(0, 50);
+    return truncated.length < prompt.trim().length ? `${truncated}...` : truncated;
+  };
+
+  const handleSubmitClick = (): void => {
     if (!isValid) return;
+    setShowConfirmModal(true);
+  };
 
+  const handleConfirmSubmit = async (): Promise<void> => {
     setSubmitting(true);
     setError(null);
 
@@ -71,26 +86,33 @@ export function CodeTaskNewPage(): React.JSX.Element {
       const requestData: {
         prompt: string;
         workerType?: CodeTaskWorkerType;
+        workerLocation?: string;
         linearIssueId?: string;
       } = {
         prompt: prompt.trim(),
         workerType,
       };
 
+      // Add worker location if user has multiple workers
+      if (showWorkerSelection && selectedWorker !== null) {
+        requestData.workerLocation = selectedWorker;
+      }
+
       // Only send linearIssueId if linking to existing issue
       if (linearMode === 'link' && selectedIssue !== null) {
         requestData.linearIssueId = selectedIssue.identifier;
       }
-      // For 'create' mode: no linearIssueId means backend will create new issue with LLM-generated title
-      // For 'none' mode: no Linear integration
 
       const taskId = await submitTask(requestData);
       void navigate(`/code-tasks/${taskId}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to submit task');
-    } finally {
       setSubmitting(false);
     }
+  };
+
+  const handleCancelModal = (): void => {
+    setShowConfirmModal(false);
   };
 
   return (
@@ -313,9 +335,7 @@ export function CodeTaskNewPage(): React.JSX.Element {
 
       <div className="flex gap-3">
         <Button
-          onClick={(): void => {
-            void handleSubmit();
-          }}
+          onClick={handleSubmitClick}
           disabled={!isValid}
           isLoading={submitting}
           loadingText="Submitting..."
@@ -333,6 +353,15 @@ export function CodeTaskNewPage(): React.JSX.Element {
           Cancel
         </Button>
       </div>
+
+      <ConfirmSubmitModal
+        isOpen={showConfirmModal}
+        taskTitle={getTaskTitle()}
+        workerName={selectedWorker ?? availableWorkers[0]?.name ?? 'default'}
+        workerType={workerType}
+        onConfirm={handleConfirmSubmit}
+        onCancel={handleCancelModal}
+      />
     </Layout>
   );
 }
