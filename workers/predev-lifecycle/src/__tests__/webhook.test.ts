@@ -22,9 +22,39 @@ vi.mock('crypto', async () => {
   };
 });
 
-vi.mock('@google-cloud/firestore', () => ({
-  Firestore: vi.fn(),
-}));
+// Mock state data - mutable so tests can change it
+let mockStateData: {
+  status: string;
+  vmIp: string | null;
+  branch: string;
+  branchLocked?: boolean;
+} | null = null;
+
+vi.mock('@google-cloud/firestore', async () => {
+  const actual = await vi.importActual('@google-cloud/firestore');
+  const mockDocGet = vi.fn().mockImplementation(() =>
+    Promise.resolve({
+      exists: mockStateData !== null,
+      data: () => mockStateData,
+    })
+  );
+  const mockDoc = vi.fn(() => ({
+    get: mockDocGet,
+    set: vi.fn().mockResolvedValue(undefined),
+  }));
+  const mockCollection = vi.fn(() => ({
+    doc: mockDoc,
+  }));
+
+  return {
+    ...actual,
+    Firestore: vi.fn(function () {
+      return {
+        collection: mockCollection,
+      };
+    }),
+  };
+});
 
 vi.mock('../lib/logger.js', () => ({
   createLogger: vi.fn(() => ({
@@ -62,6 +92,7 @@ describe('webhook function', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockStateData = null;
     process.env['INTEXURAOS_GITHUB_WEBHOOK_SECRET'] = 'test-secret';
 
     const defaultBody = { ref: 'refs/heads/development' };
@@ -166,5 +197,66 @@ describe('webhook function', () => {
   it('should return OK after processing push event', async () => {
     await webhook(mockReq as never, mockRes as never);
     expect(sendFn).toHaveBeenCalledWith('OK');
+  });
+
+  describe('branch lock', () => {
+    it('should reject push from different branch when locked', async () => {
+      mockStateData = {
+        status: 'running',
+        vmIp: '10.0.0.1',
+        branch: 'main',
+        branchLocked: true,
+      };
+      mockReq.body = { ref: 'refs/heads/feature/new-feature' };
+      mockReq.rawBody = JSON.stringify(mockReq.body);
+
+      await webhook(mockReq as never, mockRes as never);
+
+      expect(mockRes.status).toHaveBeenCalledWith(200);
+      expect(sendFn).toHaveBeenCalledWith('Branch locked - ignoring different branch');
+    });
+
+    it('should allow push from same branch when locked', async () => {
+      mockStateData = {
+        status: 'running',
+        vmIp: '10.0.0.1',
+        branch: 'development',
+        branchLocked: true,
+      };
+      mockReq.body = { ref: 'refs/heads/development' };
+      mockReq.rawBody = JSON.stringify(mockReq.body);
+
+      await webhook(mockReq as never, mockRes as never);
+
+      expect(mockRes.status).toHaveBeenCalledWith(200);
+      expect(sendFn).toHaveBeenCalledWith('OK');
+    });
+
+    it('should allow push from different branch when not locked', async () => {
+      mockStateData = {
+        status: 'running',
+        vmIp: '10.0.0.1',
+        branch: 'main',
+        branchLocked: false,
+      };
+      mockReq.body = { ref: 'refs/heads/feature/new-feature' };
+      mockReq.rawBody = JSON.stringify(mockReq.body);
+
+      await webhook(mockReq as never, mockRes as never);
+
+      expect(mockRes.status).toHaveBeenCalledWith(200);
+      expect(sendFn).toHaveBeenCalledWith('OK');
+    });
+
+    it('should allow push when state is null', async () => {
+      mockStateData = null;
+      mockReq.body = { ref: 'refs/heads/development' };
+      mockReq.rawBody = JSON.stringify(mockReq.body);
+
+      await webhook(mockReq as never, mockRes as never);
+
+      expect(mockRes.status).toHaveBeenCalledWith(200);
+      expect(sendFn).toHaveBeenCalledWith('OK');
+    });
   });
 });

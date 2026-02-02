@@ -5,6 +5,7 @@ export interface PredevState {
   status: 'stopped' | 'starting' | 'running' | 'stopping';
   vmIp: string | null;
   branch: string;
+  branchLocked: boolean;
   lastActivity: Date;
   startedAt: Date | null;
 }
@@ -45,6 +46,7 @@ export class StateManager {
         status: (data['status'] ?? 'stopped') as PredevState['status'],
         vmIp: (data['vmIp'] ?? null) as string | null,
         branch: (data['branch'] ?? 'development') as string,
+        branchLocked: data['branchLocked'] === true,
         lastActivity: toDate(data['lastActivity']) ?? new Date(),
         startedAt: toDate(data['startedAt']),
       };
@@ -64,6 +66,10 @@ export class StateManager {
 
   async updateActivity(): Promise<void> {
     await this.setState({ lastActivity: new Date() });
+  }
+
+  async setLocked(locked: boolean): Promise<void> {
+    await this.setState({ branchLocked: locked });
   }
 
   // Report-ready is authoritative - always succeeds
