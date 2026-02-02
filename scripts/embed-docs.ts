@@ -15,6 +15,7 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { join, relative, extname } from 'node:path';
 import { existsSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import type { Firestore } from '@google-cloud/firestore';
 
 // ============================================================================
@@ -314,7 +315,13 @@ export async function batchEmbeddings(texts: string[], apiKey: string): Promise<
     const data = (await response.json()) as { data: Array<{ embedding: number[] }> };
 
     for (let i = 0; i < batch.length; i++) {
-      results.push(data.data[i]?.embedding ?? []);
+      const embedding = data.data[i]?.embedding;
+      if (!Array.isArray(embedding) || embedding.length !== 1536) {
+        throw new Error(
+          `Invalid embedding at index ${i}: expected 1536-dim array, got ${embedding?.length ?? 0}`
+        );
+      }
+      results.push(embedding);
     }
 
     // Rate limit delay: 100ms between batches
@@ -398,12 +405,12 @@ function getFirestore(): Firestore {
 }
 
 /**
- * Compute document ID from filePath and section.
+ * Compute document ID from filePath and section using hash to avoid collisions.
+ * Uses SHA-256 hash truncated to 32 chars for uniqueness while keeping IDs readable.
  */
 export function getDocId(filePath: string, section: string): string {
-  const normalizedPath = filePath.replace(/[^a-zA-Z0-9]/g, '_');
-  const normalizedSection = section.replace(/[^a-zA-Z0-9]/g, '_');
-  return `${normalizedPath}__${normalizedSection}`;
+  const combined = `${filePath}:${section}`;
+  return createHash('sha256').update(combined).digest('hex').substring(0, 32);
 }
 
 /**
@@ -415,7 +422,7 @@ async function uploadChunks(chunks: EmbeddedChunk[]): Promise<void> {
 
   console.log(`Uploading ${chunks.length} chunks to Firestore...`);
 
-  const batch = db.batch();
+  let batch = db.batch();
   let batchCount = 0;
   const maxBatchSize = 500;
 
@@ -438,6 +445,7 @@ async function uploadChunks(chunks: EmbeddedChunk[]): Promise<void> {
     if (batchCount >= maxBatchSize) {
       await batch.commit();
       console.log(`Committed batch of ${batchCount} documents`);
+      batch = db.batch();
       batchCount = 0;
     }
   }
@@ -459,7 +467,7 @@ async function cleanStaleEmbeddings(currentFilePaths: Set<string>): Promise<void
 
   const snapshot = await collection.select('filePath').get();
 
-  const batch = db.batch();
+  let batch = db.batch();
   let batchCount = 0;
   const maxBatchSize = 500;
 
@@ -474,6 +482,7 @@ async function cleanStaleEmbeddings(currentFilePaths: Set<string>): Promise<void
       if (batchCount >= maxBatchSize) {
         await batch.commit();
         console.log(`Deleted ${batchCount} stale documents`);
+        batch = db.batch();
         batchCount = 0;
       }
     }

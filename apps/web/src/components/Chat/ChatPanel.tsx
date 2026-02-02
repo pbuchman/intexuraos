@@ -40,10 +40,10 @@ export function ChatPanel({
 
   if (!isOpen) return null;
 
-  const pendingCommandText = pendingAction?.payload['text'] as string | undefined;
+  const pendingCommandText = typeof pendingAction?.payload['text'] === 'string' ? pendingAction.payload['text'] : undefined;
 
   return (
-    <div className="hidden bottom-20 right-4 z-50 md:flex fixed w-96 flex-col rounded-xl border border-gray-200 bg-white shadow-2xl dark:border-gray-700 dark:bg-gray-900">
+    <div className="fixed bottom-20 right-4 z-50 hidden md:flex w-96 flex-col rounded-xl border border-gray-200 bg-white shadow-2xl dark:border-gray-700 dark:bg-gray-900">
       {/* Header */}
       <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3 dark:border-gray-700">
         <div className="flex items-center gap-2">
@@ -119,7 +119,7 @@ export function ChatPanel({
                 Confirm action
               </p>
               <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
-                Say "yes" to create: <em>"{pendingCommandText}"</em>
+                Say "yes" to create: <em>"{pendingCommandText ?? 'this command'}"</em>
               </p>
             </div>
           </div>

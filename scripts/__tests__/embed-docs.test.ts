@@ -189,7 +189,7 @@ Details about feature 1.
       const id2 = getDocId('docs/services/todos-agent/API.md', 'POST /todos');
 
       expect(id1).toBe(id2);
-      expect(id1).toMatch(/^[a-zA-Z0-9_]+__.*$/);
+      expect(id1).toMatch(/^[a-f0-9]{32}$/);
     });
 
     it('generates different IDs for different sections', async () => {
@@ -197,6 +197,15 @@ Details about feature 1.
 
       const id1 = getDocId('docs/test.md', 'Section 1');
       const id2 = getDocId('docs/test.md', 'Section 2');
+
+      expect(id1).not.toBe(id2);
+    });
+
+    it('avoids collisions for similar paths', async () => {
+      const { getDocId } = await import('../embed-docs.js');
+
+      const id1 = getDocId('docs/test/file.md', 'Section');
+      const id2 = getDocId('docs-test-file.md', 'Section');
 
       expect(id1).not.toBe(id2);
     });

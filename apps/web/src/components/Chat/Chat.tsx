@@ -8,8 +8,8 @@ import { useAuth } from '../../context';
 import { ChatFAB } from './ChatFAB.js';
 import { ChatPanel } from './ChatPanel.js';
 import { ChatBottomSheet } from './ChatBottomSheet.js';
-import { sendMessage, saveSession, loadSession, clearSession } from '../../services/chatService';
-import { createCommand } from '../../services/commandsApi';
+import { sendMessage, saveSession, loadSession, clearSession } from '../../services/chatService.js';
+import { createCommand } from '../../services/commandsApi.js';
 import type { ChatMessage, SuggestedAction } from '../../types/chat';
 
 export function Chat(): React.JSX.Element {
@@ -37,7 +37,7 @@ export function Chat(): React.JSX.Element {
       const token = await getAccessToken();
 
       const userMessage: ChatMessage = {
-        id: `msg-${String(Date.now())}`,
+        id: `msg-${crypto.randomUUID()}`,
         role: 'user',
         content,
         timestamp: Date.now(),
@@ -52,30 +52,42 @@ export function Chat(): React.JSX.Element {
         const response = await sendMessage(token, content, messages, pendingAction ?? undefined);
 
         if (response.suggestedAction !== null && !response.suggestedAction.awaitingConfirmation) {
+          const assistantResponseMessage: ChatMessage = {
+            id: `msg-${crypto.randomUUID()}`,
+            role: 'assistant',
+            content: response.response,
+            timestamp: Date.now(),
+          };
+          const messagesWithResponse = [...updatedMessages, assistantResponseMessage];
+
           try {
-            const commandText = response.suggestedAction.payload['text'] as string;
+            const payloadText = response.suggestedAction.payload['text'];
+            if (typeof payloadText !== 'string') {
+              throw new Error('Invalid payload: text is not a string');
+            }
+            const commandText = payloadText;
             const command = await createCommand(token, { text: commandText, source: 'pwa-shared' });
             const confidencePercent = Math.round((command.classification?.confidence ?? 0) * 100);
-            const classificationType = command.classification?.type ?? 'command';
+            const classificationType = command.classification?.type ?? 'todo';
 
             const successMessage: ChatMessage = {
-              id: `msg-${String(Date.now() + 1)}`,
+              id: `msg-${crypto.randomUUID()}`,
               role: 'assistant',
               content: `✓ Created as ${classificationType} (${String(confidencePercent)}% confident): "${commandText}"\n\n[View in Inbox →]`,
               timestamp: Date.now(),
             };
-            const finalMessages = [...updatedMessages, successMessage];
+            const finalMessages = [...messagesWithResponse, successMessage];
             setMessages(finalMessages);
             setPendingAction(null);
             saveSession({ messages: finalMessages, createdAt: Date.now(), lastActivityAt: Date.now() });
           } catch {
             const errorMessage: ChatMessage = {
-              id: `msg-${String(Date.now() + 1)}`,
+              id: `msg-${crypto.randomUUID()}`,
               role: 'assistant',
               content: 'Sorry, I couldn\'t create the command. Please try again.',
               timestamp: Date.now(),
             };
-            const finalMessages = [...updatedMessages, errorMessage];
+            const finalMessages = [...messagesWithResponse, errorMessage];
             setMessages(finalMessages);
             saveSession({ messages: finalMessages, createdAt: Date.now(), lastActivityAt: Date.now() });
           }
@@ -84,7 +96,7 @@ export function Chat(): React.JSX.Element {
         }
 
         const assistantMessage: ChatMessage = {
-          id: `msg-${String(Date.now() + 1)}`,
+          id: `msg-${crypto.randomUUID()}`,
           role: 'assistant',
           content: response.response,
           timestamp: Date.now(),

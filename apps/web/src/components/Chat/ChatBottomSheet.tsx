@@ -109,24 +109,36 @@ export function ChatBottomSheet({
     handleDragEnd();
   }, [handleDragEnd]);
 
-  // Mouse events (for desktop testing)
-  const handleMouseDown = useCallback(
-    (e: React.MouseEvent) => {
-      handleDragStart(e.clientY);
-    },
-    [handleDragStart]
-  );
-
-  const handleMouseMove = useCallback(
-    (e: React.MouseEvent) => {
+  // Mouse events (for desktop testing) - using window listeners to capture mouse outside element
+  const handleWindowMouseMove = useCallback(
+    (e: MouseEvent) => {
       handleDragMove(e.clientY);
     },
     [handleDragMove]
   );
 
-  const handleMouseUp = useCallback(() => {
+  const handleWindowMouseUp = useCallback(() => {
     handleDragEnd();
-  }, [handleDragEnd]);
+    window.removeEventListener('mousemove', handleWindowMouseMove);
+    window.removeEventListener('mouseup', handleWindowMouseUp);
+  }, [handleDragEnd, handleWindowMouseMove]);
+
+  const handleMouseDown = useCallback(
+    (e: React.MouseEvent) => {
+      handleDragStart(e.clientY);
+      window.addEventListener('mousemove', handleWindowMouseMove);
+      window.addEventListener('mouseup', handleWindowMouseUp);
+    },
+    [handleDragStart, handleWindowMouseMove, handleWindowMouseUp]
+  );
+
+  // Cleanup window listeners on unmount
+  useEffect(() => {
+    return (): void => {
+      window.removeEventListener('mousemove', handleWindowMouseMove);
+      window.removeEventListener('mouseup', handleWindowMouseUp);
+    };
+  }, [handleWindowMouseMove, handleWindowMouseUp]);
 
   // Toggle expand state
   const toggleExpand = useCallback((): void => {
@@ -146,8 +158,6 @@ export function ChatBottomSheet({
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
         onMouseDown={handleMouseDown}
-        onMouseMove={handleMouseMove}
-        onMouseUp={handleMouseUp}
       >
         <div className="flex-1 flex justify-center">
           <GripVertical className="h-6 w-6 text-gray-400" />
@@ -230,7 +240,7 @@ export function ChatBottomSheet({
                 Confirm action
               </p>
               <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
-                Say "yes" to create: <em>"{pendingAction.payload['text'] as string}"</em>
+                Say "yes" to create: <em>"{typeof pendingAction.payload['text'] === 'string' ? pendingAction.payload['text'] : 'this command'}"</em>
               </p>
             </div>
           </div>
