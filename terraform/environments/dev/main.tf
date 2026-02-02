@@ -1454,7 +1454,7 @@ module "linear_agent" {
 
   image = "${var.region}-docker.pkg.dev/${var.project_id}/${module.artifact_registry.repository_id}/linear-agent:latest"
 
-  secrets = local.common_service_secrets
+  secrets  = local.common_service_secrets
   env_vars = local.common_service_env_vars
 
   depends_on = [

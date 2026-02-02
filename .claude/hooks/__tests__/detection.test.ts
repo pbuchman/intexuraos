@@ -503,34 +503,30 @@ return result.value`,
         expectAllowed(result);
       });
 
-      it(
-        'soft-blocks .tsx files with missing .js extension',
-        { timeout: 20000 },
-        () => {
-          const testFile = createTestFile(
-            'component.tsx',
-            `import { foo } from "./local"
+      it('soft-blocks .tsx files with missing .js extension', { timeout: 20000 }, () => {
+        const testFile = createTestFile(
+          'component.tsx',
+          `import { foo } from "./local"
 export default function Component() { return null }`
-          );
+        );
 
-          const result = executeHookSync({
-            hookName: 'detect-common-patterns',
-            input: {
-              tool_name: 'Edit',
-              tool_input: {
-                file_path: testFile,
-                old_string: '// old',
-                new_string: '// new',
-              },
+        const result = executeHookSync({
+          hookName: 'detect-common-patterns',
+          input: {
+            tool_name: 'Edit',
+            tool_input: {
+              file_path: testFile,
+              old_string: '// old',
+              new_string: '// new',
             },
-          });
+          },
+        });
 
-          // .tsx files ARE checked and now soft-block
-          expectSoftBlock(result, {
-            stderrIncludes: 'missing-js-extension',
-          });
-        }
-      );
+        // .tsx files ARE checked and now soft-block
+        expectSoftBlock(result, {
+          stderrIncludes: 'missing-js-extension',
+        });
+      });
     });
   });
 });

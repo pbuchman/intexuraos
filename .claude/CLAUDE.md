@@ -544,13 +544,13 @@ gcloud builds log <id> --stream --region=<region>
 
 ```typescript
 // ❌ DANGEROUS - returns 15k+ tokens
-list_issues({ query: "fix", limit: 50 })
-get_issue({ id: "INT-445", includeRelations: true })  // Does NOT return children
+list_issues({ query: 'fix', limit: 50 });
+get_issue({ id: 'INT-445', includeRelations: true }); // Does NOT return children
 
 // ✅ SAFE
-list_issues({ query: "INT-445", limit: 10 })  // Specific ID
-list_issues({ parentId: "<uuid>", limit: 20 })  // Children by parentId
-get_issue({ id: "INT-445" })  // Single issue
+list_issues({ query: 'INT-445', limit: 10 }); // Specific ID
+list_issues({ parentId: '<uuid>', limit: 20 }); // Children by parentId
+get_issue({ id: 'INT-445' }); // Single issue
 ```
 
 ### Finding Child Issues
@@ -558,7 +558,7 @@ get_issue({ id: "INT-445" })  // Single issue
 `includeRelations` returns blocks/blockedBy/relatedTo - NOT children. Query by `parentId`:
 
 ```typescript
-const parent = await get_issue({ id: "INT-445" });
+const parent = await get_issue({ id: 'INT-445' });
 const children = await list_issues({ parentId: parent.id, limit: 20 });
 ```
 
