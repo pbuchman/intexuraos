@@ -164,3 +164,22 @@ export function mapStateToDashboardColumn(
       return 'todo';
   }
 }
+
+/** Locally synced Linear issue (stored in Firestore) */
+export interface SyncedLinearIssue {
+  id: string; /* Linear UUID (document ID) */
+  identifier: string; /* e.g., "INT-444" */
+  title: string;
+  description: string | null;
+  state: string; /* State name e.g., "In Progress" */
+  stateType: IssueStateCategory; /* State type for categorization */
+  priority: LinearPriority;
+  assigneeId: string | null;
+  assigneeName: string | null;
+  labels: string[];
+  url: string;
+  userId: string; /* Owner user ID (for multi-tenant) */
+  createdAt: string; /* ISO timestamp from Linear */
+  updatedAt: string; /* ISO timestamp from Linear */
+  syncedAt: string; /* When we last synced this issue */
+}

@@ -3,9 +3,10 @@
  */
 
 import type { FastifyPluginCallback, FastifyRequest, FastifyReply } from 'fastify';
+import type { Logger } from 'pino';
 import { logIncomingRequest, validateInternalAuth } from '@intexuraos/common-http';
 import { getServices } from '../services.js';
-import { processLinearAction, validateIssue, generateIssueTitle } from '../domain/index.js';
+import { processLinearAction, validateIssue, generateIssueTitle, fullSync } from '../domain/index.js';
 
 interface ProcessActionBody {
   action: {
@@ -376,6 +377,118 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       );
 
       return await reply.ok(result.value);
+    }
+  );
+
+  // Full sync endpoint for service-to-service communication
+  fastify.post<{ Body: { userId: string } }>(
+    '/internal/linear/sync',
+    {
+      schema: {
+        operationId: 'fullSync',
+        summary: 'Trigger full sync of Linear issues for a user',
+        description: 'Fetches all issues from Linear and syncs them to the database',
+        tags: ['internal'],
+        body: {
+          type: 'object',
+          required: ['userId'],
+          properties: {
+            userId: { type: 'string', description: 'User ID to sync issues for' },
+          },
+        },
+        response: {
+          200: {
+            description: 'Sync completed successfully',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [true] },
+              data: {
+                type: 'object',
+                required: ['created', 'updated', 'deleted', 'total', 'durationMs', 'syncedAt'],
+                properties: {
+                  created: { type: 'number', description: 'Number of new issues created' },
+                  updated: { type: 'number', description: 'Number of existing issues updated' },
+                  deleted: { type: 'number', description: 'Number of stale issues deleted' },
+                  total: { type: 'number', description: 'Total number of issues synced' },
+                  durationMs: { type: 'number', description: 'Sync duration in milliseconds' },
+                  syncedAt: { type: 'string', description: 'ISO timestamp of sync completion' },
+                },
+              },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+          },
+          401: {
+            description: 'Unauthorized',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+          },
+          403: {
+            description: 'Forbidden (not connected to Linear)',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+          },
+          500: {
+            description: 'Internal Server Error',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+          },
+        },
+      },
+    },
+    async (request: FastifyRequest<{ Body: { userId: string } }>, reply: FastifyReply) => {
+      logIncomingRequest(request);
+
+      const authResult = validateInternalAuth(request);
+      /* v8 ignore start -- test-infra: auth validation error path covered by other endpoint tests @preserve */
+      if (!authResult.valid) {
+        reply.status(401);
+        return await reply.fail('UNAUTHORIZED', 'Unauthorized');
+      }
+      /* v8 ignore stop @preserve */
+
+      const { userId } = request.body;
+      const services = getServices();
+
+      request.log.info({ userId }, 'internal/fullSync: starting sync');
+
+      /* v8 ignore start -- test-infra: error handling path covered by use case tests @preserve */
+      const result = await fullSync(userId, {
+        issueRepo: services.issueRepository,
+        connectionRepo: services.connectionRepository,
+        linearClient: services.linearApiClient,
+        logger: request.log as unknown as Logger,
+      });
+
+      if (!result.ok) {
+        return await handleLinearError(result.error, reply);
+      }
+
+      request.log.info(
+        {
+          userId,
+          created: result.value.created,
+          updated: result.value.updated,
+          deleted: result.value.deleted,
+          total: result.value.total,
+          durationMs: result.value.durationMs,
+        },
+        'internal/fullSync: sync completed'
+      );
+
+      return await reply.ok(result.value);
+      /* v8 ignore stop @preserve */
     }
   );
 

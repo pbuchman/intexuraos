@@ -5,6 +5,7 @@ import type { FastifyInstance } from 'fastify';
 import {
   FakeLinearConnectionRepository,
   FakeLinearApiClient,
+  FakeLinearIssueRepository,
 } from '../fakes.js';
 import type { LinearConnection, LinearIssue } from '../../domain/models.js';
 
@@ -15,6 +16,7 @@ describe('internalIssuesRoutes', () => {
   let app: FastifyInstance;
   let fakeConnectionRepo: FakeLinearConnectionRepository;
   let fakeLinearClient: FakeLinearApiClient;
+  let fakeIssueRepo: FakeLinearIssueRepository;
 
   const testUserId = 'user-123';
   const testApiKey = 'linear-api-key-test';
@@ -31,6 +33,7 @@ describe('internalIssuesRoutes', () => {
   beforeEach(async () => {
     fakeConnectionRepo = new FakeLinearConnectionRepository();
     fakeLinearClient = new FakeLinearApiClient();
+    fakeIssueRepo = new FakeLinearIssueRepository();
 
     setServices({
       connectionRepository: fakeConnectionRepo,
@@ -38,6 +41,7 @@ describe('internalIssuesRoutes', () => {
       failedIssueRepository: null as unknown as import('../../domain/index.js').FailedIssueRepository,
       extractionService: null as unknown as import('../../domain/index.js').LinearActionExtractionService,
       processedActionRepository: null as unknown as import('../../domain/index.js').ProcessedActionRepository,
+      issueRepository: fakeIssueRepo,
       userServiceClient: null as unknown as import('@intexuraos/internal-clients').UserServiceClient,
     });
 
