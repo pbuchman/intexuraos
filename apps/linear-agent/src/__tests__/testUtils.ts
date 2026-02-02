@@ -11,6 +11,7 @@ import {
   FakeFailedIssueRepository,
   FakeProcessedActionRepository,
   FakeUserServiceClient,
+  FakeLinearIssueRepository,
 } from './fakes.js';
 import { resetServices, setServices } from '../services.js';
 
@@ -167,6 +168,7 @@ export interface TestContext {
   extractionService: FakeLinearActionExtractionService;
   failedIssueRepository: FakeFailedIssueRepository;
   processedActionRepository: FakeProcessedActionRepository;
+  issueRepository: FakeLinearIssueRepository;
   userServiceClient: FakeUserServiceClient;
   withTestLogger?: boolean;
 }
@@ -179,6 +181,7 @@ export function setupTestContext(withTestLogger = false): TestContext {
     extractionService: null as unknown as FakeLinearActionExtractionService,
     failedIssueRepository: null as unknown as FakeFailedIssueRepository,
     processedActionRepository: null as unknown as FakeProcessedActionRepository,
+    issueRepository: null as unknown as FakeLinearIssueRepository,
     userServiceClient: null as unknown as FakeUserServiceClient,
     withTestLogger,
   };
@@ -199,6 +202,7 @@ export function setupTestContext(withTestLogger = false): TestContext {
     context.extractionService = new FakeLinearActionExtractionService();
     context.failedIssueRepository = new FakeFailedIssueRepository();
     context.processedActionRepository = new FakeProcessedActionRepository();
+    context.issueRepository = new FakeLinearIssueRepository();
     context.userServiceClient = new FakeUserServiceClient();
     setServices({
       connectionRepository: context.connectionRepository,
@@ -206,6 +210,7 @@ export function setupTestContext(withTestLogger = false): TestContext {
       extractionService: context.extractionService,
       failedIssueRepository: context.failedIssueRepository,
       processedActionRepository: context.processedActionRepository,
+      issueRepository: context.issueRepository,
       userServiceClient: context.userServiceClient,
     });
     clearJwksCache();
@@ -223,6 +228,7 @@ export function setupTestContext(withTestLogger = false): TestContext {
     context.extractionService.reset();
     context.failedIssueRepository.reset();
     context.processedActionRepository.reset();
+    context.issueRepository.reset();
     context.userServiceClient.reset();
     delete process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'];
   });
@@ -231,3 +237,7 @@ export function setupTestContext(withTestLogger = false): TestContext {
 }
 
 export { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, setServices, resetServices };
+
+export function createFakeLogger(): pino.Logger {
+  return pino({ level: 'silent' });
+}

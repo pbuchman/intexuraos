@@ -6,6 +6,7 @@ import {
   Clock,
   ChevronDown,
   ChevronUp,
+  CloudDownload,
   ExternalLink,
   Eye,
   Loader2,
@@ -16,7 +17,7 @@ import { Button, Layout } from '@/components';
 import { useAuth } from '@/context';
 import { useFailedLinearIssues } from '@/hooks';
 import { getErrorMessage } from '@intexuraos/common-core/errors';
-import { deleteFailedIssue, listLinearIssues, retryFailedIssue } from '@/services';
+import { deleteFailedIssue, listLinearIssues, retryFailedIssue, syncFromLinear } from '@/services';
 import type { FailedLinearIssue, LinearIssue, ListIssuesResponse } from '@/types';
 import { stripMarkdown } from '@/utils/markdownUtils';
 
@@ -351,6 +352,7 @@ export function LinearIssuesPage(): React.JSX.Element {
   const [data, setData] = useState<ListIssuesResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<TabType>('todo');
   const [archiveExpanded, setArchiveExpanded] = useState(false);
@@ -439,6 +441,28 @@ export function LinearIssuesPage(): React.JSX.Element {
     }
   };
 
+  const handleSync = async (): Promise<void> => {
+    try {
+      setSyncing(true);
+      setError(null);
+      const token = await getAccessToken();
+      const result = await syncFromLinear(token);
+      await loadIssues(true);
+      const syncedCount = result.created + result.updated;
+      setSuccessMessage(
+        `Synced ${String(syncedCount)} issue${syncedCount === 1 ? '' : 's'} from Linear` +
+          (result.deleted > 0 ? ` (removed ${String(result.deleted)} deleted issue${result.deleted === 1 ? '' : 's'})` : '')
+      );
+      setTimeout(() => {
+        setSuccessMessage(null);
+      }, 5000);
+    } catch (e) {
+      setError(getErrorMessage(e, 'Failed to sync from Linear'));
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   if (loading || failedIssuesLoading) {
     return (
       <Layout>
@@ -487,16 +511,32 @@ export function LinearIssuesPage(): React.JSX.Element {
           <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Linear Issues</h2>
           <p className="text-slate-600 dark:text-slate-300">Issues from your connected Linear workspace.</p>
         </div>
-        <button
-          onClick={(): void => {
-            void handleRefresh();
-          }}
-          disabled={refreshing}
-          className="rounded p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 disabled:opacity-50 dark:hover:bg-slate-700 dark:hover:text-slate-300"
-          title="Refresh"
-        >
-          <RefreshCw className={`h-5 w-5 ${refreshing ? 'animate-spin' : ''}`} />
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={(): void => {
+              void handleSync();
+            }}
+            disabled={syncing || refreshing}
+            className="rounded p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-blue-600 disabled:opacity-50 dark:hover:bg-slate-700 dark:hover:text-blue-400"
+            title="Sync from Linear"
+          >
+            {syncing ? (
+              <Loader2 className="h-5 w-5 animate-spin" />
+            ) : (
+              <CloudDownload className="h-5 w-5" />
+            )}
+          </button>
+          <button
+            onClick={(): void => {
+              void handleRefresh();
+            }}
+            disabled={refreshing || syncing}
+            className="rounded p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 disabled:opacity-50 dark:hover:bg-slate-700 dark:hover:text-slate-300"
+            title="Refresh"
+          >
+            <RefreshCw className={`h-5 w-5 ${refreshing ? 'animate-spin' : ''}`} />
+          </button>
+        </div>
       </div>
 
       {successMessage !== null && (

@@ -13,6 +13,7 @@ import {
   FakeProcessedActionRepository,
   FakeUserServiceClient,
   FakeLlmGenerateClient,
+  FakeLinearIssueRepository,
 } from '../fakes.js';
 import { setServices, resetServices } from '../../services.js';
 
@@ -23,6 +24,7 @@ describe('internalRoutes', () => {
   let fakeExtractionService: FakeLinearActionExtractionService;
   let fakeFailedIssueRepo: FakeFailedIssueRepository;
   let fakeProcessedActionRepo: FakeProcessedActionRepository;
+  let fakeIssueRepo: FakeLinearIssueRepository;
   let fakeUserServiceClient: FakeUserServiceClient;
   let fakeLlmClient: FakeLlmGenerateClient;
 
@@ -42,6 +44,7 @@ describe('internalRoutes', () => {
     fakeExtractionService = new FakeLinearActionExtractionService();
     fakeFailedIssueRepo = new FakeFailedIssueRepository();
     fakeProcessedActionRepo = new FakeProcessedActionRepository();
+    fakeIssueRepo = new FakeLinearIssueRepository();
     fakeUserServiceClient = new FakeUserServiceClient();
     fakeLlmClient = new FakeLlmGenerateClient();
     fakeUserServiceClient.setLlmClient(fakeLlmClient);
@@ -52,6 +55,7 @@ describe('internalRoutes', () => {
       extractionService: fakeExtractionService,
       failedIssueRepository: fakeFailedIssueRepo,
       processedActionRepository: fakeProcessedActionRepo,
+      issueRepository: fakeIssueRepo,
       userServiceClient: fakeUserServiceClient,
     });
 
