@@ -83,8 +83,9 @@ resource "google_cloudfunctions2_function" "webhook" {
     min_instance_count    = 0
 
     environment_variables = {
-      INTEXURAOS_ENVIRONMENT    = var.environment
-      INTEXURAOS_GCP_PROJECT_ID = var.project_id
+      INTEXURAOS_ENVIRONMENT              = var.environment
+      INTEXURAOS_GCP_PROJECT_ID           = var.project_id
+      INTEXURAOS_PREDEV_CODE_UPDATE_TOPIC = google_pubsub_topic.code_update.id
     }
 
     secret_environment_variables {
@@ -116,6 +117,27 @@ resource "google_cloud_run_service_iam_member" "webhook_public_run" {
 resource "google_pubsub_topic" "idle_check" {
   name    = "predev-idle-check-${var.environment}"
   project = var.project_id
+}
+
+# Pub/Sub topic for code update notifications (webhook -> VM)
+resource "google_pubsub_topic" "code_update" {
+  name    = "predev-code-update-${var.environment}"
+  project = var.project_id
+}
+
+# Pull subscription for VM to receive code update notifications
+resource "google_pubsub_subscription" "code_update_vm" {
+  name    = "predev-code-update-vm-${var.environment}"
+  topic   = google_pubsub_topic.code_update.id
+  project = var.project_id
+
+  ack_deadline_seconds       = 60
+  message_retention_duration = "600s"
+  retain_acked_messages      = false
+
+  expiration_policy {
+    ttl = "" # Never expire
+  }
 }
 
 # Idle-Check Function (Pub/Sub triggered)

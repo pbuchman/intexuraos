@@ -87,6 +87,11 @@ git config --global --add safe.directory "$REPO_DIR"
 chown -R p.buchman:p.buchman "$REPO_DIR"
 log "Fixed ownership for p.buchman user"
 
+# Install update-listener dependencies
+log "Installing update-listener dependencies..."
+cd "$REPO_DIR/tools/predev-update-listener"
+npm install --omit=dev
+
 # Start services with PM2
 log "Starting services with PM2..."
 # Set PREDEV_ENVIRONMENT to use preview mode (no HMR, works through proxy)
@@ -98,6 +103,18 @@ cd "$REPO_DIR"
 # shellcheck source=/dev/null disable=SC1091
 set -a && . .env && set +a
 HOME=/root pm2 start ecosystem.config.cjs
+
+# Start update listener for hot code reloads
+log "Starting update listener..."
+# Get project ID from metadata API (more reliable than env var)
+GCP_PROJECT_ID=$(curl -s -H "Metadata-Flavor: Google" \
+  "http://metadata.google.internal/computeMetadata/v1/project/project-id" 2>/dev/null || echo "intexuraos-dev-pbuchman")
+INTEXURAOS_GCP_PROJECT_ID="$GCP_PROJECT_ID" \
+INTEXURAOS_ENVIRONMENT="${INTEXURAOS_ENVIRONMENT:-dev}" \
+HOME=/root pm2 start "$REPO_DIR/tools/predev-update-listener/listener.mjs" \
+  --name "update-listener" \
+  --interpreter node
+
 pm2 save
 
 # Get VM's external IP

@@ -2,19 +2,51 @@
 
 import type { HttpFunction } from '@google-cloud/functions-framework';
 import * as functions from '@google-cloud/functions-framework';
+import { PubSub } from '@google-cloud/pubsub';
 import * as crypto from 'crypto';
 import { createLogger } from '../lib/logger.js';
 import { StateManager } from '../lib/state.js';
 
 const logger = createLogger('webhook');
 const state = new StateManager();
+const pubsub = new PubSub();
 
 interface GitHubPushPayload {
   ref?: string;
+  after?: string;
   repository?: {
     full_name?: string;
   };
 }
+
+interface CodeUpdateMessage {
+  branch: string;
+  commitSha: string;
+  timestamp: string;
+}
+
+async function publishCodeUpdate(branch: string, commitSha: string): Promise<void> {
+  const topicName = process.env['INTEXURAOS_PREDEV_CODE_UPDATE_TOPIC'];
+  if (!topicName) {
+    logger.warn('INTEXURAOS_PREDEV_CODE_UPDATE_TOPIC not configured, skipping publish');
+    return;
+  }
+
+  const message: CodeUpdateMessage = {
+    branch,
+    commitSha,
+    timestamp: new Date().toISOString(),
+  };
+
+  try {
+    const topic = pubsub.topic(topicName);
+    await topic.publishMessage({ json: message });
+    logger.info({ branch, commitSha, topic: topicName }, 'Published code update message');
+  } catch (error) {
+    logger.error({ error, branch, commitSha }, 'Failed to publish code update message');
+  }
+}
+
 
 export const webhook: HttpFunction = async (req, res) => {
   logger.info({ method: req.method }, 'Webhook request');
@@ -77,7 +109,7 @@ export const webhook: HttpFunction = async (req, res) => {
   }
 
   const payload = req.body as GitHubPushPayload;
-  const { ref } = payload;
+  const { ref, after: commitSha } = payload;
 
   if (!ref || ref.length === 0) {
     logger.warn('Missing ref in payload');
@@ -87,7 +119,7 @@ export const webhook: HttpFunction = async (req, res) => {
 
   const branch = ref.replace('refs/heads/', '');
 
-  logger.info({ branch }, 'Push event for branch');
+  logger.info({ branch, commitSha }, 'Push event for branch');
 
   const currentState = await state.getState();
 
@@ -101,16 +133,21 @@ export const webhook: HttpFunction = async (req, res) => {
     return;
   }
 
-  // If VM is running on different branch, we would trigger branch switch here
-  // For now, just update the target branch
+  // If VM is running on the same branch, notify it to pull latest code
+  /* v8 ignore start -- test-infra: VM notification requires specific running state @preserve */
+  if (currentState?.status === 'running' && currentState.branch === branch) {
+    logger.info({ branch, commitSha }, 'VM running on same branch - notifying for code update');
+    await publishCodeUpdate(branch, commitSha ?? 'unknown');
+  }
+  /* v8 ignore stop @preserve */
+
+  // If VM is running on different branch (and not locked), log but don't switch
   /* v8 ignore start -- test-infra: branch switch detection requires specific VM state @preserve */
   if (currentState?.status === 'running' && currentState.branch !== branch) {
     logger.info(
       { from: currentState.branch, to: branch },
-      'Branch change detected - update target branch'
+      'Branch change detected - VM will switch on next restart'
     );
-    // TODO: Implement hot branch switch via SSH or Pub/Sub to VM
-    // For now, the VM will switch on next restart
   }
   /* v8 ignore stop @preserve */
 
