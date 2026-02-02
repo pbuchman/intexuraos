@@ -51,10 +51,10 @@ Use `query-hooks.sh` to search and filter hook logs:
 
 ### PostToolUse (File Content Checks)
 
-| Hook                     | Purpose                                                        |
-| ------------------------ | -------------------------------------------------------------- |
-| `detect-common-patterns` | **Consolidated checker** for CI-breaking patterns (see below)  |
-| `ownership-check`        | Detects ownership-deflecting language in responses             |
+| Hook                     | Purpose                                                       |
+| ------------------------ | ------------------------------------------------------------- |
+| `detect-common-patterns` | **Consolidated checker** for CI-breaking patterns (see below) |
+| `ownership-check`        | Detects ownership-deflecting language in responses            |
 
 ### PreToolUse (Command Blocking)
 
@@ -75,14 +75,14 @@ Use `query-hooks.sh` to search and filter hook logs:
 
 `detect-common-patterns.sh` is the unified PostToolUse checker for file content. It detects:
 
-| Category | Pattern | Scope | Escape Hatch |
-|----------|---------|-------|--------------|
-| **Logging** | Direct `import pino` | `apps/**/*.ts` (not tests/server.ts) | `@allow-pino-import` |
-| **Response** | Raw `reply.send()` | `apps/**/routes/**/*.ts` | `@allow-raw-send` |
-| **ESM** | Missing `.js` extension | `*.ts/*.tsx` | `@allow-missing-js` |
-| **TypeScript** | `\| undefined` in types | `*.ts/*.tsx` | `@allow-undefined-type` |
-| **TypeScript** | `.value` without `.ok` | `*.ts/*.tsx` | `@allow-result-access` |
-| **Migrations** | Edit/overwrite existing | `migrations/*.mjs` | None (absolute rule) |
+| Category       | Pattern                 | Scope                                | Escape Hatch            |
+| -------------- | ----------------------- | ------------------------------------ | ----------------------- |
+| **Logging**    | Direct `import pino`    | `apps/**/*.ts` (not tests/server.ts) | `@allow-pino-import`    |
+| **Response**   | Raw `reply.send()`      | `apps/**/routes/**/*.ts`             | `@allow-raw-send`       |
+| **ESM**        | Missing `.js` extension | `*.ts/*.tsx`                         | `@allow-missing-js`     |
+| **TypeScript** | `\| undefined` in types | `*.ts/*.tsx`                         | `@allow-undefined-type` |
+| **TypeScript** | `.value` without `.ok`  | `*.ts/*.tsx`                         | `@allow-result-access`  |
+| **Migrations** | Edit/overwrite existing | `migrations/*.mjs`                   | None (absolute rule)    |
 
 ## Adding a New Hook
 
@@ -113,18 +113,18 @@ log_info "$HOOK_NAME" "pattern-name" "$message" "$suggestion"
 
 Common patterns logged by hooks:
 
-| Pattern                   | Level   | Hook                       | Description                            |
-| ------------------------- | ------- | -------------------------- | -------------------------------------- |
+| Pattern                   | Level   | Hook                       | Description                              |
+| ------------------------- | ------- | -------------------------- | ---------------------------------------- |
 | `pino-import`             | WARNED  | detect-common-patterns     | Direct pino import (use createAppLogger) |
-| `reply-send`              | WARNED  | detect-common-patterns     | Raw reply.send() (use reply.ok/fail)   |
-| `missing-js-extension`    | WARNED  | detect-common-patterns     | Import without `.js` extension         |
-| `bad-undefined-type`      | WARNED  | detect-common-patterns     | `\| undefined` instead of `?:`         |
-| `result-value-without-ok` | WARNED  | detect-common-patterns     | `.value` without `.ok` check           |
-| `migration-immutable`     | WARNED  | detect-common-patterns     | Modifying existing migration file      |
+| `reply-send`              | WARNED  | detect-common-patterns     | Raw reply.send() (use reply.ok/fail)     |
+| `missing-js-extension`    | WARNED  | detect-common-patterns     | Import without `.js` extension           |
+| `bad-undefined-type`      | WARNED  | detect-common-patterns     | `\| undefined` instead of `?:`           |
+| `result-value-without-ok` | WARNED  | detect-common-patterns     | `.value` without `.ok` check             |
+| `migration-immutable`     | WARNED  | detect-common-patterns     | Modifying existing migration file        |
 | `coverage-with-grep`      | BLOCKED | validate-coverage-commands | Parsing coverage with grep instead of jq |
-| `output-truncation`       | BLOCKED | validate-ci-output-capture | Piping CI output to tail/head          |
-| `gh-pr-checks-polling`    | BLOCKED | validate-polling           | Using sleep + gh pr checks             |
-| `ownership-violation`     | BLOCKED | ownership-check            | Using forbidden ownership language     |
+| `output-truncation`       | BLOCKED | validate-ci-output-capture | Piping CI output to tail/head            |
+| `gh-pr-checks-polling`    | BLOCKED | validate-polling           | Using sleep + gh pr checks               |
+| `ownership-violation`     | BLOCKED | ownership-check            | Using forbidden ownership language       |
 
 ## Testing Hooks
 

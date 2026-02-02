@@ -61,12 +61,17 @@ gcloud secrets versions access latest --secret="INTEXURAOS_PREDEV_ENV_VARS" --qu
 # Copy to .env for Vite (Vite reads .env files automatically)
 log "Copying env vars to .env for Vite build..."
 cp "$REPO_DIR/.envrc.local" "$REPO_DIR/.env"
+# Add predev mode flag so web app uses /api/* paths instead of Cloud Run URLs
+echo "INTEXURAOS_PREDEV_MODE=true" >> "$REPO_DIR/.env"
 
 # Source env vars for build (Vite needs them at build time for client bundle)
 log "Loading environment variables for build..."
 cd "$REPO_DIR"
 # shellcheck source=/dev/null disable=SC1091
 set -a && . .envrc.local && set +a
+
+# Set predev mode so web app uses /api/* paths (proxied by Vite) instead of Cloud Run URLs
+export INTEXURAOS_PREDEV_MODE=true
 
 # Install dependencies
 log "Installing dependencies..."

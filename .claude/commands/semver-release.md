@@ -99,19 +99,19 @@ Based on the categorized changes from PRs, Linear issues, and direct commits:
 
 **Decision Table:**
 
-| Change Type            | Release Level | How to Detect                                       |
-| ---------------------- | ------------- | --------------------------------------------------- |
-| **Breaking Changes**   | **MAJOR**     |                                                     |
-| API breaking change    | MAJOR         | PR mentions "breaking", Linear has `breaking` label |
-| Removed endpoint       | MAJOR         | PR describes removal, deprecation notice            |
-| Schema migration       | MAJOR         | PR mentions migration, DB changes                   |
-| **New Features**       | **MINOR**     |                                                     |
-| New feature            | MINOR         | Linear `feature` label, PR title `feat:`            |
-| New service            | MINOR         | PR describes new service, Linear mentions new       |
-| **Fixes & Maintenance**| **PATCH**     |                                                     |
-| Bug fix                | PATCH         | Linear `bug` label, PR title `fix:`, `[sentry]`     |
-| Refactoring            | PATCH         | PR title `refactor:`, Linear `chore` label          |
-| Documentation          | PATCH         | PR title `docs:`, docs-only changes                 |
+| Change Type             | Release Level | How to Detect                                       |
+| ----------------------- | ------------- | --------------------------------------------------- |
+| **Breaking Changes**    | **MAJOR**     |                                                     |
+| API breaking change     | MAJOR         | PR mentions "breaking", Linear has `breaking` label |
+| Removed endpoint        | MAJOR         | PR describes removal, deprecation notice            |
+| Schema migration        | MAJOR         | PR mentions migration, DB changes                   |
+| **New Features**        | **MINOR**     |                                                     |
+| New feature             | MINOR         | Linear `feature` label, PR title `feat:`            |
+| New service             | MINOR         | PR describes new service, Linear mentions new       |
+| **Fixes & Maintenance** | **PATCH**     |                                                     |
+| Bug fix                 | PATCH         | Linear `bug` label, PR title `fix:`, `[sentry]`     |
+| Refactoring             | PATCH         | PR title `refactor:`, Linear `chore` label          |
+| Documentation           | PATCH         | PR title `docs:`, docs-only changes                 |
 
 **Algorithm:**
 
@@ -141,15 +141,15 @@ ELSE:
 
 **Entry Rules:**
 
-| Rule                    | Example                                                                 |
-| ----------------------- | ----------------------------------------------------------------------- |
-| Start with verb         | Added, Fixed, Improved, Changed, Removed                                |
-| Single line per entry   | No paragraphs, no multi-line descriptions                               |
-| Use backticks for code  | commands, flags, env vars, settings, file paths                         |
-| Linear refs optional    | `(INT-XXX)` at end of line if helpful                                   |
-| User-facing only        | Skip pure internal refactorings unless they affect users                |
-| No subcategories        | No `### Added`, `### Fixed` headers — just the bullet list              |
-| Most recent at top      | New version goes above existing versions                                |
+| Rule                   | Example                                                    |
+| ---------------------- | ---------------------------------------------------------- |
+| Start with verb        | Added, Fixed, Improved, Changed, Removed                   |
+| Single line per entry  | No paragraphs, no multi-line descriptions                  |
+| Use backticks for code | commands, flags, env vars, settings, file paths            |
+| Linear refs optional   | `(INT-XXX)` at end of line if helpful                      |
+| User-facing only       | Skip pure internal refactorings unless they affect users   |
+| No subcategories       | No `### Added`, `### Fixed` headers — just the bullet list |
+| Most recent at top     | New version goes above existing versions                   |
 
 **Verb Usage:**
 

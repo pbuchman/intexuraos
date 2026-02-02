@@ -296,9 +296,7 @@ export function expectSoftBlock(
   }
 
   if (options.reasonIncludes && !obj.reason?.includes(options.reasonIncludes)) {
-    throw new Error(
-      `Expected reason to include '${options.reasonIncludes}', got '${obj.reason}'`
-    );
+    throw new Error(`Expected reason to include '${options.reasonIncludes}', got '${obj.reason}'`);
   }
 
   if (options.stderrIncludes && !stderr.includes(options.stderrIncludes)) {

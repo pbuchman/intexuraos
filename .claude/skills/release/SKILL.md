@@ -227,15 +227,15 @@ When releasing a NEW major version (e.g., v3.0.0):
 
 **Rules:**
 
-| Rule                  | Details                                              |
-| --------------------- | ---------------------------------------------------- |
-| Version headers only  | `## X.Y.Z` — no dates, no subcategories              |
-| Verb-first entries    | Added, Fixed, Improved, Changed, Removed             |
-| Single line per entry | No paragraphs or multi-line descriptions             |
-| Backticks for code    | Commands, flags, env vars, settings, file paths      |
-| Linear refs optional  | `(INT-XXX)` at end if helpful                        |
-| User-facing only      | Skip internal refactorings unless they affect users  |
-| Most recent at top    | New version prepended to file                        |
+| Rule                  | Details                                             |
+| --------------------- | --------------------------------------------------- |
+| Version headers only  | `## X.Y.Z` — no dates, no subcategories             |
+| Verb-first entries    | Added, Fixed, Improved, Changed, Removed            |
+| Single line per entry | No paragraphs or multi-line descriptions            |
+| Backticks for code    | Commands, flags, env vars, settings, file paths     |
+| Linear refs optional  | `(INT-XXX)` at end if helpful                       |
+| User-facing only      | Skip internal refactorings unless they affect users |
+| Most recent at top    | New version prepended to file                       |
 
 **Skip:** Pure test additions, CI config changes, internal refactorings, dependency updates (unless security)
 

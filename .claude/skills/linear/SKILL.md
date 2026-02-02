@@ -136,30 +136,30 @@ Aborting.
 
 ### Maximum Limits
 
-| Query Type              | Max Limit | Reason                               |
-| ----------------------- | --------- | ------------------------------------ |
-| Broad text search       | **10**    | Text search matches many issues      |
-| Specific ID search      | 10        | Targeted, predictable size           |
-| `parentId` query        | 20        | Known scope (children of one parent) |
-| Status/state filter     | 10        | Can still match many issues          |
-| No filter (list all)    | **NEVER** | Unbounded, guaranteed overflow       |
+| Query Type           | Max Limit | Reason                               |
+| -------------------- | --------- | ------------------------------------ |
+| Broad text search    | **10**    | Text search matches many issues      |
+| Specific ID search   | 10        | Targeted, predictable size           |
+| `parentId` query     | 20        | Known scope (children of one parent) |
+| Status/state filter  | 10        | Can still match many issues          |
+| No filter (list all) | **NEVER** | Unbounded, guaranteed overflow       |
 
 ### Safe vs Dangerous Queries
 
 ```typescript
 // ❌ FORBIDDEN - broad search + high limit = context crash
-list_issues({ query: "tier", limit: 50 })
-list_issues({ query: "fix", limit: 50 })
-list_issues({ limit: 100 })
+list_issues({ query: 'tier', limit: 50 });
+list_issues({ query: 'fix', limit: 50 });
+list_issues({ limit: 100 });
 
 // ✅ SAFE - specific issue ID
-list_issues({ query: "INT-445", limit: 10 })
+list_issues({ query: 'INT-445', limit: 10 });
 
 // ✅ SAFE - query children by parentId
-list_issues({ parentId: "<parent-uuid>", limit: 20 })
+list_issues({ parentId: '<parent-uuid>', limit: 20 });
 
 // ✅ SAFE - targeted state filter
-list_issues({ state: "Todo", team: "IntexuraOS", limit: 10 })
+list_issues({ state: 'Todo', team: 'IntexuraOS', limit: 10 });
 ```
 
 ### Finding Child Issues
@@ -172,7 +172,7 @@ It only returns: `blocks`, `blockedBy`, `relatedTo`, `duplicateOf`.
 
 ```typescript
 // Step 1: Get parent UUID
-const parent = await get_issue({ id: "INT-445" });
+const parent = await get_issue({ id: 'INT-445' });
 
 // Step 2: Query by parentId
 const children = await list_issues({ parentId: parent.id, limit: 20 });
