@@ -1,12 +1,12 @@
-import { useState } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AlertCircle, Play, Link2, Sparkles } from 'lucide-react';
 import MDEditor from '@uiw/react-md-editor';
 import rehypeSanitize from 'rehype-sanitize';
-import { Button, Card, Layout } from '@/components';
+import { Button, Card, Layout, ConfirmSubmitModal } from '@/components';
 import { LinearIssueCombobox } from '@/components';
-import { useCodeTasks, useLinearIssueOptions } from '@/hooks';
-import type { CodeTaskWorkerType } from '@/types';
+import { useCodeTasks, useLinearIssueOptions, useWorkersStatus } from '@/hooks';
+import type { CodeTaskWorkerType, WorkerStatus } from '@/types';
 import type { LinearIssueOption } from '@/hooks/useLinearIssueOptions';
 
 const WORKER_TYPES: { id: CodeTaskWorkerType; name: string; description: string }[] = [
@@ -34,6 +34,30 @@ export function CodeTaskNewPage(): React.JSX.Element {
   const [selectedIssue, setSelectedIssue] = useState<LinearIssueOption | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const { status: workersStatus, loading: workersLoading, refreshStatus } = useWorkersStatus();
+
+  const [selectedWorker, setSelectedWorker] = useState<string | null>(null);
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+
+  // Compute available workers (enabled and sorted by priority)
+  const availableWorkers = useMemo(() => {
+    if (workersStatus === null) return [];
+    return workersStatus.workers.filter((w) => w.priority > 0).sort((a, b) => a.priority - b.priority);
+  }, [workersStatus]);
+
+  // Pre-select first healthy worker when workers load
+  useEffect(() => {
+    if (availableWorkers.length > 0 && selectedWorker === null) {
+      const firstHealthy = availableWorkers.find((w) => w.healthy);
+      if (firstHealthy !== undefined) {
+        setSelectedWorker(firstHealthy.name);
+      }
+    }
+  }, [availableWorkers, selectedWorker]);
+
+  // Check if we should show worker selection (more than 1 worker configured)
+  const showWorkerSelection = availableWorkers.length > 1;
 
   const isValid = prompt.trim().length > 0;
 
