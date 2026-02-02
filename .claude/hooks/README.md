@@ -49,16 +49,40 @@ Use `query-hooks.sh` to search and filter hook logs:
 
 ## Available Hooks
 
-| Hook                         | Type        | Purpose                                 |
-| ---------------------------- | ----------- | --------------------------------------- |
-| `detect-common-patterns`     | PostToolUse | Detects TypeScript anti-patterns        |
-| `validate-coverage-commands` | PreToolUse  | Blocks coverage + grep                  |
-| `validate-ci-output-capture` | PreToolUse  | Blocks CI commands without `tee`        |
-| `validate-polling`           | PreToolUse  | Blocks inefficient polling patterns     |
-| `validate-vitest-flags`      | PreToolUse  | Blocks redundant vitest flags           |
-| `validate-verify-workspace`  | PreToolUse  | Blocks incorrect verify:workspace usage |
-| `validate-coverage-config`   | PreToolUse  | Warns on vitest.config.ts edits         |
-| `ownership-check`            | PostToolUse | Detects ownership-deflecting language   |
+### PostToolUse (File Content Checks)
+
+| Hook                     | Purpose                                                        |
+| ------------------------ | -------------------------------------------------------------- |
+| `detect-common-patterns` | **Consolidated checker** for CI-breaking patterns (see below)  |
+| `ownership-check`        | Detects ownership-deflecting language in responses             |
+
+### PreToolUse (Command Blocking)
+
+| Hook                         | Purpose                                 |
+| ---------------------------- | --------------------------------------- |
+| `validate-coverage-commands` | Blocks coverage + grep                  |
+| `validate-ci-output-capture` | Blocks CI commands without `tee`        |
+| `validate-polling`           | Blocks inefficient polling patterns     |
+| `validate-vitest-flags`      | Blocks redundant vitest flags           |
+| `validate-verify-workspace`  | Blocks incorrect verify:workspace usage |
+| `validate-coverage-config`   | Warns on vitest.config.ts edits         |
+| `validate-commit-typecheck`  | TypeScript check before commit          |
+| `validate-terraform`         | Terraform validation                    |
+| `validate-gcloud-resources`  | GCloud resources via Terraform only     |
+| `validate-gcloud-builds`     | Streaming for gcloud builds             |
+
+## Consolidated Pattern Detection
+
+`detect-common-patterns.sh` is the unified PostToolUse checker for file content. It detects:
+
+| Category | Pattern | Scope | Escape Hatch |
+|----------|---------|-------|--------------|
+| **Logging** | Direct `import pino` | `apps/**/*.ts` (not tests/server.ts) | `@allow-pino-import` |
+| **Response** | Raw `reply.send()` | `apps/**/routes/**/*.ts` | `@allow-raw-send` |
+| **ESM** | Missing `.js` extension | `*.ts/*.tsx` | `@allow-missing-js` |
+| **TypeScript** | `\| undefined` in types | `*.ts/*.tsx` | `@allow-undefined-type` |
+| **TypeScript** | `.value` without `.ok` | `*.ts/*.tsx` | `@allow-result-access` |
+| **Migrations** | Edit/overwrite existing | `migrations/*.mjs` | None (absolute rule) |
 
 ## Adding a New Hook
 
@@ -89,12 +113,25 @@ log_info "$HOOK_NAME" "pattern-name" "$message" "$suggestion"
 
 Common patterns logged by hooks:
 
-| Pattern                   | Level   | Hook                       | Description                              |
-| ------------------------- | ------- | -------------------------- | ---------------------------------------- | ------------------------ |
-| `missing-js-extension`    | WARNED  | detect-common-patterns     | Import from local file without `.js`     |
-| `bad-undefined-type`      | WARNED  | detect-common-patterns     | Using `                                  | undefined`instead of`?:` |
-| `result-value-without-ok` | WARNED  | detect-common-patterns     | Accessing `.value` without `.ok` check   |
+| Pattern                   | Level   | Hook                       | Description                            |
+| ------------------------- | ------- | -------------------------- | -------------------------------------- |
+| `pino-import`             | WARNED  | detect-common-patterns     | Direct pino import (use createAppLogger) |
+| `reply-send`              | WARNED  | detect-common-patterns     | Raw reply.send() (use reply.ok/fail)   |
+| `missing-js-extension`    | WARNED  | detect-common-patterns     | Import without `.js` extension         |
+| `bad-undefined-type`      | WARNED  | detect-common-patterns     | `\| undefined` instead of `?:`         |
+| `result-value-without-ok` | WARNED  | detect-common-patterns     | `.value` without `.ok` check           |
+| `migration-immutable`     | WARNED  | detect-common-patterns     | Modifying existing migration file      |
 | `coverage-with-grep`      | BLOCKED | validate-coverage-commands | Parsing coverage with grep instead of jq |
-| `output-truncation`       | BLOCKED | validate-ci-output-capture | Piping CI output to tail/head            |
-| `gh-pr-checks-polling`    | BLOCKED | validate-polling           | Using sleep + gh pr checks               |
-| `ownership-violation`     | BLOCKED | ownership-check            | Using forbidden ownership language       |
+| `output-truncation`       | BLOCKED | validate-ci-output-capture | Piping CI output to tail/head          |
+| `gh-pr-checks-polling`    | BLOCKED | validate-polling           | Using sleep + gh pr checks             |
+| `ownership-violation`     | BLOCKED | ownership-check            | Using forbidden ownership language     |
+
+## Testing Hooks
+
+Run hook tests:
+
+```bash
+bash .claude/hooks/__tests__/run-tests.sh
+```
+
+Tests use fixtures in `.claude/hooks/__tests__/fixtures/` with valid/invalid examples for each pattern.
