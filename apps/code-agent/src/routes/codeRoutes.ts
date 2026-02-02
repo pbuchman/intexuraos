@@ -1011,6 +1011,22 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
             },
             required: ['success', 'error'],
           },
+          400: {
+            description: 'Invalid worker specified',
+            type: 'object',
+            required: ['success', 'error'],
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: {
+                type: 'object',
+                required: ['code', 'message'],
+                properties: {
+                  code: { type: 'string', enum: ['INVALID_WORKER', 'WORKER_UNHEALTHY'] },
+                  message: { type: 'string' },
+                },
+              },
+            },
+          },
           409: {
             description: 'Duplicate task (similar prompt within 5 minutes)',
             type: 'object',
