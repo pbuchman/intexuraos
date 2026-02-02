@@ -24,18 +24,17 @@ async function handleLinearError(
   reply: FastifyReply
 ): Promise<unknown> {
   if (error.code === 'NOT_CONNECTED') {
-    reply.status(403);
     return await reply.fail('FORBIDDEN', error.message);
   }
   if (error.code === 'INVALID_API_KEY') {
-    reply.status(401);
     return await reply.fail('UNAUTHORIZED', error.message);
   }
   if (error.code === 'RATE_LIMIT') {
-    reply.status(429);
     return await reply.fail('DOWNSTREAM_ERROR', error.message);
   }
-  reply.status(500);
+  if (error.code === 'INTERNAL_ERROR') {
+    return await reply.fail('INTERNAL_ERROR', error.message);
+  }
   return await reply.fail('DOWNSTREAM_ERROR', error.message);
 }
 
@@ -442,6 +441,230 @@ export const linearRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       return await reply.ok(result.value);
       /* v8 ignore stop @preserve */
+    }
+  );
+
+  // Webhook configuration endpoints
+  // GET /linear/webhook-config - Get webhook URL and secret status
+  fastify.get(
+    '/linear/webhook-config',
+    {
+      schema: {
+        operationId: 'getWebhookConfig',
+        summary: 'Get webhook configuration',
+        description: 'Returns webhook URL and whether a secret is configured',
+        tags: ['linear'],
+        security: [{ bearerAuth: [] }],
+        response: {
+          200: {
+            description: 'Success',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [true] },
+              data: {
+                type: 'object',
+                properties: {
+                  webhookUrl: { type: 'string', description: 'Webhook URL for Linear' },
+                  hasWebhookSecret: { type: 'boolean', description: 'Whether a secret is configured' },
+                  teamId: { type: 'string', description: 'Connected team ID' },
+                },
+              },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+          },
+          403: {
+            description: 'Forbidden (not connected)',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+          },
+        },
+      },
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      logIncomingRequest(request);
+      const user = await requireAuth(request, reply);
+      if (user === null) {
+        return;
+      }
+
+      const { connectionRepository } = getServices();
+
+      const connResult = await connectionRepository.getFullConnection(user.userId);
+      if (!connResult.ok) {
+        return await handleLinearError(connResult.error, reply);
+      }
+
+      const conn = connResult.value;
+      if (conn === null) {
+        reply.status(403);
+        return await reply.fail('FORBIDDEN', 'Linear not connected');
+      }
+
+      return await reply.ok({
+        webhookUrl: 'https://intexuraos-linear-agent-cj44trunra-lm.a.run.app/linear/webhook',
+        hasWebhookSecret: conn.webhookSecret !== null,
+        teamId: conn.teamId,
+      });
+    }
+  );
+
+  // POST /linear/webhook-config - Set webhook secret
+  fastify.post(
+    '/linear/webhook-config',
+    {
+      schema: {
+        operationId: 'setWebhookConfig',
+        summary: 'Configure webhook secret',
+        description: 'Sets or updates the webhook signing secret for this connection',
+        tags: ['linear'],
+        security: [{ bearerAuth: [] }],
+        body: {
+          type: 'object',
+          required: ['secret'],
+          properties: {
+            secret: { type: 'string', minLength: 1, description: 'Webhook signing secret from Linear' },
+          },
+        },
+        response: {
+          200: {
+            description: 'Secret configured',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [true] },
+              data: {
+                type: 'object',
+                properties: {
+                  configured: { type: 'boolean' },
+                },
+              },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+          },
+          400: {
+            description: 'Bad request',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+          },
+          403: {
+            description: 'Forbidden (not connected)',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+          },
+        },
+      },
+    },
+    async (request: FastifyRequest<{ Body: { secret: string } }>, reply: FastifyReply) => {
+      logIncomingRequest(request);
+      const user = await requireAuth(request, reply);
+      if (user === null) {
+        return;
+      }
+
+      const { secret } = request.body;
+      if (!secret || secret.trim().length === 0) {
+        reply.status(400);
+        return await reply.fail('INVALID_REQUEST', 'Secret cannot be empty');
+      }
+
+      const { connectionRepository } = getServices();
+
+      // Verify user is connected
+      const connResult = await connectionRepository.isConnected(user.userId);
+      if (!connResult.ok) {
+        request.log.error({ error: connResult.error, userId: user.userId }, 'Failed to check connection status');
+        return await handleLinearError(connResult.error, reply);
+      }
+      if (!connResult.value) {
+        reply.status(403);
+        return await reply.fail('FORBIDDEN', 'Linear not connected');
+      }
+
+      const updateResult = await connectionRepository.updateWebhookSecret(user.userId, secret);
+      if (!updateResult.ok) {
+        request.log.error({ error: updateResult.error, userId: user.userId }, 'Failed to update webhook secret');
+        return await handleLinearError(updateResult.error, reply);
+      }
+
+      return await reply.ok({ configured: true });
+    }
+  );
+
+  // DELETE /linear/webhook-config - Remove webhook secret
+  fastify.delete(
+    '/linear/webhook-config',
+    {
+      schema: {
+        operationId: 'deleteWebhookConfig',
+        summary: 'Remove webhook secret',
+        description: 'Removes the webhook signing secret for this connection',
+        tags: ['linear'],
+        security: [{ bearerAuth: [] }],
+        response: {
+          200: {
+            description: 'Secret removed',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [true] },
+              data: {
+                type: 'object',
+                properties: {
+                  configured: { type: 'boolean' },
+                },
+              },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+          },
+          403: {
+            description: 'Forbidden (not connected)',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+          },
+        },
+      },
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      logIncomingRequest(request);
+      const user = await requireAuth(request, reply);
+      if (user === null) {
+        return;
+      }
+
+      const { connectionRepository } = getServices();
+
+      // Verify user is connected
+      const connResult = await connectionRepository.isConnected(user.userId);
+      if (!connResult.ok) {
+        request.log.error({ error: connResult.error, userId: user.userId }, 'Failed to check connection status');
+        return await handleLinearError(connResult.error, reply);
+      }
+      if (!connResult.value) {
+        reply.status(403);
+        return await reply.fail('FORBIDDEN', 'Linear not connected');
+      }
+
+      const updateResult = await connectionRepository.updateWebhookSecret(user.userId, null);
+      if (!updateResult.ok) {
+        request.log.error({ error: updateResult.error, userId: user.userId }, 'Failed to remove webhook secret');
+        return await handleLinearError(updateResult.error, reply);
+      }
+
+      return await reply.ok({ configured: false });
     }
   );
 

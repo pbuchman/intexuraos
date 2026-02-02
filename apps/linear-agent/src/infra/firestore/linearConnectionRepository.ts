@@ -16,6 +16,7 @@ interface LinearConnectionDoc {
   apiKey: string;
   teamId: string;
   teamName: string;
+  webhookSecret: string | null;
   connected: boolean;
   createdAt: string;
   updatedAt: string;
@@ -42,6 +43,7 @@ export async function saveLinearConnection(
       apiKey,
       teamId,
       teamName,
+      webhookSecret: existingData?.webhookSecret ?? null,
       connected: true,
       createdAt: existingData?.createdAt ?? now,
       updatedAt: now,
@@ -121,6 +123,7 @@ export async function getFullLinearConnection(
       apiKey: data.apiKey,
       teamId: data.teamId,
       teamName: data.teamName,
+      webhookSecret: data.webhookSecret,
       connected: data.connected,
       createdAt: data.createdAt,
       updatedAt: data.updatedAt,
@@ -200,6 +203,59 @@ export async function findUserIdByTeamId(teamId: string): Promise<Result<string 
   }
 }
 
+export async function findWebhookSecretByTeamId(
+  teamId: string
+): Promise<Result<{ userId: string; webhookSecret: string } | null, LinearError>> {
+  try {
+    const db = getFirestore();
+    const snapshot = await db
+      .collection(COLLECTION_NAME)
+      .where('connected', '==', true)
+      .where('teamId', '==', teamId)
+      .limit(1)
+      .get();
+
+    /* v8 ignore start -- test-infra: Firestore integration requires real database mock @preserve */
+    if (snapshot.empty) return ok(null);
+    const doc = snapshot.docs[0];
+    if (!doc) return ok(null); // Defensive check
+    /* v8 ignore stop @preserve */
+
+    const data = doc.data() as LinearConnectionDoc;
+    if (data.webhookSecret === null) return ok(null);
+
+    return ok({ userId: doc.id, webhookSecret: data.webhookSecret });
+  } catch (error) {
+    return err({
+      code: 'INTERNAL_ERROR',
+      message: `Failed to find webhook secret by team ID: ${getErrorMessage(error, 'Unknown Firestore error')}`,
+    });
+  }
+}
+
+export async function updateWebhookSecret(
+  userId: string,
+  webhookSecret: string | null
+): Promise<Result<void, LinearError>> {
+  try {
+    const db = getFirestore();
+    const docRef = db.collection(COLLECTION_NAME).doc(userId);
+    const now = new Date().toISOString();
+
+    await docRef.update({
+      webhookSecret,
+      updatedAt: now,
+    });
+
+    return ok(undefined);
+  } catch (error) {
+    return err({
+      code: 'INTERNAL_ERROR',
+      message: `Failed to update webhook secret: ${getErrorMessage(error, 'Unknown Firestore error')}`,
+    });
+  }
+}
+
 /** Factory for creating repository with interface */
 export function createLinearConnectionRepository(): LinearConnectionRepository {
   return {
@@ -210,5 +266,7 @@ export function createLinearConnectionRepository(): LinearConnectionRepository {
     isConnected: isLinearConnected,
     disconnect: disconnectLinear,
     findUserIdByTeamId,
+    findWebhookSecretByTeamId,
+    updateWebhookSecret,
   };
 }
