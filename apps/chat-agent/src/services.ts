@@ -4,17 +4,28 @@
  */
 
 import { createAppLogger } from '@intexuraos/infra-sentry';
+import { createUserServiceClient, type UserServiceClient } from '@intexuraos/internal-clients';
+import { fetchAllPricing, createPricingContext } from '@intexuraos/llm-pricing';
 import { LlmModels } from '@intexuraos/llm-contract';
 import { FirestoreEmbeddingRepository } from './infra/firestore/embeddingRepository.js';
 import { EmbeddingClient } from './infra/llm/embeddingClient.js';
-import { ChatClient } from './infra/llm/chatClient.js';
+import { createChatClient } from './infra/llm/chatClient.js';
 import type { EmbeddingRepositoryPort } from './domain/models/docChunk.js';
 import type { EmbeddingClient as EmbeddingClientInterface } from './domain/usecases/searchDocumentation.js';
-import type { LLMClient } from './domain/usecases/generateResponse.js';
 import type { Logger } from 'pino';
 
-/** Default LLM model for chat responses. */
-const DEFAULT_LLM_MODEL = LlmModels.Gemini25Flash;
+// Re-export createChatClient for use in routes (via services layer)
+export { createChatClient };
+
+/**
+ * Models supported for chat responses.
+ * These are validated at startup to ensure pricing is available.
+ */
+const CHAT_MODELS = [
+  LlmModels.Gemini25Flash,
+  LlmModels.Glm47,
+  LlmModels.Glm47Flash,
+] as const;
 
 /**
  * Service container holding all adapter instances.
@@ -23,7 +34,7 @@ export interface ServiceContainer {
   readonly generateId: () => string;
   readonly embeddingRepository: EmbeddingRepositoryPort;
   readonly embeddingClient: EmbeddingClientInterface;
-  readonly llmClient: LLMClient;
+  readonly userServiceClient: UserServiceClient;
   readonly logger: Logger;
 }
 
@@ -56,12 +67,28 @@ export function resetServices(): void {
 
 /**
  * Initialize the service container with all dependencies.
+ * Fetches pricing data from app-settings-service at startup.
  */
-export function initializeServices(): void {
+export async function initializeServices(): Promise<void> {
   const openaiApiKey = process.env['INTEXURAOS_OPENAI_API_KEY'];
+  const userServiceUrl = process.env['INTEXURAOS_USER_SERVICE_URL'];
+  const internalAuthToken = process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'];
+  const appSettingsServiceUrl = process.env['INTEXURAOS_APP_SETTINGS_SERVICE_URL'];
 
   if (openaiApiKey === undefined || openaiApiKey.length === 0) {
     throw new Error('INTEXURAOS_OPENAI_API_KEY environment variable is required');
+  }
+
+  if (userServiceUrl === undefined || userServiceUrl.length === 0) {
+    throw new Error('INTEXURAOS_USER_SERVICE_URL environment variable is required');
+  }
+
+  if (internalAuthToken === undefined || internalAuthToken.length === 0) {
+    throw new Error('INTEXURAOS_INTERNAL_AUTH_TOKEN environment variable is required');
+  }
+
+  if (appSettingsServiceUrl === undefined || appSettingsServiceUrl.length === 0) {
+    throw new Error('INTEXURAOS_APP_SETTINGS_SERVICE_URL environment variable is required');
   }
 
   const logger = createAppLogger({
@@ -69,14 +96,26 @@ export function initializeServices(): void {
     level: (process.env['LOG_LEVEL'] ?? 'info') as 'error' | 'info' | 'warn' | 'debug' | 'silent',
   });
 
+  // Fetch pricing data from app-settings-service
+  const pricingResult = await fetchAllPricing(appSettingsServiceUrl, internalAuthToken);
+
+  if (!pricingResult.ok) {
+    throw new Error(`Failed to fetch pricing: ${pricingResult.error.message}`);
+  }
+
+  const pricingContext = createPricingContext(
+    pricingResult.value,
+    [...CHAT_MODELS] as unknown as (typeof LlmModels.Gemini25Flash)[]
+  );
+
   container = {
     generateId: (): string => crypto.randomUUID(),
     embeddingRepository: new FirestoreEmbeddingRepository(),
     embeddingClient: new EmbeddingClient({ apiKey: openaiApiKey }),
-    llmClient: new ChatClient({
-      apiKey: openaiApiKey,
-      model: DEFAULT_LLM_MODEL,
-      userId: 'system',
+    userServiceClient: createUserServiceClient({
+      baseUrl: userServiceUrl,
+      internalAuthToken,
+      pricingContext,
       logger,
     }),
     logger,

@@ -51,6 +51,7 @@ export class FakeLinearConnectionRepository implements LinearConnectionRepositor
       apiKey,
       teamId,
       teamName,
+      webhookSecret: existing?.webhookSecret ?? null,
       connected: true,
       createdAt: existing?.createdAt ?? now,
       updatedAt: now,
@@ -115,9 +116,17 @@ export class FakeLinearConnectionRepository implements LinearConnectionRepositor
     if (error) this.failError = error;
   }
 
+  private shouldFailIsConnected = false;
+
   async isConnected(userId: string): Promise<Result<boolean, LinearError>> {
+    if (this.shouldFailIsConnected) return err(this.failError);
     const conn = this.connections.get(userId);
     return ok(conn?.connected ?? false);
+  }
+
+  setIsConnectedFailure(fail: boolean, error?: LinearError): void {
+    this.shouldFailIsConnected = fail;
+    if (error) this.failError = error;
   }
 
   async disconnect(userId: string): Promise<Result<LinearConnectionPublic, LinearError>> {
@@ -149,16 +158,48 @@ export class FakeLinearConnectionRepository implements LinearConnectionRepositor
     return ok(null);
   }
 
+  async findWebhookSecretByTeamId(
+    teamId: string
+  ): Promise<Result<{ userId: string; webhookSecret: string } | null, LinearError>> {
+    if (this.shouldFailGetConnection) return err(this.failError);
+
+    for (const [userId, conn] of this.connections.entries()) {
+      if (conn.connected && conn.teamId === teamId) {
+        if (!conn.webhookSecret) return ok(null);
+        return ok({ userId, webhookSecret: conn.webhookSecret });
+      }
+    }
+    return ok(null);
+  }
+
+  async updateWebhookSecret(
+    userId: string,
+    webhookSecret: string | null
+  ): Promise<Result<void, LinearError>> {
+    if (this.shouldFailSave) return err(this.failError);
+
+    const conn = this.connections.get(userId);
+    if (conn) {
+      conn.webhookSecret = webhookSecret;
+      conn.updatedAt = new Date().toISOString();
+    }
+    return ok(undefined);
+  }
+
   reset(): void {
     this.connections.clear();
     this.shouldFailGetFullConnection = false;
     this.shouldFailGetConnection = false;
     this.shouldFailSave = false;
     this.shouldFailDisconnect = false;
+    this.shouldFailIsConnected = false;
   }
 
-  seedConnection(conn: LinearConnection): void {
-    this.connections.set(conn.userId, conn);
+  seedConnection(conn: Omit<LinearConnection, 'webhookSecret'> & { webhookSecret?: string | null }): void {
+    this.connections.set(conn.userId, {
+      ...conn,
+      webhookSecret: conn.webhookSecret ?? null,
+    } as LinearConnection);
   }
 }
 

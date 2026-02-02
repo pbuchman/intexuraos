@@ -27,7 +27,7 @@ interface CodeUpdateMessage {
 
 async function publishCodeUpdate(branch: string, commitSha: string): Promise<void> {
   const topicName = process.env['INTEXURAOS_PREDEV_CODE_UPDATE_TOPIC'];
-  /* v8 ignore start -- module-init: env var guard for optional pub/sub integration @preserve */
+  /* v8 ignore start -- module-init: Env var guard at startup, mocking process.env not worth complexity @preserve */
   if (!topicName) {
     logger.warn('INTEXURAOS_PREDEV_CODE_UPDATE_TOPIC not configured, skipping publish');
     return;

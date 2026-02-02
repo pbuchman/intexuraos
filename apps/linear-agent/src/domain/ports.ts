@@ -46,6 +46,12 @@ export interface LinearConnectionRepository {
 
   /** Find user ID by Linear team ID (for webhook routing) */
   findUserIdByTeamId(teamId: string): Promise<Result<string | null, LinearError>>;
+
+  /** Find webhook secret by Linear team ID (for webhook signature validation) */
+  findWebhookSecretByTeamId(teamId: string): Promise<Result<{ userId: string; webhookSecret: string } | null, LinearError>>;
+
+  /** Update webhook secret for a user's connection */
+  updateWebhookSecret(userId: string, webhookSecret: string | null): Promise<Result<void, LinearError>>;
 }
 
 /** Repository for failed issue creations */

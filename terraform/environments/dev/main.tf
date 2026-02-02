@@ -500,8 +500,6 @@ module "secret_manager" {
     # Pre-dev environment secrets
     "INTEXURAOS_PREDEV_ENV_VARS"       = "Aggregated environment variables for pre-dev VM .envrc.local"
     "INTEXURAOS_GITHUB_WEBHOOK_SECRET" = "GitHub webhook secret for HMAC validation (predev branch switch)"
-    # Linear webhook secrets (INT-444)
-    "INTEXURAOS_LINEAR_WEBHOOK_SECRET" = "Linear webhook signing secret for signature validation"
   }
 
   depends_on = [google_project_service.apis]
@@ -1456,9 +1454,7 @@ module "linear_agent" {
 
   image = "${var.region}-docker.pkg.dev/${var.project_id}/${module.artifact_registry.repository_id}/linear-agent:latest"
 
-  secrets = merge(local.common_service_secrets, {
-    INTEXURAOS_LINEAR_WEBHOOK_SECRET = module.secret_manager.secret_ids["INTEXURAOS_LINEAR_WEBHOOK_SECRET"]
-  })
+  secrets  = local.common_service_secrets
   env_vars = local.common_service_env_vars
 
   depends_on = [
@@ -2103,6 +2099,11 @@ module "function_log_cleanup" {
   env_vars = {
     INTEXURAOS_ENVIRONMENT    = var.environment
     INTEXURAOS_GCP_PROJECT_ID = var.project_id
+    INTEXURAOS_CODE_AGENT_URL = "https://${local.services.code_agent.name}-${local.cloud_run_url_suffix}"
+  }
+
+  secrets = {
+    INTEXURAOS_INTERNAL_AUTH_TOKEN = module.secret_manager.secret_ids["INTEXURAOS_INTERNAL_AUTH_TOKEN"]
   }
 
   labels = local.common_labels
@@ -2112,6 +2113,7 @@ module "function_log_cleanup" {
     google_storage_bucket_object.function_placeholder,
     google_service_account.cloud_functions,
     google_pubsub_topic.log_cleanup,
+    google_secret_manager_secret_iam_member.functions_internal_auth_token,
   ]
 }
 

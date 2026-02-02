@@ -9,7 +9,7 @@ import {
   teardownJwksServer,
   createToken,
 } from './testUtils.js';
-import type { FakeLLMClient, FakeEmbeddingRepository } from './fakes.fixture.js';
+import type { FakeLlmGenerateClient, FakeEmbeddingRepository, FakeUserServiceClient } from './fakes.fixture.js';
 import type { FastifyInstance } from 'fastify';
 import { clearJwksCache } from '@intexuraos/common-http';
 
@@ -17,7 +17,8 @@ describe('chat-agent routes', () => {
   let app: FastifyInstance;
   let fakeServices: {
     embeddingRepository: FakeEmbeddingRepository;
-    llmClient: FakeLLMClient;
+    llmGenerateClient: FakeLlmGenerateClient;
+    fakeUserServiceClient: FakeUserServiceClient;
   };
 
   beforeAll(async () => {
@@ -34,7 +35,8 @@ describe('chat-agent routes', () => {
     const services = setupFakeServices();
     fakeServices = {
       embeddingRepository: services.embeddingRepository as FakeEmbeddingRepository,
-      llmClient: services.llmClient as FakeLLMClient,
+      llmGenerateClient: services.llmGenerateClient,
+      fakeUserServiceClient: services.fakeUserServiceClient,
     };
     app = await buildServer();
   });
@@ -335,9 +337,31 @@ describe('chat-agent routes', () => {
     });
 
     describe('error handling', () => {
+      it('should return 502 when userServiceClient.getLlmClient fails', async () => {
+        // Set the userServiceClient to fail on next getLlmClient call
+        fakeServices.fakeUserServiceClient.setFailNext(true);
+
+        const response = await app.inject({
+          method: 'POST',
+          url: '/chat',
+          headers: {
+            authorization: `Bearer ${authToken}`,
+          },
+          payload: {
+            message: 'Test error',
+          },
+        });
+
+        // Should return 502 (DOWNSTREAM_ERROR) for LLM client acquisition errors
+        expect(response.statusCode).toBe(502);
+        const body = JSON.parse(response.body);
+        expect(body.success).toBe(false);
+        expect(body.error.code).toBe('DOWNSTREAM_ERROR');
+      });
+
       it('should return 502 when LLM fails', async () => {
         // Set the LLM client to fail mode
-        fakeServices.llmClient.setFailure(true);
+        fakeServices.llmGenerateClient.setFailure(true);
 
         const response = await app.inject({
           method: 'POST',
@@ -354,7 +378,7 @@ describe('chat-agent routes', () => {
         expect(response.statusCode).toBe(502);
 
         // Reset for other tests
-        fakeServices.llmClient.setFailure(false);
+        fakeServices.llmGenerateClient.setFailure(false);
       });
     });
 
