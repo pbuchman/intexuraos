@@ -176,6 +176,30 @@ export async function disconnectLinear(
   }
 }
 
+export async function findUserIdByTeamId(teamId: string): Promise<Result<string | null, LinearError>> {
+  try {
+    const db = getFirestore();
+    const snapshot = await db
+      .collection(COLLECTION_NAME)
+      .where('connected', '==', true)
+      .where('teamId', '==', teamId)
+      .limit(1)
+      .get();
+
+    /* v8 ignore start -- test-infra: Firestore integration requires real database mock @preserve */
+    if (snapshot.empty) return ok(null);
+    const doc = snapshot.docs[0];
+    if (!doc) return ok(null); // Defensive check
+    return ok(doc.id);
+    /* v8 ignore stop @preserve */
+  } catch (error) {
+    return err({
+      code: 'INTERNAL_ERROR',
+      message: `Failed to find user by team ID: ${getErrorMessage(error, 'Unknown Firestore error')}`,
+    });
+  }
+}
+
 /** Factory for creating repository with interface */
 export function createLinearConnectionRepository(): LinearConnectionRepository {
   return {
@@ -185,5 +209,6 @@ export function createLinearConnectionRepository(): LinearConnectionRepository {
     getFullConnection: getFullLinearConnection,
     isConnected: isLinearConnected,
     disconnect: disconnectLinear,
+    findUserIdByTeamId,
   };
 }

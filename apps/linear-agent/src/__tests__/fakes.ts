@@ -20,6 +20,8 @@ import type {
   ProcessedActionRepository,
   ProcessedAction,
   WorkflowState,
+  LinearIssueRepository,
+  SyncedLinearIssue,
 } from '../domain/index.js';
 import type { UserServiceClient, UserServiceError } from '@intexuraos/internal-clients';
 import type { LlmGenerateClient, GenerateResult } from '@intexuraos/llm-factory';
@@ -136,6 +138,15 @@ export class FakeLinearConnectionRepository implements LinearConnectionRepositor
       createdAt: conn?.createdAt ?? now,
       updatedAt: now,
     });
+  }
+
+  async findUserIdByTeamId(teamId: string): Promise<Result<string | null, LinearError>> {
+    if (this.shouldFailGetConnection) return err(this.failError);
+
+    for (const [userId, conn] of this.connections.entries()) {
+      if (conn.connected && conn.teamId === teamId) return ok(userId);
+    }
+    return ok(null);
   }
 
   reset(): void {
@@ -465,6 +476,82 @@ export class FakeProcessedActionRepository implements ProcessedActionRepository 
 
   get count(): number {
     return this.processedActions.size;
+  }
+}
+
+export class FakeLinearIssueRepository implements LinearIssueRepository {
+  private issues = new Map<string, SyncedLinearIssue>();
+  private shouldFail = false;
+  private shouldFailSave = false;
+  private shouldFailListByUserId = false;
+  private shouldFailDeleteById = false;
+  private failError: LinearError = { code: 'INTERNAL_ERROR', message: 'Database error' };
+
+  async save(issue: SyncedLinearIssue): Promise<Result<SyncedLinearIssue, LinearError>> {
+    if (this.shouldFail || this.shouldFailSave) return err(this.failError);
+    this.issues.set(issue.id, { ...issue });
+    return ok(issue);
+  }
+
+  async findById(id: string): Promise<Result<SyncedLinearIssue | null, LinearError>> {
+    if (this.shouldFail) return err(this.failError);
+    return ok(this.issues.get(id) ?? null);
+  }
+
+  async findByIdentifier(identifier: string): Promise<Result<SyncedLinearIssue | null, LinearError>> {
+    if (this.shouldFail) return err(this.failError);
+    for (const issue of this.issues.values()) {
+      if (issue.identifier === identifier) return ok(issue);
+    }
+    return ok(null);
+  }
+
+  async listByUserId(userId: string): Promise<Result<SyncedLinearIssue[], LinearError>> {
+    if (this.shouldFail || this.shouldFailListByUserId) return err(this.failError);
+    const userIssues = Array.from(this.issues.values()).filter((i) => i.userId === userId);
+    return ok(userIssues);
+  }
+
+  async deleteById(id: string): Promise<Result<void, LinearError>> {
+    if (this.shouldFail || this.shouldFailDeleteById) return err(this.failError);
+    this.issues.delete(id);
+    return ok(undefined);
+  }
+
+  setFailure(fail: boolean, error?: LinearError): void {
+    this.shouldFail = fail;
+    if (error) this.failError = error;
+  }
+
+  setSaveFailure(fail: boolean, error?: LinearError): void {
+    this.shouldFailSave = fail;
+    if (error) this.failError = error;
+  }
+
+  setListByUserIdFailure(fail: boolean, error?: LinearError): void {
+    this.shouldFailListByUserId = fail;
+    if (error) this.failError = error;
+  }
+
+  setDeleteFailure(fail: boolean, error?: LinearError): void {
+    this.shouldFailDeleteById = fail;
+    if (error) this.failError = error;
+  }
+
+  reset(): void {
+    this.issues.clear();
+    this.shouldFail = false;
+    this.shouldFailSave = false;
+    this.shouldFailListByUserId = false;
+    this.shouldFailDeleteById = false;
+  }
+
+  seedIssue(issue: SyncedLinearIssue): void {
+    this.issues.set(issue.id, issue);
+  }
+
+  get count(): number {
+    return this.issues.size;
   }
 }
 

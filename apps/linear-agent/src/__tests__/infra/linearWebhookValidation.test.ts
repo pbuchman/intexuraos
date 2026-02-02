@@ -1,0 +1,99 @@
+/**
+ * Tests for Linear webhook signature validation.
+ */
+
+import { describe, expect, it } from 'vitest';
+import crypto from 'node:crypto';
+import { validateLinearWebhookSignature } from '../../infra/linearWebhookValidation.js';
+import type { FastifyRequest } from 'fastify';
+
+// Augment Fastify types to include rawBody for webhook signature validation
+declare module 'fastify' {
+  interface FastifyRequest {
+    rawBody?: string;
+  }
+}
+
+describe('validateLinearWebhookSignature', () => {
+  function createMockRequest(body: unknown, signature: string): FastifyRequest {
+    return {
+      headers: {
+        'linear-hmacsha256': signature,
+      },
+      rawBody: JSON.stringify(body),
+    } as unknown as FastifyRequest;
+  }
+
+  const webhookSecret = 'test-webhook-secret';
+
+  describe('signature validation', () => {
+    it('accepts valid signature', () => {
+      const body = { test: 'data' };
+      const expectedSignature = 'sha256=' + computeSignature(body, webhookSecret);
+      const request = createMockRequest(body, expectedSignature);
+
+      const result = validateLinearWebhookSignature(request, webhookSecret);
+
+      expect(result.ok).toBe(true);
+    });
+
+    it('rejects missing signature header', () => {
+      const request = {
+        headers: {},
+        rawBody: '{}',
+      } as unknown as FastifyRequest;
+
+      const result = validateLinearWebhookSignature(request, webhookSecret);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('MISSING_SIGNATURE');
+      }
+    });
+
+    it('rejects invalid signature format', () => {
+      const request = createMockRequest({}, 'invalid-format');
+
+      const result = validateLinearWebhookSignature(request, webhookSecret);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('INVALID_SIGNATURE_FORMAT');
+      }
+    });
+
+    it('rejects incorrect signature', () => {
+      const body = { test: 'data' };
+      const request = createMockRequest(body, 'sha256=wrongsignature');
+
+      const result = validateLinearWebhookSignature(request, webhookSecret);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('INVALID_SIGNATURE');
+      }
+    });
+
+    it('rejects missing raw body', () => {
+      const request = {
+        headers: {
+          'linear-hmacsha256': 'sha256=abc123',
+        },
+        rawBody: undefined,
+      } as unknown as FastifyRequest;
+
+      const result = validateLinearWebhookSignature(request, webhookSecret);
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('INVALID_SIGNATURE');
+        expect(result.error.message).toBe('Missing request body');
+      }
+    });
+  });
+});
+
+function computeSignature(body: unknown, secret: string): string {
+  const rawBody = JSON.stringify(body);
+  return crypto.createHmac('sha256', secret).update(rawBody).digest('hex');
+}

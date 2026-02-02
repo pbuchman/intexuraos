@@ -500,6 +500,8 @@ module "secret_manager" {
     # Pre-dev environment secrets
     "INTEXURAOS_PREDEV_ENV_VARS"       = "Aggregated environment variables for pre-dev VM .envrc.local"
     "INTEXURAOS_GITHUB_WEBHOOK_SECRET" = "GitHub webhook secret for HMAC validation (predev branch switch)"
+    # Linear webhook secrets (INT-444)
+    "INTEXURAOS_LINEAR_WEBHOOK_SECRET" = "Linear webhook signing secret for signature validation"
   }
 
   depends_on = [google_project_service.apis]
@@ -1454,13 +1456,60 @@ module "linear_agent" {
 
   image = "${var.region}-docker.pkg.dev/${var.project_id}/${module.artifact_registry.repository_id}/linear-agent:latest"
 
-  secrets  = local.common_service_secrets
+  secrets = merge(local.common_service_secrets, {
+    INTEXURAOS_LINEAR_WEBHOOK_SECRET = module.secret_manager.secret_ids["INTEXURAOS_LINEAR_WEBHOOK_SECRET"]
+  })
   env_vars = local.common_service_env_vars
 
   depends_on = [
     module.artifact_registry,
     module.iam,
     module.secret_manager,
+  ]
+}
+
+# -----------------------------------------------------------------------------
+# Cloud Scheduler - Linear Sync (Hourly) (INT-444)
+# -----------------------------------------------------------------------------
+
+resource "google_cloud_run_service_iam_member" "scheduler_invokes_linear_agent" {
+  project  = var.project_id
+  location = var.region
+  service  = local.services.linear_agent.name
+  role     = "roles/run.invoker"
+  member   = "serviceAccount:${google_service_account.cloud_scheduler.email}"
+
+  depends_on = [module.linear_agent]
+}
+
+resource "google_cloud_scheduler_job" "linear_sync_hourly" {
+  name        = "intexuraos-linear-sync-hourly-${var.environment}"
+  description = "Sync all Linear issues for all connected users hourly"
+  schedule    = "0 * * * *"
+  time_zone   = "UTC"
+  region      = var.region
+
+  http_target {
+    http_method = "POST"
+    uri         = "https://${local.services.linear_agent.name}-${local.cloud_run_url_suffix}/internal/linear/sync"
+
+    oidc_token {
+      service_account_email = google_service_account.cloud_scheduler.email
+      audience              = "https://${local.services.linear_agent.name}-${local.cloud_run_url_suffix}"
+    }
+  }
+
+  retry_config {
+    retry_count          = 1
+    max_retry_duration   = "60s"
+    min_backoff_duration = "5s"
+    max_backoff_duration = "30s"
+  }
+
+  depends_on = [
+    google_project_service.apis,
+    google_cloud_run_service_iam_member.scheduler_invokes_linear_agent,
+    module.linear_agent,
   ]
 }
 

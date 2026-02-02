@@ -146,6 +146,10 @@
       "owner": "linear-agent",
       "description": "Successfully processed actions for idempotency"
     },
+    "linear_issues": {
+      "owner": "linear-agent",
+      "description": "Locally synced Linear issues with webhook and full-sync support"
+    },
     "code_tasks": {
       "owner": "code-agent",
       "description": "Code execution tasks",

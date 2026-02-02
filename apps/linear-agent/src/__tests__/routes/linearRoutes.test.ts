@@ -9,6 +9,7 @@ import {
   FakeLinearActionExtractionService,
   FakeProcessedActionRepository,
   FakeUserServiceClient,
+  FakeLinearIssueRepository,
 } from '../fakes.js';
 
 describe('linearRoutes', () => {
@@ -872,6 +873,7 @@ describe('linearRoutes logging coverage', () => {
     extractionService: new FakeLinearActionExtractionService(),
     failedIssueRepository: new FakeFailedIssueRepository(),
     processedActionRepository: new FakeProcessedActionRepository(),
+    issueRepository: new FakeLinearIssueRepository(),
     userServiceClient: new FakeUserServiceClient(),
   };
 
@@ -904,6 +906,7 @@ describe('linearRoutes logging coverage', () => {
     loggingRepos.extractionService.reset();
     loggingRepos.failedIssueRepository.reset();
     loggingRepos.processedActionRepository.reset();
+    loggingRepos.issueRepository.reset();
     loggingRepos.userServiceClient.reset();
     setServices(loggingRepos);
     loggingApp = await buildServer(getTestLoggerStream());

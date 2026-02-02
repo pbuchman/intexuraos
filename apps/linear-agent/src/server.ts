@@ -3,6 +3,17 @@
  */
 
 import Fastify, { type FastifyInstance } from 'fastify';
+
+// Augment Fastify types for webhook signature validation
+declare module 'fastify' {
+  interface FastifyRequest {
+    rawBody?: string;
+  }
+
+  interface FastifyContextConfig {
+    rawBody?: boolean;
+  }
+}
 import pino from 'pino';
 import type { FastifyDynamicSwaggerOptions } from '@fastify/swagger';
 import fastifySwagger from '@fastify/swagger';
@@ -23,6 +34,7 @@ import { createSentryStream, setupSentryErrorHandler } from '@intexuraos/infra-s
 import { linearRoutes } from './routes/linearRoutes.js';
 import { internalRoutes } from './routes/internalRoutes.js';
 import { internalIssuesRoutes } from './routes/internalIssuesRoutes.js';
+import { linearWebhookRoutes } from './routes/linearWebhookRoutes.js';
 
 const SERVICE_NAME = 'linear-agent';
 const SERVICE_VERSION = '0.0.1';
@@ -32,6 +44,7 @@ const REQUIRED_SECRETS = [
   'INTEXURAOS_AUTH_ISSUER',
   'INTEXURAOS_AUTH_AUDIENCE',
   'INTEXURAOS_INTERNAL_AUTH_TOKEN',
+  'INTEXURAOS_LINEAR_WEBHOOK_SECRET',
   'INTEXURAOS_USER_SERVICE_URL',
 ];
 
@@ -190,6 +203,18 @@ export async function buildServer(testLoggerStream?: NodeJS.WritableStream): Pro
 
   registerQuietHealthCheckLogging(app);
 
+  // Add content type parser to capture raw body for Linear webhook signature validation
+  app.addContentTypeParser('application/json', { parseAs: 'string' }, (req, body, done) => {
+    try {
+      // Store raw body for signature validation
+      (req as unknown as { rawBody: string }).rawBody = body as string;
+      const json: unknown = JSON.parse(body as string);
+      done(null, json);
+    } catch {
+      done(new Error('Invalid JSON'), null);
+    }
+  });
+
   await app.register(fastifyCors, {
     origin: true,
     methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'HEAD', 'OPTIONS'],
@@ -210,6 +235,7 @@ export async function buildServer(testLoggerStream?: NodeJS.WritableStream): Pro
   await app.register(linearRoutes);
   await app.register(internalRoutes);
   await app.register(internalIssuesRoutes);
+  await app.register(linearWebhookRoutes);
 
   app.get(
     '/openapi.json',
