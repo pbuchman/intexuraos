@@ -4,6 +4,7 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { generateResponse } from './generateResponse.js';
+import type { LLMResponse, LLMError } from './generateResponse.js';
 import type {
   ConversationHistory,
   DocChunk,
@@ -58,12 +59,6 @@ const mockLogger: Logger = {
   msgPrefix: '',
 } as unknown as Logger;
 
-/** Type for LLM client that returns structured responses */
-interface LLMResponse {
-  response: string;
-  suggestedAction?: SuggestedAction;
-}
-
 /** Mock LLM client */
 class MockLLMClient {
   public response = 'Here is how to create a todo...';
@@ -88,20 +83,18 @@ class MockLLMClient {
       systemPrompt?: string;
       conversationHistory?: ConversationHistory[];
     }
-  ): Promise<Result<LLMResponse>> {
+  ): Promise<Result<LLMResponse, LLMError>> {
     if (this.shouldFail) {
       return {
         ok: false,
         error: { code: 'LLM_ERROR', message: 'LLM failed' },
       };
     }
-    return {
-      ok: true,
-      value: {
-        response: this.response,
-        suggestedAction: this.suggestedAction ?? undefined,
-      },
-    };
+    const value: LLMResponse = { response: this.response };
+    if (this.suggestedAction !== null) {
+      value.suggestedAction = this.suggestedAction;
+    }
+    return { ok: true, value };
   }
 
   reset(): void {
@@ -117,15 +110,9 @@ class MockEmbeddingClient {
 
   async embed(_text: string): Promise<Result<number[]>> {
     if (this.shouldFail) {
-      return {
-        ok: false,
-        error: { code: 'EMBEDDING_ERROR', message: 'Embed failed' },
-      };
+      return { ok: false, error: new Error('Embed failed') };
     }
-    return {
-      ok: true,
-      value: new Array(1536).fill(0.1),
-    };
+    return { ok: true, value: new Array(1536).fill(0.1) };
   }
 }
 
@@ -142,17 +129,11 @@ class MockEmbeddingRepository {
     this.shouldFail = shouldFail;
   }
 
-  async findSimilar(_embedding: number[], _limit: number): Promise<Result<DocChunkWithScore[]>> {
+  async findSimilar(_embedding: number[], _limit: number): Promise<Result<DocChunkWithScore[], unknown>> {
     if (this.shouldFail) {
-      return {
-        ok: false,
-        error: { code: 'REPOSITORY_ERROR', message: 'Repository failed' },
-      };
+      return { ok: false, error: new Error('Repository failed') };
     }
-    return {
-      ok: true,
-      value: this.chunks,
-    };
+    return { ok: true, value: this.chunks };
   }
 
   async findById(_id: string): Promise<Result<DocChunk | null, unknown>> {
