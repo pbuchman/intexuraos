@@ -6,8 +6,7 @@
     "commit-commands@claude-plugins-official": true,
     "pr-review-toolkit@claude-code-plugins": true,
     "playwright@claude-plugins-official": true,
-    "frontend-design@claude-plugins-official": true,
-    "make-english-great-again": true
+    "frontend-design@claude-plugins-official": true
   },
   "statusLine": {
     "type": "command",
