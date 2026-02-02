@@ -2,16 +2,20 @@
  * Service container tests for chat-agent.
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { resetFirestore } from '@intexuraos/infra-firestore';
 import { getServices, setServices, resetServices, initializeServices, type ServiceContainer } from '../services.js';
 
 describe('chat-agent services', () => {
   beforeEach(() => {
     process.env['INTEXURAOS_OPENAI_API_KEY'] = 'test-key';
+    process.env['INTEXURAOS_GCP_PROJECT_ID'] = 'test-project';
   });
 
   afterEach(() => {
     resetServices();
+    resetFirestore();
     delete process.env['INTEXURAOS_OPENAI_API_KEY'];
+    delete process.env['INTEXURAOS_GCP_PROJECT_ID'];
   });
 
   describe('getServices', () => {
