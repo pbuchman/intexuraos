@@ -62,6 +62,7 @@ export class EmbeddingClient {
       this.model = configOrDeps.model ?? 'text-embedding-3-small';
       this.maxRetries = configOrDeps.maxRetries ?? DEFAULT_MAX_RETRIES;
       this.retryDelayMs = configOrDeps.retryDelayMs ?? DEFAULT_RETRY_DELAY_MS;
+    /* v8 ignore start -- module-init: Production constructor uses real OpenAI client @preserve */
     } else {
       // Config mode (production)
       this.openai = new OpenAI({ apiKey: configOrDeps.apiKey });
@@ -69,6 +70,7 @@ export class EmbeddingClient {
       this.maxRetries = configOrDeps.maxRetries ?? DEFAULT_MAX_RETRIES;
       this.retryDelayMs = configOrDeps.retryDelayMs ?? DEFAULT_RETRY_DELAY_MS;
     }
+    /* v8 ignore stop @preserve */
   }
 
   /**
