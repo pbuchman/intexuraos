@@ -1251,8 +1251,20 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         }
       }
 
+      // If workerLocation specified, put that worker first in the list
+      let orderedWorkers = enabledWorkers;
+      if (body.workerLocation !== undefined) {
+        const selectedWorker = enabledWorkers.find((w) => w.name === body.workerLocation);
+        if (selectedWorker !== undefined) {
+          orderedWorkers = [
+            selectedWorker,
+            ...enabledWorkers.filter((w) => w.name !== body.workerLocation),
+          ];
+        }
+      }
+
       const workerCredentials = {
-        workers: enabledWorkers.map((w) => ({
+        workers: orderedWorkers.map((w) => ({
           name: w.name,
           url: w.url,
           cfAccessClientId: w.cfAccessClientId,
