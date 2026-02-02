@@ -48,7 +48,7 @@ export function useLinearIssueOptions(): UseLinearIssueOptionsResult {
 
       const data = await listLinearIssues(token);
 
-      const allOptions = Object.values(data).flat() as LinearIssue[];
+      const allOptions = Object.values(data.issues).flat();
 
       setOptions(
         allOptions.map((issue) => ({

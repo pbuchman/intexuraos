@@ -26,9 +26,10 @@ export function LinearIssueCombobox({
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState('');
 
-  const filteredOptions = options.filter((option) =>
-    option.identifier.toLowerCase().includes(search.toLowerCase()) ||
-    option.title.toLowerCase().includes(search.toLowerCase())
+  const filteredOptions = options.filter(
+    (option) =>
+      option.identifier.toLowerCase().includes(search.toLowerCase()) ||
+      option.title.toLowerCase().includes(search.toLowerCase())
   );
 
   const selectedOption = selected;
