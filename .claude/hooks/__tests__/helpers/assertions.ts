@@ -258,3 +258,50 @@ export function expectStderrExcludes(result: HookExecutionResult, text: string):
     );
   }
 }
+
+/**
+ * Asserts that a hook soft-blocked via JSON decision (exit 0, stdout contains decision: block)
+ * This is different from hard block (exit 2) - used by ownership-check and detect-common-patterns
+ */
+export function expectSoftBlock(
+  result: HookExecutionResult,
+  options: {
+    reasonIncludes?: string;
+    stderrIncludes?: string;
+  } = {}
+): void {
+  const { exitCode, stdout, stderr } = result;
+
+  if (exitCode !== 0) {
+    throw new Error(
+      `Expected soft block (exit code 0 with JSON decision), but got exit code ${exitCode}.\n` +
+        `stdout: ${stdout}\nstderr: ${stderr}`
+    );
+  }
+
+  let json: unknown;
+  try {
+    json = JSON.parse(stdout.trim());
+  } catch {
+    throw new Error(`Expected JSON output for soft block, but got:\n${stdout}`);
+  }
+
+  if (typeof json !== 'object' || json === null) {
+    throw new Error(`Expected JSON object, got ${typeof json}`);
+  }
+
+  const obj = json as { decision?: string; reason?: string };
+  if (obj.decision !== 'block') {
+    throw new Error(`Expected decision 'block', got '${obj.decision}'`);
+  }
+
+  if (options.reasonIncludes && !obj.reason?.includes(options.reasonIncludes)) {
+    throw new Error(
+      `Expected reason to include '${options.reasonIncludes}', got '${obj.reason}'`
+    );
+  }
+
+  if (options.stderrIncludes && !stderr.includes(options.stderrIncludes)) {
+    throw new Error(`Expected stderr to include '${options.stderrIncludes}', but got:\n${stderr}`);
+  }
+}
