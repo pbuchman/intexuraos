@@ -101,12 +101,26 @@ Multiple Task calls in single message for parallel execution
 
 ## Phase 6: Finalize
 
+- [ ] Update ALL package.json versions (root, apps/\*, packages/\*, workers/\*)
+- [ ] Update CHANGELOG.md with new version entry (Claude Code style)
 - [ ] Run `pnpm run ci:tracked` — **MUST PASS**
 - [ ] Stage all changes: `git add -A`
 - [ ] Commit with release message
 - [ ] Create tag: `git tag -a "vX.Y.Z"`
 - [ ] Push tag: `git push origin vX.Y.Z`
 - [ ] Display summary using template
+
+**Changelog Format (Claude Code Style):**
+
+```markdown
+## X.Y.Z
+
+- Added [feature with `code` inline]
+- Fixed [bug description]
+- Changed [modification]
+```
+
+No subcategories, verb-first entries, single line each.
 
 **Commands:**
 
