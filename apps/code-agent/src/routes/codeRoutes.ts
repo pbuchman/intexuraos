@@ -1082,7 +1082,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         },
       },
     },
-    async (request: FastifyRequest<{ Body: { prompt: string; workerType?: 'opus' | 'auto' | 'glm'; linearIssueId?: string } }>, reply: FastifyReply) => {
+    async (request: FastifyRequest<{ Body: { prompt: string; workerType?: 'opus' | 'auto' | 'glm'; workerLocation?: string; linearIssueId?: string } }>, reply: FastifyReply) => {
       logIncomingRequest(request, {
         message: 'Received request to POST /code/submit',
         includeParams: true,
@@ -1092,6 +1092,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       const body = request.body as {
         prompt: string;
         workerType?: 'opus' | 'auto' | 'glm';
+        workerLocation?: string;
         linearIssueId?: string;
         linearIssueTitle?: string;
       };
@@ -1229,6 +1230,26 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         return await reply.fail('WORKER_NOT_CONFIGURED', 'Please configure your workers in Settings before submitting code tasks');
       }
       /* v8 ignore stop @preserve */
+
+      // Validate workerLocation if provided
+      if (body.workerLocation !== undefined) {
+        const requestedWorker = enabledWorkers.find((w) => w.name === body.workerLocation);
+
+        if (requestedWorker === undefined) {
+          request.log.warn({ userId, workerLocation: body.workerLocation }, 'Requested worker not found');
+          return await reply.fail('INVALID_WORKER', `Worker '${body.workerLocation}' is not configured or enabled`);
+        }
+
+        // Check if worker is healthy (if health data available)
+        const healthStatuses = settings?.workerHealthStatuses;
+        if (healthStatuses !== undefined) {
+          const workerHealth = healthStatuses[body.workerLocation];
+          if (workerHealth !== undefined && !workerHealth.state.healthy) {
+            request.log.warn({ userId, workerLocation: body.workerLocation, healthState: workerHealth.state }, 'Requested worker is unhealthy');
+            return await reply.fail('WORKER_UNHEALTHY', `Worker '${body.workerLocation}' is currently unhealthy`);
+          }
+        }
+      }
 
       const workerCredentials = {
         workers: enabledWorkers.map((w) => ({
