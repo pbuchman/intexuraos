@@ -23,6 +23,13 @@ export default defineConfig({
     sequence: {
       shuffle: false,
     },
+    // Use forks pool in CI for better memory isolation during coverage collection
+    // Each test file runs in a separate process, releasing memory on completion
+    // This prevents heap fragmentation after Type & Lint phase consumes memory
+    pool: process.env.CI === 'true' ? 'forks' : 'threads',
+    // Limit workers in CI to prevent memory exhaustion during coverage
+    // GitHub Actions runners have ~7GB memory, but coverage tracking is memory-intensive
+    maxWorkers: process.env.CI === 'true' ? 2 : undefined,
     // Standard timeout for async operations
     testTimeout: 10000,
     hookTimeout: 30000,

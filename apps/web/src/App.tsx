@@ -1,6 +1,6 @@
 import { HashRouter, Navigate, Route, Routes, useParams } from 'react-router-dom';
 import { Auth0Provider } from '@auth0/auth0-react';
-import { AuthProvider, SyncQueueProvider, ThemeProvider, useAuth } from '@/context';
+import { AuthProvider, PredevProvider, SyncQueueProvider, ThemeProvider, useAuth } from '@/context';
 import { PWAProvider } from '@/context/pwa-context';
 import { AndroidInstallBanner, IOSInstallBanner, UpdateBanner } from '@/components/pwa-banners';
 import { DevBar } from '@/components/DevBar';
@@ -432,31 +432,33 @@ function AppRoutes(): React.JSX.Element {
 export function App(): React.JSX.Element {
   return (
     <ThemeProvider>
-      <PWAProvider>
-        <Auth0Provider
-          domain={config.auth0Domain}
-          clientId={config.auth0ClientId}
-          authorizationParams={{
-            redirect_uri: window.location.origin,
-            audience: config.authAudience,
-            scope: 'openid profile email',
-          }}
-          cacheLocation="localstorage"
-        >
-          <HashRouter>
-            <AuthProvider>
-              <SyncQueueProvider>
-                <AppRoutes />
-                <UpdateBanner />
-                <IOSInstallBanner />
-                <AndroidInstallBanner />
-                <DevBar />
-                <Chat />
-              </SyncQueueProvider>
-            </AuthProvider>
-          </HashRouter>
-        </Auth0Provider>
-      </PWAProvider>
+      <PredevProvider>
+        <PWAProvider>
+          <Auth0Provider
+            domain={config.auth0Domain}
+            clientId={config.auth0ClientId}
+            authorizationParams={{
+              redirect_uri: window.location.origin,
+              audience: config.authAudience,
+              scope: 'openid profile email',
+            }}
+            cacheLocation="localstorage"
+          >
+            <HashRouter>
+              <AuthProvider>
+                <SyncQueueProvider>
+                  <AppRoutes />
+                  <UpdateBanner />
+                  <IOSInstallBanner />
+                  <AndroidInstallBanner />
+                  <DevBar />
+                  <Chat />
+                </SyncQueueProvider>
+              </AuthProvider>
+            </HashRouter>
+          </Auth0Provider>
+        </PWAProvider>
+      </PredevProvider>
     </ThemeProvider>
   );
 }

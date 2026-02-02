@@ -10,6 +10,7 @@ import {
   expectAllowed,
   expectLogEntry,
   expectNoLogEntry,
+  expectSoftBlock,
 } from './helpers/index.js';
 
 // Use sequential to avoid resource contention issues when running with full CI
@@ -31,7 +32,7 @@ describe.sequential('Claude Hooks - Pattern Detection', () => {
     }
 
     describe('missing .js extension detection', () => {
-      it('warns about relative import without .js extension', () => {
+      it('soft-blocks on relative import without .js extension', () => {
         const testFile = createTestFile(
           'test.ts',
           `import { foo } from "./local"
@@ -40,7 +41,6 @@ import { bar } from '../utils/helper'
 export const test = foo`
         );
 
-        // Debug: Ensure file exists (helps diagnose flaky test)
         if (!fs.existsSync(testFile)) {
           throw new Error(`Test file not found: ${testFile}`);
         }
@@ -57,42 +57,46 @@ export const test = foo`
           },
         });
 
-        // Debug: Check log file exists and has content
-        const logPath = path.join(__dirname, '..', '..', 'hooks.log');
-        const logExists = fs.existsSync(logPath);
-        const logContent = logExists ? fs.readFileSync(logPath, 'utf-8') : '';
-
-        // If no log entries found, check if warning is in stderr
-        // (Log file creation can fail due to file system timing in rapid test execution)
-        if (!result.logEntries || result.logEntries.length === 0) {
-          // Check if warning is in stderr - hook is working, just log file didn't get created
-          if (!result.stderr || !result.stderr.includes('Missing .js extension')) {
-            throw new Error(
-              `Expected warning about missing .js extension, but found none.\n` +
-                `Diagnostics:\n` +
-                `  - testFile exists: ${fs.existsSync(testFile)}\n` +
-                `  - testFile path: ${testFile}\n` +
-                `  - hook exit code: ${result.exitCode}\n` +
-                `  - hook stderr: ${result.stderr || '(empty)'}\n` +
-                `  - log file exists: ${logExists}\n` +
-                `  - log file content: ${logContent ? '(has content)' : '(empty)'}\n` +
-                `  - log entries count: ${result.logEntries?.length ?? 0}`
-            );
-          }
-          // Log file not created but warning in stderr - accept this as pass
-          // (Due to file system timing issues in rapid test execution)
-        }
-
-        expectWarned(result, {
-          messageIncludes: 'Missing .js extension',
+        // Now outputs JSON soft block instead of just warning
+        expectSoftBlock(result, {
+          reasonIncludes: 'PATTERN DETECTION',
+          stderrIncludes: 'missing-js-extension',
         });
 
-        // Only check log entries if they were created (may be skipped due to timing)
         if (result.logEntries && result.logEntries.length > 0) {
           expectLogEntry(result, {
             level: 'WARNED',
             hook: 'detect-common-patterns',
             pattern: 'missing-js-extension',
+          });
+        }
+      });
+
+      it('allows import with @allow-missing-js suppression', () => {
+        const testFile = createTestFile(
+          'suppressed.ts',
+          `import { foo } from "./local" // @allow-missing-js -- directory with index.ts
+
+export const test = foo`
+        );
+
+        const result = executeHookSync({
+          hookName: 'detect-common-patterns',
+          input: {
+            tool_name: 'Edit',
+            tool_input: {
+              file_path: testFile,
+              old_string: '// old',
+              new_string: '// new',
+            },
+          },
+        });
+
+        expectAllowed(result);
+        if (result.logEntries && result.logEntries.length > 0) {
+          expectLogEntry(result, {
+            level: 'INFO',
+            pattern: 'suppressed-missing-js',
           });
         }
       });
@@ -200,7 +204,7 @@ import { describe } from 'vitest'`
     });
 
     describe('bad | undefined type detection', () => {
-      it('warns about | undefined in type annotations', () => {
+      it('soft-blocks on | undefined in type annotations', () => {
         const testFile = createTestFile(
           'types.ts',
           `interface User {
@@ -222,11 +226,11 @@ import { describe } from 'vitest'`
           },
         });
 
-        expectWarned(result, {
-          messageIncludes: '| undefined',
+        expectSoftBlock(result, {
+          reasonIncludes: 'PATTERN DETECTION',
+          stderrIncludes: 'bad-undefined-type',
         });
 
-        // Only check log entries if they were created (may be skipped due to timing)
         if (result.logEntries && result.logEntries.length > 0) {
           expectLogEntry(result, {
             level: 'WARNED',
@@ -234,6 +238,30 @@ import { describe } from 'vitest'`
             pattern: 'bad-undefined-type',
           });
         }
+      });
+
+      it('allows | undefined with @allow-undefined-type suppression', () => {
+        const testFile = createTestFile(
+          'suppressed-types.ts',
+          `interface User {
+  name: string
+  age: number | undefined // @allow-undefined-type -- exact optional semantics needed
+}`
+        );
+
+        const result = executeHookSync({
+          hookName: 'detect-common-patterns',
+          input: {
+            tool_name: 'Edit',
+            tool_input: {
+              file_path: testFile,
+              old_string: '// old',
+              new_string: '// new',
+            },
+          },
+        });
+
+        expectAllowed(result);
       });
 
       it('does not warn for optional properties with ?', () => {
@@ -292,7 +320,7 @@ import { describe } from 'vitest'`
     });
 
     describe('Result.value without .ok detection', () => {
-      it('warns about accessing .value without .ok check', () => {
+      it('soft-blocks on accessing .value without .ok check', () => {
         const testFile = createTestFile(
           'result.ts',
           `const result = await repo.find(id)
@@ -311,11 +339,11 @@ return result.value`
           },
         });
 
-        expectWarned(result, {
-          messageIncludes: 'Result.value',
+        expectSoftBlock(result, {
+          reasonIncludes: 'PATTERN DETECTION',
+          stderrIncludes: 'result-value-without-ok',
         });
 
-        // Only check log entries if they were created (may be skipped due to timing)
         if (result.logEntries && result.logEntries.length > 0) {
           expectLogEntry(result, {
             level: 'WARNED',
@@ -323,6 +351,28 @@ return result.value`
             pattern: 'result-value-without-ok',
           });
         }
+      });
+
+      it('allows .value access with @allow-result-access suppression', () => {
+        const testFile = createTestFile(
+          'suppressed-result.ts',
+          `const result = await repo.find(id)
+return result.value // @allow-result-access -- narrowed in calling function`
+        );
+
+        const result = executeHookSync({
+          hookName: 'detect-common-patterns',
+          input: {
+            tool_name: 'Edit',
+            tool_input: {
+              file_path: testFile,
+              old_string: '// old',
+              new_string: '// new',
+            },
+          },
+        });
+
+        expectAllowed(result);
       });
 
       it('does not warn when .ok check is present before .value', () => {
@@ -403,7 +453,7 @@ return result.ok ? result.value : defaultValue`
     // });
 
     describe('Write tool detection', () => {
-      it('detects patterns in newly written files', { timeout: 20000 }, () => {
+      it('soft-blocks on patterns in newly written files', { timeout: 20000 }, () => {
         const testFile = createTestFile(
           'new-file.ts',
           `import { foo } from "./local"
@@ -424,8 +474,10 @@ return result.value`,
           },
         });
 
-        // Should detect both patterns
-        expectWarned(result);
+        // Should soft-block with JSON decision
+        expectSoftBlock(result, {
+          reasonIncludes: 'PATTERN DETECTION',
+        });
       });
     });
 
@@ -452,7 +504,7 @@ return result.value`,
       });
 
       it(
-        'ignores .tsx files (they are checked, but pattern handles them)',
+        'soft-blocks .tsx files with missing .js extension',
         { timeout: 20000 },
         () => {
           const testFile = createTestFile(
@@ -473,8 +525,10 @@ export default function Component() { return null }`
             },
           });
 
-          // .tsx files ARE checked
-          expectWarned(result, { messageIncludes: '.js extension' });
+          // .tsx files ARE checked and now soft-block
+          expectSoftBlock(result, {
+            stderrIncludes: 'missing-js-extension',
+          });
         }
       );
     });

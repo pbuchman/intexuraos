@@ -185,4 +185,24 @@ export async function generateLinearIssueTitle(
   );
 }
 
+interface SyncFromLinearResponse {
+  syncedCount: number;
+  deletedCount: number;
+}
+
+/**
+ * Trigger a full sync from Linear
+ * Fetches all issues from the user's Linear team and updates local storage
+ */
+export async function syncFromLinear(
+  accessToken: string
+): Promise<SyncFromLinearResponse> {
+  return await apiRequest<SyncFromLinearResponse>(
+    config.linearAgentUrl,
+    '/linear/sync',
+    accessToken,
+    { method: 'POST' }
+  );
+}
+
 export type { ValidateResponse, SaveConnectionRequest };

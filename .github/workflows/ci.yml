@@ -15,10 +15,84 @@ permissions:
 
 jobs:
   # =============================================================================
-  # Main CI: Lint, Verify, Typecheck, Test, Build
+  # Type Check & Lint - runs in parallel with other jobs
   # =============================================================================
-  ci:
-    name: CI
+  type-lint:
+    name: Type & Lint
+    runs-on: ubuntu-latest
+    if: ${{ !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) }}
+    env:
+      NODE_OPTIONS: '--max-old-space-size=6144'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Build packages
+        run: pnpm build
+
+      - name: Type Check
+        run: pnpm run typecheck
+
+      - name: Type Check Tests
+        run: pnpm run typecheck:tests
+
+      - name: Lint
+        run: pnpm run lint
+
+  # =============================================================================
+  # Tests - runs in parallel with other jobs (separate runner = fresh memory)
+  # =============================================================================
+  tests:
+    name: Tests
+    runs-on: ubuntu-latest
+    if: ${{ !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) }}
+    env:
+      NODE_OPTIONS: '--max-old-space-size=6144'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Build packages
+        run: pnpm build
+
+      - name: Run Tests with Coverage
+        run: pnpm run test:coverage
+
+  # =============================================================================
+  # Static Validation - runs in parallel with other jobs
+  # =============================================================================
+  validation:
+    name: Validation
     runs-on: ubuntu-latest
     if: ${{ !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) }}
 
@@ -43,8 +117,97 @@ jobs:
       - name: Build packages
         run: pnpm build
 
-      - name: Run CI
-        run: pnpm run ci
+      - name: Validate Package JSON
+        run: node scripts/verify-package-json.mjs
+
+      - name: Validate Date Formatting
+        run: node scripts/verify-date-formatting.mjs
+
+      - name: Validate Boundaries
+        run: node scripts/verify-boundaries.mjs
+
+      - name: Validate Common
+        run: node scripts/verify-common.mjs
+
+      - name: Validate Env Vars
+        run: node scripts/verify-env-vars.mjs
+
+      - name: Validate Firestore
+        run: node scripts/verify-firestore-ownership.mjs
+
+      - name: Validate Test Isolation
+        run: node scripts/verify-test-isolation.mjs
+
+      - name: Validate Vitest Config
+        run: node scripts/verify-vitest-config.mjs
+
+      - name: Validate Endpoints
+        run: node scripts/verify-required-endpoints.mjs
+
+      - name: Validate Hash Routing
+        run: node scripts/verify-hash-routing.mjs
+
+      - name: Validate Terraform Secrets
+        run: node scripts/verify-terraform-secrets.mjs
+
+      - name: Validate PubSub
+        run: node scripts/verify-pubsub.mjs
+
+      - name: Validate Logging
+        run: node scripts/verify-logging.mjs
+
+      - name: Validate Workspace Deps
+        run: node scripts/verify-workspace-deps.mjs
+
+      - name: Validate Migrations
+        run: node scripts/verify-migrations.mjs
+
+      - name: Validate No Console
+        run: node scripts/verify-no-console.mjs
+
+      - name: Validate Reply Send
+        run: node scripts/verify-reply-send.mjs
+
+      - name: Validate Sentry Logging
+        run: node scripts/verify-sentry-logging.mjs
+
+      - name: Validate V8 Ignore
+        run: node scripts/verify-v8-ignore.mjs
+
+      - name: Validate LLM Architecture
+        run: npx tsx scripts/verify-llm-architecture.ts
+
+  # =============================================================================
+  # Build & Format - runs in parallel with other jobs
+  # =============================================================================
+  build-format:
+    name: Build & Format
+    runs-on: ubuntu-latest
+    if: ${{ !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Build packages
+        run: pnpm build
+
+      - name: Format Check
+        run: pnpm run format
 
   # =============================================================================
   # Terraform: Format, Validate

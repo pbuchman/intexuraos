@@ -595,6 +595,68 @@ gcloud builds log <id> --stream --region=<region>
 
 ---
 
+## Linear MCP Query Safety (MANDATORY)
+
+**RULE:** Never use broad text searches with high limits in Linear MCP. This causes context overflow.
+
+### Dangerous Patterns (FORBIDDEN)
+
+```typescript
+// ❌ DANGEROUS - can return 15k+ tokens, crashing context
+list_issues({ query: "tier", limit: 50, team: "IntexuraOS" })
+list_issues({ query: "fix", limit: 50 })
+list_issues({ limit: 100 })  // No filter at all
+
+// ❌ DANGEROUS - parent-child relations NOT included in get_issue
+get_issue({ id: "INT-445", includeRelations: true })  // Only returns blocks/blockedBy, NOT children
+```
+
+### Safe Patterns (REQUIRED)
+
+```typescript
+// ✅ SAFE - specific issue ID lookup
+list_issues({ query: "INT-445", limit: 10 })
+
+// ✅ SAFE - query by parentId to find children
+list_issues({ parentId: "<uuid>", limit: 20 })
+
+// ✅ SAFE - small limit with specific filters
+list_issues({ state: "Todo", team: "IntexuraOS", limit: 10 })
+
+// ✅ SAFE - single issue fetch (always small)
+get_issue({ id: "INT-445" })
+```
+
+### Finding Child Issues of a Parent
+
+**The `includeRelations` flag does NOT return child issues.** It only returns:
+
+- `blocks` — issues this issue blocks
+- `blockedBy` — issues blocking this issue
+- `relatedTo` — related issues
+- `duplicateOf` — duplicate reference
+
+**To find children, query by `parentId`:**
+
+```typescript
+// 1. Get the parent issue UUID
+const parent = await get_issue({ id: "INT-445" });
+const parentUuid = parent.id;  // e.g., "abc123-..."
+
+// 2. Query children using parentId
+const children = await list_issues({ parentId: parentUuid, limit: 20 });
+```
+
+### Recovery If Context Overflows
+
+If Linear MCP returns a massive response causing context overflow:
+
+1. Clear conversation context (`/clear`)
+2. Use targeted queries with specific issue IDs
+3. Never retry the same broad query
+
+---
+
 ## Common LLM Mistakes
 
 **Full reference:** `.claude/reference/common-mistakes.md`
