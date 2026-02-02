@@ -1120,6 +1120,7 @@ export interface CodeTask {
 export interface SubmitCodeTaskRequest {
   prompt: string;
   workerType?: CodeTaskWorkerType;
+  workerLocation?: string;
   linearIssueId?: string;
 }
 
