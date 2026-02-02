@@ -118,6 +118,43 @@ describe('StateManager', () => {
       expect(result?.branch).toBe('development');
       expect(result?.vmIp).toBeNull();
       expect(result?.startedAt).toBeNull();
+      expect(result?.branchLocked).toBe(false);
+    });
+
+    it('should parse branchLocked field when true', async () => {
+      const mockData = {
+        status: 'running',
+        vmIp: '10.0.0.1',
+        branch: 'development',
+        branchLocked: true,
+        lastActivity: '2024-01-01T00:00:00.000Z',
+        startedAt: '2024-01-01T00:00:00.000Z',
+      };
+      mockDocMethods.mockReturnValue({
+        get: vi.fn().mockResolvedValue(createMockDoc(true, mockData)),
+      });
+
+      const result = await stateManager.getState();
+
+      expect(result?.branchLocked).toBe(true);
+    });
+
+    it('should default branchLocked to false for falsy values', async () => {
+      const mockData = {
+        status: 'running',
+        vmIp: '10.0.0.1',
+        branch: 'development',
+        branchLocked: 'yes',
+        lastActivity: '2024-01-01T00:00:00.000Z',
+        startedAt: '2024-01-01T00:00:00.000Z',
+      };
+      mockDocMethods.mockReturnValue({
+        get: vi.fn().mockResolvedValue(createMockDoc(true, mockData)),
+      });
+
+      const result = await stateManager.getState();
+
+      expect(result?.branchLocked).toBe(false);
     });
 
     it('should return null on error and log error', async () => {
@@ -218,6 +255,26 @@ describe('StateManager', () => {
       await stateManager.setStopping();
 
       expect(mockSetFn).toHaveBeenCalledWith({ status: 'stopping' }, { merge: true });
+    });
+  });
+
+  describe('setLocked', () => {
+    it('should set branchLocked to true', async () => {
+      const mockSetFn = vi.fn().mockResolvedValue(undefined);
+      mockDocMethods.mockReturnValue({ set: mockSetFn });
+
+      await stateManager.setLocked(true);
+
+      expect(mockSetFn).toHaveBeenCalledWith({ branchLocked: true }, { merge: true });
+    });
+
+    it('should set branchLocked to false', async () => {
+      const mockSetFn = vi.fn().mockResolvedValue(undefined);
+      mockDocMethods.mockReturnValue({ set: mockSetFn });
+
+      await stateManager.setLocked(false);
+
+      expect(mockSetFn).toHaveBeenCalledWith({ branchLocked: false }, { merge: true });
     });
   });
 });

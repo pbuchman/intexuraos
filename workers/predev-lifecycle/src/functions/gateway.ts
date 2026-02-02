@@ -166,6 +166,33 @@ export const gateway: HttpFunction = async (req: any, res: any) => {
     return;
   }
 
+  // Handle branch lock control (predev internal API)
+  if (pathname === '/internal/branch-lock') {
+    if (req.method === 'GET') {
+      res.status(200).json({
+        locked: currentState?.branchLocked ?? false,
+        branch: currentState?.branch ?? 'unknown',
+        status: currentState?.status ?? 'unknown',
+      });
+      return;
+    }
+    if (req.method === 'POST') {
+      const body = req.body as { locked?: boolean } | undefined;
+      const locked = body?.locked ?? false;
+      await state.setLocked(locked);
+      const newState = await state.getState();
+      logger.info({ locked, branch: newState?.branch }, 'Branch lock updated');
+      res.status(200).json({
+        locked: newState?.branchLocked ?? false,
+        branch: newState?.branch ?? 'unknown',
+        status: newState?.status ?? 'unknown',
+      });
+      return;
+    }
+    res.status(405).send('Method not allowed');
+    return;
+  }
+
   // Update last activity for running VM
   if (currentState?.status === 'running') {
     await state.updateActivity();
