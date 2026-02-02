@@ -21,7 +21,7 @@ resource "google_cloudfunctions2_function" "gateway" {
     available_memory      = "512M"
     timeout_seconds       = 3600
     service_account_email = google_service_account.predev_functions.email
-    max_instance_count    = 1
+    max_instance_count    = 10
     min_instance_count    = 0
 
     environment_variables = {
