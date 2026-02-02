@@ -24,6 +24,7 @@ Orchestrate a comprehensive 6-phase release workflow with checkpoints for user c
 4. **Tag Push**: Phase 6 creates AND pushes the version tag to remote
 5. **Three Suggestions Only**: Phase 5 website audit produces EXACTLY 3 improvement suggestions
 6. **Monorepo Version Sync**: Phase 6 MUST update ALL package.json files (root, apps/\*, packages/\*, workers/\*) to the new version — not just the root
+7. **Claude Code Changelog Style**: All changelog entries use simplified format — version headers, verb-first bullets, no subcategories
 
 ## Phase Overview
 
@@ -201,12 +202,42 @@ When releasing a NEW major version (e.g., v3.0.0):
 ### Phase 6: Finalize
 
 1. **Update ALL package.json versions** — root, apps/\*, packages/\*, workers/\* (CRITICAL)
-2. Run `pnpm run ci:tracked` — MUST pass
-3. Stage all changes
-4. Commit with release message
-5. Create version tag
-6. Push tag to remote
-7. Display release summary
+2. **Update CHANGELOG.md** using Claude Code style (see Changelog Format below)
+3. Run `pnpm run ci:tracked` — MUST pass
+4. Stage all changes
+5. Commit with release message
+6. Create version tag
+7. Push tag to remote
+8. Display release summary
+
+## Changelog Format (Claude Code Style)
+
+**Structure:** Version header with flat bullet list.
+
+```markdown
+## X.Y.Z
+
+- Added [feature description with inline `code`]
+- Added [another feature] (INT-XXX)
+- Changed [modification description]
+- Fixed [bug description]
+- Improved [enhancement description]
+- Removed [deprecation description]
+```
+
+**Rules:**
+
+| Rule                  | Details                                              |
+| --------------------- | ---------------------------------------------------- |
+| Version headers only  | `## X.Y.Z` — no dates, no subcategories              |
+| Verb-first entries    | Added, Fixed, Improved, Changed, Removed             |
+| Single line per entry | No paragraphs or multi-line descriptions             |
+| Backticks for code    | Commands, flags, env vars, settings, file paths      |
+| Linear refs optional  | `(INT-XXX)` at end if helpful                        |
+| User-facing only      | Skip internal refactorings unless they affect users  |
+| Most recent at top    | New version prepended to file                        |
+
+**Skip:** Pure test additions, CI config changes, internal refactorings, dependency updates (unless security)
 
 ## Checkpoint Pattern
 
