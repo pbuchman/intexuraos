@@ -23,6 +23,9 @@ export default defineConfig({
     sequence: {
       shuffle: false,
     },
+    // Limit workers in CI to prevent memory exhaustion during coverage
+    // GitHub Actions runners have ~7GB memory, but coverage tracking is memory-intensive
+    maxWorkers: process.env.CI === 'true' ? 4 : undefined,
     // Standard timeout for async operations
     testTimeout: 10000,
     hookTimeout: 30000,
