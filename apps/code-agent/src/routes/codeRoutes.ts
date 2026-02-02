@@ -954,6 +954,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
     Body: {
       prompt: string;
       workerType?: 'opus' | 'auto' | 'glm';
+      workerLocation?: string;
       linearIssueId?: string;
       linearIssueTitle?: string;
     };
@@ -971,6 +972,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           properties: {
             prompt: { type: 'string', minLength: 1, maxLength: 100000 },
             workerType: { type: 'string', enum: ['opus', 'auto', 'glm'] },
+            workerLocation: { type: 'string', minLength: 1, maxLength: 32 },
             linearIssueId: { type: 'string' },
             linearIssueTitle: { type: 'string' },
           },
