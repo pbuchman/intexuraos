@@ -174,8 +174,9 @@ describe('EmbeddingClient', () => {
       await client.embed('test query');
       const elapsed = Date.now() - startTime;
 
-      // Should have waited at least 1000ms (first retry delay)
-      expect(elapsed).toBeGreaterThanOrEqual(1000);
+      // Should have waited approximately 1000ms (first retry delay)
+      // Allow 5% variance for timer precision
+      expect(elapsed).toBeGreaterThanOrEqual(950);
       expect(mockOpenAI.embeddings.create).toHaveBeenCalledTimes(2);
     });
   });
