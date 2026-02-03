@@ -183,6 +183,7 @@ async function bootstrap(): Promise<void> {
       logBasePath: config.logBasePath,
       codeAgentUrl: config.codeAgentUrl,
       orchestratorSecret: config.orchestratorSecret,
+      internalAuthToken,
     },
     logger
   );
