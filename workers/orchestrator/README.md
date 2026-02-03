@@ -4,7 +4,7 @@ Local worker orchestration service for code task execution.
 
 ## Overview
 
-The orchestrator runs on local machines (Mac or VM) behind Cloudflare Tunnel. It receives task dispatch requests from `code-agent`, spawns Claude Code sessions in isolated git worktrees, and reports results via webhooks.
+The orchestrator runs on local machines (Mac or VM) behind Cloudflare Tunnel. It receives task dispatch requests from `code-agent`, spawns Claude Code sessions in isolated Docker containers, and reports results via webhooks.
 
 ```
 code-agent (Cloud Run)
@@ -12,7 +12,7 @@ code-agent (Cloud Run)
     ▼ POST /tasks (HMAC signed)
 orchestrator (local)
     │
-    ├─ TaskDispatcher: manages Claude Code sessions via tmux
+    ├─ TaskDispatcher: manages Claude Code sessions via Docker
     ├─ WorktreeManager: creates isolated git worktrees
     ├─ GitHubTokenService: manages GitHub App installation tokens
     ├─ WebhookClient: reports status to code-agent
@@ -32,145 +32,88 @@ orchestrator (local)
 
 ---
 
-## Development Setup
+## Quick Start (Fresh Clone)
 
-### Prerequisites
-
-- **Node.js 22+** - Required for `--experimental-strip-types`
-- **pnpm** - Workspace package manager
-- **cloudflared** - Cloudflare Tunnel client (`brew install cloudflared`)
-- **gcloud CLI** - For fetching secrets from GCP
-- **tmux** - For managing Claude Code sessions
-
-### 1. Create Directory Structure
+**Prerequisites:** Node.js 22+, pnpm, Docker, gcloud CLI, cloudflared
 
 ```bash
-# Orchestrator state and logs
-mkdir -p ~/.claude-orchestrator/logs
+# 1. Clone and install
+git clone https://github.com/pbuchman/intexuraos.git && cd intexuraos
+pnpm install && pnpm build
 
-# Worktrees for task execution
-mkdir -p ~/claude-workers/worktrees
-```
-
-### 2. Configure GCP Authentication
-
-```bash
-# Set up gcloud with the dev service account
-gcloud auth activate-service-account --key-file=$HOME/personal/gcloud-claude-code-dev.json
-
-# Or set env var for this session
+# 2. Sync secrets from GCP (creates .envrc)
 export GOOGLE_APPLICATION_CREDENTIALS=$HOME/personal/gcloud-claude-code-dev.json
-```
+PROJECT_ID=intexuraos-dev-pbuchman ./scripts/sync-secrets.sh
+direnv allow
 
-### 3. Create Environment File
+# 3. Create directories
+mkdir -p ~/.claude-orchestrator/logs ~/claude-workers/worktrees
 
-The orchestrator requires several secrets. The **DISPATCH_SECRET** is particularly important - it must match the `dispatchSigningSecret` configured in your IntexuraOS worker settings.
-
-#### HMAC Signing (DISPATCH_SECRET)
-
-The `DISPATCH_SECRET` is used for HMAC signature verification between code-agent and orchestrator:
-
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                           HMAC Signing Flow                                  │
-├─────────────────────────────────────────────────────────────────────────────┤
-│                                                                              │
-│   Your Machine (orchestrator)              Cloud (code-agent)               │
-│   ┌─────────────────────────────┐         ┌─────────────────────────────┐   │
-│   │  ~/.claude-orchestrator/    │         │  Firestore                  │   │
-│   │  .env:                      │◄─MUST───│  workerSettings/{userId}    │   │
-│   │    DISPATCH_SECRET=abc123   │  MATCH  │    dispatchSigningSecret    │   │
-│   │                             │         │    =abc123 (encrypted)      │   │
-│   └─────────────────────────────┘         └─────────────────────────────┘   │
-│              ▲                                        │                      │
-│              │ 2. Verifies signature                  │ 1. Signs request     │
-│              └────────────── POST /tasks ─────────────┘                     │
-│                            X-Signature: hmac(...)                            │
-└─────────────────────────────────────────────────────────────────────────────┘
-```
-
-#### Setup Steps
-
-1. **Generate a signing secret** (run once, save the output):
-
-   ```bash
-   openssl rand -hex 32
-   ```
-
-2. **Configure in IntexuraOS** (via web UI or API):
-   - Go to Settings → Worker Configuration
-   - Add your worker with the signing secret you generated
-   - This stores the secret (encrypted) in Firestore for code-agent to use
-
-3. **Create the env file**:
-
-   ```bash
-   cat > ~/.claude-orchestrator/.env << 'EOF'
-   PORT=8199
-   WORKER_CAPACITY=1
-
-   # HMAC signing secret - MUST match your IntexuraOS worker settings
-   DISPATCH_SECRET=<paste-your-generated-secret-here>
-
-   # GitHub App credentials (fetch from GCP Secret Manager)
-   EOF
-
-   # Append GitHub secrets
-   echo "GH_APP_ID=$(gcloud secrets versions access latest --secret=INTEXURAOS_GITHUB_APP_ID --project=intexuraos-dev-pbuchman)" >> ~/.claude-orchestrator/.env
-   echo "GH_INSTALLATION_ID=$(gcloud secrets versions access latest --secret=INTEXURAOS_GITHUB_INSTALLATION_ID --project=intexuraos-dev-pbuchman)" >> ~/.claude-orchestrator/.env
-
-   # Private key needs special handling (multiline)
-   gcloud secrets versions access latest --secret=INTEXURAOS_GITHUB_APP_PRIVATE_KEY --project=intexuraos-dev-pbuchman > ~/.claude-orchestrator/github-app.pem
-   echo "GH_PRIVATE_KEY_PATH=$HOME/.claude-orchestrator/github-app.pem" >> ~/.claude-orchestrator/.env
-   ```
-
-> **Important:** The `DISPATCH_SECRET` in your local `.env` MUST match the `dispatchSigningSecret` you configured in IntexuraOS worker settings. If they don't match, task dispatch requests will fail signature verification.
-
-### 4. Verify Cloudflare Tunnel
-
-The tunnel should already be running as a system service (installed via `sudo cloudflared service install`).
-
-```bash
-# Check tunnel is running
-ps aux | grep cloudflared
-
-# Test tunnel connectivity (should get 502 if orchestrator not running, or 200 if running)
-curl -s -o /dev/null -w "%{http_code}" https://cc-mac.intexuraos.cloud/health
+# 4. Start orchestrator
+pnpm --filter orchestrator dev
 ```
 
 ---
 
-## Development Workflow
+## Environment Variables
 
-### Start Dev Server (with auto-reload)
+The orchestrator reads from the monorepo's `.envrc` (synced from GCP Secret Manager via `sync-secrets.sh`).
+
+### Required Variables
+
+| Variable                            | Source         | Description                            |
+| ----------------------------------- | -------------- | -------------------------------------- |
+| `INTEXURAOS_PROJECT_ID`             | .envrc.local   | GCP project for Secret Manager access  |
+| `INTEXURAOS_CODE_AGENT_URL`         | .envrc.local   | Webhook callback URL                   |
+| `INTEXURAOS_ORCHESTRATOR_SECRET`    | .envrc.local   | HMAC signing secret (see below)        |
+| `INTEXURAOS_GITHUB_APP_ID`          | GCP Secret Mgr | GitHub App ID                          |
+| `INTEXURAOS_GITHUB_INSTALLATION_ID` | GCP Secret Mgr | GitHub App installation ID             |
+| `INTEXURAOS_INTERNAL_AUTH_TOKEN`    | .envrc.local   | Service-to-service auth                |
+| `INTEXURAOS_ANTHROPIC_API_KEY`      | GCP Secret Mgr | Claude API key (passed to workers)     |
+| `INTEXURAOS_LINEAR_API_KEY`         | GCP Secret Mgr | Linear integration (passed to workers) |
+| `INTEXURAOS_SENTRY_AUTH_TOKEN`      | GCP Secret Mgr | Sentry integration (passed to workers) |
+
+### Optional Variables
+
+| Variable                 | Default                 | Description          |
+| ------------------------ | ----------------------- | -------------------- |
+| `PORT`                   | 8199                    | HTTP server port     |
+| `WORKER_CAPACITY`        | 1                       | Max concurrent tasks |
+| `REPOSITORY_PATH`        | ~/personal/intexuraos-3 | Repo path            |
+| `INTEXURAOS_ZAI_API_KEY` | -                       | ZAI API (optional)   |
+
+### HMAC Signing (INTEXURAOS_ORCHESTRATOR_SECRET)
+
+The orchestrator secret is used for request signing between code-agent and orchestrator:
+
+1. **Generate:** `openssl rand -hex 32`
+2. **Store in two places:**
+   - `.envrc.local`: `export INTEXURAOS_ORCHESTRATOR_SECRET=<secret>`
+   - IntexuraOS UI: Worker Settings → your worker → `dispatchSigningSecret`
+
+Both must match or task dispatch fails signature verification.
+
+### GitHub Private Key
+
+The GitHub App private key is **fetched automatically** from GCP Secret Manager on startup (not from a local file). The code caches it at `~/.claude-orchestrator/github-app.pem`.
+
+---
+
+## Development
+
+### Start Dev Server
 
 ```bash
-cd /path/to/intexuraos-3/workers/orchestrator
-
-# Load environment
-set -a; source ~/.claude-orchestrator/.env; set +a
-
-# Start with watch mode (auto-reloads on file changes)
-pnpm dev
+cd workers/orchestrator
+pnpm dev          # Watch mode with auto-reload
 ```
-
-The dev server:
-
-- Runs on `localhost:8199` (same port as production)
-- Uses `node --watch` for automatic reload on changes
-- Cloudflare Tunnel routes `cc-mac.intexuraos.cloud` → `localhost:8199`
-
-### Testing Changes
-
-1. Edit code in `src/`
-2. Server auto-reloads (watch mode)
-3. Test via tunnel: `curl https://cc-mac.intexuraos.cloud/health`
 
 ### Running Tests
 
 ```bash
-pnpm test        # Run once (unit tests only)
-pnpm test:watch  # Watch mode
+pnpm test         # Unit tests only
+pnpm test:e2e     # E2E container tests (requires Docker)
+pnpm test:watch   # Watch mode
 ```
 
 ### Type Checking
@@ -183,57 +126,34 @@ pnpm typecheck
 
 ## Local Testing (Container Isolation)
 
-The orchestrator includes E2E tests for Docker container isolation. These test the `DockerProvider` with real containers.
+E2E tests verify Docker container isolation with real containers.
 
 ### Prerequisites
 
-| Requirement    | Check Command                              | Install                                                      |
-| -------------- | ------------------------------------------ | ------------------------------------------------------------ |
-| Docker daemon  | `docker info`                              | [Docker Desktop](https://docker.com/products/docker-desktop) |
-| Docker network | `docker network inspect claude-worker-net` | See below                                                    |
-| Test image     | `docker image inspect claude-worker:test`  | See below                                                    |
+| Requirement    | Check Command                              | Install                             |
+| -------------- | ------------------------------------------ | ----------------------------------- |
+| Docker daemon  | `docker info`                              | Docker Desktop                      |
+| Docker network | `docker network inspect claude-worker-net` | `./scripts/setup-worker-network.sh` |
+| Test image     | `docker image inspect claude-worker:test`  | See below                           |
 
-### 1. Create Worker Network
+### Setup
 
 ```bash
+# 1. Create network
 ./scripts/setup-worker-network.sh
-```
 
-Or manually:
-
-```bash
-docker network create --driver bridge --subnet 172.28.0.0/16 claude-worker-net
-```
-
-### 2. Build Test Image
-
-```bash
+# 2. Build test image
 cd workers/claude-worker
 docker build -t claude-worker:test -f Dockerfile.test .
-```
 
-The test image uses a **Claude stub** (`test-fixtures/claude-stub.sh`) instead of real Claude CLI. The stub:
-
-- Echoes input for verification
-- Responds to test commands: `exit`, `error`, `timeout`, `network-test`, `resource-test`, `file-test`
-- Verifies mounts and permissions
-
-### 3. Run E2E Tests
-
-```bash
-# From orchestrator directory
+# 3. Run E2E tests
+cd ../orchestrator
 pnpm test:e2e
 ```
 
-Or run all tests (unit + E2E):
+The test image uses a Claude stub (`test-fixtures/claude-stub.sh`) instead of real Claude CLI.
 
-```bash
-pnpm test
-```
-
-> **Note:** E2E tests auto-skip if prerequisites are missing. Check test output for "skipped" count.
-
-### Test Coverage
+### Test Suites
 
 | Suite               | What it tests                          |
 | ------------------- | -------------------------------------- |
@@ -246,12 +166,12 @@ pnpm test
 
 ### Troubleshooting
 
-| Issue                   | Fix                                                                |
-| ----------------------- | ------------------------------------------------------------------ |
-| Tests skipped           | Run prerequisite check commands above                              |
-| "Network not found"     | Run `./scripts/setup-worker-network.sh`                            |
-| "Image not found"       | Rebuild: `docker build -t claude-worker:test -f Dockerfile.test .` |
-| Container name conflict | Run `docker rm -f $(docker ps -aq --filter name=claude-worker-)`   |
+| Issue                   | Fix                                                          |
+| ----------------------- | ------------------------------------------------------------ |
+| Tests skipped           | Check prerequisites above                                    |
+| "Network not found"     | `./scripts/setup-worker-network.sh`                          |
+| "Image not found"       | `docker build -t claude-worker:test -f Dockerfile.test .`    |
+| Container name conflict | `docker rm -f $(docker ps -aq --filter name=claude-worker-)` |
 
 ---
 
@@ -260,29 +180,26 @@ pnpm test
 ### Build
 
 ```bash
-cd /path/to/intexuraos-3
 pnpm --filter orchestrator build
 ```
 
-This creates `workers/orchestrator/dist/index.js` - a bundled ESM file with all workspace dependencies inlined.
+Creates `workers/orchestrator/dist/index.js` - bundled ESM with all workspace dependencies.
 
 ### Directory Structure
 
 ```
 ~/claude-workers/
-├── worktrees/           # Git worktrees for tasks (auto-created)
-└── logs/                # Cleanup logs
+└── worktrees/              # Git worktrees for tasks (auto-created)
 
 ~/.claude-orchestrator/
-├── .env                 # Environment variables
-├── github-app.pem       # GitHub App private key
-├── state.json           # Task state (auto-created)
-├── github-token         # Current GitHub token (auto-created)
+├── github-app.pem          # GitHub App private key (auto-fetched)
+├── state.json              # Task state (auto-created)
+├── github-token            # Current GitHub token (auto-created)
 └── logs/
-    └── {taskId}.log     # Per-task logs
+    └── {taskId}.log        # Per-task logs
 ```
 
-### LaunchAgent Setup (Auto-start on Login)
+### LaunchAgent Setup (macOS Auto-start)
 
 Create `~/Library/LaunchAgents/com.intexuraos.orchestrator.plist`:
 
@@ -296,18 +213,10 @@ Create `~/Library/LaunchAgents/com.intexuraos.orchestrator.plist`:
     <key>ProgramArguments</key>
     <array>
         <string>/opt/homebrew/bin/node</string>
-        <string>/Users/YOUR_USERNAME/path/to/intexuraos-3/workers/orchestrator/dist/index.js</string>
+        <string>/Users/YOUR_USERNAME/path/to/intexuraos/workers/orchestrator/dist/index.js</string>
     </array>
     <key>WorkingDirectory</key>
-    <string>/Users/YOUR_USERNAME/path/to/intexuraos-3/workers/orchestrator</string>
-    <key>EnvironmentVariables</key>
-    <dict>
-        <key>PORT</key>
-        <string>8080</string>
-        <key>WORKER_CAPACITY</key>
-        <string>1</string>
-        <!-- Add other env vars or use .env file -->
-    </dict>
+    <string>/Users/YOUR_USERNAME/path/to/intexuraos</string>
     <key>RunAtLoad</key>
     <true/>
     <key>KeepAlive</key>
@@ -323,101 +232,23 @@ Create `~/Library/LaunchAgents/com.intexuraos.orchestrator.plist`:
 ### Managing the Service
 
 ```bash
-# Load (start) the service
-launchctl load ~/Library/LaunchAgents/com.intexuraos.orchestrator.plist
-
-# Unload (stop) the service
-launchctl unload ~/Library/LaunchAgents/com.intexuraos.orchestrator.plist
-
-# Check status
-launchctl list | grep orchestrator
-
-# View logs
-tail -f ~/.claude-orchestrator/logs/orchestrator.out.log
-tail -f ~/.claude-orchestrator/logs/orchestrator.err.log
+launchctl load ~/Library/LaunchAgents/com.intexuraos.orchestrator.plist    # Start
+launchctl unload ~/Library/LaunchAgents/com.intexuraos.orchestrator.plist  # Stop
+launchctl list | grep orchestrator                                          # Status
 ```
 
 ---
 
-## Configuration Reference
+## Cloudflare Tunnel
 
-### Environment Variables
-
-| Variable              | Required | Default | Description                                                                               |
-| --------------------- | -------- | ------- | ----------------------------------------------------------------------------------------- |
-| `PORT`                | No       | 8199    | HTTP server port                                                                          |
-| `WORKER_CAPACITY`     | No       | 1       | Max concurrent tasks                                                                      |
-| `DISPATCH_SECRET`     | Yes      | -       | HMAC secret for verifying code-agent requests. **Must match IntexuraOS worker settings.** |
-| `GH_APP_ID`           | Yes      | -       | GitHub App ID                                                                             |
-| `GH_INSTALLATION_ID`  | Yes      | -       | GitHub App installation ID                                                                |
-| `GH_PRIVATE_KEY_PATH` | Yes      | -       | Path to GitHub App private key (PEM file)                                                 |
-
-### DISPATCH_SECRET Setup
-
-The `DISPATCH_SECRET` is a shared secret between your orchestrator and code-agent:
-
-1. **Generate once:** `openssl rand -hex 32`
-2. **Store in two places:**
-   - **Local:** `~/.claude-orchestrator/.env` as `DISPATCH_SECRET`
-   - **IntexuraOS:** Worker Settings → your worker → `dispatchSigningSecret`
-
-The code-agent reads the secret from Firestore (encrypted), the orchestrator reads from local env. They must match.
-
-### GCP Secrets (GitHub App Only)
-
-| Secret Name                         | Description                  |
-| ----------------------------------- | ---------------------------- |
-| `INTEXURAOS_GITHUB_APP_ID`          | GitHub App ID: 2753232       |
-| `INTEXURAOS_GITHUB_INSTALLATION_ID` | Installation ID: 106781840   |
-| `INTEXURAOS_GITHUB_APP_PRIVATE_KEY` | GitHub App private key (PEM) |
-
-> **Note:** `INTEXURAOS_ORCHESTRATOR_SECRET` in GCP is deprecated for multi-user setups. Each user should generate their own secret and configure it in their IntexuraOS worker settings.
-
-### Fetching GitHub Secrets
+The tunnel routes `cc-mac.intexuraos.cloud` → `localhost:8199`.
 
 ```bash
-export PROJECT=intexuraos-dev-pbuchman
-export GOOGLE_APPLICATION_CREDENTIALS=$HOME/personal/gcloud-claude-code-dev.json
+# Check tunnel is running
+ps aux | grep cloudflared
 
-gcloud secrets versions access latest --secret=INTEXURAOS_GITHUB_APP_ID --project=$PROJECT
-gcloud secrets versions access latest --secret=INTEXURAOS_GITHUB_INSTALLATION_ID --project=$PROJECT
-gcloud secrets versions access latest --secret=INTEXURAOS_GITHUB_APP_PRIVATE_KEY --project=$PROJECT
+# Test connectivity
+curl -s -o /dev/null -w "%{http_code}" https://cc-mac.intexuraos.cloud/health
 ```
 
----
-
-## Quick Start (Development)
-
-```bash
-# 1. Create directories
-mkdir -p ~/.claude-orchestrator/logs ~/claude-workers/worktrees
-
-# 2. Generate your dispatch signing secret (save this!)
-DISPATCH_SECRET=$(openssl rand -hex 32)
-echo "Your DISPATCH_SECRET: $DISPATCH_SECRET"
-echo "⚠️  Save this! You'll need to configure the same secret in IntexuraOS worker settings."
-
-# 3. Set up environment (first time only)
-export GOOGLE_APPLICATION_CREDENTIALS=$HOME/personal/gcloud-claude-code-dev.json
-cat > ~/.claude-orchestrator/.env << EOF
-PORT=8199
-WORKER_CAPACITY=1
-DISPATCH_SECRET=$DISPATCH_SECRET
-GH_APP_ID=$(gcloud secrets versions access latest --secret=INTEXURAOS_GITHUB_APP_ID --project=intexuraos-dev-pbuchman)
-GH_INSTALLATION_ID=$(gcloud secrets versions access latest --secret=INTEXURAOS_GITHUB_INSTALLATION_ID --project=intexuraos-dev-pbuchman)
-GH_PRIVATE_KEY_PATH=$HOME/.claude-orchestrator/github-app.pem
-EOF
-gcloud secrets versions access latest --secret=INTEXURAOS_GITHUB_APP_PRIVATE_KEY --project=intexuraos-dev-pbuchman > ~/.claude-orchestrator/github-app.pem
-
-# 4. Configure IntexuraOS worker settings
-#    Go to IntexuraOS → Settings → Worker Configuration
-#    Add your worker with the DISPATCH_SECRET from step 2
-
-# 5. Start dev server
-cd /path/to/intexuraos-3/workers/orchestrator
-set -a; source ~/.claude-orchestrator/.env; set +a
-pnpm dev
-
-# 6. Test (in another terminal)
-curl https://cc-mac.intexuraos.cloud/health
-```
+Install: `brew install cloudflared && sudo cloudflared service install`

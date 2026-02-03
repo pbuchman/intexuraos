@@ -116,7 +116,7 @@ async function bootstrap(): Promise<void> {
   const orchestratorSecret = getRequiredEnv('INTEXURAOS_ORCHESTRATOR_SECRET');
   const githubAppId = getRequiredEnv('INTEXURAOS_GITHUB_APP_ID');
   const githubInstallationId = getRequiredEnv('INTEXURAOS_GITHUB_INSTALLATION_ID');
-  const projectId = getRequiredEnv('PROJECT_ID');
+  const projectId = getRequiredEnv('INTEXURAOS_PROJECT_ID');
 
   // GitHub private key: fetch from Secret Manager (multiline, not in .envrc)
   const privateKeyPath = join(orchestratorDir, 'github-app.pem');
