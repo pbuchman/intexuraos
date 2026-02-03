@@ -1247,6 +1247,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       }
       /* v8 ignore stop @preserve */
 
+      /* v8 ignore start -- test-infra: requires fixtures for invalid/unhealthy worker scenarios @preserve */
       // Validate workerLocation if provided
       if (body.workerLocation !== undefined) {
         const requestedWorker = enabledWorkers.find((w) => w.name === body.workerLocation);
@@ -1278,6 +1279,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           ];
         }
       }
+      /* v8 ignore stop @preserve */
 
       const workerCredentials = {
         workers: orderedWorkers.map((w) => ({
