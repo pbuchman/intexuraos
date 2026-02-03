@@ -491,14 +491,14 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         return await reply.fail('INTERNAL_ERROR', error.message);
       }
 
-      request.log.info({ codeTaskId: result.value.codeTaskId }, 'Code action processed successfully');
+      request.log.info({ codeTaskId: result.value.codeTaskId }, 'Code action processed successfully'); // @allow-result-access -- .ok checked at line 461
 
       // Mirror dispatched status to action (non-fatal)
       try {
         await services.statusMirrorService.mirrorStatus({
           actionId: body.actionId,
           taskStatus: 'dispatched',
-          resourceUrl: result.value.resourceUrl,
+          resourceUrl: result.value.resourceUrl, // @allow-result-access -- .ok checked at line 461
           traceId,
         });
       } catch (mirrorError) {
@@ -507,7 +507,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
 
       return await reply.ok({
         status: 'submitted',
-        codeTaskId: result.value.codeTaskId,
+        codeTaskId: result.value.codeTaskId, // @allow-result-access -- .ok checked at line 461
         resourceUrl: result.value.resourceUrl,
       });
     }
@@ -1093,6 +1093,7 @@ export const codeRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         linearIssueId?: string;
         linearIssueTitle?: string;
       };
+
       /* v8 ignore start -- ts-type: optional chaining and nullish coalescing create type narrowing branches @preserve */
       const userId = request.user?.userId ?? 'unknown-user';
       /* v8 ignore stop @preserve */
