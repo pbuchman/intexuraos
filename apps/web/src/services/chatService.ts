@@ -112,3 +112,50 @@ export function clearSession(): void {
     // Silently fail - localStorage unavailable
   }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Chat Panel Size Persistence
+// ─────────────────────────────────────────────────────────────────────────────
+
+const PANEL_SIZE_KEY = 'intex-chat-panel-size';
+
+/** Chat panel dimensions */
+export interface ChatPanelSize {
+  width: number;
+  height: number;
+}
+
+/**
+ * Validate panel size structure.
+ */
+function isValidPanelSize(data: unknown): data is ChatPanelSize {
+  if (typeof data !== 'object' || data === null) return false;
+  const size = data as Partial<ChatPanelSize>;
+  return typeof size.width === 'number' && typeof size.height === 'number';
+}
+
+/**
+ * Save chat panel size to localStorage.
+ */
+export function savePanelSize(size: ChatPanelSize): void {
+  try {
+    localStorage.setItem(PANEL_SIZE_KEY, JSON.stringify(size));
+  } catch {
+    // Silently fail - localStorage unavailable
+  }
+}
+
+/**
+ * Load chat panel size from localStorage.
+ */
+export function loadPanelSize(): ChatPanelSize | null {
+  try {
+    const stored = localStorage.getItem(PANEL_SIZE_KEY);
+    if (stored === null) return null;
+
+    const parsed: unknown = JSON.parse(stored);
+    return isValidPanelSize(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}

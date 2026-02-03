@@ -8,7 +8,7 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { GripVertical, Trash2, Loader2, Minimize2, AlertCircle } from 'lucide-react';
 import { ChatMessage } from './ChatMessage.js';
 import { ChatInput } from './ChatInput.js';
-import type { ChatMessage as ChatMessageType, SuggestedAction } from '../../types/chat';
+import type { ChatMessage as ChatMessageType, SuggestedAction } from '../../types/chat.js';
 
 interface ChatBottomSheetProps {
   isOpen: boolean;
@@ -19,6 +19,8 @@ interface ChatBottomSheetProps {
   onSendMessage: (message: string) => void;
   onClose: () => void;
   onClear: () => void;
+  /** User's profile picture URL */
+  userPicture?: string;
 }
 
 export function ChatBottomSheet({
@@ -30,6 +32,7 @@ export function ChatBottomSheet({
   onSendMessage,
   onClose,
   onClear,
+  userPicture,
 }: ChatBottomSheetProps): React.JSX.Element | null {
   const sheetRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -165,9 +168,11 @@ export function ChatBottomSheet({
 
         <div className="flex items-center gap-1">
           <div className="flex items-center gap-2">
-            <div className="flex h-7 w-7 items-center justify-center rounded-full bg-blue-600 text-white text-sm font-bold">
-              I
-            </div>
+            <img
+              src="/apple-touch-icon-180x180.png"
+              alt="Intex"
+              className="h-7 w-7 rounded-full"
+            />
             <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
               Intex
             </h2>
@@ -211,6 +216,7 @@ export function ChatBottomSheet({
             key={message.id}
             message={message}
             isUser={message.role === 'user'}
+            {...(message.role === 'user' && userPicture !== undefined && { userPicture })}
           />
         ))}
 

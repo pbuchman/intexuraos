@@ -9,15 +9,17 @@ import { Copy } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeSanitize from 'rehype-sanitize';
-import { formatTime } from '../../utils/dateFormat';
-import type { ChatMessage as ChatMessageType } from '../../types/chat';
+import { formatTime } from '../../utils/dateFormat.js';
+import type { ChatMessage as ChatMessageType } from '../../types/chat.js';
 
 interface ChatMessageProps {
   message: ChatMessageType;
   isUser: boolean;
+  /** User's profile picture URL (for user messages) */
+  userPicture?: string;
 }
 
-export function ChatMessage({ message, isUser }: ChatMessageProps): React.JSX.Element {
+export function ChatMessage({ message, isUser, userPicture }: ChatMessageProps): React.JSX.Element {
   const [copied, setCopied] = useState(false);
 
   const handleCopy = async (): Promise<void> => {
@@ -35,21 +37,23 @@ export function ChatMessage({ message, isUser }: ChatMessageProps): React.JSX.El
   return (
     <div
       data-testid={`chat-message-${isUser ? 'user' : 'assistant'}`}
-      className={`flex gap-3 ${isUser ? 'justify-end' : 'justify-start'}`}
+      className={`flex gap-2 mb-3 ${isUser ? 'justify-end' : 'justify-start'}`}
     >
-      {/* Avatar for assistant */}
+      {/* Avatar for assistant - Intex app icon */}
       {!isUser && (
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-600 text-white text-sm font-medium">
-          I
-        </div>
+        <img
+          src="/apple-touch-icon-180x180.png"
+          alt="Intex"
+          className="h-8 w-8 shrink-0 rounded-full"
+        />
       )}
 
-      {/* Message bubble */}
+      {/* Message bubble - tighter padding for user messages */}
       <div
-        className={`max-w-[80%] rounded-2xl px-4 py-2 ${
+        className={`max-w-[80%] rounded-2xl ${
           isUser
-            ? 'bg-blue-600 text-white'
-            : 'bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-gray-100'
+            ? 'bg-blue-600 text-white px-3 py-1.5'
+            : 'bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-gray-100 px-4 py-2'
         }`}
       >
         {/* Message content with markdown rendering */}
@@ -108,11 +112,19 @@ export function ChatMessage({ message, isUser }: ChatMessageProps): React.JSX.El
         </div>
       </div>
 
-      {/* Avatar for user */}
+      {/* Avatar for user - profile picture or fallback */}
       {isUser && (
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gray-600 text-white text-sm font-medium">
-          U
-        </div>
+        userPicture !== undefined ? (
+          <img
+            src={userPicture}
+            alt="You"
+            className="h-8 w-8 shrink-0 rounded-full object-cover"
+          />
+        ) : (
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gray-600 text-white text-sm font-medium">
+            U
+          </div>
+        )
       )}
     </div>
   );
