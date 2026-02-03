@@ -92,6 +92,12 @@ if [ -d "/repo/.git" ]; then
     echo "[entrypoint] Git branch: $(git -C /repo branch --show-current 2>/dev/null || echo 'unknown')"
 fi
 
-# Execute Claude without --print (interactive mode)
+# Execute Claude in interactive mode (no --print flag)
 # stdin/stdout connected directly for sendInput() to work
+#
+# --dangerously-skip-permissions: Required for automated operation. Without this flag,
+# Claude Code prompts for confirmation before file writes, tool executions, and other
+# actions. In a containerized worker, there's no human to approve these prompts, so
+# they would block indefinitely. The container's isolation (non-root user, read-only
+# secrets, dropped capabilities) provides the security boundary instead.
 exec claude --dangerously-skip-permissions

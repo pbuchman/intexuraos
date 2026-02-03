@@ -19,23 +19,31 @@ All decisions below are FINAL. No guessing during implementation.
 | Claude install    | `curl -fsSL https://claude.ai/install.sh \| bash`     |
 | Image registry    | `gcr.io/intexuraos-dev-pbuchman/claude-worker:latest` |
 | Working directory | `/repo`                                               |
-| User              | `claude` (UID 1000, non-root)                         |
+| User              | `claude` (UID 1001, non-root) [^1]                    |
 | Max concurrent    | 4 containers per orchestrator                         |
 | CPU limit         | 4 cores                                               |
 | Memory limit      | 8GB                                                   |
 | Timeout           | 2 hours                                               |
 | Docker socket     | NOT mounted (no DinD)                                 |
-| Root filesystem   | Read-only                                             |
-| Capabilities      | ALL dropped                                           |
+| Root filesystem   | Writable [^2]                                         |
+| Capabilities      | ALL dropped, NET_RAW added [^3]                       |
+
+[^1]: UID 1001 used instead of 1000 because `node:22-alpine` base image already has UID 1000 assigned to the `node` user.
+
+[^2]: ReadonlyRootfs disabled because Claude Code writes to `/home/claude/.claude/` for settings and session state. While `/home/claude` is mounted as tmpfs, the Alpine base image requires writes to `/etc/passwd` for user initialization. Container isolation is maintained via non-root user, dropped capabilities, and read-only secrets mount.
+
+[^3]: NET_RAW capability required for network diagnostics (ping, traceroute) which Claude uses to verify connectivity during tasks.
 
 ### Claude Execution
 
 | Setting            | Value                                                          |
 | ------------------ | -------------------------------------------------------------- |
 | Mode               | Interactive (NO `--print` flag)                                |
-| Entrypoint         | Direct `claude` invocation                                     |
+| Entrypoint         | Direct `claude --dangerously-skip-permissions` [^4]            |
 | Input method       | Docker attach (persistent stdin connection)                    |
 | Signal for waiting | None - use idle detection (no output for 10s = likely waiting) |
+
+[^4]: `--dangerously-skip-permissions` required for automated operation. Without this flag, Claude Code prompts for confirmation before file writes and tool executions, which would block indefinitely in containerized workers. Container isolation (non-root user, read-only secrets, dropped capabilities) provides the security boundary.
 
 ### Paths
 
@@ -65,7 +73,7 @@ All decisions below are FINAL. No guessing during implementation.
 
 - Full public internet (required for web search, npm, APIs)
 
-**Blocked (via iptables in entrypoint):**
+**Blocked (via iptables on production host):** [^5]
 
 - `169.254.169.254` - Cloud metadata server
 - `127.0.0.0/8` - Localhost
@@ -73,6 +81,8 @@ All decisions below are FINAL. No guessing during implementation.
 - `172.16.0.0/12` - Private IPs (Docker range)
 - `192.168.0.0/16` - Private IPs
 - `169.254.0.0/16` - Link-local
+
+[^5]: Network isolation via iptables requires root privileges and is applied at the host level on production GCE VMs. CI and local development environments skip iptables rules as they run in sandboxed Docker Desktop/GitHub Actions environments where host network access is already restricted.
 
 ### Error Handling
 
@@ -166,21 +176,25 @@ export const WORKER_TYPES: Record<WorkerType, WorkerTypeConfig> = {
 | `services/isolation/worker-types.ts`    | Worker type configurations    |
 | `services/isolation/index.ts`           | Factory and exports           |
 
-### Deprecated (Kept for Fallback)
+### Deprecated (Removed)
 
-| File                       | Reason                         |
-| -------------------------- | ------------------------------ |
-| `services/tmux-manager.ts` | Fallback if Docker unavailable |
+| File                       | Status  | Reason                                                     |
+| -------------------------- | ------- | ---------------------------------------------------------- |
+| `services/tmux-manager.ts` | Deleted | Docker isolation is the only supported execution mode [^6] |
+
+[^6]: The TmuxManager was removed rather than kept as fallback. Docker-based isolation is required for security guarantees. Local development uses Docker Desktop; there's no scenario where a non-Docker fallback is acceptable.
 
 ---
 
 ## Deployment
 
-### Cloud Deployment (GCE VM)
+### Cloud Deployment (GCE VM) — DEFERRED [^7]
 
 Cloud Run does NOT support Docker socket access. Orchestrator must run on GCE VM with Docker installed.
 
-**VM Configuration:**
+[^7]: GCE VM deployment is deferred until the container isolation MVP is validated locally. The Terraform module `terraform/modules/orchestrator-vm/main.tf` is not yet implemented.
+
+**VM Configuration (Future):**
 
 | Setting      | Value                              |
 | ------------ | ---------------------------------- |
@@ -190,10 +204,10 @@ Cloud Run does NOT support Docker socket access. Orchestrator must run on GCE VM
 | Docker       | Installed via apt                  |
 | Startup      | Systemd service for orchestrator   |
 
-**Terraform resources:**
+**Terraform resources (to be implemented):**
 
 ```hcl
-# terraform/modules/orchestrator-vm/main.tf
+# terraform/modules/orchestrator-vm/main.tf (NOT YET IMPLEMENTED)
 
 resource "google_compute_instance" "orchestrator" {
   name         = "orchestrator-${var.environment}"

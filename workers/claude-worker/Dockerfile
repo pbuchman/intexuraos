@@ -8,6 +8,8 @@ FROM node:22-alpine
 #   - gh: 51 uses (2.6%) - PR creation
 #   - jq: 101 uses - JSON processing
 #   - bat: 0 uses but CLAUDE.md mandates it for CI analysis
+#   - python3: Required for gcloud CLI and some development scripts
+#   - py3-pip: Required for MCP server dependencies
 RUN apk add --no-cache \
     git \
     openssh-client \
