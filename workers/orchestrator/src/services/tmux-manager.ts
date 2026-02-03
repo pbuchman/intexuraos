@@ -70,8 +70,43 @@ export class TmuxManager {
     // Using a script file avoids shell quote-nesting issues with command substitution
     const claudePath = this.config.claudePath ?? 'claude';
     const scriptContent = `#!/bin/bash
-cd '${worktreePath}' || exit 1
-cat '${taskPromptFile}' | ${claudePath} --system-prompt "$(cat '${systemPromptFile}')" --print --dangerously-skip-permissions 2>&1 | tee '${logFilePath}'
+set -e
+
+# Log all output to the log file from the start
+exec > >(tee -a '${logFilePath}') 2>&1
+
+echo "[orchestrator] Starting task ${taskId} at $(date)"
+echo "[orchestrator] Worktree: ${worktreePath}"
+echo "[orchestrator] Claude path: ${claudePath}"
+
+# Verify worktree exists
+if [ ! -d '${worktreePath}' ]; then
+  echo "[orchestrator] ERROR: Worktree does not exist: ${worktreePath}"
+  exit 1
+fi
+
+cd '${worktreePath}'
+echo "[orchestrator] Changed to worktree directory"
+
+# Verify prompt files exist
+if [ ! -f '${taskPromptFile}' ]; then
+  echo "[orchestrator] ERROR: Task prompt file does not exist: ${taskPromptFile}"
+  exit 1
+fi
+if [ ! -f '${systemPromptFile}' ]; then
+  echo "[orchestrator] ERROR: System prompt file does not exist: ${systemPromptFile}"
+  exit 1
+fi
+
+# Verify claude command exists
+if ! command -v ${claudePath} &> /dev/null; then
+  echo "[orchestrator] ERROR: Claude command not found: ${claudePath}"
+  exit 1
+fi
+
+echo "[orchestrator] All checks passed, starting claude..."
+cat '${taskPromptFile}' | ${claudePath} --system-prompt "$(cat '${systemPromptFile}')" --print --dangerously-skip-permissions
+echo "[orchestrator] Task completed at $(date)"
 `;
     await writeFile(runScriptFile, scriptContent, { encoding: 'utf-8', mode: 0o755 });
 
