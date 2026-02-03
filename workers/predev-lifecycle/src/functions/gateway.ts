@@ -86,8 +86,16 @@ async function proxyRequest(vmIp: string, req: any, res: any): Promise<void> {
   const targetUrl = `http://${vmIp}:3000${String(req.url ?? '')}`;
 
   try {
-    const headers: Record<string, string> = { ...(req.headers ?? {}) };
-    delete headers['host'];
+    const incomingHeaders: Record<string, string> = { ...(req.headers ?? {}) };
+    delete incomingHeaders['host'];
+
+    // For non-GET requests with body, filter out existing content-type to avoid duplicates
+    const headers: Record<string, string> =
+      req.method !== 'GET' && req.body !== undefined
+        ? Object.fromEntries(
+            Object.entries(incomingHeaders).filter(([key]) => key.toLowerCase() !== 'content-type')
+          )
+        : incomingHeaders;
 
     const requestOptions: RequestInit = {
       method: req.method ?? 'GET',
