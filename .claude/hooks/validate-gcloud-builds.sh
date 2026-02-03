@@ -2,12 +2,15 @@
 # BLOCK: gcloud builds commands without --region flag
 # Exit 0 = allow, Exit 2 = block with stderr message
 
-HOOK_NAME="validate-gcloud-builds"
-LOG_FILE="$(dirname "$0")/${HOOK_NAME}.log"
+set -euo pipefail
 
-log_blocked() {
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] BLOCKED: $1" >> "$LOG_FILE"
-}
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+# Source shared logging library
+# shellcheck source=lib/log.sh
+source "${SCRIPT_DIR}/lib/log.sh"
+
+HOOK_NAME="validate-gcloud-builds"
 
 INPUT=$(cat)
 TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name // ""')
@@ -32,7 +35,9 @@ CORRECT:
   gcloud builds log BUILD_ID --region=europe-central2 --project=intexuraos-dev-pbuchman
   gcloud builds describe BUILD_ID --region=europe-central2 --project=intexuraos-dev-pbuchman
 EOF
-    log_blocked "$COMMAND"
+    log_blocked "$HOOK_NAME" "missing-region-flag" \
+        "gcloud builds command without --region" \
+        "Add --region=europe-central2"
     exit 2
 fi
 

@@ -2,12 +2,15 @@
 # BLOCK: gcloud builds log piped to grep/tail/head (network-heavy pattern hunting)
 # Exit 0 = allow, Exit 2 = block with stderr message
 
-HOOK_NAME="validate-gcloud-builds-log"
-LOG_FILE="$(dirname "$0")/${HOOK_NAME}.log"
+set -euo pipefail
 
-log_blocked() {
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] BLOCKED: $1" >> "$LOG_FILE"
-}
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+# Source shared logging library
+# shellcheck source=lib/log.sh
+source "${SCRIPT_DIR}/lib/log.sh"
+
+HOOK_NAME="validate-gcloud-builds-log"
 
 INPUT=$(cat)
 TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name // ""')
@@ -36,7 +39,9 @@ CORRECT: Capture once, then analyze locally:
   tail -100 /tmp/build-log.txt
   rg "FAIL|ERROR" /tmp/build-log.txt -C3
 EOF
-    log_blocked "$COMMAND"
+    log_blocked "$HOOK_NAME" "piped-builds-log" \
+        "gcloud builds log piped to text processor" \
+        "Capture with tee first, then analyze locally"
     exit 2
 fi
 

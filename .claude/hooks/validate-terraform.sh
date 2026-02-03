@@ -2,12 +2,15 @@
 # BLOCK: terraform command without env var clearing
 # Exit 0 = allow, Exit 2 = block with stderr message
 
-HOOK_NAME="validate-terraform"
-LOG_FILE="$(dirname "$0")/${HOOK_NAME}.log"
+set -euo pipefail
 
-log_blocked() {
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] BLOCKED: $1" >> "$LOG_FILE"
-}
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+# Source shared logging library
+# shellcheck source=lib/log.sh
+source "${SCRIPT_DIR}/lib/log.sh"
+
+HOOK_NAME="validate-terraform"
 
 INPUT=$(cat)
 TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name // ""')
@@ -28,7 +31,9 @@ CORRECT:
   GOOGLE_APPLICATION_CREDENTIALS=$HOME/personal/gcloud-claude-code-dev.json \
   terraform <command>
 EOF
-    log_blocked "$COMMAND"
+    log_blocked "$HOOK_NAME" "missing-emulator-env-clear" \
+        "Terraform command without clearing emulator vars" \
+        "Prefix with FIRESTORE_EMULATOR_HOST= etc."
     exit 2
 fi
 

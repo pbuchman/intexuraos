@@ -14,7 +14,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 /**
  * Creates a temporary transcript file in JSONL format for testing ownership-check
- * JSONL format = one JSON object per line
+ * JSONL format = one JSON object per line (matches actual Claude Code transcript format)
  *
  * The hook expects: .message.content[] where each content block has .type and .text
  */
