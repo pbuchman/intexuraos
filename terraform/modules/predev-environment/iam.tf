@@ -74,6 +74,14 @@ resource "google_pubsub_subscription_iam_member" "vm_subscribe_code_update" {
   member       = "serviceAccount:${google_service_account.predev_vm.email}"
 }
 
+# VM can view subscription metadata (needed for exists() check in update-listener)
+resource "google_pubsub_subscription_iam_member" "vm_view_code_update" {
+  project      = var.project_id
+  subscription = google_pubsub_subscription.code_update_vm.name
+  role         = "roles/pubsub.viewer"
+  member       = "serviceAccount:${google_service_account.predev_vm.email}"
+}
+
 # VM can read Firestore state (for branch info)
 resource "google_project_iam_member" "vm_firestore" {
   project = var.project_id
