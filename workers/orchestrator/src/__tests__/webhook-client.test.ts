@@ -58,7 +58,7 @@ describe('WebhookClient', () => {
       } as Response);
 
       const statePersistence = createStatePersistence();
-      const client = new WebhookClient(statePersistence, mockLogger);
+      const client = new WebhookClient(statePersistence, mockLogger, 'test-internal-auth-token');
 
       const payload: WebhookPayload = {
         taskId: 'task-1',
@@ -85,6 +85,7 @@ describe('WebhookClient', () => {
       expect(headers).toHaveProperty('Content-Type');
       expect(headers).toHaveProperty('X-Request-Timestamp');
       expect(headers).toHaveProperty('X-Request-Signature');
+      expect(headers).toHaveProperty('X-Internal-Auth', 'test-internal-auth-token');
     });
 
     it('should not retry on 4xx errors', async () => {
@@ -95,7 +96,7 @@ describe('WebhookClient', () => {
       } as Response);
 
       const statePersistence = createStatePersistence();
-      const client = new WebhookClient(statePersistence, mockLogger);
+      const client = new WebhookClient(statePersistence, mockLogger, 'test-internal-auth-token');
 
       const payload: WebhookPayload = {
         taskId: 'task-2',
@@ -126,7 +127,7 @@ describe('WebhookClient', () => {
       } as Response);
 
       const statePersistence = createStatePersistence();
-      const client = new WebhookClient(statePersistence, mockLogger);
+      const client = new WebhookClient(statePersistence, mockLogger, 'test-internal-auth-token');
 
       const payload: WebhookPayload = {
         taskId: 'task-3',
@@ -169,7 +170,7 @@ describe('WebhookClient', () => {
       });
 
       const statePersistence = createStatePersistence();
-      const client = new WebhookClient(statePersistence, mockLogger);
+      const client = new WebhookClient(statePersistence, mockLogger, 'test-internal-auth-token');
 
       const payload: WebhookPayload = {
         taskId: 'task-4',
@@ -202,7 +203,7 @@ describe('WebhookClient', () => {
       } as Response);
 
       const statePersistence = createStatePersistence();
-      const client = new WebhookClient(statePersistence, mockLogger);
+      const client = new WebhookClient(statePersistence, mockLogger, 'test-internal-auth-token');
 
       const payload = { taskId: 'task-1', status: 'completed' as const, duration: 1000 };
 
@@ -241,7 +242,7 @@ describe('WebhookClient', () => {
       mockFetch.mockRejectedValue(abortError);
 
       const statePersistence = createStatePersistence();
-      const client = new WebhookClient(statePersistence, mockLogger);
+      const client = new WebhookClient(statePersistence, mockLogger, 'test-internal-auth-token');
 
       const payload: WebhookPayload = {
         taskId: 'task-timeout',
@@ -275,7 +276,7 @@ describe('WebhookClient', () => {
       mockFetch.mockRejectedValue(new TypeError('Failed to fetch'));
 
       const statePersistence = createStatePersistence();
-      const client = new WebhookClient(statePersistence, mockLogger);
+      const client = new WebhookClient(statePersistence, mockLogger, 'test-internal-auth-token');
 
       const payload: WebhookPayload = {
         taskId: 'task-network',
@@ -313,7 +314,7 @@ describe('WebhookClient', () => {
       } as Response);
 
       const statePersistence = createStatePersistence();
-      const client = new WebhookClient(statePersistence, mockLogger);
+      const client = new WebhookClient(statePersistence, mockLogger, 'test-internal-auth-token');
 
       const payload: WebhookPayload = {
         taskId: 'task-5xx',
@@ -383,7 +384,7 @@ describe('WebhookClient', () => {
         } as Response;
       });
 
-      const client = new WebhookClient(statePersistence, mockLogger);
+      const client = new WebhookClient(statePersistence, mockLogger, 'test-internal-auth-token');
       await client.retryPending();
 
       const updatedState = await statePersistence.load();
@@ -416,7 +417,7 @@ describe('WebhookClient', () => {
         statusText: 'OK',
       } as Response);
 
-      const client = new WebhookClient(statePersistence, mockLogger);
+      const client = new WebhookClient(statePersistence, mockLogger, 'test-internal-auth-token');
       await client.retryPending();
 
       const updatedState = await statePersistence.load();
@@ -429,7 +430,7 @@ describe('WebhookClient', () => {
       state.pendingWebhooks = [];
       await statePersistence.save(state);
 
-      const client = new WebhookClient(statePersistence, mockLogger);
+      const client = new WebhookClient(statePersistence, mockLogger, 'test-internal-auth-token');
       await client.retryPending();
 
       const updatedState = await statePersistence.load();
@@ -459,7 +460,7 @@ describe('WebhookClient', () => {
         statusText: 'Not Found',
       } as Response);
 
-      const client = new WebhookClient(statePersistence, mockLogger);
+      const client = new WebhookClient(statePersistence, mockLogger, 'test-internal-auth-token');
       await client.retryPending();
 
       // Should be called only once (no retries for 4xx)
@@ -492,7 +493,7 @@ describe('WebhookClient', () => {
       // Mock fails with network error - should retry 3x
       mockFetch.mockRejectedValue(new TypeError('Failed to fetch'));
 
-      const client = new WebhookClient(statePersistence, mockLogger);
+      const client = new WebhookClient(statePersistence, mockLogger, 'test-internal-auth-token');
 
       // Start the retry (it will retry async with delays)
       const retryPromise = client.retryPending();
@@ -521,7 +522,7 @@ describe('WebhookClient', () => {
       mockFetch.mockRejectedValue('Some string error');
 
       const statePersistence = createStatePersistence();
-      const client = new WebhookClient(statePersistence, mockLogger);
+      const client = new WebhookClient(statePersistence, mockLogger, 'test-internal-auth-token');
 
       const payload: WebhookPayload = {
         taskId: 'task-non-error',
@@ -575,7 +576,7 @@ describe('WebhookClient', () => {
       ];
       await statePersistence.save(state);
 
-      const client = new WebhookClient(statePersistence, mockLogger);
+      const client = new WebhookClient(statePersistence, mockLogger, 'test-internal-auth-token');
       const count = await client.getPendingCount();
 
       expect(count).toBe(2);
@@ -583,7 +584,7 @@ describe('WebhookClient', () => {
 
     it('should return 0 when no pending webhooks', async () => {
       const statePersistence = createStatePersistence();
-      const client = new WebhookClient(statePersistence, mockLogger);
+      const client = new WebhookClient(statePersistence, mockLogger, 'test-internal-auth-token');
 
       const count = await client.getPendingCount();
 
