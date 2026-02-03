@@ -10,6 +10,9 @@ const REQUIRED_ENV = [
   'INTEXURAOS_AUTH_ISSUER',
   'INTEXURAOS_AUTH_AUDIENCE',
   'INTEXURAOS_OPENAI_API_KEY',
+  'INTEXURAOS_USER_SERVICE_URL',
+  'INTEXURAOS_INTERNAL_AUTH_TOKEN',
+  'INTEXURAOS_APP_SETTINGS_SERVICE_URL',
 ];
 
 validateRequiredEnv(REQUIRED_ENV);
@@ -28,7 +31,7 @@ const PORT = Number(process.env['PORT'] ?? 8080);
 const HOST = process.env['HOST'] ?? '0.0.0.0';
 
 async function main(): Promise<void> {
-  initializeServices();
+  await initializeServices();
 
   const app = await buildServer();
 

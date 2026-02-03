@@ -11,7 +11,16 @@ import type {
   SuggestedAction,
 } from '../domain/index.js';
 import type { Result } from '@intexuraos/common-core';
+import { ok, err } from '@intexuraos/common-core';
 import type { LLMResponse, LLMError } from '../domain/usecases/generateResponse.js';
+import type { LlmGenerateClient } from '@intexuraos/llm-factory';
+import type { LLMError as LlmContractError } from '@intexuraos/llm-contract';
+import type {
+  UserServiceClient,
+  DecryptedApiKeys as UserApiKeys,
+  UserServiceError,
+  OAuthProvider,
+} from '@intexuraos/internal-clients';
 
 /**
  * Fake embedding repository for testing.
@@ -143,18 +152,126 @@ export const mockLogger: {
 };
 
 /**
- * Set up fake services for testing.
+ * Fake LlmGenerateClient for testing.
+ * This is the low-level client returned by userServiceClient.getLlmClient().
  */
-export function setupFakeServices(): ServiceContainer {
+export class FakeLlmGenerateClient implements LlmGenerateClient {
+  public response = 'Here is a response';
+  public suggestedAction: SuggestedAction | null = null;
+  public shouldFail = false;
+
+  setResponse(response: string): void {
+    this.response = response;
+  }
+
+  setSuggestedAction(action: SuggestedAction | null): void {
+    this.suggestedAction = action;
+  }
+
+  setFailure(shouldFail: boolean): void {
+    this.shouldFail = shouldFail;
+  }
+
+  async generate(
+    _prompt: string
+  ): Promise<
+    Result<
+      { content: string; usage: { inputTokens: number; outputTokens: number; totalTokens: number; costUsd: number } },
+      LlmContractError
+    >
+  > {
+    if (this.shouldFail) {
+      return err({ code: 'API_ERROR', message: 'LLM failed' });
+    }
+    // Build response content, optionally with action annotation
+    let content = this.response;
+    if (this.suggestedAction !== null) {
+      content += ` [ACTION: ${this.suggestedAction.type} ${JSON.stringify(this.suggestedAction.payload)}]`;
+    }
+    return ok({
+      content,
+      usage: {
+        inputTokens: 10,
+        outputTokens: 20,
+        totalTokens: 30,
+        costUsd: 0.0001,
+      },
+    });
+  }
+
+  reset(): void {
+    this.response = 'Here is a response';
+    this.suggestedAction = null;
+    this.shouldFail = false;
+  }
+}
+
+/**
+ * Fake UserServiceClient for testing.
+ * Returns a FakeLlmGenerateClient when getLlmClient() is called.
+ */
+export class FakeUserServiceClient implements UserServiceClient {
+  private llmGenerateClient: FakeLlmGenerateClient;
+  private failNext = false;
+
+  constructor(llmGenerateClient: FakeLlmGenerateClient) {
+    this.llmGenerateClient = llmGenerateClient;
+  }
+
+  setFailNext(fail: boolean): void {
+    this.failNext = fail;
+  }
+
+  async getApiKeys(_userId: string): Promise<Result<UserApiKeys, UserServiceError>> {
+    return ok({});
+  }
+
+  async getLlmClient(_userId: string): Promise<Result<LlmGenerateClient, UserServiceError>> {
+    if (this.failNext) {
+      this.failNext = false;
+      return err({ code: 'NETWORK_ERROR', message: 'Simulated network error' });
+    }
+    return ok(this.llmGenerateClient);
+  }
+
+  async reportLlmSuccess(
+    _userId: string,
+    _provider: import('@intexuraos/llm-contract').LlmProvider
+  ): Promise<void> {
+    // Best effort - silently ignore in tests
+  }
+
+  async getOAuthToken(
+    _userId: string,
+    _provider: OAuthProvider
+  ): Promise<Result<{ accessToken: string; email: string }, UserServiceError>> {
+    return err({
+      code: 'CONNECTION_NOT_FOUND',
+      message: 'OAuth not configured in fake',
+    });
+  }
+}
+
+/**
+ * Set up fake services for testing.
+ * Returns both the ServiceContainer and the fake clients for test control.
+ */
+export function setupFakeServices(): ServiceContainer & {
+  llmGenerateClient: FakeLlmGenerateClient;
+  fakeUserServiceClient: FakeUserServiceClient;
+} {
+  const llmGenerateClient = new FakeLlmGenerateClient();
+  const fakeUserServiceClient = new FakeUserServiceClient(llmGenerateClient);
+
   const services: ServiceContainer = {
     generateId: () => `test-${crypto.randomUUID()}`,
     embeddingRepository: new FakeEmbeddingRepository(),
     embeddingClient: new FakeEmbeddingClient(),
-    llmClient: new FakeLLMClient(),
+    userServiceClient: fakeUserServiceClient,
     logger: mockLogger as unknown as import('pino').Logger,
   };
   setServices(services);
-  return services;
+  return { ...services, llmGenerateClient, fakeUserServiceClient };
 }
 
 /**
