@@ -215,7 +215,7 @@ export function CodeTaskNewPage(): React.JSX.Element {
                   <span>No workers configured</span>
                 </div>
                 <Link
-                  to="/settings/code-workers"
+                  to="/settings/workers"
                   className="mt-2 block text-sm text-blue-600 hover:underline dark:text-blue-400"
                 >
                   Configure in Settings →
